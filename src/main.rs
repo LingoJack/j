@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    // TODO 重构 work-copilot
 }
