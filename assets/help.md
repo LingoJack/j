@@ -119,7 +119,7 @@ j
 | `j reportctl push [msg]` | 推送周报到远程 git 仓库 |
 | `j reportctl pull` | 从远程 git 仓库拉取周报 |
 | `j reportctl set-url [url]` | 设置/查看 git 仓库地址 |
-| `j reportctl open` | 用系统编辑器打开日报文件 |
+| `j reportctl open` | 用内置 TUI 编辑器打开日报文件全文编辑 |
 | `j check [N]` | 查看日报最近 N 行（默认 5） |
 | `j search <N/all> <kw>` | 在日报中搜索关键字 |
 | `j search <N/all> <kw> -f` | 模糊搜索（大小写不敏感） |
@@ -149,6 +149,7 @@ j
 | `j version` | 版本信息 |
 | `j help` | 帮助信息 |
 | `j exit` | 退出（交互模式） |
+| `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
 
 ---
 
@@ -161,3 +162,4 @@ j
 - `report` 命令内容不会记入历史，保护日报隐私
 - CLI 工具（如 rg、fzf）注册后可直接在终端执行并支持管道
 - 脚本需要后台运行时，使用 `-w` 标志在新窗口中执行（如 `j deploy -w`）
+- 启用 shell Tab 补全：`eval "$(j completion zsh)"` 加入 `.zshrc` 即可在快捷模式下补全命令、别名和文件路径

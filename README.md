@@ -1,7 +1,7 @@
 # work-copilot Rust 重构进度
 
-> 📅 最后更新: 2026-02-11
-> 🔖 版本: v13.0.0
+> 📅 最后更新: 2026-02-12
+> 🔖 版本: v20.0.0
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
 
 ---
@@ -28,6 +28,9 @@ src/
 ├── cli.rs               # clap derive 宏定义所有子命令（SubCmd 枚举）
 ├── constants.rs         # 全局常量定义（版本号、section名、分类、搜索引擎等）
 ├── interactive.rs       # 交互模式（rustyline + 自定义补全器 + 历史建议）
+├── tui/
+│   ├── mod.rs           # 导出 TUI 模块
+│   └── editor.rs        # 全屏多行编辑器（ratatui + tui-textarea + vim 模式）
 ├── config/
 │   ├── mod.rs           # 导出 YamlConfig
 │   └── yaml_config.rs   # YAML 配置 serde 结构体 + 读写 + section 操作
@@ -75,6 +78,9 @@ dirs = "6"                                          # 跨平台用户目录（~/
 url = "2"                                           # URL 解析判断
 indicatif = "0.17"                                  # 进度条（倒计时用）
 termimad = "0.30"                                   # Markdown 终端渲染（fallback）
+ratatui = "0.29"                                    # TUI 框架（全屏终端 UI）
+crossterm = "0.28"                                  # 终端原始模式 + 事件读取
+tui-textarea = "0.7"                                # 多行文本编辑组件（配合 ratatui）
 ```
 
 ---
@@ -98,6 +104,13 @@ termimad = "0.30"                                   # Markdown 终端渲染（fa
 | **Phase 11** | Markdown 终端渲染（`ask -c render` + fallback termimad）；report 命令历史隐私保护 | ✅ 完成 |
 | **Phase 12** | 资源文件外置：帮助文档、版本模板抽取到 `assets/*.md`，编译时通过 `include_str!` 嵌入二进制 | ✅ 完成 |
 | **Phase 13** | ask 渲染引擎嵌入：将 Go 编写的 Markdown 渲染二进制通过 `include_bytes!` 嵌入，首次运行自动释放到 `~/.jdata/bin/ask`，换电脑零配置 | ✅ 完成 |
+| **Phase 14** | TUI 多行编辑器（ratatui + tui-textarea + vim 模式）；日报无参数时进入全屏编辑器；Ctrl+S 提交 / Ctrl+Q 取消 / :wq / :q vim 命令；日报路径 `~` 自动展开为用户主目录 | ✅ 完成 |
+| **Phase 15** | TUI 日报编辑器增强：NORMAL 模式进入（vim 体验一致）；预加载最后 3 行历史上下文（可编辑修改）；自动预填日期前缀；提交后原样写入文件（替换历史行 + 追加新内容）；脚本/open 命令路径参数 `~` 展开 | ✅ 完成 |
+| **Phase 16** | 脚本新窗口执行：`-w` / `--new-window` 标志控制脚本在新终端窗口中执行（macOS osascript + Windows start + Linux gnome-terminal/xterm/konsole fallback）；TUI 日报编辑器新周标题逻辑修复（不提前写入文件，用户取消时文件完全不变） | ✅ 完成 |
+| **Phase 17** | TUI 编辑器 `:q` / `:q!` 区分：有未保存改动时 `:q` 拒绝退出并提示，`:q!` 强制退出（与 vim 行为一致）；新窗口脚本执行完毕后等待用户按键确认再关闭窗口（跨平台） | ✅ 完成 |
+| **Phase 18** | 倒计时进度条优化：使用 `indicatif` 替换手动 ASCII 绘制，支持 spinner 动画 + 彩色进度条 + 百分比 + HH:MM:SS 显示 + 中文时长提示；`concat` 脚本创建增强：不带内容参数时打开 TUI 编辑器，预填 shebang + 等待按键模板，用户可自行编辑/删除；新窗口执行不再强制追加等待按键逻辑，由脚本自身控制（编辑器模板可选保留） | ✅ 完成 |
+| **Phase 19** | `reportctl open` 命令：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写文件；取消则不修改 | ✅ 完成 |
+| **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
 
 ---
 
@@ -138,10 +151,10 @@ flowchart TD
 | `list` | `ls` | `[section]` | 列出别名 |
 | `contain` | `find` | `<alias> [sections]` | 查找别名所在分类 |
 | `report` | `r` | `<content...>` | 写入日报 |
-| `reportctl` | `rctl` | `<new\|sync\|push\|pull\|set-url> [arg]` | 日报元数据操作 |
+| `reportctl` | `rctl` | `<new\|sync\|push\|pull\|set-url\|open> [arg]` | 日报元数据操作 |
 | `check` | `c` | `[line_count]` | 查看最近 N 行日报 |
 | `search` | `select/look/sch` | `<N\|all> <kw> [-f]` | 搜索日报 |
-| `concat` | — | `<name> <content>` | 创建脚本 |
+| `concat` | — | `<name> [content]` | 创建脚本（无 content 则打开 TUI 编辑器） |
 | `time` | — | `<countdown> <dur>` | 倒计时器 |
 | `log` | — | `<key> <value>` | 日志设置 |
 | `change` | `chg` | `<part> <field> <val>` | 修改配置 |
@@ -149,6 +162,7 @@ flowchart TD
 | `version` | `v` | — | 版本信息 |
 | `help` | `h` | — | 帮助信息 |
 | `exit` | `q/quit` | — | 退出 |
+| `completion` | — | `[zsh\|bash]` | 生成 shell 补全脚本 |
 
 ### 5.3 配置管理 — `config/yaml_config.rs`
 
@@ -180,7 +194,7 @@ flowchart TD
   - `ls/change <Tab>` → 补全 section 名
   - `log <Tab>` → 补全 `mode`，`log mode <Tab>` → 补全 `verbose/concise`
   - `search <Tab>` → 补全 `all`
-  - `reportctl <Tab>` → 补全 `new/sync/push/pull/set-url`
+  - `reportctl <Tab>` → 补全 `new/sync/push/pull/set-url/open`
   - `set <alias> /App<Tab>` → 补全文件系统路径
   - `mf <alias> /App<Tab>` → 补全文件系统路径
   - `time <Tab>` → 补全 `countdown`
@@ -200,13 +214,15 @@ j <browser> <url_alias>     → 用指定浏览器打开 URL
 j <browser> <任意文本>      → 用浏览器搜索（Google/Bing）
 j <editor> <文件路径>       → 用编辑器打开文件
 j <alias> <额外参数...>     → 带参数打开（如 j vscode ./src）
+j <script_alias> -w         → 在新终端窗口中执行脚本
+j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 ```
 
 判断逻辑：
 1. 检查第一个参数是否在 browser section → 是则走浏览器打开逻辑
 2. 检查第一个参数是否在 editor section → 是则走编辑器打开逻辑
 3. 检查是否在 VPN section → 系统 open 打开
-4. 检查是否在 script section → `sh` 执行脚本
+4. 检查是否在 script section → 执行脚本（支持 `-w` 新窗口标志）
 5. 查找别名对应的路径 → **智能判断**：
   - **CLI 可执行文件**（普通文件 + 可执行权限，非 `.app`）→ `Command::new()` 在当前终端执行，继承 stdin/stdout，支持管道
   - **GUI 应用**（`.app` 目录）/ 其他文件 → 系统 `open` 命令打开
@@ -220,6 +236,7 @@ j <alias> <额外参数...>     → 带参数打开（如 j vscode ./src）
 - **reportctl push [message]**：推送周报到远程 git 仓库（自动 add + commit + push）
 - **reportctl pull**：从远程 git 仓库拉取最新周报（支持首次 clone 和后续 pull）
 - **reportctl set-url [url]**：设置/查看 git 远程仓库地址（设置后自动同步 git remote origin）
+- **reportctl open**：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写
 - **check [N]**：从文件尾部读取最后 N 行（高效实现，不全量读取）
 - **search**：在日报中按关键字搜索，支持精确匹配和模糊匹配（`-f`），匹配内容绿色高亮
 - **默认路径**：`~/.jdata/report/week_report.md`（无需配置，自动创建目录和文件）
@@ -523,7 +540,60 @@ Phase 11 将 `auto_add_history` 改为 `false`，手动控制历史记录：
 - `report <content>` 命令**不记入历史**——日报内容属于隐私，不应在后续 history hint 中被泄露
 - 其他所有命令（包括 `!` shell 命令）正常记录历史
 
-### 12. 资源文件外置 + 编译时嵌入
+### 12. TUI 多行编辑器（vim 模式全屏编辑）
+
+Phase 14 + Phase 15 为 `report` 命令引入了基于 ratatui + tui-textarea 的全屏 TUI 多行编辑器：
+
+**触发方式**：`j report`（无参数）→ 进入全屏 vim 模式编辑器，撰写日报内容后提交
+
+**vim 模式支持**：
+- **NORMAL** 模式：默认进入（与 vim 体验一致），支持 hjkl 移动、w/e/b 词跳转、gg/G 首尾跳转、yy/dd/cc 操作、u 撤销、Ctrl+R 重做
+- **INSERT** 模式：i/a/o/O 进入，直接输入文本
+- **VISUAL** 模式：v 进入选择，支持 y/d/c 操作
+- **COMMAND** 模式：`:wq` / `:x` 提交，`:q` / `:q!` 退出
+
+**快捷键**：
+- `:q`：尝试退出，若有未保存改动则拒绝并显示警告（标题栏变红 + 提示信息）
+- `:q!`：强制放弃退出（丢弃所有改动）
+- `Ctrl+Q`：任何模式下强制取消退出（等价 `:q!`）
+- `Ctrl+S`：任何模式下快速提交
+- `Esc`：INSERT → NORMAL 模式切换
+
+**日报 TUI 特性**：
+- 进入编辑器时自动预加载日报文件**最后 3 行**作为上下文（可编辑修改）
+- 自动预填日期前缀行（如 `- 【2026/02/11】 `），光标定位到末尾
+- 默认 NORMAL 模式进入，与 vim 体验完全一致
+- 提交后将编辑器全部内容**原样写入**文件（替换末尾历史行 + 追加新内容）
+- 自动检测并处理新周标题（跨周时自动追加 `# WeekN[...]` 标题）
+
+**UI 特性**：
+- 底部状态栏实时显示当前模式（带颜色标签）+ 快捷键提示 + 行数
+- COMMAND 模式下状态栏显示实时输入的命令（如 `:wq`）
+- 编辑区支持行号显示、光标行下划线
+
+### 13. 脚本新窗口执行（`-w` / `--new-window`）
+
+Phase 16 为脚本执行增加了新窗口模式支持：
+
+**使用方式**：
+```bash
+j my-script -w                # 在新终端窗口中执行脚本
+j my-script -w arg1 arg2      # 带参数在新窗口中执行
+j my-script arg1              # 默认在当前终端执行（行为不变）
+```
+
+**实现原理**（跨平台）：
+- **macOS**：通过 `osascript` 调用 AppleScript，向 `Terminal.app` 发送 `do script` 命令在新窗口中执行
+- **Windows**：使用 `start cmd /c` 在新的 cmd 窗口中执行
+- **Linux**：依次尝试 `gnome-terminal`、`xterm`、`konsole`，全部失败则降级到当前终端执行
+
+**设计要点**：
+- `-w` / `--new-window` 标志从参数列表中过滤后再传递给脚本，脚本本身不会收到该标志
+- 参数中包含空格等特殊字符时自动 shell 转义（`shell_escape()` 函数）
+- 新窗口执行是非阻塞的（macOS/Windows），即 `j` 命令立即返回，脚本在后台窗口继续运行
+- 新窗口执行**不强制追加等待按键**逻辑，由脚本自身决定是否包含（通过 TUI 编辑器创建时模板中预填，命令行直接传入时不添加）
+
+### 14. 资源文件外置 + 编译时嵌入
 
 Phase 12 将 `system.rs` 中硬编码的大段 Markdown 文本（帮助文档、版本信息模板）抽取到独立的 `assets/*.md` 文件中：
 
@@ -545,6 +615,49 @@ const VERSION_TEMPLATE: &str = include_str!("../../assets/version.md");
 - `.md` 文件可以直接用编辑器预览，方便排版和校对
 - 编译时嵌入，运行时零开销（与硬编码字符串等价）
 - 版本模板使用占位符（`{version}`、`{os}`、`{extra}`），运行时通过 `str::replace()` 填充动态值
+
+### 15. 文件路径补全增强 + Shell 补全脚本生成
+
+Phase 20 解决了两个层面的文件路径补全缺失问题：
+
+**交互模式增强（rustyline）**：
+
+原有逻辑：当第一个词是别名（非命令）时，后续参数只补全其他别名。现在改为根据别名类型智能选择补全策略：
+
+| 别名类型 | 后续参数补全 | 典型场景 |
+|----------|-------------|----------|
+| **编辑器别名**（editor section） | 文件路径补全 | `vscode ./src<Tab>` |
+| **浏览器别名**（browser section） | 别名 + 文件路径补全 | `chrome github<Tab>` 或 `chrome index.html<Tab>` |
+| **其他别名**（CLI 工具等） | 文件路径 + 别名补全 | `rg pattern <Tab>` |
+
+**快捷模式 Shell 补全脚本（`j completion`）**：
+
+快捷模式下的 Tab 补全由 shell 负责（非程序内部 rustyline）。新增 `j completion [zsh|bash]` 命令，**动态读取当前配置**生成补全脚本：
+
+```bash
+# 方式 1：临时生效（当前 shell 会话）
+eval "$(j completion zsh)"
+
+# 方式 2：持久化（推荐）
+j completion zsh > ~/.zsh/completions/_j
+# 确保 fpath 包含该目录：fpath=(~/.zsh/completions $fpath)
+# 然后在 .zshrc 中 autoload -Uz compinit && compinit
+
+# Bash 用户
+eval "$(j completion bash)"
+# 或: j completion bash > /etc/bash_completion.d/j
+```
+
+补全脚本中包含的智能补全规则：
+- 第一个参数：补全所有子命令名 + 已注册别名
+- `set/modify` 命令：第二参数补全别名，第三参数补全文件路径
+- `rm/rename/note/denote/contain` 命令：补全别名
+- `reportctl` 命令：补全子操作（new/sync/push/pull/set-url/open）
+- 编辑器类别名（如 `code`/`tp`）：后续参数用 `_files` 补全文件路径
+- 浏览器类别名：后续参数补全别名 + 文件路径
+- 其他别名/命令：默认文件路径 + 别名补全
+
+**注意**：补全脚本是根据执行 `j completion` 时的配置快照生成的。如果新增/删除了别名，需要重新执行一次 `eval "$(j completion zsh)"` 更新补全列表。
 
 ---
 
