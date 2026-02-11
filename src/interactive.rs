@@ -102,7 +102,7 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         (cmd::CHANGE, vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
         // 日报系统
         (cmd::REPORT, vec![ArgHint::Placeholder("<content>")]),
-        (cmd::REPORTCTL, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL]), ArgHint::Placeholder("<date|message>")]),
+        (cmd::REPORTCTL, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL]), ArgHint::Placeholder("<date|message|url>")]),
         (cmd::CHECK, vec![ArgHint::Placeholder("<line_count>")]),
         (cmd::SEARCH, vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY])]),
         // 脚本

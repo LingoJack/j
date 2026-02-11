@@ -60,6 +60,7 @@ pub fn handle_help() {
   j reportctl sync [date]       同步周数和日期
   j reportctl push [message]    推送周报到远程 git 仓库
   j reportctl pull              从远程 git 仓库拉取周报
+  j reportctl set-url <url>     设置/查看 git 仓库地址
   j check [line_count]          查看日报最近 N 行（默认 5）
   j search <N|all> <keyword>    在日报中搜索关键字
   j search <N|all> <kw> -f      模糊搜索（大小写不敏感）
@@ -87,7 +88,7 @@ pub fn handle_help() {
   - 路径可使用引号包裹处理空格
   - URL 会自动识别并归类到 inner_url
   - 日报默认存储在 ~/.jdata/report/week_report.md
-  - 配置 git 仓库: j change report git_repo <repo_url>
+  - 配置 git 仓库: j reportctl set-url <repo_url>
 ==========================================================="#;
     println!("{}", help_text);
 }

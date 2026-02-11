@@ -41,8 +41,12 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
             f if f == rmeta_action::PULL => {
                 handle_pull(config);
             }
+            f if f == rmeta_action::SET_URL => {
+                let url = content.get(1).map(|s| s.as_str());
+                handle_set_url(url, config);
+            }
             _ => {
-                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL);
+                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL);
             }
         }
         return;
@@ -284,6 +288,38 @@ fn append_to_file(path: &Path, content: &str) {
     }
 }
 
+// ========== set-url 命令 ==========
+
+/// 处理 reportctl set-url 命令：设置 git 仓库地址
+fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
+    match url {
+        Some(u) if !u.is_empty() => {
+            let old = config.get_property(section::REPORT, config_key::GIT_REPO).cloned();
+            config.set_property(section::REPORT, config_key::GIT_REPO, u);
+            match old {
+                Some(old_url) if !old_url.is_empty() => {
+                    info!("✅ git 仓库地址已更新: {} → {}", old_url, u);
+                }
+                _ => {
+                    info!("✅ git 仓库地址已设置: {}", u);
+                }
+            }
+        }
+        _ => {
+            // 无参数时显示当前配置
+            match config.get_property(section::REPORT, config_key::GIT_REPO) {
+                Some(url) if !url.is_empty() => {
+                    info!("📦 当前 git 仓库地址: {}", url);
+                }
+                _ => {
+                    info!("📦 尚未配置 git 仓库地址");
+                    usage!("reportctl set-url <repo_url>");
+                }
+            }
+        }
+    }
+}
+
 // ========== push / pull 命令 ==========
 
 /// 获取日报目录（report 文件所在的目录）
@@ -334,7 +370,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
     // 检查是否有配置 git_repo
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j change report git_repo <repo_url>");
+        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
         return false;
     }
     let repo_url = git_repo.unwrap().clone();
@@ -370,7 +406,7 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j change report git_repo <repo_url>");
+        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
         return;
     }
 
@@ -419,7 +455,7 @@ fn handle_pull(config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j change report git_repo <repo_url>");
+        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
         return;
     }
 

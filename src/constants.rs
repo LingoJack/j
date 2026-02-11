@@ -4,7 +4,7 @@
 // ========== 版本信息 ==========
 
 /// 内核版本号（唯一定义，所有需要版本号的地方引用此常量）
-pub const VERSION: &str = "11.0.0";
+pub const VERSION: &str = "12.0.0";
 
 /// 项目名称
 pub const APP_NAME: &str = "work-copilot";
@@ -231,6 +231,7 @@ pub mod rmeta_action {
     pub const SYNC: &str = "sync";
     pub const PUSH: &str = "push";
     pub const PULL: &str = "pull";
+    pub const SET_URL: &str = "set-url";
 }
 
 // ========== time 子命令 ==========
