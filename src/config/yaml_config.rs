@@ -83,10 +83,24 @@ impl YamlConfig {
     pub fn report_file_path(&self) -> PathBuf {
         if let Some(custom_path) = self.get_property(section::REPORT, config_key::WEEK_REPORT) {
             if !custom_path.is_empty() {
-                return PathBuf::from(custom_path);
+                return Self::expand_tilde(custom_path);
             }
         }
         Self::report_dir().join(constants::REPORT_DEFAULT_FILE)
+    }
+
+    /// 展开路径中的 ~ 为用户主目录
+    fn expand_tilde(path: &str) -> PathBuf {
+        if path.starts_with('~') {
+            if let Some(home) = dirs::home_dir() {
+                if path == "~" {
+                    return home;
+                } else if path.starts_with("~/") {
+                    return home.join(&path[2..]);
+                }
+            }
+        }
+        PathBuf::from(path)
     }
 
     /// 从配置文件加载
