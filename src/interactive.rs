@@ -644,10 +644,6 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
 
     // 日报系统
     } else if is(cmd::REPORT) {
-        if rest.is_empty() {
-            crate::usage!("report <content>");
-            return ParseResult::Handled;
-        }
         ParseResult::Matched(SubCmd::Report {
             content: rest.to_vec(),
         })

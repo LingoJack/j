@@ -3,6 +3,7 @@ mod command;
 mod config;
 mod constants;
 mod interactive;
+mod tui;
 mod util;
 
 use clap::Parser;

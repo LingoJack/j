@@ -17,8 +17,25 @@ const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
 /// 处理 report 命令: j report <content...> 或 j reportctl new [date] / j reportctl sync [date]
 pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
-        usage!("j report <content> | j reportctl new [date] | j reportctl sync [date]");
-        return;
+        if sub == "reportctl" {
+            usage!("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url>");
+            return;
+        }
+        // report 无参数：打开 TUI 多行编辑器
+        match crate::tui::editor::open_multiline_editor("📝 输入日报内容") {
+            Ok(Some(text)) => {
+                handle_daily_report(&text, config);
+                return;
+            }
+            Ok(None) => {
+                info!("已取消编辑");
+                return;
+            }
+            Err(e) => {
+                error!("❌ 编辑器启动失败: {}", e);
+                return;
+            }
+        }
     }
 
     let first = content[0].as_str();
