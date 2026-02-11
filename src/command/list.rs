@@ -24,15 +24,15 @@ pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
     }
 }
 
-/// 列出某个 section 的所有键值对（Markdown 表格渲染）
+/// 列出某个 section 的所有键值对（Markdown 无序列表渲染）
 fn list_section(section: &str, config: &YamlConfig) {
     if let Some(map) = config.get_section(section) {
         if map.is_empty() {
-            md!("## {}\n*Empty*\n", capitalize_first_letter(section));
+            md!("- **{}**\n\t- *Empty*\n", capitalize_first_letter(section));
         } else {
-            let mut md_text = format!("## {}\n\n", capitalize_first_letter(section));
+            let mut md_text = format!("- **{}**\n", capitalize_first_letter(section));
             for (key, value) in map {
-                md_text.push_str(&format!("- **{}**\n  - {}\n", key, value));
+                md_text.push_str(&format!("\t- {} → {}\n", key, value));
             }
             md!("{}", md_text);
         }
