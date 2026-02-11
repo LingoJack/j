@@ -2,7 +2,10 @@ pub mod alias;
 pub mod category;
 pub mod list;
 pub mod open;
+pub mod report;
+pub mod script;
 pub mod system;
+pub mod time;
 
 use crate::cli::SubCmd;
 use crate::config::YamlConfig;
@@ -50,6 +53,26 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
         // 列表 & 查找
         SubCmd::Ls { part } => list::handle_list(part.as_deref(), config),
         SubCmd::Contain { alias, containers } => system::handle_contain(&alias, containers.as_deref(), config),
+
+        // 日报系统
+        SubCmd::Report { content } => report::handle_report("report", &content, config),
+        SubCmd::RMeta { action, date } => {
+            let mut args = vec![action];
+            if let Some(d) = date {
+                args.push(d);
+            }
+            report::handle_report("r-meta", &args, config);
+        }
+        SubCmd::Check { line_count } => report::handle_check(line_count.as_deref(), config),
+        SubCmd::Search { line_count, target, fuzzy } => {
+            report::handle_search(&line_count, &target, fuzzy.as_deref(), config);
+        }
+
+        // 脚本
+        SubCmd::Concat { name, content } => script::handle_concat(&name, &content, config),
+
+        // 倒计时
+        SubCmd::Time { function, arg } => time::handle_time(&function, &arg),
 
         // 系统设置
         SubCmd::Log { key, value } => system::handle_log(&key, &value, config),

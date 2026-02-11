@@ -53,6 +53,21 @@ pub fn handle_help() {
   j <browser> <text>            用浏览器搜索
   j <editor> <file>             用编辑器打开文件
 
+📝 日报系统:
+  j report <content>            写入日报
+  j r-meta new [date]           开启新的一周（周数+1）
+  j r-meta sync [date]          同步周数和日期
+  j check [line_count]          查看日报最近 N 行（默认 5）
+  j search <N|all> <keyword>    在日报中搜索关键字
+  j search <N|all> <kw> -f      模糊搜索（大小写不敏感）
+
+📜 脚本:
+  j concat <name> "<content>"   创建脚本并注册为别名
+
+⏳ 倒计时:
+  j time countdown <duration>   启动倒计时
+    duration: 30s(秒), 5m(分钟), 1h(小时), 默认分钟
+
 ⚙️  系统设置:
   j log mode <verbose|concise>  设置日志模式
   j change <part> <field> <val> 直接修改配置字段
@@ -65,6 +80,7 @@ pub fn handle_help() {
 
 💡 提示:
   - 不带参数运行 `j` 进入交互模式
+  - 交互模式下用 ! 前缀执行 shell 命令
   - 路径可使用引号包裹处理空格
   - URL 会自动识别并归类到 inner_url
 ==========================================================="#;
@@ -140,18 +156,23 @@ pub fn handle_contain(alias: &str, containers: Option<&str>, config: &YamlConfig
 }
 
 /// 处理 change 命令: j change <part> <field> <value>
-/// 直接修改配置文件中的某个字段
+/// 直接修改配置文件中的某个字段（如果字段不存在则新增）
 pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConfig) {
-    if !config.contains(part, field) {
-        error!("❌ 在配置文件中未找到该字段：{}.{}", part, field);
+    if config.get_section(part).is_none() {
+        error!("❌ 在配置文件中未找到该 section：{}", part);
         return;
     }
 
-    let old_value = config
-        .get_property(part, field)
-        .cloned()
-        .unwrap_or_default();
+    let old_value = config.get_property(part, field).cloned();
     config.set_property(part, field, value);
-    info!("✅ 已修改 {}.{} 的值为 {}，旧值为 {}", part, field, value, old_value);
+
+    match old_value {
+        Some(old) => {
+            info!("✅ 已修改 {}.{} 的值为 {}，旧值为 {}", part, field, value, old);
+        }
+        None => {
+            info!("✅ 已新增 {}.{} = {}", part, field, value);
+        }
+    }
     info!("🚧 此命令可能会导致配置文件属性错乱而使 Copilot 无法正常使用，请确保在您清楚在做什么的情况下使用");
 }

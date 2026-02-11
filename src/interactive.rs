@@ -95,6 +95,15 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         // 系统设置
         (&["log"], vec![ArgHint::Fixed(vec!["mode"]), ArgHint::Fixed(vec!["verbose", "concise"])]),
         (&["change", "chg"], vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
+        // 日报系统
+        (&["report", "r"], vec![ArgHint::Placeholder("<content>")]),
+        (&["r-meta"], vec![ArgHint::Fixed(vec!["new", "sync"]), ArgHint::Placeholder("<date>")]),
+        (&["check", "c"], vec![ArgHint::Placeholder("<line_count>")]),
+        (&["search", "select", "look", "sch"], vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec!["-f", "-fuzzy"])]),
+        // 脚本
+        (&["concat"], vec![ArgHint::Placeholder("<script_name>"), ArgHint::Placeholder("<script_content>")]),
+        // 倒计时
+        (&["time"], vec![ArgHint::Fixed(vec!["countdown"]), ArgHint::Placeholder("<duration>")]),
         // 系统信息
         (&["version", "v"], vec![]),
         (&["help", "h"], vec![]),
@@ -598,6 +607,65 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
             })
         }
         "clear" | "cls" => Some(SubCmd::Clear),
+
+        // 日报系统
+        "report" | "r" => {
+            if rest.is_empty() {
+                crate::usage!("report <content>");
+                return None;
+            }
+            Some(SubCmd::Report {
+                content: rest.to_vec(),
+            })
+        }
+        "r-meta" => {
+            if rest.is_empty() {
+                crate::usage!("r-meta <new|sync> [date]");
+                return None;
+            }
+            Some(SubCmd::RMeta {
+                action: rest[0].clone(),
+                date: rest.get(1).cloned(),
+            })
+        }
+        "check" | "c" => Some(SubCmd::Check {
+            line_count: rest.first().cloned(),
+        }),
+        "search" | "select" | "look" | "sch" => {
+            if rest.len() < 2 {
+                crate::usage!("search <line_count|all> <target> [-f|-fuzzy]");
+                return None;
+            }
+            Some(SubCmd::Search {
+                line_count: rest[0].clone(),
+                target: rest[1].clone(),
+                fuzzy: rest.get(2).cloned(),
+            })
+        }
+
+        // 脚本创建
+        "concat" => {
+            if rest.len() < 2 {
+                crate::usage!("concat <script_name> \"<script_content>\"");
+                return None;
+            }
+            Some(SubCmd::Concat {
+                name: rest[0].clone(),
+                content: rest[1..].join(" "),
+            })
+        }
+
+        // 倒计时
+        "time" => {
+            if rest.len() < 2 {
+                crate::usage!("time countdown <duration>");
+                return None;
+            }
+            Some(SubCmd::Time {
+                function: rest[0].clone(),
+                arg: rest[1].clone(),
+            })
+        }
 
         // 系统信息
         "version" | "v" => Some(SubCmd::Version),

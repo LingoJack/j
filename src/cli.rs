@@ -88,6 +88,61 @@ pub enum SubCmd {
         containers: Option<String>,
     },
 
+    // ========== 日报系统 ==========
+    /// 写入日报
+    #[command(aliases = ["r"])]
+    Report {
+        /// 日报内容（支持多个参数拼接）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
+    },
+
+    /// 日报元数据操作（new/sync）
+    #[command(name = "r-meta")]
+    RMeta {
+        /// 操作: new 或 sync
+        action: String,
+        /// 可选的日期参数（yyyy.MM.dd 格式）
+        date: Option<String>,
+    },
+
+    /// 查看日报最近 N 行
+    #[command(alias = "c")]
+    Check {
+        /// 行数（默认 5）
+        line_count: Option<String>,
+    },
+
+    /// 在日报中搜索关键字
+    #[command(aliases = ["select", "look", "sch"])]
+    Search {
+        /// 行数或 "all"
+        line_count: String,
+        /// 搜索关键字
+        target: String,
+        /// 可选: -f 或 -fuzzy 启用模糊匹配
+        #[arg(allow_hyphen_values = true)]
+        fuzzy: Option<String>,
+    },
+
+    // ========== 脚本 ==========
+    /// 创建脚本
+    Concat {
+        /// 脚本名称
+        name: String,
+        /// 脚本内容
+        content: String,
+    },
+
+    // ========== 计时器 ==========
+    /// 倒计时器
+    Time {
+        /// 功能名称（目前支持: countdown）
+        function: String,
+        /// 参数（时长，如 30s、5m、1h）
+        arg: String,
+    },
+
     // ========== 系统设置 ==========
     /// 日志模式设置
     Log {

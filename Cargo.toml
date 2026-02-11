@@ -12,6 +12,9 @@ clap = { version = "4", features = ["derive"] }
 rustyline = "15"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+serde_json = "1"
+chrono = "0.4"
 colored = "3"
 dirs = "6"
 url = "2"
+indicatif = "0.17"
