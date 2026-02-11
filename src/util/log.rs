@@ -36,12 +36,14 @@ macro_rules! debug_log {
     }};
 }
 
-/// 在终端中渲染 Markdown 文本（使用 termimad）
+/// 在终端中渲染 Markdown 文本
+/// 优先通过管道调用外部 `ask -c render` 渲染（效果更佳），
+/// 如果 ask 不可用则 fallback 到 termimad
 #[macro_export]
 macro_rules! md {
     ($($arg:tt)*) => {{
         let text = format!($($arg)*);
-        termimad::print_text(&text);
+        $crate::util::log::render_markdown(&text);
     }};
 }
 
@@ -51,16 +53,6 @@ macro_rules! md_inline {
     ($($arg:tt)*) => {{
         let text = format!($($arg)*);
         termimad::print_inline(&text);
-    }};
-}
-
-/// 使用自定义皮肤渲染 Markdown 文本
-/// 用法: md_skin!(skin, "markdown text {}", arg)
-#[macro_export]
-macro_rules! md_skin {
-    ($skin:expr, $($arg:tt)*) => {{
-        let text = format!($($arg)*);
-        $skin.print_text(&text);
     }};
 }
 
@@ -76,5 +68,36 @@ pub fn capitalize_first_letter(s: &str) -> String {
     match chars.next() {
         None => String::new(),
         Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// 渲染 Markdown 文本到终端
+/// 优先通过管道调用外部 `ask -c render`（效果更佳），
+/// 如果 ask 不可用则 fallback 到 termimad
+pub fn render_markdown(text: &str) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // 尝试调用外部 ask -c render
+    let result = Command::new("ask")
+        .args(["-c", "render"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn();
+
+    match result {
+        Ok(mut child) => {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+                // 关闭 stdin 触发 ask 处理
+                drop(stdin);
+            }
+            let _ = child.wait();
+        }
+        Err(_) => {
+            // ask 不可用，fallback 到 termimad
+            termimad::print_text(text);
+        }
     }
 }

@@ -30,11 +30,11 @@ fn list_section(section: &str, config: &YamlConfig) {
         if map.is_empty() {
             md!("## {}\n*Empty*\n", capitalize_first_letter(section));
         } else {
-            let mut md_text = format!("## {}\n\n|:-|:-|\n", capitalize_first_letter(section));
+            let mut md_text = format!("## {}\n\n| 别名 | 值 |\n|------|----|\n", capitalize_first_letter(section));
             for (key, value) in map {
                 // 转义 Markdown 中的 | 字符
                 let escaped_value = value.replace('|', "\\|");
-                md_text.push_str(&format!("|**{}**|{}|\n", key, escaped_value));
+                md_text.push_str(&format!("| **{}** | {} |\n", key, escaped_value));
             }
             md!("{}", md_text);
         }

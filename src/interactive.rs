@@ -361,7 +361,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
     let rl_config = Config::builder()
         .completion_type(CompletionType::List)
         .edit_mode(EditMode::Emacs)
-        .auto_add_history(true)
+        .auto_add_history(false) // 手动控制历史记录，report 内容不入历史（隐私保护）
         .build();
 
     let helper = CopilotHelper::new(config);
@@ -397,6 +397,8 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 if input.starts_with(constants::SHELL_PREFIX) {
                     let shell_cmd = &input[1..].trim();
                     execute_shell_command(shell_cmd);
+                    // Shell 命令记录到历史
+                    let _ = rl.add_history_entry(input);
                     println!();
                     continue;
                 }
@@ -413,6 +415,12 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 } else {
                     None
                 };
+
+                // report 内容不记入历史（隐私保护），其他命令正常记录
+                let is_report_cmd = !args.is_empty() && cmd::REPORT.contains(&args[0].as_str());
+                if !is_report_cmd {
+                    let _ = rl.add_history_entry(input);
+                }
 
                 execute_interactive_command(&args, config);
 
