@@ -21,21 +21,9 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
             usage!("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url>");
             return;
         }
-        // report 无参数：打开 TUI 多行编辑器
-        match crate::tui::editor::open_multiline_editor("📝 输入日报内容") {
-            Ok(Some(text)) => {
-                handle_daily_report(&text, config);
-                return;
-            }
-            Ok(None) => {
-                info!("已取消编辑");
-                return;
-            }
-            Err(e) => {
-                error!("❌ 编辑器启动失败: {}", e);
-                return;
-            }
-        }
+        // report 无参数：打开 TUI 多行编辑器（预填历史 + 日期前缀，NORMAL 模式）
+        handle_report_tui(config);
+        return;
     }
 
     let first = content[0].as_str();
@@ -105,6 +93,120 @@ fn get_report_path(config: &YamlConfig) -> Option<String> {
 /// 获取日报工作目录下的 settings.json 路径
 fn get_settings_json_path(report_path: &str) -> std::path::PathBuf {
     Path::new(report_path).parent().unwrap().join("settings.json")
+}
+
+/// TUI 模式日报编辑：预加载历史 + 日期前缀，NORMAL 模式进入
+fn handle_report_tui(config: &mut YamlConfig) {
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
+    };
+
+    let config_path = get_settings_json_path(&report_path);
+    load_config_from_json_and_sync(&config_path, config);
+
+    // 检查是否需要新开一周（与 handle_daily_report 相同逻辑）
+    let now = Local::now().date_naive();
+    let week_num = config
+        .get_property(section::REPORT, config_key::WEEK_NUM)
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(1);
+    let last_day_str = config
+        .get_property(section::REPORT, config_key::LAST_DAY)
+        .cloned()
+        .unwrap_or_default();
+    let last_day = parse_date(&last_day_str);
+
+    // 先读取文件最后 3 行作为历史上下文（在任何写入之前读取）
+    let context_lines = 3;
+    let report_file = Path::new(&report_path);
+    let last_lines = read_last_n_lines(report_file, context_lines);
+
+    // 拼接编辑器初始内容：历史行 + (可选的新周标题) + 日期前缀行
+    let mut initial_lines: Vec<String> = last_lines.clone();
+
+    // 检查是否需要新开一周 → 只更新配置，不写入文件；新周标题放入编辑器
+    if let Some(last_day) = last_day {
+        if now > last_day {
+            let next_last_day = now + chrono::Duration::days(6);
+            let new_week_title = format!(
+                "# Week{}[{}-{}]",
+                week_num,
+                now.format(DATE_FORMAT),
+                next_last_day.format(DATE_FORMAT)
+            );
+            update_config_files(week_num + 1, &next_last_day, &config_path, config);
+            // 新周标题放入编辑器初始内容，不提前写入文件
+            initial_lines.push(new_week_title);
+        }
+    }
+
+    // 构造日期前缀行
+    let today_str = now.format(SIMPLE_DATE_FORMAT);
+    let date_prefix = format!("- 【{}】 ", today_str);
+    initial_lines.push(date_prefix);
+
+    // 打开带初始内容的编辑器（NORMAL 模式）
+    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报", &initial_lines) {
+        Ok(Some(text)) => {
+            // 用户提交了内容
+            // 计算原始上下文有多少行（用于替换）
+            let original_context_count = last_lines.len();
+
+            // 从文件中去掉最后 N 行，再写入编辑器的全部内容
+            replace_last_n_lines(report_file, original_context_count, &text);
+
+            info!("✅ 日报已写入：{}", report_path);
+        }
+        Ok(None) => {
+            info!("已取消编辑");
+            // 文件未做任何修改（新周标题也没有写入）
+            // 配置文件中的 week_num/last_day 可能已更新，但下次进入时 now <= last_day 不会重复生成
+        }
+        Err(e) => {
+            error!("❌ 编辑器启动失败: {}", e);
+        }
+    }
+}
+
+/// 替换文件最后 N 行为新内容
+fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("❌ 读取文件失败: {}", e);
+            return;
+        }
+    };
+
+    let all_lines: Vec<&str> = content.lines().collect();
+
+    // 保留前面的行（去掉最后 n 行）
+    let keep_count = if all_lines.len() > n {
+        all_lines.len() - n
+    } else {
+        0
+    };
+
+    let mut result = String::new();
+
+    // 写入保留的行
+    for line in &all_lines[..keep_count] {
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    // 追加编辑器的内容
+    result.push_str(new_content);
+
+    // 确保文件以换行结尾
+    if !result.ends_with('\n') {
+        result.push('\n');
+    }
+
+    if let Err(e) = fs::write(path, &result) {
+        error!("❌ 写入文件失败: {}", e);
+    }
 }
 
 /// 写入日报

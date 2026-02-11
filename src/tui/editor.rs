@@ -496,7 +496,22 @@ impl Vim {
 /// - Ctrl+S: 任何模式下快速提交
 ///
 /// 返回 Some(text) 表示提交，None 表示取消
+#[allow(dead_code)]
 pub fn open_multiline_editor(title: &str) -> io::Result<Option<String>> {
+    open_editor_internal(title, &[], Mode::Insert)
+}
+
+/// 打开全屏多行编辑器，带有预填充内容，默认 NORMAL 模式
+///
+/// - `initial_lines`: 预填充到编辑区的行（如历史日报 + 日期前缀）
+///
+/// 返回 Some(text) 表示提交，None 表示取消
+pub fn open_multiline_editor_with_content(title: &str, initial_lines: &[String]) -> io::Result<Option<String>> {
+    open_editor_internal(title, initial_lines, Mode::Normal)
+}
+
+/// 内部统一入口：初始化终端 + 编辑区 + 主循环
+fn open_editor_internal(title: &str, initial_lines: &[String], initial_mode: Mode) -> io::Result<Option<String>> {
     // 进入终端原始模式
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -505,13 +520,22 @@ pub fn open_multiline_editor(title: &str) -> io::Result<Option<String>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // 初始化文本编辑区（默认 Insert 模式）
-    let initial_mode = Mode::Insert;
-    let mut textarea = TextArea::default();
+    // 初始化文本编辑区
+    let mut textarea = if initial_lines.is_empty() {
+        TextArea::default()
+    } else {
+        TextArea::new(initial_lines.to_vec())
+    };
     textarea.set_block(make_block(title, &initial_mode));
     textarea.set_cursor_style(initial_mode.cursor_style());
     textarea.set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
     textarea.set_line_number_style(Style::default().fg(Color::DarkGray));
+
+    // 如果有预填内容，光标跳到最后一行末尾
+    if !initial_lines.is_empty() {
+        textarea.move_cursor(CursorMove::Bottom);
+        textarea.move_cursor(CursorMove::End);
+    }
 
     let mut vim = Vim::new(initial_mode);
     let result = run_editor_loop(&mut terminal, &mut textarea, &mut vim, title);
