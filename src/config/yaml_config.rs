@@ -78,6 +78,7 @@ impl YamlConfig {
         if !path.exists() {
             // 配置文件不存在，创建默认配置
             let config = Self::default_config();
+            eprintln!("[INFO] 创建默认配置文件: {:?}", path);
             config.save();
             return config;
         }
