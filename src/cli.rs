@@ -98,13 +98,13 @@ pub enum SubCmd {
         content: Vec<String>,
     },
 
-    /// 日报元数据操作（new/sync）
+    /// 日报元数据操作（new/sync/push/pull）
     #[command(name = "r-meta")]
     RMeta {
-        /// 操作: new 或 sync
+        /// 操作: new / sync / push / pull
         action: String,
-        /// 可选的日期参数（yyyy.MM.dd 格式）
-        date: Option<String>,
+        /// 可选参数（new/sync 时为日期，push 时为 commit message）
+        arg: Option<String>,
     },
 
     /// 查看日报最近 N 行

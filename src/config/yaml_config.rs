@@ -72,6 +72,23 @@ impl YamlConfig {
         dir
     }
 
+    /// 获取日报目录: ~/.jdata/report/
+    pub fn report_dir() -> PathBuf {
+        let dir = Self::data_dir().join(constants::REPORT_DIR);
+        let _ = fs::create_dir_all(&dir);
+        dir
+    }
+
+    /// 获取日报文件路径（优先使用用户配置，否则使用默认路径 ~/.jdata/report/weekly.md）
+    pub fn report_file_path(&self) -> PathBuf {
+        if let Some(custom_path) = self.get_property(section::REPORT, config_key::WEEK_REPORT) {
+            if !custom_path.is_empty() {
+                return PathBuf::from(custom_path);
+            }
+        }
+        Self::report_dir().join(constants::REPORT_DEFAULT_FILE)
+    }
+
     /// 从配置文件加载
     pub fn load() -> Self {
         let path = Self::config_path();

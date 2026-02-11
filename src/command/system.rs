@@ -58,6 +58,8 @@ pub fn handle_help() {
   j report <content>            写入日报
   j r-meta new [date]           开启新的一周（周数+1）
   j r-meta sync [date]          同步周数和日期
+  j r-meta push [message]       推送周报到远程 git 仓库
+  j r-meta pull                 从远程 git 仓库拉取周报
   j check [line_count]          查看日报最近 N 行（默认 5）
   j search <N|all> <keyword>    在日报中搜索关键字
   j search <N|all> <kw> -f      模糊搜索（大小写不敏感）
@@ -84,6 +86,8 @@ pub fn handle_help() {
   - 交互模式下用 ! 前缀执行 shell 命令
   - 路径可使用引号包裹处理空格
   - URL 会自动识别并归类到 inner_url
+  - 日报默认存储在 ~/.jdata/report/weekly.md
+  - 配置 git 仓库: j change report git_repo <repo_url>
 ==========================================================="#;
     println!("{}", help_text);
 }

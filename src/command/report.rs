@@ -7,6 +7,7 @@ use colored::Colorize;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
+use std::process::Command;
 
 const DATE_FORMAT: &str = REPORT_DATE_FORMAT;
 const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
@@ -33,8 +34,15 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
                 let date_str = content.get(1).map(|s| s.as_str());
                 handle_sync(date_str, config);
             }
+            f if f == rmeta_action::PUSH => {
+                let msg = content.get(1).map(|s| s.as_str());
+                handle_push(msg, config);
+            }
+            f if f == rmeta_action::PULL => {
+                handle_pull(config);
+            }
             _ => {
-                error!("❌ 未知的元数据操作: {}，可选: {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC);
+                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL);
             }
         }
         return;
@@ -52,26 +60,43 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     handle_daily_report(&text, config);
 }
 
-/// 写入日报
-fn handle_daily_report(content: &str, config: &mut YamlConfig) {
-    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
-        Some(p) => p.clone(),
-        None => {
-            error!("❌ 配置文件中未设置 report.week_report 路径");
-            return;
-        }
-    };
+/// 获取日报文件路径（统一入口，自动创建目录和文件）
+fn get_report_path(config: &YamlConfig) -> Option<String> {
+    let report_path = config.report_file_path();
 
-    info!("📂 从配置文件中读取到路径：{}", report_path);
-
-    let report_file = Path::new(&report_path);
-    if !report_file.exists() {
-        error!("❌ 路径不存在：{}", report_path);
-        return;
+    // 确保父目录存在
+    if let Some(parent) = report_path.parent() {
+        let _ = fs::create_dir_all(parent);
     }
 
-    let work_dir = report_file.parent().unwrap();
-    let config_path = work_dir.join("settings.json");
+    // 如果文件不存在则自动创建空文件
+    if !report_path.exists() {
+        if let Err(e) = fs::write(&report_path, "") {
+            error!("❌ 创建日报文件失败: {}", e);
+            return None;
+        }
+        info!("📄 已自动创建日报文件: {:?}", report_path);
+    }
+
+    Some(report_path.to_string_lossy().to_string())
+}
+
+/// 获取日报工作目录下的 settings.json 路径
+fn get_settings_json_path(report_path: &str) -> std::path::PathBuf {
+    Path::new(report_path).parent().unwrap().join("settings.json")
+}
+
+/// 写入日报
+fn handle_daily_report(content: &str, config: &mut YamlConfig) {
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
+    };
+
+    info!("📂 日报文件路径：{}", report_path);
+
+    let report_file = Path::new(&report_path);
+    let config_path = get_settings_json_path(&report_path);
 
     load_config_from_json_and_sync(&config_path, config);
 
@@ -118,16 +143,12 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
 
 /// 处理 r-meta new 命令：开启新的一周
 fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
-    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
-        Some(p) => p.clone(),
-        None => {
-            error!("❌ 配置文件中未设置 report.week_report 路径");
-            return;
-        }
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
     };
 
-    let report_file = Path::new(&report_path);
-    let config_path = report_file.parent().unwrap().join("settings.json");
+    let config_path = get_settings_json_path(&report_path);
 
     let week_num = config
         .get_property(section::REPORT, config_key::WEEK_NUM)
@@ -152,16 +173,12 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
 
 /// 处理 r-meta sync 命令：同步周数和日期
 fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
-    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
-        Some(p) => p.clone(),
-        None => {
-            error!("❌ 配置文件中未设置 report.week_report 路径");
-            return;
-        }
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
     };
 
-    let report_file = Path::new(&report_path);
-    let config_path = report_file.parent().unwrap().join("settings.json");
+    let config_path = get_settings_json_path(&report_path);
 
     load_config_from_json_and_sync(&config_path, config);
 
@@ -267,6 +284,216 @@ fn append_to_file(path: &Path, content: &str) {
     }
 }
 
+// ========== push / pull 命令 ==========
+
+/// 获取日报目录（report 文件所在的目录）
+fn get_report_dir(config: &YamlConfig) -> Option<String> {
+    let report_path = config.report_file_path();
+    report_path.parent().map(|p| p.to_string_lossy().to_string())
+}
+
+/// 在日报目录下执行 git 命令
+fn run_git_in_report_dir(args: &[&str], config: &YamlConfig) -> Option<std::process::ExitStatus> {
+    let dir = match get_report_dir(config) {
+        Some(d) => d,
+        None => {
+            error!("❌ 无法确定日报目录");
+            return None;
+        }
+    };
+
+    let result = Command::new("git")
+        .args(args)
+        .current_dir(&dir)
+        .status();
+
+    match result {
+        Ok(status) => Some(status),
+        Err(e) => {
+            error!("💥 执行 git 命令失败: {}", e);
+            None
+        }
+    }
+}
+
+/// 检查日报目录是否已初始化 git 仓库，如果没有则初始化并配置 remote
+fn ensure_git_repo(config: &YamlConfig) -> bool {
+    let dir = match get_report_dir(config) {
+        Some(d) => d,
+        None => {
+            error!("❌ 无法确定日报目录");
+            return false;
+        }
+    };
+
+    let git_dir = Path::new(&dir).join(".git");
+    if git_dir.exists() {
+        return true;
+    }
+
+    // 检查是否有配置 git_repo
+    let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
+    if git_repo.is_none() || git_repo.unwrap().is_empty() {
+        error!("❌ 尚未配置 git 仓库地址，请先执行: j change report git_repo <repo_url>");
+        return false;
+    }
+    let repo_url = git_repo.unwrap().clone();
+
+    info!("📦 日报目录尚未初始化 git 仓库，正在初始化...");
+
+    // git init
+    if let Some(status) = run_git_in_report_dir(&["init"], config) {
+        if !status.success() {
+            error!("❌ git init 失败");
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    // git remote add origin <repo_url>
+    if let Some(status) = run_git_in_report_dir(&["remote", "add", "origin", &repo_url], config) {
+        if !status.success() {
+            error!("❌ git remote add 失败");
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    info!("✅ git 仓库初始化完成，remote: {}", repo_url);
+    true
+}
+
+/// 处理 r-meta push 命令：推送周报到远程仓库
+fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
+    // 检查 git_repo 配置
+    let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
+    if git_repo.is_none() || git_repo.unwrap().is_empty() {
+        error!("❌ 尚未配置 git 仓库地址，请先执行: j change report git_repo <repo_url>");
+        return;
+    }
+
+    // 确保 git 仓库已初始化
+    if !ensure_git_repo(config) {
+        return;
+    }
+
+    let default_msg = format!("update report {}", Local::now().format("%Y-%m-%d %H:%M"));
+    let msg = commit_msg.unwrap_or(&default_msg);
+
+    info!("📤 正在推送周报到远程仓库...");
+
+    // git add .
+    if let Some(status) = run_git_in_report_dir(&["add", "."], config) {
+        if !status.success() {
+            error!("❌ git add 失败");
+            return;
+        }
+    } else {
+        return;
+    }
+
+    // git commit -m "<msg>"
+    if let Some(status) = run_git_in_report_dir(&["commit", "-m", msg], config) {
+        if !status.success() {
+            // commit 可能因为没有变更而失败，这不一定是错误
+            info!("ℹ️ git commit 返回非零退出码（可能没有新变更）");
+        }
+    } else {
+        return;
+    }
+
+    // git push origin（自动推到当前分支）
+    if let Some(status) = run_git_in_report_dir(&["push", "-u", "origin", "HEAD"], config) {
+        if status.success() {
+            info!("✅ 周报已成功推送到远程仓库");
+        } else {
+            error!("❌ git push 失败，请检查网络连接和仓库权限");
+        }
+    }
+}
+
+/// 处理 r-meta pull 命令：从远程仓库拉取周报
+fn handle_pull(config: &YamlConfig) {
+    // 检查 git_repo 配置
+    let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
+    if git_repo.is_none() || git_repo.unwrap().is_empty() {
+        error!("❌ 尚未配置 git 仓库地址，请先执行: j change report git_repo <repo_url>");
+        return;
+    }
+
+    let dir = match get_report_dir(config) {
+        Some(d) => d,
+        None => {
+            error!("❌ 无法确定日报目录");
+            return;
+        }
+    };
+
+    let git_dir = Path::new(&dir).join(".git");
+
+    if !git_dir.exists() {
+        // 日报目录不是 git 仓库，尝试 clone
+        let repo_url = git_repo.unwrap();
+        info!("📥 日报目录尚未初始化，正在从远程仓库克隆...");
+
+        // 先备份已有文件（如果有的话）
+        let report_path = config.report_file_path();
+        let has_existing = report_path.exists() && fs::metadata(&report_path).map(|m| m.len() > 0).unwrap_or(false);
+
+        if has_existing {
+            // 备份现有文件
+            let backup_path = report_path.with_extension("md.bak");
+            if let Err(e) = fs::copy(&report_path, &backup_path) {
+                error!("⚠️ 备份现有日报文件失败: {}", e);
+            } else {
+                info!("📋 已备份现有日报到: {:?}", backup_path);
+            }
+        }
+
+        // 清空目录内容后 clone
+        // 使用 git clone 到一个临时目录再移动
+        let temp_dir = Path::new(&dir).with_file_name(".report_clone_tmp");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let result = Command::new("git")
+            .args(["clone", repo_url, &temp_dir.to_string_lossy()])
+            .status();
+
+        match result {
+            Ok(status) if status.success() => {
+                // 将 clone 出来的内容移到 report 目录
+                let _ = fs::remove_dir_all(&dir);
+                if let Err(e) = fs::rename(&temp_dir, &dir) {
+                    error!("❌ 移动克隆仓库失败: {}，临时目录: {:?}", e, temp_dir);
+                    return;
+                }
+                info!("✅ 成功从远程仓库克隆周报");
+            }
+            Ok(_) => {
+                error!("❌ git clone 失败，请检查仓库地址和网络连接");
+                let _ = fs::remove_dir_all(&temp_dir);
+            }
+            Err(e) => {
+                error!("💥 执行 git clone 失败: {}", e);
+                let _ = fs::remove_dir_all(&temp_dir);
+            }
+        }
+    } else {
+        // 已经是 git 仓库，直接 pull
+        info!("📥 正在从远程仓库拉取最新周报...");
+
+        if let Some(status) = run_git_in_report_dir(&["pull", "--rebase"], config) {
+            if status.success() {
+                info!("✅ 周报已更新到最新版本");
+            } else {
+                error!("❌ git pull 失败，请检查网络连接或手动解决冲突");
+            }
+        }
+    }
+}
+
 // ========== check 命令 ==========
 
 /// 处理 check 命令: j check [line_count]
@@ -282,18 +509,15 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
         None => DEFAULT_CHECK_LINES,
     };
 
-    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
-        Some(p) => p.clone(),
-        None => {
-            error!("❌ 配置文件中未设置 report.week_report 路径");
-            return;
-        }
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
     };
 
     info!("📂 正在读取周报文件路径: {}", report_path);
 
     let path = Path::new(&report_path);
-    if !path.exists() || !path.is_file() {
+    if !path.is_file() {
         error!("❌ 文件不存在或不是有效文件: {}", report_path);
         return;
     }
@@ -321,18 +545,15 @@ pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, c
         }
     };
 
-    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
-        Some(p) => p.clone(),
-        None => {
-            error!("❌ 配置文件中未设置 report.week_report 路径");
-            return;
-        }
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
     };
 
     info!("📂 正在读取周报文件路径: {}", report_path);
 
     let path = Path::new(&report_path);
-    if !path.exists() || !path.is_file() {
+    if !path.is_file() {
         error!("❌ 文件不存在或不是有效文件: {}", report_path);
         return;
     }

@@ -101,7 +101,7 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         (cmd::CHANGE, vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
         // 日报系统
         (cmd::REPORT, vec![ArgHint::Placeholder("<content>")]),
-        (cmd::RMETA, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC]), ArgHint::Placeholder("<date>")]),
+        (cmd::RMETA, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL]), ArgHint::Placeholder("<date|message>")]),
         (cmd::CHECK, vec![ArgHint::Placeholder("<line_count>")]),
         (cmd::SEARCH, vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY])]),
         // 脚本
@@ -615,12 +615,12 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
         })
     } else if is(cmd::RMETA) {
         if rest.is_empty() {
-            crate::usage!("r-meta <new|sync> [date]");
+            crate::usage!("r-meta <new|sync|push|pull> [date|message]");
             return None;
         }
         Some(SubCmd::RMeta {
             action: rest[0].clone(),
-            date: rest.get(1).cloned(),
+            arg: rest.get(1).cloned(),
         })
     } else if is(cmd::CHECK) {
         Some(SubCmd::Check {

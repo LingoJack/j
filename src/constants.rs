@@ -137,6 +137,7 @@ pub mod config_key {
     pub const WEEK_REPORT: &str = "week_report";
     pub const WEEK_NUM: &str = "week_num";
     pub const LAST_DAY: &str = "last_day";
+    pub const GIT_REPO: &str = "git_repo";
 }
 
 // ========== 搜索引擎 ==========
@@ -228,6 +229,8 @@ pub mod cmd {
 pub mod rmeta_action {
     pub const NEW: &str = "new";
     pub const SYNC: &str = "sync";
+    pub const PUSH: &str = "push";
+    pub const PULL: &str = "pull";
 }
 
 // ========== time 子命令 ==========
@@ -266,6 +269,12 @@ pub const CONFIG_FILE: &str = "config.yaml";
 
 /// 脚本目录名
 pub const SCRIPTS_DIR: &str = "scripts";
+
+/// 日报目录名
+pub const REPORT_DIR: &str = "report";
+
+/// 日报默认文件名
+pub const REPORT_DEFAULT_FILE: &str = "weekly.md";
 
 /// 数据根目录名
 pub const DATA_DIR: &str = ".jdata";
