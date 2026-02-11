@@ -42,16 +42,16 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
     match subcmd {
         // 别名管理
         SubCmd::Set { alias, path } => alias::handle_set(&alias, &path, config),
-        SubCmd::Rm { alias } => alias::handle_remove(&alias, config),
+        SubCmd::Remove { alias } => alias::handle_remove(&alias, config),
         SubCmd::Rename { alias, new_alias } => alias::handle_rename(&alias, &new_alias, config),
-        SubCmd::Mf { alias, path } => alias::handle_modify(&alias, &path, config),
+        SubCmd::Modify { alias, path } => alias::handle_modify(&alias, &path, config),
 
         // 分类标记
         SubCmd::Note { alias, category } => category::handle_note(&alias, &category, config),
         SubCmd::Denote { alias, category } => category::handle_denote(&alias, &category, config),
 
         // 列表 & 查找
-        SubCmd::Ls { part } => list::handle_list(part.as_deref(), config),
+        SubCmd::List { part } => list::handle_list(part.as_deref(), config),
         SubCmd::Contain { alias, containers } => system::handle_contain(&alias, containers.as_deref(), config),
 
         // 日报系统

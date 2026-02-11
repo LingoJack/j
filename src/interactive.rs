@@ -521,7 +521,7 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
             })
         }
         "rm" | "remove" => {
-            rest.first().map(|alias| SubCmd::Rm { alias: alias.clone() })
+            rest.first().map(|alias| SubCmd::Remove { alias: alias.clone() })
                 .or_else(|| { crate::usage!("rm <alias>"); None })
         }
         "rename" | "rn" => {
@@ -539,7 +539,7 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
                 crate::usage!("mf <alias> <new_path>");
                 return None;
             }
-            Some(SubCmd::Mf {
+            Some(SubCmd::Modify {
                 alias: rest[0].clone(),
                 path: rest[1..].to_vec(),
             })
@@ -568,7 +568,7 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
         }
 
         // 列表
-        "ls" | "list" => Some(SubCmd::Ls {
+        "ls" | "list" => Some(SubCmd::List {
             part: rest.first().cloned(),
         }),
 

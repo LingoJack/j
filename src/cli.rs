@@ -27,8 +27,8 @@ pub enum SubCmd {
     },
 
     /// 删除别名
-    #[command(alias = "remove")]
-    Rm {
+    #[command(alias = "rm")]
+    Remove {
         /// 要删除的别名
         alias: String,
     },
@@ -43,8 +43,8 @@ pub enum SubCmd {
     },
 
     /// 修改别名对应的路径
-    #[command(alias = "modify")]
-    Mf {
+    #[command(alias = "mf")]
+    Modify {
         /// 别名
         alias: String,
         /// 新路径或 URL
@@ -73,8 +73,8 @@ pub enum SubCmd {
 
     // ========== 列表 ==========
     /// 列出别名
-    #[command(alias = "list")]
-    Ls {
+    #[command(alias = "ls")]
+    List {
         /// 指定 section（可选，如 path/inner_url/all 等）
         part: Option<String>,
     },
