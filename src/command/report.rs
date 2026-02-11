@@ -1,4 +1,5 @@
 use crate::config::YamlConfig;
+use crate::constants::{section, config_key, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, DEFAULT_CHECK_LINES};
 use crate::util::fuzzy;
 use crate::{error, info, usage};
 use chrono::{Local, NaiveDate};
@@ -7,8 +8,8 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-const DATE_FORMAT: &str = "%Y.%m.%d";
-const SIMPLE_DATE_FORMAT: &str = "%Y/%m/%d";
+const DATE_FORMAT: &str = REPORT_DATE_FORMAT;
+const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
 
 // ========== report 命令 ==========
 
@@ -53,7 +54,7 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
 
 /// 写入日报
 fn handle_daily_report(content: &str, config: &mut YamlConfig) {
-    let report_path = match config.get_property("report", "week_report") {
+    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
         Some(p) => p.clone(),
         None => {
             error!("❌ 配置文件中未设置 report.week_report 路径");
@@ -77,12 +78,12 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
     let now = Local::now().date_naive();
 
     let week_num = config
-        .get_property("report", "week_num")
+        .get_property(section::REPORT, config_key::WEEK_NUM)
         .and_then(|s| s.parse::<i32>().ok())
         .unwrap_or(1);
 
     let last_day_str = config
-        .get_property("report", "last_day")
+        .get_property(section::REPORT, config_key::LAST_DAY)
         .cloned()
         .unwrap_or_default();
 
@@ -117,7 +118,7 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
 
 /// 处理 r-meta new 命令：开启新的一周
 fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
-    let report_path = match config.get_property("report", "week_report") {
+    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
         Some(p) => p.clone(),
         None => {
             error!("❌ 配置文件中未设置 report.week_report 路径");
@@ -129,13 +130,13 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
     let config_path = report_file.parent().unwrap().join("settings.json");
 
     let week_num = config
-        .get_property("report", "week_num")
+        .get_property(section::REPORT, config_key::WEEK_NUM)
         .and_then(|s| s.parse::<i32>().ok())
         .unwrap_or(1);
 
     let last_day_str = date_str
         .map(|s| s.to_string())
-        .or_else(|| config.get_property("report", "last_day").cloned())
+        .or_else(|| config.get_property(section::REPORT, config_key::LAST_DAY).cloned())
         .unwrap_or_default();
 
     match parse_date(&last_day_str) {
@@ -151,7 +152,7 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
 
 /// 处理 r-meta sync 命令：同步周数和日期
 fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
-    let report_path = match config.get_property("report", "week_report") {
+    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
         Some(p) => p.clone(),
         None => {
             error!("❌ 配置文件中未设置 report.week_report 路径");
@@ -165,13 +166,13 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
     load_config_from_json_and_sync(&config_path, config);
 
     let week_num = config
-        .get_property("report", "week_num")
+        .get_property(section::REPORT, config_key::WEEK_NUM)
         .and_then(|s| s.parse::<i32>().ok())
         .unwrap_or(1);
 
     let last_day_str = date_str
         .map(|s| s.to_string())
-        .or_else(|| config.get_property("report", "last_day").cloned())
+        .or_else(|| config.get_property(section::REPORT, config_key::LAST_DAY).cloned())
         .unwrap_or_default();
 
     match parse_date(&last_day_str) {
@@ -194,8 +195,8 @@ fn update_config_files(
     let last_day_str = last_day.format(DATE_FORMAT).to_string();
 
     // 更新 YAML 配置
-    config.set_property("report", "week_num", &week_num.to_string());
-    config.set_property("report", "last_day", &last_day_str);
+    config.set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string());
+    config.set_property(section::REPORT, config_key::LAST_DAY, &last_day_str);
     info!(
         "✅ 更新YAML配置文件成功：周数 = {}, 周结束日期 = {}",
         week_num, last_day_str
@@ -278,10 +279,10 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
                 return;
             }
         },
-        None => 5,
+        None => DEFAULT_CHECK_LINES,
     };
 
-    let report_path = match config.get_property("report", "week_report") {
+    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
         Some(p) => p.clone(),
         None => {
             error!("❌ 配置文件中未设置 report.week_report 路径");
@@ -320,7 +321,7 @@ pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, c
         }
     };
 
-    let report_path = match config.get_property("report", "week_report") {
+    let report_path = match config.get_property(section::REPORT, config_key::WEEK_REPORT) {
         Some(p) => p.clone(),
         None => {
             error!("❌ 配置文件中未设置 report.week_report 路径");

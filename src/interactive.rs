@@ -1,5 +1,6 @@
 use crate::command;
 use crate::config::YamlConfig;
+use crate::constants::{self, config_key, NOTE_CATEGORIES, ALL_SECTIONS, ALIAS_PATH_SECTIONS};
 use crate::{info, error};
 use colored::Colorize;
 use rustyline::completion::{Completer, Pair};
@@ -34,9 +35,8 @@ impl CopilotCompleter {
     /// 获取所有别名列表（用于补全）
     fn all_aliases(&self) -> Vec<String> {
         let mut aliases = Vec::new();
-        let sections = ["path", "inner_url", "outer_url"];
-        for section in sections {
-            if let Some(map) = self.config.get_section(section) {
+        for s in ALIAS_PATH_SECTIONS {
+            if let Some(map) = self.config.get_section(s) {
                 aliases.extend(map.keys().cloned());
             }
         }
@@ -89,11 +89,15 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         (&["note", "nt"], vec![ArgHint::Alias, ArgHint::Category]),
         (&["denote", "dnt"], vec![ArgHint::Alias, ArgHint::Category]),
         // 列表
-        (&["ls", "list"], vec![ArgHint::Fixed(vec!["", "all", "path", "inner_url", "outer_url", "editor", "browser", "vpn", "script", "version", "setting", "log", "report"])]),
+        (&["ls", "list"], vec![ArgHint::Fixed({
+            let mut v = vec!["", "all"];
+            for s in ALL_SECTIONS { v.push(s); }
+            v
+        })]),
         // 查找
         (&["contain", "find"], vec![ArgHint::Alias, ArgHint::Placeholder("<sections>")]),
         // 系统设置
-        (&["log"], vec![ArgHint::Fixed(vec!["mode"]), ArgHint::Fixed(vec!["verbose", "concise"])]),
+        (&["log"], vec![ArgHint::Fixed(vec![config_key::MODE]), ArgHint::Fixed(vec![config_key::VERBOSE, config_key::CONCISE])]),
         (&["change", "chg"], vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
         // 日报系统
         (&["report", "r"], vec![ArgHint::Placeholder("<content>")]),
@@ -112,8 +116,8 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
     ]
 }
 
-/// 分类常量
-const ALL_NOTE_CATEGORIES: &[&str] = &["browser", "editor", "vpn", "outer_url", "script"];
+/// 分类常量（引用全局常量）
+const ALL_NOTE_CATEGORIES: &[&str] = NOTE_CATEGORIES;
 
 impl Completer for CopilotCompleter {
     type Candidate = Pair;
@@ -366,7 +370,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
 
     info!("Welcome to use work copilot 🚀 ~");
 
-    let prompt = format!("{} ", "copilot >".yellow());
+    let prompt = format!("{} ", constants::INTERACTIVE_PROMPT.yellow());
 
     loop {
         match rl.readline(&prompt) {
@@ -437,7 +441,7 @@ fn history_file_path() -> std::path::PathBuf {
     let data_dir = crate::config::YamlConfig::data_dir();
     // 确保目录存在
     let _ = std::fs::create_dir_all(&data_dir);
-    data_dir.join("history.txt")
+    data_dir.join(constants::HISTORY_FILE)
 }
 
 /// 解析用户输入为参数列表

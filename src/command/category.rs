@@ -1,16 +1,17 @@
 use crate::config::YamlConfig;
+use crate::constants::{self, section};
 use crate::{error, info, usage};
 
-/// 支持标记的分类列表
-const VALID_CATEGORIES: &[&str] = &["browser", "editor", "vpn", "outer_url", "script"];
+/// 支持标记的分类列表（引用全局常量）
+const VALID_CATEGORIES: &[&str] = constants::NOTE_CATEGORIES;
 
 /// 处理 note 命令: j note <alias> <category>
 /// 将别名标记为指定分类（browser/editor/vpn/outer_url/script）
 pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
     // 校验别名是否存在
-    if !config.contains("path", alias)
-        && !config.contains("inner_url", alias)
-        && !config.contains("outer_url", alias)
+    if !config.contains(section::PATH, alias)
+        && !config.contains(section::INNER_URL, alias)
+        && !config.contains(section::OUTER_URL, alias)
     {
         error!("❌ 别名 {} 不存在", alias);
         return;
@@ -26,11 +27,11 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
     }
 
     match category {
-        "outer_url" => {
+        c if c == section::OUTER_URL => {
             // outer_url 特殊处理：从 inner_url 移到 outer_url
-            if let Some(url) = config.get_property("inner_url", alias).cloned() {
-                config.set_property("outer_url", alias, &url);
-                config.remove_property("inner_url", alias);
+            if let Some(url) = config.get_property(section::INNER_URL, alias).cloned() {
+                config.set_property(section::OUTER_URL, alias, &url);
+                config.remove_property(section::INNER_URL, alias);
                 info!("✅ 将别名 {} 标记为 OUTER_URL 成功", alias);
             } else {
                 error!("❌ 别名 {} 不在 INNER_URL 中，无法标记为 OUTER_URL", alias);
@@ -38,7 +39,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
         }
         _ => {
             // 其他分类：将 path 中的值复制到对应分类
-            if let Some(path) = config.get_property("path", alias).cloned() {
+            if let Some(path) = config.get_property(section::PATH, alias).cloned() {
                 config.set_property(category, alias, &path);
                 info!(
                     "✅ 将别名 {} 标记为 {} 成功",

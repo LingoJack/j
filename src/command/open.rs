@@ -1,4 +1,5 @@
 use crate::config::YamlConfig;
+use crate::constants::{section, config_key, search_engine, DEFAULT_SEARCH_ENGINE};
 use crate::{error, info};
 use std::process::Command;
 
@@ -19,13 +20,13 @@ pub fn handle_open(args: &[String], config: &YamlConfig) {
     }
 
     // 如果是浏览器
-    if config.contains("browser", alias) {
+    if config.contains(section::BROWSER, alias) {
         handle_open_browser(args, config);
         return;
     }
 
     // 如果是编辑器
-    if config.contains("editor", alias) {
+    if config.contains(section::EDITOR, alias) {
         if args.len() == 2 {
             let file_path = &args[1];
             open_with_path(alias, Some(file_path), config);
@@ -36,13 +37,13 @@ pub fn handle_open(args: &[String], config: &YamlConfig) {
     }
 
     // 如果是 VPN
-    if config.contains("vpn", alias) {
+    if config.contains(section::VPN, alias) {
         open_alias(alias, config);
         return;
     }
 
     // 如果是自定义脚本
-    if config.contains("script", alias) {
+    if config.contains(section::SCRIPT, alias) {
         run_script(args, config);
         return;
     }
@@ -62,11 +63,11 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
         let url_alias_or_text = &args[1];
 
         // 尝试从 inner_url 或 outer_url 获取 URL
-        let url = if let Some(u) = config.get_property("inner_url", url_alias_or_text) {
+        let url = if let Some(u) = config.get_property(section::INNER_URL, url_alias_or_text) {
             u.clone()
-        } else if let Some(u) = config.get_property("outer_url", url_alias_or_text) {
+        } else if let Some(u) = config.get_property(section::OUTER_URL, url_alias_or_text) {
             // outer_url 需要先启动 VPN
-            if let Some(vpn_map) = config.get_section("vpn") {
+            if let Some(vpn_map) = config.get_section(section::VPN) {
                 if let Some(vpn_alias) = vpn_map.keys().next() {
                     open_alias(vpn_alias, config);
                 }
@@ -81,9 +82,9 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
                 args[2].as_str()
             } else {
                 config
-                    .get_property("setting", "search-engine")
+                    .get_property(section::SETTING, config_key::SEARCH_ENGINE)
                     .map(|s| s.as_str())
-                    .unwrap_or("bing")
+                    .unwrap_or(DEFAULT_SEARCH_ENGINE)
             };
             get_search_url(url_alias_or_text, engine)
         };
@@ -95,7 +96,7 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
 /// 运行脚本
 fn run_script(args: &[String], config: &YamlConfig) {
     let alias = &args[0];
-    if let Some(script_path) = config.get_property("script", alias) {
+    if let Some(script_path) = config.get_property(section::SCRIPT, alias) {
         info!("⚙️ 即将执行脚本，路径: {}", script_path);
         let script_args: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
 
@@ -133,7 +134,7 @@ fn open_alias(alias: &str, config: &YamlConfig) {
 
 /// 使用指定应用打开某个文件/URL
 fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
-    if let Some(app_path) = config.get_property("path", alias) {
+    if let Some(app_path) = config.get_property(section::PATH, alias) {
         let app_path = clean_path(app_path);
         let os = std::env::consts::OS;
 
@@ -223,12 +224,12 @@ fn is_url_like(s: &str) -> bool {
 /// 根据搜索引擎获取搜索 URL
 fn get_search_url(query: &str, engine: &str) -> String {
     let pattern = match engine.to_lowercase().as_str() {
-        "google" => "https://www.google.com/search?q={}",
-        "bing" => "https://www.bing.com/search?q={}",
-        "baidu" => "https://www.baidu.com/s?wd={}",
+        "google" => search_engine::GOOGLE,
+        "bing" => search_engine::BING,
+        "baidu" => search_engine::BAIDU,
         _ => {
-            info!("未指定搜索引擎，使用默认搜索引擎：bing");
-            "https://www.bing.com/search?q={}"
+            info!("未指定搜索引擎，使用默认搜索引擎：{}", DEFAULT_SEARCH_ENGINE);
+            search_engine::BING
         }
     };
     pattern.replace("{}", query)

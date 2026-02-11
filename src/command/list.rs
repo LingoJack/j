@@ -1,4 +1,5 @@
 use crate::config::YamlConfig;
+use crate::constants::DEFAULT_DISPLAY_SECTIONS;
 use crate::info;
 use crate::util::log::{capitalize_first_letter, print_line};
 use colored::Colorize;
@@ -10,9 +11,8 @@ pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
     match part {
         None => {
             // 默认展示常用 section
-            let default_sections = ["path", "inner_url", "outer_url", "editor", "browser", "vpn", "script"];
-            for section in default_sections {
-                list_section(section, config);
+            for s in DEFAULT_DISPLAY_SECTIONS {
+                list_section(s, config);
             }
         }
         Some("all") => {

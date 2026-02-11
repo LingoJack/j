@@ -1,3 +1,4 @@
+use crate::constants::{self, section, config_key};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -49,23 +50,23 @@ impl YamlConfig {
     /// 获取数据根目录: ~/.jdata/
     pub fn data_dir() -> PathBuf {
         // 优先使用环境变量指定的数据路径
-        if let Ok(path) = std::env::var("J_DATA_PATH") {
+        if let Ok(path) = std::env::var(constants::DATA_PATH_ENV) {
             return PathBuf::from(path);
         }
         // 默认路径: ~/.jdata/
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(".jdata")
+            .join(constants::DATA_DIR)
     }
 
     /// 获取配置文件路径: ~/.jdata/config.yaml
     fn config_path() -> PathBuf {
-        Self::data_dir().join("config.yaml")
+        Self::data_dir().join(constants::CONFIG_FILE)
     }
 
     /// 获取脚本存储目录: ~/.jdata/scripts/
     pub fn scripts_dir() -> PathBuf {
-        let dir = Self::data_dir().join("scripts");
+        let dir = Self::data_dir().join(constants::SCRIPTS_DIR);
         // 确保目录存在
         let _ = fs::create_dir_all(&dir);
         dir
@@ -118,61 +119,59 @@ impl YamlConfig {
         let mut config = Self::default();
 
         // 版本信息
-        config.version.insert("name".into(), "work-copilot".into());
-        config.version.insert("version".into(), "11.0.0".into());
-        config.version.insert("author".into(), "lingojack".into());
-        config
-            .version
-            .insert("email".into(), "lingojack@qq.com".into());
+        config.version.insert("name".into(), constants::APP_NAME.into());
+        config.version.insert("version".into(), constants::VERSION.into());
+        config.version.insert("author".into(), constants::AUTHOR.into());
+        config.version.insert("email".into(), constants::EMAIL.into());
 
         // 日志模式
-        config.log.insert("mode".into(), "concise".into());
+        config.log.insert(config_key::MODE.into(), config_key::CONCISE.into());
 
         // 默认搜索引擎
-        config.setting.insert("search-engine".into(), "bing".into());
+        config.setting.insert(config_key::SEARCH_ENGINE.into(), constants::DEFAULT_SEARCH_ENGINE.into());
 
         config
     }
 
     /// 是否是 verbose 模式
     pub fn is_verbose(&self) -> bool {
-        self.log.get("mode").map_or(false, |m| m == "verbose")
+        self.log.get(config_key::MODE).map_or(false, |m| m == config_key::VERBOSE)
     }
 
     // ========== 根据 section 名称获取对应的 map ==========
 
     /// 获取指定 section 的不可变引用
-    pub fn get_section(&self, section: &str) -> Option<&BTreeMap<String, String>> {
-        match section {
-            "path" => Some(&self.path),
-            "inner_url" => Some(&self.inner_url),
-            "outer_url" => Some(&self.outer_url),
-            "editor" => Some(&self.editor),
-            "browser" => Some(&self.browser),
-            "vpn" => Some(&self.vpn),
-            "script" => Some(&self.script),
-            "version" => Some(&self.version),
-            "setting" => Some(&self.setting),
-            "log" => Some(&self.log),
-            "report" => Some(&self.report),
+    pub fn get_section(&self, s: &str) -> Option<&BTreeMap<String, String>> {
+        match s {
+            section::PATH => Some(&self.path),
+            section::INNER_URL => Some(&self.inner_url),
+            section::OUTER_URL => Some(&self.outer_url),
+            section::EDITOR => Some(&self.editor),
+            section::BROWSER => Some(&self.browser),
+            section::VPN => Some(&self.vpn),
+            section::SCRIPT => Some(&self.script),
+            section::VERSION => Some(&self.version),
+            section::SETTING => Some(&self.setting),
+            section::LOG => Some(&self.log),
+            section::REPORT => Some(&self.report),
             _ => None,
         }
     }
 
     /// 获取指定 section 的可变引用
-    pub fn get_section_mut(&mut self, section: &str) -> Option<&mut BTreeMap<String, String>> {
-        match section {
-            "path" => Some(&mut self.path),
-            "inner_url" => Some(&mut self.inner_url),
-            "outer_url" => Some(&mut self.outer_url),
-            "editor" => Some(&mut self.editor),
-            "browser" => Some(&mut self.browser),
-            "vpn" => Some(&mut self.vpn),
-            "script" => Some(&mut self.script),
-            "version" => Some(&mut self.version),
-            "setting" => Some(&mut self.setting),
-            "log" => Some(&mut self.log),
-            "report" => Some(&mut self.report),
+    pub fn get_section_mut(&mut self, s: &str) -> Option<&mut BTreeMap<String, String>> {
+        match s {
+            section::PATH => Some(&mut self.path),
+            section::INNER_URL => Some(&mut self.inner_url),
+            section::OUTER_URL => Some(&mut self.outer_url),
+            section::EDITOR => Some(&mut self.editor),
+            section::BROWSER => Some(&mut self.browser),
+            section::VPN => Some(&mut self.vpn),
+            section::SCRIPT => Some(&mut self.script),
+            section::VERSION => Some(&mut self.version),
+            section::SETTING => Some(&mut self.setting),
+            section::LOG => Some(&mut self.log),
+            section::REPORT => Some(&mut self.report),
             _ => None,
         }
     }
@@ -215,37 +214,21 @@ impl YamlConfig {
     }
 
     /// 获取所有已知的 section 名称
-    pub fn all_section_names(&self) -> Vec<&str> {
-        vec![
-            "path",
-            "inner_url",
-            "outer_url",
-            "editor",
-            "browser",
-            "vpn",
-            "script",
-            "version",
-            "setting",
-            "log",
-            "report",
-        ]
+    pub fn all_section_names(&self) -> &'static [&'static str] {
+        constants::ALL_SECTIONS
     }
 
     /// 判断别名是否存在于任何 section 中（用于 open 命令判断）
     pub fn alias_exists(&self, alias: &str) -> bool {
-        self.contains("path", alias)
-            || self.contains("inner_url", alias)
-            || self.contains("outer_url", alias)
-            || self.contains("script", alias)
-            || self.contains("browser", alias)
-            || self.contains("editor", alias)
-            || self.contains("vpn", alias)
+        constants::ALIAS_EXISTS_SECTIONS
+            .iter()
+            .any(|s| self.contains(s, alias))
     }
 
     /// 根据别名获取路径（依次从 path、inner_url、outer_url 中查找）
     pub fn get_path_by_alias(&self, alias: &str) -> Option<&String> {
-        self.get_property("path", alias)
-            .or_else(|| self.get_property("inner_url", alias))
-            .or_else(|| self.get_property("outer_url", alias))
+        constants::ALIAS_PATH_SECTIONS
+            .iter()
+            .find_map(|s| self.get_property(s, alias))
     }
 }

@@ -1,4 +1,5 @@
 use crate::config::YamlConfig;
+use crate::constants::{self, section, config_key, CONTAIN_SEARCH_SECTIONS};
 use crate::{error, info, usage};
 use colored::Colorize;
 
@@ -12,7 +13,7 @@ pub fn handle_version(config: &YamlConfig) {
             info!("{}: {}", key, value);
         }
     }
-    info!("kernel version: 11.0.0");
+    info!("kernel version: {}", constants::VERSION);
     info!("os: {}", std::env::consts::OS);
     info!("author: lingojack | LingoJack | 达不溜勾勾");
     info!(
@@ -95,13 +96,13 @@ pub fn handle_exit() {
 
 /// 处理 log 命令: j log mode <verbose|concise>
 pub fn handle_log(key: &str, value: &str, config: &mut YamlConfig) {
-    if key == "mode" {
-        let mode = if value == "verbose" {
-            "verbose"
+    if key == config_key::MODE {
+        let mode = if value == config_key::VERBOSE {
+            config_key::VERBOSE
         } else {
-            "concise"
+            config_key::CONCISE
         };
-        config.set_property("log", "mode", mode);
+        config.set_property(section::LOG, config_key::MODE, mode);
         info!("✅ 日志模式已切换为: {}", mode);
     } else {
         usage!("j log mode <verbose|concise>");
@@ -119,15 +120,7 @@ pub fn handle_clear() {
 pub fn handle_contain(alias: &str, containers: Option<&str>, config: &YamlConfig) {
     let sections: Vec<&str> = match containers {
         Some(c) => c.split(',').collect(),
-        None => vec![
-            "path",
-            "script",
-            "browser",
-            "editor",
-            "vpn",
-            "inner_url",
-            "outer_url",
-        ],
+        None => CONTAIN_SEARCH_SECTIONS.to_vec(),
     };
 
     let mut found = Vec::new();

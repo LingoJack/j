@@ -1,4 +1,6 @@
 use crate::config::YamlConfig;
+use crate::constants::section;
+use crate::constants::{MODIFY_SECTIONS, REMOVE_CLEANUP_SECTIONS, RENAME_SYNC_SECTIONS};
 use crate::{error, info, usage};
 use crate::command::all_command_keywords;
 use url::Url;
@@ -18,7 +20,7 @@ pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
 
     // 处理路径中包含空格的情况：将多个参数拼接
     let path = path_parts.join(" ");
-    let path = remove_quotes(&path);
+    let path = crate::util::remove_quotes(&path);
     let path = path.replace("\\ ", " ");
 
     if is_url(&path) {
@@ -30,19 +32,18 @@ pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
 
 /// 处理 remove 命令: j rm <alias>
 pub fn handle_remove(alias: &str, config: &mut YamlConfig) {
-    if config.contains("path", alias) {
-        config.remove_property("path", alias);
+    if config.contains(section::PATH, alias) {
+        config.remove_property(section::PATH, alias);
         // 同时清理关联的 category
-        config.remove_property("editor", alias);
-        config.remove_property("vpn", alias);
-        config.remove_property("browser", alias);
-        config.remove_property("script", alias);
+        for s in REMOVE_CLEANUP_SECTIONS {
+            config.remove_property(s, alias);
+        }
         info!("成功从 PATH 中移除别名 {} ✅", alias);
-    } else if config.contains("inner_url", alias) {
-        config.remove_property("inner_url", alias);
+    } else if config.contains(section::INNER_URL, alias) {
+        config.remove_property(section::INNER_URL, alias);
         info!("成功从 INNER_URL 中移除别名 {} ✅", alias);
-    } else if config.contains("outer_url", alias) {
-        config.remove_property("outer_url", alias);
+    } else if config.contains(section::OUTER_URL, alias) {
+        config.remove_property(section::OUTER_URL, alias);
         info!("成功从 OUTER_URL 中移除别名 {} ✅", alias);
     } else {
         error!("别名 {} 不存在 ❌", alias);
@@ -54,30 +55,29 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
     let mut updated = false;
 
     // path
-    if config.contains("path", alias) {
-        let path = config.get_property("path", alias).cloned().unwrap_or_default();
-        config.rename_property("path", alias, new_alias);
+    if config.contains(section::PATH, alias) {
+        let path = config.get_property(section::PATH, alias).cloned().unwrap_or_default();
+        config.rename_property(section::PATH, alias, new_alias);
         // 同时重命名关联的 category
-        config.rename_property("browser", alias, new_alias);
-        config.rename_property("editor", alias, new_alias);
-        config.rename_property("vpn", alias, new_alias);
-        config.rename_property("script", alias, new_alias);
+        for s in RENAME_SYNC_SECTIONS {
+            config.rename_property(s, alias, new_alias);
+        }
         updated = true;
         info!("✅ 重命名 {} -> {} 成功! Path: {} 🎉", alias, new_alias, path);
     }
 
     // inner_url
-    if config.contains("inner_url", alias) {
-        let url = config.get_property("inner_url", alias).cloned().unwrap_or_default();
-        config.rename_property("inner_url", alias, new_alias);
+    if config.contains(section::INNER_URL, alias) {
+        let url = config.get_property(section::INNER_URL, alias).cloned().unwrap_or_default();
+        config.rename_property(section::INNER_URL, alias, new_alias);
         updated = true;
         info!("✅ 重命名 {} -> {} 成功! Inner URL: {} 🚀", alias, new_alias, url);
     }
 
     // outer_url
-    if config.contains("outer_url", alias) {
-        let url = config.get_property("outer_url", alias).cloned().unwrap_or_default();
-        config.rename_property("outer_url", alias, new_alias);
+    if config.contains(section::OUTER_URL, alias) {
+        let url = config.get_property(section::OUTER_URL, alias).cloned().unwrap_or_default();
+        config.rename_property(section::OUTER_URL, alias, new_alias);
         updated = true;
         info!("✅ 重命名 {} -> {} 成功! Outer URL: {} 🌐", alias, new_alias, url);
     }
@@ -95,18 +95,17 @@ pub fn handle_modify(alias: &str, path_parts: &[String], config: &mut YamlConfig
     }
 
     let path = path_parts.join(" ");
-    let path = remove_quotes(&path);
+    let path = crate::util::remove_quotes(&path);
     let path = path.replace("\\ ", " ");
 
     let mut has_modified = false;
 
     // 依次检查各个 section 并更新
-    let sections = ["path", "inner_url", "outer_url", "editor", "browser", "vpn"];
-    for section in sections {
-        if config.contains(section, alias) {
-            config.set_property(section, alias, &path);
+    for s in MODIFY_SECTIONS {
+        if config.contains(s, alias) {
+            config.set_property(s, alias, &path);
             has_modified = true;
-            info!("修改 {} 在 {} 下的值为 {{{}}} 成功 ✅", alias, section, path);
+            info!("修改 {} 在 {} 下的值为 {{{}}} 成功 ✅", alias, s, path);
         }
     }
 
@@ -116,19 +115,6 @@ pub fn handle_modify(alias: &str, path_parts: &[String], config: &mut YamlConfig
 }
 
 // ========== 辅助函数 ==========
-
-/// 去除字符串两端的引号（单引号或双引号）
-fn remove_quotes(s: &str) -> String {
-    let s = s.trim();
-    if s.len() >= 2 {
-        if (s.starts_with('\'') && s.ends_with('\''))
-            || (s.starts_with('"') && s.ends_with('"'))
-        {
-            return s[1..s.len() - 1].to_string();
-        }
-    }
-    s.to_string()
-}
 
 /// 判断是否为 URL
 fn is_url(input: &str) -> bool {
@@ -142,24 +128,24 @@ fn is_url(input: &str) -> bool {
 
 /// 添加为路径别名
 fn add_as_path(alias: &str, path: &str, config: &mut YamlConfig) {
-    if config.contains("path", alias) {
+    if config.contains(section::PATH, alias) {
         error!(
             "别名 {} 的路径 {{{}}} 已存在。 😢 请使用 `mf` 命令修改",
             alias,
-            config.get_property("path", alias).unwrap()
+            config.get_property(section::PATH, alias).unwrap()
         );
     } else {
-        config.set_property("path", alias, path);
+        config.set_property(section::PATH, alias, path);
         info!("✅ 添加别名 {} -> {{{}}} 成功! 🎉", alias, path);
     }
 }
 
 /// 添加为 URL 别名
 fn add_as_url(alias: &str, url: &str, config: &mut YamlConfig) {
-    if config.contains("inner_url", alias) || config.contains("outer_url", alias) {
+    if config.contains(section::INNER_URL, alias) || config.contains(section::OUTER_URL, alias) {
         error!("别名 {} 已存在。 😢 请使用 `mf` 命令修改", alias);
     } else {
-        config.set_property("inner_url", alias, url);
+        config.set_property(section::INNER_URL, alias, url);
         info!("✅ 添加别名 {} -> {{{}}} 成功! 🚀", alias, url);
     }
 }

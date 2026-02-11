@@ -1,4 +1,5 @@
 use crate::config::YamlConfig;
+use crate::constants::section;
 use crate::{error, info};
 use std::fs;
 
@@ -6,7 +7,7 @@ use std::fs;
 /// 创建一个脚本文件并注册为别名，脚本持久化在 ~/.jdata/scripts/ 下
 pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     // 检查脚本名是否已存在
-    if config.contains("path", name) {
+    if config.contains(section::PATH, name) {
         error!("❌ 失败！脚本名 {{{}}} 已经存在", name);
         return;
     }
@@ -64,8 +65,8 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     }
 
     // 注册到 path 和 script
-    config.set_property("path", name, &script_path_str);
-    config.set_property("script", name, &script_path_str);
+    config.set_property(section::PATH, name, &script_path_str);
+    config.set_property(section::SCRIPT, name, &script_path_str);
 
     info!(
         "✅ 成功创建脚本 {{{}}} 并写入内容: {}",
