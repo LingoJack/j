@@ -23,7 +23,7 @@ const (
 func main() {
 	inputBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		fmt.Println("read from stdin failed, err:", err)
+		log.Println("read from stdin failed, err:", err)
 		return
 	}
 	content := string(inputBytes)
@@ -43,16 +43,12 @@ func main() {
 	fmt.Print(string(result))
 }
 
-// getTerminalWidth 获取终端宽度，如果无法获取则返回默认值
 func getTerminalWidth() int {
-	// 尝试获取终端宽度
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		// 如果获取失败（例如输出被重定向），返回默认宽度
 		log.Printf("无法获取终端宽度，使用默认值%d: %v", DefaultTerminalWidth, err)
 		return DefaultTerminalWidth
 	}
-	// 确保宽度在合理范围内
 	if width < MinTerminalWidth {
 		return MinTerminalWidth
 	}
