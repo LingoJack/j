@@ -156,20 +156,22 @@ fn run_script_in_current_terminal(script_path: &str, script_args: &[&str]) {
 
 /// 在新终端窗口中执行脚本
 /// 脚本自身决定是否包含等待按键逻辑（通过 TUI 编辑器创建时可预填模板）
+/// 脚本执行完后自动 exit 关闭 shell，使新窗口可被关闭
 fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
     let os = std::env::consts::OS;
 
     if os == shell::MACOS_OS {
         // macOS: 使用 osascript 在新 Terminal 窗口中执行
+        // 末尾追加 ; exit 让 shell 退出，Terminal.app 会根据偏好设置自动关闭窗口
         let full_cmd = if script_args.is_empty() {
-            format!("sh {}", shell_escape(script_path))
+            format!("sh {}; exit", shell_escape(script_path))
         } else {
             let args_str = script_args
                 .iter()
                 .map(|a| shell_escape(a))
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("sh {} {}", shell_escape(script_path), args_str)
+            format!("sh {} {}; exit", shell_escape(script_path), args_str)
         };
 
         // AppleScript: 在 Terminal.app 中打开新窗口并执行命令
@@ -220,10 +222,11 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
         }
     } else {
         // Linux: 尝试常见的终端模拟器
+        // 末尾追加 ; exit 让 shell 退出，终端模拟器会自动关闭窗口
         let full_cmd = if script_args.is_empty() {
-            format!("sh {}", script_path)
+            format!("sh {}; exit", script_path)
         } else {
-            format!("sh {} {}", script_path, script_args.join(" "))
+            format!("sh {} {}; exit", script_path, script_args.join(" "))
         };
 
         // 尝试 gnome-terminal → xterm → 降级到当前终端
