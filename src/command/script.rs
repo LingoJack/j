@@ -3,12 +3,62 @@ use crate::constants::{section, shell};
 use crate::{error, info};
 use std::fs;
 
-/// 处理 concat 命令: j concat <script_name> "<script_content>"
+/// 生成脚本末尾的「等待用户按键」模板内容
+fn wait_for_key_template() -> String {
+    if std::env::consts::OS == shell::WINDOWS_OS {
+        "echo.\necho 脚本执行完毕，按任意键退出...\npause >nul".to_string()
+    } else {
+        "echo ''\necho '\\033[32m✅ 脚本执行完毕，按回车键退出...\\033[0m'\nread _".to_string()
+    }
+}
+
+/// 处理 concat 命令: j concat <script_name> ["<script_content>"]
 /// 创建一个脚本文件并注册为别名，脚本持久化在 ~/.jdata/scripts/ 下
-pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
+/// 如果没有提供 content，则打开 TUI 编辑器让用户输入
+pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
     // 检查脚本名是否已存在
     if config.contains(section::PATH, name) {
         error!("❌ 失败！脚本名 {{{}}} 已经存在", name);
+        return;
+    }
+
+    // 获取脚本内容：有参数则直接使用，无参数则打开编辑器
+    let script_content = if content.is_empty() {
+        // 无内容参数：打开 TUI 编辑器
+        let initial_lines = vec![
+            "#!/bin/bash".to_string(),
+            "".to_string(),
+            "# 在此编写脚本内容...".to_string(),
+            "".to_string(),
+            "# --- 以下为等待按键模板（可删除） ---".to_string(),
+            wait_for_key_template(),
+        ];
+
+        match crate::tui::editor::open_multiline_editor_with_content(
+            &format!("📝 编写脚本: {}", name),
+            &initial_lines,
+        ) {
+            Ok(Some(text)) => text,
+            Ok(None) => {
+                info!("已取消创建脚本");
+                return;
+            }
+            Err(e) => {
+                error!("❌ 编辑器启动失败: {}", e);
+                return;
+            }
+        }
+    } else {
+        // 有内容参数：拼接并去除两端引号
+        let text = content.join(" ");
+        text.trim()
+            .trim_start_matches('"')
+            .trim_end_matches('"')
+            .to_string()
+    };
+
+    if script_content.trim().is_empty() {
+        error!("⚠️ 脚本内容为空，无法创建");
         return;
     }
 
@@ -24,12 +74,6 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     let script_path = scripts_dir.join(format!("{}{}", name, ext));
     let script_path_str = script_path.to_string_lossy().to_string();
 
-    // 去除 content 两端的引号
-    let script_content = content
-        .trim()
-        .trim_start_matches('"')
-        .trim_end_matches('"');
-
     // 确保目录存在（scripts_dir() 已保证，这里冗余保护）
     if let Some(parent) = script_path.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
@@ -39,7 +83,7 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     }
 
     // 写入脚本内容
-    match fs::write(&script_path, script_content) {
+    match fs::write(&script_path, &script_content) {
         Ok(_) => {
             info!("🎉 文件创建成功: {}", script_path_str);
         }
@@ -69,7 +113,7 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     config.set_property(section::SCRIPT, name, &script_path_str);
 
     info!(
-        "✅ 成功创建脚本 {{{}}} 并写入内容: {}",
-        name, script_content
+        "✅ 成功创建脚本 {{{}}}，路径: {}",
+        name, script_path_str
     );
 }

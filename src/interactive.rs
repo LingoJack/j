@@ -673,13 +673,13 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
 
     // 脚本创建
     } else if is(cmd::CONCAT) {
-        if rest.len() < 2 {
-            crate::usage!("concat <script_name> \"<script_content>\"");
+        if rest.is_empty() {
+            crate::usage!("concat <script_name> [\"<script_content>\"]");
             return ParseResult::Handled;
         }
         ParseResult::Matched(SubCmd::Concat {
             name: rest[0].clone(),
-            content: rest[1..].join(" "),
+            content: if rest.len() > 1 { rest[1..].to_vec() } else { vec![] },
         })
 
     // 倒计时

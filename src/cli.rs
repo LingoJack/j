@@ -131,8 +131,9 @@ pub enum SubCmd {
     Concat {
         /// 脚本名称
         name: String,
-        /// 脚本内容
-        content: String,
+        /// 脚本内容（可选，不提供则打开 TUI 编辑器）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
     },
 
     // ========== 计时器 ==========
