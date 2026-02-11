@@ -98,21 +98,25 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
 fn run_script(args: &[String], config: &YamlConfig) {
     let alias = &args[0];
     if let Some(script_path) = config.get_property(section::SCRIPT, alias) {
+        // 展开脚本路径中的 ~
+        let script_path = clean_path(script_path);
         info!("⚙️ 即将执行脚本，路径: {}", script_path);
-        let script_args: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
+        // 展开参数中的 ~
+        let script_args: Vec<String> = args[1..].iter().map(|s| clean_path(s)).collect();
+        let script_arg_refs: Vec<&str> = script_args.iter().map(|s| s.as_str()).collect();
 
         // 在当前终端直接执行脚本（而非打开新终端窗口）
         let result = if cfg!(target_os = "windows") {
             Command::new("cmd.exe")
                 .arg("/c")
                 .arg(script_path.as_str())
-                .args(&script_args)
+                .args(&script_arg_refs)
                 .status()
         } else {
             // macOS / Linux: 使用 sh 直接执行
             Command::new("sh")
                 .arg(script_path.as_str())
-                .args(&script_args)
+                .args(&script_arg_refs)
                 .status()
         };
 
@@ -141,10 +145,12 @@ fn open_alias(alias: &str, config: &YamlConfig) {
 fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig) {
     if let Some(path) = config.get_path_by_alias(alias) {
         let path = clean_path(path);
+        // 展开参数中的 ~
+        let expanded_args: Vec<String> = extra_args.iter().map(|s| clean_path(s)).collect();
         if is_cli_executable(&path) {
             // CLI 工具：在当前终端直接执行，继承 stdin/stdout（管道可用）
             let result = Command::new(&path)
-                .args(extra_args)
+                .args(&expanded_args)
                 .status();
             match result {
                 Ok(status) => {
@@ -164,12 +170,12 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
                 let result = if os == shell::MACOS_OS {
                     Command::new("open")
                         .args(["-a", &path])
-                        .args(extra_args)
+                        .args(&expanded_args)
                         .status()
                 } else if os == shell::WINDOWS_OS {
                     Command::new(shell::WINDOWS_CMD)
                         .args([shell::WINDOWS_CMD_FLAG, "start", "", &path])
-                        .args(extra_args)
+                        .args(&expanded_args)
                         .status()
                 } else {
                     Command::new("xdg-open").arg(&path).status()
@@ -235,6 +241,9 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
     if let Some(app_path) = config.get_property(section::PATH, alias) {
         let app_path = clean_path(app_path);
         let os = std::env::consts::OS;
+        // 展开文件路径参数中的 ~
+        let file_path_expanded = file_path.map(|fp| clean_path(fp));
+        let file_path = file_path_expanded.as_deref();
 
         let result = if os == shell::MACOS_OS {
             match file_path {
