@@ -67,8 +67,9 @@ enum Transition {
     Nop,
     Mode(Mode),
     Pending(Input),
-    Submit,  // 提交内容
-    Quit,    // 取消退出
+    Submit,     // 提交内容
+    Quit,       // 强制取消退出（:q! / Ctrl+Q）
+    TryQuit,    // 尝试退出，若有改动则拒绝（:q）
 }
 
 /// Vim 状态机
@@ -103,7 +104,7 @@ impl Vim {
             return Transition::Submit;
         }
 
-        // 任何模式下 Ctrl+Q → 取消退出
+        // 任何模式下 Ctrl+Q → 强制取消退出
         if input.ctrl && input.key == Key::Char('q') {
             return Transition::Quit;
         }
@@ -143,7 +144,8 @@ impl Vim {
                 match cmd {
                     "wq" | "x" => Transition::Submit,
                     "w" => Transition::Submit,
-                    "q" | "q!" => Transition::Quit,
+                    "q" => Transition::TryQuit,   // 有改动时拒绝退出
+                    "q!" => Transition::Quit,      // 强制退出
                     _ => Transition::Mode(Mode::Normal), // 未知命令，回到 Normal
                 }
             }
@@ -511,7 +513,11 @@ pub fn open_multiline_editor_with_content(title: &str, initial_lines: &[String])
 }
 
 /// 内部统一入口：初始化终端 + 编辑区 + 主循环
-fn open_editor_internal(title: &str, initial_lines: &[String], initial_mode: Mode) -> io::Result<Option<String>> {
+fn open_editor_internal(
+    title: &str,
+    initial_lines: &[String],
+    initial_mode: Mode,
+) -> io::Result<Option<String>> {
     // 进入终端原始模式
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -537,8 +543,11 @@ fn open_editor_internal(title: &str, initial_lines: &[String], initial_mode: Mod
         textarea.move_cursor(CursorMove::End);
     }
 
+    // 记录初始内容的快照，用于判断是否有实际改动
+    let initial_snapshot: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
+
     let mut vim = Vim::new(initial_mode);
-    let result = run_editor_loop(&mut terminal, &mut textarea, &mut vim, title);
+    let result = run_editor_loop(&mut terminal, &mut textarea, &mut vim, title, &initial_snapshot);
 
     // 恢复终端状态
     terminal::disable_raw_mode()?;
@@ -561,7 +570,10 @@ fn run_editor_loop(
     textarea: &mut TextArea,
     vim: &mut Vim,
     title: &str,
+    initial_snapshot: &[String],
 ) -> io::Result<Option<String>> {
+    // 是否显示 "有未保存改动" 的提示（下次按键后清除）
+    let mut unsaved_warning = false;
     loop {
         let mode = &vim.mode;
 
@@ -585,6 +597,12 @@ fn run_editor_loop(
 
         // 处理输入事件
         if let Event::Key(key_event) = event::read()? {
+            // 清除上次的警告提示
+            if unsaved_warning {
+                unsaved_warning = false;
+                textarea.set_block(make_block(title, &vim.mode));
+            }
+
             let input = Input::from(key_event);
             match vim.transition(input, textarea) {
                 Transition::Mode(new_mode) if vim.mode != new_mode => {
@@ -603,6 +621,24 @@ fn run_editor_loop(
                         return Ok(None);
                     }
                     return Ok(Some(text));
+                }
+                Transition::TryQuit => {
+                    // :q — 检查是否有实际改动
+                    let current_lines: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
+                    if current_lines == initial_snapshot {
+                        // 无改动，直接退出
+                        return Ok(None);
+                    } else {
+                        // 有改动，拒绝退出并提示
+                        unsaved_warning = true;
+                        textarea.set_block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title(" ⚠️ 有未保存的改动！使用 :q! 强制退出，或 :wq 保存退出 ")
+                                .border_style(Style::default().fg(Color::LightRed))
+                        );
+                        *vim = Vim::new(Mode::Normal);
+                    }
                 }
                 Transition::Quit => {
                     return Ok(None);
@@ -681,7 +717,7 @@ fn build_status_bar(mode: &Mode, line_count: usize) -> Paragraph<'static> {
             ));
             spans.push(Span::raw(" 提交  "));
             spans.push(Span::styled(
-                " :q ",
+                " :q! ",
                 Style::default().fg(Color::Black).bg(Color::Red),
             ));
             spans.push(Span::raw(" 退出  "));

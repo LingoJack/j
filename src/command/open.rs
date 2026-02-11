@@ -155,20 +155,24 @@ fn run_script_in_current_terminal(script_path: &str, script_args: &[&str]) {
 }
 
 /// 在新终端窗口中执行脚本
+/// 脚本执行完毕后等待用户按键确认，然后关闭窗口
 fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
     let os = std::env::consts::OS;
+
+    // 等待用户按键的后缀命令
+    let wait_suffix = "; echo ''; echo '\x1b[32m✅ 脚本执行完毕，按回车键退出...\x1b[0m'; read _";
 
     if os == shell::MACOS_OS {
         // macOS: 使用 osascript 在新 Terminal 窗口中执行
         let full_cmd = if script_args.is_empty() {
-            format!("sh {}", shell_escape(script_path))
+            format!("sh {}{}", shell_escape(script_path), wait_suffix)
         } else {
             let args_str = script_args
                 .iter()
                 .map(|a| shell_escape(a))
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("sh {} {}", shell_escape(script_path), args_str)
+            format!("sh {} {}{}", shell_escape(script_path), args_str, wait_suffix)
         };
 
         // AppleScript: 在 Terminal.app 中打开新窗口并执行命令
@@ -196,11 +200,11 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
             Err(e) => error!("💥 调用 osascript 失败: {}", e),
         }
     } else if os == shell::WINDOWS_OS {
-        // Windows: 使用 start cmd /c 在新窗口执行
+        // Windows: 使用 start cmd /k 在新窗口执行（/k 保持窗口打开）
         let full_cmd = if script_args.is_empty() {
-            script_path.to_string()
+            format!("{} & echo. & echo 脚本执行完毕，按任意键退出... & pause >nul", script_path)
         } else {
-            format!("{} {}", script_path, script_args.join(" "))
+            format!("{} {} & echo. & echo 脚本执行完毕，按任意键退出... & pause >nul", script_path, script_args.join(" "))
         };
 
         let result = Command::new("cmd")
@@ -220,9 +224,9 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
     } else {
         // Linux: 尝试常见的终端模拟器
         let full_cmd = if script_args.is_empty() {
-            format!("sh {}", script_path)
+            format!("sh {}{}", script_path, wait_suffix)
         } else {
-            format!("sh {} {}", script_path, script_args.join(" "))
+            format!("sh {} {}{}", script_path, script_args.join(" "), wait_suffix)
         };
 
         // 尝试 gnome-terminal → xterm → 降级到当前终端
