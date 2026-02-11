@@ -1,6 +1,17 @@
 [package]
 name = "j"
-version = "0.1.0"
+version = "11.0.0"
 edition = "2024"
 
+[[bin]]
+name = "j"
+path = "src/main.rs"
+
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+rustyline = "15"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+colored = "3"
+dirs = "6"
+url = "2"
