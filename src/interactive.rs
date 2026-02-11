@@ -245,13 +245,34 @@ impl Completer for CopilotCompleter {
             }
         }
 
-        // 如果第一个词是别名（非命令），后续参数也可能是别名（比如浏览器 + URL 别名）
+        // 如果第一个词是别名（非命令），根据别名类型智能补全后续参数
         if self.config.alias_exists(cmd) {
-            let candidates: Vec<Pair> = self.all_aliases()
-                .into_iter()
-                .filter(|a| a.starts_with(current_word))
-                .map(|a| Pair { display: a.clone(), replacement: a })
-                .collect();
+            // 编辑器类别名：后续参数补全文件路径（如 vscode ./src<Tab>）
+            if self.config.contains(constants::section::EDITOR, cmd) {
+                let candidates = complete_file_path(current_word);
+                return Ok((start_pos, candidates));
+            }
+
+            // 浏览器类别名：后续参数补全 URL 别名 + 文件路径
+            if self.config.contains(constants::section::BROWSER, cmd) {
+                let mut candidates: Vec<Pair> = self.all_aliases()
+                    .into_iter()
+                    .filter(|a| a.starts_with(current_word))
+                    .map(|a| Pair { display: a.clone(), replacement: a })
+                    .collect();
+                // 也支持文件路径补全（浏览器打开本地文件）
+                candidates.extend(complete_file_path(current_word));
+                return Ok((start_pos, candidates));
+            }
+
+            // 其他别名（如 CLI 工具）：后续参数补全文件路径 + 别名
+            let mut candidates = complete_file_path(current_word);
+            candidates.extend(
+                self.all_aliases()
+                    .into_iter()
+                    .filter(|a| a.starts_with(current_word))
+                    .map(|a| Pair { display: a.clone(), replacement: a })
+            );
             return Ok((start_pos, candidates));
         }
 
