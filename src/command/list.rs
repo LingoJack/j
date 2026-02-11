@@ -1,13 +1,10 @@
 use crate::config::YamlConfig;
 use crate::constants::DEFAULT_DISPLAY_SECTIONS;
-use crate::info;
-use crate::util::log::{capitalize_first_letter, print_line};
-use colored::Colorize;
+use crate::{md};
+use crate::util::log::capitalize_first_letter;
 
 /// 处理 list 命令: j ls [part]
 pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
-    print_line();
-
     match part {
         None => {
             // 默认展示常用 section
@@ -27,20 +24,20 @@ pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
     }
 }
 
-/// 列出某个 section 的所有键值对
+/// 列出某个 section 的所有键值对（Markdown 表格渲染）
 fn list_section(section: &str, config: &YamlConfig) {
     if let Some(map) = config.get_section(section) {
-        println!("{}", format!("[{}]", capitalize_first_letter(section)).yellow());
-
         if map.is_empty() {
-            info!("Empty");
+            md!("## {}\n*Empty*\n", capitalize_first_letter(section));
         } else {
+            let mut md_text = format!("## {}\n\n|:-|:-|\n", capitalize_first_letter(section));
             for (key, value) in map {
-                print!("{}", key.green());
-                info!(": {}", value);
+                // 转义 Markdown 中的 | 字符
+                let escaped_value = value.replace('|', "\\|");
+                md_text.push_str(&format!("|**{}**|{}|\n", key, escaped_value));
             }
+            md!("{}", md_text);
         }
-        print_line();
     } else {
         crate::error!("该 section 不存在: {}", section);
     }

@@ -36,7 +36,36 @@ macro_rules! debug_log {
     }};
 }
 
+/// 在终端中渲染 Markdown 文本（使用 termimad）
+#[macro_export]
+macro_rules! md {
+    ($($arg:tt)*) => {{
+        let text = format!($($arg)*);
+        termimad::print_text(&text);
+    }};
+}
+
+/// 在终端中渲染单行 Markdown（不换行，用于内联场景）
+#[macro_export]
+macro_rules! md_inline {
+    ($($arg:tt)*) => {{
+        let text = format!($($arg)*);
+        termimad::print_inline(&text);
+    }};
+}
+
+/// 使用自定义皮肤渲染 Markdown 文本
+/// 用法: md_skin!(skin, "markdown text {}", arg)
+#[macro_export]
+macro_rules! md_skin {
+    ($skin:expr, $($arg:tt)*) => {{
+        let text = format!($($arg)*);
+        $skin.print_text(&text);
+    }};
+}
+
 /// 打印分隔线
+#[allow(dead_code)]
 pub fn print_line() {
     println!("- - - - - - - - - - - - - - - - - - - - - - -");
 }

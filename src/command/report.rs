@@ -676,9 +676,9 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
 
     let lines = read_last_n_lines(path, num);
     info!("📄 最近的 {} 行内容如下：", lines.len());
-    for line in &lines {
-        info!("{}", line);
-    }
+    // 周报本身就是 Markdown 格式，使用 termimad 渲染
+    let md_content = lines.join("\n");
+    crate::md!("{}", md_content);
 }
 
 // ========== search 命令 ==========

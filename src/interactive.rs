@@ -148,6 +148,13 @@ impl Completer for CopilotCompleter {
 
         let start_pos = pos - current_word.len();
 
+        // Shell 命令（! 前缀）：对所有参数提供文件路径补全
+        if !parts.is_empty() && (parts[0] == "!" || parts[0].starts_with('!')) {
+            // ! 后面的所有参数都支持文件路径补全
+            let candidates = complete_file_path(current_word);
+            return Ok((start_pos, candidates));
+        }
+
         if word_index == 0 {
             // 第一个词：补全命令名 + 别名
             let mut candidates = Vec::new();
