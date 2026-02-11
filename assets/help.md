@@ -132,7 +132,11 @@ j
 | 命令 | 说明 |
 |------|------|
 | `j concat <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
+| `j <script> [args...]` | 在当前终端执行脚本 |
+| `j <script> -w [args...]` | 在**新终端窗口**中执行脚本 |
 | `j time countdown <duration>` | 启动倒计时（支持 30s / 5m / 1h） |
+
+> `-w` 或 `--new-window` 标志可让脚本在新终端窗口中执行，用于需要后台运行的场景
 
 ## ⚙️ 系统设置
 
@@ -155,3 +159,4 @@ j
 - URL 会自动识别并归类到 `inner_url`，无需手动指定 section
 - `report` 命令内容不会记入历史，保护日报隐私
 - CLI 工具（如 rg、fzf）注册后可直接在终端执行并支持管道
+- 脚本需要后台运行时，使用 `-w` 标志在新窗口中执行（如 `j deploy -w`）

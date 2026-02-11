@@ -94,42 +94,167 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
     }
 }
 
+/// 新窗口执行标志
+const NEW_WINDOW_FLAG: &str = "-w";
+const NEW_WINDOW_FLAG_LONG: &str = "--new-window";
+
 /// 运行脚本
+/// 支持 -w / --new-window 标志：在新终端窗口中执行脚本
+/// 用法：j <script_alias> [-w] [args...]
 fn run_script(args: &[String], config: &YamlConfig) {
     let alias = &args[0];
     if let Some(script_path) = config.get_property(section::SCRIPT, alias) {
         // 展开脚本路径中的 ~
         let script_path = clean_path(script_path);
-        info!("⚙️ 即将执行脚本，路径: {}", script_path);
-        // 展开参数中的 ~
-        let script_args: Vec<String> = args[1..].iter().map(|s| clean_path(s)).collect();
+
+        // 检测 -w / --new-window 标志，并从参数中过滤掉
+        let new_window = args[1..].iter().any(|s| s == NEW_WINDOW_FLAG || s == NEW_WINDOW_FLAG_LONG);
+        let script_args: Vec<String> = args[1..]
+            .iter()
+            .filter(|s| s.as_str() != NEW_WINDOW_FLAG && s.as_str() != NEW_WINDOW_FLAG_LONG)
+            .map(|s| clean_path(s))
+            .collect();
         let script_arg_refs: Vec<&str> = script_args.iter().map(|s| s.as_str()).collect();
 
-        // 在当前终端直接执行脚本（而非打开新终端窗口）
-        let result = if cfg!(target_os = "windows") {
-            Command::new("cmd.exe")
-                .arg("/c")
-                .arg(script_path.as_str())
-                .args(&script_arg_refs)
-                .status()
+        if new_window {
+            info!("⚙️ 即将在新窗口执行脚本，路径: {}", script_path);
+            run_script_in_new_window(&script_path, &script_arg_refs);
         } else {
-            // macOS / Linux: 使用 sh 直接执行
-            Command::new("sh")
-                .arg(script_path.as_str())
-                .args(&script_arg_refs)
-                .status()
+            info!("⚙️ 即将执行脚本，路径: {}", script_path);
+            run_script_in_current_terminal(&script_path, &script_arg_refs);
+        }
+    }
+}
+
+/// 在当前终端直接执行脚本
+fn run_script_in_current_terminal(script_path: &str, script_args: &[&str]) {
+    let result = if cfg!(target_os = "windows") {
+        Command::new("cmd.exe")
+            .arg("/c")
+            .arg(script_path)
+            .args(script_args)
+            .status()
+    } else {
+        // macOS / Linux: 使用 sh 直接执行
+        Command::new("sh")
+            .arg(script_path)
+            .args(script_args)
+            .status()
+    };
+
+    match result {
+        Ok(status) => {
+            if status.success() {
+                info!("✅ 脚本执行完成");
+            } else {
+                error!("❌ 脚本执行失败，退出码: {}", status);
+            }
+        }
+        Err(e) => error!("💥 执行脚本失败: {}", e),
+    }
+}
+
+/// 在新终端窗口中执行脚本
+fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
+    let os = std::env::consts::OS;
+
+    if os == shell::MACOS_OS {
+        // macOS: 使用 osascript 在新 Terminal 窗口中执行
+        let full_cmd = if script_args.is_empty() {
+            format!("sh {}", shell_escape(script_path))
+        } else {
+            let args_str = script_args
+                .iter()
+                .map(|a| shell_escape(a))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("sh {} {}", shell_escape(script_path), args_str)
         };
+
+        // AppleScript: 在 Terminal.app 中打开新窗口并执行命令
+        let apple_script = format!(
+            "tell application \"Terminal\"\n\
+                activate\n\
+                do script \"{}\"\n\
+            end tell",
+            full_cmd.replace('\\', "\\\\").replace('"', "\\\"")
+        );
+
+        let result = Command::new("osascript")
+            .arg("-e")
+            .arg(&apple_script)
+            .status();
 
         match result {
             Ok(status) => {
                 if status.success() {
-                    info!("✅ 脚本执行完成");
+                    info!("✅ 已在新终端窗口中启动脚本");
                 } else {
-                    error!("❌ 脚本执行失败，退出码: {}", status);
+                    error!("❌ 启动新终端窗口失败，退出码: {}", status);
                 }
             }
-            Err(e) => error!("💥 执行脚本失败: {}", e),
+            Err(e) => error!("💥 调用 osascript 失败: {}", e),
         }
+    } else if os == shell::WINDOWS_OS {
+        // Windows: 使用 start cmd /c 在新窗口执行
+        let full_cmd = if script_args.is_empty() {
+            script_path.to_string()
+        } else {
+            format!("{} {}", script_path, script_args.join(" "))
+        };
+
+        let result = Command::new("cmd")
+            .args(["/c", "start", "cmd", "/c", &full_cmd])
+            .status();
+
+        match result {
+            Ok(status) => {
+                if status.success() {
+                    info!("✅ 已在新终端窗口中启动脚本");
+                } else {
+                    error!("❌ 启动新终端窗口失败，退出码: {}", status);
+                }
+            }
+            Err(e) => error!("💥 启动新窗口失败: {}", e),
+        }
+    } else {
+        // Linux: 尝试常见的终端模拟器
+        let full_cmd = if script_args.is_empty() {
+            format!("sh {}", script_path)
+        } else {
+            format!("sh {} {}", script_path, script_args.join(" "))
+        };
+
+        // 尝试 gnome-terminal → xterm → 降级到当前终端
+        let terminals = [
+            ("gnome-terminal", vec!["--", "sh", "-c", &full_cmd]),
+            ("xterm", vec!["-e", &full_cmd]),
+            ("konsole", vec!["-e", &full_cmd]),
+        ];
+
+        for (term, term_args) in &terminals {
+            if let Ok(status) = Command::new(term).args(term_args).status() {
+                if status.success() {
+                    info!("✅ 已在新终端窗口中启动脚本");
+                    return;
+                }
+            }
+        }
+
+        // 所有终端都失败，降级到当前终端执行
+        info!("⚠️ 未找到可用的终端模拟器，降级到当前终端执行");
+        run_script_in_current_terminal(script_path, script_args);
+    }
+}
+
+/// Shell 参数转义（为包含空格等特殊字符的参数添加引号）
+fn shell_escape(s: &str) -> String {
+    if s.contains(' ') || s.contains('"') || s.contains('\'') || s.contains('\\') {
+        // 用单引号包裹，内部单引号转义为 '\'''
+        format!("'{}'", s.replace('\'', "'\\''")
+        )
+    } else {
+        s.to_string()
     }
 }
 
