@@ -232,6 +232,7 @@ pub mod rmeta_action {
     pub const PUSH: &str = "push";
     pub const PULL: &str = "pull";
     pub const SET_URL: &str = "set-url";
+    pub const OPEN: &str = "open";
 }
 
 // ========== time 子命令 ==========

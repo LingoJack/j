@@ -18,7 +18,7 @@ const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
 pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
         if sub == "reportctl" {
-            usage!("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url>");
+            usage!("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open");
             return;
         }
         // report 无参数：打开 TUI 多行编辑器（预填历史 + 日期前缀，NORMAL 模式）
@@ -50,8 +50,11 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
                 let url = content.get(1).map(|s| s.as_str());
                 handle_set_url(url, config);
             }
+            f if f == rmeta_action::OPEN => {
+                handle_open_report(config);
+            }
             _ => {
-                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL);
+                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL, rmeta_action::OPEN);
             }
         }
         return;
@@ -404,6 +407,55 @@ fn append_to_file(path: &Path, content: &str) {
             }
         }
         Err(e) => error!("❌ 打开文件失败: {}", e),
+    }
+}
+
+// ========== open 命令 ==========
+
+/// 处理 reportctl open 命令：用内置 TUI 编辑器打开日报文件，自由编辑全文
+fn handle_open_report(config: &YamlConfig) {
+    let report_path = match get_report_path(config) {
+        Some(p) => p,
+        None => return,
+    };
+
+    let path = Path::new(&report_path);
+    if !path.is_file() {
+        error!("❌ 日报文件不存在: {}", report_path);
+        return;
+    }
+
+    // 读取文件全部内容
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("❌ 读取日报文件失败: {}", e);
+            return;
+        }
+    };
+
+    let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+
+    // 用 TUI 编辑器打开全文（NORMAL 模式）
+    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报文件", &lines) {
+        Ok(Some(text)) => {
+            // 用户提交了内容，整体回写文件
+            let mut result = text;
+            if !result.ends_with('\n') {
+                result.push('\n');
+            }
+            if let Err(e) = fs::write(path, &result) {
+                error!("❌ 写入日报文件失败: {}", e);
+                return;
+            }
+            info!("✅ 日报文件已保存：{}", report_path);
+        }
+        Ok(None) => {
+            info!("已取消编辑，文件未修改");
+        }
+        Err(e) => {
+            error!("❌ 编辑器启动失败: {}", e);
+        }
     }
 }
 

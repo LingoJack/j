@@ -119,6 +119,7 @@ j
 | `j reportctl push [msg]` | 推送周报到远程 git 仓库 |
 | `j reportctl pull` | 从远程 git 仓库拉取周报 |
 | `j reportctl set-url [url]` | 设置/查看 git 仓库地址 |
+| `j reportctl open` | 用系统编辑器打开日报文件 |
 | `j check [N]` | 查看日报最近 N 行（默认 5） |
 | `j search <N/all> <kw>` | 在日报中搜索关键字 |
 | `j search <N/all> <kw> -f` | 模糊搜索（大小写不敏感） |
