@@ -79,7 +79,7 @@ impl YamlConfig {
         dir
     }
 
-    /// 获取日报文件路径（优先使用用户配置，否则使用默认路径 ~/.jdata/report/weekly.md）
+    /// 获取日报文件路径（优先使用用户配置，否则使用默认路径 ~/.jdata/report/week_report.md）
     pub fn report_file_path(&self) -> PathBuf {
         if let Some(custom_path) = self.get_property(section::REPORT, config_key::WEEK_REPORT) {
             if !custom_path.is_empty() {

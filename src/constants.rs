@@ -184,7 +184,7 @@ pub mod cmd {
 
     // 日报系统
     pub const REPORT: &[&str] = &["report", "r"];
-    pub const RMETA: &[&str] = &["r-meta"];
+    pub const REPORTCTL: &[&str] = &["reportctl", "rctl"];
     pub const CHECK: &[&str] = &["check", "c"];
     pub const SEARCH: &[&str] = &["search", "select", "look", "sch"];
 
@@ -214,7 +214,7 @@ pub mod cmd {
             SET, REMOVE, RENAME, MODIFY,
             NOTE, DENOTE,
             LIST, CONTAIN,
-            REPORT, RMETA, CHECK, SEARCH,
+            REPORT, REPORTCTL, CHECK, SEARCH,
             CONCAT, TIME,
             LOG, CHANGE, CLEAR,
             VERSION, HELP, EXIT,
@@ -224,7 +224,7 @@ pub mod cmd {
     }
 }
 
-// ========== r-meta 子命令 ==========
+// ========== reportctl 子命令 ==========
 
 pub mod rmeta_action {
     pub const NEW: &str = "new";
@@ -274,7 +274,7 @@ pub const SCRIPTS_DIR: &str = "scripts";
 pub const REPORT_DIR: &str = "report";
 
 /// 日报默认文件名
-pub const REPORT_DEFAULT_FILE: &str = "weekly.md";
+pub const REPORT_DEFAULT_FILE: &str = "week_report.md";
 
 /// 数据根目录名
 pub const DATA_DIR: &str = ".jdata";

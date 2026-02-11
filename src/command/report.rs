@@ -14,17 +14,17 @@ const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
 
 // ========== report 命令 ==========
 
-/// 处理 report 命令: j report <content...> 或 j r-meta new [date] / j r-meta sync [date]
+/// 处理 report 命令: j report <content...> 或 j reportctl new [date] / j reportctl sync [date]
 pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
-        usage!("j report <content> | j r-meta new [date] | j r-meta sync [date]");
+        usage!("j report <content> | j reportctl new [date] | j reportctl sync [date]");
         return;
     }
 
     let first = content[0].as_str();
 
     // 元数据操作
-    if sub == "r-meta" {
+    if sub == "reportctl" {
         match first {
             f if f == rmeta_action::NEW => {
                 let date_str = content.get(1).map(|s| s.as_str());
@@ -141,7 +141,7 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
     info!("✅ 成功将内容写入：{}", report_path);
 }
 
-/// 处理 r-meta new 命令：开启新的一周
+/// 处理 reportctl new 命令：开启新的一周
 fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
     let report_path = match get_report_path(config) {
         Some(p) => p,
@@ -171,7 +171,7 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
     }
 }
 
-/// 处理 r-meta sync 命令：同步周数和日期
+/// 处理 reportctl sync 命令：同步周数和日期
 fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
     let report_path = match get_report_path(config) {
         Some(p) => p,
@@ -341,8 +341,8 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
 
     info!("📦 日报目录尚未初始化 git 仓库，正在初始化...");
 
-    // git init
-    if let Some(status) = run_git_in_report_dir(&["init"], config) {
+    // git init -b main
+    if let Some(status) = run_git_in_report_dir(&["init", "-b", "main"], config) {
         if !status.success() {
             error!("❌ git init 失败");
             return false;
@@ -365,7 +365,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
     true
 }
 
-/// 处理 r-meta push 命令：推送周报到远程仓库
+/// 处理 reportctl push 命令：推送周报到远程仓库
 fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
@@ -404,8 +404,8 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
         return;
     }
 
-    // git push origin（自动推到当前分支）
-    if let Some(status) = run_git_in_report_dir(&["push", "-u", "origin", "HEAD"], config) {
+    // git push origin main
+    if let Some(status) = run_git_in_report_dir(&["push", "-u", "origin", "main"], config) {
         if status.success() {
             info!("✅ 周报已成功推送到远程仓库");
         } else {
@@ -414,7 +414,7 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     }
 }
 
-/// 处理 r-meta pull 命令：从远程仓库拉取周报
+/// 处理 reportctl pull 命令：从远程仓库拉取周报
 fn handle_pull(config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
@@ -458,7 +458,7 @@ fn handle_pull(config: &YamlConfig) {
         let _ = fs::remove_dir_all(&temp_dir);
 
         let result = Command::new("git")
-            .args(["clone", repo_url, &temp_dir.to_string_lossy()])
+            .args(["clone", "-b", "main", repo_url, &temp_dir.to_string_lossy()])
             .status();
 
         match result {
@@ -484,7 +484,7 @@ fn handle_pull(config: &YamlConfig) {
         // 已经是 git 仓库，直接 pull
         info!("📥 正在从远程仓库拉取最新周报...");
 
-        if let Some(status) = run_git_in_report_dir(&["pull", "--rebase"], config) {
+        if let Some(status) = run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config) {
             if status.success() {
                 info!("✅ 周报已更新到最新版本");
             } else {

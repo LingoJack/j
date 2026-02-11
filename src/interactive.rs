@@ -74,6 +74,7 @@ enum ArgHint {
     SectionKeys(String), // 依赖上一个参数的 section 名
     Fixed(Vec<&'static str>),
     Placeholder(&'static str),
+    FilePath, // 文件系统路径补全
     None,
 }
 
@@ -81,10 +82,10 @@ enum ArgHint {
 fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
     vec![
         // 别名管理
-        (cmd::SET, vec![ArgHint::Placeholder("<alias>"), ArgHint::Placeholder("<path>")]),
+        (cmd::SET, vec![ArgHint::Placeholder("<alias>"), ArgHint::FilePath]),
         (cmd::REMOVE, vec![ArgHint::Alias]),
         (cmd::RENAME, vec![ArgHint::Alias, ArgHint::Placeholder("<new_alias>")]),
-        (cmd::MODIFY, vec![ArgHint::Alias, ArgHint::Placeholder("<new_path>")]),
+        (cmd::MODIFY, vec![ArgHint::Alias, ArgHint::FilePath]),
         // 分类
         (cmd::NOTE, vec![ArgHint::Alias, ArgHint::Category]),
         (cmd::DENOTE, vec![ArgHint::Alias, ArgHint::Category]),
@@ -101,7 +102,7 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         (cmd::CHANGE, vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
         // 日报系统
         (cmd::REPORT, vec![ArgHint::Placeholder("<content>")]),
-        (cmd::RMETA, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL]), ArgHint::Placeholder("<date|message>")]),
+        (cmd::REPORTCTL, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL]), ArgHint::Placeholder("<date|message>")]),
         (cmd::CHECK, vec![ArgHint::Placeholder("<line_count>")]),
         (cmd::SEARCH, vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY])]),
         // 脚本
@@ -224,6 +225,10 @@ impl Completer for CopilotCompleter {
                         ArgHint::Placeholder(_) => {
                             // placeholder 不提供候选项
                             vec![]
+                        }
+                        ArgHint::FilePath => {
+                            // 文件系统路径补全
+                            complete_file_path(current_word)
                         }
                         ArgHint::None => vec![],
                     };
@@ -613,12 +618,12 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
         Some(SubCmd::Report {
             content: rest.to_vec(),
         })
-    } else if is(cmd::RMETA) {
+    } else if is(cmd::REPORTCTL) {
         if rest.is_empty() {
-            crate::usage!("r-meta <new|sync|push|pull> [date|message]");
+            crate::usage!("reportctl <new|sync|push|pull> [date|message]");
             return None;
         }
-        Some(SubCmd::RMeta {
+        Some(SubCmd::Reportctl {
             action: rest[0].clone(),
             arg: rest.get(1).cloned(),
         })
@@ -669,6 +674,71 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     } else {
         None
     }
+}
+
+/// 文件系统路径补全
+/// 根据用户已输入的部分路径，列出匹配的文件和目录
+fn complete_file_path(partial: &str) -> Vec<Pair> {
+    let mut candidates = Vec::new();
+
+    // 展开 ~ 为 home 目录
+    let expanded = if partial.starts_with('~') {
+        if let Some(home) = dirs::home_dir() {
+            partial.replacen('~', &home.to_string_lossy(), 1)
+        } else {
+            partial.to_string()
+        }
+    } else {
+        partial.to_string()
+    };
+
+    // 解析目录路径和文件名前缀
+    let (dir_path, file_prefix) = if expanded.ends_with('/') || expanded.ends_with(std::path::MAIN_SEPARATOR) {
+        (std::path::Path::new(&expanded).to_path_buf(), String::new())
+    } else {
+        let p = std::path::Path::new(&expanded);
+        let parent = p.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+        let fp = p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        (parent, fp)
+    };
+
+    if let Ok(entries) = std::fs::read_dir(&dir_path) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+
+            // 跳过隐藏文件（除非用户已经输入了 .）
+            if name.starts_with('.') && !file_prefix.starts_with('.') {
+                continue;
+            }
+
+            if name.starts_with(&file_prefix) {
+                let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+
+                // 构建完整路径用于替换
+                // 保留用户输入的原始前缀风格（如 ~ 或绝对路径）
+                let full_replacement = if partial.ends_with('/') || partial.ends_with(std::path::MAIN_SEPARATOR) {
+                    format!("{}{}{}", partial, name, if is_dir { "/" } else { "" })
+                } else if partial.contains('/') || partial.contains(std::path::MAIN_SEPARATOR) {
+                    // 替换最后一段
+                    let last_sep = partial.rfind('/').or_else(|| partial.rfind(std::path::MAIN_SEPARATOR)).unwrap();
+                    format!("{}/{}{}", &partial[..last_sep], name, if is_dir { "/" } else { "" })
+                } else {
+                    format!("{}{}", name, if is_dir { "/" } else { "" })
+                };
+
+                let display_name = format!("{}{}", name, if is_dir { "/" } else { "" });
+
+                candidates.push(Pair {
+                    display: display_name,
+                    replacement: full_replacement,
+                });
+            }
+        }
+    }
+
+    // 按名称排序，目录优先
+    candidates.sort_by(|a, b| a.display.cmp(&b.display));
+    candidates
 }
 
 /// 执行 shell 命令

@@ -36,12 +36,12 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
 
         // 日报系统
         SubCmd::Report { content } => report::handle_report("report", &content, config),
-        SubCmd::RMeta { action, arg } => {
+        SubCmd::Reportctl { action, arg } => {
             let mut args = vec![action];
             if let Some(a) = arg {
                 args.push(a);
             }
-            report::handle_report("r-meta", &args, config);
+            report::handle_report("reportctl", &args, config);
         }
         SubCmd::Check { line_count } => report::handle_check(line_count.as_deref(), config),
         SubCmd::Search { line_count, target, fuzzy } => {

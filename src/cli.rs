@@ -99,8 +99,8 @@ pub enum SubCmd {
     },
 
     /// 日报元数据操作（new/sync/push/pull）
-    #[command(name = "r-meta")]
-    RMeta {
+    #[command(name = "reportctl", alias = "rctl")]
+    Reportctl {
         /// 操作: new / sync / push / pull
         action: String,
         /// 可选参数（new/sync 时为日期，push 时为 commit message）
