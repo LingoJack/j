@@ -296,6 +296,15 @@ fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
         Some(u) if !u.is_empty() => {
             let old = config.get_property(section::REPORT, config_key::GIT_REPO).cloned();
             config.set_property(section::REPORT, config_key::GIT_REPO, u);
+
+            // 如果日报目录已有 .git，同步更新 remote origin
+            if let Some(dir) = get_report_dir(config) {
+                let git_dir = Path::new(&dir).join(".git");
+                if git_dir.exists() {
+                    sync_git_remote(config);
+                }
+            }
+
             match old {
                 Some(old_url) if !old_url.is_empty() => {
                     info!("✅ git 仓库地址已更新: {} → {}", old_url, u);
@@ -364,6 +373,8 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
 
     let git_dir = Path::new(&dir).join(".git");
     if git_dir.exists() {
+        // 已初始化，同步 remote URL（防止 set-url 后 remote 不一致）
+        sync_git_remote(config);
         return true;
     }
 
@@ -399,6 +410,40 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
 
     info!("✅ git 仓库初始化完成，remote: {}", repo_url);
     true
+}
+
+/// 同步 git remote origin URL 与配置文件中的 git_repo 保持一致
+fn sync_git_remote(config: &YamlConfig) {
+    let git_repo = match config.get_property(section::REPORT, config_key::GIT_REPO) {
+        Some(url) if !url.is_empty() => url.clone(),
+        _ => return, // 没有配置就不同步
+    };
+
+    // 获取当前 remote origin url
+    let dir = match get_report_dir(config) {
+        Some(d) => d,
+        None => return,
+    };
+
+    let current_url = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(&dir)
+        .output();
+
+    match current_url {
+        Ok(output) if output.status.success() => {
+            let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if url != git_repo {
+                // URL 不一致，更新 remote
+                let _ = run_git_in_report_dir(&["remote", "set-url", "origin", &git_repo], config);
+                info!("🔄 已同步 remote origin: {} → {}", url, git_repo);
+            }
+        }
+        _ => {
+            // 没有 origin remote，添加一个
+            let _ = run_git_in_report_dir(&["remote", "add", "origin", &git_repo], config);
+        }
+    }
 }
 
 /// 处理 reportctl push 命令：推送周报到远程仓库
@@ -471,7 +516,7 @@ fn handle_pull(config: &YamlConfig) {
 
     if !git_dir.exists() {
         // 日报目录不是 git 仓库，尝试 clone
-        let repo_url = git_repo.unwrap();
+        let repo_url = git_repo.unwrap().clone();
         info!("📥 日报目录尚未初始化，正在从远程仓库克隆...");
 
         // 先备份已有文件（如果有的话）
@@ -494,7 +539,7 @@ fn handle_pull(config: &YamlConfig) {
         let _ = fs::remove_dir_all(&temp_dir);
 
         let result = Command::new("git")
-            .args(["clone", "-b", "main", repo_url, &temp_dir.to_string_lossy()])
+            .args(["clone", "-b", "main", &repo_url, &temp_dir.to_string_lossy()])
             .status();
 
         match result {
@@ -517,14 +562,85 @@ fn handle_pull(config: &YamlConfig) {
             }
         }
     } else {
-        // 已经是 git 仓库，直接 pull
-        info!("📥 正在从远程仓库拉取最新周报...");
+        // 已经是 git 仓库，先同步 remote URL
+        sync_git_remote(config);
 
-        if let Some(status) = run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config) {
-            if status.success() {
-                info!("✅ 周报已更新到最新版本");
+        // 检测是否是空仓库（unborn branch，没有任何 commit）
+        let has_commits = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&dir)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if !has_commits {
+            // 空仓库（git init 后未 commit），通过 fetch + checkout 来拉取
+            info!("📥 本地仓库尚无提交，正在从远程仓库拉取...");
+
+            // 备份本地已有的未跟踪文件
+            let report_path = config.report_file_path();
+            if report_path.exists() && fs::metadata(&report_path).map(|m| m.len() > 0).unwrap_or(false) {
+                let backup_path = report_path.with_extension("md.bak");
+                let _ = fs::copy(&report_path, &backup_path);
+                info!("📋 已备份本地日报到: {:?}", backup_path);
+            }
+
+            // git fetch origin main
+            if let Some(status) = run_git_in_report_dir(&["fetch", "origin", "main"], config) {
+                if !status.success() {
+                    error!("❌ git fetch 失败，请检查网络连接和仓库地址");
+                    return;
+                }
             } else {
-                error!("❌ git pull 失败，请检查网络连接或手动解决冲突");
+                return;
+            }
+
+            // git reset --hard origin/main（强制用远程覆盖本地）
+            if let Some(status) = run_git_in_report_dir(&["reset", "--hard", "origin/main"], config) {
+                if status.success() {
+                    info!("✅ 成功从远程仓库拉取周报");
+                } else {
+                    error!("❌ git reset 失败");
+                }
+            }
+        } else {
+            // 正常仓库，先 stash 再 pull
+            info!("📥 正在从远程仓库拉取最新周报...");
+
+            // 先暂存本地未跟踪/修改的文件，防止 pull 时冲突
+            let _ = run_git_in_report_dir(&["add", "-A"], config);
+            let stash_result = Command::new("git")
+                .args(["stash", "push", "-m", "auto-stash-before-pull"])
+                .current_dir(&dir)
+                .output();
+            let has_stash = match &stash_result {
+                Ok(output) => {
+                    let msg = String::from_utf8_lossy(&output.stdout);
+                    !msg.contains("No local changes")
+                }
+                Err(_) => false,
+            };
+
+            // 执行 pull
+            let pull_ok = if let Some(status) = run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config) {
+                if status.success() {
+                    info!("✅ 周报已更新到最新版本");
+                    true
+                } else {
+                    error!("❌ git pull 失败，请检查网络连接或手动解决冲突");
+                    false
+                }
+            } else {
+                false
+            };
+
+            // 恢复 stash
+            if has_stash {
+                if let Some(status) = run_git_in_report_dir(&["stash", "pop"], config) {
+                    if !status.success() && pull_ok {
+                        info!("⚠️ stash pop 存在冲突，请手动合并本地修改（已保存在 git stash 中）");
+                    }
+                }
             }
         }
     }

@@ -480,6 +480,16 @@ fn parse_input(input: &str) -> Vec<String> {
     args
 }
 
+/// 交互命令解析结果（三态）
+enum ParseResult {
+    /// 成功解析为内置命令
+    Matched(crate::cli::SubCmd),
+    /// 是内置命令但参数不足，已打印 usage 提示
+    Handled,
+    /// 不是内置命令
+    NotFound,
+}
+
 /// 在交互模式下执行命令
 /// 与快捷模式不同，这里从解析后的 args 来分发命令
 fn execute_interactive_command(args: &[String], config: &mut YamlConfig) {
@@ -496,20 +506,26 @@ fn execute_interactive_command(args: &[String], config: &mut YamlConfig) {
     }
 
     // 尝试解析为内置命令
-    if let Some(subcmd) = parse_interactive_command(args) {
-        command::dispatch(subcmd, config);
-    } else {
-        // 不是内置命令，尝试作为别名打开
-        command::open::handle_open(args, config);
+    match parse_interactive_command(args) {
+        ParseResult::Matched(subcmd) => {
+            command::dispatch(subcmd, config);
+        }
+        ParseResult::Handled => {
+            // 内置命令参数不足，已打印 usage，无需额外处理
+        }
+        ParseResult::NotFound => {
+            // 不是内置命令，尝试作为别名打开
+            command::open::handle_open(args, config);
+        }
     }
 }
 
 /// 从交互模式输入的参数解析出 SubCmd
-fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
+fn parse_interactive_command(args: &[String]) -> ParseResult {
     use crate::cli::SubCmd;
 
     if args.is_empty() {
-        return None;
+        return ParseResult::NotFound;
     }
 
     let cmd = args[0].as_str();
@@ -521,30 +537,32 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     if is(cmd::SET) {
         if rest.is_empty() {
             crate::usage!("set <alias> <path>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Set {
+        ParseResult::Matched(SubCmd::Set {
             alias: rest[0].clone(),
             path: rest[1..].to_vec(),
         })
     } else if is(cmd::REMOVE) {
-        rest.first().map(|alias| SubCmd::Remove { alias: alias.clone() })
-            .or_else(|| { crate::usage!("rm <alias>"); None })
+        match rest.first() {
+            Some(alias) => ParseResult::Matched(SubCmd::Remove { alias: alias.clone() }),
+            None => { crate::usage!("rm <alias>"); ParseResult::Handled }
+        }
     } else if is(cmd::RENAME) {
         if rest.len() < 2 {
             crate::usage!("rename <alias> <new_alias>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Rename {
+        ParseResult::Matched(SubCmd::Rename {
             alias: rest[0].clone(),
             new_alias: rest[1].clone(),
         })
     } else if is(cmd::MODIFY) {
         if rest.is_empty() {
             crate::usage!("mf <alias> <new_path>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Modify {
+        ParseResult::Matched(SubCmd::Modify {
             alias: rest[0].clone(),
             path: rest[1..].to_vec(),
         })
@@ -553,25 +571,25 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     } else if is(cmd::NOTE) {
         if rest.len() < 2 {
             crate::usage!("note <alias> <category>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Note {
+        ParseResult::Matched(SubCmd::Note {
             alias: rest[0].clone(),
             category: rest[1].clone(),
         })
     } else if is(cmd::DENOTE) {
         if rest.len() < 2 {
             crate::usage!("denote <alias> <category>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Denote {
+        ParseResult::Matched(SubCmd::Denote {
             alias: rest[0].clone(),
             category: rest[1].clone(),
         })
 
     // 列表
     } else if is(cmd::LIST) {
-        Some(SubCmd::List {
+        ParseResult::Matched(SubCmd::List {
             part: rest.first().cloned(),
         })
 
@@ -579,9 +597,9 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     } else if is(cmd::CONTAIN) {
         if rest.is_empty() {
             crate::usage!("contain <alias> [sections]");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Contain {
+        ParseResult::Matched(SubCmd::Contain {
             alias: rest[0].clone(),
             containers: rest.get(1).cloned(),
         })
@@ -590,53 +608,53 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     } else if is(cmd::LOG) {
         if rest.len() < 2 {
             crate::usage!("log mode <verbose|concise>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Log {
+        ParseResult::Matched(SubCmd::Log {
             key: rest[0].clone(),
             value: rest[1].clone(),
         })
     } else if is(cmd::CHANGE) {
         if rest.len() < 3 {
             crate::usage!("change <part> <field> <value>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Change {
+        ParseResult::Matched(SubCmd::Change {
             part: rest[0].clone(),
             field: rest[1].clone(),
             value: rest[2].clone(),
         })
     } else if is(cmd::CLEAR) {
-        Some(SubCmd::Clear)
+        ParseResult::Matched(SubCmd::Clear)
 
     // 日报系统
     } else if is(cmd::REPORT) {
         if rest.is_empty() {
             crate::usage!("report <content>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Report {
+        ParseResult::Matched(SubCmd::Report {
             content: rest.to_vec(),
         })
     } else if is(cmd::REPORTCTL) {
         if rest.is_empty() {
-            crate::usage!("reportctl <new|sync|push|pull> [date|message]");
-            return None;
+            crate::usage!("reportctl <new|sync|push|pull|set-url> [date|message|url]");
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Reportctl {
+        ParseResult::Matched(SubCmd::Reportctl {
             action: rest[0].clone(),
             arg: rest.get(1).cloned(),
         })
     } else if is(cmd::CHECK) {
-        Some(SubCmd::Check {
+        ParseResult::Matched(SubCmd::Check {
             line_count: rest.first().cloned(),
         })
     } else if is(cmd::SEARCH) {
         if rest.len() < 2 {
             crate::usage!("search <line_count|all> <target> [-f|-fuzzy]");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Search {
+        ParseResult::Matched(SubCmd::Search {
             line_count: rest[0].clone(),
             target: rest[1].clone(),
             fuzzy: rest.get(2).cloned(),
@@ -646,9 +664,9 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     } else if is(cmd::CONCAT) {
         if rest.len() < 2 {
             crate::usage!("concat <script_name> \"<script_content>\"");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Concat {
+        ParseResult::Matched(SubCmd::Concat {
             name: rest[0].clone(),
             content: rest[1..].join(" "),
         })
@@ -657,22 +675,22 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     } else if is(cmd::TIME) {
         if rest.len() < 2 {
             crate::usage!("time countdown <duration>");
-            return None;
+            return ParseResult::Handled;
         }
-        Some(SubCmd::Time {
+        ParseResult::Matched(SubCmd::Time {
             function: rest[0].clone(),
             arg: rest[1].clone(),
         })
 
     // 系统信息
     } else if is(cmd::VERSION) {
-        Some(SubCmd::Version)
+        ParseResult::Matched(SubCmd::Version)
     } else if is(cmd::HELP) {
-        Some(SubCmd::Help)
+        ParseResult::Matched(SubCmd::Help)
 
     // 未匹配到内置命令
     } else {
-        None
+        ParseResult::NotFound
     }
 }
 
