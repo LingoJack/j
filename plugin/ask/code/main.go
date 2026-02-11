@@ -30,7 +30,6 @@ func main() {
 
 	width := getTerminalWidth()
 
-	// 缩进根据宽度自适应：宽度越大，缩进越大，但保持在合理范围内
 	indent := width / IndentDivisor
 	if indent < MinIndent {
 		indent = MinIndent
