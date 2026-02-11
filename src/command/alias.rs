@@ -33,6 +33,16 @@ pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
 /// 处理 remove 命令: j rm <alias>
 pub fn handle_remove(alias: &str, config: &mut YamlConfig) {
     if config.contains(section::PATH, alias) {
+        // 如果是脚本别名，同时删除磁盘上的脚本文件
+        if let Some(script_path) = config.get_property(section::SCRIPT, alias) {
+            let path = std::path::Path::new(&script_path);
+            if path.exists() {
+                match std::fs::remove_file(path) {
+                    Ok(_) => info!("🗑️ 已删除脚本文件: {}", script_path),
+                    Err(e) => error!("⚠️ 删除脚本文件失败: {}", e),
+                }
+            }
+        }
         config.remove_property(section::PATH, alias);
         // 同时清理关联的 category
         for s in REMOVE_CLEANUP_SECTIONS {

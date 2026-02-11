@@ -100,22 +100,29 @@ fn run_script(args: &[String], config: &YamlConfig) {
         info!("⚙️ 即将执行脚本，路径: {}", script_path);
         let script_args: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
 
-        let os = std::env::consts::OS;
-        let result = if os == "macos" {
-            let mut cmd_args = vec!["open", "-a", "Terminal", script_path.as_str()];
-            cmd_args.extend(script_args);
-            Command::new(cmd_args[0]).args(&cmd_args[1..]).status()
-        } else if os == "windows" {
-            let mut cmd_args = vec!["cmd.exe", "/c", "start", "cmd.exe", "/k", script_path.as_str()];
-            cmd_args.extend(script_args);
-            Command::new(cmd_args[0]).args(&cmd_args[1..]).status()
+        // 在当前终端直接执行脚本（而非打开新终端窗口）
+        let result = if cfg!(target_os = "windows") {
+            Command::new("cmd.exe")
+                .arg("/c")
+                .arg(script_path.as_str())
+                .args(&script_args)
+                .status()
         } else {
-            error!("❌ 不支持的操作系统: {}", os);
-            return;
+            // macOS / Linux: 使用 sh 直接执行
+            Command::new("sh")
+                .arg(script_path.as_str())
+                .args(&script_args)
+                .status()
         };
 
         match result {
-            Ok(status) => info!("✅ 脚本执行完成，退出码: {}", status),
+            Ok(status) => {
+                if status.success() {
+                    info!("✅ 脚本执行完成");
+                } else {
+                    error!("❌ 脚本执行失败，退出码: {}", status);
+                }
+            }
             Err(e) => error!("💥 执行脚本失败: {}", e),
         }
     }
