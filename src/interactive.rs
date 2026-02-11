@@ -432,14 +432,12 @@ pub fn run_interactive(config: &mut YamlConfig) {
     let _ = rl.save_history(&history_path);
 }
 
-/// 获取历史文件路径
+/// 获取历史文件路径: ~/.jdata/history.txt
 fn history_file_path() -> std::path::PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("j");
+    let data_dir = crate::config::YamlConfig::data_dir();
     // 确保目录存在
-    let _ = std::fs::create_dir_all(&config_dir);
-    config_dir.join("history.txt")
+    let _ = std::fs::create_dir_all(&data_dir);
+    data_dir.join("history.txt")
 }
 
 /// 解析用户输入为参数列表

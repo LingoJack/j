@@ -1,10 +1,9 @@
 use crate::config::YamlConfig;
 use crate::{error, info};
 use std::fs;
-use std::path::Path;
 
 /// 处理 concat 命令: j concat <script_name> "<script_content>"
-/// 创建一个脚本文件并注册为别名
+/// 创建一个脚本文件并注册为别名，脚本持久化在 ~/.jdata/scripts/ 下
 pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     // 检查脚本名是否已存在
     if config.contains("path", name) {
@@ -12,14 +11,8 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
         return;
     }
 
-    // 获取脚本仓库路径
-    let depot = match config.get_property("script", "depot") {
-        Some(d) => d.clone(),
-        None => {
-            error!("❌ 配置文件中未设置 script.depot（脚本存放目录）");
-            return;
-        }
-    };
+    // 脚本统一存储在 ~/.jdata/scripts/ 下
+    let scripts_dir = YamlConfig::scripts_dir();
 
     // 生成脚本文件路径
     let ext = if std::env::consts::OS == "windows" {
@@ -27,7 +20,8 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     } else {
         ".sh"
     };
-    let script_path = format!("{}{}{}", depot, name, ext);
+    let script_path = scripts_dir.join(format!("{}{}", name, ext));
+    let script_path_str = script_path.to_string_lossy().to_string();
 
     // 去除 content 两端的引号
     let script_content = content
@@ -35,9 +29,8 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
         .trim_start_matches('"')
         .trim_end_matches('"');
 
-    // 确保目录存在
-    let script_file = Path::new(&script_path);
-    if let Some(parent) = script_file.parent() {
+    // 确保目录存在（scripts_dir() 已保证，这里冗余保护）
+    if let Some(parent) = script_path.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
             error!("❌ 创建目录失败: {}", e);
             return;
@@ -47,7 +40,7 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     // 写入脚本内容
     match fs::write(&script_path, script_content) {
         Ok(_) => {
-            info!("🎉 文件创建成功: {}", script_path);
+            info!("🎉 文件创建成功: {}", script_path_str);
         }
         Err(e) => {
             error!("💥 写入脚本文件失败: {}", e);
@@ -71,8 +64,8 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     }
 
     // 注册到 path 和 script
-    config.set_property("path", name, &script_path);
-    config.set_property("script", name, &script_path);
+    config.set_property("path", name, &script_path_str);
+    config.set_property("script", name, &script_path_str);
 
     info!(
         "✅ 成功创建脚本 {{{}}} 并写入内容: {}",

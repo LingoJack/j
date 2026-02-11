@@ -46,17 +46,29 @@ pub struct YamlConfig {
 }
 
 impl YamlConfig {
-    /// 获取配置文件路径
-    fn config_path() -> PathBuf {
-        // 优先使用环境变量指定的配置路径
-        if let Ok(path) = std::env::var("J_CONFIG_PATH") {
+    /// 获取数据根目录: ~/.jdata/
+    pub fn data_dir() -> PathBuf {
+        // 优先使用环境变量指定的数据路径
+        if let Ok(path) = std::env::var("J_DATA_PATH") {
             return PathBuf::from(path);
         }
-        // 默认路径: ~/.config/j/config.yaml
-        let config_dir = dirs::config_dir()
+        // 默认路径: ~/.jdata/
+        dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("j");
-        config_dir.join("config.yaml")
+            .join(".jdata")
+    }
+
+    /// 获取配置文件路径: ~/.jdata/config.yaml
+    fn config_path() -> PathBuf {
+        Self::data_dir().join("config.yaml")
+    }
+
+    /// 获取脚本存储目录: ~/.jdata/scripts/
+    pub fn scripts_dir() -> PathBuf {
+        let dir = Self::data_dir().join("scripts");
+        // 确保目录存在
+        let _ = fs::create_dir_all(&dir);
+        dir
     }
 
     /// 从配置文件加载
