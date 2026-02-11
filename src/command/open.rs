@@ -1,6 +1,7 @@
 use crate::config::YamlConfig;
 use crate::constants::{section, config_key, search_engine, shell, DEFAULT_SEARCH_ENGINE};
 use crate::{error, info};
+use std::path::Path;
 use std::process::Command;
 
 /// 通过别名打开应用/文件/URL
@@ -48,8 +49,8 @@ pub fn handle_open(args: &[String], config: &YamlConfig) {
         return;
     }
 
-    // 默认作为普通路径打开
-    open_alias(alias, config);
+    // 默认作为普通路径打开（支持带参数执行 CLI 工具）
+    open_alias_with_args(alias, &args[1..], config);
 }
 
 /// 打开浏览器，可能带 URL 参数
@@ -128,15 +129,105 @@ fn run_script(args: &[String], config: &YamlConfig) {
     }
 }
 
-/// 打开一个别名对应的路径
+/// 打开一个别名对应的路径（不带额外参数）
 fn open_alias(alias: &str, config: &YamlConfig) {
+    open_alias_with_args(alias, &[], config);
+}
+
+/// 打开一个别名对应的路径，支持传递额外参数
+/// 自动判断路径类型：
+/// - CLI 可执行文件 → 在当前终端用 Command::new() 执行（stdin/stdout 继承，支持管道）
+/// - GUI 应用 (.app) / 其他文件 → 系统 open 命令打开
+fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig) {
     if let Some(path) = config.get_path_by_alias(alias) {
         let path = clean_path(path);
-        do_open(&path);
-        info!("✅ 启动 {{{}}} : {{{}}}", alias, path);
+        if is_cli_executable(&path) {
+            // CLI 工具：在当前终端直接执行，继承 stdin/stdout（管道可用）
+            let result = Command::new(&path)
+                .args(extra_args)
+                .status();
+            match result {
+                Ok(status) => {
+                    if !status.success() {
+                        error!("❌ 执行 {{{}}} 失败，退出码: {}", alias, status);
+                    }
+                }
+                Err(e) => error!("💥 执行 {{{}}} 失败: {}", alias, e),
+            }
+        } else {
+            // GUI 应用或普通文件：系统 open 命令打开
+            if extra_args.is_empty() {
+                do_open(&path);
+            } else {
+                // GUI 应用带参数打开（如 open -a App file）
+                let os = std::env::consts::OS;
+                let result = if os == shell::MACOS_OS {
+                    Command::new("open")
+                        .args(["-a", &path])
+                        .args(extra_args)
+                        .status()
+                } else if os == shell::WINDOWS_OS {
+                    Command::new(shell::WINDOWS_CMD)
+                        .args([shell::WINDOWS_CMD_FLAG, "start", "", &path])
+                        .args(extra_args)
+                        .status()
+                } else {
+                    Command::new("xdg-open").arg(&path).status()
+                };
+                if let Err(e) = result {
+                    error!("💥 启动 {{{}}} 失败: {}", alias, e);
+                    return;
+                }
+            }
+            info!("✅ 启动 {{{}}} : {{{}}}", alias, path);
+        }
     } else {
         error!("❌ 未找到别名对应的路径或网址: {}。请检查配置文件。", alias);
     }
+}
+
+/// 判断一个路径是否为 CLI 可执行文件（非 GUI 应用）
+/// 规则：
+/// - macOS 的 .app 目录 → 不是 CLI 工具，是 GUI 应用
+/// - URL（http/https）→ 不是 CLI 工具
+/// - 普通文件且具有可执行权限 → 是 CLI 工具
+fn is_cli_executable(path: &str) -> bool {
+    // URL 不是可执行文件
+    if path.starts_with("http://") || path.starts_with("https://") {
+        return false;
+    }
+
+    // macOS .app 目录是 GUI 应用
+    if path.ends_with(".app") || path.contains(".app/") {
+        return false;
+    }
+
+    let p = Path::new(path);
+
+    // 文件必须存在且是普通文件（不是目录）
+    if !p.is_file() {
+        return false;
+    }
+
+    // 检查可执行权限（Unix）
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = p.metadata() {
+            return metadata.permissions().mode() & 0o111 != 0;
+        }
+    }
+
+    // Windows 上通过扩展名判断
+    #[cfg(windows)]
+    {
+        if let Some(ext) = p.extension() {
+            let ext = ext.to_string_lossy().to_lowercase();
+            return matches!(ext.as_str(), "exe" | "cmd" | "bat" | "com");
+        }
+    }
+
+    false
 }
 
 /// 使用指定应用打开某个文件/URL
