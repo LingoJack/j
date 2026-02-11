@@ -1,18 +1,12 @@
 package main
 
 import (
-	"agent_engine/constant"
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	markdown "github.com/MichaelMure/go-term-markdown"
-	flag "github.com/spf13/pflag"
-	"github.com/tidwall/gjson"
 	"golang.org/x/term"
 )
 
@@ -27,18 +21,43 @@ const (
 )
 
 func main() {
-	var inputContent string
 	inputBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Println("read from stdin failed, err:", err)
 		return
 	}
-	inputContent = string(inputBytes)
+	content := string(inputBytes)
 
-	// render 命令不需要加载配置文件，直接渲染输出
-	if *command == "render" {
-		// 直接使用 markdown 渲染并输出
-		transport(inputContent, false)
-		return
+	width := getTerminalWidth()
+
+	// 缩进根据宽度自适应：宽度越大，缩进越大，但保持在合理范围内
+	indent := width / IndentDivisor
+	if indent < MinIndent {
+		indent = MinIndent
 	}
+	if indent > MaxIndent {
+		indent = MaxIndent
+	}
+
+	result := markdown.Render(content, width, indent)
+	fmt.Print(string(result))
+}
+
+// getTerminalWidth 获取终端宽度，如果无法获取则返回默认值
+func getTerminalWidth() int {
+	// 尝试获取终端宽度
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		// 如果获取失败（例如输出被重定向），返回默认宽度
+		log.Printf("无法获取终端宽度，使用默认值%d: %v", DefaultTerminalWidth, err)
+		return DefaultTerminalWidth
+	}
+	// 确保宽度在合理范围内
+	if width < MinTerminalWidth {
+		return MinTerminalWidth
+	}
+	if width > MaxTerminalWidth {
+		return MaxTerminalWidth
+	}
+	return width
 }
