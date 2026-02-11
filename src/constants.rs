@@ -204,6 +204,9 @@ pub mod cmd {
     pub const HELP: &[&str] = &["help", "h"];
     pub const EXIT: &[&str] = &["exit", "q", "quit"];
 
+    // shell 补全
+    pub const COMPLETION: &[&str] = &["completion"];
+
     // agent（预留）
     pub const AGENT: &[&str] = &["agent"];
     pub const SYSTEM: &[&str] = &["system", "ps"];
@@ -218,6 +221,7 @@ pub mod cmd {
             CONCAT, TIME,
             LOG, CHANGE, CLEAR,
             VERSION, HELP, EXIT,
+            COMPLETION,
             AGENT, SYSTEM,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()

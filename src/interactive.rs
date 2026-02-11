@@ -109,6 +109,8 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         (cmd::CONCAT, vec![ArgHint::Placeholder("<script_name>"), ArgHint::Placeholder("<script_content>")]),
         // 倒计时
         (cmd::TIME, vec![ArgHint::Fixed(vec![time_function::COUNTDOWN]), ArgHint::Placeholder("<duration>")]),
+        // shell 补全
+        (cmd::COMPLETION, vec![ArgHint::Fixed(vec!["zsh", "bash"])]),
         // 系统信息
         (cmd::VERSION, vec![]),
         (cmd::HELP, vec![]),
@@ -719,6 +721,10 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::Matched(SubCmd::Version)
     } else if is(cmd::HELP) {
         ParseResult::Matched(SubCmd::Help)
+    } else if is(cmd::COMPLETION) {
+        ParseResult::Matched(SubCmd::Completion {
+            shell: rest.first().cloned(),
+        })
 
     // 未匹配到内置命令
     } else {

@@ -63,5 +63,6 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
         SubCmd::Version => system::handle_version(config),
         SubCmd::Help => system::handle_help(),
         SubCmd::Exit => system::handle_exit(),
+        SubCmd::Completion { shell } => system::handle_completion(shell.as_deref(), config),
     }
 }

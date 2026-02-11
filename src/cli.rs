@@ -181,4 +181,10 @@ pub enum SubCmd {
     /// 退出（交互模式）
     #[command(aliases = ["q", "quit"])]
     Exit,
+
+    /// 生成 shell 补全脚本
+    Completion {
+        /// shell 类型: zsh, bash, fish
+        shell: Option<String>,
+    },
 }
