@@ -1,10 +1,11 @@
+use crate::constants::time_function;
 use crate::{error, info, usage};
 use std::io::{self, Write};
 
 /// 处理 time 命令: j time countdown <duration>
 /// duration 支持: 30s（秒）、5m（分钟）、1h（小时），不带单位默认为分钟
 pub fn handle_time(function: &str, arg: &str) {
-    if function != "countdown" {
+    if function != time_function::COUNTDOWN {
         error!("❌ 未知的功能: {}，目前仅支持 countdown", function);
         usage!("j time countdown <duration>");
         info!(

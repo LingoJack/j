@@ -1,5 +1,5 @@
 use crate::config::YamlConfig;
-use crate::constants::{section, config_key, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, DEFAULT_CHECK_LINES};
+use crate::constants::{section, config_key, search_flag, rmeta_action, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, DEFAULT_CHECK_LINES};
 use crate::util::fuzzy;
 use crate::{error, info, usage};
 use chrono::{Local, NaiveDate};
@@ -25,16 +25,16 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     // 元数据操作
     if sub == "r-meta" {
         match first {
-            "new" => {
+            f if f == rmeta_action::NEW => {
                 let date_str = content.get(1).map(|s| s.as_str());
                 handle_week_update(date_str, config);
             }
-            "sync" => {
+            f if f == rmeta_action::SYNC => {
                 let date_str = content.get(1).map(|s| s.as_str());
                 handle_sync(date_str, config);
             }
             _ => {
-                error!("❌ 未知的元数据操作: {}，可选: new, sync", first);
+                error!("❌ 未知的元数据操作: {}，可选: {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC);
             }
         }
         return;
@@ -337,7 +337,7 @@ pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, c
         return;
     }
 
-    let is_fuzzy = matches!(fuzzy_flag, Some("-f") | Some("-fuzzy"));
+    let is_fuzzy = matches!(fuzzy_flag, Some(f) if f == search_flag::FUZZY_SHORT || f == search_flag::FUZZY);
     if is_fuzzy {
         info!("启用模糊匹配...");
     }

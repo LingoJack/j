@@ -1,6 +1,6 @@
 use crate::command;
 use crate::config::YamlConfig;
-use crate::constants::{self, config_key, NOTE_CATEGORIES, ALL_SECTIONS, ALIAS_PATH_SECTIONS};
+use crate::constants::{self, cmd, config_key, rmeta_action, time_function, search_flag, shell, NOTE_CATEGORIES, ALL_SECTIONS, ALIAS_PATH_SECTIONS, LIST_ALL};
 use crate::{info, error};
 use colored::Colorize;
 use rustyline::completion::{Completer, Pair};
@@ -81,38 +81,38 @@ enum ArgHint {
 fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
     vec![
         // 别名管理
-        (&["set", "s"], vec![ArgHint::Placeholder("<alias>"), ArgHint::Placeholder("<path>")]),
-        (&["rm", "remove"], vec![ArgHint::Alias]),
-        (&["rename", "rn"], vec![ArgHint::Alias, ArgHint::Placeholder("<new_alias>")]),
-        (&["mf", "modify"], vec![ArgHint::Alias, ArgHint::Placeholder("<new_path>")]),
+        (cmd::SET, vec![ArgHint::Placeholder("<alias>"), ArgHint::Placeholder("<path>")]),
+        (cmd::REMOVE, vec![ArgHint::Alias]),
+        (cmd::RENAME, vec![ArgHint::Alias, ArgHint::Placeholder("<new_alias>")]),
+        (cmd::MODIFY, vec![ArgHint::Alias, ArgHint::Placeholder("<new_path>")]),
         // 分类
-        (&["note", "nt"], vec![ArgHint::Alias, ArgHint::Category]),
-        (&["denote", "dnt"], vec![ArgHint::Alias, ArgHint::Category]),
+        (cmd::NOTE, vec![ArgHint::Alias, ArgHint::Category]),
+        (cmd::DENOTE, vec![ArgHint::Alias, ArgHint::Category]),
         // 列表
-        (&["ls", "list"], vec![ArgHint::Fixed({
-            let mut v = vec!["", "all"];
+        (cmd::LIST, vec![ArgHint::Fixed({
+            let mut v: Vec<&'static str> = vec!["", LIST_ALL];
             for s in ALL_SECTIONS { v.push(s); }
             v
         })]),
         // 查找
-        (&["contain", "find"], vec![ArgHint::Alias, ArgHint::Placeholder("<sections>")]),
+        (cmd::CONTAIN, vec![ArgHint::Alias, ArgHint::Placeholder("<sections>")]),
         // 系统设置
-        (&["log"], vec![ArgHint::Fixed(vec![config_key::MODE]), ArgHint::Fixed(vec![config_key::VERBOSE, config_key::CONCISE])]),
-        (&["change", "chg"], vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
+        (cmd::LOG, vec![ArgHint::Fixed(vec![config_key::MODE]), ArgHint::Fixed(vec![config_key::VERBOSE, config_key::CONCISE])]),
+        (cmd::CHANGE, vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
         // 日报系统
-        (&["report", "r"], vec![ArgHint::Placeholder("<content>")]),
-        (&["r-meta"], vec![ArgHint::Fixed(vec!["new", "sync"]), ArgHint::Placeholder("<date>")]),
-        (&["check", "c"], vec![ArgHint::Placeholder("<line_count>")]),
-        (&["search", "select", "look", "sch"], vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec!["-f", "-fuzzy"])]),
+        (cmd::REPORT, vec![ArgHint::Placeholder("<content>")]),
+        (cmd::RMETA, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC]), ArgHint::Placeholder("<date>")]),
+        (cmd::CHECK, vec![ArgHint::Placeholder("<line_count>")]),
+        (cmd::SEARCH, vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY])]),
         // 脚本
-        (&["concat"], vec![ArgHint::Placeholder("<script_name>"), ArgHint::Placeholder("<script_content>")]),
+        (cmd::CONCAT, vec![ArgHint::Placeholder("<script_name>"), ArgHint::Placeholder("<script_content>")]),
         // 倒计时
-        (&["time"], vec![ArgHint::Fixed(vec!["countdown"]), ArgHint::Placeholder("<duration>")]),
+        (cmd::TIME, vec![ArgHint::Fixed(vec![time_function::COUNTDOWN]), ArgHint::Placeholder("<duration>")]),
         // 系统信息
-        (&["version", "v"], vec![]),
-        (&["help", "h"], vec![]),
-        (&["clear", "cls"], vec![]),
-        (&["exit", "q", "quit"], vec![]),
+        (cmd::VERSION, vec![]),
+        (cmd::HELP, vec![]),
+        (cmd::CLEAR, vec![]),
+        (cmd::EXIT, vec![]),
     ]
 }
 
@@ -368,7 +368,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
     let history_path = history_file_path();
     let _ = rl.load_history(&history_path);
 
-    info!("Welcome to use work copilot 🚀 ~");
+    info!("{}", constants::WELCOME_MESSAGE);
 
     let prompt = format!("{} ", constants::INTERACTIVE_PROMPT.yellow());
 
@@ -381,8 +381,8 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     continue;
                 }
 
-                // ! 开头：执行 shell 命令
-                if input.starts_with('!') {
+                // Shell 命令前缀开头：执行 shell 命令
+                if input.starts_with(constants::SHELL_PREFIX) {
                     let shell_cmd = &input[1..].trim();
                     execute_shell_command(shell_cmd);
                     println!();
@@ -485,7 +485,7 @@ fn execute_interactive_command(args: &[String], config: &mut YamlConfig) {
     let cmd_str = &args[0];
 
     // 检查是否是退出命令
-    if matches!(cmd_str.as_str(), "exit" | "q" | "quit") {
+    if cmd::EXIT.contains(&cmd_str.as_str()) {
         command::system::handle_exit();
         return;
     }
@@ -510,171 +510,164 @@ fn parse_interactive_command(args: &[String]) -> Option<crate::cli::SubCmd> {
     let cmd = args[0].as_str();
     let rest = &args[1..];
 
-    match cmd {
-        // 别名管理
-        "set" | "s" => {
-            if rest.is_empty() {
-                crate::usage!("set <alias> <path>");
-                return None;
-            }
-            Some(SubCmd::Set {
-                alias: rest[0].clone(),
-                path: rest[1..].to_vec(),
-            })
-        }
-        "rm" | "remove" => {
-            rest.first().map(|alias| SubCmd::Remove { alias: alias.clone() })
-                .or_else(|| { crate::usage!("rm <alias>"); None })
-        }
-        "rename" | "rn" => {
-            if rest.len() < 2 {
-                crate::usage!("rename <alias> <new_alias>");
-                return None;
-            }
-            Some(SubCmd::Rename {
-                alias: rest[0].clone(),
-                new_alias: rest[1].clone(),
-            })
-        }
-        "mf" | "modify" => {
-            if rest.is_empty() {
-                crate::usage!("mf <alias> <new_path>");
-                return None;
-            }
-            Some(SubCmd::Modify {
-                alias: rest[0].clone(),
-                path: rest[1..].to_vec(),
-            })
-        }
+    // 使用闭包简化命令匹配：判断 cmd 是否在某个命令常量组中
+    let is = |names: &[&str]| names.contains(&cmd);
 
-        // 分类标记
-        "note" | "nt" => {
-            if rest.len() < 2 {
-                crate::usage!("note <alias> <category>");
-                return None;
-            }
-            Some(SubCmd::Note {
-                alias: rest[0].clone(),
-                category: rest[1].clone(),
-            })
+    if is(cmd::SET) {
+        if rest.is_empty() {
+            crate::usage!("set <alias> <path>");
+            return None;
         }
-        "denote" | "dnt" => {
-            if rest.len() < 2 {
-                crate::usage!("denote <alias> <category>");
-                return None;
-            }
-            Some(SubCmd::Denote {
-                alias: rest[0].clone(),
-                category: rest[1].clone(),
-            })
+        Some(SubCmd::Set {
+            alias: rest[0].clone(),
+            path: rest[1..].to_vec(),
+        })
+    } else if is(cmd::REMOVE) {
+        rest.first().map(|alias| SubCmd::Remove { alias: alias.clone() })
+            .or_else(|| { crate::usage!("rm <alias>"); None })
+    } else if is(cmd::RENAME) {
+        if rest.len() < 2 {
+            crate::usage!("rename <alias> <new_alias>");
+            return None;
         }
+        Some(SubCmd::Rename {
+            alias: rest[0].clone(),
+            new_alias: rest[1].clone(),
+        })
+    } else if is(cmd::MODIFY) {
+        if rest.is_empty() {
+            crate::usage!("mf <alias> <new_path>");
+            return None;
+        }
+        Some(SubCmd::Modify {
+            alias: rest[0].clone(),
+            path: rest[1..].to_vec(),
+        })
 
-        // 列表
-        "ls" | "list" => Some(SubCmd::List {
+    // 分类标记
+    } else if is(cmd::NOTE) {
+        if rest.len() < 2 {
+            crate::usage!("note <alias> <category>");
+            return None;
+        }
+        Some(SubCmd::Note {
+            alias: rest[0].clone(),
+            category: rest[1].clone(),
+        })
+    } else if is(cmd::DENOTE) {
+        if rest.len() < 2 {
+            crate::usage!("denote <alias> <category>");
+            return None;
+        }
+        Some(SubCmd::Denote {
+            alias: rest[0].clone(),
+            category: rest[1].clone(),
+        })
+
+    // 列表
+    } else if is(cmd::LIST) {
+        Some(SubCmd::List {
             part: rest.first().cloned(),
-        }),
+        })
 
-        // 查找
-        "contain" | "find" => {
-            if rest.is_empty() {
-                crate::usage!("contain <alias> [sections]");
-                return None;
-            }
-            Some(SubCmd::Contain {
-                alias: rest[0].clone(),
-                containers: rest.get(1).cloned(),
-            })
+    // 查找
+    } else if is(cmd::CONTAIN) {
+        if rest.is_empty() {
+            crate::usage!("contain <alias> [sections]");
+            return None;
         }
+        Some(SubCmd::Contain {
+            alias: rest[0].clone(),
+            containers: rest.get(1).cloned(),
+        })
 
-        // 系统设置
-        "log" => {
-            if rest.len() < 2 {
-                crate::usage!("log mode <verbose|concise>");
-                return None;
-            }
-            Some(SubCmd::Log {
-                key: rest[0].clone(),
-                value: rest[1].clone(),
-            })
+    // 系统设置
+    } else if is(cmd::LOG) {
+        if rest.len() < 2 {
+            crate::usage!("log mode <verbose|concise>");
+            return None;
         }
-        "change" | "chg" => {
-            if rest.len() < 3 {
-                crate::usage!("change <part> <field> <value>");
-                return None;
-            }
-            Some(SubCmd::Change {
-                part: rest[0].clone(),
-                field: rest[1].clone(),
-                value: rest[2].clone(),
-            })
+        Some(SubCmd::Log {
+            key: rest[0].clone(),
+            value: rest[1].clone(),
+        })
+    } else if is(cmd::CHANGE) {
+        if rest.len() < 3 {
+            crate::usage!("change <part> <field> <value>");
+            return None;
         }
-        "clear" | "cls" => Some(SubCmd::Clear),
+        Some(SubCmd::Change {
+            part: rest[0].clone(),
+            field: rest[1].clone(),
+            value: rest[2].clone(),
+        })
+    } else if is(cmd::CLEAR) {
+        Some(SubCmd::Clear)
 
-        // 日报系统
-        "report" | "r" => {
-            if rest.is_empty() {
-                crate::usage!("report <content>");
-                return None;
-            }
-            Some(SubCmd::Report {
-                content: rest.to_vec(),
-            })
+    // 日报系统
+    } else if is(cmd::REPORT) {
+        if rest.is_empty() {
+            crate::usage!("report <content>");
+            return None;
         }
-        "r-meta" => {
-            if rest.is_empty() {
-                crate::usage!("r-meta <new|sync> [date]");
-                return None;
-            }
-            Some(SubCmd::RMeta {
-                action: rest[0].clone(),
-                date: rest.get(1).cloned(),
-            })
+        Some(SubCmd::Report {
+            content: rest.to_vec(),
+        })
+    } else if is(cmd::RMETA) {
+        if rest.is_empty() {
+            crate::usage!("r-meta <new|sync> [date]");
+            return None;
         }
-        "check" | "c" => Some(SubCmd::Check {
+        Some(SubCmd::RMeta {
+            action: rest[0].clone(),
+            date: rest.get(1).cloned(),
+        })
+    } else if is(cmd::CHECK) {
+        Some(SubCmd::Check {
             line_count: rest.first().cloned(),
-        }),
-        "search" | "select" | "look" | "sch" => {
-            if rest.len() < 2 {
-                crate::usage!("search <line_count|all> <target> [-f|-fuzzy]");
-                return None;
-            }
-            Some(SubCmd::Search {
-                line_count: rest[0].clone(),
-                target: rest[1].clone(),
-                fuzzy: rest.get(2).cloned(),
-            })
+        })
+    } else if is(cmd::SEARCH) {
+        if rest.len() < 2 {
+            crate::usage!("search <line_count|all> <target> [-f|-fuzzy]");
+            return None;
         }
+        Some(SubCmd::Search {
+            line_count: rest[0].clone(),
+            target: rest[1].clone(),
+            fuzzy: rest.get(2).cloned(),
+        })
 
-        // 脚本创建
-        "concat" => {
-            if rest.len() < 2 {
-                crate::usage!("concat <script_name> \"<script_content>\"");
-                return None;
-            }
-            Some(SubCmd::Concat {
-                name: rest[0].clone(),
-                content: rest[1..].join(" "),
-            })
+    // 脚本创建
+    } else if is(cmd::CONCAT) {
+        if rest.len() < 2 {
+            crate::usage!("concat <script_name> \"<script_content>\"");
+            return None;
         }
+        Some(SubCmd::Concat {
+            name: rest[0].clone(),
+            content: rest[1..].join(" "),
+        })
 
-        // 倒计时
-        "time" => {
-            if rest.len() < 2 {
-                crate::usage!("time countdown <duration>");
-                return None;
-            }
-            Some(SubCmd::Time {
-                function: rest[0].clone(),
-                arg: rest[1].clone(),
-            })
+    // 倒计时
+    } else if is(cmd::TIME) {
+        if rest.len() < 2 {
+            crate::usage!("time countdown <duration>");
+            return None;
         }
+        Some(SubCmd::Time {
+            function: rest[0].clone(),
+            arg: rest[1].clone(),
+        })
 
-        // 系统信息
-        "version" | "v" => Some(SubCmd::Version),
-        "help" | "h" => Some(SubCmd::Help),
+    // 系统信息
+    } else if is(cmd::VERSION) {
+        Some(SubCmd::Version)
+    } else if is(cmd::HELP) {
+        Some(SubCmd::Help)
 
-        // 未匹配到内置命令
-        _ => None,
+    // 未匹配到内置命令
+    } else {
+        None
     }
 }
 
@@ -685,13 +678,13 @@ fn execute_shell_command(cmd: &str) {
     }
 
     let os = std::env::consts::OS;
-    let result = if os == "windows" {
-        std::process::Command::new("cmd")
-            .args(["/c", cmd])
+    let result = if os == shell::WINDOWS_OS {
+        std::process::Command::new(shell::WINDOWS_CMD)
+            .args([shell::WINDOWS_CMD_FLAG, cmd])
             .status()
     } else {
-        std::process::Command::new("/bin/bash")
-            .args(["-c", cmd])
+        std::process::Command::new(shell::BASH_PATH)
+            .args([shell::BASH_CMD_FLAG, cmd])
             .status()
     };
 

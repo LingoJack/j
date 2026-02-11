@@ -1,5 +1,5 @@
-/// 项目全局常量定义
-/// 所有魔法字符串和可复用常量统一在此维护
+// 项目全局常量定义
+// 所有魔法字符串和可复用常量统一在此维护
 
 // ========== 版本信息 ==========
 
@@ -162,7 +162,98 @@ pub const REPORT_SIMPLE_DATE_FORMAT: &str = "%Y/%m/%d";
 /// check 命令默认行数
 pub const DEFAULT_CHECK_LINES: usize = 5;
 
+// ========== 命令名常量 ==========
+
+/// 所有内置命令的名称和别名，统一在此维护
+/// interactive.rs 的补全规则 / parse_interactive_command 和 command/mod.rs 的 all_command_keywords 共同引用
+pub mod cmd {
+    // 别名管理
+    pub const SET: &[&str] = &["set", "s"];
+    pub const REMOVE: &[&str] = &["rm", "remove"];
+    pub const RENAME: &[&str] = &["rename", "rn"];
+    pub const MODIFY: &[&str] = &["mf", "modify"];
+
+    // 分类标记
+    pub const NOTE: &[&str] = &["note", "nt"];
+    pub const DENOTE: &[&str] = &["denote", "dnt"];
+
+    // 列表 & 查找
+    pub const LIST: &[&str] = &["ls", "list"];
+    pub const CONTAIN: &[&str] = &["contain", "find"];
+
+    // 日报系统
+    pub const REPORT: &[&str] = &["report", "r"];
+    pub const RMETA: &[&str] = &["r-meta"];
+    pub const CHECK: &[&str] = &["check", "c"];
+    pub const SEARCH: &[&str] = &["search", "select", "look", "sch"];
+
+    // 脚本
+    pub const CONCAT: &[&str] = &["concat"];
+
+    // 倒计时
+    pub const TIME: &[&str] = &["time"];
+
+    // 系统设置
+    pub const LOG: &[&str] = &["log"];
+    pub const CHANGE: &[&str] = &["change", "chg"];
+    pub const CLEAR: &[&str] = &["clear", "cls"];
+
+    // 系统信息
+    pub const VERSION: &[&str] = &["version", "v"];
+    pub const HELP: &[&str] = &["help", "h"];
+    pub const EXIT: &[&str] = &["exit", "q", "quit"];
+
+    // agent（预留）
+    pub const AGENT: &[&str] = &["agent"];
+    pub const SYSTEM: &[&str] = &["system", "ps"];
+
+    /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
+    pub fn all_keywords() -> Vec<&'static str> {
+        let groups: &[&[&str]] = &[
+            SET, REMOVE, RENAME, MODIFY,
+            NOTE, DENOTE,
+            LIST, CONTAIN,
+            REPORT, RMETA, CHECK, SEARCH,
+            CONCAT, TIME,
+            LOG, CHANGE, CLEAR,
+            VERSION, HELP, EXIT,
+            AGENT, SYSTEM,
+        ];
+        groups.iter().flat_map(|g| g.iter().copied()).collect()
+    }
+}
+
+// ========== r-meta 子命令 ==========
+
+pub mod rmeta_action {
+    pub const NEW: &str = "new";
+    pub const SYNC: &str = "sync";
+}
+
+// ========== time 子命令 ==========
+
+pub mod time_function {
+    pub const COUNTDOWN: &str = "countdown";
+}
+
+// ========== search 标记 ==========
+
+pub mod search_flag {
+    pub const FUZZY_SHORT: &str = "-f";
+    pub const FUZZY: &str = "-fuzzy";
+}
+
+// ========== ls 补全固定选项 ==========
+
+pub const LIST_ALL: &str = "all";
+
 // ========== 交互模式 ==========
+
+/// 欢迎语
+pub const WELCOME_MESSAGE: &str = "Welcome to use work copilot 🚀 ~";
+
+/// Shell 命令前缀字符
+pub const SHELL_PREFIX: char = '!';
 
 /// 交互模式提示符
 pub const INTERACTIVE_PROMPT: &str = "copilot >";
@@ -181,3 +272,14 @@ pub const DATA_DIR: &str = ".jdata";
 
 /// 数据路径环境变量名
 pub const DATA_PATH_ENV: &str = "J_DATA_PATH";
+
+// ========== Shell 命令 ==========
+
+pub mod shell {
+    pub const BASH_PATH: &str = "/bin/bash";
+    pub const WINDOWS_CMD: &str = "cmd";
+    pub const WINDOWS_CMD_FLAG: &str = "/c";
+    pub const BASH_CMD_FLAG: &str = "-c";
+    pub const WINDOWS_OS: &str = "windows";
+    pub const MACOS_OS: &str = "macos";
+}

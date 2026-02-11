@@ -1,5 +1,5 @@
 use crate::config::YamlConfig;
-use crate::constants::{section, config_key, search_engine, DEFAULT_SEARCH_ENGINE};
+use crate::constants::{section, config_key, search_engine, shell, DEFAULT_SEARCH_ENGINE};
 use crate::{error, info};
 use std::process::Command;
 
@@ -145,18 +145,18 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
         let app_path = clean_path(app_path);
         let os = std::env::consts::OS;
 
-        let result = if os == "macos" {
+        let result = if os == shell::MACOS_OS {
             match file_path {
                 Some(fp) => Command::new("open").args(["-a", &app_path, fp]).status(),
                 None => Command::new("open").arg(&app_path).status(),
             }
-        } else if os == "windows" {
+        } else if os == shell::WINDOWS_OS {
             match file_path {
-                Some(fp) => Command::new("cmd")
-                    .args(["/c", "start", "", &app_path, fp])
+                Some(fp) => Command::new(shell::WINDOWS_CMD)
+                    .args([shell::WINDOWS_CMD_FLAG, "start", "", &app_path, fp])
                     .status(),
-                None => Command::new("cmd")
-                    .args(["/c", "start", "", &app_path])
+                None => Command::new(shell::WINDOWS_CMD)
+                    .args([shell::WINDOWS_CMD_FLAG, "start", "", &app_path])
                     .status(),
             }
         } else {
@@ -179,10 +179,10 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
 /// 跨平台 open 命令
 fn do_open(path: &str) {
     let os = std::env::consts::OS;
-    let result = if os == "macos" {
+    let result = if os == shell::MACOS_OS {
         Command::new("open").arg(path).status()
-    } else if os == "windows" {
-        Command::new("cmd").args(["/c", "start", "", path]).status()
+    } else if os == shell::WINDOWS_OS {
+        Command::new(shell::WINDOWS_CMD).args([shell::WINDOWS_CMD_FLAG, "start", "", path]).status()
     } else {
         // Linux fallback
         Command::new("xdg-open").arg(path).status()

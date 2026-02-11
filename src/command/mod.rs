@@ -9,32 +9,12 @@ pub mod time;
 
 use crate::cli::SubCmd;
 use crate::config::YamlConfig;
+use crate::constants;
 
 /// 所有内置命令的关键字列表（用于判断别名冲突）
+/// 统一从 constants::cmd 模块获取，避免多处重复定义
 pub fn all_command_keywords() -> Vec<&'static str> {
-    vec![
-        "set", "s",
-        "rm", "remove",
-        "rename", "rn",
-        "mf", "modify",
-        "ls", "list",
-        "version", "v",
-        "help", "h",
-        "exit", "q", "quit",
-        "nt", "note",
-        "dnt", "denote",
-        "log",
-        "concat",
-        "clear", "cls",
-        "contain", "find",
-        "system", "ps",
-        "time",
-        "search", "select", "look", "sch",
-        "change", "chg",
-        "agent",
-        "report", "r", "r-meta",
-        "check", "c",
-    ]
+    constants::cmd::all_keywords()
 }
 
 /// 命令分发执行

@@ -1,5 +1,5 @@
 use crate::config::YamlConfig;
-use crate::constants::section;
+use crate::constants::{section, shell};
 use crate::{error, info};
 use std::fs;
 
@@ -16,7 +16,7 @@ pub fn handle_concat(name: &str, content: &str, config: &mut YamlConfig) {
     let scripts_dir = YamlConfig::scripts_dir();
 
     // 生成脚本文件路径
-    let ext = if std::env::consts::OS == "windows" {
+    let ext = if std::env::consts::OS == shell::WINDOWS_OS {
         ".cmd"
     } else {
         ".sh"
