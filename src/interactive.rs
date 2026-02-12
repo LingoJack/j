@@ -422,7 +422,12 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 // Shell 命令前缀开头：执行 shell 命令
                 if input.starts_with(constants::SHELL_PREFIX) {
                     let shell_cmd = &input[1..].trim();
-                    execute_shell_command(shell_cmd, config);
+                    if shell_cmd.is_empty() {
+                        // 无命令：进入交互式 shell（状态延续，直到 exit 退出）
+                        enter_interactive_shell(config);
+                    } else {
+                        execute_shell_command(shell_cmd, config);
+                    }
                     // Shell 命令记录到历史
                     let _ = rl.add_history_entry(input);
                     println!();
@@ -803,6 +808,50 @@ fn complete_file_path(partial: &str) -> Vec<Pair> {
     // 按名称排序，目录优先
     candidates.sort_by(|a, b| a.display.cmp(&b.display));
     candidates
+}
+
+/// 进入交互式 shell 子进程
+/// 启动用户默认 shell（从 $SHELL 环境变量获取），以交互模式运行
+/// 在 shell 中可以自由执行命令，cd 等状态会延续，直到 exit 退出回到 copilot
+fn enter_interactive_shell(config: &YamlConfig) {
+    let os = std::env::consts::OS;
+
+    let shell_path = if os == shell::WINDOWS_OS {
+        shell::WINDOWS_CMD.to_string()
+    } else {
+        // 优先使用用户默认 shell，fallback 到 /bin/bash
+        std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string())
+    };
+
+    info!("进入 shell 模式 ({}), 输入 exit 返回 copilot", shell_path);
+
+    let mut command = std::process::Command::new(&shell_path);
+
+    // 注入别名环境变量
+    for (key, value) in config.collect_alias_envs() {
+        command.env(&key, &value);
+    }
+
+    // 继承 stdin/stdout/stderr，让 shell 完全接管终端
+    command
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+
+    match command.status() {
+        Ok(status) => {
+            if !status.success() {
+                if let Some(code) = status.code() {
+                    error!("shell 退出码: {}", code);
+                }
+            }
+        }
+        Err(e) => {
+            error!("启动 shell 失败: {}", e);
+        }
+    }
+
+    info!("已返回 copilot 交互模式 🚀");
 }
 
 /// 执行 shell 命令（交互模式下 ! 前缀触发）
