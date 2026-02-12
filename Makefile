@@ -21,3 +21,13 @@ status: current_dir
 .PHONY: release
 release: current_dir
 	@cargo build --release
+
+.PHONY: install
+install: release
+	@cp target/release/j /usr/local/bin/j
+	@echo "✅ j installed to /usr/local/bin/j"
+
+.PHONY: uninstall
+uninstall:
+	@rm -f /usr/local/bin/j
+	@echo "✅ j uninstalled"
