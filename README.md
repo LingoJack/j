@@ -557,6 +557,7 @@ Phase 14 + Phase 15 为 `report` 命令引入了基于 ratatui + tui-textarea �
 - **INSERT** 模式：i/a/o/O 进入，直接输入文本
 - **VISUAL** 模式：v 进入选择，支持 y/d/c 操作
 - **COMMAND** 模式：`:wq` / `:x` 提交，`:q` / `:q!` 退出
+- **SEARCH** 模式：`/pattern` 搜索，`n` / `N` 跳转到下一个/上一个匹配
 
 **快捷键**：
 - `:q`：尝试退出，若有未保存改动则拒绝并显示警告（标题栏变红 + 提示信息）
@@ -564,6 +565,9 @@ Phase 14 + Phase 15 为 `report` 命令引入了基于 ratatui + tui-textarea �
 - `Ctrl+Q`：任何模式下强制取消退出（等价 `:q!`）
 - `Ctrl+S`：任何模式下快速提交
 - `Esc`：INSERT → NORMAL 模式切换
+- `/`：进入搜索模式，输入 pattern 后按 Enter 执行搜索
+- `n`：跳转到下一个匹配
+- `N`：跳转到上一个匹配
 
 **日报 TUI 特性**：
 - 进入编辑器时自动预加载日报文件**最后 3 行**作为上下文（可编辑修改）

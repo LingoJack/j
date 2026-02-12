@@ -24,6 +24,7 @@ enum Mode {
     Visual,
     Operator(char),
     Command(String), // 命令行模式，存储输入的命令字符串
+    Search(String),  // 搜索模式，存储输入的搜索词
 }
 
 impl fmt::Display for Mode {
@@ -34,6 +35,7 @@ impl fmt::Display for Mode {
             Self::Visual => write!(f, "VISUAL"),
             Self::Operator(c) => write!(f, "OPERATOR({})", c),
             Self::Command(_) => write!(f, "COMMAND"),
+            Self::Search(_) => write!(f, "SEARCH"),
         }
     }
 }
@@ -46,6 +48,7 @@ impl Mode {
             Self::Visual => Color::LightYellow,
             Self::Operator(_) => Color::LightGreen,
             Self::Command(_) => Color::Reset,
+            Self::Search(_) => Color::Reset,
         };
         Style::default().fg(color).add_modifier(Modifier::REVERSED)
     }
@@ -57,6 +60,104 @@ impl Mode {
             Self::Visual => Color::LightYellow,
             Self::Operator(_) => Color::LightGreen,
             Self::Command(_) => Color::DarkGray,
+            Self::Search(_) => Color::Magenta,
+        }
+    }
+}
+
+// ========== 搜索状态 ==========
+
+/// 搜索匹配结果
+#[derive(Debug, Clone)]
+struct SearchMatch {
+    line: usize,
+    start: usize,
+    end: usize,
+}
+
+/// 搜索状态管理
+#[derive(Debug, Clone, Default)]
+struct SearchState {
+    pattern: String,
+    matches: Vec<SearchMatch>,
+    current_index: usize,
+}
+
+impl SearchState {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// 执行搜索，返回匹配数量
+    fn search(&mut self, pattern: &str, lines: &[String]) -> usize {
+        self.pattern = pattern.to_string();
+        self.matches.clear();
+        self.current_index = 0;
+
+        if pattern.is_empty() {
+            return 0;
+        }
+
+        for (line_idx, line) in lines.iter().enumerate() {
+            let mut start = 0;
+            while let Some(pos) = line[start..].find(pattern) {
+                let abs_start = start + pos;
+                self.matches.push(SearchMatch {
+                    line: line_idx,
+                    start: abs_start,
+                    end: abs_start + pattern.len(),
+                });
+                start = abs_start + pattern.len();
+                if start >= line.len() {
+                    break;
+                }
+            }
+        }
+
+        self.matches.len()
+    }
+
+    /// 跳转到下一个匹配，返回 (line, column)
+    fn next_match(&mut self) -> Option<(usize, usize)> {
+        if self.matches.is_empty() {
+            return None;
+        }
+        let m = &self.matches[self.current_index];
+        let result = Some((m.line, m.start));
+        self.current_index = (self.current_index + 1) % self.matches.len();
+        result
+    }
+
+    /// 跳转到上一个匹配，返回 (line, column)
+    fn prev_match(&mut self) -> Option<(usize, usize)> {
+        if self.matches.is_empty() {
+            return None;
+        }
+        if self.current_index == 0 {
+            self.current_index = self.matches.len() - 1;
+        } else {
+            self.current_index -= 1;
+        }
+        let m = &self.matches[self.current_index];
+        Some((m.line, m.start))
+    }
+
+    /// 重置到第一个匹配
+    fn reset_to_first(&mut self) {
+        self.current_index = 0;
+    }
+
+    /// 获取当前匹配信息（用于状态栏显示）
+    fn current_info(&self) -> (usize, usize) {
+        if self.matches.is_empty() {
+            (0, 0)
+        } else {
+            let display_idx = if self.current_index == 0 {
+                self.matches.len()
+            } else {
+                self.current_index
+            };
+            (display_idx, self.matches.len())
         }
     }
 }
@@ -70,12 +171,16 @@ enum Transition {
     Submit,     // 提交内容
     Quit,       // 强制取消退出（:q! / Ctrl+Q）
     TryQuit,    // 尝试退出，若有改动则拒绝（:q）
+    Search(String), // 执行搜索
+    NextMatch,  // 跳转到下一个匹配
+    PrevMatch,  // 跳转到上一个匹配
 }
 
 /// Vim 状态机
 struct Vim {
     mode: Mode,
     pending: Input,
+    search: SearchState,
 }
 
 impl Vim {
@@ -83,6 +188,7 @@ impl Vim {
         Self {
             mode,
             pending: Input::default(),
+            search: SearchState::new(),
         }
     }
 
@@ -90,6 +196,7 @@ impl Vim {
         Self {
             mode: self.mode,
             pending,
+            search: self.search,
         }
     }
 
@@ -111,6 +218,7 @@ impl Vim {
 
         match &self.mode {
             Mode::Command(cmd) => self.handle_command_mode(input, cmd),
+            Mode::Search(pattern) => self.handle_search_mode(input, pattern),
             Mode::Insert => self.handle_insert_mode(input, textarea),
             Mode::Normal | Mode::Visual | Mode::Operator(_) => {
                 self.handle_normal_visual_operator(input, textarea)
@@ -167,6 +275,32 @@ impl Vim {
         }
     }
 
+    /// Search 模式：处理 /pattern 输入
+    fn handle_search_mode(&self, input: Input, pattern: &str) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Enter => {
+                // 执行搜索
+                Transition::Search(pattern.to_string())
+            }
+            Key::Backspace => {
+                if pattern.is_empty() {
+                    Transition::Mode(Mode::Normal)
+                } else {
+                    let mut new_pattern = pattern.to_string();
+                    new_pattern.pop();
+                    Transition::Mode(Mode::Search(new_pattern))
+                }
+            }
+            Key::Char(c) => {
+                let mut new_pattern = pattern.to_string();
+                new_pattern.push(c);
+                Transition::Mode(Mode::Search(new_pattern))
+            }
+            _ => Transition::Nop,
+        }
+    }
+
     /// Normal / Visual / Operator 模式的 vim 按键处理
     fn handle_normal_visual_operator(
         &self,
@@ -181,6 +315,30 @@ impl Vim {
                 ..
             } if self.mode == Mode::Normal => {
                 return Transition::Mode(Mode::Command(String::new()));
+            }
+            // / 进入搜索模式
+            Input {
+                key: Key::Char('/'),
+                ctrl: false,
+                ..
+            } if self.mode == Mode::Normal => {
+                return Transition::Mode(Mode::Search(String::new()));
+            }
+            // n 跳转到下一个匹配
+            Input {
+                key: Key::Char('n'),
+                ctrl: false,
+                ..
+            } if self.mode == Mode::Normal => {
+                return Transition::NextMatch;
+            }
+            // N 跳转到上一个匹配
+            Input {
+                key: Key::Char('N'),
+                ctrl: false,
+                ..
+            } if self.mode == Mode::Normal => {
+                return Transition::PrevMatch;
             }
             // 移动
             Input {
@@ -495,6 +653,8 @@ impl Vim {
 /// - Esc: 回到 NORMAL 模式
 /// - `:wq` / `:w` / `:x`: 提交内容
 /// - `:q` / `:q!`: 取消退出
+/// - `/pattern`: 搜索 pattern
+/// - `n` / `N`: 跳转到下一个/上一个匹配
 /// - Ctrl+S: 任何模式下快速提交
 ///
 /// 返回 Some(text) 表示提交，None 表示取消
@@ -591,7 +751,7 @@ fn run_editor_loop(
             frame.render_widget(&*textarea, chunks[0]);
 
             // 渲染状态栏
-            let status_bar = build_status_bar(mode, textarea.lines().len());
+            let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
             frame.render_widget(status_bar, chunks[1]);
         })?;
 
@@ -643,13 +803,49 @@ fn run_editor_loop(
                 Transition::Quit => {
                     return Ok(None);
                 }
+                Transition::Search(pattern) => {
+                    // 执行搜索
+                    let lines: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
+                    let count = vim.search.search(&pattern, &lines);
+                    
+                    // 跳转到第一个匹配
+                    if count > 0 {
+                        if let Some((line, col)) = vim.search.next_match() {
+                            // 移动光标到匹配位置
+                            textarea.move_cursor(CursorMove::Jump(
+                                line.try_into().unwrap_or(0),
+                                col.try_into().unwrap_or(0),
+                            ));
+                        }
+                    }
+                    
+                    *vim = Vim::new(Mode::Normal);
+                    vim.search = SearchState::new();
+                    vim.search.search(&pattern, &lines);
+                }
+                Transition::NextMatch => {
+                    if let Some((line, col)) = vim.search.next_match() {
+                        textarea.move_cursor(CursorMove::Jump(
+                            line.try_into().unwrap_or(0),
+                            col.try_into().unwrap_or(0),
+                        ));
+                    }
+                }
+                Transition::PrevMatch => {
+                    if let Some((line, col)) = vim.search.prev_match() {
+                        textarea.move_cursor(CursorMove::Jump(
+                            line.try_into().unwrap_or(0),
+                            col.try_into().unwrap_or(0),
+                        ));
+                    }
+                }
             }
         }
     }
 }
 
 /// 构建底部状态栏
-fn build_status_bar(mode: &Mode, line_count: usize) -> Paragraph<'static> {
+fn build_status_bar(mode: &Mode, line_count: usize, search: &SearchState) -> Paragraph<'static> {
     let mut spans = vec![];
 
     // 模式标签
@@ -678,6 +874,22 @@ fn build_status_bar(mode: &Mode, line_count: usize) -> Paragraph<'static> {
                 Span::raw(" "),
                 Span::styled(
                     cmd_display,
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("█", Style::default().fg(Color::White)),
+            ]));
+        }
+        Mode::Search(pattern) => {
+            // 搜索模式特殊处理：直接显示搜索词
+            let search_display = format!("/{}", pattern);
+            return Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " SEARCH ",
+                    Style::default().fg(Color::Black).bg(Color::Magenta),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    search_display,
                     Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("█", Style::default().fg(Color::White)),
@@ -717,15 +929,15 @@ fn build_status_bar(mode: &Mode, line_count: usize) -> Paragraph<'static> {
             ));
             spans.push(Span::raw(" 提交  "));
             spans.push(Span::styled(
-                " :q! ",
-                Style::default().fg(Color::Black).bg(Color::Red),
+                " / ",
+                Style::default().fg(Color::Black).bg(Color::Magenta),
             ));
-            spans.push(Span::raw(" 退出  "));
+            spans.push(Span::raw(" 搜索  "));
             spans.push(Span::styled(
-                " Ctrl+Q ",
-                Style::default().fg(Color::Black).bg(Color::Red),
+                " n/N ",
+                Style::default().fg(Color::Black).bg(Color::Cyan),
             ));
-            spans.push(Span::raw(" 取消  "));
+            spans.push(Span::raw(" 下/上  "));
             spans.push(Span::styled(
                 " i ",
                 Style::default().fg(Color::Black).bg(Color::Cyan),
@@ -757,6 +969,16 @@ fn build_status_bar(mode: &Mode, line_count: usize) -> Paragraph<'static> {
         format!(" {} 行 ", line_count),
         Style::default().fg(Color::DarkGray),
     ));
+
+    // 搜索匹配信息
+    if !search.pattern.is_empty() {
+        let (current, total) = search.current_info();
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!(" [{}: {}/{}] ", search.pattern, current, total),
+            Style::default().fg(Color::Magenta),
+        ));
+    }
 
     Paragraph::new(Line::from(spans))
 }
