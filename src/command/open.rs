@@ -118,28 +118,34 @@ fn run_script(args: &[String], config: &YamlConfig) {
 
         if new_window {
             info!("⚙️ 即将在新窗口执行脚本，路径: {}", script_path);
-            run_script_in_new_window(&script_path, &script_arg_refs);
+            run_script_in_new_window(&script_path, &script_arg_refs, config);
         } else {
             info!("⚙️ 即将执行脚本，路径: {}", script_path);
-            run_script_in_current_terminal(&script_path, &script_arg_refs);
+            run_script_in_current_terminal(&script_path, &script_arg_refs, config);
         }
     }
 }
 
+/// 为 Command 注入别名路径环境变量
+fn inject_alias_envs(cmd: &mut Command, config: &YamlConfig) {
+    for (key, value) in config.collect_alias_envs() {
+        cmd.env(&key, &value);
+    }
+}
+
 /// 在当前终端直接执行脚本
-fn run_script_in_current_terminal(script_path: &str, script_args: &[&str]) {
+fn run_script_in_current_terminal(script_path: &str, script_args: &[&str], config: &YamlConfig) {
     let result = if cfg!(target_os = "windows") {
-        Command::new("cmd.exe")
-            .arg("/c")
-            .arg(script_path)
-            .args(script_args)
-            .status()
+        let mut cmd = Command::new("cmd.exe");
+        cmd.arg("/c").arg(script_path).args(script_args);
+        inject_alias_envs(&mut cmd, config);
+        cmd.status()
     } else {
         // macOS / Linux: 使用 sh 直接执行
-        Command::new("sh")
-            .arg(script_path)
-            .args(script_args)
-            .status()
+        let mut cmd = Command::new("sh");
+        cmd.arg(script_path).args(script_args);
+        inject_alias_envs(&mut cmd, config);
+        cmd.status()
     };
 
     match result {
@@ -157,21 +163,30 @@ fn run_script_in_current_terminal(script_path: &str, script_args: &[&str]) {
 /// 在新终端窗口中执行脚本
 /// 脚本自身决定是否包含等待按键逻辑（通过 TUI 编辑器创建时可预填模板）
 /// 脚本执行完后自动 exit 关闭 shell，使新窗口可被关闭
-fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
+fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &YamlConfig) {
     let os = std::env::consts::OS;
+
+    // 构建环境变量导出语句（用于新窗口中注入）
+    let env_exports = build_env_export_string(config);
 
     if os == shell::MACOS_OS {
         // macOS: 使用 osascript 在新 Terminal 窗口中执行
         // 末尾追加 ; exit 让 shell 退出，Terminal.app 会根据偏好设置自动关闭窗口
-        let full_cmd = if script_args.is_empty() {
-            format!("sh {}; exit", shell_escape(script_path))
+        let script_cmd = if script_args.is_empty() {
+            format!("sh {}", shell_escape(script_path))
         } else {
             let args_str = script_args
                 .iter()
                 .map(|a| shell_escape(a))
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("sh {} {}; exit", shell_escape(script_path), args_str)
+            format!("sh {} {}", shell_escape(script_path), args_str)
+        };
+
+        let full_cmd = if env_exports.is_empty() {
+            format!("{}; exit", script_cmd)
+        } else {
+            format!("{} {}; exit", env_exports, script_cmd)
         };
 
         // AppleScript: 在 Terminal.app 中打开新窗口并执行命令
@@ -200,10 +215,17 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
         }
     } else if os == shell::WINDOWS_OS {
         // Windows: 使用 start cmd /c 在新窗口执行
-        let full_cmd = if script_args.is_empty() {
+        let script_cmd = if script_args.is_empty() {
             script_path.to_string()
         } else {
             format!("{} {}", script_path, script_args.join(" "))
+        };
+
+        // Windows 通过 set 命令设置环境变量
+        let full_cmd = if env_exports.is_empty() {
+            script_cmd
+        } else {
+            format!("{} && {}", env_exports, script_cmd)
         };
 
         let result = Command::new("cmd")
@@ -223,10 +245,16 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
     } else {
         // Linux: 尝试常见的终端模拟器
         // 末尾追加 ; exit 让 shell 退出，终端模拟器会自动关闭窗口
-        let full_cmd = if script_args.is_empty() {
-            format!("sh {}; exit", script_path)
+        let script_cmd = if script_args.is_empty() {
+            format!("sh {}", script_path)
         } else {
-            format!("sh {} {}; exit", script_path, script_args.join(" "))
+            format!("sh {} {}", script_path, script_args.join(" "))
+        };
+
+        let full_cmd = if env_exports.is_empty() {
+            format!("{}; exit", script_cmd)
+        } else {
+            format!("{} {}; exit", env_exports, script_cmd)
         };
 
         // 尝试 gnome-terminal → xterm → 降级到当前终端
@@ -247,7 +275,30 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str]) {
 
         // 所有终端都失败，降级到当前终端执行
         info!("⚠️ 未找到可用的终端模拟器，降级到当前终端执行");
-        run_script_in_current_terminal(script_path, script_args);
+        run_script_in_current_terminal(script_path, script_args, config);
+    }
+}
+
+/// 构建环境变量导出字符串（用于新窗口执行时注入）
+/// macOS/Linux 格式: export J_CHROME='/Applications/Google Chrome.app'; export J_VSCODE=...
+/// Windows 格式: set "J_CHROME=/Applications/Google Chrome.app" && set "J_VSCODE=..."
+fn build_env_export_string(config: &YamlConfig) -> String {
+    let envs = config.collect_alias_envs();
+    if envs.is_empty() {
+        return String::new();
+    }
+
+    let os = std::env::consts::OS;
+    if os == shell::WINDOWS_OS {
+        envs.iter()
+            .map(|(k, v)| format!("set \"{}={}\"", k, v))
+            .collect::<Vec<_>>()
+            .join(" && ")
+    } else {
+        envs.iter()
+            .map(|(k, v)| format!("export {}={};", k, shell_escape(v)))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 

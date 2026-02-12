@@ -263,4 +263,29 @@ impl YamlConfig {
             .iter()
             .find_map(|s| self.get_property(s, alias))
     }
+
+    /// 收集所有别名路径，用于注入脚本执行时的环境变量
+    /// 返回 Vec<(env_key, value)>，env_key 格式为 J_<ALIAS_UPPER>
+    /// 别名中的 `-` 会转换为 `_`，且全部大写
+    /// 覆盖 section: path, inner_url, outer_url, script
+    pub fn collect_alias_envs(&self) -> Vec<(String, String)> {
+        let sections = &[section::PATH, section::INNER_URL, section::OUTER_URL, section::SCRIPT];
+        let mut envs = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for &sec in sections {
+            if let Some(map) = self.get_section(sec) {
+                for (alias, value) in map {
+                    // 将别名转为环境变量名: J_<ALIAS_UPPER>，`-` 转 `_`
+                    let env_key = format!("J_{}", alias.replace('-', "_").to_uppercase());
+                    // 同名别名只取优先级高的（path > inner_url > outer_url > script）
+                    if seen.insert(env_key.clone()) {
+                        envs.push((env_key, value.clone()));
+                    }
+                }
+            }
+        }
+
+        envs
+    }
 }
