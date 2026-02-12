@@ -1,3 +1,4 @@
+use crate::command::{CommandResult, output_result};
 use crate::config::YamlConfig;
 use crate::constants::{self, section, config_key, CONTAIN_SEARCH_SECTIONS};
 use crate::{error, info, md, usage};
@@ -8,6 +9,11 @@ const VERSION_TEMPLATE: &str = include_str!("../../assets/version.md");
 
 /// 处理 version 命令: j version
 pub fn handle_version(config: &YamlConfig) {
+    output_result(&handle_version_with_result(config));
+}
+
+/// 处理 version 命令（返回结果版本）
+pub fn handle_version_with_result(config: &YamlConfig) -> CommandResult {
     let mut extra = String::new();
 
     // 收集自定义版本信息
@@ -24,7 +30,8 @@ pub fn handle_version(config: &YamlConfig) {
         .replace("{version}", constants::VERSION)
         .replace("{os}", std::env::consts::OS)
         .replace("{extra}", &extra);
-    md!("{}", text);
+    // 不在此处输出，由调用方决定是否输出（支持管道）
+    CommandResult::with_output(text)
 }
 
 /// 编译时嵌入的帮助文档
@@ -32,7 +39,13 @@ const HELP_TEXT: &str = include_str!("../../assets/help.md");
 
 /// 处理 help 命令: j help
 pub fn handle_help() {
-    md!("{}", HELP_TEXT);
+    output_result(&handle_help_with_result());
+}
+
+/// 处理 help 命令（返回结果版本）
+pub fn handle_help_with_result() -> CommandResult {
+    // 不在此处输出，由调用方决定是否输出（支持管道）
+    CommandResult::with_output(HELP_TEXT)
 }
 
 /// 处理 exit 命令
@@ -43,6 +56,11 @@ pub fn handle_exit() {
 
 /// 处理 log 命令: j log mode <verbose|concise>
 pub fn handle_log(key: &str, value: &str, config: &mut YamlConfig) {
+    output_result(&handle_log_with_result(key, value, config));
+}
+
+/// 处理 log 命令（返回结果版本）
+pub fn handle_log_with_result(key: &str, value: &str, config: &mut YamlConfig) -> CommandResult {
     if key == config_key::MODE {
         let mode = if value == config_key::VERBOSE {
             config_key::VERBOSE
@@ -50,21 +68,32 @@ pub fn handle_log(key: &str, value: &str, config: &mut YamlConfig) {
             config_key::CONCISE
         };
         config.set_property(section::LOG, config_key::MODE, mode);
-        info!("✅ 日志模式已切换为: {}", mode);
+        CommandResult::with_output(format!("✅ 日志模式已切换为: {}", mode))
     } else {
-        usage!("j log mode <verbose|concise>");
+        CommandResult::error("j log mode <verbose|concise>")
     }
 }
 
 /// 处理 clear 命令: j clear
 pub fn handle_clear() {
+    output_result(&handle_clear_with_result());
+}
+
+/// 处理 clear 命令（返回结果版本）
+pub fn handle_clear_with_result() -> CommandResult {
     // 使用 ANSI 转义序列清屏
     print!("\x1B[2J\x1B[1;1H");
+    CommandResult::ok()
 }
 
 /// 处理 contain 命令: j contain <alias> [containers]
 /// 在指定分类中查找别名
 pub fn handle_contain(alias: &str, containers: Option<&str>, config: &YamlConfig) {
+    output_result(&handle_contain_with_result(alias, containers, config));
+}
+
+/// 处理 contain 命令（返回结果版本）
+pub fn handle_contain_with_result(alias: &str, containers: Option<&str>, config: &YamlConfig) -> CommandResult {
     let sections: Vec<&str> = match containers {
         Some(c) => c.split(',').collect(),
         None => CONTAIN_SEARCH_SECTIONS.to_vec(),
@@ -86,35 +115,45 @@ pub fn handle_contain(alias: &str, containers: Option<&str>, config: &YamlConfig
     }
 
     if found.is_empty() {
-        info!("nothing found 😢");
+        CommandResult::with_output("nothing found 😢")
     } else {
-        info!("找到 {} 条结果 😊", found.len().to_string().green());
+        let mut result = format!("找到 {} 条结果 😊\n", found.len().to_string().green());
         for line in &found {
-            info!("{}", line);
+            result.push_str(line);
+            result.push('\n');
         }
+        CommandResult::with_output(result)
     }
 }
 
 /// 处理 change 命令: j change <part> <field> <value>
 /// 直接修改配置文件中的某个字段（如果字段不存在则新增）
 pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConfig) {
+    output_result(&handle_change_with_result(part, field, value, config));
+}
+
+/// 处理 change 命令（返回结果版本）
+pub fn handle_change_with_result(part: &str, field: &str, value: &str, config: &mut YamlConfig) -> CommandResult {
     if config.get_section(part).is_none() {
-        error!("❌ 在配置文件中未找到该 section：{}", part);
-        return;
+        return CommandResult::error(format!("❌ 在配置文件中未找到该 section：{}", part));
     }
 
     let old_value = config.get_property(part, field).cloned();
     config.set_property(part, field, value);
 
-    match old_value {
+    let message = match old_value {
         Some(old) => {
-            info!("✅ 已修改 {}.{} 的值为 {}，旧值为 {}", part, field, value, old);
+            format!("✅ 已修改 {}.{} 的值为 {}，旧值为 {}", part, field, value, old)
         }
         None => {
-            info!("✅ 已新增 {}.{} = {}", part, field, value);
+            format!("✅ 已新增 {}.{} = {}", part, field, value)
         }
-    }
-    info!("🚧 此命令可能会导致配置文件属性错乱而使 Copilot 无法正常使用，请确保在您清楚在做什么的情况下使用");
+    };
+    
+    CommandResult::with_output(format!(
+        "{}\n🚧 此命令可能会导致配置文件属性错乱而使 Copilot 无法正常使用，请确保在您清楚在做什么的情况下使用",
+        message
+    ))
 }
 
 // ========== completion 命令 ==========
@@ -122,20 +161,30 @@ pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConf
 /// 处理 completion 命令: j completion [shell]
 /// 生成 shell 补全脚本，支持 zsh / bash
 pub fn handle_completion(shell_type: Option<&str>, config: &YamlConfig) {
+    output_result(&handle_completion_with_result(shell_type, config));
+}
+
+/// 处理 completion 命令（返回结果版本）
+pub fn handle_completion_with_result(shell_type: Option<&str>, config: &YamlConfig) -> CommandResult {
     let shell = shell_type.unwrap_or("zsh");
 
     match shell {
-        "zsh" => generate_zsh_completion(config),
-        "bash" => generate_bash_completion(config),
-        _ => {
-            error!("❌ 不支持的 shell 类型: {}，可选: zsh, bash", shell);
-            usage!("j completion [zsh|bash]");
+        "zsh" => {
+            let script = generate_zsh_completion(config);
+            // 不在此处输出，由调用方决定是否输出（支持管道）
+            CommandResult::with_output(script)
         }
+        "bash" => {
+            let script = generate_bash_completion(config);
+            // 不在此处输出，由调用方决定是否输出（支持管道）
+            CommandResult::with_output(script)
+        }
+        _ => CommandResult::error(format!("❌ 不支持的 shell 类型: {}，可选: zsh, bash", shell))
     }
 }
 
 /// 生成 zsh 补全脚本
-fn generate_zsh_completion(config: &YamlConfig) {
+fn generate_zsh_completion(config: &YamlConfig) -> String {
     // 收集所有别名
     let mut all_aliases = Vec::new();
     for s in constants::ALIAS_EXISTS_SECTIONS {
@@ -299,11 +348,11 @@ fn generate_zsh_completion(config: &YamlConfig) {
     script.push_str("}\n\n");
     script.push_str("_j \"$@\"\n");
 
-    print!("{}", script);
+    script
 }
 
 /// 生成 bash 补全脚本
-fn generate_bash_completion(config: &YamlConfig) {
+fn generate_bash_completion(config: &YamlConfig) -> String {
     // 收集所有别名
     let mut all_aliases = Vec::new();
     for s in constants::ALIAS_EXISTS_SECTIONS {
@@ -380,5 +429,5 @@ fn generate_bash_completion(config: &YamlConfig) {
     script.push_str("}\n\n");
     script.push_str("complete -F _j_completion j\n");
 
-    print!("{}", script);
+    script
 }

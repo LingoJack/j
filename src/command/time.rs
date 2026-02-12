@@ -1,3 +1,4 @@
+use crate::command::{CommandResult, output_result};
 use crate::constants::time_function;
 use crate::{error, info, usage};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -6,23 +7,26 @@ use std::io::{self, Write};
 /// 处理 time 命令: j time countdown <duration>
 /// duration 支持: 30s（秒）、5m（分钟）、1h（小时），不带单位默认为分钟
 pub fn handle_time(function: &str, arg: &str) {
+    output_result(&handle_time_with_result(function, arg));
+}
+
+/// 处理 time 命令（返回结果版本）
+pub fn handle_time_with_result(function: &str, arg: &str) -> CommandResult {
     if function != time_function::COUNTDOWN {
-        error!("❌ 未知的功能: {}，目前仅支持 countdown", function);
-        usage!("j time countdown <duration>");
-        info!(
-            "  duration 格式: 30s(秒), 5m(分钟), 1h(小时), 不带单位默认为分钟"
-        );
-        return;
+        return CommandResult::error(format!(
+            "❌ 未知的功能: {}，目前仅支持 countdown\n  duration 格式: 30s(秒), 5m(分钟), 1h(小时), 不带单位默认为分钟",
+            function
+        ));
     }
 
     let duration_secs = parse_duration(arg);
     if duration_secs <= 0 {
-        error!("❌ 无效的时长: {}", arg);
-        return;
+        return CommandResult::error(format!("❌ 无效的时长: {}", arg));
     }
 
     info!("⏳ 倒计时开始：{}", format_duration_display(duration_secs as u64));
     run_countdown(duration_secs as u64);
+    CommandResult::ok()
 }
 
 /// 格式化时长为可读的中文显示

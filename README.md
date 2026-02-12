@@ -112,6 +112,7 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 19** | `reportctl open` 命令：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写文件；取消则不修改 | ✅ 完成 |
 | **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
 | **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
+| **Phase 22** | 管道与多命令组合：交互模式支持 `\|`（管道）、`&&`（逻辑与）、`;`（顺序执行）操作符；`CommandResult` 统一命令返回值；`j 命令 \| shell 命令` 管道传递输出；`j 命令1 && j 命令2` 前者成功才执行后者；`j 命令1 ; j 命令2` 顺序执行 | ✅ 完成 |
 
 ---
 
@@ -697,6 +698,49 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 **`concat` 已有脚本编辑**：
 - `j concat <name>` 当脚本名已存在时，不再报错，而是打开 TUI 编辑器预填已有脚本内容，支持修改后保存
+
+### 17. 管道与多命令组合系统
+
+Phase 22 为交互模式引入了完整的管道和多命令组合支持：
+
+**操作符支持**：
+- `|` — 管道：前一命令的输出作为后一命令的输入
+- `&&` — 逻辑与：前一命令成功才执行后一命令
+- `;` — 顺序执行：无论前一命令结果，都执行后一命令
+
+**核心架构**：
+```rust
+/// 命令执行结果
+pub enum CommandResult {
+    Success { output: Option<String> },
+    Error { message: String },
+    Exit,
+}
+
+/// 命令链解析
+pub struct CommandChain {
+    segments: Vec<CommandSegment>,
+    operators: Vec<Operator>,
+}
+```
+
+**使用示例**：
+```bash
+# j 命令输出管道到 shell 命令
+j ls path | grep chrome
+
+# 多命令组合（前者成功才执行后者）
+j set chrome /path && j ls path
+
+# 顺序执行
+j report "done" ; j check 5
+```
+
+**实现要点**：
+- `CommandChain::parse()` 使用状态机解析输入，支持引号内的操作符
+- `execute_chain()` 顺序执行命令链，处理管道传递和条件执行
+- 所有 handler 增加 `_with_result` 版本，返回 `CommandResult` 而非直接打印
+- 管道执行时捕获 j 命令输出，通过 stdin 传给后续 shell 命令
 
 ---
 

@@ -1,10 +1,16 @@
+use crate::command::{CommandResult, output_result};
 use crate::config::YamlConfig;
 use crate::constants::DEFAULT_DISPLAY_SECTIONS;
-use crate::{md};
+use crate::{md, error};
 use crate::util::log::capitalize_first_letter;
 
 /// 处理 list 命令: j ls [part]
 pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
+    output_result(&handle_list_with_result(part, config));
+}
+
+/// 处理 list 命令（返回结果版本）
+pub fn handle_list_with_result(part: Option<&str>, config: &YamlConfig) -> CommandResult {
     let mut md_text = String::new();
     match part {
         None => {
@@ -25,9 +31,10 @@ pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
     }
 
     if md_text.is_empty() {
-        crate::info!("无可展示的内容");
+        CommandResult::with_output("无可展示的内容")
     } else {
-        md!("{}", md_text);
+        // 不在此处输出，由调用方决定是否输出（支持管道）
+        CommandResult::with_output(md_text)
     }
 }
 
@@ -55,6 +62,6 @@ fn build_section_md(section: &str, config: &YamlConfig, md_text: &mut String) {
         }
         md_text.push('\n');
     } else {
-        crate::error!("该 section 不存在: {}", section);
+        error!("该 section 不存在: {}", section);
     }
 }

@@ -1,3 +1,4 @@
+use crate::command::{CommandResult, output_result};
 use crate::config::YamlConfig;
 use crate::constants::section;
 use crate::constants::{MODIFY_SECTIONS, REMOVE_CLEANUP_SECTIONS, RENAME_SYNC_SECTIONS};
@@ -7,15 +8,18 @@ use url::Url;
 
 /// 处理 set 命令: j set <alias> <path...>
 pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
+    output_result(&handle_set_with_result(alias, path_parts, config));
+}
+
+/// 处理 set 命令（返回结果版本）
+pub fn handle_set_with_result(alias: &str, path_parts: &[String], config: &mut YamlConfig) -> CommandResult {
     if path_parts.is_empty() {
-        usage!("j set <alias> <path>");
-        return;
+        return CommandResult::error("j set <alias> <path>");
     }
 
     // 检查别名是否与内置命令冲突
     if all_command_keywords().contains(&alias) {
-        error!("别名 `{}` 已经是预设命令，请换一个。 😢", alias);
-        return;
+        return CommandResult::error(format!("别名 `{}` 已经是预设命令，请换一个。 😢", alias));
     }
 
     // 处理路径中包含空格的情况：将多个参数拼接
@@ -24,14 +28,19 @@ pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
     let path = path.replace("\\ ", " ");
 
     if is_url(&path) {
-        add_as_url(alias, &path, config);
+        add_as_url_with_result(alias, &path, config)
     } else {
-        add_as_path(alias, &path, config);
+        add_as_path_with_result(alias, &path, config)
     }
 }
 
 /// 处理 remove 命令: j rm <alias>
 pub fn handle_remove(alias: &str, config: &mut YamlConfig) {
+    output_result(&handle_remove_with_result(alias, config));
+}
+
+/// 处理 remove 命令（返回结果版本）
+pub fn handle_remove_with_result(alias: &str, config: &mut YamlConfig) -> CommandResult {
     if config.contains(section::PATH, alias) {
         // 如果是脚本别名，同时删除磁盘上的脚本文件
         if let Some(script_path) = config.get_property(section::SCRIPT, alias) {
@@ -48,21 +57,27 @@ pub fn handle_remove(alias: &str, config: &mut YamlConfig) {
         for s in REMOVE_CLEANUP_SECTIONS {
             config.remove_property(s, alias);
         }
-        info!("成功从 PATH 中移除别名 {} ✅", alias);
+        CommandResult::with_output(format!("成功从 PATH 中移除别名 {} ✅", alias))
     } else if config.contains(section::INNER_URL, alias) {
         config.remove_property(section::INNER_URL, alias);
-        info!("成功从 INNER_URL 中移除别名 {} ✅", alias);
+        CommandResult::with_output(format!("成功从 INNER_URL 中移除别名 {} ✅", alias))
     } else if config.contains(section::OUTER_URL, alias) {
         config.remove_property(section::OUTER_URL, alias);
-        info!("成功从 OUTER_URL 中移除别名 {} ✅", alias);
+        CommandResult::with_output(format!("成功从 OUTER_URL 中移除别名 {} ✅", alias))
     } else {
-        error!("别名 {} 不存在 ❌", alias);
+        CommandResult::error(format!("别名 {} 不存在 ❌", alias))
     }
 }
 
 /// 处理 rename 命令: j rename <alias> <new_alias>
 pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
+    output_result(&handle_rename_with_result(alias, new_alias, config));
+}
+
+/// 处理 rename 命令（返回结果版本）
+pub fn handle_rename_with_result(alias: &str, new_alias: &str, config: &mut YamlConfig) -> CommandResult {
     let mut updated = false;
+    let mut messages = Vec::new();
 
     // path
     if config.contains(section::PATH, alias) {
@@ -73,7 +88,7 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
             config.rename_property(s, alias, new_alias);
         }
         updated = true;
-        info!("✅ 重命名 {} -> {} 成功! Path: {} 🎉", alias, new_alias, path);
+        messages.push(format!("✅ 重命名 {} -> {} 成功! Path: {} 🎉", alias, new_alias, path));
     }
 
     // inner_url
@@ -81,7 +96,7 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
         let url = config.get_property(section::INNER_URL, alias).cloned().unwrap_or_default();
         config.rename_property(section::INNER_URL, alias, new_alias);
         updated = true;
-        info!("✅ 重命名 {} -> {} 成功! Inner URL: {} 🚀", alias, new_alias, url);
+        messages.push(format!("✅ 重命名 {} -> {} 成功! Inner URL: {} 🚀", alias, new_alias, url));
     }
 
     // outer_url
@@ -89,19 +104,25 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
         let url = config.get_property(section::OUTER_URL, alias).cloned().unwrap_or_default();
         config.rename_property(section::OUTER_URL, alias, new_alias);
         updated = true;
-        info!("✅ 重命名 {} -> {} 成功! Outer URL: {} 🌐", alias, new_alias, url);
+        messages.push(format!("✅ 重命名 {} -> {} 成功! Outer URL: {} 🌐", alias, new_alias, url));
     }
 
     if !updated {
-        error!("❌ 别名 {} 不存在!", alias);
+        CommandResult::error(format!("❌ 别名 {} 不存在!", alias))
+    } else {
+        CommandResult::with_output(messages.join("\n"))
     }
 }
 
 /// 处理 modify 命令: j mf <alias> <new_path...>
 pub fn handle_modify(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
+    output_result(&handle_modify_with_result(alias, path_parts, config));
+}
+
+/// 处理 modify 命令（返回结果版本）
+pub fn handle_modify_with_result(alias: &str, path_parts: &[String], config: &mut YamlConfig) -> CommandResult {
     if path_parts.is_empty() {
-        usage!("j mf <alias> <new_path>");
-        return;
+        return CommandResult::error("j mf <alias> <new_path>");
     }
 
     let path = path_parts.join(" ");
@@ -109,18 +130,21 @@ pub fn handle_modify(alias: &str, path_parts: &[String], config: &mut YamlConfig
     let path = path.replace("\\ ", " ");
 
     let mut has_modified = false;
+    let mut messages = Vec::new();
 
     // 依次检查各个 section 并更新
     for s in MODIFY_SECTIONS {
         if config.contains(s, alias) {
             config.set_property(s, alias, &path);
             has_modified = true;
-            info!("修改 {} 在 {} 下的值为 {{{}}} 成功 ✅", alias, s, path);
+            messages.push(format!("修改 {} 在 {} 下的值为 {{{}}} 成功 ✅", alias, s, path));
         }
     }
 
     if !has_modified {
-        error!("别名 {} 不存在，请先使用 set 命令添加。", alias);
+        CommandResult::error(format!("别名 {} 不存在，请先使用 set 命令添加。", alias))
+    } else {
+        CommandResult::with_output(messages.join("\n"))
     }
 }
 
@@ -135,6 +159,32 @@ fn is_url(input: &str) -> bool {
         .map(|u| u.scheme() == "http" || u.scheme() == "https")
         .unwrap_or(false)
 }
+
+/// 添加为路径别名（返回结果版本）
+fn add_as_path_with_result(alias: &str, path: &str, config: &mut YamlConfig) -> CommandResult {
+    if config.contains(section::PATH, alias) {
+        CommandResult::error(format!(
+            "别名 {} 的路径 {{{}}} 已存在。 😢 请使用 `mf` 命令修改",
+            alias,
+            config.get_property(section::PATH, alias).unwrap()
+        ))
+    } else {
+        config.set_property(section::PATH, alias, path);
+        CommandResult::with_output(format!("✅ 添加别名 {} -> {{{}}} 成功! 🎉", alias, path))
+    }
+}
+
+/// 添加为 URL 别名（返回结果版本）
+fn add_as_url_with_result(alias: &str, url: &str, config: &mut YamlConfig) -> CommandResult {
+    if config.contains(section::INNER_URL, alias) || config.contains(section::OUTER_URL, alias) {
+        CommandResult::error(format!("别名 {} 已存在。 😢 请使用 `mf` 命令修改", alias))
+    } else {
+        config.set_property(section::INNER_URL, alias, url);
+        CommandResult::with_output(format!("✅ 添加别名 {} -> {{{}}} 成功! 🚀", alias, url))
+    }
+}
+
+// ========== 保留原有函数供其他模块调用 ==========
 
 /// 添加为路径别名
 fn add_as_path(alias: &str, path: &str, config: &mut YamlConfig) {

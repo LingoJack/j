@@ -1,4 +1,4 @@
-use crate::command;
+use crate::command::{self, CommandChain, execute_chain};
 use crate::config::YamlConfig;
 use crate::constants::{self, cmd, config_key, rmeta_action, time_function, search_flag, shell, NOTE_CATEGORIES, ALL_SECTIONS, ALIAS_PATH_SECTIONS, LIST_ALL};
 use crate::{info, error};
@@ -419,8 +419,11 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     continue;
                 }
 
-                // Shell 命令前缀开头：执行 shell 命令
-                if input.starts_with(constants::SHELL_PREFIX) {
+                // 解析命令链（支持管道和多命令组合）
+                let chain = CommandChain::parse(input);
+
+                // Shell 命令前缀开头（单个命令且以 ! 开头）
+                if chain.is_single() && input.starts_with(constants::SHELL_PREFIX) {
                     let shell_cmd = &input[1..].trim();
                     if shell_cmd.is_empty() {
                         // 无命令：进入交互式 shell（状态延续，直到 exit 退出）
@@ -434,7 +437,52 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     continue;
                 }
 
-                // 解析并执行 copilot 命令
+                // 处理多命令/管道
+                if chain.is_chain() {
+                    // 多命令或管道：记录历史（非 report 命令）
+                    let is_report_cmd = chain.segments.iter().any(|seg| 
+                        seg.text.starts_with("report ") || seg.text == "report" || seg.text.starts_with("r ")
+                    );
+                    if !is_report_cmd {
+                        let _ = rl.add_history_entry(input);
+                    }
+
+                    let verbose = config.is_verbose();
+                    let start = if verbose {
+                        Some(std::time::Instant::now())
+                    } else {
+                        None
+                    };
+
+                    // 执行命令链
+                    let result = execute_chain(&chain, config);
+                    
+                    // 处理退出
+                    if matches!(result, command::CommandResult::Exit) {
+                        info!("\nGoodbye! 👋");
+                        break;
+                    }
+                    
+                    // 输出结果
+                    command::output_result(&result);
+
+                    if let Some(start) = start {
+                        let elapsed = start.elapsed();
+                        crate::debug_log!(config, "duration: {} ms", elapsed.as_millis());
+                    }
+
+                    // 每次命令执行后刷新补全器中的配置（别名可能已变化）
+                    if let Some(helper) = rl.helper_mut() {
+                        helper.refresh(config);
+                    }
+                    // 刷新进程环境变量（别名可能已增删改）
+                    inject_envs_to_process(config);
+
+                    println!();
+                    continue;
+                }
+
+                // 单个命令处理
                 let args = parse_input(input);
                 if args.is_empty() {
                     continue;

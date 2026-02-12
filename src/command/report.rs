@@ -1,3 +1,4 @@
+use crate::command::{CommandResult, output_result};
 use crate::config::YamlConfig;
 use crate::constants::{section, config_key, search_flag, rmeta_action, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, DEFAULT_CHECK_LINES};
 use crate::util::fuzzy;
@@ -16,60 +17,61 @@ const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
 
 /// 处理 report 命令: j report <content...> 或 j reportctl new [date] / j reportctl sync [date]
 pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
+    output_result(&handle_report_with_result(sub, content, config));
+}
+
+/// 处理 report 命令（返回结果版本）
+pub fn handle_report_with_result(sub: &str, content: &[String], config: &mut YamlConfig) -> CommandResult {
     if content.is_empty() {
         if sub == "reportctl" {
-            usage!("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open");
-            return;
+            return CommandResult::error("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open");
         }
         // report 无参数：打开 TUI 多行编辑器（预填历史 + 日期前缀，NORMAL 模式）
-        handle_report_tui(config);
-        return;
-    }
+        handle_report_tui_with_result(config)
+    } else {
+        let first = content[0].as_str();
 
-    let first = content[0].as_str();
+        // 元数据操作
+        if sub == "reportctl" {
+            match first {
+                f if f == rmeta_action::NEW => {
+                    let date_str = content.get(1).map(|s| s.as_str());
+                    handle_week_update_with_result(date_str, config)
+                }
+                f if f == rmeta_action::SYNC => {
+                    let date_str = content.get(1).map(|s| s.as_str());
+                    handle_sync_with_result(date_str, config)
+                }
+                f if f == rmeta_action::PUSH => {
+                    let msg = content.get(1).map(|s| s.as_str());
+                    handle_push_with_result(msg, config)
+                }
+                f if f == rmeta_action::PULL => {
+                    handle_pull_with_result(config)
+                }
+                f if f == rmeta_action::SET_URL => {
+                    let url = content.get(1).map(|s| s.as_str());
+                    handle_set_url_with_result(url, config)
+                }
+                f if f == rmeta_action::OPEN => {
+                    handle_open_report_with_result(config)
+                }
+                _ => {
+                    CommandResult::error(format!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL, rmeta_action::OPEN))
+                }
+            }
+        } else {
+            // 常规日报写入
+            let text = content.join(" ");
+            let text = text.trim().trim_matches('"').to_string();
 
-    // 元数据操作
-    if sub == "reportctl" {
-        match first {
-            f if f == rmeta_action::NEW => {
-                let date_str = content.get(1).map(|s| s.as_str());
-                handle_week_update(date_str, config);
-            }
-            f if f == rmeta_action::SYNC => {
-                let date_str = content.get(1).map(|s| s.as_str());
-                handle_sync(date_str, config);
-            }
-            f if f == rmeta_action::PUSH => {
-                let msg = content.get(1).map(|s| s.as_str());
-                handle_push(msg, config);
-            }
-            f if f == rmeta_action::PULL => {
-                handle_pull(config);
-            }
-            f if f == rmeta_action::SET_URL => {
-                let url = content.get(1).map(|s| s.as_str());
-                handle_set_url(url, config);
-            }
-            f if f == rmeta_action::OPEN => {
-                handle_open_report(config);
-            }
-            _ => {
-                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL, rmeta_action::OPEN);
+            if text.is_empty() {
+                CommandResult::error("⚠️ 内容为空，无法写入")
+            } else {
+                handle_daily_report_with_result(&text, config)
             }
         }
-        return;
     }
-
-    // 常规日报写入
-    let text = content.join(" ");
-    let text = text.trim().trim_matches('"').to_string();
-
-    if text.is_empty() {
-        error!("⚠️ 内容为空，无法写入");
-        return;
-    }
-
-    handle_daily_report(&text, config);
 }
 
 /// 获取日报文件路径（统一入口，自动创建目录和文件）
@@ -99,10 +101,10 @@ fn get_settings_json_path(report_path: &str) -> std::path::PathBuf {
 }
 
 /// TUI 模式日报编辑：预加载历史 + 日期前缀，NORMAL 模式进入
-fn handle_report_tui(config: &mut YamlConfig) {
+fn handle_report_tui_with_result(config: &mut YamlConfig) -> CommandResult {
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     let config_path = get_settings_json_path(&report_path);
@@ -159,15 +161,13 @@ fn handle_report_tui(config: &mut YamlConfig) {
             // 从文件中去掉最后 N 行，再写入编辑器的全部内容
             replace_last_n_lines(report_file, original_context_count, &text);
 
-            info!("✅ 日报已写入：{}", report_path);
+            CommandResult::with_output(format!("✅ 日报已写入：{}", report_path))
         }
         Ok(None) => {
-            info!("已取消编辑");
-            // 文件未做任何修改（新周标题也没有写入）
-            // 配置文件中的 week_num/last_day 可能已更新，但下次进入时 now <= last_day 不会重复生成
+            CommandResult::with_output("已取消编辑")
         }
         Err(e) => {
-            error!("❌ 编辑器启动失败: {}", e);
+            CommandResult::error(format!("❌ 编辑器启动失败: {}", e))
         }
     }
 }
@@ -213,10 +213,10 @@ fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
 }
 
 /// 写入日报
-fn handle_daily_report(content: &str, config: &mut YamlConfig) {
+fn handle_daily_report_with_result(content: &str, config: &mut YamlConfig) -> CommandResult {
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     info!("📂 日报文件路径：{}", report_path);
@@ -256,22 +256,21 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
             }
         }
         None => {
-            error!("❌ 无法解析 last_day 日期: {}", last_day_str);
-            return;
+            return CommandResult::error(format!("❌ 无法解析 last_day 日期: {}", last_day_str));
         }
     }
 
     let today_str = now.format(SIMPLE_DATE_FORMAT);
     let log_entry = format!("- 【{}】 {}\n", today_str, content);
     append_to_file(report_file, &log_entry);
-    info!("✅ 成功将内容写入：{}", report_path);
+    CommandResult::with_output(format!("✅ 成功将内容写入：{}", report_path))
 }
 
 /// 处理 reportctl new 命令：开启新的一周
-fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
+fn handle_week_update_with_result(date_str: Option<&str>, config: &mut YamlConfig) -> CommandResult {
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     let config_path = get_settings_json_path(&report_path);
@@ -290,18 +289,19 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
         Some(last_day) => {
             let next_last_day = last_day + chrono::Duration::days(7);
             update_config_files(week_num + 1, &next_last_day, &config_path, config);
+            CommandResult::with_output(format!("✅ 已开启新的一周：{}", next_last_day.format(DATE_FORMAT)))
         }
         None => {
-            error!("❌ 更新周数失败，请检查日期字符串是否有误: {}", last_day_str);
+            CommandResult::error(format!("❌ 更新周数失败，请检查日期字符串是否有误: {}", last_day_str))
         }
     }
 }
 
 /// 处理 reportctl sync 命令：同步周数和日期
-fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
+fn handle_sync_with_result(date_str: Option<&str>, config: &mut YamlConfig) -> CommandResult {
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     let config_path = get_settings_json_path(&report_path);
@@ -321,9 +321,10 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
     match parse_date(&last_day_str) {
         Some(last_day) => {
             update_config_files(week_num, &last_day, &config_path, config);
+            CommandResult::with_output(format!("✅ 已同步周数和日期：{}", last_day.format(DATE_FORMAT)))
         }
         None => {
-            error!("❌ 更新周数失败，请检查日期字符串是否有误: {}", last_day_str);
+            CommandResult::error(format!("❌ 更新周数失败，请检查日期字符串是否有误: {}", last_day_str))
         }
     }
 }
@@ -413,24 +414,22 @@ fn append_to_file(path: &Path, content: &str) {
 // ========== open 命令 ==========
 
 /// 处理 reportctl open 命令：用内置 TUI 编辑器打开日报文件，自由编辑全文
-fn handle_open_report(config: &YamlConfig) {
+fn handle_open_report_with_result(config: &YamlConfig) -> CommandResult {
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     let path = Path::new(&report_path);
     if !path.is_file() {
-        error!("❌ 日报文件不存在: {}", report_path);
-        return;
+        return CommandResult::error(format!("❌ 日报文件不存在: {}", report_path));
     }
 
     // 读取文件全部内容
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            error!("❌ 读取日报文件失败: {}", e);
-            return;
+            return CommandResult::error(format!("❌ 读取日报文件失败: {}", e));
         }
     };
 
@@ -445,16 +444,15 @@ fn handle_open_report(config: &YamlConfig) {
                 result.push('\n');
             }
             if let Err(e) = fs::write(path, &result) {
-                error!("❌ 写入日报文件失败: {}", e);
-                return;
+                return CommandResult::error(format!("❌ 写入日报文件失败: {}", e));
             }
-            info!("✅ 日报文件已保存：{}", report_path);
+            CommandResult::with_output(format!("✅ 日报文件已保存：{}", report_path))
         }
         Ok(None) => {
-            info!("已取消编辑，文件未修改");
+            CommandResult::with_output("已取消编辑，文件未修改")
         }
         Err(e) => {
-            error!("❌ 编辑器启动失败: {}", e);
+            CommandResult::error(format!("❌ 编辑器启动失败: {}", e))
         }
     }
 }
@@ -462,7 +460,7 @@ fn handle_open_report(config: &YamlConfig) {
 // ========== set-url 命令 ==========
 
 /// 处理 reportctl set-url 命令：设置 git 仓库地址
-fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
+fn handle_set_url_with_result(url: Option<&str>, config: &mut YamlConfig) -> CommandResult {
     match url {
         Some(u) if !u.is_empty() => {
             let old = config.get_property(section::REPORT, config_key::GIT_REPO).cloned();
@@ -478,10 +476,10 @@ fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
 
             match old {
                 Some(old_url) if !old_url.is_empty() => {
-                    info!("✅ git 仓库地址已更新: {} → {}", old_url, u);
+                    CommandResult::with_output(format!("✅ git 仓库地址已更新: {} → {}", old_url, u))
                 }
                 _ => {
-                    info!("✅ git 仓库地址已设置: {}", u);
+                    CommandResult::with_output(format!("✅ git 仓库地址已设置: {}", u))
                 }
             }
         }
@@ -489,11 +487,10 @@ fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
             // 无参数时显示当前配置
             match config.get_property(section::REPORT, config_key::GIT_REPO) {
                 Some(url) if !url.is_empty() => {
-                    info!("📦 当前 git 仓库地址: {}", url);
+                    CommandResult::with_output(format!("📦 当前 git 仓库地址: {}", url))
                 }
                 _ => {
-                    info!("📦 尚未配置 git 仓库地址");
-                    usage!("reportctl set-url <repo_url>");
+                    CommandResult::error("📦 尚未配置 git 仓库地址\nreportctl set-url <repo_url>")
                 }
             }
         }
@@ -618,17 +615,16 @@ fn sync_git_remote(config: &YamlConfig) {
 }
 
 /// 处理 reportctl push 命令：推送周报到远程仓库
-fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
+fn handle_push_with_result(commit_msg: Option<&str>, config: &YamlConfig) -> CommandResult {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
-        return;
+        return CommandResult::error("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
     }
 
     // 确保 git 仓库已初始化
     if !ensure_git_repo(config) {
-        return;
+        return CommandResult::error("❌ git 仓库初始化失败");
     }
 
     let default_msg = format!("update report {}", Local::now().format("%Y-%m-%d %H:%M"));
@@ -639,11 +635,10 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // git add .
     if let Some(status) = run_git_in_report_dir(&["add", "."], config) {
         if !status.success() {
-            error!("❌ git add 失败");
-            return;
+            return CommandResult::error("❌ git add 失败");
         }
     } else {
-        return;
+        return CommandResult::error("❌ git add 执行失败");
     }
 
     // git commit -m "<msg>"
@@ -653,33 +648,33 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
             info!("ℹ️ git commit 返回非零退出码（可能没有新变更）");
         }
     } else {
-        return;
+        return CommandResult::error("❌ git commit 执行失败");
     }
 
     // git push origin main
     if let Some(status) = run_git_in_report_dir(&["push", "-u", "origin", "main"], config) {
         if status.success() {
-            info!("✅ 周报已成功推送到远程仓库");
+            CommandResult::with_output("✅ 周报已成功推送到远程仓库")
         } else {
-            error!("❌ git push 失败，请检查网络连接和仓库权限");
+            CommandResult::error("❌ git push 失败，请检查网络连接和仓库权限")
         }
+    } else {
+        CommandResult::error("❌ git push 执行失败")
     }
 }
 
 /// 处理 reportctl pull 命令：从远程仓库拉取周报
-fn handle_pull(config: &YamlConfig) {
+fn handle_pull_with_result(config: &YamlConfig) -> CommandResult {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
-        return;
+        return CommandResult::error("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
     }
 
     let dir = match get_report_dir(config) {
         Some(d) => d,
         None => {
-            error!("❌ 无法确定日报目录");
-            return;
+            return CommandResult::error("❌ 无法确定日报目录");
         }
     };
 
@@ -718,18 +713,17 @@ fn handle_pull(config: &YamlConfig) {
                 // 将 clone 出来的内容移到 report 目录
                 let _ = fs::remove_dir_all(&dir);
                 if let Err(e) = fs::rename(&temp_dir, &dir) {
-                    error!("❌ 移动克隆仓库失败: {}，临时目录: {:?}", e, temp_dir);
-                    return;
+                    return CommandResult::error(format!("❌ 移动克隆仓库失败: {}，临时目录: {:?}", e, temp_dir));
                 }
-                info!("✅ 成功从远程仓库克隆周报");
+                CommandResult::with_output("✅ 成功从远程仓库克隆周报")
             }
             Ok(_) => {
-                error!("❌ git clone 失败，请检查仓库地址和网络连接");
                 let _ = fs::remove_dir_all(&temp_dir);
+                CommandResult::error("❌ git clone 失败，请检查仓库地址和网络连接")
             }
             Err(e) => {
-                error!("💥 执行 git clone 失败: {}", e);
                 let _ = fs::remove_dir_all(&temp_dir);
+                CommandResult::error(format!("💥 执行 git clone 失败: {}", e))
             }
         }
     } else {
@@ -759,20 +753,21 @@ fn handle_pull(config: &YamlConfig) {
             // git fetch origin main
             if let Some(status) = run_git_in_report_dir(&["fetch", "origin", "main"], config) {
                 if !status.success() {
-                    error!("❌ git fetch 失败，请检查网络连接和仓库地址");
-                    return;
+                    return CommandResult::error("❌ git fetch 失败，请检查网络连接和仓库地址");
                 }
             } else {
-                return;
+                return CommandResult::error("❌ git fetch 执行失败");
             }
 
             // git reset --hard origin/main（强制用远程覆盖本地）
             if let Some(status) = run_git_in_report_dir(&["reset", "--hard", "origin/main"], config) {
                 if status.success() {
-                    info!("✅ 成功从远程仓库拉取周报");
+                    CommandResult::with_output("✅ 成功从远程仓库拉取周报")
                 } else {
-                    error!("❌ git reset 失败");
+                    CommandResult::error("❌ git reset 失败")
                 }
+            } else {
+                CommandResult::error("❌ git reset 执行失败")
             }
         } else {
             // 正常仓库，先 stash 再 pull
@@ -795,14 +790,12 @@ fn handle_pull(config: &YamlConfig) {
             // 执行 pull
             let pull_ok = if let Some(status) = run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config) {
                 if status.success() {
-                    info!("✅ 周报已更新到最新版本");
                     true
                 } else {
-                    error!("❌ git pull 失败，请检查网络连接或手动解决冲突");
-                    false
+                    return CommandResult::error("❌ git pull 失败，请检查网络连接或手动解决冲突");
                 }
             } else {
-                false
+                return CommandResult::error("❌ git pull 执行失败");
             };
 
             // 恢复 stash
@@ -813,6 +806,8 @@ fn handle_pull(config: &YamlConfig) {
                     }
                 }
             }
+
+            CommandResult::with_output("✅ 周报已更新到最新版本")
         }
     }
 }
@@ -821,12 +816,16 @@ fn handle_pull(config: &YamlConfig) {
 
 /// 处理 check 命令: j check [line_count]
 pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
+    output_result(&handle_check_with_result(line_count, config));
+}
+
+/// 处理 check 命令（返回结果版本）
+pub fn handle_check_with_result(line_count: Option<&str>, config: &YamlConfig) -> CommandResult {
     let num = match line_count {
         Some(s) => match s.parse::<usize>() {
             Ok(n) if n > 0 => n,
             _ => {
-                error!("❌ 无效的行数参数: {}，请输入正整数", s);
-                return;
+                return CommandResult::error(format!("❌ 无效的行数参数: {}，请输入正整数", s));
             }
         },
         None => DEFAULT_CHECK_LINES,
@@ -834,51 +833,52 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
 
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     info!("📂 正在读取周报文件路径: {}", report_path);
 
     let path = Path::new(&report_path);
     if !path.is_file() {
-        error!("❌ 文件不存在或不是有效文件: {}", report_path);
-        return;
+        return CommandResult::error(format!("❌ 文件不存在或不是有效文件: {}", report_path));
     }
 
     let lines = read_last_n_lines(path, num);
-    info!("📄 最近的 {} 行内容如下：", lines.len());
-    // 周报本身就是 Markdown 格式，使用 termimad 渲染
     let md_content = lines.join("\n");
-    crate::md!("{}", md_content);
+    // 不在此处输出，由调用方决定是否输出（支持管道）
+    CommandResult::with_output(md_content)
 }
 
 // ========== search 命令 ==========
 
 /// 处理 search 命令: j search <line_count|all> <target> [-f|-fuzzy]
 pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, config: &YamlConfig) {
+    output_result(&handle_search_with_result(line_count, target, fuzzy_flag, config));
+}
+
+/// 处理 search 命令（返回结果版本）
+pub fn handle_search_with_result(line_count: &str, target: &str, fuzzy_flag: Option<&str>, config: &YamlConfig) -> CommandResult {
     let num = if line_count == "all" {
         usize::MAX
     } else {
         match line_count.parse::<usize>() {
             Ok(n) if n > 0 => n,
             _ => {
-                error!("❌ 无效的行数参数: {}，请输入正整数或 all", line_count);
-                return;
+                return CommandResult::error(format!("❌ 无效的行数参数: {}，请输入正整数或 all", line_count));
             }
         }
     };
 
     let report_path = match get_report_path(config) {
         Some(p) => p,
-        None => return,
+        None => return CommandResult::error("无法获取日报文件路径"),
     };
 
     info!("📂 正在读取周报文件路径: {}", report_path);
 
     let path = Path::new(&report_path);
     if !path.is_file() {
-        error!("❌ 文件不存在或不是有效文件: {}", report_path);
-        return;
+        return CommandResult::error(format!("❌ 文件不存在或不是有效文件: {}", report_path));
     }
 
     let is_fuzzy = matches!(fuzzy_flag, Some(f) if f == search_flag::FUZZY_SHORT || f == search_flag::FUZZY);
@@ -889,6 +889,7 @@ pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, c
     let lines = read_last_n_lines(path, num);
     info!("🔍 搜索目标关键字: {}", target.green());
 
+    let mut results = Vec::new();
     let mut index = 0;
     for line in &lines {
         let matched = if is_fuzzy {
@@ -900,12 +901,14 @@ pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, c
         if matched {
             index += 1;
             let highlighted = fuzzy::highlight_matches(line, target, is_fuzzy);
-            info!("[{}] {}", index, highlighted);
+            results.push(format!("[{}] {}", index, highlighted));
         }
     }
 
-    if index == 0 {
-        info!("nothing found 😢");
+    if results.is_empty() {
+        CommandResult::with_output("nothing found 😢")
+    } else {
+        CommandResult::with_output(results.join("\n"))
     }
 }
 

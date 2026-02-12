@@ -1,3 +1,4 @@
+use crate::command::{CommandResult, output_result};
 use crate::config::YamlConfig;
 use crate::constants::{section, config_key, search_engine, shell, DEFAULT_SEARCH_ENGINE};
 use crate::{error, info};
@@ -7,58 +8,57 @@ use std::process::Command;
 /// 通过别名打开应用/文件/URL
 /// args[0] = alias, args[1..] = 额外参数
 pub fn handle_open(args: &[String], config: &YamlConfig) {
+    output_result(&handle_open_with_result(args, config));
+}
+
+/// 通过别名打开应用/文件/URL（返回结果版本）
+pub fn handle_open_with_result(args: &[String], config: &YamlConfig) -> CommandResult {
     if args.is_empty() {
-        error!("❌ 请指定要打开的别名");
-        return;
+        return CommandResult::error("❌ 请指定要打开的别名");
     }
 
     let alias = &args[0];
 
     // 检查别名是否存在
     if !config.alias_exists(alias) {
-        error!("❌ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。", alias);
-        return;
+        return CommandResult::error(format!("❌ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。", alias));
     }
 
     // 如果是浏览器
     if config.contains(section::BROWSER, alias) {
-        handle_open_browser(args, config);
-        return;
+        return handle_open_browser_with_result(args, config);
     }
 
     // 如果是编辑器
     if config.contains(section::EDITOR, alias) {
         if args.len() == 2 {
             let file_path = &args[1];
-            open_with_path(alias, Some(file_path), config);
+            return open_with_path_with_result(alias, Some(file_path), config);
         } else {
-            open_alias(alias, config);
+            return open_alias_with_result(alias, config);
         }
-        return;
     }
 
     // 如果是 VPN
     if config.contains(section::VPN, alias) {
-        open_alias(alias, config);
-        return;
+        return open_alias_with_result(alias, config);
     }
 
     // 如果是自定义脚本
     if config.contains(section::SCRIPT, alias) {
-        run_script(args, config);
-        return;
+        return run_script_with_result(args, config);
     }
 
     // 默认作为普通路径打开（支持带参数执行 CLI 工具）
-    open_alias_with_args(alias, &args[1..], config);
+    open_alias_with_args_with_result(alias, &args[1..], config)
 }
 
 /// 打开浏览器，可能带 URL 参数
-fn handle_open_browser(args: &[String], config: &YamlConfig) {
+fn handle_open_browser_with_result(args: &[String], config: &YamlConfig) -> CommandResult {
     let alias = &args[0];
     if args.len() == 1 {
         // 直接打开浏览器
-        open_alias(alias, config);
+        open_alias_with_result(alias, config)
     } else {
         // j <browser_alias> <url_alias_or_search_text> [engine]
         let url_alias_or_text = &args[1];
@@ -70,7 +70,7 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
             // outer_url 需要先启动 VPN
             if let Some(vpn_map) = config.get_section(section::VPN) {
                 if let Some(vpn_alias) = vpn_map.keys().next() {
-                    open_alias(vpn_alias, config);
+                    let _ = open_alias_with_result(vpn_alias, config);
                 }
             }
             u.clone()
@@ -90,7 +90,7 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
             get_search_url(url_alias_or_text, engine)
         };
 
-        open_with_path(alias, Some(&url), config);
+        open_with_path_with_result(alias, Some(&url), config)
     }
 }
 
@@ -101,7 +101,7 @@ const NEW_WINDOW_FLAG_LONG: &str = "--new-window";
 /// 运行脚本
 /// 支持 -w / --new-window 标志：在新终端窗口中执行脚本
 /// 用法：j <script_alias> [-w] [args...]
-fn run_script(args: &[String], config: &YamlConfig) {
+fn run_script_with_result(args: &[String], config: &YamlConfig) -> CommandResult {
     let alias = &args[0];
     if let Some(script_path) = config.get_property(section::SCRIPT, alias) {
         // 展开脚本路径中的 ~
@@ -118,11 +118,13 @@ fn run_script(args: &[String], config: &YamlConfig) {
 
         if new_window {
             info!("⚙️ 即将在新窗口执行脚本，路径: {}", script_path);
-            run_script_in_new_window(&script_path, &script_arg_refs, config);
+            run_script_in_new_window(&script_path, &script_arg_refs, config)
         } else {
             info!("⚙️ 即将执行脚本，路径: {}", script_path);
-            run_script_in_current_terminal(&script_path, &script_arg_refs, config);
+            run_script_in_current_terminal(&script_path, &script_arg_refs, config)
         }
+    } else {
+        CommandResult::error(format!("❌ 脚本别名 {} 未找到", alias))
     }
 }
 
@@ -134,7 +136,7 @@ fn inject_alias_envs(cmd: &mut Command, config: &YamlConfig) {
 }
 
 /// 在当前终端直接执行脚本
-fn run_script_in_current_terminal(script_path: &str, script_args: &[&str], config: &YamlConfig) {
+fn run_script_in_current_terminal(script_path: &str, script_args: &[&str], config: &YamlConfig) -> CommandResult {
     let result = if cfg!(target_os = "windows") {
         let mut cmd = Command::new("cmd.exe");
         cmd.arg("/c").arg(script_path).args(script_args);
@@ -151,19 +153,19 @@ fn run_script_in_current_terminal(script_path: &str, script_args: &[&str], confi
     match result {
         Ok(status) => {
             if status.success() {
-                info!("✅ 脚本执行完成");
+                CommandResult::with_output("✅ 脚本执行完成")
             } else {
-                error!("❌ 脚本执行失败，退出码: {}", status);
+                CommandResult::error(format!("❌ 脚本执行失败，退出码: {}", status))
             }
         }
-        Err(e) => error!("💥 执行脚本失败: {}", e),
+        Err(e) => CommandResult::error(format!("💥 执行脚本失败: {}", e)),
     }
 }
 
 /// 在新终端窗口中执行脚本
 /// 脚本自身决定是否包含等待按键逻辑（通过 TUI 编辑器创建时可预填模板）
 /// 脚本执行完后自动 exit 关闭 shell，使新窗口可被关闭
-fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &YamlConfig) {
+fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &YamlConfig) -> CommandResult {
     let os = std::env::consts::OS;
 
     // 构建环境变量导出语句（用于新窗口中注入）
@@ -206,12 +208,12 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
         match result {
             Ok(status) => {
                 if status.success() {
-                    info!("✅ 已在新终端窗口中启动脚本");
+                    CommandResult::with_output("✅ 已在新终端窗口中启动脚本")
                 } else {
-                    error!("❌ 启动新终端窗口失败，退出码: {}", status);
+                    CommandResult::error(format!("❌ 启动新终端窗口失败，退出码: {}", status))
                 }
             }
-            Err(e) => error!("💥 调用 osascript 失败: {}", e),
+            Err(e) => CommandResult::error(format!("💥 调用 osascript 失败: {}", e)),
         }
     } else if os == shell::WINDOWS_OS {
         // Windows: 使用 start cmd /c 在新窗口执行
@@ -235,12 +237,12 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
         match result {
             Ok(status) => {
                 if status.success() {
-                    info!("✅ 已在新终端窗口中启动脚本");
+                    CommandResult::with_output("✅ 已在新终端窗口中启动脚本")
                 } else {
-                    error!("❌ 启动新终端窗口失败，退出码: {}", status);
+                    CommandResult::error(format!("❌ 启动新终端窗口失败，退出码: {}", status))
                 }
             }
-            Err(e) => error!("💥 启动新窗口失败: {}", e),
+            Err(e) => CommandResult::error(format!("💥 启动新窗口失败: {}", e)),
         }
     } else {
         // Linux: 尝试常见的终端模拟器
@@ -267,15 +269,14 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
         for (term, term_args) in &terminals {
             if let Ok(status) = Command::new(term).args(term_args).status() {
                 if status.success() {
-                    info!("✅ 已在新终端窗口中启动脚本");
-                    return;
+                    return CommandResult::with_output("✅ 已在新终端窗口中启动脚本");
                 }
             }
         }
 
         // 所有终端都失败，降级到当前终端执行
         info!("⚠️ 未找到可用的终端模拟器，降级到当前终端执行");
-        run_script_in_current_terminal(script_path, script_args, config);
+        run_script_in_current_terminal(script_path, script_args, config)
     }
 }
 
@@ -320,15 +321,15 @@ fn shell_escape(s: &str) -> String {
 }
 
 /// 打开一个别名对应的路径（不带额外参数）
-fn open_alias(alias: &str, config: &YamlConfig) {
-    open_alias_with_args(alias, &[], config);
+fn open_alias_with_result(alias: &str, config: &YamlConfig) -> CommandResult {
+    open_alias_with_args_with_result(alias, &[], config)
 }
 
 /// 打开一个别名对应的路径，支持传递额外参数
 /// 自动判断路径类型：
 /// - CLI 可执行文件 → 在当前终端用 Command::new() 执行（stdin/stdout 继承，支持管道）
 /// - GUI 应用 (.app) / 其他文件 → 系统 open 命令打开
-fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig) {
+fn open_alias_with_args_with_result(alias: &str, extra_args: &[String], config: &YamlConfig) -> CommandResult {
     if let Some(path) = config.get_path_by_alias(alias) {
         let path = clean_path(path);
         // 展开参数中的 ~
@@ -341,10 +342,11 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
             match result {
                 Ok(status) => {
                     if !status.success() {
-                        error!("❌ 执行 {{{}}} 失败，退出码: {}", alias, status);
+                        return CommandResult::error(format!("❌ 执行 {{{}}} 失败，退出码: {}", alias, status));
                     }
+                    CommandResult::ok()
                 }
-                Err(e) => error!("💥 执行 {{{}}} 失败: {}", alias, e),
+                Err(e) => CommandResult::error(format!("💥 执行 {{{}}} 失败: {}", alias, e)),
             }
         } else {
             // GUI 应用或普通文件：系统 open 命令打开
@@ -367,14 +369,13 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
                     Command::new("xdg-open").arg(&path).status()
                 };
                 if let Err(e) = result {
-                    error!("💥 启动 {{{}}} 失败: {}", alias, e);
-                    return;
+                    return CommandResult::error(format!("💥 启动 {{{}}} 失败: {}", alias, e));
                 }
             }
-            info!("✅ 启动 {{{}}} : {{{}}}", alias, path);
+            CommandResult::with_output(format!("✅ 启动 {{{}}} : {{{}}}", alias, path))
         }
     } else {
-        error!("❌ 未找到别名对应的路径或网址: {}。请检查配置文件。", alias);
+        CommandResult::error(format!("❌ 未找到别名对应的路径或网址: {}。请检查配置文件。", alias))
     }
 }
 
@@ -423,7 +424,7 @@ fn is_cli_executable(path: &str) -> bool {
 }
 
 /// 使用指定应用打开某个文件/URL
-fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
+fn open_with_path_with_result(alias: &str, file_path: Option<&str>, config: &YamlConfig) -> CommandResult {
     if let Some(app_path) = config.get_property(section::PATH, alias) {
         let app_path = clean_path(app_path);
         let os = std::env::consts::OS;
@@ -446,19 +447,18 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
                     .status(),
             }
         } else {
-            error!("💥 当前操作系统不支持此功能: {}", os);
-            return;
+            return CommandResult::error(format!("💥 当前操作系统不支持此功能: {}", os));
         };
 
         match result {
             Ok(_) => {
                 let target = file_path.unwrap_or("");
-                info!("✅ 启动 {{{}}} {} : {{{}}}", alias, target, app_path);
+                CommandResult::with_output(format!("✅ 启动 {{{}}} {} : {{{}}}", alias, target, app_path))
             }
-            Err(e) => error!("💥 启动 {} 失败: {}", alias, e),
+            Err(e) => CommandResult::error(format!("💥 启动 {} 失败: {}", alias, e)),
         }
     } else {
-        error!("❌ 未找到别名对应的路径: {}。", alias);
+        CommandResult::error(format!("❌ 未找到别名对应的路径: {}。", alias))
     }
 }
 
