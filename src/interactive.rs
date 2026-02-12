@@ -838,7 +838,6 @@ fn enter_interactive_shell(config: &YamlConfig) {
     // 自定义 shell 提示符为 "shell > "
     // 通过临时 rc 文件注入，先 source 用户配置再覆盖 PROMPT，确保不被 oh-my-zsh 等覆盖
     if os != shell::WINDOWS_OS {
-        let custom_prompt = "shell > ";
         let is_zsh = shell_path.contains("zsh");
         let is_bash = shell_path.contains("bash");
 
@@ -859,16 +858,15 @@ fn enter_interactive_shell(config: &YamlConfig) {
                    source \"{home}/.zshrc\"\n\
                  fi\n\
                  # 在用户配置加载完成后覆盖 PROMPT，确保不被 oh-my-zsh 等覆盖\n\
-                 PROMPT='{custom_prompt}'\n",
+                 PROMPT='%F{{green}}shell >%f '\n",
                 home = home,
-                custom_prompt = custom_prompt,
             );
 
             let zshrc_path = tmp_dir.join(".zshrc");
             if let Err(e) = std::fs::write(&zshrc_path, &zshrc_content) {
                 error!("创建临时 .zshrc 失败: {}", e);
                 // fallback: 直接设置环境变量（可能被覆盖）
-                command.env("PROMPT", custom_prompt);
+                command.env("PROMPT", "%F{green}shell >%f ");
             } else {
                 command.env("ZDOTDIR", tmp_dir.to_str().unwrap_or("/tmp"));
                 cleanup_path = Some(tmp_dir);
@@ -886,14 +884,13 @@ fn enter_interactive_shell(config: &YamlConfig) {
                    source \"{home}/.bashrc\"\n\
                  fi\n\
                  # 在用户配置加载完成后覆盖 PS1\n\
-                 PS1='{custom_prompt}'\n",
+                 PS1='\\[\\033[32m\\]shell >\\[\\033[0m\\] '\n",
                 home = home,
-                custom_prompt = custom_prompt,
             );
 
             if let Err(e) = std::fs::write(&tmp_rc, &bashrc_content) {
                 error!("创建临时 bashrc 失败: {}", e);
-                command.env("PS1", custom_prompt);
+                command.env("PS1", "\\[\\033[32m\\]shell >\\[\\033[0m\\] ");
             } else {
                 command.arg("--rcfile");
                 command.arg(tmp_rc.to_str().unwrap_or("/tmp/j_shell_bashrc"));
@@ -901,8 +898,8 @@ fn enter_interactive_shell(config: &YamlConfig) {
             }
         } else {
             // 其他 shell：fallback 到直接设置环境变量
-            command.env("PS1", custom_prompt);
-            command.env("PROMPT", custom_prompt);
+            command.env("PS1", "\x1b[32mshell >\x1b[0m ");
+            command.env("PROMPT", "\x1b[32mshell >\x1b[0m ");
         }
     }
 
@@ -934,7 +931,7 @@ fn enter_interactive_shell(config: &YamlConfig) {
         }
     }
 
-    info!("已返回 copilot 交互模式 🚀");
+    info!("{}", "已返回 copilot 交互模式 🚀".green());
 }
 
 /// 执行 shell 命令（交互模式下 ! 前缀触发）

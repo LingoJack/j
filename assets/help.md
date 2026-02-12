@@ -177,7 +177,7 @@ open -a "$J_CHROME" https://example.com
 
 - 不带参数运行 `j` 进入**交互模式**，支持 Tab 补全和历史建议
 - 交互模式下用 `!` 前缀执行 shell 命令（如 `!ls -la`），自动注入别名环境变量
-- 交互模式下输入 `!`（不带命令）进入交互式 shell 模式（提示符变为 `shell >`），cd 等状态延续，输入 `exit` 返回 copilot
+- 交互模式下输入 `!`（不带命令）进入交互式 shell 模式（提示符变为绿色 `shell >`），cd 等状态延续，输入 `exit` 返回 copilot
 - 交互模式下参数支持 `$J_XXX` / `${J_XXX}` 环境变量引用（如 `open "$J_VSCODE"`）
 - 路径含空格时用引号包裹：`j set app "/Applications/My App.app"`
 - URL 会自动识别并归类到 `inner_url`，无需手动指定 section
