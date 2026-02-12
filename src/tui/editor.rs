@@ -217,6 +217,14 @@ fn apply_search_highlight(
     }
 }
 
+/// 跳转到指定行和列
+fn jump_to_match(textarea: &mut TextArea, line: usize, col: usize) {
+    textarea.move_cursor(CursorMove::Jump(
+        line.try_into().unwrap_or(0),
+        col.try_into().unwrap_or(0),
+    ));
+}
+
 // ========== 编辑器状态转换 ==========
 
 enum Transition {
@@ -872,10 +880,7 @@ fn run_editor_loop(
                     if count > 0 {
                         if let Some((line, col)) = vim.search.next_match() {
                             // 移动光标到匹配位置
-                            textarea.move_cursor(CursorMove::Jump(
-                                line.try_into().unwrap_or(0),
-                                col.try_into().unwrap_or(0),
-                            ));
+                            jump_to_match(textarea, line, col);
                         }
                     }
                     
@@ -885,18 +890,12 @@ fn run_editor_loop(
                 }
                 Transition::NextMatch => {
                     if let Some((line, col)) = vim.search.next_match() {
-                        textarea.move_cursor(CursorMove::Jump(
-                            line.try_into().unwrap_or(0),
-                            col.try_into().unwrap_or(0),
-                        ));
+                        jump_to_match(textarea, line, col);
                     }
                 }
                 Transition::PrevMatch => {
                     if let Some((line, col)) = vim.search.prev_match() {
-                        textarea.move_cursor(CursorMove::Jump(
-                            line.try_into().unwrap_or(0),
-                            col.try_into().unwrap_or(0),
-                        ));
+                        jump_to_match(textarea, line, col);
                     }
                 }
             }
