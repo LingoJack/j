@@ -848,7 +848,10 @@ fn execute_shell_command(cmd: &str, config: &YamlConfig) {
 /// 这样在交互模式下，参数中的 $J_XXX 可以被正确展开
 fn inject_envs_to_process(config: &YamlConfig) {
     for (key, value) in config.collect_alias_envs() {
-        std::env::set_var(&key, &value);
+        // SAFETY: 交互模式为单线程，set_var 不会引起数据竞争
+        unsafe {
+            std::env::set_var(&key, &value);
+        }
     }
 }
 
