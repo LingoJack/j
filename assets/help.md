@@ -133,6 +133,7 @@ j
 | 命令 | 说明 |
 |------|------|
 | `j concat <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
+| `j concat <name>` | 脚本已存在时打开 TUI 编辑器修改脚本内容 |
 | `j <script> [args...]` | 在当前终端执行脚本 |
 | `j <script> -w [args...]` | 在**新终端窗口**中执行脚本 |
 | `j time countdown <duration>` | 启动倒计时（支持 30s / 5m / 1h） |
@@ -156,6 +157,7 @@ open -a "$J_CHROME" https://example.com
 
 > 覆盖 section: `path`、`inner_url`、`outer_url`、`script`
 > 新窗口执行（`-w`）同样支持环境变量注入
+> ⚠️ 路径含空格时，脚本中必须用双引号包裹变量：`"$J_CHROME"` 而非 `$J_CHROME`
 
 ## ⚙️ 系统设置
 
@@ -174,7 +176,8 @@ open -a "$J_CHROME" https://example.com
 ## 💡 使用技巧
 
 - 不带参数运行 `j` 进入**交互模式**，支持 Tab 补全和历史建议
-- 交互模式下用 `!` 前缀执行 shell 命令（如 `!ls -la`）
+- 交互模式下用 `!` 前缀执行 shell 命令（如 `!ls -la`），自动注入别名环境变量
+- 交互模式下参数支持 `$J_XXX` / `${J_XXX}` 环境变量引用（如 `open "$J_VSCODE"`）
 - 路径含空格时用引号包裹：`j set app "/Applications/My App.app"`
 - URL 会自动识别并归类到 `inner_url`，无需手动指定 section
 - `report` 命令内容不会记入历史，保护日报隐私

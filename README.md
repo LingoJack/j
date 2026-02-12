@@ -111,6 +111,7 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 18** | 倒计时进度条优化：使用 `indicatif` 替换手动 ASCII 绘制，支持 spinner 动画 + 彩色进度条 + 百分比 + HH:MM:SS 显示 + 中文时长提示；`concat` 脚本创建增强：不带内容参数时打开 TUI 编辑器，预填 shebang + 等待按键模板，用户可自行编辑/删除；新窗口执行不再强制追加等待按键逻辑，由脚本自身控制（编辑器模板可选保留） | ✅ 完成 |
 | **Phase 19** | `reportctl open` 命令：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写文件；取消则不修改 | ✅ 完成 |
 | **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
+| **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
 
 ---
 
@@ -201,7 +202,8 @@ flowchart TD
 - **历史建议**：`HistoryHinter`（灰色显示上次相同前缀的命令，按 → 接受）
 - **历史持久化**：`~/.jdata/history.txt`
 - **脚本统一存储**：`concat` 创建的脚本持久化在 `~/.jdata/scripts/` 下，不再依赖 `script.depot` 配置
-- **Shell 命令**：`!` 前缀执行系统命令（如 `!ls -la`）
+- **Shell 命令**：`!` 前缀执行系统命令（如 `!ls -la`），自动注入别名环境变量
+- **环境变量注入**：进入交互模式时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量，参数中 `$J_XXX` / `${J_XXX}` 自动展开
 - **内部命令解析**：`parse_interactive_command()` 将输入行解析为三态 `ParseResult` 枚举（`Matched` / `Handled` / `NotFound`），避免参数不足时误 fallback 到别名查找
 
 ### 5.5 打开命令 — `command/open.rs`
@@ -658,6 +660,38 @@ eval "$(j completion bash)"
 - 其他别名/命令：默认文件路径 + 别名补全
 
 **注意**：补全脚本是根据执行 `j completion` 时的配置快照生成的。如果新增/删除了别名，需要重新执行一次 `eval "$(j completion zsh)"` 更新补全列表。
+
+### 16. 脚本环境变量注入 + 交互模式环境变量支持
+
+Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动注入：
+
+**环境变量命名规则**：
+- 前缀 `J_` + 别名转大写，`-` 转 `_`
+- 示例：`chrome` → `J_CHROME`，`my-tool` → `J_MY_TOOL`
+- 覆盖 section 优先级：`path` > `inner_url` > `outer_url` > `script`（同名别名只取优先级高的）
+
+**注入方式（三种场景）**：
+
+| 场景 | 注入方式 | 实现 |
+|------|----------|------|
+| 当前终端脚本执行 | `Command::env()` 直接注入子进程 | `inject_alias_envs()` |
+| 新窗口脚本执行（`-w`） | 构建 `export K=V;` 语句拼接到命令前 | `build_env_export_string()` |
+| 交互模式 `!` shell 命令 | `Command::env()` 注入 + 进程级 `set_var` | `execute_shell_command()` + `inject_envs_to_process()` |
+
+**交互模式增强**：
+- 进入交互模式时自动调用 `inject_envs_to_process()` 将所有别名注入当前进程环境变量
+- 参数中的 `$J_XXX` 和 `${J_XXX}` 引用通过 `expand_env_vars()` 函数自动展开
+- 每次命令执行后刷新环境变量，确保别名变更能及时反映
+- `set_var` 在 Rust 1.83+ 中是 unsafe，通过 `unsafe` 块包裹并注释安全理由（交互模式单线程）
+
+**⚠️ 路径含空格注意事项**：
+- 环境变量的值是**原始路径**（不含引号），如 `/Applications/Visual Studio Code.app`
+- 在脚本中使用时**必须用双引号包裹**：`"$J_VSCODE"` 而非 `$J_VSCODE`
+- 不加引号会被 shell 按空格拆分导致 `No such file or directory` 错误
+- `shell_escape()` 函数仅在新窗口 `export` 语句中自动处理空格转义，脚本内部的变量引用由用户自行加引号
+
+**`concat` 已有脚本编辑**：
+- `j concat <name>` 当脚本名已存在时，不再报错，而是打开 TUI 编辑器预填已有脚本内容，支持修改后保存
 
 ---
 
