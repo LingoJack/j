@@ -1,7 +1,7 @@
 # work-copilot Rust 重构进度
 
 > 📅 最后更新: 2026-02-12
-> 🔖 版本: v20.0.0
+> 🔖 版本: v22.0.0
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
 
 ---
@@ -153,7 +153,7 @@ flowchart TD
 | `contain` | `find` | `<alias> [sections]` | 查找别名所在分类 |
 | `report` | `r` | `<content...>` | 写入日报 |
 | `reportctl` | `rctl` | `<new\|sync\|push\|pull\|set-url\|open> [arg]` | 日报元数据操作 |
-| `check` | `c` | `[line_count]` | 查看最近 N 行日报 |
+| `check` | `c` | `[line_count\|open]` | 查看最近 N 行日报 / TUI 编辑器打开日报文件 |
 | `search` | `select/look/sch` | `<N\|all> <kw> [-f]` | 搜索日报 |
 | `concat` | — | `<name> [content]` | 创建脚本（无 content 则打开 TUI 编辑器） |
 | `time` | — | `<countdown> <dur>` | 倒计时器 |

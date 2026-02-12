@@ -821,11 +821,17 @@ fn handle_pull(config: &YamlConfig) {
 
 /// 处理 check 命令: j check [line_count]
 pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
+    // 检查是否是 open 子命令
+    if line_count == Some("open") {
+        handle_open_report(config);
+        return;
+    }
+
     let num = match line_count {
         Some(s) => match s.parse::<usize>() {
             Ok(n) if n > 0 => n,
             _ => {
-                error!("❌ 无效的行数参数: {}，请输入正整数", s);
+                error!("❌ 无效的行数参数: {}，请输入正整数或 open", s);
                 return;
             }
         },
