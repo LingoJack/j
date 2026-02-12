@@ -14,8 +14,10 @@ push: current_dir
 pull: current_dir
 	@git pull origin main
 
+.PHONY: status
 status: current_dir
 	@git status
 
+.PHONY: release
 release: current_dir
 	@cargo build --release
