@@ -405,6 +405,9 @@ pub fn run_interactive(config: &mut YamlConfig) {
 
     info!("{}", constants::WELCOME_MESSAGE);
 
+    // 进入交互模式时，将所有别名路径注入为当前进程的环境变量
+    inject_envs_to_process(config);
+
     let prompt = format!("{} ", constants::INTERACTIVE_PROMPT.yellow());
 
     loop {
@@ -432,6 +435,9 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     continue;
                 }
 
+                // 展开参数中的环境变量引用（如 $J_HELLO → 实际路径）
+                let args: Vec<String> = args.iter().map(|a| expand_env_vars(a)).collect();
+
                 let verbose = config.is_verbose();
                 let start = if verbose {
                     Some(std::time::Instant::now())
@@ -456,6 +462,8 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 if let Some(helper) = rl.helper_mut() {
                     helper.refresh(config);
                 }
+                // 刷新进程环境变量（别名可能已增删改）
+                inject_envs_to_process(config);
 
                 println!();
             }
@@ -834,4 +842,62 @@ fn execute_shell_command(cmd: &str, config: &YamlConfig) {
             error!("执行命令失败: {}", e);
         }
     }
+}
+
+/// 将所有别名路径注入为当前进程的环境变量
+/// 这样在交互模式下，参数中的 $J_XXX 可以被正确展开
+fn inject_envs_to_process(config: &YamlConfig) {
+    for (key, value) in config.collect_alias_envs() {
+        std::env::set_var(&key, &value);
+    }
+}
+
+/// 展开字符串中的环境变量引用
+/// 支持 $VAR_NAME 和 ${VAR_NAME} 两种格式
+fn expand_env_vars(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        if chars[i] == '$' && i + 1 < len {
+            // ${VAR_NAME} 格式
+            if chars[i + 1] == '{' {
+                if let Some(end) = chars[i + 2..].iter().position(|&c| c == '}') {
+                    let var_name: String = chars[i + 2..i + 2 + end].iter().collect();
+                    if let Ok(val) = std::env::var(&var_name) {
+                        result.push_str(&val);
+                    } else {
+                        // 环境变量不存在，保留原文
+                        result.push_str(&input[i..i + 3 + end]);
+                    }
+                    i = i + 3 + end;
+                    continue;
+                }
+            }
+            // $VAR_NAME 格式（变量名由字母、数字、下划线组成）
+            let start = i + 1;
+            let mut end = start;
+            while end < len && (chars[end].is_alphanumeric() || chars[end] == '_') {
+                end += 1;
+            }
+            if end > start {
+                let var_name: String = chars[start..end].iter().collect();
+                if let Ok(val) = std::env::var(&var_name) {
+                    result.push_str(&val);
+                } else {
+                    // 环境变量不存在，保留原文
+                    let original: String = chars[i..end].iter().collect();
+                    result.push_str(&original);
+                }
+                i = end;
+                continue;
+            }
+        }
+        result.push(chars[i]);
+        i += 1;
+    }
+
+    result
 }
