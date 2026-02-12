@@ -832,6 +832,13 @@ fn enter_interactive_shell(config: &YamlConfig) {
         command.env(&key, &value);
     }
 
+    // 自定义 shell 提示符为 "shell > "
+    if os != shell::WINDOWS_OS {
+        let custom_prompt = "shell > ";
+        command.env("PS1", custom_prompt);    // bash
+        command.env("PROMPT", custom_prompt);  // zsh
+    }
+
     // 继承 stdin/stdout/stderr，让 shell 完全接管终端
     command
         .stdin(std::process::Stdio::inherit())

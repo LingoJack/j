@@ -202,7 +202,7 @@ flowchart TD
 - **历史建议**：`HistoryHinter`（灰色显示上次相同前缀的命令，按 → 接受）
 - **历史持久化**：`~/.jdata/history.txt`
 - **脚本统一存储**：`concat` 创建的脚本持久化在 `~/.jdata/scripts/` 下，不再依赖 `script.depot` 配置
-- **Shell 命令**：`!` 前缀执行系统命令（如 `!ls -la`），自动注入别名环境变量
+- **Shell 命令**：`!` 前缀执行系统命令（如 `!ls -la`），自动注入别名环境变量；单独输入 `!` 进入交互式 shell 模式（提示符 `shell >`），状态延续，`exit` 返回 copilot
 - **环境变量注入**：进入交互模式时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量，参数中 `$J_XXX` / `${J_XXX}` 自动展开
 - **内部命令解析**：`parse_interactive_command()` 将输入行解析为三态 `ParseResult` 枚举（`Matched` / `Handled` / `NotFound`），避免参数不足时误 fallback 到别名查找
 
@@ -391,6 +391,10 @@ copilot > set chrome /Applications/Google Chrome.app
 copilot > ls path
 copilot > note chrome browser
 copilot > !ls -la     # 执行 shell 命令
+copilot > !            # 进入交互式 shell 模式
+shell > cd /tmp        # 状态延续
+shell > ls             # 仍在 /tmp 目录
+shell > exit           # 返回 copilot
 copilot > exit
 ```
 
@@ -677,6 +681,7 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 | 当前终端脚本执行 | `Command::env()` 直接注入子进程 | `inject_alias_envs()` |
 | 新窗口脚本执行（`-w`） | 构建 `export K=V;` 语句拼接到命令前 | `build_env_export_string()` |
 | 交互模式 `!` shell 命令 | `Command::env()` 注入 + 进程级 `set_var` | `execute_shell_command()` + `inject_envs_to_process()` |
+| 交互模式 `!` 交互式 shell | `Command::env()` 注入（含自定义 PS1 提示符 `shell >`） | `enter_interactive_shell()` |
 
 **交互模式增强**：
 - 进入交互模式时自动调用 `inject_envs_to_process()` 将所有别名注入当前进程环境变量
