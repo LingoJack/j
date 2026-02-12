@@ -198,10 +198,10 @@ fn apply_search_highlight(
             });
 
             if is_match {
-                // 所有匹配都用蓝灰色高亮
+                // 匹配文字用红色显示
                 let style = Style::default()
-                    .bg(Color::Rgb(60, 60, 100))
-                    .fg(Color::White);
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD);
 
                 for j in 0..pattern_chars.len() {
                     if let Some((_, col)) = chars_with_pos.get(i + j) {
