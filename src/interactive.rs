@@ -858,7 +858,7 @@ fn enter_interactive_shell(config: &YamlConfig) {
                    source \"{home}/.zshrc\"\n\
                  fi\n\
                  # 在用户配置加载完成后覆盖 PROMPT，确保不被 oh-my-zsh 等覆盖\n\
-                 PROMPT='%F{{green}}shell >%f '\n",
+                 PROMPT='%F{{green}}shell%f (%F{{cyan}}%~%f) %F{{green}}>%f '\n",
                 home = home,
             );
 
@@ -866,7 +866,7 @@ fn enter_interactive_shell(config: &YamlConfig) {
             if let Err(e) = std::fs::write(&zshrc_path, &zshrc_content) {
                 error!("创建临时 .zshrc 失败: {}", e);
                 // fallback: 直接设置环境变量（可能被覆盖）
-                command.env("PROMPT", "%F{green}shell >%f ");
+                command.env("PROMPT", "%F{green}shell%f (%F{cyan}%~%f) %F{green}>%f ");
             } else {
                 command.env("ZDOTDIR", tmp_dir.to_str().unwrap_or("/tmp"));
                 cleanup_path = Some(tmp_dir);
@@ -883,14 +883,14 @@ fn enter_interactive_shell(config: &YamlConfig) {
                  if [ -f \"{home}/.bashrc\" ]; then\n\
                    source \"{home}/.bashrc\"\n\
                  fi\n\
-                 # 在用户配置加载完成后覆盖 PS1\n\
-                 PS1='\\[\\033[32m\\]shell >\\[\\033[0m\\] '\n",
+                 # 在用户配置加载完成后覆盖 PS1
+                 PS1='\\[\\033[32m\\]shell\\[\\033[0m\\] (\\[\\033[36m\\]\\w\\[\\033[0m\\]) \\[\\033[32m\\]>\\[\\033[0m\\] '\n",
                 home = home,
             );
 
             if let Err(e) = std::fs::write(&tmp_rc, &bashrc_content) {
                 error!("创建临时 bashrc 失败: {}", e);
-                command.env("PS1", "\\[\\033[32m\\]shell >\\[\\033[0m\\] ");
+                command.env("PS1", "\\[\\033[32m\\]shell\\[\\033[0m\\] (\\[\\033[36m\\]\\w\\[\\033[0m\\]) \\[\\033[32m\\]>\\[\\033[0m\\] ");
             } else {
                 command.arg("--rcfile");
                 command.arg(tmp_rc.to_str().unwrap_or("/tmp/j_shell_bashrc"));
@@ -898,8 +898,8 @@ fn enter_interactive_shell(config: &YamlConfig) {
             }
         } else {
             // 其他 shell：fallback 到直接设置环境变量
-            command.env("PS1", "\x1b[32mshell >\x1b[0m ");
-            command.env("PROMPT", "\x1b[32mshell >\x1b[0m ");
+            command.env("PS1", "\x1b[32mshell\x1b[0m (\x1b[36m\\w\x1b[0m) \x1b[32m>\x1b[0m ");
+            command.env("PROMPT", "\x1b[32mshell\x1b[0m (\x1b[36m%~\x1b[0m) \x1b[32m>\x1b[0m ");
         }
     }
 
