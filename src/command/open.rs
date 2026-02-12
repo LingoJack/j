@@ -295,8 +295,14 @@ fn build_env_export_string(config: &YamlConfig) -> String {
             .collect::<Vec<_>>()
             .join(" && ")
     } else {
+        // 修复：统一对所有值使用单引号包裹，避免特殊字符（&!|等）导致 shell 解析错误
+        // 单引号内所有字符都按字面值处理，包括空格、&、!、| 等
         envs.iter()
-            .map(|(k, v)| format!("export {}={};", k, shell_escape(v)))
+            .map(|(k, v)| {
+                // 对值中的单引号进行转义：' → '\''
+                let escaped_value = v.replace('\'', "'\\''");
+                format!("export {}='{}';", k, escaped_value)
+            })
             .collect::<Vec<_>>()
             .join(" ")
     }
