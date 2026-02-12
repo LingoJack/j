@@ -500,9 +500,9 @@ Phase 10 将交互模式的 `parse_interactive_command()` 返回类型从 `Optio
 
 ```rust
 enum ParseResult {
-    Matched(SubCmd),  // 成功解析为内置命令 → dispatch
-    Handled,          // 是内置命令但参数不足，已打印 usage → 不做任何事
-    NotFound,         // 不是内置命令 → fallback 到别名查找
+  Matched(SubCmd),  // 成功解析为内置命令 → dispatch
+  Handled,          // 是内置命令但参数不足，已打印 usage → 不做任何事
+  NotFound,         // 不是内置命令 → fallback 到别名查找
 }
 ```
 
