@@ -5,7 +5,7 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -72,7 +72,8 @@ impl Mode {
 struct SearchMatch {
     line: usize,
     start: usize,
-    end: usize,
+    #[allow(dead_code)]
+    end: usize, // 保留用于将来可能的高亮增强
 }
 
 /// 搜索状态管理
@@ -142,11 +143,6 @@ impl SearchState {
         Some((m.line, m.start))
     }
 
-    /// 重置到第一个匹配
-    fn reset_to_first(&mut self) {
-        self.current_index = 0;
-    }
-
     /// 获取当前匹配信息（用于状态栏显示）
     fn current_info(&self) -> (usize, usize) {
         if self.matches.is_empty() {
@@ -158,6 +154,65 @@ impl SearchState {
                 self.current_index
             };
             (display_idx, self.matches.len())
+        }
+    }
+}
+
+// ========== 搜索高亮函数 ==========
+
+/// 应用搜索高亮到 buffer（直接修改 buffer 样式）
+fn apply_search_highlight(
+    buf: &mut ratatui::buffer::Buffer,
+    area: Rect,
+    search: &SearchState,
+) {
+    if search.pattern.is_empty() || search.matches.is_empty() {
+        return;
+    }
+
+    let pattern = &search.pattern;
+
+    // 遍历 buffer 查找 pattern
+    for row in area.top()..area.bottom() {
+        let content_start = area.left() + 3; // 跳过行号
+        let mut chars_with_pos: Vec<(char, u16)> = Vec::new();
+
+        for col in content_start..area.right() {
+            if let Some(cell) = buf.cell((col, row)) {
+                let symbol = cell.symbol();
+                for c in symbol.chars() {
+                    chars_with_pos.push((c, col));
+                }
+            }
+        }
+
+        let pattern_chars: Vec<char> = pattern.chars().collect();
+        if pattern_chars.is_empty() {
+            continue;
+        }
+
+        let mut i = 0;
+        while i + pattern_chars.len() <= chars_with_pos.len() {
+            let is_match = pattern_chars.iter().enumerate().all(|(j, pc)| {
+                chars_with_pos.get(i + j).map(|(c, _)| c == pc).unwrap_or(false)
+            });
+
+            if is_match {
+                // 所有匹配都用蓝灰色高亮
+                let style = Style::default()
+                    .bg(Color::Rgb(60, 60, 100))
+                    .fg(Color::White);
+
+                for j in 0..pattern_chars.len() {
+                    if let Some((_, col)) = chars_with_pos.get(i + j) {
+                        buf[(*col, row)].set_style(style);
+                    }
+                }
+
+                i += pattern_chars.len();
+            } else {
+                i += 1;
+            }
         }
     }
 }
@@ -735,7 +790,7 @@ fn run_editor_loop(
     // 是否显示 "有未保存改动" 的提示（下次按键后清除）
     let mut unsaved_warning = false;
     loop {
-        let mode = &vim.mode;
+        let mode = &vim.mode.clone();
 
         // 绘制界面
         terminal.draw(|frame| {
@@ -749,6 +804,11 @@ fn run_editor_loop(
 
             // 渲染编辑区
             frame.render_widget(&*textarea, chunks[0]);
+
+            // 在 TextArea 渲染后，应用搜索高亮
+            if !vim.search.pattern.is_empty() {
+                apply_search_highlight(frame.buffer_mut(), chunks[0], &vim.search);
+            }
 
             // 渲染状态栏
             let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
