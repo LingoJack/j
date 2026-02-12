@@ -2,6 +2,14 @@
 name = "j"
 version = "11.0.0"
 edition = "2024"
+authors = ["Your Name <your@email.com>"]
+description = "A fast CLI tool for alias management, daily reports, and productivity"
+license = "MIT"
+repository = "https://github.com/yourusername/j"
+homepage = "https://github.com/yourusername/j"
+readme = "README.md"
+keywords = ["cli", "alias", "productivity", "launcher"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "j"
