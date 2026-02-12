@@ -17,5 +17,5 @@ pull: current_dir
 status: current_dir
 	@git status
 
-realse: current_dir
+release: current_dir
 	@cargo build --release
