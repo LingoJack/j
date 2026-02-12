@@ -419,7 +419,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 // Shell 命令前缀开头：执行 shell 命令
                 if input.starts_with(constants::SHELL_PREFIX) {
                     let shell_cmd = &input[1..].trim();
-                    execute_shell_command(shell_cmd);
+                    execute_shell_command(shell_cmd, config);
                     // Shell 命令记录到历史
                     let _ = rl.add_history_entry(input);
                     println!();
@@ -797,22 +797,30 @@ fn complete_file_path(partial: &str) -> Vec<Pair> {
     candidates
 }
 
-/// 执行 shell 命令
-fn execute_shell_command(cmd: &str) {
+/// 执行 shell 命令（交互模式下 ! 前缀触发）
+/// 自动注入所有别名路径为环境变量（J_<ALIAS_UPPER>）
+fn execute_shell_command(cmd: &str, config: &YamlConfig) {
     if cmd.is_empty() {
         return;
     }
 
     let os = std::env::consts::OS;
-    let result = if os == shell::WINDOWS_OS {
-        std::process::Command::new(shell::WINDOWS_CMD)
-            .args([shell::WINDOWS_CMD_FLAG, cmd])
-            .status()
+    let mut command = if os == shell::WINDOWS_OS {
+        let mut c = std::process::Command::new(shell::WINDOWS_CMD);
+        c.args([shell::WINDOWS_CMD_FLAG, cmd]);
+        c
     } else {
-        std::process::Command::new(shell::BASH_PATH)
-            .args([shell::BASH_CMD_FLAG, cmd])
-            .status()
+        let mut c = std::process::Command::new(shell::BASH_PATH);
+        c.args([shell::BASH_CMD_FLAG, cmd]);
+        c
     };
+
+    // 注入别名环境变量
+    for (key, value) in config.collect_alias_envs() {
+        command.env(&key, &value);
+    }
+
+    let result = command.status();
 
     match result {
         Ok(status) => {
