@@ -832,11 +832,78 @@ fn enter_interactive_shell(config: &YamlConfig) {
         command.env(&key, &value);
     }
 
+    // 用于记录需要清理的临时目录/文件
+    let mut cleanup_path: Option<std::path::PathBuf> = None;
+
     // 自定义 shell 提示符为 "shell > "
+    // 通过临时 rc 文件注入，先 source 用户配置再覆盖 PROMPT，确保不被 oh-my-zsh 等覆盖
     if os != shell::WINDOWS_OS {
         let custom_prompt = "shell > ";
-        command.env("PS1", custom_prompt);    // bash
-        command.env("PROMPT", custom_prompt);  // zsh
+        let is_zsh = shell_path.contains("zsh");
+        let is_bash = shell_path.contains("bash");
+
+        if is_zsh {
+            // zsh 方案：创建临时 ZDOTDIR 目录，写入自定义 .zshrc
+            // 在自定义 .zshrc 中先恢复 ZDOTDIR 并 source 用户原始配置，再覆盖 PROMPT
+            let pid = std::process::id();
+            let tmp_dir = std::path::PathBuf::from(format!("/tmp/j_shell_zsh_{}", pid));
+            let _ = std::fs::create_dir_all(&tmp_dir);
+
+            let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+            let zshrc_content = format!(
+                "# j shell 临时配置 - 自动生成，退出后自动清理\n\
+                 # 恢复 ZDOTDIR 为用户 home 目录，让后续 source 正常工作\n\
+                 export ZDOTDIR=\"{home}\"\n\
+                 # 加载用户原始 .zshrc（保留所有配置、alias、插件等）\n\
+                 if [ -f \"{home}/.zshrc\" ]; then\n\
+                   source \"{home}/.zshrc\"\n\
+                 fi\n\
+                 # 在用户配置加载完成后覆盖 PROMPT，确保不被 oh-my-zsh 等覆盖\n\
+                 PROMPT='{custom_prompt}'\n",
+                home = home,
+                custom_prompt = custom_prompt,
+            );
+
+            let zshrc_path = tmp_dir.join(".zshrc");
+            if let Err(e) = std::fs::write(&zshrc_path, &zshrc_content) {
+                error!("创建临时 .zshrc 失败: {}", e);
+                // fallback: 直接设置环境变量（可能被覆盖）
+                command.env("PROMPT", custom_prompt);
+            } else {
+                command.env("ZDOTDIR", tmp_dir.to_str().unwrap_or("/tmp"));
+                cleanup_path = Some(tmp_dir);
+            }
+        } else if is_bash {
+            // bash 方案：创建临时 rc 文件，用 --rcfile 加载
+            let pid = std::process::id();
+            let tmp_rc = std::path::PathBuf::from(format!("/tmp/j_shell_bashrc_{}", pid));
+
+            let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+            let bashrc_content = format!(
+                "# j shell 临时配置 - 自动生成，退出后自动清理\n\
+                 # 加载用户原始 .bashrc（保留所有配置、alias 等）\n\
+                 if [ -f \"{home}/.bashrc\" ]; then\n\
+                   source \"{home}/.bashrc\"\n\
+                 fi\n\
+                 # 在用户配置加载完成后覆盖 PS1\n\
+                 PS1='{custom_prompt}'\n",
+                home = home,
+                custom_prompt = custom_prompt,
+            );
+
+            if let Err(e) = std::fs::write(&tmp_rc, &bashrc_content) {
+                error!("创建临时 bashrc 失败: {}", e);
+                command.env("PS1", custom_prompt);
+            } else {
+                command.arg("--rcfile");
+                command.arg(tmp_rc.to_str().unwrap_or("/tmp/j_shell_bashrc"));
+                cleanup_path = Some(tmp_rc);
+            }
+        } else {
+            // 其他 shell：fallback 到直接设置环境变量
+            command.env("PS1", custom_prompt);
+            command.env("PROMPT", custom_prompt);
+        }
     }
 
     // 继承 stdin/stdout/stderr，让 shell 完全接管终端
@@ -855,6 +922,15 @@ fn enter_interactive_shell(config: &YamlConfig) {
         }
         Err(e) => {
             error!("启动 shell 失败: {}", e);
+        }
+    }
+
+    // 清理临时文件/目录
+    if let Some(path) = cleanup_path {
+        if path.is_dir() {
+            let _ = std::fs::remove_dir_all(&path);
+        } else {
+            let _ = std::fs::remove_file(&path);
         }
     }
 
