@@ -16,9 +16,52 @@ fn wait_for_key_template() -> String {
 /// 创建一个脚本文件并注册为别名，脚本持久化在 ~/.jdata/scripts/ 下
 /// 如果没有提供 content，则打开 TUI 编辑器让用户输入
 pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
-    // 检查脚本名是否已存在
+    // 检查脚本名是否已存在 → 如果存在则进入编辑模式
     if config.contains(section::PATH, name) {
-        error!("❌ 失败！脚本名 {{{}}} 已经存在", name);
+        // 获取已有脚本路径
+        let existing_path = match config.get_property(section::SCRIPT, name)
+            .or_else(|| config.get_property(section::PATH, name))
+        {
+            Some(p) => p.clone(),
+            None => {
+                error!("❌ 别名 {{{}}} 已存在，但未找到对应的脚本路径", name);
+                return;
+            }
+        };
+
+        // 读取已有脚本内容
+        let existing_content = match fs::read_to_string(&existing_path) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("❌ 读取已有脚本文件失败: {} (路径: {})", e, existing_path);
+                return;
+            }
+        };
+
+        // 打开 TUI 编辑器让用户修改
+        let initial_lines: Vec<String> = existing_content.lines().map(|l| l.to_string()).collect();
+        match crate::tui::editor::open_multiline_editor_with_content(
+            &format!("📝 编辑脚本: {}", name),
+            &initial_lines,
+        ) {
+            Ok(Some(new_content)) => {
+                if new_content.trim().is_empty() {
+                    error!("⚠️ 脚本内容为空，未保存修改");
+                    return;
+                }
+                // 写回脚本文件
+                match fs::write(&existing_path, &new_content) {
+                    Ok(_) => info!("✅ 脚本 {{{}}} 已更新，路径: {}", name, existing_path),
+                    Err(e) => error!("💥 写入脚本文件失败: {}", e),
+                }
+            }
+            Ok(None) => {
+                info!("已取消编辑脚本");
+            }
+            Err(e) => {
+                error!("❌ 编辑器启动失败: {}", e);
+            }
+        }
         return;
     }
 
