@@ -359,7 +359,26 @@ settings:
 
 ## 七、安装
 
-### 方式一：从 crates.io 安装（推荐）
+### 方式一：一键安装（推荐）
+
+使用安装脚本自动检测平台并安装：
+
+```bash
+# 安装最新版本
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- v1.0.0
+```
+
+安装后二进制文件位于 `/usr/local/bin/j`。
+
+**卸载**：
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- --uninstall
+```
+
+### 方式二：从 crates.io 安装
 
 ```bash
 # 安装
@@ -379,7 +398,29 @@ echo $PATH | grep -o ".cargo/bin"
 export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
-### 方式二：从源码安装
+### 方式三：从 GitHub Release 下载
+
+手动下载预编译二进制：
+
+```bash
+# macOS ARM64
+curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+
+# macOS Intel
+curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-darwin-amd64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+
+# Linux x86_64
+curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-linux-amd64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+
+# Linux ARM64
+curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-linux-arm64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+```
+
+### 方式四：从源码安装
 
 ```bash
 # 克隆仓库
@@ -394,7 +435,7 @@ cargo build --release
 sudo cp target/release/j /usr/local/bin/j
 ```
 
-### 方式三：本地开发编译
+### 方式五：本地开发编译
 
 ```bash
 cargo build           # Debug 编译

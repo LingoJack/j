@@ -173,10 +173,35 @@ open -a "$J_CHROME" https://example.com
 
 ---
 
-## 🔄 更新
+## 🔄 安装 & 更新
 
+### 一键安装（推荐）
 ```bash
-# 更新到最新版本（cargo 会自动检测并安装新版本）
+# 安装最新版本
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- v1.0.0
+```
+
+### 从 crates.io 安装
+```bash
+cargo install j-cli
+```
+
+### 从 GitHub Release 下载
+```bash
+# macOS ARM64
+curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+```
+
+### 更新
+```bash
+# 一键更新（安装脚本方式）
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
+
+# 从 crates.io 更新
 cargo install j-cli
 
 # 查看当前版本
@@ -190,14 +215,21 @@ j version
 ## 🗑️ 卸载
 
 ```bash
-# 卸载程序（通过 cargo 安装的）
+# 使用安装脚本卸载（推荐）
+curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- --uninstall
+
+# 或通过 cargo 卸载（cargo 安装的用户）
 cargo uninstall j-cli
+
+# 或手动删除
+sudo rm /usr/local/bin/j  # 一键安装方式
+rm ~/.cargo/bin/j          # cargo 安装方式
 
 # （可选）删除数据目录（包含配置、历史、脚本、日报等）
 rm -rf ~/.jdata
 ```
 
-> **注意**：`cargo uninstall` 只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
+> **注意**：卸载命令只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
 
 ---
 

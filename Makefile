@@ -45,3 +45,27 @@ publish-check:
 	@echo "🔍 Checking publish (dry-run)..."
 	@cargo publish --dry-run
 	@echo "✅ Check passed"
+
+# 创建 git tag 并推送（触发 GitHub Actions 自动构建发布）
+.PHONY: tag
+tag:
+	@echo "📌 Creating git tag..."
+	@read -p "Enter version (e.g., v1.0.0): " version; \
+	if [ -z "$$version" ]; then \
+		echo "❌ Version is required"; \
+		exit 1; \
+	fi; \
+	git tag -a "$$version" -m "Release $$version"; \
+	git push origin "$$version"; \
+	echo "✅ Tag $$version created and pushed. GitHub Actions will build and release automatically."
+
+# 本地测试安装脚本
+.PHONY: test-install
+test-install:
+	@echo "🧪 Testing install script locally..."
+	@./install.sh
+
+# 查看远程 tag
+.PHONY: tags
+tags:
+	@git tag -l | sort -V | tail -5
