@@ -365,17 +365,17 @@ settings:
 
 ```bash
 # 安装最新版本
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 
 # 安装指定版本
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
 ```
 
 安装后二进制文件位于 `/usr/local/bin/j`。
 
 **卸载**：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
 ```
 
 ### 方式二：从 crates.io 安装
@@ -404,19 +404,19 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 ```bash
 # macOS ARM64
-curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 
 # macOS Intel
-curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-darwin-amd64.tar.gz | tar xz
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-amd64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 
 # Linux x86_64
-curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-linux-amd64.tar.gz | tar xz
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-linux-amd64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 
 # Linux ARM64
-curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-linux-arm64.tar.gz | tar xz
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-linux-arm64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 ```
 
@@ -424,7 +424,7 @@ sudo mv j /usr/local/bin/
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/j.git
+git clone https://github.com/LingoJack/j.git
 cd j
 
 # 编译安装到 ~/.cargo/bin

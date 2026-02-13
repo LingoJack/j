@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # j-cli 安装脚本
-# 使用方式: curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
-# 或者指定版本: curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- v1.0.0
+# 使用方式: curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+# 或者指定版本: curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
 
 set -e
 

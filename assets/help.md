@@ -178,10 +178,10 @@ open -a "$J_CHROME" https://example.com
 ### 一键安装（推荐）
 ```bash
 # 安装最新版本
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 
 # 安装指定版本
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
 ```
 
 ### 从 crates.io 安装
@@ -192,14 +192,14 @@ cargo install j-cli
 ### 从 GitHub Release 下载
 ```bash
 # macOS ARM64
-curl -fsSL https://github.com/yourusername/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 ```
 
 ### 更新
 ```bash
 # 一键更新（安装脚本方式）
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 
 # 从 crates.io 更新
 cargo install j-cli
@@ -216,7 +216,7 @@ j version
 
 ```bash
 # 使用安装脚本卸载（推荐）
-curl -fsSL https://raw.githubusercontent.com/yourusername/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
 
 # 或通过 cargo 卸载（cargo 安装的用户）
 cargo uninstall j-cli
