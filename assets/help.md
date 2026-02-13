@@ -173,6 +173,20 @@ open -a "$J_CHROME" https://example.com
 
 ---
 
+## 🗑️ 卸载
+
+```bash
+# 卸载程序（通过 cargo 安装的）
+cargo uninstall j-cli
+
+# （可选）删除数据目录（包含配置、历史、脚本、日报等）
+rm -rf ~/.jdata
+```
+
+> **注意**：`cargo uninstall` 只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
+
+---
+
 ## 💡 使用技巧
 
 - 不带参数运行 `j` 进入**交互模式**，支持 Tab 补全和历史建议

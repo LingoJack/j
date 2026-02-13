@@ -357,9 +357,45 @@ settings:
 
 ---
 
-## 七、编译运行指南
+## 七、安装
 
-### 开发编译
+### 方式一：从 crates.io 安装（推荐）
+
+```bash
+# 安装
+cargo install j-cli
+
+# 验证
+j version
+```
+
+安装后二进制文件位于 `~/.cargo/bin/j`，请确保 `~/.cargo/bin` 已加入 PATH：
+
+```bash
+# 检查 PATH
+echo $PATH | grep -o ".cargo/bin"
+
+# 如果没有，添加到 ~/.zshrc 或 ~/.bashrc
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+### 方式二：从源码安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/j.git
+cd j
+
+# 编译安装到 ~/.cargo/bin
+cargo install --path .
+
+# 或编译后手动复制
+cargo build --release
+sudo cp target/release/j /usr/local/bin/j
+```
+
+### 方式三：本地开发编译
+
 ```bash
 cargo build           # Debug 编译
 cargo run             # 运行（进入交互模式）
@@ -367,11 +403,26 @@ cargo run -- help     # 快捷模式执行 help
 cargo run -- set chrome /Applications/Google\ Chrome.app
 ```
 
-### Release 编译 & 安装
+### 卸载
+
+```bash
+# 卸载程序
+cargo uninstall j-cli
+
+# （可选）删除数据目录
+rm -rf ~/.jdata
+```
+
+> **注意**：`cargo uninstall` 只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
+
+---
+
+## 八、编译运行指南
+
+### Release 编译
 ```bash
 cargo build --release
 # 二进制在 target/release/j，~17MB（内嵌 ask 渲染引擎）
-cp target/release/j /usr/local/bin/j
 ```
 
 ### 使用方式
@@ -400,7 +451,7 @@ copilot > exit
 
 ---
 
-## 八、与 Java 版的对应关系
+## 九、与 Java 版的对应关系
 
 | Java 类 | Rust 模块 | 说明 |
 |----------|-----------|------|
@@ -431,7 +482,7 @@ copilot > exit
 
 ---
 
-## 九、关键设计决策
+## 十、关键设计决策
 
 ### 1. clap try_parse + fallback
 
@@ -704,7 +755,7 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 ---
 
-## 十、未来可优化方向
+## 十一、未来可优化方向
 
 | 方向 | 说明 | 优先级 |
 |------|------|--------|
@@ -720,7 +771,7 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 ---
 
-## 十一、快速上手 Checklist
+## 十二、快速上手 Checklist
 
 > 新接手项目的开发者请按以下步骤快速了解：
 
