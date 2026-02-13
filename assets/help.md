@@ -191,7 +191,7 @@ cargo install j-cli
 
 ### 从 GitHub Release 下载
 ```bash
-# macOS ARM64
+# macOS ARM64 (M1/M2/M3/M4)
 curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 ```

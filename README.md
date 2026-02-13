@@ -2,6 +2,7 @@
 
 > 📅 最后更新: 2026-02-12
 > 🔖 版本: v22.0.0
+> 🖥️ 平台: macOS ARM64 (M1/M2/M3/M4)
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
 
 ---
@@ -400,23 +401,11 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 ### 方式三：从 GitHub Release 下载
 
-手动下载预编译二进制：
+手动下载预编译二进制（仅支持 macOS M 系列）：
 
 ```bash
-# macOS ARM64
+# macOS ARM64 (M1/M2/M3/M4)
 curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
-sudo mv j /usr/local/bin/
-
-# macOS Intel
-curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-amd64.tar.gz | tar xz
-sudo mv j /usr/local/bin/
-
-# Linux x86_64
-curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-linux-amd64.tar.gz | tar xz
-sudo mv j /usr/local/bin/
-
-# Linux ARM64
-curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-linux-arm64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
 ```
 
