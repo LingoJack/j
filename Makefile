@@ -31,3 +31,17 @@ install: release
 uninstall:
 	@rm -f /usr/local/bin/j
 	@echo "✅ j uninstalled"
+
+# 发布到 crates.io
+.PHONY: publish
+publish: release
+	@echo "📦 Publishing to crates.io..."
+	@cargo publish
+	@echo "✅ Published! Verify: cargo search j-cli"
+
+# 发布前检查（dry-run）
+.PHONY: publish-check
+publish-check:
+	@echo "🔍 Checking publish (dry-run)..."
+	@cargo publish --dry-run
+	@echo "✅ Check passed"
