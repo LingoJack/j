@@ -173,6 +173,20 @@ open -a "$J_CHROME" https://example.com
 
 ---
 
+## 🔄 更新
+
+```bash
+# 更新到最新版本（cargo 会自动检测并安装新版本）
+cargo install j-cli
+
+# 查看当前版本
+j version
+```
+
+> **注意**：`cargo install` 会自动检测 crates.io 上的最新版本并更新，无需先卸载。
+
+---
+
 ## 🗑️ 卸载
 
 ```bash
