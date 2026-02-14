@@ -844,7 +844,9 @@ fn run_editor_loop(
                     *vim = old.with_pending(input);
                 }
                 Transition::Submit => {
-                    let text = textarea.lines().join("\n").trim().to_string();
+                    let lines = textarea.lines();
+                    // 不使用 trim()，保留每行的原始缩进
+                    let text = lines.join("\n");
                     if text.is_empty() {
                         return Ok(None);
                     }
