@@ -21,11 +21,20 @@ fn main() {
         None
     };
 
+    // 检查版本更新（后台执行，不阻塞主流程）
+    let version_check_handle = std::thread::spawn(|| {
+        util::version_check::check_for_update()
+    });
+
     // 检查是否有命令行参数
     // 如果 argv 只有一个元素（程序名），进入交互模式
     let raw_args: Vec<String> = std::env::args().collect();
     if raw_args.len() <= 1 {
         // 无参数：进入交互模式
+        // 在进入交互模式前，检查版本更新提示
+        if let Ok(Some(latest_version)) = version_check_handle.join() {
+            util::version_check::print_update_hint(&latest_version);
+        }
         interactive::run_interactive(&mut config);
         return;
     }
@@ -59,6 +68,11 @@ fn main() {
             let alias_args: Vec<String> = raw_args[1..].to_vec();
             command::open::handle_open(&alias_args, &config);
         }
+    }
+
+    // 程序结束时，检查是否有新版本并打印提示
+    if let Ok(Some(latest_version)) = version_check_handle.join() {
+        util::version_check::print_update_hint(&latest_version);
     }
 
     if let Some(start) = start {
