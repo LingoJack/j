@@ -810,6 +810,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "termimad",
+ "thiserror",
  "tui-textarea",
  "url",
 ]
