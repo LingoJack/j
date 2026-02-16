@@ -3,8 +3,8 @@
 
 // ========== 版本信息 ==========
 
-/// 内核版本号（唯一定义，所有需要版本号的地方引用此常量）
-pub const VERSION: &str = "12.0.6";
+/// 内核版本号（自动从 Cargo.toml 读取，编译时确定）
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 项目名称
 pub const APP_NAME: &str = "work-copilot";
