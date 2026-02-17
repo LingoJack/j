@@ -382,7 +382,7 @@ impl rustyline::Helper for CopilotHelper {}
 /// 启动交互模式
 pub fn run_interactive(config: &mut YamlConfig) {
     let rl_config = Config::builder()
-        .completion_type(CompletionType::List)
+        .completion_type(CompletionType::Circular)
         .edit_mode(EditMode::Emacs)
         .auto_add_history(false) // 手动控制历史记录，report 内容不入历史（隐私保护）
         .build();
