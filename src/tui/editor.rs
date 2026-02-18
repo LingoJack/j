@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
 };
 use tui_textarea::{CursorMove, Input, Key, TextArea};
@@ -800,14 +800,53 @@ fn run_editor_loop(
     loop {
         let mode = &vim.mode.clone();
 
+        // 获取当前光标所在行的内容（用于预览区）
+        let cursor_row = textarea.cursor().0;
+        let current_line_text: String = textarea.lines()
+            .get(cursor_row)
+            .map(|l| l.to_string())
+            .unwrap_or_default();
+        // 判断当前行是否超过终端宽度，需要显示预览区
+        // 使用 unicode 字符宽度来准确计算（中文字符占 2 列）
+        let display_width: usize = current_line_text.chars()
+            .map(|c| if c.is_ascii() { 1 } else { 2 })
+            .sum();
+
         // 绘制界面
         terminal.draw(|frame| {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
+            let area_width = frame.area().width as usize;
+            // 预留行号宽度（行号位数 + 2 个边距）+ 边框宽度 2
+            let lnum_width = format!("{}", textarea.lines().len()).len() + 2 + 2;
+            let effective_width = area_width.saturating_sub(lnum_width);
+            let needs_preview = display_width > effective_width;
+
+            // 动态计算预览区高度：根据文本实际需要的行数
+            // 预览区内部可用宽度 = 终端宽度 - 左右边框各 1
+            let preview_inner_width = area_width.saturating_sub(2).max(1);
+            let preview_height = if needs_preview {
+                let wrapped_lines = (display_width as f64 / preview_inner_width as f64).ceil() as u16;
+                // 预览区高度 = wrap 后行数 + 2（边框），最少 3 行，最多 8 行
+                wrapped_lines.saturating_add(2).clamp(3, 8)
+            } else {
+                0
+            };
+
+            let constraints = if needs_preview {
+                vec![
+                    Constraint::Min(3),                    // 编辑区
+                    Constraint::Length(preview_height),     // 当前行预览区
+                    Constraint::Length(2),                  // 状态栏
+                ]
+            } else {
+                vec![
                     Constraint::Min(3),   // 编辑区
                     Constraint::Length(2), // 状态栏
-                ])
+                ]
+            };
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(constraints)
                 .split(frame.area());
 
             // 渲染编辑区
@@ -818,9 +857,27 @@ fn run_editor_loop(
                 apply_search_highlight(frame.buffer_mut(), chunks[0], &vim.search);
             }
 
-            // 渲染状态栏
-            let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
-            frame.render_widget(status_bar, chunks[1]);
+            if needs_preview {
+                // 渲染当前行预览区（带 wrap）
+                let preview_block = Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" 📖 第 {} 行预览 ", cursor_row + 1))
+                    .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                    .border_style(Style::default().fg(Color::Cyan));
+                let preview = Paragraph::new(current_line_text.clone())
+                    .block(preview_block)
+                    .style(Style::default().fg(Color::White))
+                    .wrap(Wrap { trim: false });
+                frame.render_widget(preview, chunks[1]);
+
+                // 渲染状态栏
+                let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
+                frame.render_widget(status_bar, chunks[2]);
+            } else {
+                // 渲染状态栏
+                let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
+                frame.render_widget(status_bar, chunks[1]);
+            }
         })?;
 
         // 处理输入事件
