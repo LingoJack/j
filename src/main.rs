@@ -21,18 +21,16 @@ fn main() {
         None
     };
 
-    // 检查版本更新（后台执行，不阻塞主流程）
-    let version_check_handle = std::thread::spawn(|| {
-        util::version_check::check_for_update()
-    });
+    // 后台静默刷新版本缓存（不阻塞，不等待）
+    util::version_check::refresh_cache_in_background();
 
     // 检查是否有命令行参数
     // 如果 argv 只有一个元素（程序名），进入交互模式
     let raw_args: Vec<String> = std::env::args().collect();
     if raw_args.len() <= 1 {
         // 无参数：进入交互模式
-        // 在进入交互模式前，检查版本更新提示
-        if let Ok(Some(latest_version)) = version_check_handle.join() {
+        // 从缓存读取版本提示（即时返回，不涉及网络）
+        if let Some(latest_version) = util::version_check::check_cached() {
             util::version_check::print_update_hint(&latest_version);
         }
         interactive::run_interactive(&mut config);
@@ -70,8 +68,8 @@ fn main() {
         }
     }
 
-    // 程序结束时，检查是否有新版本并打印提示
-    if let Ok(Some(latest_version)) = version_check_handle.join() {
+    // 程序结束时，从缓存检查是否有新版本并打印提示（即时返回，不阻塞）
+    if let Some(latest_version) = util::version_check::check_cached() {
         util::version_check::print_update_hint(&latest_version);
     }
 
