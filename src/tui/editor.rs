@@ -787,6 +787,11 @@ fn make_block<'a>(title: &str, mode: &Mode) -> Block<'a> {
         .border_style(Style::default().fg(mode.border_color()))
 }
 
+/// 计算字符串的显示宽度（中文字符占 2 列，ASCII 占 1 列）
+fn display_width_of(s: &str) -> usize {
+    s.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum()
+}
+
 /// 编辑器主循环
 fn run_editor_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
@@ -807,10 +812,7 @@ fn run_editor_loop(
             .map(|l| l.to_string())
             .unwrap_or_default();
         // 判断当前行是否超过终端宽度，需要显示预览区
-        // 使用 unicode 字符宽度来准确计算（中文字符占 2 列）
-        let display_width: usize = current_line_text.chars()
-            .map(|c| if c.is_ascii() { 1 } else { 2 })
-            .sum();
+        let display_width: usize = display_width_of(&current_line_text);
 
         // 绘制界面
         terminal.draw(|frame| {

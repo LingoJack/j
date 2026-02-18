@@ -30,3 +30,6 @@ termimad = "0.34.1"
 ratatui = "0.29.0"
 crossterm = "0.28.0"
 tui-textarea = "0.7"
+
+[patch.crates-io]
+tui-textarea = { path = "patches/tui-textarea-0.7.0" }
