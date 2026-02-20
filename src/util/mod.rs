@@ -1,5 +1,6 @@
 pub mod fuzzy;
 pub mod log;
+pub mod md_render;
 
 /// 去除字符串两端的引号（单引号或双引号）
 pub fn remove_quotes(s: &str) -> String {

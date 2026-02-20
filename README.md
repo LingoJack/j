@@ -47,7 +47,8 @@ src/
 │   └── time.rs          # time countdown（倒计时器）
 ├── util/
 │   ├── mod.rs           # 导出子模块 + 公共工具函数（remove_quotes）
-│   ├── log.rs           # info! / error! / usage! / debug_log! / md! 日志宏
+│   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏 + 工具函数
+│   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏 + ask 二进制嵌入与释放
 │   └── fuzzy.rs         # 模糊匹配（大小写不敏感 + 高亮 + UTF-8 安全）
 ├── assets/
 │   ├── help.md          # 帮助文档（编译时通过 include_str! 嵌入二进制）
@@ -262,6 +263,11 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 | `error!(...)` | 直接输出 | 红色 |
 | `usage!(...)` | `"Usage: ..."` 前缀 | 黄色 |
 | `debug_log!(config, ...)` | 仅 verbose 模式输出 | 蓝色 |
+
+### 5.8.1 Markdown 渲染 — `util/md_render.rs`
+
+| 宏 | 输出格式 | 颜色 |
+|----|----------|------|
 | `md!(...)` | Markdown 渲染输出（优先嵌入的 `ask` 引擎，fallback termimad） | 终端原生 |
 | `md_inline!(...)` | 单行 Markdown 内联渲染（termimad） | 终端原生 |
 
@@ -519,7 +525,7 @@ copilot > exit
 | `ClearCommandHandler` | `command/system.rs::handle_clear` | 清屏 |
 | `CommandRunner` | `open::that()` + `std::process::Command` | 进程执行 |
 | `FuzzyMatcher` | `util/fuzzy.rs` | 模糊匹配 |
-| `LogUtil` | `util/log.rs`（宏） | 彩色日志 |
+| `LogUtil` | `util/log.rs`（日志宏）+ `util/md_render.rs`（Markdown 渲染） | 彩色日志 + Markdown 渲染 |
 | JLine3 Completer | `interactive.rs::CopilotCompleter` | Tab 补全 |
 
 ---

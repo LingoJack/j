@@ -19,7 +19,7 @@ status: current_dir
 	@git status
 
 .PHONY: release
-release: current_dir
+release: current_dir md_render
 	@cargo build --release
 
 .PHONY: install
@@ -69,3 +69,10 @@ test-install:
 .PHONY: tags
 tags:
 	@git tag -l | sort -V | tail -5
+
+.PHONY: md_render
+md_render:
+	@echo "🔄 Building md_render..."
+	@cd plugin/md_render/code \
+	&& GOOS=darwin GOARCH=arm64 go build -o ../bin/md_render-darwin-arm64
+	@echo "✅ md_render built to plugin/md_render/bin/md_render-darwin-arm64"
