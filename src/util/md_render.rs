@@ -25,6 +25,7 @@ const ASK_BINARY: &[u8] = include_bytes!("../../plugin/md_render/bin/md_render-d
 /// 获取嵌入的 render 二进制路径
 /// 首次调用时释放嵌入的二进制到 ~/.jdata/bin/md_render，后续复用
 fn md_render_path() -> Option<std::path::PathBuf> {
+    // 如果不是 macOS arm64，则返回 None
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
         return None;
@@ -72,11 +73,11 @@ pub fn render_md(text: &str) {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
-    // 获取嵌入的 ask 二进制路径
-    let ask_path = md_render_path();
+    // 获取嵌入的 render 二进制路径
+    let renderer_path = md_render_path();
 
-    if let Some(path) = ask_path {
-        // 调用 ask：直接从 stdin 读取 Markdown，渲染后输出 stdout
+    if let Some(path) = renderer_path {
+        // 调用 render：直接从 stdin 读取 Markdown，渲染后输出 stdout
         let result = Command::new(&path)
             .stdin(Stdio::piped())
             .stdout(Stdio::inherit())
