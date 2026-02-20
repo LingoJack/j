@@ -1,5 +1,5 @@
 /// 在终端中渲染 Markdown 文本
-/// 优先通过嵌入的 ask 二进制渲染（效果更佳），
+/// 优先通过嵌入的 md_render 二进制渲染（效果更佳），
 /// 如果不可用则 fallback 到 termimad
 #[macro_export]
 macro_rules! md {
@@ -18,14 +18,13 @@ macro_rules! md_inline {
     }};
 }
 
-/// 嵌入的 ask 二进制（macOS ARM64）
 /// 编译时从 plugin/md_render/bin/ 目录嵌入
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 const ASK_BINARY: &[u8] = include_bytes!("../../plugin/md_render/bin/md_render-darwin-arm64");
 
-/// 获取 ask 可执行文件路径
-/// 首次调用时释放嵌入的二进制到 ~/.jdata/bin/ask，后续复用
-fn get_ask_path() -> Option<std::path::PathBuf> {
+/// 获取嵌入的 render 二进制路径
+/// 首次调用时释放嵌入的二进制到 ~/.jdata/bin/md_render，后续复用
+fn md_render_path() -> Option<std::path::PathBuf> {
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
         return None;
@@ -74,7 +73,7 @@ pub fn render_md(text: &str) {
     use std::process::{Command, Stdio};
 
     // 获取嵌入的 ask 二进制路径
-    let ask_path = get_ask_path();
+    let ask_path = md_render_path();
 
     if let Some(path) = ask_path {
         // 调用 ask：直接从 stdin 读取 Markdown，渲染后输出 stdout
