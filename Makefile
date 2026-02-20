@@ -34,7 +34,7 @@ uninstall:
 
 # 发布到 crates.io
 .PHONY: publish
-publish: release
+publish: release push
 	@echo "📦 Publishing to crates.io..."
 	@cargo publish
 	@echo "✅ Published! Verify: cargo search j-cli"
