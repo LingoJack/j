@@ -15,18 +15,6 @@ pub const AUTHOR: &str = "lingojack";
 /// 邮箱
 pub const EMAIL: &str = "lingojack@qq.com";
 
-/// GitHub 仓库 URL
-pub const GITHUB_REPO: &str = "LingoJack/j";
-
-/// GitHub Releases API URL
-pub const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/LingoJack/j/releases/latest";
-
-/// 版本检查缓存文件名
-pub const VERSION_CHECK_CACHE_FILE: &str = "version_check.json";
-
-/// 版本检查间隔（秒），默认 24 小时
-pub const VERSION_CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
-
 // ========== Section 名称 ==========
 
 /// 配置文件中的 section 名称常量
