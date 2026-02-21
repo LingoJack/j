@@ -2,7 +2,10 @@ SHELL := /bin/bash
 
 .PHONY: current_dir
 current_dir:
+	@echo "🔍 Current directory:"
+	@echo "======================================"
 	@echo "Current directory: $$(pwd)"
+	@echo "======================================="
 
 .PHONY: push
 push: current_dir fmt
