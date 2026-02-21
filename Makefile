@@ -5,7 +5,7 @@ current_dir:
 	@echo "Current directory: $$(pwd)"
 
 .PHONY: push
-push: current_dir
+push: current_dir fmt
 	@git add .\
 	&& (git commit -m "新增了一些特性" || exit 0) \
 	&& git push origin main
@@ -76,3 +76,7 @@ md_render:
 	@cd plugin/md_render/code \
 	&& GOOS=darwin GOARCH=arm64 go build -o ../bin/md_render-darwin-arm64
 	@echo "✅ md_render built to plugin/md_render/bin/md_render-darwin-arm64"
+
+.PHONY: fmt
+fmt:
+	@cargo fmt
