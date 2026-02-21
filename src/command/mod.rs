@@ -32,7 +32,9 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
 
         // 列表 & 查找
         SubCmd::List { part } => list::handle_list(part.as_deref(), config),
-        SubCmd::Contain { alias, containers } => system::handle_contain(&alias, containers.as_deref(), config),
+        SubCmd::Contain { alias, containers } => {
+            system::handle_contain(&alias, containers.as_deref(), config)
+        }
 
         // 日报系统
         SubCmd::Report { content } => report::handle_report("report", &content, config),
@@ -44,7 +46,11 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
             report::handle_report("reportctl", &args, config);
         }
         SubCmd::Check { line_count } => report::handle_check(line_count.as_deref(), config),
-        SubCmd::Search { line_count, target, fuzzy } => {
+        SubCmd::Search {
+            line_count,
+            target,
+            fuzzy,
+        } => {
             report::handle_search(&line_count, &target, fuzzy.as_deref(), config);
         }
 
@@ -56,7 +62,9 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
 
         // 系统设置
         SubCmd::Log { key, value } => system::handle_log(&key, &value, config),
-        SubCmd::Change { part, field, value } => system::handle_change(&part, &field, &value, config),
+        SubCmd::Change { part, field, value } => {
+            system::handle_change(&part, &field, &value, config)
+        }
         SubCmd::Clear => system::handle_clear(),
 
         // 系统信息

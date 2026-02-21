@@ -9,9 +9,7 @@ pub fn handle_time(function: &str, arg: &str) {
     if function != time_function::COUNTDOWN {
         error!("❌ 未知的功能: {}，目前仅支持 countdown", function);
         usage!("j time countdown <duration>");
-        info!(
-            "  duration 格式: 30s(秒), 5m(分钟), 1h(小时), 不带单位默认为分钟"
-        );
+        info!("  duration 格式: 30s(秒), 5m(分钟), 1h(小时), 不带单位默认为分钟");
         return;
     }
 
@@ -21,7 +19,10 @@ pub fn handle_time(function: &str, arg: &str) {
         return;
     }
 
-    info!("⏳ 倒计时开始：{}", format_duration_display(duration_secs as u64));
+    info!(
+        "⏳ 倒计时开始：{}",
+        format_duration_display(duration_secs as u64)
+    );
     run_countdown(duration_secs as u64);
 }
 
@@ -72,7 +73,12 @@ fn parse_duration(s: &str) -> i64 {
 /// 格式化剩余时间为 HH:MM:SS 或 MM:SS
 fn format_remaining(secs: u64) -> String {
     if secs >= 3600 {
-        format!("{:02}:{:02}:{:02}", secs / 3600, (secs % 3600) / 60, secs % 60)
+        format!(
+            "{:02}:{:02}:{:02}",
+            secs / 3600,
+            (secs % 3600) / 60,
+            secs % 60
+        )
     } else {
         format!("{:02}:{:02}", secs / 60, secs % 60)
     }
@@ -87,7 +93,7 @@ fn run_countdown(total_secs: u64) {
         ProgressStyle::default_bar()
             .template("  {spinner:.cyan} ⏱️  {msg}  {wide_bar:.cyan/dark_gray}  {percent}%")
             .unwrap()
-            .progress_chars("━╸─")
+            .progress_chars("━╸─"),
     );
 
     pb.set_message(format_remaining(total_secs));

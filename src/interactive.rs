@@ -1,16 +1,22 @@
 use crate::command;
 use crate::config::YamlConfig;
-use crate::constants::{self, cmd, config_key, rmeta_action, time_function, search_flag, shell, NOTE_CATEGORIES, ALL_SECTIONS, ALIAS_PATH_SECTIONS, LIST_ALL};
-use crate::{info, error};
+use crate::constants::{
+    self, ALIAS_PATH_SECTIONS, ALL_SECTIONS, LIST_ALL, NOTE_CATEGORIES, cmd, config_key,
+    rmeta_action, search_flag, shell, time_function,
+};
+use crate::{error, info};
 use colored::Colorize;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
+use rustyline::highlight::CmdKind;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::history::DefaultHistory;
 use rustyline::validate::Validator;
-use rustyline::highlight::CmdKind;
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, EventHandler, KeyCode, KeyEvent, Modifiers};
+use rustyline::{
+    Cmd, CompletionType, Config, Context, EditMode, Editor, EventHandler, KeyCode, KeyEvent,
+    Modifiers,
+};
 use std::borrow::Cow;
 
 // ========== 补全器定义 ==========
@@ -82,33 +88,92 @@ enum ArgHint {
 fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
     vec![
         // 别名管理
-        (cmd::SET, vec![ArgHint::Placeholder("<alias>"), ArgHint::FilePath]),
+        (
+            cmd::SET,
+            vec![ArgHint::Placeholder("<alias>"), ArgHint::FilePath],
+        ),
         (cmd::REMOVE, vec![ArgHint::Alias]),
-        (cmd::RENAME, vec![ArgHint::Alias, ArgHint::Placeholder("<new_alias>")]),
+        (
+            cmd::RENAME,
+            vec![ArgHint::Alias, ArgHint::Placeholder("<new_alias>")],
+        ),
         (cmd::MODIFY, vec![ArgHint::Alias, ArgHint::FilePath]),
         // 分类
         (cmd::NOTE, vec![ArgHint::Alias, ArgHint::Category]),
         (cmd::DENOTE, vec![ArgHint::Alias, ArgHint::Category]),
         // 列表
-        (cmd::LIST, vec![ArgHint::Fixed({
-            let mut v: Vec<&'static str> = vec!["", LIST_ALL];
-            for s in ALL_SECTIONS { v.push(s); }
-            v
-        })]),
+        (
+            cmd::LIST,
+            vec![ArgHint::Fixed({
+                let mut v: Vec<&'static str> = vec!["", LIST_ALL];
+                for s in ALL_SECTIONS {
+                    v.push(s);
+                }
+                v
+            })],
+        ),
         // 查找
-        (cmd::CONTAIN, vec![ArgHint::Alias, ArgHint::Placeholder("<sections>")]),
+        (
+            cmd::CONTAIN,
+            vec![ArgHint::Alias, ArgHint::Placeholder("<sections>")],
+        ),
         // 系统设置
-        (cmd::LOG, vec![ArgHint::Fixed(vec![config_key::MODE]), ArgHint::Fixed(vec![config_key::VERBOSE, config_key::CONCISE])]),
-        (cmd::CHANGE, vec![ArgHint::Section, ArgHint::Placeholder("<field>"), ArgHint::Placeholder("<value>")]),
+        (
+            cmd::LOG,
+            vec![
+                ArgHint::Fixed(vec![config_key::MODE]),
+                ArgHint::Fixed(vec![config_key::VERBOSE, config_key::CONCISE]),
+            ],
+        ),
+        (
+            cmd::CHANGE,
+            vec![
+                ArgHint::Section,
+                ArgHint::Placeholder("<field>"),
+                ArgHint::Placeholder("<value>"),
+            ],
+        ),
         // 日报系统
         (cmd::REPORT, vec![ArgHint::Placeholder("<content>")]),
-        (cmd::REPORTCTL, vec![ArgHint::Fixed(vec![rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL, rmeta_action::OPEN]), ArgHint::Placeholder("<date|message|url>")]),
+        (
+            cmd::REPORTCTL,
+            vec![
+                ArgHint::Fixed(vec![
+                    rmeta_action::NEW,
+                    rmeta_action::SYNC,
+                    rmeta_action::PUSH,
+                    rmeta_action::PULL,
+                    rmeta_action::SET_URL,
+                    rmeta_action::OPEN,
+                ]),
+                ArgHint::Placeholder("<date|message|url>"),
+            ],
+        ),
         (cmd::CHECK, vec![ArgHint::Placeholder("<line_count>")]),
-        (cmd::SEARCH, vec![ArgHint::Placeholder("<line_count|all>"), ArgHint::Placeholder("<target>"), ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY])]),
+        (
+            cmd::SEARCH,
+            vec![
+                ArgHint::Placeholder("<line_count|all>"),
+                ArgHint::Placeholder("<target>"),
+                ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY]),
+            ],
+        ),
         // 脚本
-        (cmd::CONCAT, vec![ArgHint::Placeholder("<script_name>"), ArgHint::Placeholder("<script_content>")]),
+        (
+            cmd::CONCAT,
+            vec![
+                ArgHint::Placeholder("<script_name>"),
+                ArgHint::Placeholder("<script_content>"),
+            ],
+        ),
         // 倒计时
-        (cmd::TIME, vec![ArgHint::Fixed(vec![time_function::COUNTDOWN]), ArgHint::Placeholder("<duration>")]),
+        (
+            cmd::TIME,
+            vec![
+                ArgHint::Fixed(vec![time_function::COUNTDOWN]),
+                ArgHint::Placeholder("<duration>"),
+            ],
+        ),
         // shell 补全
         (cmd::COMPLETION, vec![ArgHint::Fixed(vec!["zsh", "bash"])]),
         // 系统信息
@@ -176,7 +241,9 @@ impl Completer for CopilotCompleter {
 
             // 别名（用于 j <alias> 直接打开）
             for alias in self.all_aliases() {
-                if alias.starts_with(current_word) && !command::all_command_keywords().contains(&alias.as_str()) {
+                if alias.starts_with(current_word)
+                    && !command::all_command_keywords().contains(&alias.as_str())
+                {
                     candidates.push(Pair {
                         display: alias.clone(),
                         replacement: alias,
@@ -196,41 +263,49 @@ impl Completer for CopilotCompleter {
                 let arg_index = word_index - 1; // 减去命令本身
                 if arg_index < arg_hints.len() {
                     let candidates = match &arg_hints[arg_index] {
-                        ArgHint::Alias => {
-                            self.all_aliases()
-                                .into_iter()
-                                .filter(|a| a.starts_with(current_word))
-                                .map(|a| Pair { display: a.clone(), replacement: a })
-                                .collect()
-                        }
-                        ArgHint::Category => {
-                            ALL_NOTE_CATEGORIES
-                                .iter()
-                                .filter(|c| c.starts_with(current_word))
-                                .map(|c| Pair { display: c.to_string(), replacement: c.to_string() })
-                                .collect()
-                        }
-                        ArgHint::Section => {
-                            self.all_sections()
-                                .into_iter()
-                                .filter(|s| s.starts_with(current_word))
-                                .map(|s| Pair { display: s.clone(), replacement: s })
-                                .collect()
-                        }
-                        ArgHint::SectionKeys(section) => {
-                            self.section_keys(section)
-                                .into_iter()
-                                .filter(|k| k.starts_with(current_word))
-                                .map(|k| Pair { display: k.clone(), replacement: k })
-                                .collect()
-                        }
-                        ArgHint::Fixed(options) => {
-                            options
-                                .iter()
-                                .filter(|o| !o.is_empty() && o.starts_with(current_word))
-                                .map(|o| Pair { display: o.to_string(), replacement: o.to_string() })
-                                .collect()
-                        }
+                        ArgHint::Alias => self
+                            .all_aliases()
+                            .into_iter()
+                            .filter(|a| a.starts_with(current_word))
+                            .map(|a| Pair {
+                                display: a.clone(),
+                                replacement: a,
+                            })
+                            .collect(),
+                        ArgHint::Category => ALL_NOTE_CATEGORIES
+                            .iter()
+                            .filter(|c| c.starts_with(current_word))
+                            .map(|c| Pair {
+                                display: c.to_string(),
+                                replacement: c.to_string(),
+                            })
+                            .collect(),
+                        ArgHint::Section => self
+                            .all_sections()
+                            .into_iter()
+                            .filter(|s| s.starts_with(current_word))
+                            .map(|s| Pair {
+                                display: s.clone(),
+                                replacement: s,
+                            })
+                            .collect(),
+                        ArgHint::SectionKeys(section) => self
+                            .section_keys(section)
+                            .into_iter()
+                            .filter(|k| k.starts_with(current_word))
+                            .map(|k| Pair {
+                                display: k.clone(),
+                                replacement: k,
+                            })
+                            .collect(),
+                        ArgHint::Fixed(options) => options
+                            .iter()
+                            .filter(|o| !o.is_empty() && o.starts_with(current_word))
+                            .map(|o| Pair {
+                                display: o.to_string(),
+                                replacement: o.to_string(),
+                            })
+                            .collect(),
                         ArgHint::Placeholder(_) => {
                             // placeholder 不提供候选项
                             vec![]
@@ -257,10 +332,14 @@ impl Completer for CopilotCompleter {
 
             // 浏览器类别名：后续参数补全 URL 别名 + 文件路径
             if self.config.contains(constants::section::BROWSER, cmd) {
-                let mut candidates: Vec<Pair> = self.all_aliases()
+                let mut candidates: Vec<Pair> = self
+                    .all_aliases()
                     .into_iter()
                     .filter(|a| a.starts_with(current_word))
-                    .map(|a| Pair { display: a.clone(), replacement: a })
+                    .map(|a| Pair {
+                        display: a.clone(),
+                        replacement: a,
+                    })
                     .collect();
                 // 也支持文件路径补全（浏览器打开本地文件）
                 candidates.extend(complete_file_path(current_word));
@@ -273,7 +352,10 @@ impl Completer for CopilotCompleter {
                 self.all_aliases()
                     .into_iter()
                     .filter(|a| a.starts_with(current_word))
-                    .map(|a| Pair { display: a.clone(), replacement: a })
+                    .map(|a| Pair {
+                        display: a.clone(),
+                        replacement: a,
+                    }),
             );
             return Ok((start_pos, candidates));
         }
@@ -596,8 +678,13 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
         })
     } else if is(cmd::REMOVE) {
         match rest.first() {
-            Some(alias) => ParseResult::Matched(SubCmd::Remove { alias: alias.clone() }),
-            None => { crate::usage!("rm <alias>"); ParseResult::Handled }
+            Some(alias) => ParseResult::Matched(SubCmd::Remove {
+                alias: alias.clone(),
+            }),
+            None => {
+                crate::usage!("rm <alias>");
+                ParseResult::Handled
+            }
         }
     } else if is(cmd::RENAME) {
         if rest.len() < 2 {
@@ -715,7 +802,11 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
         }
         ParseResult::Matched(SubCmd::Concat {
             name: rest[0].clone(),
-            content: if rest.len() > 1 { rest[1..].to_vec() } else { vec![] },
+            content: if rest.len() > 1 {
+                rest[1..].to_vec()
+            } else {
+                vec![]
+            },
         })
 
     // 倒计时
@@ -762,14 +853,21 @@ fn complete_file_path(partial: &str) -> Vec<Pair> {
     };
 
     // 解析目录路径和文件名前缀
-    let (dir_path, file_prefix) = if expanded.ends_with('/') || expanded.ends_with(std::path::MAIN_SEPARATOR) {
-        (std::path::Path::new(&expanded).to_path_buf(), String::new())
-    } else {
-        let p = std::path::Path::new(&expanded);
-        let parent = p.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
-        let fp = p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        (parent, fp)
-    };
+    let (dir_path, file_prefix) =
+        if expanded.ends_with('/') || expanded.ends_with(std::path::MAIN_SEPARATOR) {
+            (std::path::Path::new(&expanded).to_path_buf(), String::new())
+        } else {
+            let p = std::path::Path::new(&expanded);
+            let parent = p
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .to_path_buf();
+            let fp = p
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            (parent, fp)
+        };
 
     if let Ok(entries) = std::fs::read_dir(&dir_path) {
         for entry in entries.flatten() {
@@ -785,15 +883,24 @@ fn complete_file_path(partial: &str) -> Vec<Pair> {
 
                 // 构建完整路径用于替换
                 // 保留用户输入的原始前缀风格（如 ~ 或绝对路径）
-                let full_replacement = if partial.ends_with('/') || partial.ends_with(std::path::MAIN_SEPARATOR) {
-                    format!("{}{}{}", partial, name, if is_dir { "/" } else { "" })
-                } else if partial.contains('/') || partial.contains(std::path::MAIN_SEPARATOR) {
-                    // 替换最后一段
-                    let last_sep = partial.rfind('/').or_else(|| partial.rfind(std::path::MAIN_SEPARATOR)).unwrap();
-                    format!("{}/{}{}", &partial[..last_sep], name, if is_dir { "/" } else { "" })
-                } else {
-                    format!("{}{}", name, if is_dir { "/" } else { "" })
-                };
+                let full_replacement =
+                    if partial.ends_with('/') || partial.ends_with(std::path::MAIN_SEPARATOR) {
+                        format!("{}{}{}", partial, name, if is_dir { "/" } else { "" })
+                    } else if partial.contains('/') || partial.contains(std::path::MAIN_SEPARATOR) {
+                        // 替换最后一段
+                        let last_sep = partial
+                            .rfind('/')
+                            .or_else(|| partial.rfind(std::path::MAIN_SEPARATOR))
+                            .unwrap();
+                        format!(
+                            "{}/{}{}",
+                            &partial[..last_sep],
+                            name,
+                            if is_dir { "/" } else { "" }
+                        )
+                    } else {
+                        format!("{}{}", name, if is_dir { "/" } else { "" })
+                    };
 
                 let display_name = format!("{}{}", name, if is_dir { "/" } else { "" });
 
@@ -898,8 +1005,14 @@ fn enter_interactive_shell(config: &YamlConfig) {
             }
         } else {
             // 其他 shell：fallback 到直接设置环境变量
-            command.env("PS1", "\x1b[32mshell\x1b[0m (\x1b[36m\\w\x1b[0m) \x1b[32m>\x1b[0m ");
-            command.env("PROMPT", "\x1b[32mshell\x1b[0m (\x1b[36m%~\x1b[0m) \x1b[32m>\x1b[0m ");
+            command.env(
+                "PS1",
+                "\x1b[32mshell\x1b[0m (\x1b[36m\\w\x1b[0m) \x1b[32m>\x1b[0m ",
+            );
+            command.env(
+                "PROMPT",
+                "\x1b[32mshell\x1b[0m (\x1b[36m%~\x1b[0m) \x1b[32m>\x1b[0m ",
+            );
         }
     }
 

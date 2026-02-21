@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
 use crate::constants;
+use clap::{Parser, Subcommand};
 
 /// work-copilot (j) - 快捷命令行工具 🚀
 #[derive(Parser, Debug)]

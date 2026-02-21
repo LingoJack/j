@@ -83,11 +83,7 @@ pub const NOTE_CATEGORIES: &[&str] = &[
 // ========== 别名查找 section ==========
 
 /// 用于查找别名路径的 section 列表（按优先级排列）
-pub const ALIAS_PATH_SECTIONS: &[&str] = &[
-    section::PATH,
-    section::INNER_URL,
-    section::OUTER_URL,
-];
+pub const ALIAS_PATH_SECTIONS: &[&str] = &[section::PATH, section::INNER_URL, section::OUTER_URL];
 
 /// 用于判断别名是否存在的 section 列表
 pub const ALIAS_EXISTS_SECTIONS: &[&str] = &[
@@ -214,15 +210,9 @@ pub mod cmd {
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
-            SET, REMOVE, RENAME, MODIFY,
-            NOTE, DENOTE,
-            LIST, CONTAIN,
-            REPORT, REPORTCTL, CHECK, SEARCH,
-            CONCAT, TIME,
-            LOG, CHANGE, CLEAR,
-            VERSION, HELP, EXIT,
-            COMPLETION,
-            AGENT, SYSTEM,
+            SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
+            SEARCH, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION, AGENT,
+            SYSTEM,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }

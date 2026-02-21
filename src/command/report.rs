@@ -1,5 +1,8 @@
 use crate::config::YamlConfig;
-use crate::constants::{section, config_key, search_flag, rmeta_action, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, DEFAULT_CHECK_LINES};
+use crate::constants::{
+    DEFAULT_CHECK_LINES, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, config_key, rmeta_action,
+    search_flag, section,
+};
 use crate::util::fuzzy;
 use crate::{error, info, usage};
 use chrono::{Local, NaiveDate};
@@ -18,7 +21,9 @@ const SIMPLE_DATE_FORMAT: &str = REPORT_SIMPLE_DATE_FORMAT;
 pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
         if sub == "reportctl" {
-            usage!("j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open");
+            usage!(
+                "j reportctl new [date] | j reportctl sync [date] | j reportctl push | j reportctl pull | j reportctl set-url <url> | j reportctl open"
+            );
             return;
         }
         // report 无参数：打开 TUI 多行编辑器（预填历史 + 日期前缀，NORMAL 模式）
@@ -54,7 +59,16 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
                 handle_open_report(config);
             }
             _ => {
-                error!("❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}", first, rmeta_action::NEW, rmeta_action::SYNC, rmeta_action::PUSH, rmeta_action::PULL, rmeta_action::SET_URL, rmeta_action::OPEN);
+                error!(
+                    "❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}",
+                    first,
+                    rmeta_action::NEW,
+                    rmeta_action::SYNC,
+                    rmeta_action::PUSH,
+                    rmeta_action::PULL,
+                    rmeta_action::SET_URL,
+                    rmeta_action::OPEN
+                );
             }
         }
         return;
@@ -95,7 +109,10 @@ fn get_report_path(config: &YamlConfig) -> Option<String> {
 
 /// 获取日报工作目录下的 settings.json 路径
 fn get_settings_json_path(report_path: &str) -> std::path::PathBuf {
-    Path::new(report_path).parent().unwrap().join("settings.json")
+    Path::new(report_path)
+        .parent()
+        .unwrap()
+        .join("settings.json")
 }
 
 /// TUI 模式日报编辑：预加载历史 + 日期前缀，NORMAL 模式进入
@@ -150,7 +167,8 @@ fn handle_report_tui(config: &mut YamlConfig) {
     initial_lines.push(date_prefix);
 
     // 打开带初始内容的编辑器（NORMAL 模式）
-    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报", &initial_lines) {
+    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报", &initial_lines)
+    {
         Ok(Some(text)) => {
             // 用户提交了内容
             // 计算原始上下文有多少行（用于替换）
@@ -283,7 +301,11 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
 
     let last_day_str = date_str
         .map(|s| s.to_string())
-        .or_else(|| config.get_property(section::REPORT, config_key::LAST_DAY).cloned())
+        .or_else(|| {
+            config
+                .get_property(section::REPORT, config_key::LAST_DAY)
+                .cloned()
+        })
         .unwrap_or_default();
 
     match parse_date(&last_day_str) {
@@ -292,7 +314,10 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
             update_config_files(week_num + 1, &next_last_day, &config_path, config);
         }
         None => {
-            error!("❌ 更新周数失败，请检查日期字符串是否有误: {}", last_day_str);
+            error!(
+                "❌ 更新周数失败，请检查日期字符串是否有误: {}",
+                last_day_str
+            );
         }
     }
 }
@@ -315,7 +340,11 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
 
     let last_day_str = date_str
         .map(|s| s.to_string())
-        .or_else(|| config.get_property(section::REPORT, config_key::LAST_DAY).cloned())
+        .or_else(|| {
+            config
+                .get_property(section::REPORT, config_key::LAST_DAY)
+                .cloned()
+        })
         .unwrap_or_default();
 
     match parse_date(&last_day_str) {
@@ -323,7 +352,10 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
             update_config_files(week_num, &last_day, &config_path, config);
         }
         None => {
-            error!("❌ 更新周数失败，请检查日期字符串是否有误: {}", last_day_str);
+            error!(
+                "❌ 更新周数失败，请检查日期字符串是否有误: {}",
+                last_day_str
+            );
         }
     }
 }
@@ -371,10 +403,7 @@ fn load_config_from_json_and_sync(config_path: &Path, config: &mut YamlConfig) {
     match fs::read_to_string(config_path) {
         Ok(content) => {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                let last_day = json
-                    .get("last_day")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let last_day = json.get("last_day").and_then(|v| v.as_str()).unwrap_or("");
                 let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
 
                 info!(
@@ -437,7 +466,8 @@ fn handle_open_report(config: &YamlConfig) {
     let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
 
     // 用 TUI 编辑器打开全文（NORMAL 模式）
-    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报文件", &lines) {
+    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报文件", &lines)
+    {
         Ok(Some(text)) => {
             // 用户提交了内容，整体回写文件
             let mut result = text;
@@ -465,7 +495,9 @@ fn handle_open_report(config: &YamlConfig) {
 fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
     match url {
         Some(u) if !u.is_empty() => {
-            let old = config.get_property(section::REPORT, config_key::GIT_REPO).cloned();
+            let old = config
+                .get_property(section::REPORT, config_key::GIT_REPO)
+                .cloned();
             config.set_property(section::REPORT, config_key::GIT_REPO, u);
 
             // 如果日报目录已有 .git，同步更新 remote origin
@@ -505,7 +537,9 @@ fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
 /// 获取日报目录（report 文件所在的目录）
 fn get_report_dir(config: &YamlConfig) -> Option<String> {
     let report_path = config.report_file_path();
-    report_path.parent().map(|p| p.to_string_lossy().to_string())
+    report_path
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
 }
 
 /// 在日报目录下执行 git 命令
@@ -518,10 +552,7 @@ fn run_git_in_report_dir(args: &[&str], config: &YamlConfig) -> Option<std::proc
         }
     };
 
-    let result = Command::new("git")
-        .args(args)
-        .current_dir(&dir)
-        .status();
+    let result = Command::new("git").args(args).current_dir(&dir).status();
 
     match result {
         Ok(status) => Some(status),
@@ -692,7 +723,10 @@ fn handle_pull(config: &YamlConfig) {
 
         // 先备份已有文件（如果有的话）
         let report_path = config.report_file_path();
-        let has_existing = report_path.exists() && fs::metadata(&report_path).map(|m| m.len() > 0).unwrap_or(false);
+        let has_existing = report_path.exists()
+            && fs::metadata(&report_path)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false);
 
         if has_existing {
             // 备份现有文件
@@ -710,7 +744,13 @@ fn handle_pull(config: &YamlConfig) {
         let _ = fs::remove_dir_all(&temp_dir);
 
         let result = Command::new("git")
-            .args(["clone", "-b", "main", &repo_url, &temp_dir.to_string_lossy()])
+            .args([
+                "clone",
+                "-b",
+                "main",
+                &repo_url,
+                &temp_dir.to_string_lossy(),
+            ])
             .status();
 
         match result {
@@ -750,7 +790,11 @@ fn handle_pull(config: &YamlConfig) {
 
             // 备份本地已有的未跟踪文件
             let report_path = config.report_file_path();
-            if report_path.exists() && fs::metadata(&report_path).map(|m| m.len() > 0).unwrap_or(false) {
+            if report_path.exists()
+                && fs::metadata(&report_path)
+                    .map(|m| m.len() > 0)
+                    .unwrap_or(false)
+            {
                 let backup_path = report_path.with_extension("md.bak");
                 let _ = fs::copy(&report_path, &backup_path);
                 info!("📋 已备份本地日报到: {:?}", backup_path);
@@ -767,7 +811,8 @@ fn handle_pull(config: &YamlConfig) {
             }
 
             // git reset --hard origin/main（强制用远程覆盖本地）
-            if let Some(status) = run_git_in_report_dir(&["reset", "--hard", "origin/main"], config) {
+            if let Some(status) = run_git_in_report_dir(&["reset", "--hard", "origin/main"], config)
+            {
                 if status.success() {
                     info!("✅ 成功从远程仓库拉取周报");
                 } else {
@@ -793,7 +838,9 @@ fn handle_pull(config: &YamlConfig) {
             };
 
             // 执行 pull
-            let pull_ok = if let Some(status) = run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config) {
+            let pull_ok = if let Some(status) =
+                run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config)
+            {
                 if status.success() {
                     info!("✅ 周报已更新到最新版本");
                     true
@@ -861,7 +908,12 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
 // ========== search 命令 ==========
 
 /// 处理 search 命令: j search <line_count|all> <target> [-f|-fuzzy]
-pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, config: &YamlConfig) {
+pub fn handle_search(
+    line_count: &str,
+    target: &str,
+    fuzzy_flag: Option<&str>,
+    config: &YamlConfig,
+) {
     let num = if line_count == "all" {
         usize::MAX
     } else {
@@ -887,7 +939,8 @@ pub fn handle_search(line_count: &str, target: &str, fuzzy_flag: Option<&str>, c
         return;
     }
 
-    let is_fuzzy = matches!(fuzzy_flag, Some(f) if f == search_flag::FUZZY_SHORT || f == search_flag::FUZZY);
+    let is_fuzzy =
+        matches!(fuzzy_flag, Some(f) if f == search_flag::FUZZY_SHORT || f == search_flag::FUZZY);
     if is_fuzzy {
         info!("启用模糊匹配...");
     }

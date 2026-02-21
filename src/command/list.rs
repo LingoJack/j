@@ -1,6 +1,6 @@
 use crate::config::YamlConfig;
 use crate::constants::DEFAULT_DISPLAY_SECTIONS;
-use crate::{md};
+use crate::md;
 use crate::util::log::capitalize_first_letter;
 
 /// 处理 list 命令: j ls [part]
