@@ -79,4 +79,5 @@ md_render:
 
 .PHONY: fmt
 fmt:
+	@echo "🧹 Formatting code..."
 	@cargo fmt
