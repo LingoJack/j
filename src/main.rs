@@ -38,8 +38,8 @@ fn main() {
     match cli {
         Ok(cli) => {
             match cli.command {
-                Some(subcmd) => {
-                    command::dispatch(subcmd, &mut config);
+                Some(subCmd) => {
+                    command::dispatch(subCmd, &mut config);
                 }
                 None => {
                     if cli.args.is_empty() {
