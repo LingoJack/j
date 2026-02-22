@@ -22,7 +22,7 @@ use std::path::PathBuf;
 // ========== 数据结构 ==========
 
 /// 单条待办事项
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TodoItem {
     /// 待办内容
     pub content: String,
@@ -35,7 +35,7 @@ pub struct TodoItem {
 }
 
 /// 待办列表（序列化到 JSON）
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct TodoList {
     pub items: Vec<TodoItem>,
 }
@@ -137,6 +137,8 @@ pub fn handle_todo(content: &[String], _config: &YamlConfig) {
 struct TodoApp {
     /// 待办列表数据
     list: TodoList,
+    /// 加载时的快照（用于对比是否真正有修改）
+    snapshot: TodoList,
     /// 列表选中状态
     state: ListState,
     /// 当前模式
@@ -145,12 +147,12 @@ struct TodoApp {
     input: String,
     /// 编辑时记录的原始索引
     edit_index: Option<usize>,
-    /// 是否有未保存的修改
-    dirty: bool,
     /// 状态栏消息
     message: Option<String>,
     /// 过滤模式: 0=全部, 1=未完成, 2=已完成
     filter: usize,
+    /// 强制退出输入缓冲（用于 q! 退出）
+    quit_input: String,
 }
 
 #[derive(PartialEq)]
@@ -163,25 +165,34 @@ enum AppMode {
     Editing,
     /// 确认删除
     ConfirmDelete,
+    /// 显示帮助
+    Help,
 }
 
 impl TodoApp {
     fn new() -> Self {
         let list = load_todo_list();
+        let snapshot = list.clone();
         let mut state = ListState::default();
         if !list.items.is_empty() {
             state.select(Some(0));
         }
         Self {
             list,
+            snapshot,
             state,
             mode: AppMode::Normal,
             input: String::new(),
             edit_index: None,
-            dirty: false,
             message: None,
             filter: 0,
+            quit_input: String::new(),
         }
+    }
+
+    /// 通过对比快照判断是否有未保存的修改
+    fn is_dirty(&self) -> bool {
+        self.list != self.snapshot
     }
 
     /// 获取当前过滤后的索引列表（映射到 list.items 的真实索引）
@@ -257,7 +268,6 @@ impl TodoApp {
                 item.done_at = None;
                 self.message = Some("⬜ 已标记为未完成".to_string());
             }
-            self.dirty = true;
         }
     }
 
@@ -276,7 +286,6 @@ impl TodoApp {
             created_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             done_at: None,
         });
-        self.dirty = true;
         self.input.clear();
         self.mode = AppMode::Normal;
         // 选中新添加的项
@@ -300,7 +309,6 @@ impl TodoApp {
         if let Some(idx) = self.edit_index {
             if idx < self.list.items.len() {
                 self.list.items[idx].content = text;
-                self.dirty = true;
                 self.message = Some("✅ 已更新待办内容".to_string());
             }
         }
@@ -313,7 +321,6 @@ impl TodoApp {
     fn delete_selected(&mut self) {
         if let Some(real_idx) = self.selected_real_index() {
             let removed = self.list.items.remove(real_idx);
-            self.dirty = true;
             self.message = Some(format!("🗑️ 已删除: {}", removed.content));
             // 调整选中位置
             let count = self.filtered_indices().len();
@@ -333,7 +340,6 @@ impl TodoApp {
         if let Some(real_idx) = self.selected_real_index() {
             if real_idx > 0 {
                 self.list.items.swap(real_idx, real_idx - 1);
-                self.dirty = true;
                 self.move_up();
             }
         }
@@ -344,7 +350,6 @@ impl TodoApp {
         if let Some(real_idx) = self.selected_real_index() {
             if real_idx < self.list.items.len() - 1 {
                 self.list.items.swap(real_idx, real_idx + 1);
-                self.dirty = true;
                 self.move_down();
             }
         }
@@ -369,11 +374,14 @@ impl TodoApp {
 
     /// 保存数据
     fn save(&mut self) {
-        if self.dirty {
+        if self.is_dirty() {
             if save_todo_list(&self.list) {
-                self.dirty = false;
+                // 更新快照为当前状态
+                self.snapshot = self.list.clone();
                 self.message = Some("💾 已保存".to_string());
             }
+        } else {
+            self.message = Some("📋 无需保存，没有修改".to_string());
         }
     }
 }
@@ -415,15 +423,13 @@ fn run_todo_tui_internal() -> io::Result<()> {
                     AppMode::Adding => handle_input_mode(&mut app, key),
                     AppMode::Editing => handle_input_mode(&mut app, key),
                     AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
+                    AppMode::Help => handle_help_mode(&mut app, key),
                 }
             }
         }
     }
 
-    // 退出前自动保存
-    if app.dirty {
-        save_todo_list(&app.list);
-    }
+    // 退出前不自动保存（用户需要手动保存或用 q! 放弃修改）
 
     // 恢复终端
     terminal::disable_raw_mode()?;
@@ -474,68 +480,143 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     f.render_widget(title_block, chunks[0]);
 
     // ========== 列表区 ==========
-    let indices = app.filtered_indices();
-    let items: Vec<ListItem> = indices
-        .iter()
-        .map(|&idx| {
-            let item = &app.list.items[idx];
-            let checkbox = if item.done { "[x]" } else { "[ ]" };
-            let style = if item.done {
+    if app.mode == AppMode::Help {
+        // 帮助模式：显示完整帮助信息
+        let help_lines = vec![
+            Line::from(Span::styled(
+                "  📖 快捷键帮助",
                 Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::CROSSED_OUT)
-            } else {
-                Style::default().fg(Color::White)
-            };
-
-            let mut spans = vec![
-                Span::styled(
-                    format!(" {} ", checkbox),
-                    if item.done {
-                        Style::default().fg(Color::Green)
-                    } else {
-                        Style::default().fg(Color::Yellow)
-                    },
-                ),
-                Span::styled(&item.content, style),
-            ];
-
-            // 显示创建时间（缩短格式）
-            if let Some(short_date) = item.created_at.get(..10) {
-                spans.push(Span::styled(
-                    format!("  ({})", short_date),
-                    Style::default().fg(Color::DarkGray),
-                ));
-            }
-
-            ListItem::new(Line::from(spans))
-        })
-        .collect();
-
-    let list_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::White))
-        .title(" 待办列表 ");
-
-    if items.is_empty() {
-        // 空列表提示
-        let empty_hint = List::new(vec![ListItem::new(Line::from(Span::styled(
-            "   (空) 按 a 添加新待办...",
-            Style::default().fg(Color::DarkGray),
-        )))])
-        .block(list_block);
-        f.render_widget(empty_hint, chunks[1]);
-    } else {
-        let list_widget = List::new(items)
-            .block(list_block)
-            .highlight_style(
-                Style::default()
-                    .bg(Color::DarkGray)
+                    .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol(" ▶ ");
-        f.render_stateful_widget(list_widget, chunks[1], &mut app.state);
-    };
+            )),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  n / ↓ / j    ", Style::default().fg(Color::Yellow)),
+                Span::raw("向下移动"),
+            ]),
+            Line::from(vec![
+                Span::styled("  N / ↑ / k    ", Style::default().fg(Color::Yellow)),
+                Span::raw("向上移动"),
+            ]),
+            Line::from(vec![
+                Span::styled("  空格 / 回车   ", Style::default().fg(Color::Yellow)),
+                Span::raw("切换完成状态 [x] / [ ]"),
+            ]),
+            Line::from(vec![
+                Span::styled("  a            ", Style::default().fg(Color::Yellow)),
+                Span::raw("添加新待办"),
+            ]),
+            Line::from(vec![
+                Span::styled("  e            ", Style::default().fg(Color::Yellow)),
+                Span::raw("编辑选中待办"),
+            ]),
+            Line::from(vec![
+                Span::styled("  d            ", Style::default().fg(Color::Yellow)),
+                Span::raw("删除待办（需确认）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  f            ", Style::default().fg(Color::Yellow)),
+                Span::raw("过滤切换（全部 / 未完成 / 已完成）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  J / K        ", Style::default().fg(Color::Yellow)),
+                Span::raw("调整待办顺序（下移 / 上移）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  s            ", Style::default().fg(Color::Yellow)),
+                Span::raw("手动保存"),
+            ]),
+            Line::from(vec![
+                Span::styled("  q            ", Style::default().fg(Color::Yellow)),
+                Span::raw("退出（有未保存修改时需先保存或用 q! 强制退出）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  q!           ", Style::default().fg(Color::Yellow)),
+                Span::raw("强制退出（丢弃未保存的修改）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  Esc          ", Style::default().fg(Color::Yellow)),
+                Span::raw("退出（同 q）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  Ctrl+C       ", Style::default().fg(Color::Yellow)),
+                Span::raw("强制退出（不保存）"),
+            ]),
+            Line::from(vec![
+                Span::styled("  ?            ", Style::default().fg(Color::Yellow)),
+                Span::raw("显示此帮助"),
+            ]),
+        ];
+        let help_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(" 帮助 ");
+        let help_widget = Paragraph::new(help_lines).block(help_block);
+        f.render_widget(help_widget, chunks[1]);
+    } else {
+        let indices = app.filtered_indices();
+        let items: Vec<ListItem> = indices
+            .iter()
+            .map(|&idx| {
+                let item = &app.list.items[idx];
+                let checkbox = if item.done { "[x]" } else { "[ ]" };
+                let style = if item.done {
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::CROSSED_OUT)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+
+                let mut spans = vec![
+                    Span::styled(
+                        format!(" {} ", checkbox),
+                        if item.done {
+                            Style::default().fg(Color::Green)
+                        } else {
+                            Style::default().fg(Color::Yellow)
+                        },
+                    ),
+                    Span::styled(&item.content, style),
+                ];
+
+                // 显示创建时间（缩短格式）
+                if let Some(short_date) = item.created_at.get(..10) {
+                    spans.push(Span::styled(
+                        format!("  ({})", short_date),
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
+
+                ListItem::new(Line::from(spans))
+            })
+            .collect();
+
+        let list_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::White))
+            .title(" 待办列表 ");
+
+        if items.is_empty() {
+            // 空列表提示
+            let empty_hint = List::new(vec![ListItem::new(Line::from(Span::styled(
+                "   (空) 按 a 添加新待办...",
+                Style::default().fg(Color::DarkGray),
+            )))])
+            .block(list_block);
+            f.render_widget(empty_hint, chunks[1]);
+        } else {
+            let list_widget = List::new(items)
+                .block(list_block)
+                .highlight_style(
+                    Style::default()
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol(" ▶ ");
+            f.render_stateful_widget(list_widget, chunks[1], &mut app.state);
+        };
+    }
 
     // ========== 状态/输入栏 ==========
     match &app.mode {
@@ -588,9 +669,9 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
             );
             f.render_widget(confirm_widget, chunks[2]);
         }
-        AppMode::Normal => {
+        AppMode::Normal | AppMode::Help => {
             let msg = app.message.as_deref().unwrap_or("按 ? 查看完整帮助");
-            let dirty_indicator = if app.dirty { " [未保存]" } else { "" };
+            let dirty_indicator = if app.is_dirty() { " [未保存]" } else { "" };
             let status_widget = Paragraph::new(Line::from(vec![
                 Span::styled(msg, Style::default().fg(Color::Gray)),
                 Span::styled(
@@ -610,10 +691,11 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | f 过滤 | s 保存 | q/Esc 退出"
+            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | f 过滤 | s 保存 | ? 帮助 | q 退出"
         }
         AppMode::Adding | AppMode::Editing => " Enter 确认 | Esc 取消",
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
+        AppMode::Help => " 按任意键返回",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(
         help_text,
@@ -624,14 +706,40 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
 
 /// 正常模式按键处理，返回 true 表示退出
 fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
-    // Ctrl+C 强制退出
+    // Ctrl+C 强制退出（不保存）
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return true;
     }
 
     match key.code {
-        // 退出
-        KeyCode::Char('q') | KeyCode::Esc => return true,
+        // 退出：有未保存修改时拒绝，提示用 q! 或先保存
+        KeyCode::Char('q') => {
+            if app.is_dirty() {
+                app.message = Some(
+                    "⚠️ 有未保存的修改！请先 s 保存，或输入 q! 强制退出（丢弃修改）".to_string(),
+                );
+                app.quit_input = "q".to_string();
+                return false;
+            }
+            return true;
+        }
+        KeyCode::Esc => {
+            if app.is_dirty() {
+                app.message = Some(
+                    "⚠️ 有未保存的修改！请先 s 保存，或输入 q! 强制退出（丢弃修改）".to_string(),
+                );
+                return false;
+            }
+            return true;
+        }
+
+        // q! 强制退出（丢弃修改）：通过 ! 键判断前一个输入是否为 q
+        KeyCode::Char('!') => {
+            if app.quit_input == "q" {
+                return true; // q! 强制退出
+            }
+            app.quit_input.clear();
+        }
 
         // 向下移动
         KeyCode::Char('n') | KeyCode::Down | KeyCode::Char('j') => app.move_down(),
@@ -676,7 +784,17 @@ fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
         KeyCode::Char('K') => app.move_item_up(),
         KeyCode::Char('J') => app.move_item_down(),
 
+        // 查看帮助
+        KeyCode::Char('?') => {
+            app.mode = AppMode::Help;
+        }
+
         _ => {}
+    }
+
+    // 非 q 键时清空 quit_input 缓冲
+    if key.code != KeyCode::Char('q') && key.code != KeyCode::Char('!') {
+        app.quit_input.clear();
     }
 
     false
@@ -720,4 +838,10 @@ fn handle_confirm_delete(app: &mut TodoApp, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+/// 帮助模式按键处理（按任意键返回）
+fn handle_help_mode(app: &mut TodoApp, _key: KeyEvent) {
+    app.mode = AppMode::Normal;
+    app.message = None;
 }
