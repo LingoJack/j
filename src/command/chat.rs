@@ -2711,7 +2711,8 @@ fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ("Ctrl+L", "清空"),
                 ("Ctrl+Y", "复制"),
                 ("Ctrl+B", "浏览"),
-                ("?", "帮助"),
+                ("Ctrl+S", "流式切换"),
+                ("?/F1", "帮助"),
                 ("Esc", "退出"),
             ]
         }
@@ -2967,7 +2968,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled(
-                "  ?            ",
+                "  ? / F1       ",
                 Style::default()
                     .fg(Color::Rgb(230, 210, 120))
                     .add_modifier(Modifier::BOLD),
@@ -3150,7 +3151,11 @@ fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             }
         }
 
-        // 输入字符
+        // F1 任何时候都能唤起帮助
+        KeyCode::F(1) => {
+            app.mode = ChatMode::Help;
+        }
+        // 输入框为空时，? 也可唤起帮助
         KeyCode::Char('?') if app.input.is_empty() => {
             app.mode = ChatMode::Help;
         }
