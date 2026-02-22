@@ -562,12 +562,19 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         f.render_widget(help_widget, chunks[1]);
     } else {
         let indices = app.filtered_indices();
+        // 计算列表区域可用宽度（减去边框 2 + highlight_symbol " ▶ " 占 3 个字符）
+        let list_inner_width = chunks[1].width.saturating_sub(2 + 3) as usize;
         let items: Vec<ListItem> = indices
             .iter()
             .map(|&idx| {
                 let item = &app.list.items[idx];
                 let checkbox = if item.done { "[x]" } else { "[ ]" };
-                let style = if item.done {
+                let checkbox_style = if item.done {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::Yellow)
+                };
+                let content_style = if item.done {
                     Style::default()
                         .fg(Color::DarkGray)
                         .add_modifier(Modifier::CROSSED_OUT)
@@ -575,27 +582,37 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     Style::default().fg(Color::White)
                 };
 
-                let mut spans = vec![
-                    Span::styled(
-                        format!(" {} ", checkbox),
-                        if item.done {
-                            Style::default().fg(Color::Green)
-                        } else {
-                            Style::default().fg(Color::Yellow)
-                        },
-                    ),
-                    Span::styled(&item.content, style),
-                ];
+                // checkbox 部分: " [x] " 占 5 个显示宽度
+                let checkbox_str = format!(" {} ", checkbox);
+                let checkbox_display_width = display_width(&checkbox_str);
 
-                // 显示创建时间（缩短格式）
-                if let Some(short_date) = item.created_at.get(..10) {
-                    spans.push(Span::styled(
-                        format!("  ({})", short_date),
-                        Style::default().fg(Color::DarkGray),
-                    ));
-                }
+                // 时间部分: "  (YYYY-MM-DD)" 占 14 个显示宽度
+                let date_str = item
+                    .created_at
+                    .get(..10)
+                    .map(|d| format!("  ({})", d))
+                    .unwrap_or_default();
+                let date_display_width = display_width(&date_str);
 
-                ListItem::new(Line::from(spans))
+                // 内容可用的最大显示宽度
+                let content_max_width = list_inner_width
+                    .saturating_sub(checkbox_display_width)
+                    .saturating_sub(date_display_width);
+
+                // 如果内容超出可用宽度则截断并加 "…"
+                let content_display = truncate_to_width(&item.content, content_max_width);
+                let content_actual_width = display_width(&content_display);
+
+                // 用空格填充内容和时间之间的间距，让时间右对齐
+                let padding_width = content_max_width.saturating_sub(content_actual_width);
+                let padding = " ".repeat(padding_width);
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(checkbox_str, checkbox_style),
+                    Span::styled(content_display, content_style),
+                    Span::raw(padding),
+                    Span::styled(date_str, Style::default().fg(Color::DarkGray)),
+                ]))
             })
             .collect();
 
@@ -954,6 +971,50 @@ fn split_input_at_cursor(input: &str, cursor_pos: usize) -> (String, String, Str
         String::new()
     };
     (before, cursor_ch, after)
+}
+
+/// 计算字符串的显示宽度（中文/全角字符占 2 列，ASCII 占 1 列）
+fn display_width(s: &str) -> usize {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii() {
+                1
+            } else {
+                // CJK 字符和全角字符占 2 列
+                2
+            }
+        })
+        .sum()
+}
+
+/// 将字符串截断到指定的显示宽度，超出部分用 ".." 替代
+fn truncate_to_width(s: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let total_width = display_width(s);
+    if total_width <= max_width {
+        return s.to_string();
+    }
+
+    // 需要截断，预留 2 列给 ".."
+    let ellipsis = "..";
+    let ellipsis_width = 2;
+    let content_budget = max_width.saturating_sub(ellipsis_width);
+
+    let mut width = 0;
+    let mut result = String::new();
+    for ch in s.chars() {
+        let ch_width = if ch.is_ascii() { 1 } else { 2 };
+        if width + ch_width > content_budget {
+            break;
+        }
+        width += ch_width;
+        result.push(ch);
+    }
+    result.push_str(ellipsis);
+    result
 }
 
 /// 复制内容到系统剪切板（macOS 使用 pbcopy，Linux 使用 xclip）
