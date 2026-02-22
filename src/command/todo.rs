@@ -533,7 +533,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
             )
-            .highlight_symbol("▶ ");
+            .highlight_symbol(" ▶ ");
         f.render_stateful_widget(list_widget, chunks[1], &mut app.state);
     };
 
