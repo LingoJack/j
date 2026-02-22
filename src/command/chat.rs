@@ -363,6 +363,25 @@ struct ChatApp {
     stream_rx: Option<mpsc::Receiver<StreamMsg>>,
     /// 当前正在流式接收的 AI 回复内容（实时更新）
     streaming_content: Arc<Mutex<String>>,
+    /// 消息渲染行缓存：(消息数, 最后一条消息内容hash, 气泡宽度) → 渲染好的行
+    /// 避免每帧都重新解析 Markdown
+    msg_lines_cache: Option<MsgLinesCache>,
+}
+
+/// 消息渲染行缓存
+struct MsgLinesCache {
+    /// 会话消息数量
+    msg_count: usize,
+    /// 最后一条消息的内容长度（用于检测流式更新）
+    last_msg_len: usize,
+    /// 流式内容长度
+    streaming_len: usize,
+    /// 是否正在加载
+    is_loading: bool,
+    /// 气泡最大宽度（窗口变化时需要重算）
+    bubble_max_width: usize,
+    /// 缓存的渲染行
+    lines: Vec<Line<'static>>,
 }
 
 /// Toast 通知显示时长（秒）
@@ -398,6 +417,7 @@ impl ChatApp {
             toast: None,
             stream_rx: None,
             streaming_content: Arc::new(Mutex::new(String::new())),
+            msg_lines_cache: None,
         }
     }
 
@@ -702,7 +722,7 @@ fn run_chat_tui_internal() -> io::Result<()> {
 
         // 等待事件：加载中用短间隔以刷新流式内容，空闲时用长间隔节省 CPU
         let poll_timeout = if app.is_loading {
-            std::time::Duration::from_millis(300)
+            std::time::Duration::from_millis(150)
         } else {
             std::time::Duration::from_millis(1000)
         };
@@ -919,7 +939,82 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 消息内容最大宽度为可用宽度的 75%
     let bubble_max_width = (inner_width * 75 / 100).max(20);
 
-    // 收集要渲染的消息列表（包括已完成的 + 正在流式接收的）
+    // 计算缓存 key：消息数 + 最后一条消息长度 + 流式内容长度 + is_loading + 气泡宽度
+    let msg_count = app.session.messages.len();
+    let last_msg_len = app
+        .session
+        .messages
+        .last()
+        .map(|m| m.content.len())
+        .unwrap_or(0);
+    let streaming_len = app.streaming_content.lock().unwrap().len();
+    let cache_hit = if let Some(ref cache) = app.msg_lines_cache {
+        cache.msg_count == msg_count
+            && cache.last_msg_len == last_msg_len
+            && cache.streaming_len == streaming_len
+            && cache.is_loading == app.is_loading
+            && cache.bubble_max_width == bubble_max_width
+    } else {
+        false
+    };
+
+    if !cache_hit {
+        // 缓存未命中，重新构建渲染行并存入缓存
+        let new_lines = build_message_lines(app, inner_width, bubble_max_width);
+        app.msg_lines_cache = Some(MsgLinesCache {
+            msg_count,
+            last_msg_len,
+            streaming_len,
+            is_loading: app.is_loading,
+            bubble_max_width,
+            lines: new_lines,
+        });
+    }
+
+    // 从缓存中借用 lines（零拷贝）
+    let cached = app.msg_lines_cache.as_ref().unwrap();
+    let all_lines = &cached.lines;
+    let total_lines = all_lines.len() as u16;
+
+    // 渲染边框
+    f.render_widget(block, area);
+
+    // 计算内部区域（去掉边框）
+    let inner = area.inner(ratatui::layout::Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
+    let visible_height = inner.height;
+    let max_scroll = total_lines.saturating_sub(visible_height);
+
+    // 自动滚动到底部
+    if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
+        app.scroll_offset = max_scroll;
+    }
+
+    // 填充内部背景色（避免空白行没有背景）
+    let bg_fill = Block::default().style(Style::default().bg(Color::Rgb(22, 22, 30)));
+    f.render_widget(bg_fill, inner);
+
+    // 只渲染可见区域的行（逐行借用缓存，clone 单行开销极小）
+    let start = app.scroll_offset as usize;
+    let end = (start + visible_height as usize).min(all_lines.len());
+    for (i, line_idx) in (start..end).enumerate() {
+        let line = &all_lines[line_idx];
+        let y = inner.y + i as u16;
+        let line_area = Rect::new(inner.x, y, inner.width, 1);
+        // 使用 Paragraph 渲染单行（clone 单行开销很小）
+        let p = Paragraph::new(line.clone());
+        f.render_widget(p, line_area);
+    }
+}
+
+/// 构建所有消息的渲染行（独立函数，用于缓存）
+fn build_message_lines(
+    app: &ChatApp,
+    inner_width: usize,
+    bubble_max_width: usize,
+) -> Vec<Line<'static>> {
     struct RenderMsg {
         role: String,
         content: String,
@@ -1102,21 +1197,7 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 末尾留白
     lines.push(Line::from(""));
 
-    // 计算滚动：严格限制在消息区可见高度内
-    let visible_height = area.height.saturating_sub(2) as u16; // 减去上下边框
-    let total_lines = lines.len() as u16;
-    let max_scroll = total_lines.saturating_sub(visible_height);
-
-    // 自动滚动到底部
-    if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
-        app.scroll_offset = max_scroll;
-    }
-
-    let messages_widget = Paragraph::new(lines)
-        .block(block)
-        .scroll((app.scroll_offset, 0));
-
-    f.render_widget(messages_widget, area);
+    lines
 }
 
 /// 将 Markdown 文本解析为 ratatui 的 Line 列表
@@ -1142,6 +1223,12 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
     let mut heading_level: Option<u8> = None;
     // 跟踪是否在引用块中
     let mut in_blockquote = false;
+    // 表格相关状态
+    let mut in_table = false;
+    let mut table_rows: Vec<Vec<String>> = Vec::new(); // 收集所有行（含表头）
+    let mut current_row: Vec<String> = Vec::new();
+    let mut current_cell = String::new();
+    let mut table_alignments: Vec<pulldown_cmark::Alignment> = Vec::new();
 
     let base_style = Style::default().fg(Color::Rgb(220, 220, 230));
 
@@ -1332,6 +1419,9 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
             Event::Text(text) => {
                 if in_code_block {
                     code_block_content.push_str(&text);
+                } else if in_table {
+                    // 表格中的文本收集到当前单元格
+                    current_cell.push_str(&text);
                 } else {
                     let style = *style_stack.last().unwrap_or(&base_style);
                     let text_str = text.to_string();
@@ -1424,6 +1514,170 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                     "─".repeat(content_width),
                     Style::default().fg(Color::Rgb(70, 75, 90)),
                 )));
+            }
+            // ===== 表格支持 =====
+            Event::Start(Tag::Table(alignments)) => {
+                flush_line(&mut current_spans, &mut lines);
+                in_table = true;
+                table_rows.clear();
+                table_alignments = alignments;
+            }
+            Event::End(TagEnd::Table) => {
+                // 表格结束：计算列宽，渲染完整表格
+                flush_line(&mut current_spans, &mut lines);
+                in_table = false;
+
+                if !table_rows.is_empty() {
+                    let num_cols = table_rows.iter().map(|r| r.len()).max().unwrap_or(0);
+                    if num_cols > 0 {
+                        // 计算每列最大宽度
+                        let mut col_widths: Vec<usize> = vec![0; num_cols];
+                        for row in &table_rows {
+                            for (i, cell) in row.iter().enumerate() {
+                                let w = display_width(cell);
+                                if w > col_widths[i] {
+                                    col_widths[i] = w;
+                                }
+                            }
+                        }
+
+                        // 限制总宽度不超过 content_width，等比缩放
+                        let sep_w = num_cols + 1; // 竖线占用
+                        let pad_w = num_cols * 2; // 每列左右各1空格
+                        let avail = content_width.saturating_sub(sep_w + pad_w);
+                        let total_col_w: usize = col_widths.iter().sum();
+                        if total_col_w > avail && total_col_w > 0 {
+                            for cw in col_widths.iter_mut() {
+                                *cw = (*cw * avail) / total_col_w;
+                                if *cw == 0 {
+                                    *cw = 1;
+                                }
+                            }
+                        }
+
+                        let table_style = Style::default().fg(Color::Rgb(180, 180, 200));
+                        let header_style = Style::default()
+                            .fg(Color::Rgb(120, 180, 255))
+                            .add_modifier(Modifier::BOLD);
+                        let border_style = Style::default().fg(Color::Rgb(60, 70, 100));
+
+                        // 渲染顶边框 ┌─┬─┐
+                        let mut top = String::from("┌");
+                        for (i, cw) in col_widths.iter().enumerate() {
+                            top.push_str(&"─".repeat(cw + 2));
+                            if i < num_cols - 1 {
+                                top.push('┬');
+                            }
+                        }
+                        top.push('┐');
+                        lines.push(Line::from(Span::styled(top, border_style)));
+
+                        for (row_idx, row) in table_rows.iter().enumerate() {
+                            // 数据行 │ cell │ cell │
+                            let mut row_spans: Vec<Span> = Vec::new();
+                            row_spans.push(Span::styled("│", border_style));
+                            for (i, cw) in col_widths.iter().enumerate() {
+                                let cell_text = row.get(i).map(|s| s.as_str()).unwrap_or("");
+                                let cell_w = display_width(cell_text);
+                                let text = if cell_w > *cw {
+                                    // 截断
+                                    let mut t = String::new();
+                                    let mut w = 0;
+                                    for ch in cell_text.chars() {
+                                        let chw = char_width(ch);
+                                        if w + chw > *cw {
+                                            break;
+                                        }
+                                        t.push(ch);
+                                        w += chw;
+                                    }
+                                    let fill = cw.saturating_sub(w);
+                                    format!(" {}{} ", t, " ".repeat(fill))
+                                } else {
+                                    // 根据对齐方式填充
+                                    let fill = cw.saturating_sub(cell_w);
+                                    let align = table_alignments
+                                        .get(i)
+                                        .copied()
+                                        .unwrap_or(pulldown_cmark::Alignment::None);
+                                    match align {
+                                        pulldown_cmark::Alignment::Center => {
+                                            let left = fill / 2;
+                                            let right = fill - left;
+                                            format!(
+                                                " {}{}{} ",
+                                                " ".repeat(left),
+                                                cell_text,
+                                                " ".repeat(right)
+                                            )
+                                        }
+                                        pulldown_cmark::Alignment::Right => {
+                                            format!(" {}{} ", " ".repeat(fill), cell_text)
+                                        }
+                                        _ => {
+                                            format!(" {}{} ", cell_text, " ".repeat(fill))
+                                        }
+                                    }
+                                };
+                                let style = if row_idx == 0 {
+                                    header_style
+                                } else {
+                                    table_style
+                                };
+                                row_spans.push(Span::styled(text, style));
+                                row_spans.push(Span::styled("│", border_style));
+                            }
+                            lines.push(Line::from(row_spans));
+
+                            // 表头行后加分隔线 ├─┼─┤
+                            if row_idx == 0 {
+                                let mut sep = String::from("├");
+                                for (i, cw) in col_widths.iter().enumerate() {
+                                    sep.push_str(&"─".repeat(cw + 2));
+                                    if i < num_cols - 1 {
+                                        sep.push('┼');
+                                    }
+                                }
+                                sep.push('┤');
+                                lines.push(Line::from(Span::styled(sep, border_style)));
+                            }
+                        }
+
+                        // 底边框 └─┴─┘
+                        let mut bottom = String::from("└");
+                        for (i, cw) in col_widths.iter().enumerate() {
+                            bottom.push_str(&"─".repeat(cw + 2));
+                            if i < num_cols - 1 {
+                                bottom.push('┴');
+                            }
+                        }
+                        bottom.push('┘');
+                        lines.push(Line::from(Span::styled(bottom, border_style)));
+                    }
+                }
+                table_rows.clear();
+                table_alignments.clear();
+            }
+            Event::Start(Tag::TableHead) => {
+                current_row.clear();
+            }
+            Event::End(TagEnd::TableHead) => {
+                table_rows.push(current_row.clone());
+                current_row.clear();
+            }
+            Event::Start(Tag::TableRow) => {
+                current_row.clear();
+            }
+            Event::End(TagEnd::TableRow) => {
+                table_rows.push(current_row.clone());
+                current_row.clear();
+            }
+            Event::Start(Tag::TableCell) => {
+                current_cell.clear();
+            }
+            Event::End(TagEnd::TableCell) => {
+                current_row.push(current_cell.clone());
+                current_cell.clear();
             }
             _ => {}
         }
