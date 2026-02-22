@@ -576,7 +576,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                 };
                 let content_style = if item.done {
                     Style::default()
-                        .fg(Color::DarkGray)
+                        .fg(Color::Gray)
                         .add_modifier(Modifier::CROSSED_OUT)
                 } else {
                     Style::default().fg(Color::White)
@@ -634,7 +634,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                 .block(list_block)
                 .highlight_style(
                     Style::default()
-                        .bg(Color::DarkGray)
+                        .bg(Color::Indexed(236))
                         .add_modifier(Modifier::BOLD),
                 )
                 .highlight_symbol(" ▶ ");
