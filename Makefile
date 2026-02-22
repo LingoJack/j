@@ -39,14 +39,14 @@ uninstall:
 .PHONY: publish
 publish: release push
 	@echo "📦 Publishing to crates.io..."
-	@cargo publish
+	@cargo publish --registry crates-io
 	@echo "✅ Published! Verify: cargo search j-cli"
 
 # 发布前检查（dry-run）
 .PHONY: publish-check
 publish-check:
 	@echo "🔍 Checking publish (dry-run)..."
-	@cargo publish --dry-run
+	@cargo publish --registry crates-io --dry-run
 	@echo "✅ Check passed"
 
 # 创建 git tag 并推送（触发 GitHub Actions 自动构建发布）
