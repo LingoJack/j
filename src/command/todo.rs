@@ -153,6 +153,8 @@ struct TodoApp {
     filter: usize,
     /// 强制退出输入缓冲（用于 q! 退出）
     quit_input: String,
+    /// 输入模式下的光标位置（字符索引）
+    cursor_pos: usize,
 }
 
 #[derive(PartialEq)]
@@ -187,6 +189,7 @@ impl TodoApp {
             message: None,
             filter: 0,
             quit_input: String::new(),
+            cursor_pos: 0,
         }
     }
 
@@ -527,6 +530,10 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                 Span::raw("手动保存"),
             ]),
             Line::from(vec![
+                Span::styled("  y            ", Style::default().fg(Color::Yellow)),
+                Span::raw("复制选中待办到剪切板"),
+            ]),
+            Line::from(vec![
                 Span::styled("  q            ", Style::default().fg(Color::Yellow)),
                 Span::raw("退出（有未保存修改时需先保存或用 q! 强制退出）"),
             ]),
@@ -621,30 +628,40 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     // ========== 状态/输入栏 ==========
     match &app.mode {
         AppMode::Adding => {
+            let (before, cursor_ch, after) = split_input_at_cursor(&app.input, app.cursor_pos);
             let input_widget = Paragraph::new(Line::from(vec![
                 Span::styled(" 新待办: ", Style::default().fg(Color::Green)),
-                Span::raw(&app.input),
-                Span::styled("█", Style::default().fg(Color::White)),
+                Span::raw(before),
+                Span::styled(
+                    cursor_ch,
+                    Style::default().fg(Color::Black).bg(Color::White),
+                ),
+                Span::raw(after),
             ]))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Green))
-                    .title(" 添加模式 (Enter 确认 / Esc 取消) "),
+                    .title(" 添加模式 (Enter 确认 / Esc 取消 / ←→ 移动光标) "),
             );
             f.render_widget(input_widget, chunks[2]);
         }
         AppMode::Editing => {
+            let (before, cursor_ch, after) = split_input_at_cursor(&app.input, app.cursor_pos);
             let input_widget = Paragraph::new(Line::from(vec![
                 Span::styled(" 编辑: ", Style::default().fg(Color::Yellow)),
-                Span::raw(&app.input),
-                Span::styled("█", Style::default().fg(Color::White)),
+                Span::raw(before),
+                Span::styled(
+                    cursor_ch,
+                    Style::default().fg(Color::Black).bg(Color::White),
+                ),
+                Span::raw(after),
             ]))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Yellow))
-                    .title(" 编辑模式 (Enter 确认 / Esc 取消) "),
+                    .title(" 编辑模式 (Enter 确认 / Esc 取消 / ←→ 移动光标) "),
             );
             f.render_widget(input_widget, chunks[2]);
         }
@@ -691,9 +708,11 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | f 过滤 | s 保存 | ? 帮助 | q 退出"
+            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | y 复制 | f 过滤 | s 保存 | ? 帮助 | q 退出"
         }
-        AppMode::Adding | AppMode::Editing => " Enter 确认 | Esc 取消",
+        AppMode::Adding | AppMode::Editing => {
+            " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾"
+        }
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
         AppMode::Help => " 按任意键返回",
     };
@@ -754,6 +773,7 @@ fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
         KeyCode::Char('a') => {
             app.mode = AppMode::Adding;
             app.input.clear();
+            app.cursor_pos = 0;
             app.message = None;
         }
 
@@ -761,9 +781,22 @@ fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
         KeyCode::Char('e') => {
             if let Some(real_idx) = app.selected_real_index() {
                 app.input = app.list.items[real_idx].content.clone();
+                app.cursor_pos = app.input.chars().count();
                 app.edit_index = Some(real_idx);
                 app.mode = AppMode::Editing;
                 app.message = None;
+            }
+        }
+
+        // 复制选中待办到剪切板
+        KeyCode::Char('y') => {
+            if let Some(real_idx) = app.selected_real_index() {
+                let content = app.list.items[real_idx].content.clone();
+                if copy_to_clipboard(&content) {
+                    app.message = Some(format!("📋 已复制到剪切板: {}", content));
+                } else {
+                    app.message = Some("❌ 复制到剪切板失败".to_string());
+                }
             }
         }
 
@@ -800,8 +833,10 @@ fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
     false
 }
 
-/// 输入模式按键处理（添加/编辑通用）
+/// 输入模式按键处理（添加/编辑通用，支持光标移动和行内编辑）
 fn handle_input_mode(app: &mut TodoApp, key: KeyEvent) {
+    let char_count = app.input.chars().count();
+
     match key.code {
         KeyCode::Enter => {
             if app.mode == AppMode::Adding {
@@ -813,14 +848,72 @@ fn handle_input_mode(app: &mut TodoApp, key: KeyEvent) {
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
             app.input.clear();
+            app.cursor_pos = 0;
             app.edit_index = None;
             app.message = Some("已取消".to_string());
         }
+        KeyCode::Left => {
+            if app.cursor_pos > 0 {
+                app.cursor_pos -= 1;
+            }
+        }
+        KeyCode::Right => {
+            if app.cursor_pos < char_count {
+                app.cursor_pos += 1;
+            }
+        }
+        KeyCode::Home => {
+            app.cursor_pos = 0;
+        }
+        KeyCode::End => {
+            app.cursor_pos = char_count;
+        }
         KeyCode::Backspace => {
-            app.input.pop();
+            if app.cursor_pos > 0 {
+                // 找到第 cursor_pos-1 和 cursor_pos 个字符的字节偏移，删除该范围
+                let start = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos - 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                let end = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.drain(start..end);
+                app.cursor_pos -= 1;
+            }
+        }
+        KeyCode::Delete => {
+            if app.cursor_pos < char_count {
+                let start = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                let end = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos + 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.drain(start..end);
+            }
         }
         KeyCode::Char(c) => {
-            app.input.push(c);
+            // 在光标位置插入字符（支持多字节字符）
+            let byte_idx = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            app.input.insert_str(byte_idx, &c.to_string());
+            app.cursor_pos += 1;
         }
         _ => {}
     }
@@ -844,4 +937,58 @@ fn handle_confirm_delete(app: &mut TodoApp, key: KeyEvent) {
 fn handle_help_mode(app: &mut TodoApp, _key: KeyEvent) {
     app.mode = AppMode::Normal;
     app.message = None;
+}
+
+/// 将输入字符串按光标位置分割为三部分：光标前、光标处字符、光标后
+fn split_input_at_cursor(input: &str, cursor_pos: usize) -> (String, String, String) {
+    let chars: Vec<char> = input.chars().collect();
+    let before: String = chars[..cursor_pos].iter().collect();
+    let cursor_ch = if cursor_pos < chars.len() {
+        chars[cursor_pos].to_string()
+    } else {
+        " ".to_string() // 光标在末尾时显示空格块
+    };
+    let after: String = if cursor_pos < chars.len() {
+        chars[cursor_pos + 1..].iter().collect()
+    } else {
+        String::new()
+    };
+    (before, cursor_ch, after)
+}
+
+/// 复制内容到系统剪切板（macOS 使用 pbcopy，Linux 使用 xclip）
+fn copy_to_clipboard(content: &str) -> bool {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // 根据平台选择剪切板命令
+    let (cmd, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+        ("pbcopy", vec![])
+    } else if cfg!(target_os = "linux") {
+        // 优先尝试 xclip，其次 xsel
+        if Command::new("which")
+            .arg("xclip")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            ("xclip", vec!["-selection", "clipboard"])
+        } else {
+            ("xsel", vec!["--clipboard", "--input"])
+        }
+    } else {
+        return false; // 不支持的平台
+    };
+
+    let child = Command::new(cmd).args(&args).stdin(Stdio::piped()).spawn();
+
+    match child {
+        Ok(mut child) => {
+            if let Some(ref mut stdin) = child.stdin {
+                let _ = stdin.write_all(content.as_bytes());
+            }
+            child.wait().map(|s| s.success()).unwrap_or(false)
+        }
+        Err(_) => false,
+    }
 }
