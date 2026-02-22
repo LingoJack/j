@@ -1,5 +1,6 @@
 pub mod alias;
 pub mod category;
+pub mod chat;
 pub mod list;
 pub mod open;
 pub mod report;
@@ -57,6 +58,9 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
 
         // 待办备忘录
         SubCmd::Todo { content } => todo::handle_todo(&content, config),
+
+        // AI 对话
+        SubCmd::Chat { content } => chat::handle_chat(&content, config),
 
         // 脚本
         SubCmd::Concat { name, content } => script::handle_concat(&name, &content, config),

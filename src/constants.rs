@@ -206,6 +206,9 @@ pub mod cmd {
     // shell 补全
     pub const COMPLETION: &[&str] = &["completion"];
 
+    // AI 对话
+    pub const CHAT: &[&str] = &["chat", "ai"];
+
     // agent（预留）
     pub const AGENT: &[&str] = &["agent"];
     pub const SYSTEM: &[&str] = &["system", "ps"];
@@ -214,8 +217,8 @@ pub mod cmd {
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
-            SEARCH, TODO, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION, AGENT,
-            SYSTEM,
+            SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
+            AGENT, SYSTEM,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }

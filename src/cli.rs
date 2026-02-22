@@ -135,6 +135,15 @@ pub enum SubCmd {
         content: Vec<String>,
     },
 
+    // ========== AI 对话 ==========
+    /// AI 对话（无参数进入 TUI 界面，有参数快速提问）
+    #[command(alias = "ai")]
+    Chat {
+        /// 消息内容（支持多个参数拼接）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
+    },
+
     // ========== 脚本 ==========
     /// 创建脚本
     Concat {

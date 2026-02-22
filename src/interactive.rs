@@ -160,6 +160,8 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         ),
         // 待办备忘录
         (cmd::TODO, vec![ArgHint::Placeholder("<content>")]),
+        // AI 对话
+        (cmd::CHAT, vec![ArgHint::Placeholder("<message>")]),
         // 脚本
         (
             cmd::CONCAT,
@@ -799,6 +801,12 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
     // 待办备忘录
     } else if is(cmd::TODO) {
         ParseResult::Matched(SubCmd::Todo {
+            content: rest.to_vec(),
+        })
+
+    // AI 对话
+    } else if is(cmd::CHAT) {
+        ParseResult::Matched(SubCmd::Chat {
             content: rest.to_vec(),
         })
 

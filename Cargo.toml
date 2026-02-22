@@ -30,6 +30,10 @@ termimad = "0.34.1"
 ratatui = "0.29.0"
 crossterm = "0.28.0"
 tui-textarea = "0.7"
+async-openai = { version = "0.33", default-features = false, features = ["chat-completion", "rustls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+futures = "0.3"
+pulldown-cmark = "0.12"
 
 [patch.crates-io]
 tui-textarea = { path = "patches/tui-textarea-0.7.0" }
