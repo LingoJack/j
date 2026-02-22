@@ -702,9 +702,9 @@ fn run_chat_tui_internal() -> io::Result<()> {
 
         // 等待事件：加载中用短间隔以刷新流式内容，空闲时用长间隔节省 CPU
         let poll_timeout = if app.is_loading {
-            std::time::Duration::from_millis(100)
+            std::time::Duration::from_millis(300)
         } else {
-            std::time::Duration::from_millis(500)
+            std::time::Duration::from_millis(1000)
         };
 
         if event::poll(poll_timeout)? {
