@@ -676,45 +676,81 @@ fn run_chat_tui_internal() -> io::Result<()> {
         return Ok(());
     }
 
+    let mut needs_redraw = true; // 首次必须绘制
+
     loop {
-        // 清理过期 toast
+        // 清理过期 toast（如果有 toast 被清理，需要重绘）
+        let had_toast = app.toast.is_some();
         app.tick_toast();
+        if had_toast && app.toast.is_none() {
+            needs_redraw = true;
+        }
 
         // 非阻塞地处理后台流式消息
+        let was_loading = app.is_loading;
         app.poll_stream();
+        // 流式加载中每帧都需要重绘（内容在更新）
+        if app.is_loading || (was_loading && !app.is_loading) {
+            needs_redraw = true;
+        }
 
-        terminal.draw(|f| draw_chat_ui(f, &mut app))?;
+        // 只在状态发生变化时才重绘，大幅降低 CPU 占用
+        if needs_redraw {
+            terminal.draw(|f| draw_chat_ui(f, &mut app))?;
+            needs_redraw = false;
+        }
 
-        // 加载中时用更短的 poll 间隔让流式输出更流畅
+        // 等待事件：加载中用短间隔以刷新流式内容，空闲时用长间隔节省 CPU
         let poll_timeout = if app.is_loading {
-            std::time::Duration::from_millis(30)
-        } else {
             std::time::Duration::from_millis(100)
+        } else {
+            std::time::Duration::from_millis(500)
         };
 
         if event::poll(poll_timeout)? {
-            match event::read()? {
-                Event::Key(key) => match app.mode {
-                    ChatMode::Chat => {
-                        if handle_chat_mode(&mut app, key) {
-                            break;
+            // 批量消费所有待处理事件，避免快速滚动/打字时事件堆积
+            let mut should_break = false;
+            loop {
+                let evt = event::read()?;
+                match evt {
+                    Event::Key(key) => {
+                        needs_redraw = true;
+                        match app.mode {
+                            ChatMode::Chat => {
+                                if handle_chat_mode(&mut app, key) {
+                                    should_break = true;
+                                    break;
+                                }
+                            }
+                            ChatMode::SelectModel => handle_select_model(&mut app, key),
+                            ChatMode::Help => {
+                                app.mode = ChatMode::Chat;
+                            }
                         }
                     }
-                    ChatMode::SelectModel => handle_select_model(&mut app, key),
-                    ChatMode::Help => {
-                        app.mode = ChatMode::Chat;
-                    }
-                },
-                Event::Mouse(mouse) => match mouse.kind {
-                    MouseEventKind::ScrollUp => {
-                        app.scroll_up();
-                    }
-                    MouseEventKind::ScrollDown => {
-                        app.scroll_down();
+                    Event::Mouse(mouse) => match mouse.kind {
+                        MouseEventKind::ScrollUp => {
+                            app.scroll_up();
+                            needs_redraw = true;
+                        }
+                        MouseEventKind::ScrollDown => {
+                            app.scroll_down();
+                            needs_redraw = true;
+                        }
+                        _ => {}
+                    },
+                    Event::Resize(_, _) => {
+                        needs_redraw = true;
                     }
                     _ => {}
-                },
-                _ => {}
+                }
+                // 继续消费剩余事件（非阻塞，Duration::ZERO）
+                if !event::poll(std::time::Duration::ZERO)? {
+                    break;
+                }
+            }
+            if should_break {
+                break;
             }
         }
     }
