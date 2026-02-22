@@ -13,6 +13,7 @@
 - **别名管理**：注册 app 路径 / URL / 脚本，通过 `j <alias>` 快速打开
 - **分类标记**：将别名标记为 browser / editor / vpn / outer_url / script，支持组合打开
 - **日报系统**：快速写入日报、查看和搜索历史记录，自动周数管理
+- **待办备忘录**：内置 TUI 待办管理，支持 markdown 风格 checkbox，数据持久化
 - **脚本创建**：一键创建 shell 脚本并注册为别名
 - **交互模式**：带 Tab 补全 + 历史建议的 REPL 环境
 - **倒计时器**：终端倒计时，带进度条和结束提醒
@@ -42,6 +43,7 @@ src/
 │   ├── list.rs          # ls（列出别名）
 │   ├── open.rs          # 打开应用 / URL / 浏览器搜索（核心命令）
 │   ├── report.rs        # report / check / search（日报系统）
+│   ├── todo.rs          # todo（待办备忘录 TUI）
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
 │   └── time.rs          # time countdown（倒计时器）
@@ -114,6 +116,7 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 19** | `reportctl open` 命令：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写文件；取消则不修改 | ✅ 完成 |
 | **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
 | **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
+| **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo <content>`；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
 
 ---
 
@@ -157,6 +160,7 @@ flowchart TD
 | `reportctl` | `rctl` | `<new\|sync\|push\|pull\|set-url\|open> [arg]` | 日报元数据操作 |
 | `check` | `c` | `[line_count\|open]` | 查看最近 N 行日报 / TUI 编辑器打开日报文件 |
 | `search` | `select/look/sch` | `<N\|all> <kw> [-f]` | 搜索日报 |
+| `todo` | `td` | `[content...]` | 待办备忘录（无参数进入 TUI 管理界面，有参数快速添加） |
 | `concat` | — | `<name> [content]` | 创建脚本（无 content 则打开 TUI 编辑器） |
 | `time` | — | `<countdown> <dur>` | 倒计时器 |
 | `log` | — | `<key> <value>` | 日志设置 |
@@ -232,7 +236,40 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
   - **GUI 应用**（`.app` 目录）/ 其他文件 → 系统 `open` 命令打开
 6. 未注册 → 提示未找到
 
-### 5.6 日报系统 — `command/report.rs`
+### 5.6 待办备忘录 — `command/todo.rs`
+
+- **数据存储**：`~/.jdata/todo/todo.json`（独立目录，JSON 格式持久化）
+- **入口方式**：
+  - `j todo` / `j td` — 进入全屏 TUI 待办管理界面
+  - `j todo 买牛奶` — 快速添加一条待办
+  - 交互模式下 `todo` / `td` 同样可用
+
+**TUI 界面**：基于 ratatui + crossterm 的全屏交互界面
+
+| 按键 | 功能 |
+|------|------|
+| `n` / `↓` / `j` | 向下移动 |
+| `N` / `↑` / `k` | 向上移动 |
+| `空格` / `回车` | 切换完成状态（`[x]` ↔ `[ ]`） |
+| `a` | 添加新待办（进入输入模式） |
+| `e` | 编辑选中待办 |
+| `d` | 删除待办（需 `y` 确认） |
+| `f` | 过滤切换（全部 → 未完成 → 已完成） |
+| `J` / `K` | 调整待办顺序（下移 / 上移） |
+| `s` | 手动保存 |
+| `q` / `Esc` | 退出（自动保存） |
+| `Ctrl+C` | 强制退出 |
+
+**UI 特性**：
+- 标题栏显示统计信息：`📋 待办备忘录 — 共 N 条 | ✅ M | ⬜ K`
+- 列表项显示 checkbox：`[x]` 已完成（绿色 + 删除线），`[ ]` 未完成（黄色）
+- 创建时间附在每项末尾（灰色短日期）
+- 底部帮助栏显示当前模式可用快捷键
+- 空列表提示 `(空) 按 a 添加新待办...`
+- 过滤模式标记在标题栏显示 `[未完成]` / `[已完成]`
+- 未保存修改时状态栏显示红色 `[未保存]` 提示
+
+### 5.7 日报系统 — `command/report.rs`
 
 - **report**：写入日报（自动追加日期前缀，自动检测是否需要新开一周）
 - **reportctl new**：手动推进周数（week_num + 1）
@@ -249,13 +286,13 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 - **git remote 自动同步**：`set-url` 更新地址后自动同步 git remote origin，`push`/`pull` 前也会自动校验并修正
 - **unborn branch 处理**：`pull` 时自动检测空仓库（`git init` 后无 commit），使用 `fetch` + `reset --hard` 而非 `pull --rebase`
 
-### 5.7 模糊匹配 — `util/fuzzy.rs`
+### 5.8 模糊匹配 — `util/fuzzy.rs`
 
 - `fuzzy_match(content, target)` — 大小写不敏感的子串匹配
 - `get_match_intervals(content, target)` — 获取所有匹配区间（UTF-8 char boundary 安全）
 - `highlight_matches(content, target, fuzzy)` — 将匹配部分 ANSI 绿色高亮
 
-### 5.8 日志宏 — `util/log.rs`
+### 5.9 日志宏 — `util/log.rs`
 
 | 宏 | 输出格式 | 颜色 |
 |----|----------|------|
@@ -264,14 +301,14 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 | `usage!(...)` | `"Usage: ..."` 前缀 | 黄色 |
 | `debug_log!(config, ...)` | 仅 verbose 模式输出 | 蓝色 |
 
-### 5.8.1 Markdown 渲染 — `util/md_render.rs`
+### 5.9.1 Markdown 渲染 — `util/md_render.rs`
 
 | 宏 | 输出格式 | 颜色 |
 |----|----------|------|
 | `md!(...)` | Markdown 渲染输出（优先嵌入的 `ask` 引擎，fallback termimad） | 终端原生 |
 | `md_inline!(...)` | 单行 Markdown 内联渲染（termimad） | 终端原生 |
 
-### 5.9 全局常量 — `constants.rs`
+### 5.10 全局常量 — `constants.rs`
 
 所有散落在各模块中的魔法字符串和重复定义都已统一到 `constants.rs` 中集中管理：
 
@@ -291,7 +328,7 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 | `REPORT_DATE_FORMAT` / `DEFAULT_CHECK_LINES` / `REPORT_DIR` / `REPORT_DEFAULT_FILE` | 日报相关常量 | report.rs, yaml_config.rs |
 | `INTERACTIVE_PROMPT` / `HISTORY_FILE` / `CONFIG_FILE` 等 | 路径和文件名 | interactive.rs, yaml_config.rs |
 
-### 5.10 公共工具函数 — `util/mod.rs`
+### 5.11 公共工具函数 — `util/mod.rs`
 
 - `remove_quotes(s: &str) -> String` — 去除字符串两端的引号（单引号或双引号），被 `alias.rs` 和 `open.rs` 共同复用。
 
@@ -312,6 +349,8 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 ├── scripts/             # concat 创建的脚本持久化存储
 │   ├── my-script.sh
 │   └── ...
+├── todo/                # 待办备忘录目录
+│   └── todo.json          # 待办数据（JSON 格式）
 └── report/              # 日报目录（默认路径，可配置 git 仓库同步）
     ├── week_report.md     # 周报文件
     ├── settings.json      # 日报配置（week_num, last_day）
@@ -482,6 +521,8 @@ j chrome "rust lang"  # 用 Chrome 搜索 "rust lang"
 j vscode ./src        # 用 VSCode 打开 src 目录
 j report "完成功能开发"  # 写入日报
 j check               # 查看最近 5 行日报
+j todo                # 进入 TUI 待办管理界面
+j todo 买牛奶         # 快速添加一条待办
 j time countdown 5m   # 5 分钟倒计时
 
 # 交互模式
@@ -520,6 +561,7 @@ copilot > exit
 | `SearchCommandHandler` | `command/report.rs::handle_search` | 搜索日报 |
 | `ConcatCommandHandler` | `command/script.rs::handle_concat` | 创建脚本 |
 | `TimeCommandHandler` | `command/time.rs::handle_time` | 倒计时器 |
+| — | `command/todo.rs::handle_todo` | 待办备忘录（Rust 新增，Java 版无对应） |
 | `LogCommandHandler` | `command/system.rs::handle_log` | 日志设置 |
 | `ChangeCommandHandler` | `command/system.rs::handle_change` | 修改配置 |
 | `ClearCommandHandler` | `command/system.rs::handle_clear` | 清屏 |

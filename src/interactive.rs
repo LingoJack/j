@@ -158,6 +158,8 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
                 ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY]),
             ],
         ),
+        // 待办备忘录
+        (cmd::TODO, vec![ArgHint::Placeholder("<content>")]),
         // 脚本
         (
             cmd::CONCAT,
@@ -792,6 +794,12 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
             line_count: rest[0].clone(),
             target: rest[1].clone(),
             fuzzy: rest.get(2).cloned(),
+        })
+
+    // 待办备忘录
+    } else if is(cmd::TODO) {
+        ParseResult::Matched(SubCmd::Todo {
+            content: rest.to_vec(),
         })
 
     // 脚本创建

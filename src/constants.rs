@@ -184,6 +184,9 @@ pub mod cmd {
     pub const CHECK: &[&str] = &["check", "c"];
     pub const SEARCH: &[&str] = &["search", "select", "look", "sch"];
 
+    // 待办备忘录
+    pub const TODO: &[&str] = &["todo", "td"];
+
     // 脚本
     pub const CONCAT: &[&str] = &["concat"];
 
@@ -211,7 +214,7 @@ pub mod cmd {
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
-            SEARCH, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION, AGENT,
+            SEARCH, TODO, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION, AGENT,
             SYSTEM,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()

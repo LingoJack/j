@@ -44,6 +44,8 @@ j
 ├── config.yaml          # 主配置文件（别名、分类、设置等）
 ├── history.txt          # 交互模式命令历史
 ├── scripts/             # j concat 创建的脚本
+├── todo/                # 待办备忘录目录
+│   └── todo.json        # 待办数据（JSON 格式）
 └── report/              # 日报目录
     ├── week_report.md   # 周报文件
     ├── settings.json    # 日报配置（周数、日期）
@@ -127,6 +129,31 @@ j
 > 日报默认路径: `~/.jdata/report/week_report.md`
 > 自定义路径: `j change report week_report <path>`
 > 配置远程仓库: `j reportctl set-url <repo_url>`
+
+## 📋 待办备忘录
+
+| 命令 | 说明 |
+|------|------|
+| `j todo` | 进入 TUI 待办管理界面（全屏交互） |
+| `j td` | 同上（别名） |
+| `j todo 买牛奶` | 快速添加一条待办 |
+
+### TUI 界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `n` / `↓` / `j` | 向下移动 |
+| `N` / `↑` / `k` | 向上移动 |
+| `空格` / `回车` | 切换完成状态 `[x]` / `[ ]` |
+| `a` | 添加新待办 |
+| `e` | 编辑选中待办 |
+| `d` | 删除待办（需确认） |
+| `f` | 过滤切换（全部 / 未完成 / 已完成） |
+| `J` / `K` | 调整待办顺序（下移 / 上移） |
+| `s` | 手动保存 |
+| `q` / `Esc` | 退出（自动保存） |
+
+> 数据存储路径: `~/.jdata/todo/todo.json`
 
 ## 📜 脚本 & ⏳ 倒计时
 
@@ -244,4 +271,5 @@ rm -rf ~/.jdata
 - `report` 命令内容不会记入历史，保护日报隐私
 - CLI 工具（如 rg、fzf）注册后可直接在终端执行并支持管道
 - 脚本需要后台运行时，使用 `-w` 标志在新窗口中执行（如 `j deploy -w`）
+- 待办备忘录支持 markdown 风格 `[x]` / `[ ]` checkbox，`j todo` 进入全屏 TUI 管理
 - 启用 shell Tab 补全：`eval "$(j completion zsh)"` 加入 `.zshrc` 即可在快捷模式下补全命令、别名和文件路径

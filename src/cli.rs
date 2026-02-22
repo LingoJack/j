@@ -126,6 +126,15 @@ pub enum SubCmd {
         fuzzy: Option<String>,
     },
 
+    // ========== 待办备忘录 ==========
+    /// 待办备忘录（无参数进入 TUI 界面，有参数快速添加）
+    #[command(alias = "td")]
+    Todo {
+        /// 待办内容（支持多个参数拼接）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
+    },
+
     // ========== 脚本 ==========
     /// 创建脚本
     Concat {

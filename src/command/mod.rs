@@ -6,6 +6,7 @@ pub mod report;
 pub mod script;
 pub mod system;
 pub mod time;
+pub mod todo;
 
 use crate::cli::SubCmd;
 use crate::config::YamlConfig;
@@ -53,6 +54,9 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
         } => {
             report::handle_search(&line_count, &target, fuzzy.as_deref(), config);
         }
+
+        // 待办备忘录
+        SubCmd::Todo { content } => todo::handle_todo(&content, config),
 
         // 脚本
         SubCmd::Concat { name, content } => script::handle_concat(&name, &content, config),
