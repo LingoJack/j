@@ -274,6 +274,73 @@ rm -rf ~/.jdata
 
 ---
 
+## 🤖 AI 对话
+
+| 命令 | 说明 |
+|------|------|
+| `j chat` | 进入 TUI 对话界面（全屏交互） |
+| `j chat 你好` | 进入对话并发送首条消息 |
+
+### 配置
+
+首次使用需配置 LLM 模型提供方，配置文件路径: `~/.jdata/agent/data/agent_config.json`
+
+```json
+{
+  "providers": [
+    {
+      "name": "GPT-4o",
+      "api_base": "https://api.openai.com/v1",
+      "api_key": "sk-your-api-key",
+      "model": "gpt-4o"
+    }
+  ],
+  "active_index": 0,
+  "system_prompt": "你是一个有用的助手。",
+  "stream_mode": true
+}
+```
+
+> 支持配置多个模型提供方，可在对话中通过 `Ctrl+T` 切换
+
+### 对话界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `Enter` | 发送消息 |
+| `↑` / `↓` | 滚动对话记录 |
+| `PageUp` / `PageDown` | 快速滚动（10行） |
+| `←` / `→` | 移动输入光标 |
+| `Home` / `End` | 跳到输入行首/行尾 |
+| `Ctrl+T` | 切换模型提供方 |
+| `Ctrl+L` | 清空对话历史 |
+| `Ctrl+Y` | 复制最后一条 AI 回复 |
+| `Ctrl+B` | 进入消息浏览模式 |
+| `Ctrl+S` | 切换流式/整体输出 |
+| `?` | 显示帮助 |
+| `Esc` / `Ctrl+C` | 退出对话 |
+
+### 消息浏览模式
+
+按 `Ctrl+B` 进入浏览模式，可选中任意历史消息并复制到剪切板：
+
+| 按键 | 功能 |
+|------|------|
+| `↑` / `k` | 选中上一条消息 |
+| `↓` / `j` | 选中下一条消息 |
+| `y` / `Enter` | 复制选中消息到剪切板 |
+| `Esc` | 返回对话模式 |
+
+### 功能特性
+
+- **Markdown 渲染**：AI 回复支持标题、加粗、斜体、行内代码、代码块（语法高亮）、列表、表格、引用块
+- **代码高亮**：支持 Rust、Python、JavaScript/TypeScript、Go、Java、Bash/Shell、C/C++、SQL、Ruby 等语言
+- **流式/整体输出**：默认流式逐字输出，可通过 `Ctrl+S` 切换为等待完整回复后再显示
+- **对话持久化**：对话自动保存到 `~/.jdata/agent/data/chat_session.json`，重启后恢复
+- **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时切换
+
+---
+
 ## 💡 使用技巧
 
 - 不带参数运行 `j` 进入**交互模式**，支持 Tab 补全和历史建议

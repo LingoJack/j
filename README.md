@@ -14,6 +14,7 @@
 - **分类标记**：将别名标记为 browser / editor / vpn / outer_url / script，支持组合打开
 - **日报系统**：快速写入日报、查看和搜索历史记录，自动周数管理
 - **待办备忘录**：内置 TUI 待办管理，支持 markdown 风格 checkbox，数据持久化
+- **AI 对话**：内置 TUI AI 对话界面，支持多模型切换、流式输出、Markdown 渲染、消息浏览复制
 - **脚本创建**：一键创建 shell 脚本并注册为别名
 - **交互模式**：带 Tab 补全 + 历史建议的 REPL 环境
 - **倒计时器**：终端倒计时，带进度条和结束提醒
@@ -44,6 +45,7 @@ src/
 │   ├── open.rs          # 打开应用 / URL / 浏览器搜索（核心命令）
 │   ├── report.rs        # report / check / search（日报系统）
 │   ├── todo.rs          # todo（待办备忘录 TUI）
+│   ├── chat.rs          # chat（AI 对话 TUI，Markdown 渲染 + 流式输出）
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
 │   └── time.rs          # time countdown（倒计时器）
@@ -117,6 +119,7 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
 | **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
 | **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo <content>`；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
+| **Phase 23** | AI 对话系统（chat）：内置 TUI AI 对话界面，支持多模型提供方切换（OpenAI/DeepSeek 等）、流式/整体输出切换（Ctrl+S）、Markdown 渲染（标题/加粗/斜体/代码块语法高亮/表格/列表/引用块）、消息浏览模式（Ctrl+B，↑↓选择 y/Enter 复制）、对话持久化；代码高亮支持 Rust/Python/JS/Go/Java/Bash/C/SQL/Ruby/YAML/CSS/Dockerfile 等语言，Bash 额外支持 `$VAR`/`${VAR}` 变量高亮；渲染行缓存 + 可见区域裁剪优化性能 | ✅ 完成 |
 
 ---
 
@@ -562,6 +565,7 @@ copilot > exit
 | `ConcatCommandHandler` | `command/script.rs::handle_concat` | 创建脚本 |
 | `TimeCommandHandler` | `command/time.rs::handle_time` | 倒计时器 |
 | — | `command/todo.rs::handle_todo` | 待办备忘录（Rust 新增，Java 版无对应） |
+| — | `command/chat.rs::handle_chat` | AI 对话 TUI（Rust 新增） |
 | `LogCommandHandler` | `command/system.rs::handle_log` | 日志设置 |
 | `ChangeCommandHandler` | `command/system.rs::handle_change` | 修改配置 |
 | `ClearCommandHandler` | `command/system.rs::handle_clear` | 清屏 |
@@ -845,7 +849,115 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 ---
 
-## 十一、未来可优化方向
+## 十一、AI 对话系统 (`chat.rs`)
+
+### 概述
+
+`j chat` 命令启动内置 TUI AI 对话界面，支持多模型、流式输出、Markdown 渲染、对话持久化等功能。
+
+### 架构
+
+```
+~/.jdata/agent/data/
+├── agent_config.json    # 模型提供方配置（API key、模型名等）
+└── chat_session.json    # 对话历史（自动保存/恢复）
+```
+
+**核心流程：**
+
+1. **用户输入** → `send_message()` 将消息加入 session，启动后台线程调用 LLM API
+2. **后台线程** → 通过 `mpsc::channel` 发送流式 chunk（`StreamMsg::Chunk`）到前端
+3. **TUI 事件循环** → `poll_stream()` 非阻塞接收 chunk，更新 `streaming_content`
+4. **渲染** → `build_message_lines()` 解析 Markdown 并缓存渲染行，`draw_messages()` 逐行绘制
+
+**性能优化：**
+- `MsgLinesCache`：消息渲染行缓存，打字/滚动时零开销复用（缓存 key: 消息数+内容长度+流式长度+气泡宽度+浏览索引）
+- 只渲染可见区域行（`start..end` 切片），避免全量克隆
+- 批量消费事件（`event::poll(Duration::ZERO)` 循环），防止快速操作时事件堆积
+- 空闲时 1s 超时降低 CPU，加载时 150ms 间隔保证流式刷新
+
+### 配置示例
+
+```json
+{
+  "providers": [
+    {
+      "name": "GPT-4o",
+      "api_base": "https://api.openai.com/v1",
+      "api_key": "sk-xxx",
+      "model": "gpt-4o"
+    },
+    {
+      "name": "DeepSeek-V3",
+      "api_base": "https://api.deepseek.com/v1",
+      "api_key": "sk-xxx",
+      "model": "deepseek-chat"
+    }
+  ],
+  "active_index": 0,
+  "system_prompt": "你是一个有用的助手。",
+  "stream_mode": true
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `providers` | 模型提供方列表（支持任意 OpenAI 兼容 API） |
+| `active_index` | 当前使用的 provider 索引 |
+| `system_prompt` | 系统提示词（可选，每轮对话前注入） |
+| `stream_mode` | `true` 流式输出（逐字显示），`false` 整体输出（等待完整回复） |
+
+### TUI 快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `Enter` | 发送消息 |
+| `↑/↓` | 滚动对话 |
+| `Ctrl+T` | 切换模型 |
+| `Ctrl+L` | 清空对话 |
+| `Ctrl+Y` | 快速复制最后一条 AI 回复 |
+| `Ctrl+B` | 消息浏览模式（↑↓选择，y/Enter复制） |
+| `Ctrl+S` | 切换流式/整体输出 |
+| `?` | 帮助 |
+| `Esc` | 退出 |
+
+### Markdown 渲染
+
+`markdown_to_lines()` 基于 `pulldown-cmark` 解析，支持：
+- 标题（`#` → `>>` 前缀 + 蓝色加粗）
+- **加粗**、*斜体*、~~删除线~~
+- 行内代码（`` ` `` → 黄色背景）
+- 代码块（语法高亮 + 边框 + 行号区）
+- 列表（有序/无序，支持嵌套）
+- 表格（自动列宽 + 边框 + 表头高亮）
+- 引用块（`>` → 左竖线 + 淡色）
+- 分隔线
+
+### 代码高亮支持语言
+
+`highlight_code_line()` 对以下语言提供关键字/字符串/注释/数字着色：
+
+| 语言 | 标识 |
+|------|------|
+| Rust | `rust`, `rs` |
+| Python | `python`, `py` |
+| JavaScript/TypeScript | `js`, `ts`, `jsx`, `tsx` |
+| Go | `go`, `golang` |
+| Java/Kotlin | `java`, `kotlin`, `kt` |
+| Bash/Shell | `sh`, `bash`, `zsh`, `shell` |
+| C/C++ | `c`, `cpp`, `c++`, `h`, `hpp` |
+| SQL | `sql` |
+| Ruby | `ruby`, `rb` |
+| YAML/TOML | `yaml`, `yml`, `toml` |
+| CSS/SCSS | `css`, `scss`, `less` |
+| Dockerfile | `dockerfile`, `docker` |
+| 其他 | 通用关键字高亮 |
+
+Bash 额外支持 `$VAR`、`${VAR}`、`$(cmd)` 变量高亮。
+
+---
+
+## 十二、未来可优化方向
 
 | 方向 | 说明 | 优先级 |
 |------|------|--------|
@@ -857,11 +969,11 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 | **跨平台测试** | Windows / Linux 平台适配验证 | 中 |
 | **自动更新** | `j update` 从 GitHub Release 自动下载最新版本 | 低 |
 | **模糊搜索增强** | 支持 fzf 风格的模糊搜索算法（如 Smith-Waterman） | 低 |
-| **agent 命令** | 接入 AI agent 能力（原 Java 版有占位） | 低 |
+| **AI agent 增强** | 工具调用（function calling）、上下文文件注入、多轮推理 | 中 |
 
 ---
 
-## 十二、快速上手 Checklist
+## 十三、快速上手 Checklist
 
 > 新接手项目的开发者请按以下步骤快速了解：
 

@@ -59,6 +59,14 @@ pub struct AgentConfig {
     /// 系统提示词（可选）
     #[serde(default)]
     pub system_prompt: Option<String>,
+    /// 是否使用流式输出（默认 true，设为 false 则等回复完整后再显示）
+    #[serde(default = "default_stream_mode")]
+    pub stream_mode: bool,
+}
+
+/// 默认流式输出
+fn default_stream_mode() -> bool {
+    true
 }
 
 /// 对话消息
@@ -265,6 +273,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             }],
             active_index: 0,
             system_prompt: Some("你是一个有用的助手。".to_string()),
+            stream_mode: true,
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);
@@ -366,6 +375,8 @@ struct ChatApp {
     /// 消息渲染行缓存：(消息数, 最后一条消息内容hash, 气泡宽度) → 渲染好的行
     /// 避免每帧都重新解析 Markdown
     msg_lines_cache: Option<MsgLinesCache>,
+    /// 消息浏览模式中选中的消息索引
+    browse_msg_index: usize,
 }
 
 /// 消息渲染行缓存
@@ -380,8 +391,12 @@ struct MsgLinesCache {
     is_loading: bool,
     /// 气泡最大宽度（窗口变化时需要重算）
     bubble_max_width: usize,
+    /// 浏览模式选中索引（None 表示非浏览模式）
+    browse_index: Option<usize>,
     /// 缓存的渲染行
     lines: Vec<Line<'static>>,
+    /// 每条消息（按 msg_index）的起始行号（用于浏览模式自动滚动）
+    msg_start_lines: Vec<(usize, usize)>, // (msg_index, start_line)
 }
 
 /// Toast 通知显示时长（秒）
@@ -393,6 +408,8 @@ enum ChatMode {
     Chat,
     /// 模型选择模式
     SelectModel,
+    /// 消息浏览模式（可选中消息并复制）
+    Browse,
     /// 帮助
     Help,
 }
@@ -418,6 +435,7 @@ impl ChatApp {
             stream_rx: None,
             streaming_content: Arc::new(Mutex::new(String::new())),
             msg_lines_cache: None,
+            browse_msg_index: 0,
         }
     }
 
@@ -511,6 +529,8 @@ impl ChatApp {
 
         let streaming_content = Arc::clone(&self.streaming_content);
 
+        let use_stream = self.agent_config.stream_mode;
+
         // 启动后台线程执行 API 调用
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
@@ -537,36 +557,58 @@ impl ChatApp {
                     }
                 };
 
-                let mut stream = match client.chat().create_stream(request).await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        let _ = tx.send(StreamMsg::Error(format!("API 请求失败: {}", e)));
-                        return;
-                    }
-                };
+                if use_stream {
+                    // 流式输出模式
+                    let mut stream = match client.chat().create_stream(request).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let _ = tx.send(StreamMsg::Error(format!("API 请求失败: {}", e)));
+                            return;
+                        }
+                    };
 
-                while let Some(result) = stream.next().await {
-                    match result {
+                    while let Some(result) = stream.next().await {
+                        match result {
+                            Ok(response) => {
+                                for choice in &response.choices {
+                                    if let Some(ref content) = choice.delta.content {
+                                        // 更新共享缓冲
+                                        {
+                                            let mut sc = streaming_content.lock().unwrap();
+                                            sc.push_str(content);
+                                        }
+                                        let _ = tx.send(StreamMsg::Chunk);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.send(StreamMsg::Error(format!("流式响应错误: {}", e)));
+                                return;
+                            }
+                        }
+                    }
+                } else {
+                    // 非流式输出模式：等待完整响应后一次性返回
+                    match client.chat().create(request).await {
                         Ok(response) => {
-                            for choice in &response.choices {
-                                if let Some(ref content) = choice.delta.content {
-                                    // 更新共享缓冲
-                                    if let Ok(mut sc) = streaming_content.lock() {
+                            if let Some(choice) = response.choices.first() {
+                                if let Some(ref content) = choice.message.content {
+                                    {
+                                        let mut sc = streaming_content.lock().unwrap();
                                         sc.push_str(content);
                                     }
-                                    // 通知 TUI 刷新
-                                    if tx.send(StreamMsg::Chunk).is_err() {
-                                        return; // TUI 已退出
-                                    }
+                                    let _ = tx.send(StreamMsg::Chunk);
                                 }
                             }
                         }
                         Err(e) => {
-                            let _ = tx.send(StreamMsg::Error(format!("流式响应错误: {}", e)));
+                            let _ = tx.send(StreamMsg::Error(format!("API 请求失败: {}", e)));
                             return;
                         }
                     }
                 }
+
+                let _ = tx.send(StreamMsg::Done);
 
                 let _ = tx.send(StreamMsg::Done);
             });
@@ -743,6 +785,7 @@ fn run_chat_tui_internal() -> io::Result<()> {
                                 }
                             }
                             ChatMode::SelectModel => handle_select_model(&mut app, key),
+                            ChatMode::Browse => handle_browse_mode(&mut app, key),
                             ChatMode::Help => {
                                 app.mode = ChatMode::Chat;
                             }
@@ -939,7 +982,7 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 消息内容最大宽度为可用宽度的 75%
     let bubble_max_width = (inner_width * 75 / 100).max(20);
 
-    // 计算缓存 key：消息数 + 最后一条消息长度 + 流式内容长度 + is_loading + 气泡宽度
+    // 计算缓存 key：消息数 + 最后一条消息长度 + 流式内容长度 + is_loading + 气泡宽度 + 浏览模式索引
     let msg_count = app.session.messages.len();
     let last_msg_len = app
         .session
@@ -948,26 +991,35 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .map(|m| m.content.len())
         .unwrap_or(0);
     let streaming_len = app.streaming_content.lock().unwrap().len();
+    let current_browse_index = if app.mode == ChatMode::Browse {
+        Some(app.browse_msg_index)
+    } else {
+        None
+    };
     let cache_hit = if let Some(ref cache) = app.msg_lines_cache {
         cache.msg_count == msg_count
             && cache.last_msg_len == last_msg_len
             && cache.streaming_len == streaming_len
             && cache.is_loading == app.is_loading
             && cache.bubble_max_width == bubble_max_width
+            && cache.browse_index == current_browse_index
     } else {
         false
     };
 
     if !cache_hit {
         // 缓存未命中，重新构建渲染行并存入缓存
-        let new_lines = build_message_lines(app, inner_width, bubble_max_width);
+        let (new_lines, new_msg_start_lines) =
+            build_message_lines(app, inner_width, bubble_max_width);
         app.msg_lines_cache = Some(MsgLinesCache {
             msg_count,
             last_msg_len,
             streaming_len,
             is_loading: app.is_loading,
             bubble_max_width,
+            browse_index: current_browse_index,
             lines: new_lines,
+            msg_start_lines: new_msg_start_lines,
         });
     }
 
@@ -987,9 +1039,30 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let visible_height = inner.height;
     let max_scroll = total_lines.saturating_sub(visible_height);
 
-    // 自动滚动到底部
-    if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
-        app.scroll_offset = max_scroll;
+    // 自动滚动到底部（非浏览模式下）
+    if app.mode != ChatMode::Browse {
+        if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
+            app.scroll_offset = max_scroll;
+        }
+    } else {
+        // 浏览模式：自动滚动到选中消息的位置
+        if let Some(target_line) = cached
+            .msg_start_lines
+            .iter()
+            .find(|(idx, _)| *idx == app.browse_msg_index)
+            .map(|(_, line)| *line as u16)
+        {
+            // 确保选中消息在可视区域内
+            if target_line < app.scroll_offset {
+                app.scroll_offset = target_line;
+            } else if target_line >= app.scroll_offset + visible_height {
+                app.scroll_offset = target_line.saturating_sub(visible_height / 3);
+            }
+            // 限制滚动范围
+            if app.scroll_offset > max_scroll {
+                app.scroll_offset = max_scroll;
+            }
+        }
     }
 
     // 填充内部背景色（避免空白行没有背景）
@@ -1010,22 +1083,26 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 }
 
 /// 构建所有消息的渲染行（独立函数，用于缓存）
+/// 返回 (渲染行列表, 消息起始行号映射)
 fn build_message_lines(
     app: &ChatApp,
     inner_width: usize,
     bubble_max_width: usize,
-) -> Vec<Line<'static>> {
+) -> (Vec<Line<'static>>, Vec<(usize, usize)>) {
     struct RenderMsg {
         role: String,
         content: String,
+        msg_index: Option<usize>, // 对应 session.messages 的索引（流式消息为 None）
     }
     let mut render_msgs: Vec<RenderMsg> = app
         .session
         .messages
         .iter()
-        .map(|m| RenderMsg {
+        .enumerate()
+        .map(|(i, m)| RenderMsg {
             role: m.role.clone(),
             content: m.content.clone(),
+            msg_index: Some(i),
         })
         .collect();
 
@@ -1036,37 +1113,59 @@ fn build_message_lines(
             render_msgs.push(RenderMsg {
                 role: "assistant".to_string(),
                 content: streaming,
+                msg_index: None,
             });
         } else {
             // 正在等待首个 chunk，显示占位
             render_msgs.push(RenderMsg {
                 role: "assistant".to_string(),
-                content: "▍".to_string(),
+                content: "◍".to_string(),
+                msg_index: None,
             });
         }
     }
 
     // 构建所有消息行
+    let is_browse_mode = app.mode == ChatMode::Browse;
     let mut lines: Vec<Line> = Vec::new();
+    let mut msg_start_lines: Vec<(usize, usize)> = Vec::new(); // (msg_index, start_line)
     for msg in &render_msgs {
+        // 判断当前消息是否在浏览模式下被选中
+        let is_selected = is_browse_mode
+            && msg.msg_index.is_some()
+            && msg.msg_index.unwrap() == app.browse_msg_index;
+
+        // 记录消息起始行号
+        if let Some(idx) = msg.msg_index {
+            msg_start_lines.push((idx, lines.len()));
+        }
+
         match msg.role.as_str() {
             "user" => {
                 // 用户消息：右对齐，蓝色系
                 lines.push(Line::from(""));
-                // 用户标签
-                let label = "You ";
+                // 用户标签（浏览模式选中时加 ▶ 指示器）
+                let label = if is_selected { "▶ You " } else { "You " };
                 let pad = inner_width.saturating_sub(display_width(label) + 2);
                 lines.push(Line::from(vec![
                     Span::raw(" ".repeat(pad)),
                     Span::styled(
                         label,
                         Style::default()
-                            .fg(Color::Rgb(100, 160, 255))
+                            .fg(if is_selected {
+                                Color::Rgb(255, 200, 80)
+                            } else {
+                                Color::Rgb(100, 160, 255)
+                            })
                             .add_modifier(Modifier::BOLD),
                     ),
                 ]));
                 // 消息内容（右对齐气泡效果）
-                let user_bg = Color::Rgb(40, 70, 120);
+                let user_bg = if is_selected {
+                    Color::Rgb(55, 85, 140)
+                } else {
+                    Color::Rgb(40, 70, 120)
+                };
                 let user_pad_lr = 3usize; // 左右内边距
                 let user_content_w = bubble_max_width.saturating_sub(user_pad_lr * 2);
 
@@ -1114,15 +1213,24 @@ fn build_message_lines(
             "assistant" => {
                 // AI 消息：左对齐，使用 Markdown 渲染
                 lines.push(Line::from(""));
+                let ai_label = if is_selected { "  ▶ AI" } else { "  AI" };
                 lines.push(Line::from(Span::styled(
-                    "  AI",
+                    ai_label,
                     Style::default()
-                        .fg(Color::Rgb(120, 220, 160))
+                        .fg(if is_selected {
+                            Color::Rgb(255, 200, 80)
+                        } else {
+                            Color::Rgb(120, 220, 160)
+                        })
                         .add_modifier(Modifier::BOLD),
                 )));
 
                 // 使用 pulldown-cmark 解析 Markdown 内容并渲染
-                let bubble_bg = Color::Rgb(38, 38, 52);
+                let bubble_bg = if is_selected {
+                    Color::Rgb(48, 48, 68)
+                } else {
+                    Color::Rgb(38, 38, 52)
+                };
                 let pad_left = "   "; // 左内边距 3 字符
                 let pad_right = "   "; // 右内边距 3 字符
                 let pad_left_w = 3usize;
@@ -1197,7 +1305,7 @@ fn build_message_lines(
     // 末尾留白
     lines.push(Line::from(""));
 
-    lines
+    (lines, msg_start_lines)
 }
 
 /// 将 Markdown 文本解析为 ratatui 的 Line 列表
@@ -1359,13 +1467,20 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 code_block_lang.clear();
             }
             Event::Code(text) => {
-                // 行内代码
-                current_spans.push(Span::styled(
-                    format!(" {} ", text),
-                    Style::default()
-                        .fg(Color::Rgb(230, 190, 120))
-                        .bg(Color::Rgb(45, 45, 60)),
-                ));
+                if in_table {
+                    // 表格中的行内代码也收集到当前单元格
+                    current_cell.push('`');
+                    current_cell.push_str(&text);
+                    current_cell.push('`');
+                } else {
+                    // 行内代码
+                    current_spans.push(Span::styled(
+                        format!(" {} ", text),
+                        Style::default()
+                            .fg(Color::Rgb(230, 190, 120))
+                            .bg(Color::Rgb(45, 45, 60)),
+                    ));
+                }
             }
             Event::Start(Tag::List(start)) => {
                 flush_line(&mut current_spans, &mut lines);
@@ -1503,10 +1618,18 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 }
             }
             Event::SoftBreak => {
-                current_spans.push(Span::raw(" "));
+                if in_table {
+                    current_cell.push(' ');
+                } else {
+                    current_spans.push(Span::raw(" "));
+                }
             }
             Event::HardBreak => {
-                flush_line(&mut current_spans, &mut lines);
+                if in_table {
+                    current_cell.push(' ');
+                } else {
+                    flush_line(&mut current_spans, &mut lines);
+                }
             }
             Event::Rule => {
                 flush_line(&mut current_spans, &mut lines);
@@ -1545,12 +1668,24 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                         let sep_w = num_cols + 1; // 竖线占用
                         let pad_w = num_cols * 2; // 每列左右各1空格
                         let avail = content_width.saturating_sub(sep_w + pad_w);
+                        // 单列最大宽度限制（避免一列过宽）
+                        let max_col_w = avail * 2 / 3;
+                        for cw in col_widths.iter_mut() {
+                            if *cw > max_col_w {
+                                *cw = max_col_w;
+                            }
+                        }
                         let total_col_w: usize = col_widths.iter().sum();
                         if total_col_w > avail && total_col_w > 0 {
-                            for cw in col_widths.iter_mut() {
-                                *cw = (*cw * avail) / total_col_w;
-                                if *cw == 0 {
-                                    *cw = 1;
+                            // 等比缩放
+                            let mut remaining = avail;
+                            for (i, cw) in col_widths.iter_mut().enumerate() {
+                                if i == num_cols - 1 {
+                                    // 最后一列取剩余宽度，避免取整误差
+                                    *cw = remaining.max(1);
+                                } else {
+                                    *cw = ((*cw) * avail / total_col_w).max(1);
+                                    remaining = remaining.saturating_sub(*cw);
                                 }
                             }
                         }
@@ -1711,10 +1846,10 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
             "true", "false", "Some", "None", "Ok", "Err",
         ],
         "python" | "py" => &[
-            "def", "class", "import", "from", "return", "if", "elif", "else", "for", "while",
-            "try", "except", "finally", "with", "as", "yield", "lambda", "True", "False", "None",
-            "self", "async", "await", "pass", "break", "continue", "raise", "in", "not", "and",
-            "or", "is",
+            "def", "class", "return", "if", "elif", "else", "for", "while", "import", "from", "as",
+            "with", "try", "except", "finally", "raise", "pass", "break", "continue", "yield",
+            "lambda", "and", "or", "not", "in", "is", "True", "False", "None", "global",
+            "nonlocal", "assert", "del", "async", "await", "self", "print",
         ],
         "javascript" | "js" | "typescript" | "ts" | "jsx" | "tsx" => &[
             "function",
@@ -1822,7 +1957,228 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
         "sh" | "bash" | "zsh" | "shell" => &[
             "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac",
             "function", "return", "exit", "echo", "export", "local", "readonly", "set", "unset",
-            "shift", "source", "in", "true", "false",
+            "shift", "source", "in", "true", "false", "read", "declare", "typeset", "trap", "eval",
+            "exec", "test", "select", "until", "break", "continue", "printf",
+        ],
+        "c" | "cpp" | "c++" | "h" | "hpp" => &[
+            "int",
+            "char",
+            "float",
+            "double",
+            "void",
+            "long",
+            "short",
+            "unsigned",
+            "signed",
+            "const",
+            "static",
+            "extern",
+            "struct",
+            "union",
+            "enum",
+            "typedef",
+            "sizeof",
+            "return",
+            "if",
+            "else",
+            "for",
+            "while",
+            "do",
+            "switch",
+            "case",
+            "break",
+            "continue",
+            "default",
+            "goto",
+            "auto",
+            "register",
+            "volatile",
+            "class",
+            "public",
+            "private",
+            "protected",
+            "virtual",
+            "override",
+            "template",
+            "namespace",
+            "using",
+            "new",
+            "delete",
+            "try",
+            "catch",
+            "throw",
+            "nullptr",
+            "true",
+            "false",
+            "this",
+            "include",
+            "define",
+            "ifdef",
+            "ifndef",
+            "endif",
+        ],
+        "sql" => &[
+            "SELECT",
+            "FROM",
+            "WHERE",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "CREATE",
+            "DROP",
+            "ALTER",
+            "TABLE",
+            "INDEX",
+            "INTO",
+            "VALUES",
+            "SET",
+            "AND",
+            "OR",
+            "NOT",
+            "NULL",
+            "JOIN",
+            "LEFT",
+            "RIGHT",
+            "INNER",
+            "OUTER",
+            "ON",
+            "GROUP",
+            "BY",
+            "ORDER",
+            "ASC",
+            "DESC",
+            "HAVING",
+            "LIMIT",
+            "OFFSET",
+            "UNION",
+            "AS",
+            "DISTINCT",
+            "COUNT",
+            "SUM",
+            "AVG",
+            "MIN",
+            "MAX",
+            "LIKE",
+            "IN",
+            "BETWEEN",
+            "EXISTS",
+            "CASE",
+            "WHEN",
+            "THEN",
+            "ELSE",
+            "END",
+            "BEGIN",
+            "COMMIT",
+            "ROLLBACK",
+            "PRIMARY",
+            "KEY",
+            "FOREIGN",
+            "REFERENCES",
+            "select",
+            "from",
+            "where",
+            "insert",
+            "update",
+            "delete",
+            "create",
+            "drop",
+            "alter",
+            "table",
+            "index",
+            "into",
+            "values",
+            "set",
+            "and",
+            "or",
+            "not",
+            "null",
+            "join",
+            "left",
+            "right",
+            "inner",
+            "outer",
+            "on",
+            "group",
+            "by",
+            "order",
+            "asc",
+            "desc",
+            "having",
+            "limit",
+            "offset",
+            "union",
+            "as",
+            "distinct",
+            "count",
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "like",
+            "in",
+            "between",
+            "exists",
+            "case",
+            "when",
+            "then",
+            "else",
+            "end",
+            "begin",
+            "commit",
+            "rollback",
+            "primary",
+            "key",
+            "foreign",
+            "references",
+        ],
+        "yaml" | "yml" | "toml" => &["true", "false", "null", "yes", "no", "on", "off"],
+        "css" | "scss" | "less" => &[
+            "color",
+            "background",
+            "border",
+            "margin",
+            "padding",
+            "display",
+            "position",
+            "width",
+            "height",
+            "font",
+            "text",
+            "flex",
+            "grid",
+            "align",
+            "justify",
+            "important",
+            "none",
+            "auto",
+            "inherit",
+            "initial",
+            "unset",
+        ],
+        "dockerfile" | "docker" => &[
+            "FROM",
+            "RUN",
+            "CMD",
+            "LABEL",
+            "EXPOSE",
+            "ENV",
+            "ADD",
+            "COPY",
+            "ENTRYPOINT",
+            "VOLUME",
+            "USER",
+            "WORKDIR",
+            "ARG",
+            "ONBUILD",
+            "STOPSIGNAL",
+            "HEALTHCHECK",
+            "SHELL",
+            "AS",
+        ],
+        "ruby" | "rb" => &[
+            "def", "end", "class", "module", "if", "elsif", "else", "unless", "while", "until",
+            "for", "do", "begin", "rescue", "ensure", "raise", "return", "yield", "require",
+            "include", "attr", "self", "true", "false", "nil", "puts", "print",
         ],
         _ => &[
             "fn", "function", "def", "class", "return", "if", "else", "for", "while", "import",
@@ -1832,7 +2188,10 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
     };
 
     let comment_prefix = match lang_lower.as_str() {
-        "python" | "py" | "sh" | "bash" | "zsh" | "shell" => "#",
+        "python" | "py" | "sh" | "bash" | "zsh" | "shell" | "ruby" | "rb" | "yaml" | "yml"
+        | "toml" | "dockerfile" | "docker" => "#",
+        "sql" => "--",
+        "css" | "scss" | "less" => "/*",
         _ => "//",
     };
 
@@ -1885,6 +2244,74 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
                 }
             }
             spans.push(Span::styled(s, str_style));
+            continue;
+        }
+        // Shell 变量 ($VAR, ${VAR}, $1 等)
+        if ch == '$'
+            && matches!(
+                lang_lower.as_str(),
+                "sh" | "bash" | "zsh" | "shell" | "dockerfile" | "docker"
+            )
+        {
+            if !buf.is_empty() {
+                spans.extend(colorize_tokens(
+                    &buf, keywords, code_style, kw_style, num_style, type_style,
+                ));
+                buf.clear();
+            }
+            let var_style = Style::default().fg(Color::Rgb(86, 182, 194));
+            let mut var = String::new();
+            var.push(ch);
+            chars.next();
+            if let Some(&next_ch) = chars.peek() {
+                if next_ch == '{' {
+                    // ${VAR}
+                    var.push(next_ch);
+                    chars.next();
+                    while let Some(&c) = chars.peek() {
+                        var.push(c);
+                        chars.next();
+                        if c == '}' {
+                            break;
+                        }
+                    }
+                } else if next_ch == '(' {
+                    // $(cmd)
+                    var.push(next_ch);
+                    chars.next();
+                    let mut depth = 1;
+                    while let Some(&c) = chars.peek() {
+                        var.push(c);
+                        chars.next();
+                        if c == '(' {
+                            depth += 1;
+                        }
+                        if c == ')' {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                    }
+                } else if next_ch.is_alphanumeric()
+                    || next_ch == '_'
+                    || next_ch == '@'
+                    || next_ch == '#'
+                    || next_ch == '?'
+                    || next_ch == '!'
+                {
+                    // $VAR, $1, $@, $#, $? 等
+                    while let Some(&c) = chars.peek() {
+                        if c.is_alphanumeric() || c == '_' {
+                            var.push(c);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            spans.push(Span::styled(var, var_style));
             continue;
         }
         // 行内注释
@@ -2283,12 +2710,16 @@ fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ("Ctrl+T", "切换模型"),
                 ("Ctrl+L", "清空"),
                 ("Ctrl+Y", "复制"),
+                ("Ctrl+B", "浏览"),
                 ("?", "帮助"),
                 ("Esc", "退出"),
             ]
         }
         ChatMode::SelectModel => {
             vec![("↑↓/jk", "移动"), ("Enter", "确认"), ("Esc", "取消")]
+        }
+        ChatMode::Browse => {
+            vec![("↑↓", "选择消息"), ("y/Enter", "复制"), ("Esc", "返回")]
         }
         ChatMode::Help => {
             vec![("任意键", "返回")]
@@ -2503,6 +2934,30 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled(
+                "  Ctrl+B       ",
+                Style::default()
+                    .fg(Color::Rgb(230, 210, 120))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "浏览消息 (↑↓选择, y/Enter复制)",
+                Style::default().fg(Color::Rgb(200, 200, 220)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Ctrl+S       ",
+                Style::default()
+                    .fg(Color::Rgb(230, 210, 120))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "切换流式/整体输出",
+                Style::default().fg(Color::Rgb(200, 200, 220)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
                 "  Esc / Ctrl+C ",
                 Style::default()
                     .fg(Color::Rgb(230, 210, 120))
@@ -2590,6 +3045,32 @@ fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         } else {
             app.show_toast("暂无 AI 回复可复制", true);
         }
+        return false;
+    }
+
+    // Ctrl+B 进入消息浏览模式（可选中历史消息并复制）
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('b') {
+        if !app.session.messages.is_empty() {
+            // 默认选中最后一条消息
+            app.browse_msg_index = app.session.messages.len() - 1;
+            app.mode = ChatMode::Browse;
+            app.msg_lines_cache = None; // 清除缓存以触发高亮重绘
+        } else {
+            app.show_toast("暂无消息可浏览", true);
+        }
+        return false;
+    }
+
+    // Ctrl+S 切换流式/非流式输出
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
+        app.agent_config.stream_mode = !app.agent_config.stream_mode;
+        let _ = save_agent_config(&app.agent_config);
+        let mode_str = if app.agent_config.stream_mode {
+            "流式输出"
+        } else {
+            "整体输出"
+        };
+        app.show_toast(&format!("已切换为: {}", mode_str), false);
         return false;
     }
 
@@ -2688,6 +3169,57 @@ fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     }
 
     false
+}
+
+/// 消息浏览模式按键处理：↑↓ 选择消息，y/Enter 复制选中消息，Esc 退出
+fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
+    let msg_count = app.session.messages.len();
+    if msg_count == 0 {
+        app.mode = ChatMode::Chat;
+        app.msg_lines_cache = None;
+        return;
+    }
+
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = ChatMode::Chat;
+            app.msg_lines_cache = None; // 退出浏览模式时清除缓存，去掉高亮
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.browse_msg_index > 0 {
+                app.browse_msg_index -= 1;
+                app.msg_lines_cache = None; // 选中变化时清缓存
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.browse_msg_index < msg_count - 1 {
+                app.browse_msg_index += 1;
+                app.msg_lines_cache = None; // 选中变化时清缓存
+            }
+        }
+        KeyCode::Enter | KeyCode::Char('y') => {
+            // 复制选中消息的原始内容到剪切板
+            if let Some(msg) = app.session.messages.get(app.browse_msg_index) {
+                let content = msg.content.clone();
+                let role_label = if msg.role == "assistant" {
+                    "AI"
+                } else if msg.role == "user" {
+                    "用户"
+                } else {
+                    "系统"
+                };
+                if copy_to_clipboard(&content) {
+                    app.show_toast(
+                        &format!("已复制第 {} 条{}消息", app.browse_msg_index + 1, role_label),
+                        false,
+                    );
+                } else {
+                    app.show_toast("复制到剪切板失败", true);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// 模型选择模式按键处理
