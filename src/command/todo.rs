@@ -634,7 +634,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                 .block(list_block)
                 .highlight_style(
                     Style::default()
-                        .bg(Color::Indexed(236))
+                        .bg(Color::Indexed(24))
                         .add_modifier(Modifier::BOLD),
                 )
                 .highlight_symbol(" ▶ ");
