@@ -1169,41 +1169,60 @@ fn build_message_lines(
                 let user_pad_lr = 3usize; // 左右内边距
                 let user_content_w = bubble_max_width.saturating_sub(user_pad_lr * 2);
 
+                // 先预计算所有换行后的内容行，以便确定实际气泡宽度
+                let mut all_wrapped_lines: Vec<String> = Vec::new();
+                for content_line in msg.content.lines() {
+                    let wrapped = wrap_text(content_line, user_content_w);
+                    all_wrapped_lines.extend(wrapped);
+                }
+                // 如果消息为空，至少保留一行空行
+                if all_wrapped_lines.is_empty() {
+                    all_wrapped_lines.push(String::new());
+                }
+
+                // 根据实际内容宽度动态计算气泡宽度（不超过 bubble_max_width）
+                let actual_content_w = all_wrapped_lines
+                    .iter()
+                    .map(|l| display_width(l))
+                    .max()
+                    .unwrap_or(0);
+                let actual_bubble_w = (actual_content_w + user_pad_lr * 2)
+                    .min(bubble_max_width)
+                    .max(user_pad_lr * 2 + 1);
+                let actual_inner_content_w = actual_bubble_w.saturating_sub(user_pad_lr * 2);
+
                 // 上边距
                 {
-                    let bubble_text = " ".repeat(bubble_max_width);
-                    let pad = inner_width.saturating_sub(bubble_max_width);
+                    let bubble_text = " ".repeat(actual_bubble_w);
+                    let pad = inner_width.saturating_sub(actual_bubble_w);
                     lines.push(Line::from(vec![
                         Span::raw(" ".repeat(pad)),
                         Span::styled(bubble_text, Style::default().bg(user_bg)),
                     ]));
                 }
 
-                for content_line in msg.content.lines() {
-                    let wrapped = wrap_text(content_line, user_content_w);
-                    for wl in wrapped {
-                        let wl_width = display_width(&wl);
-                        let fill = user_content_w.saturating_sub(wl_width);
-                        let text = format!(
-                            "{}{}{}{}",
-                            " ".repeat(user_pad_lr),
-                            wl,
-                            " ".repeat(fill),
-                            " ".repeat(user_pad_lr),
-                        );
-                        let text_width = display_width(&text);
-                        let pad = inner_width.saturating_sub(text_width);
-                        lines.push(Line::from(vec![
-                            Span::raw(" ".repeat(pad)),
-                            Span::styled(text, Style::default().fg(Color::White).bg(user_bg)),
-                        ]));
-                    }
+                for wl in &all_wrapped_lines {
+                    let wl_width = display_width(wl);
+                    let fill = actual_inner_content_w.saturating_sub(wl_width);
+                    let text = format!(
+                        "{}{}{}{}",
+                        " ".repeat(user_pad_lr),
+                        wl,
+                        " ".repeat(fill),
+                        " ".repeat(user_pad_lr),
+                    );
+                    let text_width = display_width(&text);
+                    let pad = inner_width.saturating_sub(text_width);
+                    lines.push(Line::from(vec![
+                        Span::raw(" ".repeat(pad)),
+                        Span::styled(text, Style::default().fg(Color::White).bg(user_bg)),
+                    ]));
                 }
 
                 // 下边距
                 {
-                    let bubble_text = " ".repeat(bubble_max_width);
-                    let pad = inner_width.saturating_sub(bubble_max_width);
+                    let bubble_text = " ".repeat(actual_bubble_w);
+                    let pad = inner_width.saturating_sub(actual_bubble_w);
                     lines.push(Line::from(vec![
                         Span::raw(" ".repeat(pad)),
                         Span::styled(bubble_text, Style::default().bg(user_bg)),
