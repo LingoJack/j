@@ -391,6 +391,8 @@ struct ChatApp {
     config_edit_buf: String,
     /// 配置界面：编辑光标位置
     config_edit_cursor: usize,
+    /// 流式输出时是否自动滚动到底部（用户手动上滚后关闭，发送新消息或滚到底部时恢复）
+    auto_scroll: bool,
 }
 
 /// 消息渲染行缓存
@@ -484,6 +486,7 @@ impl ChatApp {
             config_editing: false,
             config_edit_buf: String::new(),
             config_edit_cursor: 0,
+            auto_scroll: true,
         }
     }
 
@@ -549,7 +552,8 @@ impl ChatApp {
         });
         self.input.clear();
         self.cursor_pos = 0;
-        // 自动滚动到底部
+        // 发送新消息时恢复自动滚动并滚到底部
+        self.auto_scroll = true;
         self.scroll_offset = u16::MAX;
 
         // 调用 API
@@ -681,8 +685,11 @@ impl ChatApp {
             loop {
                 match rx.try_recv() {
                     Ok(StreamMsg::Chunk) => {
-                        // 内容已经通过 Arc<Mutex<String>> 更新，这里只确保滚到底部
-                        self.scroll_offset = u16::MAX;
+                        // 内容已经通过 Arc<Mutex<String>> 更新
+                        // 只有在用户没有手动滚动的情况下才自动滚到底部
+                        if self.auto_scroll {
+                            self.scroll_offset = u16::MAX;
+                        }
                     }
                     Ok(StreamMsg::Done) => {
                         finished = true;
@@ -726,7 +733,9 @@ impl ChatApp {
                     self.streaming_content.lock().unwrap().clear();
                     self.show_toast("回复完成 ✓", false);
                 }
-                self.scroll_offset = u16::MAX;
+                if self.auto_scroll {
+                    self.scroll_offset = u16::MAX;
+                }
             } else {
                 // 错误时也清空流式缓冲
                 self.streaming_content.lock().unwrap().clear();
@@ -760,11 +769,15 @@ impl ChatApp {
     /// 向上滚动消息
     fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(3);
+        // 用户手动上滚，关闭自动滚动
+        self.auto_scroll = false;
     }
 
     /// 向下滚动消息
     fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(3);
+        // 注意：scroll_offset 可能超过 max_scroll，绘制时会校正。
+        // 如果用户滚到了底部（offset >= max_scroll），在绘制时会恢复 auto_scroll。
     }
 }
 
@@ -1124,6 +1137,8 @@ fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     if app.mode != ChatMode::Browse {
         if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
             app.scroll_offset = max_scroll;
+            // 已经在底部，恢复自动滚动
+            app.auto_scroll = true;
         }
     } else {
         // 浏览模式：自动滚动到选中消息的位置
@@ -1500,14 +1515,37 @@ fn wrap_md_line_in_bubble(
     let pad_right = " ".repeat(pad_right_w);
     let mut styled_spans: Vec<Span> = Vec::new();
     styled_spans.push(Span::styled(pad_left, Style::default().bg(bubble_bg)));
+    let target_content_w = bubble_total_w.saturating_sub(pad_left_w + pad_right_w);
     let mut content_w: usize = 0;
     for span in md_line.spans {
         let sw = display_width(&span.content);
+        if content_w + sw > target_content_w {
+            // 安全钳制：逐字符截断以适应目标宽度
+            let remaining = target_content_w.saturating_sub(content_w);
+            if remaining > 0 {
+                let mut truncated = String::new();
+                let mut tw = 0;
+                for ch in span.content.chars() {
+                    let cw = char_width(ch);
+                    if tw + cw > remaining {
+                        break;
+                    }
+                    truncated.push(ch);
+                    tw += cw;
+                }
+                if !truncated.is_empty() {
+                    content_w += tw;
+                    let merged_style = span.style.bg(bubble_bg);
+                    styled_spans.push(Span::styled(truncated, merged_style));
+                }
+            }
+            // 跳过后续 span（已溢出）
+            break;
+        }
         content_w += sw;
         let merged_style = span.style.bg(bubble_bg);
         styled_spans.push(Span::styled(span.content.to_string(), merged_style));
     }
-    let target_content_w = bubble_total_w.saturating_sub(pad_left_w + pad_right_w);
     let fill = target_content_w.saturating_sub(content_w);
     if fill > 0 {
         styled_spans.push(Span::styled(
@@ -1815,9 +1853,26 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                     current_cell.push_str(&text);
                     current_cell.push('`');
                 } else {
-                    // 行内代码
+                    // 行内代码：检查行宽，放不下则先换行
+                    let code_str = format!(" {} ", text);
+                    let code_w = display_width(&code_str);
+                    let effective_prefix_w = if in_blockquote { 2 } else { 0 };
+                    let full_line_w = content_width.saturating_sub(effective_prefix_w);
+                    let existing_w: usize = current_spans
+                        .iter()
+                        .map(|s| display_width(&s.content))
+                        .sum();
+                    if existing_w + code_w > full_line_w && !current_spans.is_empty() {
+                        flush_line(&mut current_spans, &mut lines);
+                        if in_blockquote {
+                            current_spans.push(Span::styled(
+                                "| ".to_string(),
+                                Style::default().fg(Color::Rgb(80, 100, 140)),
+                            ));
+                        }
+                    }
                     current_spans.push(Span::styled(
-                        format!(" {} ", text),
+                        code_str,
                         Style::default()
                             .fg(Color::Rgb(230, 190, 120))
                             .bg(Color::Rgb(45, 45, 60)),
@@ -1915,15 +1970,35 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                         heading_level = None; // 只加一次前缀
                     }
 
+                    // 引用块：加左侧竖线
+                    let effective_prefix_w = if in_blockquote { 2 } else { 0 }; // "| " 宽度
+                    let full_line_w = content_width.saturating_sub(effective_prefix_w);
+
                     // 计算 current_spans 已有的显示宽度
                     let existing_w: usize = current_spans
                         .iter()
                         .map(|s| display_width(&s.content))
                         .sum();
 
-                    // 引用块：加左侧竖线
-                    let effective_prefix_w = if in_blockquote { 2 } else { 0 }; // "| " 宽度
-                    let wrap_w = content_width.saturating_sub(effective_prefix_w + existing_w);
+                    // 剩余可用宽度
+                    let wrap_w = full_line_w.saturating_sub(existing_w);
+
+                    // 如果剩余宽度太小（不足整行的 1/4），先 flush 当前行再换行，
+                    // 避免文字被挤到极窄的空间导致竖排
+                    let min_useful_w = full_line_w / 4;
+                    let wrap_w = if wrap_w < min_useful_w.max(4) && !current_spans.is_empty() {
+                        flush_line(&mut current_spans, &mut lines);
+                        if in_blockquote {
+                            current_spans.push(Span::styled(
+                                "| ".to_string(),
+                                Style::default().fg(Color::Rgb(80, 100, 140)),
+                            ));
+                        }
+                        // flush 后使用完整行宽
+                        full_line_w
+                    } else {
+                        wrap_w
+                    };
 
                     for (i, line) in text_str.split('\n').enumerate() {
                         if i > 0 {
@@ -2923,9 +2998,8 @@ fn colorize_tokens<'a>(
 
 /// 简单文本自动换行
 fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
-    if max_width == 0 {
-        return vec![text.to_string()];
-    }
+    // 最小宽度保证至少能放下一个字符（中文字符宽度2），避免无限循环或不截断
+    let max_width = max_width.max(2);
     let mut result = Vec::new();
     let mut current_line = String::new();
     let mut current_width = 0;
@@ -2949,43 +3023,16 @@ fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     result
 }
 
-/// 计算字符串的显示宽度
-/// 使用 unicode-width 规则：CJK 字符宽度2，其他（含 Box Drawing、符号等）宽度1
+/// 计算字符串的显示宽度（使用 unicode-width crate，比手动范围匹配更准确）
 fn display_width(s: &str) -> usize {
-    s.chars().map(|c| char_width(c)).sum()
+    use unicode_width::UnicodeWidthStr;
+    UnicodeWidthStr::width(s)
 }
 
-/// 计算单个字符的显示宽度
+/// 计算单个字符的显示宽度（使用 unicode-width crate）
 fn char_width(c: char) -> usize {
-    if c.is_ascii() {
-        return 1;
-    }
-    // CJK Unified Ideographs 及扩展
-    let cp = c as u32;
-    if (0x4E00..=0x9FFF).contains(&cp)    // CJK Unified Ideographs
-        || (0x3400..=0x4DBF).contains(&cp) // CJK Unified Ideographs Extension A
-        || (0x20000..=0x2A6DF).contains(&cp) // Extension B
-        || (0x2A700..=0x2B73F).contains(&cp) // Extension C
-        || (0x2B740..=0x2B81F).contains(&cp) // Extension D
-        || (0xF900..=0xFAFF).contains(&cp)   // CJK Compatibility Ideographs
-        || (0x2F800..=0x2FA1F).contains(&cp)  // CJK Compatibility Ideographs Supplement
-        // CJK 标点和符号
-        || (0x3000..=0x303F).contains(&cp)    // CJK Symbols and Punctuation
-        || (0xFF01..=0xFF60).contains(&cp)    // Fullwidth Forms
-        || (0xFFE0..=0xFFE6).contains(&cp)    // Fullwidth Signs
-        // 日韩
-        || (0x3040..=0x309F).contains(&cp)    // Hiragana
-        || (0x30A0..=0x30FF).contains(&cp)    // Katakana
-        || (0xAC00..=0xD7AF).contains(&cp)    // Hangul Syllables
-        // Emoji（常见范围）
-        || (0x1F300..=0x1F9FF).contains(&cp)
-        || (0x2600..=0x26FF).contains(&cp)
-        || (0x2700..=0x27BF).contains(&cp)
-    {
-        2
-    } else {
-        1
-    }
+    use unicode_width::UnicodeWidthChar;
+    UnicodeWidthChar::width(c).unwrap_or(0)
 }
 
 /// 绘制输入区
