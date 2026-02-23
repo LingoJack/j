@@ -1715,6 +1715,13 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                             .add_modifier(Modifier::BOLD);
                         let border_style = Style::default().fg(Color::Rgb(60, 70, 100));
 
+                        // 表格行的实际字符宽度（用空格字符计算，不依赖 Box Drawing 字符宽度）
+                        // table_row_w = 竖线数(num_cols+1) + 每列(cw+2) = sep_w + pad_w + total_col_w
+                        let total_col_w_final: usize = col_widths.iter().sum();
+                        let table_row_w = sep_w + pad_w + total_col_w_final;
+                        // 表格行右侧需要补充的空格数，使整行宽度等于 content_width
+                        let table_right_pad = content_width.saturating_sub(table_row_w);
+
                         // 渲染顶边框 ┌─┬─┐
                         let mut top = String::from("┌");
                         for (i, cw) in col_widths.iter().enumerate() {
@@ -1724,7 +1731,12 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                             }
                         }
                         top.push('┐');
-                        lines.push(Line::from(Span::styled(top, border_style)));
+                        // 补充右侧空格，使宽度对齐 content_width
+                        let mut top_spans = vec![Span::styled(top, border_style)];
+                        if table_right_pad > 0 {
+                            top_spans.push(Span::raw(" ".repeat(table_right_pad)));
+                        }
+                        lines.push(Line::from(top_spans));
 
                         for (row_idx, row) in table_rows.iter().enumerate() {
                             // 数据行 │ cell │ cell │
@@ -1781,6 +1793,10 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                                 row_spans.push(Span::styled(text, style));
                                 row_spans.push(Span::styled("│", border_style));
                             }
+                            // 补充右侧空格，使宽度对齐 content_width
+                            if table_right_pad > 0 {
+                                row_spans.push(Span::raw(" ".repeat(table_right_pad)));
+                            }
                             lines.push(Line::from(row_spans));
 
                             // 表头行后加分隔线 ├─┼─┤
@@ -1793,7 +1809,11 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                                     }
                                 }
                                 sep.push('┤');
-                                lines.push(Line::from(Span::styled(sep, border_style)));
+                                let mut sep_spans = vec![Span::styled(sep, border_style)];
+                                if table_right_pad > 0 {
+                                    sep_spans.push(Span::raw(" ".repeat(table_right_pad)));
+                                }
+                                lines.push(Line::from(sep_spans));
                             }
                         }
 
@@ -1806,7 +1826,11 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                             }
                         }
                         bottom.push('┘');
-                        lines.push(Line::from(Span::styled(bottom, border_style)));
+                        let mut bottom_spans = vec![Span::styled(bottom, border_style)];
+                        if table_right_pad > 0 {
+                            bottom_spans.push(Span::raw(" ".repeat(table_right_pad)));
+                        }
+                        lines.push(Line::from(bottom_spans));
                     }
                 }
                 table_rows.clear();
