@@ -1,4 +1,5 @@
 use crate::config::YamlConfig;
+use crate::util::log::write_error_log;
 use crate::{error, info};
 use async_openai::{
     Client,
@@ -62,6 +63,13 @@ pub struct AgentConfig {
     /// 是否使用流式输出（默认 true，设为 false 则等回复完整后再显示）
     #[serde(default = "default_stream_mode")]
     pub stream_mode: bool,
+    /// 发送给 API 的历史消息数量限制（默认 20 条，避免 token 消耗过大）
+    #[serde(default = "default_max_history_messages")]
+    pub max_history_messages: usize,
+}
+
+fn default_max_history_messages() -> usize {
+    20
 }
 
 /// 默认流式输出
@@ -274,6 +282,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             active_index: 0,
             system_prompt: Some("你是一个有用的助手。".to_string()),
             stream_mode: true,
+            max_history_messages: 20,
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);
@@ -451,7 +460,7 @@ enum ChatMode {
 /// 配置编辑界面的字段列表
 const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
 /// 全局配置字段
-const CONFIG_GLOBAL_FIELDS: &[&str] = &["system_prompt", "stream_mode"];
+const CONFIG_GLOBAL_FIELDS: &[&str] = &["system_prompt", "stream_mode", "max_history_messages"];
 /// 所有字段数 = provider 字段 + 全局字段
 fn config_total_fields() -> usize {
     CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
@@ -532,8 +541,17 @@ impl ChatApp {
                 content: sys.clone(),
             });
         }
-        for msg in &self.session.messages {
-            messages.push(msg.clone());
+
+        // 只取最近的 N 条历史消息，避免 token 消耗过大
+        let max_history = self.agent_config.max_history_messages;
+        let history_messages: Vec<_> = if self.session.messages.len() > max_history {
+            self.session.messages[self.session.messages.len() - max_history..].to_vec()
+        } else {
+            self.session.messages.clone()
+        };
+
+        for msg in history_messages {
+            messages.push(msg);
         }
         messages
     }
@@ -618,7 +636,9 @@ impl ChatApp {
                     let mut stream = match client.chat().create_stream(request).await {
                         Ok(s) => s,
                         Err(e) => {
-                            let _ = tx.send(StreamMsg::Error(format!("API 请求失败: {}", e)));
+                            let error_msg = format!("API 请求失败: {}", e);
+                            write_error_log("Chat API 流式请求创建", &error_msg);
+                            let _ = tx.send(StreamMsg::Error(error_msg));
                             return;
                         }
                     };
@@ -638,7 +658,9 @@ impl ChatApp {
                                 }
                             }
                             Err(e) => {
-                                let _ = tx.send(StreamMsg::Error(format!("流式响应错误: {}", e)));
+                                let error_str = format!("{}", e);
+                                write_error_log("Chat API 流式响应", &error_str);
+                                let _ = tx.send(StreamMsg::Error(error_str));
                                 return;
                             }
                         }
@@ -658,7 +680,9 @@ impl ChatApp {
                             }
                         }
                         Err(e) => {
-                            let _ = tx.send(StreamMsg::Error(format!("API 请求失败: {}", e)));
+                            let error_msg = format!("API 请求失败: {}", e);
+                            write_error_log("Chat API 非流式请求", &error_msg);
+                            let _ = tx.send(StreamMsg::Error(error_msg));
                             return;
                         }
                     }
@@ -3829,6 +3853,7 @@ fn config_field_label(idx: usize) -> &'static str {
         match CONFIG_GLOBAL_FIELDS[gi] {
             "system_prompt" => "系统提示词",
             "stream_mode" => "流式输出",
+            "max_history_messages" => "历史消息数",
             _ => CONFIG_GLOBAL_FIELDS[gi],
         }
     }
@@ -3871,6 +3896,7 @@ fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
                     "关闭".into()
                 }
             }
+            "max_history_messages" => app.agent_config.max_history_messages.to_string(),
             _ => String::new(),
         }
     }
@@ -3937,6 +3963,11 @@ fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
                     value.trim().to_lowercase().as_str(),
                     "true" | "1" | "开启" | "on" | "yes"
                 );
+            }
+            "max_history_messages" => {
+                if let Ok(num) = value.trim().parse::<usize>() {
+                    app.agent_config.max_history_messages = num;
+                }
             }
             _ => {}
         }
