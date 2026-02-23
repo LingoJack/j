@@ -164,6 +164,7 @@ flowchart TD
 | `check` | `c` | `[line_count\|open]` | 查看最近 N 行日报 / TUI 编辑器打开日报文件 |
 | `search` | `select/look/sch` | `<N\|all> <kw> [-f]` | 搜索日报 |
 | `todo` | `td` | `[content...]` | 待办备忘录（无参数进入 TUI 管理界面，有参数快速添加） |
+| `chat` | `ai` | `[content...]` | AI 对话（无参数进入 TUI 界面，有参数快速提问） |
 | `concat` | — | `<name> [content]` | 创建脚本（无 content 则打开 TUI 编辑器） |
 | `time` | — | `<countdown> <dur>` | 倒计时器 |
 | `log` | — | `<key> <value>` | 日志设置 |
