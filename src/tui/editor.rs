@@ -14,6 +14,7 @@ use ratatui::{
 use std::fmt;
 use std::io;
 use tui_textarea::{CursorMove, Input, Key, TextArea};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 // ========== Vim 模式定义 ==========
 
@@ -793,9 +794,31 @@ fn make_block<'a>(title: &str, mode: &Mode) -> Block<'a> {
         .border_style(Style::default().fg(mode.border_color()))
 }
 
-/// 计算字符串的显示宽度（中文字符占 2 列，ASCII 占 1 列）
+/// 计算字符串的显示宽度（使用 unicode_width，与 ratatui 内部一致）
 fn display_width_of(s: &str) -> usize {
-    s.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum()
+    UnicodeWidthStr::width(s)
+}
+
+/// 精确计算字符串在给定列宽下 wrap 后的行数（用于预览区滚动进度显示）
+fn count_wrapped_lines_unicode(s: &str, col_width: usize) -> usize {
+    if col_width == 0 || s.is_empty() {
+        return 1;
+    }
+    let mut lines = 1usize;
+    let mut current_width = 0usize;
+    for c in s.chars() {
+        let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+        if char_width == 0 {
+            continue;
+        }
+        if current_width + char_width > col_width {
+            lines += 1;
+            current_width = char_width;
+        } else {
+            current_width += char_width;
+        }
+    }
+    lines
 }
 
 /// 编辑器主循环
@@ -808,6 +831,11 @@ fn run_editor_loop(
 ) -> io::Result<Option<String>> {
     // 是否显示 "有未保存改动" 的提示（下次按键后清除）
     let mut unsaved_warning = false;
+    // 预览区滚动偏移（向下滚动的行数）
+    let mut preview_scroll: u16 = 0;
+    // 上一次预览的行索引，切换行时重置滚动
+    let mut last_preview_row: usize = usize::MAX;
+
     loop {
         let mode = &vim.mode.clone();
 
@@ -818,34 +846,32 @@ fn run_editor_loop(
             .get(cursor_row)
             .map(|l| l.to_string())
             .unwrap_or_default();
+
+        // 切换到新行时重置预览滚动
+        if cursor_row != last_preview_row {
+            preview_scroll = 0;
+            last_preview_row = cursor_row;
+        }
+
         // 判断当前行是否超过终端宽度，需要显示预览区
+        // 用终端宽度粗略判断（不减行号宽度，保守估计）
         let display_width: usize = display_width_of(&current_line_text);
 
         // 绘制界面
         terminal.draw(|frame| {
             let area_width = frame.area().width as usize;
+            let _area_height = frame.area().height;
             // 预留行号宽度（行号位数 + 2 个边距）+ 边框宽度 2
             let lnum_width = format!("{}", textarea.lines().len()).len() + 2 + 2;
             let effective_width = area_width.saturating_sub(lnum_width);
             let needs_preview = display_width > effective_width;
 
-            // 动态计算预览区高度：根据文本实际需要的行数
-            // 预览区内部可用宽度 = 终端宽度 - 左右边框各 1
-            let preview_inner_width = area_width.saturating_sub(2).max(1);
-            let preview_height = if needs_preview {
-                let wrapped_lines =
-                    (display_width as f64 / preview_inner_width as f64).ceil() as u16;
-                // 预览区高度 = wrap 后行数 + 2（边框），最少 3 行，最多 8 行
-                wrapped_lines.saturating_add(2).clamp(3, 8)
-            } else {
-                0
-            };
-
             let constraints = if needs_preview {
                 vec![
-                    Constraint::Min(3),                 // 编辑区
-                    Constraint::Length(preview_height), // 当前行预览区
-                    Constraint::Length(2),              // 状态栏
+                    // 编辑区占 55%，预览区占 40%，状态栏固定 2 行
+                    Constraint::Percentage(55),
+                    Constraint::Min(5),
+                    Constraint::Length(2),
                 ]
             } else {
                 vec![
@@ -868,10 +894,32 @@ fn run_editor_loop(
             }
 
             if needs_preview {
-                // 渲染当前行预览区（带 wrap）
+                // 预览区内部可用高度（去掉上下边框各 1 行）
+                let preview_inner_h = chunks[1].height.saturating_sub(2) as u16;
+                // 预览区内部可用宽度（去掉左右边框各 1 列）
+                let preview_inner_w = (chunks[1].width.saturating_sub(2)) as usize;
+
+                // 计算总 wrap 行数（用于显示滚动进度）
+                let total_wrapped =
+                    count_wrapped_lines_unicode(&current_line_text, preview_inner_w) as u16;
+                let max_scroll = total_wrapped.saturating_sub(preview_inner_h);
+                // 钳制滚动偏移（防止越界）
+                let clamped_scroll = preview_scroll.min(max_scroll);
+
+                let scroll_hint = if total_wrapped > preview_inner_h {
+                    format!(
+                        " 📖 第 {} 行预览  [{}/{}行]  Alt+↓/↑滚动 ",
+                        cursor_row + 1,
+                        clamped_scroll + preview_inner_h,
+                        total_wrapped
+                    )
+                } else {
+                    format!(" 📖 第 {} 行预览 ", cursor_row + 1)
+                };
+
                 let preview_block = Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" 📖 第 {} 行预览 ", cursor_row + 1))
+                    .title(scroll_hint)
                     .title_style(
                         Style::default()
                             .fg(Color::Cyan)
@@ -881,7 +929,8 @@ fn run_editor_loop(
                 let preview = Paragraph::new(current_line_text.clone())
                     .block(preview_block)
                     .style(Style::default().fg(Color::White))
-                    .wrap(Wrap { trim: false });
+                    .wrap(Wrap { trim: false })
+                    .scroll((clamped_scroll, 0));
                 frame.render_widget(preview, chunks[1]);
 
                 // 渲染状态栏
@@ -903,6 +952,23 @@ fn run_editor_loop(
             }
 
             let input = Input::from(key_event);
+
+            // Alt+↓ / Alt+↑：预览区滚动（不影响编辑区）
+            use crossterm::event::{KeyCode, KeyModifiers};
+            if key_event.modifiers == KeyModifiers::ALT {
+                match key_event.code {
+                    KeyCode::Down => {
+                        preview_scroll = preview_scroll.saturating_add(1);
+                        continue;
+                    }
+                    KeyCode::Up => {
+                        preview_scroll = preview_scroll.saturating_sub(1);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
             match vim.transition(input, textarea) {
                 Transition::Mode(new_mode) if vim.mode != new_mode => {
                     textarea.set_block(make_block(title, &new_mode));

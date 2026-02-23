@@ -1224,6 +1224,7 @@ dependencies = [
  "termimad",
  "tokio",
  "tui-textarea",
+ "unicode-width 0.2.0",
  "url",
 ]
 

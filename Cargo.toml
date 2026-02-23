@@ -34,6 +34,7 @@ async-openai = { version = "0.33", default-features = false, features = ["chat-c
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 futures = "0.3"
 pulldown-cmark = "0.12"
+unicode-width = "0.2"
 
 [patch.crates-io]
 tui-textarea = { path = "patches/tui-textarea-0.7.0" }
