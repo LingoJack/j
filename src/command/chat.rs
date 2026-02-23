@@ -1766,7 +1766,11 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
             }
             Event::Start(Tag::Strong) => {
                 let current = *style_stack.last().unwrap_or(&base_style);
-                style_stack.push(current.add_modifier(Modifier::BOLD));
+                style_stack.push(
+                    current
+                        .add_modifier(Modifier::BOLD)
+                        .fg(Color::Rgb(130, 220, 255)),
+                );
             }
             Event::End(TagEnd::Strong) => {
                 style_stack.pop();
@@ -1897,11 +1901,11 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                     *idx += 1;
                     s
                 } else {
-                    format!("{}- ", indent)
+                    format!("{}• ", indent)
                 };
                 current_spans.push(Span::styled(
                     bullet,
-                    Style::default().fg(Color::Rgb(160, 180, 220)),
+                    Style::default().fg(Color::Rgb(100, 160, 255)),
                 ));
             }
             Event::End(TagEnd::Item) => {
