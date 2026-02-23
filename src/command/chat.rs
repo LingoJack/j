@@ -381,6 +381,16 @@ struct ChatApp {
     last_rendered_streaming_len: usize,
     /// 流式节流：上次实际渲染流式内容的时间
     last_stream_render_time: std::time::Instant,
+    /// 配置界面：当前选中的 provider 索引
+    config_provider_idx: usize,
+    /// 配置界面：当前选中的字段索引
+    config_field_idx: usize,
+    /// 配置界面：是否正在编辑某个字段
+    config_editing: bool,
+    /// 配置界面：编辑缓冲区
+    config_edit_buf: String,
+    /// 配置界面：编辑光标位置
+    config_edit_cursor: usize,
 }
 
 /// 消息渲染行缓存
@@ -432,6 +442,17 @@ enum ChatMode {
     Browse,
     /// 帮助
     Help,
+    /// 配置编辑模式
+    Config,
+}
+
+/// 配置编辑界面的字段列表
+const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
+/// 全局配置字段
+const CONFIG_GLOBAL_FIELDS: &[&str] = &["system_prompt", "stream_mode"];
+/// 所有字段数 = provider 字段 + 全局字段
+fn config_total_fields() -> usize {
+    CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
 }
 
 impl ChatApp {
@@ -458,6 +479,11 @@ impl ChatApp {
             browse_msg_index: 0,
             last_rendered_streaming_len: 0,
             last_stream_render_time: std::time::Instant::now(),
+            config_provider_idx: 0,
+            config_field_idx: 0,
+            config_editing: false,
+            config_edit_buf: String::new(),
+            config_edit_cursor: 0,
         }
     }
 
@@ -837,6 +863,7 @@ fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::Help => {
                                 app.mode = ChatMode::Chat;
                             }
+                            ChatMode::Config => handle_config_mode(&mut app, key),
                         }
                     }
                     Event::Mouse(mouse) => match mouse.kind {
@@ -904,6 +931,8 @@ fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         draw_help(f, chunks[1]);
     } else if app.mode == ChatMode::SelectModel {
         draw_model_selector(f, chunks[1], app);
+    } else if app.mode == ChatMode::Config {
+        draw_config_screen(f, chunks[1], app);
     } else {
         draw_messages(f, chunks[1], app);
     }
@@ -3181,6 +3210,7 @@ fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ("Ctrl+Y", "复制"),
                 ("Ctrl+B", "浏览"),
                 ("Ctrl+S", "流式切换"),
+                ("Ctrl+E", "配置"),
                 ("?/F1", "帮助"),
                 ("Esc", "退出"),
             ]
@@ -3193,6 +3223,16 @@ fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         }
         ChatMode::Help => {
             vec![("任意键", "返回")]
+        }
+        ChatMode::Config => {
+            vec![
+                ("↑↓", "切换字段"),
+                ("Enter", "编辑"),
+                ("Tab", "切换 Provider"),
+                ("a", "新增"),
+                ("d", "删除"),
+                ("Esc", "保存返回"),
+            ]
         }
     };
 
@@ -3428,6 +3468,18 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled(
+                "  Ctrl+E       ",
+                Style::default()
+                    .fg(Color::Rgb(230, 210, 120))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "打开配置界面",
+                Style::default().fg(Color::Rgb(200, 200, 220)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
                 "  Esc / Ctrl+C ",
                 Style::default()
                     .fg(Color::Rgb(230, 210, 120))
@@ -3528,6 +3580,20 @@ fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         } else {
             app.show_toast("暂无消息可浏览", true);
         }
+        return false;
+    }
+
+    // Ctrl+E 打开配置界面
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('e') {
+        // 初始化配置界面状态
+        app.config_provider_idx = app
+            .agent_config
+            .active_index
+            .min(app.agent_config.providers.len().saturating_sub(1));
+        app.config_field_idx = 0;
+        app.config_editing = false;
+        app.config_edit_buf.clear();
+        app.mode = ChatMode::Config;
         return false;
     }
 
@@ -3694,6 +3760,638 @@ fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+/// 获取配置界面中当前字段的标签
+fn config_field_label(idx: usize) -> &'static str {
+    let total_provider = CONFIG_FIELDS.len();
+    if idx < total_provider {
+        match CONFIG_FIELDS[idx] {
+            "name" => "显示名称",
+            "api_base" => "API Base",
+            "api_key" => "API Key",
+            "model" => "模型名称",
+            _ => CONFIG_FIELDS[idx],
+        }
+    } else {
+        let gi = idx - total_provider;
+        match CONFIG_GLOBAL_FIELDS[gi] {
+            "system_prompt" => "系统提示词",
+            "stream_mode" => "流式输出",
+            _ => CONFIG_GLOBAL_FIELDS[gi],
+        }
+    }
+}
+
+/// 获取配置界面中当前字段的值
+fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
+    let total_provider = CONFIG_FIELDS.len();
+    if field_idx < total_provider {
+        if app.agent_config.providers.is_empty() {
+            return String::new();
+        }
+        let p = &app.agent_config.providers[app.config_provider_idx];
+        match CONFIG_FIELDS[field_idx] {
+            "name" => p.name.clone(),
+            "api_base" => p.api_base.clone(),
+            "api_key" => {
+                // 显示时隐藏 API Key 中间部分
+                if p.api_key.len() > 8 {
+                    format!(
+                        "{}****{}",
+                        &p.api_key[..4],
+                        &p.api_key[p.api_key.len() - 4..]
+                    )
+                } else {
+                    p.api_key.clone()
+                }
+            }
+            "model" => p.model.clone(),
+            _ => String::new(),
+        }
+    } else {
+        let gi = field_idx - total_provider;
+        match CONFIG_GLOBAL_FIELDS[gi] {
+            "system_prompt" => app.agent_config.system_prompt.clone().unwrap_or_default(),
+            "stream_mode" => {
+                if app.agent_config.stream_mode {
+                    "开启".into()
+                } else {
+                    "关闭".into()
+                }
+            }
+            _ => String::new(),
+        }
+    }
+}
+
+/// 获取配置字段的原始值（用于编辑时填入输入框）
+fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
+    let total_provider = CONFIG_FIELDS.len();
+    if field_idx < total_provider {
+        if app.agent_config.providers.is_empty() {
+            return String::new();
+        }
+        let p = &app.agent_config.providers[app.config_provider_idx];
+        match CONFIG_FIELDS[field_idx] {
+            "name" => p.name.clone(),
+            "api_base" => p.api_base.clone(),
+            "api_key" => p.api_key.clone(),
+            "model" => p.model.clone(),
+            _ => String::new(),
+        }
+    } else {
+        let gi = field_idx - total_provider;
+        match CONFIG_GLOBAL_FIELDS[gi] {
+            "system_prompt" => app.agent_config.system_prompt.clone().unwrap_or_default(),
+            "stream_mode" => {
+                if app.agent_config.stream_mode {
+                    "true".into()
+                } else {
+                    "false".into()
+                }
+            }
+            _ => String::new(),
+        }
+    }
+}
+
+/// 将编辑结果写回配置
+fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
+    let total_provider = CONFIG_FIELDS.len();
+    if field_idx < total_provider {
+        if app.agent_config.providers.is_empty() {
+            return;
+        }
+        let p = &mut app.agent_config.providers[app.config_provider_idx];
+        match CONFIG_FIELDS[field_idx] {
+            "name" => p.name = value.to_string(),
+            "api_base" => p.api_base = value.to_string(),
+            "api_key" => p.api_key = value.to_string(),
+            "model" => p.model = value.to_string(),
+            _ => {}
+        }
+    } else {
+        let gi = field_idx - total_provider;
+        match CONFIG_GLOBAL_FIELDS[gi] {
+            "system_prompt" => {
+                if value.is_empty() {
+                    app.agent_config.system_prompt = None;
+                } else {
+                    app.agent_config.system_prompt = Some(value.to_string());
+                }
+            }
+            "stream_mode" => {
+                app.agent_config.stream_mode = matches!(
+                    value.trim().to_lowercase().as_str(),
+                    "true" | "1" | "开启" | "on" | "yes"
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// 配置模式按键处理
+fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
+    let total_fields = config_total_fields();
+
+    if app.config_editing {
+        // 正在编辑某个字段
+        match key.code {
+            KeyCode::Esc => {
+                // 取消编辑
+                app.config_editing = false;
+            }
+            KeyCode::Enter => {
+                // 确认编辑
+                let val = app.config_edit_buf.clone();
+                config_field_set(app, app.config_field_idx, &val);
+                app.config_editing = false;
+            }
+            KeyCode::Backspace => {
+                if app.config_edit_cursor > 0 {
+                    let idx = app
+                        .config_edit_buf
+                        .char_indices()
+                        .nth(app.config_edit_cursor - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let end_idx = app
+                        .config_edit_buf
+                        .char_indices()
+                        .nth(app.config_edit_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.config_edit_buf.len());
+                    app.config_edit_buf = format!(
+                        "{}{}",
+                        &app.config_edit_buf[..idx],
+                        &app.config_edit_buf[end_idx..]
+                    );
+                    app.config_edit_cursor -= 1;
+                }
+            }
+            KeyCode::Left => {
+                app.config_edit_cursor = app.config_edit_cursor.saturating_sub(1);
+            }
+            KeyCode::Right => {
+                let char_count = app.config_edit_buf.chars().count();
+                if app.config_edit_cursor < char_count {
+                    app.config_edit_cursor += 1;
+                }
+            }
+            KeyCode::Char(c) => {
+                let byte_idx = app
+                    .config_edit_buf
+                    .char_indices()
+                    .nth(app.config_edit_cursor)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.config_edit_buf.len());
+                app.config_edit_buf.insert(byte_idx, c);
+                app.config_edit_cursor += 1;
+            }
+            _ => {}
+        }
+        return;
+    }
+
+    // 非编辑状态
+    match key.code {
+        KeyCode::Esc => {
+            // 保存并返回
+            let _ = save_agent_config(&app.agent_config);
+            app.show_toast("配置已保存 ✅", false);
+            app.mode = ChatMode::Chat;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if total_fields > 0 {
+                if app.config_field_idx == 0 {
+                    app.config_field_idx = total_fields - 1;
+                } else {
+                    app.config_field_idx -= 1;
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if total_fields > 0 {
+                app.config_field_idx = (app.config_field_idx + 1) % total_fields;
+            }
+        }
+        KeyCode::Tab | KeyCode::Right => {
+            // 切换 provider
+            let count = app.agent_config.providers.len();
+            if count > 1 {
+                app.config_provider_idx = (app.config_provider_idx + 1) % count;
+                // 切换后如果在 provider 字段区域，保持字段位置不变
+            }
+        }
+        KeyCode::BackTab | KeyCode::Left => {
+            // 反向切换 provider
+            let count = app.agent_config.providers.len();
+            if count > 1 {
+                if app.config_provider_idx == 0 {
+                    app.config_provider_idx = count - 1;
+                } else {
+                    app.config_provider_idx -= 1;
+                }
+            }
+        }
+        KeyCode::Enter => {
+            // 进入编辑模式
+            let total_provider = CONFIG_FIELDS.len();
+            if app.config_field_idx < total_provider && app.agent_config.providers.is_empty() {
+                app.show_toast("还没有 Provider，按 a 新增", true);
+                return;
+            }
+            // stream_mode 字段直接切换，不进入编辑模式
+            let gi = app.config_field_idx.checked_sub(total_provider);
+            if let Some(gi) = gi {
+                if CONFIG_GLOBAL_FIELDS[gi] == "stream_mode" {
+                    app.agent_config.stream_mode = !app.agent_config.stream_mode;
+                    return;
+                }
+            }
+            app.config_edit_buf = config_field_raw_value(app, app.config_field_idx);
+            app.config_edit_cursor = app.config_edit_buf.chars().count();
+            app.config_editing = true;
+        }
+        KeyCode::Char('a') => {
+            // 新增 Provider
+            let new_provider = ModelProvider {
+                name: format!("Provider-{}", app.agent_config.providers.len() + 1),
+                api_base: "https://api.openai.com/v1".to_string(),
+                api_key: String::new(),
+                model: String::new(),
+            };
+            app.agent_config.providers.push(new_provider);
+            app.config_provider_idx = app.agent_config.providers.len() - 1;
+            app.config_field_idx = 0; // 跳到 name 字段
+            app.show_toast("已新增 Provider，请填写配置", false);
+        }
+        KeyCode::Char('d') => {
+            // 删除当前 Provider
+            let count = app.agent_config.providers.len();
+            if count == 0 {
+                app.show_toast("没有可删除的 Provider", true);
+            } else {
+                let removed_name = app.agent_config.providers[app.config_provider_idx]
+                    .name
+                    .clone();
+                app.agent_config.providers.remove(app.config_provider_idx);
+                // 调整索引
+                if app.config_provider_idx >= app.agent_config.providers.len()
+                    && app.config_provider_idx > 0
+                {
+                    app.config_provider_idx -= 1;
+                }
+                // 调整 active_index
+                if app.agent_config.active_index >= app.agent_config.providers.len()
+                    && app.agent_config.active_index > 0
+                {
+                    app.agent_config.active_index -= 1;
+                }
+                app.show_toast(format!("已删除 Provider: {}", removed_name), false);
+            }
+        }
+        KeyCode::Char('s') => {
+            // 将当前 provider 设为活跃
+            if !app.agent_config.providers.is_empty() {
+                app.agent_config.active_index = app.config_provider_idx;
+                let name = app.agent_config.providers[app.config_provider_idx]
+                    .name
+                    .clone();
+                app.show_toast(format!("已设为活跃模型: {}", name), false);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 绘制配置编辑界面
+fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+    let bg = Color::Rgb(28, 28, 40);
+    let total_provider_fields = CONFIG_FIELDS.len();
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    // 标题
+    lines.push(Line::from(vec![Span::styled(
+        "  ⚙️  模型配置",
+        Style::default()
+            .fg(Color::Rgb(120, 180, 255))
+            .add_modifier(Modifier::BOLD),
+    )]));
+    lines.push(Line::from(""));
+
+    // Provider 标签栏
+    let provider_count = app.agent_config.providers.len();
+    if provider_count > 0 {
+        let mut tab_spans: Vec<Span> = vec![Span::styled("  ", Style::default())];
+        for (i, p) in app.agent_config.providers.iter().enumerate() {
+            let is_current = i == app.config_provider_idx;
+            let is_active = i == app.agent_config.active_index;
+            let marker = if is_active { "● " } else { "○ " };
+            let label = format!(" {}{} ", marker, p.name);
+            if is_current {
+                tab_spans.push(Span::styled(
+                    label,
+                    Style::default()
+                        .fg(Color::Rgb(22, 22, 30))
+                        .bg(Color::Rgb(120, 180, 255))
+                        .add_modifier(Modifier::BOLD),
+                ));
+            } else {
+                tab_spans.push(Span::styled(
+                    label,
+                    Style::default().fg(Color::Rgb(150, 150, 170)),
+                ));
+            }
+            if i < provider_count - 1 {
+                tab_spans.push(Span::styled(
+                    " │ ",
+                    Style::default().fg(Color::Rgb(50, 55, 70)),
+                ));
+            }
+        }
+        tab_spans.push(Span::styled(
+            "    (● = 活跃模型, Tab 切换, s 设为活跃)",
+            Style::default().fg(Color::Rgb(80, 80, 100)),
+        ));
+        lines.push(Line::from(tab_spans));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "  (无 Provider，按 a 新增)",
+            Style::default().fg(Color::Rgb(180, 120, 80)),
+        )));
+    }
+    lines.push(Line::from(""));
+
+    // 分隔线
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(Color::Rgb(50, 55, 70)),
+    )));
+    lines.push(Line::from(""));
+
+    // Provider 字段
+    if provider_count > 0 {
+        lines.push(Line::from(Span::styled(
+            "  📦 Provider 配置",
+            Style::default()
+                .fg(Color::Rgb(160, 220, 160))
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+
+        for i in 0..total_provider_fields {
+            let is_selected = app.config_field_idx == i;
+            let label = config_field_label(i);
+            let value = if app.config_editing && is_selected {
+                // 编辑模式下显示编辑缓冲区
+                app.config_edit_buf.clone()
+            } else {
+                config_field_value(app, i)
+            };
+
+            let pointer = if is_selected { "  ▸ " } else { "    " };
+            let pointer_style = if is_selected {
+                Style::default().fg(Color::Rgb(255, 200, 80))
+            } else {
+                Style::default()
+            };
+
+            let label_style = if is_selected {
+                Style::default()
+                    .fg(Color::Rgb(230, 210, 120))
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Rgb(140, 140, 160))
+            };
+
+            let value_style = if app.config_editing && is_selected {
+                Style::default().fg(Color::White).bg(Color::Rgb(50, 55, 80))
+            } else if is_selected {
+                Style::default().fg(Color::White)
+            } else {
+                // API Key 特殊处理
+                if CONFIG_FIELDS[i] == "api_key" {
+                    Style::default().fg(Color::Rgb(100, 100, 120))
+                } else {
+                    Style::default().fg(Color::Rgb(180, 180, 200))
+                }
+            };
+
+            let edit_indicator = if app.config_editing && is_selected {
+                " ✏️"
+            } else {
+                ""
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    if value.is_empty() {
+                        "(空)".to_string()
+                    } else {
+                        value
+                    },
+                    value_style,
+                ),
+                Span::styled(edit_indicator, Style::default()),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    // 分隔线
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(Color::Rgb(50, 55, 70)),
+    )));
+    lines.push(Line::from(""));
+
+    // 全局配置
+    lines.push(Line::from(Span::styled(
+        "  🌐 全局配置",
+        Style::default()
+            .fg(Color::Rgb(160, 220, 160))
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    for i in 0..CONFIG_GLOBAL_FIELDS.len() {
+        let field_idx = total_provider_fields + i;
+        let is_selected = app.config_field_idx == field_idx;
+        let label = config_field_label(field_idx);
+        let value = if app.config_editing && is_selected {
+            app.config_edit_buf.clone()
+        } else {
+            config_field_value(app, field_idx)
+        };
+
+        let pointer = if is_selected { "  ▸ " } else { "    " };
+        let pointer_style = if is_selected {
+            Style::default().fg(Color::Rgb(255, 200, 80))
+        } else {
+            Style::default()
+        };
+
+        let label_style = if is_selected {
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Rgb(140, 140, 160))
+        };
+
+        let value_style = if app.config_editing && is_selected {
+            Style::default().fg(Color::White).bg(Color::Rgb(50, 55, 80))
+        } else if is_selected {
+            Style::default().fg(Color::White)
+        } else {
+            Style::default().fg(Color::Rgb(180, 180, 200))
+        };
+
+        let edit_indicator = if app.config_editing && is_selected {
+            " ✏️"
+        } else {
+            ""
+        };
+
+        // stream_mode 用 toggle 样式
+        if CONFIG_GLOBAL_FIELDS[i] == "stream_mode" {
+            let toggle_on = app.agent_config.stream_mode;
+            let toggle_style = if toggle_on {
+                Style::default()
+                    .fg(Color::Rgb(120, 220, 160))
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Rgb(200, 100, 100))
+            };
+            let toggle_text = if toggle_on {
+                "● 开启"
+            } else {
+                "○ 关闭"
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(toggle_text, toggle_style),
+                Span::styled(
+                    if is_selected { "  (Enter 切换)" } else { "" },
+                    Style::default().fg(Color::Rgb(80, 80, 100)),
+                ),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    if value.is_empty() {
+                        "(空)".to_string()
+                    } else {
+                        value
+                    },
+                    value_style,
+                ),
+                Span::styled(edit_indicator, Style::default()),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(""));
+
+    // 操作提示
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(Color::Rgb(50, 55, 70)),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("    ", Style::default()),
+        Span::styled(
+            "↑↓/jk",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " 切换字段  ",
+            Style::default().fg(Color::Rgb(120, 120, 150)),
+        ),
+        Span::styled(
+            "Enter",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 编辑  ", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(
+            "Tab/←→",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " 切换 Provider  ",
+            Style::default().fg(Color::Rgb(120, 120, 150)),
+        ),
+        Span::styled(
+            "a",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 新增  ", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(
+            "d",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 删除  ", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(
+            "s",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " 设为活跃  ",
+            Style::default().fg(Color::Rgb(120, 120, 150)),
+        ),
+        Span::styled(
+            "Esc",
+            Style::default()
+                .fg(Color::Rgb(230, 210, 120))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 保存返回", Style::default().fg(Color::Rgb(120, 120, 150))),
+    ]));
+
+    let content = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Rgb(80, 80, 110)))
+                .title(Span::styled(
+                    " ⚙️  模型配置编辑 ",
+                    Style::default()
+                        .fg(Color::Rgb(230, 210, 120))
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(bg)),
+        )
+        .scroll((0, 0));
+    f.render_widget(content, area);
 }
 
 /// 模型选择模式按键处理

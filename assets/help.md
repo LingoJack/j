@@ -283,7 +283,9 @@ rm -rf ~/.jdata
 
 ### 配置
 
-首次使用需配置 LLM 模型提供方，配置文件路径: `~/.jdata/agent/data/agent_config.json`
+首次使用需配置 LLM 模型提供方。在对话界面中按 **Ctrl+E** 打开内置配置界面，可视化管理模型提供方。
+
+配置文件路径: `~/.jdata/agent/data/agent_config.json`（也可手动编辑）
 
 ```json
 {
@@ -317,6 +319,7 @@ rm -rf ~/.jdata
 | `Ctrl+Y` | 复制最后一条 AI 回复 |
 | `Ctrl+B` | 进入消息浏览模式 |
 | `Ctrl+S` | 切换流式/整体输出 |
+| `Ctrl+E` | 打开配置界面（可视化编辑模型配置） |
 | `?` | 显示帮助 |
 | `Esc` / `Ctrl+C` | 退出对话 |
 
