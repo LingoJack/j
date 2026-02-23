@@ -38,15 +38,3 @@ unicode-width = "0.2"
 
 [patch.crates-io]
 tui-textarea = { path = "patches/tui-textarea-0.7.0" }
-
-[source.crates-io]
-replace-with = 'rsproxy-sparse'
-
-[source.rsproxy-sparse]
-registry = "sparse+https://rsproxy.cn/index/"
-
-[registries.rsproxy]
-index = "https://rsproxy.cn/crates.io-index"
-
-[net]
-git-fetch-with-cli = true
