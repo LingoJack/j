@@ -33,7 +33,7 @@ tui-textarea = "0.7"
 async-openai = { version = "0.33", default-features = false, features = ["chat-completion", "rustls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 futures = "0.3"
-pulldown-cmark = "0.12"
+pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
 
 [patch.crates-io]
