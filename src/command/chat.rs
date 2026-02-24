@@ -2307,12 +2307,20 @@ fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
 /// 根据语言类型对常见关键字、字符串、注释、数字进行着色
 fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
     let lang_lower = lang.to_lowercase();
+    // Rust 使用多组词汇分别高亮
+    // keywords: 控制流/定义关键字 → 紫色
+    // primitive_types: 原始类型 → 青绿色
+    // 其他类型名（大写开头）自动通过 type_style 高亮 → 暖黄色
+    // 宏调用（word!）通过 macro_style 高亮 → 淡蓝色
     let keywords: &[&str] = match lang_lower.as_str() {
         "rust" | "rs" => &[
+            // 控制流/定义关键字（紫色）
             "fn", "let", "mut", "pub", "use", "mod", "struct", "enum", "impl", "trait", "for",
             "while", "loop", "if", "else", "match", "return", "self", "Self", "where", "async",
             "await", "move", "ref", "type", "const", "static", "crate", "super", "as", "in",
-            "true", "false", "Some", "None", "Ok", "Err",
+            "true", "false", "unsafe", "extern", "dyn", "abstract", "become", "box", "do", "final",
+            "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "union", "break",
+            "continue",
         ],
         "python" | "py" => &[
             "def", "class", "return", "if", "elif", "else", "for", "while", "import", "from", "as",
@@ -2788,6 +2796,15 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
         ],
     };
 
+    // Rust 原始类型列表（青绿色）
+    let primitive_types: &[&str] = match lang_lower.as_str() {
+        "rust" | "rs" => &[
+            "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+            "f32", "f64", "bool", "char", "str",
+        ],
+        _ => &[],
+    };
+
     let comment_prefix = match lang_lower.as_str() {
         "python" | "py" | "sh" | "bash" | "zsh" | "shell" | "ruby" | "rb" | "yaml" | "yml"
         | "toml" | "dockerfile" | "docker" => "#",
@@ -2796,20 +2813,23 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
         _ => "//",
     };
 
-    // 默认代码颜色
-    let code_style = Style::default().fg(Color::Rgb(200, 200, 210));
-    // 关键字颜色
+    // ===== 代码高亮配色方案（基于 One Dark Pro）=====
+    // 默认代码颜色 - 银灰色
+    let code_style = Style::default().fg(Color::Rgb(171, 178, 191));
+    // 关键字颜色 - 紫色（保留 One Dark 经典紫）
     let kw_style = Style::default().fg(Color::Rgb(198, 120, 221));
-    // 字符串颜色
+    // 字符串颜色 - 柔和绿色
     let str_style = Style::default().fg(Color::Rgb(152, 195, 121));
-    // 注释颜色
+    // 注释颜色 - 深灰蓝色 + 斜体
     let comment_style = Style::default()
         .fg(Color::Rgb(92, 99, 112))
         .add_modifier(Modifier::ITALIC);
-    // 数字颜色
+    // 数字颜色 - 橙黄色
     let num_style = Style::default().fg(Color::Rgb(209, 154, 102));
-    // 类型/大写开头标识符
+    // 类型/大写开头标识符 - 暖黄色
     let type_style = Style::default().fg(Color::Rgb(229, 192, 123));
+    // 原始类型（i32, u64, bool 等）- 青绿色
+    let primitive_style = Style::default().fg(Color::Rgb(86, 182, 194));
 
     let trimmed = line.trim_start();
 
@@ -2825,11 +2845,19 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
 
     while let Some(&ch) = chars.peek() {
         // 字符串
-        if ch == '"' || ch == '\'' || ch == '`' {
+        if ch == '"' || ch == '`' {
             // 先刷新 buf
             if !buf.is_empty() {
                 spans.extend(colorize_tokens(
-                    &buf, keywords, code_style, kw_style, num_style, type_style,
+                    &buf,
+                    keywords,
+                    primitive_types,
+                    code_style,
+                    kw_style,
+                    num_style,
+                    type_style,
+                    primitive_style,
+                    &lang_lower,
                 ));
                 buf.clear();
             }
@@ -2847,6 +2875,125 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
             spans.push(Span::styled(s, str_style));
             continue;
         }
+        // Rust 生命周期参数 ('a, 'static 等) vs 字符字面量 ('x')
+        if ch == '\'' && matches!(lang_lower.as_str(), "rust" | "rs") {
+            if !buf.is_empty() {
+                spans.extend(colorize_tokens(
+                    &buf,
+                    keywords,
+                    primitive_types,
+                    code_style,
+                    kw_style,
+                    num_style,
+                    type_style,
+                    primitive_style,
+                    &lang_lower,
+                ));
+                buf.clear();
+            }
+            let mut s = String::new();
+            s.push(ch);
+            chars.next();
+            let mut is_lifetime = false;
+            // 收集后续字符来判断是生命周期还是字符字面量
+            while let Some(&c) = chars.peek() {
+                if c.is_alphanumeric() || c == '_' {
+                    s.push(c);
+                    chars.next();
+                } else if c == '\'' && s.len() == 2 {
+                    // 'x' 形式 - 字符字面量
+                    s.push(c);
+                    chars.next();
+                    break;
+                } else {
+                    // 'name 形式 - 生命周期参数
+                    is_lifetime = true;
+                    break;
+                }
+            }
+            if is_lifetime || (s.len() > 1 && !s.ends_with('\'')) {
+                // 生命周期参数 - 使用浅橙色（与关键字紫色区分）
+                let lifetime_style = Style::default().fg(Color::Rgb(229, 192, 123));
+                spans.push(Span::styled(s, lifetime_style));
+            } else {
+                // 字符字面量
+                spans.push(Span::styled(s, str_style));
+            }
+            continue;
+        }
+        // 其他语言的字符串（包含单引号）
+        if ch == '\'' && !matches!(lang_lower.as_str(), "rust" | "rs") {
+            // 先刷新 buf
+            if !buf.is_empty() {
+                spans.extend(colorize_tokens(
+                    &buf,
+                    keywords,
+                    primitive_types,
+                    code_style,
+                    kw_style,
+                    num_style,
+                    type_style,
+                    primitive_style,
+                    &lang_lower,
+                ));
+                buf.clear();
+            }
+            let quote = ch;
+            let mut s = String::new();
+            s.push(ch);
+            chars.next();
+            while let Some(&c) = chars.peek() {
+                s.push(c);
+                chars.next();
+                if c == quote && !s.ends_with("\\\\") {
+                    break;
+                }
+            }
+            spans.push(Span::styled(s, str_style));
+            continue;
+        }
+        // Rust 属性 (#[...] 或 #![...])
+        if ch == '#' && matches!(lang_lower.as_str(), "rust" | "rs") {
+            let mut lookahead = chars.clone();
+            if let Some(next) = lookahead.next() {
+                if next == '[' {
+                    if !buf.is_empty() {
+                        spans.extend(colorize_tokens(
+                            &buf,
+                            keywords,
+                            primitive_types,
+                            code_style,
+                            kw_style,
+                            num_style,
+                            type_style,
+                            primitive_style,
+                            &lang_lower,
+                        ));
+                        buf.clear();
+                    }
+                    let mut attr = String::new();
+                    attr.push(ch);
+                    chars.next();
+                    let mut depth = 0;
+                    while let Some(&c) = chars.peek() {
+                        attr.push(c);
+                        chars.next();
+                        if c == '[' {
+                            depth += 1;
+                        } else if c == ']' {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                    }
+                    // 属性使用青绿色（与关键字紫色区分）
+                    let attr_style = Style::default().fg(Color::Rgb(86, 182, 194));
+                    spans.push(Span::styled(attr, attr_style));
+                    continue;
+                }
+            }
+        }
         // Shell 变量 ($VAR, ${VAR}, $1 等)
         if ch == '$'
             && matches!(
@@ -2856,10 +3003,19 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
         {
             if !buf.is_empty() {
                 spans.extend(colorize_tokens(
-                    &buf, keywords, code_style, kw_style, num_style, type_style,
+                    &buf,
+                    keywords,
+                    primitive_types,
+                    code_style,
+                    kw_style,
+                    num_style,
+                    type_style,
+                    primitive_style,
+                    &lang_lower,
                 ));
                 buf.clear();
             }
+            // Shell 变量使用青色（与属性统一风格）
             let var_style = Style::default().fg(Color::Rgb(86, 182, 194));
             let mut var = String::new();
             var.push(ch);
@@ -2921,7 +3077,15 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
             if rest.starts_with(comment_prefix) {
                 if !buf.is_empty() {
                     spans.extend(colorize_tokens(
-                        &buf, keywords, code_style, kw_style, num_style, type_style,
+                        &buf,
+                        keywords,
+                        primitive_types,
+                        code_style,
+                        kw_style,
+                        num_style,
+                        type_style,
+                        primitive_style,
+                        &lang_lower,
                     ));
                     buf.clear();
                 }
@@ -2935,7 +3099,15 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
 
     if !buf.is_empty() {
         spans.extend(colorize_tokens(
-            &buf, keywords, code_style, kw_style, num_style, type_style,
+            &buf,
+            keywords,
+            primitive_types,
+            code_style,
+            kw_style,
+            num_style,
+            type_style,
+            primitive_style,
+            &lang_lower,
         ));
     }
 
@@ -2946,20 +3118,27 @@ fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
     spans
 }
 
-/// 将文本按照 word boundary 拆分并对关键字、数字、类型名着色
+/// 将文本按照 word boundary 拆分并对关键字、数字、类型名、原始类型着色
 fn colorize_tokens<'a>(
     text: &str,
     keywords: &[&str],
+    primitive_types: &[&str],
     default_style: Style,
     kw_style: Style,
     num_style: Style,
     type_style: Style,
+    primitive_style: Style,
+    lang: &str,
 ) -> Vec<Span<'static>> {
+    // 宏调用样式（Rust 专用）- 淡蓝色，与属性青绿色区分
+    let macro_style = Style::default().fg(Color::Rgb(97, 175, 239));
+
     let mut spans = Vec::new();
     let mut current_word = String::new();
     let mut current_non_word = String::new();
+    let mut chars = text.chars().peekable();
 
-    for ch in text.chars() {
+    while let Some(ch) = chars.next() {
         if ch.is_alphanumeric() || ch == '_' {
             if !current_non_word.is_empty() {
                 spans.push(Span::styled(current_non_word.clone(), default_style));
@@ -2967,9 +3146,26 @@ fn colorize_tokens<'a>(
             }
             current_word.push(ch);
         } else {
+            // Rust 宏调用高亮：word! 或 word!()
+            if ch == '!' && matches!(lang, "rust" | "rs") && !current_word.is_empty() {
+                // 检查后面是否跟着 ( 或 { 或 [
+                let is_macro = chars
+                    .peek()
+                    .map(|&c| c == '(' || c == '{' || c == '[' || c.is_whitespace())
+                    .unwrap_or(true);
+                if is_macro {
+                    // 将当前 word 作为宏名高亮
+                    spans.push(Span::styled(current_word.clone(), macro_style));
+                    current_word.clear();
+                    spans.push(Span::styled("!".to_string(), macro_style));
+                    continue;
+                }
+            }
             if !current_word.is_empty() {
                 let style = if keywords.contains(&current_word.as_str()) {
                     kw_style
+                } else if primitive_types.contains(&current_word.as_str()) {
+                    primitive_style
                 } else if current_word
                     .chars()
                     .next()
@@ -3001,6 +3197,8 @@ fn colorize_tokens<'a>(
     if !current_word.is_empty() {
         let style = if keywords.contains(&current_word.as_str()) {
             kw_style
+        } else if primitive_types.contains(&current_word.as_str()) {
+            primitive_style
         } else if current_word
             .chars()
             .next()

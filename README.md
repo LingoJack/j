@@ -955,6 +955,14 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 | Dockerfile | `dockerfile`, `docker` |
 | 其他 | 通用关键字高亮 |
 
+**Rust 额外支持**：
+- **关键字高亮（紫色）**：`fn`、`let`、`mut`、`pub`、`struct`、`enum`、`impl`、`trait`、`match`、`if`、`else`、`for`、`while`、`loop`、`return` 等控制流/定义关键字
+- **原始类型高亮（青绿色）**：`i32`、`u64`、`f64`、`bool`、`char`、`str` 等
+- **类型名高亮（暖黄色）**：大写开头的类型名如 `Vec`、`String`、`Option`、`Result`、`HashMap`、`Clone`、`Debug`、`Iterator` 等 Trait 名
+- **宏调用高亮（淡蓝色）**：`println!`、`vec!`、`panic!`、`format!` 等（自动识别 `word!` 形式）
+- **生命周期参数高亮（暖黄色）**：`'a`、`'static` 等生命周期参数
+- **属性高亮（青绿色）**：`#[derive(...)]`、`#[cfg(...)]` 等属性
+
 Bash 额外支持 `$VAR`、`${VAR}`、`$(cmd)` 变量高亮。
 
 ---
