@@ -4,7 +4,7 @@ use super::model::agent_config_path;
 use super::render::{build_message_lines_incremental, char_width, display_width, wrap_text};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
@@ -13,7 +13,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let size = f.area();
 
     // 整体背景
-    let bg = Block::default().style(Style::default().bg(Color::Rgb(22, 22, 30)));
+    let bg = Block::default().style(Style::default().bg(app.theme.bg_primary));
     f.render_widget(bg, size);
 
     let chunks = Layout::default()
@@ -31,7 +31,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
 
     // ========== 消息区 ==========
     if app.mode == ChatMode::Help {
-        draw_help(f, chunks[1]);
+        draw_help(f, chunks[1], app);
     } else if app.mode == ChatMode::SelectModel {
         draw_model_selector(f, chunks[1], app);
     } else if app.mode == ChatMode::Config {
@@ -52,6 +52,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
 
 /// 绘制标题栏
 pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let t = &app.theme;
     let model_name = app.active_model_name();
     let msg_count = app.session.messages.len();
     let loading = if app.is_loading {
@@ -61,30 +62,30 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     };
 
     let title_spans = vec![
-        Span::styled(" 💬 ", Style::default().fg(Color::Rgb(120, 180, 255))),
+        Span::styled(" 💬 ", Style::default().fg(t.title_icon)),
         Span::styled(
             "AI Chat",
             Style::default()
-                .fg(Color::White)
+                .fg(t.text_white)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("  │  ", Style::default().fg(Color::Rgb(60, 60, 80))),
+        Span::styled("  │  ", Style::default().fg(t.title_separator)),
         Span::styled("🤖 ", Style::default()),
         Span::styled(
             model_name,
             Style::default()
-                .fg(Color::Rgb(160, 220, 160))
+                .fg(t.title_model)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("  │  ", Style::default().fg(Color::Rgb(60, 60, 80))),
+        Span::styled("  │  ", Style::default().fg(t.title_separator)),
         Span::styled(
             format!("📨 {} 条消息", msg_count),
-            Style::default().fg(Color::Rgb(180, 180, 200)),
+            Style::default().fg(t.title_count),
         ),
         Span::styled(
             loading,
             Style::default()
-                .fg(Color::Rgb(255, 200, 80))
+                .fg(t.title_loading)
                 .add_modifier(Modifier::BOLD),
         ),
     ];
@@ -93,26 +94,25 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         Block::default()
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Rgb(80, 100, 140)))
-            .style(Style::default().bg(Color::Rgb(28, 28, 40))),
+            .border_style(Style::default().fg(t.border_title))
+            .style(Style::default().bg(t.bg_title)),
     );
     f.render_widget(title_block, area);
 }
 
 /// 绘制消息区
 pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+    let t = &app.theme;
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Rgb(50, 55, 70)))
+        .border_style(Style::default().fg(t.border_message))
         .title(Span::styled(
             " 对话记录 ",
-            Style::default()
-                .fg(Color::Rgb(140, 140, 170))
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(t.text_dim).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(ratatui::layout::Alignment::Left)
-        .style(Style::default().bg(Color::Rgb(22, 22, 30)));
+        .style(Style::default().bg(t.bg_primary));
 
     // 空消息时显示欢迎界面
     if app.session.messages.is_empty() && !app.is_loading {
@@ -121,35 +121,35 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             Line::from(""),
             Line::from(Span::styled(
                 "  ╭──────────────────────────────────────╮",
-                Style::default().fg(Color::Rgb(60, 70, 90)),
+                Style::default().fg(t.welcome_border),
             )),
             Line::from(Span::styled(
                 "  │                                      │",
-                Style::default().fg(Color::Rgb(60, 70, 90)),
+                Style::default().fg(t.welcome_border),
             )),
             Line::from(vec![
-                Span::styled("  │     ", Style::default().fg(Color::Rgb(60, 70, 90))),
+                Span::styled("  │     ", Style::default().fg(t.welcome_border)),
                 Span::styled(
                     "Hi! What can I help you?  ",
-                    Style::default().fg(Color::Rgb(120, 140, 180)),
+                    Style::default().fg(t.welcome_text),
                 ),
-                Span::styled("     │", Style::default().fg(Color::Rgb(60, 70, 90))),
+                Span::styled("     │", Style::default().fg(t.welcome_border)),
             ]),
             Line::from(Span::styled(
                 "  │                                      │",
-                Style::default().fg(Color::Rgb(60, 70, 90)),
+                Style::default().fg(t.welcome_border),
             )),
             Line::from(Span::styled(
                 "  │     Type a message, press Enter      │",
-                Style::default().fg(Color::Rgb(80, 90, 110)),
+                Style::default().fg(t.welcome_hint),
             )),
             Line::from(Span::styled(
                 "  │                                      │",
-                Style::default().fg(Color::Rgb(60, 70, 90)),
+                Style::default().fg(t.welcome_border),
             )),
             Line::from(Span::styled(
                 "  ╰──────────────────────────────────────╯",
-                Style::default().fg(Color::Rgb(60, 70, 90)),
+                Style::default().fg(t.welcome_border),
             )),
         ];
         let empty = Paragraph::new(welcome_lines).block(block);
@@ -252,13 +252,13 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     // 填充内部背景色（避免空白行没有背景）
-    let bg_fill = Block::default().style(Style::default().bg(Color::Rgb(22, 22, 30)));
+    let bg_fill = Block::default().style(Style::default().bg(app.theme.bg_primary));
     f.render_widget(bg_fill, inner);
 
     // 只渲染可见区域的行（逐行借用缓存，clone 单行开销极小）
     let start = app.scroll_offset as usize;
     let end = (start + visible_height as usize).min(all_lines.len());
-    let msg_area_bg = Style::default().bg(Color::Rgb(22, 22, 30));
+    let msg_area_bg = Style::default().bg(app.theme.bg_primary);
     for (i, line_idx) in (start..end).enumerate() {
         let line = &all_lines[line_idx];
         let y = inner.y + i as u16;
@@ -273,6 +273,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 /// 但要排除代码块内部的双换行（未闭合的 ``` 之后的内容不能拆分）。
 
 pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let t = &app.theme;
     // 输入区可用宽度（减去边框2 + prompt 4）
     let usable_width = area.width.saturating_sub(2 + 4) as usize;
 
@@ -317,9 +318,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     };
 
     let prompt_style = if app.is_loading {
-        Style::default().fg(Color::Rgb(255, 200, 80))
+        Style::default().fg(t.input_prompt_loading)
     } else {
-        Style::default().fg(Color::Rgb(100, 200, 130))
+        Style::default().fg(t.input_prompt)
     };
     let prompt_text = if app.is_loading { " .. " } else { " >  " };
 
@@ -388,13 +389,11 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 // 先把 cursor 前的部分输出
                 if ci > seg_start {
                     let seg: String = line_chars[seg_start..ci].iter().collect();
-                    spans.push(Span::styled(seg, Style::default().fg(Color::White)));
+                    spans.push(Span::styled(seg, Style::default().fg(t.text_white)));
                 }
                 spans.push(Span::styled(
                     ch.to_string(),
-                    Style::default()
-                        .fg(Color::Rgb(22, 22, 30))
-                        .bg(Color::Rgb(200, 210, 240)),
+                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
                 ));
                 seg_start = ci + 1;
             }
@@ -402,7 +401,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         // 输出剩余部分
         if seg_start < line_chars.len() {
             let seg: String = line_chars[seg_start..].iter().collect();
-            spans.push(Span::styled(seg, Style::default().fg(Color::White)));
+            spans.push(Span::styled(seg, Style::default().fg(t.text_white)));
         }
 
         char_offset += line_chars.len();
@@ -412,12 +411,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     if display_lines.is_empty() {
         display_lines.push(Line::from(vec![
             Span::styled(prompt_text, prompt_style),
-            Span::styled(
-                " ",
-                Style::default()
-                    .fg(Color::Rgb(22, 22, 30))
-                    .bg(Color::Rgb(200, 210, 240)),
-            ),
+            Span::styled(" ", Style::default().fg(t.cursor_fg).bg(t.cursor_bg)),
         ]));
     }
 
@@ -426,15 +420,12 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(if app.is_loading {
-                Style::default().fg(Color::Rgb(120, 100, 50))
+                Style::default().fg(t.border_input_loading)
             } else {
-                Style::default().fg(Color::Rgb(60, 100, 80))
+                Style::default().fg(t.border_input)
             })
-            .title(Span::styled(
-                " 输入消息 ",
-                Style::default().fg(Color::Rgb(140, 140, 170)),
-            ))
-            .style(Style::default().bg(Color::Rgb(26, 26, 38))),
+            .title(Span::styled(" 输入消息 ", Style::default().fg(t.text_dim)))
+            .style(Style::default().bg(t.bg_input)),
     );
 
     f.render_widget(input_widget, area);
@@ -483,6 +474,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 绘制底部操作提示栏（始终可见）
 pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let t = &app.theme;
     let hints = match app.mode {
         ChatMode::Chat => {
             vec![
@@ -523,30 +515,25 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     spans.push(Span::styled(" ", Style::default()));
     for (i, (key, desc)) in hints.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(
-                "  │  ",
-                Style::default().fg(Color::Rgb(50, 50, 65)),
-            ));
+            spans.push(Span::styled("  │  ", Style::default().fg(t.hint_separator)));
         }
         spans.push(Span::styled(
             format!(" {} ", key),
-            Style::default()
-                .fg(Color::Rgb(22, 22, 30))
-                .bg(Color::Rgb(100, 110, 140)),
+            Style::default().fg(t.hint_key_fg).bg(t.hint_key_bg),
         ));
         spans.push(Span::styled(
             format!(" {}", desc),
-            Style::default().fg(Color::Rgb(120, 120, 150)),
+            Style::default().fg(t.hint_desc),
         ));
     }
 
-    let hint_bar =
-        Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Rgb(22, 22, 30)));
+    let hint_bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(hint_bar, area);
 }
 
 /// 绘制 Toast 弹窗（右上角浮层）
 pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let t = &app.theme;
     if let Some((ref msg, is_error, _)) = app.toast {
         let text_width = display_width(msg);
         // toast 宽度 = 文字宽度 + 左右 padding(各2) + emoji(2) + border(2)
@@ -562,16 +549,16 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
             // 先清空区域背景
             let clear = Block::default().style(Style::default().bg(if is_error {
-                Color::Rgb(60, 20, 20)
+                t.toast_error_bg
             } else {
-                Color::Rgb(20, 50, 30)
+                t.toast_success_bg
             }));
             f.render_widget(clear, toast_area);
 
             let (icon, border_color, text_color) = if is_error {
-                ("❌", Color::Rgb(200, 70, 70), Color::Rgb(255, 130, 130))
+                ("❌", t.toast_error_border, t.toast_error_text)
             } else {
-                ("✅", Color::Rgb(60, 160, 80), Color::Rgb(140, 230, 160))
+                ("✅", t.toast_success_border, t.toast_success_text)
             };
 
             let toast_widget = Paragraph::new(Line::from(vec![
@@ -584,9 +571,9 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::default().fg(border_color))
                     .style(Style::default().bg(if is_error {
-                        Color::Rgb(50, 18, 18)
+                        t.toast_error_bg
                     } else {
-                        Color::Rgb(18, 40, 25)
+                        t.toast_success_bg
                     })),
             );
             f.render_widget(toast_widget, toast_area);
@@ -596,6 +583,7 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 绘制模型选择界面
 pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+    let t = &app.theme;
     let items: Vec<ListItem> = app
         .agent_config
         .providers
@@ -606,10 +594,10 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
             let marker = if is_active { " ● " } else { " ○ " };
             let style = if is_active {
                 Style::default()
-                    .fg(Color::Rgb(120, 220, 160))
+                    .fg(t.model_sel_active)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Rgb(180, 180, 200))
+                Style::default().fg(t.model_sel_inactive)
             };
             let detail = format!("{}{}  ({})", marker, p.name, p.model);
             ListItem::new(Line::from(Span::styled(detail, style)))
@@ -621,19 +609,19 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Rgb(180, 160, 80)))
+                .border_style(Style::default().fg(t.model_sel_border))
                 .title(Span::styled(
                     " 🔄 选择模型 ",
                     Style::default()
-                        .fg(Color::Rgb(230, 210, 120))
+                        .fg(t.model_sel_title)
                         .add_modifier(Modifier::BOLD),
                 ))
-                .style(Style::default().bg(Color::Rgb(28, 28, 40))),
+                .style(Style::default().bg(t.bg_title)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::Rgb(50, 55, 80))
-                .fg(Color::White)
+                .bg(t.model_sel_highlight_bg)
+                .fg(t.text_white)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("  ▸ ");
@@ -642,10 +630,11 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
 }
 
 /// 绘制帮助界面
-pub fn draw_help(f: &mut ratatui::Frame, area: Rect) {
+pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let t = &app.theme;
     let separator = Line::from(Span::styled(
         "  ─────────────────────────────────────────",
-        Style::default().fg(Color::Rgb(50, 55, 70)),
+        Style::default().fg(t.separator),
     ));
 
     let help_lines = vec![
@@ -653,7 +642,7 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect) {
         Line::from(Span::styled(
             "  📖 快捷键帮助",
             Style::default()
-                .fg(Color::Rgb(120, 180, 255))
+                .fg(t.help_title)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
@@ -662,125 +651,82 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect) {
         Line::from(vec![
             Span::styled(
                 "  Enter        ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("发送消息", Style::default().fg(Color::Rgb(200, 200, 220))),
+            Span::styled("发送消息", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  ↑ / ↓        ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "滚动对话记录",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("滚动对话记录", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  ← / →        ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "移动输入光标",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("移动输入光标", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl+T       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("切换模型", Style::default().fg(Color::Rgb(200, 200, 220))),
+            Span::styled("切换模型", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl+L       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "清空对话历史",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("清空对话历史", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl+Y       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "复制最后一条 AI 回复",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("复制最后一条 AI 回复", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl+B       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 "浏览消息 (↑↓选择, y/Enter复制)",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
+                Style::default().fg(t.help_desc),
             ),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl+S       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "切换流式/整体输出",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("切换流式/整体输出", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Ctrl+E       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "打开配置界面",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("打开配置界面", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  Esc / Ctrl+C ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("退出对话", Style::default().fg(Color::Rgb(200, 200, 220))),
+            Span::styled("退出对话", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(
                 "  ? / F1       ",
-                Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "显示 / 关闭此帮助",
-                Style::default().fg(Color::Rgb(200, 200, 220)),
-            ),
+            Span::styled("显示 / 关闭此帮助", Style::default().fg(t.help_desc)),
         ]),
         Line::from(""),
         separator,
@@ -788,24 +734,24 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect) {
         Line::from(Span::styled(
             "  📁 配置文件:",
             Style::default()
-                .fg(Color::Rgb(120, 180, 255))
+                .fg(t.help_title)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             format!("     {}", agent_config_path().display()),
-            Style::default().fg(Color::Rgb(100, 100, 130)),
+            Style::default().fg(t.help_path),
         )),
     ];
 
     let help_block = Block::default()
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Rgb(80, 100, 140)))
+        .border_style(Style::default().fg(t.border_title))
         .title(Span::styled(
             " 帮助 (按任意键返回) ",
-            Style::default().fg(Color::Rgb(140, 140, 170)),
+            Style::default().fg(t.text_dim),
         ))
-        .style(Style::default().bg(Color::Rgb(24, 24, 34)));
+        .style(Style::default().bg(t.help_bg));
     let help_widget = Paragraph::new(help_lines).block(help_block);
     f.render_widget(help_widget, area);
 }
@@ -813,7 +759,8 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect) {
 /// 对话模式按键处理，返回 true 表示退出
 
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    let bg = Color::Rgb(28, 28, 40);
+    let t = &app.theme;
+    let bg = t.bg_title;
     let total_provider_fields = CONFIG_FIELDS.len();
 
     let mut lines: Vec<Line> = Vec::new();
@@ -823,7 +770,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     lines.push(Line::from(vec![Span::styled(
         "  ⚙️  模型配置",
         Style::default()
-            .fg(Color::Rgb(120, 180, 255))
+            .fg(t.config_title)
             .add_modifier(Modifier::BOLD),
     )]));
     lines.push(Line::from(""));
@@ -841,32 +788,29 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 tab_spans.push(Span::styled(
                     label,
                     Style::default()
-                        .fg(Color::Rgb(22, 22, 30))
-                        .bg(Color::Rgb(120, 180, 255))
+                        .fg(t.config_tab_active_fg)
+                        .bg(t.config_tab_active_bg)
                         .add_modifier(Modifier::BOLD),
                 ));
             } else {
                 tab_spans.push(Span::styled(
                     label,
-                    Style::default().fg(Color::Rgb(150, 150, 170)),
+                    Style::default().fg(t.config_tab_inactive),
                 ));
             }
             if i < provider_count - 1 {
-                tab_spans.push(Span::styled(
-                    " │ ",
-                    Style::default().fg(Color::Rgb(50, 55, 70)),
-                ));
+                tab_spans.push(Span::styled(" │ ", Style::default().fg(t.separator)));
             }
         }
         tab_spans.push(Span::styled(
             "    (● = 活跃模型, Tab 切换, s 设为活跃)",
-            Style::default().fg(Color::Rgb(80, 80, 100)),
+            Style::default().fg(t.config_dim),
         ));
         lines.push(Line::from(tab_spans));
     } else {
         lines.push(Line::from(Span::styled(
             "  (无 Provider，按 a 新增)",
-            Style::default().fg(Color::Rgb(180, 120, 80)),
+            Style::default().fg(t.config_toggle_off),
         )));
     }
     lines.push(Line::from(""));
@@ -874,7 +818,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     // 分隔线
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
-        Style::default().fg(Color::Rgb(50, 55, 70)),
+        Style::default().fg(t.separator),
     )));
     lines.push(Line::from(""));
 
@@ -883,7 +827,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         lines.push(Line::from(Span::styled(
             "  📦 Provider 配置",
             Style::default()
-                .fg(Color::Rgb(160, 220, 160))
+                .fg(t.config_section)
                 .add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
@@ -892,7 +836,6 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             let is_selected = app.config_field_idx == i;
             let label = config_field_label(i);
             let value = if app.config_editing && is_selected {
-                // 编辑模式下显示编辑缓冲区
                 app.config_edit_buf.clone()
             } else {
                 config_field_value(app, i)
@@ -900,29 +843,28 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
             let pointer = if is_selected { "  ▸ " } else { "    " };
             let pointer_style = if is_selected {
-                Style::default().fg(Color::Rgb(255, 200, 80))
+                Style::default().fg(t.config_pointer)
             } else {
                 Style::default()
             };
 
             let label_style = if is_selected {
                 Style::default()
-                    .fg(Color::Rgb(230, 210, 120))
+                    .fg(t.config_label_selected)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Rgb(140, 140, 160))
+                Style::default().fg(t.config_label)
             };
 
             let value_style = if app.config_editing && is_selected {
-                Style::default().fg(Color::White).bg(Color::Rgb(50, 55, 80))
+                Style::default().fg(t.text_white).bg(t.config_edit_bg)
             } else if is_selected {
-                Style::default().fg(Color::White)
+                Style::default().fg(t.text_white)
             } else {
-                // API Key 特殊处理
                 if CONFIG_FIELDS[i] == "api_key" {
-                    Style::default().fg(Color::Rgb(100, 100, 120))
+                    Style::default().fg(t.config_api_key)
                 } else {
-                    Style::default().fg(Color::Rgb(180, 180, 200))
+                    Style::default().fg(t.config_value)
                 }
             };
 
@@ -953,7 +895,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     // 分隔线
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
-        Style::default().fg(Color::Rgb(50, 55, 70)),
+        Style::default().fg(t.separator),
     )));
     lines.push(Line::from(""));
 
@@ -961,7 +903,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     lines.push(Line::from(Span::styled(
         "  🌐 全局配置",
         Style::default()
-            .fg(Color::Rgb(160, 220, 160))
+            .fg(t.config_section)
             .add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(""));
@@ -978,25 +920,25 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
         let pointer = if is_selected { "  ▸ " } else { "    " };
         let pointer_style = if is_selected {
-            Style::default().fg(Color::Rgb(255, 200, 80))
+            Style::default().fg(t.config_pointer)
         } else {
             Style::default()
         };
 
         let label_style = if is_selected {
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_label_selected)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Rgb(140, 140, 160))
+            Style::default().fg(t.config_label)
         };
 
         let value_style = if app.config_editing && is_selected {
-            Style::default().fg(Color::White).bg(Color::Rgb(50, 55, 80))
+            Style::default().fg(t.text_white).bg(t.config_edit_bg)
         } else if is_selected {
-            Style::default().fg(Color::White)
+            Style::default().fg(t.text_white)
         } else {
-            Style::default().fg(Color::Rgb(180, 180, 200))
+            Style::default().fg(t.config_value)
         };
 
         let edit_indicator = if app.config_editing && is_selected {
@@ -1005,15 +947,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             ""
         };
 
-        // stream_mode 用 toggle 样式
+        // stream_mode 和 theme 用 toggle 样式
         if CONFIG_GLOBAL_FIELDS[i] == "stream_mode" {
             let toggle_on = app.agent_config.stream_mode;
             let toggle_style = if toggle_on {
                 Style::default()
-                    .fg(Color::Rgb(120, 220, 160))
+                    .fg(t.config_toggle_on)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Rgb(200, 100, 100))
+                Style::default().fg(t.config_toggle_off)
             };
             let toggle_text = if toggle_on {
                 "● 开启"
@@ -1028,7 +970,25 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Span::styled(toggle_text, toggle_style),
                 Span::styled(
                     if is_selected { "  (Enter 切换)" } else { "" },
-                    Style::default().fg(Color::Rgb(80, 80, 100)),
+                    Style::default().fg(t.config_dim),
+                ),
+            ]));
+        } else if CONFIG_GLOBAL_FIELDS[i] == "theme" {
+            // 主题字段用特殊 toggle 样式
+            let theme_name = app.agent_config.theme.display_name();
+            lines.push(Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    format!("🎨 {}", theme_name),
+                    Style::default()
+                        .fg(t.config_toggle_on)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    if is_selected { "  (Enter 切换)" } else { "" },
+                    Style::default().fg(t.config_dim),
                 ),
             ]));
         } else {
@@ -1055,7 +1015,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     // 操作提示
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
-        Style::default().fg(Color::Rgb(50, 55, 70)),
+        Style::default().fg(t.separator),
     )));
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
@@ -1063,61 +1023,52 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         Span::styled(
             "↑↓/jk",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            " 切换字段  ",
-            Style::default().fg(Color::Rgb(120, 120, 150)),
-        ),
+        Span::styled(" 切换字段  ", Style::default().fg(t.config_hint_desc)),
         Span::styled(
             "Enter",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" 编辑  ", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(" 编辑  ", Style::default().fg(t.config_hint_desc)),
         Span::styled(
             "Tab/←→",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            " 切换 Provider  ",
-            Style::default().fg(Color::Rgb(120, 120, 150)),
-        ),
+        Span::styled(" 切换 Provider  ", Style::default().fg(t.config_hint_desc)),
         Span::styled(
             "a",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" 新增  ", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(" 新增  ", Style::default().fg(t.config_hint_desc)),
         Span::styled(
             "d",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" 删除  ", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(" 删除  ", Style::default().fg(t.config_hint_desc)),
         Span::styled(
             "s",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            " 设为活跃  ",
-            Style::default().fg(Color::Rgb(120, 120, 150)),
-        ),
+        Span::styled(" 设为活跃  ", Style::default().fg(t.config_hint_desc)),
         Span::styled(
             "Esc",
             Style::default()
-                .fg(Color::Rgb(230, 210, 120))
+                .fg(t.config_hint_key)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" 保存返回", Style::default().fg(Color::Rgb(120, 120, 150))),
+        Span::styled(" 保存返回", Style::default().fg(t.config_hint_desc)),
     ]));
 
     let content = Paragraph::new(lines)
@@ -1125,11 +1076,11 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Rgb(80, 80, 110)))
+                .border_style(Style::default().fg(t.border_config))
                 .title(Span::styled(
                     " ⚙️  模型配置编辑 ",
                     Style::default()
-                        .fg(Color::Rgb(230, 210, 120))
+                        .fg(t.config_label_selected)
                         .add_modifier(Modifier::BOLD),
                 ))
                 .style(Style::default().bg(bg)),

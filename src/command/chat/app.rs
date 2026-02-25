@@ -3,6 +3,7 @@ use super::model::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, load_agent_config, load_chat_session,
     save_agent_config, save_chat_session,
 };
+use super::theme::Theme;
 use crate::util::log::write_error_log;
 use async_openai::types::chat::CreateChatCompletionRequestArgs;
 use futures::StreamExt;
@@ -67,6 +68,8 @@ pub struct ChatApp {
     pub config_edit_cursor: usize,
     /// 流式输出时是否自动滚动到底部（用户手动上滚后关闭，发送新消息或滚到底部时恢复）
     pub auto_scroll: bool,
+    /// 当前主题
+    pub theme: Theme,
 }
 
 /// 消息渲染行缓存
@@ -125,7 +128,12 @@ pub enum ChatMode {
 /// 配置编辑界面的字段列表
 pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
 /// 全局配置字段
-pub const CONFIG_GLOBAL_FIELDS: &[&str] = &["system_prompt", "stream_mode", "max_history_messages"];
+pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
+    "system_prompt",
+    "stream_mode",
+    "max_history_messages",
+    "theme",
+];
 /// 所有字段数 = provider 字段 + 全局字段
 pub fn config_total_fields() -> usize {
     CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
@@ -139,6 +147,7 @@ impl ChatApp {
         if !agent_config.providers.is_empty() {
             model_list_state.select(Some(agent_config.active_index));
         }
+        let theme = Theme::from_name(&agent_config.theme);
         Self {
             agent_config,
             session,
@@ -161,7 +170,15 @@ impl ChatApp {
             config_edit_buf: String::new(),
             config_edit_cursor: 0,
             auto_scroll: true,
+            theme,
         }
+    }
+
+    /// 切换到下一个主题
+    pub fn switch_theme(&mut self) {
+        self.agent_config.theme = self.agent_config.theme.next();
+        self.theme = Theme::from_name(&self.agent_config.theme);
+        self.msg_lines_cache = None; // 清除缓存以触发重绘
     }
 
     /// 显示一条 toast 通知

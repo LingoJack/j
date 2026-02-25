@@ -1,3 +1,4 @@
+use super::theme::ThemeName;
 use crate::config::YamlConfig;
 use crate::error;
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,9 @@ pub struct AgentConfig {
     /// 发送给 API 的历史消息数量限制（默认 20 条，避免 token 消耗过大）
     #[serde(default = "default_max_history_messages")]
     pub max_history_messages: usize,
+    /// 主题名称（dark / light / midnight）
+    #[serde(default)]
+    pub theme: ThemeName,
 }
 
 fn default_max_history_messages() -> usize {

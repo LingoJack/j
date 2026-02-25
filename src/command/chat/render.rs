@@ -1,5 +1,6 @@
 use super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
 use super::markdown::markdown_to_lines;
+use super::theme::Theme;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -92,6 +93,7 @@ pub fn build_message_lines_incremental(
         None
     };
 
+    let t = &app.theme;
     let is_browse_mode = app.mode == ChatMode::Browse;
     let mut lines: Vec<Line> = Vec::new();
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::new();
@@ -147,6 +149,7 @@ pub fn build_message_lines_incremental(
                     inner_width,
                     bubble_max_width,
                     &mut lines,
+                    t,
                 );
             }
             "assistant" => {
@@ -156,7 +159,13 @@ pub fn build_message_lines_incremental(
                     // 先标记位置
                 } else {
                     // 已完成的 assistant 消息：完整 Markdown 渲染
-                    render_assistant_msg(&msg.content, is_selected, bubble_max_width, &mut lines);
+                    render_assistant_msg(
+                        &msg.content,
+                        is_selected,
+                        bubble_max_width,
+                        &mut lines,
+                        t,
+                    );
                 }
             }
             "system" => {
@@ -165,7 +174,7 @@ pub fn build_message_lines_incremental(
                 for wl in wrapped {
                     lines.push(Line::from(Span::styled(
                         format!("    {}  {}", "sys", wl),
-                        Style::default().fg(Color::Rgb(100, 100, 120)),
+                        Style::default().fg(t.text_system),
                     )));
                 }
             }
@@ -175,7 +184,7 @@ pub fn build_message_lines_incremental(
         // 流式消息的渲染在 assistant 分支中被跳过了，这里处理
         if msg.role == "assistant" && msg.msg_index.is_none() {
             // P1 增量段落渲染
-            let bubble_bg = Color::Rgb(38, 38, 52);
+            let bubble_bg = t.bubble_ai;
             let pad_left_w = 3usize;
             let pad_right_w = 3usize;
             let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
@@ -185,9 +194,7 @@ pub fn build_message_lines_incremental(
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 "  AI",
-                Style::default()
-                    .fg(Color::Rgb(120, 220, 160))
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
             )));
 
             // 上边距
@@ -218,7 +225,7 @@ pub fn build_message_lines_incremental(
             if boundary > stable_offset {
                 // 增量解析：从上次偏移到新边界的新完成段落
                 let new_stable_text = &content[stable_offset..boundary];
-                let new_md_lines = markdown_to_lines(new_stable_text, md_content_w + 2);
+                let new_md_lines = markdown_to_lines(new_stable_text, md_content_w + 2, t);
                 // 将新段落的渲染行包装成气泡样式并追加到 stable_lines
                 for md_line in new_md_lines {
                     let bubble_line = wrap_md_line_in_bubble(
@@ -239,7 +246,7 @@ pub fn build_message_lines_incremental(
             // 只对最后一个不完整段落做全量 Markdown 解析
             let tail = &content[boundary..];
             if !tail.is_empty() {
-                let tail_md_lines = markdown_to_lines(tail, md_content_w + 2);
+                let tail_md_lines = markdown_to_lines(tail, md_content_w + 2, t);
                 for md_line in tail_md_lines {
                     let bubble_line = wrap_md_line_in_bubble(
                         md_line,
@@ -282,7 +289,7 @@ pub fn build_message_lines_incremental(
     // 计算最终的流式稳定缓存
     let (final_stable_lines, final_stable_offset) = if let Some(sc) = &streaming_content_str {
         let boundary = find_stable_boundary(sc);
-        let bubble_bg = Color::Rgb(38, 38, 52);
+        let bubble_bg = t.bubble_ai;
         let pad_left_w = 3usize;
         let pad_right_w = 3usize;
         let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
@@ -303,7 +310,7 @@ pub fn build_message_lines_incremental(
 
         if boundary > s_offset {
             let new_text = &sc[s_offset..boundary];
-            let new_md_lines = markdown_to_lines(new_text, md_content_w + 2);
+            let new_md_lines = markdown_to_lines(new_text, md_content_w + 2, t);
             for md_line in new_md_lines {
                 let bubble_line = wrap_md_line_in_bubble(
                     md_line,
@@ -383,13 +390,14 @@ pub fn wrap_md_line_in_bubble(
     Line::from(styled_spans)
 }
 
-/// 渲染用户消息（提取为独立函数，供增量构建使用）
+/// 渲染用户消息
 pub fn render_user_msg(
     content: &str,
     is_selected: bool,
     inner_width: usize,
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
 ) {
     lines.push(Line::from(""));
     let label = if is_selected { "▶ You " } else { "You " };
@@ -400,17 +408,17 @@ pub fn render_user_msg(
             label,
             Style::default()
                 .fg(if is_selected {
-                    Color::Rgb(255, 200, 80)
+                    theme.label_selected
                 } else {
-                    Color::Rgb(100, 160, 255)
+                    theme.label_user
                 })
                 .add_modifier(Modifier::BOLD),
         ),
     ]));
     let user_bg = if is_selected {
-        Color::Rgb(55, 85, 140)
+        theme.bubble_user_selected
     } else {
-        Color::Rgb(40, 70, 120)
+        theme.bubble_user
     };
     let user_pad_lr = 3usize;
     let user_content_w = bubble_max_width.saturating_sub(user_pad_lr * 2);
@@ -454,7 +462,7 @@ pub fn render_user_msg(
         let pad = inner_width.saturating_sub(text_width);
         lines.push(Line::from(vec![
             Span::raw(" ".repeat(pad)),
-            Span::styled(text, Style::default().fg(Color::White).bg(user_bg)),
+            Span::styled(text, Style::default().fg(theme.text_white).bg(user_bg)),
         ]));
     }
     // 下边距
@@ -468,12 +476,13 @@ pub fn render_user_msg(
     }
 }
 
-/// 渲染 AI 助手消息（提取为独立函数，供增量构建使用）
+/// 渲染 AI 助手消息
 pub fn render_assistant_msg(
     content: &str,
     is_selected: bool,
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
 ) {
     lines.push(Line::from(""));
     let ai_label = if is_selected { "  ▶ AI" } else { "  AI" };
@@ -481,21 +490,21 @@ pub fn render_assistant_msg(
         ai_label,
         Style::default()
             .fg(if is_selected {
-                Color::Rgb(255, 200, 80)
+                theme.label_selected
             } else {
-                Color::Rgb(120, 220, 160)
+                theme.label_ai
             })
             .add_modifier(Modifier::BOLD),
     )));
     let bubble_bg = if is_selected {
-        Color::Rgb(48, 48, 68)
+        theme.bubble_ai_selected
     } else {
-        Color::Rgb(38, 38, 52)
+        theme.bubble_ai
     };
     let pad_left_w = 3usize;
     let pad_right_w = 3usize;
     let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
-    let md_lines = markdown_to_lines(content, md_content_w + 2);
+    let md_lines = markdown_to_lines(content, md_content_w + 2, theme);
     let bubble_total_w = bubble_max_width;
     // 上边距
     lines.push(Line::from(vec![Span::styled(

@@ -1,10 +1,11 @@
 use super::render::{char_width, display_width, wrap_text};
+use super::theme::Theme;
 use ratatui::{
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
 };
 
-pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
+pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<'static>> {
     use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
     // 内容区宽度 = max_width - 2（左侧 "  " 缩进由外层负责）
@@ -15,7 +16,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
 
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut current_spans: Vec<Span<'static>> = Vec::new();
-    let mut style_stack: Vec<Style> = vec![Style::default().fg(Color::Rgb(220, 220, 230))];
+    let mut style_stack: Vec<Style> = vec![Style::default().fg(theme.text_normal)];
     let mut in_code_block = false;
     let mut code_block_content = String::new();
     let mut code_block_lang = String::new();
@@ -31,7 +32,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
     let mut current_cell = String::new();
     let mut table_alignments: Vec<pulldown_cmark::Alignment> = Vec::new();
 
-    let base_style = Style::default().fg(Color::Rgb(220, 220, 230));
+    let base_style = Style::default().fg(theme.text_normal);
 
     let flush_line = |current_spans: &mut Vec<Span<'static>>, lines: &mut Vec<Line<'static>>| {
         if !current_spans.is_empty() {
@@ -50,16 +51,16 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 // 根据标题级别使用不同的颜色
                 let heading_style = match level as u8 {
                     1 => Style::default()
-                        .fg(Color::Rgb(100, 180, 255))
+                        .fg(theme.md_h1)
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
                     2 => Style::default()
-                        .fg(Color::Rgb(130, 190, 255))
+                        .fg(theme.md_h2)
                         .add_modifier(Modifier::BOLD),
                     3 => Style::default()
-                        .fg(Color::Rgb(160, 200, 255))
+                        .fg(theme.md_h3)
                         .add_modifier(Modifier::BOLD),
                     _ => Style::default()
-                        .fg(Color::Rgb(180, 210, 255))
+                        .fg(theme.md_h4)
                         .add_modifier(Modifier::BOLD),
                 };
                 style_stack.push(heading_style);
@@ -71,7 +72,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                     let sep_char = if (level as u8) == 1 { "━" } else { "─" };
                     lines.push(Line::from(Span::styled(
                         sep_char.repeat(content_width),
-                        Style::default().fg(Color::Rgb(60, 70, 100)),
+                        Style::default().fg(theme.md_heading_sep),
                     )));
                 }
                 style_stack.pop();
@@ -79,11 +80,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
             }
             Event::Start(Tag::Strong) => {
                 let current = *style_stack.last().unwrap_or(&base_style);
-                style_stack.push(
-                    current
-                        .add_modifier(Modifier::BOLD)
-                        .fg(Color::Rgb(240, 210, 170)),
-                );
+                style_stack.push(current.add_modifier(Modifier::BOLD).fg(theme.text_bold));
             }
             Event::End(TagEnd::Strong) => {
                 style_stack.pop();
@@ -121,7 +118,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 let top_border = format!("┌─{}{}", label, "─".repeat(border_fill));
                 lines.push(Line::from(Span::styled(
                     top_border,
-                    Style::default().fg(Color::Rgb(80, 90, 110)),
+                    Style::default().fg(theme.code_border),
                 )));
             }
             Event::End(TagEnd::CodeBlock) => {
@@ -132,26 +129,21 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 for code_line in code_content_expanded.lines() {
                     let wrapped = wrap_text(code_line, code_inner_w);
                     for wl in wrapped {
-                        let highlighted = highlight_code_line(&wl, &code_block_lang);
+                        let highlighted = highlight_code_line(&wl, &code_block_lang, theme);
                         let text_w: usize =
                             highlighted.iter().map(|s| display_width(&s.content)).sum();
                         let fill = code_inner_w.saturating_sub(text_w);
                         let mut spans_vec = Vec::new();
-                        spans_vec.push(Span::styled(
-                            "│ ",
-                            Style::default().fg(Color::Rgb(80, 90, 110)),
-                        ));
+                        spans_vec.push(Span::styled("│ ", Style::default().fg(theme.code_border)));
                         for hs in highlighted {
                             spans_vec.push(Span::styled(
                                 hs.content.to_string(),
-                                hs.style.bg(Color::Rgb(30, 30, 42)),
+                                hs.style.bg(theme.code_bg),
                             ));
                         }
                         spans_vec.push(Span::styled(
                             format!("{} │", " ".repeat(fill)),
-                            Style::default()
-                                .fg(Color::Rgb(80, 90, 110))
-                                .bg(Color::Rgb(30, 30, 42)),
+                            Style::default().fg(theme.code_border).bg(theme.code_bg),
                         ));
                         lines.push(Line::from(spans_vec));
                     }
@@ -159,7 +151,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 let bottom_border = format!("└{}", "─".repeat(content_width.saturating_sub(1)));
                 lines.push(Line::from(Span::styled(
                     bottom_border,
-                    Style::default().fg(Color::Rgb(80, 90, 110)),
+                    Style::default().fg(theme.code_border),
                 )));
                 in_code_block = false;
                 code_block_content.clear();
@@ -186,15 +178,15 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                         if in_blockquote {
                             current_spans.push(Span::styled(
                                 "| ".to_string(),
-                                Style::default().fg(Color::Rgb(80, 100, 140)),
+                                Style::default().fg(theme.md_blockquote_bar),
                             ));
                         }
                     }
                     current_spans.push(Span::styled(
                         code_str,
                         Style::default()
-                            .fg(Color::Rgb(230, 190, 120))
-                            .bg(Color::Rgb(45, 45, 60)),
+                            .fg(theme.md_inline_code_fg)
+                            .bg(theme.md_inline_code_bg),
                     ));
                 }
             }
@@ -220,7 +212,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 };
                 current_spans.push(Span::styled(
                     bullet,
-                    Style::default().fg(Color::Rgb(100, 160, 255)),
+                    Style::default().fg(theme.md_list_bullet),
                 ));
             }
             Event::End(TagEnd::Item) => {
@@ -240,7 +232,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
             Event::Start(Tag::BlockQuote(_)) => {
                 flush_line(&mut current_spans, &mut lines);
                 in_blockquote = true;
-                style_stack.push(Style::default().fg(Color::Rgb(150, 160, 180)));
+                style_stack.push(Style::default().fg(theme.md_blockquote_text));
             }
             Event::End(TagEnd::BlockQuote(_)) => {
                 flush_line(&mut current_spans, &mut lines);
@@ -263,25 +255,25 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                             1 => (
                                 ">> ",
                                 Style::default()
-                                    .fg(Color::Rgb(100, 180, 255))
+                                    .fg(theme.md_h1)
                                     .add_modifier(Modifier::BOLD),
                             ),
                             2 => (
                                 ">> ",
                                 Style::default()
-                                    .fg(Color::Rgb(130, 190, 255))
+                                    .fg(theme.md_h2)
                                     .add_modifier(Modifier::BOLD),
                             ),
                             3 => (
                                 "> ",
                                 Style::default()
-                                    .fg(Color::Rgb(160, 200, 255))
+                                    .fg(theme.md_h3)
                                     .add_modifier(Modifier::BOLD),
                             ),
                             _ => (
                                 "> ",
                                 Style::default()
-                                    .fg(Color::Rgb(180, 210, 255))
+                                    .fg(theme.md_h4)
                                     .add_modifier(Modifier::BOLD),
                             ),
                         };
@@ -310,7 +302,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                         if in_blockquote {
                             current_spans.push(Span::styled(
                                 "| ".to_string(),
-                                Style::default().fg(Color::Rgb(80, 100, 140)),
+                                Style::default().fg(theme.md_blockquote_bar),
                             ));
                         }
                         // flush 后使用完整行宽
@@ -325,7 +317,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                             if in_blockquote {
                                 current_spans.push(Span::styled(
                                     "| ".to_string(),
-                                    Style::default().fg(Color::Rgb(80, 100, 140)),
+                                    Style::default().fg(theme.md_blockquote_bar),
                                 ));
                             }
                         }
@@ -343,7 +335,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                                     if in_blockquote {
                                         current_spans.push(Span::styled(
                                             "| ".to_string(),
-                                            Style::default().fg(Color::Rgb(80, 100, 140)),
+                                            Style::default().fg(theme.md_blockquote_bar),
                                         ));
                                     }
                                 }
@@ -371,7 +363,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 flush_line(&mut current_spans, &mut lines);
                 lines.push(Line::from(Span::styled(
                     "─".repeat(content_width),
-                    Style::default().fg(Color::Rgb(70, 75, 90)),
+                    Style::default().fg(theme.md_rule),
                 )));
             }
             // ===== 表格支持 =====
@@ -426,11 +418,11 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                             }
                         }
 
-                        let table_style = Style::default().fg(Color::Rgb(180, 180, 200));
+                        let table_style = Style::default().fg(theme.table_body);
                         let header_style = Style::default()
-                            .fg(Color::Rgb(120, 180, 255))
+                            .fg(theme.table_header)
                             .add_modifier(Modifier::BOLD);
-                        let border_style = Style::default().fg(Color::Rgb(60, 70, 100));
+                        let border_style = Style::default().fg(theme.table_border);
 
                         // 表格行的实际字符宽度（用空格字符计算，不依赖 Box Drawing 字符宽度）
                         // table_row_w = 竖线数(num_cols+1) + 每列(cw+2) = sep_w + pad_w + total_col_w
@@ -596,7 +588,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
 
 /// 简单的代码语法高亮（无需外部依赖）
 /// 根据语言类型对常见关键字、字符串、注释、数字进行着色
-pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> {
+pub fn highlight_code_line<'a>(line: &'a str, lang: &str, theme: &Theme) -> Vec<Span<'static>> {
     let lang_lower = lang.to_lowercase();
     // Rust 使用多组词汇分别高亮
     // keywords: 控制流/定义关键字 → 紫色
@@ -1187,23 +1179,17 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
         _ => "//",
     };
 
-    // ===== 代码高亮配色方案（基于 One Dark Pro）=====
-    // 默认代码颜色 - 银灰色
-    let code_style = Style::default().fg(Color::Rgb(171, 178, 191));
-    // 关键字颜色 - 紫色（保留 One Dark 经典紫）
-    let kw_style = Style::default().fg(Color::Rgb(198, 120, 221));
-    // 字符串颜色 - 柔和绿色
-    let str_style = Style::default().fg(Color::Rgb(152, 195, 121));
-    // 注释颜色 - 深灰蓝色 + 斜体
+    // ===== 代码高亮配色方案（基于主题）=====
+    let code_style = Style::default().fg(theme.code_default);
+    let kw_style = Style::default().fg(theme.code_keyword);
+    let str_style = Style::default().fg(theme.code_string);
     let comment_style = Style::default()
-        .fg(Color::Rgb(92, 99, 112))
+        .fg(theme.code_comment)
         .add_modifier(Modifier::ITALIC);
-    // 数字颜色 - 橙黄色
-    let num_style = Style::default().fg(Color::Rgb(209, 154, 102));
-    // 类型/大写开头标识符 - 暖黄色
-    let type_style = Style::default().fg(Color::Rgb(229, 192, 123));
-    // 原始类型（i32, u64, bool 等）- 青绿色
-    let primitive_style = Style::default().fg(Color::Rgb(86, 182, 194));
+    let num_style = Style::default().fg(theme.code_number);
+    let type_style = Style::default().fg(theme.code_type);
+    let primitive_style = Style::default().fg(theme.code_primitive);
+    let macro_style = Style::default().fg(theme.code_macro);
 
     let trimmed = line.trim_start();
 
@@ -1231,6 +1217,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                     num_style,
                     type_style,
                     primitive_style,
+                    macro_style,
                     &lang_lower,
                 ));
                 buf.clear();
@@ -1271,6 +1258,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                     num_style,
                     type_style,
                     primitive_style,
+                    macro_style,
                     &lang_lower,
                 ));
                 buf.clear();
@@ -1301,6 +1289,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                     num_style,
                     type_style,
                     primitive_style,
+                    macro_style,
                     &lang_lower,
                 ));
                 buf.clear();
@@ -1327,7 +1316,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
             }
             if is_lifetime || (s.len() > 1 && !s.ends_with('\'')) {
                 // 生命周期参数 - 使用浅橙色（与关键字紫色区分）
-                let lifetime_style = Style::default().fg(Color::Rgb(229, 192, 123));
+                let lifetime_style = Style::default().fg(theme.code_lifetime);
                 spans.push(Span::styled(s, lifetime_style));
             } else {
                 // 字符字面量
@@ -1349,6 +1338,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                     num_style,
                     type_style,
                     primitive_style,
+                    macro_style,
                     &lang_lower,
                 ));
                 buf.clear();
@@ -1391,6 +1381,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                             num_style,
                             type_style,
                             primitive_style,
+                            macro_style,
                             &lang_lower,
                         ));
                         buf.clear();
@@ -1412,7 +1403,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                         }
                     }
                     // 属性使用青绿色（与关键字紫色区分）
-                    let attr_style = Style::default().fg(Color::Rgb(86, 182, 194));
+                    let attr_style = Style::default().fg(theme.code_attribute);
                     spans.push(Span::styled(attr, attr_style));
                     continue;
                 }
@@ -1436,12 +1427,13 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                     num_style,
                     type_style,
                     primitive_style,
+                    macro_style,
                     &lang_lower,
                 ));
                 buf.clear();
             }
             // Shell 变量使用青色（与属性统一风格）
-            let var_style = Style::default().fg(Color::Rgb(86, 182, 194));
+            let var_style = Style::default().fg(theme.code_shell_var);
             let mut var = String::new();
             var.push(ch);
             chars.next();
@@ -1512,6 +1504,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
                         num_style,
                         type_style,
                         primitive_style,
+                        macro_style,
                         &lang_lower,
                     ));
                     buf.clear();
@@ -1539,6 +1532,7 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str) -> Vec<Span<'static>> 
             num_style,
             type_style,
             primitive_style,
+            macro_style,
             &lang_lower,
         ));
     }
@@ -1561,11 +1555,9 @@ pub fn colorize_tokens<'a>(
     num_style: Style,
     type_style: Style,
     primitive_style: Style,
+    macro_style: Style,
     lang: &str,
 ) -> Vec<Span<'static>> {
-    // 宏调用样式（Rust 专用）- 淡蓝色，与属性青绿色区分
-    let macro_style = Style::default().fg(Color::Rgb(97, 175, 239));
-
     let mut spans = Vec::new();
     let mut current_word = String::new();
     let mut current_non_word = String::new();

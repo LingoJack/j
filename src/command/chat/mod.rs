@@ -4,8 +4,10 @@ pub mod handler;
 pub mod markdown;
 pub mod model;
 pub mod render;
+pub mod theme;
 pub mod ui;
 
+use crate::command::chat::theme::ThemeName;
 use crate::config::YamlConfig;
 use crate::{error, info};
 use api::call_openai_stream;
@@ -34,6 +36,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             system_prompt: Some("你是一个有用的助手。".to_string()),
             stream_mode: true,
             max_history_messages: 20,
+            theme: ThemeName::default(),
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);

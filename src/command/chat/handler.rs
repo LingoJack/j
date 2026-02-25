@@ -1,6 +1,7 @@
 use super::app::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, ChatApp, ChatMode, config_total_fields};
 use super::model::{ModelProvider, save_agent_config, save_chat_session};
 use super::render::copy_to_clipboard;
+use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
 use crate::{error, info};
 use crossterm::{
@@ -403,6 +404,7 @@ pub fn config_field_label(idx: usize) -> &'static str {
             "system_prompt" => "系统提示词",
             "stream_mode" => "流式输出",
             "max_history_messages" => "历史消息数",
+            "theme" => "主题风格",
             _ => CONFIG_GLOBAL_FIELDS[gi],
         }
     }
@@ -446,6 +448,7 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
                 }
             }
             "max_history_messages" => app.agent_config.max_history_messages.to_string(),
+            "theme" => app.agent_config.theme.display_name().to_string(),
             _ => String::new(),
         }
     }
@@ -477,6 +480,7 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
                     "false".into()
                 }
             }
+            "theme" => app.agent_config.theme.to_str().to_string(),
             _ => String::new(),
         }
     }
@@ -517,6 +521,11 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
                 if let Ok(num) = value.trim().parse::<usize>() {
                     app.agent_config.max_history_messages = num;
                 }
+            }
+            "theme" => {
+                app.agent_config.theme = ThemeName::from_str(value.trim());
+                app.theme = super::theme::Theme::from_name(&app.agent_config.theme);
+                app.msg_lines_cache = None;
             }
             _ => {}
         }
@@ -639,6 +648,11 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             if let Some(gi) = gi {
                 if CONFIG_GLOBAL_FIELDS[gi] == "stream_mode" {
                     app.agent_config.stream_mode = !app.agent_config.stream_mode;
+                    return;
+                }
+                // theme 字段直接循环切换，不进入编辑模式
+                if CONFIG_GLOBAL_FIELDS[gi] == "theme" {
+                    app.switch_theme();
                     return;
                 }
             }
