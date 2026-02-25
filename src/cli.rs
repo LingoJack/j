@@ -200,6 +200,21 @@ pub enum SubCmd {
     #[command(aliases = ["q", "quit"])]
     Exit,
 
+    // ========== 语音转文字 ==========
+    /// 语音转文字（录音 → Whisper 离线转写）
+    #[command(alias = "vc")]
+    Voice {
+        /// 操作: 默认录音转写，download 下载模型
+        #[arg(default_value = "")]
+        action: String,
+        /// 复制转写结果到剪贴板
+        #[arg(short = 'c', long = "copy")]
+        copy: bool,
+        /// 指定模型大小: tiny, base, small, medium, large
+        #[arg(short = 'm', long = "model")]
+        model: Option<String>,
+    },
+
     /// 生成 shell 补全脚本
     Completion {
         /// shell 类型: zsh, bash, fish

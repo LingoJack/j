@@ -15,6 +15,7 @@
 - **日报系统**：快速写入日报、查看和搜索历史记录，自动周数管理
 - **待办备忘录**：内置 TUI 待办管理，支持 markdown 风格 checkbox，数据持久化
 - **AI 对话**：内置 TUI AI 对话界面，支持多模型切换、流式输出、Markdown 渲染、消息浏览复制
+- **语音转文字**：基于 Whisper.cpp 的离线语音识别，支持中文，录音转写输出文字
 - **脚本创建**：一键创建 shell 脚本并注册为别名
 - **交互模式**：带 Tab 补全 + 历史建议的 REPL 环境
 - **倒计时器**：终端倒计时，带进度条和结束提醒
@@ -46,6 +47,7 @@ src/
 │   ├── report.rs        # report / check / search（日报系统）
 │   ├── todo.rs          # todo（待办备忘录 TUI）
 │   ├── chat.rs          # chat（AI 对话 TUI，Markdown 渲染 + 流式输出）
+│   ├── voice.rs         # voice（语音转文字，Whisper.cpp 离线转写）
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
 │   └── time.rs          # time countdown（倒计时器）
@@ -87,6 +89,9 @@ termimad = "0.30"                                   # Markdown 终端渲染（fa
 ratatui = "0.29"                                    # TUI 框架（全屏终端 UI）
 crossterm = "0.28"                                  # 终端原始模式 + 事件读取
 tui-textarea = "0.7"                                # 多行文本编辑组件（配合 ratatui）
+whisper-rs = "0.15"                                  # Whisper.cpp Rust 绑定（离线语音识别）
+cpal = "0.17"                                        # 跨平台音频捕获（麦克风录音）
+hound = "3.5"                                        # WAV 文件读写
 ```
 
 ---
@@ -121,6 +126,7 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo <content>`；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
 | **Phase 23** | AI 对话系统（chat）：内置 TUI AI 对话界面，支持多模型提供方切换（OpenAI/DeepSeek 等）、流式/整体输出切换（Ctrl+S）、Markdown 渲染（标题/加粗/斜体/代码块语法高亮/表格/列表/引用块）、消息浏览模式（Ctrl+B，↑↓选择 y/Enter 复制）、对话持久化；代码高亮支持 Rust/Python/JS/Go/Java/Bash/C/SQL/Ruby/YAML/CSS/Dockerfile 等语言，Bash 额外支持 `$VAR`/`${VAR}` 变量高亮；渲染行缓存 + 可见区域裁剪优化性能 | ✅ 完成 |
 | **Phase 24** | AI 对话系统增强：可视化配置界面（Ctrl+E）支持 Provider 增删改、全局设置编辑（system_prompt/max_history_messages/stream_mode）；6 种主题风格（dark/light/dracula/gruvbox/monokai/nord），实时切换无需重启；历史消息数量限制（max_history_messages）防止 token 超限 | ✅ 完成 |
+| **Phase 25** | 语音转文字：基于 Whisper.cpp 的离线语音识别（whisper-rs + cpal + hound）；`j voice` 命令录音转写输出文字；`j voice -c` 复制到剪贴板；`j voice download` 自动下载模型；支持 tiny/base/small/medium/large 五种模型大小；16kHz 单声道录音；中文识别优化；模型存储在 `~/.jdata/voice/model/` | ✅ 完成 |
 
 ---
 
@@ -174,6 +180,7 @@ flowchart TD
 | `version` | `v` | — | 版本信息 |
 | `help` | `h` | — | 帮助信息 |
 | `exit` | `q/quit` | — | 退出 |
+| `voice` | `vc` | `[-c] [-m model] / download [-m model]` | 语音转文字（录音 → Whisper 离线转写） |
 | `completion` | — | `[zsh\|bash]` | 生成 shell 补全脚本 |
 
 ### 5.3 配置管理 — `config/yaml_config.rs`
@@ -358,6 +365,10 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 │   └── ...
 ├── todo/                # 待办备忘录目录
 │   └── todo.json          # 待办数据（JSON 格式）
+├── voice/               # 语音转文字目录
+│   ├── model/             # Whisper 模型存储
+│   │   └── ggml-small.bin # Whisper 模型文件（首次使用时下载）
+│   └── recording.wav      # 临时录音文件（转写后自动删除）
 └── report/              # 日报目录（默认路径，可配置 git 仓库同步）
     ├── week_report.md     # 周报文件
     ├── settings.json      # 日报配置（week_num, last_day）
@@ -531,6 +542,9 @@ j check               # 查看最近 5 行日报
 j todo                # 进入 TUI 待办管理界面
 j todo 买牛奶         # 快速添加一条待办
 j time countdown 5m   # 5 分钟倒计时
+j voice download      # 下载语音识别模型（首次使用）
+j voice               # 录音 → 转写 → 输出文字
+j voice -c            # 录音 → 转写 → 复制到剪贴板
 
 # 交互模式
 j                     # 进入 REPL
@@ -570,6 +584,7 @@ copilot > exit
 | `TimeCommandHandler` | `command/time.rs::handle_time` | 倒计时器 |
 | — | `command/todo.rs::handle_todo` | 待办备忘录（Rust 新增，Java 版无对应） |
 | — | `command/chat.rs::handle_chat` | AI 对话 TUI（Rust 新增） |
+| — | `command/voice.rs::handle_voice` | 语音转文字（Rust 新增） |
 | `LogCommandHandler` | `command/system.rs::handle_log` | 日志设置 |
 | `ChangeCommandHandler` | `command/system.rs::handle_change` | 修改配置 |
 | `ClearCommandHandler` | `command/system.rs::handle_clear` | 清屏 |
@@ -1033,7 +1048,83 @@ Bash 额外支持 `$VAR`、`${VAR}`、`$(cmd)` 变量高亮。
 
 ---
 
-## 十二、未来可优化方向
+## 十二、语音转文字 (`voice.rs`)
+
+### 概述
+
+`j voice` 命令提供基于 Whisper.cpp 的离线语音转文字功能，支持中文识别，无需联网。
+
+### 架构
+
+```
+~/.jdata/voice/
+├── model/
+│   └── ggml-small.bin    # Whisper 模型文件（首次使用时通过 j voice download 下载）
+└── recording.wav         # 临时录音文件（转写后自动删除）
+```
+
+### 核心流程
+
+```mermaid
+flowchart TD
+    A["j voice"] --> B{模型存在?}
+    B -- 否 --> C["提示: j voice download"]
+    B -- 是 --> D["按回车开始录音"]
+    D --> E["🔴 cpal 麦克风录音"]
+    E --> F["按回车结束录音"]
+    F --> G["保存 WAV (16kHz/单声道/i16)"]
+    G --> H["whisper-rs 加载模型"]
+    H --> I["Whisper 转写 (语言=zh)"]
+    I --> J{"-c 标志?"}
+    J -- 是 --> K["输出文字 + 复制到剪贴板"]
+    J -- 否 --> L["输出文字到终端"]
+```
+
+### 使用方式
+
+```bash
+# 首次使用：下载模型（默认 small，466MB，中文效果好）
+j voice download
+j voice download -m medium    # 下载 medium 模型（1.5GB，中文最佳）
+
+# 录音转文字
+j voice                       # 录音 → 转写 → 输出到终端
+j voice -c                    # 录音 → 转写 → 复制到剪贴板
+j voice -m medium             # 使用 medium 模型转写
+j vc                          # 别名，等价于 j voice
+
+# 配合其他命令使用
+j report "$(j voice)"         # 语音写日报
+j todo "$(j voice)"           # 语音添加待办
+```
+
+### 模型选择
+
+| 模型 | 大小 | 中文质量 | 速度（M1 30s音频）| 推荐度 |
+|------|------|---------|-----------------|--------|
+| `tiny` | 75MB | ⭐⭐ | <1s | 不推荐中文 |
+| `base` | 142MB | ⭐⭐⭐ | ~1s | 凑合用 |
+| `small` | 466MB | ⭐⭐⭐⭐ | ~2s | ✅ 默认推荐 |
+| `medium` | 1.5GB | ⭐⭐⭐⭐⭐ | ~3s | ✅ 中文最佳 |
+| `large` | 3.1GB | ⭐⭐⭐⭐⭐ | ~6s | 追求极致精度 |
+
+### 技术实现
+
+- **录音**：`cpal` crate 捕获系统默认麦克风，16kHz 单声道 f32 采样，实时转 i16
+- **WAV 写入**：`hound` crate 将采样数据写入 16bit PCM WAV 文件
+- **转写**：`whisper-rs` crate（Whisper.cpp 的 Rust 绑定），Greedy 解码策略，语言设为中文
+- **模型下载**：通过 `curl` 从 Hugging Face 下载 ggml 格式模型文件
+- **剪贴板**：macOS 通过 `pbcopy` 复制
+
+### 注意事项
+
+- 首次录音时 macOS 会弹出麦克风权限请求，需要用户授权
+- 编译需要系统安装 `cmake`（`brew install cmake`），因为 whisper-rs 需要编译 whisper.cpp
+- 模型文件较大，不嵌入二进制，需要用户首次使用时手动下载
+
+---
+
+## 十三、未来可优化方向
 
 | 方向 | 说明 | 优先级 |
 |------|------|--------|

@@ -8,6 +8,7 @@ pub mod script;
 pub mod system;
 pub mod time;
 pub mod todo;
+pub mod voice;
 
 use crate::cli::SubCmd;
 use crate::config::YamlConfig;
@@ -80,5 +81,12 @@ pub fn dispatch(subcmd: SubCmd, config: &mut YamlConfig) {
         SubCmd::Help => system::handle_help(),
         SubCmd::Exit => system::handle_exit(),
         SubCmd::Completion { shell } => system::handle_completion(shell.as_deref(), config),
+
+        // 语音转文字
+        SubCmd::Voice {
+            action,
+            copy,
+            model,
+        } => voice::handle_voice(&action, copy, model.as_deref(), config),
     }
 }

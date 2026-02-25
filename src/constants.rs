@@ -209,6 +209,9 @@ pub mod cmd {
     // AI 对话
     pub const CHAT: &[&str] = &["chat", "ai"];
 
+    // 语音转文字
+    pub const VOICE: &[&str] = &["voice", "vc"];
+
     // agent（预留）
     pub const AGENT: &[&str] = &["agent"];
     pub const SYSTEM: &[&str] = &["system", "ps"];
@@ -218,7 +221,7 @@ pub mod cmd {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
             SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
-            AGENT, SYSTEM,
+            VOICE, AGENT, SYSTEM,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }
@@ -285,6 +288,35 @@ pub const DATA_DIR: &str = ".jdata";
 pub const DATA_PATH_ENV: &str = "J_DATA_PATH";
 
 // ========== Shell 命令 ==========
+
+// ========== 语音转文字 ==========
+
+/// 语音转文字相关常量
+pub mod voice {
+    /// 语音数据目录名
+    pub const VOICE_DIR: &str = "voice";
+    /// 模型子目录名
+    pub const MODEL_DIR: &str = "model";
+    /// 临时录音文件名
+    pub const RECORDING_FILE: &str = "recording.wav";
+    /// 默认模型大小
+    pub const DEFAULT_MODEL: &str = "small";
+    /// 支持的模型大小列表
+    pub const MODEL_SIZES: &[&str] = &["tiny", "base", "small", "medium", "large"];
+    /// Whisper 模型下载 URL 模板 (Hugging Face)
+    pub const MODEL_URL_TEMPLATE: &str =
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin";
+    /// 模型文件名模板
+    pub const MODEL_FILE_TEMPLATE: &str = "ggml-{}.bin";
+    /// 录音采样率 (Whisper 要求 16kHz)
+    pub const SAMPLE_RATE: u32 = 16000;
+    /// 录音声道数
+    pub const CHANNELS: u16 = 1;
+    /// 录音位深度
+    pub const BITS_PER_SAMPLE: u16 = 16;
+    /// voice 操作: 下载模型
+    pub const ACTION_DOWNLOAD: &str = "download";
+}
 
 pub mod shell {
     pub const BASH_PATH: &str = "/bin/bash";

@@ -2,7 +2,7 @@ use crate::command;
 use crate::config::YamlConfig;
 use crate::constants::{
     self, ALIAS_PATH_SECTIONS, ALL_SECTIONS, LIST_ALL, NOTE_CATEGORIES, cmd, config_key,
-    rmeta_action, search_flag, shell, time_function,
+    rmeta_action, search_flag, shell, time_function, voice as vc,
 };
 use crate::{error, info};
 use colored::Colorize;
@@ -162,6 +162,8 @@ fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
         (cmd::TODO, vec![ArgHint::Placeholder("<content>")]),
         // AI 对话
         (cmd::CHAT, vec![ArgHint::Placeholder("<message>")]),
+        // 语音转文字
+        (cmd::VOICE, vec![ArgHint::Fixed(vec![vc::ACTION_DOWNLOAD])]),
         // 脚本
         (
             cmd::CONCAT,
@@ -844,6 +846,17 @@ fn parse_interactive_command(args: &[String]) -> ParseResult {
     } else if is(cmd::COMPLETION) {
         ParseResult::Matched(SubCmd::Completion {
             shell: rest.first().cloned(),
+        })
+
+    // 语音转文字
+    } else if is(cmd::VOICE) {
+        ParseResult::Matched(SubCmd::Voice {
+            action: rest.first().cloned().unwrap_or_default(),
+            copy: rest.contains(&"-c".to_string()),
+            model: rest
+                .iter()
+                .position(|a| a == "-m" || a == "--model")
+                .and_then(|i| rest.get(i + 1).cloned()),
         })
 
     // 未匹配到内置命令

@@ -219,6 +219,21 @@ open -a "$J_CHROME" https://example.com
 | `j exit` | 退出（交互模式） |
 | `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
 
+## 🎙️ 语音转文字
+
+| 命令 | 说明 |
+|------|------|
+| `j voice` | 录音 → Whisper 离线转写 → 输出文字 |
+| `j voice -c` | 录音转写并复制结果到剪贴板 |
+| `j voice -m <model>` | 指定模型大小（tiny/base/small/medium/large） |
+| `j voice download` | 下载默认模型（small） |
+| `j voice download -m medium` | 下载指定大小的模型 |
+| `j vc` | 同 `j voice`（别名） |
+
+> 首次使用需先下载 Whisper 模型: `j voice download`
+> 模型存储路径: `~/.jdata/voice/model/`
+> 推荐中文用 small（466MB）或 medium（1.5GB）模型
+
 ---
 
 ## 🔄 安装 & 更新
