@@ -18,10 +18,6 @@ macro_rules! md_inline {
     }};
 }
 
-/// 编译时从 plugin/md_render/bin/ 目录嵌入
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-const ASK_BINARY: &[u8] = include_bytes!("../../plugin/md_render/bin/md_render-darwin-arm64");
-
 /// 获取嵌入的 render 二进制路径
 /// 首次调用时释放嵌入的二进制到 ~/.jdata/bin/md_render，后续复用
 fn md_render_path() -> Option<std::path::PathBuf> {
@@ -35,6 +31,9 @@ fn md_render_path() -> Option<std::path::PathBuf> {
     {
         use std::os::unix::fs::PermissionsExt;
 
+        // 从统一资源模块获取二进制
+        let binary_data = crate::assets::MD_RENDER_BINARY;
+
         let data_dir = crate::config::YamlConfig::data_dir();
         let bin_dir = data_dir.join("bin");
         let ask_path = bin_dir.join("md_render");
@@ -42,7 +41,7 @@ fn md_render_path() -> Option<std::path::PathBuf> {
         if ask_path.exists() {
             // 已释放过，检查大小是否一致（版本更新时自动覆盖）
             if let Ok(meta) = std::fs::metadata(&ask_path) {
-                if meta.len() == ASK_BINARY.len() as u64 {
+                if meta.len() == binary_data.len() as u64 {
                     return Some(ask_path);
                 }
             }
@@ -52,7 +51,7 @@ fn md_render_path() -> Option<std::path::PathBuf> {
         if std::fs::create_dir_all(&bin_dir).is_err() {
             return None;
         }
-        if std::fs::write(&ask_path, ASK_BINARY).is_err() {
+        if std::fs::write(&ask_path, binary_data).is_err() {
             return None;
         }
         // 设置可执行权限 (chmod 755)

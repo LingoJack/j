@@ -2,6 +2,7 @@
 //!
 //! 导出公开模块供集成测试和外部使用
 
+pub mod assets;
 pub mod cli;
 pub mod command;
 pub mod config;

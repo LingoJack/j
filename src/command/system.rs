@@ -1,10 +1,8 @@
+use crate::assets::{HELP_TEXT, VERSION_TEMPLATE};
 use crate::config::YamlConfig;
 use crate::constants::{self, CONTAIN_SEARCH_SECTIONS, config_key, section};
 use crate::{error, info, md, usage};
 use colored::Colorize;
-
-/// 编译时嵌入的版本信息模板
-const VERSION_TEMPLATE: &str = include_str!("../../assets/version.md");
 
 /// 处理 version 命令: j version
 pub fn handle_version(config: &YamlConfig) {
@@ -26,9 +24,6 @@ pub fn handle_version(config: &YamlConfig) {
         .replace("{extra}", &extra);
     md!("{}", text);
 }
-
-/// 编译时嵌入的帮助文档
-const HELP_TEXT: &str = include_str!("../../assets/help.md");
 
 /// 处理 help 命令: j help
 pub fn handle_help() {
