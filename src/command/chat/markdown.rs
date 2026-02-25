@@ -82,7 +82,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize) -> Vec<Line<'static>> {
                 style_stack.push(
                     current
                         .add_modifier(Modifier::BOLD)
-                        .fg(Color::Rgb(130, 220, 255)),
+                        .fg(Color::Rgb(240, 210, 170)),
                 );
             }
             Event::End(TagEnd::Strong) => {

@@ -258,12 +258,13 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 只渲染可见区域的行（逐行借用缓存，clone 单行开销极小）
     let start = app.scroll_offset as usize;
     let end = (start + visible_height as usize).min(all_lines.len());
+    let msg_area_bg = Style::default().bg(Color::Rgb(22, 22, 30));
     for (i, line_idx) in (start..end).enumerate() {
         let line = &all_lines[line_idx];
         let y = inner.y + i as u16;
         let line_area = Rect::new(inner.x, y, inner.width, 1);
-        // 使用 Paragraph 渲染单行（clone 单行开销很小）
-        let p = Paragraph::new(line.clone());
+        // 使用 Paragraph 渲染单行，设置背景色确保行尾空余区域颜色一致
+        let p = Paragraph::new(line.clone()).style(msg_area_bg);
         f.render_widget(p, line_area);
     }
 }
