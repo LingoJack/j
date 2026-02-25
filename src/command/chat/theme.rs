@@ -18,6 +18,7 @@ impl Default for ThemeName {
     }
 }
 
+#[allow(dead_code)]
 impl ThemeName {
     /// 获取所有主题名称列表（用于配置界面循环切换）
     pub fn all() -> &'static [ThemeName] {
@@ -65,6 +66,7 @@ impl ThemeName {
 /// 主题配色方案
 /// 将所有 UI 颜色归类为语义化字段，方便统一管理
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Theme {
     // ===== 全局背景 =====
     /// 主背景色
