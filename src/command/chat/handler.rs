@@ -214,6 +214,8 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             app.browse_msg_index = app.session.messages.len() - 1;
             app.mode = ChatMode::Browse;
             app.msg_lines_cache = None; // 清除缓存以触发高亮重绘
+            // 进入浏览模式时关闭鼠标捕获，让终端可以原生选中文本
+            let _ = execute!(io::stdout(), DisableMouseCapture);
         } else {
             app.show_toast("暂无消息可浏览", true);
         }
@@ -354,6 +356,8 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
     if msg_count == 0 {
         app.mode = ChatMode::Chat;
         app.msg_lines_cache = None;
+        // 退出浏览模式时重新开启鼠标捕获
+        let _ = execute!(io::stdout(), EnableMouseCapture);
         return;
     }
 
@@ -361,6 +365,8 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Esc => {
             app.mode = ChatMode::Chat;
             app.msg_lines_cache = None; // 退出浏览模式时清除缓存，去掉高亮
+            // 退出浏览模式时重新开启鼠标捕获
+            let _ = execute!(io::stdout(), EnableMouseCapture);
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if app.browse_msg_index > 0 {
