@@ -155,6 +155,8 @@ struct TodoApp {
     quit_input: String,
     /// 输入模式下的光标位置（字符索引）
     cursor_pos: usize,
+    /// 预览区滚动偏移
+    preview_scroll: u16,
 }
 
 #[derive(PartialEq)]
@@ -190,6 +192,7 @@ impl TodoApp {
             filter: 0,
             quit_input: String::new(),
             cursor_pos: 0,
+            preview_scroll: 0,
         }
     }
 
@@ -409,14 +412,41 @@ fn run_todo_tui_internal() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = TodoApp::new();
+    // 记录上一次的输入内容长度，用于检测输入变化并重置预览滚动
+    let mut last_input_len: usize = 0;
 
     loop {
         // 渲染界面
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
+        // 检测输入内容变化，重置预览区滚动
+        // 当输入内容变化时重置滚动，让用户看到最新输入的内容
+        let current_input_len = app.input.chars().count();
+        if current_input_len != last_input_len {
+            app.preview_scroll = 0;
+            last_input_len = current_input_len;
+        }
+
         // 处理输入事件
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
+                // Alt+↑/↓ 预览区滚动（在 Adding/Editing 模式下）
+                if (app.mode == AppMode::Adding || app.mode == AppMode::Editing)
+                    && key.modifiers.contains(KeyModifiers::ALT)
+                {
+                    match key.code {
+                        KeyCode::Down => {
+                            app.preview_scroll = app.preview_scroll.saturating_add(1);
+                            continue;
+                        }
+                        KeyCode::Up => {
+                            app.preview_scroll = app.preview_scroll.saturating_sub(1);
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+
                 match app.mode {
                     AppMode::Normal => {
                         if handle_normal_mode(&mut app, key) {
@@ -445,15 +475,35 @@ fn run_todo_tui_internal() -> io::Result<()> {
 fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     let size = f.area();
 
-    // 整体布局: 标题栏 + 列表区 + 状态栏 + 帮助栏
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
+    // 判断是否需要显示预览区（只在 Adding/Editing 模式下显示，Normal 模式不显示）
+    // 预览区用于显示正在输入的内容，当内容超出输入框显示宽度时自动显示
+    let needs_preview = if app.mode == AppMode::Adding || app.mode == AppMode::Editing {
+        // 输入内容不为空时显示预览区
+        !app.input.is_empty()
+    } else {
+        false
+    };
+
+    // 整体布局: 标题栏 + 列表区 + [预览区] + 状态栏 + 帮助栏
+    let constraints = if needs_preview {
+        vec![
+            Constraint::Length(3),      // 标题栏
+            Constraint::Percentage(55), // 列表区
+            Constraint::Min(5),         // 预览区
+            Constraint::Length(3),      // 状态/输入栏
+            Constraint::Length(2),      // 帮助栏
+        ]
+    } else {
+        vec![
             Constraint::Length(3), // 标题栏
             Constraint::Min(5),    // 列表区
             Constraint::Length(3), // 状态/输入栏
             Constraint::Length(2), // 帮助栏
-        ])
+        ]
+    };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
         .split(size);
 
     // ========== 标题栏 ==========
@@ -553,6 +603,15 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                 Span::styled("  ?            ", Style::default().fg(Color::Yellow)),
                 Span::raw("显示此帮助"),
             ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  添加/编辑模式下：",
+                Style::default().fg(Color::Gray),
+            )),
+            Line::from(vec![
+                Span::styled("  Alt+↓/↑      ", Style::default().fg(Color::Yellow)),
+                Span::raw("预览区滚动（长文本输入时）"),
+            ]),
         ];
         let help_block = Block::default()
             .borders(Borders::ALL)
@@ -642,6 +701,61 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         };
     }
 
+    // ========== 预览区（只在 Adding/Editing 模式下显示，预览用户输入内容） ==========
+    let (_preview_chunk_idx, status_chunk_idx, help_chunk_idx) = if needs_preview {
+        // 有预览区时的索引
+        // 预览区显示用户正在输入的内容
+        let input_content = &app.input;
+        // 预览区内部可用宽度（去掉左右边框各 1 列）
+        let preview_inner_w = (chunks[2].width.saturating_sub(2)) as usize;
+        // 预览区内部可用高度（去掉上下边框各 1 行）
+        let preview_inner_h = chunks[2].height.saturating_sub(2) as u16;
+
+        // 计算总 wrap 行数
+        let total_wrapped = count_wrapped_lines(input_content, preview_inner_w) as u16;
+        let max_scroll = total_wrapped.saturating_sub(preview_inner_h);
+        let clamped_scroll = app.preview_scroll.min(max_scroll);
+
+        // 构建标题
+        let mode_label = match app.mode {
+            AppMode::Adding => "新待办",
+            AppMode::Editing => "编辑中",
+            _ => "预览",
+        };
+        let title = if total_wrapped > preview_inner_h {
+            format!(
+                " 📖 {} 预览 [{}/{}行] Alt+↓/↑滚动 ",
+                mode_label,
+                clamped_scroll + preview_inner_h,
+                total_wrapped
+            )
+        } else {
+            format!(" 📖 {} 预览 ", mode_label)
+        };
+
+        let preview_block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .title_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .border_style(Style::default().fg(Color::Cyan));
+
+        use ratatui::widgets::Wrap;
+        let preview = Paragraph::new(input_content.clone())
+            .block(preview_block)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false })
+            .scroll((clamped_scroll, 0));
+        f.render_widget(preview, chunks[2]);
+        (2, 3, 4)
+    } else {
+        // 无预览区时的索引
+        (1, 2, 3)
+    };
+
     // ========== 状态/输入栏 ==========
     match &app.mode {
         AppMode::Adding => {
@@ -661,7 +775,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .border_style(Style::default().fg(Color::Green))
                     .title(" 添加模式 (Enter 确认 / Esc 取消 / ←→ 移动光标) "),
             );
-            f.render_widget(input_widget, chunks[2]);
+            f.render_widget(input_widget, chunks[status_chunk_idx]);
         }
         AppMode::Editing => {
             let (before, cursor_ch, after) = split_input_at_cursor(&app.input, app.cursor_pos);
@@ -680,7 +794,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .border_style(Style::default().fg(Color::Yellow))
                     .title(" 编辑模式 (Enter 确认 / Esc 取消 / ←→ 移动光标) "),
             );
-            f.render_widget(input_widget, chunks[2]);
+            f.render_widget(input_widget, chunks[status_chunk_idx]);
         }
         AppMode::ConfirmDelete => {
             let msg = if let Some(real_idx) = app.selected_real_index() {
@@ -728,7 +842,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
             " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | y 复制 | f 过滤 | s 保存 | ? 帮助 | q 退出"
         }
         AppMode::Adding | AppMode::Editing => {
-            " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾"
+            " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾 | Alt+↓/↑ 预览滚动"
         }
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
         AppMode::Help => " 按任意键返回",
@@ -737,7 +851,7 @@ fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         help_text,
         Style::default().fg(Color::DarkGray),
     )));
-    f.render_widget(help_widget, chunks[3]);
+    f.render_widget(help_widget, chunks[help_chunk_idx]);
 }
 
 /// 正常模式按键处理，返回 true 表示退出
@@ -985,6 +1099,25 @@ fn display_width(s: &str) -> usize {
             }
         })
         .sum()
+}
+
+/// 计算字符串在指定列宽下换行后的行数（使用 unicode_width 精确计算）
+fn count_wrapped_lines(s: &str, col_width: usize) -> usize {
+    if col_width == 0 || s.is_empty() {
+        return 1;
+    }
+    let mut lines = 1usize;
+    let mut current_width = 0usize;
+    for c in s.chars() {
+        let char_width = if c.is_ascii() { 1 } else { 2 };
+        if current_width + char_width > col_width {
+            lines += 1;
+            current_width = char_width;
+        } else {
+            current_width += char_width;
+        }
+    }
+    lines
 }
 
 /// 将字符串截断到指定的显示宽度，超出部分用 ".." 替代

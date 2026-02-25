@@ -70,6 +70,20 @@ pub struct ChatApp {
     pub auto_scroll: bool,
     /// 当前主题
     pub theme: Theme,
+    /// 归档列表（缓存）
+    pub archives: Vec<super::archive::ChatArchive>,
+    /// 归档列表选中索引
+    pub archive_list_index: usize,
+    /// 归档确认模式的默认名称
+    pub archive_default_name: String,
+    /// 归档确认模式的用户自定义名称
+    pub archive_custom_name: String,
+    /// 归档确认模式是否正在编辑名称
+    pub archive_editing_name: bool,
+    /// 归档确认模式的光标位置
+    pub archive_edit_cursor: usize,
+    /// 还原确认模式：是否需要确认当前会话有消息
+    pub restore_confirm_needed: bool,
 }
 
 /// 消息渲染行缓存
@@ -123,6 +137,10 @@ pub enum ChatMode {
     Help,
     /// 配置编辑模式
     Config,
+    /// 归档确认模式（确认归档名称）
+    ArchiveConfirm,
+    /// 归档列表模式（查看和还原归档）
+    ArchiveList,
 }
 
 /// 配置编辑界面的字段列表
@@ -171,6 +189,13 @@ impl ChatApp {
             config_edit_cursor: 0,
             auto_scroll: true,
             theme,
+            archives: Vec::new(),
+            archive_list_index: 0,
+            archive_default_name: String::new(),
+            archive_custom_name: String::new(),
+            archive_editing_name: false,
+            archive_edit_cursor: 0,
+            restore_confirm_needed: false,
         }
     }
 
@@ -484,5 +509,89 @@ impl ChatApp {
         self.scroll_offset = self.scroll_offset.saturating_add(3);
         // 注意：scroll_offset 可能超过 max_scroll，绘制时会校正。
         // 如果用户滚到了底部（offset >= max_scroll），在绘制时会恢复 auto_scroll。
+    }
+
+    // ========== 归档相关方法 ==========
+
+    /// 开始归档确认流程
+    pub fn start_archive_confirm(&mut self) {
+        use super::archive::generate_default_archive_name;
+        self.archive_default_name = generate_default_archive_name();
+        self.archive_custom_name = String::new();
+        self.archive_editing_name = false;
+        self.archive_edit_cursor = 0;
+        self.mode = ChatMode::ArchiveConfirm;
+    }
+
+    /// 开始还原流程（加载归档列表）
+    pub fn start_archive_list(&mut self) {
+        use super::archive::list_archives;
+        self.archives = list_archives();
+        self.archive_list_index = 0;
+        self.restore_confirm_needed = false;
+        self.mode = ChatMode::ArchiveList;
+    }
+
+    /// 执行归档
+    pub fn do_archive(&mut self, name: &str) {
+        use super::archive::create_archive;
+
+        match create_archive(name, self.session.messages.clone()) {
+            Ok(_) => {
+                // 归档成功后清空当前会话
+                self.clear_session();
+                self.show_toast(format!("对话已归档: {}", name), false);
+            }
+            Err(e) => {
+                self.show_toast(e, true);
+            }
+        }
+        self.mode = ChatMode::Chat;
+    }
+
+    /// 执行还原归档
+    pub fn do_restore(&mut self) {
+        use super::archive::restore_archive;
+
+        if let Some(archive) = self.archives.get(self.archive_list_index) {
+            match restore_archive(&archive.name) {
+                Ok(messages) => {
+                    // 清空当前会话
+                    self.session.messages = messages;
+                    self.scroll_offset = u16::MAX;
+                    self.msg_lines_cache = None;
+                    self.input.clear();
+                    self.cursor_pos = 0;
+                    let _ = save_chat_session(&self.session);
+                    self.show_toast(format!("已还原归档: {}", archive.name), false);
+                }
+                Err(e) => {
+                    self.show_toast(e, true);
+                }
+            }
+        }
+        self.mode = ChatMode::Chat;
+    }
+
+    /// 删除选中的归档
+    pub fn do_delete_archive(&mut self) {
+        use super::archive::delete_archive;
+
+        if let Some(archive) = self.archives.get(self.archive_list_index) {
+            match delete_archive(&archive.name) {
+                Ok(_) => {
+                    self.show_toast(format!("归档已删除: {}", archive.name), false);
+                    // 刷新归档列表
+                    self.archives = super::archive::list_archives();
+                    if self.archive_list_index >= self.archives.len() && self.archive_list_index > 0
+                    {
+                        self.archive_list_index -= 1;
+                    }
+                }
+                Err(e) => {
+                    self.show_toast(e, true);
+                }
+            }
+        }
     }
 }

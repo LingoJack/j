@@ -84,3 +84,8 @@ md_render:
 fmt:
 	@echo "🧹 Formatting code..."
 	@cargo fmt
+
+.PHONY: run
+run: current_dir
+	@echo "🚀 Running..."
+	@cargo run

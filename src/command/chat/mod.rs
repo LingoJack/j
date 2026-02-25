@@ -1,5 +1,6 @@
 pub mod api;
 pub mod app;
+pub mod archive;
 pub mod handler;
 pub mod markdown;
 pub mod model;
