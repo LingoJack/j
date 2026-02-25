@@ -713,7 +713,6 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
 }
 
 /// 绘制配置编辑界面
-
 pub fn handle_select_model(app: &mut ChatApp, key: KeyEvent) {
     let count = app.agent_config.providers.len();
     match key.code {

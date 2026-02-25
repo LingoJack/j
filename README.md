@@ -1,6 +1,6 @@
 # work-copilot Rust 重构进度
 
-> 📅 最后更新: 2026-02-12
+> 📅 最后更新: 2026-02-25
 > 🔖 版本: v22.0.0
 > 🖥️ 平台: macOS ARM64 (M1/M2/M3/M4)
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
@@ -120,6 +120,7 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
 | **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo <content>`；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
 | **Phase 23** | AI 对话系统（chat）：内置 TUI AI 对话界面，支持多模型提供方切换（OpenAI/DeepSeek 等）、流式/整体输出切换（Ctrl+S）、Markdown 渲染（标题/加粗/斜体/代码块语法高亮/表格/列表/引用块）、消息浏览模式（Ctrl+B，↑↓选择 y/Enter 复制）、对话持久化；代码高亮支持 Rust/Python/JS/Go/Java/Bash/C/SQL/Ruby/YAML/CSS/Dockerfile 等语言，Bash 额外支持 `$VAR`/`${VAR}` 变量高亮；渲染行缓存 + 可见区域裁剪优化性能 | ✅ 完成 |
+| **Phase 24** | AI 对话系统增强：可视化配置界面（Ctrl+E）支持 Provider 增删改、全局设置编辑（system_prompt/max_history_messages/stream_mode）；6 种主题风格（dark/light/dracula/gruvbox/monokai/nord），实时切换无需重启；历史消息数量限制（max_history_messages）防止 token 超限 | ✅ 完成 |
 
 ---
 
@@ -897,7 +898,9 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
   ],
   "active_index": 0,
   "system_prompt": "你是一个有用的助手。",
-  "stream_mode": true
+  "stream_mode": true,
+  "max_history_messages": 20,
+  "theme": "dark"
 }
 ```
 
@@ -907,6 +910,26 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 | `active_index` | 当前使用的 provider 索引 |
 | `system_prompt` | 系统提示词（可选，每轮对话前注入） |
 | `stream_mode` | `true` 流式输出（逐字显示），`false` 整体输出（等待完整回复） |
+| `max_history_messages` | 发送给 API 的历史消息数量上限（默认 20，防止 token 超限） |
+| `theme` | 界面主题风格（`dark`/`light`/`dracula`/`gruvbox`/`monokai`/`nord`） |
+
+### 配置界面
+
+按 `Ctrl+E` 进入可视化配置界面：
+
+| 按键 | 功能 |
+|------|------|
+| `↑` / `k` | 向上移动光标 |
+| `↓` / `j` | 向下移动光标 |
+| `Tab` / `→` | 切换到下一个 Provider |
+| `Shift+Tab` / `←` | 切换到上一个 Provider |
+| `Enter` | 进入编辑模式（修改当前字段） |
+| `a` | 新增 Provider |
+| `d` | 删除当前 Provider |
+| `s` | 将当前 Provider 设为活跃模型 |
+| `Esc` | 保存配置并返回对话 |
+
+> **提示**：`stream_mode` 和 `theme` 字段直接按 `Enter` 切换，无需手动输入
 
 ### TUI 快捷键
 
@@ -914,14 +937,27 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 |------|------|
 | `Enter` | 发送消息 |
 | `↑/↓` | 滚动对话 |
-| `Ctrl+T` | 切换模型 |
-| `Ctrl+L` | 清空对话 |
+| `Ctrl+T` | 切换模型提供方 |
+| `Ctrl+L` | 清空对话历史 |
 | `Ctrl+Y` | 快速复制最后一条 AI 回复 |
-| `Ctrl+B` | 消息浏览模式（↑↓选择，y/Enter复制） |
+| `Ctrl+B` | 消息浏览模式（↑↓ 选择，y/Enter 复制） |
 | `Ctrl+S` | 切换流式/整体输出（默认流式） |
-| `Ctrl+E` | 打开配置界面（可视化编辑模型配置） |
-| `?` | 帮助 |
-| `Esc` | 退出 |
+| `Ctrl+E` | 打开配置界面（可视化编辑模型配置、主题等） |
+| `?` | 显示帮助 |
+| `Esc` | 退出对话 |
+
+### 主题风格
+
+支持 6 种主题风格，可在配置界面（`Ctrl+E`）中选中 `theme` 字段按 `Enter` 循环切换：
+
+| 主题 | 说明 |
+|------|------|
+| `dark` | 深色主题（默认），适合深色终端 |
+| `light` | 浅色主题，适合浅色终端 |
+| `dracula` | Dracula 配色方案 |
+| `gruvbox` | Gruvbox 复古配色 |
+| `monokai` | Monokai 经典配色 |
+| `nord` | Nord 北欧冷色调配色 |
 
 ### Markdown 渲染
 

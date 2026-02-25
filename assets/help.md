@@ -299,11 +299,44 @@ rm -rf ~/.jdata
   ],
   "active_index": 0,
   "system_prompt": "你是一个有用的助手。",
-  "stream_mode": true
+  "stream_mode": true,
+  "max_history_messages": 20,
+  "theme": "dark"
 }
 ```
 
 > 支持配置多个模型提供方，可在对话中通过 `Ctrl+T` 切换
+
+### 配置界面
+
+按 `Ctrl+E` 进入可视化配置界面，可编辑模型提供方和全局设置：
+
+| 按键 | 功能 |
+|------|------|
+| `↑` / `k` | 向上移动光标 |
+| `↓` / `j` | 向下移动光标 |
+| `Tab` / `→` | 切换到下一个 Provider |
+| `Shift+Tab` / `←` | 切换到上一个 Provider |
+| `Enter` | 进入编辑模式（修改当前字段） |
+| `a` | 新增 Provider |
+| `d` | 删除当前 Provider |
+| `s` | 将当前 Provider 设为活跃模型 |
+| `Esc` | 保存配置并返回对话 |
+
+> **提示**：`stream_mode` 和 `theme` 字段直接按 `Enter` 切换，无需手动输入
+
+### 主题风格
+
+支持以下主题（在配置界面中选中 `theme` 字段按 `Enter` 循环切换）：
+
+| 主题 | 说明 |
+|------|------|
+| `dark` | 深色主题（默认） |
+| `light` | 浅色主题 |
+| `dracula` | Dracula 配色 |
+| `gruvbox` | Gruvbox 配色 |
+| `monokai` | Monokai 配色 |
+| `nord` | Nord 配色 |
 
 ### 对话界面快捷键
 
