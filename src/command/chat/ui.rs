@@ -235,23 +235,26 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             app.auto_scroll = true;
         }
     } else {
-        // 浏览模式：自动滚动到选中消息的位置
-        if let Some(target_line) = cached
+        // 浏览模式：scroll_offset 由 msg_start + browse_scroll_offset 决定
+        // browse_scroll_offset 是相对于选中消息起始行的偏移（A/D 键控制）
+        if let Some(msg_start) = cached
             .msg_start_lines
             .iter()
             .find(|(idx, _)| *idx == app.browse_msg_index)
             .map(|(_, line)| *line as u16)
         {
-            // 确保选中消息在可视区域内
-            if target_line < app.scroll_offset {
-                app.scroll_offset = target_line;
-            } else if target_line >= app.scroll_offset + visible_height {
-                app.scroll_offset = target_line.saturating_sub(visible_height / 3);
+            // 计算当前消息的行数，限制向下滚动的上限
+            let msg_line_count = cached
+                .per_msg_lines
+                .get(app.browse_msg_index)
+                .map(|c| c.lines.len())
+                .unwrap_or(1) as u16;
+            let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
+            if app.browse_scroll_offset > msg_max_scroll {
+                app.browse_scroll_offset = msg_max_scroll;
             }
-            // 限制滚动范围
-            if app.scroll_offset > max_scroll {
-                app.scroll_offset = max_scroll;
-            }
+            // 全局滚动位置 = 消息起始行 + 消息内偏移，不超过全局最大值
+            app.scroll_offset = (msg_start + app.browse_scroll_offset).min(max_scroll);
         }
     }
 

@@ -52,6 +52,8 @@ pub struct ChatApp {
     pub msg_lines_cache: Option<MsgLinesCache>,
     /// 消息浏览模式中选中的消息索引
     pub browse_msg_index: usize,
+    /// 浏览模式下当前消息内部的滚动偏移（相对于消息起始行，A/D 控制）
+    pub browse_scroll_offset: u16,
     /// 流式节流：上次实际渲染流式内容时的长度
     pub last_rendered_streaming_len: usize,
     /// 流式节流：上次实际渲染流式内容的时间
@@ -180,6 +182,7 @@ impl ChatApp {
             streaming_content: Arc::new(Mutex::new(String::new())),
             msg_lines_cache: None,
             browse_msg_index: 0,
+            browse_scroll_offset: 0,
             last_rendered_streaming_len: 0,
             last_stream_render_time: std::time::Instant::now(),
             config_provider_idx: 0,

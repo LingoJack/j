@@ -212,6 +212,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         if !app.session.messages.is_empty() {
             // 默认选中最后一条消息
             app.browse_msg_index = app.session.messages.len() - 1;
+            app.browse_scroll_offset = 0; // 重置消息内偏移
             app.mode = ChatMode::Browse;
             app.msg_lines_cache = None; // 清除缓存以触发高亮重绘
             // 进入浏览模式时关闭鼠标捕获，让终端可以原生选中文本
@@ -371,14 +372,23 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Up | KeyCode::Char('k') => {
             if app.browse_msg_index > 0 {
                 app.browse_msg_index -= 1;
+                app.browse_scroll_offset = 0; // 切换消息时从头显示
                 app.msg_lines_cache = None; // 选中变化时清缓存
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if app.browse_msg_index < msg_count - 1 {
                 app.browse_msg_index += 1;
+                app.browse_scroll_offset = 0; // 切换消息时从头显示
                 app.msg_lines_cache = None; // 选中变化时清缓存
             }
+        }
+        // A/D 细粒度滚动当前消息内容（每次 3 行）
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            app.browse_scroll_offset = app.browse_scroll_offset.saturating_sub(3);
+        }
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            app.browse_scroll_offset = app.browse_scroll_offset.saturating_add(3);
         }
         KeyCode::Enter | KeyCode::Char('y') => {
             // 复制选中消息的原始内容到剪切板
