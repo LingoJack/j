@@ -2,6 +2,7 @@
 name = "j-cli"
 version = "12.1.10"
 edition = "2024"
+rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
 description = "A fast CLI tool for alias management, daily reports, and productivity"
 license = "MIT"
