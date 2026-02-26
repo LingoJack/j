@@ -26,6 +26,11 @@ jobs:
 
       - name: Build
         run: cargo build --release --target aarch64-apple-darwin
+        env:
+          # 禁用 ARM i8mm 指令集优化，避免编译错误
+          # whisper.cpp 会自动检测并使用合适的 NEON 优化
+          CFLAGS: -march=armv8-a
+          CXXFLAGS: -march=armv8-a
 
       - name: Package
         run: |
