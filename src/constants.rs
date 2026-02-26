@@ -258,13 +258,13 @@ pub const LIST_ALL: &str = "all";
 // ========== 交互模式 ==========
 
 /// 欢迎语
-pub const WELCOME_MESSAGE: &str = "Welcome to use work copilot 🚀 ~";
+pub const WELCOME_MESSAGE: &str = "Welcome to use j-cli 🚀 ~";
 
 /// Shell 命令前缀字符
 pub const SHELL_PREFIX: char = '!';
 
 /// 交互模式提示符
-pub const INTERACTIVE_PROMPT: &str = "copilot >";
+pub const INTERACTIVE_PROMPT: &str = "j >";
 
 /// 历史记录文件名
 pub const HISTORY_FILE: &str = "history.txt";
