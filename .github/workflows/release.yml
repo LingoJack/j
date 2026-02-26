@@ -21,6 +21,9 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
+      - name: Install whisper-rs dependencies
+        run: brew install cmake
+
       - name: Build
         run: cargo build --release --target aarch64-apple-darwin
 
