@@ -11,6 +11,27 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     // 内容区宽度 = max_width - 2（左侧 "  " 缩进由外层负责）
     let content_width = max_width.saturating_sub(2);
 
+    // 预处理：修复 **"text"** 加粗不生效的问题。
+    // CommonMark 规范规定：左侧分隔符 ** 后面是标点（如 " U+201C）且前面是字母（如中文字符）时，
+    // 不被识别为有效的加粗开始标记。
+    // 解决方案：在 ** 与中文引号之间插入零宽空格（U+200B），使 ** 后面不再紧跟标点，
+    // 从而满足 CommonMark 规范。零宽空格在终端中不可见，不影响显示。
+    let md_owned;
+    let md = if md.contains("**\u{201C}")
+        || md.contains("**\u{2018}")
+        || md.contains("\u{201D}**")
+        || md.contains("\u{2019}**")
+    {
+        md_owned = md
+            .replace("**\u{201C}", "**\u{200B}\u{201C}") // **" -> **​"
+            .replace("**\u{2018}", "**\u{200B}\u{2018}") // **' -> **​'
+            .replace("\u{201D}**", "\u{201D}\u{200B}**") // "** -> "​**
+            .replace("\u{2019}**", "\u{2019}\u{200B}**"); // '** -> '​**
+        &md_owned as &str
+    } else {
+        md
+    };
+
     let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES;
     let parser = Parser::new_ext(md, options);
 
@@ -247,7 +268,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     current_cell.push_str(&text);
                 } else {
                     let style = *style_stack.last().unwrap_or(&base_style);
-                    let text_str = text.to_string();
+                    // 过滤掉预处理时插入的零宽空格（U+200B），避免渲染到终端
+                    let text_str = text.to_string().replace('\u{200B}', "");
 
                     // 标题：添加可视化符号前缀代替 # 标记
                     if let Some(level) = heading_level {
