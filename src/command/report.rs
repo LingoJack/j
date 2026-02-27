@@ -230,6 +230,116 @@ fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
     }
 }
 
+/// 将一条内容写入日报（供外部模块调用，如 todo 完成时联动写入）
+/// 返回 true 表示写入成功
+/// 注意：此函数静默执行，不输出任何 info!/error!，适合在 TUI raw mode 下调用
+pub fn write_to_report(content: &str, config: &mut YamlConfig) -> bool {
+    let report_path = match get_report_path_silent(config) {
+        Some(p) => p,
+        None => return false,
+    };
+
+    let report_file = Path::new(&report_path);
+    let config_path = get_settings_json_path(&report_path);
+
+    // 静默加载 JSON 配置并同步到 YAML（不打印 info）
+    load_config_from_json_silent(&config_path, config);
+
+    let now = Local::now().date_naive();
+
+    let week_num = config
+        .get_property(section::REPORT, config_key::WEEK_NUM)
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(1);
+
+    let last_day_str = config
+        .get_property(section::REPORT, config_key::LAST_DAY)
+        .cloned()
+        .unwrap_or_default();
+
+    let last_day = parse_date(&last_day_str);
+
+    match last_day {
+        Some(last_day) => {
+            if now > last_day {
+                let next_last_day = now + chrono::Duration::days(6);
+                let new_week_title = format!(
+                    "# Week{}[{}-{}]\n",
+                    week_num,
+                    now.format(DATE_FORMAT),
+                    next_last_day.format(DATE_FORMAT)
+                );
+                update_config_files_silent(week_num + 1, &next_last_day, &config_path, config);
+                append_to_file(report_file, &new_week_title);
+            }
+        }
+        None => {
+            return false;
+        }
+    }
+
+    let today_str = now.format(SIMPLE_DATE_FORMAT);
+    let log_entry = format!("- 【{}】 {}\n", today_str, content);
+    append_to_file(report_file, &log_entry);
+    true
+}
+
+/// 获取日报文件路径（静默版本，不输出 info）
+fn get_report_path_silent(config: &YamlConfig) -> Option<String> {
+    let report_path = config.report_file_path();
+
+    if let Some(parent) = report_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if !report_path.exists() {
+        if fs::write(&report_path, "").is_err() {
+            return None;
+        }
+    }
+
+    Some(report_path.to_string_lossy().to_string())
+}
+
+/// 静默更新配置文件（YAML + JSON），不输出 info
+fn update_config_files_silent(
+    week_num: i32,
+    last_day: &NaiveDate,
+    config_path: &Path,
+    config: &mut YamlConfig,
+) {
+    let last_day_str = last_day.format(DATE_FORMAT).to_string();
+
+    config.set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string());
+    config.set_property(section::REPORT, config_key::LAST_DAY, &last_day_str);
+
+    if config_path.exists() {
+        let json = serde_json::json!({
+            "week_num": week_num,
+            "last_day": last_day_str
+        });
+        let _ = fs::write(config_path, json.to_string());
+    }
+}
+
+/// 静默从 JSON 配置文件读取并同步到 YAML，不输出 info
+fn load_config_from_json_silent(config_path: &Path, config: &mut YamlConfig) {
+    if !config_path.exists() {
+        return;
+    }
+
+    if let Ok(content) = fs::read_to_string(config_path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            let last_day = json.get("last_day").and_then(|v| v.as_str()).unwrap_or("");
+            let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
+
+            if let Some(last_day_date) = parse_date(last_day) {
+                update_config_files_silent(week_num as i32, &last_day_date, config_path, config);
+            }
+        }
+    }
+}
+
 /// 写入日报
 fn handle_daily_report(content: &str, config: &mut YamlConfig) {
     let report_path = match get_report_path(config) {

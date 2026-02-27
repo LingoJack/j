@@ -1,3 +1,4 @@
+use crate::command::report;
 use crate::config::YamlConfig;
 use crate::error;
 use chrono::Local;
@@ -109,6 +110,8 @@ pub struct TodoApp {
     pub cursor_pos: usize,
     /// 预览区滚动偏移
     pub preview_scroll: u16,
+    /// 待写入日报的内容（toggle done 后暂存）
+    pub report_pending_content: Option<String>,
 }
 
 #[derive(PartialEq)]
@@ -121,6 +124,8 @@ pub enum AppMode {
     Editing,
     /// 确认删除
     ConfirmDelete,
+    /// 确认写入日报
+    ConfirmReport,
     /// 显示帮助
     Help,
 }
@@ -145,6 +150,7 @@ impl TodoApp {
             quit_input: String::new(),
             cursor_pos: 0,
             preview_scroll: 0,
+            report_pending_content: None,
         }
     }
 
@@ -221,7 +227,9 @@ impl TodoApp {
             item.done = !item.done;
             if item.done {
                 item.done_at = Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
-                self.message = Some("✅ 已标记为完成".to_string());
+                // 暂存内容，进入确认写入日报模式
+                self.report_pending_content = Some(item.content.clone());
+                self.mode = AppMode::ConfirmReport;
             } else {
                 item.done_at = None;
                 self.message = Some("⬜ 已标记为未完成".to_string());
@@ -527,6 +535,36 @@ pub fn handle_confirm_delete(app: &mut TodoApp, key: KeyEvent) {
 pub fn handle_help_mode(app: &mut TodoApp, _key: KeyEvent) {
     app.mode = AppMode::Normal;
     app.message = None;
+}
+
+/// 确认写入日报按键处理
+pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut YamlConfig) {
+    match key.code {
+        KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
+            if let Some(content) = app.report_pending_content.take() {
+                let write_ok = report::write_to_report(&content, config);
+                // 先保存 todo（save 会覆盖 message）
+                if app.is_dirty() {
+                    if save_todo_list(&app.list) {
+                        app.snapshot = app.list.clone();
+                    }
+                }
+                // 保存后再设置最终 message
+                if write_ok {
+                    app.message = Some("✅ 已标记为完成，已写入日报并保存".to_string());
+                } else {
+                    app.message = Some("✅ 已标记为完成，但写入日报失败".to_string());
+                }
+            }
+            app.mode = AppMode::Normal;
+        }
+        _ => {
+            // 其他任意键跳过，不写入日报
+            app.report_pending_content = None;
+            app.message = Some("✅ 已标记为完成".to_string());
+            app.mode = AppMode::Normal;
+        }
+    }
 }
 
 // ========== 工具函数 ==========

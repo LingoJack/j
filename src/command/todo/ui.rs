@@ -355,6 +355,32 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
             );
             f.render_widget(confirm_widget, chunks[2]);
         }
+        AppMode::ConfirmReport => {
+            let inner_width = chunks[status_chunk_idx].width.saturating_sub(2) as usize;
+            let msg = if let Some(ref content) = app.report_pending_content {
+                // 预留前缀和后缀的显示宽度
+                let prefix = " 写入日报: \"";
+                let suffix = "\" ？ (Enter/y 写入, 其他跳过)";
+                let prefix_w = display_width(prefix);
+                let suffix_w = display_width(suffix);
+                let budget = inner_width.saturating_sub(prefix_w + suffix_w);
+                let truncated = truncate_to_width(content, budget);
+                format!("{}{}{}", prefix, truncated, suffix)
+            } else {
+                " 没有待写入的内容".to_string()
+            };
+            let confirm_widget = Paragraph::new(Line::from(Span::styled(
+                msg,
+                Style::default().fg(Color::Cyan),
+            )))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan))
+                    .title(" 📝 写入日报 "),
+            );
+            f.render_widget(confirm_widget, chunks[status_chunk_idx]);
+        }
         AppMode::Normal | AppMode::Help => {
             let msg = app.message.as_deref().unwrap_or("按 ? 查看完整帮助");
             let dirty_indicator = if app.is_dirty() { " [未保存]" } else { "" };
@@ -383,6 +409,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
             " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾 | Alt+↓/↑ 预览滚动"
         }
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
+        AppMode::ConfirmReport => " Enter/y 写入日报并保存 | 其他键 跳过",
         AppMode::Help => " 按任意键返回",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(

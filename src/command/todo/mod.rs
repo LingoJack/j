@@ -4,8 +4,8 @@ pub mod ui;
 use crate::config::YamlConfig;
 use crate::{error, info};
 use app::{
-    AppMode, TodoApp, TodoItem, handle_confirm_delete, handle_help_mode, handle_input_mode,
-    handle_normal_mode, load_todo_list, save_todo_list,
+    AppMode, TodoApp, TodoItem, handle_confirm_delete, handle_confirm_report, handle_help_mode,
+    handle_input_mode, handle_normal_mode, load_todo_list, save_todo_list,
 };
 use chrono::Local;
 use crossterm::{
@@ -18,9 +18,9 @@ use std::io;
 use ui::draw_ui;
 
 /// 处理 todo 命令: j todo [content...]
-pub fn handle_todo(content: &[String], _config: &YamlConfig) {
+pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
-        run_todo_tui();
+        run_todo_tui(config);
         return;
     }
 
@@ -48,8 +48,8 @@ pub fn handle_todo(content: &[String], _config: &YamlConfig) {
 }
 
 /// 启动 TUI 待办管理界面
-fn run_todo_tui() {
-    match run_todo_tui_internal() {
+fn run_todo_tui(config: &mut YamlConfig) {
+    match run_todo_tui_internal(config) {
         Ok(_) => {}
         Err(e) => {
             error!("❌ TUI 启动失败: {}", e);
@@ -57,7 +57,7 @@ fn run_todo_tui() {
     }
 }
 
-fn run_todo_tui_internal() -> io::Result<()> {
+fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -105,6 +105,7 @@ fn run_todo_tui_internal() -> io::Result<()> {
                     AppMode::Adding => handle_input_mode(&mut app, key),
                     AppMode::Editing => handle_input_mode(&mut app, key),
                     AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
+                    AppMode::ConfirmReport => handle_confirm_report(&mut app, key, config),
                     AppMode::Help => handle_help_mode(&mut app, key),
                 }
             }
