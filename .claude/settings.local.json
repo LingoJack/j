@@ -1,4 +1,5 @@
 {
+  "language": "zh-CN",
   "permissions": {
     "allow": [
       "Bash(cargo check:*)",

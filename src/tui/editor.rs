@@ -821,6 +821,49 @@ fn count_wrapped_lines_unicode(s: &str, col_width: usize) -> usize {
     lines
 }
 
+/// 计算光标在指定列宽下 wrap 后所在的行号（0-based，基于 unicode_width）
+fn cursor_wrapped_line_unicode(s: &str, cursor_pos: usize, col_width: usize) -> u16 {
+    if col_width == 0 {
+        return 0;
+    }
+    let mut line: u16 = 0;
+    let mut current_width: usize = 0;
+    for (i, c) in s.chars().enumerate() {
+        if i == cursor_pos {
+            return line;
+        }
+        let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+        if char_width == 0 {
+            continue;
+        }
+        if current_width + char_width > col_width {
+            line += 1;
+            current_width = char_width;
+        } else {
+            current_width += char_width;
+        }
+    }
+    // cursor_pos == chars.len() (cursor at end)
+    line
+}
+
+/// 将字符串按光标位置（字符索引）拆分为三部分：光标前、光标字符、光标后
+fn split_line_at_cursor(line: &str, cursor_col: usize) -> (String, String, String) {
+    let chars: Vec<char> = line.chars().collect();
+    let before: String = chars[..cursor_col.min(chars.len())].iter().collect();
+    let cursor_ch = if cursor_col < chars.len() {
+        chars[cursor_col].to_string()
+    } else {
+        " ".to_string()
+    };
+    let after: String = if cursor_col < chars.len() {
+        chars[cursor_col + 1..].iter().collect()
+    } else {
+        String::new()
+    };
+    (before, cursor_ch, after)
+}
+
 /// 编辑器主循环
 fn run_editor_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
@@ -839,8 +882,8 @@ fn run_editor_loop(
     loop {
         let mode = &vim.mode.clone();
 
-        // 获取当前光标所在行的内容（用于预览区）
-        let cursor_row = textarea.cursor().0;
+        // 获取当前光标所在行的内容和列位置（用于预览区）
+        let (cursor_row, cursor_col) = textarea.cursor();
         let current_line_text: String = textarea
             .lines()
             .get(cursor_row)
@@ -903,8 +946,18 @@ fn run_editor_loop(
                 let total_wrapped =
                     count_wrapped_lines_unicode(&current_line_text, preview_inner_w) as u16;
                 let max_scroll = total_wrapped.saturating_sub(preview_inner_h);
-                // 钳制滚动偏移（防止越界）
-                let clamped_scroll = preview_scroll.min(max_scroll);
+
+                // 自动滚动到光标所在的 wrap 行可见
+                let cursor_wrap_line =
+                    cursor_wrapped_line_unicode(&current_line_text, cursor_col, preview_inner_w);
+                let auto_scroll = if cursor_wrap_line < preview_scroll {
+                    cursor_wrap_line
+                } else if cursor_wrap_line >= preview_scroll + preview_inner_h {
+                    cursor_wrap_line.saturating_sub(preview_inner_h - 1)
+                } else {
+                    preview_scroll
+                };
+                let clamped_scroll = auto_scroll.min(max_scroll);
 
                 let scroll_hint = if total_wrapped > preview_inner_h {
                     format!(
@@ -926,9 +979,19 @@ fn run_editor_loop(
                             .add_modifier(Modifier::BOLD),
                     )
                     .border_style(Style::default().fg(Color::Cyan));
-                let preview = Paragraph::new(current_line_text.clone())
+
+                // 构建带光标高亮的预览文本
+                let (before, cursor_ch, after) =
+                    split_line_at_cursor(&current_line_text, cursor_col);
+                let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+                let preview_text = vec![Line::from(vec![
+                    Span::styled(before, Style::default().fg(Color::White)),
+                    Span::styled(cursor_ch, cursor_style),
+                    Span::styled(after, Style::default().fg(Color::White)),
+                ])];
+
+                let preview = Paragraph::new(preview_text)
                     .block(preview_block)
-                    .style(Style::default().fg(Color::White))
                     .wrap(Wrap { trim: false })
                     .scroll((clamped_scroll, 0));
                 frame.render_widget(preview, chunks[1]);
