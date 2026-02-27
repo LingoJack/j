@@ -345,8 +345,8 @@ impl Theme {
             separator: Color::Rgb(50, 55, 70),
 
             // 气泡
-            bubble_ai: Color::Rgb(38, 38, 52),
-            bubble_ai_selected: Color::Rgb(48, 48, 68),
+            bubble_ai: Color::Rgb(28, 28, 38),
+            bubble_ai_selected: Color::Rgb(40, 40, 56),
             bubble_user: Color::Rgb(40, 70, 120),
             bubble_user_selected: Color::Rgb(55, 85, 140),
 
@@ -480,8 +480,8 @@ impl Theme {
             separator: Color::Rgb(55, 55, 55),
 
             // 气泡
-            bubble_ai: Color::Rgb(40, 40, 40),
-            bubble_ai_selected: Color::Rgb(50, 50, 55),
+            bubble_ai: Color::Rgb(34, 34, 34),
+            bubble_ai_selected: Color::Rgb(45, 45, 50),
             bubble_user: Color::Rgb(38, 65, 110),
             bubble_user_selected: Color::Rgb(50, 80, 130),
 
@@ -615,8 +615,8 @@ impl Theme {
             separator: Color::Rgb(210, 210, 220),
 
             // 气泡
-            bubble_ai: Color::Rgb(240, 240, 245),
-            bubble_ai_selected: Color::Rgb(225, 230, 240),
+            bubble_ai: Color::Rgb(244, 244, 248),
+            bubble_ai_selected: Color::Rgb(232, 235, 245),
             bubble_user: Color::Rgb(210, 230, 255),
             bubble_user_selected: Color::Rgb(190, 215, 250),
 
@@ -750,8 +750,8 @@ impl Theme {
             separator: Color::Rgb(67, 76, 94),      // nord2
 
             // 气泡
-            bubble_ai: Color::Rgb(59, 66, 82),          // nord1
-            bubble_ai_selected: Color::Rgb(67, 76, 94), // nord2
+            bubble_ai: Color::Rgb(50, 56, 68), // closer to nord0
+            bubble_ai_selected: Color::Rgb(59, 66, 82), // nord1
             bubble_user: Color::Rgb(52, 75, 110),
             bubble_user_selected: Color::Rgb(60, 85, 125),
 
@@ -885,8 +885,8 @@ impl Theme {
             separator: Color::Rgb(65, 65, 55),
 
             // 气泡
-            bubble_ai: Color::Rgb(49, 50, 44),
-            bubble_ai_selected: Color::Rgb(60, 62, 54),
+            bubble_ai: Color::Rgb(43, 44, 38),
+            bubble_ai_selected: Color::Rgb(55, 56, 48),
             bubble_user: Color::Rgb(55, 65, 85),
             bubble_user_selected: Color::Rgb(65, 78, 100),
 

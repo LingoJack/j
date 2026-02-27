@@ -265,25 +265,25 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     if let Some(level) = heading_level {
                         let (prefix, prefix_style) = match level {
                             1 => (
-                                ">> ",
+                                "◆ ",
                                 Style::default()
                                     .fg(theme.md_h1)
                                     .add_modifier(Modifier::BOLD),
                             ),
                             2 => (
-                                ">> ",
+                                "◇ ",
                                 Style::default()
                                     .fg(theme.md_h2)
                                     .add_modifier(Modifier::BOLD),
                             ),
                             3 => (
-                                "> ",
+                                "▸ ",
                                 Style::default()
                                     .fg(theme.md_h3)
                                     .add_modifier(Modifier::BOLD),
                             ),
                             _ => (
-                                "> ",
+                                "▹ ",
                                 Style::default()
                                     .fg(theme.md_h4)
                                     .add_modifier(Modifier::BOLD),
