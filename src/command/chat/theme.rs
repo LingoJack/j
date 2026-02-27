@@ -10,6 +10,10 @@ pub enum ThemeName {
     Light,
     #[serde(rename = "midnight")]
     Midnight,
+    #[serde(rename = "nord")]
+    Nord,
+    #[serde(rename = "monokai")]
+    Monokai,
 }
 
 impl Default for ThemeName {
@@ -22,7 +26,13 @@ impl Default for ThemeName {
 impl ThemeName {
     /// 获取所有主题名称列表（用于配置界面循环切换）
     pub fn all() -> &'static [ThemeName] {
-        &[ThemeName::Dark, ThemeName::Light, ThemeName::Midnight]
+        &[
+            ThemeName::Dark,
+            ThemeName::Light,
+            ThemeName::Midnight,
+            ThemeName::Nord,
+            ThemeName::Monokai,
+        ]
     }
 
     /// 切换到下一个主题
@@ -30,7 +40,9 @@ impl ThemeName {
         match self {
             ThemeName::Dark => ThemeName::Light,
             ThemeName::Light => ThemeName::Midnight,
-            ThemeName::Midnight => ThemeName::Dark,
+            ThemeName::Midnight => ThemeName::Nord,
+            ThemeName::Nord => ThemeName::Monokai,
+            ThemeName::Monokai => ThemeName::Dark,
         }
     }
 
@@ -40,6 +52,8 @@ impl ThemeName {
             ThemeName::Dark => "Dark",
             ThemeName::Light => "Light",
             ThemeName::Midnight => "Midnight（默认）",
+            ThemeName::Nord => "Nord",
+            ThemeName::Monokai => "Monokai",
         }
     }
 
@@ -49,6 +63,8 @@ impl ThemeName {
             "dark" => ThemeName::Dark,
             "light" => ThemeName::Light,
             "midnight" => ThemeName::Midnight,
+            "nord" => ThemeName::Nord,
+            "monokai" => ThemeName::Monokai,
             _ => ThemeName::default(),
         }
     }
@@ -59,6 +75,8 @@ impl ThemeName {
             ThemeName::Dark => "dark",
             ThemeName::Light => "light",
             ThemeName::Midnight => "midnight",
+            ThemeName::Nord => "nord",
+            ThemeName::Monokai => "monokai",
         }
     }
 }
@@ -304,6 +322,8 @@ impl Theme {
             ThemeName::Dark => Self::dark(),
             ThemeName::Light => Self::light(),
             ThemeName::Midnight => Self::midnight(),
+            ThemeName::Nord => Self::nord(),
+            ThemeName::Monokai => Self::monokai(),
         }
     }
 
@@ -337,7 +357,7 @@ impl Theme {
 
             // 文字
             text_normal: Color::Rgb(220, 220, 230),
-            text_bold: Color::Rgb(240, 210, 170),
+            text_bold: Color::Rgb(220, 245, 230),
             text_dim: Color::Rgb(140, 140, 170),
             text_very_dim: Color::Rgb(80, 80, 100),
             text_white: Color::White,
@@ -472,7 +492,7 @@ impl Theme {
 
             // 文字
             text_normal: Color::Rgb(212, 212, 212),
-            text_bold: Color::Rgb(230, 200, 160),
+            text_bold: Color::Rgb(210, 240, 220),
             text_dim: Color::Rgb(128, 128, 128),
             text_very_dim: Color::Rgb(80, 80, 80),
             text_white: Color::White,
@@ -607,7 +627,7 @@ impl Theme {
 
             // 文字
             text_normal: Color::Rgb(40, 40, 50),
-            text_bold: Color::Rgb(150, 90, 30),
+            text_bold: Color::Rgb(30, 100, 60),
             text_dim: Color::Rgb(120, 120, 140),
             text_very_dim: Color::Rgb(170, 170, 180),
             text_white: Color::Rgb(40, 40, 50),
@@ -709,6 +729,276 @@ impl Theme {
             help_desc: Color::Rgb(50, 50, 60),
             help_path: Color::Rgb(120, 120, 140),
             help_bg: Color::Rgb(248, 248, 248),
+        }
+    }
+
+    /// Nord 主题（基于 Nord 配色方案 - 极地冰蓝色调）
+    pub fn nord() -> Self {
+        Self {
+            // 全局背景 — Polar Night
+            bg_primary: Color::Rgb(46, 52, 64), // nord0
+            bg_title: Color::Rgb(59, 66, 82),   // nord1
+            bg_input: Color::Rgb(59, 66, 82),   // nord1
+            bg_panel: Color::Rgb(59, 66, 82),   // nord1
+
+            // 边框 — Polar Night / Snow Storm
+            border_title: Color::Rgb(76, 86, 106),  // nord3
+            border_message: Color::Rgb(67, 76, 94), // nord2
+            border_input: Color::Rgb(76, 86, 106),  // nord3
+            border_input_loading: Color::Rgb(235, 203, 139), // nord13
+            border_config: Color::Rgb(76, 86, 106), // nord3
+            separator: Color::Rgb(67, 76, 94),      // nord2
+
+            // 气泡
+            bubble_ai: Color::Rgb(59, 66, 82),          // nord1
+            bubble_ai_selected: Color::Rgb(67, 76, 94), // nord2
+            bubble_user: Color::Rgb(52, 75, 110),
+            bubble_user_selected: Color::Rgb(60, 85, 125),
+
+            // 标签 — Frost / Aurora
+            label_ai: Color::Rgb(163, 190, 140),       // nord14
+            label_user: Color::Rgb(129, 161, 193),     // nord9
+            label_selected: Color::Rgb(235, 203, 139), // nord13
+
+            // 文字
+            text_normal: Color::Rgb(216, 222, 233), // nord4
+            text_bold: Color::Rgb(210, 235, 220),
+            text_dim: Color::Rgb(128, 140, 160),
+            text_very_dim: Color::Rgb(76, 86, 106), // nord3
+            text_white: Color::Rgb(236, 239, 244),  // nord6
+            text_system: Color::Rgb(100, 112, 130),
+
+            // 标题栏
+            title_icon: Color::Rgb(136, 192, 208),   // nord8
+            title_separator: Color::Rgb(67, 76, 94), // nord2
+            title_model: Color::Rgb(163, 190, 140),  // nord14
+            title_count: Color::Rgb(178, 186, 202),
+            title_loading: Color::Rgb(235, 203, 139), // nord13
+
+            // 输入区
+            input_prompt: Color::Rgb(163, 190, 140), // nord14
+            input_prompt_loading: Color::Rgb(235, 203, 139), // nord13
+            cursor_fg: Color::Rgb(46, 52, 64),       // nord0
+            cursor_bg: Color::Rgb(216, 222, 233),    // nord4
+
+            // 提示栏
+            hint_key_fg: Color::Rgb(46, 52, 64),  // nord0
+            hint_key_bg: Color::Rgb(76, 86, 106), // nord3
+            hint_desc: Color::Rgb(128, 140, 160),
+            hint_separator: Color::Rgb(59, 66, 82), // nord1
+
+            // Toast
+            toast_success_border: Color::Rgb(163, 190, 140), // nord14
+            toast_success_bg: Color::Rgb(50, 60, 55),
+            toast_success_text: Color::Rgb(163, 190, 140),
+            toast_error_border: Color::Rgb(191, 97, 106), // nord11
+            toast_error_bg: Color::Rgb(60, 50, 52),
+            toast_error_text: Color::Rgb(191, 97, 106),
+
+            // 欢迎界面
+            welcome_border: Color::Rgb(76, 86, 106), // nord3
+            welcome_text: Color::Rgb(136, 192, 208), // nord8
+            welcome_hint: Color::Rgb(100, 112, 130),
+
+            // 模型选择
+            model_sel_border: Color::Rgb(235, 203, 139), // nord13
+            model_sel_title: Color::Rgb(235, 203, 139),
+            model_sel_active: Color::Rgb(163, 190, 140), // nord14
+            model_sel_inactive: Color::Rgb(178, 186, 202),
+            model_sel_highlight_bg: Color::Rgb(67, 76, 94), // nord2
+
+            // 配置界面
+            config_title: Color::Rgb(129, 161, 193), // nord9
+            config_section: Color::Rgb(163, 190, 140), // nord14
+            config_pointer: Color::Rgb(235, 203, 139), // nord13
+            config_label_selected: Color::Rgb(235, 203, 139),
+            config_label: Color::Rgb(128, 140, 160),
+            config_value: Color::Rgb(178, 186, 202),
+            config_edit_bg: Color::Rgb(67, 76, 94), // nord2
+            config_tab_active_bg: Color::Rgb(129, 161, 193), // nord9
+            config_tab_active_fg: Color::Rgb(46, 52, 64), // nord0
+            config_tab_inactive: Color::Rgb(128, 140, 160),
+            config_hint_key: Color::Rgb(235, 203, 139),
+            config_hint_desc: Color::Rgb(128, 140, 160),
+            config_toggle_on: Color::Rgb(163, 190, 140), // nord14
+            config_toggle_off: Color::Rgb(191, 97, 106), // nord11
+            config_dim: Color::Rgb(76, 86, 106),         // nord3
+            config_api_key: Color::Rgb(100, 112, 130),
+
+            // Markdown — Frost colors
+            md_h1: Color::Rgb(136, 192, 208), // nord8
+            md_h2: Color::Rgb(129, 161, 193), // nord9
+            md_h3: Color::Rgb(143, 188, 187), // nord7
+            md_h4: Color::Rgb(178, 186, 202),
+            md_heading_sep: Color::Rgb(67, 76, 94), // nord2
+            md_inline_code_fg: Color::Rgb(235, 203, 139), // nord13
+            md_inline_code_bg: Color::Rgb(59, 66, 82), // nord1
+            md_list_bullet: Color::Rgb(129, 161, 193), // nord9
+            md_blockquote_bar: Color::Rgb(76, 86, 106), // nord3
+            md_blockquote_text: Color::Rgb(160, 170, 185),
+            md_rule: Color::Rgb(67, 76, 94), // nord2
+
+            // 代码块 — Nord 风格语法高亮
+            code_border: Color::Rgb(76, 86, 106),    // nord3
+            code_bg: Color::Rgb(46, 52, 64),         // nord0
+            code_default: Color::Rgb(216, 222, 233), // nord4
+            code_keyword: Color::Rgb(180, 142, 173), // nord15
+            code_string: Color::Rgb(163, 190, 140),  // nord14
+            code_comment: Color::Rgb(97, 110, 128),
+            code_number: Color::Rgb(208, 135, 112), // nord12
+            code_type: Color::Rgb(235, 203, 139),   // nord13
+            code_primitive: Color::Rgb(143, 188, 187), // nord7
+            code_macro: Color::Rgb(136, 192, 208),  // nord8
+            code_attribute: Color::Rgb(143, 188, 187), // nord7
+            code_lifetime: Color::Rgb(235, 203, 139), // nord13
+            code_shell_var: Color::Rgb(143, 188, 187), // nord7
+
+            // 表格
+            table_border: Color::Rgb(67, 76, 94),    // nord2
+            table_header: Color::Rgb(136, 192, 208), // nord8
+            table_body: Color::Rgb(178, 186, 202),
+
+            // 帮助界面
+            help_title: Color::Rgb(136, 192, 208), // nord8
+            help_key: Color::Rgb(235, 203, 139),   // nord13
+            help_desc: Color::Rgb(216, 222, 233),  // nord4
+            help_path: Color::Rgb(100, 112, 130),
+            help_bg: Color::Rgb(59, 66, 82), // nord1
+        }
+    }
+
+    /// Monokai 主题（经典 Monokai 配色 - 暖色调高对比度）
+    pub fn monokai() -> Self {
+        Self {
+            // 全局背景
+            bg_primary: Color::Rgb(39, 40, 34),
+            bg_title: Color::Rgb(49, 50, 44),
+            bg_input: Color::Rgb(49, 50, 44),
+            bg_panel: Color::Rgb(49, 50, 44),
+
+            // 边框
+            border_title: Color::Rgb(80, 80, 70),
+            border_message: Color::Rgb(65, 65, 55),
+            border_input: Color::Rgb(80, 80, 70),
+            border_input_loading: Color::Rgb(230, 219, 116), // monokai yellow
+            border_config: Color::Rgb(80, 80, 70),
+            separator: Color::Rgb(65, 65, 55),
+
+            // 气泡
+            bubble_ai: Color::Rgb(49, 50, 44),
+            bubble_ai_selected: Color::Rgb(60, 62, 54),
+            bubble_user: Color::Rgb(55, 65, 85),
+            bubble_user_selected: Color::Rgb(65, 78, 100),
+
+            // 标签
+            label_ai: Color::Rgb(166, 226, 46),    // monokai green
+            label_user: Color::Rgb(102, 217, 239), // monokai cyan
+            label_selected: Color::Rgb(230, 219, 116), // monokai yellow
+
+            // 文字
+            text_normal: Color::Rgb(248, 248, 242), // monokai foreground
+            text_bold: Color::Rgb(215, 245, 225),
+            text_dim: Color::Rgb(140, 140, 130),
+            text_very_dim: Color::Rgb(90, 90, 80),
+            text_white: Color::Rgb(248, 248, 242),
+            text_system: Color::Rgb(117, 113, 94), // monokai comment color
+
+            // 标题栏
+            title_icon: Color::Rgb(102, 217, 239), // monokai cyan
+            title_separator: Color::Rgb(65, 65, 55),
+            title_model: Color::Rgb(166, 226, 46), // monokai green
+            title_count: Color::Rgb(190, 190, 180),
+            title_loading: Color::Rgb(230, 219, 116), // monokai yellow
+
+            // 输入区
+            input_prompt: Color::Rgb(166, 226, 46), // monokai green
+            input_prompt_loading: Color::Rgb(230, 219, 116),
+            cursor_fg: Color::Rgb(39, 40, 34),
+            cursor_bg: Color::Rgb(248, 248, 242),
+
+            // 提示栏
+            hint_key_fg: Color::Rgb(39, 40, 34),
+            hint_key_bg: Color::Rgb(117, 113, 94),
+            hint_desc: Color::Rgb(140, 140, 130),
+            hint_separator: Color::Rgb(55, 55, 45),
+
+            // Toast
+            toast_success_border: Color::Rgb(166, 226, 46),
+            toast_success_bg: Color::Rgb(45, 55, 38),
+            toast_success_text: Color::Rgb(166, 226, 46),
+            toast_error_border: Color::Rgb(249, 38, 114), // monokai pink
+            toast_error_bg: Color::Rgb(60, 38, 42),
+            toast_error_text: Color::Rgb(249, 38, 114),
+
+            // 欢迎界面
+            welcome_border: Color::Rgb(80, 80, 70),
+            welcome_text: Color::Rgb(102, 217, 239), // monokai cyan
+            welcome_hint: Color::Rgb(100, 100, 90),
+
+            // 模型选择
+            model_sel_border: Color::Rgb(230, 219, 116),
+            model_sel_title: Color::Rgb(230, 219, 116),
+            model_sel_active: Color::Rgb(166, 226, 46),
+            model_sel_inactive: Color::Rgb(190, 190, 180),
+            model_sel_highlight_bg: Color::Rgb(60, 62, 54),
+
+            // 配置界面
+            config_title: Color::Rgb(102, 217, 239),
+            config_section: Color::Rgb(166, 226, 46),
+            config_pointer: Color::Rgb(230, 219, 116),
+            config_label_selected: Color::Rgb(230, 219, 116),
+            config_label: Color::Rgb(140, 140, 130),
+            config_value: Color::Rgb(190, 190, 180),
+            config_edit_bg: Color::Rgb(60, 62, 54),
+            config_tab_active_bg: Color::Rgb(102, 217, 239),
+            config_tab_active_fg: Color::Rgb(39, 40, 34),
+            config_tab_inactive: Color::Rgb(140, 140, 130),
+            config_hint_key: Color::Rgb(230, 219, 116),
+            config_hint_desc: Color::Rgb(140, 140, 130),
+            config_toggle_on: Color::Rgb(166, 226, 46),
+            config_toggle_off: Color::Rgb(249, 38, 114),
+            config_dim: Color::Rgb(90, 90, 80),
+            config_api_key: Color::Rgb(100, 100, 90),
+
+            // Markdown
+            md_h1: Color::Rgb(249, 38, 114),  // monokai pink
+            md_h2: Color::Rgb(102, 217, 239), // monokai cyan
+            md_h3: Color::Rgb(166, 226, 46),  // monokai green
+            md_h4: Color::Rgb(230, 219, 116), // monokai yellow
+            md_heading_sep: Color::Rgb(80, 80, 70),
+            md_inline_code_fg: Color::Rgb(230, 219, 116), // monokai yellow
+            md_inline_code_bg: Color::Rgb(55, 55, 45),
+            md_list_bullet: Color::Rgb(249, 38, 114), // monokai pink
+            md_blockquote_bar: Color::Rgb(117, 113, 94),
+            md_blockquote_text: Color::Rgb(170, 170, 160),
+            md_rule: Color::Rgb(80, 80, 70),
+
+            // 代码块 — Monokai 经典语法高亮
+            code_border: Color::Rgb(80, 80, 70),
+            code_bg: Color::Rgb(39, 40, 34),
+            code_default: Color::Rgb(248, 248, 242), // monokai foreground
+            code_keyword: Color::Rgb(249, 38, 114),  // monokai pink
+            code_string: Color::Rgb(230, 219, 116),  // monokai yellow
+            code_comment: Color::Rgb(117, 113, 94),  // monokai comment
+            code_number: Color::Rgb(174, 129, 255),  // monokai purple
+            code_type: Color::Rgb(166, 226, 46),     // monokai green
+            code_primitive: Color::Rgb(102, 217, 239), // monokai cyan
+            code_macro: Color::Rgb(102, 217, 239),   // monokai cyan
+            code_attribute: Color::Rgb(166, 226, 46), // monokai green
+            code_lifetime: Color::Rgb(174, 129, 255), // monokai purple
+            code_shell_var: Color::Rgb(102, 217, 239), // monokai cyan
+
+            // 表格
+            table_border: Color::Rgb(80, 80, 70),
+            table_header: Color::Rgb(102, 217, 239),
+            table_body: Color::Rgb(190, 190, 180),
+
+            // 帮助界面
+            help_title: Color::Rgb(102, 217, 239),
+            help_key: Color::Rgb(230, 219, 116),
+            help_desc: Color::Rgb(248, 248, 242),
+            help_path: Color::Rgb(117, 113, 94),
+            help_bg: Color::Rgb(49, 50, 44),
         }
     }
 }
