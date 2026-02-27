@@ -572,6 +572,29 @@ pub fn count_wrapped_lines(s: &str, col_width: usize) -> usize {
     lines
 }
 
+/// 计算光标在指定列宽下 wrap 后所在的行号（0-based）
+pub fn cursor_wrapped_line(s: &str, cursor_pos: usize, col_width: usize) -> u16 {
+    if col_width == 0 {
+        return 0;
+    }
+    let mut line: u16 = 0;
+    let mut current_width: usize = 0;
+    for (i, c) in s.chars().enumerate() {
+        if i == cursor_pos {
+            return line;
+        }
+        let char_width = if c.is_ascii() { 1 } else { 2 };
+        if current_width + char_width > col_width {
+            line += 1;
+            current_width = char_width;
+        } else {
+            current_width += char_width;
+        }
+    }
+    // cursor_pos == chars.len() (cursor at end)
+    line
+}
+
 /// 将字符串截断到指定的显示宽度，超出部分用 ".." 替代
 pub fn truncate_to_width(s: &str, max_width: usize) -> String {
     if max_width == 0 {

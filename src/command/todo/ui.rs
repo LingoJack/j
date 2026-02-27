@@ -1,5 +1,6 @@
 use super::app::{
-    AppMode, TodoApp, count_wrapped_lines, display_width, split_input_at_cursor, truncate_to_width,
+    AppMode, TodoApp, count_wrapped_lines, cursor_wrapped_line, display_width,
+    split_input_at_cursor, truncate_to_width,
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -234,7 +235,18 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
 
         let total_wrapped = count_wrapped_lines(input_content, preview_inner_w) as u16;
         let max_scroll = total_wrapped.saturating_sub(preview_inner_h);
-        let clamped_scroll = app.preview_scroll.min(max_scroll);
+
+        // 自动滚动到光标所在行可见
+        let cursor_line = cursor_wrapped_line(input_content, app.cursor_pos, preview_inner_w);
+        let auto_scroll = if cursor_line < app.preview_scroll {
+            cursor_line
+        } else if cursor_line >= app.preview_scroll + preview_inner_h {
+            cursor_line.saturating_sub(preview_inner_h - 1)
+        } else {
+            app.preview_scroll
+        };
+        let clamped_scroll = auto_scroll.min(max_scroll);
+        app.preview_scroll = clamped_scroll;
 
         let mode_label = match app.mode {
             AppMode::Adding => "新待办",
@@ -262,10 +274,18 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
             )
             .border_style(Style::default().fg(Color::Cyan));
 
+        // 构建带光标高亮的预览文本
+        let (before, cursor_ch, after) = split_input_at_cursor(input_content, app.cursor_pos);
+        let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+        let preview_text = vec![Line::from(vec![
+            Span::styled(before, Style::default().fg(Color::White)),
+            Span::styled(cursor_ch, cursor_style),
+            Span::styled(after, Style::default().fg(Color::White)),
+        ])];
+
         use ratatui::widgets::Wrap;
-        let preview = Paragraph::new(input_content.clone())
+        let preview = Paragraph::new(preview_text)
             .block(preview_block)
-            .style(Style::default().fg(Color::White))
             .wrap(Wrap { trim: false })
             .scroll((clamped_scroll, 0));
         f.render_widget(preview, chunks[2]);
