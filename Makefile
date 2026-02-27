@@ -49,18 +49,20 @@ publish-check:
 	@cargo publish --registry crates-io --dry-run
 	@echo "✅ Check passed"
 
-# 创建 git tag 并推送（触发 GitHub Actions 自动构建发布）
+# 创建 git tag 并推送（自动读取 Cargo.toml 版本号，触发 GitHub Actions 自动构建发布）
 .PHONY: tag
 tag:
-	@echo "📌 Creating git tag..."
-	@read -p "Enter version (e.g., v1.0.0): " version; \
-	if [ -z "$$version" ]; then \
-		echo "❌ Version is required"; \
+	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	tag="v$$version"; \
+	if git rev-parse "$$tag" >/dev/null 2>&1; then \
+		echo "❌ Tag $$tag already exists (Cargo.toml version = $$version)"; \
+		echo "   请先在 Cargo.toml 中更新版本号"; \
 		exit 1; \
 	fi; \
-	git tag -a "$$version" -m "Release $$version"; \
-	git push origin "$$version"; \
-	echo "✅ Tag $$version created and pushed. GitHub Actions will build and release automatically."
+	echo "📌 Creating tag $$tag (from Cargo.toml)..."; \
+	git tag -a "$$tag" -m "Release $$tag"; \
+	git push origin "$$tag"; \
+	echo "✅ Tag $$tag created and pushed. GitHub Actions will build and release automatically."
 
 # 本地测试安装脚本
 .PHONY: test-install
