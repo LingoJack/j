@@ -5,10 +5,7 @@ use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
 use crate::{error, info};
 use crossterm::{
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
-        MouseEventKind,
-    },
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -27,7 +24,7 @@ pub fn run_chat_tui() {
 pub fn run_chat_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -114,17 +111,6 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
                         }
                     }
-                    Event::Mouse(mouse) => match mouse.kind {
-                        MouseEventKind::ScrollUp => {
-                            app.scroll_up();
-                            needs_redraw = true;
-                        }
-                        MouseEventKind::ScrollDown => {
-                            app.scroll_down();
-                            needs_redraw = true;
-                        }
-                        _ => {}
-                    },
                     Event::Resize(_, _) => {
                         needs_redraw = true;
                     }
@@ -145,11 +131,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
     let _ = save_chat_session(&app.session);
 
     terminal::disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
 }
 
@@ -215,8 +197,6 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             app.browse_scroll_offset = 0; // 重置消息内偏移
             app.mode = ChatMode::Browse;
             app.msg_lines_cache = None; // 清除缓存以触发高亮重绘
-            // 进入浏览模式时关闭鼠标捕获，让终端可以原生选中文本
-            let _ = execute!(io::stdout(), DisableMouseCapture);
         } else {
             app.show_toast("暂无消息可浏览", true);
         }
@@ -357,8 +337,6 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
     if msg_count == 0 {
         app.mode = ChatMode::Chat;
         app.msg_lines_cache = None;
-        // 退出浏览模式时重新开启鼠标捕获
-        let _ = execute!(io::stdout(), EnableMouseCapture);
         return;
     }
 
@@ -366,8 +344,6 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Esc => {
             app.mode = ChatMode::Chat;
             app.msg_lines_cache = None; // 退出浏览模式时清除缓存，去掉高亮
-            // 退出浏览模式时重新开启鼠标捕获
-            let _ = execute!(io::stdout(), EnableMouseCapture);
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if app.browse_msg_index > 0 {
