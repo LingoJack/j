@@ -4,7 +4,14 @@
       "Bash(cargo check:*)",
       "Bash(cargo test:*)",
       "Bash(true:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(head:*)",
+      "Bash(ls:*)",
+      "Bash(cargo fmt:*)"
     ]
   },
   "language": "zh-CN"

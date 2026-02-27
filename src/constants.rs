@@ -297,8 +297,6 @@ pub mod voice {
     pub const VOICE_DIR: &str = "voice";
     /// 模型子目录名
     pub const MODEL_DIR: &str = "model";
-    /// 临时录音文件名
-    pub const RECORDING_FILE: &str = "recording.wav";
     /// 默认模型大小
     pub const DEFAULT_MODEL: &str = "small";
     /// 支持的模型大小列表
@@ -310,12 +308,14 @@ pub mod voice {
     pub const MODEL_FILE_TEMPLATE: &str = "ggml-{}.bin";
     /// 录音采样率 (Whisper 要求 16kHz)
     pub const SAMPLE_RATE: u32 = 16000;
-    /// 录音声道数
-    pub const CHANNELS: u16 = 1;
-    /// 录音位深度
-    pub const BITS_PER_SAMPLE: u16 = 16;
     /// voice 操作: 下载模型
     pub const ACTION_DOWNLOAD: &str = "download";
+    /// 流式转写间隔（秒）
+    pub const STREAMING_INTERVAL_SECS: u64 = 3;
+    /// 最短有效音频长度（秒）
+    pub const MIN_AUDIO_SECS: u64 = 1;
+    /// 模型优先级（从高到低）
+    pub const MODEL_PRIORITY: &[&str] = &["large", "medium", "small", "base", "tiny"];
 }
 
 pub mod shell {

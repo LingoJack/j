@@ -1,6 +1,6 @@
 [package]
 name = "j-cli"
-version = "12.1.24"
+version = "12.1.25"
 edition = "2024"
 rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
@@ -38,7 +38,6 @@ pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
 whisper-rs = "0.15"
 cpal = "0.17"
-hound = "3.5"
 libc = "0.2"
 
 [patch.crates-io]

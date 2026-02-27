@@ -2,9 +2,12 @@ use crate::config::YamlConfig;
 use crate::constants::voice as vc;
 use crate::{error, info};
 use colored::Colorize;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+// ========== 可复用基础函数 ==========
 
 /// 获取模型期望的最小文件大小（MB），用于完整性校验
 fn expected_min_size_mb(model_size: &str) -> u64 {
@@ -18,17 +21,326 @@ fn expected_min_size_mb(model_size: &str) -> u64 {
     }
 }
 
+/// crossterm raw mode 的 RAII guard，确保异常时恢复终端
+struct RawModeGuard;
+
+impl RawModeGuard {
+    fn enter() -> Result<Self, String> {
+        crossterm::terminal::enable_raw_mode().map_err(|e| format!("启用 raw mode 失败: {}", e))?;
+        Ok(Self)
+    }
+}
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = crossterm::terminal::disable_raw_mode();
+    }
+}
+
+/// 启动录音流，返回 (stream, sample_rate, channels)
+/// recording 控制录音开关，raw_samples 收集原始采样数据
+fn start_recording_stream(
+    recording: Arc<AtomicBool>,
+    raw_samples: Arc<std::sync::Mutex<Vec<f32>>>,
+) -> Result<(cpal::Stream, u32, u16), String> {
+    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+
+    let host = cpal::default_host();
+    let device = host
+        .default_input_device()
+        .ok_or_else(|| "未找到麦克风设备，请检查音频输入设备".to_string())?;
+
+    let supported_config = device
+        .default_input_config()
+        .map_err(|e| format!("获取设备默认输入配置失败: {}", e))?;
+
+    let sample_rate = supported_config.sample_rate();
+    let channels = supported_config.channels();
+
+    let config = cpal::StreamConfig {
+        channels,
+        sample_rate,
+        buffer_size: cpal::BufferSize::Default,
+    };
+
+    let stream = device
+        .build_input_stream(
+            &config,
+            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                if !recording.load(Ordering::Relaxed) {
+                    return;
+                }
+                let mut buf = raw_samples.lock().unwrap();
+                buf.extend_from_slice(data);
+            },
+            move |err| {
+                eprintln!("录音流错误: {}", err);
+            },
+            None,
+        )
+        .map_err(|e| format!("创建录音流失败: {}", e))?;
+
+    stream.play().map_err(|e| format!("启动录音失败: {}", e))?;
+
+    Ok((stream, sample_rate, channels))
+}
+
+/// 多声道转单声道 + 重采样到 16kHz
+fn process_raw_audio(raw_data: &[f32], sample_rate: u32, channels: u16) -> Vec<f32> {
+    // 多声道转单声道
+    let mono: Vec<f32> = if channels > 1 {
+        raw_data
+            .chunks(channels as usize)
+            .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+            .collect()
+    } else {
+        raw_data.to_vec()
+    };
+
+    // 重采样到 16kHz
+    let target_rate = vc::SAMPLE_RATE;
+    if sample_rate != target_rate {
+        resample(&mono, sample_rate, target_rate)
+    } else {
+        mono
+    }
+}
+
+/// 直接从 f32 samples 转写（不经过 WAV 文件）
+fn transcribe_from_samples(model_path: &PathBuf, samples: &[f32]) -> Result<String, String> {
+    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+    if samples.is_empty() {
+        return Err("音频数据为空".to_string());
+    }
+
+    let _stderr_guard = suppress_stderr();
+
+    let ctx = WhisperContext::new_with_params(
+        model_path.to_str().unwrap_or(""),
+        WhisperContextParameters::default(),
+    )
+    .map_err(|e| format!("加载 Whisper 模型失败: {}", e))?;
+
+    let mut state = ctx
+        .create_state()
+        .map_err(|e| format!("创建 Whisper 状态失败: {}", e))?;
+
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    params.set_language(Some("zh"));
+    params.set_print_progress(false);
+    params.set_print_special(false);
+    params.set_print_realtime(false);
+    params.set_single_segment(false);
+    params.set_n_threads(4);
+
+    state
+        .full(params, samples)
+        .map_err(|e| format!("Whisper 转写失败: {}", e))?;
+
+    let num_segments = state.full_n_segments();
+    let mut result = String::new();
+    for i in 0..num_segments {
+        if let Some(segment) = state.get_segment(i) {
+            if let Ok(text) = segment.to_str_lossy() {
+                result.push_str(&text);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// 自动检测最佳可用模型，按 large > medium > small > base > tiny 优先级
+fn detect_best_model() -> Option<&'static str> {
+    for &size in vc::MODEL_PRIORITY {
+        let path = get_model_path(size);
+        if path.exists() {
+            let file_size_mb = std::fs::metadata(&path)
+                .map(|m| m.len() / 1024 / 1024)
+                .unwrap_or(0);
+            if file_size_mb >= expected_min_size_mb(size) {
+                return Some(size);
+            }
+        }
+    }
+    None
+}
+
+/// 使用 crossterm raw mode 等待按键停止录音
+/// 返回 true 表示用户按了停止键，false 表示录音标志已被外部清除
+fn wait_for_stop_key(recording: &AtomicBool) -> bool {
+    use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+
+    loop {
+        if !recording.load(Ordering::Relaxed) {
+            return false;
+        }
+        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
+            if let Ok(Event::Key(KeyEvent {
+                code, modifiers, ..
+            })) = event::read()
+            {
+                match code {
+                    KeyCode::Enter => return true,
+                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+/// 使用 crossterm raw mode 等待 Ctrl+V 停止录音（交互模式专用）
+fn wait_for_ctrl_v_stop(recording: &AtomicBool) -> bool {
+    use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+
+    loop {
+        if !recording.load(Ordering::Relaxed) {
+            return false;
+        }
+        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
+            if let Ok(Event::Key(KeyEvent {
+                code, modifiers, ..
+            })) = event::read()
+            {
+                match code {
+                    KeyCode::Char('v') if modifiers.contains(KeyModifiers::CONTROL) => {
+                        return true;
+                    }
+                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+// ========== 流式转写 ==========
+
+/// 录音 + 流式转写：边录边显示
+/// 返回最终完整转写文本
+fn record_and_transcribe_streaming(model_path: &PathBuf) -> Result<String, String> {
+    let recording = Arc::new(AtomicBool::new(true));
+    let raw_samples: Arc<std::sync::Mutex<Vec<f32>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let (stream, sample_rate, channels) =
+        start_recording_stream(recording.clone(), raw_samples.clone())?;
+
+    // 流式转写线程
+    let streaming_recording = recording.clone();
+    let streaming_samples = raw_samples.clone();
+    let streaming_model = model_path.clone();
+    let streaming_sr = sample_rate;
+    let streaming_ch = channels;
+    let displayed_len = Arc::new(std::sync::Mutex::new(0usize));
+    let displayed_len_clone = displayed_len.clone();
+
+    let transcribe_handle = std::thread::spawn(move || {
+        let interval = std::time::Duration::from_secs(vc::STREAMING_INTERVAL_SECS);
+        let min_samples = (vc::MIN_AUDIO_SECS as usize) * (streaming_sr as usize);
+
+        while streaming_recording.load(Ordering::Relaxed) {
+            std::thread::sleep(interval);
+
+            if !streaming_recording.load(Ordering::Relaxed) {
+                break;
+            }
+
+            let raw_data = streaming_samples.lock().unwrap().clone();
+            // 需要足够的原始采样数据才尝试转写
+            if raw_data.len() < min_samples * (streaming_ch as usize) {
+                continue;
+            }
+
+            let processed = process_raw_audio(&raw_data, streaming_sr, streaming_ch);
+            if processed.is_empty() {
+                continue;
+            }
+
+            if let Ok(text) = transcribe_from_samples(&streaming_model, &processed) {
+                let text = text.trim().to_string();
+                let mut prev_len = displayed_len_clone.lock().unwrap();
+                if text.len() > *prev_len {
+                    let new_part = &text[*prev_len..];
+                    print!("{}", new_part);
+                    let _ = std::io::stdout().flush();
+                    *prev_len = text.len();
+                }
+            }
+        }
+    });
+
+    // 进入 raw mode 等待用户按键停止
+    let _raw_guard = RawModeGuard::enter()?;
+    wait_for_stop_key(&recording);
+    drop(_raw_guard);
+
+    // 停止录音
+    recording.store(false, Ordering::Relaxed);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    drop(stream);
+
+    let _ = transcribe_handle.join();
+
+    // 最终完整转写确保精度
+    let raw_data = raw_samples.lock().unwrap();
+    if raw_data.is_empty() {
+        return Err("未录到任何音频数据".to_string());
+    }
+
+    let processed = process_raw_audio(&raw_data, sample_rate, channels);
+    let duration_secs = processed.len() as f64 / vc::SAMPLE_RATE as f64;
+
+    // 换行（之前流式输出可能没换行）
+    println!();
+    info!(
+        "📊 录音时长: {:.1}s (设备: {}Hz {}ch → 16kHz 单声道)",
+        duration_secs, sample_rate, channels
+    );
+
+    if processed.is_empty() || duration_secs < vc::MIN_AUDIO_SECS as f64 {
+        return Err("录音时间过短".to_string());
+    }
+
+    // 清除之前的流式输出，用最终结果替代
+    let prev_len = *displayed_len.lock().unwrap();
+    let final_text = transcribe_from_samples(model_path, &processed)?;
+    let final_text = final_text.trim().to_string();
+
+    // 如果最终结果与流式结果不同，重新输出
+    if final_text.len() != prev_len {
+        // 已经换行了，直接输出完整最终结果
+    }
+
+    Ok(final_text)
+}
+
+// ========== CLI 入口 ==========
+
 /// 语音转文字命令入口
 ///
-/// - action 为空：录音 → Whisper 转写 → 输出文字
+/// - action 为空：录音 → Whisper 流式转写 → 输出文字
 /// - action 为 "download"：下载指定模型
 /// - copy: 转写结果复制到剪贴板
-/// - model_size: 指定模型大小 (tiny/base/small/medium/large)
+/// - model_size: 指定模型大小 (tiny/base/small/medium/large)，为 None 时自动检测
 pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config: &YamlConfig) {
-    let model = model_size.unwrap_or(vc::DEFAULT_MODEL);
+    // 如果用户指定了模型，使用指定的；否则自动检测，再降级到默认
+    let model = if let Some(m) = model_size {
+        m.to_string()
+    } else if let Some(best) = detect_best_model() {
+        info!("🔍 自动检测到模型: {}", best.cyan().bold());
+        best.to_string()
+    } else {
+        vc::DEFAULT_MODEL.to_string()
+    };
 
     // 验证模型大小
-    if !vc::MODEL_SIZES.contains(&model) {
+    if !vc::MODEL_SIZES.contains(&model.as_str()) {
         error!(
             "不支持的模型大小: {}，可选: {}",
             model,
@@ -38,8 +350,7 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
     }
 
     if action == vc::ACTION_DOWNLOAD {
-        // 下载模型
-        download_model(model);
+        download_model(&model);
         return;
     }
 
@@ -50,7 +361,7 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
     }
 
     // 检查模型是否存在
-    let model_path = get_model_path(model);
+    let model_path = get_model_path(&model);
     if !model_path.exists() {
         error!("模型文件不存在: {}", model_path.display());
         info!(
@@ -65,11 +376,11 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
         return;
     }
 
-    // 检查模型文件完整性（文件大小是否达到期望最小值）
+    // 检查模型文件完整性
     let file_size_mb = std::fs::metadata(&model_path)
         .map(|m| m.len() / 1024 / 1024)
         .unwrap_or(0);
-    let min_size = expected_min_size_mb(model);
+    let min_size = expected_min_size_mb(&model);
     if file_size_mb < min_size {
         error!(
             "模型文件不完整: {} ({} MB，期望至少 {} MB)",
@@ -85,25 +396,49 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
         return;
     }
 
-    // 开始录音
-    info!("🎙️  按 {} 开始录音...", "回车".green().bold());
-    wait_for_enter();
+    info!(
+        "🎙️  按 {} 开始录音，录音中按 {} 或 {} 结束",
+        "回车".green().bold(),
+        "回车".red().bold(),
+        "Ctrl+C".red().bold()
+    );
 
-    info!("🔴 录音中... 按 {} 结束录音", "回车".red().bold());
-
-    let recording_path = get_recording_path();
-    match record_audio(&recording_path) {
-        Ok(()) => {
-            info!("✅ 录音完成，开始转写...");
-        }
-        Err(e) => {
-            error!("[handle_voice] 录音失败: {}", e);
-            return;
+    // 等待用户按回车开始（使用 crossterm raw mode 避免与交互模式冲突）
+    {
+        let _raw_guard = match RawModeGuard::enter() {
+            Ok(g) => g,
+            Err(e) => {
+                error!("[handle_voice] {}", e);
+                return;
+            }
+        };
+        use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+        loop {
+            if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
+                if let Ok(Event::Key(KeyEvent {
+                    code, modifiers, ..
+                })) = event::read()
+                {
+                    match code {
+                        KeyCode::Enter => break,
+                        KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
     }
 
-    // Whisper 转写
-    match transcribe(&model_path, &recording_path) {
+    println!();
+    info!(
+        "🔴 录音中... 按 {} 或 {} 结束录音",
+        "回车".red().bold(),
+        "Ctrl+C".red().bold()
+    );
+
+    match record_and_transcribe_streaming(&model_path) {
         Ok(text) => {
             let text = text.trim().to_string();
             if text.is_empty() {
@@ -119,13 +454,157 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
             }
         }
         Err(e) => {
-            error!("[handle_voice] 转写失败: {}", e);
+            error!("[handle_voice] {}", e);
         }
     }
-
-    // 清理临时录音文件
-    let _ = std::fs::remove_file(&recording_path);
 }
+
+// ========== 交互模式录音入口 ==========
+
+/// 交互模式下的语音录音入口（由 Ctrl+V 或 voice 命令触发）
+/// 返回转写文本（可能为空字符串）
+pub fn do_voice_record_for_interactive() -> String {
+    let model = if let Some(best) = detect_best_model() {
+        info!("🔍 自动检测到模型: {}", best.cyan().bold());
+        best.to_string()
+    } else {
+        vc::DEFAULT_MODEL.to_string()
+    };
+
+    let model_path = get_model_path(&model);
+    if !model_path.exists() {
+        error!("模型文件不存在: {}", model_path.display());
+        info!("💡 请先下载模型: {}", format!("j voice download").cyan());
+        return String::new();
+    }
+
+    let file_size_mb = std::fs::metadata(&model_path)
+        .map(|m| m.len() / 1024 / 1024)
+        .unwrap_or(0);
+    if file_size_mb < expected_min_size_mb(&model) {
+        error!("模型文件不完整，请重新下载");
+        return String::new();
+    }
+
+    info!(
+        "🔴 录音中... 按 {} 或 {} 结束",
+        "Ctrl+V".red().bold(),
+        "Ctrl+C".red().bold()
+    );
+
+    let recording = Arc::new(AtomicBool::new(true));
+    let raw_samples: Arc<std::sync::Mutex<Vec<f32>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let (stream, sample_rate, channels) =
+        match start_recording_stream(recording.clone(), raw_samples.clone()) {
+            Ok(r) => r,
+            Err(e) => {
+                error!("[voice] {}", e);
+                return String::new();
+            }
+        };
+
+    // 流式转写线程
+    let streaming_recording = recording.clone();
+    let streaming_samples = raw_samples.clone();
+    let streaming_model = model_path.clone();
+    let streaming_sr = sample_rate;
+    let streaming_ch = channels;
+    let displayed_len = Arc::new(std::sync::Mutex::new(0usize));
+    let displayed_len_clone = displayed_len.clone();
+
+    let transcribe_handle = std::thread::spawn(move || {
+        let interval = std::time::Duration::from_secs(vc::STREAMING_INTERVAL_SECS);
+        let min_samples = (vc::MIN_AUDIO_SECS as usize) * (streaming_sr as usize);
+
+        while streaming_recording.load(Ordering::Relaxed) {
+            std::thread::sleep(interval);
+            if !streaming_recording.load(Ordering::Relaxed) {
+                break;
+            }
+
+            let raw_data = streaming_samples.lock().unwrap().clone();
+            if raw_data.len() < min_samples * (streaming_ch as usize) {
+                continue;
+            }
+
+            let processed = process_raw_audio(&raw_data, streaming_sr, streaming_ch);
+            if processed.is_empty() {
+                continue;
+            }
+
+            if let Ok(text) = transcribe_from_samples(&streaming_model, &processed) {
+                let text = text.trim().to_string();
+                let mut prev_len = displayed_len_clone.lock().unwrap();
+                if text.len() > *prev_len {
+                    let new_part = &text[*prev_len..];
+                    // 在 raw mode 下需要用 \r\n
+                    print!("{}", new_part);
+                    let _ = std::io::stdout().flush();
+                    *prev_len = text.len();
+                }
+            }
+        }
+    });
+
+    // 进入 raw mode 等待 Ctrl+V 停止
+    let raw_result = RawModeGuard::enter();
+    if let Err(e) = &raw_result {
+        error!("[voice] {}", e);
+        recording.store(false, Ordering::Relaxed);
+        let _ = transcribe_handle.join();
+        drop(stream);
+        return String::new();
+    }
+    let _raw_guard = raw_result.unwrap();
+    wait_for_ctrl_v_stop(&recording);
+    drop(_raw_guard);
+
+    // 停止录音
+    recording.store(false, Ordering::Relaxed);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    drop(stream);
+
+    let _ = transcribe_handle.join();
+
+    // 最终完整转写
+    let raw_data = raw_samples.lock().unwrap();
+    if raw_data.is_empty() {
+        println!();
+        info!("⚠️  未录到音频数据");
+        return String::new();
+    }
+
+    let processed = process_raw_audio(&raw_data, sample_rate, channels);
+    let duration_secs = processed.len() as f64 / vc::SAMPLE_RATE as f64;
+
+    println!();
+    info!("📊 录音时长: {:.1}s", duration_secs);
+
+    if processed.is_empty() || duration_secs < vc::MIN_AUDIO_SECS as f64 {
+        info!("⚠️  录音时间过短");
+        return String::new();
+    }
+
+    info!("✅ 转写中...");
+    match transcribe_from_samples(&model_path, &processed) {
+        Ok(text) => {
+            let text = text.trim().to_string();
+            if text.is_empty() {
+                info!("⚠️  未识别到语音内容");
+            } else {
+                info!("📝 {}", &text);
+            }
+            text
+        }
+        Err(e) => {
+            error!("[voice] 转写失败: {}", e);
+            String::new()
+        }
+    }
+}
+
+// ========== 辅助函数 ==========
 
 /// 获取模型文件路径: ~/.jdata/voice/model/ggml-<size>.bin
 fn get_model_path(model_size: &str) -> PathBuf {
@@ -137,157 +616,7 @@ fn get_model_path(model_size: &str) -> PathBuf {
     voice_dir.join(model_file)
 }
 
-/// 获取临时录音文件路径: ~/.jdata/voice/recording.wav
-fn get_recording_path() -> PathBuf {
-    let voice_dir = YamlConfig::data_dir().join(vc::VOICE_DIR);
-    let _ = std::fs::create_dir_all(&voice_dir);
-    voice_dir.join(vc::RECORDING_FILE)
-}
-
-/// 等待用户按回车
-fn wait_for_enter() {
-    let mut input = String::new();
-    let _ = std::io::stdin().read_line(&mut input);
-}
-
-/// 录音：使用 cpal 捕获麦克风音频，保存为 WAV 文件
-/// 使用设备默认配置录音，然后重采样到 16kHz 单声道（Whisper 要求）
-/// 用户按回车结束录音
-fn record_audio(output_path: &PathBuf) -> Result<(), String> {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| "未找到麦克风设备，请检查音频输入设备".to_string())?;
-
-    // 获取设备支持的默认输入配置
-    let supported_config = device
-        .default_input_config()
-        .map_err(|e| format!("获取设备默认输入配置失败: {}", e))?;
-
-    let device_sample_rate = supported_config.sample_rate();
-    let device_channels = supported_config.channels();
-
-    let config = cpal::StreamConfig {
-        channels: device_channels,
-        sample_rate: supported_config.sample_rate(),
-        buffer_size: cpal::BufferSize::Default,
-    };
-
-    // 用于在录音线程和主线程之间共享数据
-    let recording = Arc::new(AtomicBool::new(true));
-    let recording_clone = recording.clone();
-
-    // 收集原始 f32 音频采样数据（设备原始采样率和声道数）
-    let raw_samples: Arc<std::sync::Mutex<Vec<f32>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let raw_samples_clone = raw_samples.clone();
-
-    let err_flag: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
-    let err_flag_clone = err_flag.clone();
-
-    // 创建音频输入流
-    let stream = device
-        .build_input_stream(
-            &config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                if !recording_clone.load(Ordering::Relaxed) {
-                    return;
-                }
-                let mut buf = raw_samples_clone.lock().unwrap();
-                buf.extend_from_slice(data);
-            },
-            move |err| {
-                let mut flag = err_flag_clone.lock().unwrap();
-                *flag = Some(format!("录音流错误: {}", err));
-            },
-            None,
-        )
-        .map_err(|e| format!("创建录音流失败: {}", e))?;
-
-    stream.play().map_err(|e| format!("启动录音失败: {}", e))?;
-
-    // 等待用户按回车结束录音
-    wait_for_enter();
-
-    // 停止录音
-    recording.store(false, Ordering::Relaxed);
-    // 给录音流一点时间完成最后的数据收集
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    drop(stream);
-
-    // 检查是否有错误
-    if let Some(err) = err_flag.lock().unwrap().take() {
-        return Err(err);
-    }
-
-    let raw_data = raw_samples.lock().unwrap();
-    if raw_data.is_empty() {
-        return Err("未录到任何音频数据".to_string());
-    }
-
-    // 步骤 1: 多声道转单声道（取各声道均值）
-    let mono_samples: Vec<f32> = if device_channels > 1 {
-        raw_data
-            .chunks(device_channels as usize)
-            .map(|frame| frame.iter().sum::<f32>() / device_channels as f32)
-            .collect()
-    } else {
-        raw_data.clone()
-    };
-
-    // 步骤 2: 重采样到 16kHz（如果设备采样率不是 16kHz）
-    let target_rate = vc::SAMPLE_RATE;
-    let resampled: Vec<f32> = if device_sample_rate != target_rate {
-        resample(&mono_samples, device_sample_rate, target_rate)
-    } else {
-        mono_samples
-    };
-
-    // 步骤 3: 转换为 i16 并写入 WAV
-    let i16_samples: Vec<i16> = resampled
-        .iter()
-        .map(|&s| {
-            let clamped = s.clamp(-1.0, 1.0);
-            (clamped * i16::MAX as f32) as i16
-        })
-        .collect();
-
-    if i16_samples.is_empty() {
-        return Err("重采样后无音频数据".to_string());
-    }
-
-    let duration_secs = i16_samples.len() as f64 / target_rate as f64;
-    info!(
-        "📊 录音时长: {:.1}s (设备: {}Hz {}ch → 重采样到 {}Hz 单声道)",
-        duration_secs, device_sample_rate, device_channels, target_rate
-    );
-
-    let spec = hound::WavSpec {
-        channels: vc::CHANNELS,
-        sample_rate: target_rate,
-        bits_per_sample: vc::BITS_PER_SAMPLE,
-        sample_format: hound::SampleFormat::Int,
-    };
-
-    let mut writer = hound::WavWriter::create(output_path, spec)
-        .map_err(|e| format!("创建 WAV 文件失败: {}", e))?;
-
-    for &sample in i16_samples.iter() {
-        writer
-            .write_sample(sample)
-            .map_err(|e| format!("写入音频数据失败: {}", e))?;
-    }
-
-    writer
-        .finalize()
-        .map_err(|e| format!("完成 WAV 文件写入失败: {}", e))?;
-
-    Ok(())
-}
-
 /// 线性插值重采样
-/// 将 source_rate 的音频数据重采样到 target_rate
 fn resample(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
     if samples.is_empty() || source_rate == target_rate {
         return samples.to_vec();
@@ -316,74 +645,6 @@ fn resample(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
     output
 }
 
-/// 使用 Whisper 模型转写音频文件
-fn transcribe(model_path: &PathBuf, audio_path: &PathBuf) -> Result<String, String> {
-    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
-
-    // 临时抑制 whisper.cpp C 库的 stderr 调试输出
-    let _stderr_guard = suppress_stderr();
-
-    // 加载模型
-    let ctx = WhisperContext::new_with_params(
-        model_path.to_str().unwrap_or(""),
-        WhisperContextParameters::default(),
-    )
-    .map_err(|e| format!("加载 Whisper 模型失败: {}", e))?;
-
-    let mut state = ctx
-        .create_state()
-        .map_err(|e| format!("创建 Whisper 状态失败: {}", e))?;
-
-    // 读取 WAV 文件并转换为 f32 采样
-    let reader =
-        hound::WavReader::open(audio_path).map_err(|e| format!("读取 WAV 文件失败: {}", e))?;
-
-    let samples: Vec<f32> = reader
-        .into_samples::<i16>()
-        .filter_map(|s| s.ok())
-        .map(|s| s as f32 / i16::MAX as f32)
-        .collect();
-
-    if samples.is_empty() {
-        return Err("音频文件为空".to_string());
-    }
-
-    // 配置 Whisper 转写参数
-    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-
-    // 设置语言为中文
-    params.set_language(Some("zh"));
-    // 不打印进度
-    params.set_print_progress(false);
-    // 不打印特殊 token
-    params.set_print_special(false);
-    // 不打印实时结果
-    params.set_print_realtime(false);
-    // 单段模式（适合短音频）
-    params.set_single_segment(false);
-    // 线程数
-    params.set_n_threads(4);
-
-    // 执行转写
-    state
-        .full(params, &samples)
-        .map_err(|e| format!("Whisper 转写失败: {}", e))?;
-
-    // 提取转写结果
-    let num_segments = state.full_n_segments();
-    let mut result = String::new();
-
-    for i in 0..num_segments {
-        if let Some(segment) = state.get_segment(i) {
-            if let Ok(text) = segment.to_str_lossy() {
-                result.push_str(&text);
-            }
-        }
-    }
-
-    Ok(result)
-}
-
 /// 下载 Whisper 模型
 fn download_model(model_size: &str) {
     let model_path = get_model_path(model_size);
@@ -394,7 +655,6 @@ fn download_model(model_size: &str) {
         let min_size = expected_min_size_mb(model_size);
 
         if file_size_mb < min_size {
-            // 文件存在但不完整（可能是之前下载中断）
             info!(
                 "⚠️  模型文件不完整: {} ({} MB，期望至少 {} MB)",
                 model_path.display(),
@@ -421,11 +681,10 @@ fn download_model(model_size: &str) {
     info!("   保存到: {}", model_path.display().to_string().dimmed());
     println!();
 
-    // 使用 curl 下载（避免引入额外的 HTTP 依赖）
     let status = std::process::Command::new("curl")
         .args([
-            "-L",             // 跟随重定向
-            "--progress-bar", // 进度条
+            "-L",
+            "--progress-bar",
             "-o",
             model_path.to_str().unwrap_or(""),
             &url,
@@ -478,8 +737,6 @@ fn download_model(model_size: &str) {
 
 /// 复制文字到系统剪贴板 (macOS: pbcopy)
 fn copy_to_clipboard(text: &str) {
-    use std::io::Write;
-
     let mut child = match std::process::Command::new("pbcopy")
         .stdin(std::process::Stdio::piped())
         .spawn()
@@ -502,14 +759,11 @@ fn copy_to_clipboard(text: &str) {
 }
 
 /// 临时抑制 stderr 输出（用于屏蔽 whisper.cpp C 库的调试日志）
-/// 返回一个 guard，drop 时自动恢复 stderr
 fn suppress_stderr() -> StderrGuard {
     use std::os::unix::io::AsRawFd;
 
     let stderr_fd = std::io::stderr().as_raw_fd();
-    // 备份原始 stderr fd
     let saved_fd = unsafe { libc::dup(stderr_fd) };
-    // 打开 /dev/null
     let devnull = std::fs::OpenOptions::new()
         .write(true)
         .open("/dev/null")
@@ -527,7 +781,6 @@ fn suppress_stderr() -> StderrGuard {
     }
 }
 
-/// stderr 重定向 guard，drop 时恢复原始 stderr
 struct StderrGuard {
     saved_fd: i32,
     stderr_fd: i32,
