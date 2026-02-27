@@ -36,6 +36,12 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
             let zshrc_content = format!(
                 "# j shell 临时配置 - 自动生成，退出后自动清理\n\
                  export ZDOTDIR=\"{home}\"\n\
+                 if [ -f \"{home}/.zshenv\" ]; then\n\
+                   source \"{home}/.zshenv\"\n\
+                 fi\n\
+                 if [ -f \"{home}/.zprofile\" ]; then\n\
+                   source \"{home}/.zprofile\"\n\
+                 fi\n\
                  if [ -f \"{home}/.zshrc\" ]; then\n\
                    source \"{home}/.zshrc\"\n\
                  fi\n\
