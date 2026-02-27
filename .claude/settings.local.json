@@ -1,9 +1,11 @@
 {
-  "language": "zh-CN",
   "permissions": {
     "allow": [
       "Bash(cargo check:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(true:*)",
+      "Bash(cargo build:*)"
     ]
-  }
+  },
+  "language": "zh-CN"
 }

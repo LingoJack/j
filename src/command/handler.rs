@@ -119,7 +119,7 @@ command_handlers! {
         crate::command::system::handle_version(config);
     },
     HelpCmd {} => |self, _config| {
-        crate::command::system::handle_help();
+        crate::command::help::handle_help();
     },
     ExitCmd {} => |self, _config| {
         crate::command::system::handle_exit();

@@ -1,4 +1,4 @@
-use crate::assets::{HELP_TEXT, VERSION_TEMPLATE};
+use crate::assets::VERSION_TEMPLATE;
 use crate::config::YamlConfig;
 use crate::constants::{self, CONTAIN_SEARCH_SECTIONS, config_key, section};
 use crate::{error, info, md, usage};
@@ -23,11 +23,6 @@ pub fn handle_version(config: &YamlConfig) {
         .replace("{os}", std::env::consts::OS)
         .replace("{extra}", &extra);
     md!("{}", text);
-}
-
-/// 处理 help 命令: j help
-pub fn handle_help() {
-    md!("{}", HELP_TEXT);
 }
 
 /// 处理 exit 命令
