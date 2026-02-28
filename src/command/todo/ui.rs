@@ -382,6 +382,27 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
             );
             f.render_widget(confirm_widget, chunks[status_chunk_idx]);
         }
+        AppMode::ConfirmCancelInput => {
+            let inner_width = chunks[status_chunk_idx].width.saturating_sub(2) as usize;
+            let prefix = " ⚠️ 是否保存？当前输入: \"";
+            let suffix = "\" (Enter/y 保存 / n/Esc 放弃 / 其他键继续编辑)";
+            let prefix_w = display_width(prefix);
+            let suffix_w = display_width(suffix);
+            let budget = inner_width.saturating_sub(prefix_w + suffix_w);
+            let truncated = truncate_to_width(&app.input, budget);
+            let msg = format!("{}{}{}", prefix, truncated, suffix);
+            let confirm_widget = Paragraph::new(Line::from(Span::styled(
+                msg,
+                Style::default().fg(Color::Yellow),
+            )))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow))
+                    .title(" ⚠️ 未保存的内容 "),
+            );
+            f.render_widget(confirm_widget, chunks[status_chunk_idx]);
+        }
         AppMode::Normal | AppMode::Help => {
             let msg = app.message.as_deref().unwrap_or("按 ? 查看完整帮助");
             let dirty_indicator = if app.is_dirty() { " [未保存]" } else { "" };
@@ -411,6 +432,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         }
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
         AppMode::ConfirmReport => " Enter/y 写入日报并保存 | 其他键 跳过",
+        AppMode::ConfirmCancelInput => " Enter/y 保存 | n/Esc 放弃 | 其他键 继续编辑",
         AppMode::Help => " 按任意键返回",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(

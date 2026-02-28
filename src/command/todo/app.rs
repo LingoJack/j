@@ -115,7 +115,7 @@ pub struct TodoApp {
     pub report_pending_content: Option<String>,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum AppMode {
     /// 正常浏览模式
     Normal,
@@ -127,6 +127,8 @@ pub enum AppMode {
     ConfirmDelete,
     /// 确认写入日报
     ConfirmReport,
+    /// 确认取消输入（有内容变化时）
+    ConfirmCancelInput,
     /// 显示帮助
     Help,
 }
@@ -193,7 +195,7 @@ impl TodoApp {
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= count - 1 {
-                    0
+                    count - 1 // 到达底部时停止，不再循环
                 } else {
                     i + 1
                 }
@@ -212,7 +214,7 @@ impl TodoApp {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    count - 1
+                    0 // 到达顶部时停止，不再循环
                 } else {
                     i - 1
                 }
@@ -260,7 +262,13 @@ impl TodoApp {
         if count > 0 {
             self.state.select(Some(count - 1));
         }
-        self.message = Some("✅ 已添加新待办".to_string());
+        // 自动保存到文件
+        if save_todo_list(&self.list) {
+            self.snapshot = self.list.clone();
+            self.message = Some("✅ 已添加并保存".to_string());
+        } else {
+            self.message = Some("✅ 已添加（保存失败）".to_string());
+        }
     }
 
     /// 确认编辑
@@ -276,7 +284,13 @@ impl TodoApp {
         if let Some(idx) = self.edit_index {
             if idx < self.list.items.len() {
                 self.list.items[idx].content = text;
-                self.message = Some("✅ 已更新待办内容".to_string());
+                // 自动保存到文件
+                if save_todo_list(&self.list) {
+                    self.snapshot = self.list.clone();
+                    self.message = Some("✅ 已更新并保存".to_string());
+                } else {
+                    self.message = Some("✅ 已更新（保存失败）".to_string());
+                }
             }
         }
         self.input.clear();
@@ -444,11 +458,39 @@ pub fn handle_input_mode(app: &mut TodoApp, key: KeyEvent) {
             }
         }
         KeyCode::Esc => {
-            app.mode = AppMode::Normal;
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.edit_index = None;
-            app.message = Some("已取消".to_string());
+            // 检查是否有内容变化，有变化则提示是否保存
+            let has_changes = if app.mode == AppMode::Adding {
+                !app.input.trim().is_empty()
+            } else if app.mode == AppMode::Editing {
+                // 编辑模式：比较当前输入和原始内容
+                if let Some(idx) = app.edit_index {
+                    if idx < app.list.items.len() {
+                        app.input.trim() != app.list.items[idx].content.trim()
+                    } else {
+                        !app.input.trim().is_empty()
+                    }
+                } else {
+                    !app.input.trim().is_empty()
+                }
+            } else {
+                false
+            };
+
+            if has_changes {
+                // 有修改，进入确认模式，询问是否保存
+                app.mode = AppMode::ConfirmCancelInput;
+                app.message = Some(
+                    "⚠️ 有未保存的内容，是否保存？(Enter/y 保存 / n 放弃 / 其他键继续编辑)"
+                        .to_string(),
+                );
+            } else {
+                // 无修改，直接取消
+                app.mode = AppMode::Normal;
+                app.input.clear();
+                app.cursor_pos = 0;
+                app.edit_index = None;
+                app.message = Some("已取消".to_string());
+            }
         }
         KeyCode::Left => {
             if app.cursor_pos > 0 {
@@ -533,6 +575,41 @@ pub fn handle_confirm_delete(app: &mut TodoApp, key: KeyEvent) {
 pub fn handle_help_mode(app: &mut TodoApp, _key: KeyEvent) {
     app.mode = AppMode::Normal;
     app.message = None;
+}
+
+/// 确认取消输入按键处理
+pub fn handle_confirm_cancel_input(app: &mut TodoApp, key: KeyEvent, prev_mode: AppMode) {
+    match key.code {
+        KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
+            // Enter/y 确认保存
+            if prev_mode == AppMode::Adding {
+                app.add_item();
+            } else {
+                app.confirm_edit();
+            }
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            // n 放弃修改
+            app.mode = AppMode::Normal;
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.edit_index = None;
+            app.message = Some("已放弃".to_string());
+        }
+        KeyCode::Esc => {
+            // Esc 放弃修改
+            app.mode = AppMode::Normal;
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.edit_index = None;
+            app.message = Some("已放弃".to_string());
+        }
+        _ => {
+            // 其他键继续编辑
+            app.mode = prev_mode;
+            app.message = None;
+        }
+    }
 }
 
 /// 确认写入日报按键处理

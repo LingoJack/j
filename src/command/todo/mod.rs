@@ -4,8 +4,9 @@ pub mod ui;
 use crate::config::YamlConfig;
 use crate::{error, info};
 use app::{
-    AppMode, TodoApp, TodoItem, handle_confirm_delete, handle_confirm_report, handle_help_mode,
-    handle_input_mode, handle_normal_mode, load_todo_list, save_todo_list,
+    AppMode, TodoApp, TodoItem, handle_confirm_cancel_input, handle_confirm_delete,
+    handle_confirm_report, handle_help_mode, handle_input_mode, handle_normal_mode, load_todo_list,
+    save_todo_list,
 };
 use chrono::Local;
 use crossterm::{
@@ -67,6 +68,8 @@ fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
 
     let mut app = TodoApp::new();
     let mut last_input_len: usize = 0;
+    // 记录进入 ConfirmCancelInput 前的模式，用于继续编辑时恢复
+    let mut prev_input_mode: Option<AppMode> = None;
 
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
@@ -102,10 +105,20 @@ fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
                             break;
                         }
                     }
-                    AppMode::Adding => handle_input_mode(&mut app, key),
-                    AppMode::Editing => handle_input_mode(&mut app, key),
+                    AppMode::Adding => {
+                        prev_input_mode = Some(AppMode::Adding);
+                        handle_input_mode(&mut app, key);
+                    }
+                    AppMode::Editing => {
+                        prev_input_mode = Some(AppMode::Editing);
+                        handle_input_mode(&mut app, key);
+                    }
                     AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
                     AppMode::ConfirmReport => handle_confirm_report(&mut app, key, config),
+                    AppMode::ConfirmCancelInput => {
+                        let prev = prev_input_mode.clone().unwrap_or(AppMode::Adding);
+                        handle_confirm_cancel_input(&mut app, key, prev);
+                    }
                     AppMode::Help => handle_help_mode(&mut app, key),
                 }
             }
