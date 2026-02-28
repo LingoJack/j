@@ -1,3 +1,4 @@
+use crate::constants::DATA_DIR;
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -61,7 +62,7 @@ pub fn capitalize_first_letter(s: &str) -> String {
 pub fn write_error_log(context: &str, error: &str) {
     let log_dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".jdata")
+        .join(DATA_DIR)
         .join("agent")
         .join("logs");
 
