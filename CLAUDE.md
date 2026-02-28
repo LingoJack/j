@@ -5,6 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 `j-cli` (a.k.a. "work-copilot") is a Rust CLI productivity tool for macOS ARM64. It manages app/URL aliases, daily reports, todos, AI chat, voice-to-text, and more. Binary name is `j`. User data lives in `~/.jdata/` (overridable via `J_DATA_PATH`).
+more related info: README.md
+REMEBER TO UPDATE README.md AND HELP.md WHEN CHANGES ARE MADE IF NEEDED
 
 ## Commands
 
