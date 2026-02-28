@@ -19,7 +19,8 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
     // 检查脚本名是否已存在 → 如果存在则进入编辑模式
     if config.contains(section::PATH, name) {
         // 获取已有脚本路径
-        let existing_path = match config.get_property(section::SCRIPT, name)
+        let existing_path = match config
+            .get_property(section::SCRIPT, name)
             .or_else(|| config.get_property(section::PATH, name))
         {
             Some(p) => p.clone(),
@@ -155,8 +156,5 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
     config.set_property(section::PATH, name, &script_path_str);
     config.set_property(section::SCRIPT, name, &script_path_str);
 
-    info!(
-        "✅ 成功创建脚本 {{{}}}，路径: {}",
-        name, script_path_str
-    );
+    info!("✅ 成功创建脚本 {{{}}}，路径: {}", name, script_path_str);
 }

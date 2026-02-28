@@ -1,4 +1,4 @@
-use crate::constants::{self, section, config_key};
+use crate::constants::{self, config_key, section};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -151,23 +151,38 @@ impl YamlConfig {
         let mut config = Self::default();
 
         // 版本信息
-        config.version.insert("name".into(), constants::APP_NAME.into());
-        config.version.insert("version".into(), constants::VERSION.into());
-        config.version.insert("author".into(), constants::AUTHOR.into());
-        config.version.insert("email".into(), constants::EMAIL.into());
+        config
+            .version
+            .insert("name".into(), constants::APP_NAME.into());
+        config
+            .version
+            .insert("version".into(), constants::VERSION.into());
+        config
+            .version
+            .insert("author".into(), constants::AUTHOR.into());
+        config
+            .version
+            .insert("email".into(), constants::EMAIL.into());
 
         // 日志模式
-        config.log.insert(config_key::MODE.into(), config_key::CONCISE.into());
+        config
+            .log
+            .insert(config_key::MODE.into(), config_key::CONCISE.into());
 
         // 默认搜索引擎
-        config.setting.insert(config_key::SEARCH_ENGINE.into(), constants::DEFAULT_SEARCH_ENGINE.into());
+        config.setting.insert(
+            config_key::SEARCH_ENGINE.into(),
+            constants::DEFAULT_SEARCH_ENGINE.into(),
+        );
 
         config
     }
 
     /// 是否是 verbose 模式
     pub fn is_verbose(&self) -> bool {
-        self.log.get(config_key::MODE).map_or(false, |m| m == config_key::VERBOSE)
+        self.log
+            .get(config_key::MODE)
+            .map_or(false, |m| m == config_key::VERBOSE)
     }
 
     // ========== 根据 section 名称获取对应的 map ==========
@@ -269,7 +284,12 @@ impl YamlConfig {
     /// 别名中的 `-` 会转换为 `_`，且全部大写
     /// 覆盖 section: path, inner_url, outer_url, script
     pub fn collect_alias_envs(&self) -> Vec<(String, String)> {
-        let sections = &[section::PATH, section::INNER_URL, section::OUTER_URL, section::SCRIPT];
+        let sections = &[
+            section::PATH,
+            section::INNER_URL,
+            section::OUTER_URL,
+            section::SCRIPT,
+        ];
         let mut envs = Vec::new();
         let mut seen = std::collections::HashSet::new();
 

@@ -1,8 +1,8 @@
+use crate::command::all_command_keywords;
 use crate::config::YamlConfig;
 use crate::constants::section;
 use crate::constants::{MODIFY_SECTIONS, REMOVE_CLEANUP_SECTIONS, RENAME_SYNC_SECTIONS};
 use crate::{error, info, usage};
-use crate::command::all_command_keywords;
 use url::Url;
 
 /// 处理 set 命令: j set <alias> <path...>
@@ -66,30 +66,48 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
 
     // path
     if config.contains(section::PATH, alias) {
-        let path = config.get_property(section::PATH, alias).cloned().unwrap_or_default();
+        let path = config
+            .get_property(section::PATH, alias)
+            .cloned()
+            .unwrap_or_default();
         config.rename_property(section::PATH, alias, new_alias);
         // 同时重命名关联的 category
         for s in RENAME_SYNC_SECTIONS {
             config.rename_property(s, alias, new_alias);
         }
         updated = true;
-        info!("✅ 重命名 {} -> {} 成功! Path: {} 🎉", alias, new_alias, path);
+        info!(
+            "✅ 重命名 {} -> {} 成功! Path: {} 🎉",
+            alias, new_alias, path
+        );
     }
 
     // inner_url
     if config.contains(section::INNER_URL, alias) {
-        let url = config.get_property(section::INNER_URL, alias).cloned().unwrap_or_default();
+        let url = config
+            .get_property(section::INNER_URL, alias)
+            .cloned()
+            .unwrap_or_default();
         config.rename_property(section::INNER_URL, alias, new_alias);
         updated = true;
-        info!("✅ 重命名 {} -> {} 成功! Inner URL: {} 🚀", alias, new_alias, url);
+        info!(
+            "✅ 重命名 {} -> {} 成功! Inner URL: {} 🚀",
+            alias, new_alias, url
+        );
     }
 
     // outer_url
     if config.contains(section::OUTER_URL, alias) {
-        let url = config.get_property(section::OUTER_URL, alias).cloned().unwrap_or_default();
+        let url = config
+            .get_property(section::OUTER_URL, alias)
+            .cloned()
+            .unwrap_or_default();
         config.rename_property(section::OUTER_URL, alias, new_alias);
         updated = true;
-        info!("✅ 重命名 {} -> {} 成功! Outer URL: {} 🌐", alias, new_alias, url);
+        info!(
+            "✅ 重命名 {} -> {} 成功! Outer URL: {} 🌐",
+            alias, new_alias, url
+        );
     }
 
     if !updated {

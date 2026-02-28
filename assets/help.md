@@ -44,6 +44,8 @@ j
 ├── config.yaml          # 主配置文件（别名、分类、设置等）
 ├── history.txt          # 交互模式命令历史
 ├── scripts/             # j concat 创建的脚本
+├── todo/                # 待办备忘录目录
+│   └── todo.json        # 待办数据（JSON 格式）
 └── report/              # 日报目录
     ├── week_report.md   # 周报文件
     ├── settings.json    # 日报配置（周数、日期）
@@ -128,6 +130,79 @@ j
 > 自定义路径: `j change report week_report <path>`
 > 配置远程仓库: `j reportctl set-url <repo_url>`
 
+## 📋 待办备忘录
+
+| 命令 | 说明 |
+|------|------|
+| `j todo` | 进入 TUI 待办管理界面（全屏交互） |
+| `j td` | 同上（别名） |
+| `j todo 买牛奶` | 快速添加一条待办 |
+
+### TUI 界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `n` / `↓` / `j` | 向下移动 |
+| `N` / `↑` / `k` | 向上移动 |
+| `空格` / `回车` | 切换完成状态 `[x]` / `[ ]` |
+| `a` | 添加新待办 |
+| `e` | 编辑选中待办 |
+| `d` | 删除待办（需确认） |
+| `y` | 复制选中待办到系统剪切板 |
+| `f` | 过滤切换（全部 / 未完成 / 已完成） |
+| `J` / `K` | 调整待办顺序（下移 / 上移） |
+| `s` | 手动保存 |
+| `Alt+↑` / `Alt+↓` | 预览区滚动（长待办内容时可用） |
+| `?` | 查看完整帮助 |
+| `q` | 退出（有未保存修改时需先保存或用 `q!` 强制退出） |
+| `q!` | 强制退出（丢弃未保存的修改） |
+
+### 完成时写入日报联动
+
+**新增功能**：当待办标记为完成时，自动询问是否写入日报
+
+| 操作 | 效果 |
+|------|------|
+| `空格` / `回车` 标记完成 | 底部显示确认提示：`写入日报: "内容..."？ (Enter/y 写入, 其他跳过)` |
+| `Enter` / `y` / `Y` | ✅ 写入日报 + 自动保存 todo |
+| 其他任意键 | ✅ 标记完成，不写入日报 |
+
+> **提示**：写入日报的格式与 `j report` 命令一致：`- 【YYYY/MM/DD】 内容`
+> **批量操作**：可以连续标记多个待办为完成，每次都会询问是否写入日报，便于批量记录工作成果
+
+### 输入/编辑模式快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `←` / `→` | 移动光标 |
+| `Home` / `End` | 跳到行首 / 行尾 |
+| `Backspace` | 删除光标前字符 |
+| `Delete` | 删除光标处字符 |
+| `Enter` | 确认提交 |
+| `Esc` | 取消 |
+
+### 确认写入日报模式快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `Enter` / `y` / `Y` | 确认写入日报并自动保存 todo |
+| 其他任意键 | 跳过写入日报，仅标记完成 |
+| `Esc` | 取消（同其他任意键） |
+
+> 数据存储路径: `~/.jdata/todo/todo.json`
+
+### 预览区功能
+- 当选中的待办项内容超出列表显示宽度时，列表下方会自动显示预览区
+- 预览区展示完整的待办内容，支持自动换行
+- 使用 `Alt+↑` / `Alt+↓` 可在预览区滚动查看长内容
+- 切换到其他待办项时，预览区会自动刷新并重置滚动位置
+
+### 确认写入日报模式
+- 标记完成时进入确认模式，状态栏显示 `📝 写入日报` 框
+- 帮助栏提示：`Enter/y 写入日报并保存 | 其他键 跳过`
+- 该模式下仅响应确认/取消操作，不响应其他快捷键
+- 确认或取消后自动返回正常模式
+
 ## 📜 脚本 & ⏳ 倒计时
 
 | 命令 | 说明 |
@@ -171,6 +246,208 @@ open -a "$J_CHROME" https://example.com
 | `j exit` | 退出（交互模式） |
 | `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
 
+## 🎙️ 语音转文字
+
+| 命令 | 说明 |
+|------|------|
+| `j voice` | 录音 → Whisper 离线转写 → 输出文字 |
+| `j voice -c` | 录音转写并复制结果到剪贴板 |
+| `j voice -m <model>` | 指定模型大小（tiny/base/small/medium/large） |
+| `j voice download` | 下载默认模型（small） |
+| `j voice download -m medium` | 下载指定大小的模型 |
+| `j vc` | 同 `j voice`（别名） |
+
+> 首次使用需先下载 Whisper 模型: `j voice download`
+> 模型存储路径: `~/.jdata/voice/model/`
+> 推荐中文用 small（466MB）或 medium（1.5GB）模型
+
+---
+
+## 🔄 安装 & 更新
+
+### 一键安装（推荐）
+```bash
+# 安装最新版本
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+```
+
+### 从 crates.io 安装
+```bash
+cargo install j-cli
+```
+
+### 从 GitHub Release 下载
+```bash
+# macOS ARM64 (M1/M2/M3/M4)
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+```
+
+### 更新
+```bash
+# 一键更新（安装脚本方式）
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+
+# 从 crates.io 更新
+cargo install j-cli
+
+# 查看当前版本
+j version
+```
+
+> **注意**：`cargo install` 会自动检测 crates.io 上的最新版本并更新，无需先卸载。
+
+---
+
+## 🗑️ 卸载
+
+```bash
+# 使用安装脚本卸载（推荐）
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+
+# 或通过 cargo 卸载（cargo 安装的用户）
+cargo uninstall j-cli
+
+# 或手动删除
+sudo rm /usr/local/bin/j  # 一键安装方式
+rm ~/.cargo/bin/j          # cargo 安装方式
+
+# （可选）删除数据目录（包含配置、历史、脚本、日报等）
+rm -rf ~/.jdata
+```
+
+> **注意**：卸载命令只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
+
+---
+
+## 🤖 AI 对话
+
+| 命令 | 说明 |
+|------|------|
+| `j chat` / `j ai` | 进入 TUI 对话界面（全屏交互） |
+| `j chat 你好` / `j ai 你好` | 进入对话并发送首条消息 |
+
+### 配置
+
+首次使用需配置 LLM 模型提供方。在对话界面中按 **Ctrl+E** 打开内置配置界面，可视化管理模型提供方。
+
+配置文件路径: `~/.jdata/agent/data/agent_config.json`（也可手动编辑）
+
+```json
+{
+  "providers": [
+    {
+      "name": "GPT-4o",
+      "api_base": "https://api.openai.com/v1",
+      "api_key": "sk-your-api-key",
+      "model": "gpt-4o"
+    }
+  ],
+  "active_index": 0,
+  "system_prompt": "你是一个有用的助手。",
+  "stream_mode": true,
+  "max_history_messages": 20,
+  "theme": "dark"
+}
+```
+
+> 支持配置多个模型提供方，可在对话中通过 `Ctrl+T` 切换
+
+### 配置界面
+
+按 `Ctrl+E` 进入可视化配置界面，可编辑模型提供方和全局设置：
+
+| 按键 | 功能 |
+|------|------|
+| `↑` / `k` | 向上移动光标 |
+| `↓` / `j` | 向下移动光标 |
+| `Tab` / `→` | 切换到下一个 Provider |
+| `Shift+Tab` / `←` | 切换到上一个 Provider |
+| `Enter` | 进入编辑模式（修改当前字段） |
+| `a` | 新增 Provider |
+| `d` | 删除当前 Provider |
+| `s` | 将当前 Provider 设为活跃模型 |
+| `Esc` | 保存配置并返回对话 |
+
+> **提示**：`stream_mode` 和 `theme` 字段直接按 `Enter` 切换，无需手动输入
+
+### 主题风格
+
+支持以下主题（在配置界面中选中 `theme` 字段按 `Enter` 循环切换）：
+
+| 主题 | 说明 |
+|------|------|
+| `dark` | 深色主题（默认） |
+| `light` | 浅色主题 |
+| `dracula` | Dracula 配色 |
+| `gruvbox` | Gruvbox 配色 |
+| `monokai` | Monokai 配色 |
+| `nord` | Nord 配色 |
+
+### 对话界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `Enter` | 发送消息 |
+| `↑` / `↓` | 滚动对话记录 |
+| `PageUp` / `PageDown` | 快速滚动（10行） |
+| `←` / `→` | 移动输入光标 |
+| `Home` / `End` | 跳到输入行首/行尾 |
+| `Ctrl+T` | 切换模型提供方 |
+| `Ctrl+L` | 归档当前对话（保存并清空） |
+| `Ctrl+R` | 还原归档对话 |
+| `Ctrl+Y` | 复制最后一条 AI 回复 |
+| `Ctrl+B` | 进入消息浏览模式 |
+| `Ctrl+S` | 切换流式/整体输出 |
+| `Ctrl+E` | 打开配置界面（可视化编辑模型配置） |
+| `?` | 显示帮助 |
+| `Esc` / `Ctrl+C` | 退出对话 |
+
+### 消息浏览模式
+
+按 `Ctrl+B` 进入浏览模式，可选中任意历史消息并复制到剪切板：
+
+| 按键 | 功能 |
+|------|------|
+| `↑` / `k` | 选中上一条消息 |
+| `↓` / `j` | 选中下一条消息 |
+| `A` | 消息内容向上滚动 1 行（细粒度） |
+| `D` | 消息内容向下滚动 1 行（细粒度） |
+| `y` / `Enter` | 复制选中消息到剪切板 |
+| `Esc` | 返回对话模式 |
+
+### 归档对话功能
+
+对话支持归档和还原，方便保存有价值的对话历史：
+
+**归档对话（Ctrl+L）**：
+- 按下 `Ctrl+L` 后，当前对话会被保存到归档
+- 默认归档名称格式：`archive-YYYY-MM-DD`（如 `archive-2026-02-25`）
+- 如果同名归档已存在，自动添加后缀（如 `archive-2026-02-25(1)`）
+- 归档后当前会话自动清空
+
+**还原归档（Ctrl+R）**：
+- 按下 `Ctrl+R` 进入归档列表
+- 使用 `↑` / `↓` 或 `j` / `k` 选择归档
+- 按 `Enter` 还原选中的归档
+- 按 `d` 删除选中的归档
+- 按 `Esc` 取消返回
+
+**归档存储位置**：`~/.j/chat/archives/`
+
+> 提示：还原归档会先清空当前会话，如果当前有未归档的对话，还原时会提示确认
+
+### 功能特性
+
+- **Markdown 渲染**：AI 回复支持标题、加粗、斜体、行内代码、代码块（语法高亮）、列表、表格、引用块
+- **代码高亮**：支持 Rust、Python、JavaScript/TypeScript、Go、Java、Bash/Shell、C/C++、SQL、Ruby 等语言
+- **流式/整体输出**：默认流式逐字输出，可通过 `Ctrl+S` 切换为等待完整回复后再显示
+- **对话持久化**：对话自动保存到 `~/.jdata/agent/data/chat_session.json`，重启后恢复
+- **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时切换
+
 ---
 
 ## 💡 使用技巧
@@ -184,4 +461,5 @@ open -a "$J_CHROME" https://example.com
 - `report` 命令内容不会记入历史，保护日报隐私
 - CLI 工具（如 rg、fzf）注册后可直接在终端执行并支持管道
 - 脚本需要后台运行时，使用 `-w` 标志在新窗口中执行（如 `j deploy -w`）
+- 待办备忘录支持 markdown 风格 `[x]` / `[ ]` checkbox，`j todo` 进入全屏 TUI 管理
 - 启用 shell Tab 补全：`eval "$(j completion zsh)"` 加入 `.zshrc` 即可在快捷模式下补全命令、别名和文件路径

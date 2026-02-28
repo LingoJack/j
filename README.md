@@ -1,7 +1,8 @@
 # work-copilot Rust 重构进度
 
-> 📅 最后更新: 2026-02-12
+> 📅 最后更新: 2026-02-25
 > 🔖 版本: v22.0.0
+> 🖥️ 平台: macOS ARM64 (M1/M2/M3/M4)
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
 
 ---
@@ -12,6 +13,9 @@
 - **别名管理**：注册 app 路径 / URL / 脚本，通过 `j <alias>` 快速打开
 - **分类标记**：将别名标记为 browser / editor / vpn / outer_url / script，支持组合打开
 - **日报系统**：快速写入日报、查看和搜索历史记录，自动周数管理
+- **待办备忘录**：内置 TUI 待办管理，支持 markdown 风格 checkbox，数据持久化
+- **AI 对话**：内置 TUI AI 对话界面，支持多模型切换、流式输出、Markdown 渲染、消息浏览复制
+- **语音转文字**：基于 Whisper.cpp 的离线语音识别，支持中文，录音转写输出文字
 - **脚本创建**：一键创建 shell 脚本并注册为别名
 - **交互模式**：带 Tab 补全 + 历史建议的 REPL 环境
 - **倒计时器**：终端倒计时，带进度条和结束提醒
@@ -41,12 +45,16 @@ src/
 │   ├── list.rs          # ls（列出别名）
 │   ├── open.rs          # 打开应用 / URL / 浏览器搜索（核心命令）
 │   ├── report.rs        # report / check / search（日报系统）
+│   ├── todo.rs          # todo（待办备忘录 TUI）
+│   ├── chat.rs          # chat（AI 对话 TUI，Markdown 渲染 + 流式输出）
+│   ├── voice.rs         # voice（语音转文字，Whisper.cpp 离线转写）
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
 │   └── time.rs          # time countdown（倒计时器）
 ├── util/
 │   ├── mod.rs           # 导出子模块 + 公共工具函数（remove_quotes）
-│   ├── log.rs           # info! / error! / usage! / debug_log! / md! 日志宏
+│   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏 + 工具函数
+│   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏 + ask 二进制嵌入与释放
 │   └── fuzzy.rs         # 模糊匹配（大小写不敏感 + 高亮 + UTF-8 安全）
 ├── assets/
 │   ├── help.md          # 帮助文档（编译时通过 include_str! 嵌入二进制）
@@ -81,6 +89,9 @@ termimad = "0.30"                                   # Markdown 终端渲染（fa
 ratatui = "0.29"                                    # TUI 框架（全屏终端 UI）
 crossterm = "0.28"                                  # 终端原始模式 + 事件读取
 tui-textarea = "0.7"                                # 多行文本编辑组件（配合 ratatui）
+whisper-rs = "0.15"                                  # Whisper.cpp Rust 绑定（离线语音识别）
+cpal = "0.17"                                        # 跨平台音频捕获（麦克风录音）
+hound = "3.5"                                        # WAV 文件读写
 ```
 
 ---
@@ -112,6 +123,11 @@ tui-textarea = "0.7"                                # 多行文本编辑组件�
 | **Phase 19** | `reportctl open` 命令：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写文件；取消则不修改 | ✅ 完成 |
 | **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
 | **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
+| **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo <content>`；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
+| **Phase 26** | Todo 完成时写入日报联动：待办标记为完成时弹出确认框询问是否写入日报，Enter/y 确认写入并自动保存 todo，其他键跳过；写入格式与 `j report` 一致（`- 【YYYY/MM/DD】 内容`）；支持在 TUI 中批量完成待办并选择性写入日报 | ✅ 完成 |
+| **Phase 23** | AI 对话系统（chat）：内置 TUI AI 对话界面，支持多模型提供方切换（OpenAI/DeepSeek 等）、流式/整体输出切换（Ctrl+S）、Markdown 渲染（标题/加粗/斜体/代码块语法高亮/表格/列表/引用块）、消息浏览模式（Ctrl+B，↑↓选择 y/Enter 复制，A/D 细粒度滚动消息内容）、对话持久化；代码高亮支持 Rust/Python/JS/Go/Java/Bash/C/SQL/Ruby/YAML/CSS/Dockerfile 等语言，Bash 额外支持 `$VAR`/`${VAR}` 变量高亮；渲染行缓存 + 可见区域裁剪优化性能 | ✅ 完成 |
+| **Phase 24** | AI 对话系统增强：可视化配置界面（Ctrl+E）支持 Provider 增删改、全局设置编辑（system_prompt/max_history_messages/stream_mode）；6 种主题风格（dark/light/dracula/gruvbox/monokai/nord），实时切换无需重启；历史消息数量限制（max_history_messages）防止 token 超限 | ✅ 完成 |
+| **Phase 25** | 语音转文字：基于 Whisper.cpp 的离线语音识别（whisper-rs + cpal + hound）；`j voice` 命令录音转写输出文字；`j voice -c` 复制到剪贴板；`j voice download` 自动下载模型；支持 tiny/base/small/medium/large 五种模型大小；16kHz 单声道录音；中文识别优化；模型存储在 `~/.jdata/voice/model/` | ✅ 完成 |
 
 ---
 
@@ -155,6 +171,8 @@ flowchart TD
 | `reportctl` | `rctl` | `<new\|sync\|push\|pull\|set-url\|open> [arg]` | 日报元数据操作 |
 | `check` | `c` | `[line_count\|open]` | 查看最近 N 行日报 / TUI 编辑器打开日报文件 |
 | `search` | `select/look/sch` | `<N\|all> <kw> [-f]` | 搜索日报 |
+| `todo` | `td` | `[content...]` | 待办备忘录（无参数进入 TUI 管理界面，有参数快速添加） |
+| `chat` | `ai` | `[content...]` | AI 对话（无参数进入 TUI 界面，有参数快速提问） |
 | `concat` | — | `<name> [content]` | 创建脚本（无 content 则打开 TUI 编辑器） |
 | `time` | — | `<countdown> <dur>` | 倒计时器 |
 | `log` | — | `<key> <value>` | 日志设置 |
@@ -163,6 +181,7 @@ flowchart TD
 | `version` | `v` | — | 版本信息 |
 | `help` | `h` | — | 帮助信息 |
 | `exit` | `q/quit` | — | 退出 |
+| `voice` | `vc` | `[-c] [-m model] / download [-m model]` | 语音转文字（录音 → Whisper 离线转写） |
 | `completion` | — | `[zsh\|bash]` | 生成 shell 补全脚本 |
 
 ### 5.3 配置管理 — `config/yaml_config.rs`
@@ -230,7 +249,42 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
   - **GUI 应用**（`.app` 目录）/ 其他文件 → 系统 `open` 命令打开
 6. 未注册 → 提示未找到
 
-### 5.6 日报系统 — `command/report.rs`
+### 5.6 待办备忘录 — `command/todo.rs`
+
+- **数据存储**：`~/.jdata/todo/todo.json`（独立目录，JSON 格式持久化）
+- **入口方式**：
+  - `j todo` / `j td` — 进入全屏 TUI 待办管理界面
+  - `j todo 买牛奶` — 快速添加一条待办
+  - 交互模式下 `todo` / `td` 同样可用
+
+**TUI 界面**：基于 ratatui + crossterm 的全屏交互界面
+
+| 按键 | 功能 |
+|------|------|
+| `n` / `↓` / `j` | 向下移动 |
+| `N` / `↑` / `k` | 向上移动 |
+| `空格` / `回车` | 切换完成状态（`[x]` ↔ `[ ]`） |
+| `a` | 添加新待办（进入输入模式） |
+| `e` | 编辑选中待办 |
+| `d` | 删除待办（需 `y` 确认） |
+| `f` | 过滤切换（全部 → 未完成 → 已完成） |
+| `J` / `K` | 调整待办顺序（下移 / 上移） |
+| `s` | 手动保存 |
+| `Alt+↑` / `Alt+↓` | 预览区滚动（长待办内容时可用） |
+| `q` / `Esc` | 退出（自动保存） |
+| `Ctrl+C` | 强制退出 |
+
+**UI 特性**：
+- 标题栏显示统计信息：`📋 待办备忘录 — 共 N 条 | ✅ M | ⬜ K`
+- 列表项显示 checkbox：`[x]` 已完成（绿色 + 删除线），`[ ]` 未完成（黄色）
+- 创建时间附在每项末尾（灰色短日期）
+- 底部帮助栏显示当前模式可用快捷键
+- 空列表提示 `(空) 按 a 添加新待办...`
+- 过滤模式标记在标题栏显示 `[未完成]` / `[已完成]`
+- 未保存修改时状态栏显示红色 `[未保存]` 提示
+- **预览区**：长待办内容时自动显示完整内容预览，支持 Alt+↑/↓ 滚动查看
+
+### 5.7 日报系统 — `command/report.rs`
 
 - **report**：写入日报（自动追加日期前缀，自动检测是否需要新开一周）
 - **reportctl new**：手动推进周数（week_num + 1）
@@ -247,13 +301,13 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 - **git remote 自动同步**：`set-url` 更新地址后自动同步 git remote origin，`push`/`pull` 前也会自动校验并修正
 - **unborn branch 处理**：`pull` 时自动检测空仓库（`git init` 后无 commit），使用 `fetch` + `reset --hard` 而非 `pull --rebase`
 
-### 5.7 模糊匹配 — `util/fuzzy.rs`
+### 5.8 模糊匹配 — `util/fuzzy.rs`
 
 - `fuzzy_match(content, target)` — 大小写不敏感的子串匹配
 - `get_match_intervals(content, target)` — 获取所有匹配区间（UTF-8 char boundary 安全）
 - `highlight_matches(content, target, fuzzy)` — 将匹配部分 ANSI 绿色高亮
 
-### 5.8 日志宏 — `util/log.rs`
+### 5.9 日志宏 — `util/log.rs`
 
 | 宏 | 输出格式 | 颜色 |
 |----|----------|------|
@@ -261,10 +315,15 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 | `error!(...)` | 直接输出 | 红色 |
 | `usage!(...)` | `"Usage: ..."` 前缀 | 黄色 |
 | `debug_log!(config, ...)` | 仅 verbose 模式输出 | 蓝色 |
+
+### 5.9.1 Markdown 渲染 — `util/md_render.rs`
+
+| 宏 | 输出格式 | 颜色 |
+|----|----------|------|
 | `md!(...)` | Markdown 渲染输出（优先嵌入的 `ask` 引擎，fallback termimad） | 终端原生 |
 | `md_inline!(...)` | 单行 Markdown 内联渲染（termimad） | 终端原生 |
 
-### 5.9 全局常量 — `constants.rs`
+### 5.10 全局常量 — `constants.rs`
 
 所有散落在各模块中的魔法字符串和重复定义都已统一到 `constants.rs` 中集中管理：
 
@@ -284,7 +343,7 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 | `REPORT_DATE_FORMAT` / `DEFAULT_CHECK_LINES` / `REPORT_DIR` / `REPORT_DEFAULT_FILE` | 日报相关常量 | report.rs, yaml_config.rs |
 | `INTERACTIVE_PROMPT` / `HISTORY_FILE` / `CONFIG_FILE` 等 | 路径和文件名 | interactive.rs, yaml_config.rs |
 
-### 5.10 公共工具函数 — `util/mod.rs`
+### 5.11 公共工具函数 — `util/mod.rs`
 
 - `remove_quotes(s: &str) -> String` — 去除字符串两端的引号（单引号或双引号），被 `alias.rs` 和 `open.rs` 共同复用。
 
@@ -305,6 +364,12 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 ├── scripts/             # concat 创建的脚本持久化存储
 │   ├── my-script.sh
 │   └── ...
+├── todo/                # 待办备忘录目录
+│   └── todo.json          # 待办数据（JSON 格式）
+├── voice/               # 语音转文字目录
+│   ├── model/             # Whisper 模型存储
+│   │   └── ggml-small.bin # Whisper 模型文件（首次使用时下载）
+│   └── recording.wav      # 临时录音文件（转写后自动删除）
 └── report/              # 日报目录（默认路径，可配置 git 仓库同步）
     ├── week_report.md     # 周报文件
     ├── settings.json      # 日报配置（week_num, last_day）
@@ -357,9 +422,74 @@ settings:
 
 ---
 
-## 七、编译运行指南
+## 七、安装
 
-### 开发编译
+### 方式一：一键安装（推荐）
+
+使用安装脚本自动检测平台并安装：
+
+```bash
+# 安装最新版本
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+```
+
+安装后二进制文件位于 `/usr/local/bin/j`。
+
+**卸载**：
+```bash
+curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+```
+
+### 方式二：从 crates.io 安装
+
+```bash
+# 安装
+cargo install j-cli
+
+# 验证
+j version
+```
+
+安装后二进制文件位于 `~/.cargo/bin/j`，请确保 `~/.cargo/bin` 已加入 PATH：
+
+```bash
+# 检查 PATH
+echo $PATH | grep -o ".cargo/bin"
+
+# 如果没有，添加到 ~/.zshrc 或 ~/.bashrc
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+### 方式三：从 GitHub Release 下载
+
+手动下载预编译二进制（仅支持 macOS M 系列）：
+
+```bash
+# macOS ARM64 (M1/M2/M3/M4)
+curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
+sudo mv j /usr/local/bin/
+```
+
+### 方式四：从源码安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/LingoJack/j.git
+cd j
+
+# 编译安装到 ~/.cargo/bin
+cargo install --path .
+
+# 或编译后手动复制
+cargo build --release
+sudo cp target/release/j /usr/local/bin/j
+```
+
+### 方式五：本地开发编译
+
 ```bash
 cargo build           # Debug 编译
 cargo run             # 运行（进入交互模式）
@@ -367,11 +497,38 @@ cargo run -- help     # 快捷模式执行 help
 cargo run -- set chrome /Applications/Google\ Chrome.app
 ```
 
-### Release 编译 & 安装
+### 更新
+
+```bash
+# 更新到最新版本（cargo 会自动检测并安装新版本）
+cargo install j-cli
+
+# 查看当前版本
+j version
+```
+
+> **注意**：`cargo install` 会自动检测 crates.io 上的最新版本并更新，无需先卸载。
+
+### 卸载
+
+```bash
+# 卸载程序
+cargo uninstall j-cli
+
+# （可选）删除数据目录
+rm -rf ~/.jdata
+```
+
+> **注意**：`cargo uninstall` 只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
+
+---
+
+## 八、编译运行指南
+
+### Release 编译
 ```bash
 cargo build --release
 # 二进制在 target/release/j，~17MB（内嵌 ask 渲染引擎）
-cp target/release/j /usr/local/bin/j
 ```
 
 ### 使用方式
@@ -383,7 +540,12 @@ j chrome "rust lang"  # 用 Chrome 搜索 "rust lang"
 j vscode ./src        # 用 VSCode 打开 src 目录
 j report "完成功能开发"  # 写入日报
 j check               # 查看最近 5 行日报
+j todo                # 进入 TUI 待办管理界面
+j todo 买牛奶         # 快速添加一条待办
 j time countdown 5m   # 5 分钟倒计时
+j voice download      # 下载语音识别模型（首次使用）
+j voice               # 录音 → 转写 → 输出文字
+j voice -c            # 录音 → 转写 → 复制到剪贴板
 
 # 交互模式
 j                     # 进入 REPL
@@ -400,7 +562,7 @@ copilot > exit
 
 ---
 
-## 八、与 Java 版的对应关系
+## 九、与 Java 版的对应关系
 
 | Java 类 | Rust 模块 | 说明 |
 |----------|-----------|------|
@@ -421,17 +583,20 @@ copilot > exit
 | `SearchCommandHandler` | `command/report.rs::handle_search` | 搜索日报 |
 | `ConcatCommandHandler` | `command/script.rs::handle_concat` | 创建脚本 |
 | `TimeCommandHandler` | `command/time.rs::handle_time` | 倒计时器 |
+| — | `command/todo.rs::handle_todo` | 待办备忘录（Rust 新增，Java 版无对应） |
+| — | `command/chat.rs::handle_chat` | AI 对话 TUI（Rust 新增） |
+| — | `command/voice.rs::handle_voice` | 语音转文字（Rust 新增） |
 | `LogCommandHandler` | `command/system.rs::handle_log` | 日志设置 |
 | `ChangeCommandHandler` | `command/system.rs::handle_change` | 修改配置 |
 | `ClearCommandHandler` | `command/system.rs::handle_clear` | 清屏 |
 | `CommandRunner` | `open::that()` + `std::process::Command` | 进程执行 |
 | `FuzzyMatcher` | `util/fuzzy.rs` | 模糊匹配 |
-| `LogUtil` | `util/log.rs`（宏） | 彩色日志 |
+| `LogUtil` | `util/log.rs`（日志宏）+ `util/md_render.rs`（Markdown 渲染） | 彩色日志 + Markdown 渲染 |
 | JLine3 Completer | `interactive.rs::CopilotCompleter` | Tab 补全 |
 
 ---
 
-## 九、关键设计决策
+## 十、关键设计决策
 
 ### 1. clap try_parse + fallback
 
@@ -704,7 +869,263 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 ---
 
-## 十、未来可优化方向
+## 十一、AI 对话系统 (`chat.rs`)
+
+### 概述
+
+`j chat` 命令启动内置 TUI AI 对话界面，支持多模型、流式输出、Markdown 渲染、对话持久化等功能。
+
+### 架构
+
+```
+~/.jdata/agent/data/
+├── agent_config.json    # 模型提供方配置（API key、模型名等）
+└── chat_session.json    # 对话历史（自动保存/恢复）
+```
+
+**核心流程：**
+
+1. **用户输入** → `send_message()` 将消息加入 session，启动后台线程调用 LLM API
+2. **后台线程** → 通过 `mpsc::channel` 发送流式 chunk（`StreamMsg::Chunk`）到前端
+3. **TUI 事件循环** → `poll_stream()` 非阻塞接收 chunk，更新 `streaming_content`
+4. **渲染** → `build_message_lines()` 解析 Markdown 并缓存渲染行，`draw_messages()` 逐行绘制
+
+**性能优化：**
+- `MsgLinesCache`：消息渲染行缓存，打字/滚动时零开销复用（缓存 key: 消息数+内容长度+流式长度+气泡宽度+浏览索引）
+- 只渲染可见区域行（`start..end` 切片），避免全量克隆
+- 批量消费事件（`event::poll(Duration::ZERO)` 循环），防止快速操作时事件堆积
+- 空闲时 1s 超时降低 CPU，加载时 150ms 间隔保证流式刷新
+
+### 配置示例
+
+```json
+{
+  "providers": [
+    {
+      "name": "GPT-4o",
+      "api_base": "https://api.openai.com/v1",
+      "api_key": "sk-xxx",
+      "model": "gpt-4o"
+    },
+    {
+      "name": "DeepSeek-V3",
+      "api_base": "https://api.deepseek.com/v1",
+      "api_key": "sk-xxx",
+      "model": "deepseek-chat"
+    }
+  ],
+  "active_index": 0,
+  "system_prompt": "你是一个有用的助手。",
+  "stream_mode": true,
+  "max_history_messages": 20,
+  "theme": "dark"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `providers` | 模型提供方列表（支持任意 OpenAI 兼容 API） |
+| `active_index` | 当前使用的 provider 索引 |
+| `system_prompt` | 系统提示词（可选，每轮对话前注入） |
+| `stream_mode` | `true` 流式输出（逐字显示），`false` 整体输出（等待完整回复） |
+| `max_history_messages` | 发送给 API 的历史消息数量上限（默认 20，防止 token 超限） |
+| `theme` | 界面主题风格（`dark`/`light`/`dracula`/`gruvbox`/`monokai`/`nord`） |
+
+### 配置界面
+
+按 `Ctrl+E` 进入可视化配置界面：
+
+| 按键 | 功能 |
+|------|------|
+| `↑` / `k` | 向上移动光标 |
+| `↓` / `j` | 向下移动光标 |
+| `Tab` / `→` | 切换到下一个 Provider |
+| `Shift+Tab` / `←` | 切换到上一个 Provider |
+| `Enter` | 进入编辑模式（修改当前字段） |
+| `a` | 新增 Provider |
+| `d` | 删除当前 Provider |
+| `s` | 将当前 Provider 设为活跃模型 |
+| `Esc` | 保存配置并返回对话 |
+
+> **提示**：`stream_mode` 和 `theme` 字段直接按 `Enter` 切换，无需手动输入
+
+### TUI 快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `Enter` | 发送消息 |
+| `↑/↓` | 滚动对话 |
+| `Ctrl+T` | 切换模型提供方 |
+| `Ctrl+L` | 归档当前对话（保存并清空） |
+| `Ctrl+R` | 还原归档对话 |
+| `Ctrl+Y` | 快速复制最后一条 AI 回复 |
+| `Ctrl+B` | 消息浏览模式（↑↓ 选择，y/Enter 复制，A/D 细粒度滚动内容） |
+| `Ctrl+S` | 切换流式/整体输出（默认流式） |
+| `Ctrl+E` | 打开配置界面（可视化编辑模型配置、主题等） |
+| `?` | 显示帮助 |
+| `Esc` | 退出对话 |
+
+### 主题风格
+
+支持 6 种主题风格，可在配置界面（`Ctrl+E`）中选中 `theme` 字段按 `Enter` 循环切换：
+
+| 主题 | 说明 |
+|------|------|
+| `dark` | 深色主题（默认），适合深色终端 |
+| `light` | 浅色主题，适合浅色终端 |
+| `dracula` | Dracula 配色方案 |
+| `gruvbox` | Gruvbox 复古配色 |
+| `monokai` | Monokai 经典配色 |
+| `nord` | Nord 北欧冷色调配色 |
+
+### 归档对话功能
+
+对话支持归档和还原，方便保存有价值的对话历史：
+
+**归档对话（Ctrl+L）**：
+- 按下 `Ctrl+L` 后，当前对话会被保存到归档
+- 默认归档名称格式：`archive-YYYY-MM-DD`（如 `archive-2026-02-25`）
+- 如果同名归档已存在，自动添加后缀（如 `archive-2026-02-25(1)`）
+- 归档后当前会话自动清空
+
+**还原归档（Ctrl+R）**：
+- 按下 `Ctrl+R` 进入归档列表
+- 使用 `↑` / `↓` 或 `j` / `k` 选择归档
+- 按 `Enter` 还原选中的归档
+- 按 `d` 删除选中的归档
+- 按 `Esc` 取消返回
+
+**归档存储位置**：`~/.j/chat/archives/`
+
+> 提示：还原归档会先清空当前会话，如果当前有未归档的对话，还原时会提示确认
+
+### Markdown 渲染
+
+`markdown_to_lines()` 基于 `pulldown-cmark` 解析，支持：
+- 标题（`#` → `>>` 前缀 + 蓝色加粗）
+- **加粗**、*斜体*、~~删除线~~
+- 行内代码（`` ` `` → 黄色背景）
+- 代码块（语法高亮 + 边框 + 行号区）
+- 列表（有序/无序，支持嵌套）
+- 表格（自动列宽 + 边框 + 表头高亮）
+- 引用块（`>` → 左竖线 + 淡色）
+- 分隔线
+
+### 代码高亮支持语言
+
+`highlight_code_line()` 对以下语言提供关键字/字符串/注释/数字着色：
+
+| 语言 | 标识 |
+|------|------|
+| Rust | `rust`, `rs` |
+| Python | `python`, `py` |
+| JavaScript/TypeScript | `js`, `ts`, `jsx`, `tsx` |
+| Go | `go`, `golang` |
+| Java/Kotlin | `java`, `kotlin`, `kt` |
+| Bash/Shell | `sh`, `bash`, `zsh`, `shell` |
+| C/C++ | `c`, `cpp`, `c++`, `h`, `hpp` |
+| SQL | `sql` |
+| Ruby | `ruby`, `rb` |
+| YAML/TOML | `yaml`, `yml`, `toml` |
+| CSS/SCSS | `css`, `scss`, `less` |
+| Dockerfile | `dockerfile`, `docker` |
+| 其他 | 通用关键字高亮 |
+
+**Rust 额外支持**：
+- **关键字高亮（紫色）**：`fn`、`let`、`mut`、`pub`、`struct`、`enum`、`impl`、`trait`、`match`、`if`、`else`、`for`、`while`、`loop`、`return` 等控制流/定义关键字
+- **原始类型高亮（青绿色）**：`i32`、`u64`、`f64`、`bool`、`char`、`str` 等
+- **类型名高亮（暖黄色）**：大写开头的类型名如 `Vec`、`String`、`Option`、`Result`、`HashMap`、`Clone`、`Debug`、`Iterator` 等 Trait 名
+- **宏调用高亮（淡蓝色）**：`println!`、`vec!`、`panic!`、`format!` 等（自动识别 `word!` 形式）
+- **生命周期参数高亮（暖黄色）**：`'a`、`'static` 等生命周期参数
+- **属性高亮（青绿色）**：`#[derive(...)]`、`#[cfg(...)]` 等属性
+
+Bash 额外支持 `$VAR`、`${VAR}`、`$(cmd)` 变量高亮。
+
+**Go 额外支持**：
+- **关键字高亮（紫色）**：`func`、`package`、`import`、`return`、`if`、`else`、`for`、`range`、`struct`、`interface`、`type`、`var`、`const`、`defer`、`go`、`chan`、`select`、`switch` 等
+- **内建类型高亮（青绿色）**：`int`、`int32`、`int64`、`uint`、`float64`、`bool`、`byte`、`rune`、`string`、`error`、`any` 等
+- **标准库类型高亮（暖黄色）**：`Reader`、`Writer`、`Context`、`Mutex`、`WaitGroup`、`Request`、`Response`、`Buffer` 等常见类型和接口
+- **大写开头标识符不误判**：Go 的导出函数（如 `Println`、`HandleFunc`）不会被错误地标记为类型色，只有显式类型列表中的才高亮
+
+---
+
+## 十二、语音转文字 (`voice.rs`)
+
+### 概述
+
+`j voice` 命令提供基于 Whisper.cpp 的离线语音转文字功能，支持中文识别，无需联网。
+
+### 架构
+
+```
+~/.jdata/voice/
+├── model/
+│   └── ggml-small.bin    # Whisper 模型文件（首次使用时通过 j voice download 下载）
+└── recording.wav         # 临时录音文件（转写后自动删除）
+```
+
+### 核心流程
+
+```mermaid
+flowchart TD
+    A["j voice"] --> B{模型存在?}
+    B -- 否 --> C["提示: j voice download"]
+    B -- 是 --> D["按回车开始录音"]
+    D --> E["🔴 cpal 麦克风录音"]
+    E --> F["按回车结束录音"]
+    F --> G["保存 WAV (16kHz/单声道/i16)"]
+    G --> H["whisper-rs 加载模型"]
+    H --> I["Whisper 转写 (语言=zh)"]
+    I --> J{"-c 标志?"}
+    J -- 是 --> K["输出文字 + 复制到剪贴板"]
+    J -- 否 --> L["输出文字到终端"]
+```
+
+### 使用方式
+
+```bash
+# 首次使用：下载模型（默认 small，466MB，中文效果好）
+j voice download
+j voice download -m medium    # 下载 medium 模型（1.5GB，中文最佳）
+
+# 录音转文字
+j voice                       # 录音 → 转写 → 输出到终端
+j voice -c                    # 录音 → 转写 → 复制到剪贴板
+j voice -m medium             # 使用 medium 模型转写
+j vc                          # 别名，等价于 j voice
+
+# 配合其他命令使用
+j report "$(j voice)"         # 语音写日报
+j todo "$(j voice)"           # 语音添加待办
+```
+
+### 模型选择
+
+| 模型 | 大小 | 中文质量 | 速度（M1 30s音频）| 推荐度 |
+|------|------|---------|-----------------|--------|
+| `tiny` | 75MB | ⭐⭐ | <1s | 不推荐中文 |
+| `base` | 142MB | ⭐⭐⭐ | ~1s | 凑合用 |
+| `small` | 466MB | ⭐⭐⭐⭐ | ~2s | ✅ 默认推荐 |
+| `medium` | 1.5GB | ⭐⭐⭐⭐⭐ | ~3s | ✅ 中文最佳 |
+| `large` | 3.1GB | ⭐⭐⭐⭐⭐ | ~6s | 追求极致精度 |
+
+### 技术实现
+
+- **录音**：`cpal` crate 捕获系统默认麦克风，16kHz 单声道 f32 采样，实时转 i16
+- **WAV 写入**：`hound` crate 将采样数据写入 16bit PCM WAV 文件
+- **转写**：`whisper-rs` crate（Whisper.cpp 的 Rust 绑定），Greedy 解码策略，语言设为中文
+- **模型下载**：通过 `curl` 从 Hugging Face 下载 ggml 格式模型文件
+- **剪贴板**：macOS 通过 `pbcopy` 复制
+
+### 注意事项
+
+- 首次录音时 macOS 会弹出麦克风权限请求，需要用户授权
+- 编译需要系统安装 `cmake`（`brew install cmake`），因为 whisper-rs 需要编译 whisper.cpp
+- 模型文件较大，不嵌入二进制，需要用户首次使用时手动下载
+
+---
+
+## 十三、未来可优化方向
 
 | 方向 | 说明 | 优先级 |
 |------|------|--------|
@@ -716,11 +1137,11 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 | **跨平台测试** | Windows / Linux 平台适配验证 | 中 |
 | **自动更新** | `j update` 从 GitHub Release 自动下载最新版本 | 低 |
 | **模糊搜索增强** | 支持 fzf 风格的模糊搜索算法（如 Smith-Waterman） | 低 |
-| **agent 命令** | 接入 AI agent 能力（原 Java 版有占位） | 低 |
+| **AI agent 增强** | 工具调用（function calling）、上下文文件注入、多轮推理 | 中 |
 
 ---
 
-## 十一、快速上手 Checklist
+## 十三、快速上手 Checklist
 
 > 新接手项目的开发者请按以下步骤快速了解：
 

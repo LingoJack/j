@@ -1,5 +1,5 @@
 use crate::config::YamlConfig;
-use crate::constants::{section, config_key, search_engine, shell, DEFAULT_SEARCH_ENGINE};
+use crate::constants::{DEFAULT_SEARCH_ENGINE, config_key, search_engine, section, shell};
 use crate::{error, info};
 use std::path::Path;
 use std::process::Command;
@@ -16,7 +16,10 @@ pub fn handle_open(args: &[String], config: &YamlConfig) {
 
     // 检查别名是否存在
     if !config.alias_exists(alias) {
-        error!("❌ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。", alias);
+        error!(
+            "❌ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。",
+            alias
+        );
         return;
     }
 
@@ -108,7 +111,9 @@ fn run_script(args: &[String], config: &YamlConfig) {
         let script_path = clean_path(script_path);
 
         // 检测 -w / --new-window 标志，并从参数中过滤掉
-        let new_window = args[1..].iter().any(|s| s == NEW_WINDOW_FLAG || s == NEW_WINDOW_FLAG_LONG);
+        let new_window = args[1..]
+            .iter()
+            .any(|s| s == NEW_WINDOW_FLAG || s == NEW_WINDOW_FLAG_LONG);
         let script_args: Vec<String> = args[1..]
             .iter()
             .filter(|s| s.as_str() != NEW_WINDOW_FLAG && s.as_str() != NEW_WINDOW_FLAG_LONG)
@@ -312,8 +317,7 @@ fn build_env_export_string(config: &YamlConfig) -> String {
 fn shell_escape(s: &str) -> String {
     if s.contains(' ') || s.contains('"') || s.contains('\'') || s.contains('\\') {
         // 用单引号包裹，内部单引号转义为 '\'''
-        format!("'{}'", s.replace('\'', "'\\''")
-        )
+        format!("'{}'", s.replace('\'', "'\\''"))
     } else {
         s.to_string()
     }
@@ -335,9 +339,7 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
         let expanded_args: Vec<String> = extra_args.iter().map(|s| clean_path(s)).collect();
         if is_cli_executable(&path) {
             // CLI 工具：在当前终端直接执行，继承 stdin/stdout（管道可用）
-            let result = Command::new(&path)
-                .args(&expanded_args)
-                .status();
+            let result = Command::new(&path).args(&expanded_args).status();
             match result {
                 Ok(status) => {
                     if !status.success() {
@@ -468,7 +470,9 @@ fn do_open(path: &str) {
     let result = if os == shell::MACOS_OS {
         Command::new("open").arg(path).status()
     } else if os == shell::WINDOWS_OS {
-        Command::new(shell::WINDOWS_CMD).args([shell::WINDOWS_CMD_FLAG, "start", "", path]).status()
+        Command::new(shell::WINDOWS_CMD)
+            .args([shell::WINDOWS_CMD_FLAG, "start", "", path])
+            .status()
     } else {
         // Linux fallback
         Command::new("xdg-open").arg(path).status()
@@ -521,7 +525,10 @@ fn get_search_url(query: &str, engine: &str) -> String {
         "bing" => search_engine::BING,
         "baidu" => search_engine::BAIDU,
         _ => {
-            info!("未指定搜索引擎，使用默认搜索引擎：{}", DEFAULT_SEARCH_ENGINE);
+            info!(
+                "未指定搜索引擎，使用默认搜索引擎：{}",
+                DEFAULT_SEARCH_ENGINE
+            );
             search_engine::BING
         }
     };

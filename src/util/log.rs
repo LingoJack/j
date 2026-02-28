@@ -1,3 +1,9 @@
+use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, DATA_DIR};
+use chrono::Local;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+
 /// 打印普通信息
 #[macro_export]
 macro_rules! info {
@@ -36,26 +42,6 @@ macro_rules! debug_log {
     }};
 }
 
-/// 在终端中渲染 Markdown 文本
-/// 优先通过嵌入的 ask 二进制渲染（效果更佳），
-/// 如果不可用则 fallback 到 termimad
-#[macro_export]
-macro_rules! md {
-    ($($arg:tt)*) => {{
-        let text = format!($($arg)*);
-        $crate::util::log::render_md(&text);
-    }};
-}
-
-/// 在终端中渲染单行 Markdown（不换行，用于内联场景）
-#[macro_export]
-macro_rules! md_inline {
-    ($($arg:tt)*) => {{
-        let text = format!($($arg)*);
-        termimad::print_inline(&text);
-    }};
-}
-
 /// 打印分隔线
 #[allow(dead_code)]
 pub fn print_line() {
@@ -71,85 +57,37 @@ pub fn capitalize_first_letter(s: &str) -> String {
     }
 }
 
-/// 嵌入的 ask 二进制（macOS ARM64）
-/// 编译时从 plugin/ask/bin/ 目录嵌入
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-const ASK_BINARY: &[u8] = include_bytes!("../../plugin/ask/bin/ask-darwin-arm64");
+/// 写入错误日志到文件
+/// 日志文件位置：~/.jdata/agent/logs/error.log
+pub fn write_error_log(context: &str, error: &str) {
+    let log_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(DATA_DIR)
+        .join(AGENT_DIR)
+        .join(AGENT_LOG_DIR);
 
-/// 获取 ask 可执行文件路径
-/// 首次调用时释放嵌入的二进制到 ~/.jdata/bin/ask，后续复用
-fn get_ask_path() -> Option<std::path::PathBuf> {
-    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-    {
-        return None;
+    // 创建日志目录
+    if let Err(e) = fs::create_dir_all(&log_dir) {
+        eprintln!("无法创建日志目录: {}", e);
+        return;
     }
 
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        use std::os::unix::fs::PermissionsExt;
+    let log_file = log_dir.join("error.log");
 
-        let data_dir = crate::config::YamlConfig::data_dir();
-        let bin_dir = data_dir.join("bin");
-        let ask_path = bin_dir.join("ask");
-
-        if ask_path.exists() {
-            // 已释放过，检查大小是否一致（版本更新时自动覆盖）
-            if let Ok(meta) = std::fs::metadata(&ask_path) {
-                if meta.len() == ASK_BINARY.len() as u64 {
-                    return Some(ask_path);
-                }
+    // 写入日志
+    match OpenOptions::new().create(true).append(true).open(&log_file) {
+        Ok(mut file) => {
+            let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S");
+            let log_entry = format!(
+                "\n========================================\n[{}] {}\n错误详情:\n{}\n",
+                timestamp, context, error
+            );
+            if let Err(e) = file.write_all(log_entry.as_bytes()) {
+                eprintln!("写入错误日志失败: {}", e);
             }
         }
-
-        // 首次释放或版本更新，写入嵌入的二进制
-        if std::fs::create_dir_all(&bin_dir).is_err() {
-            return None;
-        }
-        if std::fs::write(&ask_path, ASK_BINARY).is_err() {
-            return None;
-        }
-        // 设置可执行权限 (chmod 755)
-        if let Ok(meta) = std::fs::metadata(&ask_path) {
-            let mut perms = meta.permissions();
-            perms.set_mode(0o755);
-            let _ = std::fs::set_permissions(&ask_path, perms);
-        }
-
-        Some(ask_path)
-    }
-}
-
-/// 渲染 Markdown 文本到终端
-/// 优先通过嵌入的 ask 二进制渲染（stdin → stdout，效果更佳），
-/// 如果不可用则 fallback 到 termimad
-pub fn render_md(text: &str) {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
-    // 获取嵌入的 ask 二进制路径
-    let ask_path = get_ask_path();
-
-    if let Some(path) = ask_path {
-        // 调用 ask：直接从 stdin 读取 Markdown，渲染后输出 stdout
-        let result = Command::new(&path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn();
-
-        match result {
-            Ok(mut child) => {
-                if let Some(mut stdin) = child.stdin.take() {
-                    let _ = stdin.write_all(text.as_bytes());
-                    drop(stdin);
-                }
-                let _ = child.wait();
-                return;
-            }
-            Err(_) => {}
+        Err(e) => {
+            eprintln!("无法打开错误日志文件: {}", e);
         }
     }
-
-    // fallback 到 termimad
-    termimad::print_text(text);
 }

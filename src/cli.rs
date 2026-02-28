@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
 use crate::constants;
+use clap::{Parser, Subcommand};
 
 /// work-copilot (j) - 快捷命令行工具 🚀
 #[derive(Parser, Debug)]
@@ -126,6 +126,24 @@ pub enum SubCmd {
         fuzzy: Option<String>,
     },
 
+    // ========== 待办备忘录 ==========
+    /// 待办备忘录（无参数进入 TUI 界面，有参数快速添加）
+    #[command(alias = "td")]
+    Todo {
+        /// 待办内容（支持多个参数拼接）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
+    },
+
+    // ========== AI 对话 ==========
+    /// AI 对话（无参数进入 TUI 界面，有参数快速提问）
+    #[command(alias = "ai")]
+    Chat {
+        /// 消息内容（支持多个参数拼接）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        content: Vec<String>,
+    },
+
     // ========== 脚本 ==========
     /// 创建脚本
     Concat {
@@ -181,6 +199,21 @@ pub enum SubCmd {
     /// 退出（交互模式）
     #[command(aliases = ["q", "quit"])]
     Exit,
+
+    // ========== 语音转文字 ==========
+    /// 语音转文字（录音 → Whisper 离线转写）
+    #[command(alias = "vc")]
+    Voice {
+        /// 操作: 默认录音转写，download 下载模型
+        #[arg(default_value = "")]
+        action: String,
+        /// 复制转写结果到剪贴板
+        #[arg(short = 'c', long = "copy")]
+        copy: bool,
+        /// 指定模型大小: tiny, base, small, medium, large
+        #[arg(short = 'm', long = "model")]
+        model: Option<String>,
+    },
 
     /// 生成 shell 补全脚本
     Completion {

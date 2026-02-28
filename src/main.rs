@@ -1,3 +1,4 @@
+mod assets;
 mod cli;
 mod command;
 mod config;
@@ -38,8 +39,8 @@ fn main() {
     match cli {
         Ok(cli) => {
             match cli.command {
-                Some(subcmd) => {
-                    command::dispatch(subcmd, &mut config);
+                Some(sub_cmd) => {
+                    command::dispatch(sub_cmd, &mut config);
                 }
                 None => {
                     if cli.args.is_empty() {

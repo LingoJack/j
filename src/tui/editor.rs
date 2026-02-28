@@ -1,19 +1,20 @@
 use crossterm::{
     event::{self, Event},
-    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
+    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-    Terminal,
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
-use tui_textarea::{CursorMove, Input, Key, TextArea};
-use std::io;
 use std::fmt;
+use std::io;
+use tui_textarea::{CursorMove, Input, Key, TextArea};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 // ========== Vim 模式定义 ==========
 
@@ -161,11 +162,7 @@ impl SearchState {
 // ========== 搜索高亮函数 ==========
 
 /// 应用搜索高亮到 buffer（直接修改 buffer 样式）
-fn apply_search_highlight(
-    buf: &mut ratatui::buffer::Buffer,
-    area: Rect,
-    search: &SearchState,
-) {
+fn apply_search_highlight(buf: &mut ratatui::buffer::Buffer, area: Rect, search: &SearchState) {
     if search.pattern.is_empty() || search.matches.is_empty() {
         return;
     }
@@ -194,14 +191,15 @@ fn apply_search_highlight(
         let mut i = 0;
         while i + pattern_chars.len() <= chars_with_pos.len() {
             let is_match = pattern_chars.iter().enumerate().all(|(j, pc)| {
-                chars_with_pos.get(i + j).map(|(c, _)| c == pc).unwrap_or(false)
+                chars_with_pos
+                    .get(i + j)
+                    .map(|(c, _)| c == pc)
+                    .unwrap_or(false)
             });
 
             if is_match {
                 // 匹配文字用红色显示
-                let style = Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD);
+                let style = Style::default().fg(Color::Red).add_modifier(Modifier::BOLD);
 
                 for j in 0..pattern_chars.len() {
                     if let Some((_, col)) = chars_with_pos.get(i + j) {
@@ -231,12 +229,12 @@ enum Transition {
     Nop,
     Mode(Mode),
     Pending(Input),
-    Submit,     // 提交内容
-    Quit,       // 强制取消退出（:q! / Ctrl+Q）
-    TryQuit,    // 尝试退出，若有改动则拒绝（:q）
+    Submit,         // 提交内容
+    Quit,           // 强制取消退出（:q! / Ctrl+Q）
+    TryQuit,        // 尝试退出，若有改动则拒绝（:q）
     Search(String), // 执行搜索
-    NextMatch,  // 跳转到下一个匹配
-    PrevMatch,  // 跳转到上一个匹配
+    NextMatch,      // 跳转到下一个匹配
+    PrevMatch,      // 跳转到上一个匹配
 }
 
 /// Vim 状态机
@@ -315,8 +313,8 @@ impl Vim {
                 match cmd {
                     "wq" | "x" => Transition::Submit,
                     "w" => Transition::Submit,
-                    "q" => Transition::TryQuit,   // 有改动时拒绝退出
-                    "q!" => Transition::Quit,      // 强制退出
+                    "q" => Transition::TryQuit, // 有改动时拒绝退出
+                    "q!" => Transition::Quit,   // 强制退出
                     _ => Transition::Mode(Mode::Normal), // 未知命令，回到 Normal
                 }
             }
@@ -731,7 +729,10 @@ pub fn open_multiline_editor(title: &str) -> io::Result<Option<String>> {
 /// - `initial_lines`: 预填充到编辑区的行（如历史日报 + 日期前缀）
 ///
 /// 返回 Some(text) 表示提交，None 表示取消
-pub fn open_multiline_editor_with_content(title: &str, initial_lines: &[String]) -> io::Result<Option<String>> {
+pub fn open_multiline_editor_with_content(
+    title: &str,
+    initial_lines: &[String],
+) -> io::Result<Option<String>> {
     open_editor_internal(title, initial_lines, Mode::Normal)
 }
 
@@ -770,7 +771,13 @@ fn open_editor_internal(
     let initial_snapshot: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
 
     let mut vim = Vim::new(initial_mode);
-    let result = run_editor_loop(&mut terminal, &mut textarea, &mut vim, title, &initial_snapshot);
+    let result = run_editor_loop(
+        &mut terminal,
+        &mut textarea,
+        &mut vim,
+        title,
+        &initial_snapshot,
+    );
 
     // 恢复终端状态
     terminal::disable_raw_mode()?;
@@ -787,6 +794,76 @@ fn make_block<'a>(title: &str, mode: &Mode) -> Block<'a> {
         .border_style(Style::default().fg(mode.border_color()))
 }
 
+/// 计算字符串的显示宽度（使用 unicode_width，与 ratatui 内部一致）
+fn display_width_of(s: &str) -> usize {
+    UnicodeWidthStr::width(s)
+}
+
+/// 精确计算字符串在给定列宽下 wrap 后的行数（用于预览区滚动进度显示）
+fn count_wrapped_lines_unicode(s: &str, col_width: usize) -> usize {
+    if col_width == 0 || s.is_empty() {
+        return 1;
+    }
+    let mut lines = 1usize;
+    let mut current_width = 0usize;
+    for c in s.chars() {
+        let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+        if char_width == 0 {
+            continue;
+        }
+        if current_width + char_width > col_width {
+            lines += 1;
+            current_width = char_width;
+        } else {
+            current_width += char_width;
+        }
+    }
+    lines
+}
+
+/// 计算光标在指定列宽下 wrap 后所在的行号（0-based，基于 unicode_width）
+fn cursor_wrapped_line_unicode(s: &str, cursor_pos: usize, col_width: usize) -> u16 {
+    if col_width == 0 {
+        return 0;
+    }
+    let mut line: u16 = 0;
+    let mut current_width: usize = 0;
+    for (i, c) in s.chars().enumerate() {
+        if i == cursor_pos {
+            return line;
+        }
+        let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+        if char_width == 0 {
+            continue;
+        }
+        if current_width + char_width > col_width {
+            line += 1;
+            current_width = char_width;
+        } else {
+            current_width += char_width;
+        }
+    }
+    // cursor_pos == chars.len() (cursor at end)
+    line
+}
+
+/// 将字符串按光标位置（字符索引）拆分为三部分：光标前、光标字符、光标后
+fn split_line_at_cursor(line: &str, cursor_col: usize) -> (String, String, String) {
+    let chars: Vec<char> = line.chars().collect();
+    let before: String = chars[..cursor_col.min(chars.len())].iter().collect();
+    let cursor_ch = if cursor_col < chars.len() {
+        chars[cursor_col].to_string()
+    } else {
+        " ".to_string()
+    };
+    let after: String = if cursor_col < chars.len() {
+        chars[cursor_col + 1..].iter().collect()
+    } else {
+        String::new()
+    };
+    (before, cursor_ch, after)
+}
+
 /// 编辑器主循环
 fn run_editor_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
@@ -797,17 +874,58 @@ fn run_editor_loop(
 ) -> io::Result<Option<String>> {
     // 是否显示 "有未保存改动" 的提示（下次按键后清除）
     let mut unsaved_warning = false;
+    // 预览区滚动偏移（向下滚动的行数）
+    let mut preview_scroll: u16 = 0;
+    // 上一次预览的行索引，切换行时重置滚动
+    let mut last_preview_row: usize = usize::MAX;
+
     loop {
         let mode = &vim.mode.clone();
 
+        // 获取当前光标所在行的内容和列位置（用于预览区）
+        let (cursor_row, cursor_col) = textarea.cursor();
+        let current_line_text: String = textarea
+            .lines()
+            .get(cursor_row)
+            .map(|l| l.to_string())
+            .unwrap_or_default();
+
+        // 切换到新行时重置预览滚动
+        if cursor_row != last_preview_row {
+            preview_scroll = 0;
+            last_preview_row = cursor_row;
+        }
+
+        // 判断当前行是否超过终端宽度，需要显示预览区
+        // 用终端宽度粗略判断（不减行号宽度，保守估计）
+        let display_width: usize = display_width_of(&current_line_text);
+
         // 绘制界面
         terminal.draw(|frame| {
+            let area_width = frame.area().width as usize;
+            let _area_height = frame.area().height;
+            // 预留行号宽度（行号位数 + 2 个边距）+ 边框宽度 2
+            let lnum_width = format!("{}", textarea.lines().len()).len() + 2 + 2;
+            let effective_width = area_width.saturating_sub(lnum_width);
+            let needs_preview = display_width > effective_width;
+
+            let constraints = if needs_preview {
+                vec![
+                    // 编辑区占 55%，预览区占 40%，状态栏固定 2 行
+                    Constraint::Percentage(55),
+                    Constraint::Min(5),
+                    Constraint::Length(2),
+                ]
+            } else {
+                vec![
+                    Constraint::Min(3),    // 编辑区
+                    Constraint::Length(2), // 状态栏
+                ]
+            };
+
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(3),   // 编辑区
-                    Constraint::Length(2), // 状态栏
-                ])
+                .constraints(constraints)
                 .split(frame.area());
 
             // 渲染编辑区
@@ -818,9 +936,74 @@ fn run_editor_loop(
                 apply_search_highlight(frame.buffer_mut(), chunks[0], &vim.search);
             }
 
-            // 渲染状态栏
-            let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
-            frame.render_widget(status_bar, chunks[1]);
+            if needs_preview {
+                // 预览区内部可用高度（去掉上下边框各 1 行）
+                let preview_inner_h = chunks[1].height.saturating_sub(2) as u16;
+                // 预览区内部可用宽度（去掉左右边框各 1 列）
+                let preview_inner_w = (chunks[1].width.saturating_sub(2)) as usize;
+
+                // 计算总 wrap 行数（用于显示滚动进度）
+                let total_wrapped =
+                    count_wrapped_lines_unicode(&current_line_text, preview_inner_w) as u16;
+                let max_scroll = total_wrapped.saturating_sub(preview_inner_h);
+
+                // 自动滚动到光标所在的 wrap 行可见
+                let cursor_wrap_line =
+                    cursor_wrapped_line_unicode(&current_line_text, cursor_col, preview_inner_w);
+                let auto_scroll = if cursor_wrap_line < preview_scroll {
+                    cursor_wrap_line
+                } else if cursor_wrap_line >= preview_scroll + preview_inner_h {
+                    cursor_wrap_line.saturating_sub(preview_inner_h - 1)
+                } else {
+                    preview_scroll
+                };
+                let clamped_scroll = auto_scroll.min(max_scroll);
+
+                let scroll_hint = if total_wrapped > preview_inner_h {
+                    format!(
+                        " 📖 第 {} 行预览  [{}/{}行]  Alt+↓/↑滚动 ",
+                        cursor_row + 1,
+                        clamped_scroll + preview_inner_h,
+                        total_wrapped
+                    )
+                } else {
+                    format!(" 📖 第 {} 行预览 ", cursor_row + 1)
+                };
+
+                let preview_block = Block::default()
+                    .borders(Borders::ALL)
+                    .title(scroll_hint)
+                    .title_style(
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .border_style(Style::default().fg(Color::Cyan));
+
+                // 构建带光标高亮的预览文本
+                let (before, cursor_ch, after) =
+                    split_line_at_cursor(&current_line_text, cursor_col);
+                let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+                let preview_text = vec![Line::from(vec![
+                    Span::styled(before, Style::default().fg(Color::White)),
+                    Span::styled(cursor_ch, cursor_style),
+                    Span::styled(after, Style::default().fg(Color::White)),
+                ])];
+
+                let preview = Paragraph::new(preview_text)
+                    .block(preview_block)
+                    .wrap(Wrap { trim: false })
+                    .scroll((clamped_scroll, 0));
+                frame.render_widget(preview, chunks[1]);
+
+                // 渲染状态栏
+                let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
+                frame.render_widget(status_bar, chunks[2]);
+            } else {
+                // 渲染状态栏
+                let status_bar = build_status_bar(mode, textarea.lines().len(), &vim.search);
+                frame.render_widget(status_bar, chunks[1]);
+            }
         })?;
 
         // 处理输入事件
@@ -832,6 +1015,23 @@ fn run_editor_loop(
             }
 
             let input = Input::from(key_event);
+
+            // Alt+↓ / Alt+↑：预览区滚动（不影响编辑区）
+            use crossterm::event::{KeyCode, KeyModifiers};
+            if key_event.modifiers == KeyModifiers::ALT {
+                match key_event.code {
+                    KeyCode::Down => {
+                        preview_scroll = preview_scroll.saturating_add(1);
+                        continue;
+                    }
+                    KeyCode::Up => {
+                        preview_scroll = preview_scroll.saturating_sub(1);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
             match vim.transition(input, textarea) {
                 Transition::Mode(new_mode) if vim.mode != new_mode => {
                     textarea.set_block(make_block(title, &new_mode));
@@ -844,7 +1044,9 @@ fn run_editor_loop(
                     *vim = old.with_pending(input);
                 }
                 Transition::Submit => {
-                    let text = textarea.lines().join("\n").trim().to_string();
+                    let lines = textarea.lines();
+                    // 不使用 trim()，保留每行的原始缩进
+                    let text = lines.join("\n");
                     if text.is_empty() {
                         return Ok(None);
                     }
@@ -852,7 +1054,8 @@ fn run_editor_loop(
                 }
                 Transition::TryQuit => {
                     // :q — 检查是否有实际改动
-                    let current_lines: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
+                    let current_lines: Vec<String> =
+                        textarea.lines().iter().map(|l| l.to_string()).collect();
                     if current_lines == initial_snapshot {
                         // 无改动，直接退出
                         return Ok(None);
@@ -863,7 +1066,7 @@ fn run_editor_loop(
                             Block::default()
                                 .borders(Borders::ALL)
                                 .title(" ⚠️ 有未保存的改动！使用 :q! 强制退出，或 :wq 保存退出 ")
-                                .border_style(Style::default().fg(Color::LightRed))
+                                .border_style(Style::default().fg(Color::LightRed)),
                         );
                         *vim = Vim::new(Mode::Normal);
                     }
@@ -873,9 +1076,10 @@ fn run_editor_loop(
                 }
                 Transition::Search(pattern) => {
                     // 执行搜索
-                    let lines: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
+                    let lines: Vec<String> =
+                        textarea.lines().iter().map(|l| l.to_string()).collect();
                     let count = vim.search.search(&pattern, &lines);
-                    
+
                     // 跳转到第一个匹配
                     if count > 0 {
                         if let Some((line, col)) = vim.search.next_match() {
@@ -883,7 +1087,7 @@ fn run_editor_loop(
                             jump_to_match(textarea, line, col);
                         }
                     }
-                    
+
                     *vim = Vim::new(Mode::Normal);
                     vim.search = SearchState::new();
                     vim.search.search(&pattern, &lines);
@@ -933,7 +1137,9 @@ fn build_status_bar(mode: &Mode, line_count: usize, search: &SearchState) -> Par
                 Span::raw(" "),
                 Span::styled(
                     cmd_display,
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("█", Style::default().fg(Color::White)),
             ]));
@@ -949,7 +1155,9 @@ fn build_status_bar(mode: &Mode, line_count: usize, search: &SearchState) -> Par
                 Span::raw(" "),
                 Span::styled(
                     search_display,
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("█", Style::default().fg(Color::White)),
             ]));

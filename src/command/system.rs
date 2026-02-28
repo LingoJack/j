@@ -1,38 +1,16 @@
+use crate::assets::VERSION_TEMPLATE;
 use crate::config::YamlConfig;
-use crate::constants::{self, section, config_key, CONTAIN_SEARCH_SECTIONS};
+use crate::constants::{self, CONTAIN_SEARCH_SECTIONS, config_key, section};
 use crate::{error, info, md, usage};
 use colored::Colorize;
 
-/// 编译时嵌入的版本信息模板
-const VERSION_TEMPLATE: &str = include_str!("../../assets/version.md");
-
 /// 处理 version 命令: j version
-pub fn handle_version(config: &YamlConfig) {
-    let mut extra = String::new();
-
-    // 收集自定义版本信息
-    if let Some(version_map) = config.get_section("version") {
-        for (key, value) in version_map {
-            if key == "email" || key == "author" {
-                continue;
-            }
-            extra.push_str(&format!("| {} | {} |\n", key, value));
-        }
-    }
-
+pub fn handle_version() {
     let text = VERSION_TEMPLATE
         .replace("{version}", constants::VERSION)
         .replace("{os}", std::env::consts::OS)
-        .replace("{extra}", &extra);
+        .replace("{arch}", std::env::consts::ARCH);
     md!("{}", text);
-}
-
-/// 编译时嵌入的帮助文档
-const HELP_TEXT: &str = include_str!("../../assets/help.md");
-
-/// 处理 help 命令: j help
-pub fn handle_help() {
-    md!("{}", HELP_TEXT);
 }
 
 /// 处理 exit 命令
@@ -108,13 +86,18 @@ pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConf
 
     match old_value {
         Some(old) => {
-            info!("✅ 已修改 {}.{} 的值为 {}，旧值为 {}", part, field, value, old);
+            info!(
+                "✅ 已修改 {}.{} 的值为 {}，旧值为 {}",
+                part, field, value, old
+            );
         }
         None => {
             info!("✅ 已新增 {}.{} = {}", part, field, value);
         }
     }
-    info!("🚧 此命令可能会导致配置文件属性错乱而使 Copilot 无法正常使用，请确保在您清楚在做什么的情况下使用");
+    info!(
+        "🚧 此命令可能会导致配置文件属性错乱而使 Copilot 无法正常使用，请确保在您清楚在做什么的情况下使用"
+    );
 }
 
 // ========== completion 命令 ==========
@@ -190,7 +173,9 @@ fn generate_zsh_completion(config: &YamlConfig) {
     script.push_str("#compdef j\n");
     script.push_str("# Zsh completion for j (work-copilot)\n");
     script.push_str("# 生成方式: eval \"$(j completion zsh)\"\n");
-    script.push_str("# 或: j completion zsh > ~/.zsh/completions/_j && fpath=(~/.zsh/completions $fpath)\n\n");
+    script.push_str(
+        "# 或: j completion zsh > ~/.zsh/completions/_j && fpath=(~/.zsh/completions $fpath)\n\n",
+    );
     script.push_str("_j() {\n");
     script.push_str("    local curcontext=\"$curcontext\" state line\n");
     script.push_str("    typeset -A opt_args\n\n");
@@ -201,7 +186,10 @@ fn generate_zsh_completion(config: &YamlConfig) {
 
     // 编辑器/浏览器别名列表（用于判断是否需要文件补全）
     if !editor_pattern.is_empty() {
-        script.push_str(&format!("    local -a editor_aliases=({})\n", editor_aliases.join(" ")));
+        script.push_str(&format!(
+            "    local -a editor_aliases=({})\n",
+            editor_aliases.join(" ")
+        ));
     }
 
     script.push_str("\n    _arguments -C \\\n");
@@ -233,13 +221,17 @@ fn generate_zsh_completion(config: &YamlConfig) {
     // list 命令：补全 section 名
     let sections_str = constants::ALL_SECTIONS.join(" ");
     script.push_str(&format!("                ls|list)\n"));
-    script.push_str(&format!("                    local -a sections=(all {})\n", sections_str));
+    script.push_str(&format!(
+        "                    local -a sections=(all {})\n",
+        sections_str
+    ));
     script.push_str("                    _describe 'section' sections\n");
     script.push_str("                    ;;\n");
 
     // reportctl 命令：补全子操作
     script.push_str("                reportctl|rctl)\n");
-    script.push_str("                    local -a rctl_actions=(new sync push pull set-url open)\n");
+    script
+        .push_str("                    local -a rctl_actions=(new sync push pull set-url open)\n");
     script.push_str("                    _describe 'action' rctl_actions\n");
     script.push_str("                    ;;\n");
 
@@ -256,7 +248,10 @@ fn generate_zsh_completion(config: &YamlConfig) {
 
     // change 命令：补全 section
     script.push_str(&format!("                change|chg)\n"));
-    script.push_str(&format!("                    local -a sections=({})\n", sections_str));
+    script.push_str(&format!(
+        "                    local -a sections=({})\n",
+        sections_str
+    ));
     script.push_str("                    _describe 'section' sections\n");
     script.push_str("                    ;;\n");
 
@@ -318,7 +313,9 @@ fn generate_bash_completion(config: &YamlConfig) {
     all_aliases.sort();
 
     let keywords = constants::cmd::all_keywords();
-    let all_completions: Vec<String> = keywords.iter().map(|s| s.to_string())
+    let all_completions: Vec<String> = keywords
+        .iter()
+        .map(|s| s.to_string())
         .chain(all_aliases.iter().cloned())
         .collect();
 
@@ -336,11 +333,20 @@ fn generate_bash_completion(config: &YamlConfig) {
     script.push_str("    local cur prev words cword\n");
     script.push_str("    _init_completion || return\n\n");
 
-    script.push_str(&format!("    local commands=\"{}\"\n", all_completions.join(" ")));
-    script.push_str(&format!("    local aliases=\"{}\"\n", all_aliases.join(" ")));
+    script.push_str(&format!(
+        "    local commands=\"{}\"\n",
+        all_completions.join(" ")
+    ));
+    script.push_str(&format!(
+        "    local aliases=\"{}\"\n",
+        all_aliases.join(" ")
+    ));
 
     if !editor_aliases.is_empty() {
-        script.push_str(&format!("    local editor_aliases=\"{}\"\n", editor_aliases.join(" ")));
+        script.push_str(&format!(
+            "    local editor_aliases=\"{}\"\n",
+            editor_aliases.join(" ")
+        ));
     }
 
     script.push_str("\n    if [[ $cword -eq 1 ]]; then\n");
@@ -360,7 +366,9 @@ fn generate_bash_completion(config: &YamlConfig) {
     script.push_str("            COMPREPLY=( $(compgen -W \"$aliases\" -- \"$cur\") )\n");
     script.push_str("            ;;\n");
     script.push_str("        reportctl|rctl)\n");
-    script.push_str("            COMPREPLY=( $(compgen -W \"new sync push pull set-url open\" -- \"$cur\") )\n");
+    script.push_str(
+        "            COMPREPLY=( $(compgen -W \"new sync push pull set-url open\" -- \"$cur\") )\n",
+    );
     script.push_str("            ;;\n");
 
     // 编辑器别名：文件路径补全

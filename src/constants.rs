@@ -3,8 +3,8 @@
 
 // ========== 版本信息 ==========
 
-/// 内核版本号（唯一定义，所有需要版本号的地方引用此常量）
-pub const VERSION: &str = "12.0.0";
+/// 内核版本号（自动从 Cargo.toml 读取，编译时确定）
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 项目名称
 pub const APP_NAME: &str = "work-copilot";
@@ -83,11 +83,7 @@ pub const NOTE_CATEGORIES: &[&str] = &[
 // ========== 别名查找 section ==========
 
 /// 用于查找别名路径的 section 列表（按优先级排列）
-pub const ALIAS_PATH_SECTIONS: &[&str] = &[
-    section::PATH,
-    section::INNER_URL,
-    section::OUTER_URL,
-];
+pub const ALIAS_PATH_SECTIONS: &[&str] = &[section::PATH, section::INNER_URL, section::OUTER_URL];
 
 /// 用于判断别名是否存在的 section 列表
 pub const ALIAS_EXISTS_SECTIONS: &[&str] = &[
@@ -188,6 +184,9 @@ pub mod cmd {
     pub const CHECK: &[&str] = &["check", "c"];
     pub const SEARCH: &[&str] = &["search", "select", "look", "sch"];
 
+    // 待办备忘录
+    pub const TODO: &[&str] = &["todo", "td"];
+
     // 脚本
     pub const CONCAT: &[&str] = &["concat"];
 
@@ -207,6 +206,12 @@ pub mod cmd {
     // shell 补全
     pub const COMPLETION: &[&str] = &["completion"];
 
+    // AI 对话
+    pub const CHAT: &[&str] = &["chat", "ai"];
+
+    // 语音转文字
+    pub const VOICE: &[&str] = &["voice", "vc"];
+
     // agent（预留）
     pub const AGENT: &[&str] = &["agent"];
     pub const SYSTEM: &[&str] = &["system", "ps"];
@@ -214,15 +219,9 @@ pub mod cmd {
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
-            SET, REMOVE, RENAME, MODIFY,
-            NOTE, DENOTE,
-            LIST, CONTAIN,
-            REPORT, REPORTCTL, CHECK, SEARCH,
-            CONCAT, TIME,
-            LOG, CHANGE, CLEAR,
-            VERSION, HELP, EXIT,
-            COMPLETION,
-            AGENT, SYSTEM,
+            SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
+            SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
+            VOICE, AGENT, SYSTEM,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }
@@ -259,13 +258,13 @@ pub const LIST_ALL: &str = "all";
 // ========== 交互模式 ==========
 
 /// 欢迎语
-pub const WELCOME_MESSAGE: &str = "Welcome to use work copilot 🚀 ~";
+pub const WELCOME_MESSAGE: &str = "Welcome to use j-cli 🚀 ~";
 
 /// Shell 命令前缀字符
 pub const SHELL_PREFIX: char = '!';
 
 /// 交互模式提示符
-pub const INTERACTIVE_PROMPT: &str = "copilot >";
+pub const INTERACTIVE_PROMPT: &str = "j >";
 
 /// 历史记录文件名
 pub const HISTORY_FILE: &str = "history.txt";
@@ -279,6 +278,12 @@ pub const SCRIPTS_DIR: &str = "scripts";
 /// 日报目录名
 pub const REPORT_DIR: &str = "report";
 
+/// agent 目录名
+pub const AGENT_DIR: &str = "agent";
+
+/// agent 日志目录名
+pub const AGENT_LOG_DIR: &str = "logs";
+
 /// 日报默认文件名
 pub const REPORT_DEFAULT_FILE: &str = "week_report.md";
 
@@ -290,6 +295,35 @@ pub const DATA_PATH_ENV: &str = "J_DATA_PATH";
 
 // ========== Shell 命令 ==========
 
+// ========== 语音转文字 ==========
+
+/// 语音转文字相关常量
+pub mod voice {
+    /// 语音数据目录名
+    pub const VOICE_DIR: &str = "voice";
+    /// 模型子目录名
+    pub const MODEL_DIR: &str = "model";
+    /// 默认模型大小
+    pub const DEFAULT_MODEL: &str = "small";
+    /// 支持的模型大小列表
+    pub const MODEL_SIZES: &[&str] = &["tiny", "base", "small", "medium", "large"];
+    /// Whisper 模型下载 URL 模板 (Hugging Face)
+    pub const MODEL_URL_TEMPLATE: &str =
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin";
+    /// 模型文件名模板
+    pub const MODEL_FILE_TEMPLATE: &str = "ggml-{}.bin";
+    /// 录音采样率 (Whisper 要求 16kHz)
+    pub const SAMPLE_RATE: u32 = 16000;
+    /// voice 操作: 下载模型
+    pub const ACTION_DOWNLOAD: &str = "download";
+    /// 流式转写间隔（秒）
+    pub const STREAMING_INTERVAL_SECS: u64 = 3;
+    /// 最短有效音频长度（秒）
+    pub const MIN_AUDIO_SECS: u64 = 1;
+    /// 模型优先级（从高到低）
+    pub const MODEL_PRIORITY: &[&str] = &["large", "medium", "small", "base", "tiny"];
+}
+
 pub mod shell {
     pub const BASH_PATH: &str = "/bin/bash";
     pub const WINDOWS_CMD: &str = "cmd";
@@ -297,4 +331,30 @@ pub mod shell {
     pub const BASH_CMD_FLAG: &str = "-c";
     pub const WINDOWS_OS: &str = "windows";
     pub const MACOS_OS: &str = "macos";
+}
+
+// ========== Todo 过滤状态 ==========
+
+/// Todo 过滤模式常量
+pub mod todo_filter {
+    /// 显示全部待办项
+    pub const ALL: usize = 0;
+    /// 只显示未完成的待办项
+    pub const UNDONE: usize = 1;
+    /// 只显示已完成的待办项
+    pub const DONE: usize = 2;
+    /// 过滤模式总数
+    pub const COUNT: usize = 3;
+
+    /// 获取过滤模式标签
+    pub fn label(filter: usize) -> &'static str {
+        match filter {
+            UNDONE => "未完成",
+            DONE => "已完成",
+            _ => "全部",
+        }
+    }
+
+    /// 默认过滤模式（未完成）
+    pub const DEFAULT: usize = UNDONE;
 }
