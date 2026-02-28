@@ -141,7 +141,13 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
                 ArgHint::Fixed(vec![search_flag::FUZZY_SHORT, search_flag::FUZZY]),
             ],
         ),
-        (cmd::TODO, vec![ArgHint::Placeholder("<content>")]),
+        (
+            cmd::TODO,
+            vec![
+                ArgHint::Fixed(vec!["list", "add"]),
+                ArgHint::Placeholder("<content>"),
+            ],
+        ),
         (cmd::CHAT, vec![ArgHint::Placeholder("<message>")]),
         (cmd::VOICE, vec![ArgHint::Fixed(vec![vc::ACTION_DOWNLOAD])]),
         (
