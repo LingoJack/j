@@ -24,7 +24,7 @@ status: current_dir
 .PHONY: release
 release: current_dir
 	@cargo build --release
-	@git add . && git commit -m "Release" \
+	@git add . && (git commit -m "Release" || exit 0 )
 
 .PHONY: install
 install: release
