@@ -2,7 +2,7 @@ pub mod app;
 pub mod ui;
 
 use crate::config::YamlConfig;
-use crate::{error, info};
+use crate::{error, info, usage};
 use app::{
     AppMode, TodoApp, TodoItem, handle_confirm_cancel_input, handle_confirm_delete,
     handle_confirm_report, handle_help_mode, handle_input_mode, handle_normal_mode, load_todo_list,
@@ -18,34 +18,75 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use ui::draw_ui;
 
-/// 处理 todo 命令: j todo [content...]
-pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
+/// 处理 todo 命令: j todo [-l] [add <content...>]
+pub fn handle_todo(list: bool, content: &[String], config: &mut YamlConfig) {
+    if list {
+        handle_todo_list();
+        return;
+    }
+
     if content.is_empty() {
         run_todo_tui(config);
         return;
     }
 
-    let text = content.join(" ");
-    let text = text.trim().trim_matches('"').to_string();
-
-    if text.is_empty() {
-        error!("⚠️ 内容为空，无法添加待办");
-        return;
+    if content[0] == "add" {
+        let text = content[1..].join(" ");
+        let text = text.trim().trim_matches('"').to_string();
+        if text.is_empty() {
+            error!("⚠️ 内容为空，无法添加待办");
+            return;
+        }
+        quick_add_todo(&text);
+    } else {
+        usage!("j todo [add <内容>] [-l]");
     }
+}
 
-    let mut list = load_todo_list();
-    list.items.push(TodoItem {
-        content: text.clone(),
+/// 快速添加一条待办（不进入 TUI）
+fn quick_add_todo(text: &str) {
+    let mut todo_list = load_todo_list();
+    todo_list.items.push(TodoItem {
+        content: text.to_string(),
         done: false,
         created_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         done_at: None,
     });
 
-    if save_todo_list(&list) {
+    if save_todo_list(&todo_list) {
         info!("✅ 已添加待办: {}", text);
-        let undone = list.items.iter().filter(|i| !i.done).count();
+        let undone = todo_list.items.iter().filter(|i| !i.done).count();
         info!("📋 当前未完成待办: {} 条", undone);
     }
+}
+
+/// 列出所有待办，以 Markdown 格式渲染输出
+fn handle_todo_list() {
+    let todo_list = load_todo_list();
+
+    if todo_list.items.is_empty() {
+        info!("📋 暂无待办");
+        return;
+    }
+
+    let total = todo_list.items.len();
+    let done_count = todo_list.items.iter().filter(|i| i.done).count();
+    let undone_count = total - done_count;
+
+    let mut md = format!(
+        "## 待办备忘录 — 共 {} 条 | ✅ {} | ⬜ {}\n\n",
+        total, done_count, undone_count
+    );
+
+    for item in &todo_list.items {
+        if item.done {
+            md.push_str(&format!("- [x] {}\n", item.content));
+        } else {
+            md.push_str(&format!("- [ ] {}\n", item.content));
+        }
+    }
+
+    crate::md!("{}", md);
 }
 
 /// 启动 TUI 待办管理界面

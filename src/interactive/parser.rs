@@ -165,8 +165,15 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             fuzzy: rest.get(2).cloned(),
         })
     } else if is(cmd::TODO) {
+        let list_flag = rest.iter().any(|s| s == "-l" || s == "--list");
+        let content: Vec<String> = rest
+            .iter()
+            .filter(|s| *s != "-l" && *s != "--list")
+            .cloned()
+            .collect();
         ParseResult::Matched(SubCmd::Todo {
-            content: rest.to_vec(),
+            list: list_flag,
+            content,
         })
     } else if is(cmd::CHAT) {
         ParseResult::Matched(SubCmd::Chat {

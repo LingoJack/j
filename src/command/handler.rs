@@ -84,8 +84,8 @@ command_handlers! {
     },
 
     // ========== 待办备忘录 ==========
-    TodoCmd { content: Vec<String> } => |self, config| {
-        crate::command::todo::handle_todo(&self.content, config);
+    TodoCmd { list: bool, content: Vec<String> } => |self, config| {
+        crate::command::todo::handle_todo(self.list, &self.content, config);
     },
 
     // ========== AI 对话 ==========
@@ -167,7 +167,7 @@ impl SubCmd {
             }),
 
             // 待办 & AI
-            SubCmd::Todo { content } => Box::new(TodoCmd { content }),
+            SubCmd::Todo { list, content } => Box::new(TodoCmd { list, content }),
             SubCmd::Chat { content } => Box::new(ChatCmd { content }),
 
             // 脚本 & 计时

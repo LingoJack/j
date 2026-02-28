@@ -123,7 +123,7 @@ hound = "3.5"                                        # WAV 文件读写
 | **Phase 19** | `reportctl open` 命令：用内置 TUI 编辑器打开日报文件全文编辑（NORMAL 模式），保存后整体回写文件；取消则不修改 | ✅ 完成 |
 | **Phase 20** | 文件路径补全增强：交互模式下编辑器/CLI 别名后续参数智能补全文件路径（编辑器→文件补全，浏览器→别名+文件，其他→文件+别名）；`j completion [zsh\|bash]` 命令生成 shell 补全脚本，快捷模式下 Tab 补全支持子命令、别名、文件路径 | ✅ 完成 |
 | **Phase 21** | 脚本环境变量注入：执行脚本时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量（覆盖 path/inner_url/outer_url/script section）；交互模式下 `!` shell 命令和别名参数同样支持环境变量；`$J_XXX` / `${J_XXX}` 两种格式均可；新窗口执行（`-w`）通过 `export` 语句注入；`concat` 已有脚本时打开 TUI 编辑器支持修改 | ✅ 完成 |
-| **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo <content>`；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
+| **Phase 22** | 待办备忘录（todo）：内置 TUI 待办管理界面，支持 n/N/箭头上下移动、空格/回车切换完成状态（markdown `[x]`/`[ ]` 风格）、添加/编辑/删除/过滤/排序；数据持久化到 `~/.jdata/todo/todo.json`；快捷添加 `j todo add <content>`；`j todo -l` 直接输出待办列表（Markdown checkbox 格式，通过 md! 宏渲染）；交互模式支持 `todo`/`td` 命令 | ✅ 完成 |
 | **Phase 26** | Todo 完成时写入日报联动：待办标记为完成时弹出确认框询问是否写入日报，Enter/y 确认写入并自动保存 todo，其他键跳过；写入格式与 `j report` 一致（`- 【YYYY/MM/DD】 内容`）；支持在 TUI 中批量完成待办并选择性写入日报 | ✅ 完成 |
 | **Phase 23** | AI 对话系统（chat）：内置 TUI AI 对话界面，支持多模型提供方切换（OpenAI/DeepSeek 等）、流式/整体输出切换（Ctrl+S）、Markdown 渲染（标题/加粗/斜体/代码块语法高亮/表格/列表/引用块）、消息浏览模式（Ctrl+B，↑↓选择 y/Enter 复制，A/D 细粒度滚动消息内容）、对话持久化；代码高亮支持 Rust/Python/JS/Go/Java/Bash/C/SQL/Ruby/YAML/CSS/Dockerfile 等语言，Bash 额外支持 `$VAR`/`${VAR}` 变量高亮；渲染行缓存 + 可见区域裁剪优化性能 | ✅ 完成 |
 | **Phase 24** | AI 对话系统增强：可视化配置界面（Ctrl+E）支持 Provider 增删改、全局设置编辑（system_prompt/max_history_messages/stream_mode）；6 种主题风格（dark/light/dracula/gruvbox/monokai/nord），实时切换无需重启；历史消息数量限制（max_history_messages）防止 token 超限 | ✅ 完成 |
@@ -254,7 +254,8 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 - **数据存储**：`~/.jdata/todo/todo.json`（独立目录，JSON 格式持久化）
 - **入口方式**：
   - `j todo` / `j td` — 进入全屏 TUI 待办管理界面
-  - `j todo 买牛奶` — 快速添加一条待办
+  - `j todo add 买牛奶` — 快速添加一条待办
+  - `j todo -l` / `j td -l` — 输出待办列表（Markdown 格式渲染）
   - 交互模式下 `todo` / `td` 同样可用
 
 **TUI 界面**：基于 ratatui + crossterm 的全屏交互界面
@@ -541,7 +542,7 @@ j vscode ./src        # 用 VSCode 打开 src 目录
 j report "完成功能开发"  # 写入日报
 j check               # 查看最近 5 行日报
 j todo                # 进入 TUI 待办管理界面
-j todo 买牛奶         # 快速添加一条待办
+j todo add 买牛奶    # 快速添加一条待办
 j time countdown 5m   # 5 分钟倒计时
 j voice download      # 下载语音识别模型（首次使用）
 j voice               # 录音 → 转写 → 输出文字
