@@ -5,23 +5,11 @@ use crate::{error, info, md, usage};
 use colored::Colorize;
 
 /// 处理 version 命令: j version
-pub fn handle_version(config: &YamlConfig) {
-    let mut extra = String::new();
-
-    // 收集自定义版本信息
-    if let Some(version_map) = config.get_section("version") {
-        for (key, value) in version_map {
-            if key == "email" || key == "author" {
-                continue;
-            }
-            extra.push_str(&format!("| {} | {} |\n", key, value));
-        }
-    }
-
+pub fn handle_version() {
     let text = VERSION_TEMPLATE
         .replace("{version}", constants::VERSION)
         .replace("{os}", std::env::consts::OS)
-        .replace("{extra}", &extra);
+        .replace("{arch}", std::env::consts::ARCH);
     md!("{}", text);
 }
 

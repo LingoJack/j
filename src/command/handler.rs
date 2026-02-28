@@ -115,8 +115,8 @@ command_handlers! {
     },
 
     // ========== 系统信息 ==========
-    VersionCmd {} => |self, config| {
-        crate::command::system::handle_version(config);
+    VersionCmd {} => |self, _config| {
+        crate::command::system::handle_version();
     },
     HelpCmd {} => |self, _config| {
         crate::command::help::handle_help();
