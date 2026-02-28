@@ -18,28 +18,27 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use ui::draw_ui;
 
-/// 处理 todo 命令: j todo [-l] [add <content...>]
-pub fn handle_todo(list: bool, content: &[String], config: &mut YamlConfig) {
-    if list {
-        handle_todo_list();
-        return;
-    }
-
+/// 处理 todo 命令: j todo [list | add <content...>]
+pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
         run_todo_tui(config);
         return;
     }
 
-    if content[0] == "add" {
-        let text = content[1..].join(" ");
-        let text = text.trim().trim_matches('"').to_string();
-        if text.is_empty() {
-            error!("⚠️ 内容为空，无法添加待办");
-            return;
+    match content[0].as_str() {
+        "list" => handle_todo_list(),
+        "add" => {
+            let text = content[1..].join(" ");
+            let text = text.trim().trim_matches('"').to_string();
+            if text.is_empty() {
+                error!("⚠️ 内容为空，无法添加待办");
+                return;
+            }
+            quick_add_todo(&text);
         }
-        quick_add_todo(&text);
-    } else {
-        usage!("j todo [add <内容>] [-l]");
+        _ => {
+            usage!("j todo | j todo list | j todo add <内容>");
+        }
     }
 }
 

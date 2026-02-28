@@ -130,10 +130,7 @@ pub enum SubCmd {
     /// 待办备忘录（无参数进入 TUI 界面）
     #[command(alias = "td")]
     Todo {
-        /// 列出所有待办（Markdown 格式输出）
-        #[arg(short = 'l', long = "list")]
-        list: bool,
-        /// 子命令或内容（add <content> 快速添加）
+        /// 子命令: list（输出待办）/ add <content>（快速添加），无参数进入 TUI
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         content: Vec<String>,
     },
