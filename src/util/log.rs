@@ -1,4 +1,4 @@
-use crate::constants::DATA_DIR;
+use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, DATA_DIR};
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -63,8 +63,8 @@ pub fn write_error_log(context: &str, error: &str) {
     let log_dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(DATA_DIR)
-        .join("agent")
-        .join("logs");
+        .join(AGENT_DIR)
+        .join(AGENT_LOG_DIR);
 
     // 创建日志目录
     if let Err(e) = fs::create_dir_all(&log_dir) {

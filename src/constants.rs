@@ -278,6 +278,12 @@ pub const SCRIPTS_DIR: &str = "scripts";
 /// 日报目录名
 pub const REPORT_DIR: &str = "report";
 
+/// agent 目录名
+pub const AGENT_DIR: &str = "agent";
+
+/// agent 日志目录名
+pub const AGENT_LOG_DIR: &str = "logs";
+
 /// 日报默认文件名
 pub const REPORT_DEFAULT_FILE: &str = "week_report.md";
 
