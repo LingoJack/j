@@ -1,5 +1,6 @@
 use crate::command::report;
 use crate::config::YamlConfig;
+use crate::constants::todo_filter;
 use crate::error;
 use chrono::Local;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -146,7 +147,7 @@ impl TodoApp {
             input: String::new(),
             edit_index: None,
             message: None,
-            filter: 0,
+            filter: todo_filter::DEFAULT,
             quit_input: String::new(),
             cursor_pos: 0,
             preview_scroll: 0,
@@ -166,8 +167,9 @@ impl TodoApp {
             .iter()
             .enumerate()
             .filter(|(_, item)| match self.filter {
-                1 => !item.done,
-                2 => item.done,
+                todo_filter::UNDONE => !item.done,
+                todo_filter::DONE => item.done,
+                todo_filter::ALL => true,
                 _ => true,
             })
             .map(|(i, _)| i)
@@ -321,18 +323,14 @@ impl TodoApp {
 
     /// 切换过滤模式
     pub fn toggle_filter(&mut self) {
-        self.filter = (self.filter + 1) % 3;
+        self.filter = (self.filter + 1) % todo_filter::COUNT;
         let count = self.filtered_indices().len();
         if count > 0 {
             self.state.select(Some(0));
         } else {
             self.state.select(None);
         }
-        let label = match self.filter {
-            1 => "未完成",
-            2 => "已完成",
-            _ => "全部",
-        };
+        let label = todo_filter::label(self.filter);
         self.message = Some(format!("🔍 过滤: {}", label));
     }
 

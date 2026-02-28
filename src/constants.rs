@@ -326,3 +326,29 @@ pub mod shell {
     pub const WINDOWS_OS: &str = "windows";
     pub const MACOS_OS: &str = "macos";
 }
+
+// ========== Todo 过滤状态 ==========
+
+/// Todo 过滤模式常量
+pub mod todo_filter {
+    /// 显示全部待办项
+    pub const ALL: usize = 0;
+    /// 只显示未完成的待办项
+    pub const UNDONE: usize = 1;
+    /// 只显示已完成的待办项
+    pub const DONE: usize = 2;
+    /// 过滤模式总数
+    pub const COUNT: usize = 3;
+
+    /// 获取过滤模式标签
+    pub fn label(filter: usize) -> &'static str {
+        match filter {
+            UNDONE => "未完成",
+            DONE => "已完成",
+            _ => "全部",
+        }
+    }
+
+    /// 默认过滤模式（未完成）
+    pub const DEFAULT: usize = UNDONE;
+}

@@ -2,6 +2,7 @@ use super::app::{
     AppMode, TodoApp, count_wrapped_lines, cursor_wrapped_line, display_width,
     split_input_at_cursor, truncate_to_width,
 };
+use crate::constants::todo_filter;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
@@ -42,8 +43,8 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
 
     // ========== 标题栏 ==========
     let filter_label = match app.filter {
-        1 => " [未完成]",
-        2 => " [已完成]",
+        todo_filter::UNDONE => " [未完成]",
+        todo_filter::DONE => " [已完成]",
         _ => "",
     };
     let total = app.list.items.len();
