@@ -22,7 +22,7 @@ status: current_dir
 	@git status
 
 .PHONY: release
-release: current_dir md_render
+release: current_dir
 	@cargo build --release
 
 .PHONY: install
@@ -37,7 +37,7 @@ uninstall:
 
 # 发布到 crates.io
 .PHONY: publish
-publish: push tag release
+publish: md_render push tag release
 	@echo "📦 Publishing to crates.io..."
 	@cargo publish --registry crates-io
 	@echo "✅ Published! Verify: cargo search j-cli"
