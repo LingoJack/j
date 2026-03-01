@@ -123,6 +123,11 @@ pub fn chat_history_path() -> PathBuf {
     agent_data_dir().join("chat_history.json")
 }
 
+/// 获取系统提示词文件路径
+pub fn system_prompt_path() -> PathBuf {
+    agent_data_dir().join("system_prompt.md")
+}
+
 // ========== 配置读写 ==========
 
 /// 加载 Agent 配置
@@ -149,7 +154,10 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    match serde_json::to_string_pretty(config) {
+    // system_prompt 统一存放在独立文件，不再写入 agent_config.json
+    let mut config_to_save = config.clone();
+    config_to_save.system_prompt = None;
+    match serde_json::to_string_pretty(&config_to_save) {
         Ok(json) => match fs::write(&path, json) {
             Ok(_) => true,
             Err(e) => {
@@ -185,5 +193,55 @@ pub fn save_chat_session(session: &ChatSession) -> bool {
     match serde_json::to_string_pretty(session) {
         Ok(json) => fs::write(&path, json).is_ok(),
         Err(_) => false,
+    }
+}
+
+/// 加载系统提示词（来自独立文件）
+pub fn load_system_prompt() -> Option<String> {
+    let path = system_prompt_path();
+    if !path.exists() {
+        return None;
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Err(e) => {
+            error!("❌ 读取 system_prompt.md 失败: {}", e);
+            None
+        }
+    }
+}
+
+/// 保存系统提示词到独立文件（空字符串会删除文件）
+pub fn save_system_prompt(prompt: &str) -> bool {
+    let path = system_prompt_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let trimmed = prompt.trim();
+    if trimmed.is_empty() {
+        return match fs::remove_file(&path) {
+            Ok(_) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) => {
+                error!("❌ 删除 system_prompt.md 失败: {}", e);
+                false
+            }
+        };
+    }
+
+    match fs::write(path, trimmed) {
+        Ok(_) => true,
+        Err(e) => {
+            error!("❌ 保存 system_prompt.md 失败: {}", e);
+            false
+        }
     }
 }

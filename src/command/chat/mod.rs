@@ -16,12 +16,17 @@ use api::call_openai_stream;
 use handler::run_chat_tui;
 use model::{
     AgentConfig, ChatMessage, ModelProvider, agent_config_path, load_agent_config,
-    save_agent_config,
+    load_system_prompt, save_agent_config, save_system_prompt,
 };
 use std::io::{self, Write};
 
 pub fn handle_chat(content: &[String], _config: &YamlConfig) {
-    let agent_config = load_agent_config();
+    let mut agent_config = load_agent_config();
+    if let Some(file_prompt) = load_system_prompt() {
+        agent_config.system_prompt = Some(file_prompt);
+    } else if let Some(config_prompt) = agent_config.system_prompt.clone() {
+        let _ = save_system_prompt(&config_prompt);
+    }
 
     if agent_config.providers.is_empty() {
         info!("⚠️  尚未配置 LLM 模型提供方。");
@@ -35,7 +40,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
                 model: "gpt-4o".to_string(),
             }],
             active_index: 0,
-            system_prompt: Some("你是一个有用的助手。".to_string()),
+            system_prompt: None,
             stream_mode: true,
             max_history_messages: 20,
             theme: ThemeName::default(),
@@ -45,6 +50,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);
         }
+        let _ = save_system_prompt("你是一个有用的助手。");
         // 自动创建示例配置文件
         if !agent_config_path().exists() {
             let _ = save_agent_config(&example);
@@ -79,15 +85,17 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
     info!("🤖 [{}] 思考中...", provider.name);
 
     let mut messages = Vec::new();
-    if let Some(sys) = &agent_config.system_prompt {
-        messages.push(ChatMessage::text("system", sys.clone()));
-    }
     messages.push(ChatMessage::text("user", message));
 
-    match call_openai_stream(provider, &messages, &mut |chunk| {
-        print!("{}", chunk);
-        let _ = io::stdout().flush();
-    }) {
+    match call_openai_stream(
+        provider,
+        &messages,
+        agent_config.system_prompt.as_deref(),
+        &mut |chunk| {
+            print!("{}", chunk);
+            let _ = io::stdout().flush();
+        },
+    ) {
         Ok(_) => {
             println!(); // 换行
         }

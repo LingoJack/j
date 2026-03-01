@@ -1,7 +1,8 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::model::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
-    load_chat_session, save_agent_config, save_chat_session,
+    load_chat_session, load_system_prompt, save_agent_config, save_chat_session,
+    save_system_prompt, system_prompt_path,
 };
 use super::theme::Theme;
 use super::tools::ToolRegistry;
@@ -200,7 +201,14 @@ pub fn config_total_fields() -> usize {
 
 impl ChatApp {
     pub fn new() -> Self {
-        let agent_config = load_agent_config();
+        let mut agent_config = load_agent_config();
+        if let Some(file_prompt) = load_system_prompt() {
+            agent_config.system_prompt = Some(file_prompt);
+        } else if !system_prompt_path().exists() {
+            if let Some(config_prompt) = agent_config.system_prompt.clone() {
+                let _ = save_system_prompt(&config_prompt);
+            }
+        }
         let session = load_chat_session();
         let mut model_list_state = ListState::default();
         if !agent_config.providers.is_empty() {
@@ -289,9 +297,6 @@ impl ChatApp {
     /// 构建发送给 API 的消息列表
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
         let mut messages = Vec::new();
-        if let Some(sys) = &self.agent_config.system_prompt {
-            messages.push(ChatMessage::text("system", sys.clone()));
-        }
 
         // 只取最近的 N 条历史消息，避免 token 消耗过大
         let max_history = self.agent_config.max_history_messages;
@@ -355,6 +360,7 @@ impl ChatApp {
 
         let streaming_content = Arc::clone(&self.streaming_content);
         let use_stream = self.agent_config.stream_mode;
+        let system_prompt = self.agent_config.system_prompt.clone();
         let tools_enabled = self.agent_config.tools_enabled;
         let max_tool_rounds = self.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
@@ -377,6 +383,7 @@ impl ChatApp {
                 provider,
                 api_messages,
                 tools,
+                system_prompt,
                 use_stream,
                 streaming_content,
                 stream_tx,
@@ -776,6 +783,7 @@ async fn run_agent_loop(
     provider: ModelProvider,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ChatCompletionTools>,
+    system_prompt: Option<String>,
     use_stream: bool,
     streaming_content: Arc<Mutex<String>>,
     tx: mpsc::Sender<StreamMsg>,
@@ -791,7 +799,12 @@ async fn run_agent_loop(
             sc.clear();
         }
 
-        let request = match build_request_with_tools(&provider, &messages, tools.clone()) {
+        let request = match build_request_with_tools(
+            &provider,
+            &messages,
+            tools.clone(),
+            system_prompt.as_deref(),
+        ) {
             Ok(req) => req,
             Err(e) => {
                 let _ = tx.send(StreamMsg::Error(format!("构建请求失败: {}", e)));

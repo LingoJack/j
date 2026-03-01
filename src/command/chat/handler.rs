@@ -1,4 +1,4 @@
-use super::model::{ModelProvider, save_agent_config, save_chat_session};
+use super::model::{ModelProvider, save_agent_config, save_chat_session, save_system_prompt};
 use super::render::copy_to_clipboard;
 use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
@@ -142,7 +142,12 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                         } else {
                             app.agent_config.system_prompt = Some(new_text);
                         }
-                        app.show_toast("系统提示词已更新", false);
+                        let prompt_text = app.agent_config.system_prompt.as_deref().unwrap_or("");
+                        if save_system_prompt(prompt_text) {
+                            app.show_toast("系统提示词已更新", false);
+                        } else {
+                            app.show_toast("系统提示词保存失败", true);
+                        }
                     }
                     Ok(None) => {
                         // 用户取消编辑
@@ -661,8 +666,16 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
     match key.code {
         KeyCode::Esc => {
             // 保存并返回
-            let _ = save_agent_config(&app.agent_config);
-            app.show_toast("配置已保存 ✅", false);
+            let prompt_saved =
+                save_system_prompt(app.agent_config.system_prompt.as_deref().unwrap_or(""));
+            let config_saved = save_agent_config(&app.agent_config);
+            if prompt_saved && config_saved {
+                app.show_toast("配置已保存 ✅", false);
+            } else if !prompt_saved {
+                app.show_toast("系统提示词保存失败", true);
+            } else {
+                app.show_toast("配置保存失败", true);
+            }
             app.mode = ChatMode::Chat;
         }
         KeyCode::Up | KeyCode::Char('k') => {

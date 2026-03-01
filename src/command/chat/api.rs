@@ -81,8 +81,21 @@ pub fn build_request_with_tools(
     provider: &ModelProvider,
     messages: &[ChatMessage],
     tools: Vec<ChatCompletionTools>,
+    system_prompt: Option<&str>,
 ) -> Result<CreateChatCompletionRequest, String> {
-    let openai_messages = to_openai_messages(messages);
+    let mut openai_messages = Vec::new();
+    if let Some(sys) = system_prompt {
+        let trimmed = sys.trim();
+        if !trimmed.is_empty() {
+            if let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
+                .content(trimmed)
+                .build()
+            {
+                openai_messages.push(ChatCompletionRequestMessage::System(msg));
+            }
+        }
+    }
+    openai_messages.extend(to_openai_messages(messages));
     let mut builder = CreateChatCompletionRequestArgs::default();
     builder.model(&provider.model).messages(openai_messages);
     if !tools.is_empty() {
@@ -96,10 +109,23 @@ pub fn build_request_with_tools(
 pub async fn call_openai_stream_async(
     provider: &ModelProvider,
     messages: &[ChatMessage],
+    system_prompt: Option<&str>,
     on_chunk: &mut dyn FnMut(&str),
 ) -> Result<String, String> {
     let client = create_openai_client(provider);
-    let openai_messages = to_openai_messages(messages);
+    let mut openai_messages = Vec::new();
+    if let Some(sys) = system_prompt {
+        let trimmed = sys.trim();
+        if !trimmed.is_empty() {
+            if let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
+                .content(trimmed)
+                .build()
+            {
+                openai_messages.push(ChatCompletionRequestMessage::System(msg));
+            }
+        }
+    }
+    openai_messages.extend(to_openai_messages(messages));
 
     let request = CreateChatCompletionRequestArgs::default()
         .model(&provider.model)
@@ -138,8 +164,14 @@ pub async fn call_openai_stream_async(
 pub fn call_openai_stream(
     provider: &ModelProvider,
     messages: &[ChatMessage],
+    system_prompt: Option<&str>,
     on_chunk: &mut dyn FnMut(&str),
 ) -> Result<String, String> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| format!("创建异步运行时失败: {}", e))?;
-    rt.block_on(call_openai_stream_async(provider, messages, on_chunk))
+    rt.block_on(call_openai_stream_async(
+        provider,
+        messages,
+        system_prompt,
+        on_chunk,
+    ))
 }
