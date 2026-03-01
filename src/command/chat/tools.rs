@@ -61,7 +61,7 @@ impl Tool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "在当前系统上执行 shell 命令，返回命令的 stdout 和 stderr 输出。执行前需用户确认。"
+        "在当前系统上执行 shell 命令，返回命令的 stdout 和 stderr 输出"
     }
 
     fn parameters_schema(&self) -> Value {
