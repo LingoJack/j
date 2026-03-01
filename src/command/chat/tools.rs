@@ -64,7 +64,7 @@ impl Tool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "在当前系统上执行 shell 命令，返回命令的 stdout 和 stderr 输出"
+        "在当前系统上执行 shell 命令，返回命令的 stdout 和 stderr 输出；注意每次调用 run_shell 都会创建一个新的进程，状态是不延续的"
     }
 
     fn parameters_schema(&self) -> Value {

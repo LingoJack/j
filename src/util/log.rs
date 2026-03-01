@@ -57,6 +57,39 @@ pub fn capitalize_first_letter(s: &str) -> String {
     }
 }
 
+/// 写入信息日志到文件
+/// 日志文件位置：~/.jdata/agent/logs/info.log
+pub fn write_info_log(context: &str, content: &str) {
+    let log_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(DATA_DIR)
+        .join(AGENT_DIR)
+        .join(AGENT_LOG_DIR);
+
+    if let Err(e) = fs::create_dir_all(&log_dir) {
+        eprintln!("无法创建日志目录: {}", e);
+        return;
+    }
+
+    let log_file = log_dir.join("info.log");
+
+    match OpenOptions::new().create(true).append(true).open(&log_file) {
+        Ok(mut file) => {
+            let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S");
+            let log_entry = format!(
+                "\n========================================\n[{}] {}\n{}\n",
+                timestamp, context, content
+            );
+            if let Err(e) = file.write_all(log_entry.as_bytes()) {
+                eprintln!("写入信息日志失败: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!("无法打开信息日志文件: {}", e);
+        }
+    }
+}
+
 /// 写入错误日志到文件
 /// 日志文件位置：~/.jdata/agent/logs/error.log
 pub fn write_error_log(context: &str, error: &str) {

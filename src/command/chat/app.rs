@@ -8,7 +8,7 @@ use super::skill::{self, Skill};
 use super::theme::Theme;
 use super::tools::ToolRegistry;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
-use crate::util::log::write_error_log;
+use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
 use ratatui::text::Line;
@@ -846,6 +846,24 @@ async fn run_agent_loop(
             sc.clear();
         }
 
+        // 记录请求输入日志
+        {
+            let mut log_content = String::new();
+            if let Some(ref sp) = system_prompt {
+                log_content.push_str(&format!("[System] {}\n", sp));
+            }
+            for msg in &messages {
+                let role_tag = match msg.role.as_str() {
+                    "user" => "[User]",
+                    "assistant" => "[Assistant]",
+                    "tool" => "[Tool]",
+                    _ => "[Unknown]",
+                };
+                log_content.push_str(&format!("{} {}\n", role_tag, msg.content));
+            }
+            write_info_log("Chat 请求", &log_content);
+        }
+
         let request = match build_request_with_tools(
             &provider,
             &messages,
@@ -937,6 +955,11 @@ async fn run_agent_loop(
                 }
             }
 
+            // 记录流式回复日志
+            if !assistant_text.is_empty() {
+                write_info_log("Chat 回复", &assistant_text);
+            }
+
             // 如果流式遇到 tool_calls 反序列化错误，fallback 到非流式获取完整响应
             if stream_had_deserialize_error {
                 // 清空流式内容（切换到非流式）
@@ -973,8 +996,25 @@ async fn run_agent_loop(
                                         break;
                                     }
 
+                                    // 记录工具调用请求日志 (fallback)
+                                    {
+                                        let mut log_content = String::new();
+                                        for item in &tool_items {
+                                            log_content.push_str(&format!(
+                                                "- {}: {}\n",
+                                                item.name, item.arguments
+                                            ));
+                                        }
+                                        write_info_log("工具调用请求", &log_content);
+                                    }
+
                                     let assistant_text =
                                         choice.message.content.clone().unwrap_or_default();
+                                    // 记录回复日志 (fallback)
+                                    if !assistant_text.is_empty() {
+                                        write_info_log("Chat 回复", &assistant_text);
+                                    }
+
                                     messages.push(ChatMessage {
                                         role: "assistant".to_string(),
                                         content: assistant_text,
@@ -1004,6 +1044,18 @@ async fn run_agent_loop(
                                         }
                                     }
 
+                                    // 记录工具调用结果日志 (fallback)
+                                    {
+                                        let mut log_content = String::new();
+                                        for result in &tool_results {
+                                            log_content.push_str(&format!(
+                                                "- [{}]: {}\n",
+                                                result.tool_call_id, result.result
+                                            ));
+                                        }
+                                        write_info_log("工具调用结果", &log_content);
+                                    }
+
                                     for result in tool_results {
                                         messages.push(ChatMessage {
                                             role: "tool".to_string(),
@@ -1017,6 +1069,7 @@ async fn run_agent_loop(
                             }
                             // 普通文本回复
                             if let Some(ref content) = choice.message.content {
+                                write_info_log("Chat 回复", content);
                                 let mut sc = streaming_content.lock().unwrap();
                                 sc.push_str(content);
                                 drop(sc);
@@ -1054,6 +1107,15 @@ async fn run_agent_loop(
                     break;
                 }
 
+                // 记录工具调用请求日志 (流式)
+                {
+                    let mut log_content = String::new();
+                    for item in &tool_items {
+                        log_content.push_str(&format!("- {}: {}\n", item.name, item.arguments));
+                    }
+                    write_info_log("工具调用请求", &log_content);
+                }
+
                 messages.push(ChatMessage {
                     role: "assistant".to_string(),
                     content: assistant_text,
@@ -1077,6 +1139,16 @@ async fn run_agent_loop(
                             return;
                         }
                     }
+                }
+
+                // 记录工具调用结果日志 (流式)
+                {
+                    let mut log_content = String::new();
+                    for result in &tool_results {
+                        log_content
+                            .push_str(&format!("- [{}]: {}\n", result.tool_call_id, result.result));
+                    }
+                    write_info_log("工具调用结果", &log_content);
                 }
 
                 for result in tool_results {
@@ -1124,8 +1196,25 @@ async fn run_agent_loop(
                                     break;
                                 }
 
+                                // 记录工具调用请求日志 (非流式)
+                                {
+                                    let mut log_content = String::new();
+                                    for item in &tool_items {
+                                        log_content.push_str(&format!(
+                                            "- {}: {}\n",
+                                            item.name, item.arguments
+                                        ));
+                                    }
+                                    write_info_log("工具调用请求", &log_content);
+                                }
+
                                 let assistant_text =
                                     choice.message.content.clone().unwrap_or_default();
+                                // 记录回复日志 (非流式)
+                                if !assistant_text.is_empty() {
+                                    write_info_log("Chat 回复", &assistant_text);
+                                }
+
                                 messages.push(ChatMessage {
                                     role: "assistant".to_string(),
                                     content: assistant_text,
@@ -1155,6 +1244,18 @@ async fn run_agent_loop(
                                     }
                                 }
 
+                                // 记录工具调用结果日志 (非流式)
+                                {
+                                    let mut log_content = String::new();
+                                    for result in &tool_results {
+                                        log_content.push_str(&format!(
+                                            "- [{}]: {}\n",
+                                            result.tool_call_id, result.result
+                                        ));
+                                    }
+                                    write_info_log("工具调用结果", &log_content);
+                                }
+
                                 for result in tool_results {
                                     messages.push(ChatMessage {
                                         role: "tool".to_string(),
@@ -1170,6 +1271,7 @@ async fn run_agent_loop(
 
                         // 正常文本回复
                         if let Some(ref content) = choice.message.content {
+                            write_info_log("Chat 回复", content);
                             let mut sc = streaming_content.lock().unwrap();
                             sc.push_str(content);
                             drop(sc);
