@@ -959,10 +959,10 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
     }
 }
 
-/// 工具确认模式按键处理：Y 执行，N/Esc 拒绝
+/// 工具确认模式按键处理：Y/Enter 执行，N/Esc 拒绝
 pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
             app.execute_pending_tool();
         }
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {

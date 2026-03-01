@@ -406,13 +406,13 @@ pub fn build_message_lines_incremental(
 
             // 操作提示行
             {
-                let hint_text_w = display_width("[Y] 执行  /  [N] 拒绝");
+                let hint_text_w = display_width("[Y/Enter] 执行  /  [N/Esc] 拒绝");
                 let fill = content_w.saturating_sub(hint_text_w + 2);
                 lines.push(Line::from(vec![
                     Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
                     Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
                     Span::styled(
-                        "[Y] 执行",
+                        "[Y/Enter] 执行",
                         Style::default()
                             .fg(Color::Green)
                             .bg(confirm_bg)
@@ -420,7 +420,7 @@ pub fn build_message_lines_incremental(
                     ),
                     Span::styled("  /  ", Style::default().fg(Color::DarkGray).bg(confirm_bg)),
                     Span::styled(
-                        "[N] 拒绝",
+                        "[N/Esc] 拒绝",
                         Style::default()
                             .fg(Color::Red)
                             .bg(confirm_bg)
