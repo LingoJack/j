@@ -439,6 +439,7 @@ pub fn config_field_label(idx: usize) -> &'static str {
             "max_history_messages" => "历史消息数",
             "theme" => "主题风格",
             "tools_enabled" => "工具调用",
+            "max_tool_rounds" => "工具轮数上限",
             _ => CONFIG_GLOBAL_FIELDS[gi],
         }
     }
@@ -490,6 +491,7 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
                     "关闭".into()
                 }
             }
+            "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
             _ => String::new(),
         }
     }
@@ -529,6 +531,7 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
                     "false".into()
                 }
             }
+            "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
             _ => String::new(),
         }
     }
@@ -580,6 +583,11 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
                     value.trim().to_lowercase().as_str(),
                     "true" | "1" | "开启" | "on" | "yes"
                 );
+            }
+            "max_tool_rounds" => {
+                if let Ok(num) = value.trim().parse::<usize>() {
+                    app.agent_config.max_tool_rounds = num;
+                }
             }
             _ => {}
         }

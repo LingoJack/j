@@ -40,6 +40,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             max_history_messages: 20,
             theme: ThemeName::default(),
             tools_enabled: false,
+            max_tool_rounds: 10,
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);

@@ -356,6 +356,7 @@ impl ChatApp {
         let streaming_content = Arc::clone(&self.streaming_content);
         let use_stream = self.agent_config.stream_mode;
         let tools_enabled = self.agent_config.tools_enabled;
+        let max_tool_rounds = self.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
             self.tool_registry.to_openai_tools()
         } else {
@@ -380,6 +381,7 @@ impl ChatApp {
                 streaming_content,
                 stream_tx,
                 tool_result_rx,
+                max_tool_rounds,
             ));
         });
     }
@@ -778,11 +780,11 @@ async fn run_agent_loop(
     streaming_content: Arc<Mutex<String>>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
+    max_tool_rounds: usize,
 ) {
     let client = create_openai_client(&provider);
-    const MAX_ROUNDS: usize = 10;
 
-    for _round in 0..MAX_ROUNDS {
+    for _round in 0..max_tool_rounds {
         // 清空流式内容缓冲（每轮开始时）
         {
             let mut sc = streaming_content.lock().unwrap();

@@ -44,6 +44,9 @@ pub struct AgentConfig {
     /// 是否启用工具调用（默认关闭）
     #[serde(default)]
     pub tools_enabled: bool,
+    /// 工具调用最大轮数（默认 10，防止无限循环）
+    #[serde(default = "default_max_tool_rounds")]
+    pub max_tool_rounds: usize,
 }
 
 fn default_max_history_messages() -> usize {
@@ -53,6 +56,11 @@ fn default_max_history_messages() -> usize {
 /// 默认流式输出
 fn default_stream_mode() -> bool {
     true
+}
+
+/// 默认工具调用最大轮数
+fn default_max_tool_rounds() -> usize {
+    10
 }
 
 /// 单次工具调用请求（序列化到历史记录）
