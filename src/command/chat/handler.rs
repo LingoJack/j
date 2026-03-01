@@ -177,6 +177,73 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return true;
     }
 
+    // ===== @ 补全弹窗拦截 =====
+    if app.at_popup_active {
+        let filtered = get_filtered_skills(app);
+        match key.code {
+            KeyCode::Up => {
+                if !filtered.is_empty() && app.at_popup_selected > 0 {
+                    app.at_popup_selected -= 1;
+                }
+                return false;
+            }
+            KeyCode::Down => {
+                if !filtered.is_empty() && app.at_popup_selected < filtered.len().saturating_sub(1)
+                {
+                    app.at_popup_selected += 1;
+                }
+                return false;
+            }
+            KeyCode::Tab | KeyCode::Enter => {
+                if !filtered.is_empty() {
+                    let sel = app.at_popup_selected.min(filtered.len() - 1);
+                    let name = filtered[sel].clone();
+                    complete_at_mention(app, &name);
+                }
+                app.at_popup_active = false;
+                return false;
+            }
+            KeyCode::Esc => {
+                app.at_popup_active = false;
+                return false;
+            }
+            KeyCode::Char(' ') => {
+                // 空格关闭弹窗，正常处理字符
+                app.at_popup_active = false;
+                // fall through to normal char handling below
+            }
+            KeyCode::Backspace => {
+                // 先执行删除，然后检查弹窗状态
+                if app.cursor_pos > 0 {
+                    let start = app
+                        .input
+                        .char_indices()
+                        .nth(app.cursor_pos - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let end = app
+                        .input
+                        .char_indices()
+                        .nth(app.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.input.len());
+                    app.input.drain(start..end);
+                    app.cursor_pos -= 1;
+                }
+                // 如果光标退回到 @ 之前，关闭弹窗
+                if app.cursor_pos <= app.at_popup_start_pos {
+                    app.at_popup_active = false;
+                } else {
+                    update_at_filter(app);
+                }
+                return false;
+            }
+            _ => {
+                // 其他按键不拦截，落入正常处理
+            }
+        }
+    }
+
     // Ctrl+T 切换模型（替代 Ctrl+M，因为 Ctrl+M 在终端中等于 Enter）
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('t') {
         if !app.agent_config.providers.is_empty() {
@@ -357,6 +424,23 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 .unwrap_or(app.input.len());
             app.input.insert_str(byte_idx, &c.to_string());
             app.cursor_pos += 1;
+
+            // @ 补全弹窗触发逻辑
+            if c == '@' && !app.loaded_skills.is_empty() {
+                // @ 在行首或前一个字符是空白
+                let valid = app.cursor_pos <= 1 || {
+                    let chars: Vec<char> = app.input.chars().collect();
+                    app.cursor_pos >= 2 && chars[app.cursor_pos - 2].is_whitespace()
+                };
+                if valid {
+                    app.at_popup_active = true;
+                    app.at_popup_start_pos = app.cursor_pos - 1;
+                    app.at_popup_filter.clear();
+                    app.at_popup_selected = 0;
+                }
+            } else if app.at_popup_active {
+                update_at_filter(app);
+            }
         }
 
         _ => {}
@@ -991,4 +1075,44 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+// ========== @ 补全辅助函数 ==========
+
+/// 从 input 中提取 @ 之后的过滤文本
+fn update_at_filter(app: &mut ChatApp) {
+    let chars: Vec<char> = app.input.chars().collect();
+    let start = app.at_popup_start_pos + 1; // @ 之后
+    if start <= app.cursor_pos && app.cursor_pos <= chars.len() {
+        app.at_popup_filter = chars[start..app.cursor_pos].iter().collect();
+    } else {
+        app.at_popup_filter.clear();
+    }
+    // 重置选中索引
+    app.at_popup_selected = 0;
+}
+
+/// 根据 filter 过滤 loaded_skills 的 name 列表
+pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
+    let filter = app.at_popup_filter.to_lowercase();
+    app.loaded_skills
+        .iter()
+        .map(|s| s.frontmatter.name.clone())
+        .filter(|name| filter.is_empty() || name.to_lowercase().contains(&filter))
+        .collect()
+}
+
+/// 替换 input 中 @... 为 @skill_name 并加空格
+fn complete_at_mention(app: &mut ChatApp, skill_name: &str) {
+    let chars: Vec<char> = app.input.chars().collect();
+    let before: String = chars[..app.at_popup_start_pos].iter().collect();
+    let after: String = if app.cursor_pos < chars.len() {
+        chars[app.cursor_pos..].iter().collect()
+    } else {
+        String::new()
+    };
+    let replacement = format!("@{} ", skill_name);
+    let new_cursor = before.chars().count() + replacement.chars().count();
+    app.input = format!("{}{}{}", before, replacement, after);
+    app.cursor_pos = new_cursor;
 }

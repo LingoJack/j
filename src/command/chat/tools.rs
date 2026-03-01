@@ -258,11 +258,24 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
-    /// 创建默认注册表（包含 run_shell 和 read_file）
+    /// 创建默认注册表（包含 run_shell、read_file 和已加载的 skills）
     pub fn default() -> Self {
-        Self {
+        let mut registry = Self {
             tools: vec![Box::new(ShellTool), Box::new(ReadFileTool)],
+        };
+
+        // 加载 skills 并注册
+        let skills = super::skill::load_all_skills();
+        for skill in skills {
+            registry.register(Box::new(super::skill::SkillTool { skill }));
         }
+
+        registry
+    }
+
+    /// 注册一个工具
+    pub fn register(&mut self, tool: Box<dyn Tool>) {
+        self.tools.push(tool);
     }
 
     /// 按名称获取工具

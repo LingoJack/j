@@ -5,6 +5,7 @@ pub mod handler;
 pub mod markdown;
 pub mod model;
 pub mod render;
+pub mod skill;
 pub mod theme;
 pub mod tools;
 pub mod ui;

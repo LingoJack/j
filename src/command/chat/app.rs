@@ -4,6 +4,7 @@ use super::model::{
     load_chat_session, load_system_prompt, save_agent_config, save_chat_session,
     save_system_prompt, system_prompt_path,
 };
+use super::skill::{self, Skill};
 use super::theme::Theme;
 use super::tools::ToolRegistry;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
@@ -132,6 +133,18 @@ pub struct ChatApp {
     pub pending_tool_idx: usize,
     /// 配置界面：是否有待处理的 system_prompt 编辑（需弹出全屏编辑器）
     pub pending_system_prompt_edit: bool,
+    /// 已加载的 skills（用于补全和高亮）
+    pub loaded_skills: Vec<Skill>,
+    /// @ 补全弹窗是否激活
+    pub at_popup_active: bool,
+    /// @ 之后的过滤文本
+    pub at_popup_filter: String,
+    /// @ 在 input 中的字符索引
+    pub at_popup_start_pos: usize,
+    /// 弹窗中选中项索引
+    pub at_popup_selected: usize,
+    /// 发消息时提取的 skill 上下文
+    pub pending_skill_hints: Option<Vec<String>>,
 }
 
 /// 消息渲染行缓存
@@ -215,6 +228,7 @@ impl ChatApp {
             model_list_state.select(Some(agent_config.active_index));
         }
         let theme = Theme::from_name(&agent_config.theme);
+        let loaded_skills = skill::load_all_skills();
         Self {
             agent_config,
             session,
@@ -251,6 +265,12 @@ impl ChatApp {
             active_tool_calls: Vec::new(),
             pending_tool_idx: 0,
             pending_system_prompt_edit: false,
+            loaded_skills,
+            at_popup_active: false,
+            at_popup_filter: String::new(),
+            at_popup_start_pos: 0,
+            at_popup_selected: 0,
+            pending_skill_hints: None,
         }
     }
 
@@ -295,7 +315,7 @@ impl ChatApp {
     }
 
     /// 构建发送给 API 的消息列表
-    pub fn build_api_messages(&self) -> Vec<ChatMessage> {
+    pub fn build_api_messages(&mut self) -> Vec<ChatMessage> {
         let mut messages = Vec::new();
 
         // 只取最近的 N 条历史消息，避免 token 消耗过大
@@ -306,9 +326,31 @@ impl ChatApp {
             self.session.messages.clone()
         };
 
+        // 如果有 pending skill hints，在最后一条用户消息前注入 skill 上下文
+        let skill_hints = self.pending_skill_hints.take();
+
         for msg in history_messages {
             messages.push(msg);
         }
+
+        // 在消息列表末尾注入 skill 上下文（作为 system 消息紧跟在用户消息前面）
+        if let Some(hints) = skill_hints {
+            if !hints.is_empty() {
+                // 将最后一条用户消息弹出，先插入 skill system 消息，再放回用户消息
+                if let Some(last_user_msg) = messages.pop() {
+                    let combined = hints.join("\n\n---\n\n");
+                    messages.push(ChatMessage::text(
+                        "system",
+                        format!(
+                            "[Skill 指令]\n以下是用户通过 @mention 引用的技能指令，请严格遵循：\n\n{}",
+                            combined
+                        ),
+                    ));
+                    messages.push(last_user_msg);
+                }
+            }
+        }
+
         messages
     }
 
@@ -318,6 +360,37 @@ impl ChatApp {
         if text.is_empty() {
             return;
         }
+
+        // 提取 @skill_name mentions 并构建 skill 上下文
+        let skill_names: Vec<String> = self
+            .loaded_skills
+            .iter()
+            .map(|s| s.frontmatter.name.clone())
+            .collect();
+        let mentions = find_at_mentions(&text, &skill_names);
+        if !mentions.is_empty() {
+            let mut hints = Vec::new();
+            for mention_name in &mentions {
+                if let Some(sk) = self
+                    .loaded_skills
+                    .iter()
+                    .find(|s| s.frontmatter.name == *mention_name)
+                {
+                    // 提取 @skill_name 后面直到下一个 @mention 或行尾的文本作为 arguments
+                    let pattern = format!("@{}", mention_name);
+                    let args = extract_skill_arguments(&text, &pattern);
+                    let content = skill::resolve_skill_content(sk);
+                    let resolved = content.replace("$ARGUMENTS", &args);
+                    hints.push(resolved);
+                }
+            }
+            if !hints.is_empty() {
+                self.pending_skill_hints = Some(hints);
+            }
+        }
+
+        // 关闭弹窗
+        self.at_popup_active = false;
 
         // 添加用户消息
         self.session.messages.push(ChatMessage::text("user", text));
@@ -1142,4 +1215,78 @@ async fn run_agent_loop(
     }
 
     let _ = tx.send(StreamMsg::Done);
+}
+
+// ========== @mention 辅助函数 ==========
+
+/// 在文本中查找所有 @skill_name mentions，返回匹配的 skill 名称列表
+pub fn find_at_mentions(text: &str, skill_names: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        if chars[i] == '@' {
+            // @ 必须在行首或前面是空白
+            let valid_start = i == 0 || chars[i - 1].is_whitespace();
+            if valid_start {
+                // 尝试匹配 skill name（贪心：取最长匹配）
+                let rest: String = chars[i + 1..].iter().collect();
+                let mut best_match: Option<&String> = None;
+                for name in skill_names {
+                    if rest.starts_with(name.as_str()) {
+                        // 确保 name 后面是空白、EOF 或非字母数字
+                        let after_pos = name.len();
+                        let is_boundary = if after_pos >= rest.len() {
+                            true
+                        } else {
+                            let next_ch = rest.chars().nth(after_pos).unwrap();
+                            next_ch.is_whitespace() || !next_ch.is_alphanumeric()
+                        };
+                        if is_boundary {
+                            if best_match.map(|m| m.len()).unwrap_or(0) < name.len() {
+                                best_match = Some(name);
+                            }
+                        }
+                    }
+                }
+                if let Some(matched) = best_match {
+                    if !found.contains(matched) {
+                        found.push(matched.clone());
+                    }
+                    i += 1 + matched.len();
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    found
+}
+
+/// 提取 @skill_name 后面的参数文本（到下一个 @mention 或字符串末尾）
+fn extract_skill_arguments(text: &str, pattern: &str) -> String {
+    if let Some(pos) = text.find(pattern) {
+        let after = &text[pos + pattern.len()..];
+        let trimmed = after.trim_start();
+        // 到下一个 @（前面是空白）或末尾
+        let end = trimmed
+            .char_indices()
+            .find(|(i, ch)| {
+                *ch == '@'
+                    && *i > 0
+                    && trimmed
+                        .as_bytes()
+                        .get(i - 1)
+                        .map(|b| (*b as char).is_whitespace())
+                        .unwrap_or(false)
+            })
+            .map(|(i, _)| i)
+            .unwrap_or(trimmed.len());
+        trimmed[..end].trim().to_string()
+    } else {
+        String::new()
+    }
 }

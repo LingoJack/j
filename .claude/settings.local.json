@@ -12,7 +12,9 @@
       "Bash(head:*)",
       "Bash(ls:*)",
       "Bash(cargo fmt:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:www.anthropic.com)"
     ]
   },
   "language": "zh-CN",

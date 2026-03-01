@@ -1438,6 +1438,70 @@ AI 对话支持工具调用（Function Calling），让 AI 能够执行实际操
 
 > 提示：即使有安全过滤，执行 shell 命令前仍建议仔细检查命令内容
 
+### Skill 技能系统
+
+Chat 支持用户自定义 Skill（技能），让 AI 在对话中遵循特定领域的指令模板。
+
+**Skill 目录结构**：
+
+```
+~/.jdata/agent/skills/
+  my-skill/
+    SKILL.md           # 主文件（必需），YAML frontmatter + Markdown 正文
+    references/        # 可选的参考文件目录
+      api-docs.md
+    scripts/           # 可选的脚本目录
+      validate.sh
+```
+
+**SKILL.md 格式**：
+
+```yaml
+---
+name: my-skill
+description: 这个 skill 做什么
+argument-hint: "[参数说明]"
+---
+
+Markdown 指令正文，$ARGUMENTS 会被替换为实际参数...
+```
+
+**使用方式**：
+
+| 方式 | 说明 |
+|------|------|
+| `@skill_name` | 在输入框中输入 @ 触发技能选择弹窗，选择后自动补全 |
+| `@skill_name 参数` | 输入 `@技能名 参数`，发送时 AI 会收到 skill 指令上下文 |
+| 自动调用 | 启用 tools_enabled 后，AI 可通过 tool calling 自动发现并调用匹配的 skill |
+
+**@ 补全弹窗快捷键**：
+
+| 按键 | 功能 |
+|------|------|
+| `@` | 触发技能选择弹窗（需在行首或空格之后） |
+| `↑` / `↓` | 在弹窗中移动选中项 |
+| `Tab` / `Enter` | 补全选中的技能名称 |
+| `Esc` | 关闭弹窗 |
+
+**@ mention 高亮**：输入框中的 `@skill_name` 会以绿色加粗显示
+
+**创建示例 Skill**：
+
+```bash
+mkdir -p ~/.jdata/agent/skills/code-expert
+cat > ~/.jdata/agent/skills/code-expert/SKILL.md << 'EOF'
+---
+name: code-expert
+description: 编程专家，帮助用户回答编程问题
+argument-hint: "[编程语言]"
+---
+
+你是一个专精 $ARGUMENTS 的编程专家。请用简洁的代码示例回答用户的问题。
+EOF
+```
+
+> Skill 的 `references/` 目录下的文件会作为参考上下文自动附加，总内容截断到 12000 字节
+
 ### Markdown 渲染
 
 `markdown_to_lines()` 基于 `pulldown-cmark` 解析，支持：

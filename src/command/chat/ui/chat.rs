@@ -1,4 +1,5 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
+use super::super::handler::get_filtered_skills;
 use super::super::model::agent_config_path;
 use super::super::render::{build_message_lines_incremental, char_width, display_width, wrap_text};
 use super::archive::{draw_archive_confirm, draw_archive_list};
@@ -7,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
 
 pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
@@ -55,6 +56,11 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
 
     // ========== Toast 弹窗覆盖层（右上角）==========
     draw_toast(f, size, app);
+
+    // ========== @ 补全弹窗覆盖层 ==========
+    if app.at_popup_active {
+        draw_at_popup(f, chunks[2], app);
+    }
 }
 
 /// 绘制标题栏
@@ -362,6 +368,16 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         cursor_line_idx.saturating_sub(inner_height - 1)
     };
 
+    // 计算 @mention 高亮范围（基于全局 char index, 相对于 input 起始）
+    let skill_names: Vec<String> = app
+        .loaded_skills
+        .iter()
+        .map(|s| s.frontmatter.name.clone())
+        .collect();
+    let mention_ranges = find_at_mention_ranges(&app.input, &skill_names);
+    // 转换为相对于 scroll_offset_chars 的偏移
+    let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
+
     let mut display_lines: Vec<Line> = Vec::new();
     let mut char_offset: usize = 0;
     for wl in wrapped_lines.iter().take(line_scroll) {
@@ -384,24 +400,69 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         let line_chars: Vec<char> = wl.chars().collect();
         let mut seg_start = 0;
         for (ci, &ch) in line_chars.iter().enumerate() {
-            let global_idx = char_offset + ci;
-            let is_cursor = global_idx >= before_len && global_idx < before_len + cursor_len;
+            let global_idx = scroll_offset_chars + char_offset + ci;
+            let visible_idx = char_offset + ci;
+            let is_cursor = visible_idx >= before_len && visible_idx < before_len + cursor_len;
+            let is_mention = mention_ranges
+                .iter()
+                .any(|&(s, e)| global_idx >= s && global_idx < e);
 
-            if is_cursor {
+            if is_cursor || (is_mention && !is_cursor) {
+                // flush normal or mention segment before this char
                 if ci > seg_start {
                     let seg: String = line_chars[seg_start..ci].iter().collect();
-                    spans.push(Span::styled(seg, Style::default().fg(t.text_white)));
+                    // check if previous segment was in mention range
+                    let prev_global = scroll_offset_chars + char_offset + seg_start;
+                    let prev_is_mention = mention_ranges
+                        .iter()
+                        .any(|&(s, e)| prev_global >= s && prev_global < e);
+                    let seg_style = if prev_is_mention {
+                        mention_style
+                    } else {
+                        Style::default().fg(t.text_white)
+                    };
+                    spans.push(Span::styled(seg, seg_style));
                 }
-                spans.push(Span::styled(
-                    ch.to_string(),
-                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-                ));
+                if is_cursor {
+                    spans.push(Span::styled(
+                        ch.to_string(),
+                        Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+                    ));
+                } else {
+                    spans.push(Span::styled(ch.to_string(), mention_style));
+                }
                 seg_start = ci + 1;
+            } else if ci > seg_start {
+                // check if we just transitioned from mention to non-mention
+                let prev_global = scroll_offset_chars + char_offset + (ci - 1);
+                let prev_is_mention = mention_ranges
+                    .iter()
+                    .any(|&(s, e)| prev_global >= s && prev_global < e);
+                let curr_is_mention = is_mention;
+                if prev_is_mention != curr_is_mention {
+                    let seg: String = line_chars[seg_start..ci].iter().collect();
+                    let seg_style = if prev_is_mention {
+                        mention_style
+                    } else {
+                        Style::default().fg(t.text_white)
+                    };
+                    spans.push(Span::styled(seg, seg_style));
+                    seg_start = ci;
+                }
             }
         }
         if seg_start < line_chars.len() {
             let seg: String = line_chars[seg_start..].iter().collect();
-            spans.push(Span::styled(seg, Style::default().fg(t.text_white)));
+            let seg_global = scroll_offset_chars + char_offset + seg_start;
+            let seg_is_mention = mention_ranges
+                .iter()
+                .any(|&(s, e)| seg_global >= s && seg_global < e);
+            let seg_style = if seg_is_mention {
+                mention_style
+            } else {
+                Style::default().fg(t.text_white)
+            };
+            spans.push(Span::styled(seg, seg_style));
         }
 
         char_offset += line_chars.len();
@@ -470,6 +531,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ChatMode::Chat => vec![
             ("Enter", "发送"),
             ("↑↓", "滚动"),
+            ("@", "技能"),
             ("Ctrl+T", "切换模型"),
             ("Ctrl+L", "归档"),
             ("Ctrl+R", "还原"),
@@ -764,4 +826,103 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .style(Style::default().bg(t.help_bg));
     let help_widget = Paragraph::new(help_lines).block(help_block);
     f.render_widget(help_widget, area);
+}
+
+/// 绘制 @ 补全弹窗（输入区域上方浮动）
+pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
+    let t = &app.theme;
+    let filtered = get_filtered_skills(app);
+    if filtered.is_empty() {
+        return;
+    }
+
+    let item_count = filtered.len().min(8); // 最多显示 8 项
+    let popup_height = (item_count as u16) + 2; // 加上边框
+    let popup_width = filtered
+        .iter()
+        .map(|n| display_width(&format!("  @{}  ", n)))
+        .max()
+        .unwrap_or(20)
+        .max(16)
+        .min(input_area.width.saturating_sub(4) as usize) as u16
+        + 2; // 加边框
+
+    // 弹窗位置：输入区域上方
+    let x = input_area.x + 1;
+    let y = input_area.y.saturating_sub(popup_height);
+
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .enumerate()
+        .take(item_count)
+        .map(|(i, name)| {
+            let style = if i == app.at_popup_selected {
+                Style::default()
+                    .bg(t.model_sel_highlight_bg)
+                    .fg(t.text_white)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.label_ai)
+            };
+            ListItem::new(Line::from(Span::styled(format!("  @{}  ", name), style)))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_title))
+            .title(Span::styled(
+                " Skills ",
+                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(t.bg_title)),
+    );
+
+    f.render_widget(Clear, popup_area);
+    f.render_widget(list, popup_area);
+}
+
+/// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)
+fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        if chars[i] == '@' {
+            let valid_start = i == 0 || chars[i - 1].is_whitespace();
+            if valid_start {
+                let rest: String = chars[i + 1..].iter().collect();
+                let mut best_len = 0usize;
+                for name in skill_names {
+                    if rest.starts_with(name.as_str()) {
+                        let after_pos = name.len();
+                        let is_boundary = if after_pos >= rest.len() {
+                            true
+                        } else {
+                            let next_ch = rest.chars().nth(after_pos).unwrap();
+                            next_ch.is_whitespace() || !next_ch.is_alphanumeric()
+                        };
+                        if is_boundary && name.len() > best_len {
+                            best_len = name.len();
+                        }
+                    }
+                }
+                if best_len > 0 {
+                    // @ + name
+                    ranges.push((i, i + 1 + best_len));
+                    i += 1 + best_len;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    ranges
 }
