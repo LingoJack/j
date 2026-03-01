@@ -132,7 +132,10 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
                 ArgHint::Placeholder("<date|message|url>"),
             ],
         ),
-        (cmd::CHECK, vec![ArgHint::Placeholder("<line_count>")]),
+        (
+            cmd::CHECK,
+            vec![ArgHint::Fixed(vec!["open", "<line_count>"])],
+        ),
         (
             cmd::SEARCH,
             vec![

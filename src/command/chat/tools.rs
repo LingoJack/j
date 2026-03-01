@@ -44,6 +44,7 @@ fn is_dangerous_command(cmd: &str) -> bool {
         "> /dev/sda",
         "wget -O- | sh",
         "curl | sh",
+        "alias",
         "curl | bash",
     ];
     let cmd_lower = cmd.to_lowercase();

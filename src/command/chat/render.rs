@@ -132,9 +132,9 @@ pub fn build_message_lines_incremental(
                     // 查找旧缓存中同索引的消息
                     if let Some(old_per) = old_c.per_msg_lines.iter().find(|p| p.msg_index == idx) {
                         // 内容长度相同 → 消息内容未变，且浏览选中状态一致
-                        let old_was_selected = old_c.browse_index == Some(idx);
+                        // 使用缓存中记录的 is_selected 字段来判断
                         if old_per.content_len == msg.content.len()
-                            && old_was_selected == is_selected
+                            && old_per.is_selected == is_selected
                         {
                             // 直接复用旧缓存的渲染行
                             lines.extend(old_per.lines.iter().cloned());
@@ -142,6 +142,7 @@ pub fn build_message_lines_incremental(
                                 content_len: old_per.content_len,
                                 lines: old_per.lines.clone(),
                                 msg_index: idx,
+                                is_selected,
                             });
                             continue;
                         }
@@ -302,10 +303,14 @@ pub fn build_message_lines_incremental(
             // 缓存此历史消息的渲染行
             let msg_lines_end = lines.len();
             let this_msg_lines: Vec<Line<'static>> = lines[msg_lines_start..msg_lines_end].to_vec();
+            let is_selected = is_browse_mode
+                && msg.msg_index.is_some()
+                && msg.msg_index.unwrap() == app.browse_msg_index;
             per_msg_cache.push(PerMsgCache {
                 content_len: msg.content.len(),
                 lines: this_msg_lines,
                 msg_index: idx,
+                is_selected,
             });
         }
     }

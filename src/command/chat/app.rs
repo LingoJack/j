@@ -165,6 +165,8 @@ pub struct PerMsgCache {
     pub lines: Vec<Line<'static>>,
     /// 对应的 msg_start_line（此消息在全局行列表中的起始行号，需在拼装时更新）
     pub msg_index: usize,
+    /// 渲染时此消息是否被选中（用于浏览模式下检测选中状态变化）
+    pub is_selected: bool,
 }
 
 /// Toast 通知显示时长（秒）

@@ -346,9 +346,9 @@ impl Theme {
 
             // 气泡
             bubble_ai: Color::Rgb(28, 28, 38),
-            bubble_ai_selected: Color::Rgb(40, 40, 56),
+            bubble_ai_selected: Color::Rgb(255, 255, 255),
             bubble_user: Color::Rgb(40, 70, 120),
-            bubble_user_selected: Color::Rgb(55, 85, 140),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(120, 220, 160),
@@ -481,9 +481,9 @@ impl Theme {
 
             // 气泡
             bubble_ai: Color::Rgb(34, 34, 34),
-            bubble_ai_selected: Color::Rgb(45, 45, 50),
+            bubble_ai_selected: Color::Rgb(255, 255, 255),
             bubble_user: Color::Rgb(38, 65, 110),
-            bubble_user_selected: Color::Rgb(50, 80, 130),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(80, 200, 120),
@@ -616,9 +616,9 @@ impl Theme {
 
             // 气泡
             bubble_ai: Color::Rgb(244, 244, 248),
-            bubble_ai_selected: Color::Rgb(232, 235, 245),
+            bubble_ai_selected: Color::Rgb(255, 255, 255),
             bubble_user: Color::Rgb(210, 230, 255),
-            bubble_user_selected: Color::Rgb(190, 215, 250),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(40, 140, 80),
@@ -750,10 +750,10 @@ impl Theme {
             separator: Color::Rgb(67, 76, 94),      // nord2
 
             // 气泡
-            bubble_ai: Color::Rgb(50, 56, 68), // closer to nord0
-            bubble_ai_selected: Color::Rgb(59, 66, 82), // nord1
+            bubble_ai: Color::Rgb(50, 56, 68),
+            bubble_ai_selected: Color::Rgb(255, 255, 255),
             bubble_user: Color::Rgb(52, 75, 110),
-            bubble_user_selected: Color::Rgb(60, 85, 125),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签 — Frost / Aurora
             label_ai: Color::Rgb(163, 190, 140),       // nord14
@@ -886,9 +886,9 @@ impl Theme {
 
             // 气泡
             bubble_ai: Color::Rgb(43, 44, 38),
-            bubble_ai_selected: Color::Rgb(55, 56, 48),
-            bubble_user: Color::Rgb(55, 65, 85),
-            bubble_user_selected: Color::Rgb(65, 78, 100),
+            bubble_ai_selected: Color::Rgb(255, 255, 255),
+            bubble_user: Color::Rgb(55, 65, 90),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(166, 226, 46),    // monokai green
