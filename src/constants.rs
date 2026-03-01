@@ -15,6 +15,20 @@ pub const AUTHOR: &str = "lingojack";
 /// 邮箱
 pub const EMAIL: &str = "lingojack@qq.com";
 
+/// 配置编辑界面的字段列表
+pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
+/// 全局配置字段
+pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
+    "system_prompt",
+    "stream_mode",
+    "max_history_messages",
+    "theme",
+    "tools_enabled",
+];
+
+/// Toast 通知显示时长（秒）
+pub const TOAST_DURATION_SECS: u64 = 4;
+
 // ========== Section 名称 ==========
 
 /// 配置文件中的 section 名称常量

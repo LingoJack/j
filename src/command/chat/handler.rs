@@ -1,8 +1,9 @@
-use super::app::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, ChatApp, ChatMode, config_total_fields};
 use super::model::{ModelProvider, save_agent_config, save_chat_session};
 use super::render::copy_to_clipboard;
 use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
+use crate::command::chat::app::{ChatApp, ChatMode, config_total_fields};
+use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
 use crate::{error, info};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},

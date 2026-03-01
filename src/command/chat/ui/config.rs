@@ -1,5 +1,6 @@
-use super::super::app::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, ChatApp};
 use super::super::handler::{config_field_label, config_field_value};
+use crate::command::chat::app::ChatApp;
+use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

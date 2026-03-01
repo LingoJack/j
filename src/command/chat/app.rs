@@ -5,13 +5,13 @@ use super::model::{
 };
 use super::theme::Theme;
 use super::tools::ToolRegistry;
+use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_error_log;
 use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::sync::{Arc, Mutex, mpsc};
-
 // ========== TUI 界面 ==========
 
 /// 后台线程发送给 TUI 的消息类型
@@ -169,9 +169,6 @@ pub struct PerMsgCache {
     pub is_selected: bool,
 }
 
-/// Toast 通知显示时长（秒）
-pub const TOAST_DURATION_SECS: u64 = 4;
-
 #[derive(PartialEq)]
 pub enum ChatMode {
     /// 正常对话模式（焦点在输入框）
@@ -192,16 +189,6 @@ pub enum ChatMode {
     ToolConfirm,
 }
 
-/// 配置编辑界面的字段列表
-pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
-/// 全局配置字段
-pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
-    "system_prompt",
-    "stream_mode",
-    "max_history_messages",
-    "theme",
-    "tools_enabled",
-];
 /// 所有字段数 = provider 字段 + 全局字段
 pub fn config_total_fields() -> usize {
     CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
