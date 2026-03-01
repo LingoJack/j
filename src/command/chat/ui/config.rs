@@ -223,6 +223,30 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
+        } else if CONFIG_GLOBAL_FIELDS[i] == "tools_enabled" {
+            let toggle_on = app.agent_config.tools_enabled;
+            let toggle_style = if toggle_on {
+                Style::default()
+                    .fg(t.config_toggle_on)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.config_toggle_off)
+            };
+            let toggle_text = if toggle_on {
+                "● 开启"
+            } else {
+                "○ 关闭"
+            };
+            lines.push(Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(toggle_text, toggle_style),
+                Span::styled(
+                    if is_selected { "  (Enter 切换)" } else { "" },
+                    Style::default().fg(t.config_dim),
+                ),
+            ]));
         } else {
             lines.push(Line::from(vec![
                 Span::styled(pointer, pointer_style),

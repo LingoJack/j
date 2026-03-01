@@ -11,8 +11,10 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(head:*)",
       "Bash(ls:*)",
-      "Bash(cargo fmt:*)"
+      "Bash(cargo fmt:*)",
+      "Bash(grep:*)"
     ]
   },
-  "language": "zh-CN"
+  "language": "zh-CN",
+  "prefersReducedMotion": false
 }

@@ -58,6 +58,8 @@ pub fn build_message_lines_incremental(
         role: String,
         content: String,
         msg_index: Option<usize>,
+        tool_calls: Option<Vec<super::model::ToolCallItem>>,
+        role_label: Option<String>,
     }
     let mut render_msgs: Vec<RenderMsg> = app
         .session
@@ -68,6 +70,11 @@ pub fn build_message_lines_incremental(
             role: m.role.clone(),
             content: m.content.clone(),
             msg_index: Some(i),
+            tool_calls: m.tool_calls.clone(),
+            role_label: m
+                .tool_call_id
+                .as_ref()
+                .map(|id| format!("工具 {}", &id[..id.len().min(8)])),
         })
         .collect();
 
@@ -79,6 +86,8 @@ pub fn build_message_lines_incremental(
                 role: "assistant".to_string(),
                 content: streaming.clone(),
                 msg_index: None,
+                tool_calls: None,
+                role_label: None,
             });
             Some(streaming)
         } else {
@@ -86,6 +95,8 @@ pub fn build_message_lines_incremental(
                 role: "assistant".to_string(),
                 content: "◍".to_string(),
                 msg_index: None,
+                tool_calls: None,
+                role_label: None,
             });
             None
         }
@@ -157,6 +168,14 @@ pub fn build_message_lines_incremental(
                     // 流式消息：P1 增量段落渲染（在后面单独处理）
                     // 这里先跳过，后面统一处理
                     // 先标记位置
+                } else if msg.tool_calls.is_some() {
+                    // assistant 发起工具调用的消息
+                    render_tool_call_request_msg(
+                        &msg.tool_calls.as_ref().unwrap(),
+                        bubble_max_width,
+                        &mut lines,
+                        t,
+                    );
                 } else {
                     // 已完成的 assistant 消息：完整 Markdown 渲染
                     render_assistant_msg(
@@ -167,6 +186,14 @@ pub fn build_message_lines_incremental(
                         t,
                     );
                 }
+            }
+            "tool" => {
+                render_tool_result_msg(
+                    &msg.content,
+                    msg.role_label.as_deref().unwrap_or("工具结果"),
+                    &mut lines,
+                    t,
+                );
             }
             "system" => {
                 lines.push(Line::from(""));
@@ -563,6 +590,108 @@ pub fn display_width(s: &str) -> usize {
 pub fn char_width(c: char) -> usize {
     use unicode_width::UnicodeWidthChar;
     UnicodeWidthChar::width(c).unwrap_or(0)
+}
+
+/// 渲染工具调用请求消息（AI 发起）：黄色标签 + 工具名和参数摘要
+pub fn render_tool_call_request_msg(
+    tool_calls: &[super::model::ToolCallItem],
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  🔧 AI 调用工具",
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    )));
+    let bubble_bg = Color::Rgb(40, 35, 10);
+    let pad = 3usize;
+    let content_w = bubble_max_width.saturating_sub(pad * 2);
+    lines.push(Line::from(vec![Span::styled(
+        " ".repeat(bubble_max_width),
+        Style::default().bg(bubble_bg),
+    )]));
+    for tc in tool_calls {
+        let args_preview: String = tc.arguments.chars().take(50).collect();
+        let args_display = if tc.arguments.len() > 50 {
+            format!("{}...", args_preview)
+        } else {
+            args_preview
+        };
+        let text = format!("{} ({})", tc.name, args_display);
+        let wrapped = wrap_text(&text, content_w);
+        for wl in wrapped {
+            let fill = content_w.saturating_sub(display_width(&wl));
+            lines.push(Line::from(vec![
+                Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
+                Span::styled(wl, Style::default().fg(Color::Yellow).bg(bubble_bg)),
+                Span::styled(" ".repeat(fill), Style::default().bg(bubble_bg)),
+                Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
+            ]));
+        }
+    }
+    let _ = theme; // 保留参数以便未来扩展
+    lines.push(Line::from(vec![Span::styled(
+        " ".repeat(bubble_max_width),
+        Style::default().bg(bubble_bg),
+    )]));
+}
+
+/// 渲染工具执行结果消息：绿色标签 + 截断内容（最多 5 行）
+pub fn render_tool_result_msg(
+    content: &str,
+    label: &str,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("  ✅ {}", label),
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD),
+    )));
+    let bubble_bg = Color::Rgb(10, 40, 15);
+    let pad = 3usize;
+    let content_w = 60usize;
+    let bubble_w = content_w + pad * 2;
+    lines.push(Line::from(vec![Span::styled(
+        " ".repeat(bubble_w),
+        Style::default().bg(bubble_bg),
+    )]));
+    let display_content = if content.len() > 200 {
+        let mut end = 200;
+        while !content.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &content[..end])
+    } else {
+        content.to_string()
+    };
+    let all_lines: Vec<String> = display_content
+        .lines()
+        .flat_map(|l| wrap_text(l, content_w))
+        .take(5)
+        .collect();
+    for wl in all_lines {
+        let fill = content_w.saturating_sub(display_width(&wl));
+        lines.push(Line::from(vec![
+            Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
+            Span::styled(
+                wl,
+                Style::default().fg(Color::Rgb(180, 255, 180)).bg(bubble_bg),
+            ),
+            Span::styled(" ".repeat(fill), Style::default().bg(bubble_bg)),
+            Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
+        ]));
+    }
+    let _ = theme;
+    lines.push(Line::from(vec![Span::styled(
+        " ".repeat(bubble_w),
+        Style::default().bg(bubble_bg),
+    )]));
 }
 
 pub fn copy_to_clipboard(content: &str) -> bool {

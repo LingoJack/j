@@ -6,6 +6,7 @@ pub mod markdown;
 pub mod model;
 pub mod render;
 pub mod theme;
+pub mod tools;
 pub mod ui;
 
 use crate::command::chat::theme::ThemeName;
@@ -38,6 +39,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             stream_mode: true,
             max_history_messages: 20,
             theme: ThemeName::default(),
+            tools_enabled: false,
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);
@@ -77,15 +79,9 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
 
     let mut messages = Vec::new();
     if let Some(sys) = &agent_config.system_prompt {
-        messages.push(ChatMessage {
-            role: "system".to_string(),
-            content: sys.clone(),
-        });
+        messages.push(ChatMessage::text("system", sys.clone()));
     }
-    messages.push(ChatMessage {
-        role: "user".to_string(),
-        content: message,
-    });
+    messages.push(ChatMessage::text("user", message));
 
     match call_openai_stream(provider, &messages, &mut |chunk| {
         print!("{}", chunk);

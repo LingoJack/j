@@ -3,9 +3,11 @@ use async_openai::{
     Client,
     config::OpenAIConfig,
     types::chat::{
+        ChatCompletionMessageToolCall, ChatCompletionMessageToolCalls,
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequestArgs,
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
+        ChatCompletionRequestUserMessageArgs, ChatCompletionTools, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, FunctionCall,
     },
 };
 use futures::StreamExt;
@@ -33,14 +35,60 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                 .build()
                 .ok()
                 .map(ChatCompletionRequestMessage::User),
-            "assistant" => ChatCompletionRequestAssistantMessageArgs::default()
-                .content(msg.content.as_str())
-                .build()
-                .ok()
-                .map(ChatCompletionRequestMessage::Assistant),
+            "assistant" => {
+                let mut builder = ChatCompletionRequestAssistantMessageArgs::default();
+                if !msg.content.is_empty() {
+                    builder.content(msg.content.as_str());
+                }
+                if let Some(ref tool_calls) = msg.tool_calls {
+                    let tc_list: Vec<ChatCompletionMessageToolCalls> = tool_calls
+                        .iter()
+                        .map(|tc| {
+                            ChatCompletionMessageToolCalls::Function(
+                                ChatCompletionMessageToolCall {
+                                    id: tc.id.clone(),
+                                    function: FunctionCall {
+                                        name: tc.name.clone(),
+                                        arguments: tc.arguments.clone(),
+                                    },
+                                },
+                            )
+                        })
+                        .collect();
+                    builder.tool_calls(tc_list);
+                }
+                builder
+                    .build()
+                    .ok()
+                    .map(ChatCompletionRequestMessage::Assistant)
+            }
+            "tool" => {
+                let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
+                ChatCompletionRequestToolMessageArgs::default()
+                    .content(msg.content.as_str())
+                    .tool_call_id(tool_call_id)
+                    .build()
+                    .ok()
+                    .map(ChatCompletionRequestMessage::Tool)
+            }
             _ => None,
         })
         .collect()
+}
+
+/// 构建带工具定义的请求
+pub fn build_request_with_tools(
+    provider: &ModelProvider,
+    messages: &[ChatMessage],
+    tools: Vec<ChatCompletionTools>,
+) -> Result<CreateChatCompletionRequest, String> {
+    let openai_messages = to_openai_messages(messages);
+    let mut builder = CreateChatCompletionRequestArgs::default();
+    builder.model(&provider.model).messages(openai_messages);
+    if !tools.is_empty() {
+        builder.tools(tools);
+    }
+    builder.build().map_err(|e| format!("构建请求失败: {}", e))
 }
 
 /// 使用 async-openai 流式调用 API，通过回调逐步输出

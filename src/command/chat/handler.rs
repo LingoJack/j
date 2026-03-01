@@ -109,6 +109,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::Config => handle_config_mode(&mut app, key),
                             ChatMode::ArchiveConfirm => handle_archive_confirm_mode(&mut app, key),
                             ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
+                            ChatMode::ToolConfirm => handle_tool_confirm_mode(&mut app, key),
                         }
                     }
                     Event::Resize(_, _) => {
@@ -409,6 +410,7 @@ pub fn config_field_label(idx: usize) -> &'static str {
             "stream_mode" => "流式输出",
             "max_history_messages" => "历史消息数",
             "theme" => "主题风格",
+            "tools_enabled" => "工具调用",
             _ => CONFIG_GLOBAL_FIELDS[gi],
         }
     }
@@ -453,6 +455,13 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
             }
             "max_history_messages" => app.agent_config.max_history_messages.to_string(),
             "theme" => app.agent_config.theme.display_name().to_string(),
+            "tools_enabled" => {
+                if app.agent_config.tools_enabled {
+                    "开启".into()
+                } else {
+                    "关闭".into()
+                }
+            }
             _ => String::new(),
         }
     }
@@ -485,6 +494,13 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
                 }
             }
             "theme" => app.agent_config.theme.to_str().to_string(),
+            "tools_enabled" => {
+                if app.agent_config.tools_enabled {
+                    "true".into()
+                } else {
+                    "false".into()
+                }
+            }
             _ => String::new(),
         }
     }
@@ -530,6 +546,12 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
                 app.agent_config.theme = ThemeName::from_str(value.trim());
                 app.theme = super::theme::Theme::from_name(&app.agent_config.theme);
                 app.msg_lines_cache = None;
+            }
+            "tools_enabled" => {
+                app.agent_config.tools_enabled = matches!(
+                    value.trim().to_lowercase().as_str(),
+                    "true" | "1" | "开启" | "on" | "yes"
+                );
             }
             _ => {}
         }
@@ -652,6 +674,11 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             if let Some(gi) = gi {
                 if CONFIG_GLOBAL_FIELDS[gi] == "stream_mode" {
                     app.agent_config.stream_mode = !app.agent_config.stream_mode;
+                    return;
+                }
+                // tools_enabled 字段直接切换
+                if CONFIG_GLOBAL_FIELDS[gi] == "tools_enabled" {
+                    app.agent_config.tools_enabled = !app.agent_config.tools_enabled;
                     return;
                 }
                 // theme 字段直接循环切换，不进入编辑模式
@@ -894,6 +921,19 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
             if count > 0 {
                 app.do_delete_archive();
             }
+        }
+        _ => {}
+    }
+}
+
+/// 工具确认模式按键处理：Y 执行，N/Esc 拒绝
+pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            app.execute_pending_tool();
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.reject_pending_tool();
         }
         _ => {}
     }

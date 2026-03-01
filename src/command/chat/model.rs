@@ -41,6 +41,9 @@ pub struct AgentConfig {
     /// 主题名称（dark / light / midnight）
     #[serde(default)]
     pub theme: ThemeName,
+    /// 是否启用工具调用（默认关闭）
+    #[serde(default)]
+    pub tools_enabled: bool,
 }
 
 fn default_max_history_messages() -> usize {
@@ -52,11 +55,39 @@ fn default_stream_mode() -> bool {
     true
 }
 
+/// 单次工具调用请求（序列化到历史记录）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallItem {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
 /// 对话消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    pub role: String, // "user" | "assistant" | "system"
+    pub role: String, // "user" | "assistant" | "system" | "tool"
+    /// 消息内容（tool_call 类消息可为空）
+    #[serde(default)]
     pub content: String,
+    /// LLM 发起的工具调用列表（仅 assistant 角色且有 tool_calls 时非 None）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCallItem>>,
+    /// 工具执行结果对应的 tool_call_id（仅 tool 角色时非 None）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+impl ChatMessage {
+    /// 创建普通文本消息
+    pub fn text(role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
 }
 
 /// 对话会话

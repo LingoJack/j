@@ -1,11 +1,11 @@
-use super::super::app::{ChatApp, ChatMode, MsgLinesCache};
+use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
 use super::super::model::agent_config_path;
 use super::super::render::{build_message_lines_incremental, char_width, display_width, wrap_text};
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
@@ -41,6 +41,9 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         draw_archive_confirm(f, chunks[1], app);
     } else if app.mode == ChatMode::ArchiveList {
         draw_archive_list(f, chunks[1], app);
+    } else if app.mode == ChatMode::ToolConfirm {
+        draw_messages(f, chunks[1], app);
+        draw_tool_confirm(f, size, app);
     } else {
         draw_messages(f, chunks[1], app);
     }
@@ -61,9 +64,19 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let model_name = app.active_model_name();
     let msg_count = app.session.messages.len();
     let loading = if app.is_loading {
-        " ⏳ 思考中..."
+        // 如果有活跃工具调用，显示工具名
+        let tool_info = app
+            .active_tool_calls
+            .iter()
+            .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
+            .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name));
+        if let Some(info) = tool_info {
+            info
+        } else {
+            " ⏳ 思考中...".to_string()
+        }
     } else {
-        ""
+        String::new()
     };
 
     let title_spans = vec![
@@ -491,6 +504,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ]
             }
         }
+        ChatMode::ToolConfirm => vec![("Y", "执行工具"), ("N/Esc", "拒绝")],
     };
 
     let mut spans: Vec<Span> = Vec::new();
@@ -740,4 +754,101 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .style(Style::default().bg(t.help_bg));
     let help_widget = Paragraph::new(help_lines).block(help_block);
     f.render_widget(help_widget, area);
+}
+
+/// 绘制工具调用确认浮层（居中弹窗）
+pub fn draw_tool_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let idx = app.pending_tool_idx;
+    let tc = match app.active_tool_calls.get(idx) {
+        Some(tc) => tc,
+        None => return,
+    };
+
+    let t = &app.theme;
+
+    // 计算弹窗尺寸
+    let dialog_width = (area.width as usize).min(70).max(40) as u16;
+    let dialog_height: u16 = 9;
+    let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
+
+    if x + dialog_width > area.width || y + dialog_height > area.height {
+        return;
+    }
+
+    let dialog_area = Rect::new(x, y, dialog_width, dialog_height);
+
+    // 背景
+    let bg_block = Block::default().style(Style::default().bg(Color::Rgb(30, 25, 10)));
+    f.render_widget(bg_block, dialog_area);
+
+    let tool_name_line = Line::from(vec![
+        Span::styled("  工具: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            tc.tool_name.clone(),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]);
+
+    // 截断确认消息
+    let confirm_msg = if tc.confirm_message.len() > (dialog_width as usize).saturating_sub(4) {
+        let mut end = (dialog_width as usize).saturating_sub(7);
+        while !tc.confirm_message.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &tc.confirm_message[..end])
+    } else {
+        tc.confirm_message.clone()
+    };
+
+    let hint_line = Line::from(vec![
+        Span::styled(
+            "  [Y] 执行",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("  /  ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            "[N] 拒绝",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ),
+    ]);
+
+    let dialog_lines = vec![
+        Line::from(""),
+        tool_name_line,
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("  {}", confirm_msg),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  ─────────────────────────────────────────",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+        hint_line,
+    ];
+
+    let dialog_widget = Paragraph::new(dialog_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Yellow))
+            .title(Span::styled(
+                " 🔧 工具调用确认 ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(Color::Rgb(30, 25, 10))),
+    );
+
+    f.render_widget(dialog_widget, dialog_area);
+
+    let _ = t;
 }

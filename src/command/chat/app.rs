@@ -1,11 +1,12 @@
-use super::api::{create_openai_client, to_openai_messages};
+use super::api::{build_request_with_tools, create_openai_client};
 use super::model::{
-    AgentConfig, ChatMessage, ChatSession, ModelProvider, load_agent_config, load_chat_session,
-    save_agent_config, save_chat_session,
+    AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
+    load_chat_session, save_agent_config, save_chat_session,
 };
 use super::theme::Theme;
+use super::tools::ToolRegistry;
 use crate::util::log::write_error_log;
-use async_openai::types::chat::CreateChatCompletionRequestArgs;
+use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
@@ -17,10 +18,44 @@ use std::sync::{Arc, Mutex, mpsc};
 pub enum StreamMsg {
     /// 收到一个流式文本块
     Chunk,
+    /// LLM 请求执行工具（附带完整工具调用列表）
+    ToolCallRequest(Vec<ToolCallItem>),
     /// 流式响应完成
     Done,
     /// 发生错误
     Error(String),
+}
+
+/// 工具执行状态
+#[allow(dead_code)]
+pub enum ToolExecStatus {
+    /// 等待用户确认
+    PendingConfirm,
+    /// 执行中
+    Executing,
+    /// 完成（摘要）
+    Done(String),
+    /// 用户拒绝
+    Rejected,
+    /// 执行失败
+    Failed(String),
+}
+
+/// 工具调用执行状态（运行时，不序列化）
+pub struct ToolCallStatus {
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub arguments: String,
+    pub confirm_message: String,
+    pub status: ToolExecStatus,
+}
+
+/// 主线程 → 后台线程的工具结果消息
+pub struct ToolResultMsg {
+    pub tool_call_id: String,
+    pub result: String,
+    #[allow(dead_code)]
+    pub is_error: bool,
 }
 
 /// TUI 应用状态
@@ -86,6 +121,14 @@ pub struct ChatApp {
     pub archive_edit_cursor: usize,
     /// 还原确认模式：是否需要确认当前会话有消息
     pub restore_confirm_needed: bool,
+    /// 工具结果发送通道（主线程 → 后台线程）
+    pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
+    /// 工具注册表
+    pub tool_registry: ToolRegistry,
+    /// 当前活跃的工具调用状态列表
+    pub active_tool_calls: Vec<ToolCallStatus>,
+    /// ToolConfirm 模式中当前待处理工具的索引
+    pub pending_tool_idx: usize,
 }
 
 /// 消息渲染行缓存
@@ -143,6 +186,8 @@ pub enum ChatMode {
     ArchiveConfirm,
     /// 归档列表模式（查看和还原归档）
     ArchiveList,
+    /// 工具调用确认模式（弹出确认框）
+    ToolConfirm,
 }
 
 /// 配置编辑界面的字段列表
@@ -153,6 +198,7 @@ pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "stream_mode",
     "max_history_messages",
     "theme",
+    "tools_enabled",
 ];
 /// 所有字段数 = provider 字段 + 全局字段
 pub fn config_total_fields() -> usize {
@@ -199,6 +245,10 @@ impl ChatApp {
             archive_editing_name: false,
             archive_edit_cursor: 0,
             restore_confirm_needed: false,
+            tool_result_tx: None,
+            tool_registry: ToolRegistry::default(),
+            active_tool_calls: Vec::new(),
+            pending_tool_idx: 0,
         }
     }
 
@@ -246,10 +296,7 @@ impl ChatApp {
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
         let mut messages = Vec::new();
         if let Some(sys) = &self.agent_config.system_prompt {
-            messages.push(ChatMessage {
-                role: "system".to_string(),
-                content: sys.clone(),
-            });
+            messages.push(ChatMessage::text("system", sys.clone()));
         }
 
         // 只取最近的 N 条历史消息，避免 token 消耗过大
@@ -274,10 +321,7 @@ impl ChatApp {
         }
 
         // 添加用户消息
-        self.session.messages.push(ChatMessage {
-            role: "user".to_string(),
-            content: text,
-        });
+        self.session.messages.push(ChatMessage::text("user", text));
         self.input.clear();
         self.cursor_pos = 0;
         // 发送新消息时恢复自动滚动并滚到底部
@@ -298,6 +342,8 @@ impl ChatApp {
         self.last_rendered_streaming_len = 0;
         self.last_stream_render_time = std::time::Instant::now();
         self.msg_lines_cache = None;
+        self.active_tool_calls.clear();
+        self.pending_tool_idx = 0;
 
         let api_messages = self.build_api_messages();
 
@@ -307,107 +353,51 @@ impl ChatApp {
             sc.clear();
         }
 
-        // 创建 channel 用于后台线程 -> TUI 通信
-        let (tx, rx) = mpsc::channel::<StreamMsg>();
-        self.stream_rx = Some(rx);
+        // 创建双向 channel
+        let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
+        let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
+        self.stream_rx = Some(stream_rx);
+        self.tool_result_tx = Some(tool_result_tx);
 
         let streaming_content = Arc::clone(&self.streaming_content);
-
         let use_stream = self.agent_config.stream_mode;
+        let tools_enabled = self.agent_config.tools_enabled;
+        let tools = if tools_enabled {
+            self.tool_registry.to_openai_tools()
+        } else {
+            vec![]
+        };
 
-        // 启动后台线程执行 API 调用
+        // 启动后台线程执行 Agent 循环
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
-                    let _ = tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
+                    let _ = stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
                     return;
                 }
             };
 
-            rt.block_on(async {
-                let client = create_openai_client(&provider);
-                let openai_messages = to_openai_messages(&api_messages);
-
-                let request = match CreateChatCompletionRequestArgs::default()
-                    .model(&provider.model)
-                    .messages(openai_messages)
-                    .build()
-                {
-                    Ok(req) => req,
-                    Err(e) => {
-                        let _ = tx.send(StreamMsg::Error(format!("构建请求失败: {}", e)));
-                        return;
-                    }
-                };
-
-                if use_stream {
-                    // 流式输出模式
-                    let mut stream = match client.chat().create_stream(request).await {
-                        Ok(s) => s,
-                        Err(e) => {
-                            let error_msg = format!("API 请求失败: {}", e);
-                            write_error_log("Chat API 流式请求创建", &error_msg);
-                            let _ = tx.send(StreamMsg::Error(error_msg));
-                            return;
-                        }
-                    };
-
-                    while let Some(result) = stream.next().await {
-                        match result {
-                            Ok(response) => {
-                                for choice in &response.choices {
-                                    if let Some(ref content) = choice.delta.content {
-                                        // 更新共享缓冲
-                                        {
-                                            let mut sc = streaming_content.lock().unwrap();
-                                            sc.push_str(content);
-                                        }
-                                        let _ = tx.send(StreamMsg::Chunk);
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                let error_str = format!("{}", e);
-                                write_error_log("Chat API 流式响应", &error_str);
-                                let _ = tx.send(StreamMsg::Error(error_str));
-                                return;
-                            }
-                        }
-                    }
-                } else {
-                    // 非流式输出模式：等待完整响应后一次性返回
-                    match client.chat().create(request).await {
-                        Ok(response) => {
-                            if let Some(choice) = response.choices.first() {
-                                if let Some(ref content) = choice.message.content {
-                                    {
-                                        let mut sc = streaming_content.lock().unwrap();
-                                        sc.push_str(content);
-                                    }
-                                    let _ = tx.send(StreamMsg::Chunk);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let error_msg = format!("API 请求失败: {}", e);
-                            write_error_log("Chat API 非流式请求", &error_msg);
-                            let _ = tx.send(StreamMsg::Error(error_msg));
-                            return;
-                        }
-                    }
-                }
-
-                let _ = tx.send(StreamMsg::Done);
-
-                let _ = tx.send(StreamMsg::Done);
-            });
+            rt.block_on(run_agent_loop(
+                provider,
+                api_messages,
+                tools,
+                use_stream,
+                streaming_content,
+                stream_tx,
+                tool_result_rx,
+            ));
         });
     }
 
     /// 处理后台流式消息（在主循环中每帧调用）
     pub fn poll_stream(&mut self) {
         if self.stream_rx.is_none() {
+            return;
+        }
+
+        // 如果在 ToolConfirm 模式，暂停轮询（等待用户操作）
+        if self.mode == ChatMode::ToolConfirm {
             return;
         }
 
@@ -419,11 +409,55 @@ impl ChatApp {
             loop {
                 match rx.try_recv() {
                     Ok(StreamMsg::Chunk) => {
-                        // 内容已经通过 Arc<Mutex<String>> 更新
-                        // 只有在用户没有手动滚动的情况下才自动滚到底部
                         if self.auto_scroll {
                             self.scroll_offset = u16::MAX;
                         }
+                    }
+                    Ok(StreamMsg::ToolCallRequest(tool_calls)) => {
+                        // 初始化工具调用状态
+                        self.active_tool_calls.clear();
+                        self.pending_tool_idx = 0;
+
+                        for tc in tool_calls {
+                            let confirm_msg = if let Some(tool) = self.tool_registry.get(&tc.name) {
+                                tool.confirmation_message(&tc.arguments)
+                            } else {
+                                format!("调用工具 {} 参数: {}", tc.name, tc.arguments)
+                            };
+                            let needs_confirm = self
+                                .tool_registry
+                                .get(&tc.name)
+                                .map(|t| t.requires_confirmation())
+                                .unwrap_or(false);
+                            self.active_tool_calls.push(ToolCallStatus {
+                                tool_call_id: tc.id.clone(),
+                                tool_name: tc.name.clone(),
+                                arguments: tc.arguments.clone(),
+                                confirm_message: confirm_msg,
+                                status: if needs_confirm {
+                                    ToolExecStatus::PendingConfirm
+                                } else {
+                                    ToolExecStatus::Executing
+                                },
+                            });
+                        }
+
+                        // 找第一个需要确认的工具
+                        let first_confirm_idx = self
+                            .active_tool_calls
+                            .iter()
+                            .position(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm));
+
+                        if let Some(idx) = first_confirm_idx {
+                            self.pending_tool_idx = idx;
+                            self.mode = ChatMode::ToolConfirm;
+                            // 直接执行不需要确认的工具（在弹出确认框前）
+                            // 注意：确认框出现后，需要等用户按键，由 execute_pending_tool / reject_pending_tool 驱动
+                        } else {
+                            // 全部不需要确认，直接执行所有工具
+                            self.execute_all_tools_no_confirm();
+                        }
+                        break;
                     }
                     Ok(StreamMsg::Done) => {
                         finished = true;
@@ -445,39 +479,179 @@ impl ChatApp {
         }
 
         if finished {
-            self.stream_rx = None;
-            self.is_loading = false;
-            // 重置流式节流状态
-            self.last_rendered_streaming_len = 0;
-            // 清除缓存，流式结束后需要完整重建（新消息已加入 session）
-            self.msg_lines_cache = None;
-
-            if !had_error {
-                // 将流式内容作为完整回复添加到会话
-                let content = {
-                    let sc = self.streaming_content.lock().unwrap();
-                    sc.clone()
-                };
-                if !content.is_empty() {
-                    self.session.messages.push(ChatMessage {
-                        role: "assistant".to_string(),
-                        content,
-                    });
-                    // 清空流式缓冲
-                    self.streaming_content.lock().unwrap().clear();
-                    self.show_toast("回复完成 ✓", false);
-                }
-                if self.auto_scroll {
-                    self.scroll_offset = u16::MAX;
-                }
-            } else {
-                // 错误时也清空流式缓冲
-                self.streaming_content.lock().unwrap().clear();
-            }
-
-            // 自动保存对话历史
-            let _ = save_chat_session(&self.session);
+            self.finish_loading(had_error);
         }
+    }
+
+    /// 执行所有不需要确认的工具
+    fn execute_all_tools_no_confirm(&mut self) {
+        for tc_status in self.active_tool_calls.iter_mut() {
+            if matches!(tc_status.status, ToolExecStatus::Executing) {
+                let result = if let Some(tool) = self.tool_registry.get(&tc_status.tool_name) {
+                    tool.execute(&tc_status.arguments)
+                } else {
+                    super::tools::ToolResult {
+                        output: format!("未知工具: {}", tc_status.tool_name),
+                        is_error: true,
+                    }
+                };
+                let summary = if result.output.len() > 60 {
+                    format!("{}...", &result.output[..60.min(result.output.len())])
+                } else {
+                    result.output.clone()
+                };
+                let is_error = result.is_error;
+                if let Some(ref tx) = self.tool_result_tx {
+                    let _ = tx.send(ToolResultMsg {
+                        tool_call_id: tc_status.tool_call_id.clone(),
+                        result: result.output,
+                        is_error,
+                    });
+                }
+                tc_status.status = if is_error {
+                    ToolExecStatus::Failed(summary)
+                } else {
+                    ToolExecStatus::Done(summary)
+                };
+            }
+        }
+    }
+
+    /// 用户确认执行当前待处理工具
+    pub fn execute_pending_tool(&mut self) {
+        let idx = self.pending_tool_idx;
+        if idx >= self.active_tool_calls.len() {
+            self.mode = ChatMode::Chat;
+            return;
+        }
+
+        {
+            let tc_status = &mut self.active_tool_calls[idx];
+            tc_status.status = ToolExecStatus::Executing;
+        }
+
+        let (tool_name, arguments, tool_call_id) = {
+            let tc = &self.active_tool_calls[idx];
+            (
+                tc.tool_name.clone(),
+                tc.arguments.clone(),
+                tc.tool_call_id.clone(),
+            )
+        };
+
+        let result = if let Some(tool) = self.tool_registry.get(&tool_name) {
+            tool.execute(&arguments)
+        } else {
+            super::tools::ToolResult {
+                output: format!("未知工具: {}", tool_name),
+                is_error: true,
+            }
+        };
+
+        let summary = if result.output.len() > 60 {
+            let mut end = 60;
+            while !result.output.is_char_boundary(end) {
+                end -= 1;
+            }
+            format!("{}...", &result.output[..end])
+        } else {
+            result.output.clone()
+        };
+        let is_error = result.is_error;
+
+        if let Some(ref tx) = self.tool_result_tx {
+            let _ = tx.send(ToolResultMsg {
+                tool_call_id,
+                result: result.output,
+                is_error,
+            });
+        }
+
+        {
+            let tc_status = &mut self.active_tool_calls[idx];
+            tc_status.status = if is_error {
+                ToolExecStatus::Failed(summary)
+            } else {
+                ToolExecStatus::Done(summary)
+            };
+        }
+
+        // 处理下一个待确认工具
+        self.advance_tool_confirm();
+    }
+
+    /// 用户拒绝执行当前待处理工具
+    pub fn reject_pending_tool(&mut self) {
+        let idx = self.pending_tool_idx;
+        if idx >= self.active_tool_calls.len() {
+            self.mode = ChatMode::Chat;
+            return;
+        }
+
+        let tool_call_id = self.active_tool_calls[idx].tool_call_id.clone();
+        self.active_tool_calls[idx].status = ToolExecStatus::Rejected;
+
+        if let Some(ref tx) = self.tool_result_tx {
+            let _ = tx.send(ToolResultMsg {
+                tool_call_id,
+                result: "用户拒绝执行该工具".to_string(),
+                is_error: true,
+            });
+        }
+
+        self.advance_tool_confirm();
+    }
+
+    /// 推进到下一个待确认工具，或退出确认模式
+    fn advance_tool_confirm(&mut self) {
+        // 查找下一个 PendingConfirm 状态的工具
+        let next = self
+            .active_tool_calls
+            .iter()
+            .enumerate()
+            .find(|(_, tc)| matches!(tc.status, ToolExecStatus::PendingConfirm))
+            .map(|(i, _)| i);
+
+        if let Some(next_idx) = next {
+            self.pending_tool_idx = next_idx;
+            // 继续保持 ToolConfirm 模式
+        } else {
+            // 没有更多需要确认的工具，处理剩余 Executing 状态的工具
+            self.execute_all_tools_no_confirm();
+            // 退出确认模式，恢复轮询
+            self.mode = ChatMode::Chat;
+        }
+    }
+
+    /// 结束加载状态（流式完成或错误）
+    fn finish_loading(&mut self, had_error: bool) {
+        self.stream_rx = None;
+        self.tool_result_tx = None;
+        self.is_loading = false;
+        self.last_rendered_streaming_len = 0;
+        self.msg_lines_cache = None;
+        self.active_tool_calls.clear();
+
+        if !had_error {
+            let content = {
+                let sc = self.streaming_content.lock().unwrap();
+                sc.clone()
+            };
+            if !content.is_empty() {
+                self.session
+                    .messages
+                    .push(ChatMessage::text("assistant", content));
+                self.streaming_content.lock().unwrap().clear();
+                self.show_toast("回复完成 ✓", false);
+            }
+            if self.auto_scroll {
+                self.scroll_offset = u16::MAX;
+            }
+        } else {
+            self.streaming_content.lock().unwrap().clear();
+        }
+
+        let _ = save_chat_session(&self.session);
     }
 
     /// 清空对话
@@ -597,4 +771,366 @@ impl ChatApp {
             }
         }
     }
+}
+
+// ========== Agent 循环（后台异步函数）==========
+
+/// 后台 Agent 循环：支持多轮工具调用
+async fn run_agent_loop(
+    provider: ModelProvider,
+    mut messages: Vec<ChatMessage>,
+    tools: Vec<ChatCompletionTools>,
+    use_stream: bool,
+    streaming_content: Arc<Mutex<String>>,
+    tx: mpsc::Sender<StreamMsg>,
+    tool_result_rx: mpsc::Receiver<ToolResultMsg>,
+) {
+    let client = create_openai_client(&provider);
+    const MAX_ROUNDS: usize = 10;
+
+    for _round in 0..MAX_ROUNDS {
+        // 清空流式内容缓冲（每轮开始时）
+        {
+            let mut sc = streaming_content.lock().unwrap();
+            sc.clear();
+        }
+
+        let request = match build_request_with_tools(&provider, &messages, tools.clone()) {
+            Ok(req) => req,
+            Err(e) => {
+                let _ = tx.send(StreamMsg::Error(format!("构建请求失败: {}", e)));
+                return;
+            }
+        };
+
+        if use_stream {
+            // 流式模式
+            let mut stream = match client.chat().create_stream(request.clone()).await {
+                Ok(s) => s,
+                Err(e) => {
+                    let error_msg = format!("API 请求失败: {}", e);
+                    write_error_log("Chat API 流式请求创建", &error_msg);
+                    let _ = tx.send(StreamMsg::Error(error_msg));
+                    return;
+                }
+            };
+
+            let mut finish_reason: Option<async_openai::types::chat::FinishReason> = None;
+            let mut assistant_text = String::new();
+            // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
+            let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
+                std::collections::BTreeMap::new();
+            let mut stream_had_deserialize_error = false;
+
+            'stream: while let Some(result) = stream.next().await {
+                match result {
+                    Ok(response) => {
+                        for choice in &response.choices {
+                            if let Some(ref content) = choice.delta.content {
+                                assistant_text.push_str(content);
+                                let mut sc = streaming_content.lock().unwrap();
+                                sc.push_str(content);
+                                drop(sc);
+                                let _ = tx.send(StreamMsg::Chunk);
+                            }
+                            // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
+                            if let Some(ref tc_chunks) = choice.delta.tool_calls {
+                                for chunk in tc_chunks {
+                                    let entry =
+                                        raw_tool_calls.entry(chunk.index).or_insert_with(|| {
+                                            (
+                                                chunk.id.clone().unwrap_or_default(),
+                                                String::new(),
+                                                String::new(),
+                                            )
+                                        });
+                                    if entry.0.is_empty() {
+                                        if let Some(ref id) = chunk.id {
+                                            entry.0 = id.clone();
+                                        }
+                                    }
+                                    if let Some(ref func) = chunk.function {
+                                        if let Some(ref name) = func.name {
+                                            entry.1.push_str(name);
+                                        }
+                                        if let Some(ref args) = func.arguments {
+                                            entry.2.push_str(args);
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(ref fr) = choice.finish_reason {
+                                finish_reason = Some(fr.clone());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let error_str = format!("{}", e);
+                        // 检测是否是 tool_calls 反序列化错误（Gemini 等不返回 chunk index）
+                        if error_str.contains("missing field `index`")
+                            || error_str.contains("tool_calls")
+                        {
+                            // 标记需要用非流式重做，跳出流式循环
+                            stream_had_deserialize_error = true;
+                            break 'stream;
+                        }
+                        write_error_log("Chat API 流式响应", &error_str);
+                        let _ = tx.send(StreamMsg::Error(error_str));
+                        return;
+                    }
+                }
+            }
+
+            // 如果流式遇到 tool_calls 反序列化错误，fallback 到非流式获取完整响应
+            if stream_had_deserialize_error {
+                // 清空流式内容（切换到非流式）
+                {
+                    let mut sc = streaming_content.lock().unwrap();
+                    sc.clear();
+                }
+                // 重新构建请求（不带 stream）
+                match client.chat().create(request).await {
+                    Ok(response) => {
+                        if let Some(choice) = response.choices.first() {
+                            let is_tool_calls = matches!(
+                                choice.finish_reason,
+                                Some(async_openai::types::chat::FinishReason::ToolCalls)
+                            );
+                            if is_tool_calls {
+                                if let Some(ref tc_list) = choice.message.tool_calls {
+                                    let tool_items: Vec<ToolCallItem> = tc_list
+                                        .iter()
+                                        .filter_map(|tc| {
+                                            if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
+                                                Some(ToolCallItem {
+                                                    id: f.id.clone(),
+                                                    name: f.function.name.clone(),
+                                                    arguments: f.function.arguments.clone(),
+                                                })
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect();
+
+                                    if tool_items.is_empty() {
+                                        break;
+                                    }
+
+                                    let assistant_text =
+                                        choice.message.content.clone().unwrap_or_default();
+                                    messages.push(ChatMessage {
+                                        role: "assistant".to_string(),
+                                        content: assistant_text,
+                                        tool_calls: Some(tool_items.clone()),
+                                        tool_call_id: None,
+                                    });
+
+                                    if tx
+                                        .send(StreamMsg::ToolCallRequest(tool_items.clone()))
+                                        .is_err()
+                                    {
+                                        return;
+                                    }
+
+                                    let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+                                    for _ in &tool_items {
+                                        match tool_result_rx
+                                            .recv_timeout(std::time::Duration::from_secs(60))
+                                        {
+                                            Ok(result) => tool_results.push(result),
+                                            Err(_) => {
+                                                let _ = tx.send(StreamMsg::Error(
+                                                    "等待工具执行超时".to_string(),
+                                                ));
+                                                return;
+                                            }
+                                        }
+                                    }
+
+                                    for result in tool_results {
+                                        messages.push(ChatMessage {
+                                            role: "tool".to_string(),
+                                            content: result.result,
+                                            tool_calls: None,
+                                            tool_call_id: Some(result.tool_call_id),
+                                        });
+                                    }
+                                    continue;
+                                }
+                            }
+                            // 普通文本回复
+                            if let Some(ref content) = choice.message.content {
+                                let mut sc = streaming_content.lock().unwrap();
+                                sc.push_str(content);
+                                drop(sc);
+                                let _ = tx.send(StreamMsg::Chunk);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let error_msg = format!("API 请求失败(fallback): {}", e);
+                        write_error_log("Chat API fallback 非流式", &error_msg);
+                        let _ = tx.send(StreamMsg::Error(error_msg));
+                        return;
+                    }
+                }
+                break;
+            }
+
+            // 检查流式模式下的 tool_calls finish_reason
+            let is_tool_calls = matches!(
+                finish_reason,
+                Some(async_openai::types::chat::FinishReason::ToolCalls)
+            );
+
+            if is_tool_calls && !raw_tool_calls.is_empty() {
+                let tool_items: Vec<ToolCallItem> = raw_tool_calls
+                    .into_values()
+                    .map(|(id, name, arguments)| ToolCallItem {
+                        id,
+                        name,
+                        arguments,
+                    })
+                    .collect();
+
+                if tool_items.is_empty() {
+                    break;
+                }
+
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: assistant_text,
+                    tool_calls: Some(tool_items.clone()),
+                    tool_call_id: None,
+                });
+
+                if tx
+                    .send(StreamMsg::ToolCallRequest(tool_items.clone()))
+                    .is_err()
+                {
+                    return;
+                }
+
+                let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+                for _ in &tool_items {
+                    match tool_result_rx.recv_timeout(std::time::Duration::from_secs(60)) {
+                        Ok(result) => tool_results.push(result),
+                        Err(_) => {
+                            let _ = tx.send(StreamMsg::Error("等待工具执行超时".to_string()));
+                            return;
+                        }
+                    }
+                }
+
+                for result in tool_results {
+                    messages.push(ChatMessage {
+                        role: "tool".to_string(),
+                        content: result.result,
+                        tool_calls: None,
+                        tool_call_id: Some(result.tool_call_id),
+                    });
+                }
+
+                continue;
+            } else {
+                // 正常结束
+                break;
+            }
+        } else {
+            // 非流式模式
+            match client.chat().create(request).await {
+                Ok(response) => {
+                    if let Some(choice) = response.choices.first() {
+                        let is_tool_calls = matches!(
+                            choice.finish_reason,
+                            Some(async_openai::types::chat::FinishReason::ToolCalls)
+                        );
+
+                        if is_tool_calls {
+                            if let Some(ref tc_list) = choice.message.tool_calls {
+                                let tool_items: Vec<ToolCallItem> = tc_list
+                                    .iter()
+                                    .filter_map(|tc| {
+                                        if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
+                                            Some(ToolCallItem {
+                                                id: f.id.clone(),
+                                                name: f.function.name.clone(),
+                                                arguments: f.function.arguments.clone(),
+                                            })
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect();
+
+                                if tool_items.is_empty() {
+                                    break;
+                                }
+
+                                let assistant_text =
+                                    choice.message.content.clone().unwrap_or_default();
+                                messages.push(ChatMessage {
+                                    role: "assistant".to_string(),
+                                    content: assistant_text,
+                                    tool_calls: Some(tool_items.clone()),
+                                    tool_call_id: None,
+                                });
+
+                                if tx
+                                    .send(StreamMsg::ToolCallRequest(tool_items.clone()))
+                                    .is_err()
+                                {
+                                    return;
+                                }
+
+                                let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+                                for _ in &tool_items {
+                                    match tool_result_rx
+                                        .recv_timeout(std::time::Duration::from_secs(60))
+                                    {
+                                        Ok(result) => tool_results.push(result),
+                                        Err(_) => {
+                                            let _ = tx.send(StreamMsg::Error(
+                                                "等待工具执行超时".to_string(),
+                                            ));
+                                            return;
+                                        }
+                                    }
+                                }
+
+                                for result in tool_results {
+                                    messages.push(ChatMessage {
+                                        role: "tool".to_string(),
+                                        content: result.result,
+                                        tool_calls: None,
+                                        tool_call_id: Some(result.tool_call_id),
+                                    });
+                                }
+
+                                continue;
+                            }
+                        }
+
+                        // 正常文本回复
+                        if let Some(ref content) = choice.message.content {
+                            let mut sc = streaming_content.lock().unwrap();
+                            sc.push_str(content);
+                            drop(sc);
+                            let _ = tx.send(StreamMsg::Chunk);
+                        }
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("API 请求失败: {}", e);
+                    write_error_log("Chat API 非流式请求", &error_msg);
+                    let _ = tx.send(StreamMsg::Error(error_msg));
+                    return;
+                }
+            }
+            break;
+        }
+    }
+
+    let _ = tx.send(StreamMsg::Done);
 }
