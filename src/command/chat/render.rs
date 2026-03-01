@@ -318,8 +318,9 @@ pub fn build_message_lines_incremental(
     // ========== 内联工具确认区 ==========
     if app.mode == ChatMode::ToolConfirm {
         if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
-            let confirm_bg = Color::Rgb(30, 25, 10);
-            let border_color = Color::Yellow;
+            let t = &app.theme;
+            let confirm_bg = t.tool_confirm_bg;
+            let border_color = t.tool_confirm_border;
             let content_w = bubble_max_width.saturating_sub(6); // 左右各 3 的 padding
 
             // 空行
@@ -329,7 +330,7 @@ pub fn build_message_lines_incremental(
             lines.push(Line::from(Span::styled(
                 "  🔧 工具调用确认",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(t.tool_confirm_title)
                     .add_modifier(Modifier::BOLD),
             )));
 
@@ -337,7 +338,7 @@ pub fn build_message_lines_incremental(
             let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
             lines.push(Line::from(Span::styled(
                 top_border,
-                Style::default().fg(border_color),
+                Style::default().fg(border_color).bg(confirm_bg),
             )));
 
             // 工具名行
@@ -349,11 +350,14 @@ pub fn build_message_lines_incremental(
                 lines.push(Line::from(vec![
                     Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
                     Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
-                    Span::styled(label, Style::default().fg(Color::Gray).bg(confirm_bg)),
+                    Span::styled(
+                        label,
+                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
+                    ),
                     Span::styled(
                         name.clone(),
                         Style::default()
-                            .fg(Color::Yellow)
+                            .fg(t.tool_confirm_name)
                             .bg(confirm_bg)
                             .add_modifier(Modifier::BOLD),
                     ),
@@ -384,7 +388,7 @@ pub fn build_message_lines_incremental(
                     Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
                     Span::styled(
                         confirm_msg,
-                        Style::default().fg(Color::White).bg(confirm_bg),
+                        Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
                     ),
                     Span::styled(
                         " ".repeat(fill.saturating_sub(1).saturating_add(2)),
@@ -414,15 +418,18 @@ pub fn build_message_lines_incremental(
                     Span::styled(
                         "[Y/Enter] 执行",
                         Style::default()
-                            .fg(Color::Green)
+                            .fg(t.toast_success_border)
                             .bg(confirm_bg)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled("  /  ", Style::default().fg(Color::DarkGray).bg(confirm_bg)),
+                    Span::styled(
+                        "  /  ",
+                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
+                    ),
                     Span::styled(
                         "[N/Esc] 拒绝",
                         Style::default()
-                            .fg(Color::Red)
+                            .fg(t.toast_error_border)
                             .bg(confirm_bg)
                             .add_modifier(Modifier::BOLD),
                     ),
@@ -438,7 +445,7 @@ pub fn build_message_lines_incremental(
             let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
             lines.push(Line::from(Span::styled(
                 bottom_border,
-                Style::default().fg(border_color),
+                Style::default().fg(border_color).bg(confirm_bg),
             )));
         }
     }

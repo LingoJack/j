@@ -351,7 +351,8 @@ rm -rf ~/.jdata
   "system_prompt": "你是一个有用的助手。",
   "stream_mode": true,
   "max_history_messages": 20,
-  "theme": "dark"
+  "theme": "dark",
+  "tools_enabled": true
 }
 ```
 
@@ -448,6 +449,29 @@ rm -rf ~/.jdata
 - **流式/整体输出**：默认流式逐字输出，可通过 `Ctrl+S` 切换为等待完整回复后再显示
 - **对话持久化**：对话自动保存到 `~/.jdata/agent/data/chat_session.json`，重启后恢复
 - **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时切换
+- **工具调用**：支持 Function Calling，AI 可执行 shell 命令和读取文件（危险命令需确认）
+
+### 工具调用功能
+
+AI 对话支持工具调用，让 AI 能够执行实际操作。
+
+**启用方式**：在配置界面（`Ctrl+E`）中设置 `tools_enabled` 为 `true`（默认启用）
+
+**内置工具**：
+
+| 工具名 | 功能 | 需确认 |
+|--------|------|--------|
+| `run_shell` | 执行 shell 命令 | ✅ 是 |
+| `read_file` | 读取本地文件 | ❌ 否 |
+
+**工具确认快捷键**：
+
+| 按键 | 功能 |
+|------|------|
+| `Y` / `Enter` | 执行工具 |
+| `N` / `Esc` | 拒绝执行 |
+
+> **安全提示**：`run_shell` 工具内置危险命令过滤（如 `rm -rf /`），但仍建议执行前检查命令内容
 
 ---
 

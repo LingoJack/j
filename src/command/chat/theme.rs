@@ -188,6 +188,22 @@ pub struct Theme {
     /// 错误 Toast 文字
     pub toast_error_text: Color,
 
+    // ===== 工具确认区 =====
+    /// 工具确认区边框
+    pub tool_confirm_border: Color,
+    /// 工具确认区背景
+    pub tool_confirm_bg: Color,
+    /// 工具确认区标题颜色
+    pub tool_confirm_title: Color,
+    /// 工具确认区工具名颜色
+    pub tool_confirm_name: Color,
+    /// 工具确认区消息文字颜色
+    pub tool_confirm_text: Color,
+    /// 工具确认区标签颜色（如"工具:"）
+    pub tool_confirm_label: Color,
+    /// 工具确认区提示文字颜色
+    pub tool_confirm_hint: Color,
+
     // ===== 欢迎界面 =====
     /// 欢迎框边框
     pub welcome_border: Color,
@@ -390,6 +406,15 @@ impl Theme {
             toast_error_bg: Color::Rgb(50, 18, 18),
             toast_error_text: Color::Rgb(255, 130, 130),
 
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(200, 180, 80),
+            tool_confirm_bg: Color::Rgb(35, 30, 15),
+            tool_confirm_title: Color::Rgb(255, 220, 100),
+            tool_confirm_name: Color::Rgb(255, 220, 100),
+            tool_confirm_text: Color::Rgb(220, 220, 230),
+            tool_confirm_label: Color::Rgb(140, 140, 160),
+            tool_confirm_hint: Color::Rgb(180, 180, 200),
+
             // 欢迎界面
             welcome_border: Color::Rgb(60, 70, 90),
             welcome_text: Color::Rgb(120, 140, 180),
@@ -524,6 +549,15 @@ impl Theme {
             toast_error_border: Color::Rgb(200, 70, 70),
             toast_error_bg: Color::Rgb(50, 20, 20),
             toast_error_text: Color::Rgb(255, 130, 130),
+
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(200, 180, 80),
+            tool_confirm_bg: Color::Rgb(40, 35, 20),
+            tool_confirm_title: Color::Rgb(255, 220, 100),
+            tool_confirm_name: Color::Rgb(255, 220, 100),
+            tool_confirm_text: Color::Rgb(212, 212, 212),
+            tool_confirm_label: Color::Rgb(128, 128, 128),
+            tool_confirm_hint: Color::Rgb(170, 170, 170),
 
             // 欢迎界面
             welcome_border: Color::Rgb(60, 60, 60),
@@ -660,6 +694,15 @@ impl Theme {
             toast_error_bg: Color::Rgb(255, 235, 235),
             toast_error_text: Color::Rgb(160, 30, 30),
 
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(180, 140, 40),
+            tool_confirm_bg: Color::Rgb(255, 250, 235),
+            tool_confirm_title: Color::Rgb(160, 120, 20),
+            tool_confirm_name: Color::Rgb(160, 120, 20),
+            tool_confirm_text: Color::Rgb(40, 40, 50),
+            tool_confirm_label: Color::Rgb(120, 120, 140),
+            tool_confirm_hint: Color::Rgb(80, 80, 100),
+
             // 欢迎界面
             welcome_border: Color::Rgb(180, 190, 210),
             welcome_text: Color::Rgb(60, 80, 130),
@@ -795,6 +838,15 @@ impl Theme {
             toast_error_bg: Color::Rgb(60, 50, 52),
             toast_error_text: Color::Rgb(191, 97, 106),
 
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(235, 203, 139), // nord13
+            tool_confirm_bg: Color::Rgb(52, 58, 70),
+            tool_confirm_title: Color::Rgb(235, 203, 139),
+            tool_confirm_name: Color::Rgb(235, 203, 139),
+            tool_confirm_text: Color::Rgb(216, 222, 233), // nord4
+            tool_confirm_label: Color::Rgb(128, 140, 160),
+            tool_confirm_hint: Color::Rgb(178, 186, 202),
+
             // 欢迎界面
             welcome_border: Color::Rgb(76, 86, 106), // nord3
             welcome_text: Color::Rgb(136, 192, 208), // nord8
@@ -929,6 +981,15 @@ impl Theme {
             toast_error_border: Color::Rgb(249, 38, 114), // monokai pink
             toast_error_bg: Color::Rgb(60, 38, 42),
             toast_error_text: Color::Rgb(249, 38, 114),
+
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(230, 219, 116), // monokai yellow
+            tool_confirm_bg: Color::Rgb(50, 48, 38),
+            tool_confirm_title: Color::Rgb(230, 219, 116),
+            tool_confirm_name: Color::Rgb(230, 219, 116),
+            tool_confirm_text: Color::Rgb(248, 248, 242),
+            tool_confirm_label: Color::Rgb(140, 140, 130),
+            tool_confirm_hint: Color::Rgb(190, 190, 180),
 
             // 欢迎界面
             welcome_border: Color::Rgb(80, 80, 70),

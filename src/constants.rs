@@ -24,6 +24,7 @@ pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "max_history_messages",
     "theme",
     "tools_enabled",
+    "max_tool_rounds",
 ];
 
 /// Toast 通知显示时长（秒）

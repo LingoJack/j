@@ -1,6 +1,6 @@
 # work-copilot Rust 重构进度
 
-> 📅 最后更新: 2026-02-25
+> 📅 最后更新: 2026-03-01
 > 🔖 版本: v22.0.0
 > 🖥️ 平台: macOS ARM64 (M1/M2/M3/M4)
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
@@ -128,6 +128,7 @@ hound = "3.5"                                        # WAV 文件读写
 | **Phase 23** | AI 对话系统（chat）：内置 TUI AI 对话界面，支持多模型提供方切换（OpenAI/DeepSeek 等）、流式/整体输出切换（Ctrl+S）、Markdown 渲染（标题/加粗/斜体/代码块语法高亮/表格/列表/引用块）、消息浏览模式（Ctrl+B，↑↓选择 y/Enter 复制，A/D 细粒度滚动消息内容）、对话持久化；代码高亮支持 Rust/Python/JS/Go/Java/Bash/C/SQL/Ruby/YAML/CSS/Dockerfile 等语言，Bash 额外支持 `$VAR`/`${VAR}` 变量高亮；渲染行缓存 + 可见区域裁剪优化性能 | ✅ 完成 |
 | **Phase 24** | AI 对话系统增强：可视化配置界面（Ctrl+E）支持 Provider 增删改、全局设置编辑（system_prompt/max_history_messages/stream_mode）；6 种主题风格（dark/light/dracula/gruvbox/monokai/nord），实时切换无需重启；历史消息数量限制（max_history_messages）防止 token 超限 | ✅ 完成 |
 | **Phase 25** | 语音转文字：基于 Whisper.cpp 的离线语音识别（whisper-rs + cpal + hound）；`j voice` 命令录音转写输出文字；`j voice -c` 复制到剪贴板；`j voice download` 自动下载模型；支持 tiny/base/small/medium/large 五种模型大小；16kHz 单声道录音；中文识别优化；模型存储在 `~/.jdata/voice/model/` | ✅ 完成 |
+| **Phase 27** | AI 对话工具调用（Function Calling）：内置 `run_shell`（执行 shell 命令）和 `read_file`（读取文件）工具；工具注册表 `ToolRegistry` 支持 trait 扩展；危险命令过滤（rm -rf /、curl | sh 等）；shell 命令需用户确认（Y/Enter 执行，N/Esc 拒绝）；配置项 `tools_enabled` 控制启用；工具调用结果自动回传给 LLM 继续推理 | ✅ 完成 |
 
 ---
 
@@ -874,28 +875,430 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 ### 概述
 
-`j chat` 命令启动内置 TUI AI 对话界面，支持多模型、流式输出、Markdown 渲染、对话持久化等功能。
+`j chat` 命令启动内置 TUI AI 对话界面，支持多模型、流式输出、Markdown 渲染、对话持久化、工具调用等功能。
 
-### 架构
+### 架构总览
+
+```
+src/command/chat/
+├── mod.rs           # 入口：handle_chat() 命令分发
+├── handler.rs       # TUI 主循环：事件监听 + 模式路由
+├── app.rs           # 应用状态：ChatApp + 后台 Agent 循环
+├── api.rs           # API 层：OpenAI 客户端 + 请求构建
+├── model.rs         # 数据模型：AgentConfig / ChatSession / ChatMessage
+├── tools.rs         # 工具系统：Tool trait + run_shell / read_file
+├── archive.rs       # 归档管理：创建 / 列表 / 还原 / 删除
+├── theme.rs         # 主题系统：6 种配色方案
+├── render.rs        # 渲染工具：剪贴板复制
+├── markdown/        # Markdown 解析渲染
+│   ├── parser.rs    # pulldown-cmark 解析
+│   └── highlight.rs # 代码语法高亮
+└── ui/              # TUI 组件
+    ├── chat.rs      # 对话主界面
+    ├── config.rs    # 配置编辑界面
+    └── archive.rs   # 归档列表界面
+```
 
 ```
 ~/.jdata/agent/data/
 ├── agent_config.json    # 模型提供方配置（API key、模型名等）
-└── chat_session.json    # 对话历史（自动保存/恢复）
+├── chat_session.json    # 当前对话历史（自动保存/恢复）
+└── archives/            # 归档对话存储目录
+    ├── archive-2026-02-25.json
+    └── archive-2026-02-26.json
 ```
 
-**核心流程：**
+### 整体交互流程
 
-1. **用户输入** → `send_message()` 将消息加入 session，启动后台线程调用 LLM API
-2. **后台线程** → 通过 `mpsc::channel` 发送流式 chunk（`StreamMsg::Chunk`）到前端
-3. **TUI 事件循环** → `poll_stream()` 非阻塞接收 chunk，更新 `streaming_content`
-4. **渲染** → `build_message_lines()` 解析 Markdown 并缓存渲染行，`draw_messages()` 逐行绘制
+```mermaid
+flowchart TD
+    subgraph 入口层
+        A["j chat [content]"] --> B{"有参数?"}
+        B -- 否 --> C["run_chat_tui()<br/>进入 TUI 界面"]
+        B -- 是 --> D["call_openai_stream()<br/>快速问答模式"]
+        D --> E["输出回复到终端"]
+    end
 
-**性能优化：**
-- `MsgLinesCache`：消息渲染行缓存，打字/滚动时零开销复用（缓存 key: 消息数+内容长度+流式长度+气泡宽度+浏览索引）
+    subgraph TUI主循环
+        C --> F["初始化 ChatApp"]
+        F --> G["事件循环 loop"]
+        G --> H{"事件类型?"}
+        H -- "键盘事件" --> I["模式路由 dispatch"]
+        H -- "流式消息" --> J["poll_stream()"]
+        H -- "窗口调整" --> K["重绘界面"]
+        I --> L{"当前模式?"}
+        L -- Chat --> M["handle_chat_mode()"]
+        L -- SelectModel --> N["handle_select_model()"]
+        L -- Browse --> O["handle_browse_mode()"]
+        L -- Config --> P["handle_config_mode()"]
+        L -- ArchiveConfirm --> Q["handle_archive_confirm_mode()"]
+        L -- ArchiveList --> R["handle_archive_list_mode()"]
+        L -- ToolConfirm --> S["handle_tool_confirm_mode()"]
+        J --> T["更新 streaming_content"]
+        T --> U["触发重绘"]
+        K --> U
+        M --> U
+        N --> U
+        O --> U
+        P --> U
+        Q --> U
+        R --> U
+        S --> U
+        U --> G
+        M -- "Esc/Ctrl+C" --> V["退出 TUI"]
+        V --> W["save_chat_session()"]
+    end
+```
+
+### 用户发送消息流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant TUI as TUI 主线程
+    participant CH as ChatApp
+    participant BG as 后台线程
+    participant API as LLM API
+
+    U->>TUI: 输入消息 + Enter
+    TUI->>CH: send_message()
+    CH->>CH: 添加用户消息到 session
+    CH->>CH: 清空输入框
+    CH->>CH: is_loading = true
+    CH->>CH: 创建 mpsc::channel
+    CH->>BG: spawn 后台线程
+    BG->>BG: run_agent_loop()
+    BG->>API: 创建流式请求
+    
+    loop 流式响应
+        API-->>BG: chunk
+        BG->>BG: 追加到 streaming_content
+        BG->>TUI: StreamMsg::Chunk
+        TUI->>CH: poll_stream()
+        CH->>CH: 更新 UI 显示
+    end
+    
+    alt 工具调用请求
+        API-->>BG: tool_calls
+        BG->>TUI: StreamMsg::ToolCallRequest
+        TUI->>CH: 进入 ToolConfirm 模式
+        U->>TUI: Y/Enter 确认
+        CH->>CH: execute_pending_tool()
+        CH->>BG: ToolResultMsg
+        BG->>API: 继续请求（带工具结果）
+    end
+    
+    API-->>BG: done
+    BG->>TUI: StreamMsg::Done
+    TUI->>CH: finish_loading()
+    CH->>CH: 添加 AI 消息到 session
+    CH->>CH: is_loading = false
+    CH->>CH: save_chat_session()
+    TUI->>U: 显示 "回复完成 ✓"
+```
+
+### Agent 循环（支持多轮工具调用）
+
+```mermaid
+flowchart TD
+    subgraph 后台线程 run_agent_loop
+        A["开始"] --> B["清空 streaming_content"]
+        B --> C["build_request_with_tools()"]
+        C --> D{"stream_mode?"}
+        D -- 是 --> E["client.chat().create_stream()"]
+        D -- 否 --> F["client.chat().create()"]
+        
+        E --> G{"流式响应"}
+        G --> H["收到文本 chunk"]
+        H --> I["追加到 streaming_content"]
+        I --> J["发送 StreamMsg::Chunk"]
+        J --> G
+        
+        G --> K{"finish_reason?"}
+        K -- "stop" --> L["结束"]
+        K -- "tool_calls" --> M["收集工具调用列表"]
+        
+        F --> N{"finish_reason?"}
+        N -- "stop" --> L
+        N -- "tool_calls" --> M
+        
+        M --> O["添加 assistant 消息（带 tool_calls）"]
+        O --> P["发送 StreamMsg::ToolCallRequest"]
+        P --> Q["等待主线程 ToolResultMsg"]
+        Q --> R["添加 tool 消息"]
+        R --> S{"达到最大轮数(10)?"}
+        S -- 否 --> B
+        S -- 是 --> T["发送 StreamMsg::Error"]
+        
+        L --> U["发送 StreamMsg::Done"]
+    end
+```
+
+### 工具调用确认流程
+
+```mermaid
+flowchart TD
+    subgraph 主线程
+        A["收到 ToolCallRequest"] --> B["初始化 active_tool_calls"]
+        B --> C{"需要确认?"}
+        C -- 是 --> D["进入 ToolConfirm 模式"]
+        C -- 否 --> E["直接执行工具"]
+        
+        D --> F["显示确认弹窗"]
+        F --> G{"用户操作?"}
+        G -- "Y/Enter" --> H["execute_pending_tool()"]
+        G -- "N/Esc" --> I["reject_pending_tool()"]
+        
+        H --> J["tool.execute()"]
+        J --> K["发送 ToolResultMsg"]
+        K --> L["advance_tool_confirm()"]
+        
+        I --> M["发送拒绝结果"]
+        M --> L
+        
+        L --> N{"还有待确认工具?"}
+        N -- 是 --> D
+        N -- 否 --> O["退出 ToolConfirm 模式"]
+        O --> P["继续轮询流式消息"]
+        
+        E --> Q["批量执行所有不需确认的工具"]
+        Q --> P
+    end
+```
+
+### 归档功能流程
+
+```mermaid
+flowchart TD
+    subgraph 归档 Ctrl+L
+        A["Ctrl+L"] --> B{"对话为空?"}
+        B -- 是 --> C["提示: 当前对话为空"]
+        B -- 否 --> D["start_archive_confirm()"]
+        D --> E["生成默认名称 archive-YYYY-MM-DD"]
+        E --> F["进入 ArchiveConfirm 模式"]
+        F --> G{"用户操作?"}
+        G -- "Enter" --> H["使用默认名称归档"]
+        G -- "n" --> I["编辑自定义名称"]
+        G -- "d" --> J["仅清空对话，不归档"]
+        G -- "Esc" --> K["取消"]
+        
+        I --> L["输入自定义名称"]
+        L --> M["Enter 确认"]
+        M --> N["validate_archive_name()"]
+        N -- "合法" --> H
+        N -- "非法" --> O["提示错误，继续编辑"]
+        
+        H --> P["create_archive()"]
+        P --> Q["保存到 archives/name.json"]
+        Q --> R["清空当前 session"]
+        R --> S["显示成功提示"]
+    end
+
+    subgraph 还原 Ctrl+R
+        T["Ctrl+R"] --> U["start_archive_list()"]
+        U --> V["加载归档列表"]
+        V --> W["进入 ArchiveList 模式"]
+        W --> X{"用户操作?"}
+        X -- "↑↓/j/k" --> Y["移动选择"]
+        X -- "Enter" --> Z{"当前有对话?"}
+        X -- "d" --> AA["删除选中归档"]
+        X -- "Esc" --> AB["取消返回"]
+        
+        Z -- 是 --> AC["提示确认覆盖"]
+        Z -- 否 --> AD["直接还原"]
+        AC -- "y/Enter" --> AD
+        AC -- "其他" --> W
+        
+        AD --> AE["restore_archive()"]
+        AE --> AF["替换 session.messages"]
+        AF --> AG["显示成功提示"]
+    end
+```
+
+### 配置编辑流程
+
+```mermaid
+flowchart TD
+    subgraph 配置界面 Ctrl+E
+        A["Ctrl+E"] --> B["初始化配置界面状态"]
+        B --> C["进入 Config 模式"]
+        C --> D["显示 Provider 字段 + 全局字段"]
+        D --> E{"用户操作?"}
+        
+        E -- "↑↓/j/k" --> F["移动字段选择"]
+        E -- "Tab/→" --> G["切换到下一个 Provider"]
+        E -- "Shift+Tab/←" --> H["切换到上一个 Provider"]
+        E -- "Enter" --> I{"字段类型?"}
+        E -- "a" --> J["新增 Provider"]
+        E -- "d" --> K["删除当前 Provider"]
+        E -- "s" --> L["设为活跃模型"]
+        E -- "Esc" --> M["保存配置并返回"]
+        
+        I -- "stream_mode" --> N["直接切换布尔值"]
+        I -- "tools_enabled" --> N
+        I -- "theme" --> O["循环切换主题"]
+        I -- "system_prompt" --> P["打开全屏编辑器"]
+        I -- "其他字段" --> Q["进入编辑模式"]
+        
+        Q --> R["输入新值"]
+        R --> S["Enter 确认"]
+        S --> T["config_field_set()"]
+        T --> D
+        
+        N --> D
+        O --> D
+        P --> D
+        J --> D
+        K --> D
+        L --> D
+        
+        M --> U["save_agent_config()"]
+        U --> V["显示保存成功提示"]
+    end
+```
+
+### 消息浏览模式流程
+
+```mermaid
+flowchart TD
+    subgraph 浏览模式 Ctrl+B
+        A["Ctrl+B"] --> B{"有消息?"}
+        B -- 否 --> C["提示: 暂无消息"]
+        B -- 是 --> D["选中最后一条消息"]
+        D --> E["进入 Browse 模式"]
+        E --> F["显示消息列表（当前选中高亮）"]
+        F --> G{"用户操作?"}
+        
+        G -- "↑/k" --> H["选择上一条消息"]
+        G -- "↓/j" --> I["选择下一条消息"]
+        G -- "a/A" --> J["消息内容向上滚动 3 行"]
+        G -- "d/D" --> K["消息内容向下滚动 3 行"]
+        G -- "y/Enter" --> L["复制选中消息"]
+        G -- "Esc" --> M["退出浏览模式"]
+        
+        H --> F
+        I --> F
+        J --> F
+        K --> F
+        
+        L --> N["copy_to_clipboard()"]
+        N --> O["显示复制成功提示"]
+        O --> F
+        
+        M --> P["清除高亮缓存"]
+        P --> Q["返回 Chat 模式"]
+    end
+```
+
+### 数据模型关系
+
+```mermaid
+classDiagram
+    class AgentConfig {
+        +Vec~ModelProvider~ providers
+        +usize active_index
+        +Option~String~ system_prompt
+        +bool stream_mode
+        +usize max_history_messages
+        +ThemeName theme
+        +bool tools_enabled
+    }
+    
+    class ModelProvider {
+        +String name
+        +String api_base
+        +String api_key
+        +String model
+    }
+    
+    class ChatSession {
+        +Vec~ChatMessage~ messages
+    }
+    
+    class ChatMessage {
+        +String role
+        +String content
+        +Option~Vec~ToolCallItem~~ tool_calls
+        +Option~String~ tool_call_id
+    }
+    
+    class ToolCallItem {
+        +String id
+        +String name
+        +String arguments
+    }
+    
+    class ChatApp {
+        +AgentConfig agent_config
+        +ChatSession session
+        +String input
+        +usize cursor_pos
+        +ChatMode mode
+        +bool is_loading
+        +Option~Receiver~StreamMsg~~ stream_rx
+        +Arc~Mutex~String~~ streaming_content
+        +ToolRegistry tool_registry
+        +Vec~ToolCallStatus~ active_tool_calls
+        +Theme theme
+    }
+    
+    class ChatMode {
+        <<enumeration>>
+        Chat
+        SelectModel
+        Browse
+        Help
+        Config
+        ArchiveConfirm
+        ArchiveList
+        ToolConfirm
+    }
+    
+    AgentConfig "1" *-- "many" ModelProvider
+    ChatApp "1" *-- "1" AgentConfig
+    ChatApp "1" *-- "1" ChatSession
+    ChatApp --> ChatMode
+    ChatSession "1" *-- "many" ChatMessage
+    ChatMessage "1" *-- "many" ToolCallItem
+```
+
+### 性能优化策略
+
+```mermaid
+flowchart LR
+    subgraph 渲染优化
+        A["MsgLinesCache<br/>消息渲染行缓存"] --> B["缓存 key: 消息数+内容长度+流式长度+气泡宽度"]
+        B --> C["只在内容变化时重新解析 Markdown"]
+    end
+    
+    subgraph 绘制优化
+        D["可见区域裁剪"] --> E["只绘制 start..end 切片"]
+        E --> F["避免全量克隆"]
+    end
+    
+    subgraph 事件优化
+        G["批量消费事件"] --> H["event::poll(Duration::ZERO) 循环"]
+        H --> I["防止快速操作时事件堆积"]
+    end
+    
+    subgraph CPU优化
+        J["动态 poll 超时"] --> K["空闲: 1s 超时"]
+        J --> L["加载: 150ms 间隔"]
+        L --> M["保证流式刷新同时降低 CPU"]
+    end
+    
+    subgraph 流式节流
+        N["流式渲染节流"] --> O["每增加 200 字节 或 超过 200ms 才重绘"]
+        O --> P["避免高频重绘卡顿"]
+    end
+```
+
+**核心优化点：**
+- `MsgLinesCache`：消息渲染行缓存，打字/滚动时零开销复用
 - 只渲染可见区域行（`start..end` 切片），避免全量克隆
 - 批量消费事件（`event::poll(Duration::ZERO)` 循环），防止快速操作时事件堆积
 - 空闲时 1s 超时降低 CPU，加载时 150ms 间隔保证流式刷新
+- 流式节流：每增加 200 字节或超过 200ms 才重绘，避免高频重绘卡顿
 
 ### 配置示例
 
@@ -919,7 +1322,8 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
   "system_prompt": "你是一个有用的助手。",
   "stream_mode": true,
   "max_history_messages": 20,
-  "theme": "dark"
+  "theme": "dark",
+  "tools_enabled": true
 }
 ```
 
@@ -931,6 +1335,7 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 | `stream_mode` | `true` 流式输出（逐字显示），`false` 整体输出（等待完整回复） |
 | `max_history_messages` | 发送给 API 的历史消息数量上限（默认 20，防止 token 超限） |
 | `theme` | 界面主题风格（`dark`/`light`/`dracula`/`gruvbox`/`monokai`/`nord`） |
+| `tools_enabled` | 是否启用工具调用功能（默认 `true`） |
 
 ### 配置界面
 
@@ -999,6 +1404,39 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 **归档存储位置**：`~/.j/chat/archives/`
 
 > 提示：还原归档会先清空当前会话，如果当前有未归档的对话，还原时会提示确认
+
+### 工具调用功能
+
+AI 对话支持工具调用（Function Calling），让 AI 能够执行实际操作。
+
+**启用方式**：在配置界面（`Ctrl+E`）中设置 `tools_enabled` 为 `true`（默认启用）
+
+**内置工具**：
+
+| 工具名 | 功能 | 需确认 |
+|--------|------|--------|
+| `run_shell` | 执行 shell 命令 | ✅ 是 |
+| `read_file` | 读取本地文件 | ❌ 否 |
+
+**工具确认流程**：
+
+当 AI 请求执行需要确认的工具（如 `run_shell`）时：
+
+1. 界面弹出确认框，显示工具名和参数
+2. 按 `Y` / `Enter` 执行工具
+3. 按 `N` / `Esc` 拒绝执行
+4. AI 根据工具返回结果继续回复
+
+**安全策略**：
+
+`run_shell` 工具内置危险命令过滤，以下命令会被拒绝执行：
+- `rm -rf /`、`rm -rf /*`
+- `mkfs`、`dd if=`
+- `chmod -R 777 /`、`chown -R`
+- `curl | sh`、`wget -O- | sh`
+- 等...
+
+> 提示：即使有安全过滤，执行 shell 命令前仍建议仔细检查命令内容
 
 ### Markdown 渲染
 
