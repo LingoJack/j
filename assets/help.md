@@ -463,6 +463,7 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 |--------|------|--------|
 | `run_shell` | 执行 shell 命令 | ✅ 是 |
 | `read_file` | 读取本地文件 | ❌ 否 |
+| `load_skill` | 加载指定技能的完整内容到上下文 | ❌ 否 |
 
 **工具确认快捷键**：
 
@@ -475,7 +476,17 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 
 ### Skill 技能系统
 
-在 `~/.jdata/agent/skills/` 下创建 skill 目录，让 AI 遵循自定义指令模板。
+在 `~/.jdata/agent/skills/` 下创建 skill 目录，AI 通过 `load_skill` 工具按需加载技能。
+
+系统提示词中仅包含技能的名称和描述摘要，AI 判断需要时调用 `load_skill` 加载完整指令。
+
+**系统提示词模板占位符**：
+
+| 占位符 | 替换内容 |
+|--------|----------|
+| `{{.skills}}` | 所有技能的 name + description 摘要列表 |
+| `{{.tools}}` | 所有工具的 name + description 摘要列表 |
+| `{{.style}}` | 回复风格配置内容（`Ctrl+E` 中编辑） |
 
 **创建 Skill**：
 
@@ -498,8 +509,8 @@ EOF
 |------|------|
 | 输入 `@` | 弹出技能选择列表（支持过滤） |
 | `↑↓` 选择 + `Tab/Enter` | 补全技能名称 |
-| `@skill 参数` + 发送 | AI 收到 skill 指令上下文 |
-| 启用 tools_enabled | AI 可自动通过 tool calling 调用 skill |
+| `@skill 参数` + 发送 | AI 从 skills 摘要识别后调用 `load_skill` |
+| 启用 tools_enabled | AI 可根据 skills 摘要自主决定是否加载技能 |
 
 > Skill 目录支持 `references/` 子目录存放参考文件，会自动附加到上下文
 

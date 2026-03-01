@@ -1,6 +1,8 @@
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use serde_json::{Value, json};
 
+use super::skill::Skill;
+
 /// 工具执行结果
 pub struct ToolResult {
     /// 返回给 LLM 的内容
@@ -258,16 +260,15 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
-    /// 创建默认注册表（包含 run_shell、read_file 和已加载的 skills）
-    pub fn default() -> Self {
+    /// 创建注册表（包含 run_shell、read_file，以及当 skills 非空时注册 load_skill）
+    pub fn new(skills: Vec<Skill>) -> Self {
         let mut registry = Self {
             tools: vec![Box::new(ShellTool), Box::new(ReadFileTool)],
         };
 
-        // 加载 skills 并注册
-        let skills = super::skill::load_all_skills();
-        for skill in skills {
-            registry.register(Box::new(super::skill::SkillTool { skill }));
+        // 如果有 skills，注册统一的 LoadSkillTool
+        if !skills.is_empty() {
+            registry.register(Box::new(super::skill::LoadSkillTool { skills }));
         }
 
         registry
@@ -284,6 +285,15 @@ impl ToolRegistry {
             .iter()
             .find(|t| t.name() == name)
             .map(|t| t.as_ref())
+    }
+
+    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符
+    pub fn build_tools_summary(&self) -> String {
+        self.tools
+            .iter()
+            .map(|t| format!("- **{}**: {}", t.name(), t.description()))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// 生成 async-openai 的 ChatCompletionTools 列表

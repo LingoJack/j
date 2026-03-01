@@ -20,6 +20,7 @@ pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
 /// 全局配置字段
 pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "system_prompt",
+    "style",
     "stream_mode",
     "max_history_messages",
     "theme",

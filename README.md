@@ -1417,6 +1417,7 @@ AI 对话支持工具调用（Function Calling），让 AI 能够执行实际操
 |--------|------|--------|
 | `run_shell` | 执行 shell 命令 | ✅ 是 |
 | `read_file` | 读取本地文件 | ❌ 否 |
+| `load_skill` | 加载指定技能的完整内容到上下文 | ❌ 否 |
 
 **工具确认流程**：
 
@@ -1440,7 +1441,25 @@ AI 对话支持工具调用（Function Calling），让 AI 能够执行实际操
 
 ### Skill 技能系统
 
-Chat 支持用户自定义 Skill（技能），让 AI 在对话中遵循特定领域的指令模板。
+Chat 支持用户自定义 Skill（技能），AI 通过 `load_skill` 工具按需加载技能到上下文。
+
+**工作原理**：
+
+1. 系统提示词中包含所有技能的 **名称 + 描述** 摘要（通过 `{{.skills}}` 模板占位符）
+2. AI 根据摘要判断何时需要某个技能，主动调用 `load_skill` 工具加载完整指令
+3. 用户也可在输入框中用 `@skill_name` 提示 AI 使用某个技能
+
+**系统提示词模板占位符**：
+
+| 占位符 | 替换内容 |
+|--------|----------|
+| `{{.skills}}` | 所有技能的 name + description 摘要列表 |
+| `{{.tools}}` | 所有工具的 name + description 摘要列表 |
+| `{{.style}}` | 回复风格配置内容 |
+
+**回复风格（Style）配置**：
+
+在配置界面（`Ctrl+E`）中，选中 `回复风格` 字段按 `Enter` 可用全屏编辑器编辑。风格内容会通过 `{{.style}}` 注入系统提示词。文件存储于 `~/.jdata/agent/data/style.md`。
 
 **Skill 目录结构**：
 
@@ -1471,8 +1490,8 @@ Markdown 指令正文，$ARGUMENTS 会被替换为实际参数...
 | 方式 | 说明 |
 |------|------|
 | `@skill_name` | 在输入框中输入 @ 触发技能选择弹窗，选择后自动补全 |
-| `@skill_name 参数` | 输入 `@技能名 参数`，发送时 AI 会收到 skill 指令上下文 |
-| 自动调用 | 启用 tools_enabled 后，AI 可通过 tool calling 自动发现并调用匹配的 skill |
+| `@skill_name 参数` | 输入 `@技能名 参数`，AI 从 skills 摘要识别后调用 `load_skill` |
+| 自动调用 | 启用 tools_enabled 后，AI 可根据 skills 摘要自主决定是否加载技能 |
 
 **@ 补全弹窗快捷键**：
 

@@ -289,6 +289,32 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
+        } else if CONFIG_GLOBAL_FIELDS[i] == "style" {
+            // style 特殊处理：同 system_prompt 模式
+            let display_value = if value.is_empty() {
+                "(空)".to_string()
+            } else {
+                let flat: String = value
+                    .chars()
+                    .map(|c| if c == '\n' { ' ' } else { c })
+                    .collect();
+                if flat.chars().count() > 40 {
+                    let truncated: String = flat.chars().take(40).collect();
+                    format!("{}...", truncated)
+                } else {
+                    flat
+                }
+            };
+            lines.push(Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(display_value, value_style),
+                Span::styled(
+                    if is_selected { "  (Enter 编辑)" } else { "" },
+                    Style::default().fg(t.config_dim),
+                ),
+            ]));
         } else {
             lines.push(Line::from(if app.config_editing && is_selected {
                 // 编辑模式：显示带光标的文本

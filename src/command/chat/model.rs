@@ -47,6 +47,9 @@ pub struct AgentConfig {
     /// 工具调用最大轮数（默认 10，防止无限循环）
     #[serde(default = "default_max_tool_rounds")]
     pub max_tool_rounds: usize,
+    /// 回复风格（可选）
+    #[serde(default)]
+    pub style: Option<String>,
 }
 
 fn default_max_history_messages() -> usize {
@@ -128,6 +131,11 @@ pub fn system_prompt_path() -> PathBuf {
     agent_data_dir().join("system_prompt.md")
 }
 
+/// 获取回复风格文件路径
+pub fn style_path() -> PathBuf {
+    agent_data_dir().join("style.md")
+}
+
 // ========== 配置读写 ==========
 
 /// 加载 Agent 配置
@@ -154,9 +162,10 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    // system_prompt 统一存放在独立文件，不再写入 agent_config.json
+    // system_prompt 和 style 统一存放在独立文件，不再写入 agent_config.json
     let mut config_to_save = config.clone();
     config_to_save.system_prompt = None;
+    config_to_save.style = None;
     match serde_json::to_string_pretty(&config_to_save) {
         Ok(json) => match fs::write(&path, json) {
             Ok(_) => true,
@@ -241,6 +250,56 @@ pub fn save_system_prompt(prompt: &str) -> bool {
         Ok(_) => true,
         Err(e) => {
             error!("❌ 保存 system_prompt.md 失败: {}", e);
+            false
+        }
+    }
+}
+
+/// 加载回复风格（来自独立文件）
+pub fn load_style() -> Option<String> {
+    let path = style_path();
+    if !path.exists() {
+        return None;
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Err(e) => {
+            error!("❌ 读取 style.md 失败: {}", e);
+            None
+        }
+    }
+}
+
+/// 保存回复风格到独立文件（空字符串会删除文件）
+pub fn save_style(style: &str) -> bool {
+    let path = style_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let trimmed = style.trim();
+    if trimmed.is_empty() {
+        return match fs::remove_file(&path) {
+            Ok(_) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) => {
+                error!("❌ 删除 style.md 失败: {}", e);
+                false
+            }
+        };
+    }
+
+    match fs::write(path, trimmed) {
+        Ok(_) => true,
+        Err(e) => {
+            error!("❌ 保存 style.md 失败: {}", e);
             false
         }
     }

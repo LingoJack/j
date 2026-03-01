@@ -131,52 +131,103 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
     result
 }
 
-// ========== SkillTool: 实现 Tool trait ==========
+// ========== build_skills_summary ==========
 
-pub struct SkillTool {
-    pub skill: Skill,
+/// 构建 skills 摘要列表（name + description），用于系统提示词的 {{.skills}} 占位符
+pub fn build_skills_summary(skills: &[Skill]) -> String {
+    if skills.is_empty() {
+        return "（暂无已安装的技能）".to_string();
+    }
+    let mut result = String::new();
+    for skill in skills {
+        result.push_str(&format!(
+            "- **{}**: {}\n",
+            skill.frontmatter.name, skill.frontmatter.description
+        ));
+    }
+    result.trim_end().to_string()
 }
 
-impl Tool for SkillTool {
+// ========== LoadSkillTool: 统一的技能加载工具 ==========
+
+pub struct LoadSkillTool {
+    pub skills: Vec<Skill>,
+}
+
+impl Tool for LoadSkillTool {
     fn name(&self) -> &str {
-        &self.skill.frontmatter.name
+        "load_skill"
     }
 
     fn description(&self) -> &str {
-        &self.skill.frontmatter.description
+        "加载指定技能的完整内容到上下文。当你判断需要某个技能时调用此工具。"
     }
 
     fn parameters_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "要加载的技能名称"
+                },
                 "arguments": {
                     "type": "string",
-                    "description": self.skill.frontmatter.argument_hint
-                        .as_deref()
-                        .unwrap_or("传递给技能的参数")
+                    "description": "传递给技能的参数（可选）"
                 }
-            }
+            },
+            "required": ["name"]
         })
     }
 
     fn execute(&self, arguments: &str) -> ToolResult {
-        // 从 JSON 提取 arguments 字段
-        let args_str = serde_json::from_str::<Value>(arguments)
-            .ok()
-            .and_then(|v| {
-                v.get("arguments")
-                    .and_then(|a| a.as_str())
-                    .map(String::from)
-            })
-            .unwrap_or_default();
+        let parsed = serde_json::from_str::<Value>(arguments).ok();
 
-        let content = resolve_skill_content(&self.skill);
-        let resolved = content.replace("$ARGUMENTS", &args_str);
+        let skill_name = parsed
+            .as_ref()
+            .and_then(|v| v.get("name").and_then(|n| n.as_str()))
+            .unwrap_or("");
 
-        ToolResult {
-            output: resolved,
-            is_error: false,
+        let args_str = parsed
+            .as_ref()
+            .and_then(|v| v.get("arguments").and_then(|a| a.as_str()))
+            .unwrap_or("");
+
+        if skill_name.is_empty() {
+            return ToolResult {
+                output: "参数缺少 name 字段".to_string(),
+                is_error: true,
+            };
+        }
+
+        match self
+            .skills
+            .iter()
+            .find(|s| s.frontmatter.name == skill_name)
+        {
+            Some(skill) => {
+                let content = resolve_skill_content(skill);
+                let resolved = content.replace("$ARGUMENTS", args_str);
+                ToolResult {
+                    output: resolved,
+                    is_error: false,
+                }
+            }
+            None => {
+                let available: Vec<&str> = self
+                    .skills
+                    .iter()
+                    .map(|s| s.frontmatter.name.as_str())
+                    .collect();
+                ToolResult {
+                    output: format!(
+                        "未找到技能 '{}'。可用技能: {}",
+                        skill_name,
+                        available.join(", ")
+                    ),
+                    is_error: true,
+                }
+            }
         }
     }
 

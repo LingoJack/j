@@ -47,6 +47,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             theme: ThemeName::default(),
             tools_enabled: false,
             max_tool_rounds: 10,
+            style: None,
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);
