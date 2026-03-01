@@ -11,6 +11,8 @@ use std::path::PathBuf;
 pub struct SkillFrontmatter {
     pub name: String,
     pub description: String,
+
+    #[allow(dead_code)]
     #[serde(rename = "argument-hint")]
     pub argument_hint: Option<String>,
 }
@@ -160,7 +162,7 @@ impl Tool for LoadSkillTool {
     }
 
     fn description(&self) -> &str {
-        "加载指定技能的完整内容到上下文。当你判断需要某个技能时调用此工具。"
+        "加载指定 skill 的完整内容到上下文以了解更多信息，帮助你进行更好地完成任务。"
     }
 
     fn parameters_schema(&self) -> Value {
