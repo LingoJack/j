@@ -43,7 +43,7 @@ publish: md_render push tag release
 	@cargo publish --registry crates-io
 	@echo "✅ Published! Verify: cargo search j-cli"
 	@echo "Start publish to crates.io"
-	@cargo publish --registry crates-io
+	@(cargo publish --registry crates-io || exit 0)
 
 # 发布前检查（dry-run）
 .PHONY: publish-check
