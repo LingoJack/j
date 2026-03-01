@@ -853,13 +853,31 @@ async fn run_agent_loop(
                 log_content.push_str(&format!("[System] {}\n", sp));
             }
             for msg in &messages {
-                let role_tag = match msg.role.as_str() {
-                    "user" => "[User]",
-                    "assistant" => "[Assistant]",
-                    "tool" => "[Tool]",
-                    _ => "[Unknown]",
-                };
-                log_content.push_str(&format!("{} {}\n", role_tag, msg.content));
+                match msg.role.as_str() {
+                    "assistant" => {
+                        if !msg.content.is_empty() {
+                            log_content.push_str(&format!("[Assistant] {}\n", msg.content));
+                        }
+                        if let Some(ref tcs) = msg.tool_calls {
+                            for tc in tcs {
+                                log_content.push_str(&format!(
+                                    "[Assistant/ToolCall] {}: {}\n",
+                                    tc.name, tc.arguments
+                                ));
+                            }
+                        }
+                    }
+                    "tool" => {
+                        let id = msg.tool_call_id.as_deref().unwrap_or("?");
+                        log_content.push_str(&format!("[Tool/Result({})] {}\n", id, msg.content));
+                    }
+                    "user" => {
+                        log_content.push_str(&format!("[User] {}\n", msg.content));
+                    }
+                    other => {
+                        log_content.push_str(&format!("[{}] {}\n", other, msg.content));
+                    }
+                }
             }
             write_info_log("Chat 请求", &log_content);
         }
@@ -1047,10 +1065,14 @@ async fn run_agent_loop(
                                     // 记录工具调用结果日志 (fallback)
                                     {
                                         let mut log_content = String::new();
-                                        for result in &tool_results {
+                                        for (i, result) in tool_results.iter().enumerate() {
+                                            let tool_name = tool_items
+                                                .get(i)
+                                                .map(|t| t.name.as_str())
+                                                .unwrap_or("unknown");
                                             log_content.push_str(&format!(
-                                                "- [{}]: {}\n",
-                                                result.tool_call_id, result.result
+                                                "- [{}] {}: {}\n",
+                                                result.tool_call_id, tool_name, result.result
                                             ));
                                         }
                                         write_info_log("工具调用结果", &log_content);
@@ -1144,9 +1166,15 @@ async fn run_agent_loop(
                 // 记录工具调用结果日志 (流式)
                 {
                     let mut log_content = String::new();
-                    for result in &tool_results {
-                        log_content
-                            .push_str(&format!("- [{}]: {}\n", result.tool_call_id, result.result));
+                    for (i, result) in tool_results.iter().enumerate() {
+                        let (tool_name, tool_args) = tool_items
+                            .get(i)
+                            .map(|t| (t.name.as_str(), t.arguments.as_str()))
+                            .unwrap_or(("unknown", ""));
+                        log_content.push_str(&format!(
+                            "- [{}] {}({})\n结果: {}\n",
+                            result.tool_call_id, tool_name, tool_args, result.result
+                        ));
                     }
                     write_info_log("工具调用结果", &log_content);
                 }
@@ -1247,10 +1275,14 @@ async fn run_agent_loop(
                                 // 记录工具调用结果日志 (非流式)
                                 {
                                     let mut log_content = String::new();
-                                    for result in &tool_results {
+                                    for (i, result) in tool_results.iter().enumerate() {
+                                        let tool_name = tool_items
+                                            .get(i)
+                                            .map(|t| t.name.as_str())
+                                            .unwrap_or("unknown");
                                         log_content.push_str(&format!(
-                                            "- [{}]: {}\n",
-                                            result.tool_call_id, result.result
+                                            "- [{}] {}: {}\n",
+                                            result.tool_call_id, tool_name, result.result
                                         ));
                                     }
                                     write_info_log("工具调用结果", &log_content);

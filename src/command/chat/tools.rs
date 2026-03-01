@@ -3,6 +3,20 @@ use serde_json::{Value, json};
 
 use super::skill::Skill;
 
+/// 展开路径中的 ~ 为用户 home 目录
+fn expand_tilde(path: &str) -> String {
+    if path == "~" {
+        std::env::var("HOME").unwrap_or_else(|_| "~".to_string())
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        match std::env::var("HOME") {
+            Ok(home) => format!("{}/{}", home, rest),
+            Err(_) => path.to_string(),
+        }
+    } else {
+        path.to_string()
+    }
+}
+
 /// 工具执行结果
 pub struct ToolResult {
     /// 返回给 LLM 的内容
@@ -187,7 +201,7 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "读取本地文件内容并返回。文件路径必须是绝对路径或相对于当前工作目录的路径。"
+        "读取本地文件内容并返回（带行号）。支持通过 offset 和 limit 参数按行范围读取。"
     }
 
     fn parameters_schema(&self) -> Value {
@@ -196,7 +210,15 @@ impl Tool for ReadFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "要读取的文件路径"
+                    "description": "要读取的文件路径（绝对路径或相对于当前工作目录）"
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "从第几行开始读取（0-based，即 0 表示第 1 行），不传则从头开始"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "读取多少行，不传则读到文件末尾"
                 }
             },
             "required": ["path"]
@@ -204,16 +226,8 @@ impl Tool for ReadFileTool {
     }
 
     fn execute(&self, arguments: &str) -> ToolResult {
-        let path = match serde_json::from_str::<Value>(arguments) {
-            Ok(v) => match v.get("path").and_then(|c| c.as_str()) {
-                Some(p) => p.to_string(),
-                None => {
-                    return ToolResult {
-                        output: "参数缺少 path 字段".to_string(),
-                        is_error: true,
-                    };
-                }
-            },
+        let v = match serde_json::from_str::<Value>(arguments) {
+            Ok(v) => v,
             Err(e) => {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
@@ -222,18 +236,46 @@ impl Tool for ReadFileTool {
             }
         };
 
+        let path = match v.get("path").and_then(|c| c.as_str()) {
+            Some(p) => expand_tilde(p),
+            None => {
+                return ToolResult {
+                    output: "参数缺少 path 字段".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        let offset = v.get("offset").and_then(|o| o.as_u64()).map(|o| o as usize);
+        let limit = v.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize);
+
         match std::fs::read_to_string(&path) {
             Ok(content) => {
+                let lines: Vec<&str> = content.lines().collect();
+                let total = lines.len();
+                let start = offset.unwrap_or(0).min(total);
+                let count = limit.unwrap_or(total - start).min(total - start);
+                let selected: Vec<String> = lines[start..start + count]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, line)| format!("{:>4}│ {}", start + i + 1, line))
+                    .collect();
+                let mut result = selected.join("\n");
+
+                if start + count < total {
+                    result.push_str(&format!("\n...(还有 {} 行未显示)", total - start - count));
+                }
+
                 // 截断到 8000 字节
                 const MAX_BYTES: usize = 8000;
-                let truncated = if content.len() > MAX_BYTES {
+                let truncated = if result.len() > MAX_BYTES {
                     let mut end = MAX_BYTES;
-                    while !content.is_char_boundary(end) {
+                    while !result.is_char_boundary(end) {
                         end -= 1;
                     }
-                    format!("{}\n...(文件内容已截断)", &content[..end])
+                    format!("{}\n...(文件内容已截断)", &result[..end])
                 } else {
-                    content
+                    result
                 };
                 ToolResult {
                     output: truncated,
@@ -252,6 +294,252 @@ impl Tool for ReadFileTool {
     }
 }
 
+// ========== write_file ==========
+
+/// 写入文件的工具
+pub struct WriteFileTool;
+
+impl Tool for WriteFileTool {
+    fn name(&self) -> &str {
+        "write_file"
+    }
+
+    fn description(&self) -> &str {
+        "将内容写入指定文件。如果文件已存在则覆盖，如果目录不存在会自动创建。"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "要写入的文件路径（绝对路径或相对于当前工作目录）"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "要写入的文件内容"
+                }
+            },
+            "required": ["path", "content"]
+        })
+    }
+
+    fn execute(&self, arguments: &str) -> ToolResult {
+        let v = match serde_json::from_str::<Value>(arguments) {
+            Ok(v) => v,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("参数解析失败: {}", e),
+                    is_error: true,
+                };
+            }
+        };
+
+        let path = match v.get("path").and_then(|c| c.as_str()) {
+            Some(p) => expand_tilde(p),
+            None => {
+                return ToolResult {
+                    output: "参数缺少 path 字段".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        let content = match v.get("content").and_then(|c| c.as_str()) {
+            Some(c) => c.to_string(),
+            None => {
+                return ToolResult {
+                    output: "参数缺少 content 字段".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        // 自动创建父目录
+        let file_path = std::path::Path::new(&path);
+        if let Some(parent) = file_path.parent() {
+            if !parent.exists() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    return ToolResult {
+                        output: format!("创建目录失败: {}", e),
+                        is_error: true,
+                    };
+                }
+            }
+        }
+
+        match std::fs::write(&path, &content) {
+            Ok(_) => ToolResult {
+                output: format!("已写入文件: {} ({} 字节)", path, content.len()),
+                is_error: false,
+            },
+            Err(e) => ToolResult {
+                output: format!("写入文件失败: {}", e),
+                is_error: true,
+            },
+        }
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation_message(&self, arguments: &str) -> String {
+        let path = serde_json::from_str::<Value>(arguments)
+            .ok()
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(|c| c.as_str())
+                    .map(|s| expand_tilde(s))
+            })
+            .unwrap_or_else(|| "未知路径".to_string());
+        format!("即将写入文件: {}", path)
+    }
+}
+
+// ========== edit_file ==========
+
+/// 编辑文件的工具（基于字符串替换）
+pub struct EditFileTool;
+
+impl Tool for EditFileTool {
+    fn name(&self) -> &str {
+        "edit_file"
+    }
+
+    fn description(&self) -> &str {
+        "通过精确字符串匹配替换来编辑文件。old_string 必须在文件中唯一匹配，替换为 new_string。如果 new_string 为空字符串则表示删除匹配内容。"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "要编辑的文件路径"
+                },
+                "old_string": {
+                    "type": "string",
+                    "description": "要被替换的原始字符串（必须在文件中唯一存在）"
+                },
+                "new_string": {
+                    "type": "string",
+                    "description": "替换后的新字符串，为空则表示删除"
+                }
+            },
+            "required": ["path", "old_string", "new_string"]
+        })
+    }
+
+    fn execute(&self, arguments: &str) -> ToolResult {
+        let v = match serde_json::from_str::<Value>(arguments) {
+            Ok(v) => v,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("参数解析失败: {}", e),
+                    is_error: true,
+                };
+            }
+        };
+
+        let path = match v.get("path").and_then(|c| c.as_str()) {
+            Some(p) => expand_tilde(p),
+            None => {
+                return ToolResult {
+                    output: "参数缺少 path 字段".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        let old_string = match v.get("old_string").and_then(|c| c.as_str()) {
+            Some(s) => s.to_string(),
+            None => {
+                return ToolResult {
+                    output: "参数缺少 old_string 字段".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        let new_string = v
+            .get("new_string")
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // 读取文件
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("读取文件失败: {}", e),
+                    is_error: true,
+                };
+            }
+        };
+
+        // 检查匹配次数
+        let count = content.matches(&old_string).count();
+        if count == 0 {
+            return ToolResult {
+                output: "未找到匹配的字符串".to_string(),
+                is_error: true,
+            };
+        }
+        if count > 1 {
+            return ToolResult {
+                output: format!(
+                    "old_string 在文件中匹配了 {} 次，必须唯一匹配。请提供更多上下文使其唯一",
+                    count
+                ),
+                is_error: true,
+            };
+        }
+
+        // 执行替换
+        let new_content = content.replacen(&old_string, &new_string, 1);
+        match std::fs::write(&path, &new_content) {
+            Ok(_) => ToolResult {
+                output: format!("已编辑文件: {}", path),
+                is_error: false,
+            },
+            Err(e) => ToolResult {
+                output: format!("写入文件失败: {}", e),
+                is_error: true,
+            },
+        }
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation_message(&self, arguments: &str) -> String {
+        let v = serde_json::from_str::<Value>(arguments).ok();
+        let path = v
+            .as_ref()
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(|c| c.as_str())
+                    .map(|s| expand_tilde(s))
+            })
+            .unwrap_or_else(|| "未知路径".to_string());
+        let old = v
+            .as_ref()
+            .and_then(|v| v.get("old_string").and_then(|c| c.as_str()))
+            .unwrap_or("");
+        let preview = if old.len() > 60 {
+            format!("{}...", &old[..60])
+        } else {
+            old.to_string()
+        };
+        format!("即将编辑文件 {} (替换: \"{}\")", path, preview)
+    }
+}
+
 // ========== ToolRegistry ==========
 
 /// 工具注册表
@@ -260,10 +548,15 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
-    /// 创建注册表（包含 run_shell、read_file，以及当 skills 非空时注册 load_skill）
+    /// 创建注册表（包含 run_shell、read_file、write_file、edit_file，以及当 skills 非空时注册 load_skill）
     pub fn new(skills: Vec<Skill>) -> Self {
         let mut registry = Self {
-            tools: vec![Box::new(ShellTool), Box::new(ReadFileTool)],
+            tools: vec![
+                Box::new(ShellTool),
+                Box::new(ReadFileTool),
+                Box::new(WriteFileTool),
+                Box::new(EditFileTool),
+            ],
         };
 
         // 如果有 skills，注册统一的 LoadSkillTool
