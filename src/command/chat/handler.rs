@@ -126,6 +126,33 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             if should_break {
                 break;
             }
+
+            // 检查 system_prompt 全屏编辑器标志
+            if app.pending_system_prompt_edit {
+                app.pending_system_prompt_edit = false;
+                let current_prompt = app.agent_config.system_prompt.clone().unwrap_or_default();
+                match crate::tui::editor::open_editor_on_terminal(
+                    &mut terminal,
+                    "编辑系统提示词 (System Prompt)",
+                    &current_prompt,
+                ) {
+                    Ok(Some(new_text)) => {
+                        if new_text.is_empty() {
+                            app.agent_config.system_prompt = None;
+                        } else {
+                            app.agent_config.system_prompt = Some(new_text);
+                        }
+                        app.show_toast("系统提示词已更新", false);
+                    }
+                    Ok(None) => {
+                        // 用户取消编辑
+                    }
+                    Err(e) => {
+                        app.show_toast(format!("编辑器错误: {}", e), true);
+                    }
+                }
+                needs_redraw = true;
+            }
         }
     }
 
@@ -685,6 +712,11 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
                 // theme 字段直接循环切换，不进入编辑模式
                 if CONFIG_GLOBAL_FIELDS[gi] == "theme" {
                     app.switch_theme();
+                    return;
+                }
+                // system_prompt 字段使用全屏编辑器
+                if CONFIG_GLOBAL_FIELDS[gi] == "system_prompt" {
+                    app.pending_system_prompt_edit = true;
                     return;
                 }
             }

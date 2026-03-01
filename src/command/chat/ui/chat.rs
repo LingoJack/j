@@ -5,7 +5,7 @@ use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
@@ -43,7 +43,6 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         draw_archive_list(f, chunks[1], app);
     } else if app.mode == ChatMode::ToolConfirm {
         draw_messages(f, chunks[1], app);
-        draw_tool_confirm(f, size, app);
     } else {
         draw_messages(f, chunks[1], app);
     }
@@ -193,6 +192,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else {
         None
     };
+    let current_tool_confirm_idx = if app.mode == ChatMode::ToolConfirm {
+        Some(app.pending_tool_idx)
+    } else {
+        None
+    };
     let cache_hit = if let Some(ref cache) = app.msg_lines_cache {
         cache.msg_count == msg_count
             && cache.last_msg_len == last_msg_len
@@ -200,6 +204,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             && cache.is_loading == app.is_loading
             && cache.bubble_max_width == bubble_max_width
             && cache.browse_index == current_browse_index
+            && cache.tool_confirm_idx == current_tool_confirm_idx
     } else {
         false
     };
@@ -215,6 +220,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             is_loading: app.is_loading,
             bubble_max_width,
             browse_index: current_browse_index,
+            tool_confirm_idx: current_tool_confirm_idx,
             lines: new_lines,
             msg_start_lines: new_msg_start_lines,
             per_msg_lines: new_per_msg,
@@ -237,7 +243,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     if app.mode != ChatMode::Browse {
-        if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
+        if app.mode == ChatMode::ToolConfirm {
+            // ToolConfirm 模式下强制滚动到底部，确保确认区可见
+            app.scroll_offset = max_scroll;
+            app.auto_scroll = true;
+        } else if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
             app.scroll_offset = max_scroll;
             app.auto_scroll = true;
         }
@@ -754,101 +764,4 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .style(Style::default().bg(t.help_bg));
     let help_widget = Paragraph::new(help_lines).block(help_block);
     f.render_widget(help_widget, area);
-}
-
-/// 绘制工具调用确认浮层（居中弹窗）
-pub fn draw_tool_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let idx = app.pending_tool_idx;
-    let tc = match app.active_tool_calls.get(idx) {
-        Some(tc) => tc,
-        None => return,
-    };
-
-    let t = &app.theme;
-
-    // 计算弹窗尺寸
-    let dialog_width = (area.width as usize).min(70).max(40) as u16;
-    let dialog_height: u16 = 9;
-    let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
-    let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
-
-    if x + dialog_width > area.width || y + dialog_height > area.height {
-        return;
-    }
-
-    let dialog_area = Rect::new(x, y, dialog_width, dialog_height);
-
-    // 背景
-    let bg_block = Block::default().style(Style::default().bg(Color::Rgb(30, 25, 10)));
-    f.render_widget(bg_block, dialog_area);
-
-    let tool_name_line = Line::from(vec![
-        Span::styled("  工具: ", Style::default().fg(Color::Gray)),
-        Span::styled(
-            tc.tool_name.clone(),
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]);
-
-    // 截断确认消息
-    let confirm_msg = if tc.confirm_message.len() > (dialog_width as usize).saturating_sub(4) {
-        let mut end = (dialog_width as usize).saturating_sub(7);
-        while !tc.confirm_message.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}...", &tc.confirm_message[..end])
-    } else {
-        tc.confirm_message.clone()
-    };
-
-    let hint_line = Line::from(vec![
-        Span::styled(
-            "  [Y] 执行",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("  /  ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            "[N] 拒绝",
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-        ),
-    ]);
-
-    let dialog_lines = vec![
-        Line::from(""),
-        tool_name_line,
-        Line::from(""),
-        Line::from(Span::styled(
-            format!("  {}", confirm_msg),
-            Style::default().fg(Color::White),
-        )),
-        Line::from(""),
-        Line::from(Span::styled(
-            "  ─────────────────────────────────────────",
-            Style::default().fg(Color::DarkGray),
-        )),
-        Line::from(""),
-        hint_line,
-    ];
-
-    let dialog_widget = Paragraph::new(dialog_lines).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Yellow))
-            .title(Span::styled(
-                " 🔧 工具调用确认 ",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ))
-            .style(Style::default().bg(Color::Rgb(30, 25, 10))),
-    );
-
-    f.render_widget(dialog_widget, dialog_area);
-
-    let _ = t;
 }

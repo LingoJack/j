@@ -129,6 +129,8 @@ pub struct ChatApp {
     pub active_tool_calls: Vec<ToolCallStatus>,
     /// ToolConfirm 模式中当前待处理工具的索引
     pub pending_tool_idx: usize,
+    /// 配置界面：是否有待处理的 system_prompt 编辑（需弹出全屏编辑器）
+    pub pending_system_prompt_edit: bool,
 }
 
 /// 消息渲染行缓存
@@ -145,6 +147,8 @@ pub struct MsgLinesCache {
     pub bubble_max_width: usize,
     /// 浏览模式选中索引（None 表示非浏览模式）
     pub browse_index: Option<usize>,
+    /// 工具确认模式中待处理工具的索引（None 表示非确认模式）
+    pub tool_confirm_idx: Option<usize>,
     /// 缓存的渲染行
     pub lines: Vec<Line<'static>>,
     /// 每条消息（按 msg_index）的起始行号（用于浏览模式自动滚动）
@@ -238,6 +242,7 @@ impl ChatApp {
             tool_registry: ToolRegistry::default(),
             active_tool_calls: Vec::new(),
             pending_tool_idx: 0,
+            pending_system_prompt_edit: false,
         }
     }
 

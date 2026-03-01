@@ -109,34 +109,53 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             } else {
                 Style::default().fg(t.config_value)
             };
-            let edit_indicator = if app.config_editing && is_selected {
-                " ✏️"
-            } else {
-                ""
-            };
 
-            lines.push(Line::from(vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    if value.is_empty() {
-                        "(空)".to_string()
-                    } else {
-                        value
-                    },
-                    value_style,
-                ),
-                Span::styled(edit_indicator, Style::default()),
-            ]));
+            lines.push(Line::from(if app.config_editing && is_selected {
+                // 编辑模式：显示带光标的文本
+                let mut spans = vec![
+                    Span::styled(pointer, pointer_style),
+                    Span::styled(format!("{:<10}", label), label_style),
+                    Span::styled("  ", Style::default()),
+                ];
+                let chars: Vec<char> = value.chars().collect();
+                let cursor = app.config_edit_cursor;
+                let before: String = chars[..cursor.min(chars.len())].iter().collect();
+                let cursor_ch = if cursor < chars.len() {
+                    chars[cursor].to_string()
+                } else {
+                    " ".to_string()
+                };
+                let after: String = if cursor < chars.len() {
+                    chars[cursor + 1..].iter().collect()
+                } else {
+                    String::new()
+                };
+                spans.push(Span::styled(before, value_style));
+                spans.push(Span::styled(
+                    cursor_ch,
+                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+                ));
+                spans.push(Span::styled(after, value_style));
+                spans.push(Span::styled(" ✏️", Style::default()));
+                spans
+            } else {
+                vec![
+                    Span::styled(pointer, pointer_style),
+                    Span::styled(format!("{:<10}", label), label_style),
+                    Span::styled("  ", Style::default()),
+                    Span::styled(
+                        if value.is_empty() {
+                            "(空)".to_string()
+                        } else {
+                            value
+                        },
+                        value_style,
+                    ),
+                ]
+            }));
         }
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
     lines.push(Line::from(""));
 
     lines.push(Line::from(Span::styled(
@@ -176,11 +195,6 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             Style::default().fg(t.text_white)
         } else {
             Style::default().fg(t.config_value)
-        };
-        let edit_indicator = if app.config_editing && is_selected {
-            " ✏️"
-        } else {
-            ""
         };
 
         if CONFIG_GLOBAL_FIELDS[i] == "stream_mode" {
@@ -248,21 +262,77 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
-        } else {
+        } else if CONFIG_GLOBAL_FIELDS[i] == "system_prompt" {
+            // system_prompt 特殊处理：截断显示 + Enter 弹出全屏编辑器
+            let display_value = if value.is_empty() {
+                "(空)".to_string()
+            } else {
+                // 截断到 40 个字符，替换换行为空格
+                let flat: String = value
+                    .chars()
+                    .map(|c| if c == '\n' { ' ' } else { c })
+                    .collect();
+                if flat.chars().count() > 40 {
+                    let truncated: String = flat.chars().take(40).collect();
+                    format!("{}...", truncated)
+                } else {
+                    flat
+                }
+            };
             lines.push(Line::from(vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
                 Span::styled("  ", Style::default()),
+                Span::styled(display_value, value_style),
                 Span::styled(
-                    if value.is_empty() {
-                        "(空)".to_string()
-                    } else {
-                        value
-                    },
-                    value_style,
+                    if is_selected { "  (Enter 编辑)" } else { "" },
+                    Style::default().fg(t.config_dim),
                 ),
-                Span::styled(edit_indicator, Style::default()),
             ]));
+        } else {
+            lines.push(Line::from(if app.config_editing && is_selected {
+                // 编辑模式：显示带光标的文本
+                let mut spans = vec![
+                    Span::styled(pointer, pointer_style),
+                    Span::styled(format!("{:<10}", label), label_style),
+                    Span::styled("  ", Style::default()),
+                ];
+                let chars: Vec<char> = value.chars().collect();
+                let cursor = app.config_edit_cursor;
+                let before: String = chars[..cursor.min(chars.len())].iter().collect();
+                let cursor_ch = if cursor < chars.len() {
+                    chars[cursor].to_string()
+                } else {
+                    " ".to_string()
+                };
+                let after: String = if cursor < chars.len() {
+                    chars[cursor + 1..].iter().collect()
+                } else {
+                    String::new()
+                };
+                spans.push(Span::styled(before, value_style));
+                spans.push(Span::styled(
+                    cursor_ch,
+                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+                ));
+                spans.push(Span::styled(after, value_style));
+                spans.push(Span::styled(" ✏️", Style::default()));
+                spans
+            } else {
+                vec![
+                    Span::styled(pointer, pointer_style),
+                    Span::styled(format!("{:<10}", label), label_style),
+                    Span::styled("  ", Style::default()),
+                    Span::styled(
+                        if value.is_empty() {
+                            "(空)".to_string()
+                        } else {
+                            value
+                        },
+                        value_style,
+                    ),
+                ]
+            }));
         }
     }
 

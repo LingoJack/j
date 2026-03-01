@@ -315,6 +315,134 @@ pub fn build_message_lines_incremental(
         }
     }
 
+    // ========== 内联工具确认区 ==========
+    if app.mode == ChatMode::ToolConfirm {
+        if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
+            let confirm_bg = Color::Rgb(30, 25, 10);
+            let border_color = Color::Yellow;
+            let content_w = bubble_max_width.saturating_sub(6); // 左右各 3 的 padding
+
+            // 空行
+            lines.push(Line::from(""));
+
+            // 标题行
+            lines.push(Line::from(Span::styled(
+                "  🔧 工具调用确认",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )));
+
+            // 顶边框
+            let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
+            lines.push(Line::from(Span::styled(
+                top_border,
+                Style::default().fg(border_color),
+            )));
+
+            // 工具名行
+            {
+                let label = "工具: ";
+                let name = &tc.tool_name;
+                let text_content = format!("{}{}", label, name);
+                let fill = content_w.saturating_sub(display_width(&text_content));
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
+                    Span::styled(label, Style::default().fg(Color::Gray).bg(confirm_bg)),
+                    Span::styled(
+                        name.clone(),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 确认信息行（可能需要截断）
+            {
+                let max_msg_w = content_w.saturating_sub(2);
+                let confirm_msg = if display_width(&tc.confirm_message) > max_msg_w {
+                    let mut end = max_msg_w.saturating_sub(3);
+                    while end > 0 && !tc.confirm_message.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    format!("{}...", &tc.confirm_message[..end])
+                } else {
+                    tc.confirm_message.clone()
+                };
+                let msg_w = display_width(&confirm_msg);
+                let fill = content_w.saturating_sub(msg_w + 2);
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
+                    Span::styled(
+                        confirm_msg,
+                        Style::default().fg(Color::White).bg(confirm_bg),
+                    ),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 空行
+            {
+                let fill = bubble_max_width.saturating_sub(4);
+                lines.push(Line::from(vec![
+                    Span::styled("  │", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ".repeat(fill), Style::default().bg(confirm_bg)),
+                    Span::styled("│", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 操作提示行
+            {
+                let hint_text_w = display_width("[Y] 执行  /  [N] 拒绝");
+                let fill = content_w.saturating_sub(hint_text_w + 2);
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
+                    Span::styled(
+                        "[Y] 执行",
+                        Style::default()
+                            .fg(Color::Green)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("  /  ", Style::default().fg(Color::DarkGray).bg(confirm_bg)),
+                    Span::styled(
+                        "[N] 拒绝",
+                        Style::default()
+                            .fg(Color::Red)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 底边框
+            let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
+            lines.push(Line::from(Span::styled(
+                bottom_border,
+                Style::default().fg(border_color),
+            )));
+        }
+    }
+
     // 末尾留白
     lines.push(Line::from(""));
 

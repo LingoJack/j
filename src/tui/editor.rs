@@ -736,6 +736,50 @@ pub fn open_multiline_editor_with_content(
     open_editor_internal(title, initial_lines, Mode::Normal)
 }
 
+/// 在已有终端上打开全屏编辑器（不管理终端状态）
+///
+/// 适用于 Chat TUI 内部弹出编辑器的场景（如编辑 system_prompt），
+/// 调用方已经持有 terminal 并处于 raw mode + AlternateScreen，
+/// 编辑完毕后直接返回，不做终端状态切换。
+///
+/// 返回 Some(text) 表示提交，None 表示取消
+pub fn open_editor_on_terminal(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    title: &str,
+    content: &str,
+) -> io::Result<Option<String>> {
+    let initial_lines: Vec<String> = if content.is_empty() {
+        vec![]
+    } else {
+        content.lines().map(|l| l.to_string()).collect()
+    };
+    let initial_mode = if initial_lines.is_empty() {
+        Mode::Insert
+    } else {
+        Mode::Normal
+    };
+
+    let mut textarea = if initial_lines.is_empty() {
+        TextArea::default()
+    } else {
+        TextArea::new(initial_lines.clone())
+    };
+    textarea.set_block(make_block(title, &initial_mode));
+    textarea.set_cursor_style(initial_mode.cursor_style());
+    textarea.set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    textarea.set_line_number_style(Style::default().fg(Color::DarkGray));
+
+    if !initial_lines.is_empty() {
+        textarea.move_cursor(CursorMove::Bottom);
+        textarea.move_cursor(CursorMove::End);
+    }
+
+    let initial_snapshot: Vec<String> = textarea.lines().iter().map(|l| l.to_string()).collect();
+
+    let mut vim = Vim::new(initial_mode);
+    run_editor_loop(terminal, &mut textarea, &mut vim, title, &initial_snapshot)
+}
+
 /// 内部统一入口：初始化终端 + 编辑区 + 主循环
 fn open_editor_internal(
     title: &str,
