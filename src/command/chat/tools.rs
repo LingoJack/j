@@ -531,10 +531,12 @@ impl Tool for EditFileTool {
             .as_ref()
             .and_then(|v| v.get("old_string").and_then(|c| c.as_str()))
             .unwrap_or("");
-        let preview = if old.len() > 60 {
-            format!("{}...", &old[..60])
+        let first_line = old.lines().next().unwrap_or("");
+        let has_more = old.lines().count() > 1;
+        let preview = if has_more {
+            format!("{}...", first_line)
         } else {
-            old.to_string()
+            first_line.to_string()
         };
         format!("即将编辑文件 {} (替换: \"{}\")", path, preview)
     }
