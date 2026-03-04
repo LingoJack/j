@@ -27,19 +27,19 @@ type BashTool struct {
 }
 
 func (t *BashTool) Name() (name string) {
-	return "bash"
+	return "run_bash"
 }
 
 func (t *BashTool) Desc() (desc string) {
-	return "Bash is a command language interpreter for Unix-like operating systems."
+	return ""
 }
 
 func (t *BashTool) ParamSchema() (schema string) {
 	return tool.NewSchemaBuilder(BashToolInput{}).
-		SetTitle("bash 工具运行接受参数").
-		SetDescription("bash 工具运行接受参数，识别到危险命令默认向用户确认").
+		SetTitle("工具运行接受参数").
+		SetDescription("工具运行接受参数，识别到危险命令默认向用户确认").
 		SetFieldMeta("command", tool.FieldMeta{
-			Title:       "执行的 bash 脚本的命令",
+			Title:       "执行的 bash 命令",
 			Description: "执行的 bash 命令的具体内容",
 		}).
 		MustBuild()
@@ -67,7 +67,7 @@ func (t *BashTool) Run(ctx context.Context, param string) (res string, err error
 	timeout := defaultBashTimeout
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	
+
 	cmd := exec.CommandContext(execCtx, "bash", "-c", command)
 
 	var stdout, stderr bytes.Buffer
