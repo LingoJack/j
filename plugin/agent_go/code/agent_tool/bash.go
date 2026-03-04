@@ -31,7 +31,7 @@ func (t *BashTool) Name() (name string) {
 }
 
 func (t *BashTool) Desc() (desc string) {
-	return ""
+	return fmt.Sprintf("运行 bash 命令的工具，会自动识别危险命令，超时时间为 %f sec", defaultBashTimeout.Seconds())
 }
 
 func (t *BashTool) ParamSchema() (schema string) {
