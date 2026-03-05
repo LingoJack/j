@@ -1,6 +1,4 @@
-/// 在终端中渲染 Markdown 文本
-/// 优先通过嵌入的 md_render 二进制渲染（效果更佳），
-/// 如果不可用则 fallback 到 termimad
+/// 在终端中渲染 Markdown 文本（使用 Rust 原生 Markdown 渲染器）
 #[macro_export]
 macro_rules! md {
     ($($arg:tt)*) => {{
@@ -18,84 +16,94 @@ macro_rules! md_inline {
     }};
 }
 
-/// 获取嵌入的 render 二进制路径
-/// 首次调用时释放嵌入的二进制到 ~/.jdata/bin/md_render，后续复用
-fn md_render_path() -> Option<std::path::PathBuf> {
-    // 如果不是 macOS arm64，则返回 None
-    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-    {
-        return None;
-    }
+/// 将 ratatui Line/Span 输出为 ANSI 彩色终端文本
+fn print_lines_to_terminal(lines: &[ratatui::text::Line]) {
+    use crossterm::ExecutableCommand;
+    use crossterm::style::{Attribute, ContentStyle, Print, ResetColor, SetStyle};
+    use ratatui::style::Modifier;
+    use std::io::{Write, stdout};
 
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        use std::os::unix::fs::PermissionsExt;
+    let mut out = stdout();
 
-        // 从统一资源模块获取二进制
-        let binary_data = crate::assets::MD_RENDER_BINARY;
+    for line in lines {
+        for span in &line.spans {
+            let style = span.style;
+            let mut ct_style = ContentStyle::new();
 
-        let data_dir = crate::config::YamlConfig::data_dir();
-        let bin_dir = data_dir.join("bin");
-        let ask_path = bin_dir.join("md_render");
-
-        if ask_path.exists() {
-            // 已释放过，检查大小是否一致（版本更新时自动覆盖）
-            if let Ok(meta) = std::fs::metadata(&ask_path) {
-                if meta.len() == binary_data.len() as u64 {
-                    return Some(ask_path);
-                }
+            // 映射前景色
+            if let Some(fg) = style.fg {
+                ct_style.foreground_color = Some(map_color(fg));
             }
-        }
 
-        // 首次释放或版本更新，写入嵌入的二进制
-        if std::fs::create_dir_all(&bin_dir).is_err() {
-            return None;
-        }
-        if std::fs::write(&ask_path, binary_data).is_err() {
-            return None;
-        }
-        // 设置可执行权限 (chmod 755)
-        if let Ok(meta) = std::fs::metadata(&ask_path) {
-            let mut perms = meta.permissions();
-            perms.set_mode(0o755);
-            let _ = std::fs::set_permissions(&ask_path, perms);
-        }
+            // 映射背景色
+            if let Some(bg) = style.bg {
+                ct_style.background_color = Some(map_color(bg));
+            }
 
-        Some(ask_path)
+            // 映射 modifier
+            let mods = style.add_modifier;
+            if mods.contains(Modifier::BOLD) {
+                ct_style.attributes.set(Attribute::Bold);
+            }
+            if mods.contains(Modifier::ITALIC) {
+                ct_style.attributes.set(Attribute::Italic);
+            }
+            if mods.contains(Modifier::UNDERLINED) {
+                ct_style.attributes.set(Attribute::Underlined);
+            }
+            if mods.contains(Modifier::CROSSED_OUT) {
+                ct_style.attributes.set(Attribute::CrossedOut);
+            }
+            if mods.contains(Modifier::DIM) {
+                ct_style.attributes.set(Attribute::Dim);
+            }
+
+            let _ = out.execute(SetStyle(ct_style));
+            let _ = out.execute(Print(&span.content));
+            let _ = out.execute(ResetColor);
+        }
+        let _ = writeln!(out);
+    }
+    let _ = out.flush();
+}
+
+/// 映射 ratatui Color → crossterm Color
+fn map_color(color: ratatui::style::Color) -> crossterm::style::Color {
+    use crossterm::style::Color as CtColor;
+    use ratatui::style::Color as RColor;
+
+    match color {
+        RColor::Rgb(r, g, b) => CtColor::Rgb { r, g, b },
+        RColor::Indexed(i) => CtColor::AnsiValue(i),
+        RColor::Black => CtColor::Black,
+        RColor::Red => CtColor::DarkRed,
+        RColor::Green => CtColor::DarkGreen,
+        RColor::Yellow => CtColor::DarkYellow,
+        RColor::Blue => CtColor::DarkBlue,
+        RColor::Magenta => CtColor::DarkMagenta,
+        RColor::Cyan => CtColor::DarkCyan,
+        RColor::Gray => CtColor::Grey,
+        RColor::DarkGray => CtColor::DarkGrey,
+        RColor::LightRed => CtColor::Red,
+        RColor::LightGreen => CtColor::Green,
+        RColor::LightYellow => CtColor::Yellow,
+        RColor::LightBlue => CtColor::Blue,
+        RColor::LightMagenta => CtColor::Magenta,
+        RColor::LightCyan => CtColor::Cyan,
+        RColor::White => CtColor::White,
+        _ => CtColor::Reset,
     }
 }
 
 /// 渲染 Markdown 文本到终端
-/// 优先通过嵌入的 ask 二进制渲染（stdin → stdout，效果更佳），
-/// 如果不可用则 fallback 到 termimad
 pub fn render_md(text: &str) {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
+    use crate::command::chat::markdown::markdown_to_lines;
+    use crate::command::chat::theme::{Theme, ThemeName};
 
-    // 获取嵌入的 render 二进制路径
-    let renderer_path = md_render_path();
-
-    if let Some(path) = renderer_path {
-        // 调用 render：直接从 stdin 读取 Markdown，渲染后输出 stdout
-        let result = Command::new(&path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn();
-
-        match result {
-            Ok(mut child) => {
-                if let Some(mut stdin) = child.stdin.take() {
-                    let _ = stdin.write_all(text.as_bytes());
-                    drop(stdin);
-                }
-                let _ = child.wait();
-                return;
-            }
-            Err(_) => {}
-        }
-    }
-
-    // fallback 到 termimad
-    termimad::print_text(text);
+    let width = crossterm::terminal::size()
+        .map(|(w, _)| w as usize)
+        .unwrap_or(80);
+    let theme = Theme::from_name(&ThemeName::default());
+    let lines = markdown_to_lines(text, width, &theme);
+    print_lines_to_terminal(&lines);
 }

@@ -54,18 +54,11 @@ src/
 ├── util.rs              # 导出子模块 + 公共工具函数（remove_quotes）
 ├── util/
 │   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏 + 工具函数
-│   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏 + ask 二进制嵌入与释放
+│   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏（Rust 原生渲染）
 │   └── fuzzy.rs         # 模糊匹配（大小写不敏感 + 高亮 + UTF-8 安全）
 ├── assets/
 │   ├── help.md          # 帮助文档（编译时通过 include_str! 嵌入二进制）
 │   └── version.md       # 版本信息模板（同上，含占位符）
-└── plugin/
-    └── ask/             # Markdown 终端渲染引擎（Go 编写）
-        ├── code/        # Go 源码（main.go）
-        │   ├── main.go
-        │   ├── go.mod
-        │   └── go.sum
-        └── bin/         # 编译后的二进制（编译时通过 include_bytes! 嵌入）
             └── ask-darwin-arm64
 ```
 
@@ -322,7 +315,7 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 
 | 宏 | 输出格式 | 颜色 |
 |----|----------|------|
-| `md!(...)` | Markdown 渲染输出（优先嵌入的 `ask` 引擎，fallback termimad） | 终端原生 |
+| `md!(...)` | Markdown 渲染输出（Rust 原生渲染器） | 终端原生 |
 | `md_inline!(...)` | 单行 Markdown 内联渲染（termimad） | 终端原生 |
 
 ### 5.10 全局常量 — `constants.rs`
@@ -593,7 +586,7 @@ copilot > exit
 | `ClearCommandHandler` | `command/system.rs::handle_clear` | 清屏 |
 | `CommandRunner` | `open::that()` + `std::process::Command` | 进程执行 |
 | `FuzzyMatcher` | `util/fuzzy.rs` | 模糊匹配 |
-| `LogUtil` | `util/log.rs`（日志宏）+ `util/md_render.rs`（Markdown 渲染） | 彩色日志 + Markdown 渲染 |
+| `LogUtil` | `util/log.rs`（日志宏）+ `util/md_render.rs`（Markdown 渲染） | 彩色日志 + Rust 原生 Markdown 渲染 |
 | JLine3 Completer | `interactive.rs::CopilotCompleter` | Tab 补全 |
 
 ---

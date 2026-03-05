@@ -24,8 +24,7 @@ cargo check              # Check without building
 make install             # Build release and install to /usr/local/bin/j
 make uninstall           # Remove /usr/local/bin/j
 make fmt                 # cargo fmt
-make release             # Build md_render Go binary + cargo build --release
-make md_render           # Build the Markdown renderer Go binary (plugin/md_render/code/)
+make release             # cargo build --release
 make push                # fmt + git commit + push (commit message: "新增了一些特性")
 make tag                 # Create and push a version tag (triggers GitHub Actions release)
 ```
@@ -72,16 +71,12 @@ A fullscreen multi-line editor built on `ratatui` + `tui-textarea` (patched loca
 ### Utilities (`src/util/`)
 
 - `log.rs` — `debug_log!` macro (only prints when verbose mode is enabled in config)
-- `md_render.rs` — Invokes the external `ask` binary (Go-based Markdown renderer embedded in `~/.jdata/bin/ask`) for rendering
+- `md_render.rs` — Rust 原生 Markdown 终端渲染，复用 chat 模块的 Markdown 解析器，通过 crossterm 输出 ANSI 彩色文本
 - `fuzzy.rs` — Simple fuzzy string matching used by `search` command
 
 ### Embedded Assets (`src/assets.rs`, `assets/`)
 
-`assets/help.md` and `assets/version.md` are embedded at compile time via `include_str!`. The Go Markdown renderer binary is also embedded and extracted to `~/.jdata/bin/ask` on first run.
-
-### Markdown Renderer Plugin (`plugin/md_render/code/`)
-
-A Go program (`main.go`) that renders Markdown to ANSI-colored terminal output. Built separately with `make md_render` and embedded into the Rust binary. The `go.mod` uses `github.com/charmbracelet/glamour`.
+`assets/help.md` and `assets/version.md` are embedded at compile time via `include_str!`.
 
 ### Release Pipeline
 

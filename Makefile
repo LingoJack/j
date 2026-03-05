@@ -5,7 +5,6 @@ SHELL := /bin/bash
 # ============================================
 BIN_PATH := /usr/local/bin/j
 TARGET_DIR := target/release
-MD_RENDER_DIR := plugin/md_render
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
@@ -22,7 +21,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         clean clean-all \
         doc docs \
         run run-release \
-        md_render test-install \
+        test-install \
         deps update-deps \
         watch watch-test \
         coverage \
@@ -112,7 +111,7 @@ reinstall: uninstall install ## 重新安装
 # ============================================
 # 发布相关
 # ============================================
-publish: md_render push tag release ## 发布到 crates.io
+publish: push tag release ## 发布到 crates.io
 	@echo "📦 发布到 crates.io..."
 	@make push
 	@cargo publish --registry crates-io
@@ -216,14 +215,8 @@ run-release: release ## 运行发布版本
 	@$(TARGET_DIR)/j
 
 # ============================================
-# 插件相关
+# 测试安装
 # ============================================
-md_render: ## 构建 md_render 插件
-	@echo "🔄 构建 md_render 插件..."
-	@cd $(MD_RENDER_DIR)/code \
-	&& GOOS=darwin GOARCH=arm64 go build -o ../bin/md_render-darwin-arm64
-	@echo "✅ md_render 插件构建完成: $(MD_RENDER_DIR)/bin/md_render-darwin-arm64"
-
 test-install: ## 测试安装脚本
 	@echo "🧪 测试安装脚本..."
 	@./install.sh
