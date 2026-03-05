@@ -42,7 +42,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         draw_archive_confirm(f, chunks[1], app);
     } else if app.mode == ChatMode::ArchiveList {
         draw_archive_list(f, chunks[1], app);
-    } else if app.mode == ChatMode::ToolConfirm {
+    } else if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
         draw_messages(f, chunks[1], app);
     } else {
         draw_messages(f, chunks[1], app);
@@ -198,11 +198,12 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else {
         None
     };
-    let current_tool_confirm_idx = if app.mode == ChatMode::ToolConfirm {
-        Some(app.pending_tool_idx)
-    } else {
-        None
-    };
+    let current_tool_confirm_idx =
+        if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
+            Some(app.pending_tool_idx)
+        } else {
+            None
+        };
     let cache_hit = if let Some(ref cache) = app.msg_lines_cache {
         cache.msg_count == msg_count
             && cache.last_msg_len == last_msg_len
@@ -249,8 +250,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     if app.mode != ChatMode::Browse {
-        if app.mode == ChatMode::ToolConfirm {
-            // ToolConfirm 模式下强制滚动到底部，确保确认区可见
+        if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
+            // ToolConfirm/ToolRejectInput 模式下强制滚动到底部，确保确认区可见
             app.scroll_offset = max_scroll;
             app.auto_scroll = true;
         } else if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
@@ -539,6 +540,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             ("Ctrl+B", "浏览"),
             ("Ctrl+S", "流式切换"),
             ("Ctrl+E", "配置"),
+            ("Ctrl+G", "日志"),
             ("?/F1", "帮助"),
             ("Esc", "退出"),
         ],
@@ -576,7 +578,12 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ]
             }
         }
-        ChatMode::ToolConfirm => vec![("Y", "执行工具"), ("N/Esc", "拒绝")],
+        ChatMode::ToolConfirm => vec![
+            ("Y/Enter", "执行"),
+            ("N", "拒绝并输入原因"),
+            ("Esc", "直接拒绝"),
+        ],
+        ChatMode::ToolRejectInput => vec![("Enter", "发送拒绝"), ("Esc", "取消")],
     };
 
     let mut spans: Vec<Span> = Vec::new();
@@ -785,6 +792,13 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
             Span::styled("打开配置界面", Style::default().fg(t.help_desc)),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  Ctrl+G       ",
+                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("实时查看日志", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(

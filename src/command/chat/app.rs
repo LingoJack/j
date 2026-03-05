@@ -131,6 +131,8 @@ pub struct ChatApp {
     pub active_tool_calls: Vec<ToolCallStatus>,
     /// ToolConfirm 模式中当前待处理工具的索引
     pub pending_tool_idx: usize,
+    /// 进入 ToolConfirm 模式的时间（用于超时自动执行）
+    pub tool_confirm_entered_at: std::time::Instant,
     /// 配置界面：是否有待处理的 system_prompt 编辑（需弹出全屏编辑器）
     pub pending_system_prompt_edit: bool,
     /// 已加载的 skills（用于补全和高亮）
@@ -205,6 +207,8 @@ pub enum ChatMode {
     ArchiveList,
     /// 工具调用确认模式（弹出确认框）
     ToolConfirm,
+    /// 工具拒绝原因输入模式（按 N 后进入，可输入拒绝原因）
+    ToolRejectInput,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -277,6 +281,7 @@ impl ChatApp {
             tool_registry,
             active_tool_calls: Vec::new(),
             pending_tool_idx: 0,
+            tool_confirm_entered_at: std::time::Instant::now(),
             pending_system_prompt_edit: false,
             loaded_skills,
             at_popup_active: false,
@@ -442,8 +447,8 @@ impl ChatApp {
             return;
         }
 
-        // 如果在 ToolConfirm 模式，暂停轮询（等待用户操作）
-        if self.mode == ChatMode::ToolConfirm {
+        // 如果在 ToolConfirm/ToolRejectInput 模式，暂停轮询（等待用户操作）
+        if self.mode == ChatMode::ToolConfirm || self.mode == ChatMode::ToolRejectInput {
             return;
         }
 
@@ -496,6 +501,7 @@ impl ChatApp {
 
                         if let Some(idx) = first_confirm_idx {
                             self.pending_tool_idx = idx;
+                            self.tool_confirm_entered_at = std::time::Instant::now();
                             self.mode = ChatMode::ToolConfirm;
                             // 直接执行不需要确认的工具（在弹出确认框前）
                             // 注意：确认框出现后，需要等用户按键，由 execute_pending_tool / reject_pending_tool 驱动
@@ -630,8 +636,8 @@ impl ChatApp {
         self.advance_tool_confirm();
     }
 
-    /// 用户拒绝执行当前待处理工具
-    pub fn reject_pending_tool(&mut self) {
+    /// 用户拒绝执行当前待处理工具，可附带拒绝原因
+    pub fn reject_pending_tool(&mut self, reason: &str) {
         let idx = self.pending_tool_idx;
         if idx >= self.active_tool_calls.len() {
             self.mode = ChatMode::Chat;
@@ -641,10 +647,16 @@ impl ChatApp {
         let tool_call_id = self.active_tool_calls[idx].tool_call_id.clone();
         self.active_tool_calls[idx].status = ToolExecStatus::Rejected;
 
+        let reject_msg = if reason.is_empty() {
+            "用户拒绝执行该工具".to_string()
+        } else {
+            format!("用户拒绝执行该工具。用户说: {}", reason)
+        };
+
         if let Some(ref tx) = self.tool_result_tx {
             let _ = tx.send(ToolResultMsg {
                 tool_call_id,
-                result: "用户拒绝执行该工具".to_string(),
+                result: reject_msg,
                 is_error: true,
             });
         }
@@ -664,6 +676,7 @@ impl ChatApp {
 
         if let Some(next_idx) = next {
             self.pending_tool_idx = next_idx;
+            self.tool_confirm_entered_at = std::time::Instant::now();
             // 继续保持 ToolConfirm 模式
         } else {
             // 没有更多需要确认的工具，处理剩余 Executing 状态的工具

@@ -93,9 +93,8 @@ fn split_frontmatter(content: &str) -> Option<(String, String)> {
     Some((fm, body))
 }
 
-/// 拼合 body + references/ 下的参考文件，截断到 MAX_BYTES
+/// 拼合 body + references/ 下的参考文件
 pub fn resolve_skill_content(skill: &Skill) -> String {
-    const MAX_BYTES: usize = 12000;
     let mut result = skill.body.clone();
 
     // 读取 references/ 目录
@@ -113,21 +112,8 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
                             .push_str(&format!("\n\n--- 参考文件: {} ---\n{}", filename, content));
                     }
                 }
-                if result.len() > MAX_BYTES {
-                    break;
-                }
             }
         }
-    }
-
-    // 截断到 MAX_BYTES
-    if result.len() > MAX_BYTES {
-        let mut end = MAX_BYTES;
-        while !result.is_char_boundary(end) {
-            end -= 1;
-        }
-        result.truncate(end);
-        result.push_str("\n...(内容已截断)");
     }
 
     result

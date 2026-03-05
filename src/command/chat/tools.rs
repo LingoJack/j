@@ -147,21 +147,9 @@ impl Tool for ShellTool {
                     result = "(无输出)".to_string();
                 }
 
-                // 截断到 4000 字节
-                const MAX_BYTES: usize = 4000;
-                let truncated = if result.len() > MAX_BYTES {
-                    let mut end = MAX_BYTES;
-                    while !result.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    format!("{}\n...(输出已截断)", &result[..end])
-                } else {
-                    result
-                };
-
                 let is_error = !output.status.success();
                 ToolResult {
-                    output: truncated,
+                    output: result,
                     is_error,
                 }
             }
@@ -266,19 +254,8 @@ impl Tool for ReadFileTool {
                     result.push_str(&format!("\n...(还有 {} 行未显示)", total - start - count));
                 }
 
-                // 截断到 8000 字节
-                const MAX_BYTES: usize = 8000;
-                let truncated = if result.len() > MAX_BYTES {
-                    let mut end = MAX_BYTES;
-                    while !result.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    format!("{}\n...(文件内容已截断)", &result[..end])
-                } else {
-                    result
-                };
                 ToolResult {
-                    output: truncated,
+                    output: result,
                     is_error: false,
                 }
             }

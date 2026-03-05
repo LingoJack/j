@@ -82,9 +82,24 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             }
         }
 
+        // ToolConfirm 超时自动执行检查
+        if app.mode == ChatMode::ToolConfirm && app.agent_config.tool_confirm_timeout > 0 {
+            let elapsed = app.tool_confirm_entered_at.elapsed();
+            let timeout = std::time::Duration::from_secs(app.agent_config.tool_confirm_timeout);
+            if elapsed >= timeout {
+                app.execute_pending_tool();
+                needs_redraw = true;
+            } else {
+                // 倒计时变化需要重绘
+                needs_redraw = true;
+            }
+        }
+
         // 等待事件：加载中用短间隔以刷新流式内容，空闲时用长间隔节省 CPU
         let poll_timeout = if app.is_loading {
             std::time::Duration::from_millis(150)
+        } else if app.mode == ChatMode::ToolConfirm && app.agent_config.tool_confirm_timeout > 0 {
+            std::time::Duration::from_millis(500) // 倒计时需要更频繁刷新
         } else {
             std::time::Duration::from_millis(1000)
         };
@@ -113,6 +128,9 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::ArchiveConfirm => handle_archive_confirm_mode(&mut app, key),
                             ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
                             ChatMode::ToolConfirm => handle_tool_confirm_mode(&mut app, key),
+                            ChatMode::ToolRejectInput => {
+                                handle_tool_reject_input_mode(&mut app, key)
+                            }
                         }
                     }
                     Event::Resize(_, _) => {
@@ -335,6 +353,19 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         } else {
             app.show_toast("暂无消息可浏览", true);
         }
+        return false;
+    }
+
+    // Ctrl+G 用 Console.app 实时查看日志
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('g') {
+        let log_file = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".jdata/agent/logs/info.log");
+        let _ = std::process::Command::new("open")
+            .arg("-a")
+            .arg("Console")
+            .arg(&log_file)
+            .spawn();
         return false;
     }
 
@@ -564,6 +595,7 @@ pub fn config_field_label(idx: usize) -> &'static str {
             "theme" => "主题风格",
             "tools_enabled" => "工具调用",
             "max_tool_rounds" => "工具轮数上限",
+            "tool_confirm_timeout" => "确认超时(秒)",
             _ => CONFIG_GLOBAL_FIELDS[gi],
         }
     }
@@ -617,6 +649,13 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
                 }
             }
             "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
+            "tool_confirm_timeout" => {
+                if app.agent_config.tool_confirm_timeout == 0 {
+                    "关闭".into()
+                } else {
+                    format!("{}秒", app.agent_config.tool_confirm_timeout)
+                }
+            }
             _ => String::new(),
         }
     }
@@ -658,6 +697,7 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
                 }
             }
             "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
+            "tool_confirm_timeout" => app.agent_config.tool_confirm_timeout.to_string(),
             _ => String::new(),
         }
     }
@@ -720,6 +760,11 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
             "max_tool_rounds" => {
                 if let Ok(num) = value.trim().parse::<usize>() {
                     app.agent_config.max_tool_rounds = num;
+                }
+            }
+            "tool_confirm_timeout" => {
+                if let Ok(num) = value.trim().parse::<u64>() {
+                    app.agent_config.tool_confirm_timeout = num;
                 }
             }
             _ => {}
@@ -1116,14 +1161,80 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
     }
 }
 
-/// 工具确认模式按键处理：Y/Enter 执行，N/Esc 拒绝
+/// 工具确认模式按键处理：Y/Enter 执行，N 进入拒绝输入，Esc 直接拒绝（无原因）
 pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
             app.execute_pending_tool();
         }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-            app.reject_pending_tool();
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            // 进入拒绝原因输入模式
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.mode = ChatMode::ToolRejectInput;
+        }
+        KeyCode::Esc => {
+            // 直接拒绝，不带原因
+            app.reject_pending_tool("");
+        }
+        _ => {}
+    }
+}
+
+/// 工具拒绝原因输入模式：正常打字，Enter 提交拒绝，Esc 取消回到确认
+pub fn handle_tool_reject_input_mode(app: &mut ChatApp, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter => {
+            // 提交拒绝（原因可为空）
+            let reason = app.input.trim().to_string();
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.reject_pending_tool(&reason);
+        }
+        KeyCode::Esc => {
+            // 取消拒绝，回到确认模式
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.mode = ChatMode::ToolConfirm;
+        }
+        KeyCode::Backspace => {
+            if app.cursor_pos > 0 {
+                let start = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos - 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                let end = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.drain(start..end);
+                app.cursor_pos -= 1;
+            }
+        }
+        KeyCode::Left => {
+            if app.cursor_pos > 0 {
+                app.cursor_pos -= 1;
+            }
+        }
+        KeyCode::Right => {
+            let char_count = app.input.chars().count();
+            if app.cursor_pos < char_count {
+                app.cursor_pos += 1;
+            }
+        }
+        KeyCode::Char(c) => {
+            let byte_idx = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            app.input.insert_str(byte_idx, &c.to_string());
+            app.cursor_pos += 1;
         }
         _ => {}
     }

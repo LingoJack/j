@@ -48,6 +48,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             tools_enabled: false,
             max_tool_rounds: 10,
             style: None,
+            tool_confirm_timeout: 0,
         };
         if let Ok(json) = serde_json::to_string_pretty(&example) {
             println!("{}", json);

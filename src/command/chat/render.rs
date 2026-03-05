@@ -316,7 +316,7 @@ pub fn build_message_lines_incremental(
     }
 
     // ========== 内联工具确认区 ==========
-    if app.mode == ChatMode::ToolConfirm {
+    if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
         if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
             let t = &app.theme;
             let confirm_bg = t.tool_confirm_bg;
@@ -369,33 +369,34 @@ pub fn build_message_lines_incremental(
                 ]));
             }
 
-            // 确认信息行（可能需要截断）
+            // 确认信息行（折行显示，最多 10 行）
             {
                 let max_msg_w = content_w.saturating_sub(2);
-                let confirm_msg = if display_width(&tc.confirm_message) > max_msg_w {
-                    let mut end = max_msg_w.saturating_sub(3);
-                    while end > 0 && !tc.confirm_message.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    format!("{}...", &tc.confirm_message[..end])
-                } else {
-                    tc.confirm_message.clone()
-                };
-                let msg_w = display_width(&confirm_msg);
-                let fill = content_w.saturating_sub(msg_w + 2);
-                lines.push(Line::from(vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
-                    Span::styled(
-                        confirm_msg,
-                        Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
-                    ),
-                    Span::styled(
-                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                        Style::default().bg(confirm_bg),
-                    ),
-                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                ]));
+                let wrapped = wrap_text(&tc.confirm_message, max_msg_w);
+                let max_lines = 10;
+                let show_lines = wrapped.len().min(max_lines);
+                for (i, line_text) in wrapped.iter().enumerate().take(show_lines) {
+                    let display_text = if i == max_lines - 1 && wrapped.len() > max_lines {
+                        format!("{}...", line_text)
+                    } else {
+                        line_text.clone()
+                    };
+                    let msg_w = display_width(&display_text);
+                    let fill = content_w.saturating_sub(msg_w + 2);
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
+                        Span::styled(
+                            display_text,
+                            Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                        ),
+                        Span::styled(
+                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
+                }
             }
 
             // 空行
@@ -408,37 +409,97 @@ pub fn build_message_lines_incremental(
                 ]));
             }
 
-            // 操作提示行
+            // 操作提示行（根据模式显示不同内容）
             {
-                let hint_text_w = display_width("[Y/Enter] 执行  /  [N/Esc] 拒绝");
-                let fill = content_w.saturating_sub(hint_text_w + 2);
-                lines.push(Line::from(vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
-                    Span::styled(
-                        "[Y/Enter] 执行",
-                        Style::default()
-                            .fg(t.toast_success_border)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        "  /  ",
-                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
-                    ),
-                    Span::styled(
-                        "[N/Esc] 拒绝",
-                        Style::default()
-                            .fg(t.toast_error_border)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
+                if app.mode == ChatMode::ToolRejectInput {
+                    // 拒绝输入模式：提示用户输入原因
+                    let hint = "输入拒绝原因（可为空）  [Enter] 发送  /  [Esc] 取消";
+                    let hint_text_w = display_width(hint);
+                    let fill = content_w.saturating_sub(hint_text_w + 2);
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
+                        Span::styled(
+                            hint,
+                            Style::default()
+                                .fg(t.title_loading)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
+                } else {
+                    // 确认模式：Y/N/Esc + 倒计时
+                    let countdown_text = if app.agent_config.tool_confirm_timeout > 0 {
+                        let elapsed = app.tool_confirm_entered_at.elapsed().as_secs();
+                        let remaining = app
+                            .agent_config
+                            .tool_confirm_timeout
+                            .saturating_sub(elapsed);
+                        format!("  ({}s 后自动执行)", remaining)
+                    } else {
+                        String::new()
+                    };
+                    let base_hint = "[Y/Enter] 执行  /  [N] 拒绝  /  [Esc] 直接拒绝";
+                    let full_hint = format!("{}{}", base_hint, countdown_text);
+                    let hint_text_w = display_width(&full_hint);
+                    let fill = content_w.saturating_sub(hint_text_w + 2);
+                    let mut spans = vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ".repeat(1), Style::default().bg(confirm_bg)),
+                        Span::styled(
+                            "[Y/Enter] 执行",
+                            Style::default()
+                                .fg(t.toast_success_border)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            "  /  ",
+                            Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
+                        ),
+                        Span::styled(
+                            "[N] 拒绝",
+                            Style::default()
+                                .fg(t.toast_error_border)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            "  /  ",
+                            Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
+                        ),
+                        Span::styled(
+                            "[Esc] 直接拒绝",
+                            Style::default()
+                                .fg(t.toast_error_border)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ];
+                    if !countdown_text.is_empty() {
+                        spans.push(Span::styled(
+                            countdown_text,
+                            Style::default()
+                                .fg(t.title_loading)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+                    }
+                    spans.push(Span::styled(
                         " ".repeat(fill.saturating_sub(1).saturating_add(2)),
                         Style::default().bg(confirm_bg),
-                    ),
-                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                ]));
+                    ));
+                    spans.push(Span::styled(
+                        " │",
+                        Style::default().fg(border_color).bg(confirm_bg),
+                    ));
+                    lines.push(Line::from(spans));
+                }
             }
 
             // 底边框

@@ -50,6 +50,9 @@ pub struct AgentConfig {
     /// 回复风格（可选）
     #[serde(default)]
     pub style: Option<String>,
+    /// 工具确认超时秒数（0 表示不超时，需手动确认；>0 则超时后自动执行）
+    #[serde(default)]
+    pub tool_confirm_timeout: u64,
 }
 
 fn default_max_history_messages() -> usize {
