@@ -15,7 +15,11 @@
       "Bash(grep:*)",
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:www.anthropic.com)",
-      "Bash(cargo doc:*)"
+      "Bash(cargo doc:*)",
+      "Bash(cat:*)",
+      "Bash(tail:*)",
+      "Bash(stty cols:*)",
+      "Bash(cargo run:*)"
     ]
   },
   "language": "zh-CN",

@@ -46,6 +46,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     let mut ordered_index: Option<u64> = None;
     let mut heading_level: Option<u8> = None;
     let mut in_blockquote = false;
+    // 链接相关状态
+    let mut link_url: Option<String> = None;
     // 表格相关状态
     let mut in_table = false;
     let mut table_rows: Vec<Vec<String>> = Vec::new();
@@ -116,6 +118,36 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 style_stack.push(current.add_modifier(Modifier::CROSSED_OUT));
             }
             Event::End(TagEnd::Strikethrough) => {
+                style_stack.pop();
+            }
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                let link_style = Style::default()
+                    .fg(theme.md_link)
+                    .add_modifier(Modifier::UNDERLINED);
+                style_stack.push(link_style);
+                link_url = Some(dest_url.to_string());
+            }
+            Event::End(TagEnd::Link) => {
+                // 如果链接文本和 URL 不同，在文本后追加显示 URL
+                if let Some(url) = link_url.take() {
+                    let text_content: String = current_spans
+                        .iter()
+                        .rev()
+                        .take_while(|s| s.style.fg == Some(theme.md_link))
+                        .map(|s| s.content.to_string())
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect();
+                    if !text_content.is_empty() && text_content != url {
+                        current_spans.push(Span::styled(
+                            format!(" ({})", url),
+                            Style::default()
+                                .fg(theme.md_link)
+                                .add_modifier(Modifier::DIM),
+                        ));
+                    }
+                }
                 style_stack.pop();
             }
             Event::Start(Tag::CodeBlock(kind)) => {
@@ -317,26 +349,83 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         wrap_w
                     };
 
-                    for (i, line) in text_str.split('\n').enumerate() {
-                        if i > 0 {
+                    let link_style = Style::default()
+                        .fg(theme.md_link)
+                        .add_modifier(Modifier::UNDERLINED);
+                    let in_link = link_url.is_some();
+
+                    // 先将文本拆分为带样式的片段（URL vs 普通文本），再逐片段 wrap
+                    // 这样 URL 即使跨行也能保持高亮
+                    let segments: Vec<Span<'static>> = if in_link {
+                        // 已在 Tag::Link 内，整段使用链接样式
+                        text_str
+                            .split('\n')
+                            .enumerate()
+                            .flat_map(|(i, line)| {
+                                let mut v = Vec::new();
+                                if i > 0 {
+                                    v.push(Span::raw("\n"));
+                                }
+                                v.push(Span::styled(line.to_string(), style));
+                                v
+                            })
+                            .collect()
+                    } else {
+                        // 拆分 URL 片段，保留换行符作为独立片段
+                        text_str
+                            .split('\n')
+                            .enumerate()
+                            .flat_map(|(i, line)| {
+                                let mut v: Vec<Span<'static>> = Vec::new();
+                                if i > 0 {
+                                    v.push(Span::raw("\n"));
+                                }
+                                v.extend(split_text_with_urls(line, style, link_style));
+                                v
+                            })
+                            .collect()
+                    };
+
+                    // 逐片段处理：计算累计宽度，遇到超宽时 wrap 并换行
+                    let mut cur_line_w = existing_w;
+                    let mut first_seg = true;
+                    for seg in &segments {
+                        if seg.content.as_ref() == "\n" {
                             flush_line(&mut current_spans, &mut lines);
                             if in_blockquote {
                                 current_spans.push(Span::styled(
                                     "| ".to_string(),
                                     Style::default().fg(theme.md_blockquote_bar),
                                 ));
+                                cur_line_w = 2;
+                            } else {
+                                cur_line_w = 0;
                             }
+                            first_seg = false;
+                            continue;
                         }
-                        if !line.is_empty() {
-                            let first_wrap = if i == 0 { wrap_w } else { full_line_w };
-                            // 第一行用剩余宽度（或完整宽度），后续折行用完整宽度
-                            let first_line_wrapped = wrap_text(line, first_wrap);
-                            // 追加第一段
-                            current_spans.push(Span::styled(first_line_wrapped[0].clone(), style));
-                            // 如果有折行，剩余部分用 full_line_w 重新折行
-                            if first_line_wrapped.len() > 1 {
-                                // 拼接剩余文本
-                                let rest: String = first_line_wrapped[1..].join("");
+                        let seg_text = seg.content.to_string();
+                        let seg_style = seg.style;
+                        let seg_w = display_width(&seg_text);
+                        let avail = if first_seg {
+                            wrap_w
+                        } else {
+                            full_line_w.saturating_sub(cur_line_w)
+                        };
+                        first_seg = false;
+
+                        if seg_w <= avail {
+                            // 片段整体放得下，直接追加
+                            current_spans.push(Span::styled(seg_text, seg_style));
+                            cur_line_w += seg_w;
+                        } else {
+                            // 需要 wrap 这个片段
+                            let first_wrap_w = avail;
+                            let first_wrapped = wrap_text(&seg_text, first_wrap_w.max(1));
+                            // 第一段放入当前行
+                            current_spans.push(Span::styled(first_wrapped[0].clone(), seg_style));
+                            if first_wrapped.len() > 1 {
+                                let rest: String = first_wrapped[1..].join("");
                                 flush_line(&mut current_spans, &mut lines);
                                 if in_blockquote {
                                     current_spans.push(Span::styled(
@@ -344,7 +433,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                         Style::default().fg(theme.md_blockquote_bar),
                                     ));
                                 }
-                                let rest_wrapped = wrap_text(&rest, full_line_w);
+                                let rest_wrapped = wrap_text(&rest, full_line_w.max(1));
                                 for (j, wl) in rest_wrapped.iter().enumerate() {
                                     if j > 0 {
                                         flush_line(&mut current_spans, &mut lines);
@@ -355,7 +444,17 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                             ));
                                         }
                                     }
-                                    current_spans.push(Span::styled(wl.clone(), style));
+                                    current_spans.push(Span::styled(wl.clone(), seg_style));
+                                }
+                                cur_line_w =
+                                    display_width(rest_wrapped.last().unwrap_or(&String::new()));
+                                if in_blockquote {
+                                    cur_line_w += 2;
+                                }
+                            } else {
+                                cur_line_w = display_width(&first_wrapped[0]);
+                                if in_blockquote {
+                                    cur_line_w += 2;
                                 }
                             }
                         }
@@ -585,4 +684,66 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     }
 
     lines
+}
+
+/// 将文本拆分为普通文本和 URL 片段，对 URL 应用链接样式
+fn split_text_with_urls<'a>(text: &str, normal_style: Style, link_style: Style) -> Vec<Span<'a>> {
+    let mut spans = Vec::new();
+    let mut remaining = text;
+
+    while !remaining.is_empty() {
+        // 查找 URL 起始位置
+        let url_start = remaining
+            .find("https://")
+            .or_else(|| remaining.find("http://"));
+
+        match url_start {
+            Some(start) => {
+                // 添加 URL 之前的普通文本
+                if start > 0 {
+                    spans.push(Span::styled(remaining[..start].to_string(), normal_style));
+                }
+                // 找到 URL 结束位置：遇到空格、中文字符或特殊分隔符即停止
+                let url_part = &remaining[start..];
+                let url_end = url_part
+                    .char_indices()
+                    .find(|(i, c)| {
+                        // 跳过开头的 http:// 或 https://
+                        if *i < 8 {
+                            return false;
+                        }
+                        c.is_whitespace()
+                            || *c == '>'
+                            || *c == ')'
+                            || *c == ']'
+                            // 中文字符和中文标点表示 URL 结束
+                            || ('\u{4E00}'..='\u{9FFF}').contains(c) // CJK 汉字
+                            || ('\u{3000}'..='\u{303F}').contains(c) // CJK 标点
+                            || ('\u{FF00}'..='\u{FFEF}').contains(c) // 全角字符
+                            || matches!(*c, '，' | '。' | '；' | '：' | '！' | '？' | '、' | '\u{201C}' | '\u{201D}' | '\u{2018}' | '\u{2019}')
+                    })
+                    .map(|(i, _)| i)
+                    .unwrap_or(url_part.len());
+                // 去掉 URL 末尾的 ASCII 标点符号
+                let url = url_part[..url_end]
+                    .trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':' | '!' | '?'));
+                let url_len = url.len();
+                spans.push(Span::styled(url.to_string(), link_style));
+                // URL 末尾被 trim 掉的标点作为普通文本
+                if url_len < url_end {
+                    spans.push(Span::styled(
+                        url_part[url_len..url_end].to_string(),
+                        normal_style,
+                    ));
+                }
+                remaining = &remaining[start + url_end..];
+            }
+            None => {
+                spans.push(Span::styled(remaining.to_string(), normal_style));
+                break;
+            }
+        }
+    }
+
+    spans
 }

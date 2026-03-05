@@ -33,8 +33,6 @@ pub fn handle_list(part: Option<&str>, config: &YamlConfig) {
 
 /// 将某个 section 的内容拼接到 Markdown 文本中（空 section 跳过）
 fn build_section_md(section: &str, config: &YamlConfig, md_text: &mut String) {
-    use colored::Colorize;
-
     if let Some(map) = config.get_section(section) {
         if map.is_empty() {
             return;
@@ -45,10 +43,10 @@ fn build_section_md(section: &str, config: &YamlConfig, md_text: &mut String) {
         let max_key_len = map.keys().map(|k| k.len()).max().unwrap_or(0);
 
         for (key, value) in map {
-            // key 青色显示，右对齐占位，箭头和 value 对齐
+            // 用 inline code 包裹 key，用纯 Markdown 文本构建列表项
             md_text.push_str(&format!(
-                "- {:width$} → {}\n",
-                key.cyan(),
+                "- `{:width$}` → {}\n",
+                key,
                 value,
                 width = max_key_len
             ));

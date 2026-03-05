@@ -281,6 +281,8 @@ pub struct Theme {
     pub md_blockquote_text: Color,
     /// 分隔线颜色
     pub md_rule: Color,
+    /// 链接/URL 颜色
+    pub md_link: Color,
 
     // ===== 代码块 =====
     /// 代码块边框颜色
@@ -457,6 +459,7 @@ impl Theme {
             md_blockquote_bar: Color::Rgb(80, 100, 140),
             md_blockquote_text: Color::Rgb(150, 160, 180),
             md_rule: Color::Rgb(70, 75, 90),
+            md_link: Color::Rgb(86, 156, 214),
 
             // 代码块
             code_border: Color::Rgb(80, 90, 110),
@@ -601,6 +604,7 @@ impl Theme {
             md_blockquote_bar: Color::Rgb(70, 90, 130),
             md_blockquote_text: Color::Rgb(150, 150, 170),
             md_rule: Color::Rgb(70, 70, 80),
+            md_link: Color::Rgb(86, 156, 214),
 
             // 代码块
             code_border: Color::Rgb(70, 70, 80),
@@ -745,6 +749,7 @@ impl Theme {
             md_blockquote_bar: Color::Rgb(100, 130, 180),
             md_blockquote_text: Color::Rgb(80, 90, 110),
             md_rule: Color::Rgb(190, 195, 210),
+            md_link: Color::Rgb(0, 102, 204),
 
             // 代码块（VS Code Light+ 风格）
             code_border: Color::Rgb(190, 195, 210),
@@ -888,7 +893,8 @@ impl Theme {
             md_list_bullet: Color::Rgb(129, 161, 193), // nord9
             md_blockquote_bar: Color::Rgb(76, 86, 106), // nord3
             md_blockquote_text: Color::Rgb(160, 170, 185),
-            md_rule: Color::Rgb(67, 76, 94), // nord2
+            md_rule: Color::Rgb(67, 76, 94),    // nord2
+            md_link: Color::Rgb(136, 192, 208), // nord8
 
             // 代码块 — Nord 风格语法高亮
             code_border: Color::Rgb(76, 86, 106),    // nord3
@@ -1033,6 +1039,7 @@ impl Theme {
             md_blockquote_bar: Color::Rgb(117, 113, 94),
             md_blockquote_text: Color::Rgb(170, 170, 160),
             md_rule: Color::Rgb(80, 80, 70),
+            md_link: Color::Rgb(102, 217, 239),
 
             // 代码块 — Monokai 经典语法高亮
             code_border: Color::Rgb(80, 80, 70),
