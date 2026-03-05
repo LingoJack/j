@@ -328,23 +328,35 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             }
                         }
                         if !line.is_empty() {
-                            let effective_wrap = if i == 0 {
-                                wrap_w
-                            } else {
-                                content_width.saturating_sub(effective_prefix_w)
-                            };
-                            let wrapped = wrap_text(line, effective_wrap);
-                            for (j, wl) in wrapped.iter().enumerate() {
-                                if j > 0 {
-                                    flush_line(&mut current_spans, &mut lines);
-                                    if in_blockquote {
-                                        current_spans.push(Span::styled(
-                                            "| ".to_string(),
-                                            Style::default().fg(theme.md_blockquote_bar),
-                                        ));
-                                    }
+                            let first_wrap = if i == 0 { wrap_w } else { full_line_w };
+                            // 第一行用剩余宽度（或完整宽度），后续折行用完整宽度
+                            let first_line_wrapped = wrap_text(line, first_wrap);
+                            // 追加第一段
+                            current_spans.push(Span::styled(first_line_wrapped[0].clone(), style));
+                            // 如果有折行，剩余部分用 full_line_w 重新折行
+                            if first_line_wrapped.len() > 1 {
+                                // 拼接剩余文本
+                                let rest: String = first_line_wrapped[1..].join("");
+                                flush_line(&mut current_spans, &mut lines);
+                                if in_blockquote {
+                                    current_spans.push(Span::styled(
+                                        "| ".to_string(),
+                                        Style::default().fg(theme.md_blockquote_bar),
+                                    ));
                                 }
-                                current_spans.push(Span::styled(wl.clone(), style));
+                                let rest_wrapped = wrap_text(&rest, full_line_w);
+                                for (j, wl) in rest_wrapped.iter().enumerate() {
+                                    if j > 0 {
+                                        flush_line(&mut current_spans, &mut lines);
+                                        if in_blockquote {
+                                            current_spans.push(Span::styled(
+                                                "| ".to_string(),
+                                                Style::default().fg(theme.md_blockquote_bar),
+                                            ));
+                                        }
+                                    }
+                                    current_spans.push(Span::styled(wl.clone(), style));
+                                }
                             }
                         }
                     }
