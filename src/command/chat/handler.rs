@@ -356,15 +356,25 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return false;
     }
 
-    // Ctrl+G 用 Console.app 实时查看日志
+    // Ctrl+G 在新终端窗口中 tail -f 实时查看日志
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('g') {
-        let log_file = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".jdata/agent/logs/info.log");
-        let _ = std::process::Command::new("open")
-            .arg("-a")
-            .arg("Console")
-            .arg(&log_file)
+        let log_file = crate::config::YamlConfig::data_dir()
+            .join(crate::constants::AGENT_DIR)
+            .join(crate::constants::AGENT_LOG_DIR)
+            .join("info.log");
+        let tail_cmd = format!("tail -f '{}'; exit", log_file.to_string_lossy());
+        let apple_script = format!(
+            "tell application \"Terminal\"\n\
+                activate\n\
+                do script \"{}\"\n\
+            end tell",
+            tail_cmd.replace('\\', "\\\\").replace('"', "\\\"")
+        );
+        let _ = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&apple_script)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn();
         return false;
     }
