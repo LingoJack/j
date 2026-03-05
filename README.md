@@ -32,14 +32,14 @@ src/
 ├── cli.rs               # clap derive 宏定义所有子命令（SubCmd 枚举）
 ├── constants.rs         # 全局常量定义（版本号、section名、分类、搜索引擎等）
 ├── interactive.rs       # 交互模式（rustyline + 自定义补全器 + 历史建议）
+├── tui.rs               # 导出 TUI 模块
 ├── tui/
-│   ├── mod.rs           # 导出 TUI 模块
 │   └── editor.rs        # 全屏多行编辑器（ratatui + tui-textarea + vim 模式）
+├── config.rs            # 导出 YamlConfig
 ├── config/
-│   ├── mod.rs           # 导出 YamlConfig
 │   └── yaml_config.rs   # YAML 配置 serde 结构体 + 读写 + section 操作
+├── command.rs           # 命令关键字列表 + dispatch(SubCmd) 主分发
 ├── command/
-│   ├── mod.rs           # 命令关键字列表 + dispatch(SubCmd) 主分发
 │   ├── alias.rs         # set / remove / rename / modify
 │   ├── category.rs      # note / denote（分类标记管理）
 │   ├── list.rs          # ls（列出别名）
@@ -51,8 +51,8 @@ src/
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
 │   └── time.rs          # time countdown（倒计时器）
+├── util.rs              # 导出子模块 + 公共工具函数（remove_quotes）
 ├── util/
-│   ├── mod.rs           # 导出子模块 + 公共工具函数（remove_quotes）
 │   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏 + 工具函数
 │   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏 + ask 二进制嵌入与释放
 │   └── fuzzy.rs         # 模糊匹配（大小写不敏感 + 高亮 + UTF-8 安全）
@@ -345,7 +345,7 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 | `REPORT_DATE_FORMAT` / `DEFAULT_CHECK_LINES` / `REPORT_DIR` / `REPORT_DEFAULT_FILE` | 日报相关常量 | report.rs, yaml_config.rs |
 | `INTERACTIVE_PROMPT` / `HISTORY_FILE` / `CONFIG_FILE` 等 | 路径和文件名 | interactive.rs, yaml_config.rs |
 
-### 5.11 公共工具函数 — `util/mod.rs`
+### 5.11 公共工具函数 — `util.rs`
 
 - `remove_quotes(s: &str) -> String` — 去除字符串两端的引号（单引号或双引号），被 `alias.rs` 和 `open.rs` 共同复用。
 
@@ -569,7 +569,7 @@ copilot > exit
 | Java 类 | Rust 模块 | 说明 |
 |----------|-----------|------|
 | `WorkCopilotApplication` | `main.rs` + `interactive.rs` | 入口 + 交互模式 |
-| `CommandHandlerScanner` | `cli.rs` + `command/mod.rs` | 命令注册 + 分发（Java 反射 → Rust 枚举 match） |
+| `CommandHandlerScanner` | `cli.rs` + `command.rs` | 命令注册 + 分发（Java 反射 → Rust 枚举 match） |
 | `YamlConfig` | `config/yaml_config.rs` | YAML 配置管理 |
 | `SetCommandHandler` | `command/alias.rs::handle_set` | 设置别名 |
 | `RemoveCommandHandler` | `command/alias.rs::handle_remove` | 删除别名 |
@@ -880,8 +880,9 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 ### 架构总览
 
 ```
-src/command/chat/
-├── mod.rs           # 入口：handle_chat() 命令分发
+src/command/
+├── chat.rs          # 入口：handle_chat() 命令分发
+├── chat/
 ├── handler.rs       # TUI 主循环：事件监听 + 模式路由
 ├── app.rs           # 应用状态：ChatApp + 后台 Agent 循环
 ├── api.rs           # API 层：OpenAI 客户端 + 请求构建
@@ -1672,7 +1673,7 @@ j todo "$(j voice)"           # 语音添加待办
 3. **`cargo run -- help`** — 查看所有可用命令
 4. **`cargo run`** — 体验交互模式
 5. **阅读 `cli.rs`** — 所有子命令的定义都在这里（SubCmd 枚举）
-6. **阅读 `command/mod.rs`** — 了解命令如何分发到各 handler
+6. **阅读 `command.rs`** — 了解命令如何分发到各 handler
 7. **阅读 `config/yaml_config.rs`** — 了解配置文件的数据结构和操作 API
 8. **阅读 `command/open.rs`** — 这是最核心的命令，理解打开逻辑
 9. **阅读 `interactive.rs`** — 理解交互模式的补全器和命令解析
@@ -1683,7 +1684,7 @@ j todo "$(j voice)"           # 语音添加待办
 
 1. 在 `cli.rs` 的 `SubCmd` 枚举中添加新变体
 2. 在 `command/` 下创建或修改对应的 handler 文件
-3. 在 `command/mod.rs` 的 `dispatch()` 中添加匹配分支
-4. 在 `command/mod.rs` 的 `all_command_keywords()` 中注册关键字
+3. 在 `command.rs` 的 `dispatch()` 中添加匹配分支
+4. 在 `command.rs` 的 `all_command_keywords()` 中注册关键字
 5. 在 `interactive.rs` 中添加补全规则 + `parse_interactive_command()` 分支
 6. 在 `system.rs` 的 `handle_help()` 中更新帮助文本
