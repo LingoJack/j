@@ -114,6 +114,7 @@ reinstall: uninstall install ## 重新安装
 # ============================================
 publish: md_render push tag release ## 发布到 crates.io
 	@echo "📦 发布到 crates.io..."
+	@make push
 	@cargo publish --registry crates-io
 	@echo "✅ 已发布! 验证: cargo search j-cli"
 
