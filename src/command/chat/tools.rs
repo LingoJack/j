@@ -559,6 +559,17 @@ impl ToolRegistry {
             .map(|t| t.as_ref())
     }
 
+    /// 按名称执行工具，返回结果（可在任何线程调用，ToolRegistry: Send + Sync）
+    pub fn execute(&self, name: &str, arguments: &str) -> ToolResult {
+        match self.get(name) {
+            Some(tool) => tool.execute(arguments),
+            None => ToolResult {
+                output: format!("未知工具: {}", name),
+                is_error: true,
+            },
+        }
+    }
+
     /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符
     pub fn build_tools_summary(&self) -> String {
         self.tools

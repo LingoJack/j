@@ -55,6 +55,10 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         // 非阻塞地处理后台流式消息
         let was_loading = app.is_loading;
         app.poll_stream();
+        // 有待执行的工具时强制重绘，让工具执行状态先渲染出来
+        if app.pending_tool_execution {
+            needs_redraw = true;
+        }
         // 流式加载中使用节流策略：只在内容增长超过阈值或超时才重绘
         if app.is_loading {
             let current_len = app.streaming_content.lock().unwrap().len();

@@ -64,6 +64,13 @@ pub struct ToolResultMsg {
     pub is_error: bool,
 }
 
+/// 工具后台线程 → 主线程的执行完成消息
+pub struct ToolExecDoneMsg {
+    pub tool_call_id: String,
+    pub output: String,
+    pub is_error: bool,
+}
+
 /// TUI 应用状态
 pub struct ChatApp {
     /// Agent 配置
@@ -130,7 +137,7 @@ pub struct ChatApp {
     /// 工具结果发送通道（主线程 → 后台线程）
     pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
     /// 工具注册表
-    pub tool_registry: ToolRegistry,
+    pub tool_registry: Arc<ToolRegistry>,
     /// 当前活跃的工具调用状态列表
     pub active_tool_calls: Vec<ToolCallStatus>,
     /// ToolConfirm 模式中当前待处理工具的索引
@@ -153,6 +160,12 @@ pub struct ChatApp {
     pub pending_style_edit: bool,
     /// 流式请求取消令牌（存在时表示有进行中的请求）
     pub cancel_token: Option<CancellationToken>,
+    /// 是否有待执行的工具（已设为 Executing 状态但尚未实际调用，等待下一帧重绘后再执行）
+    pub pending_tool_execution: bool,
+    /// 工具后台线程 → 主线程的执行结果 channel
+    pub tool_exec_rx: Option<mpsc::Receiver<ToolExecDoneMsg>>,
+    /// 当前正在后台执行的工具数量（用于等待所有工具完成）
+    pub tools_executing_count: usize,
 }
 
 /// 消息渲染行缓存
@@ -245,7 +258,7 @@ impl ChatApp {
         }
         let theme = Theme::from_name(&agent_config.theme);
         let loaded_skills = skill::load_all_skills();
-        let tool_registry = ToolRegistry::new(loaded_skills.clone());
+        let tool_registry = Arc::new(ToolRegistry::new(loaded_skills.clone()));
         Self {
             agent_config,
             session,
@@ -290,6 +303,9 @@ impl ChatApp {
             at_popup_selected: 0,
             pending_style_edit: false,
             cancel_token: None,
+            pending_tool_execution: false,
+            tool_exec_rx: None,
+            tools_executing_count: 0,
         }
     }
 
@@ -397,6 +413,9 @@ impl ChatApp {
         self.msg_lines_cache = None;
         self.active_tool_calls.clear();
         self.pending_tool_idx = 0;
+        self.tool_exec_rx = None;
+        self.tools_executing_count = 0;
+        self.pending_tool_execution = false;
 
         let api_messages = self.build_api_messages();
 
@@ -463,6 +482,80 @@ impl ChatApp {
             return;
         }
 
+        // 如果上一帧设置了 pending_tool_execution，本帧才真正执行（让上一帧渲染出 🔧 执行中 状态）
+        if self.pending_tool_execution {
+            self.pending_tool_execution = false;
+
+            // 找第一个需要确认的工具
+            let first_confirm_idx = self
+                .active_tool_calls
+                .iter()
+                .position(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm));
+
+            if let Some(idx) = first_confirm_idx {
+                self.pending_tool_idx = idx;
+                self.tool_confirm_entered_at = std::time::Instant::now();
+                self.execute_all_tools_no_confirm();
+                self.mode = ChatMode::ToolConfirm;
+            } else {
+                self.execute_all_tools_no_confirm();
+            }
+            return;
+        }
+
+        // 轮询后台工具执行结果
+        let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
+        if self.tool_exec_rx.is_some() {
+            loop {
+                let msg = self.tool_exec_rx.as_ref().unwrap().try_recv();
+                match msg {
+                    Ok(done) => {
+                        exec_done_msgs.push(done);
+                    }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        self.tool_exec_rx = None;
+                        break;
+                    }
+                }
+            }
+        }
+        for done in exec_done_msgs {
+            // 更新工具状态
+            let summary = if done.output.len() > 60 {
+                let mut end = 60;
+                while !done.output.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &done.output[..end])
+            } else {
+                done.output.clone()
+            };
+            if let Some(tc) = self
+                .active_tool_calls
+                .iter_mut()
+                .find(|tc| tc.tool_call_id == done.tool_call_id)
+            {
+                tc.status = if done.is_error {
+                    ToolExecStatus::Failed(summary)
+                } else {
+                    ToolExecStatus::Done(summary)
+                };
+            }
+            // 转发结果给后台 agent 线程
+            if let Some(ref tx) = self.tool_result_tx {
+                let _ = tx.send(ToolResultMsg {
+                    tool_call_id: done.tool_call_id,
+                    result: done.output,
+                    is_error: done.is_error,
+                });
+            }
+            self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
+            if self.tools_executing_count == 0 {
+                self.tool_exec_rx = None;
+            }
+        }
+
         let mut finished = false;
         let mut had_error = false;
         let mut was_cancelled = false;
@@ -505,23 +598,8 @@ impl ChatApp {
                             });
                         }
 
-                        // 找第一个需要确认的工具
-                        let first_confirm_idx = self
-                            .active_tool_calls
-                            .iter()
-                            .position(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm));
-
-                        if let Some(idx) = first_confirm_idx {
-                            self.pending_tool_idx = idx;
-                            self.tool_confirm_entered_at = std::time::Instant::now();
-                            // 先把不需要确认的工具（Executing 状态）全部执行完，发送结果给后台线程
-                            // 后台线程按工具数量 recv，必须先收到这些结果才能继续等待需确认工具的结果
-                            self.execute_all_tools_no_confirm();
-                            self.mode = ChatMode::ToolConfirm;
-                        } else {
-                            // 全部不需要确认，直接执行所有工具
-                            self.execute_all_tools_no_confirm();
-                        }
+                        // 延迟一帧再执行：让本帧先渲染出 🔧 执行中 的状态
+                        self.pending_tool_execution = true;
                         break;
                     }
                     Ok(StreamMsg::Done) => {
@@ -553,45 +631,47 @@ impl ChatApp {
         }
     }
 
-    /// 执行所有不需要确认的工具
+    /// 把所有 Executing 状态的工具放到后台线程执行，结果发到 tool_exec_rx
     fn execute_all_tools_no_confirm(&mut self) {
-        for tc_status in self.active_tool_calls.iter_mut() {
-            if matches!(tc_status.status, ToolExecStatus::Executing) {
-                let result = if let Some(tool) = self.tool_registry.get(&tc_status.tool_name) {
-                    tool.execute(&tc_status.arguments)
-                } else {
-                    super::tools::ToolResult {
-                        output: format!("未知工具: {}", tc_status.tool_name),
-                        is_error: true,
-                    }
-                };
-                let summary = if result.output.len() > 60 {
-                    let mut end = 60;
-                    while !result.output.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    format!("{}...", &result.output[..end])
-                } else {
-                    result.output.clone()
-                };
-                let is_error = result.is_error;
-                if let Some(ref tx) = self.tool_result_tx {
-                    let _ = tx.send(ToolResultMsg {
-                        tool_call_id: tc_status.tool_call_id.clone(),
-                        result: result.output,
-                        is_error,
-                    });
-                }
-                tc_status.status = if is_error {
-                    ToolExecStatus::Failed(summary)
-                } else {
-                    ToolExecStatus::Done(summary)
-                };
-            }
+        // 收集需要执行的工具信息
+        let tasks: Vec<(String, String, String)> = self
+            .active_tool_calls
+            .iter()
+            .filter(|tc| matches!(tc.status, ToolExecStatus::Executing))
+            .map(|tc| {
+                (
+                    tc.tool_call_id.clone(),
+                    tc.tool_name.clone(),
+                    tc.arguments.clone(),
+                )
+            })
+            .collect();
+
+        if tasks.is_empty() {
+            return;
+        }
+
+        self.tools_executing_count += tasks.len();
+
+        let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
+        self.tool_exec_rx = Some(exec_rx);
+
+        // 为每个工具 spawn 一个线程（Arc<ToolRegistry> 可跨线程共享）
+        for (tool_call_id, tool_name, arguments) in tasks {
+            let tx = exec_tx.clone();
+            let registry = Arc::clone(&self.tool_registry);
+            std::thread::spawn(move || {
+                let result = registry.execute(&tool_name, &arguments);
+                let _ = tx.send(ToolExecDoneMsg {
+                    tool_call_id,
+                    output: result.output,
+                    is_error: result.is_error,
+                });
+            });
         }
     }
 
-    /// 用户确认执行当前待处理工具
+    /// 用户确认执行当前待处理工具（spawn 后台线程，立即返回）
     pub fn execute_pending_tool(&mut self) {
         let idx = self.pending_tool_idx;
         if idx >= self.active_tool_calls.len() {
@@ -613,45 +693,23 @@ impl ChatApp {
             )
         };
 
-        let result = if let Some(tool) = self.tool_registry.get(&tool_name) {
-            tool.execute(&arguments)
-        } else {
-            super::tools::ToolResult {
-                output: format!("未知工具: {}", tool_name),
-                is_error: true,
-            }
-        };
+        self.tools_executing_count += 1;
 
-        let summary = if result.output.len() > 60 {
-            let mut end = 60;
-            while !result.output.is_char_boundary(end) {
-                end -= 1;
-            }
-            format!("{}...", &result.output[..end])
-        } else {
-            result.output.clone()
-        };
-        let is_error = result.is_error;
+        let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
+        self.tool_exec_rx = Some(exec_rx);
 
-        if let Some(ref tx) = self.tool_result_tx {
-            let _ = tx.send(ToolResultMsg {
+        let registry = Arc::clone(&self.tool_registry);
+        std::thread::spawn(move || {
+            let result = registry.execute(&tool_name, &arguments);
+            let _ = exec_tx.send(ToolExecDoneMsg {
                 tool_call_id,
-                result: result.output,
-                is_error,
+                output: result.output,
+                is_error: result.is_error,
             });
-        }
+        });
 
-        {
-            let tc_status = &mut self.active_tool_calls[idx];
-            tc_status.status = if is_error {
-                ToolExecStatus::Failed(summary)
-            } else {
-                ToolExecStatus::Done(summary)
-            };
-        }
-
-        // 处理下一个待确认工具
-        self.advance_tool_confirm();
+        // 立即退出确认模式，让 poll_stream 能继续轮询 tool_exec_rx
+        self.mode = ChatMode::Chat;
     }
 
     /// 用户拒绝执行当前待处理工具，可附带拒绝原因
@@ -697,9 +755,8 @@ impl ChatApp {
             self.tool_confirm_entered_at = std::time::Instant::now();
             // 继续保持 ToolConfirm 模式
         } else {
-            // 没有更多需要确认的工具，处理剩余 Executing 状态的工具
+            // 没有更多需要确认的工具，执行剩余 Executing 状态的工具（后台），退出确认模式
             self.execute_all_tools_no_confirm();
-            // 退出确认模式，恢复轮询
             self.mode = ChatMode::Chat;
         }
     }
@@ -709,6 +766,8 @@ impl ChatApp {
         self.stream_rx = None;
         self.cancel_token = None;
         self.tool_result_tx = None;
+        self.tool_exec_rx = None;
+        self.tools_executing_count = 0;
         self.is_loading = false;
         self.last_rendered_streaming_len = 0;
         self.msg_lines_cache = None;

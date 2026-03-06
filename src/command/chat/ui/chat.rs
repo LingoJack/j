@@ -69,12 +69,18 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let model_name = app.active_model_name();
     let msg_count = app.session.messages.len();
     let loading = if app.is_loading {
-        // 如果有活跃工具调用，显示工具名
+        // 优先显示正在执行中的工具，其次显示等待确认的工具
         let tool_info = app
             .active_tool_calls
             .iter()
             .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
-            .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name));
+            .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name))
+            .or_else(|| {
+                app.active_tool_calls
+                    .iter()
+                    .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
+                    .map(|tc| format!(" 🔧 调用 {}...", tc.tool_name))
+            });
         if let Some(info) = tool_info {
             info
         } else {
