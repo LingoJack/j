@@ -9,7 +9,6 @@ import (
 	"main/loggger"
 	"main/tool"
 	"os/exec"
-	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -100,22 +99,4 @@ func (t *BashTool) Run(ctx context.Context, param string) (res string, err error
 
 	loggger.Infof("[BashTool.Run] 命令执行成功, command=%s, outputLen=%d", command, len(res))
 	return
-}
-
-// RunAsync 异步执行 bash 命令
-func (t *BashTool) RunAsync(ctx context.Context, param string, callback func(result string, err error)) {
-	loggger.Infof("[BashTool.RunAsync] 启动异步执行, param=%s", param)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				stack := string(debug.Stack())
-				loggger.Errorf("[BashTool.RunAsync] goroutine panic recovered, err=%v, stack=%s", r, stack)
-				callback("", fmt.Errorf("命令执行发生内部异常"))
-			}
-		}()
-
-		result, err := t.Run(ctx, param)
-		callback(result, err)
-	}()
 }
