@@ -398,7 +398,15 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     let char_count = app.input.chars().count();
 
     match key.code {
-        KeyCode::Esc => return true,
+        KeyCode::Esc => {
+            if app.is_loading {
+                // 流式中：取消请求，不退出
+                app.cancel_stream();
+            } else {
+                // 非加载中：原有行为（退出 TUI）
+                return true;
+            }
+        }
 
         KeyCode::Enter => {
             if !app.is_loading {

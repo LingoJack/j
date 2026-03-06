@@ -529,6 +529,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.theme;
     let hints = match app.mode {
+        ChatMode::Chat if app.is_loading => vec![("Esc", "取消请求"), ("↑↓", "滚动")],
         ChatMode::Chat => vec![
             ("Enter", "发送"),
             ("↑↓", "滚动"),

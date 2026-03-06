@@ -15,6 +15,7 @@ use futures::StreamExt;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::sync::{Arc, Mutex, mpsc};
+use tokio_util::sync::CancellationToken;
 // ========== TUI 界面 ==========
 
 /// 后台线程发送给 TUI 的消息类型
@@ -27,6 +28,8 @@ pub enum StreamMsg {
     Done,
     /// 发生错误
     Error(String),
+    /// 用户主动取消
+    Cancelled,
 }
 
 /// 工具执行状态
@@ -148,6 +151,8 @@ pub struct ChatApp {
     pub at_popup_selected: usize,
     /// 配置界面：是否有待处理的 style 编辑（需弹出全屏编辑器）
     pub pending_style_edit: bool,
+    /// 流式请求取消令牌（存在时表示有进行中的请求）
+    pub cancel_token: Option<CancellationToken>,
 }
 
 /// 消息渲染行缓存
@@ -284,6 +289,7 @@ impl ChatApp {
             at_popup_start_pos: 0,
             at_popup_selected: 0,
             pending_style_edit: false,
+            cancel_token: None,
         }
     }
 
@@ -417,6 +423,10 @@ impl ChatApp {
             vec![]
         };
 
+        // 创建取消令牌
+        let cancel_token = CancellationToken::new();
+        self.cancel_token = Some(cancel_token.clone());
+
         // 启动后台线程执行 Agent 循环
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
@@ -437,6 +447,7 @@ impl ChatApp {
                 stream_tx,
                 tool_result_rx,
                 max_tool_rounds,
+                cancel_token,
             ));
         });
     }
@@ -454,6 +465,7 @@ impl ChatApp {
 
         let mut finished = false;
         let mut had_error = false;
+        let mut was_cancelled = false;
 
         // 非阻塞地取出所有可用的消息
         if let Some(ref rx) = self.stream_rx {
@@ -522,6 +534,11 @@ impl ChatApp {
                         finished = true;
                         break;
                     }
+                    Ok(StreamMsg::Cancelled) => {
+                        was_cancelled = true;
+                        finished = true;
+                        break;
+                    }
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
                         finished = true;
@@ -532,7 +549,7 @@ impl ChatApp {
         }
 
         if finished {
-            self.finish_loading(had_error);
+            self.finish_loading(had_error, was_cancelled);
         }
     }
 
@@ -688,15 +705,33 @@ impl ChatApp {
     }
 
     /// 结束加载状态（流式完成或错误）
-    fn finish_loading(&mut self, had_error: bool) {
+    fn finish_loading(&mut self, had_error: bool, was_cancelled: bool) {
         self.stream_rx = None;
+        self.cancel_token = None;
         self.tool_result_tx = None;
         self.is_loading = false;
         self.last_rendered_streaming_len = 0;
         self.msg_lines_cache = None;
         self.active_tool_calls.clear();
 
-        if !had_error {
+        if was_cancelled {
+            // 保留已输出内容，追加 [已取消] 标记
+            let content = {
+                let sc = self.streaming_content.lock().unwrap();
+                sc.clone()
+            };
+            if !content.is_empty() {
+                let cancelled_content = format!("{}\n\n*[已取消]*", content);
+                self.session
+                    .messages
+                    .push(ChatMessage::text("assistant", cancelled_content));
+            }
+            self.streaming_content.lock().unwrap().clear();
+            if self.auto_scroll {
+                self.scroll_offset = u16::MAX;
+            }
+            self.show_toast("已取消", false);
+        } else if !had_error {
             let content = {
                 let sc = self.streaming_content.lock().unwrap();
                 sc.clone()
@@ -716,6 +751,13 @@ impl ChatApp {
         }
 
         let _ = save_chat_session(&self.session);
+    }
+
+    /// 取消当前流式请求
+    pub fn cancel_stream(&mut self) {
+        if let Some(ref token) = self.cancel_token {
+            token.cancel();
+        }
     }
 
     /// 清空对话
@@ -850,6 +892,7 @@ async fn run_agent_loop(
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
     max_tool_rounds: usize,
+    cancel_token: CancellationToken,
 ) {
     let client = create_openai_client(&provider);
 
@@ -928,60 +971,69 @@ async fn run_agent_loop(
                 std::collections::BTreeMap::new();
             let mut stream_had_deserialize_error = false;
 
-            'stream: while let Some(result) = stream.next().await {
-                match result {
-                    Ok(response) => {
-                        for choice in &response.choices {
-                            if let Some(ref content) = choice.delta.content {
-                                assistant_text.push_str(content);
-                                let mut sc = streaming_content.lock().unwrap();
-                                sc.push_str(content);
-                                drop(sc);
-                                let _ = tx.send(StreamMsg::Chunk);
-                            }
-                            // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
-                            if let Some(ref tc_chunks) = choice.delta.tool_calls {
-                                for chunk in tc_chunks {
-                                    let entry =
-                                        raw_tool_calls.entry(chunk.index).or_insert_with(|| {
-                                            (
-                                                chunk.id.clone().unwrap_or_default(),
-                                                String::new(),
-                                                String::new(),
-                                            )
-                                        });
-                                    if entry.0.is_empty() {
-                                        if let Some(ref id) = chunk.id {
-                                            entry.0 = id.clone();
+            'stream: loop {
+                tokio::select! {
+                    result = stream.next() => {
+                        match result {
+                            Some(Ok(response)) => {
+                                for choice in &response.choices {
+                                    if let Some(ref content) = choice.delta.content {
+                                        assistant_text.push_str(content);
+                                        let mut sc = streaming_content.lock().unwrap();
+                                        sc.push_str(content);
+                                        drop(sc);
+                                        let _ = tx.send(StreamMsg::Chunk);
+                                    }
+                                    // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
+                                    if let Some(ref tc_chunks) = choice.delta.tool_calls {
+                                        for chunk in tc_chunks {
+                                            let entry =
+                                                raw_tool_calls.entry(chunk.index).or_insert_with(|| {
+                                                    (
+                                                        chunk.id.clone().unwrap_or_default(),
+                                                        String::new(),
+                                                        String::new(),
+                                                    )
+                                                });
+                                            if entry.0.is_empty() {
+                                                if let Some(ref id) = chunk.id {
+                                                    entry.0 = id.clone();
+                                                }
+                                            }
+                                            if let Some(ref func) = chunk.function {
+                                                if let Some(ref name) = func.name {
+                                                    entry.1.push_str(name);
+                                                }
+                                                if let Some(ref args) = func.arguments {
+                                                    entry.2.push_str(args);
+                                                }
+                                            }
                                         }
                                     }
-                                    if let Some(ref func) = chunk.function {
-                                        if let Some(ref name) = func.name {
-                                            entry.1.push_str(name);
-                                        }
-                                        if let Some(ref args) = func.arguments {
-                                            entry.2.push_str(args);
-                                        }
+                                    if let Some(ref fr) = choice.finish_reason {
+                                        finish_reason = Some(fr.clone());
                                     }
                                 }
                             }
-                            if let Some(ref fr) = choice.finish_reason {
-                                finish_reason = Some(fr.clone());
+                            Some(Err(e)) => {
+                                let error_str = format!("{}", e);
+                                // 检测是否是 tool_calls 反序列化错误（Gemini 等不返回 chunk index）
+                                if error_str.contains("missing field `index`")
+                                    || error_str.contains("tool_calls")
+                                {
+                                    // 标记需要用非流式重做，跳出流式循环
+                                    stream_had_deserialize_error = true;
+                                    break 'stream;
+                                }
+                                write_error_log("Chat API 流式响应", &error_str);
+                                let _ = tx.send(StreamMsg::Error(error_str));
+                                return;
                             }
+                            None => break 'stream,
                         }
                     }
-                    Err(e) => {
-                        let error_str = format!("{}", e);
-                        // 检测是否是 tool_calls 反序列化错误（Gemini 等不返回 chunk index）
-                        if error_str.contains("missing field `index`")
-                            || error_str.contains("tool_calls")
-                        {
-                            // 标记需要用非流式重做，跳出流式循环
-                            stream_had_deserialize_error = true;
-                            break 'stream;
-                        }
-                        write_error_log("Chat API 流式响应", &error_str);
-                        let _ = tx.send(StreamMsg::Error(error_str));
+                    _ = cancel_token.cancelled() => {
+                        let _ = tx.send(StreamMsg::Cancelled);
                         return;
                     }
                 }
@@ -1000,7 +1052,10 @@ async fn run_agent_loop(
                     sc.clear();
                 }
                 // 重新构建请求（不带 stream）
-                match client.chat().create(request).await {
+                let chat_client = client.chat();
+                let create_fut = chat_client.create(request);
+                tokio::select! {
+                    result = create_fut => match result {
                     Ok(response) => {
                         if let Some(choice) = response.choices.first() {
                             let is_tool_calls = matches!(
@@ -1115,6 +1170,11 @@ async fn run_agent_loop(
                         let _ = tx.send(StreamMsg::Error(error_msg));
                         return;
                     }
+                },
+                    _ = cancel_token.cancelled() => {
+                        let _ = tx.send(StreamMsg::Cancelled);
+                        return;
+                    }
                 }
                 break;
             }
@@ -1205,7 +1265,10 @@ async fn run_agent_loop(
             }
         } else {
             // 非流式模式
-            match client.chat().create(request).await {
+            let chat_client = client.chat();
+            let create_fut = chat_client.create(request);
+            tokio::select! {
+                result = create_fut => match result {
                 Ok(response) => {
                     if let Some(choice) = response.choices.first() {
                         let is_tool_calls = matches!(
@@ -1321,6 +1384,11 @@ async fn run_agent_loop(
                     let error_msg = format!("API 请求失败: {}", e);
                     write_error_log("Chat API 非流式请求", &error_msg);
                     let _ = tx.send(StreamMsg::Error(error_msg));
+                    return;
+                }
+                },
+                _ = cancel_token.cancelled() => {
+                    let _ = tx.send(StreamMsg::Cancelled);
                     return;
                 }
             }
