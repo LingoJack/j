@@ -26,7 +26,11 @@ pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
     }
 
     match content[0].as_str() {
-        "list" => handle_todo_list(),
+        "list" => {
+            // 解析过滤选项: --done/-d 或 --undone/-u
+            let filter = parse_list_filter(&content[1..]);
+            handle_todo_list(filter);
+        }
         "add" => {
             let text = content[1..].join(" ");
             let text = text.trim().trim_matches('"').to_string();
@@ -37,9 +41,22 @@ pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
             quick_add_todo(&text);
         }
         _ => {
-            usage!("j todo | j todo list | j todo add <内容>");
+            usage!("j todo | j todo list [--done/-d | --undone/-u] | j todo add <内容>");
         }
     }
+}
+
+/// 解析 list 命令的过滤选项
+/// 返回: None=全部, Some(true)=已完成, Some(false)=未完成
+fn parse_list_filter(args: &[String]) -> Option<bool> {
+    for arg in args {
+        match arg.as_str() {
+            "--done" | "-d" => return Some(true),
+            "--undone" | "-u" => return Some(false),
+            _ => {}
+        }
+    }
+    None
 }
 
 /// 快速添加一条待办（不进入 TUI）
@@ -60,7 +77,8 @@ fn quick_add_todo(text: &str) {
 }
 
 /// 列出所有待办，以 Markdown 格式渲染输出
-fn handle_todo_list() {
+/// filter: None=全部, Some(true)=已完成, Some(false)=未完成
+fn handle_todo_list(filter: Option<bool>) {
     let todo_list = load_todo_list();
 
     if todo_list.items.is_empty() {
@@ -72,12 +90,33 @@ fn handle_todo_list() {
     let done_count = todo_list.items.iter().filter(|i| i.done).count();
     let undone_count = total - done_count;
 
-    let mut md = format!(
-        "## 待办备忘录 — 共 {} 条 | ✅ {} | ⬜ {}\n\n",
-        total, done_count, undone_count
-    );
+    // 根据过滤条件筛选
+    let filtered_items: Vec<&TodoItem> = match filter {
+        None => todo_list.items.iter().collect(),
+        Some(true) => todo_list.items.iter().filter(|i| i.done).collect(),
+        Some(false) => todo_list.items.iter().filter(|i| !i.done).collect(),
+    };
 
-    for item in &todo_list.items {
+    if filtered_items.is_empty() {
+        let filter_label = match filter {
+            Some(true) => "已完成",
+            Some(false) => "未完成",
+            None => "全部",
+        };
+        info!("📋 暂无{}待办", filter_label);
+        return;
+    }
+
+    let mut md = match filter {
+        None => format!(
+            "## 待办备忘录 — 共 {} 条 | ✅ {} | ⬜ {}\n\n",
+            total, done_count, undone_count
+        ),
+        Some(true) => format!("## 待办备忘录 — 已完成 ({}/{})\n\n", done_count, total),
+        Some(false) => format!("## 待办备忘录 — 未完成 ({}/{})\n\n", undone_count, total),
+    };
+
+    for item in &filtered_items {
         if item.done {
             md.push_str(&format!("- [x] {}\n", item.content));
         } else {
