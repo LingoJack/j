@@ -1,5 +1,6 @@
 use super::model::{
-    ModelProvider, save_agent_config, save_chat_session, save_style, save_system_prompt,
+    ModelProvider, load_style, load_system_prompt, save_agent_config, save_chat_session,
+    save_style, save_system_prompt,
 };
 use super::render::copy_to_clipboard;
 use super::theme::ThemeName;
@@ -150,20 +151,14 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             // 检查 system_prompt 全屏编辑器标志
             if app.pending_system_prompt_edit {
                 app.pending_system_prompt_edit = false;
-                let current_prompt = app.agent_config.system_prompt.clone().unwrap_or_default();
+                let current_prompt = load_system_prompt().unwrap_or_default();
                 match crate::tui::editor::open_editor_on_terminal(
                     &mut terminal,
                     "编辑系统提示词 (System Prompt)",
                     &current_prompt,
                 ) {
                     Ok(Some(new_text)) => {
-                        if new_text.is_empty() {
-                            app.agent_config.system_prompt = None;
-                        } else {
-                            app.agent_config.system_prompt = Some(new_text);
-                        }
-                        let prompt_text = app.agent_config.system_prompt.as_deref().unwrap_or("");
-                        if save_system_prompt(prompt_text) {
+                        if save_system_prompt(&new_text) {
                             app.show_toast("系统提示词已更新", false);
                         } else {
                             app.show_toast("系统提示词保存失败", true);
@@ -182,20 +177,14 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             // 检查 style 全屏编辑器标志
             if app.pending_style_edit {
                 app.pending_style_edit = false;
-                let current_style = app.agent_config.style.clone().unwrap_or_default();
+                let current_style = load_style().unwrap_or_default();
                 match crate::tui::editor::open_editor_on_terminal(
                     &mut terminal,
                     "编辑回复风格 (Style)",
                     &current_style,
                 ) {
                     Ok(Some(new_text)) => {
-                        if new_text.is_empty() {
-                            app.agent_config.style = None;
-                        } else {
-                            app.agent_config.style = Some(new_text);
-                        }
-                        let style_text = app.agent_config.style.as_deref().unwrap_or("");
-                        if save_style(style_text) {
+                        if save_style(&new_text) {
                             app.show_toast("回复风格已更新", false);
                         } else {
                             app.show_toast("回复风格保存失败", true);
@@ -640,8 +629,8 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
     } else {
         let gi = field_idx - total_provider;
         match CONFIG_GLOBAL_FIELDS[gi] {
-            "system_prompt" => app.agent_config.system_prompt.clone().unwrap_or_default(),
-            "style" => app.agent_config.style.clone().unwrap_or_default(),
+            "system_prompt" => load_system_prompt().unwrap_or_default(),
+            "style" => load_style().unwrap_or_default(),
             "stream_mode" => {
                 if app.agent_config.stream_mode {
                     "开启".into()
@@ -689,8 +678,8 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
     } else {
         let gi = field_idx - total_provider;
         match CONFIG_GLOBAL_FIELDS[gi] {
-            "system_prompt" => app.agent_config.system_prompt.clone().unwrap_or_default(),
-            "style" => app.agent_config.style.clone().unwrap_or_default(),
+            "system_prompt" => load_system_prompt().unwrap_or_default(),
+            "style" => load_style().unwrap_or_default(),
             "stream_mode" => {
                 if app.agent_config.stream_mode {
                     "true".into()
@@ -732,18 +721,10 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
         let gi = field_idx - total_provider;
         match CONFIG_GLOBAL_FIELDS[gi] {
             "system_prompt" => {
-                if value.is_empty() {
-                    app.agent_config.system_prompt = None;
-                } else {
-                    app.agent_config.system_prompt = Some(value.to_string());
-                }
+                save_system_prompt(value);
             }
             "style" => {
-                if value.is_empty() {
-                    app.agent_config.style = None;
-                } else {
-                    app.agent_config.style = Some(value.to_string());
-                }
+                save_style(value);
             }
             "stream_mode" => {
                 app.agent_config.stream_mode = matches!(
@@ -848,17 +829,10 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
     // 非编辑状态
     match key.code {
         KeyCode::Esc => {
-            // 保存并返回
-            let prompt_saved =
-                save_system_prompt(app.agent_config.system_prompt.as_deref().unwrap_or(""));
-            let style_saved = save_style(app.agent_config.style.as_deref().unwrap_or(""));
+            // 保存并返回（system_prompt 和 style 已在 config_field_set 中即时写入文件）
             let config_saved = save_agent_config(&app.agent_config);
-            if prompt_saved && style_saved && config_saved {
+            if config_saved {
                 app.show_toast("配置已保存 ✅", false);
-            } else if !prompt_saved {
-                app.show_toast("系统提示词保存失败", true);
-            } else if !style_saved {
-                app.show_toast("回复风格保存失败", true);
             } else {
                 app.show_toast("配置保存失败", true);
             }

@@ -9,6 +9,7 @@
 //! |---------|------|------|------|
 //! | `HELP_TEXT` | 文本 | `assets/help.md` | 帮助命令输出 |
 //! | `VERSION_TEMPLATE` | 文本 | `assets/version.md` | 版本命令模板 |
+//! | `DEFAULT_SYSTEM_PROMPT` | 文本 | `assets/system_prompt_default.md` | 默认系统提示词模板 |
 
 // ========== 文本资源 ==========
 
@@ -24,3 +25,10 @@ pub const HELP_TEXT: &str = include_str!("../assets/help.md");
 /// 占位符: `{version}`, `{os}`, `{extra}`
 /// 格式: Markdown 表格
 pub const VERSION_TEMPLATE: &str = include_str!("../assets/version.md");
+
+/// 默认系统提示词模板
+///
+/// 用途: 首次运行时写入 `~/.jdata/agent/data/system_prompt.md`
+/// 占位符: `{{.tools}}`, `{{.skills}}`, `{{.style}}`, `{{.memory}}`, `{{.soul}}`
+/// 格式: Markdown
+pub const DEFAULT_SYSTEM_PROMPT: &str = include_str!("../assets/system_prompt_default.md");

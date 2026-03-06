@@ -1,8 +1,8 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::model::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
-    load_chat_session, load_style, load_system_prompt, save_agent_config, save_chat_session,
-    save_system_prompt, system_prompt_path,
+    load_chat_session, load_memory, load_soul, load_style, load_system_prompt, save_agent_config,
+    save_chat_session, save_system_prompt, system_prompt_path,
 };
 use super::skill::{self, Skill};
 use super::theme::Theme;
@@ -216,27 +216,15 @@ pub fn config_total_fields() -> usize {
     CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
 }
 
-/// 默认系统提示词模板（编译时嵌入）
-const DEFAULT_SYSTEM_PROMPT: &str = include_str!("../../../assets/system_prompt_default.md");
+/// 默认系统提示词模板（编译时嵌入，见 assets.rs）
+const DEFAULT_SYSTEM_PROMPT: &str = crate::assets::DEFAULT_SYSTEM_PROMPT;
 
 impl ChatApp {
     pub fn new() -> Self {
-        let mut agent_config = load_agent_config();
-        // 加载 system_prompt
-        if let Some(file_prompt) = load_system_prompt() {
-            agent_config.system_prompt = Some(file_prompt);
-        } else if !system_prompt_path().exists() {
-            if let Some(config_prompt) = agent_config.system_prompt.clone() {
-                let _ = save_system_prompt(&config_prompt);
-            } else {
-                // 首次运行：写入默认系统提示词
-                let _ = save_system_prompt(DEFAULT_SYSTEM_PROMPT);
-                agent_config.system_prompt = Some(DEFAULT_SYSTEM_PROMPT.to_string());
-            }
-        }
-        // 加载 style
-        if let Some(s) = load_style() {
-            agent_config.style = Some(s);
+        let agent_config = load_agent_config();
+        // 首次运行：如果 system_prompt.md 不存在则写入默认模板
+        if !system_prompt_path().exists() {
+            let _ = save_system_prompt(DEFAULT_SYSTEM_PROMPT);
         }
         let session = load_chat_session();
         let mut model_list_state = ListState::default();
@@ -292,17 +280,22 @@ impl ChatApp {
         }
     }
 
-    /// 解析系统提示词模板，替换 {{.skills}}、{{.tools}}、{{.style}} 占位符
+    /// 解析系统提示词模板，替换 {{.skills}}、{{.tools}}、{{.style}}、{{.memory}}、{{.soul}} 占位符
+    /// 每次调用时动态加载所有相关文件，确保内容最新
     pub fn resolve_system_prompt(&self) -> Option<String> {
-        let template = self.agent_config.system_prompt.as_ref()?;
+        let template = load_system_prompt()?;
         let skills_summary = skill::build_skills_summary(&self.loaded_skills);
         let tools_summary = self.tool_registry.build_tools_summary();
-        let style_text = self.agent_config.style.as_deref().unwrap_or("（未设置）");
+        let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
+        let memory_text = load_memory().unwrap_or_default();
+        let soul_text = load_soul().unwrap_or_default();
 
         let resolved = template
             .replace("{{.skills}}", &skills_summary)
             .replace("{{.tools}}", &tools_summary)
-            .replace("{{.style}}", style_text);
+            .replace("{{.style}}", &style_text)
+            .replace("{{.memory}}", &memory_text)
+            .replace("{{.soul}}", &soul_text);
         Some(resolved)
     }
 
@@ -502,9 +495,10 @@ impl ChatApp {
                         if let Some(idx) = first_confirm_idx {
                             self.pending_tool_idx = idx;
                             self.tool_confirm_entered_at = std::time::Instant::now();
+                            // 先把不需要确认的工具（Executing 状态）全部执行完，发送结果给后台线程
+                            // 后台线程按工具数量 recv，必须先收到这些结果才能继续等待需确认工具的结果
+                            self.execute_all_tools_no_confirm();
                             self.mode = ChatMode::ToolConfirm;
-                            // 直接执行不需要确认的工具（在弹出确认框前）
-                            // 注意：确认框出现后，需要等用户按键，由 execute_pending_tool / reject_pending_tool 驱动
                         } else {
                             // 全部不需要确认，直接执行所有工具
                             self.execute_all_tools_no_confirm();
@@ -1062,14 +1056,10 @@ async fn run_agent_loop(
 
                                     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
                                     for _ in &tool_items {
-                                        match tool_result_rx
-                                            .recv_timeout(std::time::Duration::from_secs(60))
-                                        {
+                                        match tool_result_rx.recv() {
                                             Ok(result) => tool_results.push(result),
                                             Err(_) => {
-                                                let _ = tx.send(StreamMsg::Error(
-                                                    "等待工具执行超时".to_string(),
-                                                ));
+                                                // channel 断开（主线程退出），直接结束
                                                 return;
                                             }
                                         }
@@ -1167,10 +1157,10 @@ async fn run_agent_loop(
 
                 let mut tool_results: Vec<ToolResultMsg> = Vec::new();
                 for _ in &tool_items {
-                    match tool_result_rx.recv_timeout(std::time::Duration::from_secs(60)) {
+                    match tool_result_rx.recv() {
                         Ok(result) => tool_results.push(result),
                         Err(_) => {
-                            let _ = tx.send(StreamMsg::Error("等待工具执行超时".to_string()));
+                            // channel 断开（主线程退出），直接结束
                             return;
                         }
                     }
@@ -1272,14 +1262,10 @@ async fn run_agent_loop(
 
                                 let mut tool_results: Vec<ToolResultMsg> = Vec::new();
                                 for _ in &tool_items {
-                                    match tool_result_rx
-                                        .recv_timeout(std::time::Duration::from_secs(60))
-                                    {
+                                    match tool_result_rx.recv() {
                                         Ok(result) => tool_results.push(result),
                                         Err(_) => {
-                                            let _ = tx.send(StreamMsg::Error(
-                                                "等待工具执行超时".to_string(),
-                                            ));
+                                            // channel 断开（主线程退出），直接结束
                                             return;
                                         }
                                     }

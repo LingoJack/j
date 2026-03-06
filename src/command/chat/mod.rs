@@ -22,12 +22,7 @@ use model::{
 use std::io::{self, Write};
 
 pub fn handle_chat(content: &[String], _config: &YamlConfig) {
-    let mut agent_config = load_agent_config();
-    if let Some(file_prompt) = load_system_prompt() {
-        agent_config.system_prompt = Some(file_prompt);
-    } else if let Some(config_prompt) = agent_config.system_prompt.clone() {
-        let _ = save_system_prompt(&config_prompt);
-    }
+    let agent_config = load_agent_config();
 
     if agent_config.providers.is_empty() {
         info!("⚠️  尚未配置 LLM 模型提供方。");
@@ -93,7 +88,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
     match call_openai_stream(
         provider,
         &messages,
-        agent_config.system_prompt.as_deref(),
+        load_system_prompt().as_deref(),
         &mut |chunk| {
             print!("{}", chunk);
             let _ = io::stdout().flush();

@@ -139,6 +139,16 @@ pub fn style_path() -> PathBuf {
     agent_data_dir().join("style.md")
 }
 
+/// 获取记忆文件路径
+pub fn memory_path() -> PathBuf {
+    agent_data_dir().join("memory.md")
+}
+
+/// 获取灵魂文件路径
+pub fn soul_path() -> PathBuf {
+    agent_data_dir().join("soul.md")
+}
+
 // ========== 配置读写 ==========
 
 /// 加载 Agent 配置
@@ -304,6 +314,50 @@ pub fn save_style(style: &str) -> bool {
         Err(e) => {
             error!("❌ 保存 style.md 失败: {}", e);
             false
+        }
+    }
+}
+
+/// 加载记忆（来自独立文件）
+pub fn load_memory() -> Option<String> {
+    let path = memory_path();
+    if !path.exists() {
+        return None;
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Err(e) => {
+            error!("❌ 读取 memory.md 失败: {}", e);
+            None
+        }
+    }
+}
+
+/// 加载灵魂（来自独立文件）
+pub fn load_soul() -> Option<String> {
+    let path = soul_path();
+    if !path.exists() {
+        return None;
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Err(e) => {
+            error!("❌ 读取 soul.md 失败: {}", e);
+            None
         }
     }
 }
