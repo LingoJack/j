@@ -10,6 +10,8 @@
 //! | `HELP_TEXT` | 文本 | `assets/help.md` | 帮助命令输出 |
 //! | `VERSION_TEMPLATE` | 文本 | `assets/version.md` | 版本命令模板 |
 //! | `DEFAULT_SYSTEM_PROMPT` | 文本 | `assets/system_prompt_default.md` | 默认系统提示词模板 |
+//! | `DEFAULT_MEMORY` | 文本 | `assets/memory_default.md` | 默认记忆占位文件 |
+//! | `DEFAULT_SOUL` | 文本 | `assets/soul_default.md` | 默认灵魂占位文件 |
 
 // ========== 文本资源 ==========
 
@@ -32,3 +34,15 @@ pub const VERSION_TEMPLATE: &str = include_str!("../assets/version.md");
 /// 占位符: `{{.tools}}`, `{{.skills}}`, `{{.style}}`, `{{.memory}}`, `{{.soul}}`
 /// 格式: Markdown
 pub const DEFAULT_SYSTEM_PROMPT: &str = include_str!("../assets/system_prompt_default.md");
+
+/// 默认记忆占位文件
+///
+/// 用途: 首次运行时写入 `~/.jdata/agent/data/memory.md`
+/// 格式: Markdown
+pub const DEFAULT_MEMORY: &str = include_str!("../assets/memory_default.md");
+
+/// 默认灵魂占位文件
+///
+/// 用途: 首次运行时写入 `~/.jdata/agent/data/soul.md`
+/// 格式: Markdown
+pub const DEFAULT_SOUL: &str = include_str!("../assets/soul_default.md");

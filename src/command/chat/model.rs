@@ -361,3 +361,33 @@ pub fn load_soul() -> Option<String> {
         }
     }
 }
+
+/// 保存记忆到独立文件
+pub fn save_memory(content: &str) -> bool {
+    let path = memory_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(path, content) {
+        Ok(_) => true,
+        Err(e) => {
+            error!("❌ 保存 memory.md 失败: {}", e);
+            false
+        }
+    }
+}
+
+/// 保存灵魂到独立文件
+pub fn save_soul(content: &str) -> bool {
+    let path = soul_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(path, content) {
+        Ok(_) => true,
+        Err(e) => {
+            error!("❌ 保存 soul.md 失败: {}", e);
+            false
+        }
+    }
+}

@@ -1,8 +1,9 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::model::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
-    load_chat_session, load_memory, load_soul, load_style, load_system_prompt, save_agent_config,
-    save_chat_session, save_system_prompt, system_prompt_path,
+    load_chat_session, load_memory, load_soul, load_style, load_system_prompt, memory_path,
+    save_agent_config, save_chat_session, save_memory, save_soul, save_system_prompt, soul_path,
+    system_prompt_path,
 };
 use super::skill::{self, Skill};
 use super::theme::Theme;
@@ -222,9 +223,15 @@ const DEFAULT_SYSTEM_PROMPT: &str = crate::assets::DEFAULT_SYSTEM_PROMPT;
 impl ChatApp {
     pub fn new() -> Self {
         let agent_config = load_agent_config();
-        // 首次运行：如果 system_prompt.md 不存在则写入默认模板
+        // 首次运行：各数据文件不存在时写入默认内容
         if !system_prompt_path().exists() {
             let _ = save_system_prompt(DEFAULT_SYSTEM_PROMPT);
+        }
+        if !memory_path().exists() {
+            let _ = save_memory(crate::assets::DEFAULT_MEMORY);
+        }
+        if !soul_path().exists() {
+            let _ = save_soul(crate::assets::DEFAULT_SOUL);
         }
         let session = load_chat_session();
         let mut model_list_state = ListState::default();
