@@ -160,6 +160,8 @@ pub struct ChatApp {
     pub pending_style_edit: bool,
     /// 流式请求取消令牌（存在时表示有进行中的请求）
     pub cancel_token: Option<CancellationToken>,
+    /// 工具执行取消标志（Esc 时设为 true，让 ShellTool kill 子进程）
+    pub tool_cancelled: Arc<std::sync::atomic::AtomicBool>,
     /// 是否有待执行的工具（已设为 Executing 状态但尚未实际调用，等待下一帧重绘后再执行）
     pub pending_tool_execution: bool,
     /// 工具后台线程 → 主线程的执行结果 channel
@@ -303,6 +305,7 @@ impl ChatApp {
             at_popup_selected: 0,
             pending_style_edit: false,
             cancel_token: None,
+            tool_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             pending_tool_execution: false,
             tool_exec_rx: None,
             tools_executing_count: 0,
@@ -416,6 +419,9 @@ impl ChatApp {
         self.tool_exec_rx = None;
         self.tools_executing_count = 0;
         self.pending_tool_execution = false;
+        // 重置工具取消标志
+        self.tool_cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         let api_messages = self.build_api_messages();
 
@@ -660,8 +666,9 @@ impl ChatApp {
         for (tool_call_id, tool_name, arguments) in tasks {
             let tx = exec_tx.clone();
             let registry = Arc::clone(&self.tool_registry);
+            let cancelled = Arc::clone(&self.tool_cancelled);
             std::thread::spawn(move || {
-                let result = registry.execute(&tool_name, &arguments);
+                let result = registry.execute(&tool_name, &arguments, &cancelled);
                 let _ = tx.send(ToolExecDoneMsg {
                     tool_call_id,
                     output: result.output,
@@ -699,8 +706,9 @@ impl ChatApp {
         self.tool_exec_rx = Some(exec_rx);
 
         let registry = Arc::clone(&self.tool_registry);
+        let cancelled = Arc::clone(&self.tool_cancelled);
         std::thread::spawn(move || {
-            let result = registry.execute(&tool_name, &arguments);
+            let result = registry.execute(&tool_name, &arguments, &cancelled);
             let _ = exec_tx.send(ToolExecDoneMsg {
                 tool_call_id,
                 output: result.output,
@@ -817,6 +825,11 @@ impl ChatApp {
         if let Some(ref token) = self.cancel_token {
             token.cancel();
         }
+        // drop tool_result_tx，使后台 agent loop 里阻塞等待工具结果的 recv() 立即返回 Disconnected
+        self.tool_result_tx = None;
+        // 通知 ShellTool kill 正在执行的子进程
+        self.tool_cancelled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 清空对话

@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, atomic::AtomicBool};
 
 // ========== 数据结构 ==========
 
@@ -168,7 +169,7 @@ impl Tool for LoadSkillTool {
         })
     }
 
-    fn execute(&self, arguments: &str) -> ToolResult {
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let parsed = serde_json::from_str::<Value>(arguments).ok();
 
         let skill_name = parsed

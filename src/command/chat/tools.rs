@@ -1,5 +1,9 @@
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use serde_json::{Value, json};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use super::skill::Skill;
 
@@ -30,8 +34,8 @@ pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
     fn parameters_schema(&self) -> Value;
-    /// 执行工具（同步）
-    fn execute(&self, arguments: &str) -> ToolResult;
+    /// 执行工具（同步）；cancelled 为取消信号，支持提前终止
+    fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult;
     /// 是否需要用户确认（shell 命令需要，文件读取不需要）
     fn requires_confirmation(&self) -> bool {
         false
@@ -94,7 +98,7 @@ impl Tool for ShellTool {
         })
     }
 
-    fn execute(&self, arguments: &str) -> ToolResult {
+    fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         let command = match serde_json::from_str::<Value>(arguments) {
             Ok(v) => match v.get("command").and_then(|c| c.as_str()) {
                 Some(cmd) => cmd.to_string(),
@@ -121,11 +125,45 @@ impl Tool for ShellTool {
             };
         }
 
-        match std::process::Command::new("bash")
+        let mut child = match std::process::Command::new("bash")
             .arg("-c")
             .arg(&command)
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
         {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("执行失败: {}", e),
+                    is_error: true,
+                };
+            }
+        };
+
+        // 轮询等待子进程完成，同时检测取消信号
+        loop {
+            if cancelled.load(Ordering::Relaxed) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return ToolResult {
+                    output: "[已取消]".to_string(),
+                    is_error: true,
+                };
+            }
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+                Err(e) => {
+                    return ToolResult {
+                        output: format!("等待进程失败: {}", e),
+                        is_error: true,
+                    };
+                }
+            }
+        }
+
+        match child.wait_with_output() {
             Ok(output) => {
                 let mut result = String::new();
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -213,7 +251,7 @@ impl Tool for ReadFileTool {
         })
     }
 
-    fn execute(&self, arguments: &str) -> ToolResult {
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let v = match serde_json::from_str::<Value>(arguments) {
             Ok(v) => v,
             Err(e) => {
@@ -302,7 +340,7 @@ impl Tool for WriteFileTool {
         })
     }
 
-    fn execute(&self, arguments: &str) -> ToolResult {
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let v = match serde_json::from_str::<Value>(arguments) {
             Ok(v) => v,
             Err(e) => {
@@ -410,7 +448,7 @@ impl Tool for EditFileTool {
         })
     }
 
-    fn execute(&self, arguments: &str) -> ToolResult {
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let v = match serde_json::from_str::<Value>(arguments) {
             Ok(v) => v,
             Err(e) => {
@@ -560,9 +598,9 @@ impl ToolRegistry {
     }
 
     /// 按名称执行工具，返回结果（可在任何线程调用，ToolRegistry: Send + Sync）
-    pub fn execute(&self, name: &str, arguments: &str) -> ToolResult {
+    pub fn execute(&self, name: &str, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         match self.get(name) {
-            Some(tool) => tool.execute(arguments),
+            Some(tool) => tool.execute(arguments, cancelled),
             None => ToolResult {
                 output: format!("未知工具: {}", name),
                 is_error: true,
