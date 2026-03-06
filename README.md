@@ -250,6 +250,8 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
   - `j todo` / `j td` — 进入全屏 TUI 待办管理界面
   - `j todo add 买牛奶` — 快速添加一条待办
   - `j todo list` / `j td list` — 输出待办列表（Markdown 格式渲染）
+  - `j todo list --done` / `j td list -d` — 仅显示已完成的待办
+  - `j todo list --undone` / `j td list -u` — 仅显示未完成的待办
   - 交互模式下 `todo` / `td` 同样可用
 
 **TUI 界面**：基于 ratatui + crossterm 的全屏交互界面
