@@ -42,14 +42,30 @@ j
 ```
 ~/.jdata/
 ├── config.yaml          # 主配置文件（别名、分类、设置等）
-├── history.txt          # 交互模式命令历史
+├── agent/               # AI Agent 相关数据
+│   ├── data/            # Agent 数据目录
+│   │   ├── agent_config.json   # Agent 配置（模型、API 等）
+│   │   ├── chat_history.json   # 对话历史
+│   │   ├── archives/           # 归档对话
+│   │   ├── system_prompt.md    # 系统提示词
+│   │   ├── memory.md           # 记忆文件
+│   │   ├── soul.md             # 灵魂文件
+│   │   └── style.md            # 回复风格配置
+│   ├── logs/            # Agent 日志
+│   │   ├── info.log
+│   │   └── error.log
+│   └── skills/          # 技能目录
+├── bin/                 # 内置工具
+│   └── md_render        # Markdown 渲染器
+├── report/              # 日报目录
+│   ├── week_report.md   # 周报文件
+│   ├── settings.json    # 日报配置（周数、日期）
+│   └── .git/            # git 仓库（配置远程仓库后生成）
 ├── scripts/             # j concat 创建的脚本
 ├── todo/                # 待办备忘录目录
 │   └── todo.json        # 待办数据（JSON 格式）
-└── report/              # 日报目录
-    ├── week_report.md   # 周报文件
-    ├── settings.json    # 日报配置（周数、日期）
-    └── .git/            # git 仓库（配置远程仓库后生成）
+└── voice/               # 语音识别
+    └── model/           # Whisper 模型文件
 ```
 
 ### 配置文件结构 (`config.yaml`)
