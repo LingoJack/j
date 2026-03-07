@@ -1,7 +1,7 @@
 # work-copilot Rust 重构进度
 
-> 📅 最后更新: 2026-03-01
-> 🔖 版本: v22.0.0
+> 📅 最后更新: 2026-03-07
+> 🔖 版本: v12.1.52
 > 🖥️ 平台: macOS ARM64 (M1/M2/M3/M4)
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
 
@@ -20,7 +20,7 @@
 - **交互模式**：带 Tab 补全 + 历史建议的 REPL 环境
 - **倒计时器**：终端倒计时，带进度条和结束提醒
 
-重构动机：**启动速度提升 10-100x**（JVM 冷启动 ~200-500ms → Rust 原生 ~2ms），**单文件零依赖分发**（内嵌 Markdown 渲染引擎，~17MB）。
+重构动机：**启动速度提升 10-100x**（JVM 冷启动 ~200-500ms → Rust 原生 ~2ms），**单文件零依赖分发**
 
 ---
 
@@ -31,34 +31,66 @@ src/
 ├── main.rs              # 入口：clap 解析 + 快捷/交互模式分流
 ├── cli.rs               # clap derive 宏定义所有子命令（SubCmd 枚举）
 ├── constants.rs         # 全局常量定义（版本号、section名、分类、搜索引擎等）
-├── interactive.rs       # 交互模式（rustyline + 自定义补全器 + 历史建议）
-├── tui.rs               # 导出 TUI 模块
-├── tui/
+├── assets.rs            # 资源管理模块
+├── interactive/         # 交互模式
+│   ├── mod.rs           # 主模块入口
+│   ├── completer.rs     # Tab 补全器
+│   ├── parser.rs        # 命令解析器
+│   └── shell.rs         # Shell 命令执行
+├── tui/                 # TUI 模块
+│   ├── mod.rs           # 导出
 │   └── editor.rs        # 全屏多行编辑器（ratatui + tui-textarea + vim 模式）
-├── config.rs            # 导出 YamlConfig
-├── config/
+├── config/              # 配置管理
+│   ├── mod.rs           # 导出
 │   └── yaml_config.rs   # YAML 配置 serde 结构体 + 读写 + section 操作
-├── command.rs           # 命令关键字列表 + dispatch(SubCmd) 主分发
-├── command/
+├── command/             # 命令模块
+│   ├── mod.rs           # 模块导出
+│   ├── handler.rs       # dispatch(SubCmd) 主分发
 │   ├── alias.rs         # set / remove / rename / modify
 │   ├── category.rs      # note / denote（分类标记管理）
 │   ├── list.rs          # ls（列出别名）
 │   ├── open.rs          # 打开应用 / URL / 浏览器搜索（核心命令）
 │   ├── report.rs        # report / check / search（日报系统）
-│   ├── todo.rs          # todo（待办备忘录 TUI）
-│   ├── chat.rs          # chat（AI 对话 TUI，Markdown 渲染 + 流式输出）
-│   ├── voice.rs         # voice（语音转文字，Whisper.cpp 离线转写）
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
-│   └── time.rs          # time countdown（倒计时器）
-├── util.rs              # 导出子模块 + 公共工具函数（remove_quotes）
-├── util/
-│   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏 + 工具函数
-│   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏（Rust 原生渲染）
-│   └── fuzzy.rs         # 模糊匹配（大小写不敏感 + 高亮 + UTF-8 安全）
-├── assets/
-│   ├── help.md          # 帮助文档（编译时通过 include_str! 嵌入二进制）
-│   └── version.md       # 版本信息模板（同上，含占位符）
+│   ├── time.rs          # time countdown（倒计时器）
+│   ├── voice.rs         # voice（语音转文字，Whisper.cpp 离线转写）
+│   ├── todo/            # 待办备忘录 TUI
+│   │   ├── mod.rs       # 入口
+│   │   ├── app.rs       # 应用状态
+│   │   └── ui.rs        # UI 渲染
+│   ├── chat/            # AI 对话 TUI
+│   │   ├── mod.rs       # 入口
+│   │   ├── handler.rs   # TUI 主循环
+│   │   ├── app.rs       # 应用状态 + 后台 Agent 循环
+│   │   ├── api.rs       # OpenAI 客户端
+│   │   ├── model.rs     # 数据模型
+│   │   ├── tools.rs     # 工具系统
+│   │   ├── archive.rs   # 归档管理
+│   │   ├── theme.rs     # 主题系统
+│   │   ├── render.rs    # 渲染工具
+│   │   ├── skill.rs     # Skill 技能系统
+│   │   ├── markdown/    # Markdown 解析渲染
+│   │   │   ├── mod.rs
+│   │   │   ├── parser.rs
+│   │   │   └── highlight.rs
+│   │   └── ui/          # TUI 组件
+│   │       ├── mod.rs
+│   │       ├── chat.rs
+│   │       ├── config.rs
+│   │       └── archive.rs
+│   └── help/            # 帮助系统 TUI
+│       ├── mod.rs
+│       ├── app.rs
+│       └── ui.rs
+├── util/                # 工具函数
+│   ├── mod.rs           # 导出
+│   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏
+│   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏
+│   └── fuzzy.rs         # 模糊匹配
+└── assets/
+    ├── help.md          # 帮助文档（编译时通过 include_str! 嵌入二进制）
+    └── version.md       # 版本信息模板（同上，含占位符）
             └── ask-darwin-arm64
 ```
 
@@ -69,22 +101,28 @@ src/
 ```toml
 [dependencies]
 clap = { version = "4", features = ["derive"] }   # 命令行参数解析（derive 宏）
-rustyline = "15"                                    # 交互模式 REPL + Tab 补全
+rustyline = "17.0.2"                               # 交互模式 REPL + Tab 补全
 serde = { version = "1", features = ["derive"] }   # 序列化框架
-serde_yaml = "0.9"                                  # YAML 配置读写
-serde_json = "1"                                    # JSON 处理（日报 settings.json）
-chrono = "0.4"                                      # 日期时间（日报周数管理）
-colored = "3"                                       # 终端彩色输出
-dirs = "6"                                          # 跨平台用户目录（~/.config/j/）
-url = "2"                                           # URL 解析判断
-indicatif = "0.17"                                  # 进度条（倒计时用）
-termimad = "0.30"                                   # Markdown 终端渲染（fallback）
-ratatui = "0.29"                                    # TUI 框架（全屏终端 UI）
-crossterm = "0.28"                                  # 终端原始模式 + 事件读取
-tui-textarea = "0.7"                                # 多行文本编辑组件（配合 ratatui）
-whisper-rs = "0.15"                                  # Whisper.cpp Rust 绑定（离线语音识别）
-cpal = "0.17"                                        # 跨平台音频捕获（麦克风录音）
-hound = "3.5"                                        # WAV 文件读写
+serde_yaml = "0.9"                                 # YAML 配置读写
+serde_json = "1"                                   # JSON 处理（日报 settings.json）
+chrono = "0.4"                                     # 日期时间（日报周数管理）
+colored = "3"                                      # 终端彩色输出
+dirs = "6"                                         # 跨平台用户目录（~/.config/j/）
+url = "2"                                          # URL 解析判断
+indicatif = "0.18.3"                               # 进度条（倒计时用）
+termimad = "0.34.1"                                # Markdown 终端渲染（fallback）
+ratatui = "0.29.0"                                 # TUI 框架（全屏终端 UI）
+crossterm = "0.28.0"                               # 终端原始模式 + 事件读取
+tui-textarea = "0.7"                               # 多行文本编辑组件（配合 ratatui）
+async-openai = "0.33"                              # OpenAI API 客户端（AI 对话）
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }  # 异步运行时
+tokio-util = { version = "0.7", features = ["rt"] }                   # Tokio 工具
+futures = "0.3"                                    # Future 工具
+pulldown-cmark = "0.13.0"                          # Markdown 解析
+unicode-width = "0.2"                              # Unicode 字符宽度计算
+whisper-rs = "0.15"                                # Whisper.cpp Rust 绑定（离线语音识别）
+cpal = "0.17"                                      # 跨平台音频捕获（麦克风录音）
+libc = "0.2"                                       # libc 绑定
 ```
 
 ---
@@ -198,9 +236,9 @@ flowchart TD
 | `find_alias(alias)` → `(section, value)` | 在 path/inner_url/outer_url 中查找别名 |
 | `is_verbose()` | 是否开启 verbose 日志 |
 
-### 5.4 交互模式 — `interactive.rs`
+### 5.4 交互模式 — `interactive/`
 
-- 基于 `rustyline` 15，自定义 `CopilotHelper`（实现 Completer + Hinter + Highlighter + Validator）
+- 基于 `rustyline` 17，自定义 `CopilotHelper`（实现 Completer + Hinter + Highlighter + Validator）
 - **Tab 补全**：上下文感知
   - 第一个词 → 补全所有命令名 + 已注册别名
   - `rm/rename/mf/note/denote <Tab>` → 补全已有别名
@@ -243,7 +281,7 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
   - **GUI 应用**（`.app` 目录）/ 其他文件 → 系统 `open` 命令打开
 6. 未注册 → 提示未找到
 
-### 5.6 待办备忘录 — `command/todo.rs`
+### 5.6 待办备忘录 — `command/todo/`
 
 - **数据存储**：`~/.jdata/todo/todo.json`（独立目录，JSON 格式持久化）
 - **入口方式**：
@@ -328,19 +366,19 @@ j <script_alias> -w <args>  → 在新终端窗口中执行脚本并传递参数
 |--------|------|--------|
 | `VERSION` / `APP_NAME` / `AUTHOR` / `EMAIL` | 版本信息 | cli.rs, yaml_config.rs, system.rs |
 | `section::*` | section 名称（PATH, INNER_URL, OUTER_URL 等） | 几乎所有 command 模块 |
-| `ALL_SECTIONS` | 所有 section 名称列表 | yaml_config.rs, interactive.rs |
+| `ALL_SECTIONS` | 所有 section 名称列表 | yaml_config.rs, interactive/completer.rs |
 | `DEFAULT_DISPLAY_SECTIONS` | ls 默认展示的 section | list.rs |
 | `CONTAIN_SEARCH_SECTIONS` | contain 默认搜索的 section | system.rs |
-| `NOTE_CATEGORIES` | 可标记分类列表 | category.rs, interactive.rs |
-| `ALIAS_PATH_SECTIONS` | 别名路径查找 section | yaml_config.rs, interactive.rs |
+| `NOTE_CATEGORIES` | 可标记分类列表 | category.rs, interactive/completer.rs |
+| `ALIAS_PATH_SECTIONS` | 别名路径查找 section | yaml_config.rs, interactive/completer.rs |
 | `ALIAS_EXISTS_SECTIONS` | 别名存在性检查 section | yaml_config.rs |
 | `MODIFY_SECTIONS` / `REMOVE_CLEANUP_SECTIONS` / `RENAME_SYNC_SECTIONS` | 别名 CRUD 关联 section | alias.rs |
-| `config_key::*` | 配置 key 名称（MODE, VERBOSE, SEARCH_ENGINE, GIT_REPO 等） | yaml_config.rs, system.rs, open.rs, report.rs, interactive.rs |
+| `config_key::*` | 配置 key 名称（MODE, VERBOSE, SEARCH_ENGINE, GIT_REPO 等） | yaml_config.rs, system.rs, open.rs, report.rs, interactive/mod.rs |
 | `search_engine::*` | 搜索引擎 URL 模板 | open.rs |
 | `REPORT_DATE_FORMAT` / `DEFAULT_CHECK_LINES` / `REPORT_DIR` / `REPORT_DEFAULT_FILE` | 日报相关常量 | report.rs, yaml_config.rs |
-| `INTERACTIVE_PROMPT` / `HISTORY_FILE` / `CONFIG_FILE` 等 | 路径和文件名 | interactive.rs, yaml_config.rs |
+| `INTERACTIVE_PROMPT` / `HISTORY_FILE` / `CONFIG_FILE` 等 | 路径和文件名 | interactive/mod.rs, yaml_config.rs |
 
-### 5.11 公共工具函数 — `util.rs`
+### 5.11 公共工具函数 — `util/mod.rs`
 
 - `remove_quotes(s: &str) -> String` — 去除字符串两端的引号（单引号或双引号），被 `alias.rs` 和 `open.rs` 共同复用。
 
@@ -563,8 +601,8 @@ copilot > exit
 
 | Java 类 | Rust 模块 | 说明 |
 |----------|-----------|------|
-| `WorkCopilotApplication` | `main.rs` + `interactive.rs` | 入口 + 交互模式 |
-| `CommandHandlerScanner` | `cli.rs` + `command.rs` | 命令注册 + 分发（Java 反射 → Rust 枚举 match） |
+| `WorkCopilotApplication` | `main.rs` + `interactive/mod.rs` | 入口 + 交互模式 |
+| `CommandHandlerScanner` | `cli.rs` + `command/handler.rs` | 命令注册 + 分发（Java 反射 → Rust 枚举 match） |
 | `YamlConfig` | `config/yaml_config.rs` | YAML 配置管理 |
 | `SetCommandHandler` | `command/alias.rs::handle_set` | 设置别名 |
 | `RemoveCommandHandler` | `command/alias.rs::handle_remove` | 删除别名 |
@@ -589,7 +627,7 @@ copilot > exit
 | `CommandRunner` | `open::that()` + `std::process::Command` | 进程执行 |
 | `FuzzyMatcher` | `util/fuzzy.rs` | 模糊匹配 |
 | `LogUtil` | `util/log.rs`（日志宏）+ `util/md_render.rs`（Markdown 渲染） | 彩色日志 + Rust 原生 Markdown 渲染 |
-| JLine3 Completer | `interactive.rs::CopilotCompleter` | Tab 补全 |
+| JLine3 Completer | `interactive/completer.rs::CopilotCompleter` | Tab 补全 |
 
 ---
 
@@ -866,7 +904,7 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 
 ---
 
-## 十一、AI 对话系统 (`chat.rs`)
+## 十一、AI 对话系统 (`command/chat/`)
 
 ### 概述
 
@@ -875,9 +913,8 @@ Phase 21 为脚本执行和交互模式引入了别名路径环境变量自动�
 ### 架构总览
 
 ```
-src/command/
-├── chat.rs          # 入口：handle_chat() 命令分发
-├── chat/
+src/command/chat/
+├── mod.rs           # 入口：handle_chat() 命令分发
 ├── handler.rs       # TUI 主循环：事件监听 + 模式路由
 ├── app.rs           # 应用状态：ChatApp + 后台 Agent 循环
 ├── api.rs           # API 层：OpenAI 客户端 + 请求构建
@@ -886,10 +923,13 @@ src/command/
 ├── archive.rs       # 归档管理：创建 / 列表 / 还原 / 删除
 ├── theme.rs         # 主题系统：6 种配色方案
 ├── render.rs        # 渲染工具：剪贴板复制
+├── skill.rs         # Skill 技能系统
 ├── markdown/        # Markdown 解析渲染
+│   ├── mod.rs
 │   ├── parser.rs    # pulldown-cmark 解析
 │   └── highlight.rs # 代码语法高亮
 └── ui/              # TUI 组件
+    ├── mod.rs
     ├── chat.rs      # 对话主界面
     ├── config.rs    # 配置编辑界面
     └── archive.rs   # 归档列表界面
@@ -1567,7 +1607,7 @@ Bash 额外支持 `$VAR`、`${VAR}`、`$(cmd)` 变量高亮。
 
 ---
 
-## 十二、语音转文字 (`voice.rs`)
+## 十二、语音转文字 (`command/voice.rs`)
 
 ### 概述
 
@@ -1668,10 +1708,10 @@ j todo "$(j voice)"           # 语音添加待办
 3. **`cargo run -- help`** — 查看所有可用命令
 4. **`cargo run`** — 体验交互模式
 5. **阅读 `cli.rs`** — 所有子命令的定义都在这里（SubCmd 枚举）
-6. **阅读 `command.rs`** — 了解命令如何分发到各 handler
+6. **阅读 `command/handler.rs`** — 了解命令如何分发到各 handler
 7. **阅读 `config/yaml_config.rs`** — 了解配置文件的数据结构和操作 API
 8. **阅读 `command/open.rs`** — 这是最核心的命令，理解打开逻辑
-9. **阅读 `interactive.rs`** — 理解交互模式的补全器和命令解析
+9. **阅读 `interactive/mod.rs`** — 理解交互模式的入口和命令解析
 10. **查看 `~/.jdata/config.yaml`** — 实际配置文件，所有数据都在这里
 11. **参考 `work-copilot-java/`** — Java 原版代码，逻辑一一对应
 
@@ -1679,7 +1719,7 @@ j todo "$(j voice)"           # 语音添加待办
 
 1. 在 `cli.rs` 的 `SubCmd` 枚举中添加新变体
 2. 在 `command/` 下创建或修改对应的 handler 文件
-3. 在 `command.rs` 的 `dispatch()` 中添加匹配分支
-4. 在 `command.rs` 的 `all_command_keywords()` 中注册关键字
-5. 在 `interactive.rs` 中添加补全规则 + `parse_interactive_command()` 分支
-6. 在 `system.rs` 的 `handle_help()` 中更新帮助文本
+3. 在 `command/handler.rs` 的 `dispatch()` 中添加匹配分支
+4. 在 `command/handler.rs` 中注册关键字（如需要）
+5. 在 `interactive/completer.rs` 中添加补全规则 + `interactive/parser.rs` 分支
+6. 在 `command/system.rs` 的 `handle_help()` 中更新帮助文本
