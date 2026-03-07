@@ -951,6 +951,7 @@ impl ChatApp {
 // ========== Agent 循环（后台异步函数）==========
 
 /// 后台 Agent 循环：支持多轮工具调用
+#[allow(clippy::too_many_arguments)]
 async fn run_agent_loop(
     provider: ModelProvider,
     mut messages: Vec<ChatMessage>,

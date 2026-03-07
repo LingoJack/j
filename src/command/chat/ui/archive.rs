@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 /// 绘制归档确认界面
+#[allow(clippy::vec_init_then_push)]
 pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.theme;
     let mut lines: Vec<Line> = Vec::new();
@@ -167,6 +168,7 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 }
 
 /// 绘制归档列表界面
+#[allow(clippy::vec_init_then_push)]
 pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.theme;
 

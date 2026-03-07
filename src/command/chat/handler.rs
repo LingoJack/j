@@ -215,7 +215,6 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
 }
 
 /// 绘制 TUI 界面
-
 pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     // Ctrl+C 强制退出
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {

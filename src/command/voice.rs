@@ -3,7 +3,7 @@ use crate::constants::voice as vc;
 use crate::{error, info};
 use colored::Colorize;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -107,7 +107,7 @@ fn process_raw_audio(raw_data: &[f32], sample_rate: u32, channels: u16) -> Vec<f
 }
 
 /// 直接从 f32 samples 转写（不经过 WAV 文件）
-fn transcribe_from_samples(model_path: &PathBuf, samples: &[f32]) -> Result<String, String> {
+fn transcribe_from_samples(model_path: &Path, samples: &[f32]) -> Result<String, String> {
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
     if samples.is_empty() {
@@ -222,9 +222,10 @@ fn wait_for_ctrl_v_stop(recording: &AtomicBool) -> bool {
 
 /// 录音 + 流式转写：边录边显示
 /// 返回最终完整转写文本
-fn record_and_transcribe_streaming(model_path: &PathBuf) -> Result<String, String> {
+fn record_and_transcribe_streaming(model_path: &Path) -> Result<String, String> {
     let recording = Arc::new(AtomicBool::new(true));
     let raw_samples: Arc<std::sync::Mutex<Vec<f32>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let streaming_model = model_path.to_path_buf();
 
     let (stream, sample_rate, channels) =
         start_recording_stream(recording.clone(), raw_samples.clone())?;
@@ -232,7 +233,6 @@ fn record_and_transcribe_streaming(model_path: &PathBuf) -> Result<String, Strin
     // 流式转写线程
     let streaming_recording = recording.clone();
     let streaming_samples = raw_samples.clone();
-    let streaming_model = model_path.clone();
     let streaming_sr = sample_rate;
     let streaming_ch = channels;
     let displayed_len = Arc::new(std::sync::Mutex::new(0usize));

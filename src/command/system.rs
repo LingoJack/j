@@ -148,7 +148,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
     let keywords = constants::cmd::all_keywords();
 
     // 子命令列表
-    let subcmds = keywords.iter().copied().collect::<Vec<_>>();
+    let subcmds = keywords.to_vec();
     let subcmds_str = subcmds.join(" ");
 
     // 别名列表
@@ -220,7 +220,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
 
     // list 命令：补全 section 名
     let sections_str = constants::ALL_SECTIONS.join(" ");
-    script.push_str(&"                ls|list)\n".to_string());
+    script.push_str("                ls|list)\n");
     script.push_str(&format!(
         "                    local -a sections=(all {})\n",
         sections_str
@@ -247,7 +247,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
     script.push_str("                    ;;\n");
 
     // change 命令：补全 section
-    script.push_str(&"                change|chg)\n".to_string());
+    script.push_str("                change|chg)\n");
     script.push_str(&format!(
         "                    local -a sections=({})\n",
         sections_str

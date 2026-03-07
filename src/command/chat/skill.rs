@@ -1,7 +1,7 @@
 use crate::config::YamlConfig;
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ========== 数据结构 ==========
 
@@ -61,7 +61,7 @@ pub fn load_all_skills() -> Vec<Skill> {
 }
 
 /// 解析 SKILL.md: YAML frontmatter + body
-fn parse_skill_md(path: &PathBuf, dir: &PathBuf) -> Option<Skill> {
+fn parse_skill_md(path: &PathBuf, dir: &Path) -> Option<Skill> {
     let content = fs::read_to_string(path).ok()?;
     let (fm_str, body) = split_frontmatter(&content)?;
     let frontmatter: SkillFrontmatter = serde_yaml::from_str(&fm_str).ok()?;
@@ -73,7 +73,7 @@ fn parse_skill_md(path: &PathBuf, dir: &PathBuf) -> Option<Skill> {
     Some(Skill {
         frontmatter,
         body: body.trim().to_string(),
-        dir_path: dir.clone(),
+        dir_path: dir.to_path_buf(),
     })
 }
 

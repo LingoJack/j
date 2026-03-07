@@ -78,7 +78,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         )));
         lines.push(Line::from(""));
 
-        for i in 0..total_provider_fields {
+        for (i, field) in CONFIG_FIELDS.iter().enumerate().take(total_provider_fields) {
             let is_selected = app.config_field_idx == i;
             let label = config_field_label(i);
             let value = if app.config_editing && is_selected {
@@ -104,7 +104,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Style::default().fg(t.text_white).bg(t.config_edit_bg)
             } else if is_selected {
                 Style::default().fg(t.text_white)
-            } else if CONFIG_FIELDS[i] == "api_key" {
+            } else if *field == "api_key" {
                 Style::default().fg(t.config_api_key)
             } else {
                 Style::default().fg(t.config_value)
@@ -166,7 +166,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     )));
     lines.push(Line::from(""));
 
-    for i in 0..CONFIG_GLOBAL_FIELDS.len() {
+    for (i, field) in CONFIG_GLOBAL_FIELDS.iter().enumerate() {
         let field_idx = total_provider_fields + i;
         let is_selected = app.config_field_idx == field_idx;
         let label = config_field_label(field_idx);
@@ -197,7 +197,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             Style::default().fg(t.config_value)
         };
 
-        if CONFIG_GLOBAL_FIELDS[i] == "stream_mode" {
+        if *field == "stream_mode" {
             let toggle_on = app.agent_config.stream_mode;
             let toggle_style = if toggle_on {
                 Style::default()
@@ -221,7 +221,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
-        } else if CONFIG_GLOBAL_FIELDS[i] == "theme" {
+        } else if *field == "theme" {
             let theme_name = app.agent_config.theme.display_name();
             lines.push(Line::from(vec![
                 Span::styled(pointer, pointer_style),
@@ -238,7 +238,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
-        } else if CONFIG_GLOBAL_FIELDS[i] == "tools_enabled" {
+        } else if *field == "tools_enabled" {
             let toggle_on = app.agent_config.tools_enabled;
             let toggle_style = if toggle_on {
                 Style::default()
@@ -262,7 +262,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
-        } else if CONFIG_GLOBAL_FIELDS[i] == "system_prompt" {
+        } else if *field == "system_prompt" {
             // system_prompt 特殊处理：截断显示 + Enter 弹出全屏编辑器
             let display_value = if value.is_empty() {
                 "(空)".to_string()
@@ -289,7 +289,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ]));
-        } else if CONFIG_GLOBAL_FIELDS[i] == "style" {
+        } else if *field == "style" {
             // style 特殊处理：同 system_prompt 模式
             let display_value = if value.is_empty() {
                 "(空)".to_string()

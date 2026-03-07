@@ -943,7 +943,8 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &Theme) -> Vec<Span<'s
 }
 
 /// 将文本按照 word boundary 拆分并对关键字、数字、类型名、原始类型着色
-pub fn colorize_tokens<'a>(
+#[allow(clippy::too_many_arguments)]
+pub fn colorize_tokens(
     text: &str,
     keywords: &[&str],
     primitive_types: &[&str],
@@ -1026,6 +1027,7 @@ pub fn colorize_tokens<'a>(
 }
 
 /// 根据语言规则判断一个 word 应该使用哪种颜色样式
+#[allow(clippy::too_many_arguments)]
 pub fn classify_word(
     word: &str,
     keywords: &[&str],

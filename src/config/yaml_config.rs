@@ -96,8 +96,8 @@ impl YamlConfig {
         {
             if path == "~" {
                 return home;
-            } else if path.starts_with("~/") {
-                return home.join(&path[2..]);
+            } else if let Some(stripped) = path.strip_prefix("~/") {
+                return home.join(stripped);
             }
         }
         PathBuf::from(path)

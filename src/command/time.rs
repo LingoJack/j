@@ -52,18 +52,12 @@ fn format_duration_display(secs: u64) -> String {
 /// 解析时长字符串为秒数
 fn parse_duration(s: &str) -> i64 {
     let s = s.trim();
-    if s.ends_with('s') {
-        s[..s.len() - 1].parse::<i64>().unwrap_or(-1)
-    } else if s.ends_with('m') {
-        s[..s.len() - 1]
-            .parse::<i64>()
-            .map(|m| m * 60)
-            .unwrap_or(-1)
-    } else if s.ends_with('h') {
-        s[..s.len() - 1]
-            .parse::<i64>()
-            .map(|h| h * 3600)
-            .unwrap_or(-1)
+    if let Some(stripped) = s.strip_suffix('s') {
+        stripped.parse::<i64>().unwrap_or(-1)
+    } else if let Some(stripped) = s.strip_suffix('m') {
+        stripped.parse::<i64>().map(|m| m * 60).unwrap_or(-1)
+    } else if let Some(stripped) = s.strip_suffix('h') {
+        stripped.parse::<i64>().map(|h| h * 3600).unwrap_or(-1)
     } else {
         // 默认单位为分钟
         s.parse::<i64>().map(|m| m * 60).unwrap_or(-1)

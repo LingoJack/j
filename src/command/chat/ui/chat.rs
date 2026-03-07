@@ -42,8 +42,6 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         draw_archive_confirm(f, chunks[1], app);
     } else if app.mode == ChatMode::ArchiveList {
         draw_archive_list(f, chunks[1], app);
-    } else if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
-        draw_messages(f, chunks[1], app);
     } else {
         draw_messages(f, chunks[1], app);
     }
@@ -365,9 +363,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         }
     }
 
-    let line_scroll = if wrapped_lines.len() <= inner_height {
-        0
-    } else if cursor_line_idx < inner_height {
+    let line_scroll = if wrapped_lines.len() <= inner_height || cursor_line_idx < inner_height {
         0
     } else {
         cursor_line_idx.saturating_sub(inner_height - 1)
@@ -412,7 +408,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 .iter()
                 .any(|&(s, e)| global_idx >= s && global_idx < e);
 
-            if is_cursor || (is_mention && !is_cursor) {
+            if is_cursor || is_mention {
                 // flush normal or mention segment before this char
                 if ci > seg_start {
                     let seg: String = line_chars[seg_start..ci].iter().collect();

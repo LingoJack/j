@@ -41,7 +41,8 @@ pub fn find_stable_boundary(content: &str) -> usize {
 /// 增量构建所有消息的渲染行（P0 + P1 优化版本）
 /// - P0：按消息粒度缓存，历史消息内容未变时直接复用渲染行
 /// - P1：流式消息增量段落渲染，只重新解析最后一个不完整段落
-/// 返回 (渲染行列表, 消息起始行号映射, 按消息缓存, 流式稳定行缓存, 流式稳定偏移)
+///   返回 (渲染行列表, 消息起始行号映射, 按消息缓存, 流式稳定行缓存, 流式稳定偏移)
+#[allow(clippy::type_complexity)]
 pub fn build_message_lines_incremental(
     app: &ChatApp,
     inner_width: usize,
@@ -751,7 +752,6 @@ pub fn render_assistant_msg(
 /// 将 Markdown 文本解析为 ratatui 的 Line 列表
 /// 支持：标题（去掉 # 标记）、加粗、斜体、行内代码、代码块（语法高亮）、列表、分隔线
 /// content_width：内容区可用宽度（不含外层 "  " 缩进和右侧填充）
-
 pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     // 最小宽度保证至少能放下一个字符（中文字符宽度2），避免无限循环或不截断
     let max_width = max_width.max(2);
