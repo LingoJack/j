@@ -119,11 +119,11 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
     let script_path_str = script_path.to_string_lossy().to_string();
 
     // 确保目录存在（scripts_dir() 已保证，这里冗余保护）
-    if let Some(parent) = script_path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            error!("❌ 创建目录失败: {}", e);
-            return;
-        }
+    if let Some(parent) = script_path.parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        error!("❌ 创建目录失败: {}", e);
+        return;
     }
 
     // 写入脚本内容

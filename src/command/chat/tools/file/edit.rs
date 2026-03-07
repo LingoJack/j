@@ -123,11 +123,7 @@ impl Tool for EditFileTool {
         let v = serde_json::from_str::<Value>(arguments).ok();
         let path = v
             .as_ref()
-            .and_then(|v| {
-                v.get("path")
-                    .and_then(|c| c.as_str())
-                    .map(|s| expand_tilde(s))
-            })
+            .and_then(|v| v.get("path").and_then(|c| c.as_str()).map(expand_tilde))
             .unwrap_or_else(|| "未知路径".to_string());
         let old = v
             .as_ref()

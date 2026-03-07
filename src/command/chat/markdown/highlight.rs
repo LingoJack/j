@@ -6,7 +6,7 @@ use ratatui::{
 
 /// 简单的代码语法高亮（无需外部依赖）
 /// 根据语言类型对常见关键字、字符串、注释、数字进行着色
-pub fn highlight_code_line<'a>(line: &'a str, lang: &str, theme: &Theme) -> Vec<Span<'static>> {
+pub fn highlight_code_line(line: &str, lang: &str, theme: &Theme) -> Vec<Span<'static>> {
     let lang_lower = lang.to_lowercase();
     // Rust 使用多组词汇分别高亮
     // keywords: 控制流/定义关键字 → 紫色
@@ -773,44 +773,44 @@ pub fn highlight_code_line<'a>(line: &'a str, lang: &str, theme: &Theme) -> Vec<
         // Rust 属性 (#[...] 或 #![...])
         if ch == '#' && matches!(lang_lower.as_str(), "rust" | "rs") {
             let mut lookahead = chars.clone();
-            if let Some(next) = lookahead.next() {
-                if next == '[' {
-                    if !buf.is_empty() {
-                        spans.extend(colorize_tokens(
-                            &buf,
-                            keywords,
-                            primitive_types,
-                            go_type_names,
-                            code_style,
-                            kw_style,
-                            num_style,
-                            type_style,
-                            primitive_style,
-                            macro_style,
-                            &lang_lower,
-                        ));
-                        buf.clear();
-                    }
-                    let mut attr = String::new();
-                    attr.push(ch);
+            if let Some(next) = lookahead.next()
+                && next == '['
+            {
+                if !buf.is_empty() {
+                    spans.extend(colorize_tokens(
+                        &buf,
+                        keywords,
+                        primitive_types,
+                        go_type_names,
+                        code_style,
+                        kw_style,
+                        num_style,
+                        type_style,
+                        primitive_style,
+                        macro_style,
+                        &lang_lower,
+                    ));
+                    buf.clear();
+                }
+                let mut attr = String::new();
+                attr.push(ch);
+                chars.next();
+                let mut depth = 0;
+                while let Some(&c) = chars.peek() {
+                    attr.push(c);
                     chars.next();
-                    let mut depth = 0;
-                    while let Some(&c) = chars.peek() {
-                        attr.push(c);
-                        chars.next();
-                        if c == '[' {
-                            depth += 1;
-                        } else if c == ']' {
-                            depth -= 1;
-                            if depth == 0 {
-                                break;
-                            }
+                    if c == '[' {
+                        depth += 1;
+                    } else if c == ']' {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
                         }
                     }
-                    let attr_style = Style::default().fg(theme.code_attribute);
-                    spans.push(Span::styled(attr, attr_style));
-                    continue;
                 }
+                let attr_style = Style::default().fg(theme.code_attribute);
+                spans.push(Span::styled(attr, attr_style));
+                continue;
             }
         }
         // Shell 变量 ($VAR, ${VAR}, $1 等)

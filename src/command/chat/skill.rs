@@ -49,10 +49,10 @@ pub fn load_all_skills() -> Vec<Skill> {
             continue;
         }
         let skill_md = path.join("SKILL.md");
-        if skill_md.exists() {
-            if let Some(skill) = parse_skill_md(&skill_md, &path) {
-                skills.push(skill);
-            }
+        if skill_md.exists()
+            && let Some(skill) = parse_skill_md(&skill_md, &path)
+        {
+            skills.push(skill);
         }
     }
 
@@ -97,19 +97,18 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
 
     // 读取 references/ 目录
     let refs_dir = skill.dir_path.join("references");
-    if refs_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&refs_dir) {
-            let mut ref_files: Vec<_> = entries.flatten().collect();
-            ref_files.sort_by_key(|e| e.file_name());
-            for entry in ref_files {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Ok(content) = fs::read_to_string(&path) {
-                        let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        result
-                            .push_str(&format!("\n\n--- 参考文件: {} ---\n{}", filename, content));
-                    }
-                }
+    if refs_dir.is_dir()
+        && let Ok(entries) = fs::read_dir(&refs_dir)
+    {
+        let mut ref_files: Vec<_> = entries.flatten().collect();
+        ref_files.sort_by_key(|e| e.file_name());
+        for entry in ref_files {
+            let path = entry.path();
+            if path.is_file()
+                && let Ok(content) = fs::read_to_string(&path)
+            {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy();
+                result.push_str(&format!("\n\n--- 参考文件: {} ---\n{}", filename, content));
             }
         }
     }

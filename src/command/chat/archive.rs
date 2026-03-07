@@ -48,13 +48,13 @@ pub fn list_archives() -> Vec<ChatArchive> {
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "json") {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    match serde_json::from_str::<ChatArchive>(&content) {
-                        Ok(archive) => archives.push(archive),
-                        Err(e) => {
-                            error!("[list_archives] 解析归档文件失败: {:?}, 错误: {}", path, e);
-                        }
+            if path.extension().is_some_and(|ext| ext == "json")
+                && let Ok(content) = fs::read_to_string(&path)
+            {
+                match serde_json::from_str::<ChatArchive>(&content) {
+                    Ok(archive) => archives.push(archive),
+                    Err(e) => {
+                        error!("[list_archives] 解析归档文件失败: {:?}, 错误: {}", path, e);
                     }
                 }
             }

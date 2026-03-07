@@ -64,15 +64,14 @@ impl Tool for WriteFileTool {
 
         // 自动创建父目录
         let file_path = std::path::Path::new(&path);
-        if let Some(parent) = file_path.parent() {
-            if !parent.exists() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    return ToolResult {
-                        output: format!("创建目录失败: {}", e),
-                        is_error: true,
-                    };
-                }
-            }
+        if let Some(parent) = file_path.parent()
+            && !parent.exists()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            return ToolResult {
+                output: format!("创建目录失败: {}", e),
+                is_error: true,
+            };
         }
 
         match std::fs::write(&path, &content) {
@@ -94,11 +93,7 @@ impl Tool for WriteFileTool {
     fn confirmation_message(&self, arguments: &str) -> String {
         let path = serde_json::from_str::<Value>(arguments)
             .ok()
-            .and_then(|v| {
-                v.get("path")
-                    .and_then(|c| c.as_str())
-                    .map(|s| expand_tilde(s))
-            })
+            .and_then(|v| v.get("path").and_then(|c| c.as_str()).map(expand_tilde))
             .unwrap_or_else(|| "未知路径".to_string());
         format!("即将写入文件: {}", path)
     }

@@ -264,24 +264,22 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             app.scroll_offset = max_scroll;
             app.auto_scroll = true;
         }
-    } else {
-        if let Some(msg_start) = cached
-            .msg_start_lines
-            .iter()
-            .find(|(idx, _)| *idx == app.browse_msg_index)
-            .map(|(_, line)| *line as u16)
-        {
-            let msg_line_count = cached
-                .per_msg_lines
-                .get(app.browse_msg_index)
-                .map(|c| c.lines.len())
-                .unwrap_or(1) as u16;
-            let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
-            if app.browse_scroll_offset > msg_max_scroll {
-                app.browse_scroll_offset = msg_max_scroll;
-            }
-            app.scroll_offset = (msg_start + app.browse_scroll_offset).min(max_scroll);
+    } else if let Some(msg_start) = cached
+        .msg_start_lines
+        .iter()
+        .find(|(idx, _)| *idx == app.browse_msg_index)
+        .map(|(_, line)| *line as u16)
+    {
+        let msg_line_count = cached
+            .per_msg_lines
+            .get(app.browse_msg_index)
+            .map(|c| c.lines.len())
+            .unwrap_or(1) as u16;
+        let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
+        if app.browse_scroll_offset > msg_max_scroll {
+            app.browse_scroll_offset = msg_max_scroll;
         }
+        app.scroll_offset = (msg_start + app.browse_scroll_offset).min(max_scroll);
     }
 
     let bg_fill = Block::default().style(Style::default().bg(app.theme.bg_primary));
@@ -513,7 +511,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 let line_len = wl.chars().count();
                 if skip_chars + char_count + line_len > cursor_global_pos {
                     let pos_in_line = cursor_global_pos - (skip_chars + char_count);
-                    col = wl.chars().take(pos_in_line).map(|c| char_width(c)).sum();
+                    col = wl.chars().take(pos_in_line).map(char_width).sum();
                     break;
                 }
                 char_count += line_len;

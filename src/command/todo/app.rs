@@ -281,16 +281,16 @@ impl TodoApp {
             self.edit_index = None;
             return;
         }
-        if let Some(idx) = self.edit_index {
-            if idx < self.list.items.len() {
-                self.list.items[idx].content = text;
-                // 自动保存到文件
-                if save_todo_list(&self.list) {
-                    self.snapshot = self.list.clone();
-                    self.message = Some("✅ 已更新并保存".to_string());
-                } else {
-                    self.message = Some("✅ 已更新（保存失败）".to_string());
-                }
+        if let Some(idx) = self.edit_index
+            && idx < self.list.items.len()
+        {
+            self.list.items[idx].content = text;
+            // 自动保存到文件
+            if save_todo_list(&self.list) {
+                self.snapshot = self.list.clone();
+                self.message = Some("✅ 已更新并保存".to_string());
+            } else {
+                self.message = Some("✅ 已更新（保存失败）".to_string());
             }
         }
         self.input.clear();
@@ -306,10 +306,10 @@ impl TodoApp {
             let count = self.filtered_indices().len();
             if count == 0 {
                 self.state.select(None);
-            } else if let Some(sel) = self.state.selected() {
-                if sel >= count {
-                    self.state.select(Some(count - 1));
-                }
+            } else if let Some(sel) = self.state.selected()
+                && sel >= count
+            {
+                self.state.select(Some(count - 1));
             }
         }
         self.mode = AppMode::Normal;
@@ -317,21 +317,21 @@ impl TodoApp {
 
     /// 移动选中项向上（调整顺序）
     pub fn move_item_up(&mut self) {
-        if let Some(real_idx) = self.selected_real_index() {
-            if real_idx > 0 {
-                self.list.items.swap(real_idx, real_idx - 1);
-                self.move_up();
-            }
+        if let Some(real_idx) = self.selected_real_index()
+            && real_idx > 0
+        {
+            self.list.items.swap(real_idx, real_idx - 1);
+            self.move_up();
         }
     }
 
     /// 移动选中项向下（调整顺序）
     pub fn move_item_down(&mut self) {
-        if let Some(real_idx) = self.selected_real_index() {
-            if real_idx < self.list.items.len() - 1 {
-                self.list.items.swap(real_idx, real_idx + 1);
-                self.move_down();
-            }
+        if let Some(real_idx) = self.selected_real_index()
+            && real_idx < self.list.items.len() - 1
+        {
+            self.list.items.swap(real_idx, real_idx + 1);
+            self.move_down();
         }
     }
 
@@ -550,7 +550,7 @@ pub fn handle_input_mode(app: &mut TodoApp, key: KeyEvent) {
                 .nth(app.cursor_pos)
                 .map(|(i, _)| i)
                 .unwrap_or(app.input.len());
-            app.input.insert_str(byte_idx, &c.to_string());
+            app.input.insert(byte_idx, c);
             app.cursor_pos += 1;
         }
         _ => {}
@@ -619,10 +619,8 @@ pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut Yaml
             if let Some(content) = app.report_pending_content.take() {
                 let write_ok = report::write_to_report(&content, config);
                 // 先保存 todo（save 会覆盖 message）
-                if app.is_dirty() {
-                    if save_todo_list(&app.list) {
-                        app.snapshot = app.list.clone();
-                    }
+                if app.is_dirty() && save_todo_list(&app.list) {
+                    app.snapshot = app.list.clone();
                 }
                 // 保存后再设置最终 message
                 if write_ok {

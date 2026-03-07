@@ -141,10 +141,10 @@ fn transcribe_from_samples(model_path: &PathBuf, samples: &[f32]) -> Result<Stri
     let num_segments = state.full_n_segments();
     let mut result = String::new();
     for i in 0..num_segments {
-        if let Some(segment) = state.get_segment(i) {
-            if let Ok(text) = segment.to_str_lossy() {
-                result.push_str(&text);
-            }
+        if let Some(segment) = state.get_segment(i)
+            && let Ok(text) = segment.to_str_lossy()
+        {
+            result.push_str(&text);
         }
     }
 
@@ -176,18 +176,17 @@ fn wait_for_stop_key(recording: &AtomicBool) -> bool {
         if !recording.load(Ordering::Relaxed) {
             return false;
         }
-        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
-            if let Ok(Event::Key(KeyEvent {
+        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false)
+            && let Ok(Event::Key(KeyEvent {
                 code, modifiers, ..
             })) = event::read()
-            {
-                match code {
-                    KeyCode::Enter => return true,
-                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        return true;
-                    }
-                    _ => {}
+        {
+            match code {
+                KeyCode::Enter => return true,
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    return true;
                 }
+                _ => {}
             }
         }
     }
@@ -201,20 +200,19 @@ fn wait_for_ctrl_v_stop(recording: &AtomicBool) -> bool {
         if !recording.load(Ordering::Relaxed) {
             return false;
         }
-        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
-            if let Ok(Event::Key(KeyEvent {
+        if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false)
+            && let Ok(Event::Key(KeyEvent {
                 code, modifiers, ..
             })) = event::read()
-            {
-                match code {
-                    KeyCode::Char('v') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        return true;
-                    }
-                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        return true;
-                    }
-                    _ => {}
+        {
+            match code {
+                KeyCode::Char('v') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    return true;
                 }
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    return true;
+                }
+                _ => {}
             }
         }
     }
@@ -367,7 +365,7 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
         info!(
             "💡 请先下载模型: {} 或 {}",
             format!("j voice download -m {}", model).cyan(),
-            format!("j voice download").cyan()
+            "j voice download".to_string().cyan()
         );
         info!(
             "💡 也可以手动下载模型放到: {}",
@@ -414,18 +412,17 @@ pub fn handle_voice(action: &str, copy: bool, model_size: Option<&str>, _config:
         };
         use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
         loop {
-            if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false) {
-                if let Ok(Event::Key(KeyEvent {
+            if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false)
+                && let Ok(Event::Key(KeyEvent {
                     code, modifiers, ..
                 })) = event::read()
-                {
-                    match code {
-                        KeyCode::Enter => break,
-                        KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                            return;
-                        }
-                        _ => {}
+            {
+                match code {
+                    KeyCode::Enter => break,
+                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                        return;
                     }
+                    _ => {}
                 }
             }
         }
@@ -474,7 +471,7 @@ pub fn do_voice_record_for_interactive() -> String {
     let model_path = get_model_path(&model);
     if !model_path.exists() {
         error!("模型文件不存在: {}", model_path.display());
-        info!("💡 请先下载模型: {}", format!("j voice download").cyan());
+        info!("💡 请先下载模型: {}", "j voice download".to_string().cyan());
         return String::new();
     }
 

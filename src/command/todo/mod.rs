@@ -159,47 +159,47 @@ fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
             last_input_len = current_input_len;
         }
 
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                // Alt+↑/↓ 预览区滚动（在 Adding/Editing 模式下）
-                if (app.mode == AppMode::Adding || app.mode == AppMode::Editing)
-                    && key.modifiers.contains(KeyModifiers::ALT)
-                {
-                    match key.code {
-                        KeyCode::Down => {
-                            app.preview_scroll = app.preview_scroll.saturating_add(1);
-                            continue;
-                        }
-                        KeyCode::Up => {
-                            app.preview_scroll = app.preview_scroll.saturating_sub(1);
-                            continue;
-                        }
-                        _ => {}
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            // Alt+↑/↓ 预览区滚动（在 Adding/Editing 模式下）
+            if (app.mode == AppMode::Adding || app.mode == AppMode::Editing)
+                && key.modifiers.contains(KeyModifiers::ALT)
+            {
+                match key.code {
+                    KeyCode::Down => {
+                        app.preview_scroll = app.preview_scroll.saturating_add(1);
+                        continue;
                     }
+                    KeyCode::Up => {
+                        app.preview_scroll = app.preview_scroll.saturating_sub(1);
+                        continue;
+                    }
+                    _ => {}
                 }
+            }
 
-                match app.mode {
-                    AppMode::Normal => {
-                        if handle_normal_mode(&mut app, key) {
-                            break;
-                        }
+            match app.mode {
+                AppMode::Normal => {
+                    if handle_normal_mode(&mut app, key) {
+                        break;
                     }
-                    AppMode::Adding => {
-                        prev_input_mode = Some(AppMode::Adding);
-                        handle_input_mode(&mut app, key);
-                    }
-                    AppMode::Editing => {
-                        prev_input_mode = Some(AppMode::Editing);
-                        handle_input_mode(&mut app, key);
-                    }
-                    AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
-                    AppMode::ConfirmReport => handle_confirm_report(&mut app, key, config),
-                    AppMode::ConfirmCancelInput => {
-                        let prev = prev_input_mode.clone().unwrap_or(AppMode::Adding);
-                        handle_confirm_cancel_input(&mut app, key, prev);
-                    }
-                    AppMode::Help => handle_help_mode(&mut app, key),
                 }
+                AppMode::Adding => {
+                    prev_input_mode = Some(AppMode::Adding);
+                    handle_input_mode(&mut app, key);
+                }
+                AppMode::Editing => {
+                    prev_input_mode = Some(AppMode::Editing);
+                    handle_input_mode(&mut app, key);
+                }
+                AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
+                AppMode::ConfirmReport => handle_confirm_report(&mut app, key, config),
+                AppMode::ConfirmCancelInput => {
+                    let prev = prev_input_mode.clone().unwrap_or(AppMode::Adding);
+                    handle_confirm_cancel_input(&mut app, key, prev);
+                }
+                AppMode::Help => handle_help_mode(&mut app, key),
             }
         }
     }

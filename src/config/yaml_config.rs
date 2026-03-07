@@ -81,23 +81,23 @@ impl YamlConfig {
 
     /// 获取日报文件路径（优先使用用户配置，否则使用默认路径 ~/.jdata/report/week_report.md）
     pub fn report_file_path(&self) -> PathBuf {
-        if let Some(custom_path) = self.get_property(section::REPORT, config_key::WEEK_REPORT) {
-            if !custom_path.is_empty() {
-                return Self::expand_tilde(custom_path);
-            }
+        if let Some(custom_path) = self.get_property(section::REPORT, config_key::WEEK_REPORT)
+            && !custom_path.is_empty()
+        {
+            return Self::expand_tilde(custom_path);
         }
         Self::report_dir().join(constants::REPORT_DEFAULT_FILE)
     }
 
     /// 展开路径中的 ~ 为用户主目录
     fn expand_tilde(path: &str) -> PathBuf {
-        if path.starts_with('~') {
-            if let Some(home) = dirs::home_dir() {
-                if path == "~" {
-                    return home;
-                } else if path.starts_with("~/") {
-                    return home.join(&path[2..]);
-                }
+        if path.starts_with('~')
+            && let Some(home) = dirs::home_dir()
+        {
+            if path == "~" {
+                return home;
+            } else if path.starts_with("~/") {
+                return home.join(&path[2..]);
             }
         }
         PathBuf::from(path)
@@ -182,7 +182,7 @@ impl YamlConfig {
     pub fn is_verbose(&self) -> bool {
         self.log
             .get(config_key::MODE)
-            .map_or(false, |m| m == config_key::VERBOSE)
+            .is_some_and(|m| m == config_key::VERBOSE)
     }
 
     // ========== 根据 section 名称获取对应的 map ==========
@@ -226,7 +226,7 @@ impl YamlConfig {
     /// 检查某个 section 中是否包含指定的 key
     pub fn contains(&self, section: &str, key: &str) -> bool {
         self.get_section(section)
-            .map_or(false, |m| m.contains_key(key))
+            .is_some_and(|m| m.contains_key(key))
     }
 
     /// 获取某个 section 中指定 key 的值
@@ -252,11 +252,11 @@ impl YamlConfig {
 
     /// 重命名某个 section 中的键
     pub fn rename_property(&mut self, section: &str, old_key: &str, new_key: &str) {
-        if let Some(map) = self.get_section_mut(section) {
-            if let Some(value) = map.remove(old_key) {
-                map.insert(new_key.to_string(), value);
-                self.save();
-            }
+        if let Some(map) = self.get_section_mut(section)
+            && let Some(value) = map.remove(old_key)
+        {
+            map.insert(new_key.to_string(), value);
+            self.save();
         }
     }
 

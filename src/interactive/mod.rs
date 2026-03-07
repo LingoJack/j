@@ -171,7 +171,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 if voice_state.triggered.load(Ordering::SeqCst) {
                     // Ctrl+V 触发的语音输入
                     let saved_line = voice_state.saved_line.lock().unwrap().clone();
-                    let saved_pos = voice_state.saved_pos.lock().unwrap().clone();
+                    let saved_pos = *voice_state.saved_pos.lock().unwrap();
 
                     println!();
                     let text = do_voice_record_for_interactive();

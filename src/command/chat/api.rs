@@ -86,13 +86,12 @@ pub fn build_request_with_tools(
     let mut openai_messages = Vec::new();
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
-        if !trimmed.is_empty() {
-            if let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
+        if !trimmed.is_empty()
+            && let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
                 .content(trimmed)
                 .build()
-            {
-                openai_messages.push(ChatCompletionRequestMessage::System(msg));
-            }
+        {
+            openai_messages.push(ChatCompletionRequestMessage::System(msg));
         }
     }
     openai_messages.extend(to_openai_messages(messages));
@@ -116,13 +115,12 @@ pub async fn call_openai_stream_async(
     let mut openai_messages = Vec::new();
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
-        if !trimmed.is_empty() {
-            if let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
+        if !trimmed.is_empty()
+            && let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
                 .content(trimmed)
                 .build()
-            {
-                openai_messages.push(ChatCompletionRequestMessage::System(msg));
-            }
+        {
+            openai_messages.push(ChatCompletionRequestMessage::System(msg));
         }
     }
     openai_messages.extend(to_openai_messages(messages));

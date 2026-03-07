@@ -1125,11 +1125,11 @@ fn run_editor_loop(
                     let count = vim.search.search(&pattern, &lines);
 
                     // 跳转到第一个匹配
-                    if count > 0 {
-                        if let Some((line, col)) = vim.search.next_match() {
-                            // 移动光标到匹配位置
-                            jump_to_match(textarea, line, col);
-                        }
+                    if count > 0
+                        && let Some((line, col)) = vim.search.next_match()
+                    {
+                        // 移动光标到匹配位置
+                        jump_to_match(textarea, line, col);
                     }
 
                     *vim = Vim::new(Mode::Normal);

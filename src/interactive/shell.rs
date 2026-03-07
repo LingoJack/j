@@ -101,10 +101,10 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
 
     match command.status() {
         Ok(status) => {
-            if !status.success() {
-                if let Some(code) = status.code() {
-                    error!("shell 退出码: {}", code);
-                }
+            if !status.success()
+                && let Some(code) = status.code()
+            {
+                error!("shell 退出码: {}", code);
             }
         }
         Err(e) => {
@@ -146,10 +146,10 @@ pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
 
     match command.status() {
         Ok(status) => {
-            if !status.success() {
-                if let Some(code) = status.code() {
-                    error!("命令退出码: {}", code);
-                }
+            if !status.success()
+                && let Some(code) = status.code()
+            {
+                error!("命令退出码: {}", code);
             }
         }
         Err(e) => {
@@ -177,17 +177,17 @@ pub fn expand_env_vars(input: &str) -> String {
 
     while i < len {
         if chars[i] == '$' && i + 1 < len {
-            if chars[i + 1] == '{' {
-                if let Some(end) = chars[i + 2..].iter().position(|&c| c == '}') {
-                    let var_name: String = chars[i + 2..i + 2 + end].iter().collect();
-                    if let Ok(val) = std::env::var(&var_name) {
-                        result.push_str(&val);
-                    } else {
-                        result.push_str(&input[i..i + 3 + end]);
-                    }
-                    i = i + 3 + end;
-                    continue;
+            if chars[i + 1] == '{'
+                && let Some(end) = chars[i + 2..].iter().position(|&c| c == '}')
+            {
+                let var_name: String = chars[i + 2..i + 2 + end].iter().collect();
+                if let Ok(val) = std::env::var(&var_name) {
+                    result.push_str(&val);
+                } else {
+                    result.push_str(&input[i..i + 3 + end]);
                 }
+                i = i + 3 + end;
+                continue;
             }
             let start = i + 1;
             let mut end = start;

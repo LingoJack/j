@@ -59,7 +59,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
 
     let flush_line = |current_spans: &mut Vec<Span<'static>>, lines: &mut Vec<Line<'static>>| {
         if !current_spans.is_empty() {
-            lines.push(Line::from(current_spans.drain(..).collect::<Vec<_>>()));
+            lines.push(Line::from(std::mem::take(current_spans)));
         }
     };
 
@@ -725,8 +725,7 @@ fn split_text_with_urls<'a>(text: &str, normal_style: Style, link_style: Style) 
                     .map(|(i, _)| i)
                     .unwrap_or(url_part.len());
                 // 去掉 URL 末尾的 ASCII 标点符号
-                let url = url_part[..url_end]
-                    .trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':' | '!' | '?'));
+                let url = url_part[..url_end].trim_end_matches(['.', ',', ';', ':', '!', '?']);
                 let url_len = url.len();
                 spans.push(Span::styled(url.to_string(), link_style));
                 // URL 末尾被 trim 掉的标点作为普通文本

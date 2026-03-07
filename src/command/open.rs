@@ -71,10 +71,10 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
             u.clone()
         } else if let Some(u) = config.get_property(section::OUTER_URL, url_alias_or_text) {
             // outer_url 需要先启动 VPN
-            if let Some(vpn_map) = config.get_section(section::VPN) {
-                if let Some(vpn_alias) = vpn_map.keys().next() {
-                    open_alias(vpn_alias, config);
-                }
+            if let Some(vpn_map) = config.get_section(section::VPN)
+                && let Some(vpn_alias) = vpn_map.keys().next()
+            {
+                open_alias(vpn_alias, config);
             }
             u.clone()
         } else if is_url_like(url_alias_or_text) {
@@ -270,11 +270,11 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
         ];
 
         for (term, term_args) in &terminals {
-            if let Ok(status) = Command::new(term).args(term_args).status() {
-                if status.success() {
-                    info!("✅ 已在新终端窗口中启动脚本");
-                    return;
-                }
+            if let Ok(status) = Command::new(term).args(term_args).status()
+                && status.success()
+            {
+                info!("✅ 已在新终端窗口中启动脚本");
+                return;
             }
         }
 
@@ -430,7 +430,7 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
         let app_path = clean_path(app_path);
         let os = std::env::consts::OS;
         // 展开文件路径参数中的 ~
-        let file_path_expanded = file_path.map(|fp| clean_path(fp));
+        let file_path_expanded = file_path.map(clean_path);
         let file_path = file_path_expanded.as_deref();
 
         let result = if os == shell::MACOS_OS {
@@ -488,25 +488,24 @@ fn clean_path(path: &str) -> String {
     let mut path = path.trim().to_string();
 
     // 去除两端引号
-    if path.len() >= 2 {
-        if (path.starts_with('\'') && path.ends_with('\''))
-            || (path.starts_with('"') && path.ends_with('"'))
-        {
-            path = path[1..path.len() - 1].to_string();
-        }
+    if path.len() >= 2
+        && ((path.starts_with('\'') && path.ends_with('\''))
+            || (path.starts_with('"') && path.ends_with('"')))
+    {
+        path = path[1..path.len() - 1].to_string();
     }
 
     // 去除转义空格
     path = path.replace("\\ ", " ");
 
     // 展开 ~
-    if path.starts_with('~') {
-        if let Some(home) = dirs::home_dir() {
-            if path == "~" {
-                path = home.to_string_lossy().to_string();
-            } else if path.starts_with("~/") {
-                path = format!("{}{}", home.to_string_lossy(), &path[1..]);
-            }
+    if path.starts_with('~')
+        && let Some(home) = dirs::home_dir()
+    {
+        if path == "~" {
+            path = home.to_string_lossy().to_string();
+        } else if path.starts_with("~/") {
+            path = format!("{}{}", home.to_string_lossy(), &path[1..]);
         }
     }
 

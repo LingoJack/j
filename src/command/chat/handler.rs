@@ -395,7 +395,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         } else {
             "整体输出"
         };
-        app.show_toast(&format!("已切换为: {}", mode_str), false);
+        app.show_toast(format!("已切换为: {}", mode_str), false);
         return false;
     }
 
@@ -498,7 +498,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 .nth(app.cursor_pos)
                 .map(|(i, _)| i)
                 .unwrap_or(app.input.len());
-            app.input.insert_str(byte_idx, &c.to_string());
+            app.input.insert(byte_idx, c);
             app.cursor_pos += 1;
 
             // @ 补全弹窗触发逻辑
@@ -573,7 +573,7 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
                 };
                 if copy_to_clipboard(&content) {
                     app.show_toast(
-                        &format!("已复制第 {} 条{}消息", app.browse_msg_index + 1, role_label),
+                        format!("已复制第 {} 条{}消息", app.browse_msg_index + 1, role_label),
                         false,
                     );
                 } else {
@@ -1229,7 +1229,7 @@ pub fn handle_tool_reject_input_mode(app: &mut ChatApp, key: KeyEvent) {
                 .nth(app.cursor_pos)
                 .map(|(i, _)| i)
                 .unwrap_or(app.input.len());
-            app.input.insert_str(byte_idx, &c.to_string());
+            app.input.insert(byte_idx, c);
             app.cursor_pos += 1;
         }
         _ => {}

@@ -146,19 +146,19 @@ fn handle_report_tui(config: &mut YamlConfig) {
     let mut initial_lines: Vec<String> = last_lines.clone();
 
     // 检查是否需要新开一周 → 只更新配置，不写入文件；新周标题放入编辑器
-    if let Some(last_day) = last_day {
-        if now > last_day {
-            let next_last_day = now + chrono::Duration::days(6);
-            let new_week_title = format!(
-                "# Week{}[{}-{}]",
-                week_num,
-                now.format(DATE_FORMAT),
-                next_last_day.format(DATE_FORMAT)
-            );
-            update_config_files(week_num + 1, &next_last_day, &config_path, config);
-            // 新周标题放入编辑器初始内容，不提前写入文件
-            initial_lines.push(new_week_title);
-        }
+    if let Some(last_day) = last_day
+        && now > last_day
+    {
+        let next_last_day = now + chrono::Duration::days(6);
+        let new_week_title = format!(
+            "# Week{}[{}-{}]",
+            week_num,
+            now.format(DATE_FORMAT),
+            next_last_day.format(DATE_FORMAT)
+        );
+        update_config_files(week_num + 1, &next_last_day, &config_path, config);
+        // 新周标题放入编辑器初始内容，不提前写入文件
+        initial_lines.push(new_week_title);
     }
 
     // 构造日期前缀行
@@ -292,10 +292,8 @@ fn get_report_path_silent(config: &YamlConfig) -> Option<String> {
         let _ = fs::create_dir_all(parent);
     }
 
-    if !report_path.exists() {
-        if fs::write(&report_path, "").is_err() {
-            return None;
-        }
+    if !report_path.exists() && fs::write(&report_path, "").is_err() {
+        return None;
     }
 
     Some(report_path.to_string_lossy().to_string())
@@ -328,14 +326,14 @@ fn load_config_from_json_silent(config_path: &Path, config: &mut YamlConfig) {
         return;
     }
 
-    if let Ok(content) = fs::read_to_string(config_path) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            let last_day = json.get("last_day").and_then(|v| v.as_str()).unwrap_or("");
-            let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
+    if let Ok(content) = fs::read_to_string(config_path)
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&content)
+    {
+        let last_day = json.get("last_day").and_then(|v| v.as_str()).unwrap_or("");
+        let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
 
-            if let Some(last_day_date) = parse_date(last_day) {
-                update_config_files_silent(week_num as i32, &last_day_date, config_path, config);
-            }
+        if let Some(last_day_date) = parse_date(last_day) {
+            update_config_files_silent(week_num as i32, &last_day_date, config_path, config);
         }
     }
 }
@@ -963,12 +961,12 @@ fn handle_pull(config: &YamlConfig) {
             };
 
             // 恢复 stash
-            if has_stash {
-                if let Some(status) = run_git_in_report_dir(&["stash", "pop"], config) {
-                    if !status.success() && pull_ok {
-                        info!("⚠️ stash pop 存在冲突，请手动合并本地修改（已保存在 git stash 中）");
-                    }
-                }
+            if has_stash
+                && let Some(status) = run_git_in_report_dir(&["stash", "pop"], config)
+                && !status.success()
+                && pull_ok
+            {
+                info!("⚠️ stash pop 存在冲突，请手动合并本地修改（已保存在 git stash 中）");
             }
         }
     }
@@ -1129,7 +1127,7 @@ fn read_last_n_lines(path: &Path, n: usize) -> Vec<String> {
         }
 
         // 将 remainder（上次剩余的不完整行）追加到这个块的末尾
-        buffer.extend(remainder.drain(..));
+        buffer.append(&mut remainder);
 
         // 从后向前按行分割
         let text = String::from_utf8_lossy(&buffer).to_string();

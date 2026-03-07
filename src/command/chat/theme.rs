@@ -2,24 +2,19 @@ use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
 /// 主题名称枚举
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum ThemeName {
     #[serde(rename = "dark")]
     Dark,
     #[serde(rename = "light")]
     Light,
     #[serde(rename = "midnight")]
+    #[default]
     Midnight,
     #[serde(rename = "nord")]
     Nord,
     #[serde(rename = "monokai")]
     Monokai,
-}
-
-impl Default for ThemeName {
-    fn default() -> Self {
-        ThemeName::Midnight
-    }
 }
 
 #[allow(dead_code)]

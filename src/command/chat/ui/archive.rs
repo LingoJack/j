@@ -76,7 +76,7 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ]));
         lines.push(Line::from(
             std::iter::once(Span::styled("    ", Style::default()))
-                .chain(name_with_cursor.into_iter())
+                .chain(name_with_cursor)
                 .collect::<Vec<_>>(),
         ));
         lines.push(Line::from(""));

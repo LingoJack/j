@@ -342,10 +342,10 @@ impl ChatApp {
 
     /// 清理过期的 toast
     pub fn tick_toast(&mut self) {
-        if let Some((_, _, created)) = &self.toast {
-            if created.elapsed().as_secs() >= TOAST_DURATION_SECS {
-                self.toast = None;
-            }
+        if let Some((_, _, created)) = &self.toast
+            && created.elapsed().as_secs() >= TOAST_DURATION_SECS
+        {
+            self.toast = None;
         }
     }
 
@@ -1064,11 +1064,10 @@ async fn run_agent_loop(
                                                         String::new(),
                                                     )
                                                 });
-                                            if entry.0.is_empty() {
-                                                if let Some(ref id) = chunk.id {
+                                            if entry.0.is_empty()
+                                                && let Some(ref id) = chunk.id {
                                                     entry.0 = id.clone();
                                                 }
-                                            }
                                             if let Some(ref func) = chunk.function {
                                                 if let Some(ref name) = func.name {
                                                     entry.1.push_str(name);
@@ -1080,7 +1079,7 @@ async fn run_agent_loop(
                                         }
                                     }
                                     if let Some(ref fr) = choice.finish_reason {
-                                        finish_reason = Some(fr.clone());
+                                        finish_reason = Some(*fr);
                                     }
                                 }
                             }
@@ -1131,8 +1130,8 @@ async fn run_agent_loop(
                                 choice.finish_reason,
                                 Some(async_openai::types::chat::FinishReason::ToolCalls)
                             );
-                            if is_tool_calls {
-                                if let Some(ref tc_list) = choice.message.tool_calls {
+                            if is_tool_calls
+                                && let Some(ref tc_list) = choice.message.tool_calls {
                                     let tool_items: Vec<ToolCallItem> = tc_list
                                         .iter()
                                         .filter_map(|tc| {
@@ -1222,7 +1221,6 @@ async fn run_agent_loop(
                                     }
                                     continue;
                                 }
-                            }
                             // 普通文本回复
                             if let Some(ref content) = choice.message.content {
                                 write_info_log("Chat 回复", content);
@@ -1345,8 +1343,8 @@ async fn run_agent_loop(
                             Some(async_openai::types::chat::FinishReason::ToolCalls)
                         );
 
-                        if is_tool_calls {
-                            if let Some(ref tc_list) = choice.message.tool_calls {
+                        if is_tool_calls
+                            && let Some(ref tc_list) = choice.message.tool_calls {
                                 let tool_items: Vec<ToolCallItem> = tc_list
                                     .iter()
                                     .filter_map(|tc| {
@@ -1437,7 +1435,6 @@ async fn run_agent_loop(
 
                                 continue;
                             }
-                        }
 
                         // 正常文本回复
                         if let Some(ref content) = choice.message.content {
