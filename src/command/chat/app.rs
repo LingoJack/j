@@ -237,21 +237,18 @@ pub fn config_total_fields() -> usize {
     CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
 }
 
-/// 默认系统提示词模板（编译时嵌入，见 assets.rs）
-const DEFAULT_SYSTEM_PROMPT: &str = crate::assets::DEFAULT_SYSTEM_PROMPT;
-
 impl ChatApp {
     pub fn new() -> Self {
         let agent_config = load_agent_config();
         // 首次运行：各数据文件不存在时写入默认内容
         if !system_prompt_path().exists() {
-            let _ = save_system_prompt(DEFAULT_SYSTEM_PROMPT);
+            let _ = save_system_prompt(&crate::assets::default_system_prompt());
         }
         if !memory_path().exists() {
-            let _ = save_memory(crate::assets::DEFAULT_MEMORY);
+            let _ = save_memory(&crate::assets::default_memory());
         }
         if !soul_path().exists() {
-            let _ = save_soul(crate::assets::DEFAULT_SOUL);
+            let _ = save_soul(&crate::assets::default_soul());
         }
         let session = load_chat_session();
         let mut model_list_state = ListState::default();

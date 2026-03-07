@@ -1,4 +1,4 @@
-use crate::assets::HELP_TEXT;
+use crate::assets::help_text;
 use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::theme::{Theme, ThemeName};
 use ratatui::text::Line;
@@ -59,7 +59,7 @@ fn split_help_into_tabs() -> Vec<String> {
     let mut current_heading = String::new();
     let mut current_content = String::new();
 
-    for line in HELP_TEXT.lines() {
+    for line in help_text().lines() {
         if line.starts_with("## ") {
             // 保存上一个 section
             if !current_heading.is_empty() {

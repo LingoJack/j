@@ -1,4 +1,4 @@
-use crate::assets::VERSION_TEMPLATE;
+use crate::assets::version_template;
 use crate::config::YamlConfig;
 use crate::constants::{self, CONTAIN_SEARCH_SECTIONS, config_key, section};
 use crate::{error, info, md, usage};
@@ -6,7 +6,7 @@ use colored::Colorize;
 
 /// 处理 version 命令: j version
 pub fn handle_version() {
-    let text = VERSION_TEMPLATE
+    let text = version_template()
         .replace("{version}", constants::VERSION)
         .replace("{os}", std::env::consts::OS)
         .replace("{arch}", std::env::consts::ARCH);

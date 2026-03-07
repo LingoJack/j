@@ -1,7 +1,6 @@
 //! 编译时嵌入资源统一管理
 //!
-//! 所有通过 `include_str!` / `include_bytes!` 嵌入的外部资源
-//! 都在此模块集中管理，便于维护和追踪。
+//! 使用 `rust-embed` 实现资源嵌入，支持运行时动态查找和迭代。
 //!
 //! # 资源清单
 //!
@@ -13,36 +12,81 @@
 //! | `DEFAULT_MEMORY` | 文本 | `assets/memory_default.md` | 默认记忆占位文件 |
 //! | `DEFAULT_SOUL` | 文本 | `assets/soul_default.md` | 默认灵魂占位文件 |
 
-// ========== 文本资源 ==========
+use rust_embed::RustEmbed;
+use std::borrow::Cow;
+
+/// 编译时嵌入资源统一管理
+///
+/// 所有 assets 目录下的文件都会被嵌入到二进制中
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+pub struct Assets;
+
+// ========== 便捷访问函数 ==========
 
 /// 帮助文档内容
 ///
 /// 用途: `j help` 命令输出
 /// 格式: Markdown
-pub const HELP_TEXT: &str = include_str!("../assets/help.md");
+pub fn help_text() -> Cow<'static, str> {
+    let bytes = Assets::get("help.md")
+        .expect("help.md not found in assets")
+        .data;
+    String::from_utf8(bytes.into_owned())
+        .expect("help.md is not valid UTF-8")
+        .into()
+}
 
 /// 版本信息模板
 ///
 /// 用途: `j version` 命令输出
 /// 占位符: `{version}`, `{os}`, `{extra}`
 /// 格式: Markdown 表格
-pub const VERSION_TEMPLATE: &str = include_str!("../assets/version.md");
+pub fn version_template() -> Cow<'static, str> {
+    let bytes = Assets::get("version.md")
+        .expect("version.md not found in assets")
+        .data;
+    String::from_utf8(bytes.into_owned())
+        .expect("version.md is not valid UTF-8")
+        .into()
+}
 
 /// 默认系统提示词模板
 ///
 /// 用途: 首次运行时写入 `~/.jdata/agent/data/system_prompt.md`
 /// 占位符: `{{.tools}}`, `{{.skills}}`, `{{.style}}`, `{{.memory}}`, `{{.soul}}`
 /// 格式: Markdown
-pub const DEFAULT_SYSTEM_PROMPT: &str = include_str!("../assets/system_prompt_default.md");
+pub fn default_system_prompt() -> Cow<'static, str> {
+    let bytes = Assets::get("system_prompt_default.md")
+        .expect("system_prompt_default.md not found in assets")
+        .data;
+    String::from_utf8(bytes.into_owned())
+        .expect("system_prompt_default.md is not valid UTF-8")
+        .into()
+}
 
 /// 默认记忆占位文件
 ///
 /// 用途: 首次运行时写入 `~/.jdata/agent/data/memory.md`
 /// 格式: Markdown
-pub const DEFAULT_MEMORY: &str = include_str!("../assets/memory_default.md");
+pub fn default_memory() -> Cow<'static, str> {
+    let bytes = Assets::get("memory_default.md")
+        .expect("memory_default.md not found in assets")
+        .data;
+    String::from_utf8(bytes.into_owned())
+        .expect("memory_default.md is not valid UTF-8")
+        .into()
+}
 
 /// 默认灵魂占位文件
 ///
 /// 用途: 首次运行时写入 `~/.jdata/agent/data/soul.md`
 /// 格式: Markdown
-pub const DEFAULT_SOUL: &str = include_str!("../assets/soul_default.md");
+pub fn default_soul() -> Cow<'static, str> {
+    let bytes = Assets::get("soul_default.md")
+        .expect("soul_default.md not found in assets")
+        .data;
+    String::from_utf8(bytes.into_owned())
+        .expect("soul_default.md is not valid UTF-8")
+        .into()
+}
