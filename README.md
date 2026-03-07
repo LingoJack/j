@@ -1,7 +1,7 @@
 # work-copilot Rust 重构进度
 
-> 📅 最后更新: 2026-03-07
-> 🔖 版本: v12.1.52
+> 📅 最后更新: 2026-03-08
+> 🔖 版本: v12.1.54
 > 🖥️ 平台: macOS ARM64 (M1/M2/M3/M4)
 > 📦 原项目: `work-copilot-java/`（Java CLI 工具）→ 用 Rust 完全重构
 
@@ -1452,12 +1452,14 @@ AI 对话支持工具调用（Function Calling），让 AI 能够执行实际操
 | 工具名 | 功能 | 需确认 |
 |--------|------|--------|
 | `run_shell` | 执行 shell 命令 | ✅ 是 |
-| `read_file` | 读取本地文件 | ❌ 否 |
+| `read_file` | 读取本地文件（支持行号、分页读取） | ❌ 否 |
+| `write_file` | 写入文件（覆盖写入，自动创建目录） | ✅ 是 |
+| `edit_file` | 编辑文件（基于字符串匹配替换） | ✅ 是 |
 | `load_skill` | 加载指定技能的完整内容到上下文 | ❌ 否 |
 
 **工具确认流程**：
 
-当 AI 请求执行需要确认的工具（如 `run_shell`）时：
+当 AI 请求执行需要确认的工具（如 `run_shell`、`write_file`、`edit_file`）时：
 
 1. 界面弹出确认框，显示工具名和参数
 2. 按 `Y` / `Enter` 执行工具
@@ -1471,13 +1473,23 @@ AI 对话支持工具调用（Function Calling），让 AI 能够执行实际操
 - `mkfs`、`dd if=`
 - `chmod -R 777 /`、`chown -R`
 - `curl | sh`、`wget -O- | sh`
+- `curl | bash`
+- `alias`（防止别名劫持）
 - 等...
 
 > 提示：即使有安全过滤，执行 shell 命令前仍建议仔细检查命令内容
 
-### Skill 技能系统
+**文件操作工具说明**：
 
-Chat 支持用户自定义 Skill（技能），AI 通过 `load_skill` 工具按需加载技能到上下文。
+| 工具 | 参数 | 说明 |
+|------|------|------|
+| `read_file` | `path`, `offset?`, `limit?` | 读取文件，支持按行范围读取（0-based offset）|
+| `write_file` | `path`, `content` | 完全覆盖写入，目录不存在时自动创建 |
+| `edit_file` | `path`, `old_string`, `new_string` | 精确字符串替换，`old_string` 必须唯一匹配 |
+
+> 提示：`edit_file` 适合精确修改，`write_file` 适合创建新文件或完全重写
+
+### Skill 技能系统
 
 **工作原理**：
 
