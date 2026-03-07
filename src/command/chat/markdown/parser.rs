@@ -609,7 +609,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             }
                             lines.push(Line::from(row_spans));
 
-                            if row_idx == 0 {
+                            if row_idx < table_rows.len() - 1 {
                                 let mut sep = String::from("├");
                                 for (i, cw) in col_widths.iter().enumerate() {
                                     sep.push_str(&"─".repeat(cw + 2));
