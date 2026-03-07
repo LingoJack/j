@@ -253,7 +253,7 @@ flowchart TD
 - **历史建议**：`HistoryHinter`（灰色显示上次相同前缀的命令，按 → 接受）
 - **历史持久化**：`~/.jdata/history.txt`
 - **脚本统一存储**：`concat` 创建的脚本持久化在 `~/.jdata/scripts/` 下，不再依赖 `script.depot` 配置
-- **Shell 命令**：`!` 前缀执行系统命令（如 `!ls -la`），自动注入别名环境变量；单独输入 `!` 进入交互式 shell 模式（提示符变为绿色 `shell >`），状态延续，`exit` 返回 copilot
+- **Shell 命令**：`!` 前缀执行系统命令（如 `!ls -la`），自动注入别名环境变量；单独输入 `!` 进入交互式 shell 模式（提示符变为绿色 `shell >`），状态延续，输入 `exit` 或按 `Ctrl+D` 返回 copilot
 - **环境变量注入**：进入交互模式时自动注入所有别名路径为 `J_<ALIAS_UPPER>` 环境变量，参数中 `$J_XXX` / `${J_XXX}` 自动展开
 - **内部命令解析**：`parse_interactive_command()` 将输入行解析为三态 `ParseResult` 枚举（`Matched` / `Handled` / `NotFound`），避免参数不足时误 fallback 到别名查找
 

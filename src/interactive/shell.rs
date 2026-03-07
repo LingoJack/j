@@ -13,7 +13,10 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
         std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string())
     };
 
-    info!("进入 shell 模式 ({}), 输入 exit 返回 copilot", shell_path);
+    info!(
+        "进入 shell 模式 ({}), 输入 exit (或按 Ctrl+D) 返回 copilot",
+        shell_path
+    );
 
     let mut command = std::process::Command::new(&shell_path);
 
