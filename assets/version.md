@@ -8,3 +8,4 @@
 | **email**  | lingojack@qq.com              |
 | **arch**   | {arch}                        |
 | **data_dir**   | {data_dir}                |
+| **install**    | {install_source}          |

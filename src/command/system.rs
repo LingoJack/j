@@ -1,8 +1,8 @@
 use crate::assets::version_template;
 use crate::config::YamlConfig;
 use crate::constants::{
-    ALIAS_EXISTS_SECTIONS, ALL_SECTIONS, CONTAIN_SEARCH_SECTIONS, VERSION, cmd::all_keywords,
-    config_key, section,
+    ALIAS_EXISTS_SECTIONS, ALL_SECTIONS, CONTAIN_SEARCH_SECTIONS, INSTALL_SOURCE, VERSION,
+    cmd::all_keywords, config_key, section,
 };
 use crate::{error, info, md, usage};
 use colored::Colorize;
@@ -16,7 +16,8 @@ pub fn handle_version() {
         .replace(
             "{data_dir}",
             YamlConfig::data_dir().to_str().unwrap_or_default(),
-        );
+        )
+        .replace("{install_source}", INSTALL_SOURCE);
     md!("{}", text);
 }
 
