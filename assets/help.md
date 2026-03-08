@@ -294,17 +294,23 @@ sudo mv j /usr/local/bin/
 
 ### 更新
 ```bash
+# 内置更新命令（仅 GitHub Release 安装方式）
+j update
+
+# 仅检查版本，不更新
+j update --check
+
 # 一键更新（安装脚本方式）
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 
-# 从 crates.io 更新
+# 从 crates.io 更新（cargo 安装方式）
 cargo install j-cli
 
-# 查看当前版本
+# 查看当前版本及安装来源
 j version
 ```
 
-> **注意**：`cargo install` 会自动检测 crates.io 上的最新版本并更新，无需先卸载。
+> **注意**：`j update` 仅适用于 GitHub Release 安装方式；cargo 安装的用户请使用 `cargo install j-cli` 更新。
 
 ---
 
