@@ -144,6 +144,9 @@ pub fn run_interactive(config: &mut YamlConfig) {
 
                 let args: Vec<String> = args.iter().map(|a| expand_env_vars(a)).collect();
 
+                // 每条命令执行前重新读取最新配置，保证内存与磁盘一致
+                *config = crate::config::YamlConfig::load();
+
                 let verbose = config.is_verbose();
                 let start = if verbose {
                     Some(std::time::Instant::now())

@@ -3,9 +3,10 @@ use crate::constants::{
     DATA_DIR, DATA_PATH_ENV, DEFAULT_SEARCH_ENGINE, EMAIL, REPORT_DEFAULT_FILE, REPORT_DIR,
     SCRIPTS_DIR, VERSION, config_key, section,
 };
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 
 /// YAML 配置文件的完整结构
@@ -114,7 +115,7 @@ impl YamlConfig {
             // 配置文件不存在，创建默认配置
             let config = Self::default_config();
             eprintln!("[INFO] 创建默认配置文件: {:?}", path);
-            config.save();
+            config.save_direct();
             return config;
         }
 
@@ -129,11 +130,10 @@ impl YamlConfig {
         })
     }
 
-    /// 保存配置到文件
-    pub fn save(&self) {
+    /// 保存配置到文件（直接写入，不加锁，仅用于初始化时创建默认配置）
+    fn save_direct(&self) {
         let path = Self::config_path();
 
-        // 确保目录存在
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).unwrap_or_else(|e| {
                 eprintln!("[ERROR] 创建配置目录失败: {}", e);
@@ -148,6 +148,74 @@ impl YamlConfig {
         fs::write(&path, content).unwrap_or_else(|e| {
             eprintln!("[ERROR] 保存配置文件失败: {}, 路径: {:?}", e, path);
         });
+    }
+
+    /// 并发安全保存：用文件锁保护整个 load → modify → write 临界区
+    ///
+    /// 流程：
+    ///   1. 打开（或创建）配置文件，获取独占锁（阻塞直到获得）
+    ///   2. 读取文件系统最新内容（锁内读，保证一致性）
+    ///   3. 将 self 的修改应用到最新内容上
+    ///   4. 写回磁盘
+    ///   5. 释放锁（fd drop 时自动释放）
+    ///   6. 更新 self 与磁盘保持一致
+    pub fn save(&mut self) {
+        let path = Self::config_path();
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap_or_else(|e| {
+                eprintln!("[ERROR] 创建配置目录失败: {}", e);
+            });
+        }
+
+        // 1. 打开文件并获取独占锁
+        let lock_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .unwrap_or_else(|e| {
+                eprintln!("[ERROR] 打开配置文件失败: {}", e);
+                panic!("无法打开配置文件");
+            });
+
+        lock_file.lock_exclusive().unwrap_or_else(|e| {
+            eprintln!("[ERROR] 获取文件锁失败: {}", e);
+        });
+
+        // 2. 锁内读取最新内容
+        let content = fs::read_to_string(&path).unwrap_or_default();
+        let mut fresh: YamlConfig = serde_yaml::from_str(&content).unwrap_or_default();
+
+        // 3. 将 self 的所有 section 应用到 fresh（self 优先）
+        fresh.path = self.path.clone();
+        fresh.inner_url = self.inner_url.clone();
+        fresh.outer_url = self.outer_url.clone();
+        fresh.editor = self.editor.clone();
+        fresh.browser = self.browser.clone();
+        fresh.vpn = self.vpn.clone();
+        fresh.script = self.script.clone();
+        fresh.version = self.version.clone();
+        fresh.setting = self.setting.clone();
+        fresh.log = self.log.clone();
+        fresh.report = self.report.clone();
+        // extra 保留 fresh 的值（不覆盖其他进程写入的未知字段）
+
+        // 4. 序列化并写回磁盘
+        let output = serde_yaml::to_string(&fresh).unwrap_or_else(|e| {
+            eprintln!("[ERROR] 序列化配置失败: {}", e);
+            String::new()
+        });
+
+        fs::write(&path, output).unwrap_or_else(|e| {
+            eprintln!("[ERROR] 保存配置文件失败: {}, 路径: {:?}", e, path);
+        });
+
+        // 5. lock_file drop 时自动释放锁
+
+        // 6. 同步 extra 回内存
+        self.extra = fresh.extra;
     }
 
     /// 创建默认配置
