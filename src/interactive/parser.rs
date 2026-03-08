@@ -202,6 +202,10 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::Matched(SubCmd::Completion {
             shell: rest.first().cloned(),
         })
+    } else if is(cmd::UPDATE) {
+        ParseResult::Matched(SubCmd::Update {
+            check: rest.first().map(|s| s == "--check" || s == "-c").unwrap_or(false),
+        })
     } else {
         ParseResult::NotFound
     }
