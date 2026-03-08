@@ -175,7 +175,7 @@ enum ParseResult {
 
 ## 15. AI 对话 Agent 循环
 
-支持多轮工具调用，最大 10 轮：
+支持多轮工具调用，最大 10 轮（可通过 `max_tool_rounds` 配置）：
 
 1. 构建 API 请求
 2. 流式/整体接收响应
@@ -183,9 +183,18 @@ enum ParseResult {
 4. 执行工具 → 将结果加入上下文
 5. 继续 API 请求
 
+**配置项**：
+- `max_tool_rounds`：最大工具调用轮数（默认 10）
+- `tool_confirm_timeout`：工具确认超时秒数（默认 0，禁用自动执行）
+
+**兼容性处理**：
+- 流式响应中 tool_calls 反序列化失败时，自动 fallback 到非流式请求（适配 Gemini 等平台）
+
 ---
 
-## 16. Skill 技能系统de
+## 16. Skill 技能系统
+
+**存储位置**：`~/.jdata/agent/skills/<skill_name>/SKILL.md`
 
 **懒加载策略**：
 - 系统提示词中仅包含技能名称和描述摘要
@@ -196,3 +205,9 @@ enum ParseResult {
 - `{{.skills}}` → 技能摘要
 - `{{.tools}}` → 工具摘要
 - `{{.style}}` → 回复风格
+- `{{.memory}}` → 记忆内容
+- `{{.soul}}` → 灵魂/人格设定
+
+**引用文件支持**：
+- 技能目录下的 `references/` 子目录会被自动加载
+- 所有文件内容会被拼接追加到技能正文后
