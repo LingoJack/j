@@ -34,7 +34,6 @@ src/
 │   ├── script.rs        # concat（创建脚本）
 │   ├── system.rs        # version / help / exit / log / clear / contain / change
 │   ├── time.rs          # time countdown（倒计时器）
-│   ├── voice.rs         # voice（语音转文字，Whisper.cpp 离线转写）
 │   ├── todo/            # 待办备忘录 TUI
 │   │   ├── mod.rs       # 入口
 │   │   ├── app.rs       # 应用状态
@@ -167,7 +166,6 @@ flowchart TD
 | `version` | `v` | — | 版本信息 |
 | `help` | `h` | — | 帮助信息 |
 | `exit` | `q/quit` | — | 退出 |
-| `voice` | `vc` | `[-c] [-m model] / download [-m model]` | 语音转文字 |
 | `completion` | — | `[zsh\|bash]` | 生成 shell 补全脚本 |
 
 ---
@@ -250,5 +248,4 @@ flowchart TD
 | `ReportCommandHandler` | `command/report.rs::handle_report` | 写入日报 |
 | — | `command/todo/` | 待办备忘录（Rust 新增） |
 | — | `command/chat/` | AI 对话 TUI（Rust 新增） |
-| — | `command/voice.rs` | 语音转文字（Rust 新增） |
 | — | `command/help/` | 帮助系统 TUI（Rust 新增） |

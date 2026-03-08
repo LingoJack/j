@@ -35,8 +35,8 @@ const TAB_DEFS: &[TabDef] = &[
         heading_keywords: &["脚本"],
     },
     TabDef {
-        name: "系统 & 语音",
-        heading_keywords: &["系统设置", "语音转文字"],
+        name: "系统",
+        heading_keywords: &["系统设置"],
     },
     TabDef {
         name: "AI 对话",

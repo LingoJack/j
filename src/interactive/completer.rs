@@ -2,7 +2,7 @@ use crate::command;
 use crate::config::YamlConfig;
 use crate::constants::{
     self, ALIAS_PATH_SECTIONS, ALL_SECTIONS, LIST_ALL, NOTE_CATEGORIES, cmd, config_key,
-    rmeta_action, search_flag, time_function, voice as vc,
+    rmeta_action, search_flag, time_function,
 };
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::CmdKind;
@@ -152,7 +152,6 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
             ],
         ),
         (cmd::CHAT, vec![ArgHint::Placeholder("<message>")]),
-        (cmd::VOICE, vec![ArgHint::Fixed(vec![vc::ACTION_DOWNLOAD])]),
         (
             cmd::CONCAT,
             vec![

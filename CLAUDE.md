@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`j-cli` (a.k.a. "work-copilot") is a Rust CLI productivity tool for macOS ARM64. It manages app/URL aliases, daily reports, todos, AI chat, voice-to-text, and more. Binary name is `j`. User data lives in `~/.jdata/` (overridable via `J_DATA_PATH`).
+`j-cli` (a.k.a. "work-copilot") is a Rust CLI productivity tool for macOS ARM64. It manages app/URL aliases, daily reports, todos, AI chat, and more. Binary name is `j`. User data lives in `~/.jdata/` (overridable via `J_DATA_PATH`).
 more related info: README.md
 REMEBER TO UPDATE README.md AND HELP.md WHEN CHANGES ARE MADE IF NEEDED
 
@@ -28,8 +28,6 @@ make release             # cargo build --release
 make push                # fmt + git commit + push (commit message: "新增了一些特性")
 make tag                 # Create and push a version tag (triggers GitHub Actions release)
 ```
-
-**Note:** `cargo build --release` requires CMake (`brew install cmake`) because of the `whisper-rs` dependency.
 
 ## Architecture
 
@@ -56,7 +54,6 @@ All configuration is stored in `~/.jdata/config.yaml` and deserialized into a `Y
 - `report.rs` — Daily report writing, searching, and git sync
 - `chat/` — Async AI chat TUI using `async-openai` + `tokio`, with streaming and Markdown rendering
 - `todo/` — TUI-based todo list backed by `~/.jdata/todo/todo.json`
-- `voice.rs` — Offline speech recognition via `whisper-rs` + `cpal` for recording
 
 ### TUI Layer (`src/tui/editor.rs`)
 
@@ -80,7 +77,7 @@ A fullscreen multi-line editor built on `ratatui` + `tui-textarea` (patched loca
 
 ### Release Pipeline
 
-GitHub Actions (`.github/workflows/release.yml`) triggers on `v*` tags, builds for `aarch64-apple-darwin` with `CFLAGS=-march=armv8-a` (to avoid ARM i8mm issues with whisper.cpp), and publishes a GitHub Release with `j-darwin-arm64.tar.gz`.
+GitHub Actions (`.github/workflows/release.yml`) triggers on `v*` tags, builds for `aarch64-apple-darwin`, and publishes a GitHub Release with `j-darwin-arm64.tar.gz`.
 
 ## Key Design Decisions
 

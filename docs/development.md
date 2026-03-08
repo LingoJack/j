@@ -47,8 +47,6 @@ tui-textarea = "0.7"                               # 多行文本编辑
 async-openai = "0.33"                              # OpenAI API 客户端
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 pulldown-cmark = "0.13.0"                          # Markdown 解析
-whisper-rs = "0.15"                                # Whisper.cpp Rust 绑定
-cpal = "0.17"                                      # 跨平台音频捕获
 ```
 
 ---
@@ -151,7 +149,6 @@ cargo test
 - [ ] `j report/check/search` 日报系统
 - [ ] `j todo` 待办管理
 - [ ] `j chat` AI 对话
-- [ ] `j voice` 语音转文字
 - [ ] 交互模式 Tab 补全
 - [ ] 交互模式 `!` shell 命令
 

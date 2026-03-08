@@ -26,7 +26,7 @@ j vscode ./src            # 用 VSCode 打开 src 目录
 
 # 写日报 & 查看
 j report "完成功能开发"    # 写入今日日报
-j check                   # 查看最近 5 行
+j check                   # 查看最近 10 行
 j check 20                # 查看最近 20 行
 
 # 进入交互模式（带 Tab 补全 + 历史建议）
@@ -64,8 +64,6 @@ j
 ├── scripts/             # j concat 创建的脚本
 ├── todo/                # 待办备忘录目录
 │   └── todo.json        # 待办数据（JSON 格式）
-└── voice/               # 语音识别
-    └── model/           # Whisper 模型文件
 ```
 
 ### 配置文件结构 (`config.yaml`)
@@ -138,7 +136,7 @@ j
 | `j reportctl pull` | 从远程 git 仓库拉取周报 |
 | `j reportctl set-url [url]` | 设置/查看 git 仓库地址 |
 | `j reportctl open` | 用内置 TUI 编辑器打开日报文件全文编辑 |
-| `j check [N]` | 查看日报最近 N 行（默认 5） |
+| `j check [N]` | 查看日报最近 N 行（默认 10） |
 | `j search <N/all> <kw>` | 在日报中搜索关键字 |
 | `j search <N/all> <kw> -f` | 模糊搜索（大小写不敏感） |
 
@@ -264,21 +262,6 @@ open -a "$J_CHROME" https://example.com
 | `j help` | 帮助信息 |
 | `j exit` | 退出（交互模式） |
 | `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
-
-## 🎙️ 语音转文字
-
-| 命令 | 说明 |
-|------|------|
-| `j voice` | 录音 → Whisper 离线转写 → 输出文字 |
-| `j voice -c` | 录音转写并复制结果到剪贴板 |
-| `j voice -m <model>` | 指定模型大小（tiny/base/small/medium/large） |
-| `j voice download` | 下载默认模型（small） |
-| `j voice download -m medium` | 下载指定大小的模型 |
-| `j vc` | 同 `j voice`（别名） |
-
-> 首次使用需先下载 Whisper 模型: `j voice download`
-> 模型存储路径: `~/.jdata/voice/model/`
-> 推荐中文用 small（466MB）或 medium（1.5GB）模型
 
 ---
 

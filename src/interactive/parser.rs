@@ -202,15 +202,6 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::Matched(SubCmd::Completion {
             shell: rest.first().cloned(),
         })
-    } else if is(cmd::VOICE) {
-        ParseResult::Matched(SubCmd::Voice {
-            action: rest.first().cloned().unwrap_or_default(),
-            copy: rest.contains(&"-c".to_string()),
-            model: rest
-                .iter()
-                .position(|a| a == "-m" || a == "--model")
-                .and_then(|i| rest.get(i + 1).cloned()),
-        })
     } else {
         ParseResult::NotFound
     }

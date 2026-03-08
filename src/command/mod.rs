@@ -10,7 +10,6 @@ pub mod script;
 pub mod system;
 pub mod time;
 pub mod todo;
-pub mod voice;
 
 use crate::cli::SubCmd;
 use crate::config::YamlConfig;

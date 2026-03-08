@@ -4,7 +4,7 @@ This file provides guidance to CodeBuddy Code when working with code in this rep
 
 ## Project Overview
 
-`j-cli` (a.k.a. "work-copilot") is a Rust CLI productivity tool for macOS ARM64. It manages app/URL aliases, daily reports, todos, AI chat, voice-to-text, and more. Binary name is `j`. User data lives in `~/.jdata/` (overridable via `J_DATA_PATH`).
+`j-cli` (a.k.a. "work-copilot") is a Rust CLI productivity tool for macOS ARM64. It manages app/URL aliases, daily reports, todos, AI chat, and more. Binary name is `j`. User data lives in `~/.jdata/` (overridable via `J_DATA_PATH`).
 
 **Remember to update `README.md` and `assets/help.md` when changes are made.**
 
@@ -13,7 +13,7 @@ This file provides guidance to CodeBuddy Code when working with code in this rep
 ```bash
 # Development
 cargo build              # Debug build
-cargo build --release    # Release build (requires CMake: brew install cmake)
+cargo build --release    # Release build
 cargo run                # Run (enters interactive mode if no args)
 cargo run -- <args>      # Run with subcommand, e.g.: cargo run -- list
 cargo fmt                # Format code
@@ -31,8 +31,6 @@ make pre-commit          # fmt + lint + test
 make push                # fmt + git commit + push
 make tag                 # Create and push a version tag (triggers GitHub Actions release)
 ```
-
-**Note:** Release builds require CMake for `whisper-rs`: `brew install cmake`. Release builds also set `CFLAGS=-march=armv8-a` to avoid ARM i8mm instruction issues.
 
 ## Architecture
 
@@ -59,7 +57,6 @@ All configuration is stored in `~/.jdata/config.yaml` and deserialized into `Yam
 - `report.rs` — Daily report writing, searching, and git sync
 - `chat/` — Async AI chat TUI using `async-openai` + `tokio`, with streaming and Markdown rendering
 - `todo/` — TUI-based todo list backed by `~/.jdata/todo/todo.json`
-- `voice.rs` — Offline speech recognition via `whisper-rs` + `cpal` for recording
 
 ### TUI Layer (`src/tui/editor.rs`)
 

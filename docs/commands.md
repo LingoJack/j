@@ -295,15 +295,3 @@ j chat              # 进入 TUI 对话界面
 j ai                # 同上（别名）
 j chat 你好         # 快速提问
 ```
-
----
-
-## 语音转文字
-
-详见 [语音转文字文档](./voice.md)
-
-```bash
-j voice download           # 下载模型
-j voice                    # 录音转文字
-j voice -c                 # 转文字并复制到剪贴板
-```

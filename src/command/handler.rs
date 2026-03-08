@@ -127,11 +127,6 @@ command_handlers! {
     CompletionCmd { shell: Option<String> } => |self, config| {
         crate::command::system::handle_completion(self.shell.as_deref(), config);
     },
-
-    // ========== 语音转文字 ==========
-    VoiceCmd { action: String, copy: bool, model: Option<String> } => |self, config| {
-        crate::command::voice::handle_voice(&self.action, self.copy, self.model.as_deref(), config);
-    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -184,17 +179,6 @@ impl SubCmd {
             SubCmd::Help => Box::new(HelpCmd {}),
             SubCmd::Exit => Box::new(ExitCmd {}),
             SubCmd::Completion { shell } => Box::new(CompletionCmd { shell }),
-
-            // 语音转文字
-            SubCmd::Voice {
-                action,
-                copy,
-                model,
-            } => Box::new(VoiceCmd {
-                action,
-                copy,
-                model,
-            }),
         }
     }
 }

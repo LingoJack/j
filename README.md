@@ -8,7 +8,6 @@
 - **日报系统** — 快速写入、查看、搜索日报，自动周数管理
 - **待办备忘录** — 内置 TUI 待办管理，支持 markdown checkbox
 - **AI 对话** — 内置 TUI AI 对话，多模型、流式输出、工具调用
-- **语音转文字** — 基于 Whisper.cpp 的离线语音识别
 - **交互模式** — 带 Tab 补全 + 历史建议的 REPL 环境
 
 **重构动机**：启动速度提升 10-100x（JVM ~200-500ms → Rust ~2ms）
@@ -53,6 +52,8 @@ j                         # 进入 REPL（Tab 补全 + 历史建议）
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 ```
 
+> 零依赖，下载预编译二进制即可使用。
+
 ### 从 crates.io 安装
 
 ```bash
@@ -80,7 +81,6 @@ cd j && cargo install --path .
 | **待办** | `j todo` | 待办备忘录 |
 | **脚本** | `j concat` | 创建脚本 |
 | **AI** | `j chat` | AI 对话 |
-| **语音** | `j voice` | 语音转文字 |
 
 ---
 
@@ -95,8 +95,7 @@ cd j && cargo install --path .
 ├── bin/                 # 内置工具（Markdown 渲染器）
 ├── report/              # 日报目录
 ├── scripts/             # 用户脚本
-├── todo/                # 待办数据
-└── voice/               # 语音模型
+└── todo/                # 待办数据
 ```
 
 ---
@@ -108,7 +107,6 @@ cd j && cargo install --path .
 | [架构设计](./docs/architecture.md) | 目录结构、模块说明、数据模型 |
 | [命令详解](./docs/commands.md) | 所有命令详细使用说明 |
 | [AI 对话](./docs/chat.md) | AI 对话系统完整文档 |
-| [语音转文字](./docs/voice.md) | 语音转文字功能文档 |
 | [设计决策](./docs/design-decisions.md) | 关键设计决策记录 |
 | [开发指南](./docs/development.md) | 编译、开发、扩展指南 |
 
@@ -120,7 +118,6 @@ cd j && cargo install --path .
 - **rustyline** — 交互模式 REPL
 - **ratatui** — TUI 框架
 - **async-openai** — OpenAI API 客户端
-- **whisper-rs** — Whisper.cpp Rust 绑定
 - **serde** — 序列化框架
 
 ---

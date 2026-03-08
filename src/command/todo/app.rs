@@ -193,13 +193,7 @@ impl TodoApp {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => {
-                if i >= count - 1 {
-                    count - 1 // 到达底部时停止，不再循环
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) => (i + 1) % count,
             None => 0,
         };
         self.state.select(Some(i));
@@ -212,13 +206,7 @@ impl TodoApp {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    0 // 到达顶部时停止，不再循环
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => (i - 1 + count) % count,
             None => 0,
         };
         self.state.select(Some(i));
