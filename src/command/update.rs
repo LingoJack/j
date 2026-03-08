@@ -5,7 +5,7 @@ use colored::Colorize;
 pub fn handle_update(check_only: bool) {
     match INSTALL_SOURCE {
         "github" => handle_github_update(check_only),
-        "cargo" => show_cargo_update_hint(),
+        "cargo" => handle_cargo_update(check_only),
         _ => show_unknown_source_hint(),
     }
 }
@@ -91,32 +91,58 @@ fn perform_update() {
     }
 }
 
-/// 提示 cargo 用户使用正确的更新方式
-fn show_cargo_update_hint() {
-    println!("{}", "检测到你通过 cargo 安装了 j-cli".yellow());
+/// cargo 用户：直接执行 cargo install j-cli 更新
+fn handle_cargo_update(check_only: bool) {
+    println!("{}", "检测到 cargo 安装方式".green());
+    println!("当前版本: {}", VERSION.cyan());
+
+    if check_only {
+        // --check 模式：只打印提示，不实际安装
+        println!();
+        println!("如需更新，运行:");
+        println!("  {}", "j update".cyan());
+        println!("  或: {}", "cargo install j-cli".cyan());
+        return;
+    }
+
+    println!("{}", "正在通过 cargo 更新 j-cli...".yellow());
+    println!("执行: {}", "cargo install j-cli --force".cyan());
     println!();
-    println!("请使用以下命令更新:");
-    println!("  {}", "cargo install j-cli".cyan());
-    println!();
-    println!("或从 GitHub 重新安装（切换为 GitHub 安装方式）:");
-    println!(
-        "  {}",
-        "curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh".cyan()
-    );
+
+    // 检查 cargo 是否在 PATH 中
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    match std::process::Command::new(&cargo)
+        .args(["install", "j-cli", "--force"])
+        .spawn()
+    {
+        Ok(mut child) => match child.wait() {
+            Ok(status) if status.success() => {
+                println!();
+                println!("{}", "更新成功！".green());
+            }
+            Ok(status) => {
+                println!();
+                println!(
+                    "{} 退出码: {}",
+                    "更新失败".red(),
+                    status.code().unwrap_or(-1)
+                );
+            }
+            Err(e) => {
+                println!("{} {}", "等待 cargo 执行失败:".red(), e);
+            }
+        },
+        Err(e) => {
+            println!("{} {}", "启动 cargo 失败:".red(), e);
+            println!("请确认 cargo 已安装并在 PATH 中，或手动运行:");
+            println!("  {}", "cargo install j-cli --force".cyan());
+        }
+    }
 }
 
-/// 未知安装来源的提示
+/// 未知安装来源：尝试 cargo，失败则给出手动提示
 fn show_unknown_source_hint() {
-    println!("{}", "无法确定安装来源".yellow());
-    println!();
-    println!("请选择以下方式更新:");
-    println!();
-    println!("1. cargo 方式:");
-    println!("   {}", "cargo install j-cli".cyan());
-    println!();
-    println!("2. GitHub Release 方式:");
-    println!(
-        "   {}",
-        "curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh".cyan()
-    );
+    println!("{}", "无法确定安装来源，尝试通过 cargo 更新...".yellow());
+    handle_cargo_update(false);
 }
