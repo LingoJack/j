@@ -291,7 +291,7 @@ pub const WELCOME_MESSAGE: &str = r###"
   ║                                                                           ║
   ╠═══════════════════════════════════════════════════════════════════════════╣
   ║                                                                           ║
-  ║   🖥️  Recommended Terminal: Kitty                                          ║
+  ║   🖥️  Recommended Terminal: Kitty                                         ║
   ║       https://sw.kovidgoyal.net/kitty                                     ║
   ║                                                                           ║
   ║   🎨  Recommended Theme:                                                  ║
