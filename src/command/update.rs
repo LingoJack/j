@@ -106,7 +106,7 @@ fn handle_cargo_update(check_only: bool) {
     }
 
     println!("{}", "正在通过 cargo 更新 j-cli...".yellow());
-    println!("执行: {}", "cargo install j-cli --force".cyan());
+    println!("执行: {}", "cargo install j-cli".cyan());
     println!();
 
     // 检查 cargo 是否在 PATH 中
