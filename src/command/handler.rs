@@ -129,8 +129,8 @@ command_handlers! {
     },
 
     // ========== 自更新 ==========
-    UpdateCmd { check: bool } => |self, _config| {
-        crate::command::update::handle_update(self.check);
+    UpdateCmd { check: bool, interactive: bool } => |self, _config| {
+        crate::command::update::handle_update(self.check, self.interactive);
     },
 }
 
@@ -186,7 +186,7 @@ impl SubCmd {
             SubCmd::Completion { shell } => Box::new(CompletionCmd { shell }),
 
             // 自更新
-            SubCmd::Update { check } => Box::new(UpdateCmd { check }),
+            SubCmd::Update { check, interactive } => Box::new(UpdateCmd { check, interactive }),
         }
     }
 }

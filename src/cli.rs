@@ -214,5 +214,8 @@ pub enum SubCmd {
         /// 仅检查版本，不更新
         #[arg(short, long)]
         check: bool,
+        /// 是否在交互模式下调用（更新成功后自动重启）
+        #[arg(skip)]
+        interactive: bool,
     },
 }

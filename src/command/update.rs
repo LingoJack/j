@@ -2,23 +2,23 @@ use crate::constants::{INSTALL_SOURCE, VERSION};
 use colored::Colorize;
 
 /// 处理 update 命令
-pub fn handle_update(check_only: bool) {
+pub fn handle_update(check_only: bool, interactive: bool) {
     match INSTALL_SOURCE {
-        "github" => handle_github_update(check_only),
-        "cargo" => handle_cargo_update(check_only),
-        _ => show_unknown_source_hint(),
+        "github" => handle_github_update(check_only, interactive),
+        "cargo" => handle_cargo_update(check_only, interactive),
+        _ => show_unknown_source_hint(interactive),
     }
 }
 
 /// 从 GitHub Releases 更新
-fn handle_github_update(check_only: bool) {
+fn handle_github_update(check_only: bool, interactive: bool) {
     println!("{}", "检测到 GitHub Release 安装方式".green());
     println!("当前版本: {}", VERSION.cyan());
 
     if check_only {
         check_for_update();
     } else {
-        perform_update();
+        perform_update(interactive);
     }
 }
 
@@ -57,7 +57,7 @@ fn check_for_update() {
 }
 
 /// 执行更新
-fn perform_update() {
+fn perform_update(interactive: bool) {
     println!("{}", "正在更新...".yellow());
 
     let result = self_update::backends::github::Update::configure()
@@ -76,6 +76,9 @@ fn perform_update() {
                     "更新成功！".green(),
                     format!("版本: {}", status.version()).cyan()
                 );
+                if interactive {
+                    restart_self();
+                }
             }
             Err(e) => {
                 println!("{} {}", "更新失败:".red(), e);
@@ -92,7 +95,7 @@ fn perform_update() {
 }
 
 /// cargo 用户：直接执行 cargo install j-cli 更新
-fn handle_cargo_update(check_only: bool) {
+fn handle_cargo_update(check_only: bool, interactive: bool) {
     println!("{}", "检测到 cargo 安装方式".green());
     println!("当前版本: {}", VERSION.cyan());
 
@@ -120,6 +123,9 @@ fn handle_cargo_update(check_only: bool) {
             Ok(status) if status.success() => {
                 println!();
                 println!("{}", "更新成功！".green());
+                if interactive {
+                    restart_self();
+                }
             }
             Ok(status) => {
                 println!();
@@ -142,7 +148,35 @@ fn handle_cargo_update(check_only: bool) {
 }
 
 /// 未知安装来源：尝试 cargo，失败则给出手动提示
-fn show_unknown_source_hint() {
+fn show_unknown_source_hint(interactive: bool) {
     println!("{}", "无法确定安装来源，尝试通过 cargo 更新...".yellow());
-    handle_cargo_update(false);
+    handle_cargo_update(false, interactive);
+}
+
+/// 用 execv 替换当前进程，实现无感知重启到新版本
+fn restart_self() {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("{} {}", "无法获取当前可执行文件路径:".red(), e);
+            println!("请手动重启 j 以使用新版本。");
+            return;
+        }
+    };
+
+    println!("{}", "正在重启 j 以加载新版本...".cyan());
+
+    let exe_cstr = match std::ffi::CString::new(exe.to_string_lossy().as_bytes()) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("{} {}", "路径包含非法字符:".red(), e);
+            println!("请手动重启 j 以使用新版本。");
+            return;
+        }
+    };
+
+    let err = nix::unistd::execv(&exe_cstr, &[&exe_cstr]);
+    // execv 成功时不会返回；到这里说明失败了
+    println!("{} {:?}", "重启失败:".red(), err);
+    println!("请手动重启 j 以使用新版本。");
 }

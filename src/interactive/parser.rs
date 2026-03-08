@@ -208,6 +208,7 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                 .first()
                 .map(|s| s == "--check" || s == "-c")
                 .unwrap_or(false),
+            interactive: true,
         })
     } else {
         ParseResult::NotFound
