@@ -279,7 +279,15 @@ pub const LIST_ALL: &str = "all";
 // ========== 交互模式 ==========
 
 /// 欢迎语
-pub const WELCOME_MESSAGE: &str = "Welcome to use j-cli 🚀 ~";
+pub const WELCOME_MESSAGE: &str = r###"
+    Welcome to j-cli 🚀 ~
+        - Most recommended terminal: [Kitty](https://sw.kovidgoyal.net/kitty/)
+        - Most recommended Kitty theme: https://github.com/LingoJack/kitty_conf
+        - For the best experience, launch j-cli with Kitty by following these steps:
+            1. curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin 
+            2. cd ~/.config/kitty/ && git clone https://github.com/LingoJack/kitty_conf .
+            3. Reload Kitty
+"###;
 
 /// Shell 命令前缀字符
 pub const SHELL_PREFIX_EN: char = '!';
