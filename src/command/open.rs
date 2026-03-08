@@ -1,5 +1,8 @@
 use crate::config::YamlConfig;
-use crate::constants::{DEFAULT_SEARCH_ENGINE, config_key, search_engine, section, shell};
+use crate::constants::{
+    DEFAULT_SEARCH_ENGINE, NEW_WINDOW_FLAG, NEW_WINDOW_FLAG_LONG, config_key, search_engine,
+    section, shell,
+};
 use crate::{error, info};
 use std::path::Path;
 use std::process::Command;
@@ -96,10 +99,6 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
         open_with_path(alias, Some(&url), config);
     }
 }
-
-/// 新窗口执行标志
-const NEW_WINDOW_FLAG: &str = "-w";
-const NEW_WINDOW_FLAG_LONG: &str = "--new-window";
 
 /// 运行脚本
 /// 支持 -w / --new-window 标志：在新终端窗口中执行脚本

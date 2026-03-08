@@ -1,13 +1,16 @@
 use crate::assets::version_template;
 use crate::config::YamlConfig;
-use crate::constants::{self, CONTAIN_SEARCH_SECTIONS, config_key, section};
+use crate::constants::{
+    ALIAS_EXISTS_SECTIONS, ALL_SECTIONS, CONTAIN_SEARCH_SECTIONS, VERSION, cmd::all_keywords,
+    config_key, section,
+};
 use crate::{error, info, md, usage};
 use colored::Colorize;
 
 /// 处理 version 命令: j version
 pub fn handle_version() {
     let text = version_template()
-        .replace("{version}", constants::VERSION)
+        .replace("{version}", VERSION)
         .replace("{os}", std::env::consts::OS)
         .replace("{arch}", std::env::consts::ARCH);
     md!("{}", text);
@@ -121,7 +124,7 @@ pub fn handle_completion(shell_type: Option<&str>, config: &YamlConfig) {
 fn generate_zsh_completion(config: &YamlConfig) {
     // 收集所有别名
     let mut all_aliases = Vec::new();
-    for s in constants::ALIAS_EXISTS_SECTIONS {
+    for s in ALIAS_EXISTS_SECTIONS {
         if let Some(map) = config.get_section(s) {
             for key in map.keys() {
                 if !all_aliases.contains(key) {
@@ -145,7 +148,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
         .unwrap_or_default();
 
     // 收集内置命令关键字
-    let keywords = constants::cmd::all_keywords();
+    let keywords = all_keywords();
 
     // 子命令列表
     let subcmds = keywords.to_vec();
@@ -219,7 +222,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
     script.push_str("                    ;;\n");
 
     // list 命令：补全 section 名
-    let sections_str = constants::ALL_SECTIONS.join(" ");
+    let sections_str = ALL_SECTIONS.join(" ");
     script.push_str("                ls|list)\n");
     script.push_str(&format!(
         "                    local -a sections=(all {})\n",
@@ -301,7 +304,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
 fn generate_bash_completion(config: &YamlConfig) {
     // 收集所有别名
     let mut all_aliases = Vec::new();
-    for s in constants::ALIAS_EXISTS_SECTIONS {
+    for s in ALIAS_EXISTS_SECTIONS {
         if let Some(map) = config.get_section(s) {
             for key in map.keys() {
                 if !all_aliases.contains(key) {
@@ -312,7 +315,7 @@ fn generate_bash_completion(config: &YamlConfig) {
     }
     all_aliases.sort();
 
-    let keywords = constants::cmd::all_keywords();
+    let keywords = all_keywords();
     let all_completions: Vec<String> = keywords
         .iter()
         .map(|s| s.to_string())

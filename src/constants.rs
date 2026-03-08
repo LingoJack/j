@@ -158,6 +158,10 @@ pub mod config_key {
 /// 默认搜索引擎
 pub const DEFAULT_SEARCH_ENGINE: &str = "bing";
 
+/// 新窗口执行标志
+pub const NEW_WINDOW_FLAG: &str = "-w";
+pub const NEW_WINDOW_FLAG_LONG: &str = "--new-window";
+
 /// 搜索引擎 URL 模板
 pub mod search_engine {
     pub const GOOGLE: &str = "https://www.google.com/search?q={}";
@@ -278,7 +282,8 @@ pub const LIST_ALL: &str = "all";
 pub const WELCOME_MESSAGE: &str = "Welcome to use j-cli 🚀 ~";
 
 /// Shell 命令前缀字符
-pub const SHELL_PREFIX: char = '!';
+pub const SHELL_PREFIX_EN: char = '!';
+pub const SHELL_PREFIX_CN: char = '！';
 
 /// 交互模式提示符
 pub const INTERACTIVE_PROMPT: &str = "j >";

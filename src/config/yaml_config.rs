@@ -1,4 +1,8 @@
-use crate::constants::{self, config_key, section};
+use crate::constants::{
+    ALIAS_EXISTS_SECTIONS, ALIAS_PATH_SECTIONS, ALL_SECTIONS, APP_NAME, AUTHOR, CONFIG_FILE,
+    DATA_DIR, DATA_PATH_ENV, DEFAULT_SEARCH_ENGINE, EMAIL, REPORT_DEFAULT_FILE, REPORT_DIR,
+    SCRIPTS_DIR, VERSION, config_key, section,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -50,23 +54,23 @@ impl YamlConfig {
     /// 获取数据根目录: ~/.jdata/
     pub fn data_dir() -> PathBuf {
         // 优先使用环境变量指定的数据路径
-        if let Ok(path) = std::env::var(constants::DATA_PATH_ENV) {
+        if let Ok(path) = std::env::var(DATA_PATH_ENV) {
             return PathBuf::from(path);
         }
         // 默认路径: ~/.jdata/
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(constants::DATA_DIR)
+            .join(DATA_DIR)
     }
 
     /// 获取配置文件路径: ~/.jdata/config.yaml
     fn config_path() -> PathBuf {
-        Self::data_dir().join(constants::CONFIG_FILE)
+        Self::data_dir().join(CONFIG_FILE)
     }
 
     /// 获取脚本存储目录: ~/.jdata/scripts/
     pub fn scripts_dir() -> PathBuf {
-        let dir = Self::data_dir().join(constants::SCRIPTS_DIR);
+        let dir = Self::data_dir().join(SCRIPTS_DIR);
         // 确保目录存在
         let _ = fs::create_dir_all(&dir);
         dir
@@ -74,7 +78,7 @@ impl YamlConfig {
 
     /// 获取日报目录: ~/.jdata/report/
     pub fn report_dir() -> PathBuf {
-        let dir = Self::data_dir().join(constants::REPORT_DIR);
+        let dir = Self::data_dir().join(REPORT_DIR);
         let _ = fs::create_dir_all(&dir);
         dir
     }
@@ -86,7 +90,7 @@ impl YamlConfig {
         {
             return Self::expand_tilde(custom_path);
         }
-        Self::report_dir().join(constants::REPORT_DEFAULT_FILE)
+        Self::report_dir().join(REPORT_DEFAULT_FILE)
     }
 
     /// 展开路径中的 ~ 为用户主目录
@@ -151,18 +155,10 @@ impl YamlConfig {
         let mut config = Self::default();
 
         // 版本信息
-        config
-            .version
-            .insert("name".into(), constants::APP_NAME.into());
-        config
-            .version
-            .insert("version".into(), constants::VERSION.into());
-        config
-            .version
-            .insert("author".into(), constants::AUTHOR.into());
-        config
-            .version
-            .insert("email".into(), constants::EMAIL.into());
+        config.version.insert("name".into(), APP_NAME.into());
+        config.version.insert("version".into(), VERSION.into());
+        config.version.insert("author".into(), AUTHOR.into());
+        config.version.insert("email".into(), EMAIL.into());
 
         // 日志模式
         config
@@ -172,7 +168,7 @@ impl YamlConfig {
         // 默认搜索引擎
         config.setting.insert(
             config_key::SEARCH_ENGINE.into(),
-            constants::DEFAULT_SEARCH_ENGINE.into(),
+            DEFAULT_SEARCH_ENGINE.into(),
         );
 
         config
@@ -262,19 +258,19 @@ impl YamlConfig {
 
     /// 获取所有已知的 section 名称
     pub fn all_section_names(&self) -> &'static [&'static str] {
-        constants::ALL_SECTIONS
+        ALL_SECTIONS
     }
 
     /// 判断别名是否存在于任何 section 中（用于 open 命令判断）
     pub fn alias_exists(&self, alias: &str) -> bool {
-        constants::ALIAS_EXISTS_SECTIONS
+        ALIAS_EXISTS_SECTIONS
             .iter()
             .any(|s| self.contains(s, alias))
     }
 
     /// 根据别名获取路径（依次从 path、inner_url、outer_url 中查找）
     pub fn get_path_by_alias(&self, alias: &str) -> Option<&String> {
-        constants::ALIAS_PATH_SECTIONS
+        ALIAS_PATH_SECTIONS
             .iter()
             .find_map(|s| self.get_property(s, alias))
     }

@@ -4,7 +4,9 @@ pub mod shell;
 
 use crate::command::voice::do_voice_record_for_interactive;
 use crate::config::YamlConfig;
-use crate::constants::{self, cmd};
+use crate::constants::{
+    HISTORY_FILE, INTERACTIVE_PROMPT, SHELL_PREFIX_CN, SHELL_PREFIX_EN, WELCOME_MESSAGE, cmd,
+};
 use crate::{error, info};
 use colored::Colorize;
 use completer::CopilotHelper;
@@ -104,11 +106,11 @@ pub fn run_interactive(config: &mut YamlConfig) {
     let history_path = history_file_path();
     let _ = rl.load_history(&history_path);
 
-    info!("{}", constants::WELCOME_MESSAGE);
+    info!("{}", WELCOME_MESSAGE);
 
     inject_envs_to_process(config);
 
-    let prompt = format!("{} ", constants::INTERACTIVE_PROMPT.yellow());
+    let prompt = format!("{} ", INTERACTIVE_PROMPT.yellow());
 
     loop {
         // 每次循环重置 voice 状态
@@ -122,8 +124,9 @@ pub fn run_interactive(config: &mut YamlConfig) {
                     continue;
                 }
 
-                if input.starts_with(constants::SHELL_PREFIX) {
-                    let shell_cmd = &input[1..].trim();
+                if input.starts_with(SHELL_PREFIX_EN) || input.starts_with(SHELL_PREFIX_CN) {
+                    let shell_cmd = input.chars().skip(1).collect::<String>();
+                    let shell_cmd = shell_cmd.trim();
                     if shell_cmd.is_empty() {
                         enter_interactive_shell(config);
                     } else {
@@ -283,7 +286,7 @@ pub fn run_interactive(config: &mut YamlConfig) {
 fn history_file_path() -> std::path::PathBuf {
     let data_dir = crate::config::YamlConfig::data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
-    data_dir.join(constants::HISTORY_FILE)
+    data_dir.join(HISTORY_FILE)
 }
 
 /// 解析用户输入为参数列表（支持双引号包裹带空格的参数）
