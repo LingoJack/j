@@ -211,3 +211,37 @@ enum ParseResult {
 **引用文件支持**：
 - 技能目录下的 `references/` 子目录会被自动加载
 - 所有文件内容会被拼接追加到技能正文后
+
+---
+
+## 17. 帮助文档 Tab 分配策略
+
+`j help` 命令使用 TUI 界面展示帮助内容，通过 `## ` 标题将 `assets/help.md` 分配到不同 Tab 页。
+
+**实现机制**：
+
+```rust
+// src/command/help/app.rs
+const TAB_DEFS: &[TabDef] = &[
+    TabDef {
+        name: "快速上手",
+        heading_keywords: &["快速上手"],
+    },
+    TabDef {
+        name: "别名 & 打开",
+        heading_keywords: &["别名管理", "分类标记", "列表", "打开"],
+    },
+    // ...
+];
+```
+
+**分配逻辑**：
+1. 按 `## ` 标题将 `help.md` 切分为多个 section
+2. 遍历每个 section，检查标题是否包含某 Tab 的 `heading_keywords`
+3. 匹配上则将该 section 内容追加到对应 Tab
+
+**设计要点**：
+- 一个 Tab 可匹配多个 section（如 "别名 & 打开" 匹配 4 个 section）
+- 一个 section 只分配到一个 Tab（首次匹配优先）
+- 关键词应选择标题中的唯一标识词，避免歧义
+- 新增 `## ` section 时需同步更新 `TAB_DEFS`
