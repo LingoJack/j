@@ -291,11 +291,11 @@ pub const WELCOME_MESSAGE: &str = r###"
   ║                                                                           ║
   ╠═══════════════════════════════════════════════════════════════════════════╣
   ║                                                                           ║
-  ║   🖥️  Recommended Terminal: Kitty                                         ║
-  ║       https://sw.kovidgoyal.net/kitty                                     ║
+  ║   💻 Recommended Terminal: Kitty                                          ║
+  ║      https://sw.kovidgoyal.net/kitty                                      ║
   ║                                                                           ║
-  ║   🎨  Recommended Theme:                                                  ║
-  ║       https://github.com/LingoJack/kitty_conf                             ║
+  ║   🎨 Recommended Theme:                                                   ║
+  ║      https://github.com/LingoJack/kitty_conf                              ║
   ║                                                                           ║
   ╠═══════════════════════════════════════════════════════════════════════════╣
   ║                                                                           ║
