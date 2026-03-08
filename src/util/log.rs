@@ -1,4 +1,4 @@
-use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, DATA_DIR};
+use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_ERROR, AGENT_LOG_INFO, DATA_DIR};
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -71,7 +71,7 @@ pub fn write_info_log(context: &str, content: &str) {
         return;
     }
 
-    let log_file = log_dir.join("info.log");
+    let log_file = log_dir.join(AGENT_LOG_INFO);
 
     match OpenOptions::new().create(true).append(true).open(&log_file) {
         Ok(mut file) => {
@@ -105,7 +105,7 @@ pub fn write_error_log(context: &str, error: &str) {
         return;
     }
 
-    let log_file = log_dir.join("error.log");
+    let log_file = log_dir.join(AGENT_LOG_ERROR);
 
     // 写入日志
     match OpenOptions::new().create(true).append(true).open(&log_file) {

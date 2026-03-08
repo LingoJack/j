@@ -6,7 +6,9 @@ use super::render::copy_to_clipboard;
 use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
 use crate::command::chat::app::{ChatApp, ChatMode, config_total_fields};
-use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
+use crate::constants::{
+    AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_INFO, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS,
+};
 use crate::{error, info};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -353,7 +355,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         let log_file = crate::config::YamlConfig::data_dir()
             .join(AGENT_DIR)
             .join(AGENT_LOG_DIR)
-            .join("info.log");
+            .join(AGENT_LOG_INFO);
         let tail_cmd = format!("tail -f '{}'; exit", log_file.to_string_lossy());
         let apple_script = format!(
             "tell application \"Terminal\"\n\
