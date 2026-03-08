@@ -11,7 +11,7 @@ src/
 ├── main.rs              # 入口：clap 解析 + 快捷/交互模式分流
 ├── cli.rs               # clap derive 宏定义所有子命令（SubCmd 枚举）
 ├── constants.rs         # 全局常量定义（版本号、section名、分类、搜索引擎等）
-├── assets.rs            # 资源管理模块
+├── assets.rs            # 资源管理模块（rust-embed 统一嵌入）
 ├── interactive/         # 交互模式
 │   ├── mod.rs           # 主模块入口
 │   ├── completer.rs     # Tab 补全器
@@ -49,19 +49,71 @@ src/
 │   │   ├── theme.rs     # 主题系统
 │   │   ├── render.rs    # 渲染工具
 │   │   ├── skill.rs     # Skill 技能系统
-│   │   ├── tools/       # 工具系统
 │   │   ├── markdown/    # Markdown 解析渲染
+│   │   │   ├── mod.rs
+│   │   │   ├── parser.rs
+│   │   │   └── highlight.rs
+│   │   ├── tools/       # 工具系统
+│   │   │   ├── mod.rs
+│   │   │   ├── shell.rs
+│   │   │   ├── skill_tool.rs
+│   │   │   └── file/    # 文件操作工具
+│   │   │       ├── mod.rs
+│   │   │       ├── read.rs
+│   │   │       ├── write.rs
+│   │   │       └── edit.rs
 │   │   └── ui/          # TUI 组件
+│   │       ├── mod.rs
+│   │       ├── chat.rs
+│   │       ├── config.rs
+│   │       └── archive.rs
 │   └── help/            # 帮助系统 TUI
+│       ├── mod.rs
+│       ├── app.rs
+│       └── ui.rs
 ├── util/                # 工具函数
 │   ├── mod.rs           # 导出
 │   ├── log.rs           # info! / error! / usage! / debug_log! 日志宏
 │   ├── md_render.rs     # md! / md_inline! Markdown 渲染宏
 │   └── fuzzy.rs         # 模糊匹配
-└── assets/
-    ├── help.md          # 帮助文档（编译时通过 include_str! 嵌入二进制）
-    └── version.md       # 版本信息模板
+└── assets/              # 资源文件（编译时通过 rust-embed 嵌入二进制）
+    ├── help.md          # 帮助文档
+    ├── version.md       # 版本信息模板
+    ├── system_prompt_default.md  # 默认系统提示词模板
+    ├── memory_default.md         # 默认记忆占位文件
+    └── soul_default.md           # 默认灵魂占位文件
 ```
+
+---
+
+## 资源嵌入 (`assets.rs`)
+
+使用 `rust-embed` 实现资源嵌入，支持运行时动态查找和迭代：
+
+```rust
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+pub struct Assets;
+
+// 便捷访问函数
+pub fn help_text() -> Cow<'static, str>
+pub fn version_template() -> Cow<'static, str>
+pub fn default_system_prompt() -> Cow<'static, str>
+pub fn default_memory() -> Cow<'static, str>
+pub fn default_soul() -> Cow<'static, str>
+```
+
+**资源清单**：
+
+| 资源名称 | 类型 | 路径 | 用途 |
+|---------|------|------|------|
+| `HELP_TEXT` | 文本 | `assets/help.md` | 帮助命令输出 |
+| `VERSION_TEMPLATE` | 文本 | `assets/version.md` | 版本命令模板 |
+| `DEFAULT_SYSTEM_PROMPT` | 文本 | `assets/system_prompt_default.md` | 默认系统提示词模板 |
+| `DEFAULT_MEMORY` | 文本 | `assets/memory_default.md` | 默认记忆占位文件 |
+| `DEFAULT_SOUL` | 文本 | `assets/soul_default.md` | 默认灵魂占位文件 |
 
 ---
 
@@ -196,6 +248,7 @@ flowchart TD
 | `RemoveCommandHandler` | `command/alias.rs::handle_remove` | 删除别名 |
 | `OpenCommandHandler` | `command/open.rs::handle_open` | 打开应用/URL |
 | `ReportCommandHandler` | `command/report.rs::handle_report` | 写入日报 |
-| — | `command/todo.rs` | 待办备忘录（Rust 新增） |
+| — | `command/todo/` | 待办备忘录（Rust 新增） |
 | — | `command/chat/` | AI 对话 TUI（Rust 新增） |
 | — | `command/voice.rs` | 语音转文字（Rust 新增） |
+| — | `command/help/` | 帮助系统 TUI（Rust 新增） |
