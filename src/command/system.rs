@@ -18,7 +18,7 @@ pub fn handle_version() {
 
 /// 处理 exit 命令
 pub fn handle_exit() {
-    info!("Bye~ See you again 😭");
+    info!("Bye~ 👋");
     std::process::exit(0);
 }
 
