@@ -127,6 +127,11 @@ command_handlers! {
     CompletionCmd { shell: Option<String> } => |self, config| {
         crate::command::system::handle_completion(self.shell.as_deref(), config);
     },
+
+    // ========== 自更新 ==========
+    UpdateCmd { check: bool } => |self, _config| {
+        crate::command::update::handle_update(self.check);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -179,6 +184,9 @@ impl SubCmd {
             SubCmd::Help => Box::new(HelpCmd {}),
             SubCmd::Exit => Box::new(ExitCmd {}),
             SubCmd::Completion { shell } => Box::new(CompletionCmd { shell }),
+
+            // 自更新
+            SubCmd::Update { check } => Box::new(UpdateCmd { check }),
         }
     }
 }

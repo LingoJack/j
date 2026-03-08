@@ -206,4 +206,13 @@ pub enum SubCmd {
         /// shell 类型: zsh, bash, fish
         shell: Option<String>,
     },
+
+    // ========== 自更新 ==========
+    /// 更新 j-cli 到最新版本
+    #[command(alias = "up")]
+    Update {
+        /// 仅检查版本，不更新
+        #[arg(short, long)]
+        check: bool,
+    },
 }

@@ -39,6 +39,7 @@ tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
 pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
+self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
 
 [patch.crates-io]
 tui-textarea = { path = "patches/tui-textarea-0.7.0" }

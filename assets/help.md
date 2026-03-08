@@ -262,6 +262,10 @@ open -a "$J_CHROME" https://example.com
 | `j help` | 帮助信息 |
 | `j exit` | 退出（交互模式） |
 | `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
+| `j update` | 更新到最新版本（仅 GitHub Release 安装） |
+| `j update --check` | 仅检查是否有新版本 |
+
+> **注意**：通过 `cargo install j-cli` 安装的用户请使用 `cargo install j-cli` 更新
 
 ---
 

@@ -81,6 +81,7 @@ cd j && cargo install --path .
 | **待办** | `j todo` | 待办备忘录 |
 | **脚本** | `j concat` | 创建脚本 |
 | **AI** | `j chat` | AI 对话 |
+| **更新** | `j update` | 自更新（仅 GitHub Release 安装） |
 
 ---
 

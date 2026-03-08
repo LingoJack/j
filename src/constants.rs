@@ -15,6 +15,15 @@ pub const AUTHOR: &str = "lingojack";
 /// 邮箱
 pub const EMAIL: &str = "lingojack@qq.com";
 
+/// 安装来源（编译时嵌入）
+/// - "github": 从 GitHub Release 安装
+/// - "cargo": 从 crates.io 安装（默认）
+/// GitHub Release 构建时通过环境变量 INSTALL_SOURCE=github 设置
+pub const INSTALL_SOURCE: &str = match option_env!("INSTALL_SOURCE") {
+    Some(s) => s,
+    None => "cargo",
+};
+
 /// 配置编辑界面的字段列表
 pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
 /// 全局配置字段
@@ -234,12 +243,15 @@ pub mod cmd {
     pub const AGENT: &[&str] = &["agent"];
     pub const SYSTEM: &[&str] = &["system", "ps"];
 
+    // 自更新
+    pub const UPDATE: &[&str] = &["update", "up"];
+
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
             SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
-            AGENT, SYSTEM,
+            AGENT, SYSTEM, UPDATE,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }
