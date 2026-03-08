@@ -7,3 +7,4 @@
 | **author** | lingojack / LingoJack / 达不溜勾勾 |
 | **email**  | lingojack@qq.com              |
 | **arch**   | {arch}                        |
+| **data_dir**   | {data_dir}                |

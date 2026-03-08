@@ -12,7 +12,11 @@ pub fn handle_version() {
     let text = version_template()
         .replace("{version}", VERSION)
         .replace("{os}", std::env::consts::OS)
-        .replace("{arch}", std::env::consts::ARCH);
+        .replace("{arch}", std::env::consts::ARCH)
+        .replace(
+            "{data_dir}",
+            YamlConfig::data_dir().to_str().unwrap_or_default(),
+        );
     md!("{}", text);
 }
 
