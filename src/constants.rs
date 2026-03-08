@@ -306,6 +306,9 @@ pub const WELCOME_MESSAGE: &str = r###"
   ║   🎨 Recommended Theme:                                                   ║
   ║      https://github.com/LingoJack/kitty_conf                              ║
   ║                                                                           ║
+  ║   🚉 Github Repo:                                                         ║
+  ║      https://github.com/LingoJack/j.git                                   ║
+  ║                                                                           ║
   ╠═══════════════════════════════════════════════════════════════════════════╣
   ║                                                                           ║
   ║   📦 Quick Setup:                                                         ║
