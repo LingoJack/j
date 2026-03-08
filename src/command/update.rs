@@ -113,7 +113,7 @@ fn handle_cargo_update(check_only: bool) {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
 
     match std::process::Command::new(&cargo)
-        .args(["install", "j-cli", "--force"])
+        .args(["install", "j-cli"])
         .spawn()
     {
         Ok(mut child) => match child.wait() {
