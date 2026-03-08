@@ -1,9 +1,10 @@
 use crate::constants;
 use clap::{Parser, Subcommand};
+use constants::VERSION;
 
 /// work-copilot (j) - 快捷命令行工具 🚀
 #[derive(Parser, Debug)]
-#[command(name = "j", version = constants::VERSION, about = "快捷命令行工具", long_about = None)]
+#[command(name = "j", version = VERSION, about = "快捷命令行工具", long_about = None)]
 #[command(disable_help_subcommand = true)]
 pub struct Cli {
     #[command(subcommand)]

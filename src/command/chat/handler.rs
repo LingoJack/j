@@ -6,7 +6,7 @@ use super::render::copy_to_clipboard;
 use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
 use crate::command::chat::app::{ChatApp, ChatMode, config_total_fields};
-use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
+use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
 use crate::{error, info};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -351,8 +351,8 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     // Ctrl+G 在新终端窗口中 tail -f 实时查看日志
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('g') {
         let log_file = crate::config::YamlConfig::data_dir()
-            .join(crate::constants::AGENT_DIR)
-            .join(crate::constants::AGENT_LOG_DIR)
+            .join(AGENT_DIR)
+            .join(AGENT_LOG_DIR)
             .join("info.log");
         let tail_cmd = format!("tail -f '{}'; exit", log_file.to_string_lossy());
         let apple_script = format!(
