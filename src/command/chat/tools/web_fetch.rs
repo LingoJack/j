@@ -75,7 +75,7 @@ fn fetch_url(url: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
     // 1. 构建 HTTP 客户端
     let client = match reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
-        .user_agent("Mozilla/5.0 (compatible; WCP-AI/1.0)")
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
     {
         Ok(c) => c,
@@ -87,8 +87,8 @@ fn fetch_url(url: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         }
     };
 
-    // 2. 发送 GET 请求
-    let response = match client.get(url).send() {
+    // 2. 发送 GET 请求（添加 Referer 头模拟浏览器行为）
+    let response = match client.get(url).header("Referer", url).send() {
         Ok(r) => r,
         Err(e) => {
             return ToolResult {
