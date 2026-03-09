@@ -10,59 +10,19 @@ pub mod theme;
 pub mod tools;
 pub mod ui;
 
-use crate::command::chat::theme::ThemeName;
 use crate::config::YamlConfig;
 use crate::{error, info};
 use api::call_openai_stream;
 use handler::run_chat_tui;
-use model::{
-    AgentConfig, ChatMessage, ModelProvider, agent_config_path, load_agent_config,
-    load_system_prompt, save_agent_config, save_system_prompt,
-};
+use model::{ChatMessage, load_agent_config, load_system_prompt};
 use std::io::{self, Write};
 
 pub fn handle_chat(content: &[String], _config: &YamlConfig) {
     let agent_config = load_agent_config();
 
-    if agent_config.providers.is_empty() {
-        info!("⚠️  尚未配置 LLM 模型提供方。");
-        info!("📁 请编辑配置文件: {}", agent_config_path().display());
-        info!("📝 配置示例:");
-        let example = AgentConfig {
-            providers: vec![ModelProvider {
-                name: "GPT-4o".to_string(),
-                api_base: "https://api.openai.com/v1".to_string(),
-                api_key: "sk-your-api-key".to_string(),
-                model: "gpt-4o".to_string(),
-            }],
-            active_index: 0,
-            system_prompt: None,
-            stream_mode: true,
-            max_history_messages: 20,
-            theme: ThemeName::default(),
-            tools_enabled: false,
-            max_tool_rounds: 10,
-            style: None,
-            tool_confirm_timeout: 0,
-        };
-        if let Ok(json) = serde_json::to_string_pretty(&example) {
-            println!("{}", json);
-        }
-        let _ = save_system_prompt("你是一个有用的助手。");
-        // 自动创建示例配置文件
-        if !agent_config_path().exists() {
-            let _ = save_agent_config(&example);
-            info!(
-                "✅ 已自动创建示例配置文件: {}",
-                agent_config_path().display()
-            );
-            info!("📌 请修改其中的 api_key 和其他配置后重新运行 chat 命令");
-        }
-        return;
-    }
-
-    if content.is_empty() {
-        // 无参数：进入 TUI 对话界面
+    if content.is_empty() || agent_config.providers.is_empty() {
+        // 无参数，或尚未配置 provider：进入 TUI 对话界面
+        // 若 providers 为空，TUI 会自动切换到配置界面引导用户完成配置
         run_chat_tui();
         return;
     }

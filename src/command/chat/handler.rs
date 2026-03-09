@@ -9,7 +9,7 @@ use crate::command::chat::app::{ChatApp, ChatMode, config_total_fields};
 use crate::constants::{
     AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_INFO, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS,
 };
-use crate::{error, info};
+use crate::error;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
@@ -37,11 +37,35 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
 
     let mut app = ChatApp::new();
 
+    // 首次运行（尚未配置 provider）时，自动进入配置界面引导用户完成配置
     if app.agent_config.providers.is_empty() {
-        terminal::disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        info!("⚠️  尚未配置 LLM 模型提供方，请先运行 j chat 查看配置说明。");
-        return Ok(());
+        use super::model::{AgentConfig, ModelProvider, agent_config_path, save_agent_config};
+        use super::theme::ThemeName;
+        // 自动创建示例配置文件（如果不存在）
+        if !agent_config_path().exists() {
+            let example = AgentConfig {
+                providers: vec![ModelProvider {
+                    name: "GPT-4o".to_string(),
+                    api_base: "https://api.openai.com/v1".to_string(),
+                    api_key: "sk-your-api-key".to_string(),
+                    model: "gpt-4o".to_string(),
+                }],
+                active_index: 0,
+                system_prompt: None,
+                stream_mode: true,
+                max_history_messages: 20,
+                theme: ThemeName::default(),
+                tools_enabled: false,
+                max_tool_rounds: 10,
+                style: None,
+                tool_confirm_timeout: 0,
+            };
+            let _ = save_agent_config(&example);
+            app.agent_config = example;
+        }
+        // 直接进入配置界面
+        app.mode = ChatMode::Config;
+        app.show_toast("尚未配置模型，请先完成配置 (Esc 保存退出)", true);
     }
 
     let mut needs_redraw = true; // 首次必须绘制
