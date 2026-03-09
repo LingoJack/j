@@ -70,6 +70,11 @@ cd j && cargo install --path .
 cargo install --path . --features browser_cdp
 ```
 
+> **浏览器自动化 FAQ**
+> - 不加 `--features browser_cdp` 时自动使用 Lite 模式（纯 HTTP 模拟，无需 Chrome）
+> - CDP 模式需要本地已安装 Chrome/Chromium，程序退出时会自动关闭浏览器进程
+> - 从 crates.io 安装：`cargo install j-cli --features browser_cdp`
+
 ---
 
 ## 核心命令速查

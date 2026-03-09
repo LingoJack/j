@@ -285,6 +285,11 @@ browser.rs
 - 大多数用户不需要 CDP，默认编译应保持轻量
 - `cargo build --features browser_cdp` 显式 opt-in
 
+**用户前置要求**：
+- **Lite 模式**：零依赖，安装即用
+- **CDP 模式**：本地需已安装 Chrome 或 Chromium（chromiumoxide 不内嵌浏览器）
+- 正常退出时 `Browser` drop 自动发送 `Browser.close` 终止 Chrome 进程；`kill -9` 强杀可能导致残留
+
 ---
 
 ## 20. Browser 全局 Runtime 持久化

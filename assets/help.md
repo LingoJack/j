@@ -525,6 +525,16 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 > - **CDP 模式**：需用 `cargo build --features browser_cdp` 编译。使用真实 Chrome/Chromium 浏览器，支持截图、点击、输入、JS 执行等完整浏览器控制。
 > - **Headless 配置**：默认 headless 模式。可通过 `j change setting browser_headless false` 切换为有头模式。
 
+**浏览器工具 FAQ**：
+
+| 问题 | 说明 |
+|------|------|
+| 怎么编译带 CDP 的版本？ | `cargo build --release --features browser_cdp` 或 `cargo install j-cli --features browser_cdp` |
+| 用户需要额外安装什么？ | **CDP 模式**需要本地已安装 Chrome 或 Chromium；**Lite 模式**无任何额外依赖 |
+| 程序退出时浏览器会关闭吗？ | 会。正常退出时（`q`/`Ctrl+C`/进程结束）Chrome 进程自动终止，所有标签页一并关闭。仅 `kill -9` 强杀时可能残留 |
+| 分发二进制怎么处理？ | 从 crates.io 安装：用户加 `--features browser_cdp`；GitHub Release：需在 CI 中添加带 feature 的构建产物 |
+| 不加 feature 编译会怎样？ | 自动使用 Lite 模式，`screenshot`/`click`/`type`/`evaluate` 等 CDP 专属 action 不可用，但 `content`/`snapshot`/`tabs` 等均可用 |
+
 **工具确认快捷键**：
 
 | 按键 | 功能 |
