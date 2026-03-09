@@ -12,8 +12,6 @@ const REQUEST_TIMEOUT_SECS: u64 = 15;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 /// 默认最大输出字符数
 const DEFAULT_MAX_CHARS: usize = 50000;
-/// html2text 文本折行宽度（字符数）
-const TEXT_WIDTH: usize = 120;
 
 impl Tool for WebFetchTool {
     fn name(&self) -> &str {
@@ -40,8 +38,17 @@ impl Tool for WebFetchTool {
                 },
                 "max_chars": {
                     "type": "integer",
-                    "default": 50000,
+                    "default": 50000 * 4,
                     "description": "返回内容的最大字符数，超出将截断"
+                },
+                "authorization": {
+                    "type": "string",
+                    "description": "Authorization 请求头值（如 'Bearer xxx' 或 'Basic xxx'）"
+                },
+                "headers": {
+                    "type": "object",
+                    "description": "自定义请求头，键值对形式",
+                    "additionalProperties": { "type": "string" }
                 }
             },
             "required": ["url"]
@@ -80,7 +87,25 @@ impl Tool for WebFetchTool {
             .map(|c| c as usize)
             .unwrap_or(DEFAULT_MAX_CHARS);
 
-        fetch_url(url, extract_mode, max_chars, cancelled)
+        let authorization = v
+            .get("authorization")
+            .and_then(|a| a.as_str())
+            .map(|s| s.to_string());
+
+        let headers = v.get("headers").and_then(|h| h.as_object()).map(|obj| {
+            obj.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect::<Vec<_>>()
+        });
+
+        fetch_url(
+            url,
+            extract_mode,
+            max_chars,
+            authorization,
+            headers,
+            cancelled,
+        )
     }
 
     fn requires_confirmation(&self) -> bool {
@@ -92,6 +117,8 @@ fn fetch_url(
     url: &str,
     extract_mode: &str,
     max_chars: usize,
+    authorization: Option<String>,
+    headers: Option<Vec<(String, String)>>,
     cancelled: &Arc<AtomicBool>,
 ) -> ToolResult {
     // 检查取消
@@ -117,8 +144,23 @@ fn fetch_url(
         }
     };
 
-    // 2. 发送 GET 请求（添加 Referer 头模拟浏览器行为）
-    let response = match client.get(url).header("Referer", url).send() {
+    // 2. 构建请求
+    let mut request = client.get(url).header("Referer", url);
+
+    // 添加 Authorization 头
+    if let Some(auth) = &authorization {
+        request = request.header("Authorization", auth);
+    }
+
+    // 添加自定义请求头
+    if let Some(ref custom_headers) = headers {
+        for (key, value) in custom_headers {
+            request = request.header(key.as_str(), value.as_str());
+        }
+    }
+
+    // 3. 发送请求
+    let response = match request.send() {
         Ok(r) => r,
         Err(e) => {
             return ToolResult {
@@ -128,7 +170,7 @@ fn fetch_url(
         }
     };
 
-    // 3. 检查 HTTP 状态码
+    // 4. 检查 HTTP 状态码
     let status = response.status();
     if !status.is_success() {
         return ToolResult {
@@ -141,7 +183,7 @@ fn fetch_url(
         };
     }
 
-    // 4. 检查 Content-Type，判断是否为可处理的文本类型
+    // 5. 检查 Content-Type，判断是否为可处理的文本类型
     let content_type = response
         .headers()
         .get("content-type")
@@ -162,7 +204,7 @@ fn fetch_url(
         };
     }
 
-    // 5. 读取响应体（限制大小）
+    // 6. 读取响应体（限制大小）
     let body = match read_response_body(response) {
         Ok(b) => b,
         Err(e) => {
@@ -173,7 +215,7 @@ fn fetch_url(
         }
     };
 
-    // 6. 转换为目标格式
+    // 7. 转换为目标格式
     let text = if is_html || (!is_text && content_type.is_empty()) {
         // HTML 或未知类型，智能提取内容
         let document = Html::parse_document(&body);
@@ -188,7 +230,7 @@ fn fetch_url(
         body
     };
 
-    // 7. 截断到 max_chars
+    // 8. 截断到 max_chars
     let truncated = if text.len() > max_chars {
         format!(
             "{}...\n\n[内容已截断，原长度: {} 字符]",
