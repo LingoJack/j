@@ -475,6 +475,7 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 | `run_shell` | 执行 shell 命令 | ✅ 是 |
 | `read_file` | 读取本地文件 | ❌ 否 |
 | `web_fetch` | 获取网页内容，智能提取正文转 Markdown | ❌ 否 |
+| `web_search` | 使用 Brave Search API 进行网络搜索 | ❌ 否 |
 | `load_skill` | 加载指定技能的完整内容到上下文 | ❌ 否 |
 
 **工具确认快捷键**：

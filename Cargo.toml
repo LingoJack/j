@@ -42,6 +42,7 @@ unicode-width = "0.2"
 self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
 nix = { version = "0.29", features = ["process"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip", "brotli", "deflate"] }
+urlencoding = "2.1"
 html2text = "0.14"
 scraper = "0.25"
 html2md = "0.2"

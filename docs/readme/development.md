@@ -4,51 +4,16 @@
 
 ---
 
-## 编译运行
+## 核心依赖
 
-### Debug 编译
-
-```bash
-cargo build
-```
-
-### Release 编译
-
-```bash
-cargo build --release
-# 二进制在 target/release/j，~17MB（内嵌 ask 渲染引擎）
-```
-
-### 运行
-
-```bash
-cargo run             # 进入交互模式
-cargo run -- help     # 快捷模式执行 help
-cargo run -- set chrome /Applications/Google\ Chrome.app
-```
-
----
-
-## 技术栈
-
-```toml
-[dependencies]
-clap = { version = "4", features = ["derive"] }   # 命令行参数解析
-rustyline = "17.0.2"                               # 交互模式 REPL
-serde = { version = "1", features = ["derive"] }   # 序列化框架
-serde_yaml = "0.9"                                 # YAML 配置读写
-serde_json = "1"                                   # JSON 处理
-chrono = "0.4"                                     # 日期时间
-colored = "3"                                      # 终端彩色输出
-dirs = "6"                                         # 跨平台用户目录
-ratatui = "0.29.0"                                 # TUI 框架
-crossterm = "0.28.0"                               # 终端原始模式
-tui-textarea = "0.7"                               # 多行文本编辑
-async-openai = "0.33"                              # OpenAI API 客户端
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-pulldown-cmark = "0.13.0"                          # Markdown 解析
-```
-
+| 依赖 | 用途 |
+|------|------|
+| `clap` | 命令行参数解析 |
+| `async-openai` | OpenAI API 客户端 |
+| `ratatui` + `crossterm` | TUI 界面 |
+| `serde` + `serde_json` + `serde_yaml` | 序列化 |
+| `tokio` | 异步运行时 |
+| `pulldown-cmark` | Markdown 解析 |
 ---
 
 ## 添加新命令
