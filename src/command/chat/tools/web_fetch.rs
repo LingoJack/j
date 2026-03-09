@@ -1,4 +1,5 @@
 use crate::command::chat::tools::{Tool, ToolResult};
+use scraper::{Html, Selector};
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};
 
@@ -9,6 +10,8 @@ pub struct WebFetchTool;
 const REQUEST_TIMEOUT_SECS: u64 = 15;
 /// 最大响应体大小（字节）：1MB
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+/// 默认最大输出字符数
+const DEFAULT_MAX_CHARS: usize = 50000;
 /// html2text 文本折行宽度（字符数）
 const TEXT_WIDTH: usize = 120;
 
@@ -18,7 +21,7 @@ impl Tool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        "获取指定 URL 的网页内容，将 HTML 转换为纯文本返回。适用于阅读文章、文档、查看网页信息等场景。"
+        "获取指定 URL 的网页内容，智能提取正文并转换为 Markdown 或纯文本返回。适用于阅读文章、文档、查看网页信息等场景。"
     }
 
     fn parameters_schema(&self) -> Value {
@@ -28,6 +31,17 @@ impl Tool for WebFetchTool {
                 "url": {
                     "type": "string",
                     "description": "要获取的完整 URL（如 https://example.com）"
+                },
+                "extract_mode": {
+                    "type": "string",
+                    "enum": ["markdown", "text"],
+                    "default": "markdown",
+                    "description": "输出格式：markdown 保留结构更适合 LLM 理解，text 为纯文本"
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "default": 50000,
+                    "description": "返回内容的最大字符数，超出将截断"
                 }
             },
             "required": ["url"]
@@ -55,7 +69,18 @@ impl Tool for WebFetchTool {
             }
         };
 
-        fetch_url(url, cancelled)
+        let extract_mode = v
+            .get("extract_mode")
+            .and_then(|m| m.as_str())
+            .unwrap_or("markdown");
+
+        let max_chars = v
+            .get("max_chars")
+            .and_then(|c| c.as_u64())
+            .map(|c| c as usize)
+            .unwrap_or(DEFAULT_MAX_CHARS);
+
+        fetch_url(url, extract_mode, max_chars, cancelled)
     }
 
     fn requires_confirmation(&self) -> bool {
@@ -63,7 +88,12 @@ impl Tool for WebFetchTool {
     }
 }
 
-fn fetch_url(url: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
+fn fetch_url(
+    url: &str,
+    extract_mode: &str,
+    max_chars: usize,
+    cancelled: &Arc<AtomicBool>,
+) -> ToolResult {
     // 检查取消
     if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
         return ToolResult {
@@ -143,18 +173,34 @@ fn fetch_url(url: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         }
     };
 
-    // 6. 转换为纯文本
+    // 6. 转换为目标格式
     let text = if is_html || (!is_text && content_type.is_empty()) {
-        // HTML 或未知类型，尝试按 HTML 解析
-        html2text::from_read(body.as_bytes(), TEXT_WIDTH)
-            .unwrap_or_else(|e| format!("HTML 解析失败: {}", e))
+        // HTML 或未知类型，智能提取内容
+        let document = Html::parse_document(&body);
+        let content_html = extract_readable_content(&document);
+
+        match extract_mode {
+            "text" => html_to_text(&content_html),
+            _ => html2md::parse_html(&content_html),
+        }
     } else {
         // 纯文本直接返回
         body
     };
 
+    // 7. 截断到 max_chars
+    let truncated = if text.len() > max_chars {
+        format!(
+            "{}...\n\n[内容已截断，原长度: {} 字符]",
+            &text[..max_chars],
+            text.len()
+        )
+    } else {
+        text
+    };
+
     ToolResult {
-        output: format!("[来源: {}]\n\n{}", url, text),
+        output: format!("[来源: {}]\n\n{}", url, truncated),
         is_error: false,
     }
 }
@@ -183,4 +229,89 @@ fn read_response_body(response: reqwest::blocking::Response) -> Result<String, S
         }
         Err(e) => Err(format!("读取响应体失败: {}", e)),
     }
+}
+
+/// 智能提取网页正文内容
+/// 按语义优先级查找 article、main 等核心内容区域
+fn extract_readable_content(document: &Html) -> String {
+    let content_selectors = [
+        "article",
+        "main",
+        "[role=\"main\"]",
+        ".post-content",
+        ".article-content",
+        ".entry-content",
+        ".content",
+        "#content",
+        ".post",
+        ".article",
+    ];
+
+    for selector_str in content_selectors {
+        if let Ok(selector) = Selector::parse(selector_str) {
+            if let Some(element) = document.select(&selector).next() {
+                return element.html();
+            }
+        }
+    }
+
+    // 降级到 body
+    if let Ok(body_selector) = Selector::parse("body") {
+        if let Some(body) = document.select(&body_selector).next() {
+            return body.html();
+        }
+    }
+
+    document.html()
+}
+
+/// 将 HTML 转换为纯文本（去除标签，保留文本内容）
+/// 过滤 script、style、nav 等噪音元素
+fn html_to_text(html: &str) -> String {
+    let document = Html::parse_fragment(html);
+    let mut text = String::new();
+
+    fn extract_text(node: scraper::ElementRef, text: &mut String) {
+        for child in node.children() {
+            if let Some(element) = scraper::ElementRef::wrap(child) {
+                let tag = element.value().name();
+                // 跳过噪音元素
+                if matches!(
+                    tag,
+                    "script" | "style" | "nav" | "header" | "footer" | "aside" | "noscript"
+                ) {
+                    continue;
+                }
+                // 块级元素添加换行
+                if matches!(
+                    tag,
+                    "p" | "div" | "br" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "li" | "tr"
+                ) {
+                    text.push('\n');
+                }
+                extract_text(element, text);
+            } else if let Some(t) = child.value().as_text() {
+                let trimmed = t.trim();
+                if !trimmed.is_empty() {
+                    if !text.is_empty() && !text.ends_with('\n') && !text.ends_with(' ') {
+                        text.push(' ');
+                    }
+                    text.push_str(trimmed);
+                }
+            }
+        }
+    }
+
+    if let Ok(root_selector) = Selector::parse(":root") {
+        if let Some(root) = document.select(&root_selector).next() {
+            extract_text(root, &mut text);
+        }
+    }
+
+    // 清理多余空白
+    text.lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
