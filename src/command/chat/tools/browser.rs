@@ -859,7 +859,10 @@ mod lite {
                 links.push(json!({
                     "tag": "a",
                     "href": href,
-                    "text": if text.len() > 80 { format!("{}…", &text[..80]) } else { text },
+                    "text": if text.chars().count() > 80 {
+                        let end = text.char_indices().nth(80).map(|(i, _)| i).unwrap_or(text.len());
+                        format!("{}…", &text[..end])
+                    } else { text },
                 }));
             }
             if links.len() >= 50 {
