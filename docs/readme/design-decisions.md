@@ -245,3 +245,78 @@ const TAB_DEFS: &[TabDef] = &[
 - 一个 section 只分配到一个 Tab（首次匹配优先）
 - 关键词应选择标题中的唯一标识词，避免歧义
 - 新增 `## ` section 时需同步更新 `TAB_DEFS`
+
+---
+
+## 18. Web/Browser 工具三分架构
+
+将原先的统一 `WebTool` 拆分为 3 个独立工具，与 RustyClaw 保持一致：
+
+| 工具 | 文件 | 职责 |
+|------|------|------|
+| `web_fetch` | `tools/web_fetch.rs` | HTTP 抓取网页，HTML→Markdown/文本 |
+| `web_search` | `tools/web_search.rs` | Brave Search API 搜索 |
+| `browser` | `tools/browser.rs` | 浏览器自动化（CDP + Lite fallback） |
+
+**拆分动机**：
+- 统一工具的 action 参数增加了 LLM 选择正确操作的认知负担
+- 独立工具让 LLM 的 function calling 更精准（tool name 即意图）
+- 与 RustyClaw 架构一致，便于后续代码同步
+
+---
+
+## 19. Browser 工具 Feature Gate + Lite Fallback
+
+`browser.rs` 采用 `#[cfg(feature = "browser_cdp")]` 双模式架构：
+
+```
+browser.rs
+├── #[cfg(feature = "browser_cdp")] mod cdp { ... }       // 真实 CDP
+├── #[cfg(not(feature = "browser_cdp"))] mod lite { ... }  // Lite fallback
+└── impl Tool for BrowserTool → 按 feature 分发
+```
+
+**CDP 模式**：chromiumoxide 驱动真实 Chrome，支持截图、点击、输入、JS 执行。
+
+**Lite 模式**：reqwest 抓取 HTML + 手写解析器提取交互元素，无需外部浏览器。
+
+**选择 feature gate 而非运行时检测的原因**：
+- chromiumoxide 引入 ~30+ transitive dependencies，显著增加编译时间和二进制大小
+- 大多数用户不需要 CDP，默认编译应保持轻量
+- `cargo build --features browser_cdp` 显式 opt-in
+
+---
+
+## 20. Browser 全局 Runtime 持久化
+
+Tool trait 的 `execute()` 是同步的，但 CDP 操作是异步的。关键问题：
+
+```
+execute() 调用 → 创建临时 Runtime → block_on(start browser) → Runtime drop → handler 事件循环被终止
+```
+
+如果每次 `execute()` 创建临时 `tokio::runtime::Runtime`，浏览器的 CDP handler 事件循环（`tokio::spawn` 的 task）会随 Runtime drop 而取消，导致浏览器失去响应。
+
+**解决方案**：全局持久化 Runtime：
+
+```rust
+static BROWSER_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+```
+
+所有 `execute()` 调用共享同一个 Runtime，handler task 持续运行。这与 `api.rs` 中每次创建临时 Runtime 的模式不同——API 调用是无状态的请求-响应，而浏览器需要长期维持 WebSocket 连接。
+
+---
+
+## 21. Headless 配置层级
+
+浏览器 headless 模式采用三级配置覆盖：
+
+```
+工具参数 headless: true/false  >  config.yaml setting.browser_headless  >  默认 true
+```
+
+- **默认 headless**：CLI 工具不需要可视化窗口
+- **config.yaml 持久化**：`j set setting browser_headless false` 全局切换
+- **参数覆盖**：单次调用临时切换，不影响全局配置
+
+feature 命名为 `browser_cdp` 而非 `browser`，避免与 `config.yaml` 中已有的 `browser` section（浏览器应用别名映射）冲突。
