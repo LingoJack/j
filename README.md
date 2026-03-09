@@ -65,6 +65,9 @@ cargo install j-cli
 ```bash
 git clone https://github.com/LingoJack/j.git
 cd j && cargo install --path .
+
+# 启用完整浏览器自动化（需本地安装 Chrome/Chromium）
+cargo install --path . --features browser_cdp
 ```
 
 ---

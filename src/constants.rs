@@ -18,6 +18,7 @@ pub const EMAIL: &str = "lingojack@qq.com";
 /// 安装来源（编译时嵌入）
 /// - "github": 从 GitHub Release 安装
 /// - "cargo": 从 crates.io 安装（默认）
+///
 /// GitHub Release 构建时通过环境变量 INSTALL_SOURCE=github 设置
 pub const INSTALL_SOURCE: &str = match option_env!("INSTALL_SOURCE") {
     Some(s) => s,
@@ -160,6 +161,8 @@ pub mod config_key {
     pub const WEEK_NUM: &str = "week_num";
     pub const LAST_DAY: &str = "last_day";
     pub const GIT_REPO: &str = "git_repo";
+    #[cfg_attr(not(feature = "browser_cdp"), allow(dead_code))]
+    pub const BROWSER_HEADLESS: &str = "browser_headless";
 }
 
 // ========== 搜索引擎 ==========

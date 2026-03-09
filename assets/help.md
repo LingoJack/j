@@ -472,24 +472,58 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 
 | 工具名 | 功能 | 需确认 |
 |--------|------|--------|
-| `run_shell` | 执行 shell 命令 | ✅ 是 |
-| `read_file` | 读取本地文件 | ❌ 否 |
-| `web` | 统一 Web 工具，支持搜索/抓取/浏览器 Lite 模式（详见下方） | ❌ 否 |
-| `load_skill` | 加载指定技能的完整内容到上下文 | ❌ 否 |
+| `run_shell` | 执行 shell 命令 | yes |
+| `read_file` | 读取本地文件 | no |
+| `write_file` | 写入文件 | no |
+| `edit_file` | 编辑文件（查找替换） | no |
+| `web_fetch` | 获取网页内容并转为 Markdown/纯文本 | no |
+| `web_search` | 使用 Brave Search API 搜索网络 | no |
+| `browser` | 浏览器自动化（CDP + Lite fallback） | no |
+| `load_skill` | 加载指定技能的完整内容到上下文 | no |
 
-**`web` 工具 action 说明**：
+**`web_fetch` 工具参数**：
+
+| 参数 | 说明 |
+|------|------|
+| `url` | 目标 URL（必需） |
+| `extract_mode` | 输出格式：`markdown`（默认）或 `text` |
+| `max_chars` | 最大返回字符数（默认 50000） |
+| `authorization` | Authorization 请求头 |
+| `headers` | 自定义请求头 |
+
+**`web_search` 工具参数**：
+
+| 参数 | 说明 |
+|------|------|
+| `query` | 搜索关键词（必需） |
+| `count` | 搜索结果数量（默认 5，最大 10） |
+| `country` | 搜索国家/地区代码（默认 CN） |
+| `search_lang` | 搜索语言代码（如 zh-hans、en） |
+| `freshness` | 时间范围：`pd`(24h) `pw`(一周) `pm`(一月) `py`(一年) |
+
+**`browser` 工具 action 说明**：
 
 | action | 说明 | 必需参数 |
 |--------|------|----------|
-| `search` | 使用 Brave Search API 搜索网络 | `query` |
-| `fetch` | 获取网页内容并转为 Markdown/纯文本 | `url` |
-| `open` | 打开 URL 到浏览器 tab（解析交互元素） | `url` |
-| `tabs` | 列出已打开的 tab | 无 |
-| `snapshot` | 获取页面可交互元素列表（按钮、输入框、链接等） | `tab_id`（可选） |
-| `navigate` | 将指定 tab 导航到新 URL | `url`，`tab_id`（可选） |
-| `close` | 关闭指定 tab | `tab_id` |
+| `start` | 启动浏览器 | 无 |
+| `stop` | 停止浏览器 | 无 |
+| `status` | 查看浏览器状态 | 无 |
+| `tabs` | 列出已打开的标签页 | 无 |
+| `open` | 打开 URL 到新标签页 | `url` |
+| `navigate` | 导航标签页到新 URL | `url`，`tab_id`（可选） |
+| `screenshot` | 截图（需 CDP） | `tab_id`（可选），`full_page`（可选） |
+| `snapshot` | 获取页面可交互元素列表 | `tab_id`（可选） |
+| `content` | 获取页面文本内容 | `tab_id`（可选） |
+| `close` | 关闭标签页 | `tab_id` |
+| `click` | 点击元素（需 CDP） | `selector` |
+| `type` | 输入文本（需 CDP） | `selector`，`text` |
+| `press` | 按键（需 CDP） | `key` |
+| `evaluate` | 执行 JavaScript（需 CDP） | `script` |
 
-> **浏览器 Lite 模式**：基于 HTTP 请求 + HTML 解析实现的轻量级浏览器模拟，无需安装 Chrome。支持 tab 管理、页面交互元素识别（snapshot）、链接/表单提取等能力。AI 通过 `snapshot` 获取页面结构化的可交互元素列表，实现对网页内容的理解和分析。
+> **浏览器模式说明**：
+> - **Lite 模式**（默认）：基于 HTTP 请求 + HTML 解析的轻量级浏览器模拟，无需安装 Chrome。支持 tab 管理、页面交互元素识别（snapshot）、链接/表单提取等。
+> - **CDP 模式**：需用 `cargo build --features browser_cdp` 编译。使用真实 Chrome/Chromium 浏览器，支持截图、点击、输入、JS 执行等完整浏览器控制。
+> - **Headless 配置**：默认 headless 模式。可通过 `j change setting browser_headless false` 切换为有头模式。
 
 **工具确认快捷键**：
 

@@ -1,0 +1,1216 @@
+//! 浏览器自动化工具（CDP + Lite fallback）
+//!
+//! 启用 `browser_cdp` feature 时，使用 chromiumoxide 进行真实 CDP 浏览器控制。
+//! 未启用时，退化为基于 reqwest 的 Lite 模式（HTTP 抓取 + HTML 解析）。
+
+use crate::command::chat::tools::{Tool, ToolResult};
+use serde_json::{Value, json};
+use std::sync::{Arc, atomic::AtomicBool};
+
+// ==================== CDP 模块 ====================
+
+#[cfg(feature = "browser_cdp")]
+mod cdp {
+    use chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat;
+    use chromiumoxide::{Browser, BrowserConfig, Page};
+    use futures::StreamExt;
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    use tokio::sync::Mutex;
+
+    /// 全局 tokio Runtime，保持 handler 事件循环存活
+    static BROWSER_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+    /// 全局浏览器实例
+    static BROWSER: OnceLock<Mutex<Option<BrowserState>>> = OnceLock::new();
+
+    struct BrowserState {
+        browser: Browser,
+        pages: HashMap<String, Page>,
+        #[allow(dead_code)]
+        handler_handle: tokio::task::JoinHandle<()>,
+    }
+
+    pub fn get_runtime() -> &'static tokio::runtime::Runtime {
+        BROWSER_RUNTIME
+            .get_or_init(|| tokio::runtime::Runtime::new().expect("创建浏览器 Runtime 失败"))
+    }
+
+    fn browser_state() -> &'static Mutex<Option<BrowserState>> {
+        BROWSER.get_or_init(|| Mutex::new(None))
+    }
+
+    /// 启动浏览器（如果尚未运行）
+    pub async fn ensure_browser(headless: bool) -> Result<(), String> {
+        let mut state = browser_state().lock().await;
+        if state.is_some() {
+            return Ok(());
+        }
+
+        let config = if headless {
+            BrowserConfig::builder()
+                .viewport(None)
+                .build()
+                .map_err(|e| format!("构建浏览器配置失败: {}", e))?
+        } else {
+            BrowserConfig::builder()
+                .with_head()
+                .viewport(None)
+                .build()
+                .map_err(|e| format!("构建浏览器配置失败: {}", e))?
+        };
+
+        let (browser, mut handler) = Browser::launch(config)
+            .await
+            .map_err(|e| format!("启动浏览器失败: {}", e))?;
+
+        let handler_handle = tokio::spawn(async move {
+            while let Some(_event) = handler.next().await {
+                // 处理 CDP 事件（浏览器正常运行所必需）
+            }
+        });
+
+        *state = Some(BrowserState {
+            browser,
+            pages: HashMap::new(),
+            handler_handle,
+        });
+
+        Ok(())
+    }
+
+    /// 获取浏览器状态
+    pub async fn status() -> Result<String, String> {
+        let state = browser_state().lock().await;
+        if let Some(ref s) = *state {
+            Ok(serde_json::json!({
+                "running": true,
+                "tabs": s.pages.len(),
+            })
+            .to_string())
+        } else {
+            Ok(serde_json::json!({
+                "running": false,
+                "tabs": 0,
+            })
+            .to_string())
+        }
+    }
+
+    /// 启动浏览器
+    pub async fn start(headless: bool) -> Result<String, String> {
+        ensure_browser(headless).await?;
+        Ok("浏览器已启动".to_string())
+    }
+
+    /// 停止浏览器
+    pub async fn stop() -> Result<String, String> {
+        let mut state = browser_state().lock().await;
+        if let Some(s) = state.take() {
+            for (_id, page) in s.pages {
+                let _ = page.close().await;
+            }
+            Ok("浏览器已停止".to_string())
+        } else {
+            Ok("浏览器未在运行".to_string())
+        }
+    }
+
+    /// 列出标签页
+    pub async fn list_tabs() -> Result<String, String> {
+        let state = browser_state().lock().await;
+        if let Some(ref s) = *state {
+            let tabs: Vec<serde_json::Value> = s
+                .pages
+                .keys()
+                .map(|id| serde_json::json!({ "id": id }))
+                .collect();
+            Ok(serde_json::json!({ "tabs": tabs }).to_string())
+        } else {
+            Err("浏览器未运行，请先使用 action='start'".to_string())
+        }
+    }
+
+    /// 打开新标签页
+    pub async fn open_tab(url: &str, headless: bool) -> Result<String, String> {
+        ensure_browser(headless).await?;
+
+        let mut state = browser_state().lock().await;
+        let s = state.as_mut().ok_or("浏览器未初始化")?;
+
+        let page = s
+            .browser
+            .new_page(url)
+            .await
+            .map_err(|e| format!("打开页面失败: {}", e))?;
+
+        let tab_id = format!("tab_{}", s.pages.len());
+        s.pages.insert(tab_id.clone(), page);
+
+        Ok(serde_json::json!({
+            "success": true,
+            "tab_id": tab_id,
+            "url": url
+        })
+        .to_string())
+    }
+
+    /// 导航到 URL
+    pub async fn navigate(tab_id: Option<&str>, url: &str) -> Result<String, String> {
+        let mut state = browser_state().lock().await;
+        let s = state.as_mut().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        page.goto(url)
+            .await
+            .map_err(|e| format!("导航失败: {}", e))?;
+
+        Ok(serde_json::json!({
+            "success": true,
+            "url": url
+        })
+        .to_string())
+    }
+
+    /// 截图
+    pub async fn screenshot(tab_id: Option<&str>, full_page: bool) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        let screenshot_data = if full_page {
+            page.screenshot(
+                chromiumoxide::page::ScreenshotParams::builder()
+                    .format(CaptureScreenshotFormat::Png)
+                    .full_page(true)
+                    .build(),
+            )
+            .await
+            .map_err(|e| format!("截图失败: {}", e))?
+        } else {
+            page.screenshot(
+                chromiumoxide::page::ScreenshotParams::builder()
+                    .format(CaptureScreenshotFormat::Png)
+                    .build(),
+            )
+            .await
+            .map_err(|e| format!("截图失败: {}", e))?
+        };
+
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        let base64_data = STANDARD.encode(&screenshot_data);
+
+        Ok(serde_json::json!({
+            "success": true,
+            "format": "png",
+            "data": format!("data:image/png;base64,{}", base64_data)
+        })
+        .to_string())
+    }
+
+    /// 获取页面内容
+    pub async fn get_content(tab_id: Option<&str>) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        let content = page
+            .content()
+            .await
+            .map_err(|e| format!("获取页面内容失败: {}", e))?;
+
+        Ok(content)
+    }
+
+    /// 点击元素
+    pub async fn click(tab_id: Option<&str>, selector: &str) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        let element = page
+            .find_element(selector)
+            .await
+            .map_err(|e| format!("未找到元素: {}", e))?;
+
+        element
+            .click()
+            .await
+            .map_err(|e| format!("点击失败: {}", e))?;
+
+        Ok(serde_json::json!({
+            "success": true,
+            "action": "click",
+            "selector": selector
+        })
+        .to_string())
+    }
+
+    /// 输入文本
+    pub async fn type_text(
+        tab_id: Option<&str>,
+        selector: &str,
+        text: &str,
+    ) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        let element = page
+            .find_element(selector)
+            .await
+            .map_err(|e| format!("未找到元素: {}", e))?;
+
+        element
+            .click()
+            .await
+            .map_err(|e| format!("点击失败: {}", e))?;
+
+        element
+            .type_str(text)
+            .await
+            .map_err(|e| format!("输入失败: {}", e))?;
+
+        Ok(serde_json::json!({
+            "success": true,
+            "action": "type",
+            "selector": selector,
+            "text_length": text.len()
+        })
+        .to_string())
+    }
+
+    /// 按键
+    pub async fn press_key(tab_id: Option<&str>, key: &str) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        use chromiumoxide::cdp::browser_protocol::input::{
+            DispatchKeyEventParams, DispatchKeyEventType,
+        };
+
+        let key_down = DispatchKeyEventParams::builder()
+            .key(key.to_string())
+            .text(key.to_string())
+            .r#type(DispatchKeyEventType::KeyDown)
+            .build()
+            .map_err(|e| format!("构建按键参数失败: {}", e))?;
+        page.execute(key_down)
+            .await
+            .map_err(|e| format!("按键失败: {}", e))?;
+
+        let key_up = DispatchKeyEventParams::builder()
+            .key(key.to_string())
+            .text(key.to_string())
+            .r#type(DispatchKeyEventType::KeyUp)
+            .build()
+            .map_err(|e| format!("构建按键参数失败: {}", e))?;
+        page.execute(key_up)
+            .await
+            .map_err(|e| format!("按键失败: {}", e))?;
+
+        Ok(serde_json::json!({
+            "success": true,
+            "action": "press",
+            "key": key
+        })
+        .to_string())
+    }
+
+    /// 执行 JavaScript
+    pub async fn evaluate(tab_id: Option<&str>, script: &str) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        let result: serde_json::Value = page
+            .evaluate(script)
+            .await
+            .map_err(|e| format!("执行 JS 失败: {}", e))?
+            .into_value()
+            .map_err(|e| format!("转换结果失败: {}", e))?;
+
+        Ok(result.to_string())
+    }
+
+    /// 关闭标签页
+    pub async fn close_tab(tab_id: &str) -> Result<String, String> {
+        let mut state = browser_state().lock().await;
+        let s = state.as_mut().ok_or("浏览器未运行")?;
+
+        if let Some(page) = s.pages.remove(tab_id) {
+            page.close()
+                .await
+                .map_err(|e| format!("关闭标签页失败: {}", e))?;
+            Ok(serde_json::json!({
+                "success": true,
+                "closed": tab_id
+            })
+            .to_string())
+        } else {
+            Err(format!("未找到标签页: {}", tab_id))
+        }
+    }
+
+    /// 页面快照（可交互元素列表）
+    pub async fn snapshot(tab_id: Option<&str>) -> Result<String, String> {
+        let state = browser_state().lock().await;
+        let s = state.as_ref().ok_or("浏览器未运行")?;
+
+        let page = if let Some(id) = tab_id {
+            s.pages
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?
+        } else {
+            s.pages.values().next().ok_or("没有已打开的标签页")?
+        };
+
+        let title: String = page
+            .evaluate("document.title")
+            .await
+            .map_err(|e| format!("获取标题失败: {}", e))?
+            .into_value()
+            .unwrap_or_default();
+
+        let url: String = page
+            .evaluate("window.location.href")
+            .await
+            .map_err(|e| format!("获取 URL 失败: {}", e))?
+            .into_value()
+            .unwrap_or_default();
+
+        let elements: serde_json::Value = page
+            .evaluate(
+                r#"
+            Array.from(document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"]'))
+                .slice(0, 50)
+                .map((el, i) => ({
+                    ref: 'e' + i,
+                    tag: el.tagName.toLowerCase(),
+                    role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                    name: el.textContent?.trim().slice(0, 50) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '',
+                    type: el.type || null,
+                    href: el.href || null
+                }))
+            "#,
+            )
+            .await
+            .map_err(|e| format!("获取元素失败: {}", e))?
+            .into_value()
+            .unwrap_or(serde_json::json!([]));
+
+        Ok(serde_json::json!({
+            "title": title,
+            "url": url,
+            "elements": elements
+        })
+        .to_string())
+    }
+
+    /// 异步 action 分发
+    pub async fn exec_browser_async(
+        args: &serde_json::Value,
+        action: &str,
+        headless: bool,
+    ) -> Result<String, String> {
+        let tab_id = args.get("tab_id").and_then(|v| v.as_str());
+
+        match action {
+            "status" => status().await,
+            "start" => start(headless).await,
+            "stop" => stop().await,
+            "tabs" => list_tabs().await,
+
+            "open" => {
+                let url = args
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .ok_or("open 操作缺少 url 参数")?;
+                open_tab(url, headless).await
+            }
+
+            "navigate" => {
+                let url = args
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .ok_or("navigate 操作缺少 url 参数")?;
+                navigate(tab_id, url).await
+            }
+
+            "screenshot" => {
+                let full_page = args
+                    .get("full_page")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                screenshot(tab_id, full_page).await
+            }
+
+            "snapshot" => snapshot(tab_id).await,
+
+            "content" | "get_content" => get_content(tab_id).await,
+
+            "close" => {
+                let id = tab_id.ok_or("close 操作缺少 tab_id 参数")?;
+                close_tab(id).await
+            }
+
+            "click" => {
+                let selector = args
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .ok_or("click 操作缺少 selector 参数")?;
+                click(tab_id, selector).await
+            }
+
+            "type" => {
+                let selector = args
+                    .get("selector")
+                    .and_then(|v| v.as_str())
+                    .ok_or("type 操作缺少 selector 参数")?;
+                let text = args
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .ok_or("type 操作缺少 text 参数")?;
+                type_text(tab_id, selector, text).await
+            }
+
+            "press" => {
+                let key = args
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .ok_or("press 操作缺少 key 参数")?;
+                press_key(tab_id, key).await
+            }
+
+            "evaluate" => {
+                let script = args
+                    .get("script")
+                    .and_then(|v| v.as_str())
+                    .ok_or("evaluate 操作缺少 script 参数")?;
+                evaluate(tab_id, script).await
+            }
+
+            _ => Err(format!(
+                "未知操作: {}。可选: status, start, stop, tabs, open, navigate, screenshot, snapshot, content, close, click, type, press, evaluate",
+                action
+            )),
+        }
+    }
+}
+
+// ==================== Lite 模块 ====================
+
+#[cfg(not(feature = "browser_cdp"))]
+mod lite {
+    use serde_json::{Value, json};
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
+
+    /// Lite 模式的 "tab"：HTTP 抓取 + HTML 解析
+    struct LiteTab {
+        url: String,
+        title: String,
+        #[allow(dead_code)]
+        body: String,
+        text_content: String,
+        links: Vec<Value>,
+        forms: Vec<Value>,
+        interactive: Vec<Value>,
+    }
+
+    struct LiteBrowser {
+        tabs: HashMap<String, LiteTab>,
+        next_id: usize,
+    }
+
+    static LITE_BROWSER: OnceLock<Mutex<LiteBrowser>> = OnceLock::new();
+
+    fn browser() -> &'static Mutex<LiteBrowser> {
+        LITE_BROWSER.get_or_init(|| {
+            Mutex::new(LiteBrowser {
+                tabs: HashMap::new(),
+                next_id: 0,
+            })
+        })
+    }
+
+    fn http_client() -> Result<reqwest::blocking::Client, String> {
+        reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .build()
+            .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+    }
+
+    fn fetch_tab(url: &str) -> Result<LiteTab, String> {
+        let client = http_client()?;
+        let resp = client
+            .get(url)
+            .header("Referer", url)
+            .send()
+            .map_err(|e| format!("请求失败: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+
+        let body = resp.text().map_err(|e| format!("读取响应失败: {}", e))?;
+
+        let title = extract_tag(&body, "title").unwrap_or_default();
+        let links = extract_links(&body);
+        let forms = extract_forms(&body);
+        let interactive = extract_interactive(&body);
+        let text_content = strip_html(&body);
+
+        Ok(LiteTab {
+            url: url.to_string(),
+            title,
+            body,
+            text_content,
+            links,
+            forms,
+            interactive,
+        })
+    }
+
+    // ── Public API ──────────────────────────────────────────────────────────
+
+    pub fn status() -> Result<String, String> {
+        let br = browser().lock().map_err(|_| "锁被占用")?;
+        Ok(json!({
+            "running": true,
+            "mode": "lite",
+            "tabs": br.tabs.len(),
+            "note": "Lite 模式（reqwest）。使用 --features browser_cdp 编译以启用完整 CDP 支持。",
+        })
+        .to_string())
+    }
+
+    pub fn start() -> Result<String, String> {
+        Ok("浏览器 Lite 模式就绪（基于 reqwest）。无需外部浏览器。".to_string())
+    }
+
+    pub fn stop() -> Result<String, String> {
+        let mut br = browser().lock().map_err(|_| "锁被占用")?;
+        br.tabs.clear();
+        br.next_id = 0;
+        Ok("Lite 浏览器状态已清空".to_string())
+    }
+
+    pub fn list_tabs() -> Result<String, String> {
+        let br = browser().lock().map_err(|_| "锁被占用")?;
+        let tabs: Vec<Value> = br
+            .tabs
+            .iter()
+            .map(|(id, t)| {
+                json!({
+                    "id": id,
+                    "url": t.url,
+                    "title": t.title,
+                })
+            })
+            .collect();
+        Ok(json!({ "tabs": tabs, "count": tabs.len() }).to_string())
+    }
+
+    pub fn open_tab(url: &str) -> Result<String, String> {
+        let tab = fetch_tab(url)?;
+        let mut br = browser().lock().map_err(|_| "锁被占用")?;
+        let id = format!("tab_{}", br.next_id);
+        br.next_id += 1;
+        let title = tab.title.clone();
+        let interactive_count = tab.interactive.len();
+        let links_count = tab.links.len();
+        let forms_count = tab.forms.len();
+        br.tabs.insert(id.clone(), tab);
+        Ok(json!({
+            "success": true,
+            "tab_id": id,
+            "url": url,
+            "title": title,
+            "interactive_elements": interactive_count,
+            "links": links_count,
+            "forms": forms_count,
+        })
+        .to_string())
+    }
+
+    pub fn navigate(tab_id: Option<&str>, url: &str) -> Result<String, String> {
+        let tab = fetch_tab(url)?;
+        let mut br = browser().lock().map_err(|_| "锁被占用")?;
+        let id = match tab_id {
+            Some(id) => {
+                if !br.tabs.contains_key(id) {
+                    return Err(format!("未找到标签页: {}", id));
+                }
+                id.to_string()
+            }
+            None => br.tabs.keys().next().cloned().ok_or("没有已打开的标签页")?,
+        };
+        let title = tab.title.clone();
+        br.tabs.insert(id.clone(), tab);
+        Ok(json!({
+            "success": true,
+            "tab_id": id,
+            "url": url,
+            "title": title
+        })
+        .to_string())
+    }
+
+    pub fn snapshot(tab_id: Option<&str>) -> Result<String, String> {
+        let br = browser().lock().map_err(|_| "锁被占用")?;
+        let tab = match tab_id {
+            Some(id) => br
+                .tabs
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?,
+            None => br.tabs.values().next().ok_or("没有已打开的标签页")?,
+        };
+        Ok(json!({
+            "title": tab.title,
+            "url": tab.url,
+            "elements": tab.interactive,
+            "links_count": tab.links.len(),
+            "forms_count": tab.forms.len(),
+            "text_preview": if tab.text_content.len() > 500 {
+                format!("{}...", &tab.text_content[..500])
+            } else {
+                tab.text_content.clone()
+            }
+        })
+        .to_string())
+    }
+
+    pub fn get_content(tab_id: Option<&str>) -> Result<String, String> {
+        let br = browser().lock().map_err(|_| "锁被占用")?;
+        let tab = match tab_id {
+            Some(id) => br
+                .tabs
+                .get(id)
+                .ok_or_else(|| format!("未找到标签页: {}", id))?,
+            None => br.tabs.values().next().ok_or("没有已打开的标签页")?,
+        };
+        let text = &tab.text_content;
+        if text.len() > 50_000 {
+            Ok(format!("{}…\n\n[截断于 50KB]", &text[..50_000]))
+        } else {
+            Ok(text.clone())
+        }
+    }
+
+    pub fn screenshot() -> Result<String, String> {
+        Ok(json!({
+            "note": "截图需要 'browser_cdp' feature（CDP）。使用 'snapshot' 获取页面元素列表。",
+        })
+        .to_string())
+    }
+
+    pub fn close_tab(tab_id: &str) -> Result<String, String> {
+        let mut br = browser().lock().map_err(|_| "锁被占用")?;
+        if br.tabs.remove(tab_id).is_some() {
+            Ok(json!({ "success": true, "closed": tab_id }).to_string())
+        } else {
+            Err(format!("未找到标签页: {}", tab_id))
+        }
+    }
+
+    // ── HTML 解析辅助函数 ──────────────────────────────────────────────────
+
+    fn extract_tag(html: &str, tag: &str) -> Option<String> {
+        let lower = html.to_lowercase();
+        let open = format!("<{}", tag);
+        let close = format!("</{}>", tag);
+        let start = lower.find(&open)?;
+        let after = html[start..].find('>')? + start + 1;
+        let end = lower[after..].find(&close)? + after;
+        Some(html[after..end].trim().to_string())
+    }
+
+    fn strip_html(html: &str) -> String {
+        let mut out = String::with_capacity(html.len() / 2);
+        let mut in_tag = false;
+        let mut last_space = false;
+        for ch in html.chars() {
+            match ch {
+                '<' => in_tag = true,
+                '>' => {
+                    in_tag = false;
+                    if !last_space {
+                        out.push(' ');
+                        last_space = true;
+                    }
+                }
+                _ if !in_tag => {
+                    if ch.is_whitespace() {
+                        if !last_space {
+                            out.push(' ');
+                            last_space = true;
+                        }
+                    } else {
+                        out.push(ch);
+                        last_space = false;
+                    }
+                }
+                _ => {}
+            }
+        }
+        out.trim().to_string()
+    }
+
+    fn extract_links(html: &str) -> Vec<Value> {
+        let mut links = Vec::new();
+        let lower = html.to_lowercase();
+        let mut search_from = 0;
+        while let Some(pos) = lower[search_from..].find("<a ") {
+            let abs = search_from + pos;
+            let tag_end = match lower[abs..].find('>') {
+                Some(e) => abs + e,
+                None => break,
+            };
+            let close = match lower[tag_end..].find("</a>") {
+                Some(c) => tag_end + c,
+                None => {
+                    search_from = tag_end + 1;
+                    continue;
+                }
+            };
+            let tag_str = &html[abs..tag_end + 1];
+            let href = attr_value(tag_str, "href").unwrap_or_default();
+            let text = strip_html(&html[tag_end + 1..close]);
+            if !href.is_empty() {
+                links.push(json!({
+                    "tag": "a",
+                    "href": href,
+                    "text": if text.len() > 80 { format!("{}…", &text[..80]) } else { text },
+                }));
+            }
+            if links.len() >= 50 {
+                break;
+            }
+            search_from = close + 4;
+        }
+        links
+    }
+
+    fn extract_forms(html: &str) -> Vec<Value> {
+        let mut forms = Vec::new();
+        let lower = html.to_lowercase();
+        let mut search_from = 0;
+        while let Some(pos) = lower[search_from..].find("<form") {
+            let abs = search_from + pos;
+            let tag_end = match lower[abs..].find('>') {
+                Some(e) => abs + e,
+                None => break,
+            };
+            let tag_str = &html[abs..tag_end + 1];
+            let action = attr_value(tag_str, "action").unwrap_or_default();
+            let method = attr_value(tag_str, "method").unwrap_or_else(|| "GET".into());
+            forms.push(json!({
+                "tag": "form",
+                "action": action,
+                "method": method.to_uppercase(),
+            }));
+            if forms.len() >= 20 {
+                break;
+            }
+            search_from = tag_end + 1;
+        }
+        forms
+    }
+
+    fn extract_interactive(html: &str) -> Vec<Value> {
+        let mut elements = Vec::new();
+        let tags = ["button", "input", "select", "textarea"];
+        let lower = html.to_lowercase();
+
+        for tag_name in &tags {
+            let open = format!("<{}", tag_name);
+            let mut search_from = 0;
+            while let Some(pos) = lower[search_from..].find(&open) {
+                let abs = search_from + pos;
+                let tag_end = match lower[abs..].find('>') {
+                    Some(e) => abs + e,
+                    None => break,
+                };
+                let tag_str = &html[abs..tag_end + 1];
+                let mut elem = json!({
+                    "ref": format!("e{}", elements.len()),
+                    "tag": tag_name,
+                });
+                if let Some(t) = attr_value(tag_str, "type") {
+                    elem["type"] = json!(t);
+                }
+                if let Some(n) = attr_value(tag_str, "name") {
+                    elem["name"] = json!(n);
+                }
+                if let Some(p) = attr_value(tag_str, "placeholder") {
+                    elem["placeholder"] = json!(p);
+                }
+                if let Some(v) = attr_value(tag_str, "value") {
+                    elem["value"] = json!(v);
+                }
+                if let Some(l) = attr_value(tag_str, "aria-label") {
+                    elem["aria-label"] = json!(l);
+                }
+                if *tag_name == "button" {
+                    let close_tag = format!("</{}>", tag_name);
+                    if let Some(close_pos) = lower[tag_end..].find(&close_tag) {
+                        let text = strip_html(&html[tag_end + 1..tag_end + close_pos]);
+                        if !text.is_empty() && text.len() <= 50 {
+                            elem["text"] = json!(text);
+                        }
+                    }
+                }
+                elements.push(elem);
+                if elements.len() >= 50 {
+                    break;
+                }
+                search_from = tag_end + 1;
+            }
+            if elements.len() >= 50 {
+                break;
+            }
+        }
+
+        // 额外提取 role="button" 和 role="link"
+        for role in &["button", "link"] {
+            let pattern = format!("role=\"{}\"", role);
+            let mut search_from = 0;
+            while let Some(pos) = lower[search_from..].find(&pattern) {
+                let abs = search_from + pos;
+                let tag_start = match lower[..abs].rfind('<') {
+                    Some(s) => s,
+                    None => {
+                        search_from = abs + pattern.len();
+                        continue;
+                    }
+                };
+                let tag_end = match lower[tag_start..].find('>') {
+                    Some(e) => tag_start + e,
+                    None => {
+                        search_from = abs + pattern.len();
+                        continue;
+                    }
+                };
+                let tag_str = &html[tag_start..tag_end + 1];
+
+                let tag_name_end = html[tag_start + 1..]
+                    .find(|c: char| c.is_whitespace() || c == '>')
+                    .unwrap_or(0)
+                    + tag_start
+                    + 1;
+                let actual_tag = &html[tag_start + 1..tag_name_end].to_lowercase();
+
+                if matches!(
+                    actual_tag.as_str(),
+                    "button" | "input" | "select" | "textarea"
+                ) {
+                    search_from = tag_end + 1;
+                    continue;
+                }
+
+                let mut elem = json!({
+                    "ref": format!("e{}", elements.len()),
+                    "tag": actual_tag,
+                    "role": role,
+                });
+                if let Some(l) = attr_value(tag_str, "aria-label") {
+                    elem["aria-label"] = json!(l);
+                }
+                if let Some(h) = attr_value(tag_str, "href") {
+                    elem["href"] = json!(h);
+                }
+                elements.push(elem);
+                if elements.len() >= 50 {
+                    break;
+                }
+                search_from = tag_end + 1;
+            }
+            if elements.len() >= 50 {
+                break;
+            }
+        }
+
+        elements
+    }
+
+    fn attr_value(tag: &str, attr: &str) -> Option<String> {
+        let lower = tag.to_lowercase();
+        let needle = format!("{}=\"", attr);
+        let pos = lower.find(&needle)?;
+        let start = pos + needle.len();
+        let end = lower[start..].find('"')? + start;
+        Some(tag[start..end].to_string())
+    }
+}
+
+// ==================== BrowserTool ====================
+
+pub struct BrowserTool;
+
+impl Tool for BrowserTool {
+    fn name(&self) -> &str {
+        "browser"
+    }
+
+    fn description(&self) -> &str {
+        "浏览器自动化工具。操作: status, start, stop, tabs, open, navigate, \
+         screenshot, snapshot, close, click, type, press, evaluate。\
+         使用 snapshot 获取页面可交互元素列表。"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["status", "start", "stop", "tabs", "open", "navigate",
+                             "screenshot", "snapshot", "content", "close",
+                             "click", "type", "press", "evaluate"],
+                    "description": "操作类型"
+                },
+                "url": {
+                    "type": "string",
+                    "description": "[open/navigate] 目标 URL"
+                },
+                "tab_id": {
+                    "type": "string",
+                    "description": "目标标签页 ID（不指定则使用第一个标签页）"
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "[click/type] CSS 选择器"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "[type] 要输入的文本"
+                },
+                "key": {
+                    "type": "string",
+                    "description": "[press] 要按下的键名"
+                },
+                "script": {
+                    "type": "string",
+                    "description": "[evaluate] 要执行的 JavaScript 代码"
+                },
+                "full_page": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "[screenshot] 是否截取完整页面"
+                },
+                "headless": {
+                    "type": "boolean",
+                    "description": "是否使用 headless 模式（覆盖配置文件设置）"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+        let args: Value = match serde_json::from_str(arguments) {
+            Ok(v) => v,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("参数解析失败: {}", e),
+                    is_error: true,
+                };
+            }
+        };
+
+        let action = match args.get("action").and_then(|a| a.as_str()) {
+            Some(a) => a,
+            None => {
+                return ToolResult {
+                    output: "缺少 action 参数。可选: status, start, stop, tabs, open, navigate, screenshot, snapshot, content, close, click, type, press, evaluate".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        #[cfg(feature = "browser_cdp")]
+        {
+            exec_browser_cdp(&args, action)
+        }
+
+        #[cfg(not(feature = "browser_cdp"))]
+        {
+            exec_browser_stub(&args, action)
+        }
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        false
+    }
+}
+
+// ==================== CDP 入口 ====================
+
+#[cfg(feature = "browser_cdp")]
+fn exec_browser_cdp(args: &Value, action: &str) -> ToolResult {
+    // 读取 headless 配置：参数 > config.yaml > 默认 true
+    let headless = args
+        .get("headless")
+        .and_then(|v| v.as_bool())
+        .unwrap_or_else(|| read_headless_config());
+
+    let rt = cdp::get_runtime();
+    let result = rt.block_on(cdp::exec_browser_async(args, action, headless));
+
+    match result {
+        Ok(output) => ToolResult {
+            output,
+            is_error: false,
+        },
+        Err(err) => ToolResult {
+            output: err,
+            is_error: true,
+        },
+    }
+}
+
+// ==================== Lite fallback ====================
+
+#[cfg(not(feature = "browser_cdp"))]
+fn exec_browser_stub(args: &Value, action: &str) -> ToolResult {
+    let tab_id = args.get("tab_id").and_then(|v| v.as_str());
+
+    let result = match action {
+        "status" => lite::status(),
+        "start" => lite::start(),
+        "stop" => lite::stop(),
+        "tabs" => lite::list_tabs(),
+
+        "open" => {
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .ok_or("open 操作缺少 url 参数".to_string());
+            match url {
+                Ok(u) => lite::open_tab(u),
+                Err(e) => Err(e),
+            }
+        }
+
+        "navigate" => {
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .ok_or("navigate 操作缺少 url 参数".to_string());
+            match url {
+                Ok(u) => lite::navigate(tab_id, u),
+                Err(e) => Err(e),
+            }
+        }
+
+        "screenshot" => lite::screenshot(),
+        "snapshot" => lite::snapshot(tab_id),
+        "content" | "get_content" => lite::get_content(tab_id),
+
+        "close" => {
+            let id = tab_id.ok_or("close 操作缺少 tab_id 参数".to_string());
+            match id {
+                Ok(i) => lite::close_tab(i),
+                Err(e) => Err(e),
+            }
+        }
+
+        "click" | "type" | "press" => Ok(json!({
+            "note": format!("操作 '{}' 需要 'browser_cdp' feature（CDP）。使用 'snapshot' 查看页面交互元素。", action),
+        })
+        .to_string()),
+
+        "evaluate" => Ok(json!({
+            "note": "JavaScript 执行需要 'browser_cdp' feature（CDP）。使用 'content' 获取页面文本。",
+        })
+        .to_string()),
+
+        _ => Err(format!(
+            "未知操作: {}。可选: status, start, stop, tabs, open, navigate, screenshot, snapshot, content, close, click, type, press, evaluate",
+            action
+        )),
+    };
+
+    match result {
+        Ok(output) => ToolResult {
+            output,
+            is_error: false,
+        },
+        Err(err) => ToolResult {
+            output: err,
+            is_error: true,
+        },
+    }
+}
+
+// ==================== 配置读取 ====================
+
+#[cfg(feature = "browser_cdp")]
+fn read_headless_config() -> bool {
+    // TODO(human): 当前每次调用都从磁盘读取 config.yaml，
+    // 可考虑用 OnceLock 缓存 headless 值以避免重复 I/O，
+    // 但缓存意味着修改 config 后需重启才能生效。
+    // 请决定保留当前实现或改为缓存方案。
+    use crate::config::yaml_config::YamlConfig;
+    use crate::constants::{config_key, section};
+
+    let config = YamlConfig::load();
+    config
+        .get_property(section::SETTING, config_key::BROWSER_HEADLESS)
+        .map(|v| v != "false")
+        .unwrap_or(true) // 默认 headless
+}
