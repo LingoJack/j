@@ -474,9 +474,22 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 |--------|------|--------|
 | `run_shell` | 执行 shell 命令 | ✅ 是 |
 | `read_file` | 读取本地文件 | ❌ 否 |
-| `web_fetch` | 获取网页内容，智能提取正文转 Markdown | ❌ 否 |
-| `web_search` | 使用 Brave Search API 进行网络搜索 | ❌ 否 |
+| `web` | 统一 Web 工具，支持搜索/抓取/浏览器 Lite 模式（详见下方） | ❌ 否 |
 | `load_skill` | 加载指定技能的完整内容到上下文 | ❌ 否 |
+
+**`web` 工具 action 说明**：
+
+| action | 说明 | 必需参数 |
+|--------|------|----------|
+| `search` | 使用 Brave Search API 搜索网络 | `query` |
+| `fetch` | 获取网页内容并转为 Markdown/纯文本 | `url` |
+| `open` | 打开 URL 到浏览器 tab（解析交互元素） | `url` |
+| `tabs` | 列出已打开的 tab | 无 |
+| `snapshot` | 获取页面可交互元素列表（按钮、输入框、链接等） | `tab_id`（可选） |
+| `navigate` | 将指定 tab 导航到新 URL | `url`，`tab_id`（可选） |
+| `close` | 关闭指定 tab | `tab_id` |
+
+> **浏览器 Lite 模式**：基于 HTTP 请求 + HTML 解析实现的轻量级浏览器模拟，无需安装 Chrome。支持 tab 管理、页面交互元素识别（snapshot）、链接/表单提取等能力。AI 通过 `snapshot` 获取页面结构化的可交互元素列表，实现对网页内容的理解和分析。
 
 **工具确认快捷键**：
 

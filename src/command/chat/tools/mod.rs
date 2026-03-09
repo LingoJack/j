@@ -1,8 +1,7 @@
 mod file;
 mod shell;
 mod skill_tool;
-mod web_fetch;
-mod web_search;
+mod web;
 
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use serde_json::Value;
@@ -53,8 +52,7 @@ impl ToolRegistry {
                 Box::new(file::ReadFileTool),
                 Box::new(file::WriteFileTool),
                 Box::new(file::EditFileTool),
-                Box::new(web_fetch::WebFetchTool),
-                Box::new(web_search::WebSearchTool),
+                Box::new(web::WebTool),
             ],
         };
 

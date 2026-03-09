@@ -14,6 +14,9 @@
 | `serde` + `serde_json` + `serde_yaml` | 序列化 |
 | `tokio` | 异步运行时 |
 | `pulldown-cmark` | Markdown 解析 |
+| `reqwest` | HTTP 客户端（blocking 模式） |
+| `scraper` + `html2md` | HTML 解析与 Markdown 转换 |
+| `urlencoding` | URL 编码 |
 ---
 
 ## 添加新命令
@@ -206,6 +209,7 @@ cargo test
 - [ ] `j report/check/search` 日报系统
 - [ ] `j todo` 待办管理
 - [ ] `j chat` AI 对话
+- [ ] `web` 工具: search / fetch / open / tabs / snapshot / navigate / close
 - [ ] 交互模式 Tab 补全
 - [ ] 交互模式 `!` shell 命令
 
