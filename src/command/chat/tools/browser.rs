@@ -180,7 +180,11 @@ mod cdp {
     }
 
     /// 截图并保存到指定目录，返回文件完整路径
-    pub async fn screenshot(tab_id: Option<&str>, full_page: bool, output_dir: &str) -> Result<String, String> {
+    pub async fn screenshot(
+        tab_id: Option<&str>,
+        full_page: bool,
+        output_dir: &str,
+    ) -> Result<String, String> {
         let state = browser_state().lock().await;
         let s = state.as_ref().ok_or("浏览器未运行")?;
 
@@ -213,8 +217,7 @@ mod cdp {
 
         // 确保输出目录存在
         let dir = std::path::Path::new(output_dir);
-        std::fs::create_dir_all(dir)
-            .map_err(|e| format!("创建输出目录失败: {}", e))?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("创建输出目录失败: {}", e))?;
 
         // 生成带时间戳的文件名
         let timestamp = std::time::SystemTime::now()
@@ -224,8 +227,7 @@ mod cdp {
         let filename = format!("screenshot_{}.png", timestamp);
         let file_path = dir.join(&filename);
 
-        std::fs::write(&file_path, &screenshot_data)
-            .map_err(|e| format!("保存截图失败: {}", e))?;
+        std::fs::write(&file_path, &screenshot_data).map_err(|e| format!("保存截图失败: {}", e))?;
 
         let full_path = file_path
             .canonicalize()

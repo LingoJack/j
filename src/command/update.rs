@@ -3,8 +3,7 @@ use colored::Colorize;
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent},
-    execute,
-    terminal,
+    execute, terminal,
 };
 use std::io::{self, Write};
 
@@ -102,9 +101,10 @@ fn perform_update(interactive: bool) {
 }
 
 /// 可选 feature 列表
-const OPTIONAL_FEATURES: &[(&str, &str)] = &[
-    ("browser_cdp", "浏览器自动化 (CDP 模式，需本地有 Chrome/Chromium)"),
-];
+const OPTIONAL_FEATURES: &[(&str, &str)] = &[(
+    "browser_cdp",
+    "浏览器自动化 (CDP 模式，需本地有 Chrome/Chromium)",
+)];
 
 /// 计算菜单总行数
 fn menu_total_lines() -> u16 {
@@ -305,20 +305,14 @@ fn handle_cargo_update(check_only: bool, interactive: bool) {
     println!("{}", "正在通过 cargo 更新 j-cli...".yellow());
     println!("执行: {}", cmd_display.cyan());
     if !selected_features.is_empty() {
-        println!(
-            "启用 Features: {}",
-            selected_features.join(", ").green()
-        );
+        println!("启用 Features: {}", selected_features.join(", ").green());
     }
     println!();
 
     // 检查 cargo 是否在 PATH 中
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
 
-    match std::process::Command::new(&cargo)
-        .args(&args)
-        .spawn()
-    {
+    match std::process::Command::new(&cargo).args(&args).spawn() {
         Ok(mut child) => match child.wait() {
             Ok(status) if status.success() => {
                 println!();

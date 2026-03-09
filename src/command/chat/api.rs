@@ -1,4 +1,5 @@
 use super::model::{ChatMessage, ModelProvider};
+use crate::util::log::write_info_log;
 use async_openai::{
     Client,
     config::OpenAIConfig,
@@ -97,10 +98,19 @@ pub fn build_request_with_tools(
     openai_messages.extend(to_openai_messages(messages));
     let mut builder = CreateChatCompletionRequestArgs::default();
     builder.model(&provider.model).messages(openai_messages);
+    let tools_count = tools.len();
     if !tools.is_empty() {
         builder.tools(tools);
     }
-    builder.build().map_err(|e| format!("构建请求失败: {}", e))
+    builder.build().map_err(|e| {
+        let err_msg = format!("构建请求失败: {}", e);
+        let params_info = format!(
+            "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  tools数量: {}\n  system_prompt: {:?}",
+            provider.model, provider.api_base, messages.len(), tools_count, system_prompt
+        );
+        write_info_log("build_request_with_tools ERROR", &format!("{}\n{}", err_msg, params_info));
+        err_msg
+    })
 }
 
 /// 使用 async-openai 流式调用 API，通过回调逐步输出
@@ -129,13 +139,34 @@ pub async fn call_openai_stream_async(
         .model(&provider.model)
         .messages(openai_messages)
         .build()
-        .map_err(|e| format!("构建请求失败: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("构建请求失败: {}", e);
+            let params_info = format!(
+                "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  system_prompt: {:?}",
+                provider.model,
+                provider.api_base,
+                messages.len(),
+                system_prompt
+            );
+            write_info_log(
+                "call_openai_stream_async 构建请求 ERROR",
+                &format!("{}\n{}", err_msg, params_info),
+            );
+            err_msg
+        })?;
 
-    let mut stream = client
-        .chat()
-        .create_stream(request)
-        .await
-        .map_err(|e| format!("API 请求失败: {}", e))?;
+    // 在 request 被 move 之前，序列化完整的 request body 用于错误日志
+    let request_body =
+        serde_json::to_string(&request).unwrap_or_else(|e| format!("序列化request失败: {}", e));
+
+    let mut stream = client.chat().create_stream(request).await.map_err(|e| {
+        let err_msg = format!("API 请求失败: {}", e);
+        write_info_log(
+            "call_openai_stream_async API请求 ERROR",
+            &format!("{}\nrequest body:\n{}", err_msg, request_body),
+        );
+        err_msg
+    })?;
 
     let mut full_content = String::new();
 
@@ -150,7 +181,17 @@ pub async fn call_openai_stream_async(
                 }
             }
             Err(e) => {
-                return Err(format!("流式响应错误: {}", e));
+                let err_msg = format!("流式响应错误: {}", e);
+                write_info_log(
+                    "call_openai_stream_async 流式响应 ERROR",
+                    &format!(
+                        "{}\n已接收内容长度: {}\nrequest body:\n{}",
+                        err_msg,
+                        full_content.len(),
+                        request_body
+                    ),
+                );
+                return Err(err_msg);
             }
         }
     }
@@ -165,7 +206,21 @@ pub fn call_openai_stream(
     system_prompt: Option<&str>,
     on_chunk: &mut dyn FnMut(&str),
 ) -> Result<String, String> {
-    let rt = tokio::runtime::Runtime::new().map_err(|e| format!("创建异步运行时失败: {}", e))?;
+    let rt = tokio::runtime::Runtime::new().map_err(|e| {
+        let err_msg = format!("创建异步运行时失败: {}", e);
+        let params_info = format!(
+            "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  system_prompt: {:?}",
+            provider.model,
+            provider.api_base,
+            messages.len(),
+            system_prompt
+        );
+        write_info_log(
+            "call_openai_stream 创建runtime ERROR",
+            &format!("{}\n{}", err_msg, params_info),
+        );
+        err_msg
+    })?;
     rt.block_on(call_openai_stream_async(
         provider,
         messages,
