@@ -15,7 +15,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         current_dir push pull status \
         build release debug \
         install uninstall reinstall \
-        publish publish-check tag tags \
+        publish publish-check tag tags bump-version set-version \
         test test-all bench \
         fmt lint check clippy \
         clean clean-all \
@@ -111,29 +111,71 @@ reinstall: uninstall install ## 重新安装
 # ============================================
 # 发布相关
 # ============================================
-publish: push tag release ## 发布到 crates.io
-	@echo "📦 发布到 crates.io..."
-	@make push
-	@cargo publish --registry crates-io
-	@echo "✅ 已发布! 验证: cargo search j-cli"
+bump-version: ## 递增版本号（最后一位 patch）
+	@echo "📌 递增版本号..."
+	@current=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	major=$$(echo $$current | cut -d. -f1); \
+	minor=$$(echo $$current | cut -d. -f2); \
+	patch=$$(echo $$current | cut -d. -f3); \
+	new_patch=$$((patch + 1)); \
+	new_version="$$major.$$minor.$$new_patch"; \
+	echo "  当前版本: $$current"; \
+	echo "  新版本: $$new_version"; \
+	if [[ "$$OSTYPE" == "darwin"* ]]; then \
+		sed -i '' "s/^version = \"$$current\"/version = \"$$new_version\"/" Cargo.toml; \
+	else \
+		sed -i "s/^version = \"$$current\"/version = \"$$new_version\"/" Cargo.toml; \
+	fi; \
+	echo "✅ 版本号已更新为 $$new_version"
+
+publish: ## 发布到 crates.io（自动递增版本号）
+	@echo "📦 开始发布流程..."
+	@$(MAKE) bump-version
+	@$(MAKE) release
+	@git add Cargo.toml Cargo.lock
+	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	git commit -m "chore: bump version to v$$version"; \
+	git tag -a "v$$version" -m "Release v$$version"; \
+	git push origin $(GIT_BRANCH); \
+	git push origin "v$$version"; \
+	echo "📤 发布到 crates.io..."; \
+	cargo publish --registry crates-io; \
+	echo "✅ 已发布 v$$version! 验证: cargo search j-cli"
 
 publish-check: ## 发布前检查（dry-run）
 	@echo "🔍 发布前检查（dry-run）..."
 	@cargo publish --registry crates-io --dry-run
 	@echo "✅ 检查通过"
 
-tag: ## 创建 git tag
+tag: ## 创建 git tag（基于当前版本号）
 	@version=$(VERSION); \
 	tag="v$$version"; \
 	if git rev-parse "$$tag" >/dev/null 2>&1; then \
 		echo "❌ 标签 $$tag 已存在 (Cargo.toml 版本 = $$version)"; \
-		echo "   请先在 Cargo.toml 中更新版本号"; \
+		echo "   请先使用 'make bump-version' 递增版本号"; \
+		echo "   或使用 'make set-version V=x.x.x' 设置新版本号"; \
 		exit 1; \
 	fi; \
 	echo "📌 创建标签 $$tag (来自 Cargo.toml)..."; \
 	git tag -a "$$tag" -m "Release $$tag"; \
 	git push origin "$$tag"; \
 	echo "✅ 标签 $$tag 已创建并推送。GitHub Actions 将自动构建和发布。"
+
+set-version: ## 设置指定版本号（用法：make set-version V=1.2.3）
+ifndef V
+	@echo "❌ 请指定版本号，例如: make set-version V=1.2.3"
+	@exit 1
+endif
+	@echo "📌 设置版本号为 $(V)..."
+	@current=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "  当前版本: $$current"; \
+	echo "  新版本: $(V)"; \
+	if [[ "$$OSTYPE" == "darwin"* ]]; then \
+		sed -i '' "s/^version = \"$$current\"/version = \"$(V)\"/" Cargo.toml; \
+	else \
+		sed -i "s/^version = \"$$current\"/version = \"$(V)\"/" Cargo.toml; \
+	fi; \
+	echo "✅ 版本号已更新为 $(V)"
 
 tags: ## 查看最近的标签
 	@echo "🏷️  最近的标签:"
