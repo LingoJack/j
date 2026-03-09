@@ -282,14 +282,20 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s
 
 ### 从 crates.io 安装
 ```bash
+# 标准版（Lite 浏览器模式，无额外依赖）
 cargo install j-cli
+
+# 完整版（CDP 浏览器模式，需本地已安装 Chrome/Chromium）
+cargo install j-cli --features browser_cdp
 ```
 
 ### 从 GitHub Release 下载
 ```bash
-# macOS ARM64 (M1/M2/M3/M4)
+# macOS ARM64 (M1/M2/M3/M4) - 标准版
 curl -fsSL https://github.com/LingoJack/j/releases/latest/download/j-darwin-arm64.tar.gz | tar xz
 sudo mv j /usr/local/bin/
+
+# 如需 CDP 版本，需自行编译或等待提供带 feature 的 Release 产物
 ```
 
 ### 更新
@@ -306,6 +312,9 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 # 从 crates.io 更新（cargo 安装方式，或 Kago 用户）
 cargo install j-cli
 
+# 更新到 CDP 版本（浏览器自动化）
+cargo install j-cli --features browser_cdp
+
 # 查看当前版本及安装来源
 j version
 ```
@@ -320,7 +329,7 @@ j version
 # 使用安装脚本卸载（推荐）
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
 
-# 或通过 cargo 卸载（cargo 安装的用户）
+# 或通过 cargo 卸载（cargo 安装的用户，无论标准版还是 CDP 版）
 cargo uninstall j-cli
 
 # 或手动删除
@@ -331,7 +340,7 @@ rm ~/.cargo/bin/j          # cargo 安装方式
 rm -rf ~/.jdata
 ```
 
-> **注意**：卸载命令只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。
+> **注意**：卸载命令只会删除二进制文件，用户数据（`~/.jdata/`）会保留。如需彻底清理，请手动删除数据目录。CDP 版和标准版卸载方式相同。
 
 ---
 
@@ -527,13 +536,20 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 
 **浏览器工具 FAQ**：
 
-| 问题 | 说明 |
-|------|------|
-| 怎么编译带 CDP 的版本？ | `cargo build --release --features browser_cdp` 或 `cargo install j-cli --features browser_cdp` |
-| 用户需要额外安装什么？ | **CDP 模式**需要本地已安装 Chrome 或 Chromium；**Lite 模式**无任何额外依赖 |
-| 程序退出时浏览器会关闭吗？ | 会。正常退出时（`q`/`Ctrl+C`/进程结束）Chrome 进程自动终止，所有标签页一并关闭。仅 `kill -9` 强杀时可能残留 |
-| 分发二进制怎么处理？ | 从 crates.io 安装：用户加 `--features browser_cdp`；GitHub Release：需在 CI 中添加带 feature 的构建产物 |
-| 不加 feature 编译会怎样？ | 自动使用 Lite 模式，`screenshot`/`click`/`type`/`evaluate` 等 CDP 专属 action 不可用，但 `content`/`snapshot`/`tabs` 等均可用 |
+**Q: 怎么编译带 CDP 的版本？**
+A: `cargo build --release --features browser_cdp` 或 `cargo install j-cli --features browser_cdp`
+
+**Q: 用户需要额外安装什么？**
+A: **CDP 模式**需要本地已安装 Chrome 或 Chromium；**Lite 模式**无任何额外依赖。
+
+**Q: 程序退出时浏览器会关闭吗？**
+A: 会。正常退出时（`q`/`Ctrl+C`/进程结束）Chrome 进程自动终止，所有标签页一并关闭。仅 `kill -9` 强杀时可能残留。
+
+**Q: 分发二进制怎么处理？**
+A: 从 crates.io 安装：用户加 `--features browser_cdp`；GitHub Release：需在 CI 中添加带 feature 的构建产物。
+
+**Q: 不加 feature 编译会怎样？**
+A: 自动使用 Lite 模式，`screenshot`/`click`/`type`/`evaluate` 等 CDP 专属 action 不可用，但 `content`/`snapshot`/`tabs` 等均可用。
 
 **工具确认快捷键**：
 

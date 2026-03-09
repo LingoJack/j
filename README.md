@@ -57,7 +57,11 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 ### 从 crates.io 安装
 
 ```bash
+# 标准版（Lite 浏览器模式）
 cargo install j-cli
+
+# 完整版（CDP 浏览器模式，需本地已安装 Chrome/Chromium）
+cargo install j-cli --features browser_cdp
 ```
 
 ### 从源码编译
@@ -73,7 +77,7 @@ cargo install --path . --features browser_cdp
 > **浏览器自动化 FAQ**
 > - 不加 `--features browser_cdp` 时自动使用 Lite 模式（纯 HTTP 模拟，无需 Chrome）
 > - CDP 模式需要本地已安装 Chrome/Chromium，程序退出时会自动关闭浏览器进程
-> - 从 crates.io 安装：`cargo install j-cli --features browser_cdp`
+> - 标准版和 CDP 版卸载方式相同：`cargo uninstall j-cli`
 
 ---
 
