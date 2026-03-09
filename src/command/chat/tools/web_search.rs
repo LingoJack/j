@@ -11,10 +11,14 @@ const REQUEST_TIMEOUT_SECS: u64 = 15;
 const DEFAULT_SEARCH_COUNT: usize = 5;
 /// 最大搜索结果数量
 const MAX_SEARCH_COUNT: usize = 10;
+/// Exa API 端点
+const EXA_API_URL: &str = "https://api.exa.ai/search";
+/// highlights 最大字符数
+const HIGHLIGHTS_MAX_CHARS: usize = 4000;
 
 // ==================== WebSearchTool ====================
 
-/// Brave Search API 搜索工具
+/// Exa Search API 搜索工具
 pub struct WebSearchTool;
 
 impl Tool for WebSearchTool {
@@ -23,7 +27,7 @@ impl Tool for WebSearchTool {
     }
 
     fn description(&self) -> &str {
-        "使用 Brave Search API 搜索网络。需要设置 BRAVE_API_KEY 环境变量。"
+        "使用 Exa Search API 搜索网络。需要设置 EXA_API_KEY 环境变量。"
     }
 
     fn parameters_schema(&self) -> Value {
@@ -41,19 +45,11 @@ impl Tool for WebSearchTool {
                     "maximum": 10,
                     "description": "搜索结果数量"
                 },
-                "country": {
+                "type": {
                     "type": "string",
-                    "default": "CN",
-                    "description": "搜索国家/地区代码（如 CN、US、JP）"
-                },
-                "search_lang": {
-                    "type": "string",
-                    "description": "搜索语言代码（如 zh-hans、en、ja）"
-                },
-                "freshness": {
-                    "type": "string",
-                    "enum": ["pd", "pw", "pm", "py"],
-                    "description": "时间范围：pd(24小时) pw(一周) pm(一月) py(一年)"
+                    "enum": ["auto", "keyword", "neural"],
+                    "default": "auto",
+                    "description": "搜索类型：auto(自动) keyword(关键词) neural(语义)"
                 }
             },
             "required": ["query"]
@@ -99,36 +95,33 @@ fn exec_search(args: &Value) -> ToolResult {
         .unwrap_or(DEFAULT_SEARCH_COUNT)
         .clamp(1, MAX_SEARCH_COUNT);
 
-    let country = args.get("country").and_then(|c| c.as_str()).unwrap_or("CN");
-    let search_lang = args.get("search_lang").and_then(|l| l.as_str());
-    let freshness = args.get("freshness").and_then(|f| f.as_str());
+    let search_type = args
+        .get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("auto");
 
     // 检查 API Key
-    let api_key = match std::env::var("BRAVE_API_KEY") {
+    let api_key = match std::env::var("EXA_API_KEY") {
         Ok(key) => key,
         Err(_) => {
             return ToolResult {
-                output: "未设置 BRAVE_API_KEY 环境变量。请在 https://brave.com/search/api/ 获取免费 API Key 并设置环境变量。".to_string(),
+                output: "未设置 EXA_API_KEY 环境变量。请在 https://exa.ai/ 获取 API Key 并设置环境变量。".to_string(),
                 is_error: true,
             };
         }
     };
 
-    // 构建 API URL
-    let mut url = format!(
-        "https://api.search.brave.com/res/v1/web/search?q={}&count={}",
-        urlencoding::encode(query),
-        count,
-    );
-    if country != "ALL" {
-        url.push_str(&format!("&country={}", country));
-    }
-    if let Some(lang) = search_lang {
-        url.push_str(&format!("&search_lang={}", lang));
-    }
-    if let Some(fresh) = freshness {
-        url.push_str(&format!("&freshness={}", fresh));
-    }
+    // 构建请求体
+    let request_body = json!({
+        "query": query,
+        "type": search_type,
+        "numResults": count,
+        "contents": {
+            "highlights": {
+                "maxCharacters": HIGHLIGHTS_MAX_CHARS
+            }
+        }
+    });
 
     let client = match reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
@@ -144,16 +137,17 @@ fn exec_search(args: &Value) -> ToolResult {
     };
 
     let response = match client
-        .get(&url)
-        .header("Accept", "application/json")
-        .header("Accept-Encoding", "gzip")
-        .header("X-Subscription-Token", &api_key)
+        .post(EXA_API_URL)
+        .header("accept", "application/json")
+        .header("content-type", "application/json")
+        .header("x-api-key", &api_key)
+        .json(&request_body)
         .send()
     {
         Ok(r) => r,
         Err(e) => {
             return ToolResult {
-                output: format!("Brave Search 请求失败: {}", e),
+                output: format!("Exa Search 请求失败: {}", e),
                 is_error: true,
             };
         }
@@ -163,7 +157,7 @@ fn exec_search(args: &Value) -> ToolResult {
     if !status.is_success() {
         let body = response.text().unwrap_or_default();
         return ToolResult {
-            output: format!("Brave Search API 错误 {}: {}", status.as_u16(), body),
+            output: format!("Exa Search API 错误 {}: {}", status.as_u16(), body),
             is_error: true,
         };
     }
@@ -172,22 +166,20 @@ fn exec_search(args: &Value) -> ToolResult {
         Ok(d) => d,
         Err(e) => {
             return ToolResult {
-                output: format!("解析 Brave Search 响应失败: {}", e),
+                output: format!("解析 Exa Search 响应失败: {}", e),
                 is_error: true,
             };
         }
     };
 
-    let web_results = data
-        .get("web")
-        .and_then(|w| w.get("results"))
-        .and_then(|r| r.as_array());
-
-    let Some(results) = web_results else {
-        return ToolResult {
-            output: "未找到搜索结果".to_string(),
-            is_error: false,
-        };
+    let results = match data.get("results").and_then(|r| r.as_array()) {
+        Some(r) => r,
+        None => {
+            return ToolResult {
+                output: "未找到搜索结果".to_string(),
+                is_error: false,
+            };
+        }
     };
 
     if results.is_empty() {
@@ -204,20 +196,23 @@ fn exec_search(args: &Value) -> ToolResult {
             .and_then(|t| t.as_str())
             .unwrap_or("(无标题)");
         let url = result.get("url").and_then(|u| u.as_str()).unwrap_or("");
-        let description = result
-            .get("description")
-            .and_then(|d| d.as_str())
-            .unwrap_or("");
 
         output.push_str(&format!("{}. {}\n", i + 1, title));
         output.push_str(&format!("   {}\n", url));
-        if !description.is_empty() {
-            let desc = if description.len() > 200 {
-                format!("{}...", &description[..200])
-            } else {
-                description.to_string()
-            };
-            output.push_str(&format!("   {}\n", desc));
+
+        // 提取 highlights
+        if let Some(highlights) = result.get("highlights").and_then(|h| h.as_array()) {
+            for highlight in highlights {
+                if let Some(text) = highlight.as_str() {
+                    let desc = if text.chars().count() > 200 {
+                        let end = text.char_indices().nth(200).map(|(i, _)| i).unwrap_or(text.len());
+                        format!("{}...", &text[..end])
+                    } else {
+                        text.to_string()
+                    };
+                    output.push_str(&format!("   {}\n", desc));
+                }
+            }
         }
         output.push('\n');
     }

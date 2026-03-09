@@ -486,7 +486,7 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 | `write_file` | 写入文件 | no |
 | `edit_file` | 编辑文件（查找替换） | no |
 | `web_fetch` | 获取网页内容并转为 Markdown/纯文本 | no |
-| `web_search` | 使用 Brave Search API 搜索网络 | no |
+| `web_search` | 使用 Exa Search API 搜索网络 | no |
 | `browser` | 浏览器自动化（CDP + Lite fallback） | no |
 | `load_skill` | 加载指定技能的完整内容到上下文 | no |
 
