@@ -70,6 +70,98 @@ pub fn dispatch(cmd: SubCmd, config: &mut YamlConfig) {
 
 ---
 
+## 添加新 Tool
+
+AI 对话模式下，LLM 可以调用 Tool 执行操作（如读取文件、执行命令、网络请求等）。
+
+### 1. 创建 Tool 文件
+
+在 `src/command/chat/tools/` 下创建新文件，实现 `Tool` trait：
+
+```rust
+// src/command/chat/tools/my_tool.rs
+use super::{Tool, ToolResult};
+use serde_json::{json, Value};
+use std::sync::{Arc, atomic::AtomicBool};
+
+pub struct MyTool;
+
+impl Tool for MyTool {
+    fn name(&self) -> &str {
+        "my_tool"
+    }
+
+    fn description(&self) -> &str {
+        "工具描述，LLM 会根据此描述决定是否调用"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "param1": {
+                    "type": "string",
+                    "description": "参数说明"
+                }
+            },
+            "required": ["param1"]
+        })
+    }
+
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+        // 解析参数并执行
+        let args: Value = match serde_json::from_str(arguments) {
+            Ok(v) => v,
+            Err(e) => return ToolResult {
+                output: format!("参数解析失败: {}", e),
+                is_error: true,
+            }
+        };
+        
+        // 执行逻辑...
+        ToolResult {
+            output: "执行结果".to_string(),
+            is_error: false,
+        }
+    }
+
+    /// 需要用户确认的工具（如 shell 命令）返回 true
+    fn requires_confirmation(&self) -> bool {
+        false
+    }
+}
+```
+
+### 2. 注册 Tool
+
+在 `src/command/chat/tools/mod.rs` 中注册：
+
+```rust
+mod my_tool;  // 添加模块声明
+
+impl ToolRegistry {
+    pub fn new(skills: Vec<crate::command::chat::skill::Skill>) -> Self {
+        let mut registry = Self {
+            tools: vec![
+                // ... 现有工具
+                Box::new(my_tool::MyTool),  // 添加新工具
+            ],
+        };
+        // ...
+    }
+}
+```
+
+### 3. 更新文档
+
+在 `assets/help.md` 的内置工具表格中添加说明：
+
+```markdown
+| `my_tool` | 功能说明 | 是否需要确认 |
+```
+
+---
+
 ## 调试技巧
 
 ### 启用详细日志
