@@ -1,6 +1,6 @@
 [package]
 name = "j-cli"
-version = "12.2.2"
+version = "12.2.3"
 edition = "2024"
 rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
@@ -41,6 +41,8 @@ pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
 self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
 nix = { version = "0.29", features = ["process"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip", "brotli", "deflate"] }
+html2text = "0.14"
 
 [patch.crates-io]
 tui-textarea = { path = "patches/tui-textarea-0.7.0" }
