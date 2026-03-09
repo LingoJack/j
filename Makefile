@@ -132,7 +132,7 @@ publish: ## 发布到 crates.io（自动递增版本号）
 	@echo "📦 开始发布流程..."
 	@$(MAKE) bump-version
 	@$(MAKE) release
-	@git add Cargo.toml Cargo.lock
+	@git add .
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	git commit -m "chore: bump version to v$$version"; \
 	git tag -a "v$$version" -m "Release v$$version"; \

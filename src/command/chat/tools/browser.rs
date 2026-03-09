@@ -179,8 +179,8 @@ mod cdp {
         .to_string())
     }
 
-    /// 截图
-    pub async fn screenshot(tab_id: Option<&str>, full_page: bool) -> Result<String, String> {
+    /// 截图并保存到指定目录，返回文件完整路径
+    pub async fn screenshot(tab_id: Option<&str>, full_page: bool, output_dir: &str) -> Result<String, String> {
         let state = browser_state().lock().await;
         let s = state.as_ref().ok_or("浏览器未运行")?;
 
@@ -211,13 +211,32 @@ mod cdp {
             .map_err(|e| format!("截图失败: {}", e))?
         };
 
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        let base64_data = STANDARD.encode(&screenshot_data);
+        // 确保输出目录存在
+        let dir = std::path::Path::new(output_dir);
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("创建输出目录失败: {}", e))?;
+
+        // 生成带时间戳的文件名
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| format!("获取时间戳失败: {}", e))?
+            .as_millis();
+        let filename = format!("screenshot_{}.png", timestamp);
+        let file_path = dir.join(&filename);
+
+        std::fs::write(&file_path, &screenshot_data)
+            .map_err(|e| format!("保存截图失败: {}", e))?;
+
+        let full_path = file_path
+            .canonicalize()
+            .unwrap_or(file_path.clone())
+            .to_string_lossy()
+            .to_string();
 
         Ok(serde_json::json!({
             "success": true,
             "format": "png",
-            "data": format!("data:image/png;base64,{}", base64_data)
+            "path": full_path
         })
         .to_string())
     }
@@ -492,7 +511,11 @@ mod cdp {
                     .get("full_page")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                screenshot(tab_id, full_page).await
+                let output_dir = args
+                    .get("output_dir")
+                    .and_then(|v| v.as_str())
+                    .ok_or("screenshot 操作缺少 output_dir 参数")?;
+                screenshot(tab_id, full_page, output_dir).await
             }
 
             "snapshot" => snapshot(tab_id).await,
@@ -751,7 +774,7 @@ mod lite {
         }
     }
 
-    pub fn screenshot() -> Result<String, String> {
+    pub fn screenshot(_output_dir: Option<&str>) -> Result<String, String> {
         Ok(json!({
             "note": "截图需要 'browser_cdp' feature（CDP）。使用 'snapshot' 获取页面元素列表。",
         })
@@ -1047,6 +1070,10 @@ impl Tool for BrowserTool {
                     "type": "string",
                     "description": "[evaluate] 要执行的 JavaScript 代码"
                 },
+                "output_dir": {
+                    "type": "string",
+                    "description": "[screenshot] 截图输出目录，截图将保存到该目录下"
+                },
                 "full_page": {
                     "type": "boolean",
                     "default": false,
@@ -1157,7 +1184,10 @@ fn exec_browser_stub(args: &Value, action: &str) -> ToolResult {
             }
         }
 
-        "screenshot" => lite::screenshot(),
+        "screenshot" => {
+            let output_dir = args.get("output_dir").and_then(|v| v.as_str());
+            lite::screenshot(output_dir)
+        }
         "snapshot" => lite::snapshot(tab_id),
         "content" | "get_content" => lite::get_content(tab_id),
 
