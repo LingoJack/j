@@ -262,10 +262,10 @@ open -a "$J_CHROME" https://example.com
 | `j help` | 帮助信息 |
 | `j exit` | 退出（交互模式） |
 | `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
-| `j update` | 更新到最新版本（仅 GitHub Release 安装） |
+| `j update` | 更新到最新版本（自动检测安装来源） |
 | `j update --check` | 仅检查是否有新版本 |
 
-> **注意**：通过 `cargo install j-cli` 安装的用户请使用 `cargo install j-cli` 更新
+> **支持**：GitHub Release 安装和 cargo 安装（包括 Kago 用户）均支持自动更新
 
 ---
 
@@ -294,7 +294,7 @@ sudo mv j /usr/local/bin/
 
 ### 更新
 ```bash
-# 内置更新命令（仅 GitHub Release 安装方式）
+# 内置更新命令（自动检测安装来源）
 j update
 
 # 仅检查版本，不更新
@@ -303,14 +303,14 @@ j update --check
 # 一键更新（安装脚本方式）
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 
-# 从 crates.io 更新（cargo 安装方式）
+# 从 crates.io 更新（cargo 安装方式，或 Kago 用户）
 cargo install j-cli
 
 # 查看当前版本及安装来源
 j version
 ```
 
-> **注意**：`j update` 仅适用于 GitHub Release 安装方式；cargo 安装的用户请使用 `cargo install j-cli` 更新。
+> **说明**：`j update` 会自动检测安装来源：GitHub Release 安装会从 GitHub 下载更新；cargo 安装（包括 Kago 用户）会执行 `cargo install j-cli` 更新。
 
 ---
 
@@ -500,6 +500,8 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 | `{{.skills}}` | 所有技能的 name + description 摘要列表 |
 | `{{.tools}}` | 所有工具的 name + description 摘要列表 |
 | `{{.style}}` | 回复风格配置内容（`Ctrl+E` 中编辑） |
+| `{{.memory}}` | 记忆内容（存储用户偏好、重要事项等） |
+| `{{.soul}}` | 灵魂/人格设定（定义 AI 的角色和行为风格） |
 
 **创建 Skill**：
 

@@ -626,6 +626,8 @@ Markdown 指令正文，$ARGUMENTS 会被替换为实际参数...
 | `{{.skills}}` | 所有技能的 name + description 摘要 |
 | `{{.tools}}` | 所有工具的 name + description 摘要 |
 | `{{.style}}` | 回复风格配置内容 |
+| `{{.memory}}` | 记忆内容（存储用户偏好、重要事项等） |
+| `{{.soul}}` | 灵魂/人格设定（定义 AI 的角色和行为风格） |
 
 ---
 
