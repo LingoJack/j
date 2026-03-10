@@ -1093,9 +1093,22 @@ impl Tool for BrowserTool {
     }
 
     fn description(&self) -> &str {
-        "浏览器自动化工具。操作: status, start, stop, tabs, open, navigate, \
-         screenshot, snapshot, close, click, type, press, evaluate。\
-         使用 snapshot 获取页面可交互元素列表。"
+        "浏览器自动化工具，支持网页浏览、交互与内容提取。可用操作：\n\
+         - status: 查看浏览器运行状态和已打开的标签页数量\n\
+         - start: 启动浏览器实例（可通过 headless 参数控制是否显示窗口）\n\
+         - stop: 停止浏览器并关闭所有标签页\n\
+         - tabs: 列出所有已打开的标签页及其 ID 和 URL\n\
+         - open: 打开新标签页并导航到指定 URL（需要 url 参数），返回 tab_id\n\
+         - navigate: 在已有标签页中导航到新 URL（需要 url 参数，可选 tab_id）\n\
+         - screenshot: 对页面截图并保存为 PNG（需要 output_dir 参数，可选 full_page）\n\
+         - snapshot: 获取页面快照，包含标题、URL 和可交互元素列表（按钮、输入框、链接等），用于了解页面结构\n\
+         - content: 提取页面正文文本内容（智能去除导航栏、脚本等噪音）\n\
+         - close: 关闭指定标签页（需要 tab_id 参数）\n\
+         - click: 点击页面元素（需要 selector 参数，CSS 选择器）\n\
+         - type: 在输入框中输入文本（需要 selector 和 text 参数，支持中文）\n\
+         - press: 模拟按键操作（需要 key 参数，如 Enter、Tab、Escape）\n\
+         - evaluate: 在页面中执行 JavaScript 代码（需要 script 参数）\n\
+         典型流程：先 open 打开页面 → 用 snapshot 了解页面元素 → 用 click/type/press 进行交互 → 用 content 获取结果。"
     }
 
     fn parameters_schema(&self) -> Value {
@@ -1107,11 +1120,11 @@ impl Tool for BrowserTool {
                     "enum": ["status", "start", "stop", "tabs", "open", "navigate",
                              "screenshot", "snapshot", "content", "close",
                              "click", "type", "press", "evaluate"],
-                    "description": "操作类型"
+                    "description": "操作类型。status=查看状态; start=启动浏览器; stop=停止浏览器; tabs=列出标签页; open=打开新标签页(需url); navigate=在现有标签页导航(需url); screenshot=页面截图(需output_dir); snapshot=获取页面可交互元素快照; content=提取页面正文文本; close=关闭标签页(需tab_id); click=点击元素(需selector); type=输入文本(需selector+text); press=按键(需key); evaluate=执行JS(需script)"
                 },
                 "url": {
                     "type": "string",
-                    "description": "[open/navigate] 目标 URL"
+                    "description": "[open/navigate] 目标 URL，需要包含完整协议头（如 https://example.com）"
                 },
                 "tab_id": {
                     "type": "string",
@@ -1119,32 +1132,32 @@ impl Tool for BrowserTool {
                 },
                 "selector": {
                     "type": "string",
-                    "description": "[click/type] CSS 选择器"
+                    "description": "[click/type] CSS 选择器，用于定位页面元素（如 '#submit-btn'、'input[name=search]'、'.login-form button'）。建议先使用 snapshot 获取页面元素信息"
                 },
                 "text": {
                     "type": "string",
-                    "description": "[type] 要输入的文本"
+                    "description": "[type] 要输入到目标元素中的文本内容，支持中文等非 ASCII 字符"
                 },
                 "key": {
                     "type": "string",
-                    "description": "[press] 要按下的键名"
+                    "description": "[press] 要按下的键名，如 'Enter'、'Tab'、'Escape'、'ArrowDown'、'Backspace' 等，也支持单个字符如 'a'"
                 },
                 "script": {
                     "type": "string",
-                    "description": "[evaluate] 要执行的 JavaScript 代码，例如 `document.body.innerText` 可以获取 js 动态渲染的内容"
+                    "description": "[evaluate] 要在页面上下文中执行的 JavaScript 代码。可用于获取动态渲染内容（如 `document.body.innerText`）、操作 DOM、提取特定数据等。返回值为 JS 表达式的执行结果"
                 },
                 "output_dir": {
                     "type": "string",
-                    "description": "[screenshot] 截图输出目录，截图将保存到该目录下"
+                    "description": "[screenshot] 截图输出目录的绝对路径，截图将以 PNG 格式保存到该目录下（自动创建目录），文件名含时间戳"
                 },
                 "full_page": {
                     "type": "boolean",
                     "default": false,
-                    "description": "[screenshot] 是否截取完整页面"
+                    "description": "[screenshot] 是否截取完整页面（包括需要滚动才能看到的部分）。false 时只截取当前视口"
                 },
                 "headless": {
                     "type": "boolean",
-                    "description": "是否使用 headless 模式（覆盖配置文件设置）"
+                    "description": "是否使用无头（headless）模式运行浏览器。true=不显示浏览器窗口（适合后台自动化），false=显示窗口（适合调试）。此参数会覆盖 config.yaml 中的设置，不传则使用配置文件值（默认 true）"
                 }
             },
             "required": ["action"]
