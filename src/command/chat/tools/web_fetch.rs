@@ -212,9 +212,13 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
     };
 
     let truncated = if text.len() > max_chars {
+        let mut end = max_chars;
+        while end > 0 && !text.is_char_boundary(end) {
+            end -= 1;
+        }
         format!(
             "{}...\n\n[内容已截断，原长度: {} 字符]",
-            &text[..max_chars],
+            &text[..end],
             text.len()
         )
     } else {
@@ -244,7 +248,11 @@ fn read_response_body(response: reqwest::blocking::Response) -> Result<String, S
     match response.text() {
         Ok(text) => {
             if text.len() > MAX_RESPONSE_BYTES {
-                Ok(text[..MAX_RESPONSE_BYTES].to_string())
+                let mut end = MAX_RESPONSE_BYTES;
+                while end > 0 && !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                Ok(text[..end].to_string())
             } else {
                 Ok(text)
             }

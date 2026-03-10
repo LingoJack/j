@@ -264,9 +264,13 @@ mod cdp {
         let text = crate::command::chat::tools::html_extract::extract_text_from_html(&raw_html);
 
         if text.len() > 50_000 {
+            let mut end = 50_000;
+            while end > 0 && !text.is_char_boundary(end) {
+                end -= 1;
+            }
             Ok(format!(
                 "{}…\n\n[内容已截断，原长度: {} 字符]",
-                &text[..50_000],
+                &text[..end],
                 text.len()
             ))
         } else {
@@ -809,7 +813,11 @@ mod lite {
             "links_count": tab.links.len(),
             "forms_count": tab.forms.len(),
             "text_preview": if tab.text_content.len() > 500 {
-                format!("{}...", &tab.text_content[..500])
+                let mut end = 500;
+                while end > 0 && !tab.text_content.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &tab.text_content[..end])
             } else {
                 tab.text_content.clone()
             }
@@ -828,7 +836,11 @@ mod lite {
         };
         let text = &tab.text_content;
         if text.len() > 50_000 {
-            Ok(format!("{}…\n\n[截断于 50KB]", &text[..50_000]))
+            let mut end = 50_000;
+            while end > 0 && !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            Ok(format!("{}…\n\n[截断于 50KB]", &text[..end]))
         } else {
             Ok(text.clone())
         }

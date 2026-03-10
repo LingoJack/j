@@ -250,7 +250,7 @@ docs: doc ## 文档别名
 # ============================================
 run: ## 运行项目
 	@echo "🚀 运行项目..."
-	@cargo run
+	@cargo run --features browser_cdp
 
 run-release: release ## 运行发布版本
 	@echo "🚀 运行发布版本..."
