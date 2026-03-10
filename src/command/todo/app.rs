@@ -206,7 +206,7 @@ impl TodoApp {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => (i - 1 + count) % count,
+            Some(i) => (i + count - 1) % count,
             None => 0,
         };
         self.state.select(Some(i));
@@ -633,14 +633,16 @@ pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut Yaml
 /// 将输入字符串按光标位置分割为三部分：光标前、光标处字符、光标后
 pub fn split_input_at_cursor(input: &str, cursor_pos: usize) -> (String, String, String) {
     let chars: Vec<char> = input.chars().collect();
-    let before: String = chars[..cursor_pos].iter().collect();
-    let cursor_ch = if cursor_pos < chars.len() {
-        chars[cursor_pos].to_string()
+    // 防御性 clamp：cursor_pos 不应超过 chars.len()
+    let pos = cursor_pos.min(chars.len());
+    let before: String = chars[..pos].iter().collect();
+    let cursor_ch = if pos < chars.len() {
+        chars[pos].to_string()
     } else {
         " ".to_string()
     };
-    let after: String = if cursor_pos < chars.len() {
-        chars[cursor_pos + 1..].iter().collect()
+    let after: String = if pos < chars.len() {
+        chars[pos + 1..].iter().collect()
     } else {
         String::new()
     };

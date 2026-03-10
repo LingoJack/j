@@ -229,6 +229,32 @@ pub fn build_message_lines_incremental(
                 Style::default().bg(bubble_bg),
             )]));
 
+            // 思考指示器：颜色脉冲动画
+            if msg.content == "◍" {
+                let pulse_color = thinking_pulse_color(t);
+                let indicator_line = Line::from(Span::styled(
+                    "◍",
+                    Style::default().fg(pulse_color),
+                ));
+                let bubble_line = wrap_md_line_in_bubble(
+                    indicator_line,
+                    bubble_bg,
+                    pad_left_w,
+                    pad_right_w,
+                    bubble_total_w,
+                );
+                lines.push(bubble_line);
+
+                // 下边距
+                lines.push(Line::from(vec![Span::styled(
+                    " ".repeat(bubble_total_w),
+                    Style::default().bg(bubble_bg),
+                )]));
+
+                // 末尾留白和缓存处理在外层统一处理
+                continue;
+            }
+
             // 增量段落渲染：取旧缓存中的 stable_lines 和 stable_offset
             let (mut stable_lines, mut stable_offset) = if let Some(old_c) = old_cache {
                 if old_c.bubble_max_width == bubble_max_width {
@@ -890,6 +916,39 @@ pub fn render_tool_result_msg(
         " ".repeat(bubble_w),
         Style::default().bg(bubble_bg),
     )]));
+}
+
+/// 计算思考指示器的脉冲颜色：基于 label_ai 颜色在亮暗之间平滑过渡
+/// 使用正弦波实现呼吸灯效果，周期约 1.5 秒
+fn thinking_pulse_color(theme: &Theme) -> Color {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    // 周期 1.5s = 1500ms，正弦波映射到 [0.0, 1.0]
+    let phase = (millis % 1500) as f64 / 1500.0;
+    let t = (phase * std::f64::consts::TAU).sin() * 0.5 + 0.5; // 0.0 ~ 1.0
+
+    // 从 label_ai 颜色提取 RGB 分量
+    if let Color::Rgb(r, g, b) = theme.label_ai {
+        // 在 30% 亮度 ~ 100% 亮度之间脉冲
+        let min_factor = 0.3;
+        let factor = min_factor + (1.0 - min_factor) * t;
+        let pr = (r as f64 * factor).round().min(255.0) as u8;
+        let pg = (g as f64 * factor).round().min(255.0) as u8;
+        let pb = (b as f64 * factor).round().min(255.0) as u8;
+        Color::Rgb(pr, pg, pb)
+    } else {
+        // 非 RGB 颜色的回退：简单交替
+        if t > 0.5 {
+            theme.label_ai
+        } else {
+            theme.text_dim
+        }
+    }
 }
 
 pub fn copy_to_clipboard(content: &str) -> bool {

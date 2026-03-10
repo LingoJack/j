@@ -1,5 +1,6 @@
 use crate::command::chat::tools::{Tool, ToolResult};
-use scraper::{Html, Selector};
+use crate::command::chat::tools::html_extract;
+use scraper::Html;
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
@@ -201,9 +202,9 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
 
     let text = if is_html || (!is_text && content_type.is_empty()) {
         let document = Html::parse_document(&body);
-        let content_html = extract_readable_content(&document);
+        let content_html = html_extract::extract_readable_content(&document);
         match extract_mode {
-            "text" => html_to_text(&content_html),
+            "text" => html_extract::html_to_text(&content_html),
             _ => html2md::parse_html(&content_html),
         }
     } else {
@@ -250,83 +251,4 @@ fn read_response_body(response: reqwest::blocking::Response) -> Result<String, S
         }
         Err(e) => Err(format!("读取响应体失败: {}", e)),
     }
-}
-
-/// 智能提取网页正文内容
-fn extract_readable_content(document: &Html) -> String {
-    let content_selectors = [
-        "article",
-        "main",
-        "[role=\"main\"]",
-        ".post-content",
-        ".article-content",
-        ".entry-content",
-        ".content",
-        "#content",
-        ".post",
-        ".article",
-    ];
-
-    for selector_str in content_selectors {
-        if let Ok(selector) = Selector::parse(selector_str)
-            && let Some(element) = document.select(&selector).next()
-        {
-            return element.html();
-        }
-    }
-
-    if let Ok(body_selector) = Selector::parse("body")
-        && let Some(body) = document.select(&body_selector).next()
-    {
-        return body.html();
-    }
-
-    document.html()
-}
-
-/// 将 HTML 转换为纯文本
-fn html_to_text(html: &str) -> String {
-    let document = Html::parse_fragment(html);
-    let mut text = String::new();
-
-    fn extract_text(node: scraper::ElementRef, text: &mut String) {
-        for child in node.children() {
-            if let Some(element) = scraper::ElementRef::wrap(child) {
-                let tag = element.value().name();
-                if matches!(
-                    tag,
-                    "script" | "style" | "nav" | "header" | "footer" | "aside" | "noscript"
-                ) {
-                    continue;
-                }
-                if matches!(
-                    tag,
-                    "p" | "div" | "br" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "li" | "tr"
-                ) {
-                    text.push('\n');
-                }
-                extract_text(element, text);
-            } else if let Some(t) = child.value().as_text() {
-                let trimmed = t.trim();
-                if !trimmed.is_empty() {
-                    if !text.is_empty() && !text.ends_with('\n') && !text.ends_with(' ') {
-                        text.push(' ');
-                    }
-                    text.push_str(trimmed);
-                }
-            }
-        }
-    }
-
-    if let Ok(root_selector) = Selector::parse(":root")
-        && let Some(root) = document.select(&root_selector).next()
-    {
-        extract_text(root, &mut text);
-    }
-
-    text.lines()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
 }

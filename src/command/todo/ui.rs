@@ -239,10 +239,12 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
 
         // 自动滚动到光标所在行可见
         let cursor_line = cursor_wrapped_line(input_content, app.cursor_pos, preview_inner_w);
-        let auto_scroll = if cursor_line < app.preview_scroll {
+        let auto_scroll = if preview_inner_h == 0 {
+            0
+        } else if cursor_line < app.preview_scroll {
             cursor_line
         } else if cursor_line >= app.preview_scroll + preview_inner_h {
-            cursor_line.saturating_sub(preview_inner_h - 1)
+            cursor_line.saturating_sub(preview_inner_h.saturating_sub(1))
         } else {
             app.preview_scroll
         };
@@ -354,7 +356,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .border_style(Style::default().fg(Color::Red))
                     .title(" ⚠️ 确认删除 "),
             );
-            f.render_widget(confirm_widget, chunks[2]);
+            f.render_widget(confirm_widget, chunks[status_chunk_idx]);
         }
         AppMode::ConfirmReport => {
             let inner_width = chunks[status_chunk_idx].width.saturating_sub(2) as usize;
@@ -418,7 +420,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::DarkGray)),
             );
-            f.render_widget(status_widget, chunks[2]);
+            f.render_widget(status_widget, chunks[status_chunk_idx]);
         }
     }
 

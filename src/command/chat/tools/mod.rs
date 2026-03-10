@@ -1,5 +1,6 @@
 mod browser;
 mod file;
+pub(crate) mod html_extract;
 mod shell;
 mod skill_tool;
 mod web_fetch;

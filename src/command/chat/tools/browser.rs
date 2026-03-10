@@ -243,7 +243,7 @@ mod cdp {
         .to_string())
     }
 
-    /// 获取页面内容
+    /// 获取页面内容（智能提取正文，去除导航/脚注/脚本等噪音）
     pub async fn get_content(tab_id: Option<&str>) -> Result<String, String> {
         let state = browser_state().lock().await;
         let s = state.as_ref().ok_or("浏览器未运行")?;
@@ -256,12 +256,18 @@ mod cdp {
             s.pages.values().next().ok_or("没有已打开的标签页")?
         };
 
-        let content = page
+        let raw_html = page
             .content()
             .await
             .map_err(|e| format!("获取页面内容失败: {}", e))?;
 
-        Ok(content)
+        let text = crate::command::chat::tools::html_extract::extract_text_from_html(&raw_html);
+
+        if text.len() > 50_000 {
+            Ok(format!("{}…\n\n[内容已截断，原长度: {} 字符]", &text[..50_000], text.len()))
+        } else {
+            Ok(text)
+        }
     }
 
     /// 点击元素
@@ -637,7 +643,7 @@ mod lite {
         let links = extract_links(&body);
         let forms = extract_forms(&body);
         let interactive = extract_interactive(&body);
-        let text_content = strip_html(&body);
+        let text_content = crate::command::chat::tools::html_extract::extract_text_from_html(&body);
 
         Ok(LiteTab {
             url: url.to_string(),

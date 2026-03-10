@@ -129,7 +129,21 @@ fn handle_todo_list(filter: Option<bool>) {
 
 /// 启动 TUI 待办管理界面
 fn run_todo_tui(config: &mut YamlConfig) {
-    match run_todo_tui_internal(config) {
+    // 设置 panic hook 保底：确保 panic 时先恢复终端状态
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // 尽力恢复终端状态，即使失败也不再 panic
+        let _ = terminal::disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        default_hook(info);
+    }));
+
+    let result = run_todo_tui_internal(config);
+
+    // 恢复默认 panic hook
+    let _ = std::panic::take_hook();
+
+    match result {
         Ok(_) => {}
         Err(e) => {
             error!("❌ TUI 启动失败: {}", e);
