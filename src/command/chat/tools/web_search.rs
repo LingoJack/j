@@ -95,10 +95,7 @@ fn exec_search(args: &Value) -> ToolResult {
         .unwrap_or(DEFAULT_SEARCH_COUNT)
         .clamp(1, MAX_SEARCH_COUNT);
 
-    let search_type = args
-        .get("type")
-        .and_then(|t| t.as_str())
-        .unwrap_or("auto");
+    let search_type = args.get("type").and_then(|t| t.as_str()).unwrap_or("auto");
 
     // 检查 API Key
     let api_key = match std::env::var("EXA_API_KEY") {
@@ -205,7 +202,11 @@ fn exec_search(args: &Value) -> ToolResult {
             for highlight in highlights {
                 if let Some(text) = highlight.as_str() {
                     let desc = if text.chars().count() > 200 {
-                        let end = text.char_indices().nth(200).map(|(i, _)| i).unwrap_or(text.len());
+                        let end = text
+                            .char_indices()
+                            .nth(200)
+                            .map(|(i, _)| i)
+                            .unwrap_or(text.len());
                         format!("{}...", &text[..end])
                     } else {
                         text.to_string()

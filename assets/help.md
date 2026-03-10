@@ -260,7 +260,7 @@ open -a "$J_CHROME" https://example.com
 | `j clear` | 清屏 |
 | `j version` | 版本信息 |
 | `j help` | 帮助信息 |
-| `j exit` | 退出（交互模式） |
+| `j exit` | 退出（交互模式，或按 `Ctrl+Q` / `Ctrl+D`） |
 | `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
 | `j update` | 更新到最新版本（自动检测安装来源） |
 | `j update --check` | 仅检查是否有新版本 |
@@ -607,6 +607,7 @@ EOF
 ## 💡 使用技巧
 
 - 不带参数运行 `j` 进入**交互模式**，支持 Tab 补全和历史建议
+- 交互模式下按 `Ctrl+Q` 快速退出（等同于 `exit` 命令或 `Ctrl+D`）
 - 交互模式下用 `!` 前缀执行 shell 命令（如 `!ls -la`），自动注入别名环境变量
 - 交互模式下输入 `!`（不带命令）进入交互式 shell 模式（提示符变为绿色 `shell >`），cd 等状态延续，输入 `exit` 或按 `Ctrl+D` 返回 copilot
 - 交互模式下参数支持 `$J_XXX` / `${J_XXX}` 环境变量引用（如 `open "$J_VSCODE"`）

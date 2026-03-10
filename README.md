@@ -94,6 +94,7 @@ cargo install --path . --features browser_cdp
 | **脚本** | `j concat` | 创建脚本 |
 | **AI** | `j chat` | AI 对话 |
 | **更新** | `j update` | 自更新（仅 GitHub Release 安装） |
+| **退出** | `Ctrl+Q` / `Ctrl+D` | 交互模式快捷退出 |
 
 ---
 
