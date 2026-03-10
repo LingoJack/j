@@ -382,9 +382,11 @@ pub fn build_message_lines_incremental(
                     Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
                     Span::styled(" ", Style::default().bg(confirm_bg)),
                 ];
-                // 添加 markdown 渲染后的 spans（保留原始样式）
+                // 添加 markdown 渲染后的 spans（注入 confirm_bg 背景避免颜色冲突）
                 for span in &md_line.spans {
-                    spans.push(span.clone());
+                    let mut patched = span.clone();
+                    patched.style = patched.style.bg(confirm_bg);
+                    spans.push(patched);
                 }
                 if i == max_show - 1 && md_lines.len() > max_show {
                     spans.push(Span::styled(
