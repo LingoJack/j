@@ -264,7 +264,11 @@ mod cdp {
         let text = crate::command::chat::tools::html_extract::extract_text_from_html(&raw_html);
 
         if text.len() > 50_000 {
-            Ok(format!("{}…\n\n[内容已截断，原长度: {} 字符]", &text[..50_000], text.len()))
+            Ok(format!(
+                "{}…\n\n[内容已截断，原长度: {} 字符]",
+                &text[..50_000],
+                text.len()
+            ))
         } else {
             Ok(text)
         }
@@ -1127,7 +1131,7 @@ impl Tool for BrowserTool {
                 },
                 "script": {
                     "type": "string",
-                    "description": "[evaluate] 要执行的 JavaScript 代码"
+                    "description": "[evaluate] 要执行的 JavaScript 代码，例如 `document.body.innerText` 可以获取 js 动态渲染的内容"
                 },
                 "output_dir": {
                     "type": "string",

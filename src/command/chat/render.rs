@@ -232,10 +232,8 @@ pub fn build_message_lines_incremental(
             // 思考指示器：颜色脉冲动画
             if msg.content == "◍" {
                 let pulse_color = thinking_pulse_color(t);
-                let indicator_line = Line::from(Span::styled(
-                    "◍",
-                    Style::default().fg(pulse_color),
-                ));
+                let indicator_line =
+                    Line::from(Span::styled("◍", Style::default().fg(pulse_color)));
                 let bubble_line = wrap_md_line_in_bubble(
                     indicator_line,
                     bubble_bg,
