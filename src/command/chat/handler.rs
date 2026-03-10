@@ -101,6 +101,10 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             // 加载刚结束时必须重绘一次
             needs_redraw = true;
         }
+        // ToolConfirm/ToolRejectInput 模式下强制重绘，确保确认弹窗可见
+        if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
+            needs_redraw = true;
+        }
 
         // 只在状态发生变化时才重绘，大幅降低 CPU 占用
         if needs_redraw {
@@ -129,8 +133,8 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         // 等待事件：加载中用短间隔以刷新流式内容，空闲时用长间隔节省 CPU
         let poll_timeout = if app.is_loading {
             std::time::Duration::from_millis(150)
-        } else if app.mode == ChatMode::ToolConfirm && app.agent_config.tool_confirm_timeout > 0 {
-            std::time::Duration::from_millis(500) // 倒计时需要更频繁刷新
+        } else if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
+            std::time::Duration::from_millis(500) // 确认模式需要更频繁刷新
         } else {
             std::time::Duration::from_millis(1000)
         };

@@ -31,6 +31,8 @@ make tag                 # Create and push a version tag (triggers GitHub Action
 
 ## Architecture
 
+read docs/readme/architecture.md to learn about the architecture of j-cli.
+
 ### Entry Point and Routing (`src/main.rs`, `src/cli.rs`)
 
 `main.rs` handles two execution paths:

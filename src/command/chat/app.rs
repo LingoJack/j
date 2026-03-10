@@ -713,8 +713,8 @@ impl ChatApp {
             });
         });
 
-        // 立即退出确认模式，让 poll_stream 能继续轮询 tool_exec_rx
-        self.mode = ChatMode::Chat;
+        // 推进到下一个待确认工具；如果没有更多待确认工具，退出确认模式
+        self.advance_tool_confirm();
     }
 
     /// 用户拒绝执行当前待处理工具，可附带拒绝原因
