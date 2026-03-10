@@ -184,74 +184,7 @@ debug_log!(config, "调试信息: {}", value);
 
 ```bash
 cat ~/.jdata/config.yaml
-```
 
-### 查看 Agent 配置
-
-```bash
-cat ~/.jdata/agent/data/agent_config.json
-```
-
----
-
-## 测试
-
-### 运行测试
-
-```bash
-cargo test
-```
-
-### 手动测试清单
-
-- [ ] `j set/rm/rename/mf` 别名 CRUD
-- [ ] `j <alias>` 打开应用/URL
-- [ ] `j report/check/search` 日报系统
-- [ ] `j todo` 待办管理
-- [ ] `j chat` AI 对话
-- [ ] `web` 工具: search / fetch / open / tabs / snapshot / navigate / close
-- [ ] 交互模式 Tab 补全
-- [ ] 交互模式 `!` shell 命令
-
----
-
-## 发布流程
-
-### 1. 更新版本号
-
-```bash
-# 编辑 constants.rs 中的 VERSION
-# 编辑 Cargo.toml 中的 version
-```
-
-### 2. 编译 Release
-
-```bash
-cargo build --release
-```
-
-### 3. 测试
-
-```bash
-./target/release/j version
-./target/release/j help
-```
-
-### 4. 发布到 crates.io
-
-```bash
-cargo publish
-```
-
-### 5. 创建 GitHub Release
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-# 在 GitHub 上创建 Release，上传二进制
-```
-
----
 
 ## 文档更新
 
