@@ -357,7 +357,7 @@ mod cdp {
         );
 
         let result: serde_json::Value = page
-            .evaluate(&script)
+            .evaluate(script.as_str())
             .await
             .map_err(|e| format!("输入失败: {}", e))?
             .into_value()
@@ -393,20 +393,34 @@ mod cdp {
             DispatchKeyEventParams, DispatchKeyEventType,
         };
 
-        let key_down = DispatchKeyEventParams::builder()
+        // 功能键（Enter、Tab、Escape 等）不应设置 text 参数，
+        // 只有可打印的单字符才设置 text，否则 CDP 会报 "Invalid 'text' parameter"。
+        let text_value = if key.len() == 1 {
+            Some(key.to_string())
+        } else {
+            None
+        };
+
+        let mut key_down_builder = DispatchKeyEventParams::builder()
             .key(key.to_string())
-            .text(key.to_string())
-            .r#type(DispatchKeyEventType::KeyDown)
+            .r#type(DispatchKeyEventType::KeyDown);
+        if let Some(ref t) = text_value {
+            key_down_builder = key_down_builder.text(t.clone());
+        }
+        let key_down = key_down_builder
             .build()
             .map_err(|e| format!("构建按键参数失败: {}", e))?;
         page.execute(key_down)
             .await
             .map_err(|e| format!("按键失败: {}", e))?;
 
-        let key_up = DispatchKeyEventParams::builder()
+        let mut key_up_builder = DispatchKeyEventParams::builder()
             .key(key.to_string())
-            .text(key.to_string())
-            .r#type(DispatchKeyEventType::KeyUp)
+            .r#type(DispatchKeyEventType::KeyUp);
+        if let Some(ref t) = text_value {
+            key_up_builder = key_up_builder.text(t.clone());
+        }
+        let key_up = key_up_builder
             .build()
             .map_err(|e| format!("构建按键参数失败: {}", e))?;
         page.execute(key_up)
