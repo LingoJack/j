@@ -7,7 +7,7 @@ use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
 use crate::command::chat::app::{ChatApp, ChatMode, config_total_fields};
 use crate::constants::{
-    AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_INFO, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS,
+    AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_ERROR, AGENT_LOG_INFO, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS,
 };
 use crate::error;
 use crossterm::{
@@ -101,8 +101,8 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             // 加载刚结束时必须重绘一次
             needs_redraw = true;
         }
-        // ToolConfirm/ToolRejectInput 模式下强制重绘，确保确认弹窗可见
-        if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
+        // ToolConfirm 模式下强制重绘，确保确认弹窗可见
+        if app.mode == ChatMode::ToolConfirm {
             needs_redraw = true;
         }
 
@@ -133,7 +133,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         // 等待事件：加载中用短间隔以刷新流式内容，空闲时用长间隔节省 CPU
         let poll_timeout = if app.is_loading {
             std::time::Duration::from_millis(150)
-        } else if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
+        } else if app.mode == ChatMode::ToolConfirm {
             std::time::Duration::from_millis(500) // 确认模式需要更频繁刷新
         } else {
             std::time::Duration::from_millis(1000)
@@ -163,9 +163,6 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::ArchiveConfirm => handle_archive_confirm_mode(&mut app, key),
                             ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
                             ChatMode::ToolConfirm => handle_tool_confirm_mode(&mut app, key),
-                            ChatMode::ToolRejectInput => {
-                                handle_tool_reject_input_mode(&mut app, key)
-                            }
                         }
                     }
                     Event::Resize(_, _) => {
@@ -378,19 +375,26 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return false;
     }
 
-    // Ctrl+G 在新终端窗口中 tail -f 实时查看日志
+    // Ctrl+G 在新终端窗口中 tail -f 实时查看日志（info.log + error.log 各一个窗口）
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('g') {
-        let log_file = crate::config::YamlConfig::data_dir()
+        let log_dir = crate::config::YamlConfig::data_dir()
             .join(AGENT_DIR)
-            .join(AGENT_LOG_DIR)
-            .join(AGENT_LOG_INFO);
-        let tail_cmd = format!("tail -f '{}'; exit", log_file.to_string_lossy());
+            .join(AGENT_LOG_DIR);
+        let info_log = log_dir.join(AGENT_LOG_INFO);
+        let error_log = log_dir.join(AGENT_LOG_ERROR);
+        let info_cmd = format!("tail -f '{}'; exit", info_log.to_string_lossy())
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        let error_cmd = format!("tail -f '{}'; exit", error_log.to_string_lossy())
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
         let apple_script = format!(
             "tell application \"Terminal\"\n\
                 activate\n\
                 do script \"{}\"\n\
+                do script \"{}\"\n\
             end tell",
-            tail_cmd.replace('\\', "\\\\").replace('"', "\\\"")
+            info_cmd, error_cmd
         );
         let _ = std::process::Command::new("osascript")
             .arg("-e")
@@ -442,7 +446,24 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         }
 
         KeyCode::Enter => {
-            if !app.is_loading {
+            if app.is_loading {
+                // agent loop 期间：将用户消息追加到共享消息列表（不启动新 loop）
+                let text = app.input.trim().to_string();
+                if !text.is_empty() {
+                    app.session
+                        .messages
+                        .push(super::model::ChatMessage::text("user", &text));
+                    {
+                        let mut shared = app.shared_messages.lock().unwrap();
+                        shared.push(super::model::ChatMessage::text("user", &text));
+                    }
+                    app.input.clear();
+                    app.cursor_pos = 0;
+                    app.msg_lines_cache = None;
+                    app.auto_scroll = true;
+                    app.scroll_offset = u16::MAX;
+                }
+            } else {
                 app.send_message();
             }
         }
@@ -1186,83 +1207,161 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
     }
 }
 
-/// 工具确认模式按键处理：Y/Enter 执行，N 进入拒绝输入，Esc 直接拒绝（无原因）
+/// 统一交互区域按键处理：选项式（↑↓ 选择，Enter 确认，Esc 拒绝/退出）
 pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-            app.execute_pending_tool();
-        }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
-            // 进入拒绝原因输入模式
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.mode = ChatMode::ToolRejectInput;
-        }
-        KeyCode::Esc => {
-            // 直接拒绝，不带原因
-            app.reject_pending_tool("");
-        }
-        _ => {}
-    }
-}
+    let is_ask = app.tool_ask_mode;
 
-/// 工具拒绝原因输入模式：正常打字，Enter 提交拒绝，Esc 取消回到确认
-pub fn handle_tool_reject_input_mode(app: &mut ChatApp, key: KeyEvent) {
+    if app.tool_interact_typing {
+        // 输入模式
+        match key.code {
+            KeyCode::Esc => {
+                // 退出输入模式，回到选项
+                app.tool_interact_typing = false;
+            }
+            KeyCode::Enter => {
+                // 提交输入内容
+                let input_text = app.tool_interact_input.trim().to_string();
+                if is_ask {
+                    // ask 模式：发送输入内容作为响应
+                    let response = if input_text.is_empty() {
+                        "用户已确认".to_string()
+                    } else {
+                        input_text
+                    };
+                    if let Some(tx) = app.ask_response_tx.take() {
+                        let _ = tx.send(response);
+                    }
+                    app.tool_ask_mode = false;
+                    app.tool_ask_question.clear();
+                    app.mode = ChatMode::Chat;
+                } else {
+                    // 工具确认模式：输入内容作为拒绝原因
+                    app.reject_pending_tool(&input_text);
+                }
+                app.tool_interact_input.clear();
+                app.tool_interact_cursor = 0;
+                app.tool_interact_typing = false;
+            }
+            KeyCode::Backspace => {
+                if app.tool_interact_cursor > 0 {
+                    let start = app
+                        .tool_interact_input
+                        .char_indices()
+                        .nth(app.tool_interact_cursor - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let end = app
+                        .tool_interact_input
+                        .char_indices()
+                        .nth(app.tool_interact_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.tool_interact_input.len());
+                    app.tool_interact_input.drain(start..end);
+                    app.tool_interact_cursor -= 1;
+                }
+            }
+            KeyCode::Left => {
+                if app.tool_interact_cursor > 0 {
+                    app.tool_interact_cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                let char_count = app.tool_interact_input.chars().count();
+                if app.tool_interact_cursor < char_count {
+                    app.tool_interact_cursor += 1;
+                }
+            }
+            KeyCode::Char(c) => {
+                let byte_idx = app
+                    .tool_interact_input
+                    .char_indices()
+                    .nth(app.tool_interact_cursor)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.tool_interact_input.len());
+                app.tool_interact_input.insert(byte_idx, c);
+                app.tool_interact_cursor += 1;
+            }
+            _ => {}
+        }
+        // 任何按键操作都需要刷新渲染
+        app.msg_lines_cache = None;
+        return;
+    }
+
+    // 选项模式
     match key.code {
+        KeyCode::Up => {
+            if app.tool_interact_selected > 0 {
+                app.tool_interact_selected -= 1;
+            }
+        }
+        KeyCode::Down => {
+            if app.tool_interact_selected < 2 {
+                app.tool_interact_selected += 1;
+            }
+        }
         KeyCode::Enter => {
-            // 提交拒绝（原因可为空）
-            let reason = app.input.trim().to_string();
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.reject_pending_tool(&reason);
+            match app.tool_interact_selected {
+                0 => {
+                    // continue: 执行/确认
+                    if is_ask {
+                        let response = if app.tool_interact_input.is_empty() {
+                            "用户已确认继续".to_string()
+                        } else {
+                            app.tool_interact_input.clone()
+                        };
+                        if let Some(tx) = app.ask_response_tx.take() {
+                            let _ = tx.send(response);
+                        }
+                        app.tool_ask_mode = false;
+                        app.tool_ask_question.clear();
+                        app.mode = ChatMode::Chat;
+                        app.msg_lines_cache = None;
+                    } else {
+                        app.execute_pending_tool();
+                    }
+                }
+                1 => {
+                    // refuse: 拒绝
+                    if is_ask {
+                        if let Some(tx) = app.ask_response_tx.take() {
+                            let _ = tx.send("用户拒绝回答".to_string());
+                        }
+                        app.tool_ask_mode = false;
+                        app.tool_ask_question.clear();
+                        app.mode = ChatMode::Chat;
+                        app.msg_lines_cache = None;
+                    } else {
+                        app.reject_pending_tool("");
+                    }
+                }
+                2 => {
+                    // type: 进入输入模式
+                    app.tool_interact_typing = true;
+                    app.tool_interact_input.clear();
+                    app.tool_interact_cursor = 0;
+                }
+                _ => {}
+            }
         }
         KeyCode::Esc => {
-            // 取消拒绝，回到确认模式
-            app.input.clear();
-            app.cursor_pos = 0;
-            app.mode = ChatMode::ToolConfirm;
-        }
-        KeyCode::Backspace => {
-            if app.cursor_pos > 0 {
-                let start = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos - 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                let end = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.drain(start..end);
-                app.cursor_pos -= 1;
+            // 直接拒绝
+            if is_ask {
+                if let Some(tx) = app.ask_response_tx.take() {
+                    let _ = tx.send("用户拒绝回答".to_string());
+                }
+                app.tool_ask_mode = false;
+                app.tool_ask_question.clear();
+                app.mode = ChatMode::Chat;
+                app.msg_lines_cache = None;
+            } else {
+                app.reject_pending_tool("");
             }
-        }
-        KeyCode::Left => {
-            if app.cursor_pos > 0 {
-                app.cursor_pos -= 1;
-            }
-        }
-        KeyCode::Right => {
-            let char_count = app.input.chars().count();
-            if app.cursor_pos < char_count {
-                app.cursor_pos += 1;
-            }
-        }
-        KeyCode::Char(c) => {
-            let byte_idx = app
-                .input
-                .char_indices()
-                .nth(app.cursor_pos)
-                .map(|(i, _)| i)
-                .unwrap_or(app.input.len());
-            app.input.insert(byte_idx, c);
-            app.cursor_pos += 1;
         }
         _ => {}
     }
+    // 选项模式下任何按键操作都需要刷新渲染
+    app.msg_lines_cache = None;
 }
 
 // ========== @ 补全辅助函数 ==========

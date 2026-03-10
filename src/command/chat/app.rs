@@ -71,6 +71,12 @@ pub struct ToolExecDoneMsg {
     pub is_error: bool,
 }
 
+/// ask 工具 → 主线程的请求消息
+pub struct AskRequest {
+    pub question: String,
+    pub response_tx: mpsc::Sender<String>,
+}
+
 /// TUI 应用状态
 pub struct ChatApp {
     /// Agent 配置
@@ -168,6 +174,26 @@ pub struct ChatApp {
     pub tool_exec_rx: Option<mpsc::Receiver<ToolExecDoneMsg>>,
     /// 当前正在后台执行的工具数量（用于等待所有工具完成）
     pub tools_executing_count: usize,
+    /// 统一交互区：当前选中项索引（0=continue, 1=refuse, 2=type）
+    pub tool_interact_selected: usize,
+    /// 统一交互区：是否处于输入模式
+    pub tool_interact_typing: bool,
+    /// 统一交互区：输入缓冲
+    pub tool_interact_input: String,
+    /// 统一交互区：输入光标位置
+    pub tool_interact_cursor: usize,
+    /// 是否为 ask 工具的交互模式（区别于普通工具确认）
+    pub tool_ask_mode: bool,
+    /// ask 工具的问题内容（用于渲染）
+    pub tool_ask_question: String,
+    /// ask 工具响应发送通道（用于向 ask 工具发送用户响应）
+    pub ask_response_tx: Option<mpsc::Sender<String>>,
+    /// ask 工具请求接收通道（主线程接收 ask 请求）
+    pub ask_request_rx: Option<mpsc::Receiver<AskRequest>>,
+    /// 排队的任务列表（new_task 工具产生，当前任务完成后自动执行）
+    pub queued_tasks: Arc<Mutex<Vec<String>>>,
+    /// 共享消息列表（用于 agent loop 期间同步用户新消息）
+    pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
 }
 
 /// 消息渲染行缓存
@@ -226,10 +252,8 @@ pub enum ChatMode {
     ArchiveConfirm,
     /// 归档列表模式（查看和还原归档）
     ArchiveList,
-    /// 工具调用确认模式（弹出确认框）
+    /// 工具调用确认模式（选项式交互区域）
     ToolConfirm,
-    /// 工具拒绝原因输入模式（按 N 后进入，可输入拒绝原因）
-    ToolRejectInput,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -257,7 +281,13 @@ impl ChatApp {
         }
         let theme = Theme::from_name(&agent_config.theme);
         let loaded_skills = skill::load_all_skills();
-        let tool_registry = Arc::new(ToolRegistry::new(loaded_skills.clone()));
+        let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
+        let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let tool_registry = Arc::new(ToolRegistry::new(
+            loaded_skills.clone(),
+            ask_req_tx,
+            Arc::clone(&queued_tasks),
+        ));
         Self {
             agent_config,
             session,
@@ -306,6 +336,16 @@ impl ChatApp {
             pending_tool_execution: false,
             tool_exec_rx: None,
             tools_executing_count: 0,
+            tool_interact_selected: 0,
+            tool_interact_typing: false,
+            tool_interact_input: String::new(),
+            tool_interact_cursor: 0,
+            tool_ask_mode: false,
+            tool_ask_question: String::new(),
+            ask_response_tx: None,
+            ask_request_rx: Some(ask_req_rx),
+            queued_tasks,
+            shared_messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -388,11 +428,21 @@ impl ChatApp {
 
         // 关闭弹窗
         self.at_popup_active = false;
-
-        // 添加用户消息
-        self.session.messages.push(ChatMessage::text("user", text));
         self.input.clear();
         self.cursor_pos = 0;
+
+        self.send_message_internal(text);
+    }
+
+    /// 发送指定文本消息并启动 agent loop（供 send_message 和 queued_tasks 调用）
+    pub fn send_message_internal(&mut self, text: String) {
+        // 添加用户消息
+        self.session.messages.push(ChatMessage::text("user", &text));
+        // 同步到共享消息列表
+        {
+            let mut shared = self.shared_messages.lock().unwrap();
+            shared.push(ChatMessage::text("user", &text));
+        }
         // 发送新消息时恢复自动滚动并滚到底部
         self.auto_scroll = true;
         self.scroll_offset = u16::MAX;
@@ -422,6 +472,12 @@ impl ChatApp {
 
         let api_messages = self.build_api_messages();
 
+        // 初始化共享消息列表
+        {
+            let mut shared = self.shared_messages.lock().unwrap();
+            *shared = api_messages.clone();
+        }
+
         // 清空流式内容缓冲
         {
             let mut sc = self.streaming_content.lock().unwrap();
@@ -449,6 +505,8 @@ impl ChatApp {
         let cancel_token = CancellationToken::new();
         self.cancel_token = Some(cancel_token.clone());
 
+        let shared_messages = Arc::clone(&self.shared_messages);
+
         // 启动后台线程执行 Agent 循环
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
@@ -470,6 +528,7 @@ impl ChatApp {
                 tool_result_rx,
                 max_tool_rounds,
                 cancel_token,
+                shared_messages,
             ));
         });
     }
@@ -480,8 +539,9 @@ impl ChatApp {
             return;
         }
 
-        // 如果在 ToolConfirm/ToolRejectInput 模式，暂停轮询（等待用户操作）
-        if self.mode == ChatMode::ToolConfirm || self.mode == ChatMode::ToolRejectInput {
+        // 如果在 ToolConfirm 模式，暂停轮询（等待用户操作）
+        if self.mode == ChatMode::ToolConfirm {
+            // 但仍然轮询 ask 请求（不在此处，ask 在进入 ToolConfirm 前已处理）
             return;
         }
 
@@ -499,6 +559,13 @@ impl ChatApp {
                 self.pending_tool_idx = idx;
                 self.tool_confirm_entered_at = std::time::Instant::now();
                 self.execute_all_tools_no_confirm();
+                // 重置交互区状态
+                self.tool_interact_selected = 0;
+                self.tool_interact_typing = false;
+                self.tool_interact_input.clear();
+                self.tool_interact_cursor = 0;
+                self.tool_ask_mode = false;
+                self.tool_ask_question.clear();
                 self.mode = ChatMode::ToolConfirm;
             } else {
                 self.execute_all_tools_no_confirm();
@@ -556,6 +623,22 @@ impl ChatApp {
             self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
             if self.tools_executing_count == 0 {
                 self.tool_exec_rx = None;
+            }
+        }
+
+        // 轮询 ask 工具请求
+        if let Some(ref rx) = self.ask_request_rx {
+            if let Ok(ask_req) = rx.try_recv() {
+                self.tool_ask_mode = true;
+                self.tool_ask_question = ask_req.question;
+                self.ask_response_tx = Some(ask_req.response_tx);
+                self.tool_interact_selected = 0;
+                self.tool_interact_typing = false;
+                self.tool_interact_input.clear();
+                self.tool_interact_cursor = 0;
+                self.mode = ChatMode::ToolConfirm;
+                self.msg_lines_cache = None;
+                return;
             }
         }
 
@@ -815,6 +898,19 @@ impl ChatApp {
         }
 
         let _ = save_chat_session(&self.session);
+
+        // 检查排队的任务，若有则自动启动下一个
+        let next_task = {
+            let mut tasks = self.queued_tasks.lock().unwrap();
+            if !tasks.is_empty() {
+                Some(tasks.remove(0))
+            } else {
+                None
+            }
+        };
+        if let Some(task_text) = next_task {
+            self.send_message_internal(task_text);
+        }
     }
 
     /// 取消当前流式请求
@@ -963,10 +1059,19 @@ async fn run_agent_loop(
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
     max_tool_rounds: usize,
     cancel_token: CancellationToken,
+    shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
 ) {
     let client = create_openai_client(&provider);
 
     for _round in 0..max_tool_rounds {
+        // 每轮开始时从共享消息列表获取最新消息（可能包含用户在 agent loop 期间输入的新消息）
+        {
+            let shared = shared_messages.lock().unwrap();
+            if shared.len() > messages.len() {
+                // 有新消息被添加，合并
+                messages = shared.clone();
+            }
+        }
         // 清空流式内容缓冲（每轮开始时）
         {
             let mut sc = streaming_content.lock().unwrap();
@@ -1220,6 +1325,8 @@ async fn run_agent_loop(
                                             tool_call_id: Some(result.tool_call_id),
                                         });
                                     }
+                                    // 同步消息到共享列表
+                                    { let mut s = shared_messages.lock().unwrap(); *s = messages.clone(); }
                                     continue;
                                 }
                             // 普通文本回复
@@ -1326,6 +1433,11 @@ async fn run_agent_loop(
                     });
                 }
 
+                // 同步消息到共享列表
+                {
+                    let mut s = shared_messages.lock().unwrap();
+                    *s = messages.clone();
+                }
                 continue;
             } else {
                 // 正常结束
@@ -1434,6 +1546,8 @@ async fn run_agent_loop(
                                     });
                                 }
 
+                                // 同步消息到共享列表
+                                { let mut s = shared_messages.lock().unwrap(); *s = messages.clone(); }
                                 continue;
                             }
 

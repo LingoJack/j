@@ -337,21 +337,25 @@ pub fn build_message_lines_incremental(
         }
     }
 
-    // ========== 内联工具确认区 ==========
-    if (app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput)
-        && let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx)
-    {
+    // ========== 内联工具确认区（统一交互区域）==========
+    if app.mode == ChatMode::ToolConfirm {
         let t = &app.theme;
         let confirm_bg = t.tool_confirm_bg;
         let border_color = t.tool_confirm_border;
         let content_w = bubble_max_width.saturating_sub(6); // 左右各 3 的 padding
+        let is_ask = app.tool_ask_mode;
 
         // 空行
         lines.push(Line::from(""));
 
         // 标题行
+        let title = if is_ask {
+            "  🤖 AI 提问"
+        } else {
+            "  🔧 工具调用确认"
+        };
         lines.push(Line::from(Span::styled(
-            "  🔧 工具调用确认",
+            title,
             Style::default()
                 .fg(t.tool_confirm_title)
                 .add_modifier(Modifier::BOLD),
@@ -364,61 +368,98 @@ pub fn build_message_lines_incremental(
             Style::default().fg(border_color).bg(confirm_bg),
         )));
 
-        // 工具名行
-        {
-            let label = "工具: ";
-            let name = &tc.tool_name;
-            let text_content = format!("{}{}", label, name);
-            let fill = content_w.saturating_sub(display_width(&text_content));
-            lines.push(Line::from(vec![
-                Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
-                Span::styled(
-                    label,
-                    Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
-                ),
-                Span::styled(
-                    name.clone(),
-                    Style::default()
-                        .fg(t.tool_confirm_name)
-                        .bg(confirm_bg)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " ".repeat(fill.saturating_sub(1)),
-                    Style::default().bg(confirm_bg),
-                ),
-                Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-            ]));
-        }
-
-        // 确认信息行（折行显示，最多 10 行）
-        {
+        if is_ask {
+            // ask 模式：渲染 markdown 问题内容（直接嵌入 markdown 渲染后的行）
             let max_msg_w = content_w.saturating_sub(2);
-            let wrapped = wrap_text(&tc.confirm_message, max_msg_w);
-            let max_lines = 10;
-            let show_lines = wrapped.len().min(max_lines);
-            for (i, line_text) in wrapped.iter().enumerate().take(show_lines) {
-                let display_text = if i == max_lines - 1 && wrapped.len() > max_lines {
-                    format!("{}...", line_text)
-                } else {
-                    line_text.clone()
-                };
-                let msg_w = display_width(&display_text);
+            let md_lines = markdown_to_lines(&app.tool_ask_question, max_msg_w, t);
+            let max_show = 15;
+            for (i, md_line) in md_lines.iter().enumerate().take(max_show) {
+                // 计算该行实际显示宽度
+                let line_text: String = md_line.spans.iter().map(|s| s.content.as_ref()).collect();
+                let msg_w = display_width(&line_text);
                 let fill = content_w.saturating_sub(msg_w + 2);
+                let mut spans = vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                ];
+                // 添加 markdown 渲染后的 spans（保留原始样式）
+                for span in &md_line.spans {
+                    spans.push(span.clone());
+                }
+                if i == max_show - 1 && md_lines.len() > max_show {
+                    spans.push(Span::styled(
+                        "...",
+                        Style::default().fg(t.tool_confirm_text),
+                    ));
+                }
+                spans.push(Span::styled(
+                    " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                    Style::default().bg(confirm_bg),
+                ));
+                spans.push(Span::styled(
+                    " │",
+                    Style::default().fg(border_color).bg(confirm_bg),
+                ));
+                lines.push(Line::from(spans));
+            }
+        } else if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
+            // 工具确认模式：显示工具名和确认信息
+            // 工具名行
+            {
+                let label = "工具: ";
+                let name = &tc.tool_name;
+                let text_content = format!("{}{}", label, name);
+                let fill = content_w.saturating_sub(display_width(&text_content));
                 lines.push(Line::from(vec![
                     Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
                     Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
                     Span::styled(
-                        display_text,
-                        Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                        label,
+                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
                     ),
                     Span::styled(
-                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        name.clone(),
+                        Style::default()
+                            .fg(t.tool_confirm_name)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1)),
                         Style::default().bg(confirm_bg),
                     ),
                     Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
                 ]));
+            }
+
+            // 确认信息行（折行显示，最多 10 行）
+            {
+                let max_msg_w = content_w.saturating_sub(2);
+                let wrapped = wrap_text(&tc.confirm_message, max_msg_w);
+                let max_lines = 10;
+                let show_lines = wrapped.len().min(max_lines);
+                for (i, line_text) in wrapped.iter().enumerate().take(show_lines) {
+                    let display_text = if i == max_lines - 1 && wrapped.len() > max_lines {
+                        format!("{}...", line_text)
+                    } else {
+                        line_text.clone()
+                    };
+                    let msg_w = display_width(&display_text);
+                    let fill = content_w.saturating_sub(msg_w + 2);
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
+                        Span::styled(
+                            display_text,
+                            Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                        ),
+                        Span::styled(
+                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
+                }
             }
         }
 
@@ -432,96 +473,112 @@ pub fn build_message_lines_incremental(
             ]));
         }
 
-        // 操作提示行（根据模式显示不同内容）
+        // 选项式交互区域
         {
-            if app.mode == ChatMode::ToolRejectInput {
-                // 拒绝输入模式：提示用户输入原因
-                let hint = "输入拒绝原因（可为空）  [Enter] 发送  /  [Esc] 取消";
-                let hint_text_w = display_width(hint);
-                let fill = content_w.saturating_sub(hint_text_w + 2);
-                lines.push(Line::from(vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
-                    Span::styled(
-                        hint,
-                        Style::default()
-                            .fg(t.title_loading)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                        Style::default().bg(confirm_bg),
-                    ),
-                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                ]));
+            let arrow_style = Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD);
+            let selected = app.tool_interact_selected;
+
+            let (opt0_label, opt1_label) = if is_ask {
+                ("continue: 已提供帮助，继续", "refuse: 拒绝回答")
             } else {
-                // 确认模式：Y/N/Esc + 倒计时
-                let countdown_text = if app.agent_config.tool_confirm_timeout > 0 {
+                let countdown_suffix = if app.agent_config.tool_confirm_timeout > 0 {
                     let elapsed = app.tool_confirm_entered_at.elapsed().as_secs();
                     let remaining = app
                         .agent_config
                         .tool_confirm_timeout
                         .saturating_sub(elapsed);
-                    format!("  ({}s 后自动执行)", remaining)
+                    format!(" ({}s)", remaining)
                 } else {
                     String::new()
                 };
-                let base_hint = "[Y/Enter] 执行  /  [N] 拒绝  /  [Esc] 直接拒绝";
-                let full_hint = format!("{}{}", base_hint, countdown_text);
-                let hint_text_w = display_width(&full_hint);
-                let fill = content_w.saturating_sub(hint_text_w + 2);
-                let mut spans = vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
-                    Span::styled(
-                        "[Y/Enter] 执行",
-                        Style::default()
-                            .fg(t.toast_success_border)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        "  /  ",
-                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
-                    ),
-                    Span::styled(
-                        "[N] 拒绝",
-                        Style::default()
-                            .fg(t.toast_error_border)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        "  /  ",
-                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
-                    ),
-                    Span::styled(
-                        "[Esc] 直接拒绝",
-                        Style::default()
-                            .fg(t.toast_error_border)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ];
-                if !countdown_text.is_empty() {
-                    spans.push(Span::styled(
-                        countdown_text,
-                        Style::default()
-                            .fg(t.title_loading)
-                            .bg(confirm_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ));
+                // Use leaked string to keep references valid
+                // Actually, build the strings inline
+                let opt0 = format!("continue: 确认执行{}", countdown_suffix);
+                let opt1 = "refuse: 拒绝执行".to_string();
+                // Can't return references to local, so handle inline below
+                // Let me restructure to avoid this
+                let _ = (opt0, opt1);
+                ("", "") // placeholder, handle below
+            };
+
+            // Build options list
+            let options: Vec<String> = if is_ask {
+                vec![
+                    opt0_label.to_string(),
+                    opt1_label.to_string(),
+                    "type something...".to_string(),
+                ]
+            } else {
+                let countdown_suffix = if app.agent_config.tool_confirm_timeout > 0 {
+                    let elapsed = app.tool_confirm_entered_at.elapsed().as_secs();
+                    let remaining = app
+                        .agent_config
+                        .tool_confirm_timeout
+                        .saturating_sub(elapsed);
+                    format!(" ({}s)", remaining)
+                } else {
+                    String::new()
+                };
+                vec![
+                    format!("continue: 确认执行{}", countdown_suffix),
+                    "refuse: 拒绝执行".to_string(),
+                    "type something...".to_string(),
+                ]
+            };
+
+            for (i, option) in options.iter().enumerate() {
+                let is_selected = i == selected;
+                let pointer = if is_selected { "❯" } else { " " };
+
+                if i == 2 && app.tool_interact_typing {
+                    // 输入模式：显示 ❯ type: [输入内容]
+                    let input_display = format!("{} type: {}█", pointer, app.tool_interact_input);
+                    let input_w = display_width(&input_display);
+                    let fill = content_w.saturating_sub(input_w + 2);
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ", Style::default().bg(confirm_bg)),
+                        Span::styled(pointer, arrow_style.bg(confirm_bg)),
+                        Span::styled(
+                            format!(" type: {}█", app.tool_interact_input),
+                            Style::default().fg(t.text_white).bg(confirm_bg),
+                        ),
+                        Span::styled(
+                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
+                } else {
+                    let full_text = format!("{} {}", pointer, option);
+                    let text_w = display_width(&full_text);
+                    let fill = content_w.saturating_sub(text_w + 2);
+                    let text_style = if is_selected {
+                        arrow_style.bg(confirm_bg)
+                    } else {
+                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ", Style::default().bg(confirm_bg)),
+                        Span::styled(
+                            pointer,
+                            if is_selected {
+                                arrow_style.bg(confirm_bg)
+                            } else {
+                                Style::default().bg(confirm_bg)
+                            },
+                        ),
+                        Span::styled(format!(" {}", option), text_style),
+                        Span::styled(
+                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
                 }
-                spans.push(Span::styled(
-                    " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                    Style::default().bg(confirm_bg),
-                ));
-                spans.push(Span::styled(
-                    " │",
-                    Style::default().fg(border_color).bg(confirm_bg),
-                ));
-                lines.push(Line::from(spans));
             }
         }
 

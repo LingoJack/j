@@ -202,12 +202,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else {
         None
     };
-    let current_tool_confirm_idx =
-        if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
-            Some(app.pending_tool_idx)
-        } else {
-            None
-        };
+    let current_tool_confirm_idx = if app.mode == ChatMode::ToolConfirm {
+        Some(app.pending_tool_idx)
+    } else {
+        None
+    };
     let cache_hit = if let Some(ref cache) = app.msg_lines_cache {
         cache.msg_count == msg_count
             && cache.last_msg_len == last_msg_len
@@ -254,8 +253,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     if app.mode != ChatMode::Browse {
-        if app.mode == ChatMode::ToolConfirm || app.mode == ChatMode::ToolRejectInput {
-            // ToolConfirm/ToolRejectInput 模式下强制滚动到底部，确保确认区可见
+        if app.mode == ChatMode::ToolConfirm {
+            // ToolConfirm 模式下强制滚动到底部，确保确认区可见
             app.scroll_offset = max_scroll;
             app.auto_scroll = true;
         } else if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
@@ -579,12 +578,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ]
             }
         }
-        ChatMode::ToolConfirm => vec![
-            ("Y/Enter", "执行"),
-            ("N", "拒绝并输入原因"),
-            ("Esc", "直接拒绝"),
-        ],
-        ChatMode::ToolRejectInput => vec![("Enter", "发送拒绝"), ("Esc", "取消")],
+        ChatMode::ToolConfirm => vec![("↑↓", "选择"), ("Enter", "确认"), ("Esc", "拒绝")],
     };
 
     let mut spans: Vec<Span> = Vec::new();

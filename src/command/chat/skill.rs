@@ -118,7 +118,7 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
 
 // ========== build_skills_summary ==========
 
-/// 构建 skills 摘要列表（name + description），用于系统提示词的 {{.skills}} 占位符
+/// 构建 skills 摘要列表（name + description + dir），用于系统提示词的 {{.skills}} 占位符
 pub fn build_skills_summary(skills: &[Skill]) -> String {
     if skills.is_empty() {
         return "（暂无已安装的技能）".to_string();
@@ -126,8 +126,10 @@ pub fn build_skills_summary(skills: &[Skill]) -> String {
     let mut result = String::new();
     for skill in skills {
         result.push_str(&format!(
-            "- **{}**: {}\n",
-            skill.frontmatter.name, skill.frontmatter.description
+            "- **{}**: {} (dir: {})\n",
+            skill.frontmatter.name,
+            skill.frontmatter.description,
+            skill.dir_path.display()
         ));
     }
     result.trim_end().to_string()

@@ -15,7 +15,7 @@ impl Tool for LoadSkillTool {
     }
 
     fn description(&self) -> &str {
-        "加载指定 skill 的完整内容到上下文以了解更多信息，帮助你进行更好地完成任务。"
+        "加载指定 skill 的完整内容到上下文以了解更多信息，帮助你进行更好地完成任务。可在 skills 列表中查看各技能的目录路径。"
     }
 
     fn parameters_schema(&self) -> Value {

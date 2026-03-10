@@ -1,6 +1,8 @@
+mod ask;
 mod browser;
 mod file;
 pub(crate) mod html_extract;
+mod new_task;
 mod shell;
 mod skill_tool;
 mod web_fetch;
@@ -8,7 +10,7 @@ mod web_search;
 
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use serde_json::Value;
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== ToolResult ==========
 
@@ -48,7 +50,11 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     /// 创建注册表（包含内置工具，以及当 skills 非空时注册 load_skill）
-    pub fn new(skills: Vec<crate::command::chat::skill::Skill>) -> Self {
+    pub fn new(
+        skills: Vec<crate::command::chat::skill::Skill>,
+        ask_tx: mpsc::Sender<crate::command::chat::app::AskRequest>,
+        queued_tasks: Arc<Mutex<Vec<String>>>,
+    ) -> Self {
         let mut registry = Self {
             tools: vec![
                 Box::new(shell::ShellTool),
@@ -58,6 +64,8 @@ impl ToolRegistry {
                 Box::new(web_fetch::WebFetchTool),
                 Box::new(web_search::WebSearchTool),
                 Box::new(browser::BrowserTool),
+                Box::new(ask::AskTool { ask_tx }),
+                Box::new(new_task::NewTaskTool { queued_tasks }),
             ],
         };
 
@@ -93,13 +101,19 @@ impl ToolRegistry {
         }
     }
 
-    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符
+    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（JSON 数组格式）
     pub fn build_tools_summary(&self) -> String {
-        self.tools
+        let items: Vec<serde_json::Value> = self
+            .tools
             .iter()
-            .map(|t| format!("- **{}**: {}", t.name(), t.description()))
-            .collect::<Vec<_>>()
-            .join("\n")
+            .map(|t| {
+                serde_json::json!({
+                    "name": t.name(),
+                    "description": t.description()
+                })
+            })
+            .collect();
+        serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".to_string())
     }
 
     /// 生成 async-openai 的 ChatCompletionTools 列表
