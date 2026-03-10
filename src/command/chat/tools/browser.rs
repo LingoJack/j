@@ -301,7 +301,10 @@ mod cdp {
         .to_string())
     }
 
-    /// 输入文本
+    /// 输入文本（支持中文等非 ASCII 字符）
+    ///
+    /// 通过 JavaScript 直接设置元素值并触发 input/change 事件，
+    /// 避免 CDP KeyDown/KeyUp 不支持非拉丁字符的问题。
     pub async fn type_text(
         tab_id: Option<&str>,
         selector: &str,
@@ -318,6 +321,7 @@ mod cdp {
             s.pages.values().next().ok_or("没有已打开的标签页")?
         };
 
+        // 先点击聚焦元素
         let element = page
             .find_element(selector)
             .await
@@ -328,10 +332,40 @@ mod cdp {
             .await
             .map_err(|e| format!("点击失败: {}", e))?;
 
-        element
-            .type_str(text)
+        // 通过 JS 设置值并触发事件，兼容所有语言字符
+        let escaped_selector = selector.replace('\\', "\\\\").replace('\'', "\\'");
+        let escaped_text = text.replace('\\', "\\\\").replace('\'', "\\'");
+        let script = format!(
+            r#"(() => {{
+                const el = document.querySelector('{}');
+                if (!el) return 'element_not_found';
+                const nativeSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLTextAreaElement.prototype, 'value'
+                )?.set || Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                )?.set;
+                if (nativeSetter) {{
+                    nativeSetter.call(el, '{}');
+                }} else {{
+                    el.value = '{}';
+                }}
+                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                return 'ok';
+            }})()"#,
+            escaped_selector, escaped_text, escaped_text
+        );
+
+        let result: serde_json::Value = page
+            .evaluate(&script)
             .await
-            .map_err(|e| format!("输入失败: {}", e))?;
+            .map_err(|e| format!("输入失败: {}", e))?
+            .into_value()
+            .map_err(|e| format!("转换结果失败: {}", e))?;
+
+        if result.as_str() == Some("element_not_found") {
+            return Err(format!("JS 未找到元素: {}", selector));
+        }
 
         Ok(serde_json::json!({
             "success": true,
