@@ -118,19 +118,20 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
 
 // ========== build_skills_summary ==========
 
-/// 构建 skills 摘要列表（name + description + dir），用于系统提示词的 {{.skills}} 占位符
+/// 构建 skills 摘要列表（JSON 数组格式），用于系统提示词的 {{.skills}} 占位符
 pub fn build_skills_summary(skills: &[Skill]) -> String {
     if skills.is_empty() {
-        return "（暂无已安装的技能）".to_string();
+        return "[]".to_string();
     }
-    let mut result = String::new();
-    for skill in skills {
-        result.push_str(&format!(
-            "- **{}**: {} (dir: {})\n",
-            skill.frontmatter.name,
-            skill.frontmatter.description,
-            skill.dir_path.display()
-        ));
-    }
-    result.trim_end().to_string()
+    let items: Vec<serde_json::Value> = skills
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "name": s.frontmatter.name,
+                "description": s.frontmatter.description,
+                "dir": s.dir_path.to_string_lossy()
+            })
+        })
+        .collect();
+    serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".to_string())
 }

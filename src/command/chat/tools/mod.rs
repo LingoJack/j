@@ -101,7 +101,7 @@ impl ToolRegistry {
         }
     }
 
-    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（JSON 数组格式）
+    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（JSON 数组格式，含参数 schema）
     pub fn build_tools_summary(&self) -> String {
         let items: Vec<serde_json::Value> = self
             .tools
@@ -109,7 +109,8 @@ impl ToolRegistry {
             .map(|t| {
                 serde_json::json!({
                     "name": t.name(),
-                    "description": t.description()
+                    "description": t.description(),
+                    "parameters": t.parameters_schema()
                 })
             })
             .collect();
