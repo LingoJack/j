@@ -37,6 +37,11 @@ pub fn run_interactive(config: &mut YamlConfig) {
         KeyEvent(KeyCode::Tab, Modifiers::NONE),
         EventHandler::Simple(Cmd::Complete),
     );
+    // Ctrl+Q 快捷退出
+    rl.bind_sequence(
+        KeyEvent(KeyCode::Char('q'), Modifiers::CTRL),
+        EventHandler::Simple(Cmd::Interrupt),
+    );
 
     let history_path = history_file_path();
     let _ = rl.load_history(&history_path);
@@ -106,7 +111,9 @@ pub fn run_interactive(config: &mut YamlConfig) {
                 println!();
             }
             Err(ReadlineError::Interrupted) => {
-                info!("\nProgram interrupted. Use 'exit' to quit.");
+                // 空行按 Escape 触发，直接退出
+                info!("\nGoodbye! 👋");
+                break;
             }
             Err(ReadlineError::Eof) => {
                 info!("\nGoodbye! 👋");
