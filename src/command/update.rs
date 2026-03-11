@@ -134,9 +134,7 @@ fn select_features() -> Vec<String> {
         if let Ok(Event::Key(KeyEvent { code, .. })) = event::read() {
             match code {
                 KeyCode::Up | KeyCode::Char('k') => {
-                    if cursor_pos > 0 {
-                        cursor_pos -= 1;
-                    }
+                    cursor_pos = cursor_pos.saturating_sub(1);
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     if cursor_pos < OPTIONAL_FEATURES.len() {

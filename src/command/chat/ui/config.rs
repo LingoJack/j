@@ -247,7 +247,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     .agent_config
                     .disabled_tools
                     .iter()
-                    .filter(|d| tool_names.iter().any(|n| *n == d.as_str()))
+                    .filter(|d| tool_names.contains(&d.as_str()))
                     .count();
             let toggle_style = if toggle_on {
                 Style::default()
@@ -460,7 +460,7 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             .agent_config
             .disabled_tools
             .iter()
-            .filter(|d| tool_names.iter().any(|n| *n == d.as_str()))
+            .filter(|d| tool_names.contains(&d.as_str()))
             .count();
 
     let mut lines: Vec<Line> = Vec::new();

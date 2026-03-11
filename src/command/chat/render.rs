@@ -394,12 +394,13 @@ pub fn build_message_lines_incremental(
                         .unwrap()
                         .content
                         .clone();
-                    let mut spans: Vec<Span> = Vec::new();
-                    spans.push(Span::styled(
-                        " ".repeat(bubble_max_width),
-                        Style::default().bg(confirm_bg),
-                    ));
-                    spans.push(Span::styled(marker, Style::default()));
+                    let spans: Vec<Span> = vec![
+                        Span::styled(
+                            " ".repeat(bubble_max_width),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(marker, Style::default()),
+                    ];
                     lines.push(Line::from(spans));
                 } else if is_placeholder {
                     // 图片占位空行：纯空白填充（让 is_placeholder 检测通过）
@@ -696,14 +697,15 @@ pub fn wrap_md_line_in_bubble(
     for span in &md_line.spans {
         if span.content.starts_with("\x00IMG:") {
             let marker = span.content.clone();
-            let mut spans: Vec<Span> = Vec::new();
-            // 整行用气泡背景色空格填充（与占位行一致）
-            spans.push(Span::styled(
-                " ".repeat(bubble_total_w),
-                Style::default().bg(bubble_bg),
-            ));
-            // 标记信息附加在行末（超出可见区域，渲染 pass 通过扫描 spans 识别）
-            spans.push(Span::styled(marker, Style::default()));
+            let spans: Vec<Span> = vec![
+                // 整行用气泡背景色空格填充（与占位行一致）
+                Span::styled(
+                    " ".repeat(bubble_total_w),
+                    Style::default().bg(bubble_bg),
+                ),
+                // 标记信息附加在行末（超出可见区域，渲染 pass 通过扫描 spans 识别）
+                Span::styled(marker, Style::default()),
+            ];
             return Line::from(spans);
         }
     }

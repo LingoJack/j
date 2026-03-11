@@ -637,19 +637,19 @@ impl ChatApp {
         }
 
         // 轮询 ask 工具请求
-        if let Some(ref rx) = self.ask_request_rx {
-            if let Ok(ask_req) = rx.try_recv() {
-                self.tool_ask_mode = true;
-                self.tool_ask_question = ask_req.question;
-                self.ask_response_tx = Some(ask_req.response_tx);
-                self.tool_interact_selected = 0;
-                self.tool_interact_typing = false;
-                self.tool_interact_input.clear();
-                self.tool_interact_cursor = 0;
-                self.mode = ChatMode::ToolConfirm;
-                self.msg_lines_cache = None;
-                return;
-            }
+        if let Some(ref rx) = self.ask_request_rx
+            && let Ok(ask_req) = rx.try_recv()
+        {
+            self.tool_ask_mode = true;
+            self.tool_ask_question = ask_req.question;
+            self.ask_response_tx = Some(ask_req.response_tx);
+            self.tool_interact_selected = 0;
+            self.tool_interact_typing = false;
+            self.tool_interact_input.clear();
+            self.tool_interact_cursor = 0;
+            self.mode = ChatMode::ToolConfirm;
+            self.msg_lines_cache = None;
+            return;
         }
 
         let mut finished = false;

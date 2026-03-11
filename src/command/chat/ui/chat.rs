@@ -335,8 +335,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
             // 计算实际可用的占位行数：从标记行往下数连续的空行/占位行
             let mut actual_h = 1u16; // 标记行本身占 1 行
-            for j in (line_idx + 1)..all_lines.len().min(line_idx + height as usize) {
-                let next_line = &all_lines[j];
+            for next_line in all_lines
+                .iter()
+                .take(all_lines.len().min(line_idx + height as usize))
+                .skip(line_idx + 1)
+            {
                 // 占位行要么为空，要么只有气泡背景空格
                 let is_placeholder = next_line.spans.is_empty()
                     || next_line.spans.iter().all(|s| s.content.trim().is_empty());
