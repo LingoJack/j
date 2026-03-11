@@ -102,10 +102,12 @@ impl ToolRegistry {
     }
 
     /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（JSON 数组格式，含参数 schema）
-    pub fn build_tools_summary(&self) -> String {
+    /// 当 disabled 非空时，过滤掉其中列出的工具
+    pub fn build_tools_summary(&self, disabled: &[String]) -> String {
         let items: Vec<serde_json::Value> = self
             .tools
             .iter()
+            .filter(|t| !disabled.iter().any(|d| d == t.name()))
             .map(|t| {
                 serde_json::json!({
                     "name": t.name(),
@@ -117,10 +119,11 @@ impl ToolRegistry {
         serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".to_string())
     }
 
-    /// 生成 async-openai 的 ChatCompletionTools 列表
-    pub fn to_openai_tools(&self) -> Vec<ChatCompletionTools> {
+    /// 生成过滤后的 ChatCompletionTools 列表（排除 disabled 中的工具）
+    pub fn to_openai_tools_filtered(&self, disabled: &[String]) -> Vec<ChatCompletionTools> {
         self.tools
             .iter()
+            .filter(|t| !disabled.iter().any(|d| d == t.name()))
             .map(|t| {
                 ChatCompletionTools::Function(ChatCompletionTool {
                     function: FunctionObject {
@@ -132,6 +135,11 @@ impl ToolRegistry {
                 })
             })
             .collect()
+    }
+
+    /// 返回所有注册的工具名称（供 UI 使用）
+    pub fn tool_names(&self) -> Vec<&str> {
+        self.tools.iter().map(|t| t.name()).collect()
     }
 }
 

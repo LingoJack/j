@@ -59,6 +59,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                 max_tool_rounds: 10,
                 style: None,
                 tool_confirm_timeout: 0,
+                disabled_tools: Vec::new(),
             };
             let _ = save_agent_config(&example);
             app.agent_config = example;
@@ -163,6 +164,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::ArchiveConfirm => handle_archive_confirm_mode(&mut app, key),
                             ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
                             ChatMode::ToolConfirm => handle_tool_confirm_mode(&mut app, key),
+                            ChatMode::ToolToggle => handle_tool_toggle_mode(&mut app, key),
                         }
                     }
                     Event::Resize(_, _) => {
@@ -947,9 +949,10 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
                     app.agent_config.stream_mode = !app.agent_config.stream_mode;
                     return;
                 }
-                // tools_enabled 字段直接切换
+                // tools_enabled 字段：Enter 进入工具开关子菜单
                 if CONFIG_GLOBAL_FIELDS[gi] == "tools_enabled" {
-                    app.agent_config.tools_enabled = !app.agent_config.tools_enabled;
+                    app.tool_toggle_index = 0;
+                    app.mode = ChatMode::ToolToggle;
                     return;
                 }
                 // theme 字段直接循环切换，不进入编辑模式
@@ -1019,6 +1022,69 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
                     .clone();
                 app.show_toast(format!("已设为活跃模型: {}", name), false);
             }
+        }
+        _ => {}
+    }
+}
+
+/// 工具开关子菜单按键处理
+pub fn handle_tool_toggle_mode(app: &mut ChatApp, key: KeyEvent) {
+    let tool_names = app.tool_registry.tool_names();
+    let total = tool_names.len();
+    if total == 0 {
+        app.mode = ChatMode::Config;
+        return;
+    }
+
+    match key.code {
+        KeyCode::Esc => {
+            // 返回配置模式并保存
+            save_agent_config(&app.agent_config);
+            app.mode = ChatMode::Config;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.tool_toggle_index == 0 {
+                app.tool_toggle_index = total - 1;
+            } else {
+                app.tool_toggle_index -= 1;
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.tool_toggle_index = (app.tool_toggle_index + 1) % total;
+        }
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            // 切换当前工具的启用/禁用状态
+            let name = tool_names[app.tool_toggle_index].to_string();
+            if let Some(pos) = app
+                .agent_config
+                .disabled_tools
+                .iter()
+                .position(|d| d == &name)
+            {
+                app.agent_config.disabled_tools.remove(pos);
+            } else {
+                app.agent_config.disabled_tools.push(name);
+            }
+        }
+        KeyCode::Char('a') => {
+            // 全部启用
+            app.agent_config.disabled_tools.clear();
+            app.show_toast("已启用全部工具", false);
+        }
+        KeyCode::Char('d') => {
+            // 全部禁用
+            app.agent_config.disabled_tools = tool_names.iter().map(|n| n.to_string()).collect();
+            app.show_toast("已禁用全部工具", false);
+        }
+        KeyCode::Char('t') => {
+            // 切换总开关
+            app.agent_config.tools_enabled = !app.agent_config.tools_enabled;
+            let status = if app.agent_config.tools_enabled {
+                "开启"
+            } else {
+                "关闭"
+            };
+            app.show_toast(format!("工具调用已{}", status), false);
         }
         _ => {}
     }

@@ -5,7 +5,7 @@ use super::super::markdown::image_loader::load_image;
 use super::super::model::agent_config_path;
 use super::super::render::{build_message_lines_incremental, char_width, display_width, wrap_text};
 use super::archive::{draw_archive_confirm, draw_archive_list};
-use super::config::draw_config_screen;
+use super::config::{draw_config_screen, draw_tool_toggle};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -45,6 +45,8 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         draw_archive_confirm(f, chunks[1], app);
     } else if app.mode == ChatMode::ArchiveList {
         draw_archive_list(f, chunks[1], app);
+    } else if app.mode == ChatMode::ToolToggle {
+        draw_tool_toggle(f, chunks[1], app);
     } else {
         draw_messages(f, chunks[1], app);
     }
@@ -708,6 +710,14 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             }
         }
         ChatMode::ToolConfirm => vec![("↑↓", "选择"), ("Enter", "确认"), ("Esc", "拒绝")],
+        ChatMode::ToolToggle => vec![
+            ("↑↓", "选择"),
+            ("Enter/空格", "切换"),
+            ("t", "总开关"),
+            ("a", "全部启用"),
+            ("d", "全部禁用"),
+            ("Esc", "返回"),
+        ],
     };
 
     let mut spans: Vec<Span> = Vec::new();

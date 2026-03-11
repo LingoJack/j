@@ -197,6 +197,8 @@ pub struct ChatApp {
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 图片缓存（渲染终端图片）
     pub image_cache: Arc<Mutex<ImageCache>>,
+    /// 工具开关子菜单中选中的索引
+    pub tool_toggle_index: usize,
 }
 
 /// 消息渲染行缓存
@@ -257,6 +259,8 @@ pub enum ChatMode {
     ArchiveList,
     /// 工具调用确认模式（选项式交互区域）
     ToolConfirm,
+    /// 工具开关子菜单模式（逐个启用/禁用工具）
+    ToolToggle,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -353,6 +357,7 @@ impl ChatApp {
             queued_tasks,
             pending_user_messages: Arc::new(Mutex::new(Vec::new())),
             image_cache: Arc::new(Mutex::new(ImageCache::new())),
+            tool_toggle_index: 0,
         }
     }
 
@@ -361,7 +366,9 @@ impl ChatApp {
     pub fn resolve_system_prompt(&self) -> Option<String> {
         let template = load_system_prompt()?;
         let skills_summary = skill::build_skills_summary(&self.loaded_skills);
-        let tools_summary = self.tool_registry.build_tools_summary();
+        let tools_summary = self
+            .tool_registry
+            .build_tools_summary(&self.agent_config.disabled_tools);
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
@@ -498,7 +505,8 @@ impl ChatApp {
         let tools_enabled = self.agent_config.tools_enabled;
         let max_tool_rounds = self.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
-            self.tool_registry.to_openai_tools()
+            self.tool_registry
+                .to_openai_tools_filtered(&self.agent_config.disabled_tools)
         } else {
             vec![]
         };

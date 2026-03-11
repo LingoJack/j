@@ -53,6 +53,9 @@ pub struct AgentConfig {
     /// 工具确认超时秒数（0 表示不超时，需手动确认；>0 则超时后自动执行）
     #[serde(default)]
     pub tool_confirm_timeout: u64,
+    /// 被禁用的工具名称列表（tools_enabled=true 时，此列表中的工具不会发送给 LLM）
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
 }
 
 fn default_max_history_messages() -> usize {

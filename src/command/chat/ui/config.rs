@@ -240,6 +240,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             ]));
         } else if *field == "tools_enabled" {
             let toggle_on = app.agent_config.tools_enabled;
+            let tool_names = app.tool_registry.tool_names();
+            let total = tool_names.len();
+            let enabled_count = total
+                - app
+                    .agent_config
+                    .disabled_tools
+                    .iter()
+                    .filter(|d| tool_names.iter().any(|n| *n == d.as_str()))
+                    .count();
             let toggle_style = if toggle_on {
                 Style::default()
                     .fg(t.config_toggle_on)
@@ -248,9 +257,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Style::default().fg(t.config_toggle_off)
             };
             let toggle_text = if toggle_on {
-                "● 开启"
+                format!("● 开启 ({}/{})", enabled_count, total)
             } else {
-                "○ 关闭"
+                "○ 关闭".to_string()
             };
             lines.push(Line::from(vec![
                 Span::styled(pointer, pointer_style),
@@ -258,7 +267,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Span::styled("  ", Style::default()),
                 Span::styled(toggle_text, toggle_style),
                 Span::styled(
-                    if is_selected { "  (Enter 切换)" } else { "" },
+                    if is_selected { "  (Enter 设置)" } else { "" },
                     Style::default().fg(t.config_dim),
                 ),
             ]));
@@ -431,6 +440,162 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 .border_style(Style::default().fg(t.border_config))
                 .title(Span::styled(
                     " ⚙️  模型配置编辑 ",
+                    Style::default()
+                        .fg(t.config_label_selected)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(bg)),
+        )
+        .scroll((0, 0));
+    f.render_widget(content, area);
+}
+
+pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+    let t = &app.theme;
+    let bg = t.bg_title;
+    let tool_names = app.tool_registry.tool_names();
+    let total = tool_names.len();
+    let enabled_count = total
+        - app
+            .agent_config
+            .disabled_tools
+            .iter()
+            .filter(|d| tool_names.iter().any(|n| *n == d.as_str()))
+            .count();
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![Span::styled(
+        "  🔧 工具开关",
+        Style::default()
+            .fg(t.config_title)
+            .add_modifier(Modifier::BOLD),
+    )]));
+    lines.push(Line::from(""));
+
+    // 总开关状态
+    let master_style = if app.agent_config.tools_enabled {
+        Style::default()
+            .fg(t.config_toggle_on)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(t.config_toggle_off)
+    };
+    let master_text = if app.agent_config.tools_enabled {
+        format!("  总开关: ● 开启 ({}/{})", enabled_count, total)
+    } else {
+        "  总开关: ○ 关闭".to_string()
+    };
+    lines.push(Line::from(vec![
+        Span::styled(master_text, master_style),
+        Span::styled("  (t 切换)", Style::default().fg(t.config_dim)),
+    ]));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(t.separator),
+    )));
+    lines.push(Line::from(""));
+
+    for (i, name) in tool_names.iter().enumerate() {
+        let is_selected = i == app.tool_toggle_index;
+        let is_disabled = app.agent_config.disabled_tools.iter().any(|d| d == *name);
+        let is_enabled = !is_disabled;
+
+        let pointer = if is_selected { "  ▸ " } else { "    " };
+        let pointer_style = if is_selected {
+            Style::default().fg(t.config_pointer)
+        } else {
+            Style::default()
+        };
+
+        let toggle_style = if is_enabled {
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_toggle_off)
+        };
+        let toggle_text = if is_enabled { "●" } else { "○" };
+
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_label)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(pointer, pointer_style),
+            Span::styled(toggle_text, toggle_style),
+            Span::styled(" ", Style::default()),
+            Span::styled(name.to_string(), name_style),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(t.separator),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("    ", Style::default()),
+        Span::styled(
+            "↑↓/jk",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 选择  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "Enter/空格",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 切换  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "t",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 总开关  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "a",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 全部启用  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "d",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 全部禁用  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "Esc",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 返回", Style::default().fg(t.config_hint_desc)),
+    ]));
+
+    let content = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.border_config))
+                .title(Span::styled(
+                    " 🔧 工具开关设置 ",
                     Style::default()
                         .fg(t.config_label_selected)
                         .add_modifier(Modifier::BOLD),
