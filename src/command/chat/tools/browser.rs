@@ -291,15 +291,28 @@ mod cdp {
             s.pages.values().next().ok_or("没有已打开的标签页")?
         };
 
-        let element = page
-            .find_element(selector)
+        // 使用 JS click，绕过 CDP 原生 click 的可见性检查
+        let escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
+        let script = format!(
+            r#"(() => {{
+                const el = document.querySelector('{}');
+                if (!el) return 'not_found';
+                el.scrollIntoView({{block: 'center'}});
+                el.click();
+                return 'ok';
+            }})()"#,
+            escaped
+        );
+        let result: String = page
+            .evaluate(script)
             .await
-            .map_err(|e| format!("未找到元素: {}", e))?;
+            .map_err(|e| format!("点击失败: {}", e))?
+            .into_value()
+            .unwrap_or_default();
 
-        element
-            .click()
-            .await
-            .map_err(|e| format!("点击失败: {}", e))?;
+        if result == "not_found" {
+            return Err(format!("未找到元素: {}", selector));
+        }
 
         Ok(serde_json::json!({
             "success": true,
@@ -329,19 +342,31 @@ mod cdp {
             s.pages.values().next().ok_or("没有已打开的标签页")?
         };
 
-        // 先点击聚焦元素
-        let element = page
-            .find_element(selector)
+        // 通过 JS 点击聚焦，绕过可见性检查
+        let escaped_selector = selector.replace('\\', "\\\\").replace('\'', "\\'");
+        let focus_script = format!(
+            r#"(() => {{
+                const el = document.querySelector('{}');
+                if (!el) return 'not_found';
+                el.scrollIntoView({{block: 'center'}});
+                el.click();
+                el.focus();
+                return 'ok';
+            }})()"#,
+            escaped_selector
+        );
+        let focus_result: String = page
+            .evaluate(focus_script)
             .await
-            .map_err(|e| format!("未找到元素: {}", e))?;
+            .map_err(|e| format!("聚焦失败: {}", e))?
+            .into_value()
+            .unwrap_or_default();
 
-        element
-            .click()
-            .await
-            .map_err(|e| format!("点击失败: {}", e))?;
+        if focus_result == "not_found" {
+            return Err(format!("未找到元素: {}", selector));
+        }
 
         // 通过 JS 设置值并触发事件，兼容所有语言字符
-        let escaped_selector = selector.replace('\\', "\\\\").replace('\'', "\\'");
         let escaped_text = text.replace('\\', "\\\\").replace('\'', "\\'");
         let script = format!(
             r#"(() => {{
@@ -517,14 +542,19 @@ mod cdp {
                 r#"
             Array.from(document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"]'))
                 .slice(0, 50)
-                .map((el, i) => ({
-                    ref: 'e' + i,
-                    tag: el.tagName.toLowerCase(),
-                    role: el.getAttribute('role') || el.tagName.toLowerCase(),
-                    name: el.textContent?.trim().slice(0, 50) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '',
-                    type: el.type || null,
-                    href: el.href || null
-                }))
+                .map((el, i) => {
+                    const ref = 'e' + i;
+                    el.setAttribute('data-jref', ref);
+                    return {
+                        ref,
+                        selector: '[data-jref="' + ref + '"]',
+                        tag: el.tagName.toLowerCase(),
+                        role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                        text: el.textContent?.trim().slice(0, 50) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '',
+                        type: el.type || null,
+                        href: el.href || null
+                    };
+                })
             "#,
             )
             .await
@@ -984,8 +1014,10 @@ mod lite {
                     None => break,
                 };
                 let tag_str = &html[abs..tag_end + 1];
+                let ref_id = format!("e{}", elements.len());
                 let mut elem = json!({
-                    "ref": format!("e{}", elements.len()),
+                    "ref": &ref_id,
+                    "selector": format!("[data-jref=\"{}\"]", &ref_id),
                     "tag": tag_name,
                 });
                 if let Some(t) = attr_value(tag_str, "type") {
@@ -1060,8 +1092,10 @@ mod lite {
                     continue;
                 }
 
+                let ref_id = format!("e{}", elements.len());
                 let mut elem = json!({
-                    "ref": format!("e{}", elements.len()),
+                    "ref": &ref_id,
+                    "selector": format!("[data-jref=\"{}\"]", &ref_id),
                     "tag": actual_tag,
                     "role": role,
                 });
@@ -1120,7 +1154,8 @@ impl Tool for BrowserTool {
          - type: 在输入框中输入文本（需要 selector 和 text 参数，支持中文）\n\
          - press: 模拟按键操作（需要 key 参数，如 Enter、Tab、Escape）\n\
          - evaluate: 在页面中执行 JavaScript 代码（需要 script 参数）\n\
-         典型流程：先 open 打开页面 → 用 snapshot 了解页面元素 → 用 click/type/press 进行交互 → 用 content 获取结果。"
+         典型流程：先 open 打开页面 → 用 snapshot 了解页面元素 → 用 snapshot 返回的 selector 字段（如 [data-jref=\"e3\"]）配合 click/type/press 进行交互 → 用 content 获取结果。\
+         注意：snapshot 会为每个元素注入 data-jref 属性并返回对应的 selector，click/type 时务必使用该 selector 而非自行构造。"
     }
 
     fn parameters_schema(&self) -> Value {
@@ -1144,7 +1179,7 @@ impl Tool for BrowserTool {
                 },
                 "selector": {
                     "type": "string",
-                    "description": "[click/type] CSS 选择器，用于定位页面元素（如 '#submit-btn'、'input[name=search]'、'.login-form button'）。建议先使用 snapshot 获取页面元素信息"
+                    "description": "[click/type] CSS 选择器，用于定位页面元素。强烈建议使用 snapshot 返回的 selector 字段（如 '[data-jref=\"e3\"]'），确保精确匹配"
                 },
                 "text": {
                     "type": "string",

@@ -310,12 +310,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     // === 图片渲染 pass ===
-    let has_picker = app
-        .image_cache
-        .lock()
-        .unwrap()
-        .picker
-        .is_some();
+    let has_picker = app.image_cache.lock().unwrap().picker.is_some();
     // 图片渲染宽度与气泡内容区对齐
     let img_pad = 3u16; // 与气泡 pad_left_w 一致
     let img_render_w = (bubble_max_width as u16).saturating_sub(img_pad * 2);
@@ -324,28 +319,41 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         // 在所有 spans 中查找 \x00IMG: 标记（气泡包装会添加 padding spans）
         let img_marker = line.spans.iter().find_map(|span| {
             let content = span.content.as_ref();
-            content
-                .strip_prefix("\x00IMG:")
-                .and_then(|rest| {
-                    rest.find(':').map(|colon_pos| {
-                        let height: u16 = rest[..colon_pos].parse().unwrap_or(20);
-                        let url = &rest[colon_pos + 1..];
-                        (height, url.to_string())
-                    })
+            content.strip_prefix("\x00IMG:").and_then(|rest| {
+                rest.find(':').map(|colon_pos| {
+                    let height: u16 = rest[..colon_pos].parse().unwrap_or(20);
+                    let url = &rest[colon_pos + 1..];
+                    (height, url.to_string())
                 })
+            })
         });
         if let Some((height, url)) = img_marker {
             let y = inner.y + i as u16;
             let remaining_h = visible_height.saturating_sub(i as u16);
 
-            // 如果剩余可见高度不够容纳完整图片，跳过渲染（避免滚动时缩放）
-            if remaining_h < height {
+            // 计算实际可用的占位行数：从标记行往下数连续的空行/占位行
+            let mut actual_h = 1u16; // 标记行本身占 1 行
+            for j in (line_idx + 1)..all_lines.len().min(line_idx + height as usize) {
+                let next_line = &all_lines[j];
+                // 占位行要么为空，要么只有气泡背景空格
+                let is_placeholder = next_line.spans.is_empty()
+                    || next_line.spans.iter().all(|s| s.content.trim().is_empty());
+                if is_placeholder {
+                    actual_h += 1;
+                } else {
+                    break;
+                }
+            }
+            let render_h = actual_h.min(height).min(remaining_h);
+
+            // 如果可见高度不够容纳图片，跳过渲染（避免滚动时缩放）
+            if remaining_h < render_h {
                 continue;
             }
 
             // 图片区域在气泡内对齐：左 padding 3，宽度为气泡内容宽度
             let img_x = inner.x + img_pad;
-            let img_area = Rect::new(img_x, y, img_render_w, height);
+            let img_area = Rect::new(img_x, y, img_render_w, render_h);
 
             if !has_picker {
                 // 终端不支持图形协议，降级为文本链接
@@ -393,25 +401,20 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     // spawn 后台线程加载图片
                     let cache_clone = std::sync::Arc::clone(&app.image_cache);
                     let url_owned = url.clone();
-                    std::thread::spawn(move || {
-                        match load_image(&url_owned) {
-                            Ok(dyn_img) => {
-                                let mut c = cache_clone.lock().unwrap();
-                                if let Some(ref picker) = c.picker {
-                                    let protocol = picker.new_resize_protocol(dyn_img);
-                                    c.images.insert(
-                                        url_owned,
-                                        ImageState::Ready(protocol),
-                                    );
-                                }
+                    std::thread::spawn(move || match load_image(&url_owned) {
+                        Ok(dyn_img) => {
+                            let mut c = cache_clone.lock().unwrap();
+                            if let Some(ref picker) = c.picker {
+                                let protocol = picker.new_resize_protocol(dyn_img);
+                                c.images.insert(url_owned, ImageState::Ready(protocol));
                             }
-                            Err(e) => {
-                                cache_clone
-                                    .lock()
-                                    .unwrap()
-                                    .images
-                                    .insert(url_owned, ImageState::Failed(e));
-                            }
+                        }
+                        Err(e) => {
+                            cache_clone
+                                .lock()
+                                .unwrap()
+                                .images
+                                .insert(url_owned, ImageState::Failed(e));
                         }
                     });
                 }

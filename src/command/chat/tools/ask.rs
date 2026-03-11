@@ -16,7 +16,7 @@ impl Tool for AskTool {
     }
 
     fn description(&self) -> &str {
-        "向用户提出问题并等待回答。当你需要用户提供更多信息、确认操作或做出选择时使用此工具。问题内容支持 Markdown 格式。"
+        "向用户提出问题并等待回答。当你需要用户提供更多信息、确认操作或做出选择时使用此工具。问题内容支持 Markdown 格式，包括图片语法 ![alt](url) 可在终端中渲染图片。"
     }
 
     fn parameters_schema(&self) -> Value {
@@ -25,7 +25,7 @@ impl Tool for AskTool {
             "properties": {
                 "question": {
                     "type": "string",
-                    "description": "要向用户提出的问题（支持 Markdown 格式）"
+                    "description": "要向用户提出的问题（支持 Markdown 格式，可使用 ![alt](url) 语法展示图片）"
                 }
             },
             "required": ["question"]
