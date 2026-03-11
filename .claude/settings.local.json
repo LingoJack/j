@@ -21,7 +21,8 @@
       "Bash(stty cols:*)",
       "Bash(cargo run:*)",
       "WebFetch(domain:crates.io)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(cargo tree:*)"
     ]
   },
   "language": "zh-CN",

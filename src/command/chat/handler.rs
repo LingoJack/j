@@ -439,11 +439,15 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
             if app.is_loading {
-                if app.tools_executing_count > 0 {
-                    // 有工具在执行：只取消工具，不终止 agent loop
+                if app.tools_executing_count > 0
+                    && !app
+                        .tool_cancelled
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    // 首次按 Esc：只取消工具，不终止 agent loop
                     app.cancel_tools_only();
                 } else {
-                    // 流式文本阶段：取消整个请求
+                    // 二次按 Esc（工具已在取消中）或无工具执行：取消整个请求
                     app.cancel_stream();
                 }
             } else {

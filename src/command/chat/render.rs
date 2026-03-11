@@ -385,8 +385,7 @@ pub fn build_message_lines_incremental(
                     || md_line.spans.iter().all(|s| s.content.trim().is_empty());
 
                 if is_img_marker {
-                    // 图片标记行：与主消息区一致的格式（气泡背景空格 + 末尾标记）
-                    // 这样图片渲染 pass 能正确识别
+                    // 图片标记行：带左右边框 + 气泡背景空格 + 末尾标记
                     let marker = md_line
                         .spans
                         .iter()
@@ -394,20 +393,22 @@ pub fn build_message_lines_incremental(
                         .unwrap()
                         .content
                         .clone();
+                    let inner_w = bubble_max_width.saturating_sub(8); // "  │ " (4) + " │" (2) + 两侧各1空格
                     let spans: Vec<Span> = vec![
-                        Span::styled(
-                            " ".repeat(bubble_max_width),
-                            Style::default().bg(confirm_bg),
-                        ),
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
                         Span::styled(marker, Style::default()),
                     ];
                     lines.push(Line::from(spans));
                 } else if is_placeholder {
-                    // 图片占位空行：纯空白填充（让 is_placeholder 检测通过）
-                    lines.push(Line::from(Span::styled(
-                        " ".repeat(bubble_max_width),
-                        Style::default().bg(confirm_bg),
-                    )));
+                    // 图片占位空行：带左右边框（让 is_placeholder 检测通过）
+                    let inner_w = bubble_max_width.saturating_sub(8);
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
                 } else {
                     // 普通文本行：带边框渲染
                     text_count += 1;
@@ -699,10 +700,7 @@ pub fn wrap_md_line_in_bubble(
             let marker = span.content.clone();
             let spans: Vec<Span> = vec![
                 // 整行用气泡背景色空格填充（与占位行一致）
-                Span::styled(
-                    " ".repeat(bubble_total_w),
-                    Style::default().bg(bubble_bg),
-                ),
+                Span::styled(" ".repeat(bubble_total_w), Style::default().bg(bubble_bg)),
                 // 标记信息附加在行末（超出可见区域，渲染 pass 通过扫描 spans 识别）
                 Span::styled(marker, Style::default()),
             ];

@@ -332,6 +332,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         if let Some((height, url)) = img_marker {
             let y = inner.y + i as u16;
             let remaining_h = visible_height.saturating_sub(i as u16);
+            let bubble_w = bubble_max_width as u16;
 
             // 计算实际可用的占位行数：从标记行往下数连续的空行/占位行
             let mut actual_h = 1u16; // 标记行本身占 1 行
@@ -340,9 +341,12 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 .take(all_lines.len().min(line_idx + height as usize))
                 .skip(line_idx + 1)
             {
-                // 占位行要么为空，要么只有气泡背景空格
+                // 占位行要么为空，要么只有气泡背景空格（可能含边框字符 │）
                 let is_placeholder = next_line.spans.is_empty()
-                    || next_line.spans.iter().all(|s| s.content.trim().is_empty());
+                    || next_line
+                        .spans
+                        .iter()
+                        .all(|s| s.content.replace('│', "").trim().is_empty());
                 if is_placeholder {
                     actual_h += 1;
                 } else {
@@ -362,42 +366,48 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
             if !has_picker {
                 // 终端不支持图形协议，降级为文本链接
+                let max_url_w = (bubble_w as usize).saturating_sub(12); // "  [Image: " + "]"
+                let display_url = truncate_str(&url, max_url_w);
                 let fallback = Paragraph::new(Line::from(Span::styled(
-                    format!("  [Image: {}]", url),
+                    format!("  [Image: {}]", display_url),
                     Style::default()
                         .fg(Color::Cyan)
                         .bg(app.theme.bubble_ai)
                         .add_modifier(Modifier::UNDERLINED),
                 )));
-                let bubble_w = bubble_max_width as u16;
                 f.render_widget(fallback, Rect::new(inner.x, y, bubble_w, 1));
                 continue;
             }
 
             let mut cache = app.image_cache.lock().unwrap();
-            let bubble_w = bubble_max_width as u16;
             match cache.images.get_mut(&url) {
                 Some(ImageState::Ready(protocol)) => {
                     let widget = StatefulImage::default().resize(Resize::Scale(None));
                     f.render_stateful_widget(widget, img_area, protocol);
                 }
                 Some(ImageState::Failed(err)) => {
+                    let max_err_w = (bubble_w as usize).saturating_sub(24); // "  [Image load failed: " + "]"
+                    let display_err = truncate_str(err, max_err_w);
                     let err_line = Paragraph::new(Line::from(Span::styled(
-                        format!("  [Image load failed: {}]", err),
+                        format!("  [Image load failed: {}]", display_err),
                         Style::default().fg(Color::Red).bg(app.theme.bubble_ai),
                     )));
                     f.render_widget(err_line, Rect::new(inner.x, y, bubble_w, 1));
                 }
                 Some(ImageState::Loading) => {
+                    let max_url_w = (bubble_w as usize).saturating_sub(21); // "  Loading image: " + "..."
+                    let display_url = truncate_str(&url, max_url_w);
                     let loading = Paragraph::new(Line::from(Span::styled(
-                        format!("  Loading image: {}...", url),
+                        format!("  Loading image: {}...", display_url),
                         Style::default().fg(Color::DarkGray).bg(app.theme.bubble_ai),
                     )));
                     f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
                 }
                 Some(ImageState::Pending) | None => {
+                    let max_url_w = (bubble_w as usize).saturating_sub(21);
+                    let display_url = truncate_str(&url, max_url_w);
                     let loading = Paragraph::new(Line::from(Span::styled(
-                        format!("  Loading image: {}...", url),
+                        format!("  Loading image: {}...", display_url),
                         Style::default().fg(Color::DarkGray).bg(app.theme.bubble_ai),
                     )));
                     f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
@@ -1076,4 +1086,25 @@ fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usi
     }
 
     ranges
+}
+
+/// 截断字符串到指定显示宽度，超长时加 "..."
+fn truncate_str(s: &str, max_w: usize) -> String {
+    let w = display_width(s);
+    if w <= max_w {
+        return s.to_string();
+    }
+    let ellipsis = "...";
+    let target = max_w.saturating_sub(3);
+    let mut cur_w = 0;
+    let mut end = 0;
+    for c in s.chars() {
+        let cw = char_width(c);
+        if cur_w + cw > target {
+            break;
+        }
+        cur_w += cw;
+        end += c.len_utf8();
+    }
+    format!("{}{}", &s[..end], ellipsis)
 }
