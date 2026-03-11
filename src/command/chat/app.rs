@@ -277,7 +277,8 @@ impl ChatApp {
         if !soul_path().exists() {
             let _ = save_soul(&crate::assets::default_soul());
         }
-        // TODO 这里加一个预设 skills 的功能， assets/skills/ 目录下的所有项目都会保存（除非已存在）
+        // 安装预设 skills（assets/skills/ 目录下的所有项目，仅当 skill 目录不存在时才写入）
+        crate::assets::install_default_skills(&skill::skills_dir());
 
         let session = load_chat_session();
         let mut model_list_state = ListState::default();

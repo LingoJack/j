@@ -90,3 +90,45 @@ pub fn default_soul() -> Cow<'static, str> {
         .expect("soul_default.md is not valid UTF-8")
         .into()
 }
+
+/// 安装预设 skills 到用户数据目录
+///
+/// 遍历编译时嵌入的 `assets/skills/` 目录下的所有文件，
+/// 将其写入 `~/.jdata/agent/skills/` 对应路径（仅当 skill 目录不存在时才写入，不覆盖用户修改）。
+pub fn install_default_skills(skills_dir: &std::path::Path) {
+    for filename in Assets::iter() {
+        let filename = filename.as_ref();
+        // 只处理 skills/ 前缀的文件
+        if !filename.starts_with("skills/") {
+            continue;
+        }
+        // 提取相对路径，如 "skills/my-skill/SKILL.md" → "my-skill/SKILL.md"
+        let rel_path = &filename["skills/".len()..];
+        if rel_path.is_empty() {
+            continue;
+        }
+
+        // 提取 skill 名称（第一级目录），如 "my-skill"
+        let skill_name = match rel_path.split('/').next() {
+            Some(name) if !name.is_empty() => name,
+            _ => continue,
+        };
+
+        // 如果该 skill 目录已存在，跳过（不覆盖用户已有的 skill）
+        let skill_dir = skills_dir.join(skill_name);
+        if skill_dir.exists() {
+            continue;
+        }
+
+        // 获取嵌入的文件内容
+        if let Some(file) = Assets::get(filename) {
+            let dest_path = skills_dir.join(rel_path);
+            // 创建父目录
+            if let Some(parent) = dest_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            // 写入文件
+            let _ = std::fs::write(&dest_path, file.data.as_ref());
+        }
+    }
+}
