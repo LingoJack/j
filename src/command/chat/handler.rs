@@ -447,15 +447,15 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
         KeyCode::Enter => {
             if app.is_loading {
-                // agent loop 期间：将用户消息追加到共享消息列表（不启动新 loop）
+                // agent loop 期间：将用户消息追加到待处理队列（不启动新 loop）
                 let text = app.input.trim().to_string();
                 if !text.is_empty() {
                     app.session
                         .messages
                         .push(super::model::ChatMessage::text("user", &text));
                     {
-                        let mut shared = app.shared_messages.lock().unwrap();
-                        shared.push(super::model::ChatMessage::text("user", &text));
+                        let mut pending = app.pending_user_messages.lock().unwrap();
+                        pending.push(super::model::ChatMessage::text("user", &text));
                     }
                     app.input.clear();
                     app.cursor_pos = 0;

@@ -193,8 +193,8 @@ pub struct ChatApp {
     pub ask_request_rx: Option<mpsc::Receiver<AskRequest>>,
     /// 排队的任务列表（new_task 工具产生，当前任务完成后自动执行）
     pub queued_tasks: Arc<Mutex<Vec<String>>>,
-    /// 共享消息列表（用于 agent loop 期间同步用户新消息）
-    pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 用户在 agent loop 期间发送的待处理消息队列（单向：主线程 push → agent loop drain）
+    pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 图片缓存（渲染终端图片）
     pub image_cache: Arc<Mutex<ImageCache>>,
 }
@@ -348,7 +348,7 @@ impl ChatApp {
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
             queued_tasks,
-            shared_messages: Arc::new(Mutex::new(Vec::new())),
+            pending_user_messages: Arc::new(Mutex::new(Vec::new())),
             image_cache: Arc::new(Mutex::new(ImageCache::new())),
         }
     }
@@ -442,11 +442,6 @@ impl ChatApp {
     pub fn send_message_internal(&mut self, text: String) {
         // 添加用户消息
         self.session.messages.push(ChatMessage::text("user", &text));
-        // 同步到共享消息列表
-        {
-            let mut shared = self.shared_messages.lock().unwrap();
-            shared.push(ChatMessage::text("user", &text));
-        }
         // 发送新消息时恢复自动滚动并滚到底部
         self.auto_scroll = true;
         self.scroll_offset = u16::MAX;
@@ -476,10 +471,10 @@ impl ChatApp {
 
         let api_messages = self.build_api_messages();
 
-        // 初始化共享消息列表
+        // 清空待处理用户消息队列
         {
-            let mut shared = self.shared_messages.lock().unwrap();
-            *shared = api_messages.clone();
+            let mut pending = self.pending_user_messages.lock().unwrap();
+            pending.clear();
         }
 
         // 清空流式内容缓冲
@@ -509,7 +504,7 @@ impl ChatApp {
         let cancel_token = CancellationToken::new();
         self.cancel_token = Some(cancel_token.clone());
 
-        let shared_messages = Arc::clone(&self.shared_messages);
+        let pending_user_messages = Arc::clone(&self.pending_user_messages);
 
         // 启动后台线程执行 Agent 循环
         std::thread::spawn(move || {
@@ -532,7 +527,7 @@ impl ChatApp {
                 tool_result_rx,
                 max_tool_rounds,
                 cancel_token,
-                shared_messages,
+                pending_user_messages,
             ));
         });
     }
@@ -1050,6 +1045,17 @@ impl ChatApp {
 
 // ========== Agent 循环（后台异步函数）==========
 
+/// 从待处理队列中 drain 用户在 agent loop 期间发送的新消息，追加到 messages
+fn drain_pending_user_messages(
+    messages: &mut Vec<ChatMessage>,
+    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+) {
+    let mut pending = pending_user_messages.lock().unwrap();
+    if !pending.is_empty() {
+        messages.append(&mut *pending);
+    }
+}
+
 /// 后台 Agent 循环：支持多轮工具调用
 #[allow(clippy::too_many_arguments)]
 async fn run_agent_loop(
@@ -1063,19 +1069,13 @@ async fn run_agent_loop(
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
     max_tool_rounds: usize,
     cancel_token: CancellationToken,
-    shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
 ) {
     let client = create_openai_client(&provider);
 
     for _round in 0..max_tool_rounds {
-        // 每轮开始时从共享消息列表获取最新消息（可能包含用户在 agent loop 期间输入的新消息）
-        {
-            let shared = shared_messages.lock().unwrap();
-            if shared.len() > messages.len() {
-                // 有新消息被添加，合并
-                messages = shared.clone();
-            }
-        }
+        // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
+        drain_pending_user_messages(&mut messages, &pending_user_messages);
         // 清空流式内容缓冲（每轮开始时）
         {
             let mut sc = streaming_content.lock().unwrap();
@@ -1329,8 +1329,8 @@ async fn run_agent_loop(
                                             tool_call_id: Some(result.tool_call_id),
                                         });
                                     }
-                                    // 同步消息到共享列表
-                                    { let mut s = shared_messages.lock().unwrap(); *s = messages.clone(); }
+                                    // 同步消息到共享列表（先合并用户新消息）
+                                    drain_pending_user_messages(&mut messages, &pending_user_messages);
                                     continue;
                                 }
                             // 普通文本回复
@@ -1437,11 +1437,8 @@ async fn run_agent_loop(
                     });
                 }
 
-                // 同步消息到共享列表
-                {
-                    let mut s = shared_messages.lock().unwrap();
-                    *s = messages.clone();
-                }
+                // 同步消息到共享列表（先合并用户新消息）
+                drain_pending_user_messages(&mut messages, &pending_user_messages);
                 continue;
             } else {
                 // 正常结束
@@ -1550,8 +1547,8 @@ async fn run_agent_loop(
                                     });
                                 }
 
-                                // 同步消息到共享列表
-                                { let mut s = shared_messages.lock().unwrap(); *s = messages.clone(); }
+                                // 同步消息到共享列表（先合并用户新消息）
+                                drain_pending_user_messages(&mut messages, &pending_user_messages);
                                 continue;
                             }
 

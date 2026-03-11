@@ -373,36 +373,81 @@ pub fn build_message_lines_incremental(
             let max_msg_w = content_w.saturating_sub(2);
             let md_lines = markdown_to_lines(&app.tool_ask_question, max_msg_w, t);
             let max_show = 15;
-            for (i, md_line) in md_lines.iter().enumerate().take(max_show) {
-                // 计算该行实际显示宽度
-                let line_text: String = md_line.spans.iter().map(|s| s.content.as_ref()).collect();
-                let msg_w = display_width(&line_text);
-                let fill = content_w.saturating_sub(msg_w + 2);
-                let mut spans = vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ", Style::default().bg(confirm_bg)),
-                ];
-                // 添加 markdown 渲染后的 spans（注入 confirm_bg 背景避免颜色冲突）
-                for span in &md_line.spans {
-                    let mut patched = span.clone();
-                    patched.style = patched.style.bg(confirm_bg);
-                    spans.push(patched);
-                }
-                if i == max_show - 1 && md_lines.len() > max_show {
+            let mut text_count = 0usize; // 只统计非图片行
+            for md_line in md_lines.iter() {
+                // 检测是否是图片标记行
+                let is_img_marker = md_line
+                    .spans
+                    .iter()
+                    .any(|s| s.content.starts_with("\x00IMG:"));
+                // 检测是否是图片占位空行
+                let is_placeholder = md_line.spans.is_empty()
+                    || md_line
+                        .spans
+                        .iter()
+                        .all(|s| s.content.trim().is_empty());
+
+                if is_img_marker {
+                    // 图片标记行：与主消息区一致的格式（气泡背景空格 + 末尾标记）
+                    // 这样图片渲染 pass 能正确识别
+                    let marker = md_line
+                        .spans
+                        .iter()
+                        .find(|s| s.content.starts_with("\x00IMG:"))
+                        .unwrap()
+                        .content
+                        .clone();
+                    let mut spans: Vec<Span> = Vec::new();
                     spans.push(Span::styled(
-                        "...",
-                        Style::default().fg(t.tool_confirm_text),
+                        " ".repeat(bubble_max_width),
+                        Style::default().bg(confirm_bg),
                     ));
+                    spans.push(Span::styled(marker, Style::default()));
+                    lines.push(Line::from(spans));
+                } else if is_placeholder {
+                    // 图片占位空行：纯空白填充（让 is_placeholder 检测通过）
+                    lines.push(Line::from(Span::styled(
+                        " ".repeat(bubble_max_width),
+                        Style::default().bg(confirm_bg),
+                    )));
+                } else {
+                    // 普通文本行：带边框渲染
+                    text_count += 1;
+                    if text_count > max_show {
+                        continue;
+                    }
+                    let line_text: String =
+                        md_line.spans.iter().map(|s| s.content.as_ref()).collect();
+                    let msg_w = display_width(&line_text);
+                    let fill = content_w.saturating_sub(msg_w + 2);
+                    let mut spans = vec![
+                        Span::styled(
+                            "  │ ",
+                            Style::default().fg(border_color).bg(confirm_bg),
+                        ),
+                        Span::styled(" ", Style::default().bg(confirm_bg)),
+                    ];
+                    for span in &md_line.spans {
+                        let mut patched = span.clone();
+                        patched.style = patched.style.bg(confirm_bg);
+                        spans.push(patched);
+                    }
+                    if text_count == max_show && md_lines.len() > max_show {
+                        spans.push(Span::styled(
+                            "...",
+                            Style::default().fg(t.tool_confirm_text),
+                        ));
+                    }
+                    spans.push(Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ));
+                    spans.push(Span::styled(
+                        " │",
+                        Style::default().fg(border_color).bg(confirm_bg),
+                    ));
+                    lines.push(Line::from(spans));
                 }
-                spans.push(Span::styled(
-                    " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                    Style::default().bg(confirm_bg),
-                ));
-                spans.push(Span::styled(
-                    " │",
-                    Style::default().fg(border_color).bg(confirm_bg),
-                ));
-                lines.push(Line::from(spans));
             }
         } else if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
             // 工具确认模式：显示工具名和确认信息
