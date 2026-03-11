@@ -1,15 +1,18 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
 use super::super::handler::get_filtered_skills;
+use super::super::markdown::image_cache::ImageState;
+use super::super::markdown::image_loader::load_image;
 use super::super::model::agent_config_path;
 use super::super::render::{build_message_lines_incremental, char_width, display_width, wrap_text};
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
+use ratatui_image::{Resize, StatefulImage};
 
 pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let size = f.area();
@@ -289,8 +292,131 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         let line = &all_lines[line_idx];
         let y = inner.y + i as u16;
         let line_area = Rect::new(inner.x, y, inner.width, 1);
-        let p = Paragraph::new(line.clone()).style(msg_area_bg);
-        f.render_widget(p, line_area);
+        // 图片标记行：只渲染气泡填充 span，跳过末尾的标记 span
+        let has_marker = line.spans.iter().any(|s| s.content.starts_with("\x00IMG:"));
+        if has_marker {
+            let visible_spans: Vec<Span> = line
+                .spans
+                .iter()
+                .filter(|s| !s.content.starts_with("\x00IMG:"))
+                .cloned()
+                .collect();
+            let p = Paragraph::new(Line::from(visible_spans)).style(msg_area_bg);
+            f.render_widget(p, line_area);
+        } else {
+            let p = Paragraph::new(line.clone()).style(msg_area_bg);
+            f.render_widget(p, line_area);
+        }
+    }
+
+    // === 图片渲染 pass ===
+    let has_picker = app
+        .image_cache
+        .lock()
+        .unwrap()
+        .picker
+        .is_some();
+    // 图片渲染宽度与气泡内容区对齐
+    let img_pad = 3u16; // 与气泡 pad_left_w 一致
+    let img_render_w = (bubble_max_width as u16).saturating_sub(img_pad * 2);
+    for (i, line_idx) in (start..end).enumerate() {
+        let line = &all_lines[line_idx];
+        // 在所有 spans 中查找 \x00IMG: 标记（气泡包装会添加 padding spans）
+        let img_marker = line.spans.iter().find_map(|span| {
+            let content = span.content.as_ref();
+            content
+                .strip_prefix("\x00IMG:")
+                .and_then(|rest| {
+                    rest.find(':').map(|colon_pos| {
+                        let height: u16 = rest[..colon_pos].parse().unwrap_or(20);
+                        let url = &rest[colon_pos + 1..];
+                        (height, url.to_string())
+                    })
+                })
+        });
+        if let Some((height, url)) = img_marker {
+            let y = inner.y + i as u16;
+            let remaining_h = visible_height.saturating_sub(i as u16);
+
+            // 如果剩余可见高度不够容纳完整图片，跳过渲染（避免滚动时缩放）
+            if remaining_h < height {
+                continue;
+            }
+
+            // 图片区域在气泡内对齐：左 padding 3，宽度为气泡内容宽度
+            let img_x = inner.x + img_pad;
+            let img_area = Rect::new(img_x, y, img_render_w, height);
+
+            if !has_picker {
+                // 终端不支持图形协议，降级为文本链接
+                let fallback = Paragraph::new(Line::from(Span::styled(
+                    format!("  [Image: {}]", url),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .bg(app.theme.bubble_ai)
+                        .add_modifier(Modifier::UNDERLINED),
+                )));
+                let bubble_w = bubble_max_width as u16;
+                f.render_widget(fallback, Rect::new(inner.x, y, bubble_w, 1));
+                continue;
+            }
+
+            let mut cache = app.image_cache.lock().unwrap();
+            let bubble_w = bubble_max_width as u16;
+            match cache.images.get_mut(&url) {
+                Some(ImageState::Ready(protocol)) => {
+                    let widget = StatefulImage::default().resize(Resize::Scale(None));
+                    f.render_stateful_widget(widget, img_area, protocol);
+                }
+                Some(ImageState::Failed(err)) => {
+                    let err_line = Paragraph::new(Line::from(Span::styled(
+                        format!("  [Image load failed: {}]", err),
+                        Style::default().fg(Color::Red).bg(app.theme.bubble_ai),
+                    )));
+                    f.render_widget(err_line, Rect::new(inner.x, y, bubble_w, 1));
+                }
+                Some(ImageState::Loading) => {
+                    let loading = Paragraph::new(Line::from(Span::styled(
+                        format!("  Loading image: {}...", url),
+                        Style::default().fg(Color::DarkGray).bg(app.theme.bubble_ai),
+                    )));
+                    f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
+                }
+                Some(ImageState::Pending) | None => {
+                    let loading = Paragraph::new(Line::from(Span::styled(
+                        format!("  Loading image: {}...", url),
+                        Style::default().fg(Color::DarkGray).bg(app.theme.bubble_ai),
+                    )));
+                    f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
+                    // 标记为加载中
+                    cache.images.insert(url.clone(), ImageState::Loading);
+                    // spawn 后台线程加载图片
+                    let cache_clone = std::sync::Arc::clone(&app.image_cache);
+                    let url_owned = url.clone();
+                    std::thread::spawn(move || {
+                        match load_image(&url_owned) {
+                            Ok(dyn_img) => {
+                                let mut c = cache_clone.lock().unwrap();
+                                if let Some(ref picker) = c.picker {
+                                    let protocol = picker.new_resize_protocol(dyn_img);
+                                    c.images.insert(
+                                        url_owned,
+                                        ImageState::Ready(protocol),
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                cache_clone
+                                    .lock()
+                                    .unwrap()
+                                    .images
+                                    .insert(url_owned, ImageState::Failed(e));
+                            }
+                        }
+                    });
+                }
+            }
+        }
     }
 }
 

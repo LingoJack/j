@@ -48,6 +48,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     let mut in_blockquote = false;
     // 链接相关状态
     let mut link_url: Option<String> = None;
+    // 图片相关状态
+    let mut image_url: Option<String> = None;
+    let mut image_alt: String = String::new();
     // 表格相关状态
     let mut in_table = false;
     let mut table_rows: Vec<Vec<String>> = Vec::new();
@@ -286,7 +289,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 style_stack.pop();
             }
             Event::Text(text) => {
-                if in_code_block {
+                if image_url.is_some() {
+                    image_alt.push_str(&text);
+                } else if in_code_block {
                     code_block_content.push_str(&text);
                 } else if in_table {
                     current_cell.push_str(&text);
@@ -665,6 +670,33 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
             Event::End(TagEnd::TableCell) => {
                 current_row.push(current_cell.clone());
                 current_cell.clear();
+            }
+            // ===== 图片支持 =====
+            Event::Start(Tag::Image { dest_url, .. }) => {
+                flush_line(&mut current_spans, &mut lines);
+                image_url = Some(dest_url.to_string());
+                image_alt.clear();
+            }
+            Event::End(TagEnd::Image) => {
+                if let Some(url) = image_url.take() {
+                    let placeholder_height = 16u16;
+                    let marker = format!("\x00IMG:{}:{}", placeholder_height, url);
+                    // 图片标记行（供渲染层识别，渲染时覆盖为图片）
+                    lines.push(Line::from(Span::styled(marker, Style::default())));
+                    // 占位空行（预留渲染空间）
+                    for _ in 1..placeholder_height {
+                        lines.push(Line::from(Span::raw("")));
+                    }
+                    // 图片路径标注行
+                    let caption = format!("({})", url);
+                    lines.push(Line::from(Span::styled(
+                        caption,
+                        Style::default()
+                            .fg(ratatui::style::Color::DarkGray)
+                            .add_modifier(Modifier::DIM),
+                    )));
+                }
+                image_alt.clear();
             }
             _ => {}
         }

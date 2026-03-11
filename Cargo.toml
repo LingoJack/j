@@ -1,6 +1,6 @@
 [package]
 name = "j-cli"
-version = "12.4.2"
+version = "12.4.3"
 edition = "2024"
 rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
@@ -46,6 +46,8 @@ urlencoding = "2.1"
 html2text = "0.14"
 scraper = "0.25"
 html2md = "0.2"
+ratatui-image = "8.0.2"
+image = "0.25"
 # 浏览器自动化（可选，需 --features browser_cdp 启用）
 chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"], optional = true }
 base64 = { version = "0.22", optional = true }

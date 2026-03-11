@@ -653,6 +653,21 @@ pub fn wrap_md_line_in_bubble(
     pad_right_w: usize,
     bubble_total_w: usize,
 ) -> Line<'static> {
+    // 图片标记行：渲染为纯气泡背景空行，标记信息附加在末尾（不影响可见区域）
+    for span in &md_line.spans {
+        if span.content.starts_with("\x00IMG:") {
+            let marker = span.content.clone();
+            let mut spans: Vec<Span> = Vec::new();
+            // 整行用气泡背景色空格填充（与占位行一致）
+            spans.push(Span::styled(
+                " ".repeat(bubble_total_w),
+                Style::default().bg(bubble_bg),
+            ));
+            // 标记信息附加在行末（超出可见区域，渲染 pass 通过扫描 spans 识别）
+            spans.push(Span::styled(marker, Style::default()));
+            return Line::from(spans);
+        }
+    }
     let pad_left = " ".repeat(pad_left_w);
     let pad_right = " ".repeat(pad_right_w);
     let mut styled_spans: Vec<Span> = Vec::new();

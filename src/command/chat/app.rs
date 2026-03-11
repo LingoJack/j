@@ -1,4 +1,5 @@
 use super::api::{build_request_with_tools, create_openai_client};
+use super::markdown::image_cache::ImageCache;
 use super::model::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
     load_chat_session, load_memory, load_soul, load_style, load_system_prompt, memory_path,
@@ -194,6 +195,8 @@ pub struct ChatApp {
     pub queued_tasks: Arc<Mutex<Vec<String>>>,
     /// 共享消息列表（用于 agent loop 期间同步用户新消息）
     pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 图片缓存（渲染终端图片）
+    pub image_cache: Arc<Mutex<ImageCache>>,
 }
 
 /// 消息渲染行缓存
@@ -346,6 +349,7 @@ impl ChatApp {
             ask_request_rx: Some(ask_req_rx),
             queued_tasks,
             shared_messages: Arc::new(Mutex::new(Vec::new())),
+            image_cache: Arc::new(Mutex::new(ImageCache::new())),
         }
     }
 
