@@ -439,8 +439,13 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
             if app.is_loading {
-                // 流式中：取消请求，不退出
-                app.cancel_stream();
+                if app.tools_executing_count > 0 {
+                    // 有工具在执行：只取消工具，不终止 agent loop
+                    app.cancel_tools_only();
+                } else {
+                    // 流式文本阶段：取消整个请求
+                    app.cancel_stream();
+                }
             } else {
                 // 非加载中：原有行为（退出 TUI）
                 return true;

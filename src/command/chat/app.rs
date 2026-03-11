@@ -601,7 +601,7 @@ impl ChatApp {
             }
         }
         for done in exec_done_msgs {
-            // 更新工具状态
+            // 更新工具状态 TODO
             let summary = if done.output.len() > 60 {
                 let mut end = 60;
                 while !done.output.is_char_boundary(end) {
@@ -921,6 +921,14 @@ impl ChatApp {
         if let Some(task_text) = next_task {
             self.send_message_internal(task_text);
         }
+    }
+
+    /// 只取消工具执行，不终止 agent loop
+    pub fn cancel_tools_only(&mut self) {
+        // 只通知 ShellTool kill 子进程，不 drop tool_result_tx
+        self.tool_cancelled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.show_toast("工具已取消", false);
     }
 
     /// 取消当前流式请求
