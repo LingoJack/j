@@ -750,6 +750,10 @@ impl ChatApp {
             return;
         }
 
+        // 新一批工具开始前，清除上一批的取消标志
+        self.tool_cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+
         self.tools_executing_count += tasks.len();
 
         let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
@@ -794,6 +798,10 @@ impl ChatApp {
         };
 
         self.tools_executing_count += 1;
+
+        // 新工具开始前，清除上一批的取消标志
+        self.tool_cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
         self.tool_exec_rx = Some(exec_rx);
