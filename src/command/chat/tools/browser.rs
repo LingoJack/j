@@ -83,15 +83,38 @@ mod cdp {
     pub async fn status() -> Result<String, String> {
         let state = browser_state().lock().await;
         if let Some(ref s) = *state {
+            let mut tab_list = Vec::new();
+            for (id, page) in &s.pages {
+                let url: String = page
+                    .evaluate("window.location.href")
+                    .await
+                    .ok()
+                    .and_then(|v| v.into_value().ok())
+                    .unwrap_or_default();
+                let title: String = page
+                    .evaluate("document.title")
+                    .await
+                    .ok()
+                    .and_then(|v| v.into_value().ok())
+                    .unwrap_or_default();
+                tab_list.push(serde_json::json!({
+                    "id": id,
+                    "url": url,
+                    "title": if title.is_empty() { "(无标题)".to_string() } else { title },
+                }));
+            }
             Ok(serde_json::json!({
                 "running": true,
-                "tabs": s.pages.len(),
+                "tabs_count": s.pages.len(),
+                "tabs": tab_list,
             })
             .to_string())
         } else {
             Ok(serde_json::json!({
                 "running": false,
-                "tabs": 0,
+                "tabs_count": 0,
+                "tabs": [],
+                "hint": "使用 action='start' 启动浏览器，或 action='open' 直接打开页面（会自动启动）"
             })
             .to_string())
         }
@@ -120,14 +143,29 @@ mod cdp {
     pub async fn list_tabs() -> Result<String, String> {
         let state = browser_state().lock().await;
         if let Some(ref s) = *state {
-            let tabs: Vec<serde_json::Value> = s
-                .pages
-                .keys()
-                .map(|id| serde_json::json!({ "id": id }))
-                .collect();
-            Ok(serde_json::json!({ "tabs": tabs }).to_string())
+            let mut tabs = Vec::new();
+            for (id, page) in &s.pages {
+                let url: String = page
+                    .evaluate("window.location.href")
+                    .await
+                    .ok()
+                    .and_then(|v| v.into_value().ok())
+                    .unwrap_or_default();
+                let title: String = page
+                    .evaluate("document.title")
+                    .await
+                    .ok()
+                    .and_then(|v| v.into_value().ok())
+                    .unwrap_or_default();
+                tabs.push(serde_json::json!({
+                    "id": id,
+                    "url": url,
+                    "title": if title.is_empty() { "(无标题)".to_string() } else { title },
+                }));
+            }
+            Ok(serde_json::json!({ "tabs": tabs, "count": tabs.len() }).to_string())
         } else {
-            Err("浏览器未运行，请先使用 action='start'".to_string())
+            Err("浏览器未运行。请先使用 action='start' 启动浏览器，或 action='open' 直接打开页面".to_string())
         }
     }
 
@@ -142,7 +180,15 @@ mod cdp {
             .browser
             .new_page(url)
             .await
-            .map_err(|e| format!("打开页面失败: {}", e))?;
+            .map_err(|e| format!("打开页面失败: {}。请检查 URL 是否正确（需包含 https://）", e))?;
+
+        // 尝试获取页面标题
+        let title: String = page
+            .evaluate("document.title")
+            .await
+            .ok()
+            .and_then(|v| v.into_value().ok())
+            .unwrap_or_default();
 
         let tab_id = format!("tab_{}", s.pages.len());
         s.pages.insert(tab_id.clone(), page);
@@ -150,7 +196,9 @@ mod cdp {
         Ok(serde_json::json!({
             "success": true,
             "tab_id": tab_id,
-            "url": url
+            "url": url,
+            "title": if title.is_empty() { "(页面加载中)".to_string() } else { title },
+            "hint": "使用 action='snapshot' 查看页面可交互元素，action='content' 获取正文文本"
         })
         .to_string())
     }
@@ -158,23 +206,32 @@ mod cdp {
     /// 导航到 URL
     pub async fn navigate(tab_id: Option<&str>, url: &str) -> Result<String, String> {
         let mut state = browser_state().lock().await;
-        let s = state.as_mut().ok_or("浏览器未运行")?;
+        let s = state.as_mut().ok_or("浏览器未运行。请先使用 action='open' 打开页面（会自动启动浏览器）")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         page.goto(url)
             .await
-            .map_err(|e| format!("导航失败: {}", e))?;
+            .map_err(|e| format!("导航失败: {}。请检查 URL 是否正确", e))?;
+
+        // 尝试获取导航后的页面标题
+        let title: String = page
+            .evaluate("document.title")
+            .await
+            .ok()
+            .and_then(|v| v.into_value().ok())
+            .unwrap_or_default();
 
         Ok(serde_json::json!({
             "success": true,
-            "url": url
+            "url": url,
+            "title": if title.is_empty() { "(页面加载中)".to_string() } else { title }
         })
         .to_string())
     }
@@ -186,14 +243,14 @@ mod cdp {
         output_dir: &str,
     ) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         let screenshot_data = if full_page {
@@ -246,20 +303,20 @@ mod cdp {
     /// 获取页面内容（智能提取正文，去除导航/脚注/脚本等噪音）
     pub async fn get_content(tab_id: Option<&str>) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         let raw_html = page
             .content()
             .await
-            .map_err(|e| format!("获取页面内容失败: {}", e))?;
+            .map_err(|e| format!("获取页面内容失败: {}。页面可能已关闭或正在加载，建议用 action='tabs' 检查状态", e))?;
 
         let text = crate::command::chat::tools::html_extract::extract_text_from_html(&raw_html);
 
@@ -281,14 +338,14 @@ mod cdp {
     /// 点击元素
     pub async fn click(tab_id: Option<&str>, selector: &str) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         // 使用 JS click，绕过 CDP 原生 click 的可见性检查
@@ -311,7 +368,7 @@ mod cdp {
             .unwrap_or_default();
 
         if result == "not_found" {
-            return Err(format!("未找到元素: {}", selector));
+            return Err(format!("未找到元素 '{}'。建议先用 action='snapshot' 查看页面元素列表，使用返回的 selector 字段", selector));
         }
 
         Ok(serde_json::json!({
@@ -332,14 +389,14 @@ mod cdp {
         text: &str,
     ) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         // 通过 JS 点击聚焦，绕过可见性检查
@@ -363,7 +420,7 @@ mod cdp {
             .unwrap_or_default();
 
         if focus_result == "not_found" {
-            return Err(format!("未找到元素: {}", selector));
+            return Err(format!("未找到元素 '{}'。建议先用 action='snapshot' 查看页面元素列表，使用返回的 selector 字段", selector));
         }
 
         // 通过 JS 设置值并触发事件，兼容所有语言字符
@@ -397,7 +454,7 @@ mod cdp {
             .map_err(|e| format!("转换结果失败: {}", e))?;
 
         if result.as_str() == Some("element_not_found") {
-            return Err(format!("JS 未找到元素: {}", selector));
+            return Err(format!("JS 未找到元素 '{}'。建议先用 action='snapshot' 获取最新的元素 selector", selector));
         }
 
         Ok(serde_json::json!({
@@ -412,14 +469,14 @@ mod cdp {
     /// 按键
     pub async fn press_key(tab_id: Option<&str>, key: &str) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         use chromiumoxide::cdp::browser_protocol::input::{
@@ -471,14 +528,14 @@ mod cdp {
     /// 执行 JavaScript
     pub async fn evaluate(tab_id: Option<&str>, script: &str) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         let result: serde_json::Value = page
@@ -502,38 +559,40 @@ mod cdp {
                 .map_err(|e| format!("关闭标签页失败: {}", e))?;
             Ok(serde_json::json!({
                 "success": true,
-                "closed": tab_id
+                "closed": tab_id,
+                "remaining_tabs": s.pages.len()
             })
             .to_string())
         } else {
-            Err(format!("未找到标签页: {}", tab_id))
+            let available: Vec<&String> = s.pages.keys().collect();
+            Err(format!("未找到标签页 '{}'。当前可用标签页: {:?}", tab_id, available))
         }
     }
 
     /// 页面快照（可交互元素列表）
     pub async fn snapshot(tab_id: Option<&str>) -> Result<String, String> {
         let state = browser_state().lock().await;
-        let s = state.as_ref().ok_or("浏览器未运行")?;
+        let s = state.as_ref().ok_or("浏览器未运行。请先使用 action='open' 打开页面")?;
 
         let page = if let Some(id) = tab_id {
             s.pages
                 .get(id)
-                .ok_or_else(|| format!("未找到标签页: {}", id))?
+                .ok_or_else(|| format!("未找到标签页 '{}'。使用 action='tabs' 查看所有可用标签页", id))?
         } else {
-            s.pages.values().next().ok_or("没有已打开的标签页")?
+            s.pages.values().next().ok_or("没有已打开的标签页。请先使用 action='open' 打开一个页面")?
         };
 
         let title: String = page
             .evaluate("document.title")
             .await
-            .map_err(|e| format!("获取标题失败: {}", e))?
+            .map_err(|e| format!("页面可能已关闭或无响应（获取标题失败: {}）。建议使用 action='tabs' 检查标签页状态，或重新 open 页面", e))?
             .into_value()
             .unwrap_or_default();
 
         let url: String = page
             .evaluate("window.location.href")
             .await
-            .map_err(|e| format!("获取 URL 失败: {}", e))?
+            .map_err(|e| format!("页面可能已关闭或无响应（获取 URL 失败: {}）。建议使用 action='tabs' 检查标签页状态，或重新 open 页面", e))?
             .into_value()
             .unwrap_or_default();
 
@@ -558,7 +617,7 @@ mod cdp {
             "#,
             )
             .await
-            .map_err(|e| format!("获取元素失败: {}", e))?
+            .map_err(|e| format!("获取页面元素失败: {}。页面可能正在加载，建议稍后重试", e))?
             .into_value()
             .unwrap_or(serde_json::json!([]));
 
