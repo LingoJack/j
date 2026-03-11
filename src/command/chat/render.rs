@@ -382,10 +382,7 @@ pub fn build_message_lines_incremental(
                     .any(|s| s.content.starts_with("\x00IMG:"));
                 // 检测是否是图片占位空行
                 let is_placeholder = md_line.spans.is_empty()
-                    || md_line
-                        .spans
-                        .iter()
-                        .all(|s| s.content.trim().is_empty());
+                    || md_line.spans.iter().all(|s| s.content.trim().is_empty());
 
                 if is_img_marker {
                     // 图片标记行：与主消息区一致的格式（气泡背景空格 + 末尾标记）
@@ -421,10 +418,7 @@ pub fn build_message_lines_incremental(
                     let msg_w = display_width(&line_text);
                     let fill = content_w.saturating_sub(msg_w + 2);
                     let mut spans = vec![
-                        Span::styled(
-                            "  │ ",
-                            Style::default().fg(border_color).bg(confirm_bg),
-                        ),
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
                         Span::styled(" ", Style::default().bg(confirm_bg)),
                     ];
                     for span in &md_line.spans {
