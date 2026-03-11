@@ -633,6 +633,9 @@ impl ChatApp {
             self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
             if self.tools_executing_count == 0 {
                 self.tool_exec_rx = None;
+                // 本批工具全部完成，重置取消标志，避免影响后续轮次
+                self.tool_cancelled
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
             }
         }
 
