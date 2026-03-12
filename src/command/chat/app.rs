@@ -171,6 +171,8 @@ pub struct ChatApp {
     pub tool_cancelled: Arc<std::sync::atomic::AtomicBool>,
     /// 是否有待执行的工具（已设为 Executing 状态但尚未实际调用，等待下一帧重绘后再执行）
     pub pending_tool_execution: bool,
+    /// 工具后台线程 → 主线程的执行结果 channel（发送端，保持复用）
+    pub tool_exec_tx: Option<mpsc::Sender<ToolExecDoneMsg>>,
     /// 工具后台线程 → 主线程的执行结果 channel
     pub tool_exec_rx: Option<mpsc::Receiver<ToolExecDoneMsg>>,
     /// 当前正在后台执行的工具数量（用于等待所有工具完成）
@@ -348,6 +350,7 @@ impl ChatApp {
             cancel_token: None,
             tool_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             pending_tool_execution: false,
+            tool_exec_tx: None,
             tool_exec_rx: None,
             tools_executing_count: 0,
             tool_interact_selected: 0,
@@ -478,6 +481,7 @@ impl ChatApp {
         self.msg_lines_cache = None;
         self.active_tool_calls.clear();
         self.pending_tool_idx = 0;
+        self.tool_exec_tx = None;
         self.tool_exec_rx = None;
         self.tools_executing_count = 0;
         self.pending_tool_execution = false;
@@ -555,9 +559,22 @@ impl ChatApp {
             return;
         }
 
-        // 如果在 ToolConfirm 模式，暂停轮询（等待用户操作）
+        // 如果在 ToolConfirm 模式，仍然需要轮询工具执行结果（但暂停流式消息轮询）
         if self.mode == ChatMode::ToolConfirm {
-            // 但仍然轮询 ask 请求（不在此处，ask 在进入 ToolConfirm 前已处理）
+            self.poll_tool_exec_results();
+            // 轮询 ask 请求
+            if let Some(ref rx) = self.ask_request_rx
+                && let Ok(ask_req) = rx.try_recv()
+            {
+                self.tool_ask_mode = true;
+                self.tool_ask_question = ask_req.question;
+                self.ask_response_tx = Some(ask_req.response_tx);
+                self.tool_interact_selected = 0;
+                self.tool_interact_typing = false;
+                self.tool_interact_input.clear();
+                self.tool_interact_cursor = 0;
+                self.msg_lines_cache = None;
+            }
             return;
         }
 
@@ -590,60 +607,7 @@ impl ChatApp {
         }
 
         // 轮询后台工具执行结果
-        let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
-        if self.tool_exec_rx.is_some() {
-            loop {
-                let msg = self.tool_exec_rx.as_ref().unwrap().try_recv();
-                match msg {
-                    Ok(done) => {
-                        exec_done_msgs.push(done);
-                    }
-                    Err(mpsc::TryRecvError::Empty) => break,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        self.tool_exec_rx = None;
-                        break;
-                    }
-                }
-            }
-        }
-        for done in exec_done_msgs {
-            // 更新工具状态 TODO
-            let summary = if done.output.len() > 60 {
-                let mut end = 60;
-                while !done.output.is_char_boundary(end) {
-                    end -= 1;
-                }
-                format!("{}...", &done.output[..end])
-            } else {
-                done.output.clone()
-            };
-            if let Some(tc) = self
-                .active_tool_calls
-                .iter_mut()
-                .find(|tc| tc.tool_call_id == done.tool_call_id)
-            {
-                tc.status = if done.is_error {
-                    ToolExecStatus::Failed(summary)
-                } else {
-                    ToolExecStatus::Done(summary)
-                };
-            }
-            // 转发结果给后台 agent 线程
-            if let Some(ref tx) = self.tool_result_tx {
-                let _ = tx.send(ToolResultMsg {
-                    tool_call_id: done.tool_call_id,
-                    result: done.output,
-                    is_error: done.is_error,
-                });
-            }
-            self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
-            if self.tools_executing_count == 0 {
-                self.tool_exec_rx = None;
-                // 本批工具全部完成，重置取消标志，避免影响后续轮次
-                self.tool_cancelled
-                    .store(false, std::sync::atomic::Ordering::Relaxed);
-            }
-        }
+        self.poll_tool_exec_results();
 
         // 轮询 ask 工具请求
         if let Some(ref rx) = self.ask_request_rx
@@ -736,6 +700,65 @@ impl ChatApp {
         }
     }
 
+    /// 轮询后台工具执行结果，更新状态并转发给 agent loop
+    fn poll_tool_exec_results(&mut self) {
+        let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
+        if self.tool_exec_rx.is_some() {
+            loop {
+                let msg = self.tool_exec_rx.as_ref().unwrap().try_recv();
+                match msg {
+                    Ok(done) => {
+                        exec_done_msgs.push(done);
+                    }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        self.tool_exec_tx = None;
+                        self.tool_exec_rx = None;
+                        break;
+                    }
+                }
+            }
+        }
+        for done in exec_done_msgs {
+            let summary = if done.output.len() > 60 {
+                let mut end = 60;
+                while !done.output.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &done.output[..end])
+            } else {
+                done.output.clone()
+            };
+            if let Some(tc) = self
+                .active_tool_calls
+                .iter_mut()
+                .find(|tc| tc.tool_call_id == done.tool_call_id)
+            {
+                tc.status = if done.is_error {
+                    ToolExecStatus::Failed(summary)
+                } else {
+                    ToolExecStatus::Done(summary)
+                };
+            }
+            // 转发结果给后台 agent 线程
+            if let Some(ref tx) = self.tool_result_tx {
+                let _ = tx.send(ToolResultMsg {
+                    tool_call_id: done.tool_call_id,
+                    result: done.output,
+                    is_error: done.is_error,
+                });
+            }
+            self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
+            if self.tools_executing_count == 0 {
+                self.tool_exec_tx = None;
+                self.tool_exec_rx = None;
+                // 本批工具全部完成，重置取消标志，避免影响后续轮次
+                self.tool_cancelled
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
     /// 把所有 Executing 状态的工具放到后台线程执行，结果发到 tool_exec_rx
     fn execute_all_tools_no_confirm(&mut self) {
         // 收集需要执行的工具信息
@@ -762,8 +785,15 @@ impl ChatApp {
 
         self.tools_executing_count += tasks.len();
 
-        let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
-        self.tool_exec_rx = Some(exec_rx);
+        // 复用已有 channel，或创建新的
+        let exec_tx = if let Some(ref tx) = self.tool_exec_tx {
+            tx.clone()
+        } else {
+            let (tx, rx) = mpsc::channel::<ToolExecDoneMsg>();
+            self.tool_exec_tx = Some(tx.clone());
+            self.tool_exec_rx = Some(rx);
+            tx
+        };
 
         // 为每个工具 spawn 一个线程（Arc<ToolRegistry> 可跨线程共享）
         for (tool_call_id, tool_name, arguments) in tasks {
@@ -809,8 +839,15 @@ impl ChatApp {
         self.tool_cancelled
             .store(false, std::sync::atomic::Ordering::Relaxed);
 
-        let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
-        self.tool_exec_rx = Some(exec_rx);
+        // 复用已有 channel，或创建新的
+        let exec_tx = if let Some(ref tx) = self.tool_exec_tx {
+            tx.clone()
+        } else {
+            let (tx, rx) = mpsc::channel::<ToolExecDoneMsg>();
+            self.tool_exec_tx = Some(tx.clone());
+            self.tool_exec_rx = Some(rx);
+            tx
+        };
 
         let registry = Arc::clone(&self.tool_registry);
         let cancelled = Arc::clone(&self.tool_cancelled);
@@ -883,6 +920,7 @@ impl ChatApp {
         self.stream_rx = None;
         self.cancel_token = None;
         self.tool_result_tx = None;
+        self.tool_exec_tx = None;
         self.tool_exec_rx = None;
         self.tools_executing_count = 0;
         self.is_loading = false;
