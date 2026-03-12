@@ -392,9 +392,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             .replace('"', "\\\"");
         let apple_script = format!(
             "tell application \"Terminal\"\n\
+                do script \"{}\"\n\
+                do script \"{}\"\n\
                 activate\n\
-                do script \"{}\"\n\
-                do script \"{}\"\n\
             end tell",
             info_cmd, error_cmd
         );
