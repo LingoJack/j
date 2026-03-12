@@ -750,6 +750,10 @@ impl ChatApp {
             return;
         }
 
+        // 新一批工具开始前，清除上一批的取消标志
+        self.tool_cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+
         self.tools_executing_count += tasks.len();
 
         let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
@@ -794,6 +798,10 @@ impl ChatApp {
         };
 
         self.tools_executing_count += 1;
+
+        // 新工具开始前，清除上一批的取消标志
+        self.tool_cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         let (exec_tx, exec_rx) = mpsc::channel::<ToolExecDoneMsg>();
         self.tool_exec_rx = Some(exec_rx);
@@ -856,8 +864,10 @@ impl ChatApp {
             self.tool_confirm_entered_at = std::time::Instant::now();
             // 继续保持 ToolConfirm 模式
         } else {
-            // 没有更多需要确认的工具，执行剩余 Executing 状态的工具（后台），退出确认模式
-            self.execute_all_tools_no_confirm();
+            // 没有更多需要确认的工具，退出确认模式
+            // 注意：不需要再调 execute_all_tools_no_confirm()，因为：
+            // - 不需确认的工具已在进入 ToolConfirm 前被执行
+            // - 需确认的工具已在 execute_pending_tool 中被逐个 spawn
             self.mode = ChatMode::Chat;
         }
     }
