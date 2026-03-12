@@ -76,8 +76,27 @@ impl Tool for ShellTool {
             }
         };
 
+        // 先取走 stdout/stderr 句柄，在独立线程中读取，避免管道缓冲区满导致死锁
+        let stdout_handle = child.stdout.take();
+        let stderr_handle = child.stderr.take();
+
+        let stdout_thread = std::thread::spawn(move || {
+            stdout_handle.map(|mut r| {
+                let mut buf = Vec::new();
+                std::io::Read::read_to_end(&mut r, &mut buf).ok();
+                buf
+            })
+        });
+        let stderr_thread = std::thread::spawn(move || {
+            stderr_handle.map(|mut r| {
+                let mut buf = Vec::new();
+                std::io::Read::read_to_end(&mut r, &mut buf).ok();
+                buf
+            })
+        });
+
         // 轮询等待子进程完成，同时检测取消信号
-        loop {
+        let status = loop {
             if cancelled.load(Ordering::Relaxed) {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -87,7 +106,7 @@ impl Tool for ShellTool {
                 };
             }
             match child.try_wait() {
-                Ok(Some(_)) => break,
+                Ok(Some(status)) => break status,
                 Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
                 Err(e) => {
                     return ToolResult {
@@ -96,40 +115,35 @@ impl Tool for ShellTool {
                     };
                 }
             }
+        };
+
+        let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
+        let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
+
+        let mut result = String::new();
+        let stdout = String::from_utf8_lossy(&stdout_bytes);
+        let stderr = String::from_utf8_lossy(&stderr_bytes);
+
+        if !stdout.is_empty() {
+            result.push_str(&stdout);
+        }
+        if !stderr.is_empty() {
+            if !result.is_empty() {
+                result.push_str("\n[stderr]\n");
+            } else {
+                result.push_str("[stderr]\n");
+            }
+            result.push_str(&stderr);
         }
 
-        match child.wait_with_output() {
-            Ok(output) => {
-                let mut result = String::new();
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
+        if result.is_empty() {
+            result = "(无输出)".to_string();
+        }
 
-                if !stdout.is_empty() {
-                    result.push_str(&stdout);
-                }
-                if !stderr.is_empty() {
-                    if !result.is_empty() {
-                        result.push_str("\n[stderr]\n");
-                    } else {
-                        result.push_str("[stderr]\n");
-                    }
-                    result.push_str(&stderr);
-                }
-
-                if result.is_empty() {
-                    result = "(无输出)".to_string();
-                }
-
-                let is_error = !output.status.success();
-                ToolResult {
-                    output: result,
-                    is_error,
-                }
-            }
-            Err(e) => ToolResult {
-                output: format!("执行失败: {}", e),
-                is_error: true,
-            },
+        let is_error = !status.success();
+        ToolResult {
+            output: result,
+            is_error,
         }
     }
 
