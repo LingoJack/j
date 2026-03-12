@@ -22,7 +22,8 @@
       "Bash(cargo run:*)",
       "WebFetch(domain:crates.io)",
       "Bash(xargs sed:*)",
-      "Bash(cargo tree:*)"
+      "Bash(cargo tree:*)",
+      "Bash(make install:*)"
     ]
   },
   "language": "zh-CN",

@@ -600,7 +600,23 @@ impl ChatApp {
                 self.tool_ask_mode = false;
                 self.tool_ask_question.clear();
                 self.mode = ChatMode::ToolConfirm;
+                write_info_log(
+                    "poll_stream",
+                    &format!(
+                        "进入 ToolConfirm 模式, pending_tool_idx={}, active_tool_calls={}, tools_executing_count={}",
+                        self.pending_tool_idx,
+                        self.active_tool_calls.len(),
+                        self.tools_executing_count,
+                    ),
+                );
             } else {
+                write_info_log(
+                    "poll_stream",
+                    &format!(
+                        "无需确认的工具, 直接执行, active_tool_calls={}",
+                        self.active_tool_calls.len(),
+                    ),
+                );
                 self.execute_all_tools_no_confirm();
             }
             return;
@@ -712,12 +728,24 @@ impl ChatApp {
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
+                        write_info_log("poll_tool_exec_results", "tool_exec_rx disconnected");
                         self.tool_exec_tx = None;
                         self.tool_exec_rx = None;
                         break;
                     }
                 }
             }
+        }
+        if !exec_done_msgs.is_empty() {
+            write_info_log(
+                "poll_tool_exec_results",
+                &format!(
+                    "收到 {} 个工具结果, tools_executing_count={}, tool_result_tx={}",
+                    exec_done_msgs.len(),
+                    self.tools_executing_count,
+                    self.tool_result_tx.is_some(),
+                ),
+            );
         }
         for done in exec_done_msgs {
             let summary = if done.output.len() > 60 {
@@ -819,6 +847,17 @@ impl ChatApp {
             return;
         }
 
+        write_info_log(
+            "execute_pending_tool",
+            &format!(
+                "确认执行 idx={}, tool={}, tools_executing_count={}, tool_exec_tx={}",
+                idx,
+                self.active_tool_calls[idx].tool_name,
+                self.tools_executing_count,
+                self.tool_exec_tx.is_some(),
+            ),
+        );
+
         {
             let tc_status = &mut self.active_tool_calls[idx];
             tc_status.status = ToolExecStatus::Executing;
@@ -905,12 +944,20 @@ impl ChatApp {
         if let Some(next_idx) = next {
             self.pending_tool_idx = next_idx;
             self.tool_confirm_entered_at = std::time::Instant::now();
+            write_info_log(
+                "advance_tool_confirm",
+                &format!("推进到 pending_tool_idx={}", next_idx),
+            );
             // 继续保持 ToolConfirm 模式
         } else {
+            write_info_log(
+                "advance_tool_confirm",
+                &format!(
+                    "所有工具已处理, 退出 ToolConfirm, tools_executing_count={}",
+                    self.tools_executing_count,
+                ),
+            );
             // 没有更多需要确认的工具，退出确认模式
-            // 注意：不需要再调 execute_all_tools_no_confirm()，因为：
-            // - 不需确认的工具已在进入 ToolConfirm 前被执行
-            // - 需确认的工具已在 execute_pending_tool 中被逐个 spawn
             self.mode = ChatMode::Chat;
         }
     }
