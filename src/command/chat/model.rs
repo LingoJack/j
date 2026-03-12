@@ -56,6 +56,9 @@ pub struct AgentConfig {
     /// 被禁用的工具名称列表（tools_enabled=true 时，此列表中的工具不会发送给 LLM）
     #[serde(default)]
     pub disabled_tools: Vec<String>,
+    /// 被禁用的 skill 名称列表（列表中的 skill 不会包含在系统提示词中）
+    #[serde(default)]
+    pub disabled_skills: Vec<String>,
 }
 
 fn default_max_history_messages() -> usize {

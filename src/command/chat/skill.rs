@@ -119,11 +119,16 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
 // ========== build_skills_summary ==========
 
 /// 构建 skills 摘要列表（JSON 数组格式），用于系统提示词的 {{.skills}} 占位符
-pub fn build_skills_summary(skills: &[Skill]) -> String {
-    if skills.is_empty() {
+/// disabled_skills 中的 skill 会被过滤掉
+pub fn build_skills_summary(skills: &[Skill], disabled_skills: &[String]) -> String {
+    let filtered: Vec<&Skill> = skills
+        .iter()
+        .filter(|s| !disabled_skills.iter().any(|d| d == &s.frontmatter.name))
+        .collect();
+    if filtered.is_empty() {
         return "[]".to_string();
     }
-    let items: Vec<serde_json::Value> = skills
+    let items: Vec<serde_json::Value> = filtered
         .iter()
         .map(|s| {
             serde_json::json!({

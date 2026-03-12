@@ -60,6 +60,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                 style: None,
                 tool_confirm_timeout: 0,
                 disabled_tools: Vec::new(),
+                disabled_skills: Vec::new(),
             };
             let _ = save_agent_config(&example);
             app.agent_config = example;
@@ -165,6 +166,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                             ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
                             ChatMode::ToolConfirm => handle_tool_confirm_mode(&mut app, key),
                             ChatMode::ToolToggle => handle_tool_toggle_mode(&mut app, key),
+                            ChatMode::SkillToggle => handle_skill_toggle_mode(&mut app, key),
                         }
                     }
                     Event::Resize(_, _) => {
@@ -668,6 +670,7 @@ pub fn config_field_label(idx: usize) -> &'static str {
             "tools_enabled" => "工具调用",
             "max_tool_rounds" => "工具轮数上限",
             "tool_confirm_timeout" => "确认超时(秒)",
+            "skills_enabled" => "Skills",
             _ => CONFIG_GLOBAL_FIELDS[gi],
         }
     }
@@ -728,6 +731,17 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
                     format!("{}秒", app.agent_config.tool_confirm_timeout)
                 }
             }
+            "skills_enabled" => {
+                let total = app.loaded_skills.len();
+                let enabled = total
+                    - app
+                        .agent_config
+                        .disabled_skills
+                        .iter()
+                        .filter(|d| app.loaded_skills.iter().any(|s| &s.frontmatter.name == *d))
+                        .count();
+                format!("{}/{} 已启用", enabled, total)
+            }
             _ => String::new(),
         }
     }
@@ -770,6 +784,7 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
             }
             "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
             "tool_confirm_timeout" => app.agent_config.tool_confirm_timeout.to_string(),
+            "skills_enabled" => String::new(), // 不可直接编辑，进入子菜单
             _ => String::new(),
         }
     }
@@ -964,6 +979,12 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
                     app.mode = ChatMode::ToolToggle;
                     return;
                 }
+                // skills_enabled 字段：Enter 进入 Skill 开关子菜单
+                if CONFIG_GLOBAL_FIELDS[gi] == "skills_enabled" {
+                    app.skill_toggle_index = 0;
+                    app.mode = ChatMode::SkillToggle;
+                    return;
+                }
                 // theme 字段直接循环切换，不进入编辑模式
                 if CONFIG_GLOBAL_FIELDS[gi] == "theme" {
                     app.switch_theme();
@@ -1094,6 +1115,60 @@ pub fn handle_tool_toggle_mode(app: &mut ChatApp, key: KeyEvent) {
                 "关闭"
             };
             app.show_toast(format!("工具调用已{}", status), false);
+        }
+        _ => {}
+    }
+}
+
+pub fn handle_skill_toggle_mode(app: &mut ChatApp, key: KeyEvent) {
+    let total = app.loaded_skills.len();
+    if total == 0 {
+        app.mode = ChatMode::Config;
+        return;
+    }
+
+    match key.code {
+        KeyCode::Esc => {
+            save_agent_config(&app.agent_config);
+            app.mode = ChatMode::Config;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.skill_toggle_index == 0 {
+                app.skill_toggle_index = total - 1;
+            } else {
+                app.skill_toggle_index -= 1;
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.skill_toggle_index = (app.skill_toggle_index + 1) % total;
+        }
+        KeyCode::Enter | KeyCode::Char(' ') => {
+            let name = app.loaded_skills[app.skill_toggle_index]
+                .frontmatter
+                .name
+                .clone();
+            if let Some(pos) = app
+                .agent_config
+                .disabled_skills
+                .iter()
+                .position(|d| d == &name)
+            {
+                app.agent_config.disabled_skills.remove(pos);
+            } else {
+                app.agent_config.disabled_skills.push(name);
+            }
+        }
+        KeyCode::Char('a') => {
+            app.agent_config.disabled_skills.clear();
+            app.show_toast("已启用全部 Skills", false);
+        }
+        KeyCode::Char('d') => {
+            app.agent_config.disabled_skills = app
+                .loaded_skills
+                .iter()
+                .map(|s| s.frontmatter.name.clone())
+                .collect();
+            app.show_toast("已禁用全部 Skills", false);
         }
         _ => {}
     }
@@ -1459,6 +1534,12 @@ pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
     let filter = app.at_popup_filter.to_lowercase();
     app.loaded_skills
         .iter()
+        .filter(|s| {
+            !app.agent_config
+                .disabled_skills
+                .iter()
+                .any(|d| d == &s.frontmatter.name)
+        })
         .map(|s| s.frontmatter.name.clone())
         .filter(|name| filter.is_empty() || name.to_lowercase().contains(&filter))
         .collect()

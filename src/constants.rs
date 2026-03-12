@@ -37,6 +37,7 @@ pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "tools_enabled",
     "max_tool_rounds",
     "tool_confirm_timeout",
+    "skills_enabled",
 ];
 
 /// Toast 通知显示时长（秒）

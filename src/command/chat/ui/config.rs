@@ -605,3 +605,144 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .scroll((0, 0));
     f.render_widget(content, area);
 }
+
+pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+    let t = &app.theme;
+    let bg = t.bg_title;
+    let total = app.loaded_skills.len();
+    let enabled_count = total
+        - app
+            .agent_config
+            .disabled_skills
+            .iter()
+            .filter(|d| app.loaded_skills.iter().any(|s| &s.frontmatter.name == *d))
+            .count();
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![Span::styled(
+        "  📦 Skill 开关",
+        Style::default()
+            .fg(t.config_title)
+            .add_modifier(Modifier::BOLD),
+    )]));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![Span::styled(
+        format!("  已启用: {}/{}", enabled_count, total),
+        Style::default()
+            .fg(t.config_toggle_on)
+            .add_modifier(Modifier::BOLD),
+    )]));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(t.separator),
+    )));
+    lines.push(Line::from(""));
+
+    for (i, skill) in app.loaded_skills.iter().enumerate() {
+        let is_selected = i == app.skill_toggle_index;
+        let name = &skill.frontmatter.name;
+        let is_disabled = app.agent_config.disabled_skills.iter().any(|d| d == name);
+        let is_enabled = !is_disabled;
+
+        let pointer = if is_selected { "  ▸ " } else { "    " };
+        let pointer_style = if is_selected {
+            Style::default().fg(t.config_pointer)
+        } else {
+            Style::default()
+        };
+
+        let toggle_style = if is_enabled {
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_toggle_off)
+        };
+        let toggle_text = if is_enabled { "●" } else { "○" };
+
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_label)
+        };
+
+        let desc_style = Style::default().fg(t.config_dim);
+
+        lines.push(Line::from(vec![
+            Span::styled(pointer, pointer_style),
+            Span::styled(toggle_text, toggle_style),
+            Span::styled(" ", Style::default()),
+            Span::styled(name.to_string(), name_style),
+            Span::styled(format!("  {}", skill.frontmatter.description), desc_style),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  ─────────────────────────────────────────",
+        Style::default().fg(t.separator),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("    ", Style::default()),
+        Span::styled(
+            "↑↓/jk",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 选择  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "Enter/空格",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 切换  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "a",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 全部启用  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "d",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 全部禁用  ", Style::default().fg(t.config_hint_desc)),
+        Span::styled(
+            "Esc",
+            Style::default()
+                .fg(t.config_hint_key)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" 返回", Style::default().fg(t.config_hint_desc)),
+    ]));
+
+    let content = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.border_config))
+                .title(Span::styled(
+                    " 📦 Skill 开关设置 ",
+                    Style::default()
+                        .fg(t.config_label_selected)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(bg)),
+        )
+        .scroll((0, 0));
+    f.render_widget(content, area);
+}

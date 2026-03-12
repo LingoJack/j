@@ -199,6 +199,8 @@ pub struct ChatApp {
     pub image_cache: Arc<Mutex<ImageCache>>,
     /// 工具开关子菜单中选中的索引
     pub tool_toggle_index: usize,
+    /// Skill 开关子菜单中选中的索引
+    pub skill_toggle_index: usize,
 }
 
 /// 消息渲染行缓存
@@ -261,6 +263,8 @@ pub enum ChatMode {
     ToolConfirm,
     /// 工具开关子菜单模式（逐个启用/禁用工具）
     ToolToggle,
+    /// Skill 开关子菜单模式（逐个启用/禁用 skill）
+    SkillToggle,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -358,6 +362,7 @@ impl ChatApp {
             pending_user_messages: Arc::new(Mutex::new(Vec::new())),
             image_cache: Arc::new(Mutex::new(ImageCache::new())),
             tool_toggle_index: 0,
+            skill_toggle_index: 0,
         }
     }
 
@@ -365,7 +370,8 @@ impl ChatApp {
     /// 每次调用时动态加载所有相关文件，确保内容最新
     pub fn resolve_system_prompt(&self) -> Option<String> {
         let template = load_system_prompt()?;
-        let skills_summary = skill::build_skills_summary(&self.loaded_skills);
+        let skills_summary =
+            skill::build_skills_summary(&self.loaded_skills, &self.agent_config.disabled_skills);
         let tools_summary = self
             .tool_registry
             .build_tools_summary(&self.agent_config.disabled_tools);
