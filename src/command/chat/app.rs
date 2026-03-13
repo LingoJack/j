@@ -1491,6 +1491,10 @@ async fn run_agent_loop(
                         return;
                     }
                 }
+                // fallback 非流式正常结束，但如果有用户增量消息则继续循环
+                if !pending_user_messages.lock().unwrap().is_empty() {
+                    continue;
+                }
                 break;
             }
 
@@ -1577,7 +1581,10 @@ async fn run_agent_loop(
                 drain_pending_user_messages(&mut messages, &pending_user_messages);
                 continue;
             } else {
-                // 正常结束
+                // 正常结束，但如果有用户增量消息则继续循环
+                if !pending_user_messages.lock().unwrap().is_empty() {
+                    continue;
+                }
                 break;
             }
         } else {
@@ -1709,6 +1716,10 @@ async fn run_agent_loop(
                     let _ = tx.send(StreamMsg::Cancelled);
                     return;
                 }
+            }
+            // 非流式正常结束，但如果有用户增量消息则继续循环
+            if !pending_user_messages.lock().unwrap().is_empty() {
+                continue;
             }
             break;
         }
