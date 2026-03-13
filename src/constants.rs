@@ -7,7 +7,7 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 项目名称
-pub const APP_NAME: &str = "work-copilot";
+pub const APP_NAME: &str = "j-cli";
 
 /// 作者
 pub const AUTHOR: &str = "lingojack";
