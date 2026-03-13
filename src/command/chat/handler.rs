@@ -273,9 +273,31 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 if !filtered.is_empty() {
                     let sel = app.at_popup_selected.min(filtered.len() - 1);
                     let name = filtered[sel].clone();
-                    complete_at_mention(app, &name);
+                    if name == "file:" {
+                        // 选中 file: 选项，补全 @file: 到输入框，然后切换到文件补全模式
+                        let chars: Vec<char> = app.input.chars().collect();
+                        let before: String = chars[..app.at_popup_start_pos].iter().collect();
+                        let after: String = if app.cursor_pos < chars.len() {
+                            chars[app.cursor_pos..].iter().collect()
+                        } else {
+                            String::new()
+                        };
+                        let replacement = "@file:";
+                        let new_cursor = before.chars().count() + replacement.chars().count();
+                        app.input = format!("{}{}{}", before, replacement, after);
+                        app.cursor_pos = new_cursor;
+                        app.at_popup_active = false;
+                        app.file_popup_active = true;
+                        app.file_popup_start_pos = app.at_popup_start_pos;
+                        app.file_popup_filter.clear();
+                        app.file_popup_selected = 0;
+                    } else {
+                        complete_at_mention(app, &name);
+                        app.at_popup_active = false;
+                    }
+                } else {
+                    app.at_popup_active = false;
                 }
-                app.at_popup_active = false;
                 return false;
             }
             KeyCode::Esc => {

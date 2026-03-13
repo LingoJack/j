@@ -10,7 +10,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 use ratatui_image::{Resize, StatefulImage};
 
@@ -1030,35 +1030,39 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
 
     let items: Vec<ListItem> = filtered
         .iter()
-        .enumerate()
         .take(item_count)
-        .map(|(i, name)| {
-            let style = if i == app.at_popup_selected {
-                Style::default()
-                    .bg(t.model_sel_highlight_bg)
-                    .fg(t.text_white)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.label_ai)
-            };
+        .map(|name| {
+            let style = Style::default().fg(t.label_ai);
             ListItem::new(Line::from(Span::styled(format!("  @{}  ", name), style)))
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(t.border_title))
-            .title(Span::styled(
-                " Skills ",
-                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-            ))
-            .style(Style::default().bg(t.bg_title)),
-    );
+    let mut list_state = ListState::default();
+    list_state.select(Some(
+        app.at_popup_selected.min(item_count.saturating_sub(1)),
+    ));
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.border_title))
+                .title(Span::styled(
+                    " Skills ",
+                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(t.bg_title)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(t.model_sel_highlight_bg)
+                .fg(t.text_white)
+                .add_modifier(Modifier::BOLD),
+        );
 
     f.render_widget(Clear, popup_area);
-    f.render_widget(list, popup_area);
+    f.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
 /// 绘制文件补全弹窗（输入区域上方浮动）
@@ -1087,16 +1091,10 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
 
     let items: Vec<ListItem> = filtered
         .iter()
-        .enumerate()
         .take(item_count)
-        .map(|(i, name)| {
+        .map(|name| {
             let is_dir = name.ends_with('/');
-            let style = if i == app.file_popup_selected {
-                Style::default()
-                    .bg(t.model_sel_highlight_bg)
-                    .fg(t.text_white)
-                    .add_modifier(Modifier::BOLD)
-            } else if is_dir {
+            let style = if is_dir {
                 Style::default().fg(Color::Cyan)
             } else {
                 Style::default().fg(t.text_white)
@@ -1111,22 +1109,34 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         format!(" {} ", app.file_popup_filter)
     };
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(t.border_title))
-            .title(Span::styled(
-                title_text,
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ))
-            .style(Style::default().bg(t.bg_title)),
-    );
+    let mut list_state = ListState::default();
+    list_state.select(Some(
+        app.file_popup_selected.min(item_count.saturating_sub(1)),
+    ));
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.border_title))
+                .title(Span::styled(
+                    title_text,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(t.bg_title)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(t.model_sel_highlight_bg)
+                .fg(t.text_white)
+                .add_modifier(Modifier::BOLD),
+        );
 
     f.render_widget(Clear, popup_area);
-    f.render_widget(list, popup_area);
+    f.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
 /// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)
