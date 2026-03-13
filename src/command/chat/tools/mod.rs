@@ -1,6 +1,7 @@
 mod ask;
 mod browser;
 mod file;
+mod grep;
 pub(crate) mod html_extract;
 mod new_task;
 mod shell;
@@ -62,6 +63,7 @@ impl ToolRegistry {
                 Box::new(file::WriteFileTool),
                 Box::new(file::EditFileTool),
                 Box::new(file::GlobTool),
+                Box::new(grep::GrepTool),
                 Box::new(web_fetch::WebFetchTool),
                 Box::new(web_search::WebSearchTool),
                 Box::new(browser::BrowserTool),
