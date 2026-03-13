@@ -45,7 +45,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         if !agent_config_path().exists() {
             let example = AgentConfig {
                 providers: vec![ModelProvider {
-                    name: "GPT-4o".to_string(),
+                    name: "OpenAI".to_string(),
                     api_base: "https://api.openai.com/v1".to_string(),
                     api_key: "sk-your-api-key".to_string(),
                     model: "gpt-4o".to_string(),
@@ -319,6 +319,99 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         }
     }
 
+    // ===== 文件补全弹窗拦截 =====
+    if app.file_popup_active {
+        let filtered = get_filtered_files(app);
+        match key.code {
+            KeyCode::Up => {
+                if !filtered.is_empty() && app.file_popup_selected > 0 {
+                    app.file_popup_selected -= 1;
+                }
+                return false;
+            }
+            KeyCode::Down => {
+                if !filtered.is_empty()
+                    && app.file_popup_selected < filtered.len().saturating_sub(1)
+                {
+                    app.file_popup_selected += 1;
+                }
+                return false;
+            }
+            KeyCode::Tab | KeyCode::Enter => {
+                if !filtered.is_empty() {
+                    let sel = app.file_popup_selected.min(filtered.len() - 1);
+                    let entry = filtered[sel].clone();
+                    if entry.ends_with('/') {
+                        // 目录：追加到过滤文本，继续补全
+                        app.file_popup_filter.push_str(&entry);
+                        // 更新 input 中的文本
+                        let chars: Vec<char> = app.input.chars().collect();
+                        let before: String = chars[..app.file_popup_start_pos].iter().collect();
+                        let after: String = if app.cursor_pos < chars.len() {
+                            chars[app.cursor_pos..].iter().collect()
+                        } else {
+                            String::new()
+                        };
+                        let replacement = format!("@file:{}", app.file_popup_filter);
+                        let new_cursor = before.chars().count() + replacement.chars().count();
+                        app.input = format!("{}{}{}", before, replacement, after);
+                        app.cursor_pos = new_cursor;
+                        app.file_popup_selected = 0;
+                    } else {
+                        // 文件：补全并关闭弹窗
+                        let full_path = format!("{}{}", app.file_popup_filter, entry);
+                        complete_file_mention(app, &full_path);
+                        app.file_popup_active = false;
+                    }
+                }
+                return false;
+            }
+            KeyCode::Esc => {
+                app.file_popup_active = false;
+                return false;
+            }
+            KeyCode::Backspace => {
+                if app.cursor_pos > 0 {
+                    let start = app
+                        .input
+                        .char_indices()
+                        .nth(app.cursor_pos - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let end = app
+                        .input
+                        .char_indices()
+                        .nth(app.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.input.len());
+                    app.input.drain(start..end);
+                    app.cursor_pos -= 1;
+                }
+                // @file: 占 6 个字符，起始位置 + 6 = 冒号之后
+                let prefix_end = app.file_popup_start_pos + 6;
+                if app.cursor_pos < prefix_end {
+                    app.file_popup_active = false;
+                } else {
+                    update_file_filter(app);
+                }
+                return false;
+            }
+            KeyCode::Char(c) => {
+                let byte_idx = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.insert(byte_idx, c);
+                app.cursor_pos += 1;
+                update_file_filter(app);
+                return false;
+            }
+            _ => {}
+        }
+    }
+
     // Ctrl+T 切换模型（替代 Ctrl+M，因为 Ctrl+M 在终端中等于 Enter）
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('t') {
         if !app.agent_config.providers.is_empty() {
@@ -565,7 +658,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             app.cursor_pos += 1;
 
             // @ 补全弹窗触发逻辑
-            if c == '@' && !app.loaded_skills.is_empty() {
+            if c == '@' {
                 // @ 在行首或前一个字符是空白
                 let valid = app.cursor_pos <= 1 || {
                     let chars: Vec<char> = app.input.chars().collect();
@@ -579,6 +672,14 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 }
             } else if app.at_popup_active {
                 update_at_filter(app);
+                // 检测是否输入了 @file: ，切换到文件补全模式
+                if app.at_popup_filter == "file:" {
+                    app.at_popup_active = false;
+                    app.file_popup_active = true;
+                    app.file_popup_start_pos = app.at_popup_start_pos;
+                    app.file_popup_filter.clear();
+                    app.file_popup_selected = 0;
+                }
             }
         }
 
@@ -1532,7 +1633,8 @@ fn update_at_filter(app: &mut ChatApp) {
 /// 根据 filter 过滤 loaded_skills 的 name 列表
 pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
     let filter = app.at_popup_filter.to_lowercase();
-    app.loaded_skills
+    let mut items: Vec<String> = app
+        .loaded_skills
         .iter()
         .filter(|s| {
             !app.agent_config
@@ -1542,7 +1644,13 @@ pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
         })
         .map(|s| s.frontmatter.name.clone())
         .filter(|name| filter.is_empty() || name.to_lowercase().contains(&filter))
-        .collect()
+        .collect();
+    // 添加 file: 选项
+    let file_label = "file:".to_string();
+    if filter.is_empty() || file_label.contains(&filter) {
+        items.push(file_label);
+    }
+    items
 }
 
 /// 替换 input 中 @... 为 @skill_name 并加空格
@@ -1555,6 +1663,88 @@ fn complete_at_mention(app: &mut ChatApp, skill_name: &str) {
         String::new()
     };
     let replacement = format!("@{} ", skill_name);
+    let new_cursor = before.chars().count() + replacement.chars().count();
+    app.input = format!("{}{}{}", before, replacement, after);
+    app.cursor_pos = new_cursor;
+}
+
+/// 更新文件补全弹窗的过滤文本
+fn update_file_filter(app: &mut ChatApp) {
+    let chars: Vec<char> = app.input.chars().collect();
+    // @file: 占 6 个字符 (@file:), 过滤文本从 start_pos + 6 开始
+    let start = app.file_popup_start_pos + 6;
+    if start <= app.cursor_pos && app.cursor_pos <= chars.len() {
+        app.file_popup_filter = chars[start..app.cursor_pos].iter().collect();
+    } else {
+        app.file_popup_filter.clear();
+    }
+    app.file_popup_selected = 0;
+}
+
+/// 获取文件补全列表
+pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
+    let filter = &app.file_popup_filter;
+
+    // 解析 filter 为目录部分 + 文件名前缀
+    let (dir_part, prefix) = if let Some(last_slash) = filter.rfind('/') {
+        (&filter[..=last_slash], &filter[last_slash + 1..])
+    } else {
+        ("", filter.as_str())
+    };
+
+    let dir_path = if dir_part.is_empty() {
+        std::path::PathBuf::from(".")
+    } else {
+        std::path::PathBuf::from(dir_part)
+    };
+
+    let prefix_lower = prefix.to_lowercase();
+
+    let mut entries: Vec<String> = Vec::new();
+    if let Ok(read_dir) = std::fs::read_dir(&dir_path) {
+        for entry in read_dir.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            // 跳过隐藏文件（以 . 开头），除非用户已输入 .
+            if name.starts_with('.') && !prefix.starts_with('.') {
+                continue;
+            }
+            if !prefix_lower.is_empty() && !name.to_lowercase().starts_with(&prefix_lower) {
+                continue;
+            }
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            if is_dir {
+                entries.push(format!("{}/", name));
+            } else {
+                entries.push(name);
+            }
+        }
+    }
+
+    // 排序：目录优先，然后按名称
+    entries.sort_by(|a, b| {
+        let a_dir = a.ends_with('/');
+        let b_dir = b.ends_with('/');
+        match (a_dir, b_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.to_lowercase().cmp(&b.to_lowercase()),
+        }
+    });
+
+    entries.truncate(12);
+    entries
+}
+
+/// 替换 input 中 @file:filter 为 @file:完整路径 + 空格
+fn complete_file_mention(app: &mut ChatApp, file_path: &str) {
+    let chars: Vec<char> = app.input.chars().collect();
+    let before: String = chars[..app.file_popup_start_pos].iter().collect();
+    let after: String = if app.cursor_pos < chars.len() {
+        chars[app.cursor_pos..].iter().collect()
+    } else {
+        String::new()
+    };
+    let replacement = format!("@file:{} ", file_path);
     let new_cursor = before.chars().count() + replacement.chars().count();
     app.input = format!("{}{}{}", before, replacement, after);
     app.cursor_pos = new_cursor;

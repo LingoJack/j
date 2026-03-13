@@ -163,6 +163,14 @@ pub struct ChatApp {
     pub at_popup_start_pos: usize,
     /// 弹窗中选中项索引
     pub at_popup_selected: usize,
+    /// 文件补全弹窗是否激活
+    pub file_popup_active: bool,
+    /// @file: 在 input 中的起始字符索引
+    pub file_popup_start_pos: usize,
+    /// @file: 之后的路径过滤文本
+    pub file_popup_filter: String,
+    /// 文件弹窗中选中项索引
+    pub file_popup_selected: usize,
     /// 配置界面：是否有待处理的 style 编辑（需弹出全屏编辑器）
     pub pending_style_edit: bool,
     /// 流式请求取消令牌（存在时表示有进行中的请求）
@@ -346,6 +354,10 @@ impl ChatApp {
             at_popup_filter: String::new(),
             at_popup_start_pos: 0,
             at_popup_selected: 0,
+            file_popup_active: false,
+            file_popup_start_pos: 0,
+            file_popup_filter: String::new(),
+            file_popup_selected: 0,
             pending_style_edit: false,
             cancel_token: None,
             tool_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -451,6 +463,7 @@ impl ChatApp {
 
         // 关闭弹窗
         self.at_popup_active = false;
+        self.file_popup_active = false;
         self.input.clear();
         self.cursor_pos = 0;
 

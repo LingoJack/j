@@ -1,5 +1,5 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
-use super::super::handler::get_filtered_skills;
+use super::super::handler::{get_filtered_files, get_filtered_skills};
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::model::agent_config_path;
@@ -65,6 +65,11 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     // ========== @ 补全弹窗覆盖层 ==========
     if app.at_popup_active {
         draw_at_popup(f, chunks[2], app);
+    }
+
+    // ========== 文件补全弹窗覆盖层 ==========
+    if app.file_popup_active {
+        draw_file_popup(f, chunks[2], app);
     }
 }
 
@@ -1056,6 +1061,74 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
     f.render_widget(list, popup_area);
 }
 
+/// 绘制文件补全弹窗（输入区域上方浮动）
+pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
+    let t = &app.theme;
+    let filtered = get_filtered_files(app);
+    if filtered.is_empty() {
+        return;
+    }
+
+    let item_count = filtered.len().min(12);
+    let popup_height = (item_count as u16) + 2;
+    let popup_width = filtered
+        .iter()
+        .map(|n| display_width(&format!("  {}  ", n)))
+        .max()
+        .unwrap_or(20)
+        .max(16)
+        .min(input_area.width.saturating_sub(4) as usize) as u16
+        + 2;
+
+    let x = input_area.x + 1;
+    let y = input_area.y.saturating_sub(popup_height);
+
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .enumerate()
+        .take(item_count)
+        .map(|(i, name)| {
+            let is_dir = name.ends_with('/');
+            let style = if i == app.file_popup_selected {
+                Style::default()
+                    .bg(t.model_sel_highlight_bg)
+                    .fg(t.text_white)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_dir {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default().fg(t.text_white)
+            };
+            ListItem::new(Line::from(Span::styled(format!("  {}  ", name), style)))
+        })
+        .collect();
+
+    let title_text = if app.file_popup_filter.is_empty() {
+        " Files ".to_string()
+    } else {
+        format!(" {} ", app.file_popup_filter)
+    };
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_title))
+            .title(Span::styled(
+                title_text,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(t.bg_title)),
+    );
+
+    f.render_widget(Clear, popup_area);
+    f.render_widget(list, popup_area);
+}
+
 /// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)
 fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
@@ -1068,6 +1141,18 @@ fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usi
             let valid_start = i == 0 || chars[i - 1].is_whitespace();
             if valid_start {
                 let rest: String = chars[i + 1..].iter().collect();
+                // 检查 @file:xxx 模式
+                if rest.starts_with("file:") {
+                    // 找到 @file: 之后直到空白字符为止
+                    let mut end = i + 1 + 5; // @file: 的末尾
+                    while end < len && !chars[end].is_whitespace() {
+                        end += 1;
+                    }
+                    ranges.push((i, end));
+                    i = end;
+                    continue;
+                }
+                // 检查 @skill_name
                 let mut best_len = 0usize;
                 for name in skill_names {
                     if rest.starts_with(name.as_str()) {
@@ -1084,7 +1169,6 @@ fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usi
                     }
                 }
                 if best_len > 0 {
-                    // @ + name
                     ranges.push((i, i + 1 + best_len));
                     i += 1 + best_len;
                     continue;
