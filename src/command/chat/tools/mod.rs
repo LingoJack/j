@@ -61,6 +61,7 @@ impl ToolRegistry {
                 Box::new(file::ReadFileTool),
                 Box::new(file::WriteFileTool),
                 Box::new(file::EditFileTool),
+                Box::new(file::GlobTool),
                 Box::new(web_fetch::WebFetchTool),
                 Box::new(web_search::WebSearchTool),
                 Box::new(browser::BrowserTool),
