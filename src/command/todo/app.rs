@@ -32,14 +32,14 @@ pub struct TodoList {
 
 // ========== 文件路径 ==========
 
-/// 获取 todo 数据目录: ~/.jdata/todo/
+/// 获取 todo 数据目录: ~/.jdata/report/
 pub fn todo_dir() -> PathBuf {
-    let dir = YamlConfig::data_dir().join("todo");
+    let dir = YamlConfig::data_dir().join("report");
     let _ = fs::create_dir_all(&dir);
     dir
 }
 
-/// 获取 todo 数据文件路径: ~/.jdata/todo/todo.json
+/// 获取 todo 数据文件路径: ~/.jdata/report/todo.json
 pub fn todo_file_path() -> PathBuf {
     todo_dir().join("todo.json")
 }
