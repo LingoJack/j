@@ -107,9 +107,8 @@ cargo install --path . --features browser_cdp
 │   ├── data/            # 配置、对话历史、归档
 │   └── skills/          # 技能目录
 ├── bin/                 # 内置工具（Markdown 渲染器）
-├── report/              # 日报目录
-├── scripts/             # 用户脚本
-└── todo/                # 待办数据
+├── report/              # 日报目录（含 todo.json 待办数据）
+└── scripts/             # 用户脚本
 ```
 
 ---

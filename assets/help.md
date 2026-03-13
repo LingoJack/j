@@ -60,10 +60,9 @@ j
 ├── report/              # 日报目录
 │   ├── week_report.md   # 周报文件
 │   ├── settings.json    # 日报配置（周数、日期）
+│   ├── todo.json        # 待办数据（JSON 格式）
 │   └── .git/            # git 仓库（配置远程仓库后生成）
 ├── scripts/             # j concat 创建的脚本
-├── todo/                # 待办备忘录目录
-│   └── todo.json        # 待办数据（JSON 格式）
 ```
 
 ### 配置文件结构 (`config.yaml`)
@@ -206,7 +205,7 @@ j
 | 其他任意键 | 跳过写入日报，仅标记完成 |
 | `Esc` | 取消（同其他任意键） |
 
-> 数据存储路径: `~/.jdata/todo/todo.json`
+> 数据存储路径: `~/.jdata/report/todo.json`
 
 ### 预览区功能
 - 当选中的待办项内容超出列表显示宽度时，列表下方会自动显示预览区
