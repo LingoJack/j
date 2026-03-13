@@ -219,7 +219,7 @@ pub fn build_message_lines_incremental(
             // AI 标签
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
-                "  AI",
+                "Sprite",
                 Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
             )));
 
