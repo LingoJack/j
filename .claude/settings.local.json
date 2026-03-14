@@ -24,7 +24,8 @@
       "Bash(xargs sed:*)",
       "Bash(cargo tree:*)",
       "Bash(make install:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(wc:*)"
     ]
   },
   "language": "zh-CN",

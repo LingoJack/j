@@ -3,9 +3,10 @@ use super::super::handler::{get_filtered_files, get_filtered_skills};
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::model::agent_config_path;
-use super::super::render::{build_message_lines_incremental, char_width, display_width, wrap_text};
+use super::super::render::build_message_lines_incremental;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::{draw_config_screen, draw_skill_toggle, draw_tool_toggle};
+use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

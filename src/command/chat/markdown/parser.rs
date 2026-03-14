@@ -1,6 +1,6 @@
-use super::super::render::{display_width, wrap_text};
 use super::super::theme::Theme;
 use super::highlight::highlight_code_line;
+use crate::util::text::{display_width, wrap_text};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -568,7 +568,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                     let mut t = String::new();
                                     let mut w = 0;
                                     for ch in cell_text.chars() {
-                                        use super::super::render::char_width;
+                                        use crate::util::text::char_width;
                                         let chw = char_width(ch);
                                         if w + chw > *cw {
                                             break;
