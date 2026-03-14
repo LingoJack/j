@@ -104,7 +104,10 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
 
     // 解析 filter 为目录部分 + 文件名前缀
     let (dir_part, prefix) = if let Some(last_slash) = effective_filter.rfind('/') {
-        (&effective_filter[..=last_slash], &effective_filter[last_slash + 1..])
+        (
+            &effective_filter[..=last_slash],
+            &effective_filter[last_slash + 1..],
+        )
     } else {
         ("", effective_filter.as_str())
     };
