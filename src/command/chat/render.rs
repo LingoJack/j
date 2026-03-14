@@ -374,17 +374,11 @@ pub fn build_message_lines_incremental(
                 let total_q = app.tool_ask_questions.len();
                 let cur_idx = app.tool_ask_current_idx;
 
-                // header + 进度
+                // header 标签 + 进度
                 let header_text = if total_q > 1 {
-                    format!(
-                        "  [{}/{}] {} — {}",
-                        cur_idx + 1,
-                        total_q,
-                        cur_q.header,
-                        cur_q.question
-                    )
+                    format!("  [{}/{}] {}", cur_idx + 1, total_q, cur_q.header)
                 } else {
-                    format!("  {} — {}", cur_q.header, cur_q.question)
+                    format!("  {}", cur_q.header)
                 };
                 let header_wrapped = wrap_text(&header_text, content_w);
                 for wl in &header_wrapped {
@@ -403,6 +397,95 @@ pub fn build_message_lines_incremental(
                         ),
                         Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
                     ]));
+                }
+
+                // question 内容（Markdown 渲染）
+                {
+                    let max_msg_w = content_w.saturating_sub(2);
+                    let md_lines_rendered = markdown_to_lines(&cur_q.question, max_msg_w, t);
+                    let max_show = 15;
+                    let mut text_count = 0usize;
+                    for md_line in md_lines_rendered.iter() {
+                        let is_img_marker = md_line
+                            .spans
+                            .iter()
+                            .any(|s| s.content.starts_with("\x00IMG:"));
+                        let is_placeholder = md_line.spans.is_empty()
+                            || md_line.spans.iter().all(|s| s.content.trim().is_empty());
+
+                        if is_img_marker {
+                            let marker = md_line
+                                .spans
+                                .iter()
+                                .find(|s| s.content.starts_with("\x00IMG:"))
+                                .unwrap()
+                                .content
+                                .clone();
+                            let inner_w = bubble_max_width.saturating_sub(8);
+                            let spans: Vec<Span> = vec![
+                                Span::styled(
+                                    "  │ ",
+                                    Style::default().fg(border_color).bg(confirm_bg),
+                                ),
+                                Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
+                                Span::styled(
+                                    " │",
+                                    Style::default().fg(border_color).bg(confirm_bg),
+                                ),
+                                Span::styled(marker, Style::default()),
+                            ];
+                            lines.push(Line::from(spans));
+                        } else if is_placeholder {
+                            let inner_w = bubble_max_width.saturating_sub(8);
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    "  │ ",
+                                    Style::default().fg(border_color).bg(confirm_bg),
+                                ),
+                                Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
+                                Span::styled(
+                                    " │",
+                                    Style::default().fg(border_color).bg(confirm_bg),
+                                ),
+                            ]));
+                        } else {
+                            text_count += 1;
+                            if text_count > max_show {
+                                continue;
+                            }
+                            let line_text: String =
+                                md_line.spans.iter().map(|s| s.content.as_ref()).collect();
+                            let msg_w = display_width(&line_text);
+                            let fill = content_w.saturating_sub(msg_w + 2);
+                            let mut spans = vec![
+                                Span::styled(
+                                    "  │ ",
+                                    Style::default().fg(border_color).bg(confirm_bg),
+                                ),
+                                Span::styled(" ", Style::default().bg(confirm_bg)),
+                            ];
+                            for span in &md_line.spans {
+                                let mut patched = span.clone();
+                                patched.style = patched.style.bg(confirm_bg);
+                                spans.push(patched);
+                            }
+                            if text_count == max_show && md_lines_rendered.len() > max_show {
+                                spans.push(Span::styled(
+                                    "...",
+                                    Style::default().fg(t.tool_confirm_text),
+                                ));
+                            }
+                            spans.push(Span::styled(
+                                " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                                Style::default().bg(confirm_bg),
+                            ));
+                            spans.push(Span::styled(
+                                " │",
+                                Style::default().fg(border_color).bg(confirm_bg),
+                            ));
+                            lines.push(Line::from(spans));
+                        }
+                    }
                 }
 
                 // 空行分隔
