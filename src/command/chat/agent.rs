@@ -2,7 +2,7 @@ use super::api::{build_request_with_tools, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
 use super::model::{ChatMessage, ModelProvider, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};
-use async_openai::types::chat::ChatCompletionTools;
+use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};
 use futures::StreamExt;
 use std::sync::{Arc, Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
@@ -16,6 +16,102 @@ fn drain_pending_user_messages(
     if !pending.is_empty() {
         messages.append(&mut *pending);
     }
+}
+
+/// 从非流式响应的 tool_calls 列表中提取 ToolCallItem
+fn extract_tool_items(tc_list: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
+    tc_list
+        .iter()
+        .filter_map(|tc| {
+            if let ChatCompletionMessageToolCalls::Function(f) = tc {
+                Some(ToolCallItem {
+                    id: f.id.clone(),
+                    name: f.function.name.clone(),
+                    arguments: f.function.arguments.clone(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// 记录工具调用请求日志
+fn log_tool_request(tool_items: &[ToolCallItem]) {
+    let mut log_content = String::new();
+    for item in tool_items {
+        log_content.push_str(&format!("- {}: {}\n", item.name, item.arguments));
+    }
+    write_info_log("工具调用请求", &log_content);
+}
+
+/// 记录工具调用结果日志
+fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg]) {
+    let mut log_content = String::new();
+    for (i, result) in tool_results.iter().enumerate() {
+        let (tool_name, tool_args) = tool_items
+            .get(i)
+            .map(|t| (t.name.as_str(), t.arguments.as_str()))
+            .unwrap_or(("unknown", ""));
+        log_content.push_str(&format!(
+            "- [{}] {}({}): {}\n",
+            result.tool_call_id, tool_name, tool_args, result.result
+        ));
+    }
+    write_info_log("工具调用结果", &log_content);
+}
+
+/// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
+/// 返回 Ok(()) 表示成功（应 continue 循环），Err(()) 表示 channel 断开（应 return）
+fn process_tool_calls(
+    tool_items: Vec<ToolCallItem>,
+    assistant_text: String,
+    messages: &mut Vec<ChatMessage>,
+    tx: &mpsc::Sender<StreamMsg>,
+    tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
+    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+) -> Result<(), ()> {
+    log_tool_request(&tool_items);
+
+    if !assistant_text.is_empty() {
+        write_info_log("Chat 回复", &assistant_text);
+    }
+
+    messages.push(ChatMessage {
+        role: "assistant".to_string(),
+        content: assistant_text,
+        tool_calls: Some(tool_items.clone()),
+        tool_call_id: None,
+    });
+
+    if tx
+        .send(StreamMsg::ToolCallRequest(tool_items.clone()))
+        .is_err()
+    {
+        return Err(());
+    }
+
+    let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+    for _ in &tool_items {
+        match tool_result_rx.recv() {
+            Ok(result) => tool_results.push(result),
+            Err(_) => return Err(()),
+        }
+    }
+
+    log_tool_results(&tool_items, &tool_results);
+
+    for result in tool_results {
+        messages.push(ChatMessage {
+            role: "tool".to_string(),
+            content: result.result,
+            tool_calls: None,
+            tool_call_id: Some(result.tool_call_id),
+        });
+    }
+
+    drain_pending_user_messages(messages, pending_user_messages);
+    Ok(())
 }
 
 /// 后台 Agent 循环：支持多轮工具调用
@@ -204,96 +300,23 @@ pub async fn run_agent_loop(
                             );
                             if is_tool_calls
                                 && let Some(ref tc_list) = choice.message.tool_calls {
-                                    let tool_items: Vec<ToolCallItem> = tc_list
-                                        .iter()
-                                        .filter_map(|tc| {
-                                            if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
-                                                Some(ToolCallItem {
-                                                    id: f.id.clone(),
-                                                    name: f.function.name.clone(),
-                                                    arguments: f.function.arguments.clone(),
-                                                })
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .collect();
-
+                                    let tool_items = extract_tool_items(tc_list);
                                     if tool_items.is_empty() {
                                         break;
                                     }
-
-                                    // 记录工具调用请求日志 (fallback)
-                                    {
-                                        let mut log_content = String::new();
-                                        for item in &tool_items {
-                                            log_content.push_str(&format!(
-                                                "- {}: {}\n",
-                                                item.name, item.arguments
-                                            ));
-                                        }
-                                        write_info_log("工具调用请求", &log_content);
-                                    }
-
                                     let assistant_text =
                                         choice.message.content.clone().unwrap_or_default();
-                                    // 记录回复日志 (fallback)
-                                    if !assistant_text.is_empty() {
-                                        write_info_log("Chat 回复", &assistant_text);
+                                    match process_tool_calls(
+                                        tool_items,
+                                        assistant_text,
+                                        &mut messages,
+                                        &tx,
+                                        &tool_result_rx,
+                                        &pending_user_messages,
+                                    ) {
+                                        Ok(()) => continue,
+                                        Err(()) => return,
                                     }
-
-                                    messages.push(ChatMessage {
-                                        role: "assistant".to_string(),
-                                        content: assistant_text,
-                                        tool_calls: Some(tool_items.clone()),
-                                        tool_call_id: None,
-                                    });
-
-                                    if tx
-                                        .send(StreamMsg::ToolCallRequest(tool_items.clone()))
-                                        .is_err()
-                                    {
-                                        return;
-                                    }
-
-                                    let mut tool_results: Vec<ToolResultMsg> = Vec::new();
-                                    for _ in &tool_items {
-                                        match tool_result_rx.recv() {
-                                            Ok(result) => tool_results.push(result),
-                                            Err(_) => {
-                                                // channel 断开（主线程退出），直接结束
-                                                return;
-                                            }
-                                        }
-                                    }
-
-                                    // 记录工具调用结果日志 (fallback)
-                                    {
-                                        let mut log_content = String::new();
-                                        for (i, result) in tool_results.iter().enumerate() {
-                                            let tool_name = tool_items
-                                                .get(i)
-                                                .map(|t| t.name.as_str())
-                                                .unwrap_or("unknown");
-                                            log_content.push_str(&format!(
-                                                "- [{}] {}: {}\n",
-                                                result.tool_call_id, tool_name, result.result
-                                            ));
-                                        }
-                                        write_info_log("工具调用结果", &log_content);
-                                    }
-
-                                    for result in tool_results {
-                                        messages.push(ChatMessage {
-                                            role: "tool".to_string(),
-                                            content: result.result,
-                                            tool_calls: None,
-                                            tool_call_id: Some(result.tool_call_id),
-                                        });
-                                    }
-                                    // 同步消息到共享列表（先合并用户新消息）
-                                    drain_pending_user_messages(&mut messages, &pending_user_messages);
-                                    continue;
                                 }
                             // 普通文本回复
                             if let Some(ref content) = choice.message.content {
@@ -344,68 +367,17 @@ pub async fn run_agent_loop(
                     break;
                 }
 
-                // 记录工具调用请求日志 (流式)
-                {
-                    let mut log_content = String::new();
-                    for item in &tool_items {
-                        log_content.push_str(&format!("- {}: {}\n", item.name, item.arguments));
-                    }
-                    write_info_log("工具调用请求", &log_content);
+                match process_tool_calls(
+                    tool_items,
+                    assistant_text,
+                    &mut messages,
+                    &tx,
+                    &tool_result_rx,
+                    &pending_user_messages,
+                ) {
+                    Ok(()) => continue,
+                    Err(()) => return,
                 }
-
-                messages.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: assistant_text,
-                    tool_calls: Some(tool_items.clone()),
-                    tool_call_id: None,
-                });
-
-                if tx
-                    .send(StreamMsg::ToolCallRequest(tool_items.clone()))
-                    .is_err()
-                {
-                    return;
-                }
-
-                let mut tool_results: Vec<ToolResultMsg> = Vec::new();
-                for _ in &tool_items {
-                    match tool_result_rx.recv() {
-                        Ok(result) => tool_results.push(result),
-                        Err(_) => {
-                            // channel 断开（主线程退出），直接结束
-                            return;
-                        }
-                    }
-                }
-
-                // 记录工具调用结果日志 (流式)
-                {
-                    let mut log_content = String::new();
-                    for (i, result) in tool_results.iter().enumerate() {
-                        let (tool_name, tool_args) = tool_items
-                            .get(i)
-                            .map(|t| (t.name.as_str(), t.arguments.as_str()))
-                            .unwrap_or(("unknown", ""));
-                        log_content.push_str(&format!(
-                            "- [{}] {}({})\n结果: {}\n",
-                            result.tool_call_id, tool_name, tool_args, result.result
-                        ));
-                    }
-                    write_info_log("工具调用结果", &log_content);
-                }
-
-                for result in tool_results {
-                    messages.push(ChatMessage {
-                        role: "tool".to_string(),
-                        content: result.result,
-                        tool_calls: None,
-                        tool_call_id: Some(result.tool_call_id),
-                    });
-                }
-
-                // 同步消息到共享列表（先合并用户新消息）
-                drain_pending_user_messages(&mut messages, &pending_user_messages);
-                continue;
             } else {
                 // 正常结束，但如果有用户增量消息则继续循环
                 if !pending_user_messages.lock().unwrap().is_empty() {
@@ -428,97 +400,23 @@ pub async fn run_agent_loop(
 
                         if is_tool_calls
                             && let Some(ref tc_list) = choice.message.tool_calls {
-                                let tool_items: Vec<ToolCallItem> = tc_list
-                                    .iter()
-                                    .filter_map(|tc| {
-                                        if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
-                                            Some(ToolCallItem {
-                                                id: f.id.clone(),
-                                                name: f.function.name.clone(),
-                                                arguments: f.function.arguments.clone(),
-                                            })
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect();
-
+                                let tool_items = extract_tool_items(tc_list);
                                 if tool_items.is_empty() {
                                     break;
                                 }
-
-                                // 记录工具调用请求日志 (非流式)
-                                {
-                                    let mut log_content = String::new();
-                                    for item in &tool_items {
-                                        log_content.push_str(&format!(
-                                            "- {}: {}\n",
-                                            item.name, item.arguments
-                                        ));
-                                    }
-                                    write_info_log("工具调用请求", &log_content);
-                                }
-
                                 let assistant_text =
                                     choice.message.content.clone().unwrap_or_default();
-                                // 记录回复日志 (非流式)
-                                if !assistant_text.is_empty() {
-                                    write_info_log("Chat 回复", &assistant_text);
+                                match process_tool_calls(
+                                    tool_items,
+                                    assistant_text,
+                                    &mut messages,
+                                    &tx,
+                                    &tool_result_rx,
+                                    &pending_user_messages,
+                                ) {
+                                    Ok(()) => continue,
+                                    Err(()) => return,
                                 }
-
-                                messages.push(ChatMessage {
-                                    role: "assistant".to_string(),
-                                    content: assistant_text,
-                                    tool_calls: Some(tool_items.clone()),
-                                    tool_call_id: None,
-                                });
-
-                                if tx
-                                    .send(StreamMsg::ToolCallRequest(tool_items.clone()))
-                                    .is_err()
-                                {
-                                    return;
-                                }
-
-                                let mut tool_results: Vec<ToolResultMsg> = Vec::new();
-                                for _ in &tool_items {
-                                    match tool_result_rx.recv() {
-                                        Ok(result) => tool_results.push(result),
-                                        Err(_) => {
-                                            // channel 断开（主线程退出），直接结束
-                                            return;
-                                        }
-                                    }
-                                }
-
-                                // 记录工具调用结果日志 (非流式)
-                                {
-                                    let mut log_content = String::new();
-                                    for (i, result) in tool_results.iter().enumerate() {
-                                        let tool_name = tool_items
-                                            .get(i)
-                                            .map(|t| t.name.as_str())
-                                            .unwrap_or("unknown");
-                                        log_content.push_str(&format!(
-                                            "- [{}] {}: {}\n",
-                                            result.tool_call_id, tool_name, result.result
-                                        ));
-                                    }
-                                    write_info_log("工具调用结果", &log_content);
-                                }
-
-                                for result in tool_results {
-                                    messages.push(ChatMessage {
-                                        role: "tool".to_string(),
-                                        content: result.result,
-                                        tool_calls: None,
-                                        tool_call_id: Some(result.tool_call_id),
-                                    });
-                                }
-
-                                // 同步消息到共享列表（先合并用户新消息）
-                                drain_pending_user_messages(&mut messages, &pending_user_messages);
-                                continue;
                             }
 
                         // 正常文本回复
