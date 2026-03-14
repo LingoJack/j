@@ -474,8 +474,10 @@ pub fn build_message_lines_incremental(
                     let pointer_str = if is_cursor { " ❯ " } else { "   " };
                     let check_str = if is_multi {
                         if is_selected_multi { "☑ " } else { "☐ " }
+                    } else if is_cursor {
+                        "● "
                     } else {
-                        if is_cursor { "● " } else { "○ " }
+                        "○ "
                     };
 
                     let pointer_style = if is_cursor {
