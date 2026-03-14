@@ -72,10 +72,42 @@ pub struct ToolExecDoneMsg {
     pub is_error: bool,
 }
 
+// ========== 结构化问答数据结构 ==========
+
+/// 单个选项
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AskOption {
+    pub label: String,
+    pub description: String,
+}
+
+/// 单个结构化问题
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AskQuestion {
+    pub question: String,
+    pub header: String,
+    #[serde(default)]
+    pub multi_select: bool,
+    pub options: Vec<AskOption>,
+}
+
+/// 用户对单个问题的回答
+#[derive(Debug, Clone, Default)]
+pub struct AskAnswer {
+    pub selected: Vec<String>,       // 选中的选项 label 列表
+    pub custom_input: Option<String>, // 如果选择了 Other
+}
+
+/// 用户响应
+#[derive(Debug, Clone)]
+pub struct AskResponse {
+    pub answers: Vec<AskAnswer>,
+}
+
 /// ask 工具 → 主线程的请求消息
 pub struct AskRequest {
-    pub question: String,
-    pub response_tx: mpsc::Sender<String>,
+    pub questions: Vec<AskQuestion>,
+    pub response_tx: mpsc::Sender<AskResponse>,
 }
 
 /// TUI 应用状态
@@ -198,9 +230,21 @@ pub struct ChatApp {
     /// ask 工具的问题内容（用于渲染）
     pub tool_ask_question: String,
     /// ask 工具响应发送通道（用于向 ask 工具发送用户响应）
-    pub ask_response_tx: Option<mpsc::Sender<String>>,
+    pub ask_response_tx: Option<mpsc::Sender<AskResponse>>,
     /// ask 工具请求接收通道（主线程接收 ask 请求）
     pub ask_request_rx: Option<mpsc::Receiver<AskRequest>>,
+    /// 结构化问答：问题列表
+    pub ask_questions: Vec<AskQuestion>,
+    /// 结构化问答：当前问题索引
+    pub ask_current_idx: usize,
+    /// 结构化问答：当前高亮的选项索引
+    pub ask_selected_idx: usize,
+    /// 结构化问答：多选时已选中的选项索引
+    pub ask_selected_options: std::collections::HashSet<usize>,
+    /// 结构化问答：是否选择了 Other
+    pub ask_choose_other: bool,
+    /// 结构化问答：已记录的答案
+    pub ask_answers: Vec<AskAnswer>,
     /// 排队的任务列表（new_task 工具产生，当前任务完成后自动执行）
     pub queued_tasks: Arc<Mutex<Vec<String>>>,
     /// 用户在 agent loop 期间发送的待处理消息队列（单向：主线程 push → agent loop drain）
@@ -373,6 +417,12 @@ impl ChatApp {
             tool_ask_question: String::new(),
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
+            ask_questions: Vec::new(),
+            ask_current_idx: 0,
+            ask_selected_idx: 0,
+            ask_selected_options: std::collections::HashSet::new(),
+            ask_choose_other: false,
+            ask_answers: Vec::new(),
             queued_tasks,
             pending_user_messages: Arc::new(Mutex::new(Vec::new())),
             image_cache: Arc::new(Mutex::new(ImageCache::new())),
@@ -580,8 +630,18 @@ impl ChatApp {
                 && let Ok(ask_req) = rx.try_recv()
             {
                 self.tool_ask_mode = true;
-                self.tool_ask_question = ask_req.question;
+                // 结构化问答初始化
+                self.ask_questions = ask_req.questions;
                 self.ask_response_tx = Some(ask_req.response_tx);
+                self.ask_current_idx = 0;
+                self.ask_selected_idx = 0;
+                self.ask_selected_options.clear();
+                self.ask_choose_other = false;
+                self.ask_answers.clear();
+                // 如果有问题，设置当前问题的文本用于显示
+                if let Some(q) = self.ask_questions.first() {
+                    self.tool_ask_question = q.question.clone();
+                }
                 self.tool_interact_selected = 0;
                 self.tool_interact_typing = false;
                 self.tool_interact_input.clear();
@@ -643,8 +703,18 @@ impl ChatApp {
             && let Ok(ask_req) = rx.try_recv()
         {
             self.tool_ask_mode = true;
-            self.tool_ask_question = ask_req.question;
+            // 结构化问答初始化
+            self.ask_questions = ask_req.questions;
             self.ask_response_tx = Some(ask_req.response_tx);
+            self.ask_current_idx = 0;
+            self.ask_selected_idx = 0;
+            self.ask_selected_options.clear();
+            self.ask_choose_other = false;
+            self.ask_answers.clear();
+            // 如果有问题，设置当前问题的文本用于显示
+            if let Some(q) = self.ask_questions.first() {
+                self.tool_ask_question = q.question.clone();
+            }
             self.tool_interact_selected = 0;
             self.tool_interact_typing = false;
             self.tool_interact_input.clear();

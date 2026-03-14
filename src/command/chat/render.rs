@@ -349,10 +349,14 @@ pub fn build_message_lines_incremental(
         lines.push(Line::from(""));
 
         // 标题行
-        let title = if is_ask {
-            "  🤖 AI 提问"
+        let title = if is_ask && !app.ask_questions.is_empty() {
+            let total = app.ask_questions.len();
+            let current = app.ask_current_idx + 1;
+            format!("  🤖 AI 提问 ({}/{})", current, total)
+        } else if is_ask {
+            "  🤖 AI 提问".to_string()
         } else {
-            "  🔧 工具调用确认"
+            "  🔧 工具调用确认".to_string()
         };
         lines.push(Line::from(Span::styled(
             title,
@@ -368,7 +372,210 @@ pub fn build_message_lines_incremental(
             Style::default().fg(border_color).bg(confirm_bg),
         )));
 
-        if is_ask {
+        if is_ask && !app.ask_questions.is_empty() {
+            // ========== 结构化问答渲染 ==========
+            let current_q = &app.ask_questions[app.ask_current_idx];
+            let _total_q = app.ask_questions.len();
+            let current_idx = app.ask_current_idx;
+            let selected_idx = app.ask_selected_idx;
+            let is_multi = current_q.multi_select;
+            let options_count = current_q.options.len();
+
+            // 问题文本行
+            let md_lines = markdown_to_lines(&current_q.question, content_w.saturating_sub(2), t);
+            for md_line in md_lines.iter().take(5) {
+                let line_text: String = md_line.spans.iter().map(|s| s.content.as_ref()).collect();
+                let msg_w = display_width(&line_text);
+                let fill = content_w.saturating_sub(msg_w + 2);
+                let mut spans = vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                ];
+                for span in &md_line.spans {
+                    let mut patched = span.clone();
+                    patched.style = patched.style.bg(confirm_bg);
+                    spans.push(patched);
+                }
+                spans.push(Span::styled(
+                    " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                    Style::default().bg(confirm_bg),
+                ));
+                spans.push(Span::styled(
+                    " │",
+                    Style::default().fg(border_color).bg(confirm_bg),
+                ));
+                lines.push(Line::from(spans));
+            }
+
+            // header 标签行
+            {
+                let header_text = format!("  {}", current_q.header);
+                let fill = content_w.saturating_sub(display_width(&header_text) + 2);
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                    Span::styled(
+                        header_text,
+                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
+                    ),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 空行分隔
+            {
+                let fill = bubble_max_width.saturating_sub(4);
+                lines.push(Line::from(vec![
+                    Span::styled("  │", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ".repeat(fill), Style::default().bg(confirm_bg)),
+                    Span::styled("│", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 渲染选项列表
+            let arrow_style = Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD);
+
+            for (i, opt) in current_q.options.iter().enumerate() {
+                let is_selected = i == selected_idx;
+                let is_checked = app.ask_selected_options.contains(&i);
+
+                // 第一行：checkbox + label
+                let checkbox = if is_multi {
+                    if is_checked { "[x]" } else { "[ ]" }
+                } else {
+                    if is_selected { "❯" } else { " " }
+                };
+
+                let pointer = if !is_multi && is_selected { "❯" } else { " " };
+                let label_text = if is_multi {
+                    format!("{} {}", checkbox, opt.label)
+                } else {
+                    format!("{} {}", pointer, opt.label)
+                };
+
+                let fill = content_w.saturating_sub(display_width(&label_text) + 2);
+                let label_style = if is_selected || is_checked {
+                    arrow_style.bg(confirm_bg)
+                } else {
+                    Style::default().fg(t.tool_confirm_text).bg(confirm_bg)
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                    Span::styled(label_text, label_style),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+
+                // 第二行：description（缩进显示）
+                let desc_text = format!("    {}", opt.description);
+                let desc_wrapped = wrap_text(&desc_text, content_w.saturating_sub(4));
+                for desc_line in desc_wrapped.iter().take(2) {
+                    let desc_fill = content_w.saturating_sub(display_width(desc_line) + 2);
+                    lines.push(Line::from(vec![
+                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                        Span::styled(" ", Style::default().bg(confirm_bg)),
+                        Span::styled(
+                            desc_line.clone(),
+                            Style::default().fg(t.text_dim).bg(confirm_bg),
+                        ),
+                        Span::styled(
+                            " ".repeat(desc_fill.saturating_sub(1).saturating_add(2)),
+                            Style::default().bg(confirm_bg),
+                        ),
+                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                    ]));
+                }
+            }
+
+            // Other... 选项
+            let other_idx = options_count;
+            let is_other_selected = selected_idx == other_idx;
+            {
+                let other_label = if is_multi {
+                    if app.ask_choose_other { "[x]" } else { "[ ]" }
+                } else {
+                    if is_other_selected { "❯" } else { " " }
+                };
+                let other_text = if is_multi {
+                    format!("{} Other...", other_label)
+                } else {
+                    format!("{} Other...", if is_other_selected { "❯" } else { " " })
+                };
+                let fill = content_w.saturating_sub(display_width(&other_text) + 2);
+                let other_style = if is_other_selected || app.ask_choose_other {
+                    arrow_style.bg(confirm_bg)
+                } else {
+                    Style::default().fg(t.tool_confirm_text).bg(confirm_bg)
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                    Span::styled(other_text, other_style),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // 如果选择了 Other 且正在输入
+            if app.tool_interact_typing && is_other_selected {
+                let input_label = format!("    输入: {}█", app.tool_interact_input);
+                let fill = content_w.saturating_sub(display_width(&input_label) + 2);
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                    Span::styled(
+                        input_label,
+                        Style::default().fg(t.text_white).bg(confirm_bg),
+                    ),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+
+            // ← 返回上一题（如果不是第一题）
+            if current_idx > 0 {
+                let back_idx = options_count + 1; // Other 之后的索引
+                let is_back_selected = selected_idx == back_idx;
+                let back_text = format!(
+                    "  {} ← 返回上一题",
+                    if is_back_selected { "❯" } else { " " }
+                );
+                let fill = content_w.saturating_sub(display_width(&back_text) + 2);
+                let back_style = if is_back_selected {
+                    arrow_style.bg(confirm_bg)
+                } else {
+                    Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                    Span::styled(back_text, back_style),
+                    Span::styled(
+                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
+                        Style::default().bg(confirm_bg),
+                    ),
+                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
+                ]));
+            }
+        } else if is_ask {
+            // ========== 旧版开放式问答渲染（兼容）==========
             // ask 模式：渲染 markdown 问题内容（直接嵌入 markdown 渲染后的行）
             let max_msg_w = content_w.saturating_sub(2);
             let md_lines = markdown_to_lines(&app.tool_ask_question, max_msg_w, t);
@@ -506,8 +713,8 @@ pub fn build_message_lines_incremental(
             }
         }
 
-        // 空行
-        {
+        // 空行（仅非结构化问答模式）
+        if !(is_ask && !app.ask_questions.is_empty()) {
             let fill = bubble_max_width.saturating_sub(4);
             lines.push(Line::from(vec![
                 Span::styled("  │", Style::default().fg(border_color).bg(confirm_bg)),
@@ -516,8 +723,8 @@ pub fn build_message_lines_incremental(
             ]));
         }
 
-        // 选项式交互区域
-        {
+        // 选项式交互区域（仅非结构化问答模式）
+        if !(is_ask && !app.ask_questions.is_empty()) {
             let arrow_style = Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD);
@@ -536,12 +743,8 @@ pub fn build_message_lines_incremental(
                 } else {
                     String::new()
                 };
-                // Use leaked string to keep references valid
-                // Actually, build the strings inline
                 let opt0 = format!("continue: 确认执行{}", countdown_suffix);
                 let opt1 = "refuse: 拒绝执行".to_string();
-                // Can't return references to local, so handle inline below
-                // Let me restructure to avoid this
                 let _ = (opt0, opt1);
                 ("", "") // placeholder, handle below
             };

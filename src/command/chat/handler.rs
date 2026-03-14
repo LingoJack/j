@@ -5,7 +5,7 @@ use super::model::{
 use super::render::copy_to_clipboard;
 use super::theme::ThemeName;
 use super::ui::draw_chat_ui;
-use crate::command::chat::app::{ChatApp, ChatMode, config_total_fields};
+use crate::command::chat::app::{ChatApp, ChatMode, AskAnswer, AskResponse, config_total_fields};
 use crate::constants::{
     AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_ERROR, AGENT_LOG_INFO, CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS,
 };
@@ -1492,6 +1492,13 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
 /// 统一交互区域按键处理：选项式（↑↓ 选择，Enter 确认，Esc 拒绝/退出）
 pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     let is_ask = app.tool_ask_mode;
+    let is_structured_ask = is_ask && !app.ask_questions.is_empty();
+
+    // ========== 结构化问答模式 ==========
+    if is_structured_ask {
+        handle_structured_ask_mode(app, key);
+        return;
+    }
 
     if app.tool_interact_typing {
         // 输入模式
@@ -1511,7 +1518,12 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
                         input_text
                     };
                     if let Some(tx) = app.ask_response_tx.take() {
-                        let _ = tx.send(response);
+                        let _ = tx.send(AskResponse {
+                            answers: vec![AskAnswer {
+                                selected: vec![],
+                                custom_input: Some(response),
+                            }],
+                        });
                     }
                     app.tool_ask_mode = false;
                     app.tool_ask_question.clear();
@@ -1593,7 +1605,12 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
                             app.tool_interact_input.clone()
                         };
                         if let Some(tx) = app.ask_response_tx.take() {
-                            let _ = tx.send(response);
+                            let _ = tx.send(AskResponse {
+                                answers: vec![AskAnswer {
+                                    selected: vec![],
+                                    custom_input: Some(response),
+                                }],
+                            });
                         }
                         app.tool_ask_mode = false;
                         app.tool_ask_question.clear();
@@ -1607,7 +1624,12 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
                     // refuse: 拒绝
                     if is_ask {
                         if let Some(tx) = app.ask_response_tx.take() {
-                            let _ = tx.send("用户拒绝回答".to_string());
+                            let _ = tx.send(AskResponse {
+                                answers: vec![AskAnswer {
+                                    selected: vec!["用户拒绝回答".to_string()],
+                                    custom_input: None,
+                                }],
+                            });
                         }
                         app.tool_ask_mode = false;
                         app.tool_ask_question.clear();
@@ -1630,7 +1652,12 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
             // 直接拒绝
             if is_ask {
                 if let Some(tx) = app.ask_response_tx.take() {
-                    let _ = tx.send("用户拒绝回答".to_string());
+                    let _ = tx.send(AskResponse {
+                        answers: vec![AskAnswer {
+                            selected: vec!["用户拒绝回答".to_string()],
+                            custom_input: None,
+                        }],
+                    });
                 }
                 app.tool_ask_mode = false;
                 app.tool_ask_question.clear();
@@ -1643,6 +1670,235 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
         _ => {}
     }
     // 选项模式下任何按键操作都需要刷新渲染
+    app.msg_lines_cache = None;
+}
+
+/// 结构化问答模式按键处理
+fn handle_structured_ask_mode(app: &mut ChatApp, key: KeyEvent) {
+    // 如果正在输入 Other 内容
+    if app.tool_interact_typing {
+        match key.code {
+            KeyCode::Esc => {
+                app.tool_interact_typing = false;
+                app.tool_interact_input.clear();
+                app.tool_interact_cursor = 0;
+            }
+            KeyCode::Enter => {
+                let input_text = app.tool_interact_input.trim().to_string();
+                let answer = AskAnswer {
+                    selected: vec![],
+                    custom_input: Some(if input_text.is_empty() {
+                        "用户选择 Other".to_string()
+                    } else {
+                        input_text
+                    }),
+                };
+                advance_to_next_question(app, answer);
+            }
+            KeyCode::Backspace => {
+                if app.tool_interact_cursor > 0 {
+                    let start = app
+                        .tool_interact_input
+                        .char_indices()
+                        .nth(app.tool_interact_cursor - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let end = app
+                        .tool_interact_input
+                        .char_indices()
+                        .nth(app.tool_interact_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.tool_interact_input.len());
+                    app.tool_interact_input.drain(start..end);
+                    app.tool_interact_cursor -= 1;
+                }
+            }
+            KeyCode::Left => {
+                if app.tool_interact_cursor > 0 {
+                    app.tool_interact_cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                let char_count = app.tool_interact_input.chars().count();
+                if app.tool_interact_cursor < char_count {
+                    app.tool_interact_cursor += 1;
+                }
+            }
+            KeyCode::Char(c) => {
+                let byte_idx = app
+                    .tool_interact_input
+                    .char_indices()
+                    .nth(app.tool_interact_cursor)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.tool_interact_input.len());
+                app.tool_interact_input.insert(byte_idx, c);
+                app.tool_interact_cursor += 1;
+            }
+            _ => {}
+        }
+        app.msg_lines_cache = None;
+        return;
+    }
+
+    let current_q = match app.ask_questions.get(app.ask_current_idx) {
+        Some(q) => q,
+        None => return,
+    };
+    let options_count = current_q.options.len();
+    let is_multi = current_q.multi_select;
+    let has_prev = app.ask_current_idx > 0;
+    let total_options = options_count + 1 + if has_prev { 1 } else { 0 };
+
+    match key.code {
+        KeyCode::Up => {
+            if app.ask_selected_idx > 0 {
+                app.ask_selected_idx -= 1;
+            } else {
+                app.ask_selected_idx = total_options - 1;
+            }
+        }
+        KeyCode::Down => {
+            if app.ask_selected_idx < total_options - 1 {
+                app.ask_selected_idx += 1;
+            } else {
+                app.ask_selected_idx = 0;
+            }
+        }
+        KeyCode::Char(' ') => {
+            if is_multi {
+                let idx = app.ask_selected_idx;
+                if idx < options_count {
+                    if app.ask_selected_options.contains(&idx) {
+                        app.ask_selected_options.remove(&idx);
+                    } else {
+                        app.ask_selected_options.insert(idx);
+                    }
+                } else if idx == options_count {
+                    app.ask_choose_other = !app.ask_choose_other;
+                }
+            }
+        }
+        KeyCode::Enter => {
+            let idx = app.ask_selected_idx;
+            if idx < options_count {
+                let answer = if is_multi {
+                    let mut selected: Vec<String> = app
+                        .ask_selected_options
+                        .iter()
+                        .filter_map(|&i| current_q.options.get(i).map(|o| o.label.clone()))
+                        .collect();
+                    if !app.ask_selected_options.contains(&idx) {
+                        if let Some(opt) = current_q.options.get(idx) {
+                            selected.push(opt.label.clone());
+                        }
+                    }
+                    AskAnswer {
+                        selected,
+                        custom_input: None,
+                    }
+                } else {
+                    AskAnswer {
+                        selected: vec![current_q.options[idx].label.clone()],
+                        custom_input: None,
+                    }
+                };
+                advance_to_next_question(app, answer);
+            } else if idx == options_count {
+                if is_multi && !app.ask_choose_other {
+                    app.ask_choose_other = true;
+                }
+                app.tool_interact_typing = true;
+                app.tool_interact_input.clear();
+                app.tool_interact_cursor = 0;
+            } else if has_prev && idx == options_count + 1 {
+                go_to_previous_question(app);
+            }
+        }
+        KeyCode::Esc => {
+            if let Some(tx) = app.ask_response_tx.take() {
+                let _ = tx.send(AskResponse {
+                    answers: vec![AskAnswer {
+                        selected: vec!["用户取消".to_string()],
+                        custom_input: None,
+                    }],
+                });
+            }
+            app.tool_ask_mode = false;
+            app.tool_ask_question.clear();
+            app.ask_questions.clear();
+            app.mode = ChatMode::Chat;
+        }
+        _ => {}
+    }
+    app.msg_lines_cache = None;
+}
+
+/// 推进到下一个问题或完成问答
+fn advance_to_next_question(app: &mut ChatApp, answer: AskAnswer) {
+    if app.ask_answers.len() <= app.ask_current_idx {
+        app.ask_answers.push(answer);
+    } else {
+        app.ask_answers[app.ask_current_idx] = answer;
+    }
+
+    if app.ask_current_idx + 1 < app.ask_questions.len() {
+        app.ask_current_idx += 1;
+        app.ask_selected_idx = 0;
+        app.ask_selected_options.clear();
+        app.ask_choose_other = false;
+        if let Some(prev_answer) = app.ask_answers.get(app.ask_current_idx) {
+            for (i, opt) in app.ask_questions[app.ask_current_idx]
+                .options
+                .iter()
+                .enumerate()
+            {
+                if prev_answer.selected.contains(&opt.label) {
+                    app.ask_selected_options.insert(i);
+                }
+            }
+            app.ask_choose_other = prev_answer.custom_input.is_some();
+        }
+        app.tool_ask_question = app.ask_questions[app.ask_current_idx].question.clone();
+    } else {
+        let response = AskResponse {
+            answers: app.ask_answers.clone(),
+        };
+        if let Some(tx) = app.ask_response_tx.take() {
+            let _ = tx.send(response);
+        }
+        app.tool_ask_mode = false;
+        app.tool_ask_question.clear();
+        app.ask_questions.clear();
+        app.ask_answers.clear();
+        app.ask_selected_options.clear();
+        app.mode = ChatMode::Chat;
+    }
+    app.msg_lines_cache = None;
+}
+
+/// 返回上一题
+fn go_to_previous_question(app: &mut ChatApp) {
+    if app.ask_current_idx == 0 {
+        return;
+    }
+    app.ask_current_idx -= 1;
+    app.ask_selected_idx = 0;
+    app.ask_selected_options.clear();
+    app.ask_choose_other = false;
+
+    if let Some(prev_answer) = app.ask_answers.get(app.ask_current_idx) {
+        for (i, opt) in app.ask_questions[app.ask_current_idx]
+            .options
+            .iter()
+            .enumerate()
+        {
+            if prev_answer.selected.contains(&opt.label) {
+                app.ask_selected_options.insert(i);
+            }
+        }
+        app.ask_choose_other = prev_answer.custom_input.is_some();
+    }
+    app.tool_ask_question = app.ask_questions[app.ask_current_idx].question.clone();
     app.msg_lines_cache = None;
 }
 
