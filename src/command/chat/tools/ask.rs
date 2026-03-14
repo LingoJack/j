@@ -1,4 +1,4 @@
-use crate::command::chat::app::AskRequest;
+use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
 use crate::command::chat::tools::{Tool, ToolResult};
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool, mpsc};
@@ -16,36 +16,144 @@ impl Tool for AskTool {
     }
 
     fn description(&self) -> &str {
-        "请求用户介入并等待响应。这是你在当前工具调用循环中与用户交互的唯一方式。\n\n## 何时使用\n\n在任何需要用户介入的场景下都应使用此工具，包括但不限于：\n- 需要用户提供信息、做出选择或确认操作\n- 需要用户在终端中执行某些你无法完成的操作（如登录、授权、手动安装等）\n- 遇到权限不足、环境问题等需要用户协助解决的障碍\n- 需要向用户展示阶段性结果并获取反馈后再继续\n- 任何你无法独立完成、需要人类介入的情况\n\n## 关键：保持上下文\n\n工具调用的结果只在当前循环中可见。当你结束回复后，新的循环将无法看到之前的工具调用结果。因此：\n- 如果你调用了其他工具并需要基于结果与用户讨论，必须在同一循环中使用 ask，不要直接结束回复\n- 如果你需要用户做某事后再继续处理，使用 ask 等待用户完成，这样你仍然保有当前上下文\n- 简而言之：任何需要用户参与才能继续的流程，都通过 ask 来衔接，避免上下文丢失\n\n## 格式\n\n问题内容支持 Markdown 格式，包括图片语法 ![alt](url) 可在终端中渲染图片。"
+        "向用户提出结构化的选择题，支持单选和多选。每次可提 1-4 个问题，每个问题 2-4 个选项。\n\n## 何时使用\n\n在任何需要用户介入的场景下都应使用此工具，包括但不限于：\n- 需要用户做出选择或确认操作\n- 需要用户提供偏好或配置\n- 遇到多种方案需要用户决定\n- 需要向用户展示阶段性结果并获取反馈\n\n## 格式说明\n\n每个问题包含 header（短标签）、question（完整问题）、options（选项列表）和 multi_select（是否多选）。\n用户可以选择预设选项，也可以自由输入。\n\n## 响应格式\n\n返回 JSON：{\"answers\": {\"问题文本\": \"选中的label或自由输入\"}}\n多选时用逗号分隔多个 label。"
     }
 
     fn parameters_schema(&self) -> Value {
         json!({
             "type": "object",
             "properties": {
-                "question": {
-                    "type": "string",
-                    "description": "要传达给用户的内容：可以是问题、操作指引、需要确认的信息等（支持 Markdown 格式，可使用 ![alt](url) 语法展示图片）"
+                "questions": {
+                    "type": "array",
+                    "description": "要提问的问题列表（1-4 个）",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "完整的问题文本"
+                            },
+                            "header": {
+                                "type": "string",
+                                "description": "短标签（最多12字符），如 'Auth method'"
+                            },
+                            "options": {
+                                "type": "array",
+                                "description": "选项列表（2-4 个）",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {
+                                            "type": "string",
+                                            "description": "选项显示文本（1-5 个词）"
+                                        },
+                                        "description": {
+                                            "type": "string",
+                                            "description": "选项说明"
+                                        }
+                                    },
+                                    "required": ["label", "description"]
+                                }
+                            },
+                            "multi_select": {
+                                "type": "boolean",
+                                "description": "是否允许多选（默认 false）"
+                            }
+                        },
+                        "required": ["question", "header", "options"]
+                    }
                 }
             },
-            "required": ["question"]
+            "required": ["questions"]
         })
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed = serde_json::from_str::<Value>(arguments).ok();
+        let parsed: Value = match serde_json::from_str(arguments) {
+            Ok(v) => v,
+            Err(_) => {
+                return ToolResult {
+                    output: "参数解析失败".to_string(),
+                    is_error: true,
+                };
+            }
+        };
 
-        let question = parsed
-            .as_ref()
-            .and_then(|v| v.get("question").and_then(|q| q.as_str()))
-            .unwrap_or("请回答");
+        let questions_val = match parsed.get("questions").and_then(|v| v.as_array()) {
+            Some(arr) => arr,
+            None => {
+                return ToolResult {
+                    output: "缺少 questions 参数".to_string(),
+                    is_error: true,
+                };
+            }
+        };
+
+        if questions_val.is_empty() || questions_val.len() > 4 {
+            return ToolResult {
+                output: "questions 数量必须为 1-4 个".to_string(),
+                is_error: true,
+            };
+        }
+
+        let mut questions: Vec<AskQuestion> = Vec::new();
+        for q_val in questions_val {
+            let question = q_val
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("请回答")
+                .to_string();
+            let header = q_val
+                .get("header")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let multi_select = q_val
+                .get("multi_select")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            let options = q_val
+                .get("options")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .map(|o| AskOption {
+                            label: o
+                                .get("label")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            description: o
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            if options.len() < 2 || options.len() > 4 {
+                return ToolResult {
+                    output: format!("问题 '{}' 的选项数量必须为 2-4 个", question),
+                    is_error: true,
+                };
+            }
+
+            questions.push(AskQuestion {
+                question,
+                header,
+                options,
+                multi_select,
+            });
+        }
 
         // 创建响应 channel
         let (response_tx, response_rx) = mpsc::channel::<String>();
 
-        // 发送 ask 请求到主线程
         let ask_request = AskRequest {
-            question: question.to_string(),
+            questions,
             response_tx,
         };
 

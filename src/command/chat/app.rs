@@ -72,9 +72,34 @@ pub struct ToolExecDoneMsg {
     pub is_error: bool,
 }
 
+/// ask 工具选项
+#[derive(Clone)]
+pub struct AskOption {
+    pub label: String,
+    pub description: String,
+}
+
+/// ask 工具单个问题
+#[derive(Clone)]
+pub struct AskQuestion {
+    pub question: String,
+    pub header: String,
+    pub options: Vec<AskOption>,
+    pub multi_select: bool,
+}
+
+/// ask 工具单题答案
+#[derive(Clone)]
+pub enum AskAnswer {
+    /// 选中的选项索引（单选/多选）
+    Selected(Vec<usize>),
+    /// 自由输入文本
+    FreeText(String),
+}
+
 /// ask 工具 → 主线程的请求消息
 pub struct AskRequest {
-    pub question: String,
+    pub questions: Vec<AskQuestion>,
     pub response_tx: mpsc::Sender<String>,
 }
 
@@ -195,8 +220,16 @@ pub struct ChatApp {
     pub tool_interact_cursor: usize,
     /// 是否为 ask 工具的交互模式（区别于普通工具确认）
     pub tool_ask_mode: bool,
-    /// ask 工具的问题内容（用于渲染）
-    pub tool_ask_question: String,
+    /// ask 工具的所有问题
+    pub tool_ask_questions: Vec<AskQuestion>,
+    /// ask 工具当前问题索引
+    pub tool_ask_current_idx: usize,
+    /// ask 工具每题答案
+    pub tool_ask_answers: Vec<AskAnswer>,
+    /// ask 工具当前问题各选项的选中状态（多选用）
+    pub tool_ask_selections: Vec<bool>,
+    /// ask 工具当前问题的选项游标位置
+    pub tool_ask_cursor: usize,
     /// ask 工具响应发送通道（用于向 ask 工具发送用户响应）
     pub ask_response_tx: Option<mpsc::Sender<String>>,
     /// ask 工具请求接收通道（主线程接收 ask 请求）
@@ -370,7 +403,11 @@ impl ChatApp {
             tool_interact_input: String::new(),
             tool_interact_cursor: 0,
             tool_ask_mode: false,
-            tool_ask_question: String::new(),
+            tool_ask_questions: Vec::new(),
+            tool_ask_current_idx: 0,
+            tool_ask_answers: Vec::new(),
+            tool_ask_selections: Vec::new(),
+            tool_ask_cursor: 0,
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
             queued_tasks,
@@ -579,13 +616,7 @@ impl ChatApp {
             if let Some(ref rx) = self.ask_request_rx
                 && let Ok(ask_req) = rx.try_recv()
             {
-                self.tool_ask_mode = true;
-                self.tool_ask_question = ask_req.question;
-                self.ask_response_tx = Some(ask_req.response_tx);
-                self.tool_interact_selected = 0;
-                self.tool_interact_typing = false;
-                self.tool_interact_input.clear();
-                self.tool_interact_cursor = 0;
+                self.init_ask_mode(ask_req);
                 self.msg_lines_cache = None;
             }
             return;
@@ -611,7 +642,11 @@ impl ChatApp {
                 self.tool_interact_input.clear();
                 self.tool_interact_cursor = 0;
                 self.tool_ask_mode = false;
-                self.tool_ask_question.clear();
+                self.tool_ask_questions.clear();
+                self.tool_ask_current_idx = 0;
+                self.tool_ask_answers.clear();
+                self.tool_ask_selections.clear();
+                self.tool_ask_cursor = 0;
                 self.mode = ChatMode::ToolConfirm;
                 write_info_log(
                     "poll_stream",
@@ -642,13 +677,7 @@ impl ChatApp {
         if let Some(ref rx) = self.ask_request_rx
             && let Ok(ask_req) = rx.try_recv()
         {
-            self.tool_ask_mode = true;
-            self.tool_ask_question = ask_req.question;
-            self.ask_response_tx = Some(ask_req.response_tx);
-            self.tool_interact_selected = 0;
-            self.tool_interact_typing = false;
-            self.tool_interact_input.clear();
-            self.tool_interact_cursor = 0;
+            self.init_ask_mode(ask_req);
             self.mode = ChatMode::ToolConfirm;
             self.msg_lines_cache = None;
             return;
@@ -726,6 +755,30 @@ impl ChatApp {
 
         if finished {
             self.finish_loading(had_error, was_cancelled);
+        }
+    }
+
+    /// 初始化 ask 模式状态
+    fn init_ask_mode(&mut self, ask_req: AskRequest) {
+        self.tool_ask_mode = true;
+        self.tool_ask_questions = ask_req.questions;
+        self.tool_ask_current_idx = 0;
+        self.tool_ask_answers = Vec::new();
+        self.ask_response_tx = Some(ask_req.response_tx);
+        // 初始化当前问题的选中状态
+        self.init_ask_question_state();
+        self.tool_interact_selected = 0;
+        self.tool_interact_typing = false;
+        self.tool_interact_input.clear();
+        self.tool_interact_cursor = 0;
+    }
+
+    /// 初始化当前 ask 问题的选项状态
+    pub fn init_ask_question_state(&mut self) {
+        if let Some(q) = self.tool_ask_questions.get(self.tool_ask_current_idx) {
+            // options + 1 for "自由输入" option
+            self.tool_ask_selections = vec![false; q.options.len() + 1];
+            self.tool_ask_cursor = 0;
         }
     }
 
