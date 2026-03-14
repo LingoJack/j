@@ -12,7 +12,7 @@ pub struct AskTool {
 
 impl Tool for AskTool {
     fn name(&self) -> &str {
-        "ask"
+        "Ask"
     }
 
     fn description(&self) -> &str {

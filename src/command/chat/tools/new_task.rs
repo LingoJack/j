@@ -11,7 +11,7 @@ pub struct NewTaskTool {
 
 impl Tool for NewTaskTool {
     fn name(&self) -> &str {
-        "new_task"
+        "NewTask"
     }
 
     fn description(&self) -> &str {

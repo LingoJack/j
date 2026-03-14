@@ -7,7 +7,7 @@ pub struct GlobTool;
 
 impl Tool for GlobTool {
     fn name(&self) -> &str {
-        "glob"
+        "Glob"
     }
 
     fn description(&self) -> &str {

@@ -11,7 +11,7 @@ pub struct LoadSkillTool {
 
 impl Tool for LoadSkillTool {
     fn name(&self) -> &str {
-        "load_skill"
+        "LoadSkill"
     }
 
     fn description(&self) -> &str {

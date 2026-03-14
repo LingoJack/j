@@ -45,7 +45,7 @@ fn get_extensions_for_type(file_type: &str) -> Vec<&'static str> {
 
 impl Tool for GrepTool {
     fn name(&self) -> &str {
-        "grep"
+        "Grep"
     }
 
     fn description(&self) -> &str {

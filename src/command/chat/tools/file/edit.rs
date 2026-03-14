@@ -7,7 +7,7 @@ pub struct EditFileTool;
 
 impl Tool for EditFileTool {
     fn name(&self) -> &str {
-        "edit_file"
+        "EditFile"
     }
 
     fn description(&self) -> &str {

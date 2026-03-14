@@ -23,7 +23,7 @@ pub struct WebSearchTool;
 
 impl Tool for WebSearchTool {
     fn name(&self) -> &str {
-        "web_search"
+        "WebSearch"
     }
 
     fn description(&self) -> &str {

@@ -21,7 +21,7 @@ pub struct WebFetchTool;
 
 impl Tool for WebFetchTool {
     fn name(&self) -> &str {
-        "web_fetch"
+        "WebFetch"
     }
 
     fn description(&self) -> &str {

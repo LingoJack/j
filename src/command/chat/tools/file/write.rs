@@ -7,7 +7,7 @@ pub struct WriteFileTool;
 
 impl Tool for WriteFileTool {
     fn name(&self) -> &str {
-        "write_file"
+        "WriteFile"
     }
 
     fn description(&self) -> &str {

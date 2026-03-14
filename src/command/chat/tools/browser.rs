@@ -1276,7 +1276,7 @@ pub struct BrowserTool;
 
 impl Tool for BrowserTool {
     fn name(&self) -> &str {
-        "browser"
+        "Browser"
     }
 
     fn description(&self) -> &str {

@@ -13,7 +13,7 @@ pub struct ShellTool;
 
 impl Tool for ShellTool {
     fn name(&self) -> &str {
-        "run_shell"
+        "RunShell"
     }
 
     fn description(&self) -> &str {
