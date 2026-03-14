@@ -985,7 +985,11 @@ pub fn render_assistant_msg(
     theme: &Theme,
 ) {
     lines.push(Line::from(""));
-    let ai_label = if is_selected { "  ▶ AI" } else { "  AI" };
+    let ai_label = if is_selected {
+        "  ▶ Sprite"
+    } else {
+        "  Sprite"
+    };
     lines.push(Line::from(Span::styled(
         ai_label,
         Style::default()
@@ -1103,7 +1107,7 @@ pub fn render_tool_call_request_msg(
 ) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  🔧 AI 调用工具",
+        "  🔧 调用工具",
         Style::default()
             .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD),
