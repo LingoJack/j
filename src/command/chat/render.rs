@@ -471,11 +471,11 @@ pub fn build_message_lines_incremental(
                         i < app.tool_ask_selections.len() && app.tool_ask_selections[i];
 
                     // 指示器和复选框用多个 span 实现颜色区分
-                    let pointer_str = if is_cursor { " > " } else { "   " };
+                    let pointer_str = if is_cursor { " ❯ " } else { "   " };
                     let check_str = if is_multi {
-                        if is_selected_multi { "[x] " } else { "[ ] " }
+                        if is_selected_multi { "☑ " } else { "☐ " }
                     } else {
-                        if is_cursor { "(*) " } else { "( ) " }
+                        if is_cursor { "● " } else { "○ " }
                     };
 
                     let pointer_style = if is_cursor {
@@ -546,7 +546,7 @@ pub fn build_message_lines_incremental(
                             .add_modifier(Modifier::BOLD);
                         lines.push(bordered_line(
                             vec![
-                                Span::styled(" > ", pointer_style),
+                                Span::styled(" ❯ ✏ ", pointer_style),
                                 Span::styled(
                                     format!("{}|", app.tool_interact_input),
                                     Style::default().fg(t.text_white).bg(confirm_bg),
@@ -557,7 +557,7 @@ pub fn build_message_lines_incremental(
                             confirm_bg,
                         ));
                     } else {
-                        let pointer_str = if is_cursor { " > " } else { "   " };
+                        let pointer_str = if is_cursor { " ❯ " } else { "   " };
                         let pointer_style = if is_cursor {
                             Style::default()
                                 .fg(Color::Cyan)
@@ -577,7 +577,7 @@ pub fn build_message_lines_incremental(
                         lines.push(bordered_line(
                             vec![
                                 Span::styled(pointer_str, pointer_style),
-                                Span::styled("Other...", text_style),
+                                Span::styled("✏ 自由输入...", text_style),
                             ],
                             bubble_max_width,
                             border_color,
