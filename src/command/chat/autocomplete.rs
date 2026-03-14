@@ -63,6 +63,26 @@ pub fn update_file_filter(app: &mut ChatApp) {
     app.file_popup_selected = 0;
 }
 
+/// 将 ~ 展开为用户 home 目录
+fn expand_tilde(path: &str) -> String {
+    if path == "~" || path.starts_with("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return format!("{}{}", home.display(), &path[1..]);
+        }
+    }
+    path.to_string()
+}
+
+/// 从 filter 中提取目录部分（含尾部 /），用于和文件名拼接成完整路径
+/// 例如 "src/ma" -> "src/", "" -> "", "~/" -> "~/"
+pub fn filter_dir_part(filter: &str) -> &str {
+    if let Some(last_slash) = filter.rfind('/') {
+        &filter[..=last_slash]
+    } else {
+        ""
+    }
+}
+
 /// 获取文件补全列表
 pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
     let filter = &app.file_popup_filter;
@@ -74,10 +94,11 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
         ("", filter.as_str())
     };
 
+    // 展开 ~ 后确定实际要读取的目录
     let dir_path = if dir_part.is_empty() {
         std::path::PathBuf::from(".")
     } else {
-        std::path::PathBuf::from(dir_part)
+        std::path::PathBuf::from(expand_tilde(dir_part))
     };
 
     let prefix_lower = prefix.to_lowercase();

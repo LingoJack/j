@@ -382,8 +382,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     let sel = app.file_popup_selected.min(filtered.len() - 1);
                     let entry = filtered[sel].clone();
                     if entry.ends_with('/') {
-                        // 目录：追加到过滤文本，继续补全
-                        app.file_popup_filter.push_str(&entry);
+                        // 目录：用 dir_part + entry 更新 filter，继续补全
+                        let dir = filter_dir_part(&app.file_popup_filter);
+                        app.file_popup_filter = format!("{}{}", dir, entry);
                         // 更新 input 中的文本
                         let chars: Vec<char> = app.input.chars().collect();
                         let before: String = chars[..app.file_popup_start_pos].iter().collect();
@@ -398,8 +399,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         app.cursor_pos = new_cursor;
                         app.file_popup_selected = 0;
                     } else {
-                        // 文件：补全并关闭弹窗
-                        let full_path = format!("{}{}", app.file_popup_filter, entry);
+                        // 文件：用 dir_part + entry 拼接完整路径，补全并关闭弹窗
+                        let dir = filter_dir_part(&app.file_popup_filter);
+                        let full_path = format!("{}{}", dir, entry);
                         complete_file_mention(app, &full_path);
                         app.file_popup_active = false;
                     }
@@ -1632,7 +1634,8 @@ fn ask_submit_answer(app: &mut ChatApp, answer: AskAnswer) {
 // ========== @ 补全辅助函数 ==========
 
 use super::autocomplete::{
-    complete_at_mention, complete_file_mention, update_at_filter, update_file_filter,
+    complete_at_mention, complete_file_mention, filter_dir_part, update_at_filter,
+    update_file_filter,
 };
 /// 从 input 中提取 @ 之后的过滤文本
 // autocomplete 函数已移至 super::autocomplete 模块
