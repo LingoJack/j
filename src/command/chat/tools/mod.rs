@@ -2,7 +2,6 @@ mod ask;
 mod browser;
 mod file;
 mod grep;
-pub(crate) mod html_extract;
 mod new_task;
 mod shell;
 mod skill_tool;
