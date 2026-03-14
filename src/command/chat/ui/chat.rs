@@ -172,7 +172,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     "Hi! What can I help you?  ",
                     Style::default().fg(t.welcome_text),
                 ),
-                Span::styled("     │", Style::default().fg(t.welcome_border)),
+                Span::styled("       │", Style::default().fg(t.welcome_border)),
             ]),
             Line::from(Span::styled(
                 "  │                                      │",
