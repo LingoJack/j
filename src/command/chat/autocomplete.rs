@@ -74,12 +74,15 @@ fn expand_tilde(path: &str) -> String {
 }
 
 /// 从 filter 中提取目录部分（含尾部 /），用于和文件名拼接成完整路径
-/// 例如 "src/ma" -> "src/", "" -> "", "~/" -> "~/"
-pub fn filter_dir_part(filter: &str) -> &str {
+/// 例如 "src/ma" -> "src/", "" -> "", "~/" -> "~/", "~" -> "~/"
+pub fn filter_dir_part(filter: &str) -> String {
+    if filter == "~" {
+        return "~/".to_string();
+    }
     if let Some(last_slash) = filter.rfind('/') {
-        &filter[..=last_slash]
+        filter[..=last_slash].to_string()
     } else {
-        ""
+        String::new()
     }
 }
 
@@ -87,11 +90,23 @@ pub fn filter_dir_part(filter: &str) -> &str {
 pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
     let filter = &app.file_popup_filter;
 
-    // 解析 filter 为目录部分 + 文件名前缀
-    let (dir_part, prefix) = if let Some(last_slash) = filter.rfind('/') {
-        (&filter[..=last_slash], &filter[last_slash + 1..])
+    // 处理 ~ 路径：将 ~ 单独或 ~/ 开头视为 home 目录
+    let expanded;
+    let effective_filter = if filter == "~" {
+        // 用户刚打了 ~，等同于 ~/（列出 home 目录内容）
+        expanded = "~/".to_string();
+        &expanded
+    } else if filter.starts_with("~/") {
+        filter
     } else {
-        ("", filter.as_str())
+        filter
+    };
+
+    // 解析 filter 为目录部分 + 文件名前缀
+    let (dir_part, prefix) = if let Some(last_slash) = effective_filter.rfind('/') {
+        (&effective_filter[..=last_slash], &effective_filter[last_slash + 1..])
+    } else {
+        ("", effective_filter.as_str())
     };
 
     // 展开 ~ 后确定实际要读取的目录
