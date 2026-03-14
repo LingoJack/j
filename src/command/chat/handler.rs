@@ -385,8 +385,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         complete_file_mention(app, &full_path);
                         app.file_popup_active = false;
                     }
+                    return false;
                 }
-                return false;
+                // filtered 为空时，关闭弹窗，让 Enter 继续处理（发送消息）
+                app.file_popup_active = false;
+                // fall through to normal Enter handling
             }
             KeyCode::Esc => {
                 app.file_popup_active = false;
@@ -419,16 +422,22 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 return false;
             }
             KeyCode::Char(c) => {
-                let byte_idx = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.insert(byte_idx, c);
-                app.cursor_pos += 1;
-                update_file_filter(app);
-                return false;
+                // 空格关闭文件弹窗，让后续输入正常处理
+                if c == ' ' {
+                    app.file_popup_active = false;
+                    // fall through to normal char handling
+                } else {
+                    let byte_idx = app
+                        .input
+                        .char_indices()
+                        .nth(app.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.input.len());
+                    app.input.insert(byte_idx, c);
+                    app.cursor_pos += 1;
+                    update_file_filter(app);
+                    return false;
+                }
             }
             _ => {}
         }
