@@ -266,9 +266,14 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     if app.mode != ChatMode::Browse {
         if app.mode == ChatMode::ToolConfirm {
-            // ToolConfirm 模式下强制滚动到底部，确保确认区可见
-            app.scroll_offset = max_scroll;
-            app.auto_scroll = true;
+            // ToolConfirm 模式下，若 auto_scroll 则滚到底部确保确认区可见
+            // 用户 PageUp 后 auto_scroll=false，允许查看上方内容
+            if app.auto_scroll || app.scroll_offset == u16::MAX {
+                app.scroll_offset = max_scroll;
+                app.auto_scroll = true;
+            } else if app.scroll_offset > max_scroll {
+                app.scroll_offset = max_scroll;
+            }
         } else if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
             app.scroll_offset = max_scroll;
             app.auto_scroll = true;

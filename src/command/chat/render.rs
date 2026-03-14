@@ -376,35 +376,24 @@ pub fn build_message_lines_incremental(
 
                 // header 标签 + 进度
                 let header_text = if total_q > 1 {
-                    format!("  [{}/{}] {}", cur_idx + 1, total_q, cur_q.header)
+                    format!("[{}/{}] {}", cur_idx + 1, total_q, cur_q.header)
                 } else {
-                    format!("  {}", cur_q.header)
+                    cur_q.header.clone()
                 };
-                let header_wrapped = wrap_text(&header_text, content_w);
-                for wl in &header_wrapped {
-                    let msg_w = display_width(wl);
-                    let fill = content_w.saturating_sub(msg_w + 2);
-                    lines.push(Line::from(vec![
-                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                        Span::styled(" ", Style::default().bg(confirm_bg)),
-                        Span::styled(
-                            wl.clone(),
-                            Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
-                        ),
-                        Span::styled(
-                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                            Style::default().bg(confirm_bg),
-                        ),
-                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                    ]));
-                }
+                lines.push(bordered_line(
+                    vec![Span::styled(
+                        format!(" {}", header_text),
+                        Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                    )],
+                    bubble_max_width,
+                    border_color,
+                    confirm_bg,
+                ));
 
                 // question 内容（Markdown 渲染）
                 {
                     let max_msg_w = content_w.saturating_sub(2);
                     let md_lines_rendered = markdown_to_lines(&cur_q.question, max_msg_w, t);
-                    let max_show = 15;
-                    let mut text_count = 0usize;
                     for md_line in md_lines_rendered.iter() {
                         let is_img_marker = md_line
                             .spans
@@ -422,7 +411,7 @@ pub fn build_message_lines_incremental(
                                 .content
                                 .clone();
                             let inner_w = bubble_max_width.saturating_sub(8);
-                            let spans: Vec<Span> = vec![
+                            lines.push(Line::from(vec![
                                 Span::styled(
                                     "  │ ",
                                     Style::default().fg(border_color).bg(confirm_bg),
@@ -433,138 +422,114 @@ pub fn build_message_lines_incremental(
                                     Style::default().fg(border_color).bg(confirm_bg),
                                 ),
                                 Span::styled(marker, Style::default()),
-                            ];
-                            lines.push(Line::from(spans));
+                            ]));
                         } else if is_placeholder {
-                            let inner_w = bubble_max_width.saturating_sub(8);
+                            // 空行
+                            let inner_w = bubble_max_width.saturating_sub(4);
                             lines.push(Line::from(vec![
                                 Span::styled(
-                                    "  │ ",
+                                    "  │",
                                     Style::default().fg(border_color).bg(confirm_bg),
                                 ),
                                 Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
-                                Span::styled(
-                                    " │",
-                                    Style::default().fg(border_color).bg(confirm_bg),
-                                ),
+                                Span::styled("│", Style::default().fg(border_color).bg(confirm_bg)),
                             ]));
                         } else {
-                            text_count += 1;
-                            if text_count > max_show {
-                                continue;
-                            }
-                            let line_text: String =
-                                md_line.spans.iter().map(|s| s.content.as_ref()).collect();
-                            let msg_w = display_width(&line_text);
-                            let fill = content_w.saturating_sub(msg_w + 2);
-                            let mut spans = vec![
-                                Span::styled(
-                                    "  │ ",
-                                    Style::default().fg(border_color).bg(confirm_bg),
-                                ),
-                                Span::styled(" ", Style::default().bg(confirm_bg)),
-                            ];
+                            let mut content_spans =
+                                vec![Span::styled(" ", Style::default().bg(confirm_bg))];
                             for span in &md_line.spans {
                                 let mut patched = span.clone();
                                 patched.style = patched.style.bg(confirm_bg);
-                                spans.push(patched);
+                                content_spans.push(patched);
                             }
-                            if text_count == max_show && md_lines_rendered.len() > max_show {
-                                spans.push(Span::styled(
-                                    "...",
-                                    Style::default().fg(t.tool_confirm_text),
-                                ));
-                            }
-                            spans.push(Span::styled(
-                                " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                                Style::default().bg(confirm_bg),
+                            lines.push(bordered_line(
+                                content_spans,
+                                bubble_max_width,
+                                border_color,
+                                confirm_bg,
                             ));
-                            spans.push(Span::styled(
-                                " │",
-                                Style::default().fg(border_color).bg(confirm_bg),
-                            ));
-                            lines.push(Line::from(spans));
                         }
                     }
                 }
 
                 // 空行分隔
                 {
-                    let fill = bubble_max_width.saturating_sub(4);
+                    let inner_w = bubble_max_width.saturating_sub(4);
                     lines.push(Line::from(vec![
                         Span::styled("  │", Style::default().fg(border_color).bg(confirm_bg)),
-                        Span::styled(" ".repeat(fill), Style::default().bg(confirm_bg)),
+                        Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
                         Span::styled("│", Style::default().fg(border_color).bg(confirm_bg)),
                     ]));
                 }
 
                 // 渲染选项列表
-                let arrow_style = Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD);
                 let is_multi = cur_q.multi_select;
 
                 for (i, opt) in cur_q.options.iter().enumerate() {
                     let is_cursor = i == app.tool_ask_cursor;
                     let is_selected_multi =
                         i < app.tool_ask_selections.len() && app.tool_ask_selections[i];
-                    let pointer = if is_cursor { "❯" } else { " " };
 
-                    // 多选 checkbox 或单选 radio
-                    let check = if is_multi {
-                        if is_selected_multi { "☑ " } else { "☐ " }
+                    // 指示器和复选框用多个 span 实现颜色区分
+                    let pointer_str = if is_cursor { " > " } else { "   " };
+                    let check_str = if is_multi {
+                        if is_selected_multi { "[x] " } else { "[ ] " }
                     } else {
-                        if is_cursor { "● " } else { "○ " }
+                        if is_cursor { "(*) " } else { "( ) " }
                     };
 
-                    // label 行
-                    let label_text = format!("{} {}{}", pointer, check, opt.label);
-                    let label_w = display_width(&label_text);
-                    let fill = content_w.saturating_sub(label_w + 2);
-                    let text_style = if is_cursor {
-                        arrow_style.bg(confirm_bg)
+                    let pointer_style = if is_cursor {
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().bg(confirm_bg)
+                    };
+                    let check_style = if is_cursor || is_selected_multi {
+                        Style::default()
+                            .fg(Color::Green)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
                     };
-                    lines.push(Line::from(vec![
-                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                        Span::styled(" ", Style::default().bg(confirm_bg)),
-                        Span::styled(label_text, text_style),
-                        Span::styled(
-                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                            Style::default().bg(confirm_bg),
-                        ),
-                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                    ]));
+                    let label_style = if is_cursor {
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
+                    };
+
+                    lines.push(bordered_line(
+                        vec![
+                            Span::styled(pointer_str, pointer_style),
+                            Span::styled(check_str, check_style),
+                            Span::styled(opt.label.clone(), label_style),
+                        ],
+                        bubble_max_width,
+                        border_color,
+                        confirm_bg,
+                    ));
 
                     // description 行（缩进，灰色）
                     if !opt.description.is_empty() {
-                        let desc_prefix = "      ";
+                        let desc_prefix = "       ";
                         let desc_max_w = content_w.saturating_sub(display_width(desc_prefix) + 2);
                         let desc_wrapped = wrap_text(&opt.description, desc_max_w);
                         for dl in &desc_wrapped {
                             let desc_text = format!("{}{}", desc_prefix, dl);
-                            let desc_w = display_width(&desc_text);
-                            let fill = content_w.saturating_sub(desc_w + 2);
-                            lines.push(Line::from(vec![
-                                Span::styled(
-                                    "  │ ",
-                                    Style::default().fg(border_color).bg(confirm_bg),
-                                ),
-                                Span::styled(" ", Style::default().bg(confirm_bg)),
-                                Span::styled(
+                            lines.push(bordered_line(
+                                vec![Span::styled(
                                     desc_text,
                                     Style::default().fg(t.text_dim).bg(confirm_bg),
-                                ),
-                                Span::styled(
-                                    " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                                    Style::default().bg(confirm_bg),
-                                ),
-                                Span::styled(
-                                    " │",
-                                    Style::default().fg(border_color).bg(confirm_bg),
-                                ),
-                            ]));
+                                )],
+                                bubble_max_width,
+                                border_color,
+                                confirm_bg,
+                            ));
                         }
                     }
                 }
@@ -573,78 +538,77 @@ pub fn build_message_lines_incremental(
                 {
                     let free_idx = cur_q.options.len();
                     let is_cursor = free_idx == app.tool_ask_cursor;
-                    let pointer = if is_cursor { "❯" } else { " " };
 
                     if app.tool_interact_typing {
-                        // 输入模式
-                        let input_display = format!("{} ✏ {}█", pointer, app.tool_interact_input);
-                        let input_w = display_width(&input_display);
-                        let fill = content_w.saturating_sub(input_w + 2);
-                        lines.push(Line::from(vec![
-                            Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                            Span::styled(" ", Style::default().bg(confirm_bg)),
-                            Span::styled(pointer, arrow_style.bg(confirm_bg)),
-                            Span::styled(
-                                format!(" ✏ {}█", app.tool_interact_input),
-                                Style::default().fg(t.text_white).bg(confirm_bg),
-                            ),
-                            Span::styled(
-                                " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                                Style::default().bg(confirm_bg),
-                            ),
-                            Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                        ]));
+                        let pointer_style = Style::default()
+                            .fg(Color::Cyan)
+                            .bg(confirm_bg)
+                            .add_modifier(Modifier::BOLD);
+                        lines.push(bordered_line(
+                            vec![
+                                Span::styled(" > ", pointer_style),
+                                Span::styled(
+                                    format!("{}|", app.tool_interact_input),
+                                    Style::default().fg(t.text_white).bg(confirm_bg),
+                                ),
+                            ],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
                     } else {
-                        let free_text = format!("{} ✏ 自由输入...", pointer);
-                        let text_w = display_width(&free_text);
-                        let fill = content_w.saturating_sub(text_w + 2);
+                        let pointer_str = if is_cursor { " > " } else { "   " };
+                        let pointer_style = if is_cursor {
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().bg(confirm_bg)
+                        };
                         let text_style = if is_cursor {
-                            arrow_style.bg(confirm_bg)
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .bg(confirm_bg)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
                         };
-                        lines.push(Line::from(vec![
-                            Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                            Span::styled(" ", Style::default().bg(confirm_bg)),
-                            Span::styled(free_text, text_style),
-                            Span::styled(
-                                " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                                Style::default().bg(confirm_bg),
-                            ),
-                            Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                        ]));
+                        lines.push(bordered_line(
+                            vec![
+                                Span::styled(pointer_str, pointer_style),
+                                Span::styled("Other...", text_style),
+                            ],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
                     }
                 }
 
                 // 底部操作提示
                 {
-                    let fill = bubble_max_width.saturating_sub(4);
+                    let inner_w = bubble_max_width.saturating_sub(4);
                     lines.push(Line::from(vec![
                         Span::styled("  │", Style::default().fg(border_color).bg(confirm_bg)),
-                        Span::styled(" ".repeat(fill), Style::default().bg(confirm_bg)),
+                        Span::styled(" ".repeat(inner_w), Style::default().bg(confirm_bg)),
                         Span::styled("│", Style::default().fg(border_color).bg(confirm_bg)),
                     ]));
                 }
                 let hint = if is_multi {
-                    "  ↑↓ 移动 · Space 选中 · Enter 确认 · ←→ 切题 · Esc 取消"
+                    " Up/Down Move | Space Toggle | Enter OK | PgUp/PgDn Scroll | Esc Cancel"
                 } else {
-                    "  ↑↓ 移动 · Enter 确认 · ←→ 切题 · Esc 取消"
+                    " Up/Down Move | Enter OK | PgUp/PgDn Scroll | Esc Cancel"
                 };
-                let hint_wrapped = wrap_text(hint, content_w);
-                for hl in &hint_wrapped {
-                    let hint_w = display_width(hl);
-                    let fill = content_w.saturating_sub(hint_w + 2);
-                    lines.push(Line::from(vec![
-                        Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                        Span::styled(" ", Style::default().bg(confirm_bg)),
-                        Span::styled(hl.clone(), Style::default().fg(t.text_dim).bg(confirm_bg)),
-                        Span::styled(
-                            " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                            Style::default().bg(confirm_bg),
-                        ),
-                        Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                    ]));
-                }
+                lines.push(bordered_line(
+                    vec![Span::styled(
+                        hint,
+                        Style::default().fg(t.text_dim).bg(confirm_bg),
+                    )],
+                    bubble_max_width,
+                    border_color,
+                    confirm_bg,
+                ));
             }
         } else if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
             // 工具确认模式：显示工具名和确认信息
@@ -1096,6 +1060,36 @@ pub fn display_width(s: &str) -> usize {
 pub fn char_width(c: char) -> usize {
     use unicode_width::UnicodeWidthChar;
     UnicodeWidthChar::width(c).unwrap_or(0)
+}
+
+/// 构建一行带左右边框的行，自动用空格补齐到 bubble_max_width
+/// content_spans: 不含左右边框的内容 spans（会被消费）
+/// bubble_max_width: 气泡总宽度
+/// border_color: 边框颜色
+/// bg: 背景色
+fn bordered_line(
+    content_spans: Vec<Span<'static>>,
+    bubble_max_width: usize,
+    border_color: Color,
+    bg: Color,
+) -> Line<'static> {
+    // 左边框 "  │ " 占 4 列，右边框 " │" 占 2 列
+    let border_overhead = 4 + 2;
+    let content_used: usize = content_spans
+        .iter()
+        .map(|s| display_width(&s.content))
+        .sum();
+    let fill = bubble_max_width.saturating_sub(border_overhead + content_used);
+
+    let mut spans = Vec::with_capacity(content_spans.len() + 3);
+    spans.push(Span::styled(
+        "  │ ",
+        Style::default().fg(border_color).bg(bg),
+    ));
+    spans.extend(content_spans);
+    spans.push(Span::styled(" ".repeat(fill), Style::default().bg(bg)));
+    spans.push(Span::styled(" │", Style::default().fg(border_color).bg(bg)));
+    Line::from(spans)
 }
 
 /// 渲染工具调用请求消息（AI 发起）：黄色标签 + 工具名和参数摘要

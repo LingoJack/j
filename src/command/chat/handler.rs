@@ -11,7 +11,7 @@ use crate::constants::{
 };
 use crate::error;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -30,7 +30,11 @@ pub fn run_chat_tui() {
 pub fn run_chat_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        crossterm::event::EnableMouseCapture
+    )?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -172,6 +176,17 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                     Event::Resize(_, _) => {
                         needs_redraw = true;
                     }
+                    Event::Mouse(mouse) => match mouse.kind {
+                        MouseEventKind::ScrollUp => {
+                            app.scroll_up();
+                            needs_redraw = true;
+                        }
+                        MouseEventKind::ScrollDown => {
+                            app.scroll_down();
+                            needs_redraw = true;
+                        }
+                        _ => {}
+                    },
                     _ => {}
                 }
                 // 继续消费剩余事件（非阻塞，Duration::ZERO）
@@ -241,7 +256,11 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
     let _ = save_chat_session(&app.session);
 
     terminal::disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        crossterm::event::DisableMouseCapture,
+        LeaveAlternateScreen
+    )?;
     Ok(())
 }
 
@@ -1742,6 +1761,17 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
             app.tool_ask_selections.clear();
             app.tool_ask_cursor = 0;
             app.mode = ChatMode::Chat;
+        }
+        // PageUp/PageDown 滚动消息区（查看长问题内容）
+        KeyCode::PageUp => {
+            for _ in 0..10 {
+                app.scroll_up();
+            }
+        }
+        KeyCode::PageDown => {
+            for _ in 0..10 {
+                app.scroll_down();
+            }
         }
         _ => {}
     }
