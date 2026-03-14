@@ -350,7 +350,7 @@ pub fn build_message_lines_incremental(
 
         // 标题行
         let title = if is_ask {
-            "  🤖 AI 提问"
+            "  🪐 问一下："
         } else {
             "  🔧 工具调用确认"
         };
