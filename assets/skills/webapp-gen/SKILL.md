@@ -11,22 +11,42 @@ description: "一句话生成完整 Web APP。当用户描述一个 Web 应用�
 
 ## 项目目录规范
 
-**所有生成的 Web APP 项目统一存放在 `~/jcli_playground/` 目录下：**
+**所有生成的 Web APP 项目统一存放在 `~/jcli_playground/` 目录下。**
 
 ```
 ~/jcli_playground/
-├── <project-name>/          # 每个项目的独立目录
+├── <project-name>/          # 每个项目独立目录
 │   ├── frontend/
 │   ├── backend/
 │   ├── docs/
 │   ├── modules.yaml
 │   ├── REQUIREMENTS.md
 │   └── ...
-├── another-project/
 └── ...
 ```
 
-项目名从用户需求中提取（如"做一个商城" → `shopping-mall`），如果目录已存在则询问用户是否覆盖。
+项目名从用户需求中提取（如"做一个商城" → `shopping-mall`）。
+
+**定义项目根目录变量，后续所有 shell 命令通过 `cwd` 参数指向该目录，不再使用 `cd`：**
+
+```
+PROJECT_DIR = ~/jcli_playground/<project-name>
+```
+
+## Shell 工具使用规范
+
+本 Skill 中所有 `RunShell` 调用遵循以下规则：
+
+1. **始终使用 `cwd` 参数**指定工作目录，不要用 `cd xxx &&` 拼接
+2. **交互式命令加 `--yes`**（如 `npm create vite@latest ... --yes`），避免命令等待输入导致超时
+3. **不要后台启动 dev server**（`npm run dev &` 会卡住），改用 `npm run build` 检查编译是否通过
+4. **长时间命令设置合理 `timeout`**（如 `npm install` 设 60s，`docker compose up --build` 设 180s）
+
+示例调用：
+
+```json
+{ "command": "npm install", "cwd": "~/jcli_playground/my-app/frontend", "timeout": 60 }
+```
 
 ## 工作流总览
 
@@ -52,20 +72,13 @@ Phase 7: 文档交付
 
 将确认结果写入 `REQUIREMENTS.md`，用 `ask` 做最终确认。
 
-然后初始化项目：
+然后初始化项目（项目名从需求中提取，如"做一个商城" → `shopping-mall`）：
 
-```bash
-# 项目名从需求中提取（如"做一个商城" → shopping-mall）
-PROJECT_NAME="<project-name>"
-PROJECT_DIR="$HOME/jcli_playground/$PROJECT_NAME"
-
-# 检查目录是否存在
-if [ -d "$PROJECT_DIR" ]; then
-  echo "目录已存在，请确认是否覆盖"
-fi
-
-mkdir -p "$PROJECT_DIR" && cd "$PROJECT_DIR" && git init
+```json
+{ "command": "mkdir -p ~/jcli_playground/shopping-mall && git init", "cwd": "~/jcli_playground/shopping-mall" }
 ```
+
+如果目录已存在，先用 `ask` 询问用户是否覆盖。
 
 ## Phase 2: 模块划分
 
@@ -78,8 +91,8 @@ mkdir -p "$PROJECT_DIR" && cd "$PROJECT_DIR" && git init
 
 确认后：
 
-```bash
-git add . && git commit -m "docs: 需求文档 + 模块划分"
+```json
+{ "command": "git add . && git commit -m 'docs: 需求文档 + 模块划分'", "cwd": "PROJECT_DIR" }
 ```
 
 ## Phase 3: 前端生成（Mock 数据）
@@ -90,11 +103,8 @@ React + TailwindCSS 规范见 [references/react_frontend.md](references/react_fr
 
 ### 3.1 初始化前端项目
 
-用 Vite 创建 React + TailwindCSS 项目：
-
-```bash
-npm create vite@latest frontend -- --template react && cd frontend && npm install
-npm install -D tailwindcss @tailwindcss/vite
+```json
+{ "command": "npm create vite@latest frontend -- --template react --yes && cd frontend && npm install && npm install -D tailwindcss @tailwindcss/vite && npm install react-router-dom", "cwd": "PROJECT_DIR", "timeout": 60 }
 ```
 
 生成基础布局（导航栏、侧边栏、路由），配置 TailwindCSS。
@@ -111,26 +121,43 @@ npm install -D tailwindcss @tailwindcss/vite
 
 每生成一个模块的页面后：
 
-1. `shell` 启动开发服务器：`cd frontend && npm run dev`（后台运行）
-2. 用 `ask` 告知用户访问地址（通常 http://localhost:5173），展示已生成的页面列表
-3. 用 `ask` 问用户：
+1. 用 `shell` 执行编译检查，确认无语法/类型错误：
+
+```json
+{ "command": "npm run build", "cwd": "PROJECT_DIR/frontend", "timeout": 30 }
+```
+
+2. 如果编译失败 → 读取错误输出，修复代码，重新编译（最多 3 次）
+3. 编译通过后，用 `ask` 告知用户：
 
 ```
-"请查看页面效果，是否满意？"
+"前端页面已生成并编译通过。请手动运行以下命令预览：
+  cd PROJECT_DIR/frontend && npm run dev
+
+查看后是否满意？"
 选项：
 - 满意，继续
 - 不满意，需要调整（请描述）
 ```
 
-4. **满意** → `git add frontend/ && git commit -m "feat(frontend): <模块名>页面"`，继续下一个模块
-5. **不满意** → 根据用户反馈修改代码，回到步骤 2 重新展示。如果改崩了，用 `git checkout -- frontend/` 恢复到上次 commit，重新生成
+4. **满意** → 提交：
+
+```json
+{ "command": "git add frontend/ && git commit -m 'feat(frontend): <模块名>页面'", "cwd": "PROJECT_DIR" }
+```
+
+5. **不满意** → 根据用户反馈修改代码，回到步骤 1。如果改崩了：
+
+```json
+{ "command": "git checkout -- frontend/", "cwd": "PROJECT_DIR" }
+```
 
 ### 3.4 前端完整后
 
 所有模块页面都确认 OK 后：
 
-```bash
-git add . && git commit -m "feat(frontend): 所有页面完成（Mock 数据）"
+```json
+{ "command": "git add . && git commit -m 'feat(frontend): 所有页面完成（Mock 数据）'", "cwd": "PROJECT_DIR" }
 ```
 
 ## Phase 4: 后端生成
@@ -141,13 +168,13 @@ Go 后端规范见 [references/go_backend.md](references/go_backend.md)。
 
 ### 4.1 初始化后端项目
 
-```bash
-mkdir backend && cd backend && go mod init <module-name>
+```json
+{ "command": "mkdir -p backend && cd backend && go mod init <module-name>", "cwd": "PROJECT_DIR" }
 ```
 
 ### 4.2 逐模块生成
 
-对每个模块（按依赖拓扑序，先生成被依赖模块），用 `NewTask` 创建子任务：
+对每个模块（按依赖拓扑序，先生成被依赖模块）：
 
 1. 数据模型（`internal/<module>/model.go`）— 结构体 + GORM 标签
 2. Repository 层（`internal/<module>/repository.go`）— 数据访问
@@ -163,7 +190,7 @@ mkdir backend && cd backend && go mod init <module-name>
 
 ```
 重复（最多 5 次）：
-  1. 执行 shell: cd backend && go test ./internal/<module>/...
+  1. RunShell: { "command": "go test ./internal/<module>/...", "cwd": "PROJECT_DIR/backend", "timeout": 30 }
   2. 全部通过 → 跳出循环
   3. 有失败 → 读取错误输出，分析原因，用 edit 修复代码，回到步骤 1
 如果 5 次仍失败 → 用 ask 告知用户，请求指导
@@ -171,8 +198,8 @@ mkdir backend && cd backend && go mod init <module-name>
 
 每个模块测试通过后立即提交：
 
-```bash
-git add backend/internal/<module>/ && git commit -m "feat(backend): <模块名>模块 — 模型/接口/测试"
+```json
+{ "command": "git add backend/internal/<module>/ && git commit -m 'feat(backend): <模块名>模块'", "cwd": "PROJECT_DIR" }
 ```
 
 ## Phase 5: 前后端联调
@@ -183,17 +210,27 @@ git add backend/internal/<module>/ && git commit -m "feat(backend): <模块名>�
 
 ### 5.2 联调验证
 
-```
-重复（最多 3 次）：
-  1. shell 启动后端: cd backend && go run cmd/server/main.go &
-  2. shell 启动前端: cd frontend && npm run dev &
-  3. 用 shell + curl 验证核心接口
-  4. 全部正常 → 跳出
-  5. 有问题 → 读取错误日志，修复，回到步骤 1
+分别编译前后端，确认无错误：
+
+```json
+{ "command": "npm run build", "cwd": "PROJECT_DIR/frontend", "timeout": 30 }
+{ "command": "go build ./cmd/server/...", "cwd": "PROJECT_DIR/backend", "timeout": 30 }
 ```
 
-```bash
-git add . && git commit -m "feat: 前后端联调完成"
+用 `ask` 告知用户手动启动前后端进行联调验证：
+
+```
+"前后端代码已生成并编译通过。请手动验证：
+  终端 1: cd PROJECT_DIR/backend && go run cmd/server/main.go
+  终端 2: cd PROJECT_DIR/frontend && npm run dev
+  
+验证核心接口是否正常工作。"
+```
+
+编译通过后提交：
+
+```json
+{ "command": "git add . && git commit -m 'feat: 前后端联调完成'", "cwd": "PROJECT_DIR" }
 ```
 
 ## Phase 6: 容器化部署
@@ -210,14 +247,14 @@ git add . && git commit -m "feat: 前后端联调完成"
 
 ```
 重复（最多 3 次）：
-  1. shell: docker compose up --build -d
-  2. shell: curl 健康检查接口
+  1. RunShell: { "command": "docker compose up --build -d", "cwd": "PROJECT_DIR", "timeout": 180 }
+  2. RunShell: { "command": "sleep 5 && curl -s http://localhost:8080/api/health", "cwd": "PROJECT_DIR", "timeout": 15 }
   3. 正常 → 跳出
-  4. 失败 → 读 docker compose logs，修复，回到步骤 1
+  4. 失败 → RunShell: { "command": "docker compose logs --tail=50", "cwd": "PROJECT_DIR" } → 分析日志，修复，回到步骤 1
 ```
 
-```bash
-git add . && git commit -m "chore: 容器化部署配置"
+```json
+{ "command": "git add . && git commit -m 'chore: 容器化部署配置'", "cwd": "PROJECT_DIR" }
 ```
 
 ## Phase 7: 文档交付
@@ -229,8 +266,8 @@ git add . && git commit -m "chore: 容器化部署配置"
 2. `docs/api.md` — 各模块 API 文档（接口、请求/响应示例）
 3. `docs/architecture.md` — 架构图、模块依赖、数据流
 
-```bash
-git add . && git commit -m "docs: 项目文档"
+```json
+{ "command": "git add . && git commit -m 'docs: 项目文档'", "cwd": "PROJECT_DIR" }
 ```
 
 ## 关键约束
@@ -242,3 +279,6 @@ git add . && git commit -m "docs: 项目文档"
 5. **每个阶段结束必须 git commit**
 6. **前端通过环境变量配置后端地址**，不硬编码
 7. **生成的代码必须能直接运行**，不留 TODO 占位
+8. **所有 shell 命令使用 `cwd` 参数**，不用 `cd xxx &&` 拼接
+9. **不后台启动 dev server**，用 `npm run build` 检查编译，让用户手动预览
+10. **交互式命令加 `--yes`**，避免等待输入超时

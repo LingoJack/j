@@ -1,12 +1,6 @@
 # Go 后端规范
 
-## 前置条件
-
-确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
-
-```bash
-cd ~/jcli_playground/<project-name>
-```
+> 所有 shell 命令通过 `cwd` 参数指定工作目录，不使用 `cd`。
 
 ## 项目结构
 
@@ -36,6 +30,12 @@ backend/
 ├── go.mod
 ├── go.sum
 └── .env.example
+```
+
+## 初始化命令
+
+```json
+{ "command": "mkdir -p backend && cd backend && go mod init <module-name>", "cwd": "PROJECT_DIR" }
 ```
 
 ## 核心依赖
@@ -163,6 +163,18 @@ func main() {
 
     r.Run(":" + config.Get("PORT", "8080"))
 }
+```
+
+## 编译检查
+
+```json
+{ "command": "go build ./cmd/server/...", "cwd": "PROJECT_DIR/backend", "timeout": 30 }
+```
+
+## 测试执行
+
+```json
+{ "command": "go test ./internal/<module>/...", "cwd": "PROJECT_DIR/backend", "timeout": 30 }
 ```
 
 ## 环境变量

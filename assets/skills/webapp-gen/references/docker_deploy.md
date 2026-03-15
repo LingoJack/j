@@ -1,12 +1,6 @@
 # 容器化部署规范
 
-## 前置条件
-
-确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
-
-```bash
-cd ~/jcli_playground/<project-name>
-```
+> 所有 shell 命令通过 `cwd` 参数指定工作目录，不使用 `cd`。
 
 ## 后端 Dockerfile
 
@@ -126,43 +120,33 @@ JWT_SECRET=change-me-in-production
 # 如需 Podman：DOCKER_HOST=unix:///run/user/1000/podman/podman.sock
 ```
 
-## 启动命令
+## 启动与验证
 
-Docker：
+构建并启动：
 
-```bash
-docker compose up --build -d
+```json
+{ "command": "docker compose up --build -d", "cwd": "PROJECT_DIR", "timeout": 180 }
 ```
 
-Podman（兼容）：
+等待并检查健康状态：
 
-```bash
-podman compose up --build -d
-```
-
-## 验证流程
-
-启动后依次检查：
-
-```bash
-# 1. 检查容器状态
-docker compose ps
-
-# 2. 等待后端就绪
-sleep 5
-
-# 3. 健康检查
-curl -s http://localhost:8080/api/health | head -1
-
-# 4. 检查前端
-curl -s -o /dev/null -w "%{http_code}" http://localhost:80
+```json
+{ "command": "sleep 5 && docker compose ps", "cwd": "PROJECT_DIR", "timeout": 15 }
+{ "command": "curl -s http://localhost:8080/api/health", "cwd": "PROJECT_DIR", "timeout": 10 }
+{ "command": "curl -s -o /dev/null -w '%{http_code}' http://localhost:80", "cwd": "PROJECT_DIR", "timeout": 10 }
 ```
 
 期望：后端返回 `{"code":0,"message":"ok"}`，前端返回 HTTP 200。
 
+查看日志（排错用）：
+
+```json
+{ "command": "docker compose logs --tail=50", "cwd": "PROJECT_DIR", "timeout": 10 }
+```
+
 ## 停止与清理
 
-```bash
-docker compose down          # 停止
-docker compose down -v       # 停止并删除数据卷
+```json
+{ "command": "docker compose down", "cwd": "PROJECT_DIR" }
+{ "command": "docker compose down -v", "cwd": "PROJECT_DIR" }
 ```

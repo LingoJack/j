@@ -1,12 +1,6 @@
 # 测试策略
 
-## 前置条件
-
-确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
-
-```bash
-cd ~/jcli_playground/<project-name>
-```
+> 所有 shell 命令通过 `cwd` 参数指定工作目录，不使用 `cd`。
 
 ## 后端单元测试
 
@@ -78,8 +72,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 ### 执行
 
-```bash
-cd backend && go test ./internal/...
+```json
+{ "command": "go test ./internal/...", "cwd": "PROJECT_DIR/backend", "timeout": 60 }
 ```
 
 ## 集成测试
@@ -129,8 +123,8 @@ func TestOrderFlow(t *testing.T) {
 
 ### 执行
 
-```bash
-cd backend && go test ./tests/... -v
+```json
+{ "command": "go test ./tests/... -v", "cwd": "PROJECT_DIR/backend", "timeout": 60 }
 ```
 
 ## 自动修复循环
@@ -139,7 +133,7 @@ cd backend && go test ./tests/... -v
 
 ```
 重复（最多 5 次）：
-  1. 执行测试
+  1. RunShell: { "command": "go test ./internal/<module>/...", "cwd": "PROJECT_DIR/backend", "timeout": 30 }
   2. 全部通过 → 结束
   3. 有失败 → 读取完整错误输出 → 分析失败原因 → 修复代码 → 回到 1
 

@@ -1,8 +1,6 @@
 # 模块划分规范
 
-## 前置条件
-
-模块划分文档 `modules.yaml` 位于项目根目录 `~/jcli_playground/<project-name>/modules.yaml`。
+> `modules.yaml` 位于项目根目录 `PROJECT_DIR/modules.yaml`。
 
 ## 划分原则
 
