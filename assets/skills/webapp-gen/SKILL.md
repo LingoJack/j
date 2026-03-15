@@ -9,6 +9,25 @@ description: "一句话生成完整 Web APP。当用户描述一个 Web 应用�
 
 核心原则：**前端先行，即时反馈**。先用 Mock 数据生成可运行的前端页面，用户确认满意后再生成后端实现。
 
+## 项目目录规范
+
+**所有生成的 Web APP 项目统一存放在 `~/jcli_playground/` 目录下：**
+
+```
+~/jcli_playground/
+├── <project-name>/          # 每个项目的独立目录
+│   ├── frontend/
+│   ├── backend/
+│   ├── docs/
+│   ├── modules.yaml
+│   ├── REQUIREMENTS.md
+│   └── ...
+├── another-project/
+└── ...
+```
+
+项目名从用户需求中提取（如"做一个商城" → `shopping-mall`），如果目录已存在则询问用户是否覆盖。
+
 ## 工作流总览
 
 ```
@@ -36,7 +55,16 @@ Phase 7: 文档交付
 然后初始化项目：
 
 ```bash
-mkdir -p <project-name> && cd <project-name> && git init
+# 项目名从需求中提取（如"做一个商城" → shopping-mall）
+PROJECT_NAME="<project-name>"
+PROJECT_DIR="$HOME/jcli_playground/$PROJECT_NAME"
+
+# 检查目录是否存在
+if [ -d "$PROJECT_DIR" ]; then
+  echo "目录已存在，请确认是否覆盖"
+fi
+
+mkdir -p "$PROJECT_DIR" && cd "$PROJECT_DIR" && git init
 ```
 
 ## Phase 2: 模块划分
