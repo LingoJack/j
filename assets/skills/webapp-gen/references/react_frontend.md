@@ -1,5 +1,13 @@
 # React + TailwindCSS 前端规范
 
+## 前置条件
+
+确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
+
+```bash
+cd ~/jcli_playground/<project-name>
+```
+
 ## 项目结构
 
 ```

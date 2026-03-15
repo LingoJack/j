@@ -1,5 +1,13 @@
 # 容器化部署规范
 
+## 前置条件
+
+确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
+
+```bash
+cd ~/jcli_playground/<project-name>
+```
+
 ## 后端 Dockerfile
 
 多阶段构建，最终镜像只包含二进制文件：

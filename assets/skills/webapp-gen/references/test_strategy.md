@@ -1,5 +1,13 @@
 # 测试策略
 
+## 前置条件
+
+确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
+
+```bash
+cd ~/jcli_playground/<project-name>
+```
+
 ## 后端单元测试
 
 ### 测试范围
