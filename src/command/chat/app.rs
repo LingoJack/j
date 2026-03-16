@@ -338,11 +338,7 @@ impl ChatApp {
         let loaded_skills = skill::load_all_skills();
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let tool_registry = Arc::new(ToolRegistry::new(
-            loaded_skills.clone(),
-            ask_req_tx,
-            Arc::clone(&queued_tasks),
-        ));
+        let tool_registry = Arc::new(ToolRegistry::new(loaded_skills.clone(), ask_req_tx));
         Self {
             agent_config,
             session,
