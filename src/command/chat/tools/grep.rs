@@ -49,18 +49,20 @@ impl Tool for GrepTool {
     }
 
     fn description(&self) -> &str {
-        r###"- 基于正则表达式的强大搜索工具，适用于在文件内容中搜索
-- 支持完整的正则语法，如 "log.*Error"、"function\s+\w+" 等
-- 可通过 glob 参数过滤文件类型（如 "*.js"、"**/*.tsx"）或 type 参数指定语言类型
-- 输出模式：
-  - "content": 显示匹配内容和行号（默认）
-  - "files_with_matches": 只返回文件路径
-  - "count": 返回匹配数量
-- 支持分页：head_limit 限制输出数量，offset 跳过前 N 条结果
-- 使用 context 参数显示匹配行的上下文（前后 N 行）
-- 当需要查找特定文件名时，请使用 Glob 工具；Grep 用于搜索文件内容
-- 可以在单次响应中调用多个工具。如果搜索多个独立模式，建议并行执行
-- 重要：如果不需要指定路径，请省略此字段，不要输入 "undefined"、"null" 或空字符串"###
+        r###"
+        - 基于正则表达式的强大搜索工具，适用于在文件内容中搜索
+        - 支持完整的正则语法，如 "log.*Error"、"function\s+\w+" 等
+        - 可通过 glob 参数过滤文件类型（如 "*.js"、"**/*.tsx"）或 type 参数指定语言类型
+        - 输出模式：
+          - "content": 显示匹配内容和行号（默认）
+          - "files_with_matches": 只返回文件路径
+          - "count": 返回匹配数量
+        - 支持分页：head_limit 限制输出数量，offset 跳过前 N 条结果
+        - 使用 context 参数显示匹配行的上下文（前后 N 行）
+        - 当需要查找特定文件名时，请使用 Glob 工具；Grep 用于搜索文件内容
+        - 可以在单次响应中调用多个工具。如果搜索多个独立模式，建议并行执行
+        - 重要：如果不需要指定路径，请省略此字段，不要输入 "undefined"、"null" 或空字符串
+        "###
     }
 
     fn parameters_schema(&self) -> Value {
