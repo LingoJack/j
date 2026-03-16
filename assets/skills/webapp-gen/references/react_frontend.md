@@ -1,12 +1,6 @@
 # React + TailwindCSS 前端规范
 
-## 前置条件
-
-确保已在项目目录下（`~/jcli_playground/<project-name>/`）：
-
-```bash
-cd ~/jcli_playground/<project-name>
-```
+> 所有 shell 命令通过 `cwd` 参数指定工作目录，不使用 `cd`。
 
 ## 项目结构
 
@@ -55,12 +49,11 @@ frontend/
 
 ## 初始化命令
 
-```bash
-npm create vite@latest frontend -- --template react-ts
-cd frontend
-npm install
-npm install -D tailwindcss @tailwindcss/vite
-npm install react-router-dom
+在项目根目录（`PROJECT_DIR`）执行，注意 `--yes` 避免交互提示：
+
+```json
+{ "command": "npm create vite@latest frontend -- --template react-ts --yes", "cwd": "PROJECT_DIR", "timeout": 30 }
+{ "command": "npm install && npm install -D tailwindcss @tailwindcss/vite && npm install react-router-dom", "cwd": "PROJECT_DIR/frontend", "timeout": 60 }
 ```
 
 vite.config.ts 中添加 TailwindCSS 插件：
@@ -118,6 +111,16 @@ VITE_API_BASE_URL=http://localhost:8080/api
 ```
 
 Mock 阶段 `VITE_USE_MOCK=true`，联调时改为 `false`。
+
+## 编译检查
+
+**不要后台启动 dev server**，用 build 验证前端是否正确：
+
+```json
+{ "command": "npm run build", "cwd": "PROJECT_DIR/frontend", "timeout": 30 }
+```
+
+编译通过后用 `ask` 让用户手动 `npm run dev` 预览。
 
 ## 页面组件模式
 

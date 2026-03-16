@@ -1,5 +1,7 @@
 # 文档化追踪规范
 
+> 所有 shell 命令通过 `cwd` 参数指定工作目录，不使用 `cd`。
+
 ## Git 提交规范
 
 每个阶段结束后必须 commit，提交信息格式：
@@ -38,16 +40,19 @@ chore: Docker 容器化部署配置
 | Phase 6 完成 | 部署验证通过 | `chore: 容器化部署配置` |
 | Phase 7 完成 | 文档生成 | `docs: 项目文档` |
 
+所有 git 命令通过 `cwd` 指定项目根目录：
+
+```json
+{ "command": "git add . && git commit -m 'feat(frontend): 商品页面'", "cwd": "PROJECT_DIR" }
+```
+
 ## 回退机制
 
 用户不满意时用 git 回退：
 
-```bash
-# 丢弃所有未提交的改动（回到上次 commit）
-git checkout -- .
-
-# 如果已经 commit 了但想撤回
-git reset --soft HEAD~1
+```json
+{ "command": "git checkout -- .", "cwd": "PROJECT_DIR" }
+{ "command": "git reset --soft HEAD~1", "cwd": "PROJECT_DIR" }
 ```
 
 ## 生成的文档清单
