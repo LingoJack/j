@@ -3,7 +3,6 @@ mod browser;
 mod file;
 mod grep;
 pub(crate) mod html_extract;
-mod new_task;
 mod shell;
 mod skill_tool;
 mod web_fetch;
@@ -11,7 +10,7 @@ mod web_search;
 
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use serde_json::Value;
-use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+use std::sync::{Arc, atomic::AtomicBool, mpsc};
 
 // ========== ToolResult ==========
 
@@ -54,7 +53,6 @@ impl ToolRegistry {
     pub fn new(
         skills: Vec<crate::command::chat::skill::Skill>,
         ask_tx: mpsc::Sender<crate::command::chat::app::AskRequest>,
-        queued_tasks: Arc<Mutex<Vec<String>>>,
     ) -> Self {
         let mut registry = Self {
             tools: vec![
@@ -68,7 +66,6 @@ impl ToolRegistry {
                 Box::new(web_search::WebSearchTool),
                 Box::new(browser::BrowserTool),
                 Box::new(ask::AskTool { ask_tx }),
-                Box::new(new_task::NewTaskTool { queued_tasks }),
             ],
         };
 

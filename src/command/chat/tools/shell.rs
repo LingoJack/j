@@ -17,7 +17,7 @@ pub struct ShellTool;
 
 impl Tool for ShellTool {
     fn name(&self) -> &str {
-        "RunShell"
+        "Bash"
     }
 
     fn description(&self) -> &str {
