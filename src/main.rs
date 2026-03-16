@@ -37,22 +37,14 @@ fn main() {
     let cli = Cli::try_parse();
 
     match cli {
-        Ok(cli) => {
-            match cli.command {
-                Some(sub_cmd) => {
-                    command::dispatch(sub_cmd, &mut config);
-                }
-                None => {
-                    if cli.args.is_empty() {
-                        // 不应该走到这里（已在上面处理了无参数情况）
-                        interactive::run_interactive(&mut config);
-                    } else {
-                        // 带参数但没匹配到子命令 → 别名打开
-                        command::open::handle_open(&cli.args, &config);
-                    }
-                }
+        Ok(cli) => match cli.command {
+            Some(sub_cmd) => {
+                command::dispatch(sub_cmd, &mut config);
             }
-        }
+            None => {
+                command::open::handle_open(&cli.args, &config);
+            }
+        },
         Err(_) => {
             // clap 解析失败，可能是用户输入了别名
             // 例如: j chrome, j vscode file.txt
