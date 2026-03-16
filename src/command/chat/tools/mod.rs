@@ -110,7 +110,7 @@ impl ToolRegistry {
             .map(|t| {
                 serde_json::json!({
                     "name": t.name(),
-                    "description": t.description(),
+                    "description": t.description().trim(),
                     "parameters": t.parameters_schema()
                 })
             })
@@ -127,7 +127,7 @@ impl ToolRegistry {
                 ChatCompletionTools::Function(ChatCompletionTool {
                     function: FunctionObject {
                         name: t.name().to_string(),
-                        description: Some(t.description().to_string()),
+                        description: Some(t.description().trim().to_string()),
                         parameters: Some(t.parameters_schema()),
                         strict: None,
                     },
