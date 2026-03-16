@@ -37,7 +37,7 @@ impl Tool for ShellTool {
         - 多个独立命令用 && 串联，而非分多次调用
         - 用绝对路径，避免依赖 cd 切换目录
         - 包含空格的文件路径用双引号包裹
-        - 文件操作优先使用 ReadFile/WriteFile/EditFile 工具，而非 cat/sed/echo
+        - 文件操作优先使用 Read/Write/Edit 工具，而非 cat/sed/echo
         "#
     }
 

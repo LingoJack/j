@@ -3,7 +3,7 @@ mod browser;
 mod file;
 mod grep;
 mod shell;
-mod skill_tool;
+mod skill;
 mod web_fetch;
 mod web_search;
 
@@ -70,7 +70,7 @@ impl ToolRegistry {
 
         // 如果有 skills，注册统一的 LoadSkillTool
         if !skills.is_empty() {
-            registry.register(Box::new(self::skill_tool::LoadSkillTool { skills }));
+            registry.register(Box::new(self::skill::LoadSkillTool { skills }));
         }
 
         registry
