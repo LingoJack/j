@@ -1,5 +1,5 @@
-use crate::command::chat::tools::html_extract;
 use crate::command::chat::tools::{Tool, ToolResult};
+use crate::util::html_extract;
 use scraper::Html;
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};

@@ -1,4 +1,5 @@
 pub mod fuzzy;
+pub mod html_extract;
 pub mod log;
 pub mod md_render;
 pub mod text;

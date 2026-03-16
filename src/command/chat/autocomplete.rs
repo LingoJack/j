@@ -65,10 +65,10 @@ pub fn update_file_filter(app: &mut ChatApp) {
 
 /// 将 ~ 展开为用户 home 目录
 fn expand_tilde(path: &str) -> String {
-    if path == "~" || path.starts_with("~/") {
-        if let Some(home) = dirs::home_dir() {
-            return format!("{}{}", home.display(), &path[1..]);
-        }
+    if (path == "~" || path.starts_with("~/"))
+        && let Some(home) = dirs::home_dir()
+    {
+        return format!("{}{}", home.display(), &path[1..]);
     }
     path.to_string()
 }
@@ -96,8 +96,6 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
         // 用户刚打了 ~，等同于 ~/（列出 home 目录内容）
         expanded = "~/".to_string();
         &expanded
-    } else if filter.starts_with("~/") {
-        filter
     } else {
         filter
     };

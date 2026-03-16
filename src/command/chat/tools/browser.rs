@@ -348,7 +348,7 @@ mod cdp {
             )
         })?;
 
-        let text = crate::command::chat::tools::html_extract::extract_text_from_html(&raw_html);
+        let text = crate::util::html_extract::extract_text_from_html(&raw_html);
 
         if text.len() > 50_000 {
             let mut end = 50_000;
@@ -870,7 +870,7 @@ mod lite {
         let links = extract_links(&body);
         let forms = extract_forms(&body);
         let interactive = extract_interactive(&body);
-        let text_content = crate::command::chat::tools::html_extract::extract_text_from_html(&body);
+        let text_content = crate::util::html_extract::extract_text_from_html(&body);
 
         Ok(LiteTab {
             url: url.to_string(),
