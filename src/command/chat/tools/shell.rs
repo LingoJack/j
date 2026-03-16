@@ -21,7 +21,23 @@ impl Tool for ShellTool {
     }
 
     fn description(&self) -> &str {
-        "在当前系统上执行 shell 命令，返回命令的 stdout 和 stderr 输出。每次调用都会创建一个新的进程，状态不延续，可通过 cwd 指定工作目录，通过 timeout 控制超时。"
+        r#"
+        在当前系统上执行 shell 命令，返回 stdout 和 stderr。每次调用创建新进程，状态不延续。
+        重要限制：
+        - 不支持交互式命令（stdin 未连接）。所有需要用户输入的命令必须使用非交互标志：
+          - npm init -> npm init -y
+          - npx create-react-app -> npx create-react-app my-app（自动跳过提示）
+          - apt install -> apt install -y
+          - git commit -> git commit -m "message"（不要依赖编辑器打开）
+          - pip install 需要确认时 -> echo "y" | pip install
+        - 不支持后台/长期运行的服务（如 npm run dev、python -m http.server），进程会在超时后被终止
+        - 如果命令超时（默认 120s），会自动终止并返回已有输出
+        - 对于构建类命令（npm run build 等），可适当增大 timeout 值（最大 600）
+        使用建议：
+        - 多个独立命令用 && 串联，而非分多次调用
+        - 用绝对路径，避免依赖 cd 切换目录
+        - 包含空格的文件路径用双引号包裹
+        - 文件操作优先使用 ReadFile/WriteFile/EditFile 工具，而非 cat/sed/echo"#
     }
 
     fn parameters_schema(&self) -> Value {
@@ -30,7 +46,11 @@ impl Tool for ShellTool {
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "要执行的 shell 命令（在 bash 中执行）"
+                    "description": "要执行的 shell 命令（在 bash -c 中执行）。不支持交互式输入，必须使用非交互标志（如 -y、--yes、--no-input）。"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "命令的简短描述（5-10 字），用于在 UI 中展示"
                 },
                 "cwd": {
                     "type": "string",
@@ -38,7 +58,7 @@ impl Tool for ShellTool {
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "超时秒数，默认 120。超时后自动终止进程并返回已有输出。对于可能阻塞的命令（如交互式提示、长时间运行的服务）应设置较短的超时。"
+                    "description": "超时秒数，默认 120，最大 600。超时后自动终止进程并返回已有输出。构建类命令（npm run build、cargo build 等）建议设置 300-600。"
                 }
             },
             "required": ["command"]
@@ -74,7 +94,8 @@ impl Tool for ShellTool {
         let timeout_secs = parsed
             .get("timeout")
             .and_then(|t| t.as_u64())
-            .unwrap_or(DEFAULT_TIMEOUT_SECS);
+            .unwrap_or(DEFAULT_TIMEOUT_SECS)
+            .min(600);
 
         // 安全过滤
         if is_dangerous_command(&command) {
