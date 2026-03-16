@@ -5,4 +5,5 @@ target/
 node_modules/
 work-copilot-java/
 /prompt/
+/example
 .DS_Store
