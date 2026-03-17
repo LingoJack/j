@@ -1052,6 +1052,10 @@ fn run_editor_loop(
 
         // 处理输入事件
         if let Event::Key(key_event) = event::read()? {
+            // 只处理按下事件，忽略释放和重复事件，避免重复处理
+            if key_event.kind != crossterm::event::KeyEventKind::Press {
+                continue;
+            }
             // 清除上次的警告提示
             if unsaved_warning {
                 unsaved_warning = false;

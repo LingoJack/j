@@ -574,6 +574,26 @@ flowchart LR
 - `curl | sh`、`wget -O- | sh`
 - `alias`（防止别名劫持）
 
+### .jcli 权限配置
+
+在项目根目录创建 `.jcli` 文件（YAML），可自定义工具的自动执行权限（从 cwd 向上查找）：
+
+```yaml
+permissions:
+  # allow_all: true  # 完全放开
+  allow:
+    - "Bash(cargo build:*)"   # 允许 cargo build 命令自动执行
+    - "Bash(cargo test:*)"
+    - "Read"                   # 允许所有文件读取
+    - "Write(path:/my/proj/*)" # 限定目录的文件写入
+    - "WebFetch(domain:docs.rs)"
+  deny:
+    - "Bash(rm -rf:*)"        # 黑名单（优先于 allow）
+    - "Bash(sudo:*)"
+```
+
+规则优先级：`deny` > `allow` > `requires_confirmation()`
+
 ---
 
 ## Skill 技能系统

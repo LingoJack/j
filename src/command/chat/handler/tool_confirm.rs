@@ -78,14 +78,15 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
             }
         }
         KeyCode::Down => {
-            if app.tool_interact_selected < 2 {
+            if app.tool_interact_selected < 3 {
                 app.tool_interact_selected += 1;
             }
         }
         KeyCode::Enter => match app.tool_interact_selected {
             0 => app.execute_pending_tool(),
-            1 => app.reject_pending_tool(""),
-            2 => {
+            1 => app.allow_and_execute_pending_tool(),
+            2 => app.reject_pending_tool(""),
+            3 => {
                 app.tool_interact_typing = true;
                 app.tool_interact_input.clear();
                 app.tool_interact_cursor = 0;

@@ -26,7 +26,7 @@ use super::ui::draw_chat_ui;
 use crate::command::chat::app::{ChatApp, ChatMode};
 use crate::error;
 use crossterm::{
-    event::{self, Event, MouseEventKind},
+    event::{self, Event, KeyEventKind, MouseEventKind},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -166,7 +166,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             loop {
                 let evt = event::read()?;
                 match evt {
-                    Event::Key(key) => {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
                         needs_redraw = true;
                         match app.mode {
                             ChatMode::Chat => {

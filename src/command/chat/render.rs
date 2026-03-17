@@ -55,50 +55,12 @@ pub fn build_message_lines_incremental(
     Vec<Line<'static>>,
     usize,
 ) {
-    struct RenderMsg {
-        role: String,
-        content: String,
-        msg_index: Option<usize>,
-        tool_calls: Option<Vec<super::model::ToolCallItem>>,
-        role_label: Option<String>,
-    }
-    let mut render_msgs: Vec<RenderMsg> = app
-        .session
-        .messages
-        .iter()
-        .enumerate()
-        .map(|(i, m)| RenderMsg {
-            role: m.role.clone(),
-            content: m.content.clone(),
-            msg_index: Some(i),
-            tool_calls: m.tool_calls.clone(),
-            role_label: m
-                .tool_call_id
-                .as_ref()
-                .map(|id| format!("工具 {}", &id[..id.len().min(8)])),
-        })
-        .collect();
-
-    // 如果正在流式接收，添加一条临时的 assistant 消息
+    // 获取流式内容（只 lock 一次，尽快释放锁）
     let streaming_content_str = if app.is_loading {
         let streaming = app.streaming_content.lock().unwrap().clone();
         if !streaming.is_empty() {
-            render_msgs.push(RenderMsg {
-                role: "assistant".to_string(),
-                content: streaming.clone(),
-                msg_index: None,
-                tool_calls: None,
-                role_label: None,
-            });
             Some(streaming)
         } else {
-            render_msgs.push(RenderMsg {
-                role: "assistant".to_string(),
-                content: "◍".to_string(),
-                msg_index: None,
-                tool_calls: None,
-                role_label: None,
-            });
             None
         }
     } else {
@@ -111,50 +73,50 @@ pub fn build_message_lines_incremental(
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::new();
     let mut per_msg_cache: Vec<PerMsgCache> = Vec::new();
 
-    // 判断旧缓存中的 per_msg_lines 是否可以复用（bubble_max_width 相同且浏览模式状态一致）
+    // 判断旧缓存中的 per_msg_lines 是否可以复用（bubble_max_width 相同）
     let can_reuse_per_msg = old_cache
         .map(|c| c.bubble_max_width == bubble_max_width)
         .unwrap_or(false);
 
-    for msg in &render_msgs {
-        let is_selected = is_browse_mode
-            && msg.msg_index.is_some()
-            && msg.msg_index.unwrap() == app.browse_msg_index;
+    // ===== P0 优化：直接引用 session.messages，避免克隆全部内容 =====
+    // 缓存命中时零拷贝复用，只在缓存未命中时才访问消息内容
+    let msg_count = app.session.messages.len();
+    for idx in 0..msg_count {
+        let m = &app.session.messages[idx];
+        let is_selected = is_browse_mode && idx == app.browse_msg_index;
 
         // 记录消息起始行号
-        if let Some(idx) = msg.msg_index {
-            msg_start_lines.push((idx, lines.len()));
-        }
+        msg_start_lines.push((idx, lines.len()));
 
-        // P0 优化：对于有 msg_index 的历史消息，尝试复用旧缓存
-        if let Some(idx) = msg.msg_index
-            && can_reuse_per_msg
-            && let Some(old_c) = old_cache
-        {
-            // 查找旧缓存中同索引的消息
-            if let Some(old_per) = old_c.per_msg_lines.iter().find(|p| p.msg_index == idx) {
-                // 内容长度相同 → 消息内容未变，且浏览选中状态一致
-                // 使用缓存中记录的 is_selected 字段来判断
-                if old_per.content_len == msg.content.len() && old_per.is_selected == is_selected {
-                    // 直接复用旧缓存的渲染行
-                    lines.extend(old_per.lines.iter().cloned());
-                    per_msg_cache.push(PerMsgCache {
-                        content_len: old_per.content_len,
-                        lines: old_per.lines.clone(),
-                        msg_index: idx,
-                        is_selected,
-                    });
-                    continue;
+        // P0 优化：尝试直接按索引复用旧缓存（O(1) 查找代替 O(n) 线性搜索）
+        if can_reuse_per_msg {
+            if let Some(old_c) = old_cache {
+                if let Some(old_per) = old_c.per_msg_lines.get(idx) {
+                    if old_per.msg_index == idx
+                        && old_per.content_len == m.content.len()
+                        && old_per.is_selected == is_selected
+                    {
+                        // 直接复用旧缓存的渲染行（只克隆一次）
+                        let cached_lines = old_per.lines.clone();
+                        lines.extend(cached_lines.iter().cloned());
+                        per_msg_cache.push(PerMsgCache {
+                            content_len: old_per.content_len,
+                            lines: cached_lines,
+                            msg_index: idx,
+                            is_selected,
+                        });
+                        continue;
+                    }
                 }
             }
         }
 
-        // 缓存未命中 / 流式消息 → 重新渲染
+        // 缓存未命中 → 重新渲染
         let msg_lines_start = lines.len();
-        match msg.role.as_str() {
+        match m.role.as_str() {
             "user" => {
                 render_user_msg(
-                    &msg.content,
+                    &m.content,
                     is_selected,
                     inner_width,
                     bubble_max_width,
@@ -163,40 +125,32 @@ pub fn build_message_lines_incremental(
                 );
             }
             "assistant" => {
-                if msg.msg_index.is_none() {
-                    // 流式消息：P1 增量段落渲染（在后面单独处理）
-                    // 这里先跳过，后面统一处理
-                    // 先标记位置
-                } else if msg.tool_calls.is_some() {
-                    // assistant 发起工具调用的消息
+                if m.tool_calls.is_some() {
                     render_tool_call_request_msg(
-                        msg.tool_calls.as_ref().unwrap(),
+                        m.tool_calls.as_ref().unwrap(),
                         bubble_max_width,
                         &mut lines,
                         t,
                     );
                 } else {
-                    // 已完成的 assistant 消息：完整 Markdown 渲染
-                    render_assistant_msg(
-                        &msg.content,
-                        is_selected,
-                        bubble_max_width,
-                        &mut lines,
-                        t,
-                    );
+                    render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut lines, t);
                 }
             }
             "tool" => {
+                let role_label = m
+                    .tool_call_id
+                    .as_ref()
+                    .map(|id| format!("工具 {}", &id[..id.len().min(8)]));
                 render_tool_result_msg(
-                    &msg.content,
-                    msg.role_label.as_deref().unwrap_or("工具结果"),
+                    &m.content,
+                    role_label.as_deref().unwrap_or("工具结果"),
                     &mut lines,
                     t,
                 );
             }
             "system" => {
                 lines.push(Line::from(""));
-                let wrapped = wrap_text(&msg.content, inner_width.saturating_sub(8));
+                let wrapped = wrap_text(&m.content, inner_width.saturating_sub(8));
                 for wl in wrapped {
                     lines.push(Line::from(Span::styled(
                         format!("    {}  {}", "sys", wl),
@@ -207,54 +161,62 @@ pub fn build_message_lines_incremental(
             _ => {}
         }
 
-        // 流式消息的渲染在 assistant 分支中被跳过了，这里处理
-        if msg.role == "assistant" && msg.msg_index.is_none() {
-            // P1 增量段落渲染
-            let bubble_bg = t.bubble_ai;
-            let pad_left_w = 3usize;
-            let pad_right_w = 3usize;
-            let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
-            let bubble_total_w = bubble_max_width;
+        // 缓存此历史消息的渲染行
+        let msg_lines_end = lines.len();
+        let this_msg_lines: Vec<Line<'static>> = lines[msg_lines_start..msg_lines_end].to_vec();
+        per_msg_cache.push(PerMsgCache {
+            content_len: m.content.len(),
+            lines: this_msg_lines,
+            msg_index: idx,
+            is_selected,
+        });
+    }
 
-            // AI 标签
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "Sprite",
-                Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-            )));
+    // ===== 流式消息单独渲染（不进入 per_msg_cache）=====
+    let has_streaming_msg = app.is_loading;
+    if has_streaming_msg {
+        let streaming_text = streaming_content_str.as_deref().unwrap_or("◍");
+        // P1 增量段落渲染
+        let bubble_bg = t.bubble_ai;
+        let pad_left_w = 3usize;
+        let pad_right_w = 3usize;
+        let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
+        let bubble_total_w = bubble_max_width;
 
-            // 上边距
+        // AI 标签
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Sprite",
+            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+        )));
+
+        // 上边距
+        lines.push(Line::from(vec![Span::styled(
+            " ".repeat(bubble_total_w),
+            Style::default().bg(bubble_bg),
+        )]));
+
+        // 思考指示器：颜色脉冲动画
+        if streaming_text == "◍" {
+            let pulse_color = thinking_pulse_color(t);
+            let indicator_line = Line::from(Span::styled("◍", Style::default().fg(pulse_color)));
+            let bubble_line = wrap_md_line_in_bubble(
+                indicator_line,
+                bubble_bg,
+                pad_left_w,
+                pad_right_w,
+                bubble_total_w,
+            );
+            lines.push(bubble_line);
+
+            // 下边距
             lines.push(Line::from(vec![Span::styled(
                 " ".repeat(bubble_total_w),
                 Style::default().bg(bubble_bg),
             )]));
-
-            // 思考指示器：颜色脉冲动画
-            if msg.content == "◍" {
-                let pulse_color = thinking_pulse_color(t);
-                let indicator_line =
-                    Line::from(Span::styled("◍", Style::default().fg(pulse_color)));
-                let bubble_line = wrap_md_line_in_bubble(
-                    indicator_line,
-                    bubble_bg,
-                    pad_left_w,
-                    pad_right_w,
-                    bubble_total_w,
-                );
-                lines.push(bubble_line);
-
-                // 下边距
-                lines.push(Line::from(vec![Span::styled(
-                    " ".repeat(bubble_total_w),
-                    Style::default().bg(bubble_bg),
-                )]));
-
-                // 末尾留白和缓存处理在外层统一处理
-                continue;
-            }
-
+        } else {
             // 增量段落渲染：取旧缓存中的 stable_lines 和 stable_offset
-            let (mut stable_lines, mut stable_offset) = if let Some(old_c) = old_cache {
+            let (mut stable_lines, stable_offset) = if let Some(old_c) = old_cache {
                 if old_c.bubble_max_width == bubble_max_width {
                     (
                         old_c.streaming_stable_lines.clone(),
@@ -267,16 +229,14 @@ pub fn build_message_lines_incremental(
                 (Vec::<Line<'static>>::new(), 0)
             };
 
-            let content = &msg.content;
+            let content = streaming_text;
             // 找到当前内容中最后一个安全的段落边界
             let boundary = find_stable_boundary(content);
 
             // 如果有新的完整段落超过了上次缓存的偏移
             if boundary > stable_offset {
-                // 增量解析：从上次偏移到新边界的新完成段落
                 let new_stable_text = &content[stable_offset..boundary];
                 let new_md_lines = markdown_to_lines(new_stable_text, md_content_w + 2, t);
-                // 将新段落的渲染行包装成气泡样式并追加到 stable_lines
                 for md_line in new_md_lines {
                     let bubble_line = wrap_md_line_in_bubble(
                         md_line,
@@ -287,7 +247,6 @@ pub fn build_message_lines_incremental(
                     );
                     stable_lines.push(bubble_line);
                 }
-                stable_offset = boundary;
             }
 
             // 追加已缓存的稳定段落行
@@ -314,26 +273,6 @@ pub fn build_message_lines_incremental(
                 " ".repeat(bubble_total_w),
                 Style::default().bg(bubble_bg),
             )]));
-
-            // 记录最终的 stable 状态用于返回
-            // （在函数末尾统一返回）
-            // 先用局部变量暂存
-            let _ = (stable_lines.clone(), stable_offset);
-
-            // 构建末尾留白和返回值时统一处理
-        } else if let Some(idx) = msg.msg_index {
-            // 缓存此历史消息的渲染行
-            let msg_lines_end = lines.len();
-            let this_msg_lines: Vec<Line<'static>> = lines[msg_lines_start..msg_lines_end].to_vec();
-            let is_selected = is_browse_mode
-                && msg.msg_index.is_some()
-                && msg.msg_index.unwrap() == app.browse_msg_index;
-            per_msg_cache.push(PerMsgCache {
-                content_len: msg.content.len(),
-                lines: this_msg_lines,
-                msg_index: idx,
-                is_selected,
-            });
         }
     }
 
@@ -1025,6 +964,7 @@ fn render_tool_confirm_content(
         };
         let options: Vec<String> = vec![
             format!("continue: 确认执行{}", countdown_suffix),
+            "allow: 允许并记住".to_string(),
             "refuse: 拒绝执行".to_string(),
             "type something...".to_string(),
         ];
@@ -1033,7 +973,7 @@ fn render_tool_confirm_content(
             let is_selected = i == selected;
             let pointer = if is_selected { "❯" } else { " " };
 
-            if i == 2 && app.tool_interact_typing {
+            if i == 3 && app.tool_interact_typing {
                 let input_display = format!("{} type: {}█", pointer, app.tool_interact_input);
                 let input_w = display_width(&input_display);
                 let fill = content_w.saturating_sub(input_w + 2);

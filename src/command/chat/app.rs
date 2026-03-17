@@ -6,6 +6,7 @@ use super::model::{
     save_agent_config, save_chat_session, save_memory, save_soul, save_system_prompt, soul_path,
     system_prompt_path,
 };
+use super::permission::JcliConfig;
 use super::skill::{self, Skill};
 use super::theme::Theme;
 use super::tools::ToolRegistry;
@@ -169,6 +170,8 @@ pub struct ChatApp {
     pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
     /// 工具注册表
     pub tool_registry: Arc<ToolRegistry>,
+    /// .jcli 权限配置
+    pub jcli_config: Arc<JcliConfig>,
     /// 后台任务管理器
     pub background_manager: Arc<BackgroundManager>,
     /// 当前活跃的工具调用状态列表
@@ -349,6 +352,7 @@ impl ChatApp {
             Arc::clone(&background_manager),
             Arc::clone(&task_manager),
         ));
+        let jcli_config = Arc::new(JcliConfig::load());
         Self {
             agent_config,
             session,
@@ -382,6 +386,7 @@ impl ChatApp {
             restore_confirm_needed: false,
             tool_result_tx: None,
             tool_registry,
+            jcli_config,
             background_manager,
             active_tool_calls: Vec::new(),
             pending_tool_idx: 0,
@@ -633,6 +638,19 @@ impl ChatApp {
         if self.pending_tool_execution {
             self.pending_tool_execution = false;
 
+            // 处理被 .jcli deny 拒绝的工具：直接发送错误结果给 agent 线程
+            for tc in &self.active_tool_calls {
+                if let ToolExecStatus::Failed(ref msg) = tc.status {
+                    if let Some(ref tx) = self.tool_result_tx {
+                        let _ = tx.send(ToolResultMsg {
+                            tool_call_id: tc.tool_call_id.clone(),
+                            result: msg.clone(),
+                            is_error: true,
+                        });
+                    }
+                }
+            }
+
             // 找第一个需要确认的工具
             let first_confirm_idx = self
                 .active_tool_calls
@@ -709,6 +727,23 @@ impl ChatApp {
                         self.pending_tool_idx = 0;
 
                         for tc in tool_calls {
+                            // 检查 .jcli deny 列表：被拒绝的工具直接标记为 Failed
+                            if self.jcli_config.is_denied(&tc.name, &tc.arguments) {
+                                self.active_tool_calls.push(ToolCallStatus {
+                                    tool_call_id: tc.id.clone(),
+                                    tool_name: tc.name.clone(),
+                                    arguments: tc.arguments.clone(),
+                                    confirm_message: format!(
+                                        "🚫 {} 被 .jcli 权限配置拒绝",
+                                        tc.name
+                                    ),
+                                    status: ToolExecStatus::Failed(
+                                        "该命令被 .jcli 权限配置拒绝".to_string(),
+                                    ),
+                                });
+                                continue;
+                            }
+
                             let confirm_msg = if let Some(tool) = self.tool_registry.get(&tc.name) {
                                 tool.confirmation_message(&tc.arguments)
                             } else {
@@ -718,7 +753,8 @@ impl ChatApp {
                                 .tool_registry
                                 .get(&tc.name)
                                 .map(|t| t.requires_confirmation())
-                                .unwrap_or(false);
+                                .unwrap_or(false)
+                                && !self.jcli_config.is_allowed(&tc.name, &tc.arguments);
                             self.active_tool_calls.push(ToolCallStatus {
                                 tool_call_id: tc.id.clone(),
                                 tool_name: tc.name.clone(),
@@ -910,6 +946,27 @@ impl ChatApp {
                 });
             });
         }
+    }
+
+    /// 用户选择 "允许并记住"：生成 allow 规则写入 .jcli，然后执行工具
+    pub fn allow_and_execute_pending_tool(&mut self) {
+        let idx = self.pending_tool_idx;
+        if idx >= self.active_tool_calls.len() {
+            self.mode = ChatMode::Chat;
+            return;
+        }
+
+        let tool_name = self.active_tool_calls[idx].tool_name.clone();
+        let arguments = self.active_tool_calls[idx].arguments.clone();
+
+        // 生成 allow 规则并写入 .jcli
+        let rule = super::permission::generate_allow_rule(&tool_name, &arguments);
+        let mut jcli = (*self.jcli_config).clone();
+        jcli.add_allow_rule(&rule);
+        self.jcli_config = std::sync::Arc::new(jcli);
+
+        // 执行工具
+        self.execute_pending_tool();
     }
 
     /// 用户确认执行当前待处理工具（spawn 后台线程，立即返回）

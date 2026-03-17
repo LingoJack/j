@@ -7,6 +7,7 @@ pub mod config;
 pub mod handler;
 pub mod markdown;
 pub mod model;
+pub mod permission;
 pub mod render;
 pub mod skill;
 pub mod theme;
