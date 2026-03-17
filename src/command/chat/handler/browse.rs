@@ -42,7 +42,7 @@ pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
             if let Some(msg) = app.session.messages.get(app.browse_msg_index) {
                 let content = msg.content.clone();
                 let role_label = if msg.role == "assistant" {
-                    "AI"
+                    "Sprite"
                 } else if msg.role == "user" {
                     "用户"
                 } else {

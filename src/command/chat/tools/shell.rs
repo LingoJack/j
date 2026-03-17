@@ -24,20 +24,15 @@ impl Tool for ShellTool {
         r#"
         在当前系统上执行 shell 命令，返回 stdout 和 stderr。每次调用创建新进程，状态不延续。
         重要限制：
-        - 不支持交互式命令（stdin 未连接）。所有需要用户输入的命令必须使用非交互标志：
-          - npm init -> npm init -y
-          - npx create-react-app -> npx create-react-app my-app（自动跳过提示）
-          - apt install -> apt install -y
-          - git commit -> git commit -m "message"（不要依赖编辑器打开）
-          - pip install 需要确认时 -> echo "y" | pip install
+        - 不支持交互式命令（stdin 未连接）
         - 不支持后台/长期运行的服务（如 npm run dev、python -m http.server），进程会在超时后被终止
         - 如果命令超时（默认 120s），会自动终止并返回已有输出
-        - 对于构建类命令（npm run build 等），可适当增大 timeout 值（最大 600）
+        - 对于构建类命令，可适当增大 timeout 值（最大 600）
         使用建议：
         - 多个独立命令用 && 串联，而非分多次调用
         - 用绝对路径，避免依赖 cd 切换目录
         - 包含空格的文件路径用双引号包裹
-        - 文件操作优先使用 ReadFile/WriteFile/EditFile 工具，而非 cat/sed/echo
+        - 文件操作优先使用 Read/Write/Edit 工具，而非 cat/sed/echo
         "#
     }
 
