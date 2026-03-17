@@ -441,7 +441,12 @@ impl ChatApp {
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
 
+        let current_dir = std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| ".".to_string());
+
         let resolved = template
+            .replace("{{.current_dir}}", &current_dir)
             .replace("{{.skills}}", &skills_summary)
             .replace("{{.tools}}", &tools_summary)
             .replace("{{.style}}", &style_text)
