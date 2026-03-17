@@ -166,7 +166,9 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             loop {
                 let evt = event::read()?;
                 match evt {
-                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    Event::Key(key)
+                        if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
+                    {
                         needs_redraw = true;
                         match app.mode {
                             ChatMode::Chat => {
