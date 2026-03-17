@@ -1,9 +1,11 @@
 mod ask;
+pub mod background;
 mod browser;
 mod file;
 mod grep;
 mod shell;
 mod skill_tool;
+pub mod task;
 mod web_fetch;
 mod web_search;
 
@@ -52,6 +54,8 @@ impl ToolRegistry {
     pub fn new(
         skills: Vec<crate::command::chat::skill::Skill>,
         ask_tx: mpsc::Sender<crate::command::chat::app::AskRequest>,
+        background_manager: Arc<background::BackgroundManager>,
+        task_manager: Arc<task::TaskManager>,
     ) -> Self {
         let mut registry = Self {
             tools: vec![
@@ -65,6 +69,26 @@ impl ToolRegistry {
                 Box::new(web_search::WebSearchTool),
                 Box::new(browser::BrowserTool),
                 Box::new(ask::AskTool { ask_tx }),
+                // 后台任务工具
+                Box::new(background::BackgroundRunTool {
+                    manager: Arc::clone(&background_manager),
+                }),
+                Box::new(background::CheckBackgroundTool {
+                    manager: Arc::clone(&background_manager),
+                }),
+                // 任务管理工具
+                Box::new(task::TaskCreateTool {
+                    manager: Arc::clone(&task_manager),
+                }),
+                Box::new(task::TaskUpdateTool {
+                    manager: Arc::clone(&task_manager),
+                }),
+                Box::new(task::TaskListTool {
+                    manager: Arc::clone(&task_manager),
+                }),
+                Box::new(task::TaskGetTool {
+                    manager: Arc::clone(&task_manager),
+                }),
             ],
         };
 
@@ -100,22 +124,25 @@ impl ToolRegistry {
         }
     }
 
-    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（JSON 数组格式，含参数 schema）
+    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（XML 格式，更省 token）
     /// 当 disabled 非空时，过滤掉其中列出的工具
     pub fn build_tools_summary(&self, disabled: &[String]) -> String {
-        let items: Vec<serde_json::Value> = self
+        let mut xml = String::from("<tools>\n");
+        for t in self
             .tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
-            .map(|t| {
-                serde_json::json!({
-                    "name": t.name(),
-                    "description": t.description().trim(),
-                    "parameters": t.parameters_schema()
-                })
-            })
-            .collect();
-        serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".to_string())
+        {
+            xml.push_str(&format!("<tool name=\"{}\">\n", t.name()));
+            xml.push_str(&format!(
+                "<description>{}</description>\n",
+                t.description().trim()
+            ));
+            xml.push_str(&json_schema_to_xml_params(&t.parameters_schema()));
+            xml.push_str("</tool>\n");
+        }
+        xml.push_str("</tools>");
+        xml
     }
 
     /// 生成过滤后的 ChatCompletionTools 列表（排除 disabled 中的工具）
@@ -156,6 +183,42 @@ pub fn expand_tilde(path: &str) -> String {
     } else {
         path.to_string()
     }
+}
+
+/// 将 JSON Schema 转为 XML `<parameters>` 块
+fn json_schema_to_xml_params(schema: &Value) -> String {
+    let properties = match schema.get("properties").and_then(|p| p.as_object()) {
+        Some(p) => p,
+        None => return String::new(),
+    };
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    let mut xml = String::from("<parameters>\n");
+    for (name, prop) in properties {
+        let type_str = prop
+            .get("type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("string");
+        let desc = prop
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("");
+        let req = if required.contains(&name.as_str()) {
+            " required"
+        } else {
+            ""
+        };
+        xml.push_str(&format!(
+            "<param name=\"{}\" type=\"{}\"{}>{}</param>\n",
+            name, type_str, req, desc
+        ));
+    }
+    xml.push_str("</parameters>\n");
+    xml
 }
 
 /// 简单的危险命令过滤

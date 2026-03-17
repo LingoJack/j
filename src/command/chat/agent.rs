@@ -1,6 +1,7 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
 use super::model::{ChatMessage, ModelProvider, ToolCallItem};
+use super::tools::background::BackgroundManager;
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};
 use futures::StreamExt;
@@ -128,12 +129,35 @@ pub async fn run_agent_loop(
     max_tool_rounds: usize,
     cancel_token: CancellationToken,
     pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    background_manager: Arc<BackgroundManager>,
 ) {
     let client = create_openai_client(&provider);
 
     for _round in 0..max_tool_rounds {
         // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
         drain_pending_user_messages(&mut messages, &pending_user_messages);
+
+        // Drain 后台任务完成通知，注入为系统消息
+        {
+            let notifications = background_manager.drain_notifications();
+            for notif in notifications {
+                let notif_msg = format!(
+                    "[后台任务完成] task_id={}, command={}, status={}\n结果:\n{}",
+                    notif.task_id, notif.command, notif.status, notif.result
+                );
+                messages.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: notif_msg,
+                    tool_calls: None,
+                    tool_call_id: None,
+                });
+                write_info_log(
+                    "BackgroundNotification",
+                    &format!("注入后台任务通知: task_id={}", notif.task_id),
+                );
+            }
+        }
+
         // 清空流式内容缓冲（每轮开始时）
         {
             let mut sc = streaming_content.lock().unwrap();

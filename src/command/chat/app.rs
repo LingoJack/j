@@ -9,6 +9,7 @@ use super::model::{
 use super::skill::{self, Skill};
 use super::theme::Theme;
 use super::tools::ToolRegistry;
+use super::tools::background::BackgroundManager;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use ratatui::text::Line;
@@ -168,6 +169,8 @@ pub struct ChatApp {
     pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
     /// 工具注册表
     pub tool_registry: Arc<ToolRegistry>,
+    /// 后台任务管理器
+    pub background_manager: Arc<BackgroundManager>,
     /// 当前活跃的工具调用状态列表
     pub active_tool_calls: Vec<ToolCallStatus>,
     /// ToolConfirm 模式中当前待处理工具的索引
@@ -338,7 +341,14 @@ impl ChatApp {
         let loaded_skills = skill::load_all_skills();
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let tool_registry = Arc::new(ToolRegistry::new(loaded_skills.clone(), ask_req_tx));
+        let background_manager = Arc::new(BackgroundManager::new());
+        let task_manager = Arc::new(super::tools::task::TaskManager::new());
+        let tool_registry = Arc::new(ToolRegistry::new(
+            loaded_skills.clone(),
+            ask_req_tx,
+            Arc::clone(&background_manager),
+            Arc::clone(&task_manager),
+        ));
         Self {
             agent_config,
             session,
@@ -372,6 +382,7 @@ impl ChatApp {
             restore_confirm_needed: false,
             tool_result_tx: None,
             tool_registry,
+            background_manager,
             active_tool_calls: Vec::new(),
             pending_tool_idx: 0,
             tool_confirm_entered_at: std::time::Instant::now(),
@@ -570,6 +581,7 @@ impl ChatApp {
         self.cancel_token = Some(cancel_token.clone());
 
         let pending_user_messages = Arc::clone(&self.pending_user_messages);
+        let background_manager = Arc::clone(&self.background_manager);
 
         // 启动后台线程执行 Agent 循环
         std::thread::spawn(move || {
@@ -593,6 +605,7 @@ impl ChatApp {
                 max_tool_rounds,
                 cancel_token,
                 pending_user_messages,
+                background_manager,
             ));
         });
     }

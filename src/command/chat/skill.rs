@@ -118,7 +118,7 @@ pub fn resolve_skill_content(skill: &Skill) -> String {
 
 // ========== build_skills_summary ==========
 
-/// 构建 skills 摘要列表（JSON 数组格式），用于系统提示词的 {{.skills}} 占位符
+/// 构建 skills 摘要列表（XML 格式），用于系统提示词的 {{.skills}} 占位符
 /// disabled_skills 中的 skill 会被过滤掉
 pub fn build_skills_summary(skills: &[Skill], disabled_skills: &[String]) -> String {
     let filtered: Vec<&Skill> = skills
@@ -126,17 +126,18 @@ pub fn build_skills_summary(skills: &[Skill], disabled_skills: &[String]) -> Str
         .filter(|s| !disabled_skills.iter().any(|d| d == &s.frontmatter.name))
         .collect();
     if filtered.is_empty() {
-        return "[]".to_string();
+        return "<skills />".to_string();
     }
-    let items: Vec<serde_json::Value> = filtered
-        .iter()
-        .map(|s| {
-            serde_json::json!({
-                "name": s.frontmatter.name,
-                "description": s.frontmatter.description,
-                "dir": s.dir_path.to_string_lossy()
-            })
-        })
-        .collect();
-    serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".to_string())
+    let mut xml = String::from("<skills>\n");
+    for s in &filtered {
+        xml.push_str(&format!("<skill name=\"{}\">\n", s.frontmatter.name));
+        xml.push_str(&format!(
+            "<description>{}</description>\n",
+            s.frontmatter.description
+        ));
+        xml.push_str(&format!("<dir>{}</dir>\n", s.dir_path.to_string_lossy()));
+        xml.push_str("</skill>\n");
+    }
+    xml.push_str("</skills>");
+    xml
 }
