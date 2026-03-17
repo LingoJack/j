@@ -1,0 +1,9 @@
+permissions:
+  allow_all: false
+  allow:
+  - Bash(tree /Users/jacklingo/Desktop/peoject_example/blog\:*)
+  - Bash(pwd:*)
+  - Edit
+  - Bash(grep -n:*)
+  - Bash(cd example/tech-blog:*)
+  deny: []
