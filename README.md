@@ -113,18 +113,6 @@ cargo install --path . --features browser_cdp
 
 ---
 
-## 详细文档
-
-| 文档 | 内容 |
-|------|------|
-| [架构设计](./docs/readme/architecture.md) | 目录结构、模块说明、数据模型 |
-| [命令详解](./docs/readme/commands.md) | 所有命令详细使用说明 |
-| [AI 对话](./docs/readme/chat.md) | AI 对话系统完整文档 |
-| [设计决策](./docs/readme/design-decisions.md) | 关键设计决策记录 |
-| [开发指南](./docs/readme/development.md) | 编译、开发、扩展指南 |
-
----
-
 ## 技术栈
 
 - **clap** — 命令行参数解析
