@@ -1,6 +1,7 @@
 use super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
 use super::markdown::markdown_to_lines;
 use super::theme::Theme;
+use crate::command::chat::constant::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -114,7 +115,7 @@ pub fn build_message_lines_incremental(
         // 缓存未命中 → 重新渲染
         let msg_lines_start = lines.len();
         match m.role.as_str() {
-            "user" => {
+            ROLE_USER => {
                 render_user_msg(
                     &m.content,
                     is_selected,
@@ -124,7 +125,7 @@ pub fn build_message_lines_incremental(
                     t,
                 );
             }
-            "assistant" => {
+            ROLE_ASSISTANT => {
                 if m.tool_calls.is_some() {
                     render_tool_call_request_msg(
                         m.tool_calls.as_ref().unwrap(),
@@ -136,7 +137,7 @@ pub fn build_message_lines_incremental(
                     render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut lines, t);
                 }
             }
-            "tool" => {
+            ROLE_TOOL => {
                 let role_label = m
                     .tool_call_id
                     .as_ref()
@@ -148,7 +149,7 @@ pub fn build_message_lines_incremental(
                     t,
                 );
             }
-            "system" => {
+            ROLE_SYSTEM => {
                 lines.push(Line::from(""));
                 let wrapped = wrap_text(&m.content, inner_width.saturating_sub(8));
                 for wl in wrapped {
