@@ -1,4 +1,5 @@
 pub mod app;
+mod constant;
 pub mod ui;
 
 use crate::config::YamlConfig;
@@ -9,6 +10,9 @@ use app::{
     save_todo_list,
 };
 use chrono::Local;
+use constant::{
+    CMD_ADD, CMD_LIST, FILTER_DONE, FILTER_DONE_SHORT, FILTER_UNDONE, FILTER_UNDONE_SHORT,
+};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
@@ -26,12 +30,12 @@ pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
     }
 
     match content[0].as_str() {
-        "list" => {
+        CMD_LIST => {
             // 解析过滤选项: --done/-d 或 --undone/-u
             let filter = parse_list_filter(&content[1..]);
             handle_todo_list(filter);
         }
-        "add" => {
+        CMD_ADD => {
             let text = content[1..].join(" ");
             let text = text.trim().trim_matches('"').to_string();
             if text.is_empty() {
@@ -51,8 +55,8 @@ pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
 fn parse_list_filter(args: &[String]) -> Option<bool> {
     for arg in args {
         match arg.as_str() {
-            "--done" | "-d" => return Some(true),
-            "--undone" | "-u" => return Some(false),
+            FILTER_DONE | FILTER_DONE_SHORT => return Some(true),
+            FILTER_UNDONE | FILTER_UNDONE_SHORT => return Some(false),
             _ => {}
         }
     }
