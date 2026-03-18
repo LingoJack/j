@@ -133,7 +133,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             let bytes_delta = current_len.saturating_sub(app.ui.last_rendered_streaming_len);
             let time_elapsed = app.ui.last_stream_render_time.elapsed();
             if bytes_delta >= 200
-                || time_elapsed >= std::time::Duration::from_millis(200)
+                || time_elapsed >= std::time::Duration::from_millis(100)
                 || current_len == 0
             {
                 needs_redraw = true;
