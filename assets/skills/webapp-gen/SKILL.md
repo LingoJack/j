@@ -1,7 +1,6 @@
 ---
 name: webapp-gen
 description: "一句话生成完整 Web APP。当用户描述一个 Web 应用需求时触发"
-
 ---
 
 # webapp-gen
