@@ -1,25 +1,27 @@
 use super::app::ChatApp;
 
 pub fn update_at_filter(app: &mut ChatApp) {
-    let chars: Vec<char> = app.input.chars().collect();
-    let start = app.at_popup_start_pos + 1; // @ 之后
-    if start <= app.cursor_pos && app.cursor_pos <= chars.len() {
-        app.at_popup_filter = chars[start..app.cursor_pos].iter().collect();
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let start = app.ui.at_popup_start_pos + 1; // @ 之后
+    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
+        app.ui.at_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
     } else {
-        app.at_popup_filter.clear();
+        app.ui.at_popup_filter.clear();
     }
     // 重置选中索引
-    app.at_popup_selected = 0;
+    app.ui.at_popup_selected = 0;
 }
 
 /// 根据 filter 过滤 loaded_skills 的 name 列表
 pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
-    let filter = app.at_popup_filter.to_lowercase();
+    let filter = app.ui.at_popup_filter.to_lowercase();
     let mut items: Vec<String> = app
+        .state
         .loaded_skills
         .iter()
         .filter(|s| {
-            !app.agent_config
+            !app.state
+                .agent_config
                 .disabled_skills
                 .iter()
                 .any(|d| d == &s.frontmatter.name)
@@ -37,30 +39,30 @@ pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
 
 /// 替换 input 中 @... 为 @skill_name 并加空格
 pub fn complete_at_mention(app: &mut ChatApp, skill_name: &str) {
-    let chars: Vec<char> = app.input.chars().collect();
-    let before: String = chars[..app.at_popup_start_pos].iter().collect();
-    let after: String = if app.cursor_pos < chars.len() {
-        chars[app.cursor_pos..].iter().collect()
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
+    let after: String = if app.ui.cursor_pos < chars.len() {
+        chars[app.ui.cursor_pos..].iter().collect()
     } else {
         String::new()
     };
     let replacement = format!("@{} ", skill_name);
     let new_cursor = before.chars().count() + replacement.chars().count();
-    app.input = format!("{}{}{}", before, replacement, after);
-    app.cursor_pos = new_cursor;
+    app.ui.input = format!("{}{}{}", before, replacement, after);
+    app.ui.cursor_pos = new_cursor;
 }
 
 /// 更新文件补全弹窗的过滤文本
 pub fn update_file_filter(app: &mut ChatApp) {
-    let chars: Vec<char> = app.input.chars().collect();
+    let chars: Vec<char> = app.ui.input.chars().collect();
     // @file: 占 6 个字符 (@file:), 过滤文本从 start_pos + 6 开始
-    let start = app.file_popup_start_pos + 6;
-    if start <= app.cursor_pos && app.cursor_pos <= chars.len() {
-        app.file_popup_filter = chars[start..app.cursor_pos].iter().collect();
+    let start = app.ui.file_popup_start_pos + 6;
+    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
+        app.ui.file_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
     } else {
-        app.file_popup_filter.clear();
+        app.ui.file_popup_filter.clear();
     }
-    app.file_popup_selected = 0;
+    app.ui.file_popup_selected = 0;
 }
 
 /// 将 ~ 展开为用户 home 目录
@@ -88,7 +90,7 @@ pub fn filter_dir_part(filter: &str) -> String {
 
 /// 获取文件补全列表
 pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
-    let filter = &app.file_popup_filter;
+    let filter = &app.ui.file_popup_filter;
 
     // 处理 ~ 路径：将 ~ 单独或 ~/ 开头视为 home 目录
     let expanded;
@@ -156,15 +158,15 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
 
 /// 替换 input 中 @file:filter 为 @file:完整路径 + 空格
 pub fn complete_file_mention(app: &mut ChatApp, file_path: &str) {
-    let chars: Vec<char> = app.input.chars().collect();
-    let before: String = chars[..app.file_popup_start_pos].iter().collect();
-    let after: String = if app.cursor_pos < chars.len() {
-        chars[app.cursor_pos..].iter().collect()
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let before: String = chars[..app.ui.file_popup_start_pos].iter().collect();
+    let after: String = if app.ui.cursor_pos < chars.len() {
+        chars[app.ui.cursor_pos..].iter().collect()
     } else {
         String::new()
     };
     let replacement = format!("@file:{} ", file_path);
     let new_cursor = before.chars().count() + replacement.chars().count();
-    app.input = format!("{}{}{}", before, replacement, after);
-    app.cursor_pos = new_cursor;
+    app.ui.input = format!("{}{}{}", before, replacement, after);
+    app.ui.cursor_pos = new_cursor;
 }

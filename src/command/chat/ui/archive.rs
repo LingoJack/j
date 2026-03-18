@@ -9,7 +9,7 @@ use ratatui::{
 /// 绘制归档确认界面
 #[allow(clippy::vec_init_then_push)]
 pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let mut lines: Vec<Line> = Vec::new();
 
     lines.push(Line::from(""));
@@ -31,23 +31,23 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     )));
     lines.push(Line::from(""));
 
-    if app.archive_editing_name {
+    if app.ui.archive_editing_name {
         lines.push(Line::from(Span::styled(
             "  请输入归档名称：",
             Style::default().fg(t.text_white),
         )));
         lines.push(Line::from(""));
 
-        let name_with_cursor = if app.archive_custom_name.is_empty() {
+        let name_with_cursor = if app.ui.archive_custom_name.is_empty() {
             vec![Span::styled(
                 " ",
                 Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
             )]
         } else {
-            let chars: Vec<char> = app.archive_custom_name.chars().collect();
+            let chars: Vec<char> = app.ui.archive_custom_name.chars().collect();
             let mut spans: Vec<Span> = Vec::new();
             for (i, &ch) in chars.iter().enumerate() {
-                if i == app.archive_edit_cursor {
+                if i == app.ui.archive_edit_cursor {
                     spans.push(Span::styled(
                         ch.to_string(),
                         Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
@@ -59,7 +59,7 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                     ));
                 }
             }
-            if app.archive_edit_cursor >= chars.len() {
+            if app.ui.archive_edit_cursor >= chars.len() {
                 spans.push(Span::styled(
                     " ",
                     Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
@@ -111,7 +111,7 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         lines.push(Line::from(vec![
             Span::styled("  默认名称：", Style::default().fg(t.text_dim)),
             Span::styled(
-                &app.archive_default_name,
+                &app.ui.archive_default_name,
                 Style::default()
                     .fg(t.config_toggle_on)
                     .add_modifier(Modifier::BOLD),
@@ -170,9 +170,9 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 /// 绘制归档列表界面
 #[allow(clippy::vec_init_then_push)]
 pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
 
-    if app.restore_confirm_needed {
+    if app.ui.restore_confirm_needed {
         let mut lines: Vec<Line> = Vec::new();
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
@@ -192,7 +192,7 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             Style::default().fg(t.separator),
         )));
         lines.push(Line::from(""));
-        if let Some(archive) = app.archives.get(app.archive_list_index) {
+        if let Some(archive) = app.ui.archives.get(app.ui.archive_list_index) {
             lines.push(Line::from(vec![
                 Span::styled("  将还原归档：", Style::default().fg(t.text_dim)),
                 Span::styled(
@@ -232,7 +232,7 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         return;
     }
 
-    if app.archives.is_empty() {
+    if app.ui.archives.is_empty() {
         let lines = vec![
             Line::from(""),
             Line::from(""),
@@ -264,11 +264,12 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     }
 
     let items: Vec<ListItem> = app
+        .ui
         .archives
         .iter()
         .enumerate()
         .map(|(i, archive)| {
-            let is_selected = i == app.archive_list_index;
+            let is_selected = i == app.ui.archive_list_index;
             let marker = if is_selected { "  ▸ " } else { "    " };
             let msg_count = archive.messages.len();
             let created_at = archive
@@ -314,6 +315,6 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .highlight_symbol("");
 
     let mut list_state = ListState::default();
-    list_state.select(Some(app.archive_list_index));
+    list_state.select(Some(app.ui.archive_list_index));
     f.render_stateful_widget(list, area, &mut list_state);
 }

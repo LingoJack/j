@@ -34,10 +34,10 @@ pub fn config_field_label(idx: usize) -> &'static str {
 pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
     let total_provider = CONFIG_FIELDS.len();
     if field_idx < total_provider {
-        if app.agent_config.providers.is_empty() {
+        if app.state.agent_config.providers.is_empty() {
             return String::new();
         }
-        let p = &app.agent_config.providers[app.config_provider_idx];
+        let p = &app.state.agent_config.providers[app.ui.config_provider_idx];
         match CONFIG_FIELDS[field_idx] {
             "name" => p.name.clone(),
             "api_base" => p.api_base.clone(),
@@ -62,37 +62,43 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
             "system_prompt" => load_system_prompt().unwrap_or_default(),
             "style" => load_style().unwrap_or_default(),
             "stream_mode" => {
-                if app.agent_config.stream_mode {
+                if app.state.agent_config.stream_mode {
                     "开启".into()
                 } else {
                     "关闭".into()
                 }
             }
-            "max_history_messages" => app.agent_config.max_history_messages.to_string(),
-            "theme" => app.agent_config.theme.display_name().to_string(),
+            "max_history_messages" => app.state.agent_config.max_history_messages.to_string(),
+            "theme" => app.state.agent_config.theme.display_name().to_string(),
             "tools_enabled" => {
-                if app.agent_config.tools_enabled {
+                if app.state.agent_config.tools_enabled {
                     "开启".into()
                 } else {
                     "关闭".into()
                 }
             }
-            "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
+            "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
             "tool_confirm_timeout" => {
-                if app.agent_config.tool_confirm_timeout == 0 {
+                if app.state.agent_config.tool_confirm_timeout == 0 {
                     "关闭".into()
                 } else {
-                    format!("{}秒", app.agent_config.tool_confirm_timeout)
+                    format!("{}秒", app.state.agent_config.tool_confirm_timeout)
                 }
             }
             "skills_enabled" => {
-                let total = app.loaded_skills.len();
+                let total = app.state.loaded_skills.len();
                 let enabled = total
                     - app
+                        .state
                         .agent_config
                         .disabled_skills
                         .iter()
-                        .filter(|d| app.loaded_skills.iter().any(|s| &s.frontmatter.name == *d))
+                        .filter(|d| {
+                            app.state
+                                .loaded_skills
+                                .iter()
+                                .any(|s| &s.frontmatter.name == *d)
+                        })
                         .count();
                 format!("{}/{} 已启用", enabled, total)
             }
@@ -105,10 +111,10 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
 pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
     let total_provider = CONFIG_FIELDS.len();
     if field_idx < total_provider {
-        if app.agent_config.providers.is_empty() {
+        if app.state.agent_config.providers.is_empty() {
             return String::new();
         }
-        let p = &app.agent_config.providers[app.config_provider_idx];
+        let p = &app.state.agent_config.providers[app.ui.config_provider_idx];
         match CONFIG_FIELDS[field_idx] {
             "name" => p.name.clone(),
             "api_base" => p.api_base.clone(),
@@ -122,22 +128,22 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
             "system_prompt" => load_system_prompt().unwrap_or_default(),
             "style" => load_style().unwrap_or_default(),
             "stream_mode" => {
-                if app.agent_config.stream_mode {
+                if app.state.agent_config.stream_mode {
                     "true".into()
                 } else {
                     "false".into()
                 }
             }
-            "theme" => app.agent_config.theme.to_str().to_string(),
+            "theme" => app.state.agent_config.theme.to_str().to_string(),
             "tools_enabled" => {
-                if app.agent_config.tools_enabled {
+                if app.state.agent_config.tools_enabled {
                     "true".into()
                 } else {
                     "false".into()
                 }
             }
-            "max_tool_rounds" => app.agent_config.max_tool_rounds.to_string(),
-            "tool_confirm_timeout" => app.agent_config.tool_confirm_timeout.to_string(),
+            "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
+            "tool_confirm_timeout" => app.state.agent_config.tool_confirm_timeout.to_string(),
             "skills_enabled" => String::new(), // 不可直接编辑，进入子菜单
             _ => String::new(),
         }
@@ -148,10 +154,10 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
 pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
     let total_provider = CONFIG_FIELDS.len();
     if field_idx < total_provider {
-        if app.agent_config.providers.is_empty() {
+        if app.state.agent_config.providers.is_empty() {
             return;
         }
-        let p = &mut app.agent_config.providers[app.config_provider_idx];
+        let p = &mut app.state.agent_config.providers[app.ui.config_provider_idx];
         match CONFIG_FIELDS[field_idx] {
             "name" => p.name = value.to_string(),
             "api_base" => p.api_base = value.to_string(),
@@ -169,35 +175,35 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
                 save_style(value);
             }
             "stream_mode" => {
-                app.agent_config.stream_mode = matches!(
+                app.state.agent_config.stream_mode = matches!(
                     value.trim().to_lowercase().as_str(),
                     "true" | "1" | "开启" | "on" | "yes"
                 );
             }
             "max_history_messages" => {
                 if let Ok(num) = value.trim().parse::<usize>() {
-                    app.agent_config.max_history_messages = num;
+                    app.state.agent_config.max_history_messages = num;
                 }
             }
             "theme" => {
-                app.agent_config.theme = ThemeName::from_str(value.trim());
-                app.theme = super::theme::Theme::from_name(&app.agent_config.theme);
-                app.msg_lines_cache = None;
+                app.state.agent_config.theme = ThemeName::from_str(value.trim());
+                app.ui.theme = super::theme::Theme::from_name(&app.state.agent_config.theme);
+                app.ui.msg_lines_cache = None;
             }
             "tools_enabled" => {
-                app.agent_config.tools_enabled = matches!(
+                app.state.agent_config.tools_enabled = matches!(
                     value.trim().to_lowercase().as_str(),
                     "true" | "1" | "开启" | "on" | "yes"
                 );
             }
             "max_tool_rounds" => {
                 if let Ok(num) = value.trim().parse::<usize>() {
-                    app.agent_config.max_tool_rounds = num;
+                    app.state.agent_config.max_tool_rounds = num;
                 }
             }
             "tool_confirm_timeout" => {
                 if let Ok(num) = value.trim().parse::<u64>() {
-                    app.agent_config.tool_confirm_timeout = num;
+                    app.state.agent_config.tool_confirm_timeout = num;
                 }
             }
             _ => {}

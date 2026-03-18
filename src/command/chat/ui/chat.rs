@@ -19,7 +19,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let size = f.area();
 
     // 整体背景
-    let bg = Block::default().style(Style::default().bg(app.theme.bg_primary));
+    let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 
     let chunks = Layout::default()
@@ -36,19 +36,19 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     draw_title_bar(f, chunks[0], app);
 
     // ========== 消息区 ==========
-    if app.mode == ChatMode::Help {
+    if app.ui.mode == ChatMode::Help {
         draw_help(f, chunks[1], app);
-    } else if app.mode == ChatMode::SelectModel {
+    } else if app.ui.mode == ChatMode::SelectModel {
         draw_model_selector(f, chunks[1], app);
-    } else if app.mode == ChatMode::Config {
+    } else if app.ui.mode == ChatMode::Config {
         draw_config_screen(f, chunks[1], app);
-    } else if app.mode == ChatMode::ArchiveConfirm {
+    } else if app.ui.mode == ChatMode::ArchiveConfirm {
         draw_archive_confirm(f, chunks[1], app);
-    } else if app.mode == ChatMode::ArchiveList {
+    } else if app.ui.mode == ChatMode::ArchiveList {
         draw_archive_list(f, chunks[1], app);
-    } else if app.mode == ChatMode::ToolToggle {
+    } else if app.ui.mode == ChatMode::ToolToggle {
         draw_tool_toggle(f, chunks[1], app);
-    } else if app.mode == ChatMode::SkillToggle {
+    } else if app.ui.mode == ChatMode::SkillToggle {
         draw_skill_toggle(f, chunks[1], app);
     } else {
         draw_messages(f, chunks[1], app);
@@ -64,30 +64,32 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     draw_toast(f, size, app);
 
     // ========== @ 补全弹窗覆盖层 ==========
-    if app.at_popup_active {
+    if app.ui.at_popup_active {
         draw_at_popup(f, chunks[2], app);
     }
 
     // ========== 文件补全弹窗覆盖层 ==========
-    if app.file_popup_active {
+    if app.ui.file_popup_active {
         draw_file_popup(f, chunks[2], app);
     }
 }
 
 /// 绘制标题栏
 pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let model_name = app.active_model_name();
-    let msg_count = app.session.messages.len();
-    let loading = if app.is_loading {
+    let msg_count = app.state.session.messages.len();
+    let loading = if app.state.is_loading {
         // 优先显示正在执行中的工具，其次显示等待确认的工具
         let tool_info = app
+            .tool_executor
             .active_tool_calls
             .iter()
             .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
             .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name))
             .or_else(|| {
-                app.active_tool_calls
+                app.tool_executor
+                    .active_tool_calls
                     .iter()
                     .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
                     .map(|tc| format!(" 🔧 调用 {}...", tc.tool_name))
@@ -140,9 +142,8 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     f.render_widget(title_block, area);
 }
 
-/// 绘制消息区
 pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
@@ -155,7 +156,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .style(Style::default().bg(t.bg_primary));
 
     // 空消息时显示欢迎界面
-    if app.session.messages.is_empty() && !app.is_loading {
+    if app.state.session.messages.is_empty() && !app.state.is_loading {
         let welcome_lines = vec![
             Line::from(""),
             Line::from(""),
@@ -202,29 +203,30 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 消息内容最大宽度为可用宽度的 75%
     let bubble_max_width = (inner_width * 75 / 100).max(20);
 
-    let msg_count = app.session.messages.len();
+    let msg_count = app.state.session.messages.len();
     let last_msg_len = app
+        .state
         .session
         .messages
         .last()
         .map(|m| m.content.len())
         .unwrap_or(0);
-    let streaming_len = app.streaming_content.lock().unwrap().len();
-    let current_browse_index = if app.mode == ChatMode::Browse {
-        Some(app.browse_msg_index)
+    let streaming_len = app.state.streaming_content.lock().unwrap().len();
+    let current_browse_index = if app.ui.mode == ChatMode::Browse {
+        Some(app.ui.browse_msg_index)
     } else {
         None
     };
-    let current_tool_confirm_idx = if app.mode == ChatMode::ToolConfirm {
-        Some(app.pending_tool_idx)
+    let current_tool_confirm_idx = if app.ui.mode == ChatMode::ToolConfirm {
+        Some(app.tool_executor.pending_tool_idx)
     } else {
         None
     };
-    let cache_hit = if let Some(ref cache) = app.msg_lines_cache {
+    let cache_hit = if let Some(ref cache) = app.ui.msg_lines_cache {
         cache.msg_count == msg_count
             && cache.last_msg_len == last_msg_len
             && cache.streaming_len == streaming_len
-            && cache.is_loading == app.is_loading
+            && cache.is_loading == app.state.is_loading
             && cache.bubble_max_width == bubble_max_width
             && cache.browse_index == current_browse_index
             && cache.tool_confirm_idx == current_tool_confirm_idx
@@ -233,14 +235,14 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     };
 
     if !cache_hit {
-        let old_cache = app.msg_lines_cache.take();
+        let old_cache = app.ui.msg_lines_cache.take();
         let (new_lines, new_msg_start_lines, new_per_msg, new_stable_lines, new_stable_offset) =
             build_message_lines_incremental(app, inner_width, bubble_max_width, old_cache.as_ref());
-        app.msg_lines_cache = Some(MsgLinesCache {
+        app.ui.msg_lines_cache = Some(MsgLinesCache {
             msg_count,
             last_msg_len,
             streaming_len,
-            is_loading: app.is_loading,
+            is_loading: app.state.is_loading,
             bubble_max_width,
             browse_index: current_browse_index,
             tool_confirm_idx: current_tool_confirm_idx,
@@ -252,7 +254,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         });
     }
 
-    let cached = app.msg_lines_cache.as_ref().unwrap();
+    let cached = app.ui.msg_lines_cache.as_ref().unwrap();
     let all_lines = &cached.lines;
     let total_lines = all_lines.len() as u16;
 
@@ -265,44 +267,42 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let visible_height = inner.height;
     let max_scroll = total_lines.saturating_sub(visible_height);
 
-    if app.mode != ChatMode::Browse {
-        if app.mode == ChatMode::ToolConfirm {
-            // ToolConfirm 模式下，若 auto_scroll 则滚到底部确保确认区可见
-            // 用户 PageUp 后 auto_scroll=false，允许查看上方内容
-            if app.auto_scroll || app.scroll_offset == u16::MAX {
-                app.scroll_offset = max_scroll;
-                app.auto_scroll = true;
-            } else if app.scroll_offset > max_scroll {
-                app.scroll_offset = max_scroll;
+    if app.ui.mode != ChatMode::Browse {
+        if app.ui.mode == ChatMode::ToolConfirm {
+            if app.ui.auto_scroll || app.ui.scroll_offset == u16::MAX {
+                app.ui.scroll_offset = max_scroll;
+                app.ui.auto_scroll = true;
+            } else if app.ui.scroll_offset > max_scroll {
+                app.ui.scroll_offset = max_scroll;
             }
-        } else if app.scroll_offset == u16::MAX || app.scroll_offset > max_scroll {
-            app.scroll_offset = max_scroll;
-            app.auto_scroll = true;
+        } else if app.ui.scroll_offset == u16::MAX || app.ui.scroll_offset > max_scroll {
+            app.ui.scroll_offset = max_scroll;
+            app.ui.auto_scroll = true;
         }
     } else if let Some(msg_start) = cached
         .msg_start_lines
         .iter()
-        .find(|(idx, _)| *idx == app.browse_msg_index)
+        .find(|(idx, _)| *idx == app.ui.browse_msg_index)
         .map(|(_, line)| *line as u16)
     {
         let msg_line_count = cached
             .per_msg_lines
-            .get(app.browse_msg_index)
+            .get(app.ui.browse_msg_index)
             .map(|c| c.lines.len())
             .unwrap_or(1) as u16;
         let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
-        if app.browse_scroll_offset > msg_max_scroll {
-            app.browse_scroll_offset = msg_max_scroll;
+        if app.ui.browse_scroll_offset > msg_max_scroll {
+            app.ui.browse_scroll_offset = msg_max_scroll;
         }
-        app.scroll_offset = (msg_start + app.browse_scroll_offset).min(max_scroll);
+        app.ui.scroll_offset = (msg_start + app.ui.browse_scroll_offset).min(max_scroll);
     }
 
-    let bg_fill = Block::default().style(Style::default().bg(app.theme.bg_primary));
+    let bg_fill = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg_fill, inner);
 
-    let start = app.scroll_offset as usize;
+    let start = app.ui.scroll_offset as usize;
     let end = (start + visible_height as usize).min(all_lines.len());
-    let msg_area_bg = Style::default().bg(app.theme.bg_primary);
+    let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
     for (i, line_idx) in (start..end).enumerate() {
         let line = &all_lines[line_idx];
         let y = inner.y + i as u16;
@@ -325,7 +325,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     // === 图片渲染 pass ===
-    let has_picker = app.image_cache.lock().unwrap().picker.is_some();
+    let has_picker = app.ui.image_cache.lock().unwrap().picker.is_some();
     // 图片渲染宽度与气泡内容区对齐
     let img_pad = 3u16; // 与气泡 pad_left_w 一致
     let img_render_w = (bubble_max_width as u16).saturating_sub(img_pad * 2);
@@ -385,14 +385,14 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     format!("  [Image: {}]", display_url),
                     Style::default()
                         .fg(Color::Cyan)
-                        .bg(app.theme.bubble_ai)
+                        .bg(app.ui.theme.bubble_ai)
                         .add_modifier(Modifier::UNDERLINED),
                 )));
                 f.render_widget(fallback, Rect::new(inner.x, y, bubble_w, 1));
                 continue;
             }
 
-            let mut cache = app.image_cache.lock().unwrap();
+            let mut cache = app.ui.image_cache.lock().unwrap();
             match cache.images.get_mut(&url) {
                 Some(ImageState::Ready(protocol)) => {
                     let widget = StatefulImage::default().resize(Resize::Scale(None));
@@ -403,7 +403,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     let display_err = truncate_str(err, max_err_w);
                     let err_line = Paragraph::new(Line::from(Span::styled(
                         format!("  [Image load failed: {}]", display_err),
-                        Style::default().fg(Color::Red).bg(app.theme.bubble_ai),
+                        Style::default().fg(Color::Red).bg(app.ui.theme.bubble_ai),
                     )));
                     f.render_widget(err_line, Rect::new(inner.x, y, bubble_w, 1));
                 }
@@ -412,7 +412,9 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     let display_url = truncate_str(&url, max_url_w);
                     let loading = Paragraph::new(Line::from(Span::styled(
                         format!("  Loading image: {}...", display_url),
-                        Style::default().fg(Color::DarkGray).bg(app.theme.bubble_ai),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .bg(app.ui.theme.bubble_ai),
                     )));
                     f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
                 }
@@ -421,13 +423,15 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     let display_url = truncate_str(&url, max_url_w);
                     let loading = Paragraph::new(Line::from(Span::styled(
                         format!("  Loading image: {}...", display_url),
-                        Style::default().fg(Color::DarkGray).bg(app.theme.bubble_ai),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .bg(app.ui.theme.bubble_ai),
                     )));
                     f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
                     // 标记为加载中
                     cache.images.insert(url.clone(), ImageState::Loading);
                     // spawn 后台线程加载图片
-                    let cache_clone = std::sync::Arc::clone(&app.image_cache);
+                    let cache_clone = std::sync::Arc::clone(&app.ui.image_cache);
                     let url_owned = url.clone();
                     std::thread::spawn(move || match load_image(&url_owned) {
                         Ok(dyn_img) => {
@@ -452,12 +456,12 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 }
 
 pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let usable_width = area.width.saturating_sub(2 + 4) as usize;
 
-    let chars: Vec<char> = app.input.chars().collect();
+    let chars: Vec<char> = app.ui.input.chars().collect();
 
-    let before_all: String = chars[..app.cursor_pos].iter().collect();
+    let before_all: String = chars[..app.ui.cursor_pos].iter().collect();
     let before_width = display_width(&before_all);
 
     let scroll_offset_chars = if before_width >= usable_width {
@@ -477,7 +481,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     };
 
     let visible_chars = &chars[scroll_offset_chars..];
-    let cursor_in_visible = app.cursor_pos - scroll_offset_chars;
+    let cursor_in_visible = app.ui.cursor_pos - scroll_offset_chars;
 
     let before: String = visible_chars[..cursor_in_visible].iter().collect();
     let cursor_ch = if cursor_in_visible < visible_chars.len() {
@@ -491,12 +495,12 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         String::new()
     };
 
-    let prompt_style = if app.is_loading {
+    let prompt_style = if app.state.is_loading {
         Style::default().fg(t.input_prompt_loading)
     } else {
         Style::default().fg(t.input_prompt)
     };
-    let prompt_text = if app.is_loading { " .. " } else { " >  " };
+    let prompt_text = if app.state.is_loading { " .. " } else { " >  " };
 
     let full_visible = format!("{}{}{}", before, cursor_ch, after);
     let inner_height = area.height.saturating_sub(2) as usize;
@@ -527,11 +531,12 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     // 计算 @mention 高亮范围（基于全局 char index, 相对于 input 起始）
     let skill_names: Vec<String> = app
+        .state
         .loaded_skills
         .iter()
         .map(|s| s.frontmatter.name.clone())
         .collect();
-    let mention_ranges = find_at_mention_ranges(&app.input, &skill_names);
+    let mention_ranges = find_at_mention_ranges(&app.ui.input, &skill_names);
     // 转换为相对于 scroll_offset_chars 的偏移
     let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
 
@@ -637,7 +642,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         Block::default()
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(if app.is_loading {
+            .border_style(if app.state.is_loading {
                 Style::default().fg(t.border_input_loading)
             } else {
                 Style::default().fg(t.border_input)
@@ -648,7 +653,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     f.render_widget(input_widget, area);
 
-    if !app.is_loading {
+    if !app.state.is_loading {
         let prompt_w: u16 = 4;
         let border_left: u16 = 1;
 
@@ -683,9 +688,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 绘制底部操作提示栏（始终可见）
 pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
-    let hints = match app.mode {
-        ChatMode::Chat if app.is_loading => vec![("Esc", "取消请求"), ("↑↓", "滚动")],
+    let t = &app.ui.theme;
+    let hints = match app.ui.mode {
+        ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求"), ("↑↓", "滚动")],
         ChatMode::Chat => vec![
             ("Enter", "发送"),
             ("↑↓", "滚动"),
@@ -713,7 +718,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             ("Esc", "保存返回"),
         ],
         ChatMode::ArchiveConfirm => {
-            if app.archive_editing_name {
+            if app.ui.archive_editing_name {
                 vec![("Enter", "确认"), ("Esc", "取消")]
             } else {
                 vec![
@@ -724,7 +729,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             }
         }
         ChatMode::ArchiveList => {
-            if app.restore_confirm_needed {
+            if app.ui.restore_confirm_needed {
                 vec![("y/Enter", "确认还原"), ("Esc", "取消")]
             } else {
                 vec![
@@ -775,8 +780,8 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 绘制 Toast 弹窗（右上角浮层）
 pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
-    if let Some((ref msg, is_error, _)) = app.toast {
+    let t = &app.ui.theme;
+    if let Some((ref msg, is_error, _)) = app.ui.toast {
         let text_width = display_width(msg);
         let toast_width = (text_width + 10).min(area.width as usize).max(16) as u16;
         let toast_height: u16 = 3;
@@ -822,14 +827,15 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 绘制模型选择界面
 pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let items: Vec<ListItem> = app
+        .state
         .agent_config
         .providers
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let is_active = i == app.agent_config.active_index;
+            let is_active = i == app.state.agent_config.active_index;
             let marker = if is_active { " ● " } else { " ○ " };
             let style = if is_active {
                 Style::default()
@@ -865,12 +871,12 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
         )
         .highlight_symbol("  ▸ ");
 
-    f.render_stateful_widget(list, area, &mut app.model_list_state);
+    f.render_stateful_widget(list, area, &mut app.ui.model_list_state);
 }
 
 /// 绘制帮助界面
 pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let separator = Line::from(Span::styled(
         "  ─────────────────────────────────────────",
         Style::default().fg(t.separator),
@@ -1011,7 +1017,7 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 绘制 @ 补全弹窗（输入区域上方浮动）
 pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let filtered = get_filtered_skills(app);
     if filtered.is_empty() {
         return;
@@ -1045,7 +1051,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
 
     let mut list_state = ListState::default();
     list_state.select(Some(
-        app.at_popup_selected.min(item_count.saturating_sub(1)),
+        app.ui.at_popup_selected.min(item_count.saturating_sub(1)),
     ));
 
     let list = List::new(items)
@@ -1073,7 +1079,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
 
 /// 绘制文件补全弹窗（输入区域上方浮动）
 pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let filtered = get_filtered_files(app);
     if filtered.is_empty() {
         return;
@@ -1109,15 +1115,15 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         })
         .collect();
 
-    let title_text = if app.file_popup_filter.is_empty() {
+    let title_text = if app.ui.file_popup_filter.is_empty() {
         " Files ".to_string()
     } else {
-        format!(" {} ", app.file_popup_filter)
+        format!(" {} ", app.ui.file_popup_filter)
     };
 
     let mut list_state = ListState::default();
     list_state.select(Some(
-        app.file_popup_selected.min(item_count.saturating_sub(1)),
+        app.ui.file_popup_selected.min(item_count.saturating_sub(1)),
     ));
 
     let list = List::new(items)

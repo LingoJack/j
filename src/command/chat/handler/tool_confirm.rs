@@ -1,211 +1,131 @@
-use crate::command::chat::app::{AskAnswer, ChatApp, ChatMode};
+use crate::command::chat::app::{Action, AskAnswer, ChatApp, CursorDirection};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// 统一交互区域按键处理：选项式（↑↓ 选择，Enter 确认，Esc 拒绝/退出）
 pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
-    let is_ask = app.tool_ask_mode;
+    let is_ask = app.ui.tool_ask_mode;
 
     // ask 模式使用新的结构化问答处理
     if is_ask {
         handle_ask_mode(app, key);
-        app.msg_lines_cache = None;
+        app.ui.msg_lines_cache = None;
         return;
     }
 
-    if app.tool_interact_typing {
-        // 输入模式（工具确认）
-        match key.code {
+    if app.ui.tool_interact_typing {
+        // 输入模式（工具确认拒绝原因）
+        let action = match key.code {
             KeyCode::Esc => {
-                app.tool_interact_typing = false;
+                app.ui.tool_interact_typing = false;
+                app.ui.msg_lines_cache = None;
+                return;
             }
             KeyCode::Enter => {
-                let input_text = app.tool_interact_input.trim().to_string();
-                app.reject_pending_tool(&input_text);
-                app.tool_interact_input.clear();
-                app.tool_interact_cursor = 0;
-                app.tool_interact_typing = false;
+                let input_text = app.ui.tool_interact_input.trim().to_string();
+                app.update(Action::RejectPendingToolWithReason(input_text));
+                app.ui.tool_interact_input.clear();
+                app.ui.tool_interact_cursor = 0;
+                app.ui.tool_interact_typing = false;
+                app.ui.msg_lines_cache = None;
+                return;
             }
-            KeyCode::Backspace => {
-                if app.tool_interact_cursor > 0 {
-                    let start = app
-                        .tool_interact_input
-                        .char_indices()
-                        .nth(app.tool_interact_cursor - 1)
-                        .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    let end = app
-                        .tool_interact_input
-                        .char_indices()
-                        .nth(app.tool_interact_cursor)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.tool_interact_input.len());
-                    app.tool_interact_input.drain(start..end);
-                    app.tool_interact_cursor -= 1;
-                }
-            }
+            KeyCode::Backspace => Action::ToolInteractDeleteChar,
             KeyCode::Left => {
-                if app.tool_interact_cursor > 0 {
-                    app.tool_interact_cursor -= 1;
+                if app.ui.tool_interact_cursor > 0 {
+                    app.ui.tool_interact_cursor -= 1;
                 }
+                app.ui.msg_lines_cache = None;
+                return;
             }
             KeyCode::Right => {
-                let char_count = app.tool_interact_input.chars().count();
-                if app.tool_interact_cursor < char_count {
-                    app.tool_interact_cursor += 1;
+                let char_count = app.ui.tool_interact_input.chars().count();
+                if app.ui.tool_interact_cursor < char_count {
+                    app.ui.tool_interact_cursor += 1;
                 }
+                app.ui.msg_lines_cache = None;
+                return;
             }
-            KeyCode::Char(c) => {
-                let byte_idx = app
-                    .tool_interact_input
-                    .char_indices()
-                    .nth(app.tool_interact_cursor)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.tool_interact_input.len());
-                app.tool_interact_input.insert(byte_idx, c);
-                app.tool_interact_cursor += 1;
+            KeyCode::Char(c) => Action::ToolInteractInputChar(c),
+            _ => {
+                app.ui.msg_lines_cache = None;
+                return;
             }
-            _ => {}
-        }
-        app.msg_lines_cache = None;
+        };
+        app.update(action);
+        app.ui.msg_lines_cache = None;
         return;
     }
 
     // 工具确认选项模式
-    match key.code {
-        KeyCode::Up => {
-            if app.tool_interact_selected > 0 {
-                app.tool_interact_selected -= 1;
-            }
+    let action = match key.code {
+        KeyCode::Up => Action::ToolInteractNavigate(CursorDirection::Up),
+        KeyCode::Down => Action::ToolInteractNavigate(CursorDirection::Down),
+        KeyCode::Enter => Action::ToolInteractConfirm,
+        KeyCode::Esc => Action::RejectPendingTool,
+        _ => {
+            app.ui.msg_lines_cache = None;
+            return;
         }
-        KeyCode::Down => {
-            if app.tool_interact_selected < 3 {
-                app.tool_interact_selected += 1;
-            }
-        }
-        KeyCode::Enter => match app.tool_interact_selected {
-            0 => app.execute_pending_tool(),
-            1 => app.allow_and_execute_pending_tool(),
-            2 => app.reject_pending_tool(""),
-            3 => {
-                app.tool_interact_typing = true;
-                app.tool_interact_input.clear();
-                app.tool_interact_cursor = 0;
-            }
-            _ => {}
-        },
-        KeyCode::Esc => {
-            app.reject_pending_tool("");
-        }
-        _ => {}
-    }
-    app.msg_lines_cache = None;
+    };
+    app.update(action);
+    app.ui.msg_lines_cache = None;
 }
 
 /// Ask 模式的结构化问答交互处理
 fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
-    let total_questions = app.tool_ask_questions.len();
+    let total_questions = app.ui.tool_ask_questions.len();
     if total_questions == 0 {
         return;
     }
 
     // 自由输入模式
-    if app.tool_interact_typing {
-        match key.code {
+    if app.ui.tool_interact_typing {
+        let action = match key.code {
             KeyCode::Esc => {
-                // 退出输入模式，回到选项
-                app.tool_interact_typing = false;
+                app.ui.tool_interact_typing = false;
+                return;
             }
-            KeyCode::Enter => {
-                // 提交自由输入作为当前题答案
-                let input_text = app.tool_interact_input.trim().to_string();
-                let answer = if input_text.is_empty() {
-                    AskAnswer::FreeText("（空）".to_string())
-                } else {
-                    AskAnswer::FreeText(input_text)
-                };
-                ask_submit_answer(app, answer);
-                app.tool_interact_input.clear();
-                app.tool_interact_cursor = 0;
-                app.tool_interact_typing = false;
-            }
-            KeyCode::Backspace => {
-                if app.tool_interact_cursor > 0 {
-                    let start = app
-                        .tool_interact_input
-                        .char_indices()
-                        .nth(app.tool_interact_cursor - 1)
-                        .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    let end = app
-                        .tool_interact_input
-                        .char_indices()
-                        .nth(app.tool_interact_cursor)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.tool_interact_input.len());
-                    app.tool_interact_input.drain(start..end);
-                    app.tool_interact_cursor -= 1;
-                }
-            }
+            KeyCode::Enter => Action::AskSubmitAnswer,
+            KeyCode::Backspace => Action::AskDeleteChar,
             KeyCode::Left => {
-                if app.tool_interact_cursor > 0 {
-                    app.tool_interact_cursor -= 1;
+                if app.ui.tool_interact_cursor > 0 {
+                    app.ui.tool_interact_cursor -= 1;
                 }
+                return;
             }
             KeyCode::Right => {
-                let char_count = app.tool_interact_input.chars().count();
-                if app.tool_interact_cursor < char_count {
-                    app.tool_interact_cursor += 1;
+                let char_count = app.ui.tool_interact_input.chars().count();
+                if app.ui.tool_interact_cursor < char_count {
+                    app.ui.tool_interact_cursor += 1;
                 }
+                return;
             }
-            KeyCode::Char(c) => {
-                let byte_idx = app
-                    .tool_interact_input
-                    .char_indices()
-                    .nth(app.tool_interact_cursor)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.tool_interact_input.len());
-                app.tool_interact_input.insert(byte_idx, c);
-                app.tool_interact_cursor += 1;
-            }
-            _ => {}
-        }
+            KeyCode::Char(c) => Action::AskInputChar(c),
+            _ => return,
+        };
+        app.update(action);
         return;
     }
 
-    let cur_q = &app.tool_ask_questions[app.tool_ask_current_idx];
-    let option_count = cur_q.options.len() + 1; // +1 for free input
+    let cur_q = &app.ui.tool_ask_questions[app.ui.tool_ask_current_idx];
     let is_multi = cur_q.multi_select;
 
-    match key.code {
-        KeyCode::Up => {
-            if app.tool_ask_cursor > 0 {
-                app.tool_ask_cursor -= 1;
-            }
-        }
-        KeyCode::Down => {
-            if app.tool_ask_cursor < option_count - 1 {
-                app.tool_ask_cursor += 1;
-            }
-        }
-        KeyCode::Char(' ') if is_multi => {
-            // 多选 toggle（不对"自由输入"选项 toggle）
-            if app.tool_ask_cursor < cur_q.options.len() {
-                let idx = app.tool_ask_cursor;
-                if idx < app.tool_ask_selections.len() {
-                    app.tool_ask_selections[idx] = !app.tool_ask_selections[idx];
-                }
-            }
-        }
+    let action = match key.code {
+        KeyCode::Up => Action::AskOptionNavigate(CursorDirection::Up),
+        KeyCode::Down => Action::AskOptionNavigate(CursorDirection::Down),
+        KeyCode::Char(' ') if is_multi => Action::AskToggleMultiSelect,
         KeyCode::Enter => {
-            let cursor = app.tool_ask_cursor;
+            let cursor = app.ui.tool_ask_cursor;
             if cursor == cur_q.options.len() {
                 // "自由输入"选项：进入输入模式
-                app.tool_interact_typing = true;
-                app.tool_interact_input.clear();
-                app.tool_interact_cursor = 0;
+                app.ui.tool_interact_typing = true;
+                app.ui.tool_interact_input.clear();
+                app.ui.tool_interact_cursor = 0;
+                return;
             } else if is_multi {
                 // 多选：收集所有选中的选项
                 let selected: Vec<usize> = app
+                    .ui
                     .tool_ask_selections
                     .iter()
                     .enumerate()
@@ -213,110 +133,23 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
                     .map(|(i, _)| i)
                     .collect();
                 if selected.is_empty() {
-                    // 没有勾选任何项，就以当前光标所在项为选择
-                    ask_submit_answer(app, AskAnswer::Selected(vec![cursor]));
+                    app.ask_submit_answer(AskAnswer::Selected(vec![cursor]));
                 } else {
-                    ask_submit_answer(app, AskAnswer::Selected(selected));
+                    app.ask_submit_answer(AskAnswer::Selected(selected));
                 }
+                return;
             } else {
                 // 单选：直接选中当前项
-                ask_submit_answer(app, AskAnswer::Selected(vec![cursor]));
+                app.ask_submit_answer(AskAnswer::Selected(vec![cursor]));
+                return;
             }
         }
-        // 回退到上一题
-        KeyCode::Left | KeyCode::BackTab => {
-            if app.tool_ask_current_idx > 0 {
-                app.tool_ask_current_idx -= 1;
-                // 恢复上一题的状态
-                if app.tool_ask_answers.len() > app.tool_ask_current_idx {
-                    app.tool_ask_answers.truncate(app.tool_ask_current_idx);
-                }
-                app.init_ask_question_state();
-            }
-        }
-        // 前进（仅当已回答过时才能快速前进）
-        KeyCode::Right | KeyCode::Tab => {
-            if app.tool_ask_current_idx < total_questions - 1
-                && app.tool_ask_current_idx < app.tool_ask_answers.len()
-            {
-                app.tool_ask_current_idx += 1;
-                app.init_ask_question_state();
-            }
-        }
-        KeyCode::Esc => {
-            // 取消整个问答
-            if let Some(tx) = app.ask_response_tx.take() {
-                let _ = tx.send("用户取消了问答".to_string());
-            }
-            app.tool_ask_mode = false;
-            app.tool_ask_questions.clear();
-            app.tool_ask_current_idx = 0;
-            app.tool_ask_answers.clear();
-            app.tool_ask_selections.clear();
-            app.tool_ask_cursor = 0;
-            app.mode = ChatMode::Chat;
-        }
-        // PageUp/PageDown 滚动消息区（查看长问题内容）
-        KeyCode::PageUp => {
-            for _ in 0..10 {
-                app.scroll_up();
-            }
-        }
-        KeyCode::PageDown => {
-            for _ in 0..10 {
-                app.scroll_down();
-            }
-        }
-        _ => {}
-    }
-}
-
-/// 提交当前问题的答案，前进到下一题或完成全部
-fn ask_submit_answer(app: &mut ChatApp, answer: AskAnswer) {
-    let total = app.tool_ask_questions.len();
-
-    // 存储答案
-    if app.tool_ask_current_idx < app.tool_ask_answers.len() {
-        app.tool_ask_answers[app.tool_ask_current_idx] = answer;
-    } else {
-        app.tool_ask_answers.push(answer);
-    }
-
-    if app.tool_ask_current_idx + 1 < total {
-        // 下一题
-        app.tool_ask_current_idx += 1;
-        app.init_ask_question_state();
-    } else {
-        // 全部完成，构建 JSON 响应
-        let mut answers_map = serde_json::Map::new();
-        for (i, q) in app.tool_ask_questions.iter().enumerate() {
-            if let Some(ans) = app.tool_ask_answers.get(i) {
-                let val = match ans {
-                    AskAnswer::Selected(indices) => {
-                        let labels: Vec<&str> = indices
-                            .iter()
-                            .filter_map(|&idx| q.options.get(idx).map(|o| o.label.as_str()))
-                            .collect();
-                        labels.join(", ")
-                    }
-                    AskAnswer::FreeText(text) => text.clone(),
-                };
-                answers_map.insert(q.question.clone(), serde_json::Value::String(val));
-            }
-        }
-
-        let response = serde_json::json!({ "answers": answers_map }).to_string();
-        if let Some(tx) = app.ask_response_tx.take() {
-            let _ = tx.send(response);
-        }
-
-        // 清理状态
-        app.tool_ask_mode = false;
-        app.tool_ask_questions.clear();
-        app.tool_ask_current_idx = 0;
-        app.tool_ask_answers.clear();
-        app.tool_ask_selections.clear();
-        app.tool_ask_cursor = 0;
-        app.mode = ChatMode::Chat;
-    }
+        KeyCode::Left | KeyCode::BackTab => Action::AskNavigate(CursorDirection::Up),
+        KeyCode::Right | KeyCode::Tab => Action::AskNavigate(CursorDirection::Down),
+        KeyCode::Esc => Action::AskCancel,
+        KeyCode::PageUp => Action::PageScroll(CursorDirection::Up),
+        KeyCode::PageDown => Action::PageScroll(CursorDirection::Down),
+        _ => return,
+    };
+    app.update(action);
 }

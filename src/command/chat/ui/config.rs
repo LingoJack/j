@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let bg = t.bg_title;
     let total_provider_fields = CONFIG_FIELDS.len();
 
@@ -24,12 +24,12 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     )]));
     lines.push(Line::from(""));
 
-    let provider_count = app.agent_config.providers.len();
+    let provider_count = app.state.agent_config.providers.len();
     if provider_count > 0 {
         let mut tab_spans: Vec<Span> = vec![Span::styled("  ", Style::default())];
-        for (i, p) in app.agent_config.providers.iter().enumerate() {
-            let is_current = i == app.config_provider_idx;
-            let is_active = i == app.agent_config.active_index;
+        for (i, p) in app.state.agent_config.providers.iter().enumerate() {
+            let is_current = i == app.ui.config_provider_idx;
+            let is_active = i == app.state.agent_config.active_index;
             let marker = if is_active { "● " } else { "○ " };
             let label = format!(" {}{} ", marker, p.name);
             if is_current {
@@ -79,10 +79,10 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         lines.push(Line::from(""));
 
         for (i, field) in CONFIG_FIELDS.iter().enumerate().take(total_provider_fields) {
-            let is_selected = app.config_field_idx == i;
+            let is_selected = app.ui.config_field_idx == i;
             let label = config_field_label(i);
-            let value = if app.config_editing && is_selected {
-                app.config_edit_buf.clone()
+            let value = if app.ui.config_editing && is_selected {
+                app.ui.config_edit_buf.clone()
             } else {
                 config_field_value(app, i)
             };
@@ -100,7 +100,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             } else {
                 Style::default().fg(t.config_label)
             };
-            let value_style = if app.config_editing && is_selected {
+            let value_style = if app.ui.config_editing && is_selected {
                 Style::default().fg(t.text_white).bg(t.config_edit_bg)
             } else if is_selected {
                 Style::default().fg(t.text_white)
@@ -110,7 +110,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Style::default().fg(t.config_value)
             };
 
-            lines.push(Line::from(if app.config_editing && is_selected {
+            lines.push(Line::from(if app.ui.config_editing && is_selected {
                 // 编辑模式：显示带光标的文本
                 let mut spans = vec![
                     Span::styled(pointer, pointer_style),
@@ -118,7 +118,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Span::styled("  ", Style::default()),
                 ];
                 let chars: Vec<char> = value.chars().collect();
-                let cursor = app.config_edit_cursor;
+                let cursor = app.ui.config_edit_cursor;
                 let before: String = chars[..cursor.min(chars.len())].iter().collect();
                 let cursor_ch = if cursor < chars.len() {
                     chars[cursor].to_string()
@@ -168,10 +168,10 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     for (i, field) in CONFIG_GLOBAL_FIELDS.iter().enumerate() {
         let field_idx = total_provider_fields + i;
-        let is_selected = app.config_field_idx == field_idx;
+        let is_selected = app.ui.config_field_idx == field_idx;
         let label = config_field_label(field_idx);
-        let value = if app.config_editing && is_selected {
-            app.config_edit_buf.clone()
+        let value = if app.ui.config_editing && is_selected {
+            app.ui.config_edit_buf.clone()
         } else {
             config_field_value(app, field_idx)
         };
@@ -189,7 +189,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         } else {
             Style::default().fg(t.config_label)
         };
-        let value_style = if app.config_editing && is_selected {
+        let value_style = if app.ui.config_editing && is_selected {
             Style::default().fg(t.text_white).bg(t.config_edit_bg)
         } else if is_selected {
             Style::default().fg(t.text_white)
@@ -198,7 +198,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         };
 
         if *field == "stream_mode" {
-            let toggle_on = app.agent_config.stream_mode;
+            let toggle_on = app.state.agent_config.stream_mode;
             let toggle_style = if toggle_on {
                 Style::default()
                     .fg(t.config_toggle_on)
@@ -222,7 +222,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 ),
             ]));
         } else if *field == "theme" {
-            let theme_name = app.agent_config.theme.display_name();
+            let theme_name = app.state.agent_config.theme.display_name();
             lines.push(Line::from(vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
@@ -239,11 +239,12 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 ),
             ]));
         } else if *field == "tools_enabled" {
-            let toggle_on = app.agent_config.tools_enabled;
+            let toggle_on = app.state.agent_config.tools_enabled;
             let tool_names = app.tool_registry.tool_names();
             let total = tool_names.len();
             let enabled_count = total
                 - app
+                    .state
                     .agent_config
                     .disabled_tools
                     .iter()
@@ -325,7 +326,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 ),
             ]));
         } else {
-            lines.push(Line::from(if app.config_editing && is_selected {
+            lines.push(Line::from(if app.ui.config_editing && is_selected {
                 // 编辑模式：显示带光标的文本
                 let mut spans = vec![
                     Span::styled(pointer, pointer_style),
@@ -333,7 +334,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Span::styled("  ", Style::default()),
                 ];
                 let chars: Vec<char> = value.chars().collect();
-                let cursor = app.config_edit_cursor;
+                let cursor = app.ui.config_edit_cursor;
                 let before: String = chars[..cursor.min(chars.len())].iter().collect();
                 let cursor_ch = if cursor < chars.len() {
                     chars[cursor].to_string()
@@ -451,12 +452,13 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 }
 
 pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let bg = t.bg_title;
     let tool_names = app.tool_registry.tool_names();
     let total = tool_names.len();
     let enabled_count = total
         - app
+            .state
             .agent_config
             .disabled_tools
             .iter()
@@ -475,14 +477,14 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     lines.push(Line::from(""));
 
     // 总开关状态
-    let master_style = if app.agent_config.tools_enabled {
+    let master_style = if app.state.agent_config.tools_enabled {
         Style::default()
             .fg(t.config_toggle_on)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(t.config_toggle_off)
     };
-    let master_text = if app.agent_config.tools_enabled {
+    let master_text = if app.state.agent_config.tools_enabled {
         format!("  总开关: ● 开启 ({}/{})", enabled_count, total)
     } else {
         "  总开关: ○ 关闭".to_string()
@@ -500,8 +502,13 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     lines.push(Line::from(""));
 
     for (i, name) in tool_names.iter().enumerate() {
-        let is_selected = i == app.tool_toggle_index;
-        let is_disabled = app.agent_config.disabled_tools.iter().any(|d| d == *name);
+        let is_selected = i == app.ui.tool_toggle_index;
+        let is_disabled = app
+            .state
+            .agent_config
+            .disabled_tools
+            .iter()
+            .any(|d| d == *name);
         let is_enabled = !is_disabled;
 
         let pointer = if is_selected { "  ▸ " } else { "    " };
@@ -607,15 +614,21 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 }
 
 pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let bg = t.bg_title;
-    let total = app.loaded_skills.len();
+    let total = app.state.loaded_skills.len();
     let enabled_count = total
         - app
+            .state
             .agent_config
             .disabled_skills
             .iter()
-            .filter(|d| app.loaded_skills.iter().any(|s| &s.frontmatter.name == *d))
+            .filter(|d| {
+                app.state
+                    .loaded_skills
+                    .iter()
+                    .any(|s| &s.frontmatter.name == *d)
+            })
             .count();
 
     let mut lines: Vec<Line> = Vec::new();
@@ -643,10 +656,15 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
     )));
     lines.push(Line::from(""));
 
-    for (i, skill) in app.loaded_skills.iter().enumerate() {
-        let is_selected = i == app.skill_toggle_index;
+    for (i, skill) in app.state.loaded_skills.iter().enumerate() {
+        let is_selected = i == app.ui.skill_toggle_index;
         let name = &skill.frontmatter.name;
-        let is_disabled = app.agent_config.disabled_skills.iter().any(|d| d == name);
+        let is_disabled = app
+            .state
+            .agent_config
+            .disabled_skills
+            .iter()
+            .any(|d| d == name);
         let is_enabled = !is_disabled;
 
         let pointer = if is_selected { "  ▸ " } else { "    " };

@@ -56,8 +56,8 @@ pub fn build_message_lines_incremental(
     usize,
 ) {
     // 获取流式内容（只 lock 一次，尽快释放锁）
-    let streaming_content_str = if app.is_loading {
-        let streaming = app.streaming_content.lock().unwrap().clone();
+    let streaming_content_str = if app.state.is_loading {
+        let streaming = app.state.streaming_content.lock().unwrap().clone();
         if !streaming.is_empty() {
             Some(streaming)
         } else {
@@ -67,8 +67,8 @@ pub fn build_message_lines_incremental(
         None
     };
 
-    let t = &app.theme;
-    let is_browse_mode = app.mode == ChatMode::Browse;
+    let t = &app.ui.theme;
+    let is_browse_mode = app.ui.mode == ChatMode::Browse;
     let mut lines: Vec<Line> = Vec::new();
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::new();
     let mut per_msg_cache: Vec<PerMsgCache> = Vec::new();
@@ -80,10 +80,10 @@ pub fn build_message_lines_incremental(
 
     // ===== P0 优化：直接引用 session.messages，避免克隆全部内容 =====
     // 缓存命中时零拷贝复用，只在缓存未命中时才访问消息内容
-    let msg_count = app.session.messages.len();
+    let msg_count = app.state.session.messages.len();
     for idx in 0..msg_count {
-        let m = &app.session.messages[idx];
-        let is_selected = is_browse_mode && idx == app.browse_msg_index;
+        let m = &app.state.session.messages[idx];
+        let is_selected = is_browse_mode && idx == app.ui.browse_msg_index;
 
         // 记录消息起始行号
         msg_start_lines.push((idx, lines.len()));
@@ -173,7 +173,7 @@ pub fn build_message_lines_incremental(
     }
 
     // ===== 流式消息单独渲染（不进入 per_msg_cache）=====
-    let has_streaming_msg = app.is_loading;
+    let has_streaming_msg = app.state.is_loading;
     if has_streaming_msg {
         let streaming_text = streaming_content_str.as_deref().unwrap_or("◍");
         // P1 增量段落渲染
@@ -277,7 +277,7 @@ pub fn build_message_lines_incremental(
     }
 
     // ========== 内联工具确认区（统一交互区域）==========
-    if app.mode == ChatMode::ToolConfirm {
+    if app.ui.mode == ChatMode::ToolConfirm {
         render_tool_confirm_area(app, bubble_max_width, &mut lines);
     }
 
@@ -577,11 +577,11 @@ fn render_tool_confirm_area(
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
 ) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let confirm_bg = t.tool_confirm_bg;
     let border_color = t.tool_confirm_border;
     let content_w = bubble_max_width.saturating_sub(6); // 左右各 3 的 padding
-    let is_ask = app.tool_ask_mode;
+    let is_ask = app.ui.tool_ask_mode;
 
     // 空行
     lines.push(Line::from(""));
@@ -608,7 +608,11 @@ fn render_tool_confirm_area(
 
     if is_ask {
         render_ask_questions(app, bubble_max_width, content_w, lines);
-    } else if let Some(tc) = app.active_tool_calls.get(app.pending_tool_idx) {
+    } else if let Some(tc) = app
+        .tool_executor
+        .active_tool_calls
+        .get(app.tool_executor.pending_tool_idx)
+    {
         render_tool_confirm_content(app, tc, bubble_max_width, content_w, lines);
     }
 
@@ -627,13 +631,13 @@ fn render_ask_questions(
     content_w: usize,
     lines: &mut Vec<Line<'static>>,
 ) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let confirm_bg = t.tool_confirm_bg;
     let border_color = t.tool_confirm_border;
 
-    if let Some(cur_q) = app.tool_ask_questions.get(app.tool_ask_current_idx) {
-        let total_q = app.tool_ask_questions.len();
-        let cur_idx = app.tool_ask_current_idx;
+    if let Some(cur_q) = app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx) {
+        let total_q = app.ui.tool_ask_questions.len();
+        let cur_idx = app.ui.tool_ask_current_idx;
 
         // header 标签 + 进度
         let header_text = if total_q > 1 {
@@ -718,8 +722,9 @@ fn render_ask_questions(
         let is_multi = cur_q.multi_select;
 
         for (i, opt) in cur_q.options.iter().enumerate() {
-            let is_cursor = i == app.tool_ask_cursor;
-            let is_selected_multi = i < app.tool_ask_selections.len() && app.tool_ask_selections[i];
+            let is_cursor = i == app.ui.tool_ask_cursor;
+            let is_selected_multi =
+                i < app.ui.tool_ask_selections.len() && app.ui.tool_ask_selections[i];
 
             // 指示器和复选框用多个 span 实现颜色区分
             let pointer_str = if is_cursor { " ❯ " } else { "   " };
@@ -790,9 +795,9 @@ fn render_ask_questions(
         // "自由输入" 选项
         {
             let free_idx = cur_q.options.len();
-            let is_cursor = free_idx == app.tool_ask_cursor;
+            let is_cursor = free_idx == app.ui.tool_ask_cursor;
 
-            if app.tool_interact_typing {
+            if app.ui.tool_interact_typing {
                 let pointer_style = Style::default()
                     .fg(Color::Cyan)
                     .bg(confirm_bg)
@@ -801,7 +806,7 @@ fn render_ask_questions(
                     vec![
                         Span::styled(" ❯ ✏ ", pointer_style),
                         Span::styled(
-                            format!("{}|", app.tool_interact_input),
+                            format!("{}|", app.ui.tool_interact_input),
                             Style::default().fg(t.text_white).bg(confirm_bg),
                         ),
                     ],
@@ -873,7 +878,7 @@ fn render_tool_confirm_content(
     content_w: usize,
     lines: &mut Vec<Line<'static>>,
 ) {
-    let t = &app.theme;
+    let t = &app.ui.theme;
     let confirm_bg = t.tool_confirm_bg;
     let border_color = t.tool_confirm_border;
 
@@ -950,11 +955,16 @@ fn render_tool_confirm_content(
         let arrow_style = Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD);
-        let selected = app.tool_interact_selected;
+        let selected = app.ui.tool_interact_selected;
 
-        let countdown_suffix = if app.agent_config.tool_confirm_timeout > 0 {
-            let elapsed = app.tool_confirm_entered_at.elapsed().as_secs();
+        let countdown_suffix = if app.state.agent_config.tool_confirm_timeout > 0 {
+            let elapsed = app
+                .tool_executor
+                .tool_confirm_entered_at
+                .elapsed()
+                .as_secs();
             let remaining = app
+                .state
                 .agent_config
                 .tool_confirm_timeout
                 .saturating_sub(elapsed);
@@ -973,8 +983,8 @@ fn render_tool_confirm_content(
             let is_selected = i == selected;
             let pointer = if is_selected { "❯" } else { " " };
 
-            if i == 3 && app.tool_interact_typing {
-                let input_display = format!("{} type: {}█", pointer, app.tool_interact_input);
+            if i == 3 && app.ui.tool_interact_typing {
+                let input_display = format!("{} type: {}█", pointer, app.ui.tool_interact_input);
                 let input_w = display_width(&input_display);
                 let fill = content_w.saturating_sub(input_w + 2);
                 lines.push(Line::from(vec![
@@ -982,7 +992,7 @@ fn render_tool_confirm_content(
                     Span::styled(" ", Style::default().bg(confirm_bg)),
                     Span::styled(pointer, arrow_style.bg(confirm_bg)),
                     Span::styled(
-                        format!(" type: {}█", app.tool_interact_input),
+                        format!(" type: {}█", app.ui.tool_interact_input),
                         Style::default().fg(t.text_white).bg(confirm_bg),
                     ),
                     Span::styled(
