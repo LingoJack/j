@@ -595,7 +595,7 @@ impl ChatApp {
 
         // 启动后台线程执行 Agent 循环
         std::thread::spawn(move || {
-            let rt = match tokio::runtime::Runtime::new() {
+            let runtime = match tokio::runtime::Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
                     let _ = stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
@@ -603,7 +603,7 @@ impl ChatApp {
                 }
             };
 
-            rt.block_on(run_agent_loop(
+            runtime.block_on(run_agent_loop(
                 provider,
                 api_messages,
                 tools,

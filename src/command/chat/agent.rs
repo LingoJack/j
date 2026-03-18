@@ -246,8 +246,8 @@ pub async fn run_agent_loop(
                                         let _ = tx.send(StreamMsg::Chunk);
                                     }
                                     // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
-                                    if let Some(ref tc_chunks) = choice.delta.tool_calls {
-                                        for chunk in tc_chunks {
+                                    if let Some(ref toolcall_chunks) = choice.delta.tool_calls {
+                                        for chunk in toolcall_chunks {
                                             let entry =
                                                 raw_tool_calls.entry(chunk.index).or_insert_with(|| {
                                                     (
@@ -260,11 +260,11 @@ pub async fn run_agent_loop(
                                                 && let Some(ref id) = chunk.id {
                                                     entry.0 = id.clone();
                                                 }
-                                            if let Some(ref func) = chunk.function {
-                                                if let Some(ref name) = func.name {
+                                            if let Some(ref tool_function) = chunk.function {
+                                                if let Some(ref name) = tool_function.name {
                                                     entry.1.push_str(name);
                                                 }
-                                                if let Some(ref args) = func.arguments {
+                                                if let Some(ref args) = tool_function.arguments {
                                                     entry.2.push_str(args);
                                                 }
                                             }
