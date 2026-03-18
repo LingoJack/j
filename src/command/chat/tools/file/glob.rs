@@ -38,11 +38,11 @@ impl Tool for GlobTool {
                     "type": "integer"
                 },
                 "path": {
-                    "description": "搜索的目录路径。如果不指定，则使用当前工作目录。重要：如果不需要指定路径，请省略此字段，不要输入 \"undefined\"、\"null\" 或空字符串",
+                    "description": "搜索的目录路径。如果不指定，则使用当前工作目录。重要：如果不需要指定路径，请省略此字段，不要输入 undefined、null 或空字符串",
                     "type": "string"
                 },
                 "pattern": {
-                    "description": "要匹配的文件 glob 模式（如 \"**/*.js\"、\"*.{ts,tsx}\"、\"src/**/*.py\"）",
+                    "description": "要匹配的文件 glob 模式（如 **/*.js、*.{ts,tsx}、src/**/*.py）",
                     "type": "string"
                 }
             },
