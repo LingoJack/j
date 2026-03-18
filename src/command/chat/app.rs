@@ -4,9 +4,8 @@ use super::permission::JcliConfig;
 use super::skill::{self, Skill};
 use super::storage::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
-    load_chat_session, load_memory, load_soul, load_style, load_system_prompt, memory_path,
-    save_agent_config, save_chat_session, save_memory, save_soul, save_system_prompt, soul_path,
-    system_prompt_path,
+    load_chat_session, memory_path, save_agent_config, save_chat_session, save_memory, save_soul,
+    save_system_prompt, soul_path, system_prompt_path,
 };
 use super::theme::Theme;
 use super::tools::ToolRegistry;
@@ -562,7 +561,7 @@ impl AgentHandle {
         provider: ModelProvider,
         api_messages: Vec<ChatMessage>,
         tools: Vec<ChatCompletionTools>,
-        system_prompt: Option<String>,
+        system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send>,
         use_stream: bool,
         streaming_content: Arc<Mutex<String>>,
         max_tool_rounds: usize,
@@ -576,6 +575,9 @@ impl AgentHandle {
         let cancel_token_clone = cancel_token.clone();
 
         std::thread::spawn(move || {
+            // 在后台线程里执行文件 IO（resolve_system_prompt），避免阻塞主线程
+            let system_prompt = system_prompt_fn();
+
             let runtime = match tokio::runtime::Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
@@ -1963,34 +1965,6 @@ impl ChatApp {
         }
     }
 
-    /// 解析系统提示词模板
-    pub fn resolve_system_prompt(&self) -> Option<String> {
-        let template = load_system_prompt()?;
-        let skills_summary = skill::build_skills_summary(
-            &self.state.loaded_skills,
-            &self.state.agent_config.disabled_skills,
-        );
-        let tools_summary = self
-            .tool_registry
-            .build_tools_summary(&self.state.agent_config.disabled_tools);
-        let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
-        let memory_text = load_memory().unwrap_or_default();
-        let soul_text = load_soul().unwrap_or_default();
-
-        let current_dir = std::env::current_dir()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| ".".to_string());
-
-        let resolved = template
-            .replace("{{.current_dir}}", &current_dir)
-            .replace("{{.skills}}", &skills_summary)
-            .replace("{{.tools}}", &tools_summary)
-            .replace("{{.style}}", &style_text)
-            .replace("{{.memory}}", &memory_text)
-            .replace("{{.soul}}", &soul_text);
-        Some(resolved)
-    }
-
     /// 切换到下一个主题
     pub fn switch_theme(&mut self) {
         self.state.agent_config.theme = self.state.agent_config.theme.next();
@@ -2100,7 +2074,6 @@ impl ChatApp {
 
         let streaming_content = Arc::clone(&self.state.streaming_content);
         let use_stream = self.state.agent_config.stream_mode;
-        let system_prompt = self.resolve_system_prompt();
         let tools_enabled = self.state.agent_config.tools_enabled;
         let max_tool_rounds = self.state.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
@@ -2113,12 +2086,39 @@ impl ChatApp {
         let pending_user_messages = Arc::clone(&self.state.pending_user_messages);
         let background_manager = Arc::clone(&self.background_manager);
 
+        // 把 resolve_system_prompt 所需数据 clone 出来，在后台线程里执行文件 IO，避免阻塞主线程
+        let loaded_skills = self.state.loaded_skills.clone();
+        let disabled_skills = self.state.agent_config.disabled_skills.clone();
+        let disabled_tools = self.state.agent_config.disabled_tools.clone();
+        let tool_registry = Arc::clone(&self.tool_registry);
+        let system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send> = Box::new(move || {
+            use super::storage::{load_memory, load_soul, load_style, load_system_prompt};
+            let template = load_system_prompt()?;
+            let skills_summary =
+                super::skill::build_skills_summary(&loaded_skills, &disabled_skills);
+            let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
+            let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
+            let memory_text = load_memory().unwrap_or_default();
+            let soul_text = load_soul().unwrap_or_default();
+            let current_dir = std::env::current_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| ".".to_string());
+            let resolved = template
+                .replace("{{.current_dir}}", &current_dir)
+                .replace("{{.skills}}", &skills_summary)
+                .replace("{{.tools}}", &tools_summary)
+                .replace("{{.style}}", &style_text)
+                .replace("{{.memory}}", &memory_text)
+                .replace("{{.soul}}", &soul_text);
+            Some(resolved)
+        });
+
         // 启动 agent handle
         let (handle, tool_result_tx) = AgentHandle::spawn(
             provider,
             api_messages,
             tools,
-            system_prompt,
+            system_prompt_fn,
             use_stream,
             streaming_content,
             max_tool_rounds,

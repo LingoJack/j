@@ -151,11 +151,11 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         // Phase 4: Collect Input — 等待事件 → Actions → dispatch
         // ================================================================
         let poll_timeout = if app.state.is_loading {
-            std::time::Duration::from_millis(150)
+            std::time::Duration::from_millis(300)
         } else if app.ui.mode == ChatMode::ToolConfirm {
-            std::time::Duration::from_millis(500)
-        } else {
             std::time::Duration::from_millis(1000)
+        } else {
+            std::time::Duration::from_millis(2000)
         };
 
         if event::poll(poll_timeout)? {
