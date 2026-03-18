@@ -1,4 +1,5 @@
 use super::model::{ChatMessage, ModelProvider};
+use crate::command::chat::constant;
 use crate::util::log::write_info_log;
 use async_openai::{
     Client,
@@ -11,6 +12,7 @@ use async_openai::{
         CreateChatCompletionRequestArgs, FunctionCall,
     },
 };
+use constant::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use futures::StreamExt;
 
 /// 根据 ModelProvider 配置创建 async-openai Client
@@ -26,17 +28,17 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
     messages
         .iter()
         .filter_map(|msg| match msg.role.as_str() {
-            "system" => ChatCompletionRequestSystemMessageArgs::default()
+            ROLE_SYSTEM => ChatCompletionRequestSystemMessageArgs::default()
                 .content(msg.content.as_str())
                 .build()
                 .ok()
                 .map(ChatCompletionRequestMessage::System),
-            "user" => ChatCompletionRequestUserMessageArgs::default()
+            ROLE_USER => ChatCompletionRequestUserMessageArgs::default()
                 .content(msg.content.as_str())
                 .build()
                 .ok()
                 .map(ChatCompletionRequestMessage::User),
-            "assistant" => {
+            ROLE_ASSISTANT => {
                 let mut builder = ChatCompletionRequestAssistantMessageArgs::default();
                 if !msg.content.is_empty() {
                     builder.content(msg.content.as_str());
@@ -63,7 +65,7 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                     .ok()
                     .map(ChatCompletionRequestMessage::Assistant)
             }
-            "tool" => {
+            ROLE_TOOL => {
                 let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
                 ChatCompletionRequestToolMessageArgs::default()
                     .content(msg.content.as_str())
