@@ -106,13 +106,13 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let title_spans = vec![
         Span::styled(" 🦞 ", Style::default().fg(t.title_icon)),
         Span::styled(
-            "Sprite",
+            " Sprite",
             Style::default()
                 .fg(t.text_white)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled("  │  ", Style::default().fg(t.title_separator)),
-        Span::styled("❀ ", Style::default()),
+        Span::styled("💫  ", Style::default()),
         Span::styled(
             model_name,
             Style::default()
@@ -121,7 +121,7 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ),
         Span::styled("  │  ", Style::default().fg(t.title_separator)),
         Span::styled(
-            format!("➢ {} 条消息", msg_count),
+            format!("📬  {} 条消息", msg_count),
             Style::default().fg(t.title_count),
         ),
         Span::styled(
