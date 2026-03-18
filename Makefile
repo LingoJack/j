@@ -62,12 +62,12 @@ push: current_dir fmt ## 提交并推送代码
 	@git add .\
 	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
 	&& git push origin $(GIT_BRANCH)
-	@echo "✅ 代码已推送"
+	@echo "☑️ 代码已推送"
 
 pull: current_dir ## 拉取最新代码
 	@echo "📥 拉取最新代码..."
 	@git pull origin $(GIT_BRANCH)
-	@echo "✅ 代码已更新"
+	@echo "☑️ 代码已更新"
 
 status: current_dir ## 查看 Git 状态
 	@git status
@@ -78,17 +78,17 @@ status: current_dir ## 查看 Git 状态
 build: ## 构建项目（调试模式）
 	@echo "🔨 构建项目..."
 	@cargo build
-	@echo "✅ 构建完成"
+	@echo "☑️ 构建完成"
 
 release: current_dir ## 构建发布版本
 	@echo "🚀 构建发布版本..."
 	@cargo build --release
-	@echo "✅ 发布版本构建完成: $(TARGET_DIR)/j"
+	@echo "☑️ 发布版本构建完成: $(TARGET_DIR)/j"
 
 debug: ## 构建调试版本
 	@echo "🐛 构建调试版本..."
 	@cargo build --debug
-	@echo "✅ 调试版本构建完成"
+	@echo "☑️ 调试版本构建完成"
 
 # ============================================
 # 安装相关
@@ -97,13 +97,13 @@ install: release ## 安装到系统
 	@echo "📦 安装到系统..."
 	@cp $(TARGET_DIR)/j $(BIN_PATH)
 	@chmod +x $(BIN_PATH)
-	@echo "✅ j 已安装到 $(BIN_PATH)"
+	@echo "☑️ j 已安装到 $(BIN_PATH)"
 	@echo "   版本: $(VERSION)"
 
 uninstall: ## 卸载
 	@echo "🗑️  卸载..."
 	@rm -f $(BIN_PATH)
-	@echo "✅ j 已卸载"
+	@echo "☑️ j 已卸载"
 
 reinstall: uninstall install ## 重新安装
 	@echo "🔄 重新安装完成"
@@ -126,7 +126,7 @@ bump-version: ## 递增版本号（最后一位 patch）
 	else \
 		sed -i "s/^version = \"$$current\"/version = \"$$new_version\"/" Cargo.toml; \
 	fi; \
-	echo "✅ 版本号已更新为 $$new_version"
+	echo "☑️ 版本号已更新为 $$new_version"
 
 publish: ## 发布到 crates.io（自动递增版本号）
 	@echo "📦 开始发布流程..."
@@ -140,12 +140,12 @@ publish: ## 发布到 crates.io（自动递增版本号）
 	git push origin "v$$version"; \
 	echo "📤 发布到 crates.io..."; \
 	cargo publish --registry crates-io; \
-	echo "✅ 已发布 v$$version! 验证: cargo search j-cli"
+	echo "☑️ 已发布 v$$version! 验证: cargo search j-cli"
 
 publish-check: ## 发布前检查（dry-run）
 	@echo "🔍 发布前检查（dry-run）..."
 	@cargo publish --registry crates-io --dry-run
-	@echo "✅ 检查通过"
+	@echo "☑️ 检查通过"
 
 tag: ## 创建 git tag（基于当前版本号）
 	@version=$(VERSION); \
@@ -159,7 +159,7 @@ tag: ## 创建 git tag（基于当前版本号）
 	echo "📌 创建标签 $$tag (来自 Cargo.toml)..."; \
 	git tag -a "$$tag" -m "Release $$tag"; \
 	git push origin "$$tag"; \
-	echo "✅ 标签 $$tag 已创建并推送。GitHub Actions 将自动构建和发布。"
+	echo "☑️ 标签 $$tag 已创建并推送。GitHub Actions 将自动构建和发布。"
 
 set-version: ## 设置指定版本号（用法：make set-version V=1.2.3）
 ifndef V
@@ -175,7 +175,7 @@ endif
 	else \
 		sed -i "s/^version = \"$$current\"/version = \"$(V)\"/" Cargo.toml; \
 	fi; \
-	echo "✅ 版本号已更新为 $(V)"
+	echo "☑️ 版本号已更新为 $(V)"
 
 tags: ## 查看最近的标签
 	@echo "🏷️  最近的标签:"
@@ -187,17 +187,17 @@ tags: ## 查看最近的标签
 test: ## 运行测试
 	@echo "🧪 运行测试..."
 	@cargo test
-	@echo "✅ 测试完成"
+	@echo "☑️ 测试完成"
 
 test-all: ## 运行所有测试（包括集成测试）
 	@echo "🧪 运行所有测试..."
 	@cargo test --all-features
-	@echo "✅ 所有测试完成"
+	@echo "☑️ 所有测试完成"
 
 bench: ## 运行性能测试
 	@echo "⚡ 运行性能测试..."
 	@cargo bench
-	@echo "✅ 性能测试完成"
+	@echo "☑️ 性能测试完成"
 
 # ============================================
 # 代码质量
@@ -205,22 +205,22 @@ bench: ## 运行性能测试
 fmt: ## 格式化代码
 	@echo "🧹 格式化代码..."
 	@cargo fmt
-	@echo "✅ 代码格式化完成"
+	@echo "☑️ 代码格式化完成"
 
 lint: ## 运行 clippy 检查
 	@echo "🔍 运行 clippy 检查..."
 	@cargo clippy -- -D warnings
-	@echo "✅ clippy 检查完成"
+	@echo "☑️ clippy 检查完成"
 
 check: ## 检查代码（不构建）
 	@echo "🔍 检查代码..."
 	@cargo check
-	@echo "✅ 代码检查完成"
+	@echo "☑️ 代码检查完成"
 
 clippy: lint ## clippy 别名
 
 pre-commit: fmt lint test ## 提交前检查
-	@echo "✅ 所有检查通过，可以提交"
+	@echo "☑️ 所有检查通过，可以提交"
 
 # ============================================
 # 清理相关
@@ -228,12 +228,12 @@ pre-commit: fmt lint test ## 提交前检查
 clean: ## 清理构建产物
 	@echo "🧹 清理构建产物..."
 	@cargo clean
-	@echo "✅ 清理完成"
+	@echo "☑️ 清理完成"
 
 clean-all: clean ## 彻底清理（包括依赖）
 	@echo "🧹 彻底清理..."
 	@rm -rf target/
-	@echo "✅ 彻底清理完成"
+	@echo "☑️ 彻底清理完成"
 
 # ============================================
 # 文档相关
@@ -241,7 +241,7 @@ clean-all: clean ## 彻底清理（包括依赖）
 doc: ## 生成文档
 	@echo "📚 生成文档..."
 	@cargo doc --no-deps
-	@echo "✅ 文档生成完成: target/doc/j_cli/index.html"
+	@echo "☑️ 文档生成完成: target/doc/j_cli/index.html"
 
 docs: doc ## 文档别名
 
@@ -273,7 +273,7 @@ deps: ## 显示依赖信息
 update-deps: ## 更新依赖
 	@echo "🔄 更新依赖..."
 	@cargo update
-	@echo "✅ 依赖更新完成"
+	@echo "☑️ 依赖更新完成"
 
 # ============================================
 # 开发工具
@@ -289,7 +289,7 @@ watch-test: ## 监视文件变化并运行测试
 coverage: ## 生成代码覆盖率报告
 	@echo "📊 生成代码覆盖率报告..."
 	@cargo tarpaulin --out Html
-	@echo "✅ 覆盖率报告生成完成: tarpaulin-report.html"
+	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"
 
 # ============================================
 # Docker 支持
@@ -297,7 +297,7 @@ coverage: ## 生成代码覆盖率报告
 docker-build: ## 构建 Docker 镜像
 	@echo "🐳 构建 Docker 镜像..."
 	@docker build -t j-cli:$(VERSION) .
-	@echo "✅ Docker 镜像构建完成: j-cli:$(VERSION)"
+	@echo "☑️ Docker 镜像构建完成: j-cli:$(VERSION)"
 
 docker-run: docker-build ## 运行 Docker 容器
 	@echo "🐳 运行 Docker 容器..."

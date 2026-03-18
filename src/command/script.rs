@@ -8,7 +8,7 @@ fn wait_for_key_template() -> String {
     if std::env::consts::OS == shell::WINDOWS_OS {
         "echo.\necho 脚本执行完毕，按任意键退出...\npause >nul".to_string()
     } else {
-        "echo ''\necho '\\033[32m✅ 脚本执行完毕，按回车键退出...\\033[0m'\nread _".to_string()
+        "echo ''\necho '\\033[32m☑️ 脚本执行完毕，按回车键退出...\\033[0m'\nread _".to_string()
     }
 }
 
@@ -52,7 +52,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
                 }
                 // 写回脚本文件
                 match fs::write(&existing_path, &new_content) {
-                    Ok(_) => info!("✅ 脚本 {{{}}} 已更新，路径: {}", name, existing_path),
+                    Ok(_) => info!("☑️ 脚本 {{{}}} 已更新，路径: {}", name, existing_path),
                     Err(e) => error!("💥 写入脚本文件失败: {}", e),
                 }
             }
@@ -156,5 +156,5 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
     config.set_property(section::PATH, name, &script_path_str);
     config.set_property(section::SCRIPT, name, &script_path_str);
 
-    info!("✅ 成功创建脚本 {{{}}}，路径: {}", name, script_path_str);
+    info!("☑️ 成功创建脚本 {{{}}}，路径: {}", name, script_path_str);
 }

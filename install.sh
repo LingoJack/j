@@ -107,7 +107,7 @@ install() {
 
     # 验证安装
     if [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
-        info "✅ 安装成功！"
+        info "☑️ 安装成功！"
         info ""
         info "安装位置: $INSTALL_DIR/$BINARY_NAME"
         info "数据目录: $DATA_DIR"
@@ -130,7 +130,7 @@ uninstall() {
             SUDO=""
         fi
         $SUDO rm -f "$INSTALL_DIR/$BINARY_NAME"
-        info "✅ 已卸载程序"
+        info "☑️ 已卸载程序"
     else
         warn "程序未安装"
     fi

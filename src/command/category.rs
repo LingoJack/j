@@ -32,7 +32,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
             if let Some(url) = config.get_property(section::INNER_URL, alias).cloned() {
                 config.set_property(section::OUTER_URL, alias, &url);
                 config.remove_property(section::INNER_URL, alias);
-                info!("✅ 将别名 {} 标记为 OUTER_URL 成功", alias);
+                info!("☑️ 将别名 {} 标记为 OUTER_URL 成功", alias);
             } else {
                 error!("❌ 别名 {} 不在 INNER_URL 中，无法标记为 OUTER_URL", alias);
             }
@@ -42,7 +42,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
             if let Some(path) = config.get_property(section::PATH, alias).cloned() {
                 config.set_property(category, alias, &path);
                 info!(
-                    "✅ 将别名 {} 标记为 {} 成功",
+                    "☑️ 将别名 {} 标记为 {} 成功",
                     alias,
                     category.to_uppercase()
                 );
@@ -72,7 +72,7 @@ pub fn handle_denote(alias: &str, category: &str, config: &mut YamlConfig) {
 
     config.remove_property(category, alias);
     info!(
-        "✅ 已将别名 {} 从 {} 中移除",
+        "☑️ 已将别名 {} 从 {} 中移除",
         alias,
         category.to_uppercase()
     );

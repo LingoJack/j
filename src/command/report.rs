@@ -177,7 +177,7 @@ fn handle_report_tui(config: &mut YamlConfig) {
             // 从文件中去掉最后 N 行，再写入编辑器的全部内容
             replace_last_n_lines(report_file, original_context_count, &text);
 
-            info!("✅ 日报已写入：{}", report_path);
+            info!("☑️ 日报已写入：{}", report_path);
         }
         Ok(None) => {
             info!("已取消编辑");
@@ -390,7 +390,7 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
     let today_str = now.format(SIMPLE_DATE_FORMAT);
     let log_entry = format!("- 【{}】 {}\n", today_str, content);
     append_to_file(report_file, &log_entry);
-    info!("✅ 成功将内容写入：{}", report_path);
+    info!("☑️ 成功将内容写入：{}", report_path);
 }
 
 /// 处理 reportctl new 命令：开启新的一周
@@ -481,7 +481,7 @@ fn update_config_files(
     config.set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string());
     config.set_property(section::REPORT, config_key::LAST_DAY, &last_day_str);
     info!(
-        "✅ 更新YAML配置文件成功：周数 = {}, 周结束日期 = {}",
+        "☑️ 更新YAML配置文件成功：周数 = {}, 周结束日期 = {}",
         week_num, last_day_str
     );
 
@@ -493,7 +493,7 @@ fn update_config_files(
         });
         match fs::write(config_path, json.to_string()) {
             Ok(_) => info!(
-                "✅ 更新JSON配置文件成功：周数 = {}, 周结束日期 = {}",
+                "☑️ 更新JSON配置文件成功：周数 = {}, 周结束日期 = {}",
                 week_num, last_day_str
             ),
             Err(e) => error!("❌ 更新JSON配置文件时出错: {}", e),
@@ -515,7 +515,7 @@ fn load_config_from_json_and_sync(config_path: &Path, config: &mut YamlConfig) {
                 let week_num = json.get("week_num").and_then(|v| v.as_i64()).unwrap_or(1);
 
                 info!(
-                    "✅ 从日报配置文件中读取到：last_day = {}, week_num = {}",
+                    "☑️ 从日报配置文件中读取到：last_day = {}, week_num = {}",
                     last_day, week_num
                 );
 
@@ -586,7 +586,7 @@ fn handle_open_report(config: &YamlConfig) {
                 error!("❌ 写入日报文件失败: {}", e);
                 return;
             }
-            info!("✅ 日报文件已保存：{}", report_path);
+            info!("☑️ 日报文件已保存：{}", report_path);
         }
         Ok(None) => {
             info!("已取消编辑，文件未修改");
@@ -618,10 +618,10 @@ fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
 
             match old {
                 Some(old_url) if !old_url.is_empty() => {
-                    info!("✅ git 仓库地址已更新: {} → {}", old_url, u);
+                    info!("☑️ git 仓库地址已更新: {} → {}", old_url, u);
                 }
                 _ => {
-                    info!("✅ git 仓库地址已设置: {}", u);
+                    info!("☑️ git 仓库地址已设置: {}", u);
                 }
             }
         }
@@ -718,7 +718,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
         return false;
     }
 
-    info!("✅ git 仓库初始化完成，remote: {}", repo_url);
+    info!("☑️ git 仓库初始化完成，remote: {}", repo_url);
     true
 }
 
@@ -798,7 +798,7 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // git push origin main
     if let Some(status) = run_git_in_report_dir(&["push", "-u", "origin", "main"], config) {
         if status.success() {
-            info!("✅ 周报已成功推送到远程仓库");
+            info!("☑️ 周报已成功推送到远程仓库");
         } else {
             error!("❌ git push 失败，请检查网络连接和仓库权限");
         }
@@ -869,7 +869,7 @@ fn handle_pull(config: &YamlConfig) {
                     error!("❌ 移动克隆仓库失败: {}，临时目录: {:?}", e, temp_dir);
                     return;
                 }
-                info!("✅ 成功从远程仓库克隆周报");
+                info!("☑️ 成功从远程仓库克隆周报");
             }
             Ok(_) => {
                 error!("❌ git clone 失败，请检查仓库地址和网络连接");
@@ -922,7 +922,7 @@ fn handle_pull(config: &YamlConfig) {
             if let Some(status) = run_git_in_report_dir(&["reset", "--hard", "origin/main"], config)
             {
                 if status.success() {
-                    info!("✅ 成功从远程仓库拉取周报");
+                    info!("☑️ 成功从远程仓库拉取周报");
                 } else {
                     error!("❌ git reset 失败");
                 }
@@ -950,7 +950,7 @@ fn handle_pull(config: &YamlConfig) {
                 run_git_in_report_dir(&["pull", "origin", "main", "--rebase"], config)
             {
                 if status.success() {
-                    info!("✅ 周报已更新到最新版本");
+                    info!("☑️ 周报已更新到最新版本");
                     true
                 } else {
                     error!("❌ git pull 失败，请检查网络连接或手动解决冲突");

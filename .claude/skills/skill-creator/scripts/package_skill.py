@@ -51,7 +51,7 @@ def package_skill(skill_path, output_dir=None):
         print(f"❌ Validation failed: {message}")
         print("   Please fix the validation errors before packaging.")
         return None
-    print(f"✅ {message}\n")
+    print(f"☑️ {message}\n")
 
     # Determine output location
     skill_name = skill_path.name
@@ -74,7 +74,7 @@ def package_skill(skill_path, output_dir=None):
                     zipf.write(file_path, arcname)
                     print(f"  Added: {arcname}")
 
-        print(f"\n✅ Successfully packaged skill to: {skill_filename}")
+        print(f"\n☑️ Successfully packaged skill to: {skill_filename}")
         return skill_filename
 
     except Exception as e:

@@ -36,7 +36,7 @@ pub fn handle_log(key: &str, value: &str, config: &mut YamlConfig) {
             config_key::CONCISE
         };
         config.set_property(section::LOG, config_key::MODE, mode);
-        info!("✅ 日志模式已切换为: {}", mode);
+        info!("☑️ 日志模式已切换为: {}", mode);
     } else {
         usage!("j log mode <verbose|concise>");
     }
@@ -95,12 +95,12 @@ pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConf
     match old_value {
         Some(old) => {
             info!(
-                "✅ 已修改 {}.{} 的值为 {}，旧值为 {}",
+                "☑️ 已修改 {}.{} 的值为 {}，旧值为 {}",
                 part, field, value, old
             );
         }
         None => {
-            info!("✅ 已新增 {}.{} = {}", part, field, value);
+            info!("☑️ 已新增 {}.{} = {}", part, field, value);
         }
     }
     info!(

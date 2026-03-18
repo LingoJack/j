@@ -155,7 +155,7 @@ fn run_script_in_current_terminal(script_path: &str, script_args: &[&str], confi
     match result {
         Ok(status) => {
             if status.success() {
-                info!("✅ 脚本执行完成");
+                info!("☑️ 脚本执行完成");
             } else {
                 error!("❌ 脚本执行失败，退出码: {}", status);
             }
@@ -210,7 +210,7 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
         match result {
             Ok(status) => {
                 if status.success() {
-                    info!("✅ 已在新终端窗口中启动脚本");
+                    info!("☑️ 已在新终端窗口中启动脚本");
                 } else {
                     error!("❌ 启动新终端窗口失败，退出码: {}", status);
                 }
@@ -239,7 +239,7 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
         match result {
             Ok(status) => {
                 if status.success() {
-                    info!("✅ 已在新终端窗口中启动脚本");
+                    info!("☑️ 已在新终端窗口中启动脚本");
                 } else {
                     error!("❌ 启动新终端窗口失败，退出码: {}", status);
                 }
@@ -272,7 +272,7 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
             if let Ok(status) = Command::new(term).args(term_args).status()
                 && status.success()
             {
-                info!("✅ 已在新终端窗口中启动脚本");
+                info!("☑️ 已在新终端窗口中启动脚本");
                 return;
             }
         }
@@ -372,7 +372,7 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
                     return;
                 }
             }
-            info!("✅ 启动 {{{}}} : {{{}}}", alias, path);
+            info!("☑️ 启动 {{{}}} : {{{}}}", alias, path);
         }
     } else {
         error!("❌ 未找到别名对应的路径或网址: {}。请检查配置文件。", alias);
@@ -454,7 +454,7 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
         match result {
             Ok(_) => {
                 let target = file_path.unwrap_or("");
-                info!("✅ 启动 {{{}}} {} : {{{}}}", alias, target, app_path);
+                info!("☑️ 启动 {{{}}} {} : {{{}}}", alias, target, app_path);
             }
             Err(e) => error!("💥 启动 {} 失败: {}", alias, e),
         }

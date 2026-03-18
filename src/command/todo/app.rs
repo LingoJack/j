@@ -253,9 +253,9 @@ impl TodoApp {
         // 自动保存到文件
         if save_todo_list(&self.list) {
             self.snapshot = self.list.clone();
-            self.message = Some("✅ 已添加并保存".to_string());
+            self.message = Some("☑️ 已添加并保存".to_string());
         } else {
-            self.message = Some("✅ 已添加（保存失败）".to_string());
+            self.message = Some("☑️ 已添加（保存失败）".to_string());
         }
     }
 
@@ -276,9 +276,9 @@ impl TodoApp {
             // 自动保存到文件
             if save_todo_list(&self.list) {
                 self.snapshot = self.list.clone();
-                self.message = Some("✅ 已更新并保存".to_string());
+                self.message = Some("☑️ 已更新并保存".to_string());
             } else {
-                self.message = Some("✅ 已更新（保存失败）".to_string());
+                self.message = Some("☑️ 已更新（保存失败）".to_string());
             }
         }
         self.input.clear();
@@ -612,9 +612,9 @@ pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut Yaml
                 }
                 // 保存后再设置最终 message
                 if write_ok {
-                    app.message = Some("✅ 已标记为完成，已写入日报并保存".to_string());
+                    app.message = Some("☑️ 已标记为完成，已写入日报并保存".to_string());
                 } else {
-                    app.message = Some("✅ 已标记为完成，但写入日报失败".to_string());
+                    app.message = Some("☑️ 已标记为完成，但写入日报失败".to_string());
                 }
             }
             app.mode = AppMode::Normal;
@@ -622,7 +622,7 @@ pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut Yaml
         _ => {
             // 其他任意键跳过，不写入日报
             app.report_pending_content = None;
-            app.message = Some("✅ 已标记为完成".to_string());
+            app.message = Some("☑️ 已标记为完成".to_string());
             app.mode = AppMode::Normal;
         }
     }

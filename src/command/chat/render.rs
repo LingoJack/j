@@ -1077,7 +1077,7 @@ pub fn render_tool_result_msg(
 ) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        format!("  ✅ {}", label),
+        format!("  ☑️ {}", label),
         Style::default()
             .fg(Color::Green)
             .add_modifier(Modifier::BOLD),

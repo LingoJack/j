@@ -74,7 +74,7 @@ fn quick_add_todo(text: &str) {
     });
 
     if save_todo_list(&todo_list) {
-        info!("✅ 已添加待办: {}", text);
+        info!("☑️ 已添加待办: {}", text);
         let undone = todo_list.items.iter().filter(|i| !i.done).count();
         info!("📋 当前未完成待办: {} 条", undone);
     }
@@ -113,7 +113,7 @@ fn handle_todo_list(filter: Option<bool>) {
 
     let mut md = match filter {
         None => format!(
-            "## 待办备忘录 — 共 {} 条 | ✅ {} | ⬜ {}\n\n",
+            "## 待办备忘录 — 共 {} 条 | ☑️ {} | ⬜ {}\n\n",
             total, done_count, undone_count
         ),
         Some(true) => format!("## 待办备忘录 — 已完成 ({}/{})\n\n", done_count, total),

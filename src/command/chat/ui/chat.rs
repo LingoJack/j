@@ -797,7 +797,7 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             let (icon, border_color, text_color) = if is_error {
                 ("❌", t.toast_error_border, t.toast_error_text)
             } else {
-                ("✅", t.toast_success_border, t.toast_success_text)
+                ("☑️", t.toast_success_border, t.toast_success_text)
             };
 
             let toast_widget = Paragraph::new(Line::from(vec![
