@@ -45,7 +45,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
         .min(agent_config.providers.len() - 1);
     let provider = &agent_config.providers[idx];
 
-    info!("🤖 [{}] 思考中...", provider.name);
+    info!("💫 [{}] 思考中...", provider.name);
 
     let mut messages = Vec::new();
     messages.push(ChatMessage::text("user", message));
