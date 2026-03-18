@@ -20,7 +20,7 @@ pub fn handle_time(function: &str, arg: &str) {
     }
 
     info!(
-        "⏳ 倒计时开始：{}",
+        "⌛️ 倒计时开始：{}",
         format_duration_display(duration_secs as u64)
     );
     run_countdown(duration_secs as u64);
