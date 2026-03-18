@@ -29,7 +29,7 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                      Main Event Loop                     │
-│                     (handler/mod.rs)                      │
+│                   (handler/tui_loop.rs)                    │
 │                                                           │
 │  Phase 1: Tick ──────── Action::TickToast                │
 │      │                                                    │
@@ -65,19 +65,20 @@ src/command/chat/
 ├── app.rs              # 核心：ChatApp, UIState, ChatState, ToolExecutor,
 │                       #       AgentHandle, Action, update(), poll_stream_actions()
 ├── agent.rs            # Agent 后台线程（run_agent_loop）
-├── model.rs            # 数据模型 I/O（AgentConfig, ChatSession, 加载/保存）
+├── storage.rs          # 持久化层（AgentConfig, ChatSession, 加载/保存）
 ├── api.rs              # LLM API 调用
 ├── permission.rs       # .jcli 权限配置（JcliConfig）
 ├── skill.rs            # Skill 加载和构建
-├── config.rs           # 配置字段映射
+├── ui_helpers.rs       # 配置 UI 辅助函数（字段 label/value 映射）
 ├── archive.rs          # 会话归档功能
 ├── autocomplete.rs     # @ 和 @file: 补全逻辑
-├── render.rs           # 消息行构建（build_message_lines_incremental）
-├── constant.rs         # 常量定义
+├── render_cache.rs     # 消息增量渲染缓存（build_message_lines_incremental）
+├── constants.rs        # 常量定义
 ├── theme.rs            # 主题系统
 │
 ├── handler/            # 事件处理层（KeyEvent → Action）
-│   ├── mod.rs          # 主事件循环（5 阶段）+ handler 分发
+│   ├── mod.rs          # Handler 分发 + 模块 re-export
+│   ├── tui_loop.rs     # 主事件循环（5 阶段）
 │   ├── chat.rs         # Chat 模式处理
 │   ├── browse.rs       # Browse 模式处理
 │   ├── config.rs       # Config/ToolToggle/SkillToggle/SelectModel 处理
@@ -498,7 +499,7 @@ agent.rs: run_agent_loop()                          ← 后台线程 (tokio asyn
 Agent 线程运行的同时，主线程在事件循环中持续轮询：
 
 ```
-handler/mod.rs: 主事件循环                           ← 主线程
+handler/tui_loop.rs: 主事件循环                      ← 主线程
     │
     │  Phase 2: Poll Backend
     │
@@ -711,7 +712,7 @@ Agent线程        ·············│ 创建    │ 调API  │ 流�
 
 ## 7. 主事件循环（5 阶段）
 
-位于 `handler/mod.rs` 的 `run_chat_tui_internal()`。
+位于 `handler/tui_loop.rs` 的 `run_chat_tui_internal()`。
 
 ```rust
 loop {
@@ -938,7 +939,7 @@ loop {
 | handle_archive_confirm_mode | ArchiveConfirm | handler/archive.rs |
 | handle_archive_list_mode | ArchiveList | handler/archive.rs |
 | handle_tool_confirm_mode | ToolConfirm | handler/tool_confirm.rs |
-| Help 模式 | （直接在 mod.rs 中处理） | handler/mod.rs |
+| Help 模式 | （直接在 tui_loop.rs 中处理） | handler/tui_loop.rs |
 
 ### Hybrid Patterns（混合模式说明）
 

@@ -3,24 +3,24 @@ pub mod api;
 pub mod app;
 pub mod archive;
 pub mod autocomplete;
-pub mod config;
-pub mod constant;
+pub mod constants;
 pub mod handler;
 pub mod markdown;
-pub mod model;
 pub mod permission;
-pub mod render;
+pub mod render_cache;
 pub mod skill;
+pub mod storage;
 pub mod theme;
 pub mod tools;
 pub mod ui;
+pub mod ui_helpers;
 
 use crate::config::YamlConfig;
 use crate::{error, info};
 use api::call_openai_stream;
 use handler::run_chat_tui;
-use model::{ChatMessage, load_agent_config, load_system_prompt};
 use std::io::{self, Write};
+use storage::{ChatMessage, load_agent_config, load_system_prompt};
 
 pub fn handle_chat(content: &[String], _config: &YamlConfig) {
     let agent_config = load_agent_config();

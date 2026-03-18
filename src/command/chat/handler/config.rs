@@ -1,4 +1,4 @@
-use super::super::model::save_agent_config;
+use super::super::storage::save_agent_config;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crossterm::event::{KeyCode, KeyEvent};
 

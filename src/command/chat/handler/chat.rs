@@ -315,10 +315,10 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.state
                         .session
                         .messages
-                        .push(super::super::model::ChatMessage::text("user", &text));
+                        .push(super::super::storage::ChatMessage::text("user", &text));
                     {
                         let mut pending = app.state.pending_user_messages.lock().unwrap();
-                        pending.push(super::super::model::ChatMessage::text("user", &text));
+                        pending.push(super::super::storage::ChatMessage::text("user", &text));
                     }
                     app.ui.input.clear();
                     app.ui.cursor_pos = 0;

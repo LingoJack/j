@@ -1,13 +1,13 @@
 use super::agent::run_agent_loop;
 use super::markdown::image_cache::ImageCache;
-use super::model::{
+use super::permission::JcliConfig;
+use super::skill::{self, Skill};
+use super::storage::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
     load_chat_session, load_memory, load_soul, load_style, load_system_prompt, memory_path,
     save_agent_config, save_chat_session, save_memory, save_soul, save_system_prompt, soul_path,
     system_prompt_path,
 };
-use super::permission::JcliConfig;
-use super::skill::{self, Skill};
 use super::theme::Theme;
 use super::tools::ToolRegistry;
 use super::tools::background::BackgroundManager;
@@ -1439,7 +1439,7 @@ impl ChatApp {
                 }
             },
             Action::BrowseCopyMessage => {
-                use super::render::copy_to_clipboard;
+                use super::render_cache::copy_to_clipboard;
                 if let Some(msg) = self.state.session.messages.get(self.ui.browse_msg_index) {
                     let content = msg.content.clone();
                     let role_label = if msg.role == "assistant" {
@@ -1498,7 +1498,7 @@ impl ChatApp {
                 }
             }
             Action::ConfigEnter => {
-                use super::config::config_field_raw_value;
+                use super::ui_helpers::config_field_raw_value;
                 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
                 let total_provider = CONFIG_FIELDS.len();
                 if self.ui.config_field_idx < total_provider
@@ -1587,7 +1587,7 @@ impl ChatApp {
                 }
             },
             Action::ConfigEditSubmit => {
-                use super::config::config_field_set;
+                use super::ui_helpers::config_field_set;
                 let val = self.ui.config_edit_buf.clone();
                 config_field_set(self, self.ui.config_field_idx, &val);
                 self.ui.config_editing = false;
@@ -1906,7 +1906,7 @@ impl ChatApp {
 
             // ========== 快速操作 ==========
             Action::CopyLastAiReply => {
-                use super::render::copy_to_clipboard;
+                use super::render_cache::copy_to_clipboard;
                 if let Some(last_ai) = self
                     .state
                     .session
@@ -2542,7 +2542,7 @@ impl ChatApp {
         if !cache_hit {
             let old_cache = self.ui.msg_lines_cache.take();
             let (new_lines, new_msg_start_lines, new_per_msg, new_stable_lines, new_stable_offset) =
-                super::render::build_message_lines_incremental(
+                super::render_cache::build_message_lines_incremental(
                     self,
                     inner_width,
                     bubble_max_width,

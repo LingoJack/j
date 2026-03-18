@@ -1,5 +1,5 @@
-use super::model::{ChatMessage, ModelProvider};
-use crate::command::chat::constant;
+use super::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::constants;
 use crate::util::log::write_info_log;
 use async_openai::{
     Client,
@@ -12,7 +12,7 @@ use async_openai::{
         CreateChatCompletionRequestArgs, FunctionCall,
     },
 };
-use constant::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
+use constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use futures::StreamExt;
 
 /// 根据 ModelProvider 配置创建 async-openai Client

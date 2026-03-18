@@ -1,4 +1,4 @@
-use super::model::ChatMessage;
+use super::storage::ChatMessage;
 use crate::error;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ pub struct ChatArchive {
 
 /// 获取归档目录路径: ~/.jdata/agent/data/archives/
 pub fn get_archives_dir() -> PathBuf {
-    super::model::agent_data_dir().join("archives")
+    super::storage::agent_data_dir().join("archives")
 }
 
 /// 确保归档目录存在

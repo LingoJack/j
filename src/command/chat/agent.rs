@@ -1,6 +1,6 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
-use super::model::{ChatMessage, ModelProvider, ToolCallItem};
+use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};

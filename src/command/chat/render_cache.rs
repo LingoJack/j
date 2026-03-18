@@ -1,7 +1,7 @@
 use super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
 use super::markdown::markdown_to_lines;
 use super::theme::Theme;
-use crate::command::chat::constant::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -1034,7 +1034,7 @@ fn render_tool_confirm_content(
     }
 }
 pub fn render_tool_call_request_msg(
-    tool_calls: &[super::model::ToolCallItem],
+    tool_calls: &[super::storage::ToolCallItem],
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,

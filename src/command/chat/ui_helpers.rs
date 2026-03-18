@@ -1,5 +1,5 @@
 use super::app::ChatApp;
-use super::model::{load_style, load_system_prompt, save_style, save_system_prompt};
+use super::storage::{load_style, load_system_prompt, save_style, save_system_prompt};
 use super::theme::ThemeName;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
 
