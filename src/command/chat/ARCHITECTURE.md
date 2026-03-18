@@ -8,15 +8,17 @@
 2. [文件结构](#2-文件结构)
 3. [核心数据结构](#3-核心数据结构)
 4. [数据流向](#4-数据流向)
-5. [主事件循环（5 阶段）](#5-主事件循环5-阶段)
-6. [Action 枚举（完整分类）](#6-action-枚举完整分类)
-7. [Handler 层](#7-handler-层)
-8. [后台流式处理](#8-后台流式处理)
-9. [工具执行流水线](#9-工具执行流水线)
-10. [渲染管线](#10-渲染管线)
-11. [跨线程通信](#11-跨线程通信)
-12. [关键设计模式](#12-关键设计模式)
-13. [未来改进方向](#13-未来改进方向)
+5. [一条消息的完整生命周期](#5-一条消息的完整生命周期)
+6. [线程模型](#6-线程模型)
+7. [主事件循环（5 阶段）](#7-主事件循环5-阶段)
+8. [Action 枚举（完整分类）](#8-action-枚举完整分类)
+9. [Handler 层](#9-handler-层)
+10. [后台流式处理](#10-后台流式处理)
+11. [工具执行流水线](#11-工具执行流水线)
+12. [渲染管线](#12-渲染管线)
+13. [跨线程通信](#13-跨线程通信)
+14. [关键设计模式](#14-关键设计模式)
+15. [未来改进方向](#15-未来改进方向)
 
 ---
 
@@ -363,7 +365,351 @@ Agent Thread                    TUI Main Thread
 
 ---
 
-## 5. 主事件循环（5 阶段）
+## 5. 一条消息的完整生命周期
+
+从用户按下回车发送一条消息，到 AI 回复完整显示在屏幕上，完整经过以下阶段。如果 AI 回复中包含工具调用，还会进入工具执行循环。
+
+### 阶段 1: 用户按键 → Action 分发
+
+```
+用户按下 Enter
+    │
+    ▼
+handler/chat.rs: handle_chat_mode(app, key)        ← Phase 4 (Collect Input)
+    │ KeyCode::Enter
+    ▼
+app.update(Action::SendMessage)                     ← Action 分发
+    │
+    ▼
+app.rs: update() match Action::SendMessage          ← 中央 reducer
+    │ 调用 self.send_message()
+    ▼
+```
+
+**涉及方法**: `handle_chat_mode()` → `update()` → `send_message()`
+
+### 阶段 2: 消息准备与 Agent 线程启动
+
+```
+app.rs: send_message()                              ← app.rs:2046
+    │
+    ├── 1. 取出 input 文本，清空输入框和光标
+    ├── 2. 关闭弹窗 (at_popup, file_popup)
+    │
+    ▼
+app.rs: send_message_internal(text)                 ← app.rs:2062
+    │
+    ├── 3. session.messages.push(ChatMessage::text("user", &text))
+    │      将用户消息加入会话历史
+    │
+    ├── 4. auto_scroll = true, scroll_offset = u16::MAX
+    │      恢复自动滚动
+    │
+    ├── 5. active_provider() → 获取当前 LLM provider 配置
+    │      (api_base, api_key, model)
+    │
+    ├── 6. is_loading = true
+    │      重置流式节流状态 + 清空渲染缓存
+    │      tool_executor.reset()
+    │
+    ├── 7. build_api_messages() → Vec<ChatMessage>   ← app.rs:2036
+    │      截取最近 max_history_messages 条消息
+    │
+    ├── 8. resolve_system_prompt() → Option<String>  ← app.rs:1967
+    │      加载 system_prompt.md 模板，填充变量:
+    │      {{.current_dir}}, {{.skills}}, {{.tools}},
+    │      {{.style}}, {{.memory}}, {{.soul}}
+    │
+    ├── 9. tool_registry.to_openai_tools_filtered()
+    │      构建工具定义列表 (如果 tools_enabled)
+    │
+    ├──10. 清空 pending_user_messages 和 streaming_content
+    │
+    └──11. AgentHandle::spawn(...)                   ← app.rs:561
+           │
+           ├── 创建 channel: stream_tx/rx (StreamMsg)
+           ├── 创建 channel: tool_result_tx/rx (ToolResultMsg)
+           ├── 创建 CancellationToken
+           │
+           └── std::thread::spawn → 新线程
+               │
+               └── tokio::Runtime::new()
+                   └── runtime.block_on(run_agent_loop(...))
+```
+
+**涉及方法**: `send_message()` → `send_message_internal()` → `build_api_messages()` → `resolve_system_prompt()` → `AgentHandle::spawn()`
+
+### 阶段 3: Agent 后台线程执行
+
+```
+agent.rs: run_agent_loop()                          ← 后台线程 (tokio async)
+    │
+    │  for _round in 0..max_tool_rounds {            ← 支持多轮工具调用
+    │
+    ├── 1. drain_pending_user_messages()
+    │      从待处理队列中取出 agent 运行期间用户发的新消息
+    │
+    ├── 2. background_manager.drain_notifications()
+    │      注入后台任务完成通知
+    │
+    ├── 3. streaming_content.lock().clear()
+    │      清空流式缓冲（每轮开始时）
+    │
+    ├── 4. build_request_with_tools()                ← api.rs
+    │      构建 OpenAI API 请求体
+    │
+    ├── 5. 发送请求 (流式 or 非流式)
+    │      │
+    │      ├── 流式: client.chat().create_stream(request)
+    │      │   │
+    │      │   │  'stream loop:
+    │      │   ├── 收到 delta.content → 写入 streaming_content
+    │      │   │                       → tx.send(StreamMsg::Chunk)
+    │      │   ├── 收到 delta.tool_calls → 聚合到 raw_tool_calls
+    │      │   ├── 收到 finish_reason → 跳出 stream loop
+    │      │   └── cancel_token 触发 → tx.send(StreamMsg::Cancelled) → return
+    │      │
+    │      └── 非流式: client.chat().create(request)
+    │          └── 直接获取完整 response
+    │
+    ├── 6a. 如果有 tool_calls:
+    │      │
+    │      └── process_tool_calls()                  ← agent.rs:67
+    │          ├── messages.push(assistant msg + tool_calls)
+    │          ├── tx.send(StreamMsg::ToolCallRequest(items))
+    │          │                        ↑ 通知主线程有工具需要执行
+    │          │
+    │          ├── 阻塞等待每个工具结果:
+    │          │   tool_result_rx.recv()              ← 等主线程回传结果
+    │          │
+    │          ├── messages.push(tool result messages)
+    │          ├── drain_pending_user_messages()
+    │          └── continue → 下一轮 (带工具结果重新请求 LLM)
+    │
+    └── 6b. 如果无 tool_calls (纯文本回复):
+           ├── tx.send(StreamMsg::Done)
+           └── return (agent loop 结束)
+```
+
+**涉及方法**: `run_agent_loop()` → `build_request_with_tools()` → `process_tool_calls()`
+
+### 阶段 4: 主线程轮询 → 实时渲染
+
+Agent 线程运行的同时，主线程在事件循环中持续轮询：
+
+```
+handler/mod.rs: 主事件循环                           ← 主线程
+    │
+    │  Phase 2: Poll Backend
+    │
+    ├── poll_stream_actions()                        ← app.rs:2143
+    │   │
+    │   ├── agent.poll() → Vec<StreamMsg>            ← 非阻塞 try_recv
+    │   │   │
+    │   │   ├── StreamMsg::Chunk → Action::StreamChunk
+    │   │   │
+    │   │   │   update(StreamChunk):
+    │   │   │     auto_scroll = true                 ← 保持滚动到底部
+    │   │   │     (streaming_content 已由 agent 线程写入)
+    │   │   │
+    │   │   ├── StreamMsg::Done → Action::StreamDone
+    │   │   │
+    │   │   │   update(StreamDone):
+    │   │   │     finish_loading(false, false)        ← app.rs:2389
+    │   │   │     ├── agent = None (释放 agent 句柄)
+    │   │   │     ├── is_loading = false
+    │   │   │     ├── streaming_content → 追加为 assistant 消息
+    │   │   │     ├── save_chat_session() (持久化)
+    │   │   │     ├── show_toast("回复完成 ✓")
+    │   │   │     └── 检查 queued_tasks → 如有则自动 send_message_internal()
+    │   │   │
+    │   │   └── StreamMsg::Error(e) → Action::StreamError(e)
+    │   │       update(StreamError):
+    │   │         show_toast(e, is_error=true)
+    │   │         finish_loading(true, false)
+    │   │
+    │   └── 返回 Vec<Action>
+    │
+    ├── for action in stream_actions { app.update(action); }
+    │
+    │  Phase 3: Render (如果 needs_redraw)
+    │
+    └── terminal.draw(|f| draw_chat_ui(f, &mut app))
+        │
+        ├── draw_messages()                          ← ui/chat.rs
+        │   ├── 检查 msg_lines_cache 有效性
+        │   ├── 缓存失效 → build_message_lines_incremental()
+        │   │              重新构建所有消息的渲染行
+        │   ├── 流式内容 → 拼接到最后一条消息的气泡中
+        │   └── 渲染到 Frame
+        │
+        └── 流式节流状态更新:
+            last_rendered_streaming_len = current_len
+            last_stream_render_time = now()
+```
+
+**涉及方法**: `poll_stream_actions()` → `agent.poll()` → `update(StreamChunk/StreamDone/StreamError)` → `finish_loading()` → `draw_chat_ui()` → `draw_messages()`
+
+### 阶段 5: 工具调用（如果有）
+
+当 AI 回复中包含工具调用时，会插入一个工具执行循环：
+
+```
+poll_stream_actions() 收到 ToolCallRequest
+    │
+    ├── 对每个 tool_call 检查权限:
+    │   ├── jcli_config.is_denied() → ToolExecStatus::Failed
+    │   ├── jcli_config.is_allowed() → ToolExecStatus::Executing
+    │   └── tool.requires_confirmation() → ToolExecStatus::PendingConfirm
+    │
+    ├── pending_tool_execution = true
+    │
+    ▼ (下一帧 poll_stream_actions)
+    │
+    ├── 有 PendingConfirm 的工具?
+    │   │
+    │   ├── YES → 进入 ToolConfirm 模式
+    │   │   │     显示工具确认界面
+    │   │   │
+    │   │   │     用户操作 (handle_tool_confirm_mode):
+    │   │   │     ├── Enter(Continue)  → Action::ExecutePendingTool
+    │   │   │     │   → tool_executor.execute_current()
+    │   │   │     │   → advance() 到下一个 PendingConfirm
+    │   │   │     │
+    │   │   │     ├── Enter(Allow)     → Action::AllowAndExecutePendingTool
+    │   │   │     │   → 写入 .jcli 规则 + execute
+    │   │   │     │
+    │   │   │     ├── Enter(Refuse)    → Action::RejectPendingTool
+    │   │   │     │   → tool_executor.reject_current("")
+    │   │   │     │
+    │   │   │     └── 超时 (tool_confirm_timeout秒)
+    │   │   │         → Action::ExecutePendingTool (自动执行)
+    │   │   │
+    │   │   └── 所有工具处理完毕 → 退出 ToolConfirm
+    │   │
+    │   └── NO → 全部自动执行
+    │
+    ├── tool_executor.execute_batch()
+    │   │ 对所有 Executing 状态的工具:
+    │   └── std::thread::spawn → 后台线程
+    │       └── tool_registry.execute(name, args) → 执行工具
+    │           → tool_exec_tx.send(ToolExecDoneMsg)
+    │
+    ├── poll_results() (后续帧持续轮询)
+    │   │ tool_exec_rx.try_recv()
+    │   ├── 更新 ToolExecStatus::Done(summary)
+    │   └── tools_executing_count -= 1
+    │
+    ├── 所有工具完成:
+    │   ├── 收集所有 Done 的结果 → ToolResultMsg
+    │   └── tool_result_tx.send(result) → 发回 Agent 线程
+    │
+    ▼
+Agent 线程收到 tool_result_rx.recv()
+    │ 将结果加入 messages
+    │ continue → 下一轮 LLM 请求
+    │ (带着工具结果让 AI 继续回答)
+    ▼
+回到阶段 3 (Agent 发起新一轮请求)
+    ...
+直到 AI 不再返回 tool_calls → StreamMsg::Done → 阶段 4 的 finish_loading
+```
+
+**涉及方法**: `poll_stream_actions()` → `execute_batch()` → `poll_results()` → `tool_result_tx.send()` → Agent 线程 `tool_result_rx.recv()` → 下一轮 `run_agent_loop`
+
+### 完整时序总览
+
+```
+时间轴 →
+
+主线程          │ Enter按键 │ update  │ send_   │ poll     │ render  │ poll     │ render  │ ... │ poll      │ render  │
+(事件循环)      │           │ (Send   │ message │ stream   │ (显示   │ stream   │ (更新   │     │ stream    │ (最终   │
+                │           │  Message)│ _internal│ actions │  用户   │ actions  │  流式   │     │ actions   │  完整   │
+                │           │         │         │ (empty)  │  消息)  │ (Chunk)  │  内容)  │     │ (Done)    │  回复)  │
+                │           │         │         │          │         │          │         │     │           │         │
+                                        │                                                        │
+                                        │ spawn                                                  │ finish_
+                                        ▼                                                        │ loading
+Agent线程        ·············│ 创建    │ 调API  │ 流式chunk │ 流式chunk │ ··· │ 完成     │ ·····
+(后台)                       │ runtime │        │ → Chunk  │ → Chunk  │     │ → Done   │
+                             │         │        │          │          │     │          │
+                                                                           │          │
+                                                         (如有工具调用)     │          │
+                                                         │ ToolCallRequest │          │
+                                                         │ → 等待结果      │          │
+工具线程          ·······························│ execute │ 完成    │ ···│          │
+(后台)                                          │ tool    │ → Done  │    │          │
+                                                │         │ → 结果回传   │          │
+                                                                    Agent继续下一轮──┘
+```
+
+### 关键方法速查表
+
+| 阶段 | 方法 | 文件:行号 | 说明 |
+|------|------|-----------|------|
+| 按键处理 | `handle_chat_mode()` | handler/chat.rs | KeyEvent → Action::SendMessage |
+| Action 分发 | `update()` | app.rs:~1079 | match SendMessage → send_message() |
+| 发送准备 | `send_message()` | app.rs:2046 | 清空输入框，调用 send_message_internal |
+| 消息构建 | `send_message_internal()` | app.rs:2062 | 加入会话、构建 API 参数、启动 Agent |
+| API 消息截取 | `build_api_messages()` | app.rs:2036 | 截取最近 N 条历史消息 |
+| 系统提示词 | `resolve_system_prompt()` | app.rs:1967 | 加载模板 + 变量替换 |
+| Agent 启动 | `AgentHandle::spawn()` | app.rs:561 | 创建线程 + channel |
+| Agent 主循环 | `run_agent_loop()` | agent.rs:120 | 多轮工具调用循环 |
+| API 调用 | `build_request_with_tools()` | api.rs | 构建 OpenAI 请求体 |
+| 工具调用处理 | `process_tool_calls()` | agent.rs:67 | 发送请求 + 等待结果 + 更新消息 |
+| 后台轮询 | `poll_stream_actions()` | app.rs:2143 | StreamMsg → Vec\<Action\> |
+| 流式更新 | `update(StreamChunk)` | app.rs:~1165 | auto_scroll = true |
+| 完成处理 | `finish_loading()` | app.rs:2389 | 清理状态 + 持久化 + 检查队列 |
+| 工具批量执行 | `execute_batch()` | app.rs (ToolExecutor) | 启动工具后台线程 |
+| 工具结果轮询 | `poll_results()` | app.rs (ToolExecutor) | try_recv 工具执行结果 |
+| 渲染 | `draw_chat_ui()` | ui/chat.rs | 主渲染入口 |
+| 消息渲染 | `draw_messages()` | ui/chat.rs | 消息行构建 + 缓存 |
+
+---
+
+## 6. 线程模型
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       主线程 (同步)                          │
+│                                                             │
+│  run_chat_tui_internal() — 同步事件循环                      │
+│                                                             │
+│  所有逻辑处理和 UI 渲染都在此线程顺序执行:                     │
+│  ├── Phase 1: Tick (定时器)         ← 逻辑                  │
+│  ├── Phase 2: Poll Backend          ← 逻辑 (非阻塞 poll)    │
+│  ├── Phase 3: Render                ← 渲染 (terminal.draw)  │
+│  ├── Phase 4: Collect Input         ← 逻辑 (事件处理)       │
+│  └── Phase 5: Side-effects          ← 逻辑 (编辑器)         │
+│                                                             │
+│  ChatApp 无需 Arc<Mutex> 包装，handler 直接 &mut ChatApp     │
+│  主线程内部不存在并发问题                                     │
+└───────────┬──────────────────────────────┬──────────────────┘
+            │ mpsc channel                 │ mpsc channel
+            │ (StreamMsg)                  │ (ToolResultMsg)
+            ▼                              ▲
+┌───────────────────────┐     ┌────────────────────────────┐
+│    Agent 线程 (后台)    │     │    工具执行线程 (后台, N个)  │
+│                       │     │                            │
+│  std::thread::spawn   │     │  std::thread::spawn        │
+│  └── tokio Runtime    │     │  └── tool_registry         │
+│      └── run_agent_   │     │      .execute(name, args)  │
+│          loop()       │     │                            │
+│                       │     │  每个工具一个线程             │
+│  • 调用 LLM API       │     │  执行完通过 channel 回传     │
+│  • 流式写入           │     │                            │
+│    streaming_content  │     │                            │
+│    (Arc<Mutex>)       │     │                            │
+│  • 等待工具结果        │     │                            │
+│    (阻塞 recv)        │     │                            │
+└───────────────────────┘     └────────────────────────────┘
+```
+
+主线程与后台线程的通信全部通过 `mpsc` channel 和 `Arc<Mutex<T>>` 完成，主线程只做非阻塞的 `try_recv` / `lock`，绝不会被后台线程阻塞。
+
+---
+
+## 7. 主事件循环（5 阶段）
 
 位于 `handler/mod.rs` 的 `run_chat_tui_internal()`。
 
@@ -426,7 +772,7 @@ loop {
 
 ---
 
-## 6. Action 枚举（完整分类）
+## 8. Action 枚举（完整分类）
 
 共 ~85 个变体，按功能分为 14 类：
 
@@ -575,7 +921,7 @@ loop {
 
 ---
 
-## 7. Handler 层
+## 9. Handler 层
 
 每个 handler 函数接收 `(app: &mut ChatApp, key: KeyEvent)`，将按键映射为 Action 后调用 `app.update(action)`。
 
@@ -608,7 +954,7 @@ loop {
 
 ---
 
-## 8. 后台流式处理
+## 10. 后台流式处理
 
 ### poll_stream_actions() 详细流程
 
@@ -656,7 +1002,7 @@ poll_stream_actions() → Vec<Action>
 
 ---
 
-## 9. 工具执行流水线
+## 11. 工具执行流水线
 
 ```
 LLM 返回 tool_calls
@@ -717,7 +1063,7 @@ PendingConfirm ──┬── Continue ──▶ Executing ──▶ Done(summa
 
 ---
 
-## 10. 渲染管线
+## 12. 渲染管线
 
 ### draw_chat_ui 布局
 
@@ -789,7 +1135,7 @@ terminal.draw(|f| draw_chat_ui(f, &app));  // 理想: &app（只读）
 
 ---
 
-## 11. 跨线程通信
+## 13. 跨线程通信
 
 | 通道 | 类型 | 方向 | 用途 |
 |------|------|------|------|
@@ -809,7 +1155,7 @@ terminal.draw(|f| draw_chat_ui(f, &app));  // 理想: &app（只读）
 
 ---
 
-## 12. 关键设计模式
+## 14. 关键设计模式
 
 ### 模式 1: Redux 单向数据流
 所有状态变更经过 `update(Action)` 中心化处理。Handler 只做 KeyEvent→Action 映射。
@@ -836,7 +1182,7 @@ terminal.draw(|f| draw_chat_ui(f, &app));  // 理想: &app（只读）
 
 ---
 
-## 13. 未来改进方向
+## 15. 未来改进方向
 
 1. **激活 pre-render 阶段**: 在主循环 Phase 3 前调用 `prepare_for_render()` 和 `prepare_scroll_state()`，将渲染函数签名从 `&mut ChatApp` 改为 `&ChatApp`（受限于 ratatui 的 `render_stateful_widget` API）
 
