@@ -28,10 +28,9 @@ impl JcliConfig {
     pub fn load() -> Self {
         if let Some(path) = Self::find_config_file() {
             match std::fs::read_to_string(&path) {
-                Ok(content) => match serde_yaml::from_str::<JcliConfig>(&content) {
-                    Ok(config) => config,
-                    Err(_) => Self::default(),
-                },
+                Ok(content) => {
+                    serde_yaml::from_str::<JcliConfig>(&content).unwrap_or_else(|_| Self::default())
+                }
                 Err(_) => Self::default(),
             }
         } else {
