@@ -51,7 +51,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     let done = app.list.items.iter().filter(|i| i.done).count();
     let undone = total - done;
     let title = format!(
-        " 📋 待办备忘录{} — 共 {} 条 | ✅ {} | ⬜ {} ",
+        " 📝 待办备忘录{} — 共 {} 条 | ☑️ {} | ⬜ {} ",
         filter_label, total, done, undone
     );
     let title_block = Paragraph::new(Line::from(vec![Span::styled(
