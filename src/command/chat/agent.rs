@@ -20,15 +20,15 @@ fn drain_pending_user_messages(
 }
 
 /// 从非流式响应的 tool_calls 列表中提取 ToolCallItem
-fn extract_tool_items(tc_list: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
-    tc_list
+fn extract_tool_items(raw_tool_list: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
+    raw_tool_list
         .iter()
         .filter_map(|tc| {
-            if let ChatCompletionMessageToolCalls::Function(f) = tc {
+            if let ChatCompletionMessageToolCalls::Function(function) = tc {
                 Some(ToolCallItem {
-                    id: f.id.clone(),
-                    name: f.function.name.clone(),
-                    arguments: f.function.arguments.clone(),
+                    id: function.id.clone(),
+                    name: function.function.name.clone(),
+                    arguments: function.function.arguments.clone(),
                 })
             } else {
                 None
