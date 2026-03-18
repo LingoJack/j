@@ -45,11 +45,7 @@ pub fn run_chat_tui() {
 pub fn run_chat_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
-    )?;
+    execute!(stdout, EnterAlternateScreen, event::EnableMouseCapture)?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -288,7 +284,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
-        crossterm::event::DisableMouseCapture,
+        event::DisableMouseCapture,
         LeaveAlternateScreen
     )?;
     Ok(())
