@@ -9,9 +9,9 @@ use ratatui::{
 };
 
 /// 绘制帮助 TUI 界面
-pub fn draw_help_ui(f: &mut Frame, app: &mut HelpApp) {
-    let size = f.area();
-    let theme = app.theme().clone();
+pub fn draw_help_ui(frame: &mut Frame, help_app: &mut HelpApp) {
+    let size = frame.area();
+    let theme = help_app.theme().clone();
 
     // 主布局：Tab 栏(1) + 标题栏(3) + 内容区(flex) + 提示栏(1)
     let chunks = Layout::default()
@@ -24,31 +24,31 @@ pub fn draw_help_ui(f: &mut Frame, app: &mut HelpApp) {
         ])
         .split(size);
 
-    draw_tab_bar(f, app, chunks[0], &theme);
-    draw_title_bar(f, app, chunks[1], &theme);
-    draw_content(f, app, chunks[2], &theme);
-    draw_hint_bar(f, chunks[3], &theme);
+    draw_tab_bar(frame, help_app, chunks[0], &theme);
+    draw_title_bar(frame, help_app, chunks[1], &theme);
+    draw_content(frame, help_app, chunks[2], &theme);
+    draw_hint_bar(frame, chunks[3], &theme);
 }
 
 /// 绘制 Tab 栏
 fn draw_tab_bar(
-    f: &mut Frame,
-    app: &HelpApp,
+    frame: &mut Frame,
+    help_app: &HelpApp,
     area: Rect,
     theme: &crate::command::chat::theme::Theme,
 ) {
     let mut spans: Vec<Span> = Vec::new();
     spans.push(Span::styled(" ", Style::default().bg(theme.bg_title)));
 
-    for i in 0..app.tab_count {
+    for i in 0..help_app.tab_count {
         let num = if i == 9 {
             "0".to_string()
         } else {
             format!("{}", i + 1)
         };
-        let label = format!(" {}.{} ", num, app.tab_name(i));
+        let label = format!(" {}.{} ", num, help_app.tab_name(i));
 
-        if i == app.active_tab {
+        if i == help_app.active_tab {
             spans.push(Span::styled(
                 label,
                 Style::default()
@@ -78,18 +78,18 @@ fn draw_tab_bar(
     }
 
     let line = Line::from(spans);
-    f.render_widget(Paragraph::new(vec![line]), area);
+    frame.render_widget(Paragraph::new(vec![line]), area);
 }
 
 /// 绘制标题栏
 fn draw_title_bar(
-    f: &mut Frame,
-    app: &HelpApp,
+    frame: &mut Frame,
+    help_app: &HelpApp,
     area: Rect,
     theme: &crate::command::chat::theme::Theme,
 ) {
-    let title_text = format!("  📖 j help — {}", app.tab_name(app.active_tab));
-    let page_info = format!("{}/{}  ", app.active_tab + 1, app.tab_count);
+    let title_text = format!("  📖 j help — {}", help_app.tab_name(help_app.active_tab));
+    let page_info = format!("{}/{}  ", help_app.active_tab + 1, help_app.tab_count);
 
     let title_w = display_width(&title_text);
     let page_w = display_width(&page_info);
@@ -117,10 +117,10 @@ fn draw_title_bar(
         .split(area);
 
     // 空行
-    f.render_widget(Paragraph::new(vec![Line::from("")]), inner_chunks[0]);
+    frame.render_widget(Paragraph::new(vec![Line::from("")]), inner_chunks[0]);
 
     // 标题内容
-    f.render_widget(Paragraph::new(vec![Line::from(spans)]), inner_chunks[1]);
+    frame.render_widget(Paragraph::new(vec![Line::from(spans)]), inner_chunks[1]);
 
     // 分隔线
     let sep_width = area.width as usize;
@@ -128,7 +128,7 @@ fn draw_title_bar(
         "─".repeat(sep_width),
         Style::default().fg(theme.separator),
     ));
-    f.render_widget(Paragraph::new(vec![sep_line]), inner_chunks[2]);
+    frame.render_widget(Paragraph::new(vec![sep_line]), inner_chunks[2]);
 }
 
 /// 绘制内容区（带滚动）
@@ -171,7 +171,6 @@ fn draw_hint_bar(f: &mut Frame, area: Rect, theme: &crate::command::chat::theme:
         ("←→", "切换"),
         ("1-0", "跳转"),
         ("↑↓", "滚动"),
-        ("PgUp/Dn", "翻页"),
         ("q", "退出"),
     ];
 
