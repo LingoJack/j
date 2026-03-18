@@ -124,25 +124,21 @@ impl ToolRegistry {
         }
     }
 
-    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（XML 格式，更省 token）
+    /// 构建工具摘要列表，用于系统提示词的 {{.tools}} 占位符（Markdown 格式）
     /// 当 disabled 非空时，过滤掉其中列出的工具
     pub fn build_tools_summary(&self, disabled: &[String]) -> String {
-        let mut xml = String::from("<tools>\n");
+        let mut md = String::new();
         for t in self
             .tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
         {
-            xml.push_str(&format!("<tool name=\"{}\">\n", t.name()));
-            xml.push_str(&format!(
-                "<description>{}</description>\n",
-                t.description().trim()
-            ));
-            xml.push_str(&json_schema_to_xml_params(&t.parameters_schema()));
-            xml.push_str("</tool>\n");
+            md.push_str(&format!("### {}\n\n", t.name()));
+            md.push_str(&format!("{}\n", t.description().trim()));
+            md.push_str(&json_schema_to_md_params(&t.parameters_schema()));
+            md.push('\n');
         }
-        xml.push_str("</tools>");
-        xml
+        md.trim_end().to_string()
     }
 
     /// 生成过滤后的 ChatCompletionTools 列表（排除 disabled 中的工具）
@@ -185,8 +181,8 @@ pub fn expand_tilde(path: &str) -> String {
     }
 }
 
-/// 将 JSON Schema 转为 XML `<parameters>` 块
-fn json_schema_to_xml_params(schema: &Value) -> String {
+/// 将 JSON Schema 转为 Markdown 参数列表
+fn json_schema_to_md_params(schema: &Value) -> String {
     let properties = match schema.get("properties").and_then(|p| p.as_object()) {
         Some(p) => p,
         None => return String::new(),
@@ -197,7 +193,7 @@ fn json_schema_to_xml_params(schema: &Value) -> String {
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
         .unwrap_or_default();
 
-    let mut xml = String::from("<parameters>\n");
+    let mut md = String::from("\n**参数：**\n\n");
     for (name, prop) in properties {
         let type_str = prop
             .get("type")
@@ -208,17 +204,13 @@ fn json_schema_to_xml_params(schema: &Value) -> String {
             .and_then(|d| d.as_str())
             .unwrap_or("");
         let req = if required.contains(&name.as_str()) {
-            " required"
+            "，必填"
         } else {
             ""
         };
-        xml.push_str(&format!(
-            "<param name=\"{}\" type=\"{}\"{}>{}</param>\n",
-            name, type_str, req, desc
-        ));
+        md.push_str(&format!("- `{}` ({}{}) — {}\n", name, type_str, req, desc));
     }
-    xml.push_str("</parameters>\n");
-    xml
+    md
 }
 
 /// 简单的危险命令过滤
