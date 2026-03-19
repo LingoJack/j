@@ -1,4 +1,5 @@
 use super::agent::run_agent_loop;
+use super::compact::CompactConfig;
 use super::markdown::image_cache::ImageCache;
 use super::permission::JcliConfig;
 use super::skill::{self, Skill};
@@ -567,6 +568,7 @@ impl AgentHandle {
         max_tool_rounds: usize,
         pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
         background_manager: Arc<BackgroundManager>,
+        compact_config: CompactConfig,
     ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
         let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
         let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
@@ -604,6 +606,7 @@ impl AgentHandle {
                     cancel_token_clone,
                     pending_user_messages,
                     background_manager,
+                    compact_config,
                 ));
             }));
 
@@ -2105,6 +2108,7 @@ impl ChatApp {
 
         let pending_user_messages = Arc::clone(&self.state.pending_user_messages);
         let background_manager = Arc::clone(&self.background_manager);
+        let compact_config = self.state.agent_config.compact.clone();
 
         // 把 resolve_system_prompt 所需数据 clone 出来，在后台线程里执行文件 IO，避免阻塞主线程
         let loaded_skills = self.state.loaded_skills.clone();
@@ -2144,6 +2148,7 @@ impl ChatApp {
             max_tool_rounds,
             pending_user_messages,
             background_manager,
+            compact_config,
         );
 
         self.agent = Some(handle);

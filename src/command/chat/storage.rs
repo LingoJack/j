@@ -1,3 +1,4 @@
+use super::compact::CompactConfig;
 use super::theme::ThemeName;
 use crate::config::YamlConfig;
 use crate::error;
@@ -59,6 +60,9 @@ pub struct AgentConfig {
     /// 被禁用的 skill 名称列表（列表中的 skill 不会包含在系统提示词中）
     #[serde(default)]
     pub disabled_skills: Vec<String>,
+    /// Context compact 配置
+    #[serde(default)]
+    pub compact: CompactConfig,
 }
 
 fn default_max_history_messages() -> usize {

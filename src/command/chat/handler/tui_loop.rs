@@ -62,6 +62,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                 tool_confirm_timeout: 0,
                 disabled_tools: Vec::new(),
                 disabled_skills: Vec::new(),
+                compact: Default::default(),
             };
             let _ = save_agent_config(&example);
             app.state.agent_config = example;

@@ -25,7 +25,10 @@
       "Bash(cargo tree:*)",
       "Bash(make install:*)",
       "Bash(python3:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(find . -name app.rs -path */command/chat/*)",
+      "Bash(/tmp/chat_architecture_diagram.txt:*)",
+      "Read(//tmp/**)"
     ]
   },
   "language": "zh-CN",

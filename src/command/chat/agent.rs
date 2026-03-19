@@ -1,5 +1,6 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
+use super::compact::{self, CompactConfig};
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
 use crate::util::log::{write_error_log, write_info_log};
@@ -23,6 +24,7 @@ pub async fn run_agent_loop(
     cancel_token: CancellationToken,
     pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
     background_manager: Arc<BackgroundManager>,
+    compact_config: CompactConfig,
 ) {
     let client = create_openai_client(&provider);
 
@@ -48,6 +50,21 @@ pub async fn run_agent_loop(
                     "BackgroundNotification",
                     &format!("注入后台任务通知: task_id={}", notif.task_id),
                 );
+            }
+        }
+
+        // ── Layer 1: micro_compact（替换旧 tool results）──
+        // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
+        if compact_config.enabled {
+            compact::micro_compact(&mut messages, compact_config.keep_recent);
+            if compact::estimate_tokens(&messages) > compact_config.token_threshold {
+                write_info_log(
+                    "agent_loop",
+                    "auto_compact triggered (token threshold exceeded)",
+                );
+                if let Err(e) = compact::auto_compact(&mut messages, &provider).await {
+                    write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
+                }
             }
         }
 
@@ -231,7 +248,13 @@ pub async fn run_agent_loop(
                                         &tool_result_rx,
                                         &pending_user_messages,
                                     ) {
-                                        Ok(()) => continue,
+                                        Ok(compact_requested) => {
+                                            // ── Layer 3: compact tool 触发 ──
+                                            if compact_requested && compact_config.enabled {
+                                                let _ = compact::auto_compact(&mut messages, &provider).await;
+                                            }
+                                            continue;
+                                        }
                                         Err(()) => return,
                                     }
                                 }
@@ -292,7 +315,13 @@ pub async fn run_agent_loop(
                     &tool_result_rx,
                     &pending_user_messages,
                 ) {
-                    Ok(()) => continue,
+                    Ok(compact_requested) => {
+                        // ── Layer 3: compact tool 触发 ──
+                        if compact_requested && compact_config.enabled {
+                            let _ = compact::auto_compact(&mut messages, &provider).await;
+                        }
+                        continue;
+                    }
                     Err(()) => return,
                 }
             } else {
@@ -331,7 +360,13 @@ pub async fn run_agent_loop(
                                     &tool_result_rx,
                                     &pending_user_messages,
                                 ) {
-                                    Ok(()) => continue,
+                                    Ok(compact_requested) => {
+                                        // ── Layer 3: compact tool 触发 ──
+                                        if compact_requested && compact_config.enabled {
+                                            let _ = compact::auto_compact(&mut messages, &provider).await;
+                                        }
+                                        continue;
+                                    }
                                     Err(()) => return,
                                 }
                             }
@@ -424,7 +459,8 @@ fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg])
 }
 
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
-/// 返回 Ok(()) 表示成功（应 continue 循环），Err(()) 表示 channel 断开（应 return）
+/// 返回 Ok(bool) 表示成功（应 continue 循环），bool 为 true 时表示有 compact tool 被调用
+/// Err(()) 表示 channel 断开（应 return）
 fn process_tool_calls(
     tool_items: Vec<ToolCallItem>,
     assistant_text: String,
@@ -432,12 +468,15 @@ fn process_tool_calls(
     tx: &mpsc::Sender<StreamMsg>,
     tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
     pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
-) -> Result<(), ()> {
+) -> Result<bool, ()> {
     log_tool_request(&tool_items);
 
     if !assistant_text.is_empty() {
         write_info_log("Chat 回复", &assistant_text);
     }
+
+    // 检查是否有 compact tool 被调用
+    let compact_requested = tool_items.iter().any(|t| t.name == "compact");
 
     messages.push(ChatMessage {
         role: "assistant".to_string(),
@@ -473,5 +512,5 @@ fn process_tool_calls(
     }
 
     drain_pending_user_messages(messages, pending_user_messages);
-    Ok(())
+    Ok(compact_requested)
 }

@@ -3,6 +3,7 @@ pub mod api;
 pub mod app;
 pub mod archive;
 pub mod autocomplete;
+pub mod compact;
 pub mod constants;
 pub mod handler;
 pub mod markdown;

@@ -1,6 +1,7 @@
 mod ask;
 pub mod background;
 mod browser;
+mod compact;
 mod file;
 mod grep;
 mod shell;
@@ -89,6 +90,8 @@ impl ToolRegistry {
                 Box::new(task::TaskGetTool {
                     manager: Arc::clone(&task_manager),
                 }),
+                // Context compact 工具
+                Box::new(compact::CompactTool),
             ],
         };
 
