@@ -11,7 +11,8 @@ description: "一句话生成完整 Web APP。当用户描述一个 Web 应用�
 
 ## 初始化工作流
 
-使用 `Task` 工具初始化工作流，创建项目根目录 `<project_name>/`
+创建项目根目录 `<project_name>/`
+使用 `Task` 工具初始化以下工作流并执行
 
 ### 1. 需求分析与扩写
 
