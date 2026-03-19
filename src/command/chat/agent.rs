@@ -3,6 +3,7 @@ use super::app::{StreamMsg, ToolResultMsg};
 use super::compact::{self, CompactConfig};
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
+use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};
 use futures::StreamExt;
@@ -82,7 +83,7 @@ pub async fn run_agent_loop(
             }
             for msg in &messages {
                 match msg.role.as_str() {
-                    "assistant" => {
+                    ROLE_ASSISTANT => {
                         if !msg.content.is_empty() {
                             log_content.push_str(&format!("[Assistant] {}\n", msg.content));
                         }
@@ -95,11 +96,11 @@ pub async fn run_agent_loop(
                             }
                         }
                     }
-                    "tool" => {
+                    ROLE_TOOL => {
                         let id = msg.tool_call_id.as_deref().unwrap_or("?");
                         log_content.push_str(&format!("[Tool/Result({})] {}\n", id, msg.content));
                     }
-                    "user" => {
+                    ROLE_USER => {
                         log_content.push_str(&format!("[User] {}\n", msg.content));
                     }
                     other => {
