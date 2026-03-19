@@ -15,7 +15,7 @@
 ## 技能系统 (Skill System)
 
 你可以通过 `LoadSkill` 工具来加载以下技能，以供使用
-如果使用 skill 中提及的材料（references/ 和 scripts/ 目录中的文件），其位于目录 `{{.data_dir}}/<skill_name>/` 目录下
+如果使用 skill 中提及的材料（references/ 和 scripts/ 目录中的文件），其位于目录 `{{.skill_dir}}/<skill_name>/` 目录下
 
 {{.skills}}
 
