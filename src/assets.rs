@@ -99,10 +99,12 @@ pub fn default_soul() -> Cow<'static, str> {
 pub fn install_default_skills(skills_dir: &std::path::Path) {
     for filename in Assets::iter() {
         let filename = filename.as_ref();
+
         // 只处理 skills/ 前缀的文件
         if !filename.starts_with("skills/") {
             continue;
         }
+
         // 提取相对路径，如 "skills/my-skill/SKILL.md" → "my-skill/SKILL.md"
         let rel_path = &filename["skills/".len()..];
         if rel_path.is_empty() {
