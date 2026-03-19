@@ -8,113 +8,6 @@ use futures::StreamExt;
 use std::sync::{Arc, Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
 
-/// 从待处理队列中 drain 用户在 agent loop 期间发送的新消息，追加到 messages
-fn drain_pending_user_messages(
-    messages: &mut Vec<ChatMessage>,
-    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
-) {
-    let mut pending = pending_user_messages.lock().unwrap();
-    if !pending.is_empty() {
-        messages.append(&mut *pending);
-    }
-}
-
-/// 从非流式响应的 tool_calls 列表中提取 ToolCallItem
-fn extract_tool_items(raw_tool_list: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
-    raw_tool_list
-        .iter()
-        .filter_map(|tc| {
-            if let ChatCompletionMessageToolCalls::Function(function) = tc {
-                Some(ToolCallItem {
-                    id: function.id.clone(),
-                    name: function.function.name.clone(),
-                    arguments: function.function.arguments.clone(),
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-/// 记录工具调用请求日志
-fn log_tool_request(tool_items: &[ToolCallItem]) {
-    let mut log_content = String::new();
-    for item in tool_items {
-        log_content.push_str(&format!("- {}: {}\n", item.name, item.arguments));
-    }
-    write_info_log("工具调用请求", &log_content);
-}
-
-/// 记录工具调用结果日志
-fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg]) {
-    let mut log_content = String::new();
-    for (i, result) in tool_results.iter().enumerate() {
-        let (tool_name, tool_args) = tool_items
-            .get(i)
-            .map(|t| (t.name.as_str(), t.arguments.as_str()))
-            .unwrap_or(("unknown", ""));
-        log_content.push_str(&format!(
-            "- [{}] {}({}): {}\n",
-            result.tool_call_id, tool_name, tool_args, result.result
-        ));
-    }
-    write_info_log("工具调用结果", &log_content);
-}
-
-/// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
-/// 返回 Ok(()) 表示成功（应 continue 循环），Err(()) 表示 channel 断开（应 return）
-fn process_tool_calls(
-    tool_items: Vec<ToolCallItem>,
-    assistant_text: String,
-    messages: &mut Vec<ChatMessage>,
-    tx: &mpsc::Sender<StreamMsg>,
-    tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
-    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
-) -> Result<(), ()> {
-    log_tool_request(&tool_items);
-
-    if !assistant_text.is_empty() {
-        write_info_log("Chat 回复", &assistant_text);
-    }
-
-    messages.push(ChatMessage {
-        role: "assistant".to_string(),
-        content: assistant_text,
-        tool_calls: Some(tool_items.clone()),
-        tool_call_id: None,
-    });
-
-    if tx
-        .send(StreamMsg::ToolCallRequest(tool_items.clone()))
-        .is_err()
-    {
-        return Err(());
-    }
-
-    let mut tool_results: Vec<ToolResultMsg> = Vec::new();
-    for _ in &tool_items {
-        match tool_result_rx.recv() {
-            Ok(result) => tool_results.push(result),
-            Err(_) => return Err(()),
-        }
-    }
-
-    log_tool_results(&tool_items, &tool_results);
-
-    for result in tool_results {
-        messages.push(ChatMessage {
-            role: "tool".to_string(),
-            content: result.result,
-            tool_calls: None,
-            tool_call_id: Some(result.tool_call_id),
-        });
-    }
-
-    drain_pending_user_messages(messages, pending_user_messages);
-    Ok(())
-}
-
 /// 后台 Agent 循环：支持多轮工具调用
 #[allow(clippy::too_many_arguments)]
 pub async fn run_agent_loop(
@@ -474,4 +367,111 @@ pub async fn run_agent_loop(
     }
 
     let _ = tx.send(StreamMsg::Done);
+}
+
+/// 从待处理队列中 drain 用户在 agent loop 期间发送的新消息，追加到 messages
+fn drain_pending_user_messages(
+    messages: &mut Vec<ChatMessage>,
+    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+) {
+    let mut pending = pending_user_messages.lock().unwrap();
+    if !pending.is_empty() {
+        messages.append(&mut *pending);
+    }
+}
+
+/// 从非流式响应的 tool_calls 列表中提取 ToolCallItem
+fn extract_tool_items(raw_tool_list: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
+    raw_tool_list
+        .iter()
+        .filter_map(|tc| {
+            if let ChatCompletionMessageToolCalls::Function(function) = tc {
+                Some(ToolCallItem {
+                    id: function.id.clone(),
+                    name: function.function.name.clone(),
+                    arguments: function.function.arguments.clone(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// 记录工具调用请求日志
+fn log_tool_request(tool_items: &[ToolCallItem]) {
+    let mut log_content = String::new();
+    for item in tool_items {
+        log_content.push_str(&format!("- {}: {}\n", item.name, item.arguments));
+    }
+    write_info_log("工具调用请求", &log_content);
+}
+
+/// 记录工具调用结果日志
+fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg]) {
+    let mut log_content = String::new();
+    for (i, result) in tool_results.iter().enumerate() {
+        let (tool_name, tool_args) = tool_items
+            .get(i)
+            .map(|t| (t.name.as_str(), t.arguments.as_str()))
+            .unwrap_or(("unknown", ""));
+        log_content.push_str(&format!(
+            "- [{}] {}({}): {}\n",
+            result.tool_call_id, tool_name, tool_args, result.result
+        ));
+    }
+    write_info_log("工具调用结果", &log_content);
+}
+
+/// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
+/// 返回 Ok(()) 表示成功（应 continue 循环），Err(()) 表示 channel 断开（应 return）
+fn process_tool_calls(
+    tool_items: Vec<ToolCallItem>,
+    assistant_text: String,
+    messages: &mut Vec<ChatMessage>,
+    tx: &mpsc::Sender<StreamMsg>,
+    tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
+    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+) -> Result<(), ()> {
+    log_tool_request(&tool_items);
+
+    if !assistant_text.is_empty() {
+        write_info_log("Chat 回复", &assistant_text);
+    }
+
+    messages.push(ChatMessage {
+        role: "assistant".to_string(),
+        content: assistant_text,
+        tool_calls: Some(tool_items.clone()),
+        tool_call_id: None,
+    });
+
+    if tx
+        .send(StreamMsg::ToolCallRequest(tool_items.clone()))
+        .is_err()
+    {
+        return Err(());
+    }
+
+    let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+    for _ in &tool_items {
+        match tool_result_rx.recv() {
+            Ok(result) => tool_results.push(result),
+            Err(_) => return Err(()),
+        }
+    }
+
+    log_tool_results(&tool_items, &tool_results);
+
+    for result in tool_results {
+        messages.push(ChatMessage {
+            role: "tool".to_string(),
+            content: result.result,
+            tool_calls: None,
+            tool_call_id: Some(result.tool_call_id),
+        });
+    }
+
+    drain_pending_user_messages(messages, pending_user_messages);
+    Ok(())
 }
