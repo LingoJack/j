@@ -14,6 +14,7 @@
 
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
+use std::fs;
 
 /// 编译时嵌入资源统一管理
 ///
@@ -108,27 +109,14 @@ pub fn install_default_skills(skills_dir: &std::path::Path) {
             continue;
         }
 
-        // 提取 skill 名称（第一级目录），如 "my-skill"
-        let skill_name = match rel_path.split('/').next() {
-            Some(name) if !name.is_empty() => name,
-            _ => continue,
-        };
-
-        // 如果该 skill 目录已存在，跳过（不覆盖用户已有的 skill）
-        let skill_dir = skills_dir.join(skill_name);
-        if skill_dir.exists() {
+        // skills 目录原封不动复制到用户数据目录
+        let dst_path = skills_dir.join(rel_path);
+        if dst_path.exists() {
             continue;
         }
 
-        // 获取嵌入的文件内容
-        if let Some(file) = Assets::get(filename) {
-            let dest_path = skills_dir.join(rel_path);
-            // 创建父目录
-            if let Some(parent) = dest_path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            // 写入文件
-            let _ = std::fs::write(&dest_path, file.data.as_ref());
-        }
+        let bytes = Assets::get(filename).expect("asset not found").data;
+
+        fs::write(dst_path, bytes).expect("failed to write asset");
     }
 }
