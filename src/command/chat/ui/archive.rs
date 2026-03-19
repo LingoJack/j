@@ -14,7 +14,7 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  📦 归档当前对话",
+        "  🗂️ 归档当前对话",
         Style::default()
             .fg(t.help_title)
             .add_modifier(Modifier::BOLD),
