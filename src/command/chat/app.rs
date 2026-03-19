@@ -575,31 +575,51 @@ impl AgentHandle {
         let cancel_token_clone = cancel_token.clone();
 
         std::thread::spawn(move || {
-            // 在后台线程里执行文件 IO（resolve_system_prompt），避免阻塞主线程
-            let system_prompt = system_prompt_fn();
+            // 保留一个 stream_tx 副本，用于 panic 后向主线程发送错误消息
+            let stream_tx_panic = stream_tx.clone();
 
-            let runtime = match tokio::runtime::Runtime::new() {
-                Ok(rt) => rt,
-                Err(e) => {
-                    let _ = stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
-                    return;
-                }
-            };
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                // 在后台线程里执行文件 IO（resolve_system_prompt），避免阻塞主线程
+                let system_prompt = system_prompt_fn();
 
-            runtime.block_on(run_agent_loop(
-                provider,
-                api_messages,
-                tools,
-                system_prompt,
-                use_stream,
-                streaming_content,
-                stream_tx,
-                tool_result_rx,
-                max_tool_rounds,
-                cancel_token_clone,
-                pending_user_messages,
-                background_manager,
-            ));
+                let runtime = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        let _ =
+                            stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
+                        return;
+                    }
+                };
+
+                runtime.block_on(run_agent_loop(
+                    provider,
+                    api_messages,
+                    tools,
+                    system_prompt,
+                    use_stream,
+                    streaming_content,
+                    stream_tx,
+                    tool_result_rx,
+                    max_tool_rounds,
+                    cancel_token_clone,
+                    pending_user_messages,
+                    background_manager,
+                ));
+            }));
+
+            if let Err(panic_info) = result {
+                // 尝试提取 panic 信息
+                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    format!("Agent 线程 panic: {}", s)
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    format!("Agent 线程 panic: {}", s)
+                } else {
+                    "Agent 线程发生未知 panic".to_string()
+                };
+                crate::util::log::write_error_log("AgentHandle::spawn", &panic_msg);
+                // 通知主线程，避免 loading 状态永久卡住
+                let _ = stream_tx_panic.send(StreamMsg::Error(panic_msg));
+            }
         });
 
         // 这里是一个表达式
