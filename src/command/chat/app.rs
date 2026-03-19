@@ -995,7 +995,12 @@ impl ChatApp {
             let _ = save_soul(&crate::assets::default_soul());
         }
         // 安装预设 skills
-        crate::assets::install_default_skills(&skill::skills_dir());
+        if let Err(e) = crate::assets::install_default_skills(&skill::skills_dir()) {
+            crate::util::log::write_error_log(
+                "[ChatApp::new]",
+                &format!("安装预设 skills 失败: {}", e),
+            );
+        }
 
         let session = load_chat_session();
         let mut model_list_state = ListState::default();
