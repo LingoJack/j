@@ -2,7 +2,7 @@ use super::agent::run_agent_loop;
 use super::compact::CompactConfig;
 use super::markdown::image_cache::ImageCache;
 use super::permission::JcliConfig;
-use super::skill::{self, Skill};
+use super::skill::{self, Skill, skills_dir};
 use super::storage::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
     load_chat_session, memory_path, save_agent_config, save_chat_session, save_memory, save_soul,
@@ -2123,8 +2123,7 @@ impl ChatApp {
         let system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send> = Box::new(move || {
             use super::storage::{load_memory, load_soul, load_style, load_system_prompt};
             let template = load_system_prompt()?;
-            let skills_summary =
-                super::skill::build_skills_summary(&loaded_skills, &disabled_skills);
+            let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
             let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
             let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
             let memory_text = load_memory().unwrap_or_default();
@@ -2132,9 +2131,11 @@ impl ChatApp {
             let current_dir = std::env::current_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string());
+            let skill_dir = skills_dir().to_string_lossy().to_string();
             let resolved = template
                 .replace("{{.current_dir}}", &current_dir)
                 .replace("{{.skills}}", &skills_summary)
+                .replace("{{.skill_dir}}", &skill_dir)
                 .replace("{{.tools}}", &tools_summary)
                 .replace("{{.style}}", &style_text)
                 .replace("{{.memory}}", &memory_text)
