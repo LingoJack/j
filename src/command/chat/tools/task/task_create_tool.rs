@@ -16,6 +16,7 @@ impl Tool for TaskCreateTool {
         r#"
         Create a new task to break down complex requirements into smaller, trackable units of work.
         Supports optional dependency parameters to define task ordering at creation time.
+        Note that the task should be self-contained and actionable based on the provided title and description and task documents given, as it will be assigned to an agent for execution.
         "#
     }
 
