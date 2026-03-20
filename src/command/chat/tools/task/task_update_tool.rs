@@ -1,6 +1,5 @@
 use std::sync::{Arc, atomic::AtomicBool};
 
-use crossterm::event::read;
 use serde_json::{Value, json};
 
 use crate::command::chat::tools::{Tool, ToolResult, task::task_manager::TaskManager};
