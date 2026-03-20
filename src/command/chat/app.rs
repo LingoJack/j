@@ -377,12 +377,32 @@ impl ToolExecutor {
             let registry = Arc::clone(registry);
             let cancelled = Arc::clone(&self.tool_cancelled);
             std::thread::spawn(move || {
-                let result = registry.execute(&tool_name, &arguments, &cancelled);
-                let _ = tx.send(ToolExecDoneMsg {
-                    tool_call_id,
-                    output: result.output,
-                    is_error: result.is_error,
-                });
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    registry.execute(&tool_name, &arguments, &cancelled)
+                }));
+                match result {
+                    Ok(exec_result) => {
+                        let _ = tx.send(ToolExecDoneMsg {
+                            tool_call_id,
+                            output: exec_result.output,
+                            is_error: exec_result.is_error,
+                        });
+                    }
+                    Err(panic_info) => {
+                        let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "unknown panic".to_string()
+                        };
+                        let _ = tx.send(ToolExecDoneMsg {
+                            tool_call_id,
+                            output: format!("[Tool panic] {}", msg),
+                            is_error: true,
+                        });
+                    }
+                }
             });
         }
     }
@@ -434,12 +454,32 @@ impl ToolExecutor {
         let registry = Arc::clone(registry);
         let cancelled = Arc::clone(&self.tool_cancelled);
         std::thread::spawn(move || {
-            let result = registry.execute(&tool_name, &arguments, &cancelled);
-            let _ = exec_tx.send(ToolExecDoneMsg {
-                tool_call_id,
-                output: result.output,
-                is_error: result.is_error,
-            });
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                registry.execute(&tool_name, &arguments, &cancelled)
+            }));
+            match result {
+                Ok(exec_result) => {
+                    let _ = exec_tx.send(ToolExecDoneMsg {
+                        tool_call_id,
+                        output: exec_result.output,
+                        is_error: exec_result.is_error,
+                    });
+                }
+                Err(panic_info) => {
+                    let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "unknown panic".to_string()
+                    };
+                    let _ = exec_tx.send(ToolExecDoneMsg {
+                        tool_call_id,
+                        output: format!("[Tool panic] {}", msg),
+                        is_error: true,
+                    });
+                }
+            }
         });
 
         self.advance()

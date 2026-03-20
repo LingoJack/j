@@ -18,12 +18,32 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 
+/// 恢复终端状态：关闭鼠标追踪、离开备用屏幕、关闭 raw mode
+fn restore_terminal() {
+    let _ = terminal::disable_raw_mode();
+    let _ = execute!(
+        io::stdout(),
+        event::DisableMouseCapture,
+        LeaveAlternateScreen
+    );
+}
+
 pub fn run_chat_tui() {
-    match run_chat_tui_internal() {
-        Ok(_) => {}
-        Err(e) => {
-            error!("❌ Chat TUI 启动失败: {}", e);
-        }
+    // 设置 panic hook，确保 panic 时也能恢复终端状态
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        original_hook(info);
+    }));
+
+    let result = run_chat_tui_internal();
+
+    // 恢复默认 panic hook
+    let _ = std::panic::take_hook();
+
+    if let Err(e) = result {
+        restore_terminal();
+        error!("❌ Chat TUI 启动失败: {}", e);
     }
 }
 

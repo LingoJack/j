@@ -402,7 +402,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 continue;
             }
 
-            let mut cache = app.ui.image_cache.lock().unwrap();
+            let mut cache = safe_lock(&app.ui.image_cache, "draw_chat_ui::image_cache");
             match cache.images.get_mut(&url) {
                 Some(ImageState::Ready(protocol)) => {
                     let widget = StatefulImage::default().resize(Resize::Scale(None));

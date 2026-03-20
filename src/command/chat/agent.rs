@@ -222,7 +222,7 @@ pub async fn run_agent_loop(
             if stream_had_deserialize_error {
                 // 清空流式内容（切换到非流式）
                 {
-                    let mut sc = streaming_content.lock().unwrap();
+                    let mut sc = safe_lock(&streaming_content, "agent::fallback_clear");
                     sc.clear();
                 }
                 // 重新构建请求（不带 stream）
