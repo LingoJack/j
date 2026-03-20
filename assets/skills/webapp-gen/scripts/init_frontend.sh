@@ -67,6 +67,52 @@ npm install --prefer-offline || {
     exit 1
 }
 
+# Install and configure Tailwind CSS v4
+log_info "Installing Tailwind CSS v4..."
+npm install -D tailwindcss @tailwindcss/vite || {
+    log_error "Failed to install Tailwind CSS"
+    cd ../..
+    exit 1
+}
+
+# Update vite.config.ts to include Tailwind CSS plugin
+log_info "Configuring Vite with Tailwind CSS plugin..."
+cat > vite.config.ts << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [
+    react(),
+    tailwindcss(),
+  ],
+})
+EOF
+
+# Update index.css with Tailwind CSS import
+log_info "Setting up Tailwind CSS styles..."
+cat > src/index.css << 'EOF'
+@import "tailwindcss";
+EOF
+
+# Clean up default App.css (Tailwind replaces it)
+rm -f src/App.css
+
+# Update App.tsx to remove App.css import and use Tailwind classes
+cat > src/App.tsx << 'EOF'
+function App() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <h1 className="text-4xl font-bold text-blue-600">Hello, World!</h1>
+    </div>
+  )
+}
+
+export default App
+EOF
+
 log_success "Frontend project initialized successfully!"
 log_info "Project location: frontend/$PROJECT_NAME"
 log_info "Next steps:"
