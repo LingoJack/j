@@ -1,5 +1,6 @@
 use super::api::create_openai_client;
 use super::storage::{ChatMessage, ModelProvider, agent_data_dir};
+use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
@@ -29,11 +30,11 @@ fn default_compact_enabled() -> bool {
 }
 
 fn default_token_threshold() -> usize {
-    50000
+    1 << 20 // 1MB
 }
 
 fn default_keep_recent() -> usize {
-    3
+    10
 }
 
 impl Default for CompactConfig {
@@ -59,7 +60,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
     let mut tool_name_map: HashMap<String, String> = HashMap::new();
     for msg in messages.iter() {
-        if msg.role == "assistant" {
+        if msg.role == ROLE_ASSISTANT {
             if let Some(ref tcs) = msg.tool_calls {
                 for tc in tcs {
                     tool_name_map.insert(tc.id.clone(), tc.name.clone());
@@ -72,7 +73,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     let tool_indices: Vec<usize> = messages
         .iter()
         .enumerate()
-        .filter(|(_, msg)| msg.role == "tool")
+        .filter(|(_, msg)| msg.role == ROLE_TOOL)
         .map(|(i, _)| i)
         .collect();
 
