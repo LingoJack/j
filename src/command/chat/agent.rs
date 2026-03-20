@@ -101,9 +101,10 @@ pub async fn run_agent_loop(
                     }
                     ROLE_TOOL => {
                         let id = msg.tool_call_id.as_deref().unwrap_or("?");
+                        let tool_name = msg.tool_calls.as_ref().unwrap()[0].name;
                         log_content.push_str(&format!(
-                            "[Tool/Result({})] result \n:{}\n",
-                            id, msg.content
+                            "[Tool/Result({} with id `{}`)] result \n:{}\n",
+                            tool_name, id, msg.content
                         ));
                     }
                     ROLE_USER => {
@@ -510,8 +511,9 @@ fn process_tool_calls(
     log_tool_results(&tool_items, &tool_results);
 
     for result in tool_results {
+        // TODO 这里应该记录一下 tool name
         messages.push(ChatMessage {
-            role: "tool".to_string(),
+            role: ROLE_TOOL.to_string(),
             content: result.result,
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id),
