@@ -20,3 +20,5 @@ description: "一句话生成完整 Web APP。当用户描述一个 Web 应用�
 6. 阅读 references/frontend_impl.md 指引，完成前端实现
 7. 阅读 references/testing.md 指引，完成测试配置
 8. 阅读 references/deployment.md 指引，完成部署
+
+注意，上述所有任务是串行的，前一个任务都必须完成才能继续下一个任务
