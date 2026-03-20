@@ -1,7 +1,7 @@
 使用 `init_frontend.sh` 脚本快速初始化 React + TypeScript 项目（自动创建项目脚手架，并安装依赖）
 
 
-根据 `docs/requirement.md` 内容，严格按照以下步骤开发：
+阅读需求文档 `docs/requirement.md` 内容，严格按照以下步骤开发：
 1. 创建 `frontend/` 目录，在目录下执行
     ```bash
     <skill_base_path>/scripts/init_frontend.sh <app_name>

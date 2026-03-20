@@ -83,6 +83,9 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     // 3. 除最近 keep_recent 个外，content.len() > 100 的替换为占位符
     let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
+    // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
+    const EXEMPT_TOOLS: &[&str] = &["LoadSkill"];
+
     for &idx in to_compact {
         let msg = &messages[idx];
         if msg.content.len() > 100 {
@@ -91,6 +94,9 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
                 .get(&tool_call_id)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
+            if EXEMPT_TOOLS.iter().any(|&t| t == tool_name) {
+                continue;
+            }
             messages[idx].content = format!("[Previous: used {}]", tool_name);
             compacted_count += 1;
         }
@@ -167,6 +173,7 @@ pub async fn auto_compact(
     let summary_prompt = format!(
         "Summarize this conversation for continuity. Include: \
          1) What was accomplished, 2) Current state, 3) Key decisions made. \
+         4) If a skill/workflow was actively being followed, preserve its key steps and current progress so the model can continue following it. \
          Be concise but preserve critical details.\n\n{}",
         truncated
     );

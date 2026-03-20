@@ -30,7 +30,9 @@
       "Bash(/tmp/chat_architecture_diagram.txt:*)",
       "Read(//tmp/**)",
       "Bash(chmod +x /Users/jacklingo/dev_custom/j/assets/skills/webapp-gen/scripts/*.sh)",
-      "Bash(/Users/jacklingo/dev_custom/j/assets/skills/webapp-gen/SCRIPTS_SUMMARY.md:*)"
+      "Bash(/Users/jacklingo/dev_custom/j/assets/skills/webapp-gen/SCRIPTS_SUMMARY.md:*)",
+      "Read(//Users/jacklingo/dev_custom/j/**)",
+      "Bash(echo \":*)"
     ]
   },
   "language": "zh-CN",
