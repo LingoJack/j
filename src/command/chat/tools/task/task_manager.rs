@@ -2,12 +2,14 @@ use super::entity::AgentTask;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 // ========== TaskManager ==========
 
 /// 任务管理器，负责 CRUD 操作和持久化
 pub struct TaskManager {
     tasks_dir: PathBuf,
+    write_lock: Mutex<()>,
 }
 
 impl TaskManager {
@@ -15,7 +17,10 @@ impl TaskManager {
         let data_dir = crate::config::YamlConfig::data_dir();
         let tasks_dir = data_dir.join("agent").join("tasks");
         let _ = fs::create_dir_all(&tasks_dir);
-        Self { tasks_dir }
+        Self {
+            tasks_dir,
+            write_lock: Mutex::new(()),
+        }
     }
 
     /// 生成下一个任务 ID（基于已有文件的最大 ID + 1）
@@ -49,6 +54,7 @@ impl TaskManager {
         blocked_by: Vec<u64>,
         blocks: Vec<u64>,
     ) -> Result<AgentTask, String> {
+        let _lock = self.write_lock.lock().unwrap();
         let task_id = self.next_id();
         let task = AgentTask {
             task_id,
@@ -110,6 +116,7 @@ impl TaskManager {
     }
 
     pub fn update_task(&self, id: u64, updates: &Value) -> Result<AgentTask, String> {
+        let _lock = self.write_lock.lock().unwrap();
         let mut task = self.get_task(id)?;
 
         if let Some(status) = updates.get("status").and_then(|s| s.as_str()) {
