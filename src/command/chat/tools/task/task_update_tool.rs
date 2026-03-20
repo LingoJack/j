@@ -1,5 +1,6 @@
 use std::sync::{Arc, atomic::AtomicBool};
 
+use crossterm::event::read;
 use serde_json::{Value, json};
 
 use crate::command::chat::tools::{Tool, ToolResult, task::task_manager::TaskManager};
@@ -83,10 +84,16 @@ impl Tool for TaskUpdateTool {
         };
 
         match self.manager.update_task(task_id, &parsed) {
-            Ok(task) => ToolResult {
-                output: serde_json::to_string_pretty(&task).unwrap_or_default(),
-                is_error: false,
-            },
+            Ok(_) => {
+                let ready_tasks = self.manager.list_ready_tasks();
+                ToolResult {
+                    output: format!(
+                        "Update task successfully. Following tasks are ready to run: \n\n{}",
+                        serde_json::to_string_pretty(&ready_tasks).unwrap_or_default()
+                    ),
+                    is_error: false,
+                }
+            }
             Err(e) => ToolResult {
                 output: e,
                 is_error: true,

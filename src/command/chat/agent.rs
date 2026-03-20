@@ -69,6 +69,8 @@ pub async fn run_agent_loop(
             }
         }
 
+        // 这里对 task 的情况做一个检测
+
         // 清空流式内容缓冲（每轮开始时）
         {
             let mut sc = streaming_content.lock().unwrap();
