@@ -143,6 +143,30 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     f.render_widget(title_block, area);
 }
 
+/// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用
+/// history_total 是所有历史消息的总行数（预计算，避免重复求和）
+fn get_line_at<'a>(
+    cached: &'a MsgLinesCache,
+    global_idx: usize,
+    history_total: usize,
+) -> Option<&'a Line<'static>> {
+    if global_idx < history_total {
+        // 二分查找 msg_start_lines 定位所属消息
+        let msg_pos = cached
+            .msg_start_lines
+            .partition_point(|&(_, start)| start <= global_idx);
+        if msg_pos == 0 {
+            return None;
+        }
+        let (_msg_idx, start) = cached.msg_start_lines[msg_pos - 1];
+        let local = global_idx - start;
+        let per = &cached.per_msg_lines[msg_pos - 1];
+        per.lines.get(local)
+    } else {
+        cached.streaming_lines.get(global_idx - history_total)
+    }
+}
+
 pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
     let block = Block::default()
@@ -241,8 +265,15 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     if !cache_hit {
         let old_cache = app.ui.msg_lines_cache.take();
-        let (new_lines, new_msg_start_lines, new_per_msg, new_stable_lines, new_stable_offset) =
-            build_message_lines_incremental(app, inner_width, bubble_max_width, old_cache.as_ref());
+        let (
+            new_msg_start_lines,
+            new_per_msg,
+            new_streaming_lines,
+            new_stable_lines,
+            new_stable_offset,
+        ) = build_message_lines_incremental(app, inner_width, bubble_max_width, old_cache.as_ref());
+        let total_line_count: usize =
+            new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>() + new_streaming_lines.len();
         app.ui.msg_lines_cache = Some(MsgLinesCache {
             msg_count,
             last_msg_len,
@@ -251,9 +282,10 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             bubble_max_width,
             browse_index: current_browse_index,
             tool_confirm_idx: current_tool_confirm_idx,
-            lines: new_lines,
+            total_line_count,
             msg_start_lines: new_msg_start_lines,
             per_msg_lines: new_per_msg,
+            streaming_lines: new_streaming_lines,
             streaming_stable_lines: new_stable_lines,
             streaming_stable_offset: new_stable_offset,
         });
@@ -263,8 +295,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         Some(c) => c,
         None => return,
     };
-    let all_lines = &cached.lines;
-    let total_lines = all_lines.len() as u16;
+    let total_lines = cached.total_line_count as u16;
 
     f.render_widget(block, area);
 
@@ -309,10 +340,14 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     f.render_widget(bg_fill, inner);
 
     let start = app.ui.scroll_offset as usize;
-    let end = (start + visible_height as usize).min(all_lines.len());
+    let end = (start + visible_height as usize).min(cached.total_line_count);
+    let history_total: usize = cached.per_msg_lines.iter().map(|p| p.lines.len()).sum();
     let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
     for (i, line_idx) in (start..end).enumerate() {
-        let line = &all_lines[line_idx];
+        let line = match get_line_at(cached, line_idx, history_total) {
+            Some(l) => l,
+            None => continue,
+        };
         let y = inner.y + i as u16;
         let line_area = Rect::new(inner.x, y, inner.width, 1);
         // 图片标记行：只渲染气泡填充 span，跳过末尾的标记 span
@@ -340,15 +375,18 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let img_pad = 3u16; // 与气泡 pad_left_w 一致
     let img_render_w = (bubble_max_width as u16).saturating_sub(img_pad * 2);
     for (i, line_idx) in (start..end).enumerate() {
-        let line = &all_lines[line_idx];
+        let line = match get_line_at(cached, line_idx, history_total) {
+            Some(l) => l,
+            None => continue,
+        };
         // 在所有 spans 中查找 \x00IMG: 标记（气泡包装会添加 padding spans）
-        let img_marker = line.spans.iter().find_map(|span| {
+        let img_marker: Option<(u16, String)> = line.spans.iter().find_map(|span| {
             let content = span.content.as_ref();
             content.strip_prefix("\x00IMG:").and_then(|rest| {
                 rest.find(':').map(|colon_pos| {
                     let height: u16 = rest[..colon_pos].parse().unwrap_or(20);
-                    let url = &rest[colon_pos + 1..];
-                    (height, url.to_string())
+                    let url = rest[colon_pos + 1..].to_string();
+                    (height, url)
                 })
             })
         });
@@ -359,11 +397,15 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
             // 计算实际可用的占位行数：从标记行往下数连续的空行/占位行
             let mut actual_h = 1u16; // 标记行本身占 1 行
-            for next_line in all_lines
-                .iter()
-                .take(all_lines.len().min(line_idx + height as usize))
-                .skip(line_idx + 1)
-            {
+            for next_offset in 1..height as usize {
+                let next_idx = line_idx + next_offset;
+                if next_idx >= cached.total_line_count {
+                    break;
+                }
+                let next_line = match get_line_at(cached, next_idx, history_total) {
+                    Some(l) => l,
+                    None => break,
+                };
                 // 占位行要么为空，要么只有气泡背景空格（可能含边框字符 │）
                 let is_placeholder = next_line.spans.is_empty()
                     || next_line

@@ -736,12 +736,14 @@ pub struct MsgLinesCache {
     pub browse_index: Option<usize>,
     /// 工具确认模式中待处理工具的索引（None 表示非确认模式）
     pub tool_confirm_idx: Option<usize>,
-    /// 缓存的渲染行
-    pub lines: Vec<Line<'static>>,
+    /// 缓存的总行数（历史消息 + 流式内容）
+    pub total_line_count: usize,
     /// 每条消息（按 msg_index）的起始行号（用于浏览模式自动滚动）
     pub msg_start_lines: Vec<(usize, usize)>, // (msg_index, start_line)
     /// 按消息粒度缓存：每条历史消息的渲染行（key: 消息索引）
     pub per_msg_lines: Vec<PerMsgCache>,
+    /// 流式内容 + tool confirm + 末尾留白的渲染行（与历史消息分开存储）
+    pub streaming_lines: Vec<Line<'static>>,
     /// 流式增量渲染缓存：已完成段落的渲染行
     pub streaming_stable_lines: Vec<Line<'static>>,
     /// 流式增量渲染缓存：已缓存到 streaming_content 的字节偏移
@@ -2634,13 +2636,20 @@ impl ChatApp {
 
         if !cache_hit {
             let old_cache = self.ui.msg_lines_cache.take();
-            let (new_lines, new_msg_start_lines, new_per_msg, new_stable_lines, new_stable_offset) =
-                super::render_cache::build_message_lines_incremental(
-                    self,
-                    inner_width,
-                    bubble_max_width,
-                    old_cache.as_ref(),
-                );
+            let (
+                new_msg_start_lines,
+                new_per_msg,
+                new_streaming_lines,
+                new_stable_lines,
+                new_stable_offset,
+            ) = super::render_cache::build_message_lines_incremental(
+                self,
+                inner_width,
+                bubble_max_width,
+                old_cache.as_ref(),
+            );
+            let total_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>()
+                + new_streaming_lines.len();
             self.ui.msg_lines_cache = Some(MsgLinesCache {
                 msg_count,
                 last_msg_len,
@@ -2649,9 +2658,10 @@ impl ChatApp {
                 bubble_max_width,
                 browse_index: current_browse_index,
                 tool_confirm_idx: current_tool_confirm_idx,
-                lines: new_lines,
+                total_line_count,
                 msg_start_lines: new_msg_start_lines,
                 per_msg_lines: new_per_msg,
+                streaming_lines: new_streaming_lines,
                 streaming_stable_lines: new_stable_lines,
                 streaming_stable_offset: new_stable_offset,
             });

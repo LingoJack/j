@@ -33,7 +33,9 @@
       "Bash(/Users/jacklingo/dev_custom/j/assets/skills/webapp-gen/SCRIPTS_SUMMARY.md:*)",
       "Read(//Users/jacklingo/dev_custom/j/**)",
       "Bash(echo \":*)",
-      "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat/tools/task -type f -exec wc -l {} +)"
+      "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat/tools/task -type f -exec wc -l {} +)",
+      "mcp__ide__getDiagnostics",
+      "Bash(git stash:*)"
     ]
   },
   "language": "zh-CN",

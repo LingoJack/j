@@ -40,10 +40,11 @@ pub fn find_stable_boundary(content: &str) -> usize {
     last_safe_boundary
 }
 
-/// 增量构建所有消息的渲染行（P0 + P1 优化版本）
+/// 增量构建所有消息的渲染行（P0 + P1 + P2 优化版本）
 /// - P0：按消息粒度缓存，历史消息内容未变时直接复用渲染行
 /// - P1：流式消息增量段落渲染，只重新解析最后一个不完整段落
-///   返回 (渲染行列表, 消息起始行号映射, 按消息缓存, 流式稳定行缓存, 流式稳定偏移)
+/// - P2：不再组装扁平 lines Vec，draw_messages 直接索引 per_msg_lines + streaming_lines
+///   返回 (消息起始行号映射, 按消息缓存, 流式渲染行, 流式稳定行缓存, 流式稳定偏移)
 #[allow(clippy::type_complexity)]
 pub fn build_message_lines_incremental(
     app: &ChatApp,
@@ -51,9 +52,9 @@ pub fn build_message_lines_incremental(
     bubble_max_width: usize,
     old_cache: Option<&MsgLinesCache>,
 ) -> (
-    Vec<Line<'static>>,
     Vec<(usize, usize)>,
     Vec<PerMsgCache>,
+    Vec<Line<'static>>,
     Vec<Line<'static>>,
     usize,
 ) {
@@ -75,7 +76,7 @@ pub fn build_message_lines_incremental(
 
     let t = &app.ui.theme;
     let is_browse_mode = app.ui.mode == ChatMode::Browse;
-    let mut lines: Vec<Line> = Vec::new();
+    let mut current_line_offset: usize = 0;
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::new();
     let mut per_msg_cache: Vec<PerMsgCache> = Vec::new();
 
@@ -92,7 +93,7 @@ pub fn build_message_lines_incremental(
         let is_selected = is_browse_mode && idx == app.ui.browse_msg_index;
 
         // 记录消息起始行号
-        msg_start_lines.push((idx, lines.len()));
+        msg_start_lines.push((idx, current_line_offset));
 
         // P0 优化：尝试直接按索引复用旧缓存（O(1) 查找代替 O(n) 线性搜索）
         if can_reuse_per_msg {
@@ -102,12 +103,11 @@ pub fn build_message_lines_incremental(
                         && old_per.content_len == m.content.len()
                         && old_per.is_selected == is_selected
                     {
-                        // 直接复用旧缓存的渲染行（只克隆一次）
-                        let cached_lines = old_per.lines.clone();
-                        lines.extend(cached_lines.iter().cloned());
+                        // 直接复用旧缓存（零拷贝：clone PerMsgCache 结构但不重建 flat vec）
+                        current_line_offset += old_per.lines.len();
                         per_msg_cache.push(PerMsgCache {
                             content_len: old_per.content_len,
-                            lines: cached_lines,
+                            lines: old_per.lines.clone(),
                             msg_index: idx,
                             is_selected,
                         });
@@ -117,8 +117,8 @@ pub fn build_message_lines_incremental(
             }
         }
 
-        // 缓存未命中 → 重新渲染
-        let msg_lines_start = lines.len();
+        // 缓存未命中 → 重新渲染到临时 Vec
+        let mut tmp_lines: Vec<Line<'static>> = Vec::new();
         match m.role.as_str() {
             ROLE_USER => {
                 render_user_msg(
@@ -126,15 +126,21 @@ pub fn build_message_lines_incremental(
                     is_selected,
                     inner_width,
                     bubble_max_width,
-                    &mut lines,
+                    &mut tmp_lines,
                     t,
                 );
             }
             ROLE_ASSISTANT => {
                 if let Some(ref tool_calls) = m.tool_calls {
-                    render_tool_call_request_msg(tool_calls, bubble_max_width, &mut lines, t);
+                    render_tool_call_request_msg(tool_calls, bubble_max_width, &mut tmp_lines, t);
                 } else {
-                    render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut lines, t);
+                    render_assistant_msg(
+                        &m.content,
+                        is_selected,
+                        bubble_max_width,
+                        &mut tmp_lines,
+                        t,
+                    );
                 }
             }
             ROLE_TOOL => {
@@ -145,15 +151,15 @@ pub fn build_message_lines_incremental(
                 render_tool_result_msg(
                     &m.content,
                     role_label.as_deref().unwrap_or("工具结果"),
-                    &mut lines,
+                    &mut tmp_lines,
                     t,
                 );
             }
             ROLE_SYSTEM => {
-                lines.push(Line::from(""));
+                tmp_lines.push(Line::from(""));
                 let wrapped = wrap_text(&m.content, inner_width.saturating_sub(8));
                 for wl in wrapped {
-                    lines.push(Line::from(Span::styled(
+                    tmp_lines.push(Line::from(Span::styled(
                         format!("    {}  {}", "sys", wl),
                         Style::default().fg(t.text_system),
                     )));
@@ -162,19 +168,36 @@ pub fn build_message_lines_incremental(
             _ => {}
         }
 
-        // 缓存此历史消息的渲染行
-        let msg_lines_end = lines.len();
-        let this_msg_lines: Vec<Line<'static>> = lines[msg_lines_start..msg_lines_end].to_vec();
+        // 缓存此历史消息的渲染行（无需额外复制，直接存入）
+        current_line_offset += tmp_lines.len();
         per_msg_cache.push(PerMsgCache {
             content_len: m.content.len(),
-            lines: this_msg_lines,
+            lines: tmp_lines,
             msg_index: idx,
             is_selected,
         });
     }
 
-    // ===== 流式消息单独渲染（不进入 per_msg_cache）=====
+    // ===== 流式消息单独渲染进 streaming_lines =====
+    let mut streaming_lines: Vec<Line<'static>> = Vec::new();
+
+    // 获取旧的 stable_lines（只 clone 一次，复用于渲染和返回）
+    let (mut stable_lines, old_stable_offset) = if let Some(old_c) = old_cache {
+        if old_c.bubble_max_width == bubble_max_width {
+            (
+                old_c.streaming_stable_lines.clone(),
+                old_c.streaming_stable_offset,
+            )
+        } else {
+            (Vec::<Line<'static>>::new(), 0)
+        }
+    } else {
+        (Vec::<Line<'static>>::new(), 0)
+    };
+
     let has_streaming_msg = app.state.is_loading;
+    let mut final_stable_offset = old_stable_offset;
+
     if has_streaming_msg {
         let streaming_text = streaming_content_str.as_deref().unwrap_or("◍");
         // P1 增量段落渲染
@@ -185,14 +208,14 @@ pub fn build_message_lines_incremental(
         let bubble_total_w = bubble_max_width;
 
         // AI 标签
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
+        streaming_lines.push(Line::from(""));
+        streaming_lines.push(Line::from(Span::styled(
             "Sprite",
             Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
         )));
 
         // 上边距
-        lines.push(Line::from(vec![Span::styled(
+        streaming_lines.push(Line::from(vec![Span::styled(
             " ".repeat(bubble_total_w),
             Style::default().bg(bubble_bg),
         )]));
@@ -208,35 +231,21 @@ pub fn build_message_lines_incremental(
                 pad_right_w,
                 bubble_total_w,
             );
-            lines.push(bubble_line);
+            streaming_lines.push(bubble_line);
 
             // 下边距
-            lines.push(Line::from(vec![Span::styled(
+            streaming_lines.push(Line::from(vec![Span::styled(
                 " ".repeat(bubble_total_w),
                 Style::default().bg(bubble_bg),
             )]));
         } else {
-            // 增量段落渲染：取旧缓存中的 stable_lines 和 stable_offset
-            let (mut stable_lines, stable_offset) = if let Some(old_c) = old_cache {
-                if old_c.bubble_max_width == bubble_max_width {
-                    (
-                        old_c.streaming_stable_lines.clone(),
-                        old_c.streaming_stable_offset,
-                    )
-                } else {
-                    (Vec::<Line<'static>>::new(), 0)
-                }
-            } else {
-                (Vec::<Line<'static>>::new(), 0)
-            };
-
             let content = streaming_text;
             // 找到当前内容中最后一个安全的段落边界
             let boundary = find_stable_boundary(content);
 
             // 如果有新的完整段落超过了上次缓存的偏移
-            if boundary > stable_offset {
-                let new_stable_text = &content[stable_offset..boundary];
+            if boundary > old_stable_offset {
+                let new_stable_text = &content[old_stable_offset..boundary];
                 let new_md_lines = markdown_to_lines(new_stable_text, md_content_w + 2, t);
                 for md_line in new_md_lines {
                     let bubble_line = wrap_md_line_in_bubble(
@@ -249,9 +258,10 @@ pub fn build_message_lines_incremental(
                     stable_lines.push(bubble_line);
                 }
             }
+            final_stable_offset = boundary;
 
-            // 追加已缓存的稳定段落行
-            lines.extend(stable_lines.iter().cloned());
+            // 追加已缓存的稳定段落行（引用 clone，不再双重 clone）
+            streaming_lines.extend(stable_lines.iter().cloned());
 
             // 只对最后一个不完整段落做全量 Markdown 解析
             let tail = &content[boundary..];
@@ -265,72 +275,35 @@ pub fn build_message_lines_incremental(
                         pad_right_w,
                         bubble_total_w,
                     );
-                    lines.push(bubble_line);
+                    streaming_lines.push(bubble_line);
                 }
             }
 
             // 下边距
-            lines.push(Line::from(vec![Span::styled(
+            streaming_lines.push(Line::from(vec![Span::styled(
                 " ".repeat(bubble_total_w),
                 Style::default().bg(bubble_bg),
             )]));
         }
+    } else {
+        // 非流式状态：stable_lines 不再需要
+        stable_lines = Vec::new();
+        final_stable_offset = 0;
     }
 
     // ========== 内联工具确认区（统一交互区域）==========
     if app.ui.mode == ChatMode::ToolConfirm {
-        render_tool_confirm_area(app, bubble_max_width, &mut lines);
+        render_tool_confirm_area(app, bubble_max_width, &mut streaming_lines);
     }
 
     // 末尾留白
-    lines.push(Line::from(""));
-
-    // 计算最终的流式稳定缓存
-    let (final_stable_lines, final_stable_offset) = if let Some(sc) = &streaming_content_str {
-        let boundary = find_stable_boundary(sc);
-        let bubble_bg = t.bubble_ai;
-        let pad_left_w = 3usize;
-        let pad_right_w = 3usize;
-        let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
-        let bubble_total_w = bubble_max_width;
-
-        let (mut s_lines, s_offset) = if let Some(old_c) = old_cache {
-            if old_c.bubble_max_width == bubble_max_width {
-                (
-                    old_c.streaming_stable_lines.clone(),
-                    old_c.streaming_stable_offset,
-                )
-            } else {
-                (Vec::<Line<'static>>::new(), 0)
-            }
-        } else {
-            (Vec::<Line<'static>>::new(), 0)
-        };
-
-        if boundary > s_offset {
-            let new_text = &sc[s_offset..boundary];
-            let new_md_lines = markdown_to_lines(new_text, md_content_w + 2, t);
-            for md_line in new_md_lines {
-                let bubble_line = wrap_md_line_in_bubble(
-                    md_line,
-                    bubble_bg,
-                    pad_left_w,
-                    pad_right_w,
-                    bubble_total_w,
-                );
-                s_lines.push(bubble_line);
-            }
-        }
-        (s_lines, boundary)
-    } else {
-        (Vec::new(), 0)
-    };
+    streaming_lines.push(Line::from(""));
 
     (
-        lines,
         msg_start_lines,
         per_msg_cache,
-        final_stable_lines,
+        streaming_lines,
+        stable_lines,
         final_stable_offset,
     )
 }
