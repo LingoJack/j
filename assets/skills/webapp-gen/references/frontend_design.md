@@ -1,15 +1,34 @@
-使用 `init_frontend.sh` 脚本快速初始化 React + TypeScript 项目（自动创建项目脚手架，并安装依赖）
-
+前端技术栈使用为 React + TypeScript + Tailwind CSS
+使用 `init_frontend.sh` 脚本自动创建项目脚手架，并安装依赖
 
 阅读需求文档 `docs/requirement.md` 内容，严格按照以下步骤开发：
-1. 创建 `frontend/` 目录，在目录下执行
-    ```bash
-    <skill_base_path>/scripts/init_frontend.sh <app_name>
-    ```
-2. 按照用户的要求实现原型，数据可以先 mock
-3. 运行以下脚本检查前端项目
+0. 计划阶段
+    a. 编写 `docs/frontend_design.md` 首先思考计划清楚以下内容
+        - 确定项目结构
+        - 列出页面组件
+        - 定义状态管理方案
+        - 选择 UI 库
+        - 确定路由规划
+        - 列出 API 接口定义
+        - 定义全局样式规范
+        - 确定响应式断点
+        - 确定主题色板
+        - 确定图标系统
+        - 确定组件库规范
+    b. 编写完成后，运行以下命令以打开前端设计文档供用户查看，并使用 `Ask` 工具收集反馈
+        ```bash
+        open docs/frontend_design.md
+        ```
+    c. 收集用户反馈后，修改 `docs/frontend_design.md` 并再次运行上述命令，直到用户确认该文档满足要求
+1. 原型阶段
+    a. 创建 `frontend/` 目录，在目录下执行
+        ```bash
+        <skill_base_path>/scripts/init_frontend.sh <app_name>
+        ```
+    b. 按照 `docs/frontend_design.md` 实现原型，mock 所有需要使用的数据以及接口
+    c. 运行以下脚本检查前端项目
     ```bash
     <skill_base_path>/scripts/check_frontend.sh
     ```
-4. 使用 `BackgroundRun` 运行 `npm run dev` 启动开发服务器
-5. 用 `Ask` 询问改进意见并按照用户要求优化，直到用户确认该原型满足要求
+    d. 若检查通过，使用 `BackgroundRun` 运行 `npm run dev` 启动开发服务器
+    e. 用 `Ask` 询问改进意见并按照用户要求优化，直到用户确认该原型满足要求

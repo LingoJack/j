@@ -7,9 +7,7 @@
 - 标题：需求名称
 - 一些预期的用例场景 Use Case
 - 非功能性需求
-- 数据模型的初步建模
-
-写好之后，运行
+写好之后，运行以下命令，以供用户查看需求文档
 ```bash
-j open <file_path>
+j open docs/requirement.md
 ```
