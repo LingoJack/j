@@ -33,6 +33,21 @@ pub async fn run_agent_loop(
         // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
         drain_pending_user_messages(&mut messages, &pending_user_messages);
 
+        // ── Layer 1: micro_compact（替换旧 tool results）──
+        // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
+        if compact_config.enabled {
+            compact::micro_compact(&mut messages, compact_config.keep_recent);
+            if compact::estimate_tokens(&messages) > compact_config.token_threshold {
+                write_info_log(
+                    "agent_loop",
+                    "auto_compact triggered (token threshold exceeded)",
+                );
+                if let Err(e) = compact::auto_compact(&mut messages, &provider).await {
+                    write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
+                }
+            }
+        }
+
         // Drain 后台任务完成通知，注入为系统消息
         {
             let notifications = background_manager.drain_notifications();
@@ -51,21 +66,6 @@ pub async fn run_agent_loop(
                     "BackgroundNotification",
                     &format!("注入后台任务通知: task_id={}", notif.task_id),
                 );
-            }
-        }
-
-        // ── Layer 1: micro_compact（替换旧 tool results）──
-        // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
-        if compact_config.enabled {
-            compact::micro_compact(&mut messages, compact_config.keep_recent);
-            if compact::estimate_tokens(&messages) > compact_config.token_threshold {
-                write_info_log(
-                    "agent_loop",
-                    "auto_compact triggered (token threshold exceeded)",
-                );
-                if let Err(e) = compact::auto_compact(&mut messages, &provider).await {
-                    write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
-                }
             }
         }
 
