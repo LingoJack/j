@@ -14,6 +14,7 @@ use super::tools::background::BackgroundManager;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_USER};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
+use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
@@ -270,10 +271,9 @@ impl ToolExecutor {
     /// 轮询后台工具执行结果，更新状态并转发给 agent loop
     pub fn poll_results(&mut self) {
         let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
-        if self.tool_exec_rx.is_some() {
+        if let Some(ref rx) = self.tool_exec_rx {
             loop {
-                let msg = self.tool_exec_rx.as_ref().unwrap().try_recv();
-                match msg {
+                match rx.try_recv() {
                     Ok(done) => {
                         exec_done_msgs.push(done);
                     }
@@ -405,10 +405,7 @@ impl ToolExecutor {
             ),
         );
 
-        {
-            let tc_status = &mut self.active_tool_calls[idx];
-            tc_status.status = ToolExecStatus::Executing;
-        }
+        self.active_tool_calls[idx].status = ToolExecStatus::Executing;
 
         let (tool_name, arguments, tool_call_id) = {
             let tc = &self.active_tool_calls[idx];
@@ -1724,8 +1721,8 @@ impl ChatApp {
             Action::ToggleMenuToggle => {
                 if self.ui.mode == ChatMode::ToolToggle {
                     let tool_names = self.tool_registry.tool_names();
-                    if !tool_names.is_empty() {
-                        let name = tool_names[self.ui.tool_toggle_index].to_string();
+                    if let Some(name) = tool_names.get(self.ui.tool_toggle_index) {
+                        let name = name.to_string();
                         if let Some(pos) = self
                             .state
                             .agent_config
@@ -1739,12 +1736,8 @@ impl ChatApp {
                         }
                     }
                 } else {
-                    let total = self.state.loaded_skills.len();
-                    if total > 0 {
-                        let name = self.state.loaded_skills[self.ui.skill_toggle_index]
-                            .frontmatter
-                            .name
-                            .clone();
+                    if let Some(skill) = self.state.loaded_skills.get(self.ui.skill_toggle_index) {
+                        let name = skill.frontmatter.name.clone();
                         if let Some(pos) = self
                             .state
                             .agent_config
@@ -2091,13 +2084,19 @@ impl ChatApp {
 
         // 清空待处理用户消息队列
         {
-            let mut pending = self.state.pending_user_messages.lock().unwrap();
+            let mut pending = safe_lock(
+                &self.state.pending_user_messages,
+                "send_message::pending_user_messages",
+            );
             pending.clear();
         }
 
         // 清空流式内容缓冲
         {
-            let mut sc = self.state.streaming_content.lock().unwrap();
+            let mut sc = safe_lock(
+                &self.state.streaming_content,
+                "send_message::streaming_content",
+            );
             sc.clear();
         }
 
@@ -2431,7 +2430,10 @@ impl ChatApp {
 
         if was_cancelled {
             let content = {
-                let sc = self.state.streaming_content.lock().unwrap();
+                let sc = safe_lock(
+                    &self.state.streaming_content,
+                    "finish_loading::streaming_content",
+                );
                 sc.clone()
             };
             if !content.is_empty() {
@@ -2441,14 +2443,21 @@ impl ChatApp {
                     .messages
                     .push(ChatMessage::text(ROLE_ASSISTANT, cancelled_content));
             }
-            self.state.streaming_content.lock().unwrap().clear();
+            safe_lock(
+                &self.state.streaming_content,
+                "finish_loading::streaming_content_clear",
+            )
+            .clear();
             if self.ui.auto_scroll {
                 self.ui.scroll_offset = u16::MAX;
             }
             self.show_toast("已取消", false);
         } else if !had_error {
             let content = {
-                let sc = self.state.streaming_content.lock().unwrap();
+                let sc = safe_lock(
+                    &self.state.streaming_content,
+                    "finish_loading::streaming_content_done",
+                );
                 sc.clone()
             };
             if !content.is_empty() {
@@ -2456,21 +2465,29 @@ impl ChatApp {
                     .session
                     .messages
                     .push(ChatMessage::text(ROLE_ASSISTANT, content));
-                self.state.streaming_content.lock().unwrap().clear();
+                safe_lock(
+                    &self.state.streaming_content,
+                    "finish_loading::streaming_content_done_clear",
+                )
+                .clear();
                 self.show_toast("回复完成 ✓", false);
             }
             if self.ui.auto_scroll {
                 self.ui.scroll_offset = u16::MAX;
             }
         } else {
-            self.state.streaming_content.lock().unwrap().clear();
+            safe_lock(
+                &self.state.streaming_content,
+                "finish_loading::streaming_content_error",
+            )
+            .clear();
         }
 
         let _ = save_chat_session(&self.state.session);
 
         // 检查排队的任务
         let next_task = {
-            let mut tasks = self.state.queued_tasks.lock().unwrap();
+            let mut tasks = safe_lock(&self.state.queued_tasks, "finish_loading::queued_tasks");
             if !tasks.is_empty() {
                 Some(tasks.remove(0))
             } else {
@@ -2548,7 +2565,11 @@ impl ChatApp {
             .last()
             .map(|m| m.content.len())
             .unwrap_or(0);
-        let streaming_len = self.state.streaming_content.lock().unwrap().len();
+        let streaming_len = safe_lock(
+            &self.state.streaming_content,
+            "prepare_for_render::streaming_content",
+        )
+        .len();
         let current_browse_index = if self.ui.mode == ChatMode::Browse {
             Some(self.ui.browse_msg_index)
         } else {

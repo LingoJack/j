@@ -15,7 +15,10 @@ pub fn config_field_label(idx: usize) -> &'static str {
         }
     } else {
         let gi = idx - total_provider;
-        match CONFIG_GLOBAL_FIELDS[gi] {
+        let Some(field_name) = CONFIG_GLOBAL_FIELDS.get(gi) else {
+            return "";
+        };
+        match *field_name {
             "system_prompt" => "系统提示词",
             "style" => "回复风格",
             "stream_mode" => "流式输出",
@@ -25,7 +28,7 @@ pub fn config_field_label(idx: usize) -> &'static str {
             "max_tool_rounds" => "工具轮数上限",
             "tool_confirm_timeout" => "确认超时(秒)",
             "skills_enabled" => "Skills",
-            _ => CONFIG_GLOBAL_FIELDS[gi],
+            _ => field_name,
         }
     }
 }
@@ -34,21 +37,24 @@ pub fn config_field_label(idx: usize) -> &'static str {
 pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
     let total_provider = CONFIG_FIELDS.len();
     if field_idx < total_provider {
-        if app.state.agent_config.providers.is_empty() {
+        let Some(p) = app
+            .state
+            .agent_config
+            .providers
+            .get(app.ui.config_provider_idx)
+        else {
             return String::new();
-        }
-        let p = &app.state.agent_config.providers[app.ui.config_provider_idx];
+        };
         match CONFIG_FIELDS[field_idx] {
             "name" => p.name.clone(),
             "api_base" => p.api_base.clone(),
             "api_key" => {
                 // 显示时隐藏 API Key 中间部分
-                if p.api_key.len() > 8 {
-                    format!(
-                        "{}****{}",
-                        &p.api_key[..4],
-                        &p.api_key[p.api_key.len() - 4..]
-                    )
+                let chars: Vec<char> = p.api_key.chars().collect();
+                if chars.len() > 8 {
+                    let prefix: String = chars[..4].iter().collect();
+                    let suffix: String = chars[chars.len() - 4..].iter().collect();
+                    format!("{}****{}", prefix, suffix)
                 } else {
                     p.api_key.clone()
                 }
@@ -58,7 +64,10 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
         }
     } else {
         let gi = field_idx - total_provider;
-        match CONFIG_GLOBAL_FIELDS[gi] {
+        let Some(field_name) = CONFIG_GLOBAL_FIELDS.get(gi) else {
+            return String::new();
+        };
+        match *field_name {
             "system_prompt" => load_system_prompt().unwrap_or_default(),
             "style" => load_style().unwrap_or_default(),
             "stream_mode" => {
@@ -111,10 +120,14 @@ pub fn config_field_value(app: &ChatApp, field_idx: usize) -> String {
 pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
     let total_provider = CONFIG_FIELDS.len();
     if field_idx < total_provider {
-        if app.state.agent_config.providers.is_empty() {
+        let Some(p) = app
+            .state
+            .agent_config
+            .providers
+            .get(app.ui.config_provider_idx)
+        else {
             return String::new();
-        }
-        let p = &app.state.agent_config.providers[app.ui.config_provider_idx];
+        };
         match CONFIG_FIELDS[field_idx] {
             "name" => p.name.clone(),
             "api_base" => p.api_base.clone(),
@@ -124,7 +137,10 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
         }
     } else {
         let gi = field_idx - total_provider;
-        match CONFIG_GLOBAL_FIELDS[gi] {
+        let Some(field_name) = CONFIG_GLOBAL_FIELDS.get(gi) else {
+            return String::new();
+        };
+        match *field_name {
             "system_prompt" => load_system_prompt().unwrap_or_default(),
             "style" => load_style().unwrap_or_default(),
             "stream_mode" => {
@@ -154,10 +170,14 @@ pub fn config_field_raw_value(app: &ChatApp, field_idx: usize) -> String {
 pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
     let total_provider = CONFIG_FIELDS.len();
     if field_idx < total_provider {
-        if app.state.agent_config.providers.is_empty() {
+        let Some(p) = app
+            .state
+            .agent_config
+            .providers
+            .get_mut(app.ui.config_provider_idx)
+        else {
             return;
-        }
-        let p = &mut app.state.agent_config.providers[app.ui.config_provider_idx];
+        };
         match CONFIG_FIELDS[field_idx] {
             "name" => p.name = value.to_string(),
             "api_base" => p.api_base = value.to_string(),
@@ -167,7 +187,10 @@ pub fn config_field_set(app: &mut ChatApp, field_idx: usize, value: &str) {
         }
     } else {
         let gi = field_idx - total_provider;
-        match CONFIG_GLOBAL_FIELDS[gi] {
+        let Some(field_name) = CONFIG_GLOBAL_FIELDS.get(gi) else {
+            return;
+        };
+        match *field_name {
             "system_prompt" => {
                 save_system_prompt(value);
             }

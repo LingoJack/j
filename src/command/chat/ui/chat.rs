@@ -6,6 +6,7 @@ use super::super::render_cache::build_message_lines_incremental;
 use super::super::storage::agent_config_path;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::{draw_config_screen, draw_skill_toggle, draw_tool_toggle};
+use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -211,7 +212,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .last()
         .map(|m| m.content.len())
         .unwrap_or(0);
-    let streaming_len = app.state.streaming_content.lock().unwrap().len();
+    let streaming_len = safe_lock(
+        &app.state.streaming_content,
+        "draw_messages::streaming_content",
+    )
+    .len();
     let current_browse_index = if app.ui.mode == ChatMode::Browse {
         Some(app.ui.browse_msg_index)
     } else {
@@ -254,7 +259,10 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         });
     }
 
-    let cached = app.ui.msg_lines_cache.as_ref().unwrap();
+    let cached = match app.ui.msg_lines_cache.as_ref() {
+        Some(c) => c,
+        None => return,
+    };
     let all_lines = &cached.lines;
     let total_lines = all_lines.len() as u16;
 
@@ -325,7 +333,9 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     // === 图片渲染 pass ===
-    let has_picker = app.ui.image_cache.lock().unwrap().picker.is_some();
+    let has_picker = safe_lock(&app.ui.image_cache, "draw_messages::image_cache_picker")
+        .picker
+        .is_some();
     // 图片渲染宽度与气泡内容区对齐
     let img_pad = 3u16; // 与气泡 pad_left_w 一致
     let img_render_w = (bubble_max_width as u16).saturating_sub(img_pad * 2);
@@ -435,16 +445,15 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                     let url_owned = url.clone();
                     std::thread::spawn(move || match load_image(&url_owned) {
                         Ok(dyn_img) => {
-                            let mut c = cache_clone.lock().unwrap();
+                            let mut c = safe_lock(&cache_clone, "image_load::cache_ready");
                             if let Some(ref picker) = c.picker {
-                                let protocol = picker.new_resize_protocol(dyn_img);
+                                let protocol: ratatui_image::protocol::StatefulProtocol =
+                                    picker.new_resize_protocol(dyn_img);
                                 c.images.insert(url_owned, ImageState::Ready(protocol));
                             }
                         }
                         Err(e) => {
-                            cache_clone
-                                .lock()
-                                .unwrap()
+                            safe_lock(&cache_clone, "image_load::cache_failed")
                                 .images
                                 .insert(url_owned, ImageState::Failed(e));
                         }
@@ -461,7 +470,10 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     let chars: Vec<char> = app.ui.input.chars().collect();
 
-    let before_all: String = chars[..app.ui.cursor_pos].iter().collect();
+    // 安全检查：cursor_pos 不能超过字符数
+    let cursor_pos = app.ui.cursor_pos.min(chars.len());
+
+    let before_all: String = chars[..cursor_pos].iter().collect();
     let before_width = display_width(&before_all);
 
     let scroll_offset_chars = if before_width >= usable_width {
@@ -481,7 +493,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     };
 
     let visible_chars = &chars[scroll_offset_chars..];
-    let cursor_in_visible = app.ui.cursor_pos - scroll_offset_chars;
+    let cursor_in_visible = cursor_pos
+        .saturating_sub(scroll_offset_chars)
+        .min(visible_chars.len());
 
     let before: String = visible_chars[..cursor_in_visible].iter().collect();
     let cursor_ch = if cursor_in_visible < visible_chars.len() {
@@ -1182,8 +1196,12 @@ fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usi
                         let is_boundary = if after_pos >= rest.len() {
                             true
                         } else {
-                            let next_ch = rest.chars().nth(after_pos).unwrap();
-                            next_ch.is_whitespace() || !next_ch.is_alphanumeric()
+                            rest.chars()
+                                .nth(after_pos)
+                                .map(|next_ch| {
+                                    next_ch.is_whitespace() || !next_ch.is_alphanumeric()
+                                })
+                                .unwrap_or(true)
                         };
                         if is_boundary && name.len() > best_len {
                             best_len = name.len();

@@ -13,4 +13,6 @@ pub struct AgentTask {
     pub blocks: Vec<u64>,
     #[serde(default)]
     pub owner: String,
+    #[serde(default)]
+    pub task_doc_paths: Vec<String>,
 }

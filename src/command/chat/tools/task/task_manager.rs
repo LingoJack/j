@@ -1,4 +1,5 @@
 use super::entity::AgentTask;
+use crate::util::safe_lock;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -54,7 +55,7 @@ impl TaskManager {
         blocked_by: Vec<u64>,
         blocks: Vec<u64>,
     ) -> Result<AgentTask, String> {
-        let _lock = self.write_lock.lock().unwrap();
+        let _lock = safe_lock(&self.write_lock, "TaskManager::create_task");
         let task_id = self.next_id();
         let task = AgentTask {
             task_id,
@@ -64,6 +65,7 @@ impl TaskManager {
             blocked_by,
             blocks: blocks.clone(),
             owner: String::new(),
+            task_doc_paths: Vec::new(),
         };
         self.save_task(&task)?;
 
@@ -116,7 +118,7 @@ impl TaskManager {
     }
 
     pub fn update_task(&self, id: u64, updates: &Value) -> Result<AgentTask, String> {
-        let _lock = self.write_lock.lock().unwrap();
+        let _lock = safe_lock(&self.write_lock, "TaskManager::update_task");
         let mut task = self.get_task(id)?;
 
         if let Some(status) = updates.get("status").and_then(|s| s.as_str()) {

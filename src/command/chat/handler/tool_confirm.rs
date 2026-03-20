@@ -107,7 +107,10 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         return;
     }
 
-    let cur_q = &app.ui.tool_ask_questions[app.ui.tool_ask_current_idx];
+    let cur_q = match app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx) {
+        Some(q) => q,
+        None => return,
+    };
     let is_multi = cur_q.multi_select;
 
     let action = match key.code {

@@ -31,6 +31,13 @@ impl Tool for TaskCreateTool {
                     "type": "string",
                     "description": "Detailed description of what needs to be done"
                 },
+                "task_doc_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "Location of the task document, which records full details about the task"
+                    },
+                },
                 "blockedBy": {
                     "type": "array",
                     "items": { "type": "integer" },

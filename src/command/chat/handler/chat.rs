@@ -3,6 +3,7 @@ use super::super::autocomplete::{
     get_filtered_skills, update_at_filter, update_file_filter,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
+use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
@@ -317,7 +318,10 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         .messages
                         .push(super::super::storage::ChatMessage::text("user", &text));
                     {
-                        let mut pending = app.state.pending_user_messages.lock().unwrap();
+                        let mut pending = safe_lock(
+                            &app.state.pending_user_messages,
+                            "handler_chat::pending_user_messages",
+                        );
                         pending.push(super::super::storage::ChatMessage::text("user", &text));
                     }
                     app.ui.input.clear();

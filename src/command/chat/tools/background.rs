@@ -1,4 +1,5 @@
 use super::{Tool, ToolResult};
+use crate::util::safe_lock;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
@@ -44,7 +45,7 @@ impl BackgroundManager {
 
     /// 生成唯一的后台任务 ID
     fn gen_id(&self) -> String {
-        let mut id = self.next_id.lock().unwrap();
+        let mut id = safe_lock(&self.next_id, "BackgroundManager::gen_id");
         let current = *id;
         *id += 1;
         format!("bg_{}", current)
@@ -63,7 +64,7 @@ impl BackgroundManager {
         };
 
         {
-            let mut tasks = self.tasks.lock().unwrap();
+            let mut tasks = safe_lock(&self.tasks, "BackgroundManager::spawn_command");
             tasks.insert(task_id.clone(), bg_task);
         }
 
@@ -74,7 +75,7 @@ impl BackgroundManager {
     fn complete_task(&self, task_id: &str, status: &str, result: String) {
         let command;
         {
-            let mut tasks = self.tasks.lock().unwrap();
+            let mut tasks = safe_lock(&self.tasks, "BackgroundManager::complete_task");
             if let Some(task) = tasks.get_mut(task_id) {
                 task.status = status.to_string();
                 task.result = Some(result.clone());
@@ -84,7 +85,7 @@ impl BackgroundManager {
             }
         }
         {
-            let mut notifs = self.notifications.lock().unwrap();
+            let mut notifs = safe_lock(&self.notifications, "BackgroundManager::complete_notify");
             notifs.push(BgNotification {
                 task_id: task_id.to_string(),
                 command,
@@ -96,13 +97,16 @@ impl BackgroundManager {
 
     /// Drain 所有待处理的通知（agent loop 每轮调用）
     pub fn drain_notifications(&self) -> Vec<BgNotification> {
-        let mut notifs = self.notifications.lock().unwrap();
+        let mut notifs = safe_lock(
+            &self.notifications,
+            "BackgroundManager::drain_notifications",
+        );
         std::mem::take(&mut *notifs)
     }
 
     /// 查询单个后台任务状态
     fn get_task_status(&self, task_id: &str) -> Option<Value> {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = safe_lock(&self.tasks, "BackgroundManager::get_task_status");
         tasks.get(task_id).map(|t| {
             json!({
                 "task_id": t.task_id,
@@ -115,8 +119,8 @@ impl BackgroundManager {
 
     /// 列出所有后台任务状态
     fn list_all(&self) -> Vec<Value> {
-        let tasks = self.tasks.lock().unwrap();
-        let mut items: Vec<_> = tasks
+        let tasks = safe_lock(&self.tasks, "BackgroundManager::list_all");
+        let mut items: Vec<Value> = tasks
             .values()
             .map(|t| {
                 json!({

@@ -10,8 +10,8 @@ pub fn load_image(source: &str) -> Result<DynamicImage, String> {
         image::load_from_memory(&bytes).map_err(|e| e.to_string())
     } else {
         // 处理 file:// 协议：提取实际文件路径
-        let path = if source.starts_with("file://") {
-            source.strip_prefix("file://").unwrap().to_string()
+        let path = if let Some(stripped) = source.strip_prefix("file://") {
+            stripped.to_string()
         } else {
             super::super::tools::expand_tilde(source)
         };

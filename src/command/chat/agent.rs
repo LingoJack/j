@@ -5,6 +5,7 @@ use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::util::log::{write_error_log, write_info_log};
+use crate::util::safe_lock;
 use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};
 use futures::StreamExt;
 use std::sync::{Arc, Mutex, mpsc};
@@ -73,7 +74,7 @@ pub async fn run_agent_loop(
 
         // 清空流式内容缓冲（每轮开始时）
         {
-            let mut sc = streaming_content.lock().unwrap();
+            let mut sc = safe_lock(&streaming_content, "agent::streaming_content_clear");
             sc.clear();
         }
 
@@ -153,7 +154,7 @@ pub async fn run_agent_loop(
                                 for choice in &response.choices {
                                     if let Some(ref content) = choice.delta.content {
                                         assistant_text.push_str(content);
-                                        let mut sc = streaming_content.lock().unwrap();
+                                        let mut sc = safe_lock(&streaming_content, "agent::stream_chunk");
                                         sc.push_str(content);
                                         drop(sc);
                                         let _ = tx.send(StreamMsg::Chunk);
@@ -264,7 +265,7 @@ pub async fn run_agent_loop(
                             // 普通文本回复
                             if let Some(ref content) = choice.message.content {
                                 write_info_log("Chat 回复", content);
-                                let mut sc = streaming_content.lock().unwrap();
+                                let mut sc = safe_lock(&streaming_content, "agent::fallback_content");
                                 sc.push_str(content);
                                 drop(sc);
                                 let _ = tx.send(StreamMsg::Chunk);
@@ -284,7 +285,7 @@ pub async fn run_agent_loop(
                     }
                 }
                 // fallback 非流式正常结束，但如果有用户增量消息则继续循环
-                if !pending_user_messages.lock().unwrap().is_empty() {
+                if !safe_lock(&pending_user_messages, "agent::pending_check_fallback").is_empty() {
                     continue;
                 }
                 break;
@@ -329,7 +330,7 @@ pub async fn run_agent_loop(
                 }
             } else {
                 // 正常结束，但如果有用户增量消息则继续循环
-                if !pending_user_messages.lock().unwrap().is_empty() {
+                if !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty() {
                     continue;
                 }
                 break;
@@ -377,7 +378,7 @@ pub async fn run_agent_loop(
                         // 正常文本回复
                         if let Some(ref content) = choice.message.content {
                             write_info_log("Chat 回复", content);
-                            let mut sc = streaming_content.lock().unwrap();
+                            let mut sc = safe_lock(&streaming_content, "agent::non_stream_content");
                             sc.push_str(content);
                             drop(sc);
                             let _ = tx.send(StreamMsg::Chunk);
@@ -397,7 +398,7 @@ pub async fn run_agent_loop(
                 }
             }
             // 非流式正常结束，但如果有用户增量消息则继续循环
-            if !pending_user_messages.lock().unwrap().is_empty() {
+            if !safe_lock(&pending_user_messages, "agent::pending_check_non_stream").is_empty() {
                 continue;
             }
             break;
@@ -412,7 +413,7 @@ fn drain_pending_user_messages(
     messages: &mut Vec<ChatMessage>,
     pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) {
-    let mut pending = pending_user_messages.lock().unwrap();
+    let mut pending = safe_lock(pending_user_messages, "agent::drain_pending");
     if !pending.is_empty() {
         messages.append(&mut *pending);
     }

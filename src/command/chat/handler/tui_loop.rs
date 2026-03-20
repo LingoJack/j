@@ -9,6 +9,7 @@ use super::{
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
+use crate::util::safe_lock;
 use crossterm::{
     event::{self, Event, KeyEventKind, MouseEventKind},
     execute,
@@ -116,7 +117,8 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
 
         // 流式加载中的节流策略
         if app.state.is_loading {
-            let current_len = app.state.streaming_content.lock().unwrap().len();
+            let current_len =
+                safe_lock(&app.state.streaming_content, "tui_loop::streaming_throttle").len();
             let bytes_delta = current_len.saturating_sub(app.ui.last_rendered_streaming_len);
             let time_elapsed = app.ui.last_stream_render_time.elapsed();
             if bytes_delta >= 200
@@ -142,8 +144,11 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             needs_redraw = false;
             // 更新流式节流状态
             if app.state.is_loading {
-                app.ui.last_rendered_streaming_len =
-                    app.state.streaming_content.lock().unwrap().len();
+                app.ui.last_rendered_streaming_len = safe_lock(
+                    &app.state.streaming_content,
+                    "tui_loop::rendered_streaming_len",
+                )
+                .len();
                 app.ui.last_stream_render_time = std::time::Instant::now();
             }
         }

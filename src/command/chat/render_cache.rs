@@ -2,6 +2,7 @@ use super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
 use super::markdown::markdown_to_lines;
 use super::theme::Theme;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
+use crate::util::safe_lock;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -58,7 +59,11 @@ pub fn build_message_lines_incremental(
 ) {
     // 获取流式内容（只 lock 一次，尽快释放锁）
     let streaming_content_str = if app.state.is_loading {
-        let streaming = app.state.streaming_content.lock().unwrap().clone();
+        let streaming: String = safe_lock(
+            &app.state.streaming_content,
+            "render_cache::streaming_content",
+        )
+        .clone();
         if !streaming.is_empty() {
             Some(streaming)
         } else {
@@ -126,13 +131,8 @@ pub fn build_message_lines_incremental(
                 );
             }
             ROLE_ASSISTANT => {
-                if m.tool_calls.is_some() {
-                    render_tool_call_request_msg(
-                        m.tool_calls.as_ref().unwrap(),
-                        bubble_max_width,
-                        &mut lines,
-                        t,
-                    );
+                if let Some(ref tool_calls) = m.tool_calls {
+                    render_tool_call_request_msg(tool_calls, bubble_max_width, &mut lines, t);
                 } else {
                     render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut lines, t);
                 }
@@ -669,13 +669,14 @@ fn render_ask_questions(
                     || md_line.spans.iter().all(|s| s.content.trim().is_empty());
 
                 if is_img_marker {
-                    let marker = md_line
+                    let marker = match md_line
                         .spans
                         .iter()
                         .find(|s| s.content.starts_with("\x00IMG:"))
-                        .unwrap()
-                        .content
-                        .clone();
+                    {
+                        Some(s) => s.content.clone(),
+                        None => continue,
+                    };
                     let inner_w = bubble_max_width.saturating_sub(8);
                     lines.push(Line::from(vec![
                         Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
