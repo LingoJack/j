@@ -30,7 +30,7 @@ fn default_compact_enabled() -> bool {
 }
 
 fn default_token_threshold() -> usize {
-    1 << 20 // 1MB
+    256 * 800
 }
 
 fn default_keep_recent() -> usize {
