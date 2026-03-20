@@ -25,6 +25,8 @@ pub struct CompactConfig {
     pub keep_recent: usize,
 }
 
+const MICRO_COMPACT_BYTES_COUNT_THRESHOLD: usize = 800;
+
 fn default_compact_enabled() -> bool {
     true
 }
@@ -55,7 +57,7 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 /// Layer 1: micro_compact - 替换旧 tool result 为占位符，保留最近 keep_recent 个
 ///
 /// 纯内存操作，零 API 成本。
-/// 将较早的 role="tool" 消息中内容长度 > 100 的替换为 "[Previous: used {tool_name}]"
+/// 将较早的 role="tool" 消息中内容长度 > MICRO_COMPACT_BYTES_COUNT_THRESHOLD 的替换为 "[Previous: used {tool_name}]"
 pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
     let mut tool_name_map: HashMap<String, String> = HashMap::new();
@@ -81,7 +83,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
         return;
     }
 
-    // 3. 除最近 keep_recent 个外，content.len() > 100 的替换为占位符
+    // 3. 除最近 keep_recent 个外，content.len() > MICRO_COMPACT_BYTES_COUNT_THRESHOLD 的替换为占位符
     let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
     // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
@@ -89,7 +91,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
 
     for &idx in to_compact {
         let msg = &messages[idx];
-        if msg.content.len() > 100 {
+        if msg.content.len() > MICRO_COMPACT_BYTES_COUNT_THRESHOLD {
             let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
             let tool_name = tool_name_map
                 .get(&tool_call_id)
