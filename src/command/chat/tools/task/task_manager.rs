@@ -1,5 +1,6 @@
 use super::entity::AgentTask;
 use crate::util::safe_lock;
+use core::task;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -54,6 +55,7 @@ impl TaskManager {
         description: &str,
         blocked_by: Vec<u64>,
         blocks: Vec<u64>,
+        task_doc_paths: Vec<String>,
     ) -> Result<AgentTask, String> {
         let _lock = safe_lock(&self.write_lock, "TaskManager::create_task");
         let task_id = self.next_id();
@@ -65,7 +67,7 @@ impl TaskManager {
             blocked_by,
             blocks: blocks.clone(),
             owner: String::new(),
-            task_doc_paths: Vec::new(),
+            task_doc_paths,
         };
         self.save_task(&task)?;
 

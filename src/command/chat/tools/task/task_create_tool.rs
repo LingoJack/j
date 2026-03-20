@@ -31,7 +31,7 @@ impl Tool for TaskCreateTool {
                     "type": "string",
                     "description": "Detailed description of what needs to be done"
                 },
-                "task_doc_paths": {
+                "taskDocPaths": {
                     "type": "array",
                     "items": {
                         "type": "string",
@@ -90,9 +90,19 @@ impl Tool for TaskCreateTool {
             .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
             .unwrap_or_default();
 
+        let task_doc_paths: Vec<String> = parsed
+            .get("taskDocPaths")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         match self
             .manager
-            .create_task(title, description, blocked_by, blocks)
+            .create_task(title, description, blocked_by, blocks, task_doc_paths)
         {
             Ok(task) => ToolResult {
                 output: serde_json::to_string_pretty(&task).unwrap_or_default(),
