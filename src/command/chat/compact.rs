@@ -91,7 +91,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
 
     for &idx in to_compact {
         let msg = &messages[idx];
-        if msg.content.len() > MICRO_COMPACT_BYTES_COUNT_THRESHOLD {
+        if msg.content.chars().count() > MICRO_COMPACT_BYTES_COUNT_THRESHOLD {
             let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
             let tool_name = tool_name_map
                 .get(&tool_call_id)
