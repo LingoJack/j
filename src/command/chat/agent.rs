@@ -101,7 +101,12 @@ pub async fn run_agent_loop(
                     }
                     ROLE_TOOL => {
                         let id = msg.tool_call_id.as_deref().unwrap_or("?");
-                        let tool_name = &msg.tool_calls.as_ref().unwrap()[0].name;
+                        let tool_name = msg
+                            .tool_calls
+                            .as_ref()
+                            .and_then(|tc| tc.first())
+                            .map(|tc| tc.name.as_str())
+                            .unwrap_or("unknown");
                         log_content.push_str(&format!(
                             "[Tool/Result({} with id `{}`)] result \n:{}\n",
                             tool_name, id, msg.content
