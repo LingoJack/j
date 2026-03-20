@@ -101,7 +101,10 @@ pub async fn run_agent_loop(
                     }
                     ROLE_TOOL => {
                         let id = msg.tool_call_id.as_deref().unwrap_or("?");
-                        log_content.push_str(&format!("[Tool/Result({})] {}\n", id, msg.content));
+                        log_content.push_str(&format!(
+                            "[Tool/Result({})] result \n:{}\n",
+                            id, msg.content
+                        ));
                     }
                     ROLE_USER => {
                         log_content.push_str(&format!("[User] {}\n", msg.content));
