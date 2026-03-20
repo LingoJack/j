@@ -44,6 +44,10 @@ impl Tool for GlobTool {
                 "pattern": {
                     "description": "要匹配的文件 glob 模式（如 **/*.js、*.{ts,tsx}、src/**/*.py）",
                     "type": "string"
+                },
+                "excludePattern": {
+                    "description": "要排除的文件 glob 模式（如 **/node_modules/**、**/.git/**）",
+                    "type": "string"
                 }
             },
             "required": ["pattern"],
@@ -98,6 +102,13 @@ impl Tool for GlobTool {
             .map(|o| o as usize)
             .unwrap_or(0);
 
+        // 解析排除模式
+        let exclude_pattern = v
+            .get("excludePattern")
+            .and_then(|p| p.as_str())
+            .filter(|s| !s.is_empty())
+            .and_then(|p| glob::Pattern::new(p).ok());
+
         // 构建完整的 glob 模式
         let full_pattern = if pattern.starts_with('/') {
             pattern.to_string()
@@ -107,7 +118,18 @@ impl Tool for GlobTool {
 
         // 执行 glob 搜索
         let mut matches: Vec<std::path::PathBuf> = match glob::glob(&full_pattern) {
-            Ok(paths) => paths.filter_map(Result::ok).collect(),
+            Ok(paths) => paths
+                .filter_map(Result::ok)
+                .filter(|path| {
+                    // 应用排除模式过滤
+                    if let Some(ref exclude) = exclude_pattern {
+                        let path_str = path.to_string_lossy();
+                        !exclude.matches(&path_str)
+                    } else {
+                        true
+                    }
+                })
+                .collect(),
             Err(e) => {
                 return ToolResult {
                     output: format!("glob 模式无效: {}", e),
