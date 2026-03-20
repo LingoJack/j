@@ -91,29 +91,43 @@ fn split_frontmatter(content: &str) -> Option<(String, String)> {
     Some((fm, body))
 }
 
-/// 拼合 body + references/ 下的参考文件
+/// 拼合 body + references/ 和 scripts/ 的文件列表（不内联内容，由模型按需 Read/Bash）
 pub fn resolve_skill_content(skill: &Skill) -> String {
     let mut result = skill.body.clone();
 
-    // 读取 references/ 目录
-    let refs_dir = skill.dir_path.join("references");
-    if refs_dir.is_dir()
-        && let Ok(entries) = fs::read_dir(&refs_dir)
-    {
-        let mut ref_files: Vec<_> = entries.flatten().collect();
-        ref_files.sort_by_key(|e| e.file_name());
-        for entry in ref_files {
-            let path = entry.path();
-            if path.is_file()
-                && let Ok(content) = fs::read_to_string(&path)
-            {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                result.push_str(&format!("\n\n--- 参考文件: {} ---\n{}", filename, content));
-            }
+    // 列出 references/ 目录中的文件路径，供模型按需读取
+    if let Some(paths) = list_dir_files(&skill.dir_path.join("references")) {
+        result.push_str("\n\n## 参考文件\n\n以下参考文件可按需使用 Read 工具读取：\n");
+        for p in &paths {
+            result.push_str(&format!("- `{}`\n", p));
+        }
+    }
+
+    // 列出 scripts/ 目录中的脚本路径，供模型按需执行
+    if let Some(paths) = list_dir_files(&skill.dir_path.join("scripts")) {
+        result.push_str("\n\n## 脚本\n\n以下脚本可按需使用 Bash/BackgroundRun 工具执行：\n");
+        for p in &paths {
+            result.push_str(&format!("- `{}`\n", p));
         }
     }
 
     result
+}
+
+/// 列出目录下的文件路径（排序），目录不存在或为空时返回 None
+fn list_dir_files(dir: &Path) -> Option<Vec<String>> {
+    if !dir.is_dir() {
+        return None;
+    }
+    let entries = fs::read_dir(dir).ok()?;
+    let mut files: Vec<_> = entries.flatten().collect();
+    files.sort_by_key(|e| e.file_name());
+    let paths: Vec<String> = files
+        .iter()
+        .filter(|e| e.path().is_file())
+        .map(|e| e.path().display().to_string())
+        .collect();
+    if paths.is_empty() { None } else { Some(paths) }
 }
 
 // ========== build_skills_summary ==========
