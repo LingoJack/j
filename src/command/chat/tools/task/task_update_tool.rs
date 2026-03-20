@@ -82,15 +82,31 @@ impl Tool for TaskUpdateTool {
             }
         };
 
+        let status = parsed
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
         match self.manager.update_task(task_id, &parsed) {
-            Ok(_) => {
-                let ready_tasks = self.manager.list_ready_tasks();
-                ToolResult {
-                    output: format!(
-                        "Update task successfully. Following tasks are ready to run: \n\n{}",
-                        serde_json::to_string_pretty(&ready_tasks).unwrap_or_default()
-                    ),
-                    is_error: false,
+            Ok(task) => {
+                if status == "completed" {
+                    ToolResult {
+                        output: format!(
+                            "Update task successfully. Following tasks are ready to run: \n\n{}",
+                            serde_json::to_string_pretty(&self.manager.list_ready_tasks())
+                                .unwrap_or_default()
+                        ),
+                        is_error: false,
+                    }
+                } else {
+                    ToolResult {
+                        output: format!(
+                            "Update task successfully. updated task detail: {}",
+                            serde_json::to_string_pretty(&task).unwrap_or_default()
+                        ),
+                        is_error: false,
+                    }
                 }
             }
             Err(e) => ToolResult {
