@@ -1,4 +1,4 @@
-前端技术栈使用为 React + TypeScript + Tailwind CSS
+前端技术栈使用为 React + TypeScript + Tailwind CSS (V4)
 使用 `init_frontend.sh` 脚本自动创建项目脚手架，并安装依赖
 
 阅读需求文档 `docs/requirement.md` 内容，严格按照以下步骤开发：
