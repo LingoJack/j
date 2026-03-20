@@ -1,6 +1,5 @@
 use super::entity::AgentTask;
 use crate::util::safe_lock;
-use core::task;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
