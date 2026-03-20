@@ -11,6 +11,7 @@ use super::storage::{
 use super::theme::Theme;
 use super::tools::ToolRegistry;
 use super::tools::background::BackgroundManager;
+use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_USER};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use async_openai::types::chat::ChatCompletionTools;
@@ -1472,9 +1473,9 @@ impl ChatApp {
                 use super::render_cache::copy_to_clipboard;
                 if let Some(msg) = self.state.session.messages.get(self.ui.browse_msg_index) {
                     let content = msg.content.clone();
-                    let role_label = if msg.role == "assistant" {
+                    let role_label = if msg.role == ROLE_ASSISTANT {
                         "Sprite"
-                    } else if msg.role == "user" {
+                    } else if msg.role == ROLE_USER {
                         "用户"
                     } else {
                         "系统"
@@ -1943,7 +1944,7 @@ impl ChatApp {
                     .messages
                     .iter()
                     .rev()
-                    .find(|m| m.role == "assistant")
+                    .find(|m| m.role == ROLE_ASSISTANT)
                 {
                     if copy_to_clipboard(&last_ai.content) {
                         self.show_toast("已复制最后一条 AI 回复", false);
@@ -2438,7 +2439,7 @@ impl ChatApp {
                 self.state
                     .session
                     .messages
-                    .push(ChatMessage::text("assistant", cancelled_content));
+                    .push(ChatMessage::text(ROLE_ASSISTANT, cancelled_content));
             }
             self.state.streaming_content.lock().unwrap().clear();
             if self.ui.auto_scroll {
@@ -2454,7 +2455,7 @@ impl ChatApp {
                 self.state
                     .session
                     .messages
-                    .push(ChatMessage::text("assistant", content));
+                    .push(ChatMessage::text(ROLE_ASSISTANT, content));
                 self.state.streaming_content.lock().unwrap().clear();
                 self.show_toast("回复完成 ✓", false);
             }

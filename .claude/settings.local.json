@@ -32,7 +32,8 @@
       "Bash(chmod +x /Users/jacklingo/dev_custom/j/assets/skills/webapp-gen/scripts/*.sh)",
       "Bash(/Users/jacklingo/dev_custom/j/assets/skills/webapp-gen/SCRIPTS_SUMMARY.md:*)",
       "Read(//Users/jacklingo/dev_custom/j/**)",
-      "Bash(echo \":*)"
+      "Bash(echo \":*)",
+      "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat/tools/task -type f -exec wc -l {} +)"
     ]
   },
   "language": "zh-CN",

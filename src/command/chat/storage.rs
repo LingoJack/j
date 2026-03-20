@@ -76,7 +76,7 @@ fn default_stream_mode() -> bool {
 
 /// 默认工具调用最大轮数
 fn default_max_tool_rounds() -> usize {
-    10
+    100
 }
 
 /// 单次工具调用请求（序列化到历史记录）

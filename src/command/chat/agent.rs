@@ -480,7 +480,7 @@ fn process_tool_calls(
     let compact_requested = tool_items.iter().any(|t| t.name == "compact");
 
     messages.push(ChatMessage {
-        role: "assistant".to_string(),
+        role: ROLE_ASSISTANT.to_string(),
         content: assistant_text,
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
