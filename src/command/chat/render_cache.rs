@@ -1078,8 +1078,10 @@ pub fn render_tool_result_msg(
         return;
     }
     // 展开模式：缩进显示内容，无背景色
+    // 对 content 做 sanitize，防止旧 history 中残留的 ANSI 码 / 控制字符导致渲染乱码
+    let clean = crate::util::text::sanitize_tool_output(content);
     let content_w = bubble_max_width.saturating_sub(6); // "    " prefix
-    let all_lines: Vec<String> = content
+    let all_lines: Vec<String> = clean
         .lines()
         .flat_map(|l| wrap_text(l, content_w))
         .collect();

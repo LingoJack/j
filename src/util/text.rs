@@ -48,7 +48,7 @@ pub fn strip_ansi_codes(s: &str) -> String {
         // 覆盖 ESC[?1049h (alternate screen), ESC[38;2;...m (RGB color) 等
         // OSC 序列: ESC]...BEL 或 ESC]...ST
         // 其他 ESC 序列: ESC + 单字节
-        Regex::new(r"\x1b\[[\x20-\x3f]*[\x40-\x7e]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[^[\]()]")
+        Regex::new(r"\x1b\[[\x20-\x3f]*[\x40-\x7e]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[^\[\]()]")
             .unwrap()
     });
     re.replace_all(s, "").into_owned()
