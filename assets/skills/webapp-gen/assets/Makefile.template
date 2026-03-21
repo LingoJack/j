@@ -1,0 +1,15 @@
+SHELL := /bin/bash
+
+.PHONY: push
+push:
+	@git add . \
+	&& (git commit -m "updated" || exit 0) \
+	&& git push origin main
+
+.PHONY: pull
+pull:
+	@git pull origin main
+
+.PHONY: status
+status:
+	@git status

@@ -1,0 +1,10 @@
+.idea/
+.vscode/
+.env
+node_modules/
+target/
+.claude/
+.codebuddy/
+.codex/
+.trae/
+.opencode/
