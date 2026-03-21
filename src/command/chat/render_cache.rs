@@ -1036,8 +1036,9 @@ pub fn render_tool_call_request_msg(
                 Span::styled(tc.name.clone(), tool_name_style),
             ]));
             if !tc.arguments.is_empty() {
-                let wrapped = wrap_text(&tc.arguments, content_w);
-                for wl in wrapped {
+                // 尝试格式化 JSON 参数
+                let formatted_args = format_json_args(&tc.arguments, content_w);
+                for wl in formatted_args {
                     lines.push(Line::from(Span::styled(format!("    {}", wl), dim)));
                 }
             }
@@ -1059,6 +1060,29 @@ pub fn render_tool_call_request_msg(
             lines.push(Line::from(Span::styled(display, dim)));
         }
     }
+}
+
+/// 格式化 JSON 参数字符串，返回适合显示的行列表
+/// 如果是有效的 JSON，则美化格式化；否则原样折行显示
+fn format_json_args(args: &str, max_width: usize) -> Vec<String> {
+    // 尝试解析为 JSON 并美化格式化
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(args) {
+        if let Ok(pretty) = serde_json::to_string_pretty(&json_value) {
+            // 对格式化后的每一行进行折行处理
+            return pretty
+                .lines()
+                .flat_map(|line| {
+                    if display_width(line) > max_width {
+                        wrap_text(line, max_width)
+                    } else {
+                        vec![line.to_string()]
+                    }
+                })
+                .collect();
+        }
+    }
+    // 非 JSON 或解析失败，使用普通折行
+    wrap_text(args, max_width)
 }
 
 /// 渲染工具执行结果消息：展开时完整内容，折叠时只显示标签

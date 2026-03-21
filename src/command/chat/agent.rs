@@ -110,7 +110,7 @@ pub async fn run_agent_loop(
                             .map(|tc| tc.name.as_str())
                             .unwrap_or("unknown");
                         log_content.push_str(&format!(
-                            "[Tool/Result({} with id `{}`)] result \n:{}\n",
+                            "[Tool/Result({} with id `{}`)] result:\n{}\n",
                             tool_name, id, msg.content
                         ));
                     }
@@ -226,7 +226,7 @@ pub async fn run_agent_loop(
 
             // 记录流式回复日志
             if !assistant_text.is_empty() {
-                write_info_log("Chat 回复", &assistant_text);
+                write_info_log("Sprite 回复", &assistant_text);
             }
 
             // 如果流式遇到 tool_calls 反序列化错误，fallback 到非流式获取完整响应
@@ -275,7 +275,7 @@ pub async fn run_agent_loop(
                                 }
                             // 普通文本回复
                             if let Some(ref content) = choice.message.content {
-                                write_info_log("Chat 回复", content);
+                                write_info_log("Sprite 回复", content);
                                 let mut sc = safe_lock(&streaming_content, "agent::fallback_content");
                                 sc.push_str(content);
                                 drop(sc);
@@ -285,7 +285,7 @@ pub async fn run_agent_loop(
                     }
                     Err(e) => {
                         let error_msg = format!("API 请求失败(fallback): {}", e);
-                        write_error_log("Chat API fallback 非流式", &error_msg);
+                        write_error_log("Sprite API fallback 非流式", &error_msg);
                         let _ = tx.send(StreamMsg::Error(error_msg));
                         return;
                     }
