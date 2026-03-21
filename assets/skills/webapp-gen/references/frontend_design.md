@@ -25,7 +25,7 @@
         ```bash
         <skill_base_path>/scripts/init_frontend.sh <app_name>
         ```
-    b. 按照 `docs/frontend_design.md` 实现原型，mock 所有需要使用的数据以及接口
+    b. 按照 `docs/frontend_design.md` 实现原型，接口返回的数据可以先 mock，注意必须是 mock 接口返回的数据
     c. 运行以下脚本检查前端项目
     ```bash
     <skill_base_path>/scripts/check_frontend.sh
