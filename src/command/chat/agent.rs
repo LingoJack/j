@@ -4,6 +4,8 @@ use super::compact::{self, CompactConfig};
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::tools::Tool;
+use crate::command::chat::tools::compact::CompactTool;
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};
@@ -485,11 +487,11 @@ fn process_tool_calls(
     log_tool_request(&tool_items);
 
     if !assistant_text.is_empty() {
-        write_info_log("Chat 回复", &assistant_text);
+        write_info_log("Sprite 回复", &assistant_text);
     }
 
     // 检查是否有 compact tool 被调用
-    let compact_requested = tool_items.iter().any(|t| t.name == "compact");
+    let compact_requested = tool_items.iter().any(|t| t.name == CompactTool {}.name());
 
     messages.push(ChatMessage {
         role: ROLE_ASSISTANT.to_string(),

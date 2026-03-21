@@ -10,39 +10,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct GrepTool;
 
-/// 文件类型到扩展名的映射
-fn get_extensions_for_type(file_type: &str) -> Vec<&'static str> {
-    match file_type {
-        "js" => vec!["js", "jsx", "mjs", "cjs"],
-        "ts" => vec!["ts", "tsx"],
-        "py" => vec!["py", "pyw"],
-        "rust" | "rs" => vec!["rs"],
-        "go" => vec!["go"],
-        "java" => vec!["java"],
-        "c" => vec!["c", "h"],
-        "cpp" | "c++" | "cc" => vec!["cpp", "cc", "cxx", "hpp", "hh", "hxx", "h"],
-        "cs" | "csharp" => vec!["cs"],
-        "ruby" | "rb" => vec!["rb", "rake"],
-        "php" => vec!["php"],
-        "swift" => vec!["swift"],
-        "kt" | "kotlin" => vec!["kt", "kts"],
-        "scala" => vec!["scala", "sc"],
-        "lua" => vec!["lua"],
-        "perl" => vec!["pl", "pm", "t"],
-        "shell" | "sh" | "bash" => vec!["sh", "bash", "zsh", "ksh"],
-        "sql" => vec!["sql"],
-        "html" => vec!["html", "htm", "xhtml"],
-        "css" => vec!["css", "scss", "sass", "less"],
-        "json" => vec!["json"],
-        "yaml" | "yml" => vec!["yaml", "yml"],
-        "xml" => vec!["xml", "xsl", "xslt", "svg"],
-        "markdown" | "md" => vec!["md", "markdown"],
-        "toml" => vec!["toml"],
-        "docker" | "dockerfile" => vec!["Dockerfile", "dockerfile"],
-        _ => vec![],
-    }
-}
-
 impl Tool for GrepTool {
     fn name(&self) -> &str {
         "Grep"
@@ -380,5 +347,38 @@ impl Tool for GrepTool {
 
     fn requires_confirmation(&self) -> bool {
         false
+    }
+}
+
+/// 文件类型到扩展名的映射
+fn get_extensions_for_type(file_type: &str) -> Vec<&'static str> {
+    match file_type {
+        "js" => vec!["js", "jsx", "mjs", "cjs"],
+        "ts" => vec!["ts", "tsx"],
+        "py" => vec!["py", "pyw"],
+        "rust" | "rs" => vec!["rs"],
+        "go" => vec!["go"],
+        "java" => vec!["java"],
+        "c" => vec!["c", "h"],
+        "cpp" | "c++" | "cc" => vec!["cpp", "cc", "cxx", "hpp", "hh", "hxx", "h"],
+        "cs" | "csharp" => vec!["cs"],
+        "ruby" | "rb" => vec!["rb", "rake"],
+        "php" => vec!["php"],
+        "swift" => vec!["swift"],
+        "kt" | "kotlin" => vec!["kt", "kts"],
+        "scala" => vec!["scala", "sc"],
+        "lua" => vec!["lua"],
+        "perl" => vec!["pl", "pm", "t"],
+        "shell" | "sh" | "bash" => vec!["sh", "bash", "zsh", "ksh"],
+        "sql" => vec!["sql"],
+        "html" => vec!["html", "htm", "xhtml"],
+        "css" => vec!["css", "scss", "sass", "less"],
+        "json" => vec!["json"],
+        "yaml" | "yml" => vec!["yaml", "yml"],
+        "xml" => vec!["xml", "xsl", "xslt", "svg"],
+        "markdown" | "md" => vec!["md", "markdown"],
+        "toml" => vec!["toml"],
+        "docker" | "dockerfile" => vec!["Dockerfile", "dockerfile"],
+        _ => vec![],
     }
 }

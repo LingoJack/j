@@ -1,7 +1,7 @@
 mod ask;
 pub mod background;
 mod browser;
-mod compact;
+pub mod compact;
 mod file;
 mod grep;
 mod shell;
