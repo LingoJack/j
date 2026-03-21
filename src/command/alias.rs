@@ -56,7 +56,7 @@ pub fn handle_remove(alias: &str, config: &mut YamlConfig) {
         config.remove_property(section::OUTER_URL, alias);
         info!("成功从 OUTER_URL 中移除别名 {} ☑️", alias);
     } else {
-        error!("别名 {} 不存在 ❌", alias);
+        error!("别名 {} 不存在 ✖️", alias);
     }
 }
 
@@ -111,7 +111,7 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
     }
 
     if !updated {
-        error!("❌ 别名 {} 不存在!", alias);
+        error!("✖️ 别名 {} 不存在!", alias);
     }
 }
 

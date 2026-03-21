@@ -169,11 +169,11 @@ pub fn load_agent_config() -> AgentConfig {
     }
     match fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            error!("❌ 解析 agent_config.json 失败: {}", e);
+            error!("✖️ 解析 agent_config.json 失败: {}", e);
             AgentConfig::default()
         }),
         Err(e) => {
-            error!("❌ 读取 agent_config.json 失败: {}", e);
+            error!("✖️ 读取 agent_config.json 失败: {}", e);
             AgentConfig::default()
         }
     }
@@ -193,12 +193,12 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
         Ok(json) => match fs::write(&path, json) {
             Ok(_) => true,
             Err(e) => {
-                error!("❌ 保存 agent_config.json 失败: {}", e);
+                error!("✖️ 保存 agent_config.json 失败: {}", e);
                 false
             }
         },
         Err(e) => {
-            error!("❌ 序列化 agent 配置失败: {}", e);
+            error!("✖️ 序列化 agent 配置失败: {}", e);
             false
         }
     }
@@ -244,7 +244,7 @@ pub fn load_system_prompt() -> Option<String> {
             }
         }
         Err(e) => {
-            error!("❌ 读取 system_prompt.md 失败: {}", e);
+            error!("✖️ 读取 system_prompt.md 失败: {}", e);
             None
         }
     }
@@ -263,7 +263,7 @@ pub fn save_system_prompt(prompt: &str) -> bool {
             Ok(_) => true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
             Err(e) => {
-                error!("❌ 删除 system_prompt.md 失败: {}", e);
+                error!("✖️ 删除 system_prompt.md 失败: {}", e);
                 false
             }
         };
@@ -272,7 +272,7 @@ pub fn save_system_prompt(prompt: &str) -> bool {
     match fs::write(path, trimmed) {
         Ok(_) => true,
         Err(e) => {
-            error!("❌ 保存 system_prompt.md 失败: {}", e);
+            error!("✖️ 保存 system_prompt.md 失败: {}", e);
             false
         }
     }
@@ -294,7 +294,7 @@ pub fn load_style() -> Option<String> {
             }
         }
         Err(e) => {
-            error!("❌ 读取 style.md 失败: {}", e);
+            error!("✖️ 读取 style.md 失败: {}", e);
             None
         }
     }
@@ -313,7 +313,7 @@ pub fn save_style(style: &str) -> bool {
             Ok(_) => true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
             Err(e) => {
-                error!("❌ 删除 style.md 失败: {}", e);
+                error!("✖️ 删除 style.md 失败: {}", e);
                 false
             }
         };
@@ -322,7 +322,7 @@ pub fn save_style(style: &str) -> bool {
     match fs::write(path, trimmed) {
         Ok(_) => true,
         Err(e) => {
-            error!("❌ 保存 style.md 失败: {}", e);
+            error!("✖️ 保存 style.md 失败: {}", e);
             false
         }
     }
@@ -344,7 +344,7 @@ pub fn load_memory() -> Option<String> {
             }
         }
         Err(e) => {
-            error!("❌ 读取 memory.md 失败: {}", e);
+            error!("✖️ 读取 memory.md 失败: {}", e);
             None
         }
     }
@@ -366,7 +366,7 @@ pub fn load_soul() -> Option<String> {
             }
         }
         Err(e) => {
-            error!("❌ 读取 soul.md 失败: {}", e);
+            error!("✖️ 读取 soul.md 失败: {}", e);
             None
         }
     }
@@ -381,7 +381,7 @@ pub fn save_memory(content: &str) -> bool {
     match fs::write(path, content) {
         Ok(_) => true,
         Err(e) => {
-            error!("❌ 保存 memory.md 失败: {}", e);
+            error!("✖️ 保存 memory.md 失败: {}", e);
             false
         }
     }
@@ -396,7 +396,7 @@ pub fn save_soul(content: &str) -> bool {
     match fs::write(path, content) {
         Ok(_) => true,
         Err(e) => {
-            error!("❌ 保存 soul.md 失败: {}", e);
+            error!("✖️ 保存 soul.md 失败: {}", e);
             false
         }
     }

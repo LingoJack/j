@@ -25,7 +25,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
         {
             Some(p) => p.clone(),
             None => {
-                error!("❌ 别名 {{{}}} 已存在，但未找到对应的脚本路径", name);
+                error!("✖️ 别名 {{{}}} 已存在，但未找到对应的脚本路径", name);
                 return;
             }
         };
@@ -34,7 +34,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
         let existing_content = match fs::read_to_string(&existing_path) {
             Ok(c) => c,
             Err(e) => {
-                error!("❌ 读取已有脚本文件失败: {} (路径: {})", e, existing_path);
+                error!("✖️ 读取已有脚本文件失败: {} (路径: {})", e, existing_path);
                 return;
             }
         };
@@ -60,7 +60,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
                 info!("已取消编辑脚本");
             }
             Err(e) => {
-                error!("❌ 编辑器启动失败: {}", e);
+                error!("✖️ 编辑器启动失败: {}", e);
             }
         }
         return;
@@ -88,7 +88,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
                 return;
             }
             Err(e) => {
-                error!("❌ 编辑器启动失败: {}", e);
+                error!("✖️ 编辑器启动失败: {}", e);
                 return;
             }
         }
@@ -122,7 +122,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
     if let Some(parent) = script_path.parent()
         && let Err(e) = fs::create_dir_all(parent)
     {
-        error!("❌ 创建目录失败: {}", e);
+        error!("✖️ 创建目录失败: {}", e);
         return;
     }
 
@@ -145,7 +145,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
             let mut perms = metadata.permissions();
             perms.set_mode(perms.mode() | 0o111); // 添加执行权限
             if let Err(e) = fs::set_permissions(&script_path, perms) {
-                error!("❌ 设置执行权限失败: {}", e);
+                error!("✖️ 设置执行权限失败: {}", e);
             } else {
                 info!("🔧 已为脚本 {{{}}} 设置执行权限", name);
             }

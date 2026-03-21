@@ -85,7 +85,7 @@ pub fn handle_contain(alias: &str, containers: Option<&str>, config: &YamlConfig
 /// 直接修改配置文件中的某个字段（如果字段不存在则新增）
 pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConfig) {
     if config.get_section(part).is_none() {
-        error!("❌ 在配置文件中未找到该 section：{}", part);
+        error!("✖️ 在配置文件中未找到该 section：{}", part);
         return;
     }
 
@@ -119,7 +119,7 @@ pub fn handle_completion(shell_type: Option<&str>, config: &YamlConfig) {
         "zsh" => generate_zsh_completion(config),
         "bash" => generate_bash_completion(config),
         _ => {
-            error!("❌ 不支持的 shell 类型: {}，可选: zsh, bash", shell);
+            error!("✖️ 不支持的 shell 类型: {}，可选: zsh, bash", shell);
             usage!("j completion [zsh|bash]");
         }
     }

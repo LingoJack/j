@@ -13,7 +13,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
         && !config.contains(section::INNER_URL, alias)
         && !config.contains(section::OUTER_URL, alias)
     {
-        error!("❌ 别名 {} 不存在", alias);
+        error!("✖️ 别名 {} 不存在", alias);
         return;
     }
 
@@ -34,7 +34,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
                 config.remove_property(section::INNER_URL, alias);
                 info!("☑️ 将别名 {} 标记为 OUTER_URL 成功", alias);
             } else {
-                error!("❌ 别名 {} 不在 INNER_URL 中，无法标记为 OUTER_URL", alias);
+                error!("✖️ 别名 {} 不在 INNER_URL 中，无法标记为 OUTER_URL", alias);
             }
         }
         _ => {
@@ -47,7 +47,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
                     category.to_uppercase()
                 );
             } else {
-                error!("❌ 别名 {} 不在 PATH 中，无法标记", alias);
+                error!("✖️ 别名 {} 不在 PATH 中，无法标记", alias);
             }
         }
     }
@@ -66,7 +66,7 @@ pub fn handle_denote(alias: &str, category: &str, config: &mut YamlConfig) {
     }
 
     if !config.contains(category, alias) {
-        error!("❌ 别名 {} 不在 {} 分类中", alias, category.to_uppercase());
+        error!("✖️ 别名 {} 不在 {} 分类中", alias, category.to_uppercase());
         return;
     }
 

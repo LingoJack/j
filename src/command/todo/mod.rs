@@ -150,7 +150,7 @@ fn run_todo_tui(config: &mut YamlConfig) {
     match result {
         Ok(_) => {}
         Err(e) => {
-            error!("❌ TUI 启动失败: {}", e);
+            error!("✖️ TUI 启动失败: {}", e);
         }
     }
 }

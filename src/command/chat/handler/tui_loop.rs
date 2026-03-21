@@ -43,7 +43,7 @@ pub fn run_chat_tui() {
 
     if let Err(e) = result {
         restore_terminal();
-        error!("❌ Chat TUI 启动失败: {}", e);
+        error!("✖️ Chat TUI 启动失败: {}", e);
     }
 }
 

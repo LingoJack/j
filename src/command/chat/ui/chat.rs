@@ -856,7 +856,7 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             f.render_widget(clear, toast_area);
 
             let (icon, border_color, text_color) = if is_error {
-                ("❌", t.toast_error_border, t.toast_error_text)
+                ("✖️", t.toast_error_border, t.toast_error_text)
             } else {
                 ("☑️", t.toast_success_border, t.toast_success_text)
             };

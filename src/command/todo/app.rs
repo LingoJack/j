@@ -54,11 +54,11 @@ pub fn load_todo_list() -> TodoList {
     }
     match fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            error!("❌ 解析 todo.json 失败: {}", e);
+            error!("✖️ 解析 todo.json 失败: {}", e);
             TodoList::default()
         }),
         Err(e) => {
-            error!("❌ 读取 todo.json 失败: {}", e);
+            error!("✖️ 读取 todo.json 失败: {}", e);
             TodoList::default()
         }
     }
@@ -74,12 +74,12 @@ pub fn save_todo_list(list: &TodoList) -> bool {
         Ok(json) => match fs::write(&path, json) {
             Ok(_) => true,
             Err(e) => {
-                error!("❌ 保存 todo.json 失败: {}", e);
+                error!("✖️ 保存 todo.json 失败: {}", e);
                 false
             }
         },
         Err(e) => {
-            error!("❌ 序列化 todo 列表失败: {}", e);
+            error!("✖️ 序列化 todo 列表失败: {}", e);
             false
         }
     }
@@ -407,7 +407,7 @@ pub fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
                 if copy_to_clipboard(&content) {
                     app.message = Some(format!("📋 已复制到剪切板: {}", content));
                 } else {
-                    app.message = Some("❌ 复制到剪切板失败".to_string());
+                    app.message = Some("✖️ 复制到剪切板失败".to_string());
                 }
             }
         }

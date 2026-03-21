@@ -60,7 +60,7 @@ pub fn handle_report(sub: &str, content: &[String], config: &mut YamlConfig) {
             }
             _ => {
                 error!(
-                    "❌ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}",
+                    "✖️ 未知的元数据操作: {}，可选: {}, {}, {}, {}, {}, {}",
                     first,
                     rmeta_action::NEW,
                     rmeta_action::SYNC,
@@ -98,7 +98,7 @@ fn get_report_path(config: &YamlConfig) -> Option<String> {
     // 如果文件不存在则自动创建空文件
     if !report_path.exists() {
         if let Err(e) = fs::write(&report_path, "") {
-            error!("❌ 创建日报文件失败: {}", e);
+            error!("✖️ 创建日报文件失败: {}", e);
             return None;
         }
         info!("📄 已自动创建日报文件: {:?}", report_path);
@@ -185,7 +185,7 @@ fn handle_report_tui(config: &mut YamlConfig) {
             // 配置文件中的 week_num/last_day 可能已更新，但下次进入时 now <= last_day 不会重复生成
         }
         Err(e) => {
-            error!("❌ 编辑器启动失败: {}", e);
+            error!("✖️ 编辑器启动失败: {}", e);
         }
     }
 }
@@ -195,7 +195,7 @@ fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            error!("❌ 读取文件失败: {}", e);
+            error!("✖️ 读取文件失败: {}", e);
             return;
         }
     };
@@ -226,7 +226,7 @@ fn replace_last_n_lines(path: &Path, n: usize, new_content: &str) {
     }
 
     if let Err(e) = fs::write(path, &result) {
-        error!("❌ 写入文件失败: {}", e);
+        error!("✖️ 写入文件失败: {}", e);
     }
 }
 
@@ -382,7 +382,7 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
             }
         }
         None => {
-            error!("❌ 无法解析 last_day 日期: {}", last_day_str);
+            error!("✖️ 无法解析 last_day 日期: {}", last_day_str);
             return;
         }
     }
@@ -423,7 +423,7 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
         }
         None => {
             error!(
-                "❌ 更新周数失败，请检查日期字符串是否有误: {}",
+                "✖️ 更新周数失败，请检查日期字符串是否有误: {}",
                 last_day_str
             );
         }
@@ -461,7 +461,7 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
         }
         None => {
             error!(
-                "❌ 更新周数失败，请检查日期字符串是否有误: {}",
+                "✖️ 更新周数失败，请检查日期字符串是否有误: {}",
                 last_day_str
             );
         }
@@ -496,7 +496,7 @@ fn update_config_files(
                 "☑️ 更新JSON配置文件成功：周数 = {}, 周结束日期 = {}",
                 week_num, last_day_str
             ),
-            Err(e) => error!("❌ 更新JSON配置文件时出错: {}", e),
+            Err(e) => error!("✖️ 更新JSON配置文件时出错: {}", e),
         }
     }
 }
@@ -504,7 +504,7 @@ fn update_config_files(
 /// 从 JSON 配置文件读取并同步到 YAML
 fn load_config_from_json_and_sync(config_path: &Path, config: &mut YamlConfig) {
     if !config_path.exists() {
-        error!("❌ 日报配置文件不存在：{:?}", config_path);
+        error!("✖️ 日报配置文件不存在：{:?}", config_path);
         return;
     }
 
@@ -523,10 +523,10 @@ fn load_config_from_json_and_sync(config_path: &Path, config: &mut YamlConfig) {
                     update_config_files(week_num as i32, &last_day_date, config_path, config);
                 }
             } else {
-                error!("❌ 解析日报配置文件时出错");
+                error!("✖️ 解析日报配置文件时出错");
             }
         }
-        Err(e) => error!("❌ 读取日报配置文件失败: {}", e),
+        Err(e) => error!("✖️ 读取日报配置文件失败: {}", e),
     }
 }
 
@@ -540,10 +540,10 @@ fn append_to_file(path: &Path, content: &str) {
     match OpenOptions::new().create(true).append(true).open(path) {
         Ok(mut f) => {
             if let Err(e) = f.write_all(content.as_bytes()) {
-                error!("❌ 写入文件失败: {}", e);
+                error!("✖️ 写入文件失败: {}", e);
             }
         }
-        Err(e) => error!("❌ 打开文件失败: {}", e),
+        Err(e) => error!("✖️ 打开文件失败: {}", e),
     }
 }
 
@@ -558,7 +558,7 @@ fn handle_open_report(config: &YamlConfig) {
 
     let path = Path::new(&report_path);
     if !path.is_file() {
-        error!("❌ 日报文件不存在: {}", report_path);
+        error!("✖️ 日报文件不存在: {}", report_path);
         return;
     }
 
@@ -566,7 +566,7 @@ fn handle_open_report(config: &YamlConfig) {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            error!("❌ 读取日报文件失败: {}", e);
+            error!("✖️ 读取日报文件失败: {}", e);
             return;
         }
     };
@@ -583,7 +583,7 @@ fn handle_open_report(config: &YamlConfig) {
                 result.push('\n');
             }
             if let Err(e) = fs::write(path, &result) {
-                error!("❌ 写入日报文件失败: {}", e);
+                error!("✖️ 写入日报文件失败: {}", e);
                 return;
             }
             info!("☑️ 日报文件已保存：{}", report_path);
@@ -592,7 +592,7 @@ fn handle_open_report(config: &YamlConfig) {
             info!("已取消编辑，文件未修改");
         }
         Err(e) => {
-            error!("❌ 编辑器启动失败: {}", e);
+            error!("✖️ 编辑器启动失败: {}", e);
         }
     }
 }
@@ -655,7 +655,7 @@ fn run_git_in_report_dir(args: &[&str], config: &YamlConfig) -> Option<std::proc
     let dir = match get_report_dir(config) {
         Some(d) => d,
         None => {
-            error!("❌ 无法确定日报目录");
+            error!("✖️ 无法确定日报目录");
             return None;
         }
     };
@@ -676,7 +676,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
     let dir = match get_report_dir(config) {
         Some(d) => d,
         None => {
-            error!("❌ 无法确定日报目录");
+            error!("✖️ 无法确定日报目录");
             return false;
         }
     };
@@ -691,7 +691,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
     // 检查是否有配置 git_repo
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
+        error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
         return false;
     }
     let repo_url = git_repo.unwrap().clone();
@@ -701,7 +701,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
     // git init -b main
     if let Some(status) = run_git_in_report_dir(&["init", "-b", "main"], config) {
         if !status.success() {
-            error!("❌ git init 失败");
+            error!("✖️ git init 失败");
             return false;
         }
     } else {
@@ -711,7 +711,7 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
     // git remote add origin <repo_url>
     if let Some(status) = run_git_in_report_dir(&["remote", "add", "origin", &repo_url], config) {
         if !status.success() {
-            error!("❌ git remote add 失败");
+            error!("✖️ git remote add 失败");
             return false;
         }
     } else {
@@ -761,7 +761,7 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
+        error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
         return;
     }
 
@@ -778,7 +778,7 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // git add .
     if let Some(status) = run_git_in_report_dir(&["add", "."], config) {
         if !status.success() {
-            error!("❌ git add 失败");
+            error!("✖️ git add 失败");
             return;
         }
     } else {
@@ -800,7 +800,7 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
         if status.success() {
             info!("☑️ 周报已成功推送到远程仓库");
         } else {
-            error!("❌ git push 失败，请检查网络连接和仓库权限");
+            error!("✖️ git push 失败，请检查网络连接和仓库权限");
         }
     }
 }
@@ -810,14 +810,14 @@ fn handle_pull(config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
     if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("❌ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
+        error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
         return;
     }
 
     let dir = match get_report_dir(config) {
         Some(d) => d,
         None => {
-            error!("❌ 无法确定日报目录");
+            error!("✖️ 无法确定日报目录");
             return;
         }
     };
@@ -866,13 +866,13 @@ fn handle_pull(config: &YamlConfig) {
                 // 将 clone 出来的内容移到 report 目录
                 let _ = fs::remove_dir_all(&dir);
                 if let Err(e) = fs::rename(&temp_dir, &dir) {
-                    error!("❌ 移动克隆仓库失败: {}，临时目录: {:?}", e, temp_dir);
+                    error!("✖️ 移动克隆仓库失败: {}，临时目录: {:?}", e, temp_dir);
                     return;
                 }
                 info!("☑️ 成功从远程仓库克隆周报");
             }
             Ok(_) => {
-                error!("❌ git clone 失败，请检查仓库地址和网络连接");
+                error!("✖️ git clone 失败，请检查仓库地址和网络连接");
                 let _ = fs::remove_dir_all(&temp_dir);
             }
             Err(e) => {
@@ -911,7 +911,7 @@ fn handle_pull(config: &YamlConfig) {
             // git fetch origin main
             if let Some(status) = run_git_in_report_dir(&["fetch", "origin", "main"], config) {
                 if !status.success() {
-                    error!("❌ git fetch 失败，请检查网络连接和仓库地址");
+                    error!("✖️ git fetch 失败，请检查网络连接和仓库地址");
                     return;
                 }
             } else {
@@ -924,7 +924,7 @@ fn handle_pull(config: &YamlConfig) {
                 if status.success() {
                     info!("☑️ 成功从远程仓库拉取周报");
                 } else {
-                    error!("❌ git reset 失败");
+                    error!("✖️ git reset 失败");
                 }
             }
         } else {
@@ -953,7 +953,7 @@ fn handle_pull(config: &YamlConfig) {
                     info!("☑️ 周报已更新到最新版本");
                     true
                 } else {
-                    error!("❌ git pull 失败，请检查网络连接或手动解决冲突");
+                    error!("✖️ git pull 失败，请检查网络连接或手动解决冲突");
                     false
                 }
             } else {
@@ -986,7 +986,7 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
         Some(s) => match s.parse::<usize>() {
             Ok(n) if n > 0 => n,
             _ => {
-                error!("❌ 无效的行数参数: {}，请输入正整数或 open", s);
+                error!("✖️ 无效的行数参数: {}，请输入正整数或 open", s);
                 return;
             }
         },
@@ -1002,7 +1002,7 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
 
     let path = Path::new(&report_path);
     if !path.is_file() {
-        error!("❌ 文件不存在或不是有效文件: {}", report_path);
+        error!("✖️ 文件不存在或不是有效文件: {}", report_path);
         return;
     }
 
@@ -1028,7 +1028,7 @@ pub fn handle_search(
         match line_count.parse::<usize>() {
             Ok(n) if n > 0 => n,
             _ => {
-                error!("❌ 无效的行数参数: {}，请输入正整数或 all", line_count);
+                error!("✖️ 无效的行数参数: {}，请输入正整数或 all", line_count);
                 return;
             }
         }
@@ -1043,7 +1043,7 @@ pub fn handle_search(
 
     let path = Path::new(&report_path);
     if !path.is_file() {
-        error!("❌ 文件不存在或不是有效文件: {}", report_path);
+        error!("✖️ 文件不存在或不是有效文件: {}", report_path);
         return;
     }
 
@@ -1084,7 +1084,7 @@ fn read_last_n_lines(path: &Path, n: usize) -> Vec<String> {
     let mut file = match fs::File::open(path) {
         Ok(f) => f,
         Err(e) => {
-            error!("❌ 读取文件时发生错误: {}", e);
+            error!("✖️ 读取文件时发生错误: {}", e);
             return lines;
         }
     };

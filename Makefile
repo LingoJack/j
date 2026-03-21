@@ -151,7 +151,7 @@ tag: ## 创建 git tag（基于当前版本号）
 	@version=$(VERSION); \
 	tag="v$$version"; \
 	if git rev-parse "$$tag" >/dev/null 2>&1; then \
-		echo "❌ 标签 $$tag 已存在 (Cargo.toml 版本 = $$version)"; \
+		echo "✖️ 标签 $$tag 已存在 (Cargo.toml 版本 = $$version)"; \
 		echo "   请先使用 'make bump-version' 递增版本号"; \
 		echo "   或使用 'make set-version V=x.x.x' 设置新版本号"; \
 		exit 1; \
@@ -163,7 +163,7 @@ tag: ## 创建 git tag（基于当前版本号）
 
 set-version: ## 设置指定版本号（用法：make set-version V=1.2.3）
 ifndef V
-	@echo "❌ 请指定版本号，例如: make set-version V=1.2.3"
+	@echo "✖️ 请指定版本号，例如: make set-version V=1.2.3"
 	@exit 1
 endif
 	@echo "📌 设置版本号为 $(V)..."

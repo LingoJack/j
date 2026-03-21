@@ -11,7 +11,7 @@ use std::process::Command;
 /// args[0] = alias, args[1..] = 额外参数
 pub fn handle_open(args: &[String], config: &YamlConfig) {
     if args.is_empty() {
-        error!("❌ 请指定要打开的别名");
+        error!("✖️ 请指定要打开的别名");
         return;
     }
 
@@ -20,7 +20,7 @@ pub fn handle_open(args: &[String], config: &YamlConfig) {
     // 检查别名是否存在
     if !config.alias_exists(alias) {
         error!(
-            "❌ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。",
+            "✖️ 无法找到别名对应的路径或网址 {{{}}}。请检查配置文件。",
             alias
         );
         return;
@@ -157,7 +157,7 @@ fn run_script_in_current_terminal(script_path: &str, script_args: &[&str], confi
             if status.success() {
                 info!("☑️ 脚本执行完成");
             } else {
-                error!("❌ 脚本执行失败，退出码: {}", status);
+                error!("✖️ 脚本执行失败，退出码: {}", status);
             }
         }
         Err(e) => error!("💥 执行脚本失败: {}", e),
@@ -212,7 +212,7 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
                 if status.success() {
                     info!("☑️ 已在新终端窗口中启动脚本");
                 } else {
-                    error!("❌ 启动新终端窗口失败，退出码: {}", status);
+                    error!("✖️ 启动新终端窗口失败，退出码: {}", status);
                 }
             }
             Err(e) => error!("💥 调用 osascript 失败: {}", e),
@@ -241,7 +241,7 @@ fn run_script_in_new_window(script_path: &str, script_args: &[&str], config: &Ya
                 if status.success() {
                     info!("☑️ 已在新终端窗口中启动脚本");
                 } else {
-                    error!("❌ 启动新终端窗口失败，退出码: {}", status);
+                    error!("✖️ 启动新终端窗口失败，退出码: {}", status);
                 }
             }
             Err(e) => error!("💥 启动新窗口失败: {}", e),
@@ -342,7 +342,7 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
             match result {
                 Ok(status) => {
                     if !status.success() {
-                        error!("❌ 执行 {{{}}} 失败，退出码: {}", alias, status);
+                        error!("✖️ 执行 {{{}}} 失败，退出码: {}", alias, status);
                     }
                 }
                 Err(e) => error!("💥 执行 {{{}}} 失败: {}", alias, e),
@@ -375,7 +375,7 @@ fn open_alias_with_args(alias: &str, extra_args: &[String], config: &YamlConfig)
             info!("☑️ 启动 {{{}}} : {{{}}}", alias, path);
         }
     } else {
-        error!("❌ 未找到别名对应的路径或网址: {}。请检查配置文件。", alias);
+        error!("✖️ 未找到别名对应的路径或网址: {}。请检查配置文件。", alias);
     }
 }
 
@@ -459,7 +459,7 @@ fn open_with_path(alias: &str, file_path: Option<&str>, config: &YamlConfig) {
             Err(e) => error!("💥 启动 {} 失败: {}", alias, e),
         }
     } else {
-        error!("❌ 未找到别名对应的路径: {}。", alias);
+        error!("✖️ 未找到别名对应的路径: {}。", alias);
     }
 }
 

@@ -7,7 +7,7 @@ use std::io::{self, Write};
 /// duration 支持: 30s（秒）、5m（分钟）、1h（小时），不带单位默认为分钟
 pub fn handle_time(function: &str, arg: &str) {
     if function != time_function::COUNTDOWN {
-        error!("❌ 未知的功能: {}，目前仅支持 countdown", function);
+        error!("✖️ 未知的功能: {}，目前仅支持 countdown", function);
         usage!("j time countdown <duration>");
         info!("  duration 格式: 30s(秒), 5m(分钟), 1h(小时), 不带单位默认为分钟");
         return;
@@ -15,7 +15,7 @@ pub fn handle_time(function: &str, arg: &str) {
 
     let duration_secs = parse_duration(arg);
     if duration_secs <= 0 {
-        error!("❌ 无效的时长: {}", arg);
+        error!("✖️ 无效的时长: {}", arg);
         return;
     }
 

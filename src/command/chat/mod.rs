@@ -64,7 +64,7 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
             println!(); // 换行
         }
         Err(e) => {
-            error!("\n❌ {}", e);
+            error!("\n✖️ {}", e);
         }
     }
 }
