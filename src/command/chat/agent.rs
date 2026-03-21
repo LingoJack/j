@@ -493,6 +493,9 @@ fn process_tool_calls(
     // 检查是否有 compact tool 被调用
     let compact_requested = tool_items.iter().any(|t| t.name == CompactTool {}.name());
 
+    // 记录新增消息的起始位置
+    let msg_start = messages.len();
+
     messages.push(ChatMessage {
         role: ROLE_ASSISTANT.to_string(),
         content: assistant_text,
@@ -526,6 +529,10 @@ fn process_tool_calls(
             tool_call_id: Some(result.tool_call_id),
         });
     }
+
+    // 增量推送本轮新增的 tool_call + tool_result 消息到主线程
+    let new_msgs: Vec<ChatMessage> = messages[msg_start..].to_vec();
+    let _ = tx.send(StreamMsg::AgentMessages(new_msgs));
 
     drain_pending_user_messages(messages, pending_user_messages);
     Ok(compact_requested)

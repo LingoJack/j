@@ -11,7 +11,7 @@ use super::storage::{
 use super::theme::Theme;
 use super::tools::ToolRegistry;
 use super::tools::background::BackgroundManager;
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_USER};
+use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
@@ -29,6 +29,8 @@ pub enum StreamMsg {
     Chunk,
     /// LLM 请求执行工具（附带完整工具调用列表）
     ToolCallRequest(Vec<ToolCallItem>),
+    /// Agent loop 中新增的消息（tool_call assistant + tool results），增量推送
+    AgentMessages(Vec<super::storage::ChatMessage>),
     /// 流式响应完成
     Done,
     /// 发生错误
@@ -207,6 +209,8 @@ pub struct UIState {
     pub tool_toggle_index: usize,
     /// Skill 开关子菜单中选中的索引
     pub skill_toggle_index: usize,
+    /// 是否展开工具调用详情（Ctrl+O 切换）
+    pub expand_tools: bool,
 }
 
 // ========== 后端状态 ==========
@@ -748,6 +752,8 @@ pub struct MsgLinesCache {
     pub streaming_stable_lines: Vec<Line<'static>>,
     /// 流式增量渲染缓存：已缓存到 streaming_content 的字节偏移
     pub streaming_stable_offset: usize,
+    /// 工具展开状态（缓存时记录，变化时需重建）
+    pub expand_tools: bool,
 }
 
 /// 单条消息的渲染缓存
@@ -1008,6 +1014,8 @@ pub enum Action {
     // ========== 应用控制 ==========
     /// 正常退出（Ctrl+C）
     Quit,
+    /// 切换工具详情展开/折叠（Ctrl+O）
+    ToggleExpandTools,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1111,6 +1119,7 @@ impl ChatApp {
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
                 tool_toggle_index: 0,
                 skill_toggle_index: 0,
+                expand_tools: false,
             },
             state: ChatState {
                 agent_config,
@@ -2026,6 +2035,18 @@ impl ChatApp {
             Action::Quit => {
                 // Will be handled by event loop
             }
+            Action::ToggleExpandTools => {
+                self.ui.expand_tools = !self.ui.expand_tools;
+                self.ui.msg_lines_cache = None;
+                self.show_toast(
+                    if self.ui.expand_tools {
+                        "展开工具详情"
+                    } else {
+                        "折叠工具详情"
+                    },
+                    false,
+                );
+            }
         }
     }
 
@@ -2070,14 +2091,22 @@ impl ChatApp {
             .unwrap_or_else(|| "未配置".to_string())
     }
 
-    /// 构建发送给 API 的消息列表
+    /// 构建发送给 API 的消息列表（安全裁剪：不从 tool pair 中间截断）
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
         let max_history = self.state.agent_config.max_history_messages;
-        if self.state.session.messages.len() > max_history {
-            self.state.session.messages[self.state.session.messages.len() - max_history..].to_vec()
-        } else {
-            self.state.session.messages.clone()
+        let msgs = &self.state.session.messages;
+        if msgs.len() <= max_history {
+            return msgs.clone();
         }
+        let mut start = msgs.len() - max_history;
+        // 向前退到安全位置：不从 tool pair 中间截断
+        while start > 0
+            && (msgs[start].role == ROLE_TOOL
+                || (msgs[start].role == ROLE_ASSISTANT && msgs[start].tool_calls.is_some()))
+        {
+            start -= 1;
+        }
+        msgs[start..].to_vec()
     }
 
     /// 发送消息（非阻塞，启动后台线程流式接收）
@@ -2365,6 +2394,14 @@ impl ChatApp {
                         // 延迟一帧再执行
                         self.tool_executor.pending_tool_execution = true;
                         break;
+                    }
+                    StreamMsg::AgentMessages(new_msgs) => {
+                        // 增量推送：agent loop 中产生的 tool_call + tool_result 消息
+                        for msg in new_msgs {
+                            self.state.session.messages.push(msg);
+                        }
+                        self.ui.msg_lines_cache = None;
+                        // 不 break，继续处理后续消息
                     }
                     StreamMsg::Done => {
                         actions.push(Action::StreamDone);
@@ -2664,6 +2701,7 @@ impl ChatApp {
                 streaming_lines: new_streaming_lines,
                 streaming_stable_lines: new_stable_lines,
                 streaming_stable_offset: new_stable_offset,
+                expand_tools: self.ui.expand_tools,
             });
         }
     }

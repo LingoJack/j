@@ -37,6 +37,29 @@ pub fn char_width(c: char) -> usize {
     UnicodeWidthChar::width(c).unwrap_or(0)
 }
 
+/// 剥离 ANSI 转义序列（颜色、粗体等控制码），返回纯文本
+/// 例如 "\x1b[1;34mhello\x1b[0m" → "hello"
+pub fn strip_ansi_codes(s: &str) -> String {
+    use regex::Regex;
+    use std::sync::OnceLock;
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        // CSI 序列: ESC[ (参数字节 0x30-0x3F: 0-9;:?>=!等) (中间字节 0x20-0x2F) 终止字节
+        // 覆盖 ESC[?1049h (alternate screen), ESC[38;2;...m (RGB color) 等
+        // OSC 序列: ESC]...BEL 或 ESC]...ST
+        // 其他 ESC 序列: ESC + 单字节
+        Regex::new(r"\x1b\[[\x20-\x3f]*[\x40-\x7e]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[^[\]()]")
+            .unwrap()
+    });
+    re.replace_all(s, "").into_owned()
+}
+
+/// 清理工具输出文本：剥离 ANSI 码 + 将 tab 替换为空格 + 移除 \r
+pub fn sanitize_tool_output(s: &str) -> String {
+    let stripped = strip_ansi_codes(s);
+    stripped.replace('\t', "    ").replace('\r', "")
+}
+
 /// 去除字符串两端的引号（单引号或双引号）
 pub fn remove_quotes(s: &str) -> String {
     let s = s.trim();

@@ -261,6 +261,8 @@ impl Tool for BackgroundRunTool {
             }
             if result.is_empty() {
                 result = "(无输出)".to_string();
+            } else {
+                result = crate::util::text::sanitize_tool_output(&result);
             }
 
             let status = if output.status.success() {

@@ -268,6 +268,12 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return false;
     }
 
+    // Ctrl+O 切换工具详情展开/折叠
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('o') {
+        app.update(Action::ToggleExpandTools);
+        return false;
+    }
+
     // Ctrl+E 打开配置界面
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('e') {
         app.ui.config_provider_idx = app

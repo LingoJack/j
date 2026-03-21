@@ -80,9 +80,11 @@ pub fn build_message_lines_incremental(
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::new();
     let mut per_msg_cache: Vec<PerMsgCache> = Vec::new();
 
-    // 判断旧缓存中的 per_msg_lines 是否可以复用（bubble_max_width 相同）
+    let expand = app.ui.expand_tools;
+
+    // 判断旧缓存中的 per_msg_lines 是否可以复用（bubble_max_width 相同且 expand 一致）
     let can_reuse_per_msg = old_cache
-        .map(|c| c.bubble_max_width == bubble_max_width)
+        .map(|c| c.bubble_max_width == bubble_max_width && c.expand_tools == expand)
         .unwrap_or(false);
 
     // ===== P0 优化：直接引用 session.messages，避免克隆全部内容 =====
@@ -132,7 +134,13 @@ pub fn build_message_lines_incremental(
             }
             ROLE_ASSISTANT => {
                 if let Some(ref tool_calls) = m.tool_calls {
-                    render_tool_call_request_msg(tool_calls, bubble_max_width, &mut tmp_lines, t);
+                    render_tool_call_request_msg(
+                        tool_calls,
+                        bubble_max_width,
+                        &mut tmp_lines,
+                        t,
+                        expand,
+                    );
                 } else {
                     render_assistant_msg(
                         &m.content,
@@ -151,8 +159,10 @@ pub fn build_message_lines_incremental(
                 render_tool_result_msg(
                     &m.content,
                     role_label.as_deref().unwrap_or("工具结果"),
+                    bubble_max_width,
                     &mut tmp_lines,
                     t,
+                    expand,
                 );
             }
             ROLE_SYSTEM => {
@@ -1011,101 +1021,71 @@ pub fn render_tool_call_request_msg(
     tool_calls: &[super::storage::ToolCallItem],
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
+    _theme: &Theme,
+    expand: bool,
 ) {
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  🔧 调用工具",
-        Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD),
-    )));
-    let bubble_bg = Color::Rgb(40, 35, 10);
-    let pad = 3usize;
-    let content_w = bubble_max_width.saturating_sub(pad * 2);
-    lines.push(Line::from(vec![Span::styled(
-        " ".repeat(bubble_max_width),
-        Style::default().bg(bubble_bg),
-    )]));
+    let dim = Style::default().fg(Color::DarkGray);
+    let tool_name_style = Style::default().fg(Color::Rgb(140, 140, 140));
+    let content_w = bubble_max_width.saturating_sub(6); // "  ⏺ " prefix
+
     for tc in tool_calls {
-        let args_preview: String = tc.arguments.chars().take(50).collect();
-        let args_display = if tc.arguments.len() > 50 {
-            format!("{}...", args_preview)
-        } else {
-            args_preview
-        };
-        let text = format!("{} ({})", tc.name, args_display);
-        let wrapped = wrap_text(&text, content_w);
-        for wl in wrapped {
-            let fill = content_w.saturating_sub(display_width(&wl));
+        if expand {
+            // 展开模式：名称一行 + 参数折行
             lines.push(Line::from(vec![
-                Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
-                Span::styled(wl, Style::default().fg(Color::Yellow).bg(bubble_bg)),
-                Span::styled(" ".repeat(fill), Style::default().bg(bubble_bg)),
-                Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
+                Span::styled("  ⏺ ", dim),
+                Span::styled(tc.name.clone(), tool_name_style),
             ]));
+            if !tc.arguments.is_empty() {
+                let wrapped = wrap_text(&tc.arguments, content_w);
+                for wl in wrapped {
+                    lines.push(Line::from(Span::styled(format!("    {}", wl), dim)));
+                }
+            }
+        } else {
+            // 折叠模式：一行 "  ⏺ name(truncated_args)"
+            let args_preview: String = tc.arguments.chars().take(80).collect();
+            let suffix = if tc.arguments.chars().count() > 80 {
+                "…"
+            } else {
+                ""
+            };
+            let text = if args_preview.is_empty() {
+                format!("  ⏺ {}", tc.name)
+            } else {
+                format!("  ⏺ {}({}{})", tc.name, args_preview, suffix)
+            };
+            // 截断到 bubble_max_width
+            let display: String = text.chars().take(bubble_max_width).collect();
+            lines.push(Line::from(Span::styled(display, dim)));
         }
     }
-    let _ = theme; // 保留参数以便未来扩展
-    lines.push(Line::from(vec![Span::styled(
-        " ".repeat(bubble_max_width),
-        Style::default().bg(bubble_bg),
-    )]));
 }
 
-/// 渲染工具执行结果消息：绿色标签 + 截断内容（最多 5 行）
+/// 渲染工具执行结果消息：展开时完整内容，折叠时只显示标签
 pub fn render_tool_result_msg(
     content: &str,
     label: &str,
+    bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
+    _theme: &Theme,
+    expand: bool,
 ) {
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        format!("  ☑️ {}", label),
-        Style::default()
-            .fg(Color::Green)
-            .add_modifier(Modifier::BOLD),
-    )));
-    let bubble_bg = Color::Rgb(10, 40, 15);
-    let pad = 3usize;
-    let content_w = 60usize;
-    let bubble_w = content_w + pad * 2;
-    lines.push(Line::from(vec![Span::styled(
-        " ".repeat(bubble_w),
-        Style::default().bg(bubble_bg),
-    )]));
-    let display_content = if content.len() > 200 {
-        let mut end = 200;
-        while !content.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}...", &content[..end])
-    } else {
-        content.to_string()
-    };
-    let all_lines: Vec<String> = display_content
+    let dim = Style::default().fg(Color::DarkGray);
+    // 折叠模式：一行 "  ✓ label"
+    lines.push(Line::from(Span::styled(format!("  ✓ {}", label), dim)));
+
+    if !expand || content.is_empty() {
+        return;
+    }
+    // 展开模式：缩进显示内容，无背景色
+    let content_w = bubble_max_width.saturating_sub(6); // "    " prefix
+    let all_lines: Vec<String> = content
         .lines()
         .flat_map(|l| wrap_text(l, content_w))
-        .take(5)
         .collect();
     for wl in all_lines {
-        let fill = content_w.saturating_sub(display_width(&wl));
-        lines.push(Line::from(vec![
-            Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
-            Span::styled(
-                wl,
-                Style::default().fg(Color::Rgb(180, 255, 180)).bg(bubble_bg),
-            ),
-            Span::styled(" ".repeat(fill), Style::default().bg(bubble_bg)),
-            Span::styled(" ".repeat(pad), Style::default().bg(bubble_bg)),
-        ]));
+        lines.push(Line::from(Span::styled(format!("    {}", wl), dim)));
     }
-    let _ = theme;
-    lines.push(Line::from(vec![Span::styled(
-        " ".repeat(bubble_w),
-        Style::default().bg(bubble_bg),
-    )]));
 }
 
 /// 计算思考指示器的脉冲颜色：基于 label_ai 颜色在亮暗之间平滑过渡

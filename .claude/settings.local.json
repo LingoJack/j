@@ -36,7 +36,10 @@
       "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat/tools/task -type f -exec wc -l {} +)",
       "mcp__ide__getDiagnostics",
       "Bash(git stash:*)",
-      "Bash(find ./src -type f -name *.rs)"
+      "Bash(find ./src -type f -name *.rs)",
+      "Bash(/tmp/exact_locations.txt:*)",
+      "Bash(/tmp/INDEX.txt:*)",
+      "Bash(cargo eval:*)"
     ]
   },
   "language": "zh-CN",

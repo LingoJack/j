@@ -288,6 +288,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             streaming_lines: new_streaming_lines,
             streaming_stable_lines: new_stable_lines,
             streaming_stable_offset: new_stable_offset,
+            expand_tools: app.ui.expand_tools,
         });
     }
 
@@ -759,6 +760,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             ("Ctrl+S", "流式切换"),
             ("Ctrl+E", "配置"),
             ("Ctrl+G", "日志"),
+            ("Ctrl+O", "工具详情"),
             ("?/F1", "帮助"),
             ("Esc", "退出"),
         ],

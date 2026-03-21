@@ -239,8 +239,9 @@ impl Tool for ShellTool {
     }
 }
 
-/// 将 stdout 和 stderr 字节拼接为最终输出字符串
+/// 将 stdout 和 stderr 字节拼接为最终输出字符串（剥离 ANSI 转义码 + 清理控制字符）
 fn build_output(stdout_bytes: &[u8], stderr_bytes: &[u8]) -> String {
+    use crate::util::text::sanitize_tool_output;
     let mut result = String::new();
     let stdout = String::from_utf8_lossy(stdout_bytes);
     let stderr = String::from_utf8_lossy(stderr_bytes);
@@ -256,5 +257,5 @@ fn build_output(stdout_bytes: &[u8], stderr_bytes: &[u8]) -> String {
         }
         result.push_str(&stderr);
     }
-    result
+    sanitize_tool_output(&result)
 }
