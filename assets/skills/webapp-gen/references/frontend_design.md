@@ -5,7 +5,7 @@
 - React
 - Typescript
 - tailwindcss (v4)
-使用 `init_frontend.py` 脚本自动创建项目脚手架，并安装依赖
+使用 `make init-frontend APP=<app_name>` 自动创建项目脚手架，并安装依赖
 
 
 ## 流程要求
@@ -28,7 +28,7 @@
 
 编写完成后，运行以下命令以打开前端设计文档供用户查看，并使用 `Ask` 工具收集反馈
 ```bash
-open docs/frontend_design.md
+j code docs/frontend_design.md
 ```
 
 收集用户反馈后，修改 `docs/frontend_design.md` 并再次运行上述命令，直到用户确认该文档满足要求
@@ -37,17 +37,17 @@ open docs/frontend_design.md
 
 创建 `frontend/` 目录，在目录下执行
 ```bash
-python3 <skill_base_path>/scripts/init_frontend.py <app_name>
+make init-frontend APP=<app_name>
 ```
 
 按照 `docs/frontend_design.md` 实现原型，接口返回的数据可以先 mock，注意必须是 mock 接口返回的数据
 
-运行以下脚本检查前端项目
+运行以下命令检查前端项目构建
 ```bash
-python3 <skill_base_path>/scripts/check_frontend.py
+make check-frontend
 ```
 
-若检查通过，使用 `BackgroundRun` 运行 `npm run dev` 启动开发服务器
+若检查通过，使用 `BackgroundRun` 运行 `make dev-frontend` 启动开发服务器
 
 用 `Ask` 询问改进意见并按照用户要求优化，直到用户确认该原型满足要求
 
