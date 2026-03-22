@@ -10,7 +10,7 @@ pub struct CompactTool;
 
 impl Tool for CompactTool {
     fn name(&self) -> &str {
-        "compact"
+        "Compact"
     }
 
     fn description(&self) -> &str {
