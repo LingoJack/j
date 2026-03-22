@@ -128,7 +128,7 @@ pub async fn run_agent_loop(
         }
 
         // ★ PreLlmRequest hook（可修改 messages 和 system_prompt）
-        {
+        if hook_manager.has_hooks_for(HookEvent::PreLlmRequest) {
             let ctx = HookContext {
                 event: HookEvent::PreLlmRequest,
                 messages: Some(messages.clone()),
@@ -559,14 +559,14 @@ fn process_tool_calls(
         let mut result_content = result.result;
 
         // ★ PostToolExecution hook
-        let tool_name = tool_items
-            .iter()
-            .find(|t| t.id == result.tool_call_id)
-            .map(|t| t.name.clone());
-        {
+        if hook_manager.has_hooks_for(HookEvent::PostToolExecution) {
+            let tool_name = tool_items
+                .iter()
+                .find(|t| t.id == result.tool_call_id)
+                .map(|t| t.name.clone());
             let ctx = HookContext {
                 event: HookEvent::PostToolExecution,
-                tool_name: tool_name.clone(),
+                tool_name,
                 tool_result: Some(result_content.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())

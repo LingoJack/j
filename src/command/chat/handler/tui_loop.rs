@@ -290,30 +290,41 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         }
     }
 
-    // ★ SessionEnd hook
-    {
-        use crate::command::chat::hook::{HookContext, HookEvent};
-        let ctx = HookContext {
-            event: HookEvent::SessionEnd,
-            messages: Some(app.state.session.messages.clone()),
-            cwd: std::env::current_dir()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| ".".to_string()),
-            ..Default::default()
-        };
-        if let Ok(manager) = app.hook_manager.lock() {
-            let _ = manager.execute(HookEvent::SessionEnd, ctx);
-        }
-    }
-
     // 保存对话历史
     let _ = save_chat_session(&app.state.session);
 
+    // ★ 先恢复终端，再跑 SessionEnd hook（避免 hook 阻塞时终端卡在 raw mode）
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
         event::DisableMouseCapture,
         LeaveAlternateScreen
     )?;
+
+    // ★ SessionEnd hook（fire-and-forget，终端已恢复）
+    {
+        use crate::command::chat::hook::{HookContext, HookEvent, HookManager};
+        let has_hooks = app
+            .hook_manager
+            .lock()
+            .map(|m| m.has_hooks_for(HookEvent::SessionEnd))
+            .unwrap_or(false);
+        if has_hooks {
+            let ctx = HookContext {
+                event: HookEvent::SessionEnd,
+                messages: Some(app.state.session.messages.clone()),
+                cwd: std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+                ..Default::default()
+            };
+            HookManager::execute_fire_and_forget(
+                std::sync::Arc::clone(&app.hook_manager),
+                HookEvent::SessionEnd,
+                ctx,
+            );
+        }
+    }
+
     Ok(())
 }

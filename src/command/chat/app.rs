@@ -1147,18 +1147,27 @@ impl ChatApp {
             hook_manager: Arc::clone(&hook_manager),
         };
 
-        // 执行 SessionStart hook
+        // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
         {
-            let ctx = HookContext {
-                event: HookEvent::SessionStart,
-                messages: Some(new_app.state.session.messages.clone()),
-                cwd: std::env::current_dir()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|_| ".".to_string()),
-                ..Default::default()
-            };
-            if let Ok(manager) = new_app.hook_manager.lock() {
-                let _ = manager.execute(HookEvent::SessionStart, ctx);
+            let should_fire = new_app
+                .hook_manager
+                .lock()
+                .map(|m| m.has_hooks_for(HookEvent::SessionStart))
+                .unwrap_or(false);
+            if should_fire {
+                let ctx = HookContext {
+                    event: HookEvent::SessionStart,
+                    messages: Some(new_app.state.session.messages.clone()),
+                    cwd: std::env::current_dir()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| ".".to_string()),
+                    ..Default::default()
+                };
+                HookManager::execute_fire_and_forget(
+                    Arc::clone(&new_app.hook_manager),
+                    HookEvent::SessionStart,
+                    ctx,
+                );
             }
         }
 
@@ -2152,19 +2161,28 @@ impl ChatApp {
 
     /// 发送指定文本消息并启动 agent loop
     pub fn send_message_internal(&mut self, text: String) {
-        // ★ PreSendMessage hook
+        // ★ PreSendMessage hook（同步，需要返回值来决定是否 abort / 修改 text）
         let hook_result = {
-            let ctx = HookContext {
-                event: HookEvent::PreSendMessage,
-                user_input: Some(text.clone()),
-                messages: Some(self.state.session.messages.clone()),
-                cwd: std::env::current_dir()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|_| ".".to_string()),
-                ..Default::default()
-            };
-            if let Ok(manager) = self.hook_manager.lock() {
-                manager.execute(HookEvent::PreSendMessage, ctx)
+            let has_hooks = self
+                .hook_manager
+                .lock()
+                .map(|m| m.has_hooks_for(HookEvent::PreSendMessage))
+                .unwrap_or(false);
+            if has_hooks {
+                let ctx = HookContext {
+                    event: HookEvent::PreSendMessage,
+                    user_input: Some(text.clone()),
+                    messages: Some(self.state.session.messages.clone()),
+                    cwd: std::env::current_dir()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| ".".to_string()),
+                    ..Default::default()
+                };
+                if let Ok(manager) = self.hook_manager.lock() {
+                    manager.execute(HookEvent::PreSendMessage, ctx)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -2188,19 +2206,28 @@ impl ChatApp {
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = u16::MAX;
 
-        // ★ PostSendMessage hook（fire-and-forget）
+        // ★ PostSendMessage hook（fire-and-forget，不阻塞主线程）
         {
-            let ctx = HookContext {
-                event: HookEvent::PostSendMessage,
-                user_input: Some(text.clone()),
-                messages: Some(self.state.session.messages.clone()),
-                cwd: std::env::current_dir()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|_| ".".to_string()),
-                ..Default::default()
-            };
-            if let Ok(manager) = self.hook_manager.lock() {
-                let _ = manager.execute(HookEvent::PostSendMessage, ctx);
+            let has_hooks = self
+                .hook_manager
+                .lock()
+                .map(|m| m.has_hooks_for(HookEvent::PostSendMessage))
+                .unwrap_or(false);
+            if has_hooks {
+                let ctx = HookContext {
+                    event: HookEvent::PostSendMessage,
+                    user_input: Some(text.clone()),
+                    messages: Some(self.state.session.messages.clone()),
+                    cwd: std::env::current_dir()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| ".".to_string()),
+                    ..Default::default()
+                };
+                HookManager::execute_fire_and_forget(
+                    Arc::clone(&self.hook_manager),
+                    HookEvent::PostSendMessage,
+                    ctx,
+                );
             }
         }
 
@@ -2426,40 +2453,47 @@ impl ChatApp {
                         self.tool_executor.pending_tool_idx = 0;
 
                         for mut tc in tool_calls {
-                            // ★ PreToolExecution hook
+                            // ★ PreToolExecution hook（同步，需要返回值）
                             {
-                                let ctx = HookContext {
-                                    event: HookEvent::PreToolExecution,
-                                    tool_name: Some(tc.name.clone()),
-                                    tool_arguments: Some(tc.arguments.clone()),
-                                    cwd: std::env::current_dir()
-                                        .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|_| ".".to_string()),
-                                    ..Default::default()
-                                };
-                                if let Ok(manager) = self.hook_manager.lock() {
-                                    if let Some(result) =
-                                        manager.execute(HookEvent::PreToolExecution, ctx)
-                                    {
-                                        if result.abort {
-                                            self.tool_executor.active_tool_calls.push(
-                                                ToolCallStatus {
-                                                    tool_call_id: tc.id.clone(),
-                                                    tool_name: tc.name.clone(),
-                                                    arguments: tc.arguments.clone(),
-                                                    confirm_message: format!(
-                                                        "🚫 {} 被 hook 拦截",
-                                                        tc.name
-                                                    ),
-                                                    status: ToolExecStatus::Failed(
-                                                        "该工具调用被 hook 拦截".to_string(),
-                                                    ),
-                                                },
-                                            );
-                                            continue;
-                                        }
-                                        if let Some(new_args) = result.tool_arguments {
-                                            tc.arguments = new_args;
+                                let has_hooks = self
+                                    .hook_manager
+                                    .lock()
+                                    .map(|m| m.has_hooks_for(HookEvent::PreToolExecution))
+                                    .unwrap_or(false);
+                                if has_hooks {
+                                    let ctx = HookContext {
+                                        event: HookEvent::PreToolExecution,
+                                        tool_name: Some(tc.name.clone()),
+                                        tool_arguments: Some(tc.arguments.clone()),
+                                        cwd: std::env::current_dir()
+                                            .map(|p| p.display().to_string())
+                                            .unwrap_or_else(|_| ".".to_string()),
+                                        ..Default::default()
+                                    };
+                                    if let Ok(manager) = self.hook_manager.lock() {
+                                        if let Some(result) =
+                                            manager.execute(HookEvent::PreToolExecution, ctx)
+                                        {
+                                            if result.abort {
+                                                self.tool_executor.active_tool_calls.push(
+                                                    ToolCallStatus {
+                                                        tool_call_id: tc.id.clone(),
+                                                        tool_name: tc.name.clone(),
+                                                        arguments: tc.arguments.clone(),
+                                                        confirm_message: format!(
+                                                            "🚫 {} 被 hook 拦截",
+                                                            tc.name
+                                                        ),
+                                                        status: ToolExecStatus::Failed(
+                                                            "该工具调用被 hook 拦截".to_string(),
+                                                        ),
+                                                    },
+                                                );
+                                                continue;
+                                            }
+                                            if let Some(new_args) = result.tool_arguments {
+                                                tc.arguments = new_args;
+                                            }
                                         }
                                     }
                                 }
@@ -2654,21 +2688,28 @@ impl ChatApp {
                 sc.clone()
             };
             if !content.is_empty() {
-                // ★ PostLlmResponse hook
+                // ★ PostLlmResponse hook（同步，需要返回值来修改 content）
                 {
-                    let ctx = HookContext {
-                        event: HookEvent::PostLlmResponse,
-                        assistant_output: Some(content.clone()),
-                        messages: Some(self.state.session.messages.clone()),
-                        cwd: std::env::current_dir()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|_| ".".to_string()),
-                        ..Default::default()
-                    };
-                    if let Ok(manager) = self.hook_manager.lock() {
-                        if let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx) {
-                            if let Some(new_msg) = result.assistant_output {
-                                content = new_msg;
+                    let has_hooks = self
+                        .hook_manager
+                        .lock()
+                        .map(|m| m.has_hooks_for(HookEvent::PostLlmResponse))
+                        .unwrap_or(false);
+                    if has_hooks {
+                        let ctx = HookContext {
+                            event: HookEvent::PostLlmResponse,
+                            assistant_output: Some(content.clone()),
+                            messages: Some(self.state.session.messages.clone()),
+                            cwd: std::env::current_dir()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_else(|_| ".".to_string()),
+                            ..Default::default()
+                        };
+                        if let Ok(manager) = self.hook_manager.lock() {
+                            if let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx) {
+                                if let Some(new_msg) = result.assistant_output {
+                                    content = new_msg;
+                                }
                             }
                         }
                     }

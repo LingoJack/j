@@ -13,6 +13,7 @@ impl Tool for RegisterHookTool {
         "RegisterHook"
     }
 
+    // TODO 这里 AI 根本不知道如何创建自己的 hook，不会使用
     fn description(&self) -> &str {
         r#"
         注册、列出或移除 session 级 hook。Hook 允许在关键事件节点注入自定义脚本。

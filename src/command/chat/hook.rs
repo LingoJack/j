@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 
 // ========== 数据结构 ==========
 
@@ -323,10 +324,41 @@ impl HookManager {
         result
     }
 
+    /// 检查某个事件是否有任何 hook 注册（用户级/项目级/session 级）
+    /// 用于调用方在构建 HookContext 之前短路，避免不必要的 clone 和内存分配
+    pub fn has_hooks_for(&self, event: HookEvent) -> bool {
+        self.user_hooks.get(&event).map_or(false, |h| !h.is_empty())
+            || self
+                .project_hooks
+                .get(&event)
+                .map_or(false, |h| !h.is_empty())
+            || self
+                .session_hooks
+                .get(&event)
+                .map_or(false, |h| !h.is_empty())
+    }
+
+    /// Fire-and-forget 执行：在后台线程中执行 hook，不阻塞调用方
+    /// 适用于 PostSendMessage、SessionEnd 等不需要返回值的 hook
+    pub fn execute_fire_and_forget(
+        manager: Arc<Mutex<HookManager>>,
+        event: HookEvent,
+        context: HookContext,
+    ) {
+        std::thread::spawn(move || {
+            if let Ok(m) = manager.lock() {
+                let _ = m.execute(event, context);
+            }
+        });
+    }
+
     /// 链式执行所有 hook（用户→项目→session）
     ///
     /// 返回 `Some(HookResult)` 如果有任何修改或 abort，否则 `None`。
     /// 链式执行中，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。
+    ///
+    /// **注意**：调用方应先用 `has_hooks_for()` 检查，再构建 HookContext 并调用此方法，
+    /// 避免在没有 hook 注册时进行不必要的内存分配。
     pub fn execute(&self, event: HookEvent, mut context: HookContext) -> Option<HookResult> {
         let mut all_hooks: Vec<&HookDef> = Vec::new();
 
