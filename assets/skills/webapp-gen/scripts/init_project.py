@@ -20,10 +20,12 @@ def main():
 
     project_name = sys.argv[1]
 
+    # Validate project name
     if not re.match(r"^[a-zA-Z0-9_-]+$", project_name):
         log_error("Invalid project name. Only alphanumeric characters, hyphens, and underscores are allowed.")
         sys.exit(1)
 
+    # Check if project directory already exists
     project_dir = Path(project_name)
     if project_dir.exists():
         log_error(f"Project directory already exists: {project_name}")
@@ -35,14 +37,19 @@ def main():
 
     log_info(f"Creating project: {project_name}")
 
+    # Create project directory
     project_dir.mkdir(parents=True)
 
     # Copy template files
     shutil.copy2(assets_dir / "Makefile.template", project_dir / "Makefile")
     log_info("Created Makefile")
-
+    
     shutil.copy2(assets_dir / ".gitignore.template", project_dir / ".gitignore")
     log_info("Created .gitignore")
+
+    # Create docs directory
+    (project_dir / "docs").mkdir(parents=True)
+    log_info("Created docs/")
 
     # Initialize git repository
     subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
