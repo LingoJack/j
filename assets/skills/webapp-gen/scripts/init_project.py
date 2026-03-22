@@ -30,7 +30,7 @@ def main():
     shutil.copy2(assets_dir / "Makefile.template", project_dir / "Makefile")
     log_info("Created Makefile")
 
-    shutil.copy2(assets_dir / ".gitignore.template", project_dir / ".gitignore")
+    shutil.copy2(assets_dir / "gitignore.template", project_dir / ".gitignore")
     log_info("Created .gitignore")
 
     # Create docs directory
