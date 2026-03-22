@@ -13,28 +13,10 @@ impl Tool for RegisterHookTool {
         "RegisterHook"
     }
 
-    // TODO 这里 AI 根本不知道如何创建自己的 hook，不会使用
     fn description(&self) -> &str {
         r#"
-        注册、列出或移除 session 级 hook。Hook 允许在关键事件节点注入自定义脚本。
-
-        支持三种操作：
-        1. 注册 hook：提供 event + command（可选 timeout）
-        2. 列出所有 hook：action="list"
-        3. 移除 session hook：action="remove" + event + index
-
-        可用事件：
-        - pre_send_message: 用户发送消息前
-        - post_send_message: 用户发送消息后
-        - pre_llm_request: LLM 请求前
-        - post_llm_response: LLM 回复后
-        - pre_tool_execution: 工具执行前
-        - post_tool_execution: 工具执行后
-        - session_start: 会话开始
-        - session_end: 会话结束
-
-        脚本通过 stdin 接收 HookContext JSON，stdout 输出 HookResult JSON。
-        exit 0 表示成功，非零退出表示 abort。
+        注册、列出、移除 session 级 hook，或查看完整协议文档。
+        操作：register（需 event+command）、list、remove（需 event+index）、help（查看 stdin/stdout JSON 结构和脚本示例）。要注册 hook 使用请先调用 action="help" 了解脚本协议。
         "#
     }
 
@@ -44,8 +26,8 @@ impl Tool for RegisterHookTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "操作类型：register（默认）、list、remove",
-                    "enum": ["register", "list", "remove"]
+                    "description": "操作类型：register（默认）、list、remove、help",
+                    "enum": ["register", "list", "remove", "help"]
                 },
                 "event": {
                     "type": "string",
@@ -90,6 +72,7 @@ impl Tool for RegisterHookTool {
             .unwrap_or("register");
 
         match action {
+            "help" => Self::handle_help(),
             "list" => self.handle_list(),
             "remove" => self.handle_remove(&parsed),
             "register" | _ => self.handle_register(&parsed),
@@ -108,6 +91,7 @@ impl Tool for RegisterHookTool {
             .unwrap_or("register");
 
         match action {
+            "help" => "查看 Hook 协议文档".to_string(),
             "list" => "列出所有已注册的 hook".to_string(),
             "remove" => {
                 let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
@@ -127,6 +111,101 @@ impl Tool for RegisterHookTool {
 }
 
 impl RegisterHookTool {
+    fn handle_help() -> ToolResult {
+        ToolResult {
+            output: r#"# Hook 完整协议文档
+
+## 可用事件及其可读/可写字段
+
+| event               | 触发时机       | stdin 可读字段                    | stdout 可写字段                                    |
+|---------------------|----------------|-----------------------------------|----------------------------------------------------|
+| pre_send_message    | 用户消息发送前 | user_input, messages              | user_input, abort                                  |
+| post_send_message   | 用户消息发送后 | user_input, messages              | （仅通知，返回值忽略）                             |
+| pre_llm_request     | LLM 请求前     | messages, system_prompt, model    | messages, system_prompt, inject_messages, abort     |
+| post_llm_response   | LLM 回复后     | assistant_output, messages        | assistant_output                                   |
+| pre_tool_execution  | 工具执行前     | tool_name, tool_arguments         | tool_arguments, abort                              |
+| post_tool_execution | 工具执行后     | tool_name, tool_result            | tool_result                                        |
+| session_start       | 会话开始       | messages                          | （仅通知）                                         |
+| session_end         | 会话退出       | messages                          | （仅通知）                                         |
+
+## 脚本协议
+- 执行方式：`sh -c "<command>"`
+- 工作目录：用户当前目录
+- 环境变量：JCLI_HOOK_EVENT（事件名）、JCLI_CWD（当前目录）
+- stdin：HookContext JSON
+- stdout：HookResult JSON（只返回要修改的字段，空/`{}` 表示无修改）
+- exit 0 = 成功，非零 = abort
+
+## stdin HookContext JSON 结构
+```json
+{
+  "event": "pre_send_message",
+  "cwd": "/path/to/project",
+  "user_input": "用户输入文本",
+  "messages": [{"role": "user", "content": "..."}],
+  "system_prompt": "系统提示词",
+  "model": "gpt-4o",
+  "assistant_output": "AI 回复文本",
+  "tool_name": "Bash",
+  "tool_arguments": "{\"command\": \"ls\"}",
+  "tool_result": "工具执行结果"
+}
+```
+各字段按事件类型选择性出现，未填充的不会出现在 JSON 中。
+
+## stdout HookResult JSON 结构
+```json
+{
+  "user_input": "修改后的用户消息",
+  "assistant_output": "修改后的 AI 回复",
+  "messages": [{"role":"user","content":"..."}],
+  "system_prompt": "修改后的提示词",
+  "tool_arguments": "修改后的工具参数",
+  "tool_result": "修改后的工具结果",
+  "inject_messages": [{"role":"user","content":"注入消息"}],
+  "abort": false
+}
+```
+
+## 脚本示例
+
+### 示例 1：给用户消息加时间戳（pre_send_message）
+```bash
+#!/bin/bash
+input=$(cat)
+msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_input',''))")
+echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
+```
+
+### 示例 2：拦截危险命令（pre_tool_execution）
+```bash
+#!/bin/bash
+input=$(cat)
+tool=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_name',''))")
+args=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_arguments',''))")
+if [ "$tool" = "Bash" ] && echo "$args" | grep -q "rm -rf"; then
+  echo '{"abort": true}'
+else
+  echo '{}'
+fi
+```
+
+### 示例 3：纯通知（post_send_message / session_end）
+```bash
+#!/bin/bash
+cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
+```
+
+## 注意事项
+- 先用 Write/Bash 工具创建脚本文件，再用本工具注册
+- 脚本必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
+- timeout 默认 10 秒，超时后脚本被 kill
+- 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑配置文件"#
+                .to_string(),
+            is_error: false,
+        }
+    }
+
     fn handle_register(&self, parsed: &Value) -> ToolResult {
         let event_str = match parsed.get("event").and_then(|v| v.as_str()) {
             Some(e) => e,
