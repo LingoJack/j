@@ -707,12 +707,40 @@ hooks:
 **脚本协议**：
 - 执行方式：`sh -c "<command>"`，工作目录为用户当前目录
 - 环境变量：`JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（当前目录）
-- stdin：HookContext JSON（包含 event、messages、user_message 等）
+- stdin：HookContext JSON（见下方字段说明）
 - stdout：HookResult JSON（可为空/空 JSON 表示无修改）
 - exit 0：成功；非零退出：视为 abort
 - 超时：默认 10 秒，超时后 kill 子进程
 
-**HookResult 字段**（stdout JSON）：
+**HookContext 字段**（stdin JSON，各事件仅填充相关字段，其余字段省略）：
+```json
+{\n  "event": "pre_send_message",
+  "cwd": "/Users/jack/project",
+  "messages": [{"role": "user", "content": "..."}],
+  "user_input": "用户输入的消息文本",
+  "system_prompt": "当前系统提示词",
+  "model": "gpt-4o",
+  "assistant_output": "AI 回复的完整文本",
+  "tool_name": "Bash",
+  "tool_arguments": "{\"command\": \"ls\"}",
+  "tool_result": "工具执行结果"
+}
+```
+
+| 字段 | 说明 | 可用事件 |
+|------|------|----------|
+| `event` | 当前触发的事件名（始终存在） | 所有事件 |
+| `cwd` | 当前工作目录（始终存在） | 所有事件 |
+| `messages` | 当前对话的完整消息列表 | PreSendMessage, PostSendMessage, PreLlmRequest, PostLlmResponse, SessionStart, SessionEnd |
+| `user_input` | 本轮用户输入的消息文本 | PreSendMessage, PostSendMessage |
+| `system_prompt` | 当前系统提示词 | PreLlmRequest |
+| `model` | 当前使用的模型名称 | PreLlmRequest |
+| `assistant_output` | 本轮 AI 回复的完整文本 | PostLlmResponse |
+| `tool_name` | 当前工具调用的工具名 | PreToolExecution, PostToolExecution |
+| `tool_arguments` | 当前工具调用的参数 JSON 字符串 | PreToolExecution |
+| `tool_result` | 工具执行的结果内容 | PostToolExecution |
+
+**HookResult 字段**（stdout JSON，脚本只需返回想要修改的字段）：
 ```json
 {
   "user_input": "修改后的用户消息",
@@ -732,8 +760,8 @@ hooks:
 # ~/.jdata/agent/hooks/inject_time.sh
 # 用法：pre_send_message hook
 read input
-msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_message',''))")
-echo "{\"user_message\": \"[$(date '+%H:%M')] $msg\"}"
+msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_input',''))")
+echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
 ```
 
 **register_hook 工具**：AI 可通过 `register_hook` 工具动态注册 session 级 hook：
