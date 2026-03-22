@@ -13,19 +13,6 @@ GREEN = "\033[0;32m"
 RED = "\033[0;31m"
 NC = "\033[0m"
 
-
-def log_info(msg):
-    print(f"{BLUE}[INFO]{NC} {msg}")
-
-
-def log_success(msg):
-    print(f"{GREEN}[SUCCESS]{NC} {msg}")
-
-
-def log_error(msg):
-    print(f"{RED}[ERROR]{NC} {msg}", file=sys.stderr)
-
-
 def main():
     if len(sys.argv) < 2:
         log_error(f"Usage: {sys.argv[0]} <project_name>")
@@ -66,5 +53,20 @@ def main():
     log_info(f"Project location: {project_name}/")
 
 
+
+
+def log_info(msg):
+    print(f"{BLUE}[INFO]{NC} {msg}")
+
+
+def log_success(msg):
+    print(f"{GREEN}[SUCCESS]{NC} {msg}")
+
+
+def log_error(msg):
+    print(f"{RED}[ERROR]{NC} {msg}", file=sys.stderr)
+    
+    
+    
 if __name__ == "__main__":
     main()
