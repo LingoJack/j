@@ -27,10 +27,10 @@ def main():
     log_info(f"Initializing project in current directory: {project_name}")
 
     # Copy template files
-    shutil.copy2(assets_dir / "Makefile.template", project_dir / "Makefile")
+    shutil.copy2(assets_dir / "Makefile", project_dir / "Makefile")
     log_info("Created Makefile")
 
-    shutil.copy2(assets_dir / "gitignore.template", project_dir / ".gitignore")
+    shutil.copy2(assets_dir / "gitignore", project_dir / ".gitignore")
     log_info("Created .gitignore")
 
     # Create docs directory

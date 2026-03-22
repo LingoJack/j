@@ -28,43 +28,41 @@ ifndef APP
 endif
 	@mkdir -p frontend
 	@echo "创建 Vite + React + TypeScript 项目..."
-	@cd frontend && npx -y create-vite@latest $(APP) --template react-ts
+	@cd frontend && (echo "" | npx -y create-vite@latest $(APP) --template react-ts)
 	@echo "安装依赖..."
 	@cd frontend/$(APP) && npm install --prefer-offline
 	@echo "安装 Tailwind CSS v4..."
 	@cd frontend/$(APP) && npm install -D tailwindcss @tailwindcss/vite
 	@echo "配置 vite.config.ts..."
-	@cat > frontend/$(APP)/vite.config.ts << 'EOF'
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-
-export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-  ],
-})
-EOF
+	@printf '%s\n' \
+		'import { defineConfig } from "vite"' \
+		'import react from "@vitejs/plugin-react"' \
+		'import tailwindcss from "@tailwindcss/vite"' \
+		'' \
+		'export default defineConfig({' \
+		'  plugins: [' \
+		'    react(),' \
+		'    tailwindcss(),' \
+		'  ],' \
+		'})' > frontend/$(APP)/vite.config.ts
 	@echo "配置 index.css..."
 	@echo '@import "tailwindcss";' > frontend/$(APP)/src/index.css
 	@rm -f frontend/$(APP)/src/App.css
 	@echo "配置 App.tsx..."
-	@cat > frontend/$(APP)/src/App.tsx << 'EOF'
-function App() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <h1 className="text-4xl font-bold text-blue-600">Hello, World!</h1>
-    </div>
-  )
-}
-
-export default App
-EOF
+	@printf '%s\n' \
+		'function App() {' \
+		'  return (' \
+		'    <div className="min-h-screen flex items-center justify-center bg-gray-100">' \
+		'      <h1 className="text-4xl font-bold text-blue-600">Hello, World!</h1>' \
+		'    </div>' \
+		'  )' \
+		'}' \
+		'' \
+		'export default App' > frontend/$(APP)/src/App.tsx
 	@echo "前端初始化完成: frontend/$(APP)"
 
-check-frontend: ## 构建前端 (在项目根目录运行)
-	@cd frontend && npm run build
+check-frontend:
+	@cd frontend && npm install -y && (npm run build || exit 1)
 
-dev-frontend: ## 启动前端开发服务器 (在项目根目录运行)
+dev-frontend: check-frontend
 	@cd frontend && npm run dev
