@@ -1280,23 +1280,23 @@ impl Tool for BrowserTool {
     }
 
     fn description(&self) -> &str {
-        "浏览器自动化工具，支持网页浏览、交互与内容提取。可用操作：\n\
-         - status: 查看浏览器运行状态和已打开的标签页数量\n\
-         - start: 启动浏览器实例（可通过 headless 参数控制是否显示窗口）\n\
-         - stop: 停止浏览器并关闭所有标签页\n\
-         - tabs: 列出所有已打开的标签页及其 ID 和 URL\n\
-         - open: 打开新标签页并导航到指定 URL（需要 url 参数），返回 tab_id\n\
-         - navigate: 在已有标签页中导航到新 URL（需要 url 参数，可选 tab_id）\n\
-         - screenshot: 对页面截图并保存为 PNG（需要 output_dir 参数，可选 full_page）\n\
-         - snapshot: 获取页面快照，包含标题、URL 和可交互元素列表（按钮、输入框、链接等），用于了解页面结构\n\
-         - content: 提取页面正文文本内容（智能去除导航栏、脚本等噪音）\n\
-         - close: 关闭指定标签页（需要 tab_id 参数）\n\
-         - click: 点击页面元素（需要 selector 参数，CSS 选择器）\n\
-         - type: 在输入框中输入文本（需要 selector 和 text 参数，支持中文）\n\
-         - press: 模拟按键操作（需要 key 参数，如 Enter、Tab、Escape）\n\
-         - evaluate: 在页面中执行 JavaScript 代码（需要 script 参数）\n\
-         典型流程：先 open 打开页面 → 用 snapshot 了解页面元素 → 用 snapshot 返回的 selector 字段（如 [data-jref=\"e3\"]）配合 click/type/press 进行交互 → 用 content 获取结果。\
-         注意：snapshot 会为每个元素注入 data-jref 属性并返回对应的 selector，click/type 时务必使用该 selector 而非自行构造。"
+        "Browser automation tool for web browsing, interaction, and content extraction. Available actions:\n\
+         - status: Check browser running status and number of open tabs\n\
+         - start: Launch a browser instance (use headless param to control window visibility)\n\
+         - stop: Stop the browser and close all tabs\n\
+         - tabs: List all open tabs with their IDs and URLs\n\
+         - open: Open a new tab and navigate to the specified URL (requires url), returns tab_id\n\
+         - navigate: Navigate an existing tab to a new URL (requires url, optional tab_id)\n\
+         - screenshot: Capture a page screenshot as PNG (requires output_dir, optional full_page)\n\
+         - snapshot: Get a page snapshot with title, URL, and interactive element list (buttons, inputs, links, etc.) for understanding page structure\n\
+         - content: Extract page body text (intelligently removes navbars, scripts, and noise)\n\
+         - close: Close a specific tab (requires tab_id)\n\
+         - click: Click a page element (requires selector, CSS selector)\n\
+         - type: Type text into an input field (requires selector and text, supports Unicode)\n\
+         - press: Simulate a key press (requires key, e.g. Enter, Tab, Escape)\n\
+         - evaluate: Execute JavaScript in the page context (requires script)\n\
+         Typical flow: open a page → use snapshot to discover elements → use the selector field from snapshot (e.g. [data-jref=\"e3\"]) with click/type/press to interact → use content to get results.\
+         Note: snapshot injects a data-jref attribute on each element and returns the corresponding selector; always use that selector for click/type instead of constructing your own."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -1308,44 +1308,44 @@ impl Tool for BrowserTool {
                     "enum": ["status", "start", "stop", "tabs", "open", "navigate",
                              "screenshot", "snapshot", "content", "close",
                              "click", "type", "press", "evaluate"],
-                    "description": "操作类型。status=查看状态; start=启动浏览器; stop=停止浏览器; tabs=列出标签页; open=打开新标签页(需url); navigate=在现有标签页导航(需url); screenshot=页面截图(需output_dir); snapshot=获取页面可交互元素快照; content=提取页面正文文本; close=关闭标签页(需tab_id); click=点击元素(需selector); type=输入文本(需selector+text); press=按键(需key); evaluate=执行JS(需script)"
+                    "description": "Action type. status=check status; start=launch browser; stop=stop browser; tabs=list tabs; open=open new tab(requires url); navigate=navigate existing tab(requires url); screenshot=capture screenshot(requires output_dir); snapshot=get interactive element snapshot; content=extract page text; close=close tab(requires tab_id); click=click element(requires selector); type=type text(requires selector+text); press=key press(requires key); evaluate=execute JS(requires script)"
                 },
                 "url": {
                     "type": "string",
-                    "description": "[open/navigate] 目标 URL，需要包含完整协议头（如 https://example.com）"
+                    "description": "[open/navigate] Target URL, must include full protocol (e.g. https://example.com)"
                 },
                 "tab_id": {
                     "type": "string",
-                    "description": "目标标签页 ID（不指定则使用第一个标签页）"
+                    "description": "Target tab ID (defaults to the first tab if not specified)"
                 },
                 "selector": {
                     "type": "string",
-                    "description": "[click/type] CSS 选择器，用于定位页面元素。强烈建议使用 snapshot 返回的 selector 字段（如 '[data-jref=\"e3\"]'），确保精确匹配"
+                    "description": "[click/type] CSS selector to locate a page element. Strongly recommended to use the selector field returned by snapshot (e.g. '[data-jref=\"e3\"]') for precise matching"
                 },
                 "text": {
                     "type": "string",
-                    "description": "[type] 要输入到目标元素中的文本内容，支持中文等非 ASCII 字符"
+                    "description": "[type] Text to input into the target element, supports Unicode characters"
                 },
                 "key": {
                     "type": "string",
-                    "description": "[press] 要按下的键名，如 'Enter'、'Tab'、'Escape'、'ArrowDown'、'Backspace' 等，也支持单个字符如 'a'"
+                    "description": "[press] Key name to press, e.g. 'Enter', 'Tab', 'Escape', 'ArrowDown', 'Backspace', or a single character like 'a'"
                 },
                 "script": {
                     "type": "string",
-                    "description": "[evaluate] 要在页面上下文中执行的 JavaScript 代码。可用于获取动态渲染内容（如 `document.body.innerText`）、操作 DOM、提取特定数据等。返回值为 JS 表达式的执行结果"
+                    "description": "[evaluate] JavaScript code to execute in the page context. Can be used to get dynamically rendered content (e.g. `document.body.innerText`), manipulate the DOM, extract specific data, etc. Returns the JS expression result"
                 },
                 "output_dir": {
                     "type": "string",
-                    "description": "[screenshot] 截图输出目录的绝对路径，截图将以 PNG 格式保存到该目录下（自动创建目录），文件名含时间戳"
+                    "description": "[screenshot] Absolute path to the screenshot output directory. Screenshots are saved as PNG with timestamped filenames (directory is auto-created)"
                 },
                 "full_page": {
                     "type": "boolean",
                     "default": false,
-                    "description": "[screenshot] 是否截取完整页面（包括需要滚动才能看到的部分）。false 时只截取当前视口"
+                    "description": "[screenshot] Whether to capture the full page (including parts requiring scrolling). false captures only the current viewport"
                 },
                 "headless": {
                     "type": "boolean",
-                    "description": "是否使用无头（headless）模式运行浏览器。true=不显示浏览器窗口（适合后台自动化），false=显示窗口（适合调试）。此参数会覆盖 config.yaml 中的设置，不传则使用配置文件值（默认 true）"
+                    "description": "Whether to run the browser in headless mode. true=no browser window (for background automation), false=show window (for debugging). Overrides the config.yaml setting; omit to use config value (default true)"
                 }
             },
             "required": ["action"]

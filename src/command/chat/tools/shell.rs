@@ -22,17 +22,17 @@ impl Tool for ShellTool {
 
     fn description(&self) -> &str {
         r#"
-        在当前系统上执行 shell 命令，返回 stdout 和 stderr。每次调用创建新进程，状态不延续。
-        重要限制：
-        - 不支持交互式命令（stdin 未连接）
-        - 不支持后台/长期运行的服务（如 npm run dev、python -m http.server），进程会在超时后被终止
-        - 如果命令超时（默认 120s），会自动终止并返回已有输出
-        - 对于构建类命令，可适当增大 timeout 值（最大 600）
-        使用建议：
-        - 多个独立命令用 && 串联，而非分多次调用
-        - 用绝对路径，避免依赖 cd 切换目录
-        - 包含空格的文件路径用双引号包裹
-        - 文件操作优先使用 Read/Write/Edit 工具，而非 cat/sed/echo
+        Execute shell commands on the current system, returning stdout and stderr. Each call creates a new process; state does not persist.
+        Important limitations:
+        - Interactive commands are not supported (stdin is not connected)
+        - Background/long-running services (e.g. npm run dev, python -m http.server) are not supported; processes are killed on timeout
+        - Commands that exceed the timeout (default 120s) are automatically terminated and partial output is returned
+        - For build commands, increase the timeout value as needed (max 600)
+        Usage tips:
+        - Chain independent commands with && instead of making multiple calls
+        - Use absolute paths; avoid relying on cd to switch directories
+        - Quote file paths containing spaces with double quotes
+        - Prefer Read/Write/Edit tools for file operations instead of cat/sed/echo
         "#
     }
 
@@ -42,19 +42,19 @@ impl Tool for ShellTool {
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "要执行的 shell 命令（在 bash -c 中执行）。不支持交互式输入，必须使用非交互标志（如 -y、--yes、--no-input）。"
+                    "description": "The shell command to execute (runs in bash -c). Interactive input is not supported; use non-interactive flags (e.g. -y, --yes, --no-input)."
                 },
                 "description": {
                     "type": "string",
-                    "description": "命令的简短描述（5-10 字），用于在 UI 中展示"
+                    "description": "A short description of the command (5-10 words), displayed in the UI"
                 },
                 "cwd": {
                     "type": "string",
-                    "description": "命令执行的工作目录（绝对路径）。不指定则使用当前进程工作目录。"
+                    "description": "Working directory for the command (absolute path). Defaults to the current process working directory if not specified."
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "超时秒数，默认 120，最大 600。超时后自动终止进程并返回已有输出。构建类命令（npm run build、cargo build 等）建议设置 300-600。"
+                    "description": "Timeout in seconds, default 120, max 600. The process is automatically killed on timeout and partial output is returned. For build commands (npm run build, cargo build, etc.) use 300-600."
                 }
             },
             "required": ["command"]
@@ -233,8 +233,8 @@ impl Tool for ShellTool {
             .and_then(|v| v.get("cwd").and_then(|c| c.as_str()));
 
         match cwd {
-            Some(dir) => format!("即将执行: {} (工作目录: {})", cmd, dir),
-            None => format!("即将执行: {}", cmd),
+            Some(dir) => format!("Execute: {} (cwd: {})", cmd, dir),
+            None => format!("Execute: {}", cmd),
         }
     }
 }

@@ -11,7 +11,7 @@ impl Tool for WriteFileTool {
     }
 
     fn description(&self) -> &str {
-        "将内容写入指定文件。如果文件已存在则覆盖，如果目录不存在会自动创建。"
+        "Write content to a specified file. Overwrites if the file exists; auto-creates directories if they don't exist."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -20,11 +20,11 @@ impl Tool for WriteFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "要写入的文件路径（绝对路径或相对于当前工作目录）"
+                    "description": "File path to write (absolute or relative to current working directory)"
                 },
                 "content": {
                     "type": "string",
-                    "description": "要写入的文件内容"
+                    "description": "Content to write to the file"
                 }
             },
             "required": ["path", "content"]

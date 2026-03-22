@@ -27,7 +27,7 @@ impl Tool for WebSearchTool {
     }
 
     fn description(&self) -> &str {
-        "使用 Exa Search API 搜索网络。需要设置 EXA_API_KEY 环境变量。"
+        "Search the web using Exa Search API. Requires the EXA_API_KEY environment variable."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -36,20 +36,20 @@ impl Tool for WebSearchTool {
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "搜索关键词"
+                    "description": "Search keywords"
                 },
                 "count": {
                     "type": "integer",
                     "default": 5,
                     "minimum": 1,
                     "maximum": 10,
-                    "description": "搜索结果数量"
+                    "description": "Number of search results"
                 },
                 "type": {
                     "type": "string",
                     "enum": ["auto", "keyword", "neural"],
                     "default": "auto",
-                    "description": "搜索类型：auto(自动) keyword(关键词) neural(语义)"
+                    "description": "Search type: auto, keyword, or neural (semantic)"
                 }
             },
             "required": ["query"]

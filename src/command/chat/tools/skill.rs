@@ -15,7 +15,7 @@ impl Tool for LoadSkillTool {
     }
 
     fn description(&self) -> &str {
-        "加载指定 skill 的完整内容到上下文以了解更多信息，帮助你进行更好地完成任务。可在 skills 列表中查看各技能的目录路径。"
+        "Load the full content of a specified skill into context for more information, helping you better complete the task. Check the skills list for available skill names and directory paths."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -24,11 +24,11 @@ impl Tool for LoadSkillTool {
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "要加载的技能名称"
+                    "description": "Name of the skill to load"
                 },
                 "arguments": {
                     "type": "string",
-                    "description": "传递给技能的参数（可选）"
+                    "description": "Arguments to pass to the skill (optional)"
                 }
             },
             "required": ["name"]

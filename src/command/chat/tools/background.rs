@@ -154,10 +154,10 @@ impl Tool for BackgroundRunTool {
 
     fn description(&self) -> &str {
         r#"
-        在后台线程执行 shell 命令，立即返回 task_id，不阻塞当前对话。
-        适用于耗时较长的命令（如编译、下载、测试），执行完成后会自动通知。
-        使用 CheckBackground 工具查询执行状态和结果。
-        注意：后台任务不支持交互式输入，且不会在会话重启后保留。
+        Execute a shell command in a background thread, returning a task_id immediately without blocking the conversation.
+        Suitable for long-running commands (e.g. builds, downloads, tests); a notification is sent upon completion.
+        Use CheckBackground to query status and results.
+        Note: background tasks do not support interactive input and are not preserved across session restarts.
         "#
     }
 
@@ -167,15 +167,15 @@ impl Tool for BackgroundRunTool {
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "要执行的 shell 命令"
+                    "description": "Shell command to execute"
                 },
                 "description": {
                     "type": "string",
-                    "description": "命令的简短描述"
+                    "description": "Short description of the command"
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "超时秒数，默认 300，最大 600"
+                    "description": "Timeout in seconds, default 300, max 600"
                 }
             },
             "required": ["command"]
@@ -295,7 +295,7 @@ impl Tool for BackgroundRunTool {
             .as_ref()
             .and_then(|v| v.get("command").and_then(|c| c.as_str()))
             .unwrap_or(arguments);
-        format!("即将后台执行: {}", cmd)
+        format!("Background execute: {}", cmd)
     }
 }
 
@@ -313,8 +313,8 @@ impl Tool for CheckBackgroundTool {
 
     fn description(&self) -> &str {
         r#"
-        查询后台任务的状态和结果。
-        可以查询单个任务（提供 task_id）或列出所有后台任务。
+        Query the status and result of background tasks.
+        Provide a task_id to query a single task, or omit it to list all background tasks.
         "#
     }
 
@@ -324,7 +324,7 @@ impl Tool for CheckBackgroundTool {
             "properties": {
                 "task_id": {
                     "type": "string",
-                    "description": "要查询的后台任务 ID。不提供则列出所有后台任务。"
+                    "description": "Background task ID to query. Omit to list all tasks."
                 }
             }
         })

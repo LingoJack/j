@@ -11,7 +11,7 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "读取本地文件内容并返回（带行号）。支持通过 offset 和 limit 参数按行范围读取。"
+        "Read local file contents and return with line numbers. Supports reading by line range via offset and limit parameters."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -20,15 +20,15 @@ impl Tool for ReadFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "要读取的文件路径（绝对路径或相对于当前工作目录）"
+                    "description": "File path to read (absolute or relative to current working directory)"
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "从第几行开始读取（0-based，即 0 表示第 1 行），不传则从头开始"
+                    "description": "Starting line number (0-based, i.e. 0 = first line). Omit to start from the beginning"
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "读取多少行，不传则读到文件末尾"
+                    "description": "Number of lines to read. Omit to read to end of file"
                 }
             },
             "required": ["path"]

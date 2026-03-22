@@ -43,7 +43,10 @@
       "Bash(rm -f init_project.sh init_frontend.sh init_backend.sh check_backend.sh check_frontend.sh)",
       "Bash(chmod +x *.py)",
       "Bash(find . -path */src/command/chat/*.rs)",
-      "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat -name \"*.rs\" -exec grep -l \"^pub struct\\\\|^pub enum\\\\|^pub trait\" {})"
+      "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat -name \"*.rs\" -exec grep -l \"^pub struct\\\\|^pub enum\\\\|^pub trait\" {})",
+      "Bash(echo:*)",
+      "Bash(cp /tmp/complete_translations.txt ~/chinese_strings_to_translate.txt)",
+      "Read(//Users/jacklingo/**)"
     ]
   },
   "language": "zh-CN",

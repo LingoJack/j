@@ -11,7 +11,7 @@ impl Tool for EditFileTool {
     }
 
     fn description(&self) -> &str {
-        "通过精确字符串匹配替换来编辑文件。old_string 必须在文件中唯一匹配，替换为 new_string。如果 new_string 为空字符串则表示删除匹配内容。"
+        "Edit a file by exact string match and replace. old_string must match uniquely in the file and is replaced with new_string. If new_string is empty, the matched content is deleted."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -20,15 +20,15 @@ impl Tool for EditFileTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "要编辑的文件路径"
+                    "description": "File path to edit"
                 },
                 "old_string": {
                     "type": "string",
-                    "description": "要被替换的原始字符串（必须在文件中唯一存在）"
+                    "description": "Original string to replace (must be unique in the file)"
                 },
                 "new_string": {
                     "type": "string",
-                    "description": "替换后的新字符串，为空则表示删除"
+                    "description": "Replacement string; empty string means delete"
                 }
             },
             "required": ["path", "old_string", "new_string"]

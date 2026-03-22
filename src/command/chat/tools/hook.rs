@@ -15,8 +15,9 @@ impl Tool for RegisterHookTool {
 
     fn description(&self) -> &str {
         r#"
-        注册、列出、移除 session 级 hook，或查看完整协议文档。
-        操作：register（需 event+command）、list、remove（需 event+index）、help（查看 stdin/stdout JSON 结构和脚本示例）。要注册 hook 使用请先调用 action="help" 了解脚本协议。
+        Register, list, remove session-level hooks, or view the full protocol documentation.
+        Actions: register (requires event+command), list, remove (requires event+index), help (view stdin/stdout JSON schema and script examples).
+        Call action="help" first to learn the script protocol before registering hooks.
         "#
     }
 
@@ -26,12 +27,12 @@ impl Tool for RegisterHookTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "操作类型：register（默认）、list、remove、help",
+                    "description": "Action type: register (default), list, remove, help",
                     "enum": ["register", "list", "remove", "help"]
                 },
                 "event": {
                     "type": "string",
-                    "description": "Hook 事件名称（register/remove 时必填）",
+                    "description": "Hook event name (required for register/remove)",
                     "enum": [
                         "pre_send_message", "post_send_message",
                         "pre_llm_request", "post_llm_response",
@@ -41,15 +42,15 @@ impl Tool for RegisterHookTool {
                 },
                 "command": {
                     "type": "string",
-                    "description": "要执行的 shell 命令（register 时必填）"
+                    "description": "Shell command to execute (required for register)"
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "超时秒数（默认 10）"
+                    "description": "Timeout in seconds (default 10)"
                 },
                 "index": {
                     "type": "integer",
-                    "description": "要移除的 hook 索引（remove 时必填）"
+                    "description": "Index of the hook to remove (required for remove)"
                 }
             }
         })
@@ -91,12 +92,12 @@ impl Tool for RegisterHookTool {
             .unwrap_or("register");
 
         match action {
-            "help" => "查看 Hook 协议文档".to_string(),
-            "list" => "列出所有已注册的 hook".to_string(),
+            "help" => "View Hook protocol documentation".to_string(),
+            "list" => "List all registered hooks".to_string(),
             "remove" => {
                 let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
                 let index = parsed.get("index").and_then(|v| v.as_u64()).unwrap_or(0);
-                format!("移除 hook: event={}, index={}", event, index)
+                format!("Remove hook: event={}, index={}", event, index)
             }
             _ => {
                 let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
@@ -104,7 +105,7 @@ impl Tool for RegisterHookTool {
                     .get("command")
                     .and_then(|v| v.as_str())
                     .unwrap_or("?");
-                format!("注册 hook: event={}, command={}", event, command)
+                format!("Register hook: event={}, command={}", event, command)
             }
         }
     }

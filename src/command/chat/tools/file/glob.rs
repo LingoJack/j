@@ -12,15 +12,15 @@ impl Tool for GlobTool {
 
     fn description(&self) -> &str {
         r###"
-        - 快速文件模式匹配工具，适用于任意规模的代码库
-        - 支持 glob 模式如 "**/*.js" 或 "src/**/*.tsx"
-        - 返回匹配的文件路径，按修改时间排序
-        - 当你需要按文件名模式查找文件时使用此工具，格式如 "src/components/**/*.tsx"
-        - 如果是开放式搜索，可能需要多轮 glob 和 grep，请改用 Agent 工具
-        - 可以在单次响应中调用多个工具。如果多个文件模式可能有用，建议并行执行多个 glob 搜索。例如，需要按模式 A、B、C 查找文件时，并行运行三个 glob 查询
-        - 重要：如果不需要指定路径，请省略此字段，不要输入 "undefined"、"null" 或空字符串
-        - 重要：始终优先编辑代码库中的现有文件，除非明确要求，否则不要创建新文件
-        - 重要：仅当用户明确要求时才使用 emoji
+        - Fast file pattern matching tool, works with any codebase size
+        - Supports glob patterns like "**/*.js" or "src/**/*.tsx"
+        - Returns matching file paths sorted by modification time
+        - Use this tool when you need to find files by name pattern, e.g. "src/components/**/*.tsx"
+        - For open-ended searches that may require multiple rounds of glob and grep, use the Agent tool instead
+        - Multiple tools can be called in a single response. If multiple file patterns may be useful, run glob searches in parallel
+        - Important: if no path is needed, omit the field entirely — do not enter "undefined", "null", or empty string
+        - Important: always prefer editing existing files in the codebase; do not create new files unless explicitly required
+        - Important: only use emojis if the user explicitly requests it
         "###
     }
 
@@ -29,24 +29,24 @@ impl Tool for GlobTool {
             "properties": {
                 "limit": {
                     "default": 100,
-                    "description": "返回结果的最大数量，默认 100",
+                    "description": "Maximum number of results to return, default 100",
                     "type": "integer"
                 },
                 "offset": {
                     "default": 0,
-                    "description": "跳过前 N 个结果，配合 limit 实现分页",
+                    "description": "Skip the first N results, for pagination with limit",
                     "type": "integer"
                 },
                 "path": {
-                    "description": "搜索的目录路径。如果不指定，则使用当前工作目录。重要：如果不需要指定路径，请省略此字段，不要输入 undefined、null 或空字符串",
+                    "description": "Directory path to search. Defaults to current working directory if not specified. Important: omit this field if not needed — do not enter undefined, null, or empty string",
                     "type": "string"
                 },
                 "pattern": {
-                    "description": "要匹配的文件 glob 模式（如 **/*.js、*.{ts,tsx}、src/**/*.py）",
+                    "description": "File glob pattern to match (e.g. **/*.js, *.{ts,tsx}, src/**/*.py)",
                     "type": "string"
                 },
                 "excludePattern": {
-                    "description": "要排除的文件 glob 模式（如 **/node_modules/**、**/.git/**）",
+                    "description": "File glob pattern to exclude (e.g. **/node_modules/**, **/.git/**)",
                     "type": "string"
                 }
             },

@@ -17,28 +17,28 @@ impl Tool for AskTool {
 
     fn description(&self) -> &str {
         r#"
-        向用户提出结构化的选择题，支持单选和多选。每次可提 1-4 个问题，每个问题 2-4 个选项
+        Present structured questions to the user with single-select or multi-select options. Supports 1-4 questions per call, each with 2-4 options.
 
-        何时使用：在任何需要用户介入的场景下都应使用此工具，包括但不限于：
-        - 需要用户做出选择或确认操作
-        - 需要用户提供偏好或配置
-        - 遇到多种方案需要用户决定
-        - 需要向用户展示阶段性结果并获取反馈
+        When to use: whenever user input is needed, including but not limited to:
+        - Asking the user to make a choice or confirm an action
+        - Gathering user preferences or configuration
+        - Presenting multiple approaches for the user to decide
+        - Showing intermediate results and requesting feedback
 
-        格式说明：
-        每个问题包含 header（短标签）、question（完整问题）、options（选项列表）和 multi_select（是否多选）。
-        用户可以选择预设选项，也可以自由输入
+        Format:
+        Each question contains header (short tag), question (full text), options (list), and multi_select (boolean).
+        Users can select a preset option or provide free-text input.
 
-        响应格式：
-        返回 JSON：
+        Response format:
+        Returns JSON:
         ```json
         {
             "answers": {
-                "问题文本": "选中的label或自由输入"
+                "question text": "selected label or free-text input"
             }
         }
         ```
-        多选时用逗号分隔多个 label
+        For multi-select, multiple labels are comma-separated.
         "#
     }
 
@@ -48,31 +48,31 @@ impl Tool for AskTool {
             "properties": {
                 "questions": {
                     "type": "array",
-                    "description": "要提问的问题列表（1-4 个）",
+                    "description": "List of questions to ask (1-4)",
                     "items": {
                         "type": "object",
                         "properties": {
                             "question": {
                                 "type": "string",
-                                "description": "完整的问题文本"
+                                "description": "Full question text"
                             },
                             "header": {
                                 "type": "string",
-                                "description": "短标签（最多12字符），如 'Auth method'"
+                                "description": "Short tag (max 12 chars), e.g. 'Auth method'"
                             },
                             "options": {
                                 "type": "array",
-                                "description": "选项列表（2-4 个）",
+                                "description": "List of options (2-4)",
                                 "items": {
                                     "type": "object",
                                     "properties": {
                                         "label": {
                                             "type": "string",
-                                            "description": "选项显示文本（1-5 个词）"
+                                            "description": "Option display text (1-5 words)"
                                         },
                                         "description": {
                                             "type": "string",
-                                            "description": "选项说明"
+                                            "description": "Option description"
                                         }
                                     },
                                     "required": ["label", "description"]
@@ -80,7 +80,7 @@ impl Tool for AskTool {
                             },
                             "multi_select": {
                                 "type": "boolean",
-                                "description": "是否允许多选（默认 false）"
+                                "description": "Whether to allow multiple selections (default false)"
                             }
                         },
                         "required": ["question", "header", "options"]

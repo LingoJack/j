@@ -25,7 +25,7 @@ impl Tool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        "获取网页内容并转为 Markdown 或纯文本。支持自定义请求头和授权信息。"
+        "Fetch web page content and convert to Markdown or plain text. Supports custom headers and authorization."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -34,26 +34,26 @@ impl Tool for WebFetchTool {
             "properties": {
                 "url": {
                     "type": "string",
-                    "description": "目标 URL（必须以 http:// 或 https:// 开头）"
+                    "description": "Target URL (must start with http:// or https://)"
                 },
                 "extract_mode": {
                     "type": "string",
                     "enum": ["markdown", "text"],
                     "default": "markdown",
-                    "description": "输出格式：markdown 或 text"
+                    "description": "Output format: markdown or text"
                 },
                 "max_chars": {
                     "type": "integer",
                     "default": 50000,
-                    "description": "最大返回字符数"
+                    "description": "Maximum number of characters to return"
                 },
                 "authorization": {
                     "type": "string",
-                    "description": "Authorization 请求头"
+                    "description": "Authorization header value"
                 },
                 "headers": {
                     "type": "object",
-                    "description": "自定义请求头",
+                    "description": "Custom request headers",
                     "additionalProperties": { "type": "string" }
                 }
             },

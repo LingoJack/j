@@ -17,18 +17,18 @@ impl Tool for GrepTool {
 
     fn description(&self) -> &str {
         r###"
-        - 基于正则表达式的强大搜索工具，适用于在文件内容中搜索
-        - 支持完整的正则语法，如 "log.*Error"、"function\s+\w+" 等
-        - 可通过 glob 参数过滤文件类型（如 "*.js"、"**/*.tsx"）或 type 参数指定语言类型
-        - 输出模式：
-          - "content": 显示匹配内容和行号（默认）
-          - "files_with_matches": 只返回文件路径
-          - "count": 返回匹配数量
-        - 支持分页：head_limit 限制输出数量，offset 跳过前 N 条结果
-        - 使用 context 参数显示匹配行的上下文（前后 N 行）
-        - 当需要查找特定文件名时，请使用 Glob 工具；Grep 用于搜索文件内容
-        - 可以在单次响应中调用多个工具。如果搜索多个独立模式，建议并行执行
-        - 重要：如果不需要指定路径，请省略此字段，不要输入 "undefined"、"null" 或空字符串
+        - Powerful regex-based search tool for searching within file contents
+        - Supports full regex syntax, e.g. "log.*Error", "function\s+\w+"
+        - Filter files with the glob parameter (e.g. "*.js", "**/*.tsx") or the type parameter for language types
+        - Output modes:
+          - "content": show matching lines with line numbers (default)
+          - "files_with_matches": return file paths only
+          - "count": return match counts
+        - Supports pagination: head_limit limits output count, offset skips the first N results
+        - Use the context parameter to show N lines of context around each match
+        - For finding files by name, use the Glob tool; Grep is for searching file contents
+        - Multiple tools can be called in a single response. For independent patterns, run searches in parallel
+        - Important: if no path is needed, omit the field entirely — do not enter "undefined", "null", or empty string
         "###
     }
 
@@ -38,40 +38,40 @@ impl Tool for GrepTool {
             "properties": {
                 "pattern": {
                     "type": "string",
-                    "description": "要搜索的正则表达式模式（如 \"log.*Error\"、\"function\\\\s+\\\\w+\"）"
+                    "description": "Regex pattern to search for (e.g. \"log.*Error\", \"function\\\\s+\\\\w+\")"
                 },
                 "path": {
                     "type": "string",
-                    "description": "搜索的文件或目录路径。如果不指定，则使用当前工作目录。重要：如果不需要指定路径，请省略此字段"
+                    "description": "File or directory path to search. Defaults to current working directory if not specified. Important: omit this field if not needed"
                 },
                 "glob": {
                     "type": "string",
-                    "description": "过滤文件的 glob 模式（如 \"*.js\"、\"*.{ts,tsx}\"、\"src/**/*.py\"）"
+                    "description": "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\", \"src/**/*.py\")"
                 },
                 "type": {
                     "type": "string",
-                    "description": "搜索的文件类型（如 \"js\"、\"py\"、\"rust\"、\"go\"、\"java\" 等）。比 glob 更高效"
+                    "description": "File type to search (e.g. \"js\", \"py\", \"rust\", \"go\", \"java\"). More efficient than glob"
                 },
                 "output_mode": {
                     "type": "string",
                     "enum": ["content", "files_with_matches", "count"],
-                    "description": "输出模式：\"content\" 显示匹配内容和行号（默认）、\"files_with_matches\" 只返回文件路径、\"count\" 返回匹配数量"
+                    "description": "Output mode: \"content\" shows matching lines with line numbers (default), \"files_with_matches\" returns file paths only, \"count\" returns match counts"
                 },
                 "head_limit": {
                     "type": "integer",
-                    "description": "限制输出结果的数量"
+                    "description": "Limit the number of output results"
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "跳过前 N 条结果，用于分页"
+                    "description": "Skip the first N results, for pagination"
                 },
                 "context": {
                     "type": "integer",
-                    "description": "显示匹配行的上下文 N 行（同时包含前后 N 行）"
+                    "description": "Show N lines of context around each match (before and after)"
                 },
                 "ignore_case": {
                     "type": "boolean",
-                    "description": "忽略大小写"
+                    "description": "Case-insensitive search"
                 }
             },
             "required": ["pattern"]
