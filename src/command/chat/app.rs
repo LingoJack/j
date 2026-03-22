@@ -1,5 +1,6 @@
 use super::agent::run_agent_loop;
 use super::compact::CompactConfig;
+use super::hook::{HookContext, HookEvent, HookManager};
 use super::markdown::image_cache::ImageCache;
 use super::permission::JcliConfig;
 use super::skill::{self, Skill, skills_dir};
@@ -611,6 +612,7 @@ impl AgentHandle {
         pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
         background_manager: Arc<BackgroundManager>,
         compact_config: CompactConfig,
+        hook_manager: super::hook::HookManager,
     ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
         let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
         let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
@@ -649,6 +651,7 @@ impl AgentHandle {
                     pending_user_messages,
                     background_manager,
                     compact_config,
+                    hook_manager,
                 ));
             }));
 
@@ -722,6 +725,8 @@ pub struct ChatApp {
     pub ask_response_tx: Option<mpsc::Sender<String>>,
     /// ask 工具请求接收通道
     pub ask_request_rx: Option<mpsc::Receiver<AskRequest>>,
+    /// Hook 管理器
+    pub hook_manager: Arc<Mutex<HookManager>>,
 }
 
 /// 消息渲染行缓存
@@ -1061,15 +1066,17 @@ impl ChatApp {
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(super::tools::task::TaskManager::new());
+        let hook_manager = Arc::new(Mutex::new(HookManager::load()));
         let tool_registry = Arc::new(ToolRegistry::new(
             loaded_skills.clone(),
             ask_req_tx,
             Arc::clone(&background_manager),
             Arc::clone(&task_manager),
+            Arc::clone(&hook_manager),
         ));
         let jcli_config = Arc::new(JcliConfig::load());
 
-        Self {
+        let new_app = Self {
             ui: UIState {
                 input: String::new(),
                 cursor_pos: 0,
@@ -1137,7 +1144,25 @@ impl ChatApp {
             background_manager,
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
+            hook_manager: Arc::clone(&hook_manager),
+        };
+
+        // 执行 SessionStart hook
+        {
+            let ctx = HookContext {
+                event: HookEvent::SessionStart,
+                messages: Some(new_app.state.session.messages.clone()),
+                cwd: std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+                ..Default::default()
+            };
+            if let Ok(manager) = new_app.hook_manager.lock() {
+                let _ = manager.execute(HookEvent::SessionStart, ctx);
+            }
         }
+
+        new_app
     }
 
     // ========== 中央 update() reducer ==========
@@ -2127,6 +2152,33 @@ impl ChatApp {
 
     /// 发送指定文本消息并启动 agent loop
     pub fn send_message_internal(&mut self, text: String) {
+        // ★ PreSendMessage hook
+        let hook_result = {
+            let ctx = HookContext {
+                event: HookEvent::PreSendMessage,
+                user_message: Some(text.clone()),
+                messages: Some(self.state.session.messages.clone()),
+                cwd: std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+                ..Default::default()
+            };
+            if let Ok(manager) = self.hook_manager.lock() {
+                manager.execute(HookEvent::PreSendMessage, ctx)
+            } else {
+                None
+            }
+        };
+        let text = if let Some(result) = hook_result {
+            if result.abort {
+                self.show_toast("消息发送被 hook 拦截", true);
+                return;
+            }
+            result.user_message.unwrap_or(text)
+        } else {
+            text
+        };
+
         // 添加用户消息
         self.state
             .session
@@ -2135,6 +2187,22 @@ impl ChatApp {
         // 发送新消息时恢复自动滚动并滚到底部
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = u16::MAX;
+
+        // ★ PostSendMessage hook（fire-and-forget）
+        {
+            let ctx = HookContext {
+                event: HookEvent::PostSendMessage,
+                user_message: Some(text.clone()),
+                messages: Some(self.state.session.messages.clone()),
+                cwd: std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+                ..Default::default()
+            };
+            if let Ok(manager) = self.hook_manager.lock() {
+                let _ = manager.execute(HookEvent::PostSendMessage, ctx);
+            }
+        }
 
         let provider = match self.active_provider() {
             Some(p) => p.clone(),
@@ -2214,6 +2282,12 @@ impl ChatApp {
             Some(resolved)
         });
 
+        // Clone hook_manager for agent thread
+        let hook_manager_clone = match self.hook_manager.lock() {
+            Ok(manager) => manager.clone(),
+            Err(_) => HookManager::default(),
+        };
+
         // 启动 agent handle
         let (handle, tool_result_tx) = AgentHandle::spawn(
             provider,
@@ -2226,6 +2300,7 @@ impl ChatApp {
             pending_user_messages,
             background_manager,
             compact_config,
+            hook_manager_clone,
         );
 
         self.agent = Some(handle);
@@ -2350,7 +2425,46 @@ impl ChatApp {
                         self.tool_executor.active_tool_calls.clear();
                         self.tool_executor.pending_tool_idx = 0;
 
-                        for tc in tool_calls {
+                        for mut tc in tool_calls {
+                            // ★ PreToolExecution hook
+                            {
+                                let ctx = HookContext {
+                                    event: HookEvent::PreToolExecution,
+                                    tool_name: Some(tc.name.clone()),
+                                    tool_arguments: Some(tc.arguments.clone()),
+                                    cwd: std::env::current_dir()
+                                        .map(|p| p.display().to_string())
+                                        .unwrap_or_else(|_| ".".to_string()),
+                                    ..Default::default()
+                                };
+                                if let Ok(manager) = self.hook_manager.lock() {
+                                    if let Some(result) =
+                                        manager.execute(HookEvent::PreToolExecution, ctx)
+                                    {
+                                        if result.abort {
+                                            self.tool_executor.active_tool_calls.push(
+                                                ToolCallStatus {
+                                                    tool_call_id: tc.id.clone(),
+                                                    tool_name: tc.name.clone(),
+                                                    arguments: tc.arguments.clone(),
+                                                    confirm_message: format!(
+                                                        "🚫 {} 被 hook 拦截",
+                                                        tc.name
+                                                    ),
+                                                    status: ToolExecStatus::Failed(
+                                                        "该工具调用被 hook 拦截".to_string(),
+                                                    ),
+                                                },
+                                            );
+                                            continue;
+                                        }
+                                        if let Some(new_args) = result.tool_arguments {
+                                            tc.arguments = new_args;
+                                        }
+                                    }
+                                }
+                            }
+
                             if self.jcli_config.is_denied(&tc.name, &tc.arguments) {
                                 self.tool_executor.active_tool_calls.push(ToolCallStatus {
                                     tool_call_id: tc.id.clone(),
@@ -2532,7 +2646,7 @@ impl ChatApp {
             }
             self.show_toast("已取消", false);
         } else if !had_error {
-            let content = {
+            let mut content = {
                 let sc = safe_lock(
                     &self.state.streaming_content,
                     "finish_loading::streaming_content_done",
@@ -2540,6 +2654,26 @@ impl ChatApp {
                 sc.clone()
             };
             if !content.is_empty() {
+                // ★ PostLlmResponse hook
+                {
+                    let ctx = HookContext {
+                        event: HookEvent::PostLlmResponse,
+                        assistant_message: Some(content.clone()),
+                        messages: Some(self.state.session.messages.clone()),
+                        cwd: std::env::current_dir()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|_| ".".to_string()),
+                        ..Default::default()
+                    };
+                    if let Ok(manager) = self.hook_manager.lock() {
+                        if let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx) {
+                            if let Some(new_msg) = result.assistant_message {
+                                content = new_msg;
+                            }
+                        }
+                    }
+                }
+
                 self.state
                     .session
                     .messages

@@ -290,6 +290,22 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         }
     }
 
+    // ★ SessionEnd hook
+    {
+        use crate::command::chat::hook::{HookContext, HookEvent};
+        let ctx = HookContext {
+            event: HookEvent::SessionEnd,
+            messages: Some(app.state.session.messages.clone()),
+            cwd: std::env::current_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| ".".to_string()),
+            ..Default::default()
+        };
+        if let Ok(manager) = app.hook_manager.lock() {
+            let _ = manager.execute(HookEvent::SessionEnd, ctx);
+        }
+    }
+
     // 保存对话历史
     let _ = save_chat_session(&app.state.session);
 

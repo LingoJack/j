@@ -4,6 +4,7 @@ mod browser;
 pub mod compact;
 mod file;
 mod grep;
+pub mod hook;
 mod shell;
 mod skill;
 pub mod task;
@@ -12,7 +13,7 @@ mod web_search;
 
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use serde_json::Value;
-use std::sync::{Arc, atomic::AtomicBool, mpsc};
+use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== ToolResult ==========
 
@@ -57,6 +58,7 @@ impl ToolRegistry {
         ask_tx: mpsc::Sender<crate::command::chat::app::AskRequest>,
         background_manager: Arc<background::BackgroundManager>,
         task_manager: Arc<task::TaskManager>,
+        hook_manager: Arc<Mutex<crate::command::chat::hook::HookManager>>,
     ) -> Self {
         let mut registry = Self {
             tools: vec![
@@ -92,6 +94,8 @@ impl ToolRegistry {
                 }),
                 // Context compact 工具
                 Box::new(compact::CompactTool),
+                // Hook 管理工具
+                Box::new(hook::RegisterHookTool { hook_manager }),
             ],
         };
 

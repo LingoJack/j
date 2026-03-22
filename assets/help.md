@@ -641,6 +641,91 @@ argument-hint: "[参数说明]"
 EOF
 ```
 
+### Hook 系统
+
+Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
+
+**三级 Hook**：
+1. **用户级**：`~/.jdata/agent/hooks.yaml` — 全局生效
+2. **项目级**：`.jcli` 文件的 `hooks` 字段 — 项目目录下生效
+3. **Session 级**：通过 `register_hook` 工具由 AI 动态注册 — 仅当前会话
+
+**执行顺序**：用户级 → 项目级 → Session 级，链式执行。前者输出影响后者输入，任何 `abort` 立即中止。
+
+**可用事件**：
+
+| 事件 | 触发时机 | 可操作数据 |
+|------|----------|------------|
+| `pre_send_message` | 用户发送消息前 | user_message, messages |
+| `post_send_message` | 用户发送消息后 | user_message, messages |
+| `pre_llm_request` | LLM API 请求前 | messages, system_prompt, model |
+| `post_llm_response` | LLM 回复完成后 | assistant_message, messages |
+| `pre_tool_execution` | 工具执行前 | tool_name, tool_arguments |
+| `post_tool_execution` | 工具执行后 | tool_name, tool_result |
+| `session_start` | 会话启动时 | messages |
+| `session_end` | 会话退出时 | messages |
+
+**用户级配置**（`~/.jdata/agent/hooks.yaml`）：
+```yaml
+pre_send_message:
+  - command: "python3 ~/.jdata/agent/hooks/inject_time.py"
+    timeout: 5
+pre_llm_request:
+  - command: "~/.jdata/agent/hooks/add_context.sh"
+session_start:
+  - command: "echo '{\"inject_messages\": [{\"role\": \"user\", \"content\": \"当前用户: jack\"}]}'"
+```
+
+**项目级配置**（`.jcli` 文件）：
+```yaml
+permissions:
+  allow:
+    - "Read"
+hooks:
+  pre_tool_execution:
+    - command: "./scripts/validate_tool.sh"
+      timeout: 5
+```
+
+**脚本协议**：
+- 执行方式：`sh -c "<command>"`，工作目录为用户当前目录
+- 环境变量：`JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（当前目录）
+- stdin：HookContext JSON（包含 event、messages、user_message 等）
+- stdout：HookResult JSON（可为空/空 JSON 表示无修改）
+- exit 0：成功；非零退出：视为 abort
+- 超时：默认 10 秒，超时后 kill 子进程
+
+**HookResult 字段**（stdout JSON）：
+```json
+{
+  "user_message": "修改后的用户消息",
+  "assistant_message": "修改后的 AI 回复",
+  "messages": [],
+  "system_prompt": "修改后的系统提示词",
+  "tool_arguments": "修改后的工具参数",
+  "tool_result": "修改后的工具结果",
+  "inject_messages": [{"role": "user", "content": "注入的消息"}],
+  "abort": false
+}
+```
+
+**示例：自动注入时间戳**：
+```bash
+#!/bin/bash
+# ~/.jdata/agent/hooks/inject_time.sh
+# 用法：pre_send_message hook
+read input
+msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_message',''))")
+echo "{\"user_message\": \"[$(date '+%H:%M')] $msg\"}"
+```
+
+**register_hook 工具**：AI 可通过 `register_hook` 工具动态注册 session 级 hook：
+```json
+{"action": "register", "event": "pre_tool_execution", "command": "./validate.sh", "timeout": 5}
+{"action": "list"}
+{"action": "remove", "event": "pre_tool_execution", "index": 0}
+```
+
 **使用方式**：
 
 | 操作 | 说明 |

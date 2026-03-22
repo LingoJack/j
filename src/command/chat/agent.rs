@@ -1,6 +1,7 @@
 use super::api::{build_request_with_tools, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
 use super::compact::{self, CompactConfig};
+use super::hook::{HookContext, HookEvent, HookManager};
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
@@ -19,7 +20,7 @@ pub async fn run_agent_loop(
     provider: ModelProvider,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ChatCompletionTools>,
-    system_prompt: Option<String>,
+    mut system_prompt: Option<String>,
     use_stream: bool,
     streaming_content: Arc<Mutex<String>>,
     tx: mpsc::Sender<StreamMsg>,
@@ -29,6 +30,7 @@ pub async fn run_agent_loop(
     pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
     background_manager: Arc<BackgroundManager>,
     compact_config: CompactConfig,
+    hook_manager: HookManager,
 ) {
     let client = create_openai_client(&provider);
 
@@ -123,6 +125,35 @@ pub async fn run_agent_loop(
                 }
             }
             write_info_log("Chat 请求", &log_content);
+        }
+
+        // ★ PreLlmRequest hook（可修改 messages 和 system_prompt）
+        {
+            let ctx = HookContext {
+                event: HookEvent::PreLlmRequest,
+                messages: Some(messages.clone()),
+                system_prompt: system_prompt.clone(),
+                model: Some(provider.model.clone()),
+                cwd: std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+                ..Default::default()
+            };
+            if let Some(result) = hook_manager.execute(HookEvent::PreLlmRequest, ctx) {
+                if result.abort {
+                    let _ = tx.send(StreamMsg::Error("LLM 请求被 hook 中止".to_string()));
+                    return;
+                }
+                if let Some(new_msgs) = result.messages {
+                    messages = new_msgs;
+                }
+                if let Some(new_prompt) = result.system_prompt {
+                    system_prompt = Some(new_prompt);
+                }
+                if let Some(inject) = result.inject_messages {
+                    messages.extend(inject);
+                }
+            }
         }
 
         let request = match build_request_with_tools(
@@ -262,6 +293,7 @@ pub async fn run_agent_loop(
                                         &tx,
                                         &tool_result_rx,
                                         &pending_user_messages,
+                                        &hook_manager,
                                     ) {
                                         Ok(compact_requested) => {
                                             // ── Layer 3: compact tool 触发 ──
@@ -329,6 +361,7 @@ pub async fn run_agent_loop(
                     &tx,
                     &tool_result_rx,
                     &pending_user_messages,
+                    &hook_manager,
                 ) {
                     Ok(compact_requested) => {
                         // ── Layer 3: compact tool 触发 ──
@@ -374,6 +407,7 @@ pub async fn run_agent_loop(
                                     &tx,
                                     &tool_result_rx,
                                     &pending_user_messages,
+                                    &hook_manager,
                                 ) {
                                     Ok(compact_requested) => {
                                         // ── Layer 3: compact tool 触发 ──
@@ -483,6 +517,7 @@ fn process_tool_calls(
     tx: &mpsc::Sender<StreamMsg>,
     tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
     pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    hook_manager: &HookManager,
 ) -> Result<bool, ()> {
     log_tool_request(&tool_items);
 
@@ -521,10 +556,33 @@ fn process_tool_calls(
     log_tool_results(&tool_items, &tool_results);
 
     for result in tool_results {
-        // TODO 这里应该记录一下 tool name
+        let mut result_content = result.result;
+
+        // ★ PostToolExecution hook
+        let tool_name = tool_items
+            .iter()
+            .find(|t| t.id == result.tool_call_id)
+            .map(|t| t.name.clone());
+        {
+            let ctx = HookContext {
+                event: HookEvent::PostToolExecution,
+                tool_name: tool_name.clone(),
+                tool_result: Some(result_content.clone()),
+                cwd: std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+                ..Default::default()
+            };
+            if let Some(hook_result) = hook_manager.execute(HookEvent::PostToolExecution, ctx) {
+                if let Some(new_result) = hook_result.tool_result {
+                    result_content = new_result;
+                }
+            }
+        }
+
         messages.push(ChatMessage {
             role: ROLE_TOOL.to_string(),
-            content: result.result,
+            content: result_content,
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id),
         });
