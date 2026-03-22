@@ -39,7 +39,9 @@
       "Bash(find ./src -type f -name *.rs)",
       "Bash(/tmp/exact_locations.txt:*)",
       "Bash(/tmp/INDEX.txt:*)",
-      "Bash(cargo eval:*)"
+      "Bash(cargo eval:*)",
+      "Bash(rm -f init_project.sh init_frontend.sh init_backend.sh check_backend.sh check_frontend.sh)",
+      "Bash(chmod +x *.py)"
     ]
   },
   "language": "zh-CN",

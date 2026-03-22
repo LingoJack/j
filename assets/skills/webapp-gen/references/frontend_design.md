@@ -1,5 +1,5 @@
 前端技术栈使用为 React + TypeScript + Tailwind CSS (V4)
-使用 `init_frontend.sh` 脚本自动创建项目脚手架，并安装依赖
+使用 `init_frontend.py` 脚本自动创建项目脚手架，并安装依赖
 
 阅读需求文档 `docs/requirement.md` 内容，严格按照以下步骤开发：
 0. 计划阶段
@@ -23,12 +23,12 @@
 1. 原型阶段
     a. 创建 `frontend/` 目录，在目录下执行
         ```bash
-        <skill_base_path>/scripts/init_frontend.sh <app_name>
+        python3 <skill_base_path>/scripts/init_frontend.py <app_name>
         ```
     b. 按照 `docs/frontend_design.md` 实现原型，接口返回的数据可以先 mock，注意必须是 mock 接口返回的数据
     c. 运行以下脚本检查前端项目
     ```bash
-    <skill_base_path>/scripts/check_frontend.sh
+    python3 <skill_base_path>/scripts/check_frontend.py
     ```
     d. 若检查通过，使用 `BackgroundRun` 运行 `npm run dev` 启动开发服务器
     e. 用 `Ask` 询问改进意见并按照用户要求优化，直到用户确认该原型满足要求
