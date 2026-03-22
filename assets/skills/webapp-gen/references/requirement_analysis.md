@@ -1,6 +1,6 @@
-- 初始化项目，在项目目录执行
+- 初始化项目，在工作目录执行
 	```bash
-	python3 <skill_base_path>/scripts/init_project.py <project_name>
+	python3 <skill_base_path>/scripts/init_project.py
 	```
 - 根据用户的一句话需求进行详细扩写
 - 用 `Ask` 向用户确认，收集反馈并迭代
