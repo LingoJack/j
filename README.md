@@ -38,11 +38,6 @@ j todo                    # 进入 TUI 管理
 j chat                    # 进入 TUI 对话界面
 j chat 你好               # 快速提问
 
-# Hook 系统 — 在关键事件节点注入自定义脚本
-# 支持三级 hook：用户级(~/.jdata/agent/hooks.yaml)、项目级(.jcli)、session 级(register_hook 工具)
-# 可用事件：pre_send_message, pre_llm_request, pre_tool_execution 等 8 种
-# 详见 assets/help.md 中的 Hook 系统章节
-
 # 交互模式
 j                         # 进入 REPL（Tab 补全 + 历史建议）
 ```
