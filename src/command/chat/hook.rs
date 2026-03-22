@@ -9,6 +9,19 @@ use std::process::Command;
 // ========== 数据结构 ==========
 
 /// Hook 事件类型
+///
+/// 各事件的触发时机及可读/可写字段：
+///
+/// | 事件                  | 触发时机           | 可读字段                              | 可写字段（HookResult 中返回即生效）        |
+/// |-----------------------|--------------------|-----------------------------------------|----------------------------------------------|
+/// | `PreSendMessage`      | 用户消息入队前     | `user_input`, `messages`               | `user_input`（修改发送内容）, `abort`        |
+/// | `PostSendMessage`     | 用户消息入队后     | `user_input`, `messages`               | 仅通知，返回值被忽略                         |
+/// | `PreLlmRequest`       | LLM API 请求前     | `messages`, `system_prompt`, `model`   | `messages`, `system_prompt`, `inject_messages`, `abort` |
+/// | `PostLlmResponse`     | LLM 回复完成后     | `assistant_output`, `messages`         | `assistant_output`（修改最终回复）           |
+/// | `PreToolExecution`    | 工具执行前         | `tool_name`, `tool_arguments`          | `tool_arguments`（修改参数）, `abort`        |
+/// | `PostToolExecution`   | 工具执行后         | `tool_name`, `tool_result`             | `tool_result`（修改结果）                    |
+/// | `SessionStart`        | 会话启动时         | `messages`                             | 仅通知，返回值被忽略                         |
+/// | `SessionEnd`          | 会话退出时         | `messages`                             | 仅通知，返回值被忽略                         |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookEvent {
@@ -64,7 +77,7 @@ impl HookEvent {
     }
 }
 
-/// Hook 定义
+/// Hook 定义：一条 shell 命令 + 超时秒数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookDef {
     pub command: String,
@@ -76,26 +89,56 @@ fn default_timeout() -> u64 {
     10
 }
 
-/// Hook 执行上下文（传给脚本的 stdin JSON）
+/// Hook 执行上下文（通过 stdin JSON 传给脚本）
+///
+/// 各字段按事件类型有选择性地填充，未填充的字段序列化时会被跳过（`skip_serializing_if`）。
+/// 脚本可通过 stdin 读取此 JSON 来获取当前事件的上下文信息。
 #[derive(Debug, Serialize)]
 pub struct HookContext {
+    /// 当前触发的事件类型
     pub event: HookEvent,
+
+    /// 当前对话的完整消息列表
+    /// - 可读事件：PreSendMessage, PostSendMessage, PreLlmRequest, PostLlmResponse, SessionStart, SessionEnd
     #[serde(skip_serializing_if = "Option::is_none")]
     pub messages: Option<Vec<ChatMessage>>,
+
+    /// 当前系统提示词
+    /// - 可读事件：PreLlmRequest
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
+
+    /// 当前使用的模型名称
+    /// - 可读事件：PreLlmRequest
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+
+    /// 本轮用户输入的消息文本
+    /// - 可读事件：PreSendMessage（发送前，可通过 HookResult 修改）、PostSendMessage（发送后，只读）
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_message: Option<String>,
+    pub user_input: Option<String>,
+
+    /// 本轮 AI 回复的完整文本
+    /// - 可读事件：PostLlmResponse（可通过 HookResult 修改最终展示内容）
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub assistant_message: Option<String>,
+    pub assistant_output: Option<String>,
+
+    /// 当前工具调用的工具名
+    /// - 可读事件：PreToolExecution, PostToolExecution
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
+
+    /// 当前工具调用的参数 JSON 字符串
+    /// - 可读事件：PreToolExecution（可通过 HookResult 修改）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_arguments: Option<String>,
+
+    /// 工具执行的结果内容
+    /// - 可读事件：PostToolExecution（可通过 HookResult 修改）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_result: Option<String>,
+
+    /// 当前工作目录
     pub cwd: String,
 }
 
@@ -106,8 +149,8 @@ impl Default for HookContext {
             messages: None,
             system_prompt: None,
             model: None,
-            user_message: None,
-            assistant_message: None,
+            user_input: None,
+            assistant_output: None,
             tool_name: None,
             tool_arguments: None,
             tool_result: None,
@@ -118,23 +161,44 @@ impl Default for HookContext {
     }
 }
 
-/// Hook 脚本返回结果（从 stdout JSON 解析）
+/// Hook 脚本返回结果（脚本通过 stdout 输出 JSON）
+///
+/// 脚本只需返回想要修改的字段，未返回的字段保持原值。
+/// 空字符串或 `{}` 表示无修改。
+///
+/// 各字段的生效场景：
+/// - `user_input`：仅 PreSendMessage 中生效，替换用户即将发送的消息
+/// - `assistant_output`：仅 PostLlmResponse 中生效，替换 AI 最终展示的回复
+/// - `messages`：仅 PreLlmRequest 中生效，替换发给 LLM 的消息列表
+/// - `system_prompt`：仅 PreLlmRequest 中生效，替换系统提示词
+/// - `tool_arguments`：仅 PreToolExecution 中生效，替换工具调用参数
+/// - `tool_result`：仅 PostToolExecution 中生效，替换工具返回结果
+/// - `inject_messages`：仅 PreLlmRequest 中生效，追加到消息列表末尾
+/// - `abort`：Pre* 事件中生效，为 true 时中止当前操作
 #[derive(Debug, Deserialize, Default)]
 pub struct HookResult {
+    /// 替换消息列表（PreLlmRequest）
     #[serde(default)]
     pub messages: Option<Vec<ChatMessage>>,
+    /// 替换系统提示词（PreLlmRequest）
     #[serde(default)]
     pub system_prompt: Option<String>,
+    /// 替换用户输入文本（PreSendMessage）
     #[serde(default)]
-    pub user_message: Option<String>,
+    pub user_input: Option<String>,
+    /// 替换 AI 回复文本（PostLlmResponse）
     #[serde(default)]
-    pub assistant_message: Option<String>,
+    pub assistant_output: Option<String>,
+    /// 替换工具调用参数（PreToolExecution）
     #[serde(default)]
     pub tool_arguments: Option<String>,
+    /// 替换工具执行结果（PostToolExecution）
     #[serde(default)]
     pub tool_result: Option<String>,
+    /// 追加消息到消息列表末尾（PreLlmRequest）
     #[serde(default)]
     pub inject_messages: Option<Vec<ChatMessage>>,
+    /// 中止当前操作（Pre* 事件中有效）
     #[serde(default)]
     pub abort: bool,
     // MVP 保留字段，暂不支持
@@ -145,6 +209,9 @@ pub struct HookResult {
 // ========== HookManager ==========
 
 /// Hook 管理器：管理三级 hook（用户级、项目级、session 级）
+///
+/// 执行顺序：用户级 → 项目级 → Session 级，链式执行。
+/// 前者的输出会更新到 context 中，影响后者的输入。任何 `abort` 立即中止整条链。
 #[derive(Debug, Clone, Default)]
 pub struct HookManager {
     user_hooks: HashMap<HookEvent, Vec<HookDef>>,
@@ -153,7 +220,7 @@ pub struct HookManager {
 }
 
 impl HookManager {
-    /// 加载用户级 + 项目级 hook
+    /// 加载用户级（`~/.jdata/agent/hooks.yaml`）+ 项目级（`.jcli` hooks 字段）hook
     pub fn load() -> Self {
         let mut manager = HookManager::default();
 
@@ -217,12 +284,12 @@ impl HookManager {
         manager
     }
 
-    /// 注册 session 级 hook
+    /// 注册 session 级 hook（由 register_hook 工具调用）
     pub fn register_session_hook(&mut self, event: HookEvent, def: HookDef) {
         self.session_hooks.entry(event).or_default().push(def);
     }
 
-    /// 移除 session 级 hook
+    /// 移除 session 级 hook（按事件和索引）
     pub fn remove_session_hook(&mut self, event: HookEvent, index: usize) -> bool {
         if let Some(hooks) = self.session_hooks.get_mut(&event) {
             if index < hooks.len() {
@@ -233,7 +300,7 @@ impl HookManager {
         false
     }
 
-    /// 列出所有 hook（含来源标记）
+    /// 列出所有 hook（含来源标记 "user"/"project"/"session"）
     pub fn list_hooks(&self) -> Vec<(HookEvent, &HookDef, &str)> {
         let mut result = Vec::new();
         for event in HookEvent::all() {
@@ -257,7 +324,9 @@ impl HookManager {
     }
 
     /// 链式执行所有 hook（用户→项目→session）
-    /// 返回 Some(HookResult) 如果有任何修改或 abort，否则 None
+    ///
+    /// 返回 `Some(HookResult)` 如果有任何修改或 abort，否则 `None`。
+    /// 链式执行中，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。
     pub fn execute(&self, event: HookEvent, mut context: HookContext) -> Option<HookResult> {
         let mut all_hooks: Vec<&HookDef> = Vec::new();
 
@@ -303,73 +372,36 @@ impl HookManager {
 
                     // 合并结果到 context（链式传递）
                     if let Some(ref msgs) = result.messages {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!(
-                                "Hook 修改了 messages (cmd: {}, count: {})",
-                                hook.command,
-                                msgs.len()
-                            ),
-                        );
                         context.messages = Some(msgs.clone());
                         final_result.messages = Some(msgs.clone());
                         had_modification = true;
                     }
                     if let Some(ref sp) = result.system_prompt {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook 修改了 system_prompt (cmd: {})", hook.command),
-                        );
                         context.system_prompt = Some(sp.clone());
                         final_result.system_prompt = Some(sp.clone());
                         had_modification = true;
                     }
-                    if let Some(ref um) = result.user_message {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook 修改了 user_message (cmd: {})", hook.command),
-                        );
-                        context.user_message = Some(um.clone());
-                        final_result.user_message = Some(um.clone());
+                    if let Some(ref ui) = result.user_input {
+                        context.user_input = Some(ui.clone());
+                        final_result.user_input = Some(ui.clone());
                         had_modification = true;
                     }
-                    if let Some(ref am) = result.assistant_message {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook 修改了 assistant_message (cmd: {})", hook.command),
-                        );
-                        context.assistant_message = Some(am.clone());
-                        final_result.assistant_message = Some(am.clone());
+                    if let Some(ref ao) = result.assistant_output {
+                        context.assistant_output = Some(ao.clone());
+                        final_result.assistant_output = Some(ao.clone());
                         had_modification = true;
                     }
                     if let Some(ref ta) = result.tool_arguments {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook 修改了 tool_arguments (cmd: {})", hook.command),
-                        );
                         context.tool_arguments = Some(ta.clone());
                         final_result.tool_arguments = Some(ta.clone());
                         had_modification = true;
                     }
                     if let Some(ref tr) = result.tool_result {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook 修改了 tool_result (cmd: {})", hook.command),
-                        );
                         context.tool_result = Some(tr.clone());
                         final_result.tool_result = Some(tr.clone());
                         had_modification = true;
                     }
                     if let Some(ref inject) = result.inject_messages {
-                        // inject_messages 累积追加
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!(
-                                "Hook 注入了 {} 条消息 (cmd: {})",
-                                inject.len(),
-                                hook.command
-                            ),
-                        );
                         let existing = final_result.inject_messages.get_or_insert_with(Vec::new);
                         existing.extend(inject.clone());
                         had_modification = true;
@@ -398,6 +430,16 @@ impl HookManager {
 }
 
 /// 执行单个 hook 脚本
+///
+/// 协议：
+/// - 执行方式: `sh -c "<command>"`
+/// - 工作目录: 用户当前目录 (`std::env::current_dir()`)
+/// - 环境变量: `JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（当前目录）
+/// - stdin: HookContext JSON
+/// - stdout: HookResult JSON（可为空字符串/空 JSON `{}`，表示无修改）
+/// - exit 0: 成功
+/// - exit ≠0: 视为失败（调用方将其当作 abort）
+/// - 超时: kill 子进程，返回 Err
 fn execute_single_hook(hook: &HookDef, context: &HookContext) -> Result<HookResult, String> {
     let context_json =
         serde_json::to_string(context).map_err(|e| format!("序列化 context 失败: {}", e))?;
@@ -499,7 +541,7 @@ mod tests {
         let result: HookResult = serde_json::from_str("{}").unwrap();
         assert!(!result.abort);
         assert!(result.messages.is_none());
-        assert!(result.user_message.is_none());
+        assert!(result.user_input.is_none());
     }
 
     #[test]
@@ -510,22 +552,23 @@ mod tests {
     }
 
     #[test]
-    fn test_hook_result_with_user_message() {
-        let json = r#"{"user_message": "[modified] hello"}"#;
+    fn test_hook_result_with_user_input() {
+        let json = r#"{"user_input": "[modified] hello"}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
-        assert_eq!(result.user_message.as_deref(), Some("[modified] hello"));
+        assert_eq!(result.user_input.as_deref(), Some("[modified] hello"));
     }
 
     #[test]
     fn test_hook_context_serialization() {
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
-            user_message: Some("hello".to_string()),
+            user_input: Some("hello".to_string()),
             ..Default::default()
         };
         let json = serde_json::to_string(&ctx).unwrap();
         assert!(json.contains("pre_send_message"));
         assert!(json.contains("hello"));
+        assert!(json.contains("user_input"));
         // skip_serializing_if 应跳过 None 字段
         assert!(!json.contains("messages"));
         assert!(!json.contains("tool_name"));
@@ -534,16 +577,16 @@ mod tests {
     #[test]
     fn test_execute_single_hook_echo() {
         let hook = HookDef {
-            command: r#"echo '{"user_message": "hooked"}'"#.to_string(),
+            command: r#"echo '{"user_input": "hooked"}'"#.to_string(),
             timeout: 5,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
-            user_message: Some("original".to_string()),
+            user_input: Some("original".to_string()),
             ..Default::default()
         };
         let result = execute_single_hook(&hook, &ctx).unwrap();
-        assert_eq!(result.user_message.as_deref(), Some("hooked"));
+        assert_eq!(result.user_input.as_deref(), Some("hooked"));
         assert!(!result.abort);
     }
 
@@ -556,7 +599,7 @@ mod tests {
         let ctx = HookContext::default();
         let result = execute_single_hook(&hook, &ctx).unwrap();
         assert!(!result.abort);
-        assert!(result.user_message.is_none());
+        assert!(result.user_input.is_none());
     }
 
     #[test]
@@ -572,18 +615,17 @@ mod tests {
 
     #[test]
     fn test_execute_single_hook_reads_stdin() {
-        // Script that reads stdin and echoes back a modified user_message
         let hook = HookDef {
-            command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_message": "got_input"}'"#.to_string(),
+            command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_input": "got_input"}'"#.to_string(),
             timeout: 5,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
-            user_message: Some("test".to_string()),
+            user_input: Some("test".to_string()),
             ..Default::default()
         };
         let result = execute_single_hook(&hook, &ctx).unwrap();
-        assert_eq!(result.user_message.as_deref(), Some("got_input"));
+        assert_eq!(result.user_input.as_deref(), Some("got_input"));
     }
 
     #[test]
@@ -600,7 +642,7 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_message": "session_hooked"}'"#.to_string(),
+                command: r#"echo '{"user_input": "session_hooked"}'"#.to_string(),
                 timeout: 5,
             },
         );
@@ -614,12 +656,12 @@ mod tests {
                 HookEvent::PreSendMessage,
                 HookContext {
                     event: HookEvent::PreSendMessage,
-                    user_message: Some("original".to_string()),
+                    user_input: Some("original".to_string()),
                     ..Default::default()
                 },
             )
             .unwrap();
-        assert_eq!(result.user_message.as_deref(), Some("session_hooked"));
+        assert_eq!(result.user_input.as_deref(), Some("session_hooked"));
     }
 
     #[test]
@@ -645,18 +687,17 @@ mod tests {
     fn test_hook_chain_execution() {
         let mut manager = HookManager::default();
 
-        // 注册两个 session hook，第一个设置 user_message，第二个也设置
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_message": "first"}'"#.to_string(),
+                command: r#"echo '{"user_input": "first"}'"#.to_string(),
                 timeout: 5,
             },
         );
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_message": "second"}'"#.to_string(),
+                command: r#"echo '{"user_input": "second"}'"#.to_string(),
                 timeout: 5,
             },
         );
@@ -666,14 +707,14 @@ mod tests {
                 HookEvent::PreSendMessage,
                 HookContext {
                     event: HookEvent::PreSendMessage,
-                    user_message: Some("original".to_string()),
+                    user_input: Some("original".to_string()),
                     ..Default::default()
                 },
             )
             .unwrap();
 
         // 最后一个 hook 的输出应该覆盖之前的
-        assert_eq!(result.user_message.as_deref(), Some("second"));
+        assert_eq!(result.user_input.as_deref(), Some("second"));
     }
 
     #[test]
@@ -690,7 +731,7 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_message": "should_not_reach"}'"#.to_string(),
+                command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
                 timeout: 5,
             },
         );
@@ -706,6 +747,6 @@ mod tests {
             .unwrap();
 
         assert!(result.abort);
-        assert!(result.user_message.is_none());
+        assert!(result.user_input.is_none());
     }
 }

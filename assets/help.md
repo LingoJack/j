@@ -470,6 +470,8 @@ rm -rf ~/.jdata
 - **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时切换
 - **工具调用**：支持 Function Calling，AI 可执行 shell 命令和读取文件（危险命令需确认）
 
+## 🛠️ AI 工具 & 权限
+
 ### 工具调用功能
 
 AI 对话支持工具调用，让 AI 能够执行实际操作。
@@ -480,14 +482,25 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 
 | 工具名 | 功能 | 需确认 |
 |--------|------|--------|
-| `run_shell` | 执行 shell 命令 | yes |
-| `read_file` | 读取本地文件 | no |
-| `write_file` | 写入文件 | no |
-| `edit_file` | 编辑文件（查找替换） | no |
-| `web_fetch` | 获取网页内容并转为 Markdown/纯文本 | no |
-| `web_search` | 使用 Exa Search API 搜索网络 | no |
-| `browser` | 浏览器自动化（CDP + Lite fallback） | no |
-| `load_skill` | 加载指定技能的完整内容到上下文 | no |
+| `Bash` | 执行 shell 命令 | ✅ |
+| `Read` | 读取本地文件（支持行号范围） | |
+| `Write` | 写入文件（自动创建目录） | ✅ |
+| `Edit` | 编辑文件（精确字符串替换） | ✅ |
+| `Glob` | 按模式匹配搜索文件名 | |
+| `Grep` | 正则搜索文件内容 | |
+| `Ask` | 向用户提结构化选择题 | |
+| `WebFetch` | 获取网页内容并转为 Markdown/纯文本 | |
+| `WebSearch` | 使用 Exa Search API 搜索网络 | |
+| `Browser` | 浏览器自动化（CDP + Lite fallback） | |
+| `BackgroundRun` | 后台执行 shell 命令（不阻塞对话） | ✅ |
+| `CheckBackground` | 查询后台任务状态和结果 | |
+| `LoadSkill` | 加载指定技能到上下文 | |
+| `Compact` | 触发对话压缩以释放上下文窗口 | |
+| `TaskCreate` | 创建任务 | |
+| `TaskList` | 列出所有任务 | |
+| `TaskGet` | 获取任务详情 | |
+| `TaskUpdate` | 更新任务状态/依赖 | |
+| `RegisterHook` | 注册/管理 session 级 hook | ✅ |
 
 **`web_fetch` 工具参数**：
 
@@ -557,7 +570,7 @@ A: 自动使用 Lite 模式，`screenshot`/`click`/`type`/`evaluate` 等 CDP 专
 | `Y` / `Enter` | 执行工具 |
 | `N` / `Esc` | 拒绝执行 |
 
-> **安全提示**：`run_shell` 工具内置危险命令过滤（如 `rm -rf /`），但仍建议执行前检查命令内容
+> **安全提示**：`Bash` 工具内置危险命令过滤（如 `rm -rf /`），但仍建议执行前检查命令内容
 
 ### .jcli 权限配置
 
@@ -610,7 +623,7 @@ permissions:
 - `deny` 优先于 `allow`（被 deny 的调用直接拒绝执行）
 - `allow_all: true` 或 allow 中包含 `"*"`：所有工具跳过确认
 
-### Skill 技能系统
+## 🧩 Skill 技能系统
 
 在 `~/.jdata/agent/skills/` 下创建 skill 目录，AI 通过 `load_skill` 工具按需加载技能。
 
@@ -620,7 +633,9 @@ permissions:
 
 | 占位符 | 替换内容 |
 |--------|----------|
+| `{{.current_dir}}` | 当前工作目录的绝对路径 |
 | `{{.skills}}` | 所有技能的 name + description 摘要列表 |
+| `{{.skill_dir}}` | 技能目录的绝对路径（`~/.jdata/agent/skills/`） |
 | `{{.tools}}` | 所有工具的 name + description 摘要列表 |
 | `{{.style}}` | 回复风格配置内容（`Ctrl+E` 中编辑） |
 | `{{.memory}}` | 记忆内容（存储用户偏好、重要事项等） |
@@ -641,6 +656,8 @@ argument-hint: "[参数说明]"
 EOF
 ```
 
+## 🪝 AI Hook
+
 ### Hook 系统
 
 Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
@@ -656,10 +673,10 @@ Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
 
 | 事件 | 触发时机 | 可操作数据 |
 |------|----------|------------|
-| `pre_send_message` | 用户发送消息前 | user_message, messages |
-| `post_send_message` | 用户发送消息后 | user_message, messages |
+| `pre_send_message` | 用户发送消息前 | user_input, messages |
+| `post_send_message` | 用户发送消息后 | user_input, messages |
 | `pre_llm_request` | LLM API 请求前 | messages, system_prompt, model |
-| `post_llm_response` | LLM 回复完成后 | assistant_message, messages |
+| `post_llm_response` | LLM 回复完成后 | assistant_output, messages |
 | `pre_tool_execution` | 工具执行前 | tool_name, tool_arguments |
 | `post_tool_execution` | 工具执行后 | tool_name, tool_result |
 | `session_start` | 会话启动时 | messages |
@@ -698,8 +715,8 @@ hooks:
 **HookResult 字段**（stdout JSON）：
 ```json
 {
-  "user_message": "修改后的用户消息",
-  "assistant_message": "修改后的 AI 回复",
+  "user_input": "修改后的用户消息",
+  "assistant_output": "修改后的 AI 回复",
   "messages": [],
   "system_prompt": "修改后的系统提示词",
   "tool_arguments": "修改后的工具参数",

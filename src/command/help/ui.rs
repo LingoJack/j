@@ -41,11 +41,7 @@ fn draw_tab_bar(
     spans.push(Span::styled(" ", Style::default().bg(theme.bg_title)));
 
     for i in 0..help_app.tab_count {
-        let num = if i == 9 {
-            "0".to_string()
-        } else {
-            format!("{}", i + 1)
-        };
+        let num = format!("{}", i + 1);
         let label = format!(" {}.{} ", num, help_app.tab_name(i));
 
         if i == help_app.active_tab {

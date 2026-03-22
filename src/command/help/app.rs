@@ -43,6 +43,14 @@ const TAB_DEFS: &[TabDef] = &[
         heading_keywords: &["AI 对话"],
     },
     TabDef {
+        name: "AI 工具",
+        heading_keywords: &["AI 工具"],
+    },
+    TabDef {
+        name: "AI Hook & Skill",
+        heading_keywords: &["AI Hook", "Skill"],
+    },
+    TabDef {
         name: "安装 & 卸载",
         heading_keywords: &["安装", "卸载"],
     },

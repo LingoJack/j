@@ -2156,7 +2156,7 @@ impl ChatApp {
         let hook_result = {
             let ctx = HookContext {
                 event: HookEvent::PreSendMessage,
-                user_message: Some(text.clone()),
+                user_input: Some(text.clone()),
                 messages: Some(self.state.session.messages.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())
@@ -2174,7 +2174,7 @@ impl ChatApp {
                 self.show_toast("消息发送被 hook 拦截", true);
                 return;
             }
-            result.user_message.unwrap_or(text)
+            result.user_input.unwrap_or(text)
         } else {
             text
         };
@@ -2192,7 +2192,7 @@ impl ChatApp {
         {
             let ctx = HookContext {
                 event: HookEvent::PostSendMessage,
-                user_message: Some(text.clone()),
+                user_input: Some(text.clone()),
                 messages: Some(self.state.session.messages.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())
@@ -2658,7 +2658,7 @@ impl ChatApp {
                 {
                     let ctx = HookContext {
                         event: HookEvent::PostLlmResponse,
-                        assistant_message: Some(content.clone()),
+                        assistant_output: Some(content.clone()),
                         messages: Some(self.state.session.messages.clone()),
                         cwd: std::env::current_dir()
                             .map(|p| p.display().to_string())
@@ -2667,7 +2667,7 @@ impl ChatApp {
                     };
                     if let Ok(manager) = self.hook_manager.lock() {
                         if let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx) {
-                            if let Some(new_msg) = result.assistant_message {
+                            if let Some(new_msg) = result.assistant_output {
                                 content = new_msg;
                             }
                         }

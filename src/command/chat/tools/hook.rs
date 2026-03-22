@@ -10,7 +10,7 @@ pub struct RegisterHookTool {
 
 impl Tool for RegisterHookTool {
     fn name(&self) -> &str {
-        "register_hook"
+        "RegisterHook"
     }
 
     fn description(&self) -> &str {
