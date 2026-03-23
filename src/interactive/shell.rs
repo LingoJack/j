@@ -135,7 +135,8 @@ pub fn execute_shell_command(cmd: &str, config: &YamlConfig) {
         c.args([shell::WINDOWS_CMD_FLAG, cmd]);
         c
     } else {
-        let mut c = std::process::Command::new(shell::BASH_PATH);
+        let shell_path = std::env::var("SHELL").unwrap_or_else(|_| shell::BASH_PATH.to_string());
+        let mut c = std::process::Command::new(shell_path);
         c.args([shell::BASH_CMD_FLAG, cmd]);
         c
     };

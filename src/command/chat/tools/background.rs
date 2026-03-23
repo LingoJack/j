@@ -3,18 +3,20 @@ use crate::util::safe_lock;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // ========== BgTask ==========
 
 /// 后台任务状态
-struct BgTask {
-    task_id: String,
-    command: String,
-    status: String, // "running" | "completed" | "error" | "timeout"
-    result: Option<String>,
+pub(super) struct BgTask {
+    pub task_id: String,
+    pub command: String,
+    pub status: String, // "running" | "completed" | "error" | "timeout"
+    pub result: Option<String>,
     #[allow(dead_code)]
-    started_at: Instant,
+    pub started_at: Instant,
+    #[allow(dead_code)]
+    pub cwd: Option<String>,
 }
 
 /// 后台任务完成通知
@@ -29,7 +31,7 @@ pub struct BgNotification {
 
 /// 后台任务管理器（Send + Sync，可跨线程共享）
 pub struct BackgroundManager {
-    tasks: Mutex<HashMap<String, BgTask>>,
+    pub(super) tasks: Mutex<HashMap<String, BgTask>>,
     notifications: Mutex<Vec<BgNotification>>,
     next_id: Mutex<u64>,
 }
@@ -52,7 +54,7 @@ impl BackgroundManager {
     }
 
     /// 注册后台命令为 running 状态，返回 task_id（实际 spawn 在调用方完成）
-    fn spawn_command(&self, command: &str) -> String {
+    pub fn spawn_command(&self, command: &str, cwd: Option<String>, _timeout_secs: u64) -> String {
         let task_id = self.gen_id();
 
         let bg_task = BgTask {
@@ -61,6 +63,7 @@ impl BackgroundManager {
             status: "running".to_string(),
             result: None,
             started_at: Instant::now(),
+            cwd,
         };
 
         {
@@ -72,7 +75,7 @@ impl BackgroundManager {
     }
 
     /// 内部方法：标记任务完成并添加通知
-    fn complete_task(&self, task_id: &str, status: &str, result: String) {
+    pub fn complete_task(&self, task_id: &str, status: &str, result: String) {
         let command;
         {
             let mut tasks = safe_lock(&self.tasks, "BackgroundManager::complete_task");
@@ -105,59 +108,45 @@ impl BackgroundManager {
     }
 
     /// 查询单个后台任务状态
-    fn get_task_status(&self, task_id: &str) -> Option<Value> {
+    pub fn get_task_status(&self, task_id: &str) -> Option<Value> {
         let tasks = safe_lock(&self.tasks, "BackgroundManager::get_task_status");
         tasks.get(task_id).map(|t| {
             json!({
                 "task_id": t.task_id,
                 "command": t.command,
                 "status": t.status,
-                "result": t.result,
+                "output": t.result,
             })
         })
     }
 
-    /// 列出所有后台任务状态
-    fn list_all(&self) -> Vec<Value> {
-        let tasks = safe_lock(&self.tasks, "BackgroundManager::list_all");
-        let mut items: Vec<Value> = tasks
-            .values()
-            .map(|t| {
-                json!({
-                    "task_id": t.task_id,
-                    "command": t.command,
-                    "status": t.status,
-                    "has_result": t.result.is_some(),
-                })
-            })
-            .collect();
-        items.sort_by(|a, b| {
-            a.get("task_id")
-                .and_then(|v| v.as_str())
-                .cmp(&b.get("task_id").and_then(|v| v.as_str()))
-        });
-        items
+    /// 检查任务是否仍在运行
+    pub fn is_running(&self, task_id: &str) -> bool {
+        let tasks = safe_lock(&self.tasks, "BackgroundManager::is_running");
+        tasks
+            .get(task_id)
+            .map(|t| t.status == "running")
+            .unwrap_or(false)
     }
 }
 
-// ========== BackgroundRunTool ==========
+// ========== TaskOutputTool ==========
 
-/// 后台运行命令的工具
-pub struct BackgroundRunTool {
+/// 查询后台任务输出的工具（替代 CheckBackgroundTool）
+pub struct TaskOutputTool {
     pub manager: Arc<BackgroundManager>,
 }
 
-impl Tool for BackgroundRunTool {
+impl Tool for TaskOutputTool {
     fn name(&self) -> &str {
-        "BackgroundRun"
+        "TaskOutput"
     }
 
     fn description(&self) -> &str {
         r#"
-        Execute a shell command in a background thread, returning a task_id immediately without blocking the conversation.
-        Suitable for long-running commands (e.g. builds, downloads, tests); a notification is sent upon completion.
-        Use CheckBackground to query status and results.
-        Note: background tasks do not support interactive input and are not preserved across session restarts.
+        Retrieves output from a running or completed background task (started via Bash with run_in_background: true).
+        Use block=true (default) to wait for task completion; use block=false for a non-blocking status check.
+        Returns the task output along with status information.
         "#
     }
 
@@ -165,20 +154,20 @@ impl Tool for BackgroundRunTool {
         json!({
             "type": "object",
             "properties": {
-                "command": {
+                "task_id": {
                     "type": "string",
-                    "description": "Shell command to execute"
+                    "description": "The task ID to get output from (returned by Bash with run_in_background: true)"
                 },
-                "description": {
-                    "type": "string",
-                    "description": "Short description of the command"
+                "block": {
+                    "type": "boolean",
+                    "description": "Whether to wait for task completion (default: true). Set to false for a non-blocking check of current status."
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "Timeout in seconds, default 300, max 600"
+                    "description": "Max wait time in milliseconds when block=true (default: 30000, max: 600000)"
                 }
             },
-            "required": ["command"]
+            "required": ["task_id"]
         })
     }
 
@@ -193,172 +182,71 @@ impl Tool for BackgroundRunTool {
             }
         };
 
-        let command = match parsed.get("command").and_then(|c| c.as_str()) {
-            Some(cmd) => cmd.to_string(),
+        let task_id = match parsed.get("task_id").and_then(|v| v.as_str()) {
+            Some(id) => id.to_string(),
             None => {
                 return ToolResult {
-                    output: "缺少 command 参数".to_string(),
+                    output: "缺少 task_id 参数".to_string(),
                     is_error: true,
                 };
             }
         };
 
-        let _timeout_secs = parsed
-            .get("timeout")
-            .and_then(|t| t.as_u64())
-            .unwrap_or(300)
-            .min(600);
+        let block = parsed
+            .get("block")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
-        // 安全检查
-        if super::is_dangerous_command(&command) {
+        let timeout_ms = parsed
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(30_000)
+            .min(600_000);
+
+        // 若任务不存在，直接报错
+        if self.manager.get_task_status(&task_id).is_none() {
             return ToolResult {
-                output: "该命令被安全策略拒绝执行".to_string(),
+                output: format!("后台任务 {} 不存在", task_id),
                 is_error: true,
             };
         }
 
-        let task_id = self.manager.spawn_command(&command);
-        let manager = Arc::clone(&self.manager);
-        let tid = task_id.clone();
-        let cmd = command.clone();
-
-        // Spawn 后台线程执行命令
-        std::thread::spawn(move || {
-            let mut child_cmd = std::process::Command::new("bash");
-            child_cmd
-                .arg("-c")
-                .arg(&cmd)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
-
-            let child = match child_cmd.spawn() {
-                Ok(c) => c,
-                Err(e) => {
-                    manager.complete_task(&tid, "error", format!("启动失败: {}", e));
-                    return;
+        // block=true 且任务仍在运行时，轮询等待
+        if block && self.manager.is_running(&task_id) {
+            let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+            loop {
+                if !self.manager.is_running(&task_id) {
+                    break;
                 }
-            };
-
-            let output = match child.wait_with_output() {
-                Ok(o) => o,
-                Err(e) => {
-                    manager.complete_task(&tid, "error", format!("等待进程失败: {}", e));
-                    return;
+                if Instant::now() >= deadline {
+                    // 超时，返回当前状态
+                    let info = self.manager.get_task_status(&task_id).unwrap_or(json!({}));
+                    let mut obj = info.clone();
+                    if let Some(map) = obj.as_object_mut() {
+                        map.insert(
+                            "note".to_string(),
+                            json!("still running: timeout waiting for completion"),
+                        );
+                    }
+                    return ToolResult {
+                        output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
+                        is_error: false,
+                    };
                 }
-            };
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let mut result = String::new();
-            if !stdout.is_empty() {
-                result.push_str(&stdout);
+                std::thread::sleep(Duration::from_millis(50));
             }
-            if !stderr.is_empty() {
-                if !result.is_empty() {
-                    result.push_str("\n[stderr]\n");
-                }
-                result.push_str(&stderr);
-            }
-            if result.is_empty() {
-                result = "(无输出)".to_string();
-            } else {
-                result = crate::util::text::sanitize_tool_output(&result);
-            }
-
-            let status = if output.status.success() {
-                "completed"
-            } else {
-                "error"
-            };
-            manager.complete_task(&tid, status, result);
-        });
-
-        ToolResult {
-            output: json!({
-                "task_id": task_id,
-                "command": command,
-                "status": "running",
-                "message": "命令已在后台启动，使用 CheckBackground 查询状态"
-            })
-            .to_string(),
-            is_error: false,
         }
-    }
 
-    fn requires_confirmation(&self) -> bool {
-        true
-    }
-
-    fn confirmation_message(&self, arguments: &str) -> String {
-        let parsed = serde_json::from_str::<Value>(arguments).ok();
-        let cmd = parsed
-            .as_ref()
-            .and_then(|v| v.get("command").and_then(|c| c.as_str()))
-            .unwrap_or(arguments);
-        format!("Background execute: {}", cmd)
-    }
-}
-
-// ========== CheckBackgroundTool ==========
-
-/// 查询后台任务状态的工具
-pub struct CheckBackgroundTool {
-    pub manager: Arc<BackgroundManager>,
-}
-
-impl Tool for CheckBackgroundTool {
-    fn name(&self) -> &str {
-        "CheckBackground"
-    }
-
-    fn description(&self) -> &str {
-        r#"
-        Query the status and result of background tasks.
-        Provide a task_id to query a single task, or omit it to list all background tasks.
-        "#
-    }
-
-    fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "task_id": {
-                    "type": "string",
-                    "description": "Background task ID to query. Omit to list all tasks."
-                }
-            }
-        })
-    }
-
-    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = serde_json::from_str(arguments).unwrap_or(json!({}));
-
-        if let Some(task_id) = parsed.get("task_id").and_then(|v| v.as_str()) {
-            // 查询单个任务
-            match self.manager.get_task_status(task_id) {
-                Some(info) => ToolResult {
-                    output: serde_json::to_string_pretty(&info).unwrap_or_default(),
-                    is_error: false,
-                },
-                None => ToolResult {
-                    output: format!("后台任务 {} 不存在", task_id),
-                    is_error: true,
-                },
-            }
-        } else {
-            // 列出所有任务
-            let all = self.manager.list_all();
-            if all.is_empty() {
-                ToolResult {
-                    output: "没有后台任务".to_string(),
-                    is_error: false,
-                }
-            } else {
-                ToolResult {
-                    output: serde_json::to_string_pretty(&all).unwrap_or_default(),
-                    is_error: false,
-                }
-            }
+        // 返回当前状态（已完成或 block=false）
+        match self.manager.get_task_status(&task_id) {
+            Some(info) => ToolResult {
+                output: serde_json::to_string_pretty(&info).unwrap_or_default(),
+                is_error: false,
+            },
+            None => ToolResult {
+                output: format!("后台任务 {} 不存在", task_id),
+                is_error: true,
+            },
         }
     }
 }

@@ -482,7 +482,7 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 
 | 工具名 | 功能 | 需确认 |
 |--------|------|--------|
-| `Bash` | 执行 shell 命令 | ✅ |
+| `Bash` | 执行 shell 命令；`run_in_background: true` 时后台执行并返回 task_id | ✅ |
 | `Read` | 读取本地文件（支持行号范围） | |
 | `Write` | 写入文件（自动创建目录） | ✅ |
 | `Edit` | 编辑文件（精确字符串替换） | ✅ |
@@ -492,14 +492,10 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 | `WebFetch` | 获取网页内容并转为 Markdown/纯文本 | |
 | `WebSearch` | 使用 Exa Search API 搜索网络 | |
 | `Browser` | 浏览器自动化（CDP + Lite fallback） | |
-| `BackgroundRun` | 后台执行 shell 命令（不阻塞对话） | ✅ |
-| `CheckBackground` | 查询后台任务状态和结果 | |
+| `TaskOutput` | 查询后台任务输出（`Bash run_in_background` 产生的任务），支持阻塞等待 | |
 | `LoadSkill` | 加载指定技能到上下文 | |
 | `Compact` | 触发对话压缩以释放上下文窗口 | |
-| `TaskCreate` | 创建任务 | |
-| `TaskList` | 列出所有任务 | |
-| `TaskGet` | 获取任务详情 | |
-| `TaskUpdate` | 更新任务状态/依赖 | |
+| `Task` | 管理任务（create/get/list/update）；`action` 字段区分操作 | |
 | `RegisterHook` | 注册/管理 session 级 hook | ✅ |
 
 **`web_fetch` 工具参数**：

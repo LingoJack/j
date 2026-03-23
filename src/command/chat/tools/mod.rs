@@ -68,7 +68,9 @@ impl ToolRegistry {
         let mut registry = Self {
             todo_manager: Arc::clone(&todo_manager),
             tools: vec![
-                Box::new(shell::ShellTool),
+                Box::new(shell::ShellTool {
+                    manager: Arc::clone(&background_manager),
+                }),
                 Box::new(file::ReadFileTool),
                 Box::new(file::WriteFileTool),
                 Box::new(file::EditFileTool),
@@ -79,23 +81,11 @@ impl ToolRegistry {
                 Box::new(browser::BrowserTool),
                 Box::new(ask::AskTool { ask_tx }),
                 // 后台任务工具
-                Box::new(background::BackgroundRunTool {
-                    manager: Arc::clone(&background_manager),
-                }),
-                Box::new(background::CheckBackgroundTool {
+                Box::new(background::TaskOutputTool {
                     manager: Arc::clone(&background_manager),
                 }),
                 // 任务管理工具
-                Box::new(task::TaskCreateTool {
-                    manager: Arc::clone(&task_manager),
-                }),
-                Box::new(task::TaskUpdateTool {
-                    manager: Arc::clone(&task_manager),
-                }),
-                Box::new(task::TaskListTool {
-                    manager: Arc::clone(&task_manager),
-                }),
-                Box::new(task::TaskGetTool {
+                Box::new(task::TaskTool {
                     manager: Arc::clone(&task_manager),
                 }),
                 // Todo 工具
