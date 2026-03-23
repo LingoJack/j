@@ -212,7 +212,7 @@ fn json_schema_to_xml_params(schema: &Value) -> String {
             .and_then(|d| d.as_str())
             .unwrap_or("");
         let req = if required.contains(&name.as_str()) {
-            "，必填"
+            ", required"
         } else {
             ""
         };
