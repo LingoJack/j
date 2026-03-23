@@ -140,10 +140,11 @@ impl ToolRegistry {
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
         {
-            md.push_str(&format!("### {}\n\n", t.name()));
-            md.push_str(&format!("{}\n", t.description().trim()));
-            md.push_str(&json_schema_to_md_params(&t.parameters_schema()));
-            md.push('\n');
+            let name = t.name();
+            md.push_str(&format!("<{}>\n", name));
+            md.push_str(&format!("description:\n{}\n", t.description().trim()));
+            md.push_str(&json_schema_to_xml_params(&t.parameters_schema()));
+            md.push_str(&format!("<{}/>\n\n", name));
         }
         md.trim_end().to_string()
     }
@@ -189,7 +190,7 @@ pub fn expand_tilde(path: &str) -> String {
 }
 
 /// 将 JSON Schema 转为 Markdown 参数列表
-fn json_schema_to_md_params(schema: &Value) -> String {
+fn json_schema_to_xml_params(schema: &Value) -> String {
     let properties = match schema.get("properties").and_then(|p| p.as_object()) {
         Some(p) => p,
         None => return String::new(),
@@ -200,7 +201,7 @@ fn json_schema_to_md_params(schema: &Value) -> String {
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
         .unwrap_or_default();
 
-    let mut md = String::from("\n**参数：**\n\n");
+    let mut md = String::from("parameter schema:\n");
     for (name, prop) in properties {
         let type_str = prop
             .get("type")

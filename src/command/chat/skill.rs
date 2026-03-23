@@ -144,8 +144,10 @@ pub fn build_skills_summary(skills: &[Skill], disabled_skills: &[String]) -> Str
     }
     let mut md = String::new();
     for s in &filtered {
-        md.push_str(&format!("### {}\n\n", s.frontmatter.name));
-        md.push_str(&format!("{}\n\n", s.frontmatter.description));
+        md.push_str(&format!(
+            "- {}: {}\n",
+            s.frontmatter.name, s.frontmatter.description
+        ));
     }
     md.trim_end().to_string()
 }
