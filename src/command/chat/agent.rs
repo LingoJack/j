@@ -76,18 +76,23 @@ pub async fn run_agent_loop(
             }
         }
 
-        // TODO 后续这里可以做一下检测 task 的逻辑
-
-        // Nag reminder: 提醒模型更新 todo 进度
+        // 检查是否有待办事项
         todo_manager.increment_turn();
-        if todo_manager.has_todos() && todo_manager.turns_since_last_call() >= 3 {
+        if todo_manager.has_todos() && todo_manager.turns_since_last_call() >= 15 {
+            let todos_summary = todo_manager.format_todos_summary();
             messages.push(ChatMessage {
-                role: "user".to_string(),
-                content: "<system-reminder>You have an active todo list but haven't updated it in 3+ rounds. Please update your todo progress using TodoWrite.</system-reminder>".to_string(),
+                role: ROLE_TOOL.to_string(),
+                content: format!(
+                    "<system-reminder>It seems that you have an active todo list but haven't updated it in 15+ rounds. forget to update or ignore this reminder if you are processing the item work\n\nCurrent todo items:\n{}</system-reminder>",
+                    todos_summary
+                ),
                 tool_calls: None,
                 tool_call_id: None,
             });
-            write_info_log("TodoNagReminder", "Injected nag reminder for todo updates");
+            write_info_log(
+                "TodoNagReminder",
+                &format!("Injected nag reminder with todos:\n{}", todos_summary),
+            );
         }
 
         // 清空流式内容缓冲（每轮开始时）

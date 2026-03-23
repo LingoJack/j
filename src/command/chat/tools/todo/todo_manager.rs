@@ -103,6 +103,28 @@ impl TodoManager {
         !items.is_empty()
     }
 
+    /// 格式化当前 todos 为可读字符串（供 nag reminder 使用）
+    pub fn format_todos_summary(&self) -> String {
+        let items = safe_lock(&self.items, "TodoManager::format_todos_summary");
+        if items.is_empty() {
+            return "No active todos.".to_string();
+        }
+        let mut summary = String::new();
+        for item in items.iter() {
+            let icon = match item.status.as_str() {
+                "completed" => "✅",
+                "in_progress" => "🔄",
+                "cancelled" => "❌",
+                _ => "⬜",
+            };
+            summary.push_str(&format!(
+                "{} [{}] {}: {}\n",
+                icon, item.id, item.status, item.content
+            ));
+        }
+        summary.trim_end().to_string()
+    }
+
     /// 每轮 agent loop 调用，递增计数器
     pub fn increment_turn(&self) {
         self.turns_without_call.fetch_add(1, Ordering::Relaxed);

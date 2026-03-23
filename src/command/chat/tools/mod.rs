@@ -102,6 +102,9 @@ impl ToolRegistry {
                 Box::new(todo::TodoWriteTool {
                     manager: Arc::clone(&todo_manager),
                 }),
+                Box::new(todo::TodoReadTool {
+                    manager: Arc::clone(&todo_manager),
+                }),
                 // Context compact 工具
                 Box::new(compact::CompactTool),
                 // Hook 管理工具
