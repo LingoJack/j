@@ -1,5 +1,8 @@
 use super::api::create_openai_client;
 use super::storage::{ChatMessage, ModelProvider, agent_data_dir};
+use super::tools::skill::LoadSkillTool;
+use super::tools::task::{TaskCreateTool, TaskGetTool, TaskListTool, TaskUpdateTool};
+use super::tools::todo::{TodoReadTool, TodoWriteTool};
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{
@@ -88,11 +91,13 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     let mut compacted_count = 0;
     // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
     const EXEMPT_TOOLS: &[&str] = &[
-        "LoadSkill",
-        "TaskCreate",
-        "TaskUpdate",
-        "TodoWrite",
-        "TodoRead",
+        LoadSkillTool::NAME,
+        TaskCreateTool::NAME,
+        TaskUpdateTool::NAME,
+        TaskListTool::NAME,
+        TaskGetTool::NAME,
+        TodoWriteTool::NAME,
+        TodoReadTool::NAME,
     ];
 
     for &idx in to_compact {

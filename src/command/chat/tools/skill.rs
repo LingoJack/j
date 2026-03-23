@@ -9,9 +9,13 @@ pub struct LoadSkillTool {
     pub skills: Vec<Skill>,
 }
 
+impl LoadSkillTool {
+    pub const NAME: &'static str = "LoadSkill";
+}
+
 impl Tool for LoadSkillTool {
     fn name(&self) -> &str {
-        "LoadSkill"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

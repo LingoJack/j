@@ -7,9 +7,13 @@ pub struct TodoReadTool {
     pub manager: Arc<TodoManager>,
 }
 
+impl TodoReadTool {
+    pub const NAME: &'static str = "TodoRead";
+}
+
 impl Tool for TodoReadTool {
     fn name(&self) -> &str {
-        "TodoRead"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

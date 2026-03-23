@@ -7,9 +7,13 @@ pub struct TaskCreateTool {
     pub manager: Arc<TaskManager>,
 }
 
+impl TaskCreateTool {
+    pub const NAME: &'static str = "TaskCreate";
+}
+
 impl Tool for TaskCreateTool {
     fn name(&self) -> &str {
-        "TaskCreate"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

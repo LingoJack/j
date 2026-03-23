@@ -8,9 +8,13 @@ pub struct TaskListTool {
     pub manager: Arc<TaskManager>,
 }
 
+impl TaskListTool {
+    pub const NAME: &'static str = "TaskList";
+}
+
 impl Tool for TaskListTool {
     fn name(&self) -> &str {
-        "TaskList"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

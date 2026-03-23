@@ -8,9 +8,13 @@ pub struct TaskUpdateTool {
     pub manager: Arc<TaskManager>,
 }
 
+impl TaskUpdateTool {
+    pub const NAME: &'static str = "TaskUpdate";
+}
+
 impl Tool for TaskUpdateTool {
     fn name(&self) -> &str {
-        "TaskUpdate"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

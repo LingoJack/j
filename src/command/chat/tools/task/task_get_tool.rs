@@ -7,9 +7,13 @@ pub struct TaskGetTool {
     pub manager: Arc<TaskManager>,
 }
 
+impl TaskGetTool {
+    pub const NAME: &'static str = "TaskGet";
+}
+
 impl Tool for TaskGetTool {
     fn name(&self) -> &str {
-        "TaskGet"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

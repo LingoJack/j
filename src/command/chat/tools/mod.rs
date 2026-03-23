@@ -6,7 +6,7 @@ mod file;
 mod grep;
 pub mod hook;
 mod shell;
-mod skill;
+pub mod skill;
 pub mod task;
 pub mod todo;
 mod web_fetch;

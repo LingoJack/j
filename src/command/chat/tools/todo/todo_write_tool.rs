@@ -8,9 +8,13 @@ pub struct TodoWriteTool {
     pub manager: Arc<TodoManager>,
 }
 
+impl TodoWriteTool {
+    pub const NAME: &'static str = "TodoWrite";
+}
+
 impl Tool for TodoWriteTool {
     fn name(&self) -> &str {
-        "TodoWrite"
+        Self::NAME
     }
 
     fn description(&self) -> &str {
