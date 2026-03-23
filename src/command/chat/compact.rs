@@ -87,7 +87,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
     // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
-    const EXEMPT_TOOLS: &[&str] = &["LoadSkill"];
+    const EXEMPT_TOOLS: &[&str] = &["LoadSkill", "TaskCreate", "TaskUpdate"];
 
     for &idx in to_compact {
         let msg = &messages[idx];
@@ -118,11 +118,11 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
 
 /// 保存完整 transcript 到 .transcripts/ 目录
 fn save_transcript(messages: &[ChatMessage]) -> Option<String> {
-    let transcript_dir = agent_data_dir().join(".transcripts");
+    let transcript_dir = agent_data_dir().join("transcripts");
     if let Err(e) = fs::create_dir_all(&transcript_dir) {
         write_error_log(
             "save_transcript",
-            &format!("创建 .transcripts 目录失败: {}", e),
+            &format!("创建 transcripts 目录失败: {}", e),
         );
         return None;
     }
