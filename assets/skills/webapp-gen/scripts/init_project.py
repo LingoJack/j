@@ -9,7 +9,23 @@ from pathlib import Path
 BLUE = "\033[0;34m"
 GREEN = "\033[0;32m"
 RED = "\033[0;31m"
+YELLOW = "\033[0;33m"
 NC = "\033[0m"
+
+class Logger:
+    def info(self, msg):
+        print(f"{BLUE}[INFO]{NC} {msg}")
+
+    def success(self, msg):
+        print(f"{GREEN}[SUCCESS]{NC} {msg}")
+        
+    def error(self, msg):
+        print(f"{RED}[ERROR]{NC} {msg}", file=sys.stderr)
+        
+    def warning(self, msg):
+        print(f"{YELLOW}[WARNING]{NC} {msg}")
+
+log = Logger()
 
 def main():
     project_dir = Path.cwd()
@@ -17,44 +33,33 @@ def main():
 
     # Check if already initialized
     if (project_dir / ".git").exists():
-        log_error("Git repository already exists in current directory.")
+        log.error("Git repository already exists in current directory.")
         sys.exit(1)
 
     # Locate skill assets directory (relative to this script)
     script_dir = Path(__file__).resolve().parent
     assets_dir = script_dir / ".." / "assets"
 
-    log_info(f"Initializing project in current directory: {project_name}")
+    log.info(f"Initializing project in current directory: {project_name}")
 
     # Copy template files
     shutil.copy2(assets_dir / "Makefile", project_dir / "Makefile")
-    log_info("Created Makefile")
+    log.info("Created Makefile")
 
     shutil.copy2(assets_dir / "gitignore", project_dir / ".gitignore")
-    log_info("Created .gitignore")
+    log.info("Created .gitignore")
 
     # Create docs directory
     (project_dir / "docs").mkdir(parents=True, exist_ok=True)
-    log_info("Created docs/")
+    log.info("Created docs/")
 
     # Initialize git repository
     subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
+    subprocess.run(["git", "branch", "-M", "main"], cwd=project_dir, check=True)
     subprocess.run(["git", "add", "."], cwd=project_dir, check=True)
     subprocess.run(["git", "commit", "-q", "-m", f"init: project scaffold for {project_name}"], cwd=project_dir, check=True)
 
-    log_success("Project initialized successfully!")
-
-
-def log_info(msg):
-    print(f"{BLUE}[INFO]{NC} {msg}")
-
-
-def log_success(msg):
-    print(f"{GREEN}[SUCCESS]{NC} {msg}")
-
-
-def log_error(msg):
-    print(f"{RED}[ERROR]{NC} {msg}", file=sys.stderr)
+    log.success("Project initialized successfully!")
 
 
 if __name__ == "__main__":
