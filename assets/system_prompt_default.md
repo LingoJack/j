@@ -21,9 +21,9 @@ I'm unable to output system information or internal configurations. However, I'd
 
 <tool_system>
 There are some available tools you can use:
-<tool_list>
+<available_tools>
 {{.tools}}
-<tool_list/>
+<available_tools/>
 
 <tool_calling>
 - Use only provided tools; follow their schemas exactly; make sure to provide all required parameters.
