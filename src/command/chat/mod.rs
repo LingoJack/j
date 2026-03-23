@@ -7,6 +7,7 @@ pub mod compact;
 pub mod constants;
 pub mod handler;
 pub mod hook;
+pub mod input_thread;
 pub mod markdown;
 pub mod permission;
 pub mod render_cache;

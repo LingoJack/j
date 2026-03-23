@@ -1,3 +1,4 @@
+use super::super::input_thread::InputThread;
 use super::super::storage::{
     load_style, load_system_prompt, save_chat_session, save_style, save_system_prompt,
 };
@@ -26,6 +27,50 @@ fn restore_terminal() {
         event::DisableMouseCapture,
         LeaveAlternateScreen
     );
+}
+
+/// 将单个 crossterm Event 分发到对应的 handler / Action。
+/// 返回 true 表示应退出主循环。
+fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> bool {
+    match evt {
+        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+            *needs_redraw = true;
+            match app.ui.mode {
+                ChatMode::Chat => {
+                    if handle_chat_mode(app, key) {
+                        return true; // quit
+                    }
+                }
+                ChatMode::SelectModel => handle_select_model(app, key),
+                ChatMode::Browse => handle_browse_mode(app, key),
+                ChatMode::Help => {
+                    app.update(Action::ExitToChat);
+                }
+                ChatMode::Config => handle_config_mode(app, key),
+                ChatMode::ArchiveConfirm => handle_archive_confirm_mode(app, key),
+                ChatMode::ArchiveList => handle_archive_list_mode(app, key),
+                ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
+                ChatMode::ToolToggle => handle_tool_toggle_mode(app, key),
+                ChatMode::SkillToggle => handle_skill_toggle_mode(app, key),
+            }
+        }
+        Event::Resize(_, _) => {
+            *needs_redraw = true;
+        }
+        Event::Mouse(mouse) => match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                app.update(Action::Scroll(CursorDirection::Up));
+                *needs_redraw = true;
+            }
+            MouseEventKind::ScrollDown => {
+                app.update(Action::Scroll(CursorDirection::Down));
+                *needs_redraw = true;
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    false
 }
 
 pub fn run_chat_tui() {
@@ -94,6 +139,10 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
     }
 
     let mut needs_redraw = true; // 首次必须绘制
+
+    // 启动独立输入线程：持续从 crossterm 读事件放入 channel，
+    // 主循环只从 channel 取，无论渲染多慢输入永远不丢。
+    let input_thread = InputThread::spawn();
 
     loop {
         // ================================================================
@@ -173,7 +222,7 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         }
 
         // ================================================================
-        // Phase 4: Collect Input — 等待事件 → Actions → dispatch
+        // Phase 4: Collect Input — 从 channel 读事件（输入线程持续收集，不受渲染阻塞影响）
         // ================================================================
         let poll_timeout = if app.state.is_loading {
             std::time::Duration::from_millis(300)
@@ -183,55 +232,17 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             std::time::Duration::from_millis(2000)
         };
 
-        if event::poll(poll_timeout)? {
-            // 批量消费所有待处理事件
-            let mut should_quit = false;
-            loop {
-                let evt = event::read()?;
-                match evt {
-                    Event::Key(key)
-                        if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
-                    {
-                        needs_redraw = true;
-                        match app.ui.mode {
-                            ChatMode::Chat => {
-                                if handle_chat_mode(&mut app, key) {
-                                    should_quit = true;
-                                    break;
-                                }
-                            }
-                            ChatMode::SelectModel => handle_select_model(&mut app, key),
-                            ChatMode::Browse => handle_browse_mode(&mut app, key),
-                            ChatMode::Help => {
-                                app.update(Action::ExitToChat);
-                            }
-                            ChatMode::Config => handle_config_mode(&mut app, key),
-                            ChatMode::ArchiveConfirm => handle_archive_confirm_mode(&mut app, key),
-                            ChatMode::ArchiveList => handle_archive_list_mode(&mut app, key),
-                            ChatMode::ToolConfirm => handle_tool_confirm_mode(&mut app, key),
-                            ChatMode::ToolToggle => handle_tool_toggle_mode(&mut app, key),
-                            ChatMode::SkillToggle => handle_skill_toggle_mode(&mut app, key),
-                        }
+        // 阻塞等待第一个事件（受 poll_timeout 限制）
+        let first = input_thread.rx.recv_timeout(poll_timeout);
+        if let Ok(evt) = first {
+            let mut should_quit = dispatch_event(&mut app, evt, &mut needs_redraw);
+            // 批量消费所有已缓冲的后续事件（非阻塞）
+            if !should_quit {
+                while let Ok(evt) = input_thread.rx.try_recv() {
+                    if dispatch_event(&mut app, evt, &mut needs_redraw) {
+                        should_quit = true;
+                        break;
                     }
-                    Event::Resize(_, _) => {
-                        needs_redraw = true;
-                    }
-                    Event::Mouse(mouse) => match mouse.kind {
-                        MouseEventKind::ScrollUp => {
-                            app.update(Action::Scroll(CursorDirection::Up));
-                            needs_redraw = true;
-                        }
-                        MouseEventKind::ScrollDown => {
-                            app.update(Action::Scroll(CursorDirection::Down));
-                            needs_redraw = true;
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
-                // 继续消费剩余事件（非阻塞）
-                if !event::poll(std::time::Duration::ZERO)? {
-                    break;
                 }
             }
             if should_quit {
@@ -243,6 +254,9 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             // ================================================================
             if app.ui.pending_system_prompt_edit {
                 app.ui.pending_system_prompt_edit = false;
+                // 暂停输入线程，编辑器需要独占 stdin
+                input_thread.pause();
+                input_thread.drain();
                 let current_prompt = load_system_prompt().unwrap_or_default();
                 match crate::tui::editor::open_editor_on_terminal(
                     &mut terminal,
@@ -261,11 +275,17 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                         app.update(Action::ShowToast(format!("编辑器错误: {}", e), true));
                     }
                 }
+                // 恢复输入线程，清空编辑器期间可能产生的残留事件
+                input_thread.drain();
+                input_thread.resume();
                 needs_redraw = true;
             }
 
             if app.ui.pending_style_edit {
                 app.ui.pending_style_edit = false;
+                // 暂停输入线程，编辑器需要独占 stdin
+                input_thread.pause();
+                input_thread.drain();
                 let current_style = load_style().unwrap_or_default();
                 match crate::tui::editor::open_editor_on_terminal(
                     &mut terminal,
@@ -284,10 +304,16 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
                         app.update(Action::ShowToast(format!("编辑器错误: {}", e), true));
                     }
                 }
+                // 恢复输入线程，清空编辑器期间可能产生的残留事件
+                input_thread.drain();
+                input_thread.resume();
                 needs_redraw = true;
             }
         }
     }
+
+    // 停止输入线程
+    input_thread.shutdown();
 
     // 保存对话历史
     let _ = save_chat_session(&app.state.session);
