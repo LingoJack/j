@@ -16,7 +16,7 @@ pub struct TaskManager {
 impl TaskManager {
     pub fn new() -> Self {
         let data_dir = crate::config::YamlConfig::data_dir();
-        let tasks_dir = data_dir.join("agent").join("tasks");
+        let tasks_dir = data_dir.join("agent").join("data").join("tasks");
         let _ = fs::create_dir_all(&tasks_dir);
         Self {
             tasks_dir,
