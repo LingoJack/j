@@ -87,7 +87,13 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
     let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
     // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
-    const EXEMPT_TOOLS: &[&str] = &["LoadSkill", "TaskCreate", "TaskUpdate"];
+    const EXEMPT_TOOLS: &[&str] = &[
+        "LoadSkill",
+        "TaskCreate",
+        "TaskUpdate",
+        "TodoWrite",
+        "TodoRead",
+    ];
 
     for &idx in to_compact {
         let msg = &messages[idx];
