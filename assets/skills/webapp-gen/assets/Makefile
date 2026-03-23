@@ -60,5 +60,12 @@ init-frontend: ## 初始化前端 React+TS+Tailwind (用法: make init-frontend)
 check-frontend:
 	@cd frontend && npm install -y && (npm run build || exit 1)
 
-dev-frontend: check-frontend
+run-frontend: check-frontend
 	@cd frontend && npm run dev
+
+init-backend: current_dir ## 初始化后端 Go+Gin (用法: make init-backend)
+	@mkdir -p backend
+	@echo "创建 go 后台..."
+	@cd backend && go mod init main
+	@echo "后端初始化完成: backend/"
+
