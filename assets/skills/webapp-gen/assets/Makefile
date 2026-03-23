@@ -21,18 +21,14 @@ pull: ## 从 main 拉取最新代码
 # ============================================
 # 前端
 # ============================================
-init-frontend: ## 初始化前端 React+TS+Tailwind (用法: make init-frontend APP=myapp)
-ifndef APP
-	@echo "用法: make init-frontend APP=myapp"
-	@exit 1
-endif
+init-frontend: ## 初始化前端 React+TS+Tailwind (用法: make init-frontend)
 	@mkdir -p frontend
 	@echo "创建 Vite + React + TypeScript 项目..."
-	@cd frontend && (echo "" | npx -y create-vite@latest $(APP) --template react-ts)
+	@cd frontend && (echo "" | npx -y create-vite@latest . --template react-ts)
 	@echo "安装依赖..."
-	@cd frontend/$(APP) && npm install --prefer-offline
+	@cd frontend && npm install --prefer-offline
 	@echo "安装 Tailwind CSS v4..."
-	@cd frontend/$(APP) && npm install -D tailwindcss @tailwindcss/vite
+	@cd frontend && npm install -D tailwindcss @tailwindcss/vite
 	@echo "配置 vite.config.ts..."
 	@printf '%s\n' \
 		'import { defineConfig } from "vite"' \
@@ -44,10 +40,10 @@ endif
 		'    react(),' \
 		'    tailwindcss(),' \
 		'  ],' \
-		'})' > frontend/$(APP)/vite.config.ts
+		'})' > frontend/vite.config.ts
 	@echo "配置 index.css..."
-	@echo '@import "tailwindcss";' > frontend/$(APP)/src/index.css
-	@rm -f frontend/$(APP)/src/App.css
+	@echo '@import "tailwindcss";' > frontend/src/index.css
+	@rm -f frontend/src/App.css
 	@echo "配置 App.tsx..."
 	@printf '%s\n' \
 		'function App() {' \
@@ -58,8 +54,8 @@ endif
 		'  )' \
 		'}' \
 		'' \
-		'export default App' > frontend/$(APP)/src/App.tsx
-	@echo "前端初始化完成: frontend/$(APP)"
+		'export default App' > frontend/src/App.tsx
+	@echo "前端初始化完成: frontend/"
 
 check-frontend:
 	@cd frontend && npm install -y && (npm run build || exit 1)
