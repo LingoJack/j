@@ -12,6 +12,8 @@ pub(super) struct BgTask {
     pub task_id: String,
     pub command: String,
     pub status: String, // "running" | "completed" | "error" | "timeout"
+    /// 共享输出缓冲区，reader 线程实时写入，查询时可直接读取中间输出
+    pub output_buffer: Arc<Mutex<String>>,
     pub result: Option<String>,
     #[allow(dead_code)]
     pub started_at: Instant,
@@ -54,13 +56,21 @@ impl BackgroundManager {
     }
 
     /// 注册后台命令为 running 状态，返回 task_id（实际 spawn 在调用方完成）
-    pub fn spawn_command(&self, command: &str, cwd: Option<String>, _timeout_secs: u64) -> String {
+    /// 返回 task_id 和共享输出缓冲区的 Arc，调用方将 buffer 传给 reader 线程实现实时写入
+    pub fn spawn_command(
+        &self,
+        command: &str,
+        cwd: Option<String>,
+        _timeout_secs: u64,
+    ) -> (String, Arc<Mutex<String>>) {
         let task_id = self.gen_id();
+        let output_buffer = Arc::new(Mutex::new(String::new()));
 
         let bg_task = BgTask {
             task_id: task_id.clone(),
             command: command.to_string(),
             status: "running".to_string(),
+            output_buffer: Arc::clone(&output_buffer),
             result: None,
             started_at: Instant::now(),
             cwd,
@@ -71,7 +81,7 @@ impl BackgroundManager {
             tasks.insert(task_id.clone(), bg_task);
         }
 
-        task_id
+        (task_id, output_buffer)
     }
 
     /// 内部方法：标记任务完成并添加通知
@@ -107,15 +117,24 @@ impl BackgroundManager {
         std::mem::take(&mut *notifs)
     }
 
-    /// 查询单个后台任务状态
+    /// 查询单个后台任务状态（包括中间输出）
     pub fn get_task_status(&self, task_id: &str) -> Option<Value> {
         let tasks = safe_lock(&self.tasks, "BackgroundManager::get_task_status");
         tasks.get(task_id).map(|t| {
+            // 优先从 output_buffer 读取（包含实时中间输出），回退到 result（最终结果）
+            let output = {
+                let buf = safe_lock(&t.output_buffer, "BgTask::output_buffer");
+                if buf.is_empty() {
+                    t.result.clone()
+                } else {
+                    Some(buf.clone())
+                }
+            };
             json!({
                 "task_id": t.task_id,
                 "command": t.command,
                 "status": t.status,
-                "output": t.result,
+                "output": output,
             })
         })
     }

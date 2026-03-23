@@ -2,6 +2,7 @@ use super::ToolResult;
 use super::background::BackgroundManager;
 use crate::command::chat::tools::{Tool, is_dangerous_command};
 use serde_json::{Value, json};
+use std::io::BufRead;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -275,9 +276,9 @@ impl ShellTool {
         cwd: Option<String>,
         timeout_secs: u64,
     ) -> ToolResult {
-        let task_id = self
-            .manager
-            .spawn_command(&command, cwd.clone(), timeout_secs);
+        let (task_id, output_buffer) =
+            self.manager
+                .spawn_command(&command, cwd.clone(), timeout_secs);
         let manager = Arc::clone(&self.manager);
         let tid = task_id.clone();
         let cmd = command.clone();
@@ -300,28 +301,45 @@ impl ShellTool {
             let mut child = match child_cmd.spawn() {
                 Ok(c) => c,
                 Err(e) => {
+                    let mut buf = output_buffer.lock().unwrap();
+                    *buf = format!("启动失败: {}", e);
+                    drop(buf);
                     manager.complete_task(&tid, "error", format!("启动失败: {}", e));
                     return;
                 }
             };
 
-            // 独立 reader 线程防死锁
+            // 独立 reader 线程防死锁，逐行读取并实时写入共享 buffer
             let stdout_handle = child.stdout.take();
             let stderr_handle = child.stderr.take();
+            let stdout_buf = Arc::clone(&output_buffer);
+            let stderr_buf = Arc::clone(&output_buffer);
 
             let stdout_thread = std::thread::spawn(move || {
-                stdout_handle.map(|mut r| {
-                    let mut buf = Vec::new();
-                    std::io::Read::read_to_end(&mut r, &mut buf).ok();
-                    buf
-                })
+                if let Some(r) = stdout_handle {
+                    let reader = std::io::BufReader::new(r);
+                    for line in reader.lines() {
+                        if let Ok(line) = line {
+                            if let Ok(mut buf) = stdout_buf.lock() {
+                                buf.push_str(&line);
+                                buf.push('\n');
+                            }
+                        }
+                    }
+                }
             });
             let stderr_thread = std::thread::spawn(move || {
-                stderr_handle.map(|mut r| {
-                    let mut buf = Vec::new();
-                    std::io::Read::read_to_end(&mut r, &mut buf).ok();
-                    buf
-                })
+                if let Some(r) = stderr_handle {
+                    let reader = std::io::BufReader::new(r);
+                    for line in reader.lines() {
+                        if let Ok(line) = line {
+                            if let Ok(mut buf) = stderr_buf.lock() {
+                                buf.push_str(&line);
+                                buf.push('\n');
+                            }
+                        }
+                    }
+                }
             });
 
             let start = Instant::now();
@@ -332,15 +350,16 @@ impl ShellTool {
                     let _ = child.kill();
                     let _ = child.wait();
 
-                    let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
-                    let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
-                    let partial = build_output(&stdout_bytes, &stderr_bytes);
+                    // 等待 reader 线程结束，确保 buffer 已写入完整
+                    let _ = stdout_thread.join();
+                    let _ = stderr_thread.join();
 
+                    let output = output_buffer.lock().unwrap().clone();
                     let timeout_msg = format!("[超时] 命令执行超过 {}s 已自动终止。", timeout_secs);
-                    let result = if partial.is_empty() {
+                    let result = if output.is_empty() {
                         timeout_msg
                     } else {
-                        format!("{}\n{}", partial, timeout_msg)
+                        format!("{}\n{}", output, timeout_msg)
                     };
                     manager.complete_task(&tid, "timeout", result);
                     return;
@@ -350,19 +369,24 @@ impl ShellTool {
                     Ok(Some(status)) => break status,
                     Ok(None) => std::thread::sleep(Duration::from_millis(50)),
                     Err(e) => {
+                        let mut buf = output_buffer.lock().unwrap();
+                        *buf = format!("等待进程失败: {}", e);
+                        drop(buf);
                         manager.complete_task(&tid, "error", format!("等待进程失败: {}", e));
                         return;
                     }
                 }
             };
 
-            let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
-            let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
-            let result = build_output(&stdout_bytes, &stderr_bytes);
-            let result = if result.is_empty() {
+            // 等待 reader 线程结束，确保 buffer 已写入完整
+            let _ = stdout_thread.join();
+            let _ = stderr_thread.join();
+
+            let output = output_buffer.lock().unwrap().clone();
+            let result = if output.is_empty() {
                 "(无输出)".to_string()
             } else {
-                result
+                output
             };
 
             let status_str = if final_status.success() {
