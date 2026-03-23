@@ -53,7 +53,6 @@ impl TaskManager {
         title: &str,
         description: &str,
         blocked_by: Vec<u64>,
-        blocks: Vec<u64>,
         task_doc_paths: Vec<String>,
     ) -> Result<AgentTask, String> {
         let _lock = safe_lock(&self.write_lock, "TaskManager::create_task");
@@ -64,21 +63,10 @@ impl TaskManager {
             description: description.to_string(),
             status: "pending".to_string(),
             blocked_by,
-            blocks: blocks.clone(),
             owner: String::new(),
             task_doc_paths,
         };
         self.save_task(&task)?;
-
-        // Update target tasks' blocked_by (bidirectional)
-        for dep_id in &blocks {
-            if let Ok(mut target) = self.get_task(*dep_id) {
-                if !target.blocked_by.contains(&task_id) {
-                    target.blocked_by.push(task_id);
-                    let _ = self.save_task(&target);
-                }
-            }
-        }
 
         Ok(task)
     }
@@ -164,22 +152,6 @@ impl TaskManager {
                 }
             }
         }
-        if let Some(add_blocks) = updates.get("addBlocks").and_then(|v| v.as_array()) {
-            for id_val in add_blocks {
-                if let Some(dep_id) = id_val.as_u64() {
-                    if !task.blocks.contains(&dep_id) {
-                        task.blocks.push(dep_id);
-                    }
-                    // 同时更新目标任务的 blocked_by
-                    if let Ok(mut target) = self.get_task(dep_id) {
-                        if !target.blocked_by.contains(&id) {
-                            target.blocked_by.push(id);
-                            let _ = self.save_task(&target);
-                        }
-                    }
-                }
-            }
-        }
 
         self.save_task(&task)?;
         Ok(task)
@@ -198,10 +170,6 @@ impl TaskManager {
         for mut task in tasks {
             if task.blocked_by.contains(&completed_id) {
                 task.blocked_by.retain(|&id| id != completed_id);
-                let _ = self.save_task(&task);
-            }
-            if task.blocks.contains(&completed_id) {
-                task.blocks.retain(|&id| id != completed_id);
                 let _ = self.save_task(&task);
             }
         }

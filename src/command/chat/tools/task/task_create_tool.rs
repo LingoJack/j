@@ -59,12 +59,7 @@ impl Tool for TaskCreateTool {
                 "blockedBy": {
                     "type": "array",
                     "items": { "type": "integer" },
-                    "description": "List of task IDs that must complete before this task can start"
-                },
-                "blocks": {
-                    "type": "array",
-                    "items": { "type": "integer" },
-                    "description": "List of task IDs that this task blocks (cannot start until this task completes)"
+                    "description": "List of task IDs that must complete before this task can start，note that dependencies are bidirectional and transitive, so you only need to specify direct dependencies"
                 }
             },
             "required": ["title"]
@@ -102,12 +97,6 @@ impl Tool for TaskCreateTool {
             .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
             .unwrap_or_default();
 
-        let blocks: Vec<u64> = parsed
-            .get("blocks")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
-            .unwrap_or_default();
-
         let task_doc_paths: Vec<String> = parsed
             .get("taskDocPaths")
             .and_then(|v| v.as_array())
@@ -120,7 +109,7 @@ impl Tool for TaskCreateTool {
 
         match self
             .manager
-            .create_task(title, description, blocked_by, blocks, task_doc_paths)
+            .create_task(title, description, blocked_by, task_doc_paths)
         {
             Ok(task) => ToolResult {
                 output: serde_json::to_string_pretty(&task).unwrap_or_default(),

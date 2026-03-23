@@ -50,11 +50,6 @@ impl Tool for TaskUpdateTool {
                     "type": "array",
                     "items": { "type": "integer" },
                     "description": "Task IDs to add as blockers of the current task"
-                },
-                "addBlocks": {
-                    "type": "array",
-                    "items": { "type": "integer" },
-                    "description": "Task IDs that the current task blocks (bidirectional: also updates target tasks' blockedBy)"
                 }
             },
             "required": ["taskId"]
@@ -93,7 +88,7 @@ impl Tool for TaskUpdateTool {
                 if status == "completed" {
                     ToolResult {
                         output: format!(
-                            "Update task successfully. Following tasks are ready to run: \n\n{}",
+                            "Update task successfully. Following tasks are ready: \n\n{}",
                             serde_json::to_string_pretty(&self.manager.list_ready_tasks())
                                 .unwrap_or_default()
                         ),
