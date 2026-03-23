@@ -541,6 +541,13 @@ impl ToolExecutor {
         self.execute_current(registry)
     }
 
+    /// 是否还有待确认的工具
+    pub fn has_pending_confirm(&self) -> bool {
+        self.active_tool_calls
+            .iter()
+            .any(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
+    }
+
     /// 推进到下一个待确认工具，或返回 Some(ChatMode::Chat) 退出确认模式
     pub fn advance(&mut self) -> Option<ChatMode> {
         let next = self
@@ -1437,7 +1444,10 @@ impl ChatApp {
                 self.ui.tool_ask_answers.clear();
                 self.ui.tool_ask_selections.clear();
                 self.ui.tool_ask_cursor = 0;
-                self.ui.mode = ChatMode::Chat;
+                // 如果还有待确认的工具，保持 ToolConfirm 模式
+                if !self.tool_executor.has_pending_confirm() {
+                    self.ui.mode = ChatMode::Chat;
+                }
             }
 
             // ========== 工具交互区 ==========
@@ -2639,7 +2649,10 @@ impl ChatApp {
             self.ui.tool_ask_answers.clear();
             self.ui.tool_ask_selections.clear();
             self.ui.tool_ask_cursor = 0;
-            self.ui.mode = ChatMode::Chat;
+            // 如果还有待确认的工具，保持 ToolConfirm 模式
+            if !self.tool_executor.has_pending_confirm() {
+                self.ui.mode = ChatMode::Chat;
+            }
         }
     }
 
