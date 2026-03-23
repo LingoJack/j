@@ -47,7 +47,7 @@ make init-frontend APP=<app_name>
 make check-frontend
 ```
 
-若检查通过，使用 `BackgroundRun` 运行 `make dev-frontend` 启动开发服务器
+若检查通过，使用 `Bash` 后台运行 `make dev-frontend` 启动开发服务器
 
 用 `Ask` 询问改进意见并按照用户要求优化，直到用户确认该原型满足要求
 
