@@ -4,6 +4,7 @@ use super::compact::{self, CompactConfig};
 use super::hook::{HookContext, HookEvent, HookManager};
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
+use super::tools::todo::TodoManager;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
@@ -31,6 +32,7 @@ pub async fn run_agent_loop(
     background_manager: Arc<BackgroundManager>,
     compact_config: CompactConfig,
     hook_manager: HookManager,
+    todo_manager: Arc<TodoManager>,
 ) {
     let client = create_openai_client(&provider);
 
@@ -75,6 +77,18 @@ pub async fn run_agent_loop(
         }
 
         // TODO 后续这里可以做一下检测 task 的逻辑
+
+        // Nag reminder: 提醒模型更新 todo 进度
+        todo_manager.increment_turn();
+        if todo_manager.has_todos() && todo_manager.turns_since_last_call() >= 3 {
+            messages.push(ChatMessage {
+                role: "user".to_string(),
+                content: "<system-reminder>You have an active todo list but haven't updated it in 3+ rounds. Please update your todo progress using TodoWrite.</system-reminder>".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+            });
+            write_info_log("TodoNagReminder", "Injected nag reminder for todo updates");
+        }
 
         // 清空流式内容缓冲（每轮开始时）
         {

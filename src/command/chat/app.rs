@@ -620,6 +620,7 @@ impl AgentHandle {
         background_manager: Arc<BackgroundManager>,
         compact_config: CompactConfig,
         hook_manager: super::hook::HookManager,
+        todo_manager: Arc<super::tools::todo::TodoManager>,
     ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
         let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
         let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
@@ -659,6 +660,7 @@ impl AgentHandle {
                     background_manager,
                     compact_config,
                     hook_manager,
+                    todo_manager,
                 ));
             }));
 
@@ -728,6 +730,8 @@ pub struct ChatApp {
     pub jcli_config: Arc<JcliConfig>,
     /// 后台任务管理器
     pub background_manager: Arc<BackgroundManager>,
+    /// Todo 管理器
+    pub todo_manager: Arc<super::tools::todo::TodoManager>,
     /// ask 工具响应发送通道
     pub ask_response_tx: Option<mpsc::Sender<String>>,
     /// ask 工具请求接收通道
@@ -1074,13 +1078,15 @@ impl ChatApp {
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(super::tools::task::TaskManager::new());
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
-        let tool_registry = Arc::new(ToolRegistry::new(
+        let tool_registry = ToolRegistry::new(
             loaded_skills.clone(),
             ask_req_tx,
             Arc::clone(&background_manager),
             Arc::clone(&task_manager),
             Arc::clone(&hook_manager),
-        ));
+        );
+        let todo_manager = Arc::clone(&tool_registry.todo_manager);
+        let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
 
         let new_app = Self {
@@ -1149,6 +1155,7 @@ impl ChatApp {
             tool_registry,
             jcli_config,
             background_manager,
+            todo_manager,
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
             hook_manager: Arc::clone(&hook_manager),
@@ -2325,6 +2332,8 @@ impl ChatApp {
             Err(_) => HookManager::default(),
         };
 
+        let todo_manager = Arc::clone(&self.todo_manager);
+
         // 启动 agent handle
         let (handle, tool_result_tx) = AgentHandle::spawn(
             provider,
@@ -2338,6 +2347,7 @@ impl ChatApp {
             background_manager,
             compact_config,
             hook_manager_clone,
+            todo_manager,
         );
 
         self.agent = Some(handle);

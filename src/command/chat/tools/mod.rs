@@ -8,6 +8,7 @@ pub mod hook;
 mod shell;
 mod skill;
 pub mod task;
+pub mod todo;
 mod web_fetch;
 mod web_search;
 
@@ -49,6 +50,8 @@ pub trait Tool: Send + Sync {
 /// 工具注册表
 pub struct ToolRegistry {
     tools: Vec<Box<dyn Tool>>,
+    /// Todo 管理器（供外部获取以传入 agent loop）
+    pub todo_manager: Arc<todo::TodoManager>,
 }
 
 impl ToolRegistry {
@@ -60,7 +63,10 @@ impl ToolRegistry {
         task_manager: Arc<task::TaskManager>,
         hook_manager: Arc<Mutex<crate::command::chat::hook::HookManager>>,
     ) -> Self {
+        let todo_manager = Arc::new(todo::TodoManager::new());
+
         let mut registry = Self {
+            todo_manager: Arc::clone(&todo_manager),
             tools: vec![
                 Box::new(shell::ShellTool),
                 Box::new(file::ReadFileTool),
@@ -91,6 +97,10 @@ impl ToolRegistry {
                 }),
                 Box::new(task::TaskGetTool {
                     manager: Arc::clone(&task_manager),
+                }),
+                // Todo 工具
+                Box::new(todo::TodoWriteTool {
+                    manager: Arc::clone(&todo_manager),
                 }),
                 // Context compact 工具
                 Box::new(compact::CompactTool),
