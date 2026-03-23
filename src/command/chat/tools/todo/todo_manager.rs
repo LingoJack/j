@@ -16,7 +16,7 @@ pub struct TodoManager {
 impl TodoManager {
     pub fn new() -> Self {
         let data_dir = crate::config::YamlConfig::data_dir();
-        let file_path = data_dir.join("agent").join("todos.json");
+        let file_path = data_dir.join("agent").join("data").join("todos.json");
         let _ = fs::create_dir_all(file_path.parent().unwrap());
 
         // 从磁盘加载已有数据
