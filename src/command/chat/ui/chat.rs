@@ -236,11 +236,18 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .last()
         .map(|m| m.content.len())
         .unwrap_or(0);
-    let streaming_len = safe_lock(
-        &app.state.streaming_content,
-        "draw_messages::streaming_content",
-    )
-    .len();
+    let streaming_len = if app.state.is_loading {
+        // 复用 tui_loop 中已获取的快照长度，避免重复加锁
+        // 如果 tui_loop 确定需要重绘（因为 delta 变化），此时 last_rendered_streaming_len 已经是上次值
+        // 用一次轻量锁获取（此时 agent 线程可能已经写入更多）
+        safe_lock(
+            &app.state.streaming_content,
+            "draw_messages::streaming_content",
+        )
+        .len()
+    } else {
+        0
+    };
     let current_browse_index = if app.ui.mode == ChatMode::Browse {
         Some(app.ui.browse_msg_index)
     } else {

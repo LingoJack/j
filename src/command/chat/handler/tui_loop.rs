@@ -135,24 +135,27 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
             }
         }
 
-        // 流式加载中的节流策略
-        if app.state.is_loading {
-            let current_len =
-                safe_lock(&app.state.streaming_content, "tui_loop::streaming_throttle").len();
-            let bytes_delta = current_len.saturating_sub(app.ui.last_rendered_streaming_len);
+        // 流式加载中的节流策略（只锁一次获取长度，避免多次 safe_lock）
+        let streaming_snapshot_len: usize = if app.state.is_loading {
+            let len = safe_lock(&app.state.streaming_content, "tui_loop::streaming_throttle").len();
+            let bytes_delta = len.saturating_sub(app.ui.last_rendered_streaming_len);
             let time_elapsed = app.ui.last_stream_render_time.elapsed();
             if bytes_delta >= 200
                 || time_elapsed >= std::time::Duration::from_millis(150)
-                || current_len == 0
+                || len == 0
             {
                 needs_redraw = true;
             }
-        } else if was_loading {
-            needs_redraw = true;
-        }
+            len
+        } else {
+            if was_loading {
+                needs_redraw = true;
+            }
+            0
+        };
 
-        // ToolConfirm 模式下强制重绘
-        if app.ui.mode == ChatMode::ToolConfirm {
+        // ToolConfirm 模式下：仅在有倒计时时才周期性重绘（用于更新秒数显示）
+        if app.ui.mode == ChatMode::ToolConfirm && app.state.agent_config.tool_confirm_timeout > 0 {
             needs_redraw = true;
         }
 
@@ -162,13 +165,9 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         if needs_redraw {
             terminal.draw(|f| draw_chat_ui(f, &mut app))?;
             needs_redraw = false;
-            // 更新流式节流状态
+            // 更新流式节流状态（复用 Phase 2 已获取的长度，不再重新加锁）
             if app.state.is_loading {
-                app.ui.last_rendered_streaming_len = safe_lock(
-                    &app.state.streaming_content,
-                    "tui_loop::rendered_streaming_len",
-                )
-                .len();
+                app.ui.last_rendered_streaming_len = streaming_snapshot_len;
                 app.ui.last_stream_render_time = std::time::Instant::now();
             }
         }
