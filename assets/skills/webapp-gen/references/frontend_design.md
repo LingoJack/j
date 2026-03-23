@@ -1,4 +1,4 @@
-# 前端设计指导文档
+# 原型设计阶段
 
 ## 技术栈
 前端技术栈
@@ -7,12 +7,12 @@
 - tailwindcss (v4)
 使用 `make init-frontend APP=<app_name>` 自动创建项目脚手架，并安装依赖
 
-
 ## 流程要求
 阅读需求文档 `docs/requirement.md` 内容，严格按照以下步骤开发：
 
-### 计划阶段
 
+使用 `TodoWrite` 跟踪以下待办依次执行：
+### 计划阶段
 编写 `docs/frontend_design.md` 首先思考计划清楚以下内容
 - 确定项目结构
 - 列出页面组件

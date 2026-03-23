@@ -14,9 +14,26 @@ impl Tool for TaskCreateTool {
 
     fn description(&self) -> &str {
         r#"
-        Create a new task to break down complex requirements into smaller, trackable units of work.
-        Supports optional dependency parameters to define task ordering at creation time.
-        Note that the task should be self-contained and actionable based on the provided title and description and task documents given, as it will be assigned to an agent for execution.
+        Create a self-contained task.
+        The task should be actionable based on the provided title and description and task documents given,
+        as it will be assigned to an agent for execution.
+
+        Do NOT use the Task tool for very small (Instead, use TodoWrite), single-step operations such as:
+        - Reading one known file path
+        - Searching for a single class/function definition in a known file
+        - Finding a simple, localized match in one or two files
+        - Tasks that can be completed with a single read_file or search_file call
+
+        Use the Task tool for tasks that require multiple steps, such as:
+        When you break down a complex task into multiple sub-tasks, use TaskCreate for each sub-task, and use the blockedBy/blocks fields to specify dependencies between them. 
+        - requirements analysis
+        - design
+        - implementation
+
+        Usage notes:
+        - Launch multiple agents concurrently when beneficial by issuing several Task tool calls in one message.
+        - Each agent invocation is stateless, so your prompt should clearly describe the task the subagent needs to accomplish, but should not expand the request into unnecessary details or steps.
+        - The agent will return one final message; summarize the result for the user as needed.
         "#
     }
 

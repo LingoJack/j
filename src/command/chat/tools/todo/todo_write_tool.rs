@@ -15,14 +15,13 @@ impl Tool for TodoWriteTool {
 
     fn description(&self) -> &str {
         r#"
-        Create or update a structured todo list to track progress and maintain direction.
-        Use merge=false to replace the entire list (initial creation), merge=true to update specific items.
-        Only one item can be in_progress at a time — this is enforced automatically.
-
-        Status values: pending, in_progress, completed, cancelled.
-
-        When updating status, use merge=true and only include the items being changed.
-        Batch updates are supported: e.g., mark one item completed and another in_progress in one call.
+        Create and manage a structured todo list to maintain state across long turns.
+    
+        CRITICAL RULES:
+        1. Only ONE item can be 'in_progress' at any time; the system enforces this automatically.
+        2. For updates, always use 'merge=true' and only provide the specific items being modified.
+        3. Support batch updates: efficiently transition states by marking a task 'completed' and the next 'in_progress' in a single call.
+        4. Use this to demonstrate progress and ensure complex requirements are not missed.
         "#
     }
 
