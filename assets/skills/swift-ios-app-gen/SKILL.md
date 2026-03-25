@@ -15,3 +15,9 @@ iOS App 项目结构约定：
 ```bash
 xcodebuild -scheme YourProjectName -sdk iphonesimulator build
 ```
+
+
+查看有哪些可用的设备
+```bash
+xcrun simctl list devices available
+```
