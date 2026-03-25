@@ -274,7 +274,16 @@ pub fn write_to_report(content: &str, config: &mut YamlConfig) -> bool {
             }
         }
         None => {
-            return false;
+            // 首次使用或 last_day 为空，自动初始化当前周（静默）
+            let next_last_day = now + chrono::Duration::days(6);
+            let new_week_title = format!(
+                "# Week{}[{}-{}]\n",
+                week_num,
+                now.format(DATE_FORMAT),
+                next_last_day.format(DATE_FORMAT)
+            );
+            update_config_files_silent(week_num + 1, &next_last_day, &config_path, config);
+            append_to_file(report_file, &new_week_title);
         }
     }
 
@@ -311,18 +320,21 @@ fn update_config_files_silent(
     config.set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string());
     config.set_property(section::REPORT, config_key::LAST_DAY, &last_day_str);
 
-    if config_path.exists() {
-        let json = serde_json::json!({
-            "week_num": week_num,
-            "last_day": last_day_str
-        });
-        let _ = fs::write(config_path, json.to_string());
-    }
+    let json = serde_json::json!({
+        "week_num": week_num,
+        "last_day": last_day_str
+    });
+    let _ = fs::write(config_path, json.to_string());
 }
 
 /// 静默从 JSON 配置文件读取并同步到 YAML，不输出 info
+/// 如果文件不存在，自动以当前周信息初始化
 fn load_config_from_json_silent(config_path: &Path, config: &mut YamlConfig) {
     if !config_path.exists() {
+        // 首次使用，自动初始化 settings.json（静默）
+        let now = Local::now().date_naive();
+        let last_day = now + chrono::Duration::days(6);
+        update_config_files_silent(1, &last_day, config_path, config);
         return;
     }
 
@@ -382,8 +394,17 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
             }
         }
         None => {
-            error!("✖️ 无法解析 last_day 日期: {}", last_day_str);
-            return;
+            // 首次使用或 last_day 为空，自动初始化当前周
+            let next_last_day = now + chrono::Duration::days(6);
+            let new_week_title = format!(
+                "# Week{}[{}-{}]\n",
+                week_num,
+                now.format(DATE_FORMAT),
+                next_last_day.format(DATE_FORMAT)
+            );
+            update_config_files(week_num + 1, &next_last_day, &config_path, config);
+            append_to_file(report_file, &new_week_title);
+            info!("📄 已自动初始化第一周");
         }
     }
 
@@ -485,26 +506,32 @@ fn update_config_files(
         week_num, last_day_str
     );
 
-    // 更新 JSON 配置
-    if config_path.exists() {
-        let json = serde_json::json!({
-            "week_num": week_num,
-            "last_day": last_day_str
-        });
-        match fs::write(config_path, json.to_string()) {
-            Ok(_) => info!(
-                "☑️ 更新JSON配置文件成功：周数 = {}, 周结束日期 = {}",
-                week_num, last_day_str
-            ),
-            Err(e) => error!("✖️ 更新JSON配置文件时出错: {}", e),
-        }
+    // 更新 JSON 配置（始终写入，首次运行时自动创建）
+    let json = serde_json::json!({
+        "week_num": week_num,
+        "last_day": last_day_str
+    });
+    match fs::write(config_path, json.to_string()) {
+        Ok(_) => info!(
+            "☑️ 更新JSON配置文件成功：周数 = {}, 周结束日期 = {}",
+            week_num, last_day_str
+        ),
+        Err(e) => error!("✖️ 更新JSON配置文件时出错: {}", e),
     }
 }
 
 /// 从 JSON 配置文件读取并同步到 YAML
+/// 如果文件不存在，自动以当前周信息初始化
 fn load_config_from_json_and_sync(config_path: &Path, config: &mut YamlConfig) {
     if !config_path.exists() {
-        error!("✖️ 日报配置文件不存在：{:?}", config_path);
+        // 首次使用，自动初始化 settings.json
+        let now = Local::now().date_naive();
+        let last_day = now + chrono::Duration::days(6);
+        info!(
+            "📄 日报配置文件不存在，自动初始化：week_num = 1, last_day = {}",
+            last_day.format(DATE_FORMAT)
+        );
+        update_config_files(1, &last_day, config_path, config);
         return;
     }
 
