@@ -27,3 +27,7 @@ skills assets(scripts, references, assets file and etc.) locates at `{{.skill_di
 you use tool <LoadSkill> to load following skills into context to use: 
 {{.skills}}
 <skill_system/>
+
+<response_language>
+请使用中文回复
+<response_language/>
