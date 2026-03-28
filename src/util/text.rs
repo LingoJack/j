@@ -49,7 +49,7 @@ pub fn strip_ansi_codes(s: &str) -> String {
         // OSC 序列: ESC]...BEL 或 ESC]...ST
         // 其他 ESC 序列: ESC + 单字节
         Regex::new(r"\x1b\[[\x20-\x3f]*[\x40-\x7e]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[^\[\]()]")
-            .unwrap()
+            .expect("正则表达式编译失败，这是一个静态模式，应该总是有效的")
     });
     re.replace_all(s, "").into_owned()
 }

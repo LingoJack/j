@@ -108,11 +108,10 @@ fn get_report_path(config: &YamlConfig) -> Option<String> {
 }
 
 /// 获取日报工作目录下的 settings.json 路径
-fn get_settings_json_path(report_path: &str) -> std::path::PathBuf {
+fn get_settings_json_path(report_path: &str) -> Option<std::path::PathBuf> {
     Path::new(report_path)
         .parent()
-        .unwrap()
-        .join("settings.json")
+        .map(|p| p.join("settings.json"))
 }
 
 /// TUI 模式日报编辑：预加载历史 + 日期前缀，NORMAL 模式进入
@@ -122,7 +121,13 @@ fn handle_report_tui(config: &mut YamlConfig) {
         None => return,
     };
 
-    let config_path = get_settings_json_path(&report_path);
+    let config_path = match get_settings_json_path(&report_path) {
+        Some(p) => p,
+        None => {
+            error!("✖️ 无法获取配置文件路径");
+            return;
+        }
+    };
     load_config_from_json_and_sync(&config_path, config);
 
     // 检查是否需要新开一周（与 handle_daily_report 相同逻辑）
@@ -240,7 +245,10 @@ pub fn write_to_report(content: &str, config: &mut YamlConfig) -> bool {
     };
 
     let report_file = Path::new(&report_path);
-    let config_path = get_settings_json_path(&report_path);
+    let config_path = match get_settings_json_path(&report_path) {
+        Some(p) => p,
+        None => return false,
+    };
 
     // 静默加载 JSON 配置并同步到 YAML（不打印 info）
     load_config_from_json_silent(&config_path, config);
@@ -360,7 +368,13 @@ fn handle_daily_report(content: &str, config: &mut YamlConfig) {
     info!("📂 日报文件路径：{}", report_path);
 
     let report_file = Path::new(&report_path);
-    let config_path = get_settings_json_path(&report_path);
+    let config_path = match get_settings_json_path(&report_path) {
+        Some(p) => p,
+        None => {
+            error!("✖️ 无法获取配置文件路径");
+            return;
+        }
+    };
 
     load_config_from_json_and_sync(&config_path, config);
 
@@ -421,7 +435,13 @@ fn handle_week_update(date_str: Option<&str>, config: &mut YamlConfig) {
         None => return,
     };
 
-    let config_path = get_settings_json_path(&report_path);
+    let config_path = match get_settings_json_path(&report_path) {
+        Some(p) => p,
+        None => {
+            error!("✖️ 无法获取配置文件路径");
+            return;
+        }
+    };
 
     let week_num = config
         .get_property(section::REPORT, config_key::WEEK_NUM)
@@ -458,7 +478,13 @@ fn handle_sync(date_str: Option<&str>, config: &mut YamlConfig) {
         None => return,
     };
 
-    let config_path = get_settings_json_path(&report_path);
+    let config_path = match get_settings_json_path(&report_path) {
+        Some(p) => p,
+        None => {
+            error!("✖️ 无法获取配置文件路径");
+            return;
+        }
+    };
 
     load_config_from_json_and_sync(&config_path, config);
 
@@ -717,36 +743,41 @@ fn ensure_git_repo(config: &YamlConfig) -> bool {
 
     // 检查是否有配置 git_repo
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
-    if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
-        return false;
-    }
-    let repo_url = git_repo.unwrap().clone();
+    match git_repo {
+        Some(url) if !url.is_empty() => {
+            let repo_url = url.clone();
+            info!("📦 日报目录尚未初始化 git 仓库，正在初始化...");
 
-    info!("📦 日报目录尚未初始化 git 仓库，正在初始化...");
+            // git init -b main
+            if let Some(status) = run_git_in_report_dir(&["init", "-b", "main"], config) {
+                if !status.success() {
+                    error!("✖️ git init 失败");
+                    return false;
+                }
+            } else {
+                return false;
+            }
 
-    // git init -b main
-    if let Some(status) = run_git_in_report_dir(&["init", "-b", "main"], config) {
-        if !status.success() {
-            error!("✖️ git init 失败");
-            return false;
+            // git remote add origin <repo_url>
+            if let Some(status) =
+                run_git_in_report_dir(&["remote", "add", "origin", &repo_url], config)
+            {
+                if !status.success() {
+                    error!("✖️ git remote add 失败");
+                    return false;
+                }
+            } else {
+                return false;
+            }
+
+            info!("☑️ git 仓库初始化完成，remote: {}", repo_url);
+            true
         }
-    } else {
-        return false;
-    }
-
-    // git remote add origin <repo_url>
-    if let Some(status) = run_git_in_report_dir(&["remote", "add", "origin", &repo_url], config) {
-        if !status.success() {
-            error!("✖️ git remote add 失败");
-            return false;
+        _ => {
+            error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
+            false
         }
-    } else {
-        return false;
     }
-
-    info!("☑️ git 仓库初始化完成，remote: {}", repo_url);
-    true
 }
 
 /// 同步 git remote origin URL 与配置文件中的 git_repo 保持一致
@@ -787,9 +818,12 @@ fn sync_git_remote(config: &YamlConfig) {
 fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
-    if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
-        return;
+    match git_repo {
+        Some(url) if !url.is_empty() => {}
+        _ => {
+            error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
+            return;
+        }
     }
 
     // 确保 git 仓库已初始化
@@ -836,10 +870,13 @@ fn handle_push(commit_msg: Option<&str>, config: &YamlConfig) {
 fn handle_pull(config: &YamlConfig) {
     // 检查 git_repo 配置
     let git_repo = config.get_property(section::REPORT, config_key::GIT_REPO);
-    if git_repo.is_none() || git_repo.unwrap().is_empty() {
-        error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
-        return;
-    }
+    let repo_url = match git_repo {
+        Some(url) if !url.is_empty() => url.clone(),
+        _ => {
+            error!("✖️ 尚未配置 git 仓库地址，请先执行: j reportctl set-url <repo_url>");
+            return;
+        }
+    };
 
     let dir = match get_report_dir(config) {
         Some(d) => d,
@@ -853,7 +890,6 @@ fn handle_pull(config: &YamlConfig) {
 
     if !git_dir.exists() {
         // 日报目录不是 git 仓库，尝试 clone
-        let repo_url = git_repo.unwrap().clone();
         info!("📥 日报目录尚未初始化，正在从远程仓库克隆...");
 
         // 先备份已有文件（如果有的话）

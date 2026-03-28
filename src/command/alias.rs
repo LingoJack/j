@@ -160,7 +160,9 @@ fn add_as_path(alias: &str, path: &str, config: &mut YamlConfig) {
         error!(
             "别名 {} 的路径 {{{}}} 已存在。 😢 请使用 `mf` 命令修改",
             alias,
-            config.get_property(section::PATH, alias).unwrap()
+            config
+                .get_property(section::PATH, alias)
+                .map_or("(未知)", |v| v)
         );
     } else {
         config.set_property(section::PATH, alias, path);

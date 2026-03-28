@@ -470,7 +470,7 @@ pub fn complete_file_path(partial: &str) -> Vec<Pair> {
                         let last_sep = partial
                             .rfind('/')
                             .or_else(|| partial.rfind(std::path::MAIN_SEPARATOR))
-                            .unwrap();
+                            .unwrap_or(0);
                         format!(
                             "{}/{}{}",
                             &partial[..last_sep],

@@ -86,7 +86,7 @@ fn run_countdown(total_secs: u64) {
     pb.set_style(
         ProgressStyle::default_bar()
             .template("  {spinner:.cyan} ⏱️  {msg}  {wide_bar:.cyan/dark_gray}  {percent}%")
-            .unwrap()
+            .expect("进度条模板格式错误")
             .progress_chars("━╸─"),
     );
 
