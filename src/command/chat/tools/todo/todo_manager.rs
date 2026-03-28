@@ -1,4 +1,5 @@
 use super::entity::TodoItem;
+use crate::command::chat::permission::JcliConfig;
 use crate::util::safe_lock;
 use std::fs;
 use std::path::PathBuf;
@@ -15,9 +16,21 @@ pub struct TodoManager {
 
 impl TodoManager {
     pub fn new() -> Self {
-        let data_dir = crate::config::YamlConfig::data_dir();
-        let file_path = data_dir.join("agent").join("data").join("todos.json");
-        let _ = fs::create_dir_all(file_path.parent().unwrap());
+        // 优先使用 .jcli/todos.json，找不到则在 cwd 下创建 .jcli/todos.json
+        let config_dir = JcliConfig::find_config_dir().or_else(JcliConfig::ensure_config_dir);
+        let file_path = match config_dir {
+            Some(dir) => {
+                let _ = fs::create_dir_all(&dir);
+                dir.join("todos.json")
+            }
+            None => {
+                // 极端 fallback：使用全局目录
+                let data_dir = crate::config::YamlConfig::data_dir();
+                let dir = data_dir.join("agent").join("data");
+                let _ = fs::create_dir_all(&dir);
+                dir.join("todos.json")
+            }
+        };
 
         // 从磁盘加载已有数据
         let items = if file_path.exists() {

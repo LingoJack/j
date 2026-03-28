@@ -1,0 +1,9 @@
+{
+  "task_id": 1,
+  "title": "测试 Task 创建",
+  "description": "这是一个测试任务，验证 Task 工具是否正常工作",
+  "status": "completed",
+  "blocked_by": [],
+  "owner": "",
+  "task_doc_paths": []
+}

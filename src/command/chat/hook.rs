@@ -221,7 +221,7 @@ pub struct HookManager {
 }
 
 impl HookManager {
-    /// 加载用户级（`~/.jdata/agent/hooks.yaml`）+ 项目级（`.jcli` hooks 字段）hook
+    /// 加载用户级（`~/.jdata/agent/hooks.yaml`）+ 项目级（`.jcli/hooks.yaml`）hook
     pub fn load() -> Self {
         let mut manager = HookManager::default();
 
@@ -261,25 +261,52 @@ impl HookManager {
             }
         }
 
-        // 加载项目级 hooks：从 .jcli 文件
-        let jcli_config = JcliConfig::load();
-        for (event_name, defs) in &jcli_config.hooks {
-            if let Some(event) = HookEvent::from_str(event_name) {
-                manager
-                    .project_hooks
-                    .entry(event)
-                    .or_default()
-                    .extend(defs.clone());
-            } else {
-                write_error_log(
-                    "HookManager::load",
-                    &format!("项目级 .jcli 中未知 hook 事件: {}", event_name),
-                );
+        // 加载项目级 hooks：从 .jcli/hooks.yaml
+        if let Some(config_dir) = JcliConfig::find_config_dir() {
+            let hooks_path = config_dir.join("hooks.yaml");
+            if hooks_path.is_file() {
+                match std::fs::read_to_string(&hooks_path) {
+                    Ok(content) => {
+                        match serde_yaml::from_str::<HashMap<String, Vec<HookDef>>>(&content) {
+                            Ok(hooks_map) => {
+                                for (event_name, defs) in hooks_map {
+                                    if let Some(event) = HookEvent::from_str(&event_name) {
+                                        manager
+                                            .project_hooks
+                                            .entry(event)
+                                            .or_default()
+                                            .extend(defs);
+                                    } else {
+                                        write_error_log(
+                                            "HookManager::load",
+                                            &format!(
+                                                "项目级 .jcli/hooks.yaml 中未知 hook 事件: {}",
+                                                event_name
+                                            ),
+                                        );
+                                    }
+                                }
+                                write_info_log(
+                                    "HookManager::load",
+                                    &format!("已加载项目级 hooks: {}", hooks_path.display()),
+                                );
+                            }
+                            Err(e) => {
+                                write_error_log(
+                                    "HookManager::load",
+                                    &format!("解析项目级 hooks.yaml 失败: {}", e),
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        write_error_log(
+                            "HookManager::load",
+                            &format!("读取项目级 hooks.yaml 失败: {}", e),
+                        );
+                    }
+                }
             }
-        }
-
-        if !manager.project_hooks.is_empty() {
-            write_info_log("HookManager::load", "已加载项目级 hooks (from .jcli)");
         }
 
         manager

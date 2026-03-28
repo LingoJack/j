@@ -531,7 +531,7 @@ impl ToolExecutor {
         let tool_name = self.active_tool_calls[idx].tool_name.clone();
         let arguments = self.active_tool_calls[idx].arguments.clone();
 
-        // 生成 allow 规则并写入 .jcli
+        // 生成 allow 规则并写入 .jcli/permissions.yaml
         let rule = super::permission::generate_allow_rule(&tool_name, &arguments);
         let mut jcli = (**jcli_config).clone();
         jcli.add_allow_rule(&rule);
@@ -726,7 +726,7 @@ pub struct ChatApp {
     pub agent: Option<AgentHandle>,
     /// 工具注册表
     pub tool_registry: Arc<ToolRegistry>,
-    /// .jcli 权限配置
+    /// .jcli/ 权限配置
     pub jcli_config: Arc<JcliConfig>,
     /// 后台任务管理器
     pub background_manager: Arc<BackgroundManager>,
@@ -881,7 +881,7 @@ pub enum Action {
     RejectPendingTool,
     /// 拒绝当前待处理工具（带拒绝原因）
     RejectPendingToolWithReason(String),
-    /// 允许并执行当前工具（记住规则到 .jcli）
+    /// 允许并执行当前工具（记住规则到 .jcli/）
     AllowAndExecutePendingTool,
     /// 工具后台执行完成
     ToolExecDone(ToolExecDoneMsg),
@@ -2388,7 +2388,7 @@ impl ChatApp {
         if self.tool_executor.pending_tool_execution {
             self.tool_executor.pending_tool_execution = false;
 
-            // 处理被 .jcli deny 拒绝的工具
+            // 处理被 .jcli/ deny 拒绝的工具
             for tc in &self.tool_executor.active_tool_calls {
                 if let ToolExecStatus::Failed(ref msg) = tc.status {
                     if let Some(ref tx) = self.tool_executor.tool_result_tx {
@@ -2525,11 +2525,11 @@ impl ChatApp {
                                     tool_name: tc.name.clone(),
                                     arguments: tc.arguments.clone(),
                                     confirm_message: format!(
-                                        "🚫 {} 被 .jcli 权限配置拒绝",
+                                        "🚫 {} 被 .jcli/ 权限配置拒绝",
                                         tc.name
                                     ),
                                     status: ToolExecStatus::Failed(
-                                        "该命令被 .jcli 权限配置拒绝".to_string(),
+                                        "该命令被 .jcli/ 权限配置拒绝".to_string(),
                                     ),
                                 });
                                 continue;

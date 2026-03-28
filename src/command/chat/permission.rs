@@ -1,17 +1,12 @@
-use super::hook::HookDef;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// .jcli 配置文件结构
+/// .jcli/ 目录权限配置
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct JcliConfig {
     #[serde(default)]
     pub permissions: PermissionConfig,
-    /// Hook 配置：key 为事件名（snake_case），value 为 HookDef 列表
-    #[serde(default)]
-    pub hooks: HashMap<String, Vec<HookDef>>,
 }
 
 /// 权限配置
@@ -29,12 +24,15 @@ pub struct PermissionConfig {
 }
 
 impl JcliConfig {
-    /// 从 cwd 向上查找 .jcli 文件并加载配置
+    /// 从 cwd 向上查找 .jcli/ 目录并加载 permissions.yaml
     pub fn load() -> Self {
-        if let Some(path) = Self::find_config_file() {
-            match std::fs::read_to_string(&path) {
+        if let Some(dir) = Self::find_config_dir() {
+            let perm_path = dir.join("permissions.yaml");
+            match std::fs::read_to_string(&perm_path) {
                 Ok(content) => {
-                    serde_yaml::from_str::<JcliConfig>(&content).unwrap_or_else(|_| Self::default())
+                    let permissions =
+                        serde_yaml::from_str::<PermissionConfig>(&content).unwrap_or_default();
+                    JcliConfig { permissions }
                 }
                 Err(_) => Self::default(),
             }
@@ -43,18 +41,25 @@ impl JcliConfig {
         }
     }
 
-    /// 从当前目录向上查找 .jcli 文件
-    fn find_config_file() -> Option<PathBuf> {
+    /// 从当前目录向上查找 .jcli/ 目录
+    pub fn find_config_dir() -> Option<PathBuf> {
         let mut dir = std::env::current_dir().ok()?;
         loop {
             let candidate = dir.join(".jcli");
-            if candidate.is_file() {
+            if candidate.is_dir() {
                 return Some(candidate);
             }
             if !dir.pop() {
                 return None;
             }
         }
+    }
+
+    /// 确保 cwd 下存在 .jcli/ 目录，返回该目录路径
+    pub fn ensure_config_dir() -> Option<PathBuf> {
+        let dir = std::env::current_dir().ok()?.join(".jcli");
+        let _ = std::fs::create_dir_all(&dir);
+        Some(dir)
     }
 
     /// 检查某个工具调用是否被自动允许（跳过确认）
@@ -94,7 +99,7 @@ impl JcliConfig {
         false
     }
 
-    /// 将一条 allow 规则追加到 cwd 下的 .jcli 文件（若文件不存在则创建）
+    /// 将一条 allow 规则追加到 .jcli/permissions.yaml（若目录/文件不存在则创建）
     /// 去重：如果 allow 列表已包含该规则则不重复添加
     pub fn add_allow_rule(&mut self, rule: &str) {
         // 去重
@@ -105,28 +110,31 @@ impl JcliConfig {
         // 更新内存
         self.permissions.allow.push(rule.to_string());
 
-        // 写入 cwd 下的 .jcli（不向上查找，在当前目录创建/更新）
-        let path = match std::env::current_dir() {
-            Ok(dir) => dir.join(".jcli"),
-            Err(_) => return,
+        // 确保 .jcli/ 目录存在
+        let config_dir = match Self::ensure_config_dir() {
+            Some(dir) => dir,
+            None => return,
         };
+        let perm_path = config_dir.join("permissions.yaml");
 
         // 如果文件已存在，尝试加载已有内容再追加
-        let mut config = if path.is_file() {
-            match std::fs::read_to_string(&path) {
-                Ok(content) => serde_yaml::from_str::<JcliConfig>(&content).unwrap_or_default(),
-                Err(_) => JcliConfig::default(),
+        let mut permissions = if perm_path.is_file() {
+            match std::fs::read_to_string(&perm_path) {
+                Ok(content) => {
+                    serde_yaml::from_str::<PermissionConfig>(&content).unwrap_or_default()
+                }
+                Err(_) => PermissionConfig::default(),
             }
         } else {
-            JcliConfig::default()
+            PermissionConfig::default()
         };
 
-        if !config.permissions.allow.contains(&rule.to_string()) {
-            config.permissions.allow.push(rule.to_string());
+        if !permissions.allow.contains(&rule.to_string()) {
+            permissions.allow.push(rule.to_string());
         }
 
-        if let Ok(yaml) = serde_yaml::to_string(&config) {
-            let _ = std::fs::write(&path, yaml);
+        if let Ok(yaml) = serde_yaml::to_string(&permissions) {
+            let _ = std::fs::write(&perm_path, yaml);
         }
     }
 }

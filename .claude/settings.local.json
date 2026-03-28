@@ -46,7 +46,11 @@
       "Bash(find /Users/jacklingo/dev_custom/j/src/command/chat -name \"*.rs\" -exec grep -l \"^pub struct\\\\|^pub enum\\\\|^pub trait\" {})",
       "Bash(echo:*)",
       "Bash(cp /tmp/complete_translations.txt ~/chinese_strings_to_translate.txt)",
-      "Read(//Users/jacklingo/**)"
+      "Read(//Users/jacklingo/**)",
+      "Bash(find /Users/jacklingo/dev_custom/j/src -type f -name \"*.rs\" -exec wc -l {} +)",
+      "Bash(git -C /Users/jacklingo/dev_custom/j log --oneline)",
+      "Bash(git:*)",
+      "Bash(find /Users/jacklingo/dev_custom/j -name .jcli* -o -name *jcli* -type f)"
     ]
   },
   "language": "zh-CN",

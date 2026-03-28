@@ -1,0 +1,4 @@
+allow_all: false
+allow:
+- Bash(echo "Hello,:*)
+deny: []

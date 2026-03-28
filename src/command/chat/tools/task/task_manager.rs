@@ -1,4 +1,5 @@
 use super::entity::AgentTask;
+use crate::command::chat::permission::JcliConfig;
 use crate::util::safe_lock;
 use serde_json::Value;
 use std::fs;
@@ -15,8 +16,16 @@ pub struct TaskManager {
 
 impl TaskManager {
     pub fn new() -> Self {
-        let data_dir = crate::config::YamlConfig::data_dir();
-        let tasks_dir = data_dir.join("agent").join("data").join("tasks");
+        // 优先使用 .jcli/tasks/，找不到则在 cwd 下创建 .jcli/tasks/
+        let config_dir = JcliConfig::find_config_dir().or_else(JcliConfig::ensure_config_dir);
+        let tasks_dir = match config_dir {
+            Some(dir) => dir.join("tasks"),
+            None => {
+                // 极端 fallback：使用全局目录
+                let data_dir = crate::config::YamlConfig::data_dir();
+                data_dir.join("agent").join("data").join("tasks")
+            }
+        };
         let _ = fs::create_dir_all(&tasks_dir);
         Self {
             tasks_dir,

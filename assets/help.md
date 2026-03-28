@@ -568,41 +568,51 @@ A: 自动使用 Lite 模式，`screenshot`/`click`/`type`/`evaluate` 等 CDP 专
 
 > **安全提示**：`Bash` 工具内置危险命令过滤（如 `rm -rf /`），但仍建议执行前检查命令内容
 
-### .jcli 权限配置
+### .jcli/ 权限配置
 
-在项目根目录创建 `.jcli` 文件（YAML 格式），可细粒度控制 `j chat` 中工具的自动执行权限。程序会从当前目录向上查找 `.jcli` 文件。
+在项目根目录创建 `.jcli/` 目录，在其中放置 `permissions.yaml` 文件，可细粒度控制 `j chat` 中工具的自动执行权限。程序会从当前目录向上查找 `.jcli/` 目录。
 
-**配置示例**：
+**目录结构**：
+
+```
+.jcli/
+├── permissions.yaml    # 权限配置
+├── hooks.yaml          # 项目级 hooks 配置
+├── tasks/              # Task 工具数据（自动生成）
+│   └── task_*.json
+└── todos.json          # Todo 工具数据（自动生成）
+```
+
+**配置示例**（`.jcli/permissions.yaml`）：
 
 ```yaml
-permissions:
-  # 完全放开（跳过所有工具确认）
-  # allow_all: true
+# 完全放开（跳过所有工具确认）
+# allow_all: true
 
-  allow:
-    # Bash 命令前缀匹配（:* 表示任意参数后缀）
-    - "Bash(cargo build:*)"
-    - "Bash(cargo test:*)"
-    - "Bash(cargo fmt:*)"
-    - "Bash(git status:*)"
-    - "Bash(ls:*)"
+allow:
+  # Bash 命令前缀匹配（:* 表示任意参数后缀）
+  - "Bash(cargo build:*)"
+  - "Bash(cargo test:*)"
+  - "Bash(cargo fmt:*)"
+  - "Bash(git status:*)"
+  - "Bash(ls:*)"
 
-    # 工具级别：允许该工具所有调用跳过确认
-    - "Read"
-    - "Glob"
-    - "Grep"
+  # 工具级别：允许该工具所有调用跳过确认
+  - "Read"
+  - "Glob"
+  - "Grep"
 
-    # 文件写入限制到特定目录
-    - "Write(path:/Users/jack/projects/*)"
-    - "Edit(path:/Users/jack/projects/*)"
+  # 文件写入限制到特定目录
+  - "Write(path:/Users/jack/projects/*)"
+  - "Edit(path:/Users/jack/projects/*)"
 
-    # WebFetch 限制域名
-    - "WebFetch(domain:docs.rs)"
+  # WebFetch 限制域名
+  - "WebFetch(domain:docs.rs)"
 
-  deny:
-    # 黑名单（优先于 allow）
-    - "Bash(rm -rf:*)"
-    - "Bash(sudo:*)"
+deny:
+  # 黑名单（优先于 allow）
+  - "Bash(rm -rf:*)"
+  - "Bash(sudo:*)"
 ```
 
 **匹配规则**：
@@ -615,7 +625,7 @@ permissions:
 | `Write(path:dir/*)` | 文件路径前缀匹配 | `"Write(path:/home/user/*)"` |
 | `WebFetch(domain:x)` | URL 域名匹配 | `"WebFetch(domain:docs.rs)"` |
 
-- 无 `.jcli` 文件：保持默认行为（需确认的工具弹确认框）
+- 无 `.jcli/` 目录：保持默认行为（需确认的工具弹确认框）
 - `deny` 优先于 `allow`（被 deny 的调用直接拒绝执行）
 - `allow_all: true` 或 allow 中包含 `"*"`：所有工具跳过确认
 
@@ -660,7 +670,7 @@ Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
 
 **三级 Hook**：
 1. **用户级**：`~/.jdata/agent/hooks.yaml` — 全局生效
-2. **项目级**：`.jcli` 文件的 `hooks` 字段 — 项目目录下生效
+2. **项目级**：`.jcli/hooks.yaml` — 项目目录下生效
 3. **Session 级**：通过 `register_hook` 工具由 AI 动态注册 — 仅当前会话
 
 **执行顺序**：用户级 → 项目级 → Session 级，链式执行。前者输出影响后者输入，任何 `abort` 立即中止。
@@ -689,15 +699,11 @@ session_start:
   - command: "echo '{\"inject_messages\": [{\"role\": \"user\", \"content\": \"当前用户: jack\"}]}'"
 ```
 
-**项目级配置**（`.jcli` 文件）：
+**项目级配置**（`.jcli/hooks.yaml`）：
 ```yaml
-permissions:
-  allow:
-    - "Read"
-hooks:
-  pre_tool_execution:
-    - command: "./scripts/validate_tool.sh"
-      timeout: 5
+pre_tool_execution:
+  - command: "./scripts/validate_tool.sh"
+    timeout: 5
 ```
 
 **脚本协议**：
