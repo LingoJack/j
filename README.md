@@ -397,6 +397,44 @@ open -a "$J_CHROME" https://example.com
 - **对话持久化**：对话自动保存到 `~/.jdata/agent/data/chat_session.json`，重启后恢复
 - **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时切换
 - **工具调用**：支持 Function Calling，AI 可执行 shell 命令和读取文件（危险命令需确认）
+- **Context Compact**：三层对话压缩机制，自动管理上下文窗口
+
+### Context Compact（对话压缩）
+
+长对话会逐渐消耗上下文窗口，Context Compact 通过三层机制自动管理：
+
+**Layer 1: micro_compact（零 API 成本）**
+
+每轮 Agent 循环开始时自动执行。将较早的工具调用结果（`role="tool"`）替换为 `[Previous: used {tool_name}]` 占位符，保留最近 `keep_recent`（默认 10）个不替换。
+
+- 仅压缩内容超过 800 字符的 tool result
+- **豁免工具**：`LoadSkill`、`TaskCreate/List/Get/Update`、`TodoWrite`、`TodoRead` 的结果永远不压缩（承载工作流指令或任务状态）
+
+**Layer 2: auto_compact（LLM 摘要）**
+
+micro_compact 之后，若估算 token 数仍超过阈值（默认 204,800），自动触发：
+
+1. 保存完整对话记录到 `~/.jdata/agent/data/transcripts/transcript_{timestamp}.jsonl`
+2. 将对话 JSON（截断到 80,000 字符）发送给当前模型，请求生成摘要（非流式，max_tokens=2000）
+3. 清空所有消息，替换为两条消息：
+   - `user`: `[Conversation compressed. Transcript: {path}]\n\n{摘要内容}`
+   - `assistant`: `Understood. I have the context from the summary. Continuing.`
+4. 若 LLM 调用失败，仅记录错误日志，继续使用原消息（graceful degradation）
+
+**Layer 3: Compact 工具（AI 主动触发）**
+
+AI 判断对话过长时可主动调用 `Compact` 工具，触发与 Layer 2 相同的摘要流程。
+
+**配置**（在 `agent_config.json` 的 `compact` 字段中）：
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `enabled` | `true` | 是否启用 Context Compact |
+| `token_threshold` | `204800` | 触发 auto_compact 的 token 阈值 |
+| `keep_recent` | `10` | micro_compact 保留最近几个 tool result 不替换 |
+
+> Token 估算方式：`JSON 序列化总字节数 / 4`（粗略估算，约 4 字符 = 1 token）
+> Transcript 文件保留完整对话历史，可用于回溯
 
 ---
 

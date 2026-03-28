@@ -10,9 +10,13 @@ pub struct AskTool {
     pub ask_tx: mpsc::Sender<AskRequest>,
 }
 
+impl AskTool {
+    pub const NAME: &'static str = "Ask";
+}
+
 impl Tool for AskTool {
     fn name(&self) -> &str {
-        "Ask"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

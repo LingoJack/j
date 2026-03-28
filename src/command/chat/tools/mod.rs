@@ -1,4 +1,4 @@
-mod ask;
+pub mod ask;
 pub mod background;
 mod browser;
 pub mod compact;

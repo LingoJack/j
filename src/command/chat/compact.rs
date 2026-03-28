@@ -1,5 +1,6 @@
 use super::api::create_openai_client;
 use super::storage::{ChatMessage, ModelProvider, agent_data_dir};
+use super::tools::ask::AskTool;
 use super::tools::skill::LoadSkillTool;
 use super::tools::task::TaskTool;
 use super::tools::todo::{TodoReadTool, TodoWriteTool};
@@ -95,6 +96,7 @@ pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
         TaskTool::NAME,
         TodoWriteTool::NAME,
         TodoReadTool::NAME,
+        AskTool::NAME,
     ];
 
     for &idx in to_compact {
@@ -167,7 +169,7 @@ fn save_transcript(messages: &[ChatMessage]) -> Option<String> {
 
 /// Layer 2: auto_compact - 保存 transcript + LLM 摘要 + 替换消息
 ///
-/// 需要调用 LLM（非流式，max_tokens=2000）。
+/// 需要调用 LLM（非流式，max_tokens=20000）。
 /// 失败时 graceful degradation：log 错误，返回 Err，调用方可继续用原消息。
 pub async fn auto_compact(
     messages: &mut Vec<ChatMessage>,
@@ -197,7 +199,7 @@ pub async fn auto_compact(
     let request = CreateChatCompletionRequestArgs::default()
         .model(&provider.model)
         .messages(vec![ChatCompletionRequestMessage::User(user_msg)])
-        .max_tokens(2000u32)
+        .max_tokens(20000u32)
         .build()
         .map_err(|e| format!("构建摘要请求失败: {}", e))?;
 
