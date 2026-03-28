@@ -11,6 +11,7 @@ pub mod input_thread;
 pub mod markdown;
 pub mod permission;
 pub mod render_cache;
+pub mod sandbox;
 pub mod skill;
 pub mod storage;
 pub mod theme;

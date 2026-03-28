@@ -1,4 +1,5 @@
 allow_all: false
 allow:
 - Bash(echo "Hello,:*)
+- Bash(ls:*)
 deny: []

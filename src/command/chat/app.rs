@@ -3,6 +3,7 @@ use super::compact::CompactConfig;
 use super::hook::{HookContext, HookEvent, HookManager};
 use super::markdown::image_cache::ImageCache;
 use super::permission::JcliConfig;
+use super::sandbox::Sandbox;
 use super::skill::{self, Skill, skills_dir};
 use super::storage::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
@@ -738,6 +739,8 @@ pub struct ChatApp {
     pub ask_request_rx: Option<mpsc::Receiver<AskRequest>>,
     /// Hook 管理器
     pub hook_manager: Arc<Mutex<HookManager>>,
+    /// 安全沙箱（限制工具操作路径范围）
+    pub sandbox: Sandbox,
 }
 
 /// 消息渲染行缓存
@@ -1159,6 +1162,7 @@ impl ChatApp {
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
             hook_manager: Arc::clone(&hook_manager),
+            sandbox: Sandbox::new(),
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -2535,16 +2539,20 @@ impl ChatApp {
                                 continue;
                             }
 
-                            let confirm_msg = if let Some(tool) = self.tool_registry.get(&tc.name) {
+                            let sandbox_outside = self.sandbox.is_outside(&tc.name, &tc.arguments);
+                            let confirm_msg = if sandbox_outside {
+                                self.sandbox.outside_message(&tc.name, &tc.arguments)
+                            } else if let Some(tool) = self.tool_registry.get(&tc.name) {
                                 tool.confirmation_message(&tc.arguments)
                             } else {
                                 format!("调用工具 {} 参数: {}", tc.name, tc.arguments)
                             };
-                            let needs_confirm = self
+                            let tool_needs_confirm = self
                                 .tool_registry
                                 .get(&tc.name)
                                 .map(|t| t.requires_confirmation())
-                                .unwrap_or(false)
+                                .unwrap_or(false);
+                            let needs_confirm = (tool_needs_confirm || sandbox_outside)
                                 && !self.jcli_config.is_allowed(&tc.name, &tc.arguments);
                             self.tool_executor.active_tool_calls.push(ToolCallStatus {
                                 tool_call_id: tc.id.clone(),
