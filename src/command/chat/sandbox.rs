@@ -103,20 +103,14 @@ impl Sandbox {
     /// 生成沙箱外路径的提示信息
     pub fn outside_message(&self, tool_name: &str, arguments: &str) -> String {
         let paths = extract_paths(tool_name, arguments);
-        let outside_paths: Vec<String> = paths
+        let outside: Vec<String> = paths
             .into_iter()
             .filter(|p| !self.is_path_safe(p))
             .collect();
-        let safe_dirs_display: Vec<String> = self
-            .safe_dirs
-            .iter()
-            .map(|d| d.display().to_string())
-            .collect();
         format!(
-            "⚠️ 安全沙箱: {} 将访问安全目录外的路径 {}\n安全目录: {}",
+            "⚠️ {} 正在操作当前目录以外的文件: {}",
             tool_name,
-            outside_paths.join(", "),
-            safe_dirs_display.join(", "),
+            outside.join(", "),
         )
     }
 }
