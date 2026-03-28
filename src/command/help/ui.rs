@@ -30,23 +30,79 @@ pub fn draw_help_ui(frame: &mut Frame, help_app: &mut HelpApp) {
     draw_hint_bar(frame, chunks[3], &theme);
 }
 
-/// 绘制 Tab 栏
+/// 绘制 Tab 栏（可滚动，放不下时显示 ◀ ▶）
 fn draw_tab_bar(
     frame: &mut Frame,
     help_app: &HelpApp,
     area: Rect,
     theme: &crate::command::chat::theme::Theme,
 ) {
+    let total_width = area.width as usize;
+
+    // 预计算每个 tab 的标签文本和宽度（含两侧间距）
+    let tab_labels: Vec<String> = (0..help_app.tab_count)
+        .map(|i| format!(" {}.{} ", i + 1, help_app.tab_name(i)))
+        .collect();
+    // 每个 tab 占用宽度 = 标签宽度 + 1（右侧间距）
+    let tab_widths: Vec<usize> = tab_labels.iter().map(|l| display_width(l) + 1).collect();
+    let all_tabs_width: usize = tab_widths.iter().sum::<usize>() + 1; // +1 左侧间距
+
+    // 判断是否需要滚动
+    let needs_scroll = all_tabs_width > total_width;
+    let arrow_width = 3; // " ◀ " 或 " ▶ "
+
+    // 计算可见 tab 范围
+    let (vis_start, vis_end) = if !needs_scroll {
+        (0, help_app.tab_count)
+    } else {
+        // 从 active_tab 向两侧扩展，尽量居中
+        let avail = total_width.saturating_sub(arrow_width * 2); // 两侧箭头预留
+        let mut start = help_app.active_tab;
+        let mut end = help_app.active_tab + 1;
+        let mut used = tab_widths[help_app.active_tab] + 1; // +1 左侧间距
+
+        loop {
+            let mut expanded = false;
+            // 尝试向右扩展
+            if end < help_app.tab_count && used + tab_widths[end] <= avail {
+                used += tab_widths[end];
+                end += 1;
+                expanded = true;
+            }
+            // 尝试向左扩展
+            if start > 0 && used + tab_widths[start - 1] <= avail {
+                start -= 1;
+                used += tab_widths[start];
+                expanded = true;
+            }
+            if !expanded {
+                break;
+            }
+        }
+        (start, end)
+    };
+
+    let has_left = vis_start > 0;
+    let has_right = vis_end < help_app.tab_count;
+
     let mut spans: Vec<Span> = Vec::new();
-    spans.push(Span::styled(" ", Style::default().bg(theme.bg_title)));
 
-    for i in 0..help_app.tab_count {
-        let num = format!("{}", i + 1);
-        let label = format!(" {}.{} ", num, help_app.tab_name(i));
+    // 左箭头或左间距
+    if has_left {
+        spans.push(Span::styled(
+            " ◀ ",
+            Style::default().fg(theme.text_dim).bg(theme.bg_title),
+        ));
+    } else {
+        spans.push(Span::styled(" ", Style::default().bg(theme.bg_title)));
+    }
 
+    // 渲染可见 tab
+    for i in vis_start..vis_end {
+        let label = &tab_labels[i];
         if i == help_app.active_tab {
             spans.push(Span::styled(
-                label,
+                label.clone(),
                 Style::default()
                     .fg(theme.config_tab_active_fg)
                     .bg(theme.config_tab_active_bg)
@@ -54,7 +110,7 @@ fn draw_tab_bar(
             ));
         } else {
             spans.push(Span::styled(
-                label,
+                label.clone(),
                 Style::default()
                     .fg(theme.config_tab_inactive)
                     .bg(theme.bg_title),
@@ -63,14 +119,31 @@ fn draw_tab_bar(
         spans.push(Span::styled(" ", Style::default().bg(theme.bg_title)));
     }
 
-    // 填充剩余空间
-    let used_width: usize = spans.iter().map(|s| display_width(&s.content)).sum();
-    let fill = (area.width as usize).saturating_sub(used_width);
-    if fill > 0 {
+    // 右箭头
+    if has_right {
+        // 先计算已用宽度，填充到右箭头位置
+        let used_width: usize = spans.iter().map(|s| display_width(&s.content)).sum();
+        let fill = total_width.saturating_sub(used_width + arrow_width);
+        if fill > 0 {
+            spans.push(Span::styled(
+                " ".repeat(fill),
+                Style::default().bg(theme.bg_title),
+            ));
+        }
         spans.push(Span::styled(
-            " ".repeat(fill),
-            Style::default().bg(theme.bg_title),
+            " ▶ ",
+            Style::default().fg(theme.text_dim).bg(theme.bg_title),
         ));
+    } else {
+        // 填充剩余空间
+        let used_width: usize = spans.iter().map(|s| display_width(&s.content)).sum();
+        let fill = total_width.saturating_sub(used_width);
+        if fill > 0 {
+            spans.push(Span::styled(
+                " ".repeat(fill),
+                Style::default().bg(theme.bg_title),
+            ));
+        }
     }
 
     let line = Line::from(spans);

@@ -15,28 +15,16 @@ const TAB_DEFS: &[TabDef] = &[
         heading_keywords: &["快速上手"],
     },
     TabDef {
-        name: "数据目录",
-        heading_keywords: &["数据目录"],
-    },
-    TabDef {
         name: "别名 & 打开",
         heading_keywords: &["别名管理", "分类标记", "列表", "打开"],
     },
     TabDef {
-        name: "日报",
-        heading_keywords: &["日报系统"],
+        name: "日报 & 待办",
+        heading_keywords: &["日报系统", "待办备忘录"],
     },
     TabDef {
-        name: "待办",
-        heading_keywords: &["待办备忘录"],
-    },
-    TabDef {
-        name: "脚本 & 计时",
-        heading_keywords: &["脚本"],
-    },
-    TabDef {
-        name: "系统",
-        heading_keywords: &["系统设置"],
+        name: "脚本 & 系统",
+        heading_keywords: &["脚本", "系统设置"],
     },
     TabDef {
         name: "AI 对话",
@@ -47,16 +35,12 @@ const TAB_DEFS: &[TabDef] = &[
         heading_keywords: &["AI 工具"],
     },
     TabDef {
-        name: "AI Hook & Skill",
+        name: "Hook & Skill",
         heading_keywords: &["AI Hook", "Skill"],
     },
     TabDef {
-        name: "安装 & 卸载",
-        heading_keywords: &["安装", "卸载"],
-    },
-    TabDef {
-        name: "使用技巧",
-        heading_keywords: &["使用技巧"],
+        name: "安装 & 技巧",
+        heading_keywords: &["安装", "卸载", "使用技巧"],
     },
 ];
 

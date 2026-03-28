@@ -1,6 +1,6 @@
 use super::super::autocomplete::{
-    complete_at_mention, complete_file_mention, filter_dir_part, get_filtered_files,
-    get_filtered_skills, update_at_filter, update_file_filter,
+    complete_at_mention, complete_file_mention, get_filtered_files, get_filtered_skills,
+    update_at_filter, update_file_filter,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::util::safe_lock;
@@ -17,16 +17,22 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         let filtered = get_filtered_skills(app);
         match key.code {
             KeyCode::Up => {
-                if !filtered.is_empty() && app.ui.at_popup_selected > 0 {
-                    app.ui.at_popup_selected -= 1;
+                if !filtered.is_empty() {
+                    if app.ui.at_popup_selected > 0 {
+                        app.ui.at_popup_selected -= 1;
+                    } else {
+                        app.ui.at_popup_selected = filtered.len() - 1;
+                    }
                 }
                 return false;
             }
             KeyCode::Down => {
-                if !filtered.is_empty()
-                    && app.ui.at_popup_selected < filtered.len().saturating_sub(1)
-                {
-                    app.ui.at_popup_selected += 1;
+                if !filtered.is_empty() {
+                    if app.ui.at_popup_selected < filtered.len() - 1 {
+                        app.ui.at_popup_selected += 1;
+                    } else {
+                        app.ui.at_popup_selected = 0;
+                    }
                 }
                 return false;
             }
@@ -109,16 +115,22 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         let filtered = get_filtered_files(app);
         match key.code {
             KeyCode::Up => {
-                if !filtered.is_empty() && app.ui.file_popup_selected > 0 {
-                    app.ui.file_popup_selected -= 1;
+                if !filtered.is_empty() {
+                    if app.ui.file_popup_selected > 0 {
+                        app.ui.file_popup_selected -= 1;
+                    } else {
+                        app.ui.file_popup_selected = filtered.len() - 1;
+                    }
                 }
                 return false;
             }
             KeyCode::Down => {
-                if !filtered.is_empty()
-                    && app.ui.file_popup_selected < filtered.len().saturating_sub(1)
-                {
-                    app.ui.file_popup_selected += 1;
+                if !filtered.is_empty() {
+                    if app.ui.file_popup_selected < filtered.len() - 1 {
+                        app.ui.file_popup_selected += 1;
+                    } else {
+                        app.ui.file_popup_selected = 0;
+                    }
                 }
                 return false;
             }
@@ -127,9 +139,8 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     let sel = app.ui.file_popup_selected.min(filtered.len() - 1);
                     let entry = filtered[sel].clone();
                     if entry.ends_with('/') {
-                        // 目录：用 dir_part + entry 更新 filter，继续补全
-                        let dir = filter_dir_part(&app.ui.file_popup_filter);
-                        app.ui.file_popup_filter = format!("{}{}", dir, entry);
+                        // 目录：直接用 entry 作为新 filter（已包含完整路径）
+                        app.ui.file_popup_filter = entry.clone();
                         // 更新 input 中的文本
                         let chars: Vec<char> = app.ui.input.chars().collect();
                         let before: String = chars[..app.ui.file_popup_start_pos].iter().collect();
@@ -144,10 +155,8 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         app.ui.cursor_pos = new_cursor;
                         app.ui.file_popup_selected = 0;
                     } else {
-                        // 文件：用 dir_part + entry 拼接完整路径，补全并关闭弹窗
-                        let dir = filter_dir_part(&app.ui.file_popup_filter);
-                        let full_path = format!("{}{}", dir, entry);
-                        complete_file_mention(app, &full_path);
+                        // 文件：entry 已包含完整相对路径，直接补全
+                        complete_file_mention(app, &entry);
                         app.ui.file_popup_active = false;
                     }
                     return false;

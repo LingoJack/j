@@ -1150,7 +1150,7 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         return;
     }
 
-    let item_count = filtered.len().min(12);
+    let item_count = filtered.len().min(15);
     let popup_height = (item_count as u16) + 2;
     let popup_width = filtered
         .iter()
