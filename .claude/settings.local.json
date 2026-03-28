@@ -50,7 +50,8 @@
       "Bash(find /Users/jacklingo/dev_custom/j/src -type f -name \"*.rs\" -exec wc -l {} +)",
       "Bash(git -C /Users/jacklingo/dev_custom/j log --oneline)",
       "Bash(git:*)",
-      "Bash(find /Users/jacklingo/dev_custom/j -name .jcli* -o -name *jcli* -type f)"
+      "Bash(find /Users/jacklingo/dev_custom/j -name .jcli* -o -name *jcli* -type f)",
+      "Bash(cargo clippy:*)"
     ]
   },
   "language": "zh-CN",

@@ -15,6 +15,9 @@ fn main() {
     // 加载配置
     let mut config = YamlConfig::load();
 
+    // 安装预置脚本（静默失败）
+    let _ = assets::install_default_scripts(&mut config);
+
     let verbose = config.is_verbose();
     let start = if verbose {
         Some(std::time::Instant::now())
