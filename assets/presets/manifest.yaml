@@ -1,5 +1,7 @@
 # 预置脚本清单
 # name: 注册到 config 的名字（也是 j <name> 的命令名）
 # file: assets/presets/ 下的脚本文件名
-- name: hello
-  file: hello.sh
+- name: open
+  file: open.sh
+- name: ll
+  file: ll.sh
