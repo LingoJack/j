@@ -28,10 +28,10 @@ impl Sandbox {
     /// 添加一个安全目录（供用户在确认时选择"始终允许该目录"）
     #[allow(dead_code)]
     pub fn add_safe_dir(&mut self, dir: &Path) {
-        if let Ok(canonical) = dir.canonicalize() {
-            if !self.safe_dirs.contains(&canonical) {
-                self.safe_dirs.push(canonical);
-            }
+        if let Ok(canonical) = dir.canonicalize()
+            && !self.safe_dirs.contains(&canonical)
+        {
+            self.safe_dirs.push(canonical);
         }
     }
 

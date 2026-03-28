@@ -98,25 +98,22 @@ pub fn build_message_lines_incremental(
         msg_start_lines.push((idx, current_line_offset));
 
         // P0 优化：尝试直接按索引复用旧缓存（O(1) 查找代替 O(n) 线性搜索）
-        if can_reuse_per_msg {
-            if let Some(old_c) = old_cache {
-                if let Some(old_per) = old_c.per_msg_lines.get(idx) {
-                    if old_per.msg_index == idx
-                        && old_per.content_len == m.content.len()
-                        && old_per.is_selected == is_selected
-                    {
-                        // 直接复用旧缓存（零拷贝：clone PerMsgCache 结构但不重建 flat vec）
-                        current_line_offset += old_per.lines.len();
-                        per_msg_cache.push(PerMsgCache {
-                            content_len: old_per.content_len,
-                            lines: old_per.lines.clone(),
-                            msg_index: idx,
-                            is_selected,
-                        });
-                        continue;
-                    }
-                }
-            }
+        if can_reuse_per_msg
+            && let Some(old_c) = old_cache
+            && let Some(old_per) = old_c.per_msg_lines.get(idx)
+            && old_per.msg_index == idx
+            && old_per.content_len == m.content.len()
+            && old_per.is_selected == is_selected
+        {
+            // 直接复用旧缓存（零拷贝：clone PerMsgCache 结构但不重建 flat vec）
+            current_line_offset += old_per.lines.len();
+            per_msg_cache.push(PerMsgCache {
+                content_len: old_per.content_len,
+                lines: old_per.lines.clone(),
+                msg_index: idx,
+                is_selected,
+            });
+            continue;
         }
 
         // 缓存未命中 → 重新渲染到临时 Vec
@@ -1066,20 +1063,20 @@ pub fn render_tool_call_request_msg(
 /// 如果是有效的 JSON，则美化格式化；否则原样折行显示
 fn format_json_args(args: &str, max_width: usize) -> Vec<String> {
     // 尝试解析为 JSON 并美化格式化
-    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(args) {
-        if let Ok(pretty) = serde_json::to_string_pretty(&json_value) {
-            // 对格式化后的每一行进行折行处理
-            return pretty
-                .lines()
-                .flat_map(|line| {
-                    if display_width(line) > max_width {
-                        wrap_text(line, max_width)
-                    } else {
-                        vec![line.to_string()]
-                    }
-                })
-                .collect();
-        }
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(args)
+        && let Ok(pretty) = serde_json::to_string_pretty(&json_value)
+    {
+        // 对格式化后的每一行进行折行处理
+        return pretty
+            .lines()
+            .flat_map(|line| {
+                if display_width(line) > max_width {
+                    wrap_text(line, max_width)
+                } else {
+                    vec![line.to_string()]
+                }
+            })
+            .collect();
     }
     // 非 JSON 或解析失败，使用普通折行
     wrap_text(args, max_width)

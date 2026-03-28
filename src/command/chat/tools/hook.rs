@@ -76,7 +76,7 @@ impl Tool for RegisterHookTool {
             "help" => Self::handle_help(),
             "list" => self.handle_list(),
             "remove" => self.handle_remove(&parsed),
-            "register" | _ => self.handle_register(&parsed),
+            _ => self.handle_register(&parsed),
         }
     }
 

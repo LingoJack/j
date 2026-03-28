@@ -145,11 +145,11 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
 /// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用
 /// history_total 是所有历史消息的总行数（预计算，避免重复求和）
-fn get_line_at<'a>(
-    cached: &'a MsgLinesCache,
+fn get_line_at(
+    cached: &MsgLinesCache,
     global_idx: usize,
     history_total: usize,
-) -> Option<&'a Line<'static>> {
+) -> Option<&Line<'static>> {
     if global_idx < history_total {
         // 二分查找 msg_start_lines 定位所属消息
         let msg_pos = cached

@@ -318,12 +318,10 @@ impl ShellTool {
             let stdout_thread = std::thread::spawn(move || {
                 if let Some(r) = stdout_handle {
                     let reader = std::io::BufReader::new(r);
-                    for line in reader.lines() {
-                        if let Ok(line) = line {
-                            if let Ok(mut buf) = stdout_buf.lock() {
-                                buf.push_str(&line);
-                                buf.push('\n');
-                            }
+                    for line in reader.lines().map_while(Result::ok) {
+                        if let Ok(mut buf) = stdout_buf.lock() {
+                            buf.push_str(&line);
+                            buf.push('\n');
                         }
                     }
                 }
@@ -331,12 +329,10 @@ impl ShellTool {
             let stderr_thread = std::thread::spawn(move || {
                 if let Some(r) = stderr_handle {
                     let reader = std::io::BufReader::new(r);
-                    for line in reader.lines() {
-                        if let Ok(line) = line {
-                            if let Ok(mut buf) = stderr_buf.lock() {
-                                buf.push_str(&line);
-                                buf.push('\n');
-                            }
+                    for line in reader.lines().map_while(Result::ok) {
+                        if let Ok(mut buf) = stderr_buf.lock() {
+                            buf.push_str(&line);
+                            buf.push('\n');
                         }
                     }
                 }

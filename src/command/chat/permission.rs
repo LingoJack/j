@@ -221,8 +221,7 @@ fn match_command_prefix(pattern: &str, command: &str) -> bool {
     if command == prefix {
         return true;
     }
-    if command.starts_with(prefix) {
-        let rest = &command[prefix.len()..];
+    if let Some(rest) = command.strip_prefix(prefix) {
         return rest.starts_with(' ') || rest.starts_with('\t');
     }
     false

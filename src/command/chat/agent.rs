@@ -592,10 +592,10 @@ fn process_tool_calls(
                     .unwrap_or_else(|_| ".".to_string()),
                 ..Default::default()
             };
-            if let Some(hook_result) = hook_manager.execute(HookEvent::PostToolExecution, ctx) {
-                if let Some(new_result) = hook_result.tool_result {
-                    result_content = new_result;
-                }
+            if let Some(hook_result) = hook_manager.execute(HookEvent::PostToolExecution, ctx)
+                && let Some(new_result) = hook_result.tool_result
+            {
+                result_content = new_result;
             }
         }
 

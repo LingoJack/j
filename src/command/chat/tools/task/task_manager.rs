@@ -41,12 +41,11 @@ impl TaskManager {
                 let name = entry.file_name();
                 let name = name.to_string_lossy();
                 // 格式: task_{id}.json
-                if let Some(rest) = name.strip_prefix("task_") {
-                    if let Some(id_str) = rest.strip_suffix(".json") {
-                        if let Ok(id) = id_str.parse::<u64>() {
-                            max_id = max_id.max(id);
-                        }
-                    }
+                if let Some(rest) = name.strip_prefix("task_")
+                    && let Some(id_str) = rest.strip_suffix(".json")
+                    && let Ok(id) = id_str.parse::<u64>()
+                {
+                    max_id = max_id.max(id);
                 }
             }
         }
@@ -102,12 +101,11 @@ impl TaskManager {
         if let Ok(entries) = fs::read_dir(&self.tasks_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().is_some_and(|e| e == "json") {
-                    if let Ok(data) = fs::read_to_string(&path) {
-                        if let Ok(task) = serde_json::from_str::<AgentTask>(&data) {
-                            tasks.push(task);
-                        }
-                    }
+                if path.extension().is_some_and(|e| e == "json")
+                    && let Ok(data) = fs::read_to_string(&path)
+                    && let Ok(task) = serde_json::from_str::<AgentTask>(&data)
+                {
+                    tasks.push(task);
                 }
             }
         }
@@ -154,10 +152,10 @@ impl TaskManager {
         // 添加依赖关系
         if let Some(add_blocked_by) = updates.get("addBlockedBy").and_then(|v| v.as_array()) {
             for id_val in add_blocked_by {
-                if let Some(dep_id) = id_val.as_u64() {
-                    if !task.blocked_by.contains(&dep_id) {
-                        task.blocked_by.push(dep_id);
-                    }
+                if let Some(dep_id) = id_val.as_u64()
+                    && !task.blocked_by.contains(&dep_id)
+                {
+                    task.blocked_by.push(dep_id);
                 }
             }
         }

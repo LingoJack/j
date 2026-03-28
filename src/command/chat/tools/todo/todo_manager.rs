@@ -161,7 +161,7 @@ impl TodoManager {
     }
 
     /// 确保只有一个 in_progress：保留最后一个，其余降为 pending
-    fn enforce_single_in_progress(&self, items: &mut Vec<TodoItem>) {
+    fn enforce_single_in_progress(&self, items: &mut [TodoItem]) {
         let in_progress_indices: Vec<usize> = items
             .iter()
             .enumerate()

@@ -62,15 +62,15 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 ///
 /// 纯内存操作，零 API 成本。
 /// 将较早的 role="tool" 消息中内容长度 > MICRO_COMPACT_BYTES_COUNT_THRESHOLD 的替换为 "[Previous: used {tool_name}]"
-pub fn micro_compact(messages: &mut Vec<ChatMessage>, keep_recent: usize) {
+pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
     let mut tool_name_map: HashMap<String, String> = HashMap::new();
     for msg in messages.iter() {
-        if msg.role == ROLE_ASSISTANT {
-            if let Some(ref tcs) = msg.tool_calls {
-                for tc in tcs {
-                    tool_name_map.insert(tc.id.clone(), tc.name.clone());
-                }
+        if msg.role == ROLE_ASSISTANT
+            && let Some(ref tcs) = msg.tool_calls
+        {
+            for tc in tcs {
+                tool_name_map.insert(tc.id.clone(), tc.name.clone());
             }
         }
     }

@@ -319,11 +319,11 @@ impl HookManager {
 
     /// 移除 session 级 hook（按事件和索引）
     pub fn remove_session_hook(&mut self, event: HookEvent, index: usize) -> bool {
-        if let Some(hooks) = self.session_hooks.get_mut(&event) {
-            if index < hooks.len() {
-                hooks.remove(index);
-                return true;
-            }
+        if let Some(hooks) = self.session_hooks.get_mut(&event)
+            && index < hooks.len()
+        {
+            hooks.remove(index);
+            return true;
         }
         false
     }
@@ -354,15 +354,15 @@ impl HookManager {
     /// 检查某个事件是否有任何 hook 注册（用户级/项目级/session 级）
     /// 用于调用方在构建 HookContext 之前短路，避免不必要的 clone 和内存分配
     pub fn has_hooks_for(&self, event: HookEvent) -> bool {
-        self.user_hooks.get(&event).map_or(false, |h| !h.is_empty())
+        self.user_hooks.get(&event).is_some_and(|h| !h.is_empty())
             || self
                 .project_hooks
                 .get(&event)
-                .map_or(false, |h| !h.is_empty())
+                .is_some_and(|h| !h.is_empty())
             || self
                 .session_hooks
                 .get(&event)
-                .map_or(false, |h| !h.is_empty())
+                .is_some_and(|h| !h.is_empty())
     }
 
     /// Fire-and-forget 执行：在后台线程中执行 hook，不阻塞调用方

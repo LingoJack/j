@@ -609,6 +609,7 @@ pub struct AgentHandle {
 
 impl AgentHandle {
     /// 启动一个 agent loop，返回 (AgentHandle, tool_result_tx)
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         provider: ModelProvider,
         api_messages: Vec<ChatMessage>,
@@ -1392,12 +1393,12 @@ impl ChatApp {
                 }
             }
             Action::AskToggleMultiSelect => {
-                if let Some(q) = self.ui.tool_ask_questions.get(self.ui.tool_ask_current_idx) {
-                    if self.ui.tool_ask_cursor < q.options.len() {
-                        let idx = self.ui.tool_ask_cursor;
-                        if idx < self.ui.tool_ask_selections.len() {
-                            self.ui.tool_ask_selections[idx] = !self.ui.tool_ask_selections[idx];
-                        }
+                if let Some(q) = self.ui.tool_ask_questions.get(self.ui.tool_ask_current_idx)
+                    && self.ui.tool_ask_cursor < q.options.len()
+                {
+                    let idx = self.ui.tool_ask_cursor;
+                    if idx < self.ui.tool_ask_selections.len() {
+                        self.ui.tool_ask_selections[idx] = !self.ui.tool_ask_selections[idx];
                     }
                 }
             }
@@ -2394,14 +2395,14 @@ impl ChatApp {
 
             // 处理被 .jcli/ deny 拒绝的工具
             for tc in &self.tool_executor.active_tool_calls {
-                if let ToolExecStatus::Failed(ref msg) = tc.status {
-                    if let Some(ref tx) = self.tool_executor.tool_result_tx {
-                        let _ = tx.send(ToolResultMsg {
-                            tool_call_id: tc.tool_call_id.clone(),
-                            result: msg.clone(),
-                            is_error: true,
-                        });
-                    }
+                if let ToolExecStatus::Failed(ref msg) = tc.status
+                    && let Some(ref tx) = self.tool_executor.tool_result_tx
+                {
+                    let _ = tx.send(ToolResultMsg {
+                        tool_call_id: tc.tool_call_id.clone(),
+                        result: msg.clone(),
+                        is_error: true,
+                    });
                 }
             }
 
@@ -2494,30 +2495,29 @@ impl ChatApp {
                                             .unwrap_or_else(|_| ".".to_string()),
                                         ..Default::default()
                                     };
-                                    if let Ok(manager) = self.hook_manager.lock() {
-                                        if let Some(result) =
+                                    if let Ok(manager) = self.hook_manager.lock()
+                                        && let Some(result) =
                                             manager.execute(HookEvent::PreToolExecution, ctx)
-                                        {
-                                            if result.abort {
-                                                self.tool_executor.active_tool_calls.push(
-                                                    ToolCallStatus {
-                                                        tool_call_id: tc.id.clone(),
-                                                        tool_name: tc.name.clone(),
-                                                        arguments: tc.arguments.clone(),
-                                                        confirm_message: format!(
-                                                            "🚫 {} 被 hook 拦截",
-                                                            tc.name
-                                                        ),
-                                                        status: ToolExecStatus::Failed(
-                                                            "该工具调用被 hook 拦截".to_string(),
-                                                        ),
-                                                    },
-                                                );
-                                                continue;
-                                            }
-                                            if let Some(new_args) = result.tool_arguments {
-                                                tc.arguments = new_args;
-                                            }
+                                    {
+                                        if result.abort {
+                                            self.tool_executor.active_tool_calls.push(
+                                                ToolCallStatus {
+                                                    tool_call_id: tc.id.clone(),
+                                                    tool_name: tc.name.clone(),
+                                                    arguments: tc.arguments.clone(),
+                                                    confirm_message: format!(
+                                                        "🚫 {} 被 hook 拦截",
+                                                        tc.name
+                                                    ),
+                                                    status: ToolExecStatus::Failed(
+                                                        "该工具调用被 hook 拦截".to_string(),
+                                                    ),
+                                                },
+                                            );
+                                            continue;
+                                        }
+                                        if let Some(new_args) = result.tool_arguments {
+                                            tc.arguments = new_args;
                                         }
                                     }
                                 }
@@ -2736,12 +2736,11 @@ impl ChatApp {
                                 .unwrap_or_else(|_| ".".to_string()),
                             ..Default::default()
                         };
-                        if let Ok(manager) = self.hook_manager.lock() {
-                            if let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx) {
-                                if let Some(new_msg) = result.assistant_output {
-                                    content = new_msg;
-                                }
-                            }
+                        if let Ok(manager) = self.hook_manager.lock()
+                            && let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx)
+                            && let Some(new_msg) = result.assistant_output
+                        {
+                            content = new_msg;
                         }
                     }
                 }
@@ -2928,24 +2927,23 @@ impl ChatApp {
                 self.ui.scroll_offset = max_scroll;
                 self.ui.auto_scroll = true;
             }
-        } else if let Some(cache) = self.ui.msg_lines_cache.as_ref() {
-            if let Some(msg_start) = cache
+        } else if let Some(cache) = self.ui.msg_lines_cache.as_ref()
+            && let Some(msg_start) = cache
                 .msg_start_lines
                 .iter()
                 .find(|(idx, _)| *idx == self.ui.browse_msg_index)
                 .map(|(_, line)| *line as u16)
-            {
-                let msg_line_count = cache
-                    .per_msg_lines
-                    .get(self.ui.browse_msg_index)
-                    .map(|c| c.lines.len())
-                    .unwrap_or(1) as u16;
-                let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
-                if self.ui.browse_scroll_offset > msg_max_scroll {
-                    self.ui.browse_scroll_offset = msg_max_scroll;
-                }
-                self.ui.scroll_offset = (msg_start + self.ui.browse_scroll_offset).min(max_scroll);
+        {
+            let msg_line_count = cache
+                .per_msg_lines
+                .get(self.ui.browse_msg_index)
+                .map(|c| c.lines.len())
+                .unwrap_or(1) as u16;
+            let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
+            if self.ui.browse_scroll_offset > msg_max_scroll {
+                self.ui.browse_scroll_offset = msg_max_scroll;
             }
+            self.ui.scroll_offset = (msg_start + self.ui.browse_scroll_offset).min(max_scroll);
         }
     }
 
