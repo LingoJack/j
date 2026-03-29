@@ -33,7 +33,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
         md
     };
 
-    let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES;
+    let options =
+        Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS;
     let parser = Parser::new_ext(md, options);
 
     let mut lines: Vec<Line<'static>> = Vec::new();
@@ -266,6 +267,26 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
             }
             Event::End(TagEnd::Item) => {
                 flush_line(&mut current_spans, &mut lines);
+            }
+            Event::TaskListMarker(checked) => {
+                // 替换 Start(Item) 插入的 • 子弹为复选框符号
+                if let Some(last) = current_spans.last_mut() {
+                    let indent: String = last.content.chars().take_while(|c| *c == ' ').collect();
+                    let (symbol, style) = if checked {
+                        (
+                            format!("{}● ", indent),
+                            Style::default()
+                                .fg(ratatui::style::Color::LightGreen)
+                                .add_modifier(Modifier::BOLD),
+                        )
+                    } else {
+                        (
+                            format!("{}○ ", indent),
+                            Style::default().fg(theme.md_list_bullet),
+                        )
+                    };
+                    *last = Span::styled(symbol, style);
+                }
             }
             Event::Start(Tag::Paragraph) => {
                 if !lines.is_empty() && !in_code_block && heading_level.is_none() {
