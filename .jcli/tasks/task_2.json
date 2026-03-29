@@ -1,9 +1,0 @@
-{
-  "task_id": 2,
-  "title": "测试 Task 依赖",
-  "description": "第二个测试任务，依赖第一个任务",
-  "status": "pending",
-  "blocked_by": [],
-  "owner": "",
-  "task_doc_paths": []
-}
