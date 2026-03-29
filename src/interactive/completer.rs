@@ -68,6 +68,8 @@ pub enum ArgHint {
     Section,
     SectionKeys(String),
     Fixed(Vec<&'static str>),
+    /// Flag 补全：当前词以 `-` 开头时触发，可出现在任意参数位置
+    Flags(Vec<&'static str>),
     Placeholder(&'static str),
     FilePath,
     None,
@@ -151,7 +153,13 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
                 ArgHint::Placeholder("<content>"),
             ],
         ),
-        (cmd::CHAT, vec![ArgHint::Placeholder("<message>")]),
+        (
+            cmd::CHAT,
+            vec![
+                ArgHint::Flags(vec!["--continue", "-c", "--session"]),
+                ArgHint::Placeholder("<message>"),
+            ],
+        ),
         (
             cmd::CONCAT,
             vec![
@@ -239,9 +247,54 @@ impl Completer for CopilotCompleter {
 
         for (names, arg_hints) in &rules {
             if names.contains(&cmd_str) {
-                let arg_index = word_index - 1;
-                if arg_index < arg_hints.len() {
-                    let candidates = match &arg_hints[arg_index] {
+                // 当前词以 `-` 开头时，扫描所有 Flags hint 进行补全（不受位置限制）
+                if current_word.starts_with('-') {
+                    let flags: Vec<Pair> = arg_hints
+                        .iter()
+                        .filter_map(|h| {
+                            if let ArgHint::Flags(fs) = h {
+                                Some(fs)
+                            } else {
+                                None
+                            }
+                        })
+                        .flatten()
+                        .filter(|f| f.starts_with(current_word))
+                        .map(|f| Pair {
+                            display: f.to_string(),
+                            replacement: f.to_string(),
+                        })
+                        .collect();
+                    if !flags.is_empty() {
+                        return Ok((start_pos, flags));
+                    }
+                }
+
+                // 计算非 flag 参数的实际位置（跳过已输入的 flag 和 --session 的值）
+                let non_flag_args: Vec<&ArgHint> = arg_hints
+                    .iter()
+                    .filter(|h| !matches!(h, ArgHint::Flags(_)))
+                    .collect();
+
+                // 统计前面参数中已消耗的位置（flag 和 --session <value> 不计入位置索引）
+                let preceding = &parts[1..word_index]; // 当前词之前的所有参数
+                let mut skip = 0usize;
+                let mut i = 0;
+                while i < preceding.len() {
+                    if preceding[i] == "--session" {
+                        skip += 2; // --session 和它的值各占一个位置
+                        i += 2;
+                    } else if preceding[i].starts_with('-') {
+                        skip += 1;
+                        i += 1;
+                    } else {
+                        i += 1;
+                    }
+                }
+                let positional_index = (word_index - 1).saturating_sub(skip);
+
+                if positional_index < non_flag_args.len() {
+                    let candidates = match non_flag_args[positional_index] {
                         ArgHint::Alias => self
                             .all_aliases()
                             .into_iter()
@@ -285,7 +338,11 @@ impl Completer for CopilotCompleter {
                                 replacement: o.to_string(),
                             })
                             .collect(),
-                        ArgHint::Placeholder(_) => vec![],
+                        ArgHint::Placeholder(hint) => vec![Pair {
+                            display: hint.to_string(),
+                            replacement: current_word.to_string(),
+                        }],
+                        ArgHint::Flags(_) => vec![],
                         ArgHint::FilePath => complete_file_path(current_word),
                         ArgHint::None => vec![],
                     };
