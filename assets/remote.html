@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Sprite Remote</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -10,12 +10,14 @@
   --bg: #1a1a2e; --bg2: #16213e; --fg: #e0e0e0; --fg2: #a0a0b0;
   --accent: #0f3460; --primary: #e94560; --green: #4ecca3; --border: #2a2a4a;
   --bubble-user: #0f3460; --bubble-ai: #1a1a3e; --bubble-tool: #2a1a3e;
+  --sat: env(safe-area-inset-top); --sab: env(safe-area-inset-bottom);
+  --sal: env(safe-area-inset-left); --sar: env(safe-area-inset-right);
 }
 html, body { height: 100%; background: var(--bg); color: var(--fg); font-family: -apple-system, system-ui, sans-serif; font-size: 15px; }
-#app { display: flex; flex-direction: column; height: 100%; max-width: 600px; margin: 0 auto; }
+#app { display: flex; flex-direction: column; height: 100%; max-width: 600px; margin: 0 auto; padding-left: var(--sal); padding-right: var(--sar); }
 
 /* 顶部状态栏 */
-.header { padding: 12px 16px; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.header { padding: 12px 16px; padding-top: calc(12px + var(--sat)); background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .header .dot { width: 8px; height: 8px; border-radius: 50%; background: #666; flex-shrink: 0; }
 .header .dot.connected { background: var(--green); }
 .header .title { font-weight: 600; font-size: 16px; }
@@ -35,7 +37,7 @@ html, body { height: 100%; background: var(--bg); color: var(--fg); font-family:
 .status-bar { padding: 6px 16px; text-align: center; font-size: 12px; color: var(--fg2); background: var(--bg2); border-top: 1px solid var(--border); flex-shrink: 0; }
 
 /* 工具确认弹窗 */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; padding: var(--sat) var(--sar) var(--sab) var(--sal); }
 .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 20px; width: 90%; max-width: 400px; }
 .modal h3 { font-size: 16px; margin-bottom: 12px; color: var(--fg); }
 .modal .tool-info { font-size: 13px; color: var(--fg2); margin-bottom: 16px; background: var(--bg); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; word-break: break-all; }
@@ -45,7 +47,7 @@ html, body { height: 100%; background: var(--bg); color: var(--fg); font-family:
 .modal .btn.reject { background: var(--primary); color: #fff; }
 
 /* 输入区域 */
-.input-area { padding: 8px 12px; background: var(--bg2); border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+.input-area { padding: 8px 12px; padding-bottom: calc(8px + var(--sab)); background: var(--bg2); border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
 .input-area textarea { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 10px 16px; color: var(--fg); font-size: 15px; resize: none; outline: none; max-height: 120px; font-family: inherit; line-height: 1.4; }
 .input-area textarea:focus { border-color: var(--primary); }
 .input-area .send-btn { width: 42px; height: 42px; border-radius: 50%; border: none; background: var(--primary); color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -94,7 +96,6 @@ const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`;
 let ws = null;
 let state = 'idle'; // idle | loading | tool_confirm
 let streamingEl = null;
-let streamingContent = '';
 
 const messagesEl = document.getElementById('messages');
 const statusBar = document.getElementById('statusBar');
@@ -127,12 +128,11 @@ function connect() {
 function handleMessage(msg) {
   switch(msg.type) {
     case 'stream_chunk':
+      // msg.content 是全量流式内容（非增量），直接替换
       if (!streamingEl) {
         streamingEl = addMsg('assistant', '', true);
-        streamingContent = '';
       }
-      streamingContent += msg.content;
-      streamingEl.innerHTML = renderMd(streamingContent);
+      streamingEl.innerHTML = renderMd(msg.content);
       streamingEl.classList.add('streaming');
       scrollToBottom();
       state = 'loading';
@@ -141,11 +141,15 @@ function handleMessage(msg) {
 
     case 'message':
       if (msg.role === 'assistant' && streamingEl) {
+        // 流式结束，用最终完整内容替换
         streamingEl.classList.remove('streaming');
         streamingEl.innerHTML = renderMd(msg.content);
         streamingEl = null;
-        streamingContent = '';
+      } else if (msg.role === 'assistant') {
+        // 非流式的 assistant 消息（如 sync 后补发）
+        addMsg('assistant', msg.content);
       } else {
+        // user 消息（从终端发来的，需要显示）
         addMsg(msg.role, msg.content);
       }
       scrollToBottom();
@@ -155,7 +159,7 @@ function handleMessage(msg) {
       state = 'tool_confirm';
       let info = '';
       for (const t of msg.tools) {
-        info += `<b>${t.name}</b>\n${t.confirm_message}\n\n`;
+        info += `<b>${escHtml(t.name)}</b>\n${escHtml(t.confirm_message)}\n\n`;
       }
       toolInfo.innerHTML = info;
       toolModal.style.display = 'flex';
@@ -164,19 +168,23 @@ function handleMessage(msg) {
 
     case 'tool_result':
       const toolEl = addMsg('tool', '');
-      toolEl.innerHTML = `<span class="tool-name">🔧 ${msg.tool_call_id.substring(0,8)}</span> ${msg.is_error ? '❌' : '✅'}\n${truncate(msg.output, 200)}`;
+      toolEl.innerHTML = `<span class="tool-name">🔧 ${escHtml(msg.tool_call_id.substring(0,8))}</span> ${msg.is_error ? '❌' : '✅'}\n${escHtml(truncate(msg.output, 200))}`;
       scrollToBottom();
       break;
 
     case 'status':
       state = msg.state;
+      // 流式结束但没收到 message 事件时，清理 streaming 状态
+      if (state === 'idle' && streamingEl) {
+        streamingEl.classList.remove('streaming');
+        streamingEl = null;
+      }
       updateUI();
       break;
 
     case 'session_sync':
       messagesEl.innerHTML = '';
       streamingEl = null;
-      streamingContent = '';
       for (const m of msg.messages) {
         addMsg(m.role, m.content);
       }
@@ -231,7 +239,6 @@ function updateUI() {
   sendBtn.disabled = isLoading;
   if (isLoading) {
     statusBar.textContent = '⏳ AI 思考中...';
-    // 替换发送按钮为取消按钮
     if (!document.getElementById('cancelBtn')) {
       const cancelBtn = document.createElement('button');
       cancelBtn.className = 'cancel-btn';
@@ -247,7 +254,6 @@ function updateUI() {
     } else {
       statusBar.textContent = '已连接';
     }
-    // 恢复发送按钮
     const cancelBtn = document.getElementById('cancelBtn');
     if (cancelBtn) { cancelBtn.remove(); sendBtn.style.display = ''; }
   }
@@ -258,10 +264,11 @@ function scrollToBottom() {
 }
 
 function truncate(s, n) {
-  return s.length > n ? s.substring(0, n) + '...' : s;
+  return s && s.length > n ? s.substring(0, n) + '...' : (s || '');
 }
 
 function escHtml(s) {
+  if (!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
@@ -270,7 +277,7 @@ function renderMd(text) {
   if (!text) return '';
   let html = escHtml(text);
   // code blocks
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  html = html.replace(/```(\w*)<br>([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
   // inline code
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   // bold

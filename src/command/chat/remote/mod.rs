@@ -8,6 +8,7 @@ use bridge::WsBridge;
 use std::io;
 use std::net::UdpSocket;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Notify;
 
 /// 检测本机局域网 IP
@@ -58,7 +59,8 @@ fn display_qr_code(url: &str) {
 
 /// 启动远程控制服务器并等待客户端连接
 ///
-/// 返回 `(WsBridge, url)` 或 IO 错误
+/// 返回 `(WsBridge, url)` 或 IO 错误。
+/// 等待期间支持 Ctrl+C 中断。
 pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     let ip = detect_local_ip();
     let token = generate_token();
@@ -72,6 +74,16 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     let client_connected = Arc::clone(&bridge.client_connected);
     let client_notify = Arc::new(Notify::new());
     let client_notify2 = Arc::clone(&client_notify);
+
+    // Ctrl+C 中断标志
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let interrupted2 = Arc::clone(&interrupted);
+    let client_notify3 = Arc::clone(&client_notify);
+    ctrlc::set_handler(move || {
+        interrupted2.store(true, Ordering::Relaxed);
+        client_notify3.notify_one(); // 唤醒等待
+    })
+    .ok();
 
     // 启动 tokio runtime 和服务器
     let rt = tokio::runtime::Runtime::new()?;
@@ -93,10 +105,21 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
         .await;
     });
 
-    // 等待客户端连接（阻塞当前线程）
+    // 等待客户端连接（阻塞当前线程，可被 Ctrl+C 唤醒）
     rt.block_on(async {
         client_notify.notified().await;
     });
+
+    // 检查是否是 Ctrl+C 中断
+    if interrupted.load(Ordering::Relaxed) {
+        // 清理 ctrlc handler
+        let _ = ctrlc::set_handler(|| {});
+        println!("\n  ⏹  已取消\n");
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "用户取消"));
+    }
+
+    // 清理 ctrlc handler（TUI 有自己的输入处理）
+    let _ = ctrlc::set_handler(|| {});
 
     println!("  ✅ 客户端已连接！正在启动对话界面...\n");
     std::thread::sleep(std::time::Duration::from_millis(500));

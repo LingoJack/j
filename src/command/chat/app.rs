@@ -2243,15 +2243,11 @@ impl ChatApp {
     }
 
     /// 从远程客户端注入一条消息（模拟用户输入并发送）
+    /// 注意：不广播 user message 回去，发送方 Web 端已经本地显示了
     pub fn inject_remote_message(&mut self, content: String) {
         if content.trim().is_empty() {
             return;
         }
-        // 广播用户消息到远程（让其他客户端看到）
-        self.broadcast_ws(super::remote::protocol::WsOutbound::Message {
-            role: "user".to_string(),
-            content: content.clone(),
-        });
         self.send_message_internal(content);
     }
 
