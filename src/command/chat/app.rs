@@ -221,6 +221,8 @@ pub struct UIState {
     pub skill_toggle_index: usize,
     /// 是否展开工具调用详情（Ctrl+O 切换）
     pub expand_tools: bool,
+    /// 配置/工具/技能列表界面的垂直滚动偏移
+    pub config_scroll_offset: u16,
 }
 
 // ========== 后端状态 ==========
@@ -1172,6 +1174,7 @@ impl ChatApp {
                 tool_toggle_index: 0,
                 skill_toggle_index: 0,
                 expand_tools: false,
+                config_scroll_offset: 0,
             },
             state: ChatState {
                 agent_config,
@@ -1832,10 +1835,12 @@ impl ChatApp {
             Action::EnterToolToggleMenu => {
                 self.ui.mode = ChatMode::ToolToggle;
                 self.ui.tool_toggle_index = 0;
+                self.ui.config_scroll_offset = 0;
             }
             Action::EnterSkillToggleMenu => {
                 self.ui.mode = ChatMode::SkillToggle;
                 self.ui.skill_toggle_index = 0;
+                self.ui.config_scroll_offset = 0;
             }
             Action::ToggleMenuNavigate(dir) => {
                 // Used by both ToolToggle and SkillToggle modes

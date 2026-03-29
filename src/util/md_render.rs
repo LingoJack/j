@@ -98,12 +98,15 @@ fn map_color(color: ratatui::style::Color) -> crossterm::style::Color {
 /// 渲染 Markdown 文本到终端
 pub fn render_md(text: &str) {
     use crate::command::chat::markdown::markdown_to_lines;
-    use crate::command::chat::theme::{Theme, ThemeName};
+    use crate::command::chat::storage::load_agent_config;
+    use crate::command::chat::theme::Theme;
 
     let width = crossterm::terminal::size()
         .map(|(w, _)| w as usize)
         .unwrap_or(80);
-    let theme = Theme::from_name(&ThemeName::default());
+    // 直接复用用户在 agent_config 里已配置的主题，无需猜测终端背景色
+    let theme_name = load_agent_config().theme;
+    let theme = Theme::from_name(&theme_name);
     let lines = markdown_to_lines(text, width, &theme);
     print_lines_to_terminal(&lines);
 }

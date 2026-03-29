@@ -264,10 +264,9 @@ pub fn find_latest_session_id() -> Option<String> {
             continue;
         }
         if let (Ok(meta), Some(stem)) = (path.metadata(), path.file_stem().and_then(|s| s.to_str()))
+            && let Ok(modified) = meta.modified()
         {
-            if let Ok(modified) = meta.modified() {
-                entries.push((modified, stem.to_string()));
-            }
+            entries.push((modified, stem.to_string()));
         }
     }
     entries.sort_by(|a, b| b.0.cmp(&a.0));

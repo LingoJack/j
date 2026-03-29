@@ -403,6 +403,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         app.ui.config_field_idx = 0;
         app.ui.config_editing = false;
         app.ui.config_edit_buf.clear();
+        app.ui.config_scroll_offset = 0;
         app.update(Action::EnterMode(ChatMode::Config));
         return false;
     }

@@ -37,22 +37,15 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     draw_title_bar(f, chunks[0], app);
 
     // ========== 消息区 ==========
-    if app.ui.mode == ChatMode::Help {
-        draw_help(f, chunks[1], app);
-    } else if app.ui.mode == ChatMode::SelectModel {
-        draw_model_selector(f, chunks[1], app);
-    } else if app.ui.mode == ChatMode::Config {
-        draw_config_screen(f, chunks[1], app);
-    } else if app.ui.mode == ChatMode::ArchiveConfirm {
-        draw_archive_confirm(f, chunks[1], app);
-    } else if app.ui.mode == ChatMode::ArchiveList {
-        draw_archive_list(f, chunks[1], app);
-    } else if app.ui.mode == ChatMode::ToolToggle {
-        draw_tool_toggle(f, chunks[1], app);
-    } else if app.ui.mode == ChatMode::SkillToggle {
-        draw_skill_toggle(f, chunks[1], app);
-    } else {
-        draw_messages(f, chunks[1], app);
+    match app.ui.mode {
+        ChatMode::Help => draw_help(f, chunks[1], app),
+        ChatMode::SelectModel => draw_model_selector(f, chunks[1], app),
+        ChatMode::Config => draw_config_screen(f, chunks[1], app),
+        ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
+        ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
+        ChatMode::ToolToggle => draw_tool_toggle(f, chunks[1], app),
+        ChatMode::SkillToggle => draw_skill_toggle(f, chunks[1], app),
+        _ => draw_messages(f, chunks[1], app),
     }
 
     // ========== 输入区 ==========
@@ -356,6 +349,9 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let end = (start + visible_height as usize).min(cached.total_line_count);
     let history_total: usize = cached.per_msg_lines.iter().map(|p| p.lines.len()).sum();
     let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
+
+    // 单 pass：渲染文字的同时收集图片标记 (display_row, height, url)
+    let mut img_markers: Vec<(usize, u16, String)> = Vec::new();
     for (i, line_idx) in (start..end).enumerate() {
         let line = match get_line_at(cached, line_idx, history_total) {
             Some(l) => l,
@@ -363,9 +359,20 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         };
         let y = inner.y + i as u16;
         let line_area = Rect::new(inner.x, y, inner.width, 1);
-        // 图片标记行：只渲染气泡填充 span，跳过末尾的标记 span
-        let has_marker = line.spans.iter().any(|s| s.content.starts_with("\x00IMG:"));
-        if has_marker {
+
+        // 检查是否有图片标记 span
+        let img_info: Option<(u16, String)> = line.spans.iter().find_map(|span| {
+            span.content.strip_prefix("\x00IMG:").and_then(|rest| {
+                rest.find(':').map(|p| {
+                    let height: u16 = rest[..p].parse().unwrap_or(20);
+                    let url = rest[p + 1..].to_string();
+                    (height, url)
+                })
+            })
+        });
+
+        if let Some((height, url)) = img_info {
+            // 渲染无标记 span 的气泡行
             let visible_spans: Vec<Span> = line
                 .spans
                 .iter()
@@ -374,146 +381,130 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 .collect();
             let p = Paragraph::new(Line::from(visible_spans)).style(msg_area_bg);
             f.render_widget(p, line_area);
+            img_markers.push((i, height, url));
         } else {
             let p = Paragraph::new(line.clone()).style(msg_area_bg);
             f.render_widget(p, line_area);
         }
     }
 
-    // === 图片渲染 pass ===
+    // === 图片渲染 pass（需在文字之后覆盖绘制）===
     let has_picker = safe_lock(&app.ui.image_cache, "draw_messages::image_cache_picker")
         .picker
         .is_some();
-    // 图片渲染宽度与气泡内容区对齐
     let img_pad = 3u16; // 与气泡 pad_left_w 一致
     let img_render_w = (bubble_max_width as u16).saturating_sub(img_pad * 2);
-    for (i, line_idx) in (start..end).enumerate() {
-        let line = match get_line_at(cached, line_idx, history_total) {
-            Some(l) => l,
-            None => continue,
-        };
-        // 在所有 spans 中查找 \x00IMG: 标记（气泡包装会添加 padding spans）
-        let img_marker: Option<(u16, String)> = line.spans.iter().find_map(|span| {
-            let content = span.content.as_ref();
-            content.strip_prefix("\x00IMG:").and_then(|rest| {
-                rest.find(':').map(|colon_pos| {
-                    let height: u16 = rest[..colon_pos].parse().unwrap_or(20);
-                    let url = rest[colon_pos + 1..].to_string();
-                    (height, url)
-                })
-            })
-        });
-        if let Some((height, url)) = img_marker {
-            let y = inner.y + i as u16;
-            let remaining_h = visible_height.saturating_sub(i as u16);
-            let bubble_w = bubble_max_width as u16;
+    for (i, height, url) in img_markers {
+        let line_idx = start + i;
+        let y = inner.y + i as u16;
+        let remaining_h = visible_height.saturating_sub(i as u16);
+        let bubble_w = bubble_max_width as u16;
 
-            // 计算实际可用的占位行数：从标记行往下数连续的空行/占位行
-            let mut actual_h = 1u16; // 标记行本身占 1 行
-            for next_offset in 1..height as usize {
-                let next_idx = line_idx + next_offset;
-                if next_idx >= cached.total_line_count {
-                    break;
-                }
-                let next_line = match get_line_at(cached, next_idx, history_total) {
-                    Some(l) => l,
-                    None => break,
-                };
-                // 占位行要么为空，要么只有气泡背景空格（可能含边框字符 │）
-                let is_placeholder = next_line.spans.is_empty()
-                    || next_line
-                        .spans
-                        .iter()
-                        .all(|s| s.content.replace('│', "").trim().is_empty());
-                if is_placeholder {
-                    actual_h += 1;
-                } else {
-                    break;
-                }
+        // 计算实际可用的占位行数：从标记行往下数连续的空行/占位行
+        let mut actual_h = 1u16; // 标记行本身占 1 行
+        for next_offset in 1..height as usize {
+            let next_idx = line_idx + next_offset;
+            if next_idx >= cached.total_line_count {
+                break;
             }
-            let render_h = actual_h.min(height).min(remaining_h);
-
-            // 如果可见高度不够容纳图片，跳过渲染（避免滚动时缩放）
-            if remaining_h < render_h {
-                continue;
+            let next_line = match get_line_at(cached, next_idx, history_total) {
+                Some(l) => l,
+                None => break,
+            };
+            // 占位行要么为空，要么只有气泡背景空格（可能含边框字符 │）
+            let is_placeholder = next_line.spans.is_empty()
+                || next_line
+                    .spans
+                    .iter()
+                    .all(|s| s.content.replace('│', "").trim().is_empty());
+            if is_placeholder {
+                actual_h += 1;
+            } else {
+                break;
             }
+        }
+        let render_h = actual_h.min(height).min(remaining_h);
 
-            // 图片区域在气泡内对齐：左 padding 3，宽度为气泡内容宽度
-            let img_x = inner.x + img_pad;
-            let img_area = Rect::new(img_x, y, img_render_w, render_h);
+        // 如果可见高度不够容纳图片，跳过渲染（避免滚动时缩放）
+        if remaining_h < render_h {
+            continue;
+        }
 
-            if !has_picker {
-                // 终端不支持图形协议，降级为文本链接
-                let max_url_w = (bubble_w as usize).saturating_sub(12); // "  [Image: " + "]"
-                let display_url = truncate_str(&url, max_url_w);
-                let fallback = Paragraph::new(Line::from(Span::styled(
-                    format!("  [Image: {}]", display_url),
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .bg(app.ui.theme.bubble_ai)
-                        .add_modifier(Modifier::UNDERLINED),
+        // 图片区域在气泡内对齐：左 padding 3，宽度为气泡内容宽度
+        let img_x = inner.x + img_pad;
+        let img_area = Rect::new(img_x, y, img_render_w, render_h);
+
+        if !has_picker {
+            // 终端不支持图形协议，降级为文本链接
+            let max_url_w = (bubble_w as usize).saturating_sub(12); // "  [Image: " + "]"
+            let display_url = truncate_str(&url, max_url_w);
+            let fallback = Paragraph::new(Line::from(Span::styled(
+                format!("  [Image: {}]", display_url),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .bg(app.ui.theme.bubble_ai)
+                    .add_modifier(Modifier::UNDERLINED),
+            )));
+            f.render_widget(fallback, Rect::new(inner.x, y, bubble_w, 1));
+            continue;
+        }
+
+        let mut cache = safe_lock(&app.ui.image_cache, "draw_chat_ui::image_cache");
+        match cache.images.get_mut(&url) {
+            Some(ImageState::Ready(protocol)) => {
+                let widget = StatefulImage::default().resize(Resize::Scale(None));
+                f.render_stateful_widget(widget, img_area, protocol);
+            }
+            Some(ImageState::Failed(err)) => {
+                let max_err_w = (bubble_w as usize).saturating_sub(24); // "  [Image load failed: " + "]"
+                let display_err = truncate_str(err, max_err_w);
+                let err_line = Paragraph::new(Line::from(Span::styled(
+                    format!("  [Image load failed: {}]", display_err),
+                    Style::default().fg(Color::Red).bg(app.ui.theme.bubble_ai),
                 )));
-                f.render_widget(fallback, Rect::new(inner.x, y, bubble_w, 1));
-                continue;
+                f.render_widget(err_line, Rect::new(inner.x, y, bubble_w, 1));
             }
-
-            let mut cache = safe_lock(&app.ui.image_cache, "draw_chat_ui::image_cache");
-            match cache.images.get_mut(&url) {
-                Some(ImageState::Ready(protocol)) => {
-                    let widget = StatefulImage::default().resize(Resize::Scale(None));
-                    f.render_stateful_widget(widget, img_area, protocol);
-                }
-                Some(ImageState::Failed(err)) => {
-                    let max_err_w = (bubble_w as usize).saturating_sub(24); // "  [Image load failed: " + "]"
-                    let display_err = truncate_str(err, max_err_w);
-                    let err_line = Paragraph::new(Line::from(Span::styled(
-                        format!("  [Image load failed: {}]", display_err),
-                        Style::default().fg(Color::Red).bg(app.ui.theme.bubble_ai),
-                    )));
-                    f.render_widget(err_line, Rect::new(inner.x, y, bubble_w, 1));
-                }
-                Some(ImageState::Loading) => {
-                    let max_url_w = (bubble_w as usize).saturating_sub(21); // "  Loading image: " + "..."
-                    let display_url = truncate_str(&url, max_url_w);
-                    let loading = Paragraph::new(Line::from(Span::styled(
-                        format!("  Loading image: {}...", display_url),
-                        Style::default()
-                            .fg(Color::DarkGray)
-                            .bg(app.ui.theme.bubble_ai),
-                    )));
-                    f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
-                }
-                Some(ImageState::Pending) | None => {
-                    let max_url_w = (bubble_w as usize).saturating_sub(21);
-                    let display_url = truncate_str(&url, max_url_w);
-                    let loading = Paragraph::new(Line::from(Span::styled(
-                        format!("  Loading image: {}...", display_url),
-                        Style::default()
-                            .fg(Color::DarkGray)
-                            .bg(app.ui.theme.bubble_ai),
-                    )));
-                    f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
-                    // 标记为加载中
-                    cache.images.insert(url.clone(), ImageState::Loading);
-                    // spawn 后台线程加载图片
-                    let cache_clone = std::sync::Arc::clone(&app.ui.image_cache);
-                    let url_owned = url.clone();
-                    std::thread::spawn(move || match load_image(&url_owned) {
-                        Ok(dyn_img) => {
-                            let mut c = safe_lock(&cache_clone, "image_load::cache_ready");
-                            if let Some(ref picker) = c.picker {
-                                let protocol: ratatui_image::protocol::StatefulProtocol =
-                                    picker.new_resize_protocol(dyn_img);
-                                c.images.insert(url_owned, ImageState::Ready(protocol));
-                            }
+            Some(ImageState::Loading) => {
+                let max_url_w = (bubble_w as usize).saturating_sub(21); // "  Loading image: " + "..."
+                let display_url = truncate_str(&url, max_url_w);
+                let loading = Paragraph::new(Line::from(Span::styled(
+                    format!("  Loading image: {}...", display_url),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .bg(app.ui.theme.bubble_ai),
+                )));
+                f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
+            }
+            Some(ImageState::Pending) | None => {
+                let max_url_w = (bubble_w as usize).saturating_sub(21);
+                let display_url = truncate_str(&url, max_url_w);
+                let loading = Paragraph::new(Line::from(Span::styled(
+                    format!("  Loading image: {}...", display_url),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .bg(app.ui.theme.bubble_ai),
+                )));
+                f.render_widget(loading, Rect::new(inner.x, y, bubble_w, 1));
+                // 标记为加载中
+                cache.images.insert(url.clone(), ImageState::Loading);
+                // spawn 后台线程加载图片
+                let cache_clone = std::sync::Arc::clone(&app.ui.image_cache);
+                let url_owned = url.clone();
+                std::thread::spawn(move || match load_image(&url_owned) {
+                    Ok(dyn_img) => {
+                        let mut c = safe_lock(&cache_clone, "image_load::cache_ready");
+                        if let Some(ref picker) = c.picker {
+                            let protocol: ratatui_image::protocol::StatefulProtocol =
+                                picker.new_resize_protocol(dyn_img);
+                            c.images.insert(url_owned, ImageState::Ready(protocol));
                         }
-                        Err(e) => {
-                            safe_lock(&cache_clone, "image_load::cache_failed")
-                                .images
-                                .insert(url_owned, ImageState::Failed(e));
-                        }
-                    });
-                }
+                    }
+                    Err(e) => {
+                        safe_lock(&cache_clone, "image_load::cache_failed")
+                            .images
+                            .insert(url_owned, ImageState::Failed(e));
+                    }
+                });
             }
         }
     }
@@ -521,7 +512,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
 pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
-    let usable_width = area.width.saturating_sub(2 + 4) as usize;
+    let usable_width = area.width.saturating_sub(2) as usize;
 
     let chars: Vec<char> = app.ui.input.chars().collect();
 
@@ -564,12 +555,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         String::new()
     };
 
-    let prompt_style = if app.state.is_loading {
-        Style::default().fg(t.input_prompt_loading)
-    } else {
-        Style::default().fg(t.input_prompt)
-    };
-    let prompt_text = if app.state.is_loading { " .. " } else { " >  " };
+    let loading_prefix = if app.state.is_loading { " · " } else { "" };
 
     let full_visible = format!("{}{}{}", before, cursor_ch, after);
     let inner_height = area.height.saturating_sub(2) as usize;
@@ -616,10 +602,11 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .take(inner_height.max(1))
     {
         let mut spans: Vec<Span> = Vec::new();
-        if _line_idx == 0 && line_scroll == 0 {
-            spans.push(Span::styled(prompt_text, prompt_style));
-        } else {
-            spans.push(Span::styled("    ", Style::default()));
+        if _line_idx == 0 && line_scroll == 0 && !loading_prefix.is_empty() {
+            spans.push(Span::styled(
+                loading_prefix,
+                Style::default().fg(t.input_prompt_loading),
+            ));
         }
 
         let line_chars: Vec<char> = wl.chars().collect();
@@ -695,10 +682,10 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     }
 
     if display_lines.is_empty() {
-        display_lines.push(Line::from(vec![
-            Span::styled(prompt_text, prompt_style),
-            Span::styled(" ", Style::default().fg(t.cursor_fg).bg(t.cursor_bg)),
-        ]));
+        display_lines.push(Line::from(vec![Span::styled(
+            " ",
+            Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+        )]));
     }
 
     let input_widget = Paragraph::new(display_lines).block(
@@ -717,7 +704,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     f.render_widget(input_widget, area);
 
     if !app.state.is_loading {
-        let prompt_w: u16 = 4;
+        let prompt_w: u16 = 0;
         let border_left: u16 = 1;
 
         let cursor_col_in_line = {
@@ -822,9 +809,19 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ],
     };
 
+    // 按终端宽度自适应：依次累加 hint，直到放不下为止
+    let avail_width = area.width as usize;
+    let sep_w = display_width("  │  ");
     let mut spans: Vec<Span> = Vec::new();
     spans.push(Span::styled(" ", Style::default()));
+    let mut used = 1usize;
+
     for (i, (key, desc)) in hints.iter().enumerate() {
+        let item_w = display_width(&format!(" {} ", key)) + display_width(&format!(" {}", desc));
+        let need_w = if i == 0 { item_w } else { sep_w + item_w };
+        if used + need_w > avail_width {
+            break;
+        }
         if i > 0 {
             spans.push(Span::styled("  │  ", Style::default().fg(t.hint_separator)));
         }
@@ -836,6 +833,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             format!(" {}", desc),
             Style::default().fg(t.hint_desc),
         ));
+        used += need_w;
     }
 
     let hint_bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_primary));
@@ -1079,6 +1077,66 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     f.render_widget(help_widget, area);
 }
 
+/// 通用浮动弹窗列表渲染（输入区上方）
+#[allow(clippy::too_many_arguments)]
+fn draw_popup_list(
+    f: &mut ratatui::Frame,
+    input_area: Rect,
+    items: Vec<ListItem<'static>>,
+    item_labels: &[String],
+    title: String,
+    title_color: ratatui::style::Color,
+    border_color: ratatui::style::Color,
+    bg_color: ratatui::style::Color,
+    highlight_bg: ratatui::style::Color,
+    selected: usize,
+) {
+    if items.is_empty() {
+        return;
+    }
+    let item_count = items.len();
+    let popup_height = (item_count as u16) + 2;
+    let popup_width = item_labels
+        .iter()
+        .map(|n| display_width(n))
+        .max()
+        .unwrap_or(20)
+        .max(16)
+        .min(input_area.width.saturating_sub(4) as usize) as u16
+        + 2;
+
+    let x = input_area.x + 1;
+    let y = input_area.y.saturating_sub(popup_height);
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(selected.min(item_count.saturating_sub(1))));
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(border_color))
+                .title(Span::styled(
+                    title,
+                    Style::default()
+                        .fg(title_color)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(bg_color)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(highlight_bg)
+                .fg(ratatui::style::Color::White)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    f.render_widget(Clear, popup_area);
+    f.render_stateful_widget(list, popup_area, &mut list_state);
+}
+
 /// 绘制 @ 补全弹窗（输入区域上方浮动）
 pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
@@ -1086,59 +1144,33 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
     if filtered.is_empty() {
         return;
     }
-
-    let item_count = filtered.len().min(8); // 最多显示 8 项
-    let popup_height = (item_count as u16) + 2; // 加上边框
-    let popup_width = filtered
+    let max_items = filtered.len().min(8);
+    let labels: Vec<String> = filtered
         .iter()
-        .map(|n| display_width(&format!("  @{}  ", n)))
-        .max()
-        .unwrap_or(20)
-        .max(16)
-        .min(input_area.width.saturating_sub(4) as usize) as u16
-        + 2; // 加边框
-
-    // 弹窗位置：输入区域上方
-    let x = input_area.x + 1;
-    let y = input_area.y.saturating_sub(popup_height);
-
-    let popup_area = Rect::new(x, y, popup_width, popup_height);
-
-    let items: Vec<ListItem> = filtered
+        .take(max_items)
+        .map(|n| format!("  @{}  ", n))
+        .collect();
+    let items: Vec<ListItem<'static>> = labels
         .iter()
-        .take(item_count)
-        .map(|name| {
-            let style = Style::default().fg(t.label_ai);
-            ListItem::new(Line::from(Span::styled(format!("  @{}  ", name), style)))
+        .map(|label| {
+            ListItem::new(Line::from(Span::styled(
+                label.clone(),
+                Style::default().fg(t.label_ai),
+            )))
         })
         .collect();
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(
-        app.ui.at_popup_selected.min(item_count.saturating_sub(1)),
-    ));
-
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_title))
-                .title(Span::styled(
-                    " Skills ",
-                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(t.bg_title)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(t.model_sel_highlight_bg)
-                .fg(t.text_white)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    f.render_widget(Clear, popup_area);
-    f.render_stateful_widget(list, popup_area, &mut list_state);
+    draw_popup_list(
+        f,
+        input_area,
+        items,
+        &labels,
+        " Skills ".to_string(),
+        t.label_ai,
+        t.border_title,
+        t.bg_title,
+        t.model_sel_highlight_bg,
+        app.ui.at_popup_selected,
+    );
 }
 
 /// 绘制文件补全弹窗（输入区域上方浮动）
@@ -1148,29 +1180,17 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
     if filtered.is_empty() {
         return;
     }
-
-    let item_count = filtered.len().min(15);
-    let popup_height = (item_count as u16) + 2;
-    let popup_width = filtered
+    let max_items = filtered.len().min(15);
+    let labels: Vec<String> = filtered
         .iter()
-        .map(|n| display_width(&format!("  {}  ", n)))
-        .max()
-        .unwrap_or(20)
-        .max(16)
-        .min(input_area.width.saturating_sub(4) as usize) as u16
-        + 2;
-
-    let x = input_area.x + 1;
-    let y = input_area.y.saturating_sub(popup_height);
-
-    let popup_area = Rect::new(x, y, popup_width, popup_height);
-
-    let items: Vec<ListItem> = filtered
+        .take(max_items)
+        .map(|n| format!("  {}  ", n))
+        .collect();
+    let items: Vec<ListItem<'static>> = filtered
         .iter()
-        .take(item_count)
+        .take(max_items)
         .map(|name| {
-            let is_dir = name.ends_with('/');
-            let style = if is_dir {
+            let style = if name.ends_with('/') {
                 Style::default().fg(Color::Cyan)
             } else {
                 Style::default().fg(t.text_white)
@@ -1178,41 +1198,23 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
             ListItem::new(Line::from(Span::styled(format!("  {}  ", name), style)))
         })
         .collect();
-
-    let title_text = if app.ui.file_popup_filter.is_empty() {
+    let title = if app.ui.file_popup_filter.is_empty() {
         " Files ".to_string()
     } else {
         format!(" {} ", app.ui.file_popup_filter)
     };
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(
-        app.ui.file_popup_selected.min(item_count.saturating_sub(1)),
-    ));
-
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_title))
-                .title(Span::styled(
-                    title_text,
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(t.bg_title)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(t.model_sel_highlight_bg)
-                .fg(t.text_white)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    f.render_widget(Clear, popup_area);
-    f.render_stateful_widget(list, popup_area, &mut list_state);
+    draw_popup_list(
+        f,
+        input_area,
+        items,
+        &labels,
+        title,
+        Color::Cyan,
+        t.border_title,
+        t.bg_title,
+        t.model_sel_highlight_bg,
+        app.ui.file_popup_selected,
+    );
 }
 
 /// 绘制技能补全弹窗（输入区域上方浮动）
@@ -1222,66 +1224,38 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
     if filtered.is_empty() {
         return;
     }
-
-    let item_count = filtered.len().min(8);
-    let popup_height = (item_count as u16) + 2;
-    let popup_width = filtered
+    let max_items = filtered.len().min(8);
+    let labels: Vec<String> = filtered
         .iter()
-        .map(|n| display_width(&format!("  {}  ", n)))
-        .max()
-        .unwrap_or(20)
-        .max(16)
-        .min(input_area.width.saturating_sub(4) as usize) as u16
-        + 2;
-
-    let x = input_area.x + 1;
-    let y = input_area.y.saturating_sub(popup_height);
-
-    let popup_area = Rect::new(x, y, popup_width, popup_height);
-
-    let title_text = if app.ui.skill_popup_filter.is_empty() {
+        .take(max_items)
+        .map(|n| format!("  {}  ", n))
+        .collect();
+    let items: Vec<ListItem<'static>> = labels
+        .iter()
+        .map(|label| {
+            ListItem::new(Line::from(Span::styled(
+                label.clone(),
+                Style::default().fg(t.label_ai),
+            )))
+        })
+        .collect();
+    let title = if app.ui.skill_popup_filter.is_empty() {
         " Skills ".to_string()
     } else {
         format!(" {} ", app.ui.skill_popup_filter)
     };
-
-    let items: Vec<ListItem> = filtered
-        .iter()
-        .take(item_count)
-        .map(|name| {
-            let style = Style::default().fg(t.label_ai);
-            ListItem::new(Line::from(Span::styled(format!("  {}  ", name), style)))
-        })
-        .collect();
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(
-        app.ui
-            .skill_popup_selected
-            .min(item_count.saturating_sub(1)),
-    ));
-
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_title))
-                .title(Span::styled(
-                    title_text,
-                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(t.bg_title)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(t.model_sel_highlight_bg)
-                .fg(t.text_white)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    f.render_widget(Clear, popup_area);
-    f.render_stateful_widget(list, popup_area, &mut list_state);
+    draw_popup_list(
+        f,
+        input_area,
+        items,
+        &labels,
+        title,
+        t.label_ai,
+        t.border_title,
+        t.bg_title,
+        t.model_sel_highlight_bg,
+        app.ui.skill_popup_selected,
+    );
 }
 
 /// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)

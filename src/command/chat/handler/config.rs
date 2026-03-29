@@ -43,12 +43,14 @@ pub fn handle_tool_toggle_mode(app: &mut ChatApp, key: KeyEvent) {
     let total = tool_names.len();
     if total == 0 {
         app.ui.mode = ChatMode::Config;
+        app.ui.config_scroll_offset = 0;
         return;
     }
 
     let action = match key.code {
         KeyCode::Esc => {
             save_agent_config(&app.state.agent_config);
+            app.ui.config_scroll_offset = 0;
             Action::EnterMode(ChatMode::Config)
         }
         KeyCode::Up | KeyCode::Char('k') => Action::ToggleMenuNavigate(CursorDirection::Up),
@@ -76,12 +78,14 @@ pub fn handle_skill_toggle_mode(app: &mut ChatApp, key: KeyEvent) {
     let total = app.state.loaded_skills.len();
     if total == 0 {
         app.ui.mode = ChatMode::Config;
+        app.ui.config_scroll_offset = 0;
         return;
     }
 
     let action = match key.code {
         KeyCode::Esc => {
             save_agent_config(&app.state.agent_config);
+            app.ui.config_scroll_offset = 0;
             Action::EnterMode(ChatMode::Config)
         }
         KeyCode::Up | KeyCode::Char('k') => Action::ToggleMenuNavigate(CursorDirection::Up),

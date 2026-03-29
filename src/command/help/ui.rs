@@ -98,8 +98,7 @@ fn draw_tab_bar(
     }
 
     // 渲染可见 tab
-    for i in vis_start..vis_end {
-        let label = &tab_labels[i];
+    for (i, label) in tab_labels.iter().enumerate().take(vis_end).skip(vis_start) {
         if i == help_app.active_tab {
             spans.push(Span::styled(
                 label.clone(),

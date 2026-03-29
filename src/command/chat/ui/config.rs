@@ -8,14 +8,61 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+/// 构建"带行内光标的可编辑字段"span 列表
+fn render_cursor_spans<'a>(
+    value: &str,
+    cursor: usize,
+    value_style: Style,
+    cursor_fg: ratatui::style::Color,
+    cursor_bg: ratatui::style::Color,
+) -> Vec<Span<'a>> {
+    let chars: Vec<char> = value.chars().collect();
+    let before: String = chars[..cursor.min(chars.len())].iter().collect();
+    let cursor_ch = if cursor < chars.len() {
+        chars[cursor].to_string()
+    } else {
+        " ".to_string()
+    };
+    let after: String = if cursor < chars.len() {
+        chars[cursor + 1..].iter().collect()
+    } else {
+        String::new()
+    };
+    vec![
+        Span::styled(before, value_style),
+        Span::styled(cursor_ch, Style::default().fg(cursor_fg).bg(cursor_bg)),
+        Span::styled(after, value_style),
+        Span::styled(" ✏️", Style::default()),
+    ]
+}
+
+/// 构建长文本字段的截断预览值（替换换行为空格，超 40 字符截断）
+fn render_preview_value(raw: &str) -> String {
+    if raw.is_empty() {
+        return "(空)".to_string();
+    }
+    let flat: String = raw
+        .chars()
+        .map(|c| if c == '\n' { ' ' } else { c })
+        .collect();
+    if flat.chars().count() > 40 {
+        let truncated: String = flat.chars().take(40).collect();
+        format!("{}...", truncated)
+    } else {
+        flat
+    }
+}
+
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
     let bg = t.bg_title;
     let total_provider_fields = CONFIG_FIELDS.len();
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
+    // 记录每个字段对应的行号（用于滚动定位）
+    let mut field_line_indices: Vec<usize> = Vec::new();
 
+    lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
         "  ⚙️  模型配置",
         Style::default()
@@ -62,7 +109,6 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         )));
     }
     lines.push(Line::from(""));
-
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
         Style::default().fg(t.separator),
@@ -78,7 +124,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         )));
         lines.push(Line::from(""));
 
-        for (i, field) in CONFIG_FIELDS.iter().enumerate().take(total_provider_fields) {
+        for (i, _) in CONFIG_FIELDS.iter().enumerate().take(total_provider_fields) {
+            field_line_indices.push(lines.len());
             let is_selected = app.ui.config_field_idx == i;
             let label = config_field_label(i);
             let value = if app.ui.config_editing && is_selected {
@@ -104,42 +151,28 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Style::default().fg(t.text_white).bg(t.config_edit_bg)
             } else if is_selected {
                 Style::default().fg(t.text_white)
-            } else if *field == "api_key" {
+            } else if CONFIG_FIELDS[i] == "api_key" {
                 Style::default().fg(t.config_api_key)
             } else {
                 Style::default().fg(t.config_value)
             };
 
-            lines.push(Line::from(if app.ui.config_editing && is_selected {
-                // 编辑模式：显示带光标的文本
+            let line = if app.ui.config_editing && is_selected {
                 let mut spans = vec![
                     Span::styled(pointer, pointer_style),
                     Span::styled(format!("{:<10}", label), label_style),
                     Span::styled("  ", Style::default()),
                 ];
-                let chars: Vec<char> = value.chars().collect();
-                let cursor = app.ui.config_edit_cursor;
-                let before: String = chars[..cursor.min(chars.len())].iter().collect();
-                let cursor_ch = if cursor < chars.len() {
-                    chars[cursor].to_string()
-                } else {
-                    " ".to_string()
-                };
-                let after: String = if cursor < chars.len() {
-                    chars[cursor + 1..].iter().collect()
-                } else {
-                    String::new()
-                };
-                spans.push(Span::styled(before, value_style));
-                spans.push(Span::styled(
-                    cursor_ch,
-                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+                spans.extend(render_cursor_spans(
+                    &value,
+                    app.ui.config_edit_cursor,
+                    value_style,
+                    t.cursor_fg,
+                    t.cursor_bg,
                 ));
-                spans.push(Span::styled(after, value_style));
-                spans.push(Span::styled(" ✏️", Style::default()));
-                spans
+                Line::from(spans)
             } else {
-                vec![
+                Line::from(vec![
                     Span::styled(pointer, pointer_style),
                     Span::styled(format!("{:<10}", label), label_style),
                     Span::styled("  ", Style::default()),
@@ -151,13 +184,13 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                         },
                         value_style,
                     ),
-                ]
-            }));
+                ])
+            };
+            lines.push(line);
         }
     }
 
     lines.push(Line::from(""));
-
     lines.push(Line::from(Span::styled(
         "  🌐 全局配置",
         Style::default()
@@ -168,6 +201,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     for (i, field) in CONFIG_GLOBAL_FIELDS.iter().enumerate() {
         let field_idx = total_provider_fields + i;
+        field_line_indices.push(lines.len());
         let is_selected = app.ui.config_field_idx == field_idx;
         let label = config_field_label(field_idx);
         let value = if app.ui.config_editing && is_selected {
@@ -197,7 +231,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             Style::default().fg(t.config_value)
         };
 
-        if *field == "stream_mode" {
+        let line = if *field == "stream_mode" {
             let toggle_on = app.state.agent_config.stream_mode;
             let toggle_style = if toggle_on {
                 Style::default()
@@ -211,7 +245,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             } else {
                 "○ 关闭"
             };
-            lines.push(Line::from(vec![
+            Line::from(vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
                 Span::styled("  ", Style::default()),
@@ -220,10 +254,10 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     if is_selected { "  (Enter 切换)" } else { "" },
                     Style::default().fg(t.config_dim),
                 ),
-            ]));
+            ])
         } else if *field == "theme" {
             let theme_name = app.state.agent_config.theme.display_name();
-            lines.push(Line::from(vec![
+            Line::from(vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
                 Span::styled("  ", Style::default()),
@@ -237,7 +271,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     if is_selected { "  (Enter 切换)" } else { "" },
                     Style::default().fg(t.config_dim),
                 ),
-            ]));
+            ])
         } else if *field == "tools_enabled" {
             let toggle_on = app.state.agent_config.tools_enabled;
             let tool_names = app.tool_registry.tool_names();
@@ -262,7 +296,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             } else {
                 "○ 关闭".to_string()
             };
-            lines.push(Line::from(vec![
+            Line::from(vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
                 Span::styled("  ", Style::default()),
@@ -271,110 +305,56 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     if is_selected { "  (Enter 设置)" } else { "" },
                     Style::default().fg(t.config_dim),
                 ),
-            ]));
-        } else if *field == "system_prompt" {
-            // system_prompt 特殊处理：截断显示 + Enter 弹出全屏编辑器
-            let display_value = if value.is_empty() {
-                "(空)".to_string()
-            } else {
-                // 截断到 40 个字符，替换换行为空格
-                let flat: String = value
-                    .chars()
-                    .map(|c| if c == '\n' { ' ' } else { c })
-                    .collect();
-                if flat.chars().count() > 40 {
-                    let truncated: String = flat.chars().take(40).collect();
-                    format!("{}...", truncated)
-                } else {
-                    flat
-                }
-            };
-            lines.push(Line::from(vec![
+            ])
+        } else if *field == "system_prompt" || *field == "style" {
+            Line::from(vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
                 Span::styled("  ", Style::default()),
-                Span::styled(display_value, value_style),
+                Span::styled(render_preview_value(&value), value_style),
                 Span::styled(
-                    if is_selected { "  (Enter 编辑)" } else { "" },
+                    if is_selected {
+                        "  (Enter 编辑)".to_string()
+                    } else {
+                        String::new()
+                    },
                     Style::default().fg(t.config_dim),
                 ),
-            ]));
-        } else if *field == "style" {
-            // style 特殊处理：同 system_prompt 模式
-            let display_value = if value.is_empty() {
-                "(空)".to_string()
-            } else {
-                let flat: String = value
-                    .chars()
-                    .map(|c| if c == '\n' { ' ' } else { c })
-                    .collect();
-                if flat.chars().count() > 40 {
-                    let truncated: String = flat.chars().take(40).collect();
-                    format!("{}...", truncated)
-                } else {
-                    flat
-                }
-            };
-            lines.push(Line::from(vec![
+            ])
+        } else if app.ui.config_editing && is_selected {
+            let mut spans = vec![
                 Span::styled(pointer, pointer_style),
                 Span::styled(format!("{:<10}", label), label_style),
                 Span::styled("  ", Style::default()),
-                Span::styled(display_value, value_style),
-                Span::styled(
-                    if is_selected { "  (Enter 编辑)" } else { "" },
-                    Style::default().fg(t.config_dim),
-                ),
-            ]));
+            ];
+            spans.extend(render_cursor_spans(
+                &value,
+                app.ui.config_edit_cursor,
+                value_style,
+                t.cursor_fg,
+                t.cursor_bg,
+            ));
+            Line::from(spans)
         } else {
-            lines.push(Line::from(if app.ui.config_editing && is_selected {
-                // 编辑模式：显示带光标的文本
-                let mut spans = vec![
-                    Span::styled(pointer, pointer_style),
-                    Span::styled(format!("{:<10}", label), label_style),
-                    Span::styled("  ", Style::default()),
-                ];
-                let chars: Vec<char> = value.chars().collect();
-                let cursor = app.ui.config_edit_cursor;
-                let before: String = chars[..cursor.min(chars.len())].iter().collect();
-                let cursor_ch = if cursor < chars.len() {
-                    chars[cursor].to_string()
-                } else {
-                    " ".to_string()
-                };
-                let after: String = if cursor < chars.len() {
-                    chars[cursor + 1..].iter().collect()
-                } else {
-                    String::new()
-                };
-                spans.push(Span::styled(before, value_style));
-                spans.push(Span::styled(
-                    cursor_ch,
-                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-                ));
-                spans.push(Span::styled(after, value_style));
-                spans.push(Span::styled(" ✏️", Style::default()));
-                spans
-            } else {
-                vec![
-                    Span::styled(pointer, pointer_style),
-                    Span::styled(format!("{:<10}", label), label_style),
-                    Span::styled("  ", Style::default()),
-                    Span::styled(
-                        if value.is_empty() {
-                            "(空)".to_string()
-                        } else {
-                            value
-                        },
-                        value_style,
-                    ),
-                ]
-            }));
-        }
+            Line::from(vec![
+                Span::styled(pointer, pointer_style),
+                Span::styled(format!("{:<10}", label), label_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    if value.is_empty() {
+                        "(空)".to_string()
+                    } else {
+                        value
+                    },
+                    value_style,
+                ),
+            ])
+        };
+        lines.push(line);
     }
 
     lines.push(Line::from(""));
     lines.push(Line::from(""));
-
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
         Style::default().fg(t.separator),
@@ -433,6 +413,20 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         Span::styled(" 保存返回", Style::default().fg(t.config_hint_desc)),
     ]));
 
+    // 滚动：确保选中字段始终可见
+    let inner_height = area.height.saturating_sub(2) as usize;
+    if let Some(&selected_line) = field_line_indices.get(app.ui.config_field_idx) {
+        let scroll = app.ui.config_scroll_offset as usize;
+        let new_scroll = if selected_line < scroll {
+            selected_line
+        } else if selected_line >= scroll + inner_height {
+            selected_line.saturating_sub(inner_height - 1)
+        } else {
+            scroll
+        };
+        app.ui.config_scroll_offset = new_scroll as u16;
+    }
+
     let content = Paragraph::new(lines)
         .block(
             Block::default()
@@ -447,7 +441,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 ))
                 .style(Style::default().bg(bg)),
         )
-        .scroll((0, 0));
+        .scroll((app.ui.config_scroll_offset, 0));
     f.render_widget(content, area);
 }
 
@@ -467,7 +461,6 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(""));
-
     lines.push(Line::from(vec![Span::styled(
         "  🔧 工具开关",
         Style::default()
@@ -476,7 +469,6 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     )]));
     lines.push(Line::from(""));
 
-    // 总开关状态
     let master_style = if app.state.agent_config.tools_enabled {
         Style::default()
             .fg(t.config_toggle_on)
@@ -494,22 +486,23 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         Span::styled("  (t 切换)", Style::default().fg(t.config_dim)),
     ]));
     lines.push(Line::from(""));
-
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
         Style::default().fg(t.separator),
     )));
     lines.push(Line::from(""));
 
+    // 列表起始行号（用于滚动定位）
+    let list_start_line = lines.len();
+
     for (i, name) in tool_names.iter().enumerate() {
         let is_selected = i == app.ui.tool_toggle_index;
-        let is_disabled = app
+        let is_enabled = !app
             .state
             .agent_config
             .disabled_tools
             .iter()
             .any(|d| d == *name);
-        let is_enabled = !is_disabled;
 
         let pointer = if is_selected { "  ▸ " } else { "    " };
         let pointer_style = if is_selected {
@@ -517,7 +510,6 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         } else {
             Style::default()
         };
-
         let toggle_style = if is_enabled {
             Style::default()
                 .fg(t.config_toggle_on)
@@ -526,7 +518,6 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             Style::default().fg(t.config_toggle_off)
         };
         let toggle_text = if is_enabled { "●" } else { "○" };
-
         let name_style = if is_selected {
             Style::default()
                 .fg(t.config_label_selected)
@@ -595,6 +586,19 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         Span::styled(" 返回", Style::default().fg(t.config_hint_desc)),
     ]));
 
+    // 滚动：确保选中工具始终可见
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let selected_line = list_start_line + app.ui.tool_toggle_index;
+    let scroll = app.ui.config_scroll_offset as usize;
+    let new_scroll = if selected_line < scroll {
+        selected_line
+    } else if selected_line >= scroll + inner_height {
+        selected_line.saturating_sub(inner_height - 1)
+    } else {
+        scroll
+    };
+    app.ui.config_scroll_offset = new_scroll as u16;
+
     let content = Paragraph::new(lines)
         .block(
             Block::default()
@@ -609,7 +613,7 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 ))
                 .style(Style::default().bg(bg)),
         )
-        .scroll((0, 0));
+        .scroll((app.ui.config_scroll_offset, 0));
     f.render_widget(content, area);
 }
 
@@ -633,7 +637,6 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(""));
-
     lines.push(Line::from(vec![Span::styled(
         "  📦 Skill 开关",
         Style::default()
@@ -641,7 +644,6 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             .add_modifier(Modifier::BOLD),
     )]));
     lines.push(Line::from(""));
-
     lines.push(Line::from(vec![Span::styled(
         format!("  已启用: {}/{}", enabled_count, total),
         Style::default()
@@ -649,23 +651,23 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             .add_modifier(Modifier::BOLD),
     )]));
     lines.push(Line::from(""));
-
     lines.push(Line::from(Span::styled(
         "  ─────────────────────────────────────────",
         Style::default().fg(t.separator),
     )));
     lines.push(Line::from(""));
 
+    let list_start_line = lines.len();
+
     for (i, skill) in app.state.loaded_skills.iter().enumerate() {
         let is_selected = i == app.ui.skill_toggle_index;
         let name = &skill.frontmatter.name;
-        let is_disabled = app
+        let is_enabled = !app
             .state
             .agent_config
             .disabled_skills
             .iter()
             .any(|d| d == name);
-        let is_enabled = !is_disabled;
 
         let pointer = if is_selected { "  ▸ " } else { "    " };
         let pointer_style = if is_selected {
@@ -673,7 +675,6 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
         } else {
             Style::default()
         };
-
         let toggle_style = if is_enabled {
             Style::default()
                 .fg(t.config_toggle_on)
@@ -682,7 +683,6 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             Style::default().fg(t.config_toggle_off)
         };
         let toggle_text = if is_enabled { "●" } else { "○" };
-
         let name_style = if is_selected {
             Style::default()
                 .fg(t.config_label_selected)
@@ -691,14 +691,15 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             Style::default().fg(t.config_label)
         };
 
-        let desc_style = Style::default().fg(t.config_dim);
-
         lines.push(Line::from(vec![
             Span::styled(pointer, pointer_style),
             Span::styled(toggle_text, toggle_style),
             Span::styled(" ", Style::default()),
             Span::styled(name.to_string(), name_style),
-            Span::styled(format!("  {}", skill.frontmatter.description), desc_style),
+            Span::styled(
+                format!("  {}", skill.frontmatter.description),
+                Style::default().fg(t.config_dim),
+            ),
         ]));
     }
 
@@ -747,6 +748,19 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
         Span::styled(" 返回", Style::default().fg(t.config_hint_desc)),
     ]));
 
+    // 滚动：确保选中 skill 始终可见
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let selected_line = list_start_line + app.ui.skill_toggle_index;
+    let scroll = app.ui.config_scroll_offset as usize;
+    let new_scroll = if selected_line < scroll {
+        selected_line
+    } else if selected_line >= scroll + inner_height {
+        selected_line.saturating_sub(inner_height - 1)
+    } else {
+        scroll
+    };
+    app.ui.config_scroll_offset = new_scroll as u16;
+
     let content = Paragraph::new(lines)
         .block(
             Block::default()
@@ -761,6 +775,6 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
                 ))
                 .style(Style::default().bg(bg)),
         )
-        .scroll((0, 0));
+        .scroll((app.ui.config_scroll_offset, 0));
     f.render_widget(content, area);
 }
