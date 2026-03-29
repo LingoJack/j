@@ -169,8 +169,33 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             content: rest.to_vec(),
         })
     } else if is(cmd::CHAT) {
+        let mut cont = false;
+        let mut session: Option<String> = None;
+        let mut content: Vec<String> = Vec::new();
+        let mut i = 0;
+        while i < rest.len() {
+            match rest[i].as_str() {
+                "--continue" | "-c" => {
+                    cont = true;
+                    i += 1;
+                }
+                "--session" => {
+                    i += 1;
+                    if i < rest.len() {
+                        session = Some(rest[i].clone());
+                        i += 1;
+                    }
+                }
+                _ => {
+                    content.push(rest[i].clone());
+                    i += 1;
+                }
+            }
+        }
         ParseResult::Matched(SubCmd::Chat {
-            content: rest.to_vec(),
+            cont,
+            session,
+            content,
         })
     } else if is(cmd::CONCAT) {
         if rest.is_empty() {

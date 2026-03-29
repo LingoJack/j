@@ -250,6 +250,30 @@ pub fn append_session_event(session_id: &str, event: &SessionEvent) -> bool {
     }
 }
 
+/// 查找最近修改的 session ID（用于 --continue）
+pub fn find_latest_session_id() -> Option<String> {
+    let dir = sessions_dir();
+    let mut entries: Vec<(std::time::SystemTime, String)> = Vec::new();
+    let read_dir = match fs::read_dir(&dir) {
+        Ok(rd) => rd,
+        Err(_) => return None,
+    };
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        if let (Ok(meta), Some(stem)) = (path.metadata(), path.file_stem().and_then(|s| s.to_str()))
+        {
+            if let Ok(modified) = meta.modified() {
+                entries.push((modified, stem.to_string()));
+            }
+        }
+    }
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    entries.into_iter().next().map(|(_, id)| id)
+}
+
 /// 从 JSONL 文件 replay 出 ChatSession（供 resume 等功能使用）
 #[allow(dead_code)]
 pub fn load_session(session_id: &str) -> ChatSession {

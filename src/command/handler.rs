@@ -89,8 +89,8 @@ command_handlers! {
     },
 
     // ========== AI 对话 ==========
-    ChatCmd { content: Vec<String> } => |self, config| {
-        crate::command::chat::handle_chat(&self.content, config);
+    ChatCmd { cont: bool, session: Option<String>, content: Vec<String> } => |self, config| {
+        crate::command::chat::handle_chat(&self.content, self.cont, self.session.as_deref(), config);
     },
 
     // ========== 脚本 ==========
@@ -168,7 +168,15 @@ impl SubCmd {
 
             // 待办 & AI
             SubCmd::Todo { content } => Box::new(TodoCmd { content }),
-            SubCmd::Chat { content } => Box::new(ChatCmd { content }),
+            SubCmd::Chat {
+                cont,
+                session,
+                content,
+            } => Box::new(ChatCmd {
+                cont,
+                session,
+                content,
+            }),
 
             // 脚本 & 计时
             SubCmd::Concat { name, content } => Box::new(ConcatCmd { name, content }),

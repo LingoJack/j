@@ -140,6 +140,12 @@ pub enum SubCmd {
     /// AI 对话（无参数进入 TUI 界面，有参数快速提问）
     #[command(alias = "ai")]
     Chat {
+        /// 延续上一个会话（使用最近一次 oneshot 会话）
+        #[arg(long = "continue", short = 'c')]
+        cont: bool,
+        /// 指定要延续的会话 ID
+        #[arg(long)]
+        session: Option<String>,
         /// 消息内容（支持多个参数拼接）
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         content: Vec<String>,

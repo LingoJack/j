@@ -23,12 +23,39 @@ use crate::config::YamlConfig;
 use crate::{error, info};
 use handler::run_chat_tui;
 use std::io::{self, Write};
-use storage::{ChatMessage, load_agent_config, load_system_prompt};
+use storage::{
+    ChatMessage, SessionEvent, append_session_event, load_agent_config, load_session,
+    load_system_prompt,
+};
 
-pub fn handle_chat(content: &[String], _config: &YamlConfig) {
+/// 生成 oneshot 会话 ID（时间戳微秒 + 进程 ID）
+fn generate_oneshot_session_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros();
+    let pid = std::process::id();
+    format!("{:x}-{:x}", ts, pid)
+}
+
+/// 将消息列表持久化到 session 文件（仅保存从 start_idx 开始的新消息）
+fn persist_messages(session_id: &str, messages: &[ChatMessage], start_idx: usize) {
+    for msg in messages.iter().skip(start_idx) {
+        append_session_event(session_id, &SessionEvent::Msg(msg.clone()));
+    }
+}
+
+pub fn handle_chat(
+    content: &[String],
+    cont: bool,
+    session_id_opt: Option<&str>,
+    _config: &YamlConfig,
+) {
     let agent_config = load_agent_config();
 
-    if content.is_empty() || agent_config.providers.is_empty() {
+    if content.is_empty() && !cont && session_id_opt.is_none() || agent_config.providers.is_empty()
+    {
         // 无参数，或尚未配置 provider：进入 TUI 对话界面
         // 若 providers 为空，TUI 会自动切换到配置界面引导用户完成配置
         run_chat_tui();
@@ -38,10 +65,36 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
     // 有参数：快速发送消息并打印回复
     let message = content.join(" ");
     let message = message.trim().to_string();
-    if message.is_empty() {
+    if message.is_empty() && !cont && session_id_opt.is_none() {
         error!("⚠️ 消息内容为空");
         return;
     }
+    if message.is_empty() {
+        error!("⚠️ 消息内容为空（--continue / --session 需要附带消息内容）");
+        return;
+    }
+
+    // 解析会话 ID
+    let session_id = if let Some(id) = session_id_opt {
+        id.to_string()
+    } else if cont {
+        storage::find_latest_session_id().unwrap_or_else(generate_oneshot_session_id)
+    } else {
+        generate_oneshot_session_id()
+    };
+
+    // 加载历史消息（--continue 或 --session 时）
+    let prior_messages = if cont || session_id_opt.is_some() {
+        let loaded = load_session(&session_id).messages;
+        if !loaded.is_empty() {
+            info!("📂 延续会话 {} （{} 条历史消息）", session_id, loaded.len());
+        } else if session_id_opt.is_some() {
+            info!("📂 会话 {} 不存在或为空，开始新对话", session_id);
+        }
+        loaded
+    } else {
+        vec![]
+    };
 
     let idx = agent_config
         .active_index
@@ -51,12 +104,20 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
     info!("💫 [{}] 思考中...", provider.name);
 
     if agent_config.tools_enabled {
-        run_oneshot_agent(provider, &agent_config, message);
+        run_oneshot_agent(
+            provider,
+            &agent_config,
+            message,
+            prior_messages,
+            &session_id,
+        );
     } else {
         // 无工具模式：流式输出 + 结束后 markdown 重绘
         use crossterm::{cursor, execute, terminal};
 
-        let messages = vec![ChatMessage::text("user", message)];
+        let user_msg = ChatMessage::text("user", message.clone());
+        let mut messages = prior_messages.clone();
+        messages.push(user_msg.clone());
 
         let term_width = crossterm::terminal::size()
             .map(|(w, _)| w as usize)
@@ -64,9 +125,17 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
         let mut cur_col: usize = 0;
         let mut raw_lines: usize = 0;
 
+        // 发送给 API 时截取历史窗口
+        let history_limit = agent_config.max_history_messages;
+        let send_messages = if messages.len() > history_limit {
+            messages[messages.len() - history_limit..].to_vec()
+        } else {
+            messages.clone()
+        };
+
         match api::call_openai_stream(
             provider,
-            &messages,
+            &send_messages,
             load_system_prompt().as_deref(),
             &mut |chunk| {
                 print!("{}", chunk);
@@ -102,6 +171,15 @@ pub fn handle_chat(content: &[String], _config: &YamlConfig) {
                             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
                     }
                     crate::util::md_render::render_md(&full_text);
+                    // 持久化本轮新增的两条消息
+                    persist_messages(&session_id, &[user_msg], 0);
+                    persist_messages(
+                        &session_id,
+                        &[ChatMessage::text("assistant", &full_text)],
+                        0,
+                    );
+                    use colored::Colorize;
+                    eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
                 }
             }
             Err(e) => {
@@ -116,6 +194,8 @@ fn run_oneshot_agent(
     provider: &storage::ModelProvider,
     agent_config: &storage::AgentConfig,
     message: String,
+    prior_messages: Vec<ChatMessage>,
+    session_id: &str,
 ) {
     use api::{build_request_with_tools, create_openai_client};
     use colored::Colorize;
@@ -338,7 +418,11 @@ fn run_oneshot_agent(
     let cancelled = Arc::new(AtomicBool::new(false));
     let max_rounds = agent_config.max_tool_rounds;
 
-    let mut messages = vec![ChatMessage::text("user", message)];
+    // 构建初始消息列表：先写入历史，再追加本次用户消息
+    let user_msg = ChatMessage::text("user", message);
+    let prior_len = prior_messages.len();
+    let mut messages = prior_messages;
+    messages.push(user_msg);
 
     /// 交互式工具确认（crossterm raw mode，↑↓ 选择，Enter 确认）
     /// 返回选中的选项索引
@@ -560,7 +644,9 @@ fn run_oneshot_agent(
         }
 
         if sr.tool_items.is_empty() {
-            // 无工具调用，正常结束
+            // 无工具调用，正常结束：持久化本轮新增消息并打印会话 ID
+            persist_messages(session_id, &messages, prior_len);
+            eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
             return;
         }
 
@@ -643,6 +729,9 @@ fn run_oneshot_agent(
         // 继续下一轮
     }
 
+    // 达到最大轮数：持久化已有消息并提示
+    persist_messages(session_id, &messages, prior_len);
+    eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
     eprintln!("\n⚠️ 达到最大工具调用轮数 ({})", max_rounds);
 }
 
