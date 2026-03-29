@@ -4,6 +4,7 @@ use crate::config::YamlConfig;
 use crate::error;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 // ========== 数据结构 ==========
@@ -120,6 +121,20 @@ pub struct ChatSession {
     pub messages: Vec<ChatMessage>,
 }
 
+// ========== JSONL 会话事件 ==========
+
+/// Session JSONL 事件类型（每行一个事件，append-only）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SessionEvent {
+    /// 新增一条消息
+    Msg(ChatMessage),
+    /// 对话清空
+    Clear,
+    /// 归档还原（messages 为还原后的完整消息列表）
+    Restore { messages: Vec<ChatMessage> },
+}
+
 // ========== 文件路径 ==========
 
 /// 获取 agent 数据目录: ~/.jdata/agent/data/
@@ -129,13 +144,25 @@ pub fn agent_data_dir() -> PathBuf {
     dir
 }
 
+/// 获取 sessions 目录: ~/.jdata/agent/data/sessions/
+pub fn sessions_dir() -> PathBuf {
+    let dir = agent_data_dir().join("sessions");
+    let _ = fs::create_dir_all(&dir);
+    dir
+}
+
+/// 获取单个 session 的 JSONL 文件路径
+pub fn session_file_path(session_id: &str) -> PathBuf {
+    sessions_dir().join(format!("{}.jsonl", session_id))
+}
+
 /// 获取 agent 配置文件路径
 pub fn agent_config_path() -> PathBuf {
     agent_data_dir().join("agent_config.json")
 }
 
-/// 获取对话历史文件路径
-pub fn chat_history_path() -> PathBuf {
+/// 已废弃：旧的单文件对话历史路径（仅用于迁移检测）
+pub fn legacy_chat_history_path() -> PathBuf {
     agent_data_dir().join("chat_history.json")
 }
 
@@ -211,28 +238,47 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
     }
 }
 
-/// 加载对话历史
-pub fn load_chat_session() -> ChatSession {
-    let path = chat_history_path();
-    if !path.exists() {
-        return ChatSession::default();
-    }
-    match fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| ChatSession::default()),
-        Err(_) => ChatSession::default(),
+/// 追加一个事件到 session JSONL 文件（append-only，POSIX 下原子安全）
+pub fn append_session_event(session_id: &str, event: &SessionEvent) -> bool {
+    let path = session_file_path(session_id);
+    match serde_json::to_string(event) {
+        Ok(line) => match fs::OpenOptions::new().create(true).append(true).open(&path) {
+            Ok(mut file) => writeln!(file, "{}", line).is_ok(),
+            Err(_) => false,
+        },
+        Err(_) => false,
     }
 }
 
-/// 保存对话历史
-pub fn save_chat_session(session: &ChatSession) -> bool {
-    let path = chat_history_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
+/// 从 JSONL 文件 replay 出 ChatSession（供 resume 等功能使用）
+#[allow(dead_code)]
+pub fn load_session(session_id: &str) -> ChatSession {
+    let path = session_file_path(session_id);
+    if !path.exists() {
+        return ChatSession::default();
     }
-    match serde_json::to_string_pretty(session) {
-        Ok(json) => fs::write(&path, json).is_ok(),
-        Err(_) => false,
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return ChatSession::default(),
+    };
+    let mut messages: Vec<ChatMessage> = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<SessionEvent>(line) {
+            Ok(event) => match event {
+                SessionEvent::Msg(msg) => messages.push(msg),
+                SessionEvent::Clear => messages.clear(),
+                SessionEvent::Restore { messages: restored } => messages = restored,
+            },
+            Err(_) => {
+                // 损坏行直接跳过，继续处理剩余行
+            }
+        }
     }
+    ChatSession { messages }
 }
 
 /// 加载系统提示词（来自独立文件）

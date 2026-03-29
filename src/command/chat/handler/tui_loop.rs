@@ -1,6 +1,7 @@
 use super::super::input_thread::InputThread;
 use super::super::storage::{
-    load_style, load_system_prompt, save_chat_session, save_style, save_system_prompt,
+    ChatSession, legacy_chat_history_path, load_style, load_system_prompt, save_style,
+    save_system_prompt,
 };
 use super::super::ui::draw_chat_ui;
 use super::{
@@ -92,6 +93,43 @@ pub fn run_chat_tui() {
     }
 }
 
+/// 生成本次会话 ID（时间戳微秒 + 进程 ID，无需外部依赖）
+fn generate_session_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros();
+    let pid = std::process::id();
+    format!("{:x}-{:x}", ts, pid)
+}
+
+/// 一次性迁移旧 chat_history.json → 归档，保留历史对话
+fn migrate_legacy_session_if_needed() {
+    let old_path = legacy_chat_history_path();
+    if !old_path.exists() {
+        return;
+    }
+    let migrated = (|| {
+        let content = std::fs::read_to_string(&old_path).ok()?;
+        let session: ChatSession = serde_json::from_str(&content).ok()?;
+        if session.messages.is_empty() {
+            return None;
+        }
+        let name = format!("migrated-{}", chrono::Local::now().format("%Y-%m-%d"));
+        super::super::archive::create_archive(&name, session.messages).ok()?;
+        Some(name)
+    })();
+    // 无论迁移是否成功，删除旧文件避免重复迁移
+    let _ = std::fs::remove_file(&old_path);
+    if let Some(name) = migrated {
+        crate::util::log::write_info_log(
+            "migrate_legacy_session",
+            &format!("旧对话历史已迁移为归档: {}", name),
+        );
+    }
+}
+
 pub fn run_chat_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -100,7 +138,11 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = ChatApp::new();
+    // 一次性迁移旧格式
+    migrate_legacy_session_if_needed();
+
+    let session_id = generate_session_id();
+    let mut app = ChatApp::new(session_id);
 
     // 首次运行（尚未配置 provider）时，自动进入配置界面引导用户完成配置
     if app.state.agent_config.providers.is_empty() {
@@ -314,9 +356,6 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
 
     // 停止输入线程
     input_thread.shutdown();
-
-    // 保存对话历史
-    let _ = save_chat_session(&app.state.session);
 
     // ★ 先恢复终端，再跑 SessionEnd hook（避免 hook 阻塞时终端卡在 raw mode）
     terminal::disable_raw_mode()?;

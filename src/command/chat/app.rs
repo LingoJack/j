@@ -6,9 +6,9 @@ use super::permission::JcliConfig;
 use super::sandbox::Sandbox;
 use super::skill::{self, Skill, skills_dir};
 use super::storage::{
-    AgentConfig, ChatMessage, ChatSession, ModelProvider, ToolCallItem, load_agent_config,
-    load_chat_session, memory_path, save_agent_config, save_chat_session, save_memory, save_soul,
-    save_system_prompt, soul_path, system_prompt_path,
+    AgentConfig, ChatMessage, ChatSession, ModelProvider, SessionEvent, ToolCallItem,
+    append_session_event, load_agent_config, memory_path, save_agent_config, save_memory,
+    save_soul, save_system_prompt, soul_path, system_prompt_path,
 };
 use super::theme::Theme;
 use super::tools::ToolRegistry;
@@ -742,6 +742,10 @@ pub struct ChatApp {
     pub hook_manager: Arc<Mutex<HookManager>>,
     /// 安全沙箱（限制工具操作路径范围）
     pub sandbox: Sandbox,
+    /// 本次会话 ID（启动时生成，对应 sessions/{id}.jsonl）
+    pub session_id: String,
+    /// 已持久化到 JSONL 的消息数量（用于增量追加）
+    pub last_persisted_len: usize,
 }
 
 /// 消息渲染行缓存
@@ -1050,7 +1054,7 @@ pub fn config_total_fields() -> usize {
 }
 
 impl ChatApp {
-    pub fn new() -> Self {
+    pub fn new(session_id: String) -> Self {
         let agent_config = load_agent_config();
         // 首次运行：各数据文件不存在时写入默认内容
         if !system_prompt_path().exists() {
@@ -1070,7 +1074,8 @@ impl ChatApp {
             );
         }
 
-        let session = load_chat_session();
+        // 每次启动创建全新会话（session_id 由调用方生成）
+        let session = ChatSession::default();
         let mut model_list_state = ListState::default();
         if !agent_config.providers.is_empty() {
             model_list_state.select(Some(agent_config.active_index));
@@ -1164,6 +1169,8 @@ impl ChatApp {
             ask_request_rx: Some(ask_req_rx),
             hook_manager: Arc::clone(&hook_manager),
             sandbox: Sandbox::new(),
+            session_id,
+            last_persisted_len: 0,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -2767,7 +2774,7 @@ impl ChatApp {
             .clear();
         }
 
-        let _ = save_chat_session(&self.state.session);
+        self.persist_new_messages();
 
         // 检查排队的任务
         let next_task = {
@@ -2802,12 +2809,23 @@ impl ChatApp {
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// 将 session.messages 中尚未持久化的新消息追加到 JSONL
+    fn persist_new_messages(&mut self) {
+        let start = self.last_persisted_len;
+        let msgs: Vec<_> = self.state.session.messages[start..].to_vec();
+        for msg in msgs {
+            append_session_event(&self.session_id, &SessionEvent::Msg(msg));
+        }
+        self.last_persisted_len = self.state.session.messages.len();
+    }
+
     /// 清空对话
     pub fn clear_session(&mut self) {
         self.state.session.messages.clear();
         self.ui.scroll_offset = 0;
         self.ui.msg_lines_cache = None;
-        let _ = save_chat_session(&self.state.session);
+        append_session_event(&self.session_id, &SessionEvent::Clear);
+        self.last_persisted_len = 0;
         self.show_toast("对话已清空", false);
     }
 
@@ -2991,12 +3009,13 @@ impl ChatApp {
         if let Some(archive) = self.ui.archives.get(self.ui.archive_list_index) {
             match restore_archive(&archive.name) {
                 Ok(messages) => {
-                    self.state.session.messages = messages;
+                    self.state.session.messages = messages.clone();
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.input.clear();
                     self.ui.cursor_pos = 0;
-                    let _ = save_chat_session(&self.state.session);
+                    append_session_event(&self.session_id, &SessionEvent::Restore { messages });
+                    self.last_persisted_len = self.state.session.messages.len();
                     self.show_toast(format!("已还原归档: {}", archive.name), false);
                 }
                 Err(e) => {
