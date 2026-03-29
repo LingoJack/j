@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-rust-embed = "8"
+rust-embed = { version = "8", features = ["include-exclude"] }
 rustyline = "17.0.2"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

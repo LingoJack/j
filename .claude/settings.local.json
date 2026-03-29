@@ -57,7 +57,8 @@
       "Bash(npm init:*)",
       "Bash(npm install:*)",
       "Bash(npx vite:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(make run:*)"
     ]
   },
   "language": "zh-CN",
