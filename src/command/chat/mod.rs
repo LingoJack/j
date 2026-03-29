@@ -57,9 +57,12 @@ pub fn handle_chat(
 ) {
     let agent_config = load_agent_config();
 
-    if content.is_empty() && !cont && session_id_opt.is_none() || agent_config.providers.is_empty()
+    // --remote 始终进入 TUI 模式（远程控制需要 TUI 事件循环）
+    if remote
+        || content.is_empty() && !cont && session_id_opt.is_none()
+        || agent_config.providers.is_empty()
     {
-        // 无参数，或尚未配置 provider：进入 TUI 对话界面
+        // 无参数 / remote / 尚未配置 provider：进入 TUI 对话界面
         // 若 providers 为空，TUI 会自动切换到配置界面引导用户完成配置
         run_chat_tui(remote, port);
         return;
