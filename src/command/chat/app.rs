@@ -756,6 +756,10 @@ pub struct ChatApp {
     pub session_id: String,
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
     pub last_persisted_len: usize,
+    /// 远程控制 WebSocket 桥接器
+    pub ws_bridge: Option<super::remote::bridge::WsBridge>,
+    /// 远程客户端是否已连接
+    pub remote_connected: bool,
 }
 
 /// 消息渲染行缓存
@@ -1197,6 +1201,8 @@ impl ChatApp {
             sandbox: Sandbox::new(),
             session_id,
             last_persisted_len: 0,
+            ws_bridge: None,
+            remote_connected: false,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -1355,18 +1361,48 @@ impl ChatApp {
                 if self.ui.auto_scroll {
                     self.ui.scroll_offset = u16::MAX;
                 }
+                // 广播流式 chunk 到远程客户端
+                if self.ws_bridge.is_some() {
+                    let content =
+                        safe_lock(&self.state.streaming_content, "ws_stream_chunk").clone();
+                    // 只发最新增量（简单实现：发整段，客户端会替换）
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::StreamChunk { content });
+                }
             }
             Action::ToolCallRequest(_tool_calls) => {
                 // Will delegate to helper (existing poll_stream logic)
             }
             Action::StreamDone => {
+                // 广播完整消息和状态到远程
+                if self.ws_bridge.is_some() {
+                    if let Some(last_msg) = self.state.session.messages.last()
+                        && last_msg.role == "assistant"
+                    {
+                        self.broadcast_ws(super::remote::protocol::WsOutbound::Message {
+                            role: "assistant".to_string(),
+                            content: last_msg.content.clone(),
+                        });
+                    }
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                        state: "idle".to_string(),
+                    });
+                }
                 self.finish_loading(false, false);
             }
             Action::StreamError(ref e) => {
+                self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                    message: format!("请求失败: {}", e),
+                });
+                self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                    state: "idle".to_string(),
+                });
                 self.show_toast(format!("请求失败: {}", e), true);
                 self.finish_loading(true, false);
             }
             Action::StreamCancelled => {
+                self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                    state: "idle".to_string(),
+                });
                 self.finish_loading(false, true);
             }
 
@@ -1577,6 +1613,29 @@ impl ChatApp {
 
             // ========== 模式切换和导航 ==========
             Action::EnterMode(mode) => {
+                // 广播工具确认请求到远程
+                if mode == ChatMode::ToolConfirm && self.ws_bridge.is_some() {
+                    let tools: Vec<super::remote::protocol::ToolConfirmInfo> = self
+                        .tool_executor
+                        .active_tool_calls
+                        .iter()
+                        .filter(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
+                        .map(|tc| super::remote::protocol::ToolConfirmInfo {
+                            id: tc.tool_call_id.clone(),
+                            name: tc.tool_name.clone(),
+                            arguments: tc.arguments.clone(),
+                            confirm_message: tc.confirm_message.clone(),
+                        })
+                        .collect();
+                    if !tools.is_empty() {
+                        self.broadcast_ws(
+                            super::remote::protocol::WsOutbound::ToolConfirmRequest { tools },
+                        );
+                    }
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                        state: "tool_confirm".to_string(),
+                    });
+                }
                 self.ui.mode = mode;
             }
             Action::ExitToChat => {
@@ -1901,20 +1960,19 @@ impl ChatApp {
                             self.state.agent_config.disabled_tools.push(name);
                         }
                     }
-                } else {
-                    if let Some(skill) = self.state.loaded_skills.get(self.ui.skill_toggle_index) {
-                        let name = skill.frontmatter.name.clone();
-                        if let Some(pos) = self
-                            .state
-                            .agent_config
-                            .disabled_skills
-                            .iter()
-                            .position(|d| d == &name)
-                        {
-                            self.state.agent_config.disabled_skills.remove(pos);
-                        } else {
-                            self.state.agent_config.disabled_skills.push(name);
-                        }
+                } else if let Some(skill) = self.state.loaded_skills.get(self.ui.skill_toggle_index)
+                {
+                    let name = skill.frontmatter.name.clone();
+                    if let Some(pos) = self
+                        .state
+                        .agent_config
+                        .disabled_skills
+                        .iter()
+                        .position(|d| d == &name)
+                    {
+                        self.state.agent_config.disabled_skills.remove(pos);
+                    } else {
+                        self.state.agent_config.disabled_skills.push(name);
                     }
                 }
             }
@@ -2175,6 +2233,26 @@ impl ChatApp {
     /// 显示一条 toast 通知
     pub fn show_toast(&mut self, msg: impl Into<String>, is_error: bool) {
         self.ui.toast = Some((msg.into(), is_error, std::time::Instant::now()));
+    }
+
+    /// 广播 WebSocket 消息给远程客户端
+    pub fn broadcast_ws(&self, msg: super::remote::protocol::WsOutbound) {
+        if let Some(ref ws) = self.ws_bridge {
+            ws.broadcast(msg);
+        }
+    }
+
+    /// 从远程客户端注入一条消息（模拟用户输入并发送）
+    pub fn inject_remote_message(&mut self, content: String) {
+        if content.trim().is_empty() {
+            return;
+        }
+        // 广播用户消息到远程（让其他客户端看到）
+        self.broadcast_ws(super::remote::protocol::WsOutbound::Message {
+            role: "user".to_string(),
+            content: content.clone(),
+        });
+        self.send_message_internal(content);
     }
 
     /// 清理过期的 toast

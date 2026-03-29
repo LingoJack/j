@@ -10,6 +10,7 @@ pub mod hook;
 pub mod input_thread;
 pub mod markdown;
 pub mod permission;
+pub mod remote;
 pub mod render_cache;
 pub mod sandbox;
 pub mod skill;
@@ -50,6 +51,8 @@ pub fn handle_chat(
     content: &[String],
     cont: bool,
     session_id_opt: Option<&str>,
+    remote: bool,
+    port: u16,
     _config: &YamlConfig,
 ) {
     let agent_config = load_agent_config();
@@ -58,7 +61,7 @@ pub fn handle_chat(
     {
         // 无参数，或尚未配置 provider：进入 TUI 对话界面
         // 若 providers 为空，TUI 会自动切换到配置界面引导用户完成配置
-        run_chat_tui();
+        run_chat_tui(remote, port);
         return;
     }
 

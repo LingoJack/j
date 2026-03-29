@@ -102,7 +102,7 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         String::new()
     };
 
-    let title_spans = vec![
+    let mut title_spans = vec![
         Span::styled(" 🦞 ", Style::default().fg(t.title_icon)),
         Span::styled(
             " Sprite",
@@ -130,6 +130,20 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 .add_modifier(Modifier::BOLD),
         ),
     ];
+
+    // 远程控制连接指示器
+    if app.remote_connected {
+        title_spans.push(Span::styled(
+            "  │  ",
+            Style::default().fg(t.title_separator),
+        ));
+        title_spans.push(Span::styled(
+            "📱 远程已连接",
+            Style::default()
+                .fg(t.title_count)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
     let title_block = Paragraph::new(Line::from(title_spans)).block(
         Block::default()

@@ -1,4 +1,7 @@
 use super::super::input_thread::InputThread;
+use super::super::remote;
+use super::super::remote::bridge::WsBridge;
+use super::super::remote::protocol::{SyncMessage, WsInbound, WsOutbound};
 use super::super::storage::{
     ChatSession, legacy_chat_history_path, load_style, load_system_prompt, save_style,
     save_system_prompt,
@@ -74,7 +77,7 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
     false
 }
 
-pub fn run_chat_tui() {
+pub fn run_chat_tui(remote_mode: bool, port: u16) {
     // 设置 panic hook，确保 panic 时也能恢复终端状态
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -82,7 +85,20 @@ pub fn run_chat_tui() {
         original_hook(info);
     }));
 
-    let result = run_chat_tui_internal();
+    // 远程模式：先启动 WS 服务器，显示二维码，等待连接
+    let ws_bridge = if remote_mode {
+        match remote::start_remote_and_wait(port) {
+            Ok((bridge, _url)) => Some(bridge),
+            Err(e) => {
+                crate::error!("远程服务启动失败: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let result = run_chat_tui_internal(ws_bridge);
 
     // 恢复默认 panic hook
     let _ = std::panic::take_hook();
@@ -130,7 +146,7 @@ fn migrate_legacy_session_if_needed() {
     }
 }
 
-pub fn run_chat_tui_internal() -> io::Result<()> {
+pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, event::EnableMouseCapture)?;
@@ -143,6 +159,12 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
 
     let session_id = generate_session_id();
     let mut app = ChatApp::new(session_id);
+    app.ws_bridge = ws_bridge;
+    app.remote_connected = app
+        .ws_bridge
+        .as_ref()
+        .map(|ws| ws.has_client())
+        .unwrap_or(false);
 
     // 首次运行（尚未配置 provider）时，自动进入配置界面引导用户完成配置
     if app.state.agent_config.providers.is_empty() {
@@ -206,6 +228,65 @@ pub fn run_chat_tui_internal() -> io::Result<()> {
         }
         for action in stream_actions {
             app.update(action);
+        }
+
+        // Phase 2b: 收集 WebSocket 远程消息
+        if app.ws_bridge.is_some() {
+            // 取出 ws_bridge 来避免借用冲突
+            let mut ws = app.ws_bridge.take().unwrap();
+            let mut ws_actions: Vec<(WsInbound,)> = Vec::new();
+            while let Some(msg) = ws.try_recv() {
+                ws_actions.push((msg,));
+            }
+            app.remote_connected = ws.has_client();
+            app.ws_bridge = Some(ws);
+
+            for (msg,) in ws_actions {
+                needs_redraw = true;
+                match msg {
+                    WsInbound::SendMessage { content } => {
+                        app.inject_remote_message(content);
+                    }
+                    WsInbound::ToolConfirm { action } => {
+                        if action == "allow" {
+                            app.update(Action::ExecutePendingTool);
+                        } else {
+                            app.update(Action::RejectPendingTool);
+                        }
+                    }
+                    WsInbound::Cancel => {
+                        app.update(Action::CancelStream);
+                    }
+                    WsInbound::Sync => {
+                        let messages: Vec<SyncMessage> = app
+                            .state
+                            .session
+                            .messages
+                            .iter()
+                            .map(|m| SyncMessage {
+                                role: m.role.clone(),
+                                content: m.content.clone(),
+                            })
+                            .collect();
+                        let status = if app.state.is_loading {
+                            "loading"
+                        } else if app.ui.mode == ChatMode::ToolConfirm {
+                            "tool_confirm"
+                        } else {
+                            "idle"
+                        };
+                        let model = app.active_model_name().to_string();
+                        app.broadcast_ws(WsOutbound::SessionSync {
+                            messages,
+                            status: status.to_string(),
+                            model,
+                        });
+                    }
+                    WsInbound::Ping => {
+                        app.broadcast_ws(WsOutbound::Pong);
+                    }
+                }
+            }
         }
 
         // 有待执行的工具时强制重绘

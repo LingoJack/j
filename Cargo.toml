@@ -54,6 +54,9 @@ chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-
 base64 = { version = "0.22", optional = true }
 ignore = "0.4.25"
 regex = "1.12.3"
+tokio-tungstenite = "0.26"
+qrcode = "0.14"
+rand = "0.8"
 
 [features]
 default = []

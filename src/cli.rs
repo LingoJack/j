@@ -146,6 +146,12 @@ pub enum SubCmd {
         /// 指定要延续的会话 ID
         #[arg(long)]
         session: Option<String>,
+        /// 启用远程控制（手机扫码控制）
+        #[arg(long)]
+        remote: bool,
+        /// 远程控制监听端口
+        #[arg(long, default_value = "9390")]
+        port: u16,
         /// 消息内容（支持多个参数拼接）
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         content: Vec<String>,

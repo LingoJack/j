@@ -196,6 +196,8 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             cont,
             session,
             content,
+            remote: false,
+            port: 9390,
         })
     } else if is(cmd::CONCAT) {
         if rest.is_empty() {
