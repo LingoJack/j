@@ -51,7 +51,12 @@
       "Bash(git -C /Users/jacklingo/dev_custom/j log --oneline)",
       "Bash(git:*)",
       "Bash(find /Users/jacklingo/dev_custom/j -name .jcli* -o -name *jcli* -type f)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(npm -v)",
+      "Bash(mkdir -p /Users/lingojack/dev_custom/j/assets/remote)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)"
     ]
   },
   "language": "zh-CN",

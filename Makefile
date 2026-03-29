@@ -26,7 +26,8 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         watch watch-test \
         coverage \
         docker-build docker-run \
-        pre-commit
+        pre-commit \
+        build-remote
 
 # ============================================
 # 帮助信息
@@ -75,12 +76,17 @@ status: current_dir ## 查看 Git 状态
 # ============================================
 # 构建相关
 # ============================================
+build-remote: ## 构建 Remote 前端
+	@echo "🌐 构建 Remote 前端..."
+	@cd assets/remote && npm install --silent && npm run build
+	@echo "☑️ Remote 前端构建完成"
+
 build: ## 构建项目（调试模式）
 	@echo "🔨 构建项目..."
 	@cargo build
 	@echo "☑️ 构建完成"
 
-release: current_dir ## 构建发布版本
+release: current_dir build-remote ## 构建发布版本
 	@echo "🚀 构建发布版本..."
 	@cargo build --release
 	@echo "☑️ 发布版本构建完成: $(TARGET_DIR)/j"
