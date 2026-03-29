@@ -519,10 +519,6 @@ fn run_oneshot_agent(
 
     // Ctrl+C 中断标志
     let ctrl_c = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let ctrl_c2 = Arc::clone(&ctrl_c);
-    let _ = ctrlc::set_handler(move || {
-        ctrl_c2.store(true, std::sync::atomic::Ordering::Relaxed);
-    });
 
     // 流式调用结果
     struct StreamResult {
@@ -559,10 +555,16 @@ fn run_oneshot_agent(
             let mut cur_col: usize = 0;
             let mut raw_lines: usize = 0;
 
-            while let Some(result) = stream.next().await {
-                if ctrl_c_stream.load(std::sync::atomic::Ordering::Relaxed) {
-                    break;
-                }
+            loop {
+                let chunk = tokio::select! {
+                    biased;
+                    _ = tokio::signal::ctrl_c() => {
+                        ctrl_c_stream.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
+                    chunk = stream.next() => chunk,
+                };
+                let Some(result) = chunk else { break };
                 match result {
                     Ok(response) => {
                         for choice in &response.choices {
