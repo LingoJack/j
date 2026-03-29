@@ -25,6 +25,7 @@ use std::fs;
 #[derive(RustEmbed)]
 #[folder = "assets/"]
 #[exclude = "remote/node_modules/*"]
+#[exclude = "remote/dist/*"]
 pub struct Assets;
 
 // ========== 便捷访问函数 ==========

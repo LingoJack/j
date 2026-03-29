@@ -78,7 +78,7 @@ status: current_dir ## 查看 Git 状态
 # ============================================
 build-remote: ## 构建 Remote 前端
 	@echo "🌐 构建 Remote 前端..."
-	@cd assets/remote && npm install --silent && npm run build
+	@cd assets/remote && npm install --silent && npm run build && cp dist/remote.html ..
 	@echo "☑️ Remote 前端构建完成"
 
 build: ## 构建项目（调试模式）

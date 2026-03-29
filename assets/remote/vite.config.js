@@ -5,8 +5,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
   build: {
-    outDir: '..',
-    emptyOutDir: false,
+    outDir: 'dist',
+    emptyOutDir: true,
     rollupOptions: {
       input: 'remote.html',
       output: { entryFileNames: 'remote.js' },
