@@ -19,84 +19,109 @@
   --color-label-ai:     #78dca0;
   --color-label-user:   #64a0ff;
   --color-tool-confirm: #ffc850;
+
+  /* 动画定义 */
+  --animate-blink: blink 1s infinite;
+  --animate-pulse-dot: pulse 1.2s ease-in-out infinite;
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* 基础层：全局重置和默认样式 */
+@layer base {
+  * {
+    @apply m-0 p-0 box-border;
+  }
 
-html, body {
-  height: 100%;
-  background: var(--color-bg);
-  color: var(--color-fg);
-  font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
-  font-size: 15px;
-  -webkit-font-smoothing: antialiased;
+  html, body {
+    @apply h-full bg-bg text-fg overflow-hidden fixed w-full inset-0;
+    font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #root {
+    @apply h-full w-full;
+  }
 }
 
-/* ============ Streaming cursor ============ */
-.streaming .msg-content::after {
-  content: '▋';
-  animation: blink 1s infinite;
-  color: var(--color-accent);
-}
-@keyframes blink { 50% { opacity: 0; } }
+/* 组件层：Markdown 消息样式 */
+@layer components {
+  .md-msg {
+    @apply text-sm leading-relaxed;
+  }
 
-/* ============ Loading dot pulse ============ */
-@keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .md-msg p {
+    @apply mb-2 last:mb-0;
+  }
 
-/* ============ Markdown in assistant messages ============ */
-.md-msg p { margin: 0 0 8px; }
-.md-msg p:last-child { margin-bottom: 0; }
-.md-msg ul, .md-msg ol { margin: 4px 0 8px 18px; }
-.md-msg li { margin: 2px 0; }
-.md-msg h1, .md-msg h2, .md-msg h3 {
-  margin: 12px 0 6px;
-  font-size: 15px;
-  font-weight: 700;
-}
-.md-msg h1 { font-size: 17px; }
-.md-msg h2 { font-size: 16px; }
-.md-msg blockquote {
-  border-left: 3px solid var(--color-border-light);
-  padding-left: 12px;
-  color: var(--color-fg2);
-  margin: 6px 0;
-}
-.md-msg table {
-  border-collapse: collapse;
-  margin: 6px 0;
-  font-size: 13px;
-  width: 100%;
-}
-.md-msg th, .md-msg td {
-  border: 1px solid var(--color-border);
-  padding: 4px 8px;
-  text-align: left;
-}
-.md-msg th { background: var(--color-bg2); font-weight: 600; }
-.md-msg code {
-  background: rgba(45,45,60,0.8);
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 13px;
-  font-family: 'SF Mono', 'Menlo', monospace;
-}
-.md-msg pre {
-  margin: 8px 0;
-  border-radius: 6px;
-  overflow-x: auto;
-}
-.md-msg pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-}
-.md-msg a {
-  color: #569cd6;
-  text-decoration: none;
-}
-.md-msg a:hover { text-decoration: underline; }
-.md-msg hr {
-  border: none;
-  border-top: 1px solid var(--color-border);
-  margin: 10px 0;
+  .md-msg ul, .md-msg ol {
+    @apply my-1 mb-2 ml-[18px];
+  }
+
+  .md-msg li {
+    @apply my-0.5;
+  }
+
+  .md-msg h1, .md-msg h2, .md-msg h3 {
+    @apply my-3 mb-1.5 font-bold text-[15px];
+  }
+
+  .md-msg h1 {
+    @apply text-[17px];
+  }
+
+  .md-msg h2 {
+    @apply text-[16px];
+  }
+
+  .md-msg blockquote {
+    @apply border-l-[3px] border-border-light pl-3 text-fg2 my-1.5;
+  }
+
+  .md-msg table {
+    @apply border-collapse my-1.5 text-[13px] w-full;
+  }
+
+  .md-msg th, .md-msg td {
+    @apply border border-border px-2 py-1 text-left;
+  }
+
+  .md-msg th {
+    @apply bg-bg2 font-semibold;
+  }
+
+  .md-msg code {
+    @apply bg-[rgba(45,45,60,0.8)] px-1.5 py-0.5 rounded-[5px] text-[13px];
+    font-family: 'SF Mono', 'Menlo', monospace;
+  }
+
+  .md-msg pre {
+    @apply my-2 rounded-md overflow-x-auto;
+  }
+
+  .md-msg pre code {
+    @apply bg-none p-0 rounded-none;
+  }
+
+  .md-msg a {
+    @apply text-[#569cd6] no-underline hover:underline;
+  }
+
+  .md-msg hr {
+    @apply border-0 border-t border-border my-2.5;
+  }
+
+  /* Streaming 状态 */
+  .streaming .msg-content::after {
+    content: '▋';
+    @apply animate-blink text-accent;
+  }
 }

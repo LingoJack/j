@@ -3,4 +3,8 @@ allow:
 - Bash(echo "Hello,:*)
 - Bash(ls:*)
 - Bash(ps aux:*)
+- Edit
+- Bash(head -500:*)
+- Bash(cd /Users/lingojack/dev_custom/j/assets/remote:*)
+- Write
 deny: []
