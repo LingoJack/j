@@ -9,9 +9,13 @@ pub enum WsInbound {
     /// 发送聊天消息
     #[serde(rename = "send_message")]
     SendMessage { content: String },
-    /// 工具确认（allow / reject）
+    /// 工具确认（allow / allow_always / reject / reject_with_reason）
     #[serde(rename = "tool_confirm")]
-    ToolConfirm { action: String },
+    ToolConfirm {
+        action: String,
+        #[serde(default)]
+        reason: Option<String>,
+    },
     /// 取消当前流式请求
     #[serde(rename = "cancel")]
     Cancel,

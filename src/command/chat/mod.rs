@@ -120,6 +120,8 @@ pub fn handle_chat(
     } else {
         // 无工具模式：流式输出 + 结束后 markdown 重绘
         use crossterm::{cursor, execute, terminal};
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
 
         let user_msg = ChatMessage::text("user", message.clone());
         let mut messages = prior_messages.clone();
@@ -130,6 +132,11 @@ pub fn handle_chat(
             .unwrap_or(80);
         let mut cur_col: usize = 0;
         let mut raw_lines: usize = 0;
+        let interrupted = Arc::new(AtomicBool::new(false));
+        let interrupted2 = Arc::clone(&interrupted);
+        let _ = ctrlc::set_handler(move || {
+            interrupted2.store(true, Ordering::Relaxed);
+        });
 
         // 发送给 API 时截取历史窗口
         let history_limit = agent_config.max_history_messages;
@@ -144,6 +151,9 @@ pub fn handle_chat(
             &send_messages,
             load_system_prompt().as_deref(),
             &mut |chunk| {
+                if interrupted.load(Ordering::Relaxed) {
+                    return;
+                }
                 print!("{}", chunk);
                 let _ = io::stdout().flush();
                 for ch in chunk.chars() {
@@ -507,6 +517,13 @@ fn run_oneshot_agent(
 
     let client = create_openai_client(provider);
 
+    // Ctrl+C 中断标志
+    let ctrl_c = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ctrl_c2 = Arc::clone(&ctrl_c);
+    let _ = ctrlc::set_handler(move || {
+        ctrl_c2.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+
     // 流式调用结果
     struct StreamResult {
         assistant_text: String,
@@ -517,6 +534,7 @@ fn run_oneshot_agent(
 
     for _round in 0..max_rounds {
         // ── 异步部分：API 流式调用 ──
+        let ctrl_c_stream = Arc::clone(&ctrl_c);
         let stream_result: Result<StreamResult, String> = rt.block_on(async {
             let request = build_request_with_tools(
                 provider,
@@ -542,6 +560,9 @@ fn run_oneshot_agent(
             let mut raw_lines: usize = 0;
 
             while let Some(result) = stream.next().await {
+                if ctrl_c_stream.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
                 match result {
                     Ok(response) => {
                         for choice in &response.choices {
@@ -628,6 +649,18 @@ fn run_oneshot_agent(
                 return;
             }
         };
+
+        // Ctrl+C 打断：持久化已有内容后退出
+        if ctrl_c.load(std::sync::atomic::Ordering::Relaxed) {
+            println!();
+            if !sr.assistant_text.is_empty() {
+                messages.push(ChatMessage::text("assistant", &sr.assistant_text));
+            }
+            persist_messages(session_id, &messages, prior_len);
+            eprintln!("\n{}", "⏹ 已中断".dimmed());
+            eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
+            return;
+        }
 
         // ── 同步部分：markdown 重绘 + 工具执行 ──
 

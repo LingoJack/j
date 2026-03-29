@@ -90,6 +90,10 @@ pub fn run_chat_tui(remote_mode: bool, port: u16) {
         match remote::start_remote_and_wait(port) {
             Ok((bridge, _url)) => Some(bridge),
             Err(e) => {
+                if e.kind() == std::io::ErrorKind::Interrupted {
+                    // Ctrl+C 取消，直接返回不进入 TUI
+                    return;
+                }
                 crate::error!("远程服务启动失败: {}", e);
                 None
             }
@@ -247,13 +251,15 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     WsInbound::SendMessage { content } => {
                         app.inject_remote_message(content);
                     }
-                    WsInbound::ToolConfirm { action } => {
-                        if action == "allow" {
-                            app.update(Action::ExecutePendingTool);
-                        } else {
-                            app.update(Action::RejectPendingTool);
+                    WsInbound::ToolConfirm { action, reason } => match action.as_str() {
+                        "allow" => app.update(Action::ExecutePendingTool),
+                        "allow_always" => app.update(Action::AllowAndExecutePendingTool),
+                        "reject_with_reason" => {
+                            let r = reason.unwrap_or_default();
+                            app.update(Action::RejectPendingToolWithReason(r));
                         }
-                    }
+                        _ => app.update(Action::RejectPendingTool),
+                    },
                     WsInbound::Cancel => {
                         app.update(Action::CancelStream);
                     }

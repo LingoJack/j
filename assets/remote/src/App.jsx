@@ -1,39 +1,28 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWebSocket } from './useWebSocket'
-import { escHtml, renderMd, truncate } from './utils'
+import { truncate } from './utils'
+import Markdown from './Markdown'
+import ToolModal from './ToolModal'
 
 const params = new URLSearchParams(location.search)
 const token = params.get('token') || ''
 const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
 const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 
-function Message({ role, content, streaming, dangerousHtml }) {
+function Message({ role, content, streaming }) {
   const cls = role === 'user' ? 'user' : role === 'tool' ? 'tool' : 'assistant'
   return (
-    <div
-      className={`msg ${cls}${streaming ? ' streaming' : ''}`}
-      dangerouslySetInnerHTML={{ __html: dangerousHtml ?? (role === 'user' ? escHtml(content) : renderMd(content)) }}
-    />
+    <div className={`msg ${cls}${streaming ? ' streaming' : ''}`}>
+      {role === 'user' ? content : <Markdown content={content || ''} />}
+    </div>
   )
 }
 
-function ToolModal({ tools, onConfirm }) {
-  if (!tools) return null
+function ToolResultMsg({ toolName, output, isError }) {
   return (
-    <div className="modal-overlay">
-      <div className="modal">
-        <h3>🔧 工具调用确认</h3>
-        <div
-          className="tool-info"
-          dangerouslySetInnerHTML={{
-            __html: tools.map(t => `<b>${escHtml(t.name)}</b>\n${escHtml(t.confirm_message)}\n\n`).join(''),
-          }}
-        />
-        <div className="btns">
-          <button className="btn allow" onClick={() => onConfirm('allow')}>✓ 允许</button>
-          <button className="btn reject" onClick={() => onConfirm('reject')}>✗ 拒绝</button>
-        </div>
-      </div>
+    <div className="msg tool">
+      <span className="tool-result-name">{isError ? '❌' : '✅'} {toolName}</span>
+      {output && <div className="tool-result-output">{truncate(output, 300)}</div>}
     </div>
   )
 }
@@ -44,8 +33,9 @@ export default function App() {
   const [connected, setConnected] = useState(false)
   const [modelName, setModelName] = useState('--')
   const [toolConfirm, setToolConfirm] = useState(null)
+  const [toolConfirmIdx, setToolConfirmIdx] = useState(0)
   const [inputText, setInputText] = useState('')
-  const streamRef = useRef(null)
+  const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -60,13 +50,13 @@ export default function App() {
   const onMessage = useCallback((msg) => {
     switch (msg.type) {
       case 'stream_chunk':
-        streamRef.current = renderMd(msg.content)
+        streamContentRef.current = msg.content
         setMessages(prev => {
           const last = prev[prev.length - 1]
           if (last?.streaming) {
-            return [...prev.slice(0, -1), { ...last, dangerousHtml: streamRef.current }]
+            return [...prev.slice(0, -1), { ...last, content: msg.content }]
           }
-          return [...prev, { role: 'assistant', content: '', streaming: true, dangerousHtml: streamRef.current }]
+          return [...prev, { role: 'assistant', content: msg.content, streaming: true }]
         })
         setState('loading')
         scrollToBottom()
@@ -84,18 +74,24 @@ export default function App() {
         } else {
           setMessages(prev => [...prev, { role: msg.role, content: msg.content }])
         }
-        streamRef.current = null
+        streamContentRef.current = ''
         scrollToBottom()
         break
 
       case 'tool_confirm_request':
         setState('tool_confirm')
         setToolConfirm(msg.tools)
+        setToolConfirmIdx(0)
         break
 
       case 'tool_result': {
-        const html = `<span class="tool-name">🔧 ${escHtml(msg.tool_call_id.substring(0, 8))}</span> ${msg.is_error ? '❌' : '✅'}\n${escHtml(truncate(msg.output, 200))}`
-        setMessages(prev => [...prev, { role: 'tool', content: '', dangerousHtml: html }])
+        const name = msg.tool_call_id?.substring(0, 10) || 'tool'
+        setMessages(prev => [...prev, {
+          role: 'tool_result',
+          toolName: name,
+          output: msg.output,
+          isError: msg.is_error,
+        }])
         scrollToBottom()
         break
       }
@@ -110,12 +106,12 @@ export default function App() {
             }
             return prev
           })
-          streamRef.current = null
+          streamContentRef.current = ''
         }
         break
 
       case 'session_sync':
-        streamRef.current = null
+        streamContentRef.current = ''
         setMessages(msg.messages.map(m => ({ role: m.role, content: m.content })))
         setModelName(msg.model || '--')
         setState(msg.status)
@@ -143,11 +139,20 @@ export default function App() {
     scrollToBottom()
   }, [inputText, state, send, scrollToBottom])
 
-  const confirmTool = useCallback((action) => {
-    send({ type: 'tool_confirm', action })
-    setToolConfirm(null)
-    setState('loading')
-  }, [send])
+  const confirmTool = useCallback((action, reason) => {
+    const payload = { type: 'tool_confirm', action }
+    if (reason) payload.reason = reason
+    send(payload)
+
+    // 多工具：推进到下一个
+    if (toolConfirm && toolConfirmIdx < toolConfirm.length - 1) {
+      setToolConfirmIdx(prev => prev + 1)
+    } else {
+      setToolConfirm(null)
+      setToolConfirmIdx(0)
+      setState('loading')
+    }
+  }, [send, toolConfirm, toolConfirmIdx])
 
   const cancelStream = useCallback(() => {
     send({ type: 'cancel' })
@@ -171,23 +176,39 @@ export default function App() {
   useEffect(() => { autoResize() }, [inputText, autoResize])
 
   const isLoading = state === 'loading'
-  const statusText = isLoading ? '⏳ AI 思考中...' : state === 'tool_confirm' ? '🔧 等待工具确认...' : connected ? '已连接' : '连接断开，3秒后重连...'
+  const statusText = isLoading
+    ? 'AI 思考中...'
+    : state === 'tool_confirm'
+      ? '等待工具确认...'
+      : connected
+        ? '已连接'
+        : '连接断开，重连中...'
 
   return (
     <div id="app">
       <div className="header">
         <div className={`dot${connected ? ' connected' : ''}`} />
-        <span className="title">🦞 Sprite</span>
+        <span className="title">Sprite</span>
         <span className="model">{modelName}</span>
       </div>
 
       <div className="messages" ref={messagesRef}>
-        {messages.map((m, i) => (
-          <Message key={i} role={m.role} content={m.content} streaming={m.streaming} dangerousHtml={m.dangerousHtml} />
-        ))}
+        {messages.length === 0 && (
+          <div className="empty-hint">发送消息开始对话</div>
+        )}
+        {messages.map((m, i) =>
+          m.role === 'tool_result' ? (
+            <ToolResultMsg key={i} toolName={m.toolName} output={m.output} isError={m.isError} />
+          ) : (
+            <Message key={i} role={m.role} content={m.content} streaming={m.streaming} />
+          )
+        )}
       </div>
 
-      <div className="status-bar">{statusText}</div>
+      <div className={`status-bar${isLoading ? ' loading' : ''}`}>
+        {isLoading && <span className="loading-dot" />}
+        {statusText}
+      </div>
 
       <div className="input-area">
         <textarea
@@ -200,13 +221,13 @@ export default function App() {
           onKeyDown={handleKeyDown}
         />
         {isLoading ? (
-          <button className="cancel-btn" onClick={cancelStream}>■</button>
+          <button className="cancel-btn" onClick={cancelStream} title="取消">■</button>
         ) : (
-          <button className="send-btn" disabled={false} onClick={sendMessage}>↑</button>
+          <button className="send-btn" onClick={sendMessage} disabled={!inputText.trim()} title="发送">↑</button>
         )}
       </div>
 
-      <ToolModal tools={toolConfirm} onConfirm={confirmTool} />
+      <ToolModal tools={toolConfirm} currentIndex={toolConfirmIdx} onConfirm={confirmTool} />
     </div>
   )
 }
