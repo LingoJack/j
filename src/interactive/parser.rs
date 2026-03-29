@@ -171,6 +171,8 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
     } else if is(cmd::CHAT) {
         let mut cont = false;
         let mut session: Option<String> = None;
+        let mut remote = false;
+        let mut port: u16 = 9390;
         let mut content: Vec<String> = Vec::new();
         let mut i = 0;
         while i < rest.len() {
@@ -186,6 +188,17 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                         i += 1;
                     }
                 }
+                "--remote" => {
+                    remote = true;
+                    i += 1;
+                }
+                "--port" => {
+                    i += 1;
+                    if i < rest.len() {
+                        port = rest[i].parse().unwrap_or(9390);
+                        i += 1;
+                    }
+                }
                 _ => {
                     content.push(rest[i].clone());
                     i += 1;
@@ -196,8 +209,8 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             cont,
             session,
             content,
-            remote: false,
-            port: 9390,
+            remote,
+            port,
         })
     } else if is(cmd::CONCAT) {
         if rest.is_empty() {
