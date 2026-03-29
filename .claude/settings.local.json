@@ -56,7 +56,8 @@
       "Bash(mkdir -p /Users/lingojack/dev_custom/j/assets/remote)",
       "Bash(npm init:*)",
       "Bash(npm install:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(npm run:*)"
     ]
   },
   "language": "zh-CN",
