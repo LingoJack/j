@@ -10,19 +10,26 @@ const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
 const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 
 function Message({ role, content, streaming }) {
-  const cls = role === 'user' ? 'user' : role === 'tool' ? 'tool' : 'assistant'
+  const isUser = role === 'user'
+  const isTool = role === 'tool'
+  const base = 'max-w-[90%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
+  const cls = isUser
+    ? `${base} self-end bg-accent text-white rounded-br-md whitespace-pre-wrap`
+    : isTool
+      ? `${base} self-start bg-transparent border border-border rounded-xl px-3.5 py-2 text-xs max-w-[85%]`
+      : `${base} self-start bg-bg3 rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
   return (
-    <div className={`msg ${cls}${streaming ? ' streaming' : ''}`}>
-      {role === 'user' ? content : <Markdown content={content || ''} />}
+    <div className={cls}>
+      {isUser ? content : <Markdown content={content || ''} />}
     </div>
   )
 }
 
 function ToolResultMsg({ toolName, output, isError }) {
   return (
-    <div className="msg tool">
-      <span className="tool-result-name">{isError ? '❌' : '✅'} {toolName}</span>
-      {output && <div className="tool-result-output">{truncate(output, 300)}</div>}
+    <div className="self-start bg-transparent border border-border rounded-xl px-3.5 py-2 text-xs max-w-[85%] break-words">
+      <span className="font-semibold text-xs">{isError ? '❌' : '✅'} {toolName}</span>
+      {output && <div className="text-fg2 text-[11px] mt-1 whitespace-pre-wrap break-all">{truncate(output, 300)}</div>}
     </div>
   )
 }
@@ -144,7 +151,6 @@ export default function App() {
     if (reason) payload.reason = reason
     send(payload)
 
-    // 多工具：推进到下一个
     if (toolConfirm && toolConfirmIdx < toolConfirm.length - 1) {
       setToolConfirmIdx(prev => prev + 1)
     } else {
@@ -185,16 +191,18 @@ export default function App() {
         : '连接断开，重连中...'
 
   return (
-    <div id="app">
-      <div className="header">
-        <div className={`dot${connected ? ' connected' : ''}`} />
-        <span className="title">Sprite</span>
-        <span className="model">{modelName}</span>
+    <div className="flex flex-col h-dvh max-w-[680px] mx-auto pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-4.5 pt-[calc(14px+env(safe-area-inset-top))] pb-3.5 bg-bg2 border-b border-border shrink-0">
+        <div className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
+        <span className="font-bold text-[17px] tracking-wide">Sprite</span>
+        <span className="ml-auto text-fg2 text-xs bg-bg3 px-2.5 py-0.5 rounded-xl">{modelName}</span>
       </div>
 
-      <div className="messages" ref={messagesRef}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 [-webkit-overflow-scrolling:touch]" ref={messagesRef}>
         {messages.length === 0 && (
-          <div className="empty-hint">发送消息开始对话</div>
+          <div className="text-center text-fg3 mt-[40%] text-sm">发送消息开始对话</div>
         )}
         {messages.map((m, i) =>
           m.role === 'tool_result' ? (
@@ -205,12 +213,14 @@ export default function App() {
         )}
       </div>
 
-      <div className={`status-bar${isLoading ? ' loading' : ''}`}>
-        {isLoading && <span className="loading-dot" />}
+      {/* Status Bar */}
+      <div className={`px-4.5 py-1.5 text-center text-xs bg-bg2 border-t border-border shrink-0 flex items-center justify-center gap-1.5 ${isLoading ? 'text-accent' : 'text-fg3'}`}>
+        {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-[pulse_1.2s_ease-in-out_infinite]" />}
         {statusText}
       </div>
 
-      <div className="input-area">
+      {/* Input Area */}
+      <div className="flex gap-2.5 items-end px-3.5 pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))] bg-bg2 border-t border-border shrink-0">
         <textarea
           ref={textareaRef}
           rows={1}
@@ -219,11 +229,21 @@ export default function App() {
           value={inputText}
           onChange={e => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
+          className="flex-1 bg-bg3 border border-border rounded-[22px] px-4.5 py-2.5 text-fg text-[15px] resize-none outline-none max-h-[120px] font-[inherit] leading-snug transition-colors duration-200 focus:border-accent placeholder:text-fg3"
         />
         {isLoading ? (
-          <button className="cancel-btn" onClick={cancelStream} title="取消">■</button>
+          <button
+            className="w-11 h-11 rounded-full border-none text-sm cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-danger text-white active:scale-[0.92]"
+            onClick={cancelStream}
+            title="取消"
+          >■</button>
         ) : (
-          <button className="send-btn" onClick={sendMessage} disabled={!inputText.trim()} title="发送">↑</button>
+          <button
+            className="w-11 h-11 rounded-full border-none text-xl cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-accent text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.92]"
+            onClick={sendMessage}
+            disabled={!inputText.trim()}
+            title="发送"
+          >↑</button>
         )}
       </div>
 

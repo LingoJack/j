@@ -1,7 +1,14 @@
 import { useState } from 'react'
 
+const optCfg = [
+  { label: '允许执行', icon: '▶', border: 'border-ok', text: 'text-ok', hover: 'hover:bg-ok/10' },
+  { label: '始终允许', icon: '✓', border: 'border-accent', text: 'text-accent', hover: 'hover:bg-accent/10' },
+  { label: '拒绝', icon: '✗', border: 'border-danger', text: 'text-danger', hover: 'hover:bg-danger/10' },
+  { label: '输入原因拒绝...', icon: '✎', border: 'border-warn', text: 'text-warn', hover: 'hover:bg-warn/10' },
+]
+
 export default function ToolModal({ tools, currentIndex, onConfirm }) {
-  const [mode, setMode] = useState('select') // 'select' | 'input'
+  const [mode, setMode] = useState('select')
   const [reason, setReason] = useState('')
   const [selected, setSelected] = useState(0)
 
@@ -10,13 +17,6 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
   const tool = tools[currentIndex] || tools[0]
   const total = tools.length
   const remaining = total - currentIndex
-
-  const options = [
-    { label: '允许执行', icon: '▶', cls: 'opt-allow' },
-    { label: '始终允许', icon: '✓', cls: 'opt-always' },
-    { label: '拒绝', icon: '✗', cls: 'opt-reject' },
-    { label: '输入原因拒绝...', icon: '✎', cls: 'opt-input' },
-  ]
 
   const handleConfirm = (idx) => {
     switch (idx) {
@@ -34,43 +34,46 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
   }
 
   return (
-    <div className="modal-overlay">
-      <div className="modal">
-        <div className="modal-header">
-          <span className="modal-icon">🔧</span>
+    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-100 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]">
+      <div className="bg-bg2 border border-border-light rounded-[20px] p-5.5 w-[92%] max-w-[420px] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        {/* Header */}
+        <div className="flex items-center gap-2 text-base font-bold mb-4">
+          <span className="text-xl">🔧</span>
           <span>工具调用确认</span>
           {total > 1 && (
-            <span className="modal-badge">{remaining} 个待确认</span>
+            <span className="ml-auto text-[11px] font-medium bg-accent-dim text-white px-2 py-0.5 rounded-[10px]">{remaining} 个待确认</span>
           )}
         </div>
 
-        <div className="tool-detail">
-          <div className="tool-name-row">
-            <span className="tool-label">工具</span>
-            <span className="tool-name-val">{tool.name}</span>
+        {/* Tool Detail */}
+        <div className="bg-bg border border-border rounded-xl p-3.5 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] text-fg3 uppercase tracking-wide">工具</span>
+            <span className="font-bold text-accent text-sm">{tool.name}</span>
           </div>
-          <div className="tool-desc">{tool.confirm_message}</div>
+          <div className="text-[13px] text-fg2 leading-relaxed break-all max-h-40 overflow-y-auto">{tool.confirm_message}</div>
         </div>
 
+        {/* Options / Reason Input */}
         {mode === 'select' ? (
-          <div className="tool-options">
-            {options.map((opt, i) => (
+          <div className="flex flex-col gap-2">
+            {optCfg.map((opt, i) => (
               <button
                 key={i}
-                className={`tool-opt ${opt.cls}${selected === i ? ' active' : ''}`}
+                className={`flex items-center gap-2.5 px-4 py-3 border rounded-xl bg-transparent text-sm cursor-pointer transition-all duration-150 text-left active:scale-[0.98] ${opt.border} ${opt.text} ${opt.hover}`}
                 onClick={() => handleConfirm(i)}
                 onMouseEnter={() => setSelected(i)}
               >
-                <span className="opt-icon">{opt.icon}</span>
+                <span className="text-base w-5 text-center shrink-0">{opt.icon}</span>
                 {opt.label}
               </button>
             ))}
           </div>
         ) : (
-          <div className="tool-reason-input">
+          <div className="flex flex-col gap-2.5">
             <input
               type="text"
-              className="reason-input"
+              className="w-full px-4 py-3 border border-border-light rounded-xl bg-bg text-fg text-sm outline-none font-[inherit] focus:border-accent"
               placeholder="输入拒绝原因..."
               value={reason}
               onChange={e => setReason(e.target.value)}
@@ -80,9 +83,9 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
               }}
               autoFocus
             />
-            <div className="reason-actions">
-              <button className="reason-btn cancel" onClick={() => { setMode('select'); setReason('') }}>取消</button>
-              <button className="reason-btn submit" onClick={submitReason}>提交</button>
+            <div className="flex gap-2 justify-end">
+              <button className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-bg3 text-fg2" onClick={() => { setMode('select'); setReason('') }}>取消</button>
+              <button className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-danger text-white" onClick={submitReason}>提交</button>
             </div>
           </div>
         )}
