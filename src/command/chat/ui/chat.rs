@@ -1,5 +1,5 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
-use super::super::handler::{get_filtered_files, get_filtered_skills};
+use super::super::handler::{get_filtered_files, get_filtered_skill_names, get_filtered_skills};
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
@@ -72,6 +72,11 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     // ========== 文件补全弹窗覆盖层 ==========
     if app.ui.file_popup_active {
         draw_file_popup(f, chunks[2], app);
+    }
+
+    // ========== 技能补全弹窗覆盖层 ==========
+    if app.ui.skill_popup_active {
+        draw_skill_popup(f, chunks[2], app);
     }
 }
 
@@ -594,13 +599,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     };
 
     // 计算 @mention 高亮范围（基于全局 char index, 相对于 input 起始）
-    let skill_names: Vec<String> = app
-        .state
-        .loaded_skills
-        .iter()
-        .map(|s| s.frontmatter.name.clone())
-        .collect();
-    let mention_ranges = find_at_mention_ranges(&app.ui.input, &skill_names);
+    let mention_ranges = find_at_mention_ranges(&app.ui.input);
     // 转换为相对于 scroll_offset_chars 的偏移
     let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
 
@@ -1216,8 +1215,77 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
     f.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
+/// 绘制技能补全弹窗（输入区域上方浮动）
+pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
+    let t = &app.ui.theme;
+    let filtered = get_filtered_skill_names(app);
+    if filtered.is_empty() {
+        return;
+    }
+
+    let item_count = filtered.len().min(8);
+    let popup_height = (item_count as u16) + 2;
+    let popup_width = filtered
+        .iter()
+        .map(|n| display_width(&format!("  {}  ", n)))
+        .max()
+        .unwrap_or(20)
+        .max(16)
+        .min(input_area.width.saturating_sub(4) as usize) as u16
+        + 2;
+
+    let x = input_area.x + 1;
+    let y = input_area.y.saturating_sub(popup_height);
+
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    let title_text = if app.ui.skill_popup_filter.is_empty() {
+        " Skills ".to_string()
+    } else {
+        format!(" {} ", app.ui.skill_popup_filter)
+    };
+
+    let items: Vec<ListItem> = filtered
+        .iter()
+        .take(item_count)
+        .map(|name| {
+            let style = Style::default().fg(t.label_ai);
+            ListItem::new(Line::from(Span::styled(format!("  {}  ", name), style)))
+        })
+        .collect();
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(
+        app.ui
+            .skill_popup_selected
+            .min(item_count.saturating_sub(1)),
+    ));
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.border_title))
+                .title(Span::styled(
+                    title_text,
+                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(t.bg_title)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(t.model_sel_highlight_bg)
+                .fg(t.text_white)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    f.render_widget(Clear, popup_area);
+    f.render_stateful_widget(list, popup_area, &mut list_state);
+}
+
 /// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)
-fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usize)> {
+fn find_at_mention_ranges(text: &str) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();
@@ -1228,6 +1296,16 @@ fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usi
             let valid_start = i == 0 || chars[i - 1].is_whitespace();
             if valid_start {
                 let rest: String = chars[i + 1..].iter().collect();
+                // 检查 @skill:name 模式
+                if rest.starts_with("skill:") {
+                    let mut end = i + 1 + 6; // @skill: 的末尾
+                    while end < len && !chars[end].is_whitespace() {
+                        end += 1;
+                    }
+                    ranges.push((i, end));
+                    i = end;
+                    continue;
+                }
                 // 检查 @file:xxx 模式
                 if rest.starts_with("file:") {
                     // 找到 @file: 之后直到空白字符为止
@@ -1237,31 +1315,6 @@ fn find_at_mention_ranges(text: &str, skill_names: &[String]) -> Vec<(usize, usi
                     }
                     ranges.push((i, end));
                     i = end;
-                    continue;
-                }
-                // 检查 @skill_name
-                let mut best_len = 0usize;
-                for name in skill_names {
-                    if rest.starts_with(name.as_str()) {
-                        let after_pos = name.len();
-                        let is_boundary = if after_pos >= rest.len() {
-                            true
-                        } else {
-                            rest.chars()
-                                .nth(after_pos)
-                                .map(|next_ch| {
-                                    next_ch.is_whitespace() || !next_ch.is_alphanumeric()
-                                })
-                                .unwrap_or(true)
-                        };
-                        if is_boundary && name.len() > best_len {
-                            best_len = name.len();
-                        }
-                    }
-                }
-                if best_len > 0 {
-                    ranges.push((i, i + 1 + best_len));
-                    i += 1 + best_len;
                     continue;
                 }
             }

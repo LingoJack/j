@@ -12,11 +12,38 @@ pub fn update_at_filter(app: &mut ChatApp) {
     app.ui.at_popup_selected = 0;
 }
 
-/// 根据 filter 过滤 loaded_skills 的 name 列表
+/// 根据 filter 过滤 @ 弹窗的顶级选项（skill: 和 file:）
 pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
     let filter = app.ui.at_popup_filter.to_lowercase();
-    let mut items: Vec<String> = app
-        .state
+    let mut items: Vec<String> = Vec::new();
+    let skill_label = "skill:".to_string();
+    if filter.is_empty() || skill_label.contains(&filter) {
+        items.push(skill_label);
+    }
+    let file_label = "file:".to_string();
+    if filter.is_empty() || file_label.contains(&filter) {
+        items.push(file_label);
+    }
+    items
+}
+
+/// 更新技能补全弹窗的过滤文本
+pub fn update_skill_filter(app: &mut ChatApp) {
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    // @skill: 占 7 个字符, 过滤文本从 start_pos + 7 开始
+    let start = app.ui.skill_popup_start_pos + 7;
+    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
+        app.ui.skill_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
+    } else {
+        app.ui.skill_popup_filter.clear();
+    }
+    app.ui.skill_popup_selected = 0;
+}
+
+/// 根据 skill_popup_filter 过滤技能名称列表
+pub fn get_filtered_skill_names(app: &ChatApp) -> Vec<String> {
+    let filter = app.ui.skill_popup_filter.to_lowercase();
+    app.state
         .loaded_skills
         .iter()
         .filter(|s| {
@@ -28,13 +55,22 @@ pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
         })
         .map(|s| s.frontmatter.name.clone())
         .filter(|name| filter.is_empty() || name.to_lowercase().contains(&filter))
-        .collect();
-    // 添加 file: 选项
-    let file_label = "file:".to_string();
-    if filter.is_empty() || file_label.contains(&filter) {
-        items.push(file_label);
-    }
-    items
+        .collect()
+}
+
+/// 替换 input 中 @skill:filter 为 @skill:完整名称 + 空格
+pub fn complete_skill_mention(app: &mut ChatApp, skill_name: &str) {
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let before: String = chars[..app.ui.skill_popup_start_pos].iter().collect();
+    let after: String = if app.ui.cursor_pos < chars.len() {
+        chars[app.ui.cursor_pos..].iter().collect()
+    } else {
+        String::new()
+    };
+    let replacement = format!("@skill:{} ", skill_name);
+    let new_cursor = before.chars().count() + replacement.chars().count();
+    app.ui.input = format!("{}{}{}", before, replacement, after);
+    app.ui.cursor_pos = new_cursor;
 }
 
 /// 替换 input 中 @... 为 @skill_name 并加空格

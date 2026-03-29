@@ -181,6 +181,14 @@ pub struct UIState {
     pub file_popup_filter: String,
     /// 文件弹窗中选中项索引
     pub file_popup_selected: usize,
+    /// 技能补全弹窗是否激活
+    pub skill_popup_active: bool,
+    /// @skill: 在 input 中的起始字符索引
+    pub skill_popup_start_pos: usize,
+    /// @skill: 之后的名称过滤文本
+    pub skill_popup_filter: String,
+    /// 技能弹窗中选中项索引
+    pub skill_popup_selected: usize,
     /// 统一交互区：当前选中项索引（0=continue, 1=allow, 2=refuse, 3=type）
     pub tool_interact_selected: usize,
     /// 统一交互区：是否处于输入模式
@@ -870,6 +878,17 @@ pub enum Action {
     /// 在文件补全中确认（插入文件路径）
     FilePopupConfirm,
 
+    /// 激活技能补全弹窗（在 "@skill:" 之后）
+    SkillPopupActivate,
+    /// 关闭技能补全弹窗
+    SkillPopupClose,
+    /// 更新技能补全过滤文本
+    SkillPopupFilter(String),
+    /// 在技能补全中导航
+    SkillPopupNavigate(CursorDirection),
+    /// 在技能补全中确认（插入技能名称）
+    SkillPopupConfirm,
+
     // ========== 流式生命周期（来自后台 Agent） ==========
     /// 收到一个流式文本块（实时回复）
     StreamChunk,
@@ -1133,6 +1152,10 @@ impl ChatApp {
                 file_popup_start_pos: 0,
                 file_popup_filter: String::new(),
                 file_popup_selected: 0,
+                skill_popup_active: false,
+                skill_popup_start_pos: 0,
+                skill_popup_filter: String::new(),
+                skill_popup_selected: 0,
                 tool_interact_selected: 0,
                 tool_interact_typing: false,
                 tool_interact_input: String::new(),
@@ -1299,6 +1322,30 @@ impl ChatApp {
             Action::FilePopupConfirm => {
                 // Will delegate to helper (Step 5 refactor)
             }
+
+            Action::SkillPopupActivate => {
+                self.ui.skill_popup_active = true;
+                self.ui.skill_popup_filter.clear();
+                self.ui.skill_popup_selected = 0;
+            }
+            Action::SkillPopupClose => {
+                self.ui.skill_popup_active = false;
+            }
+            Action::SkillPopupFilter(text) => {
+                self.ui.skill_popup_filter = text;
+                self.ui.skill_popup_selected = 0;
+            }
+            Action::SkillPopupNavigate(dir) => match dir {
+                CursorDirection::Up => {
+                    if self.ui.skill_popup_selected > 0 {
+                        self.ui.skill_popup_selected -= 1;
+                    }
+                }
+                CursorDirection::Down => {
+                    self.ui.skill_popup_selected += 1;
+                }
+            },
+            Action::SkillPopupConfirm => {}
 
             // ========== 流式生命周期 ==========
             Action::StreamChunk => {
@@ -2182,6 +2229,7 @@ impl ChatApp {
         // 关闭弹窗
         self.ui.at_popup_active = false;
         self.ui.file_popup_active = false;
+        self.ui.skill_popup_active = false;
         self.ui.input.clear();
         self.ui.cursor_pos = 0;
 

@@ -21,4 +21,4 @@ pub use tui_loop::run_chat_tui;
 pub use super::ui_helpers::{config_field_label, config_field_value};
 
 // Re-export autocomplete functions (for ui/chat.rs compatibility)
-pub use super::autocomplete::{get_filtered_files, get_filtered_skills};
+pub use super::autocomplete::{get_filtered_files, get_filtered_skill_names, get_filtered_skills};
