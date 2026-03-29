@@ -24,6 +24,7 @@ use std::fs;
 /// 所有 assets 目录下的文件都会被嵌入到二进制中
 #[derive(RustEmbed)]
 #[folder = "assets/"]
+#[exclude = "remote/node_modules/*"]
 pub struct Assets;
 
 // ========== 便捷访问函数 ==========
