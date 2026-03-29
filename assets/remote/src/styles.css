@@ -1,19 +1,24 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0f0f17;
-  --color-bg2: #161625;
-  --color-bg3: #1c1c2e;
-  --color-fg: #e4e4ef;
-  --color-fg2: #8888a0;
-  --color-fg3: #5a5a72;
-  --color-accent: #6366f1;
-  --color-accent-dim: #4f46e5;
-  --color-ok: #34d399;
-  --color-danger: #f87171;
-  --color-warn: #fb923c;
-  --color-border: #2a2a42;
-  --color-border-light: #363652;
+  --color-bg:           #16161e;
+  --color-bg2:          #1c1c28;
+  --color-bg3:          #1a1a26;
+  --color-fg:           #dcdce6;
+  --color-fg2:          #8c8caa;
+  --color-fg3:          #505064;
+  --color-accent:       #64b4ff;
+  --color-accent-dim:   #5064c8;
+  --color-ok:           #78dca0;
+  --color-danger:       #c84646;
+  --color-warn:         #ffc850;
+  --color-border:       #32374a;
+  --color-border-light: #506480;
+  --color-bubble-user:  #284678;
+  --color-bubble-ai:    #1c1c26;
+  --color-label-ai:     #78dca0;
+  --color-label-user:   #64a0ff;
+  --color-tool-confirm: #ffc850;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -51,7 +56,7 @@ html, body {
 .md-msg h1 { font-size: 17px; }
 .md-msg h2 { font-size: 16px; }
 .md-msg blockquote {
-  border-left: 3px solid var(--color-accent-dim);
+  border-left: 3px solid var(--color-border-light);
   padding-left: 12px;
   color: var(--color-fg2);
   margin: 6px 0;
@@ -69,7 +74,7 @@ html, body {
 }
 .md-msg th { background: var(--color-bg2); font-weight: 600; }
 .md-msg code {
-  background: rgba(255,255,255,0.07);
+  background: rgba(45,45,60,0.8);
   padding: 2px 6px;
   border-radius: 5px;
   font-size: 13px;
@@ -77,7 +82,7 @@ html, body {
 }
 .md-msg pre {
   margin: 8px 0;
-  border-radius: 10px;
+  border-radius: 6px;
   overflow-x: auto;
 }
 .md-msg pre code {
@@ -86,7 +91,7 @@ html, body {
   border-radius: 0;
 }
 .md-msg a {
-  color: var(--color-accent);
+  color: #569cd6;
   text-decoration: none;
 }
 .md-msg a:hover { text-decoration: underline; }

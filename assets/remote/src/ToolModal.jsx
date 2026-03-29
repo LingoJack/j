@@ -2,9 +2,9 @@ import { useState } from 'react'
 
 const optCfg = [
   { label: '允许执行', icon: '▶', border: 'border-ok', text: 'text-ok', hover: 'hover:bg-ok/10' },
-  { label: '始终允许', icon: '✓', border: 'border-accent', text: 'text-accent', hover: 'hover:bg-accent/10' },
+  { label: '始终允许', icon: '✓', border: 'border-warn', text: 'text-warn', hover: 'hover:bg-warn/10' },
   { label: '拒绝', icon: '✗', border: 'border-danger', text: 'text-danger', hover: 'hover:bg-danger/10' },
-  { label: '输入原因拒绝...', icon: '✎', border: 'border-warn', text: 'text-warn', hover: 'hover:bg-warn/10' },
+  { label: '输入原因拒绝...', icon: '✎', border: 'border-fg2', text: 'text-fg2', hover: 'hover:bg-fg2/10' },
 ]
 
 export default function ToolModal({ tools, currentIndex, onConfirm }) {
@@ -34,22 +34,22 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-100 p-[env(safe-area-inset-top)_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)]">
-      <div className="bg-bg2 border border-border-light rounded-[20px] p-5.5 w-[92%] max-w-[420px] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-100 p-[calc(env(safe-area-inset-top)+8px)_calc(env(safe-area-inset-right)+8px)_calc(env(safe-area-inset-bottom)+8px)_calc(env(safe-area-inset-left)+8px)]">
+      <div className="bg-[#231e0f] border border-[#806830] rounded-[20px] p-5.5 w-[92%] max-w-[420px] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
         {/* Header */}
         <div className="flex items-center gap-2 text-base font-bold mb-4">
           <span className="text-xl">🔧</span>
-          <span>工具调用确认</span>
+          <span className="text-tool-confirm">工具调用确认</span>
           {total > 1 && (
-            <span className="ml-auto text-[11px] font-medium bg-accent-dim text-white px-2 py-0.5 rounded-[10px]">{remaining} 个待确认</span>
+            <span className="ml-auto text-[11px] font-medium bg-warn/20 text-warn px-2 py-0.5 rounded-[10px]">{remaining} 个待确认</span>
           )}
         </div>
 
         {/* Tool Detail */}
-        <div className="bg-bg border border-border rounded-xl p-3.5 mb-4">
+        <div className="bg-[#1a180e] border border-[#504020] rounded-xl p-3.5 mb-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[11px] text-fg3 uppercase tracking-wide">工具</span>
-            <span className="font-bold text-accent text-sm">{tool.name}</span>
+            <span className="font-bold text-tool-confirm text-sm">{tool.name}</span>
           </div>
           <div className="text-[13px] text-fg2 leading-relaxed break-all max-h-40 overflow-y-auto">{tool.confirm_message}</div>
         </div>
@@ -73,7 +73,7 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
           <div className="flex flex-col gap-2.5">
             <input
               type="text"
-              className="w-full px-4 py-3 border border-border-light rounded-xl bg-bg text-fg text-sm outline-none font-[inherit] focus:border-accent"
+              className="w-full px-4 py-3 border border-[#504020] rounded-xl bg-[#1a180e] text-fg text-sm outline-none font-[inherit] focus:border-warn"
               placeholder="输入拒绝原因..."
               value={reason}
               onChange={e => setReason(e.target.value)}

@@ -12,15 +12,22 @@ const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 function Message({ role, content, streaming }) {
   const isUser = role === 'user'
   const isTool = role === 'tool'
-  const base = 'max-w-[90%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
+  const base = 'max-w-[85%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
   const cls = isUser
-    ? `${base} self-end bg-accent text-white rounded-br-md whitespace-pre-wrap`
+    ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : isTool
-      ? `${base} self-start bg-transparent border border-border rounded-xl px-3.5 py-2 text-xs max-w-[85%]`
-      : `${base} self-start bg-bg3 rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
+      ? `${base} self-start bg-transparent border border-border rounded-xl px-3.5 py-2 text-xs`
+      : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
   return (
-    <div className={cls}>
-      {isUser ? content : <Markdown content={content || ''} />}
+    <div className="flex flex-col gap-0.5">
+      {!isTool && (
+        <span className={`text-[11px] font-medium ${isUser ? 'self-end text-label-user' : 'self-start text-label-ai'}`}>
+          {isUser ? '你' : 'AI'}
+        </span>
+      )}
+      <div className={cls}>
+        {isUser ? content : <Markdown content={content || ''} />}
+      </div>
     </div>
   )
 }
@@ -182,6 +189,7 @@ export default function App() {
   useEffect(() => { autoResize() }, [inputText, autoResize])
 
   const isLoading = state === 'loading'
+  const msgCount = messages.length
   const statusText = isLoading
     ? 'AI 思考中...'
     : state === 'tool_confirm'
@@ -195,12 +203,15 @@ export default function App() {
       {/* Header */}
       <div className="flex items-center gap-2.5 px-4.5 pt-[calc(14px+env(safe-area-inset-top))] pb-3.5 bg-bg2 border-b border-border shrink-0">
         <div className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
+        <span className="text-[17px]">🦞</span>
         <span className="font-bold text-[17px] tracking-wide">Sprite</span>
-        <span className="ml-auto text-fg2 text-xs bg-bg3 px-2.5 py-0.5 rounded-xl">{modelName}</span>
+        <span className="text-border-light mx-0.5">│</span>
+        <span className="text-label-ai text-sm font-medium">{modelName}</span>
+        <span className="ml-auto text-fg2 text-xs">📬 {msgCount}</span>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 [-webkit-overflow-scrolling:touch]" ref={messagesRef}>
+      <div className="flex-1 overflow-y-auto px-[calc(16px+env(safe-area-inset-left))] pr-[calc(16px+env(safe-area-inset-right))] py-4 flex flex-col gap-3 [-webkit-overflow-scrolling:touch]" ref={messagesRef}>
         {messages.length === 0 && (
           <div className="text-center text-fg3 mt-[40%] text-sm">发送消息开始对话</div>
         )}
@@ -214,8 +225,8 @@ export default function App() {
       </div>
 
       {/* Status Bar */}
-      <div className={`px-4.5 py-1.5 text-center text-xs bg-bg2 border-t border-border shrink-0 flex items-center justify-center gap-1.5 ${isLoading ? 'text-accent' : 'text-fg3'}`}>
-        {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-[pulse_1.2s_ease-in-out_infinite]" />}
+      <div className={`px-4.5 py-1.5 text-center text-xs bg-bg2 border-t border-border shrink-0 flex items-center justify-center gap-1.5 ${isLoading ? 'text-warn' : 'text-fg3'}`}>
+        {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-warn animate-[pulse_1.2s_ease-in-out_infinite]" />}
         {statusText}
       </div>
 
@@ -229,7 +240,7 @@ export default function App() {
           value={inputText}
           onChange={e => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 bg-bg3 border border-border rounded-[22px] px-4.5 py-2.5 text-fg text-[15px] resize-none outline-none max-h-[120px] font-[inherit] leading-snug transition-colors duration-200 focus:border-accent placeholder:text-fg3"
+          className={`flex-1 bg-bg3 border rounded-[22px] px-4.5 py-2.5 text-fg text-[15px] resize-none outline-none max-h-[120px] font-[inherit] leading-snug transition-colors duration-200 placeholder:text-fg3 ${isLoading ? 'border-[#786432]' : 'border-[#3c6450] focus:border-accent'}`}
         />
         {isLoading ? (
           <button
@@ -239,7 +250,7 @@ export default function App() {
           >■</button>
         ) : (
           <button
-            className="w-11 h-11 rounded-full border-none text-xl cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-accent text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.92]"
+            className="w-11 h-11 rounded-full border-none text-xl cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-label-user text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.92]"
             onClick={sendMessage}
             disabled={!inputText.trim()}
             title="发送"

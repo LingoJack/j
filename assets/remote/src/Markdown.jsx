@@ -8,9 +8,9 @@ const codeStyle = {
   'pre[class*="language-"]': {
     ...oneDark['pre[class*="language-"]'],
     margin: '6px 0',
-    borderRadius: '8px',
+    borderRadius: '6px',
     fontSize: '13px',
-    background: 'rgba(0,0,0,0.35)',
+    background: 'rgba(30,30,42,0.9)',
   },
   'code[class*="language-"]': {
     ...oneDark['code[class*="language-"]'],
