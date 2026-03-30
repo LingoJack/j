@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Markdown from './Markdown'
 
 export default function MessageDetailModal({ message, onClose }) {
   const contentRef = useRef(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -28,6 +29,21 @@ export default function MessageDetailModal({ message, onClose }) {
   }
 
   const roleInfo = getRoleInfo()
+
+  const handleCopy = async () => {
+    const text = isToolCall 
+      ? message.arguments 
+      : isToolResult 
+        ? message.output 
+        : message.content || ''
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (e) {
+      console.error('Copy failed:', e)
+    }
+  }
 
   const renderContent = () => {
     if (isToolCall) {
@@ -119,17 +135,10 @@ export default function MessageDetailModal({ message, onClose }) {
         {/* Footer */}
         <div className="px-5 py-3 border-t border-border flex justify-end gap-2 shrink-0">
           <button
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-bg3 text-fg2 hover:text-fg transition-colors"
-            onClick={() => {
-              const text = isToolCall 
-                ? message.arguments 
-                : isToolResult 
-                  ? message.output 
-                  : message.content || ''
-              navigator.clipboard.writeText(text)
-            }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${copied ? 'bg-ok/20 text-ok' : 'bg-bg3 text-fg2 hover:text-fg'}`}
+            onClick={handleCopy}
           >
-            📋 复制内容
+            {copied ? '✓ 已复制' : '📋 复制内容'}
           </button>
           <button
             className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-[#111] hover:opacity-90 transition-opacity"

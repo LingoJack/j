@@ -53,7 +53,7 @@ function ToolCallMsg({ name, arguments: args, completed, onDetail }) {
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start max-w-[85%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -99,7 +99,7 @@ function ToolResultMsg({ toolName, output, isError, onDetail }) {
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden transition-opacity ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      className={`self-start max-w-[85%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -339,13 +339,25 @@ export default function App() {
   return (
     <div className="flex flex-col h-[100dvh] max-w-[680px] mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 pt-[max(10px,env(safe-area-inset-top))] pb-2.5 bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
-        <div className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
-        <span className="text-[17px]">🦞</span>
-        <span className="font-bold text-[16px] tracking-wide">Sprite</span>
-        <span className="text-border-light mx-0.5 text-sm">|</span>
-        <span className="text-label-ai text-[13px] font-medium">{modelName}</span>
-        <span className="ml-auto text-fg2 text-xs font-medium">📬 {msgCount}</span>
+      <div className="bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
+        {/* 状态栏 - 放在最上面 */}
+        <div className={`px-4 py-1 text-[11px] flex items-center justify-center gap-1.5 border-b border-border/50 ${!connected ? 'text-err' : isLoading ? 'text-warn' : 'text-fg3'}`}>
+          {isLoading && connected && <span className="w-1.5 h-1.5 rounded-full bg-warn animate-[pulse_1.2s_ease-in-out_infinite]" />}
+          {statusText}
+        </div>
+        {/* 导航栏 */}
+        <div className="flex items-center gap-3 px-4 pt-2.5 pb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[20px] leading-none">🦞</span>
+            <span className="font-bold text-[16px] tracking-wide">Sprite</span>
+          </div>
+          <span className="w-px h-4 bg-border" />
+          <span className="text-label-ai text-[12px] font-medium">{modelName}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
+            <span className="text-fg3 text-[11px]">{msgCount} 条消息</span>
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
@@ -390,12 +402,6 @@ export default function App() {
       {toast && (
         <div className="px-5 py-2 text-center text-[13px] text-err bg-err/10 border-t border-err/30 shrink-0">{toast}</div>
       )}
-
-      {/* Status Bar */}
-      <div className={`px-5 py-1.5 text-center text-[12px] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0 flex items-center justify-center gap-2 ${!connected ? 'text-err' : isLoading ? 'text-warn' : 'text-fg3'}`}>
-        {isLoading && connected && <span className="w-2 h-2 rounded-full bg-warn animate-[pulse_1.2s_ease-in-out_infinite]" />}
-        {statusText}
-      </div>
 
       {/* Input Area */}
       <div className="flex gap-2 items-end px-4 pt-3.5 pb-[max(16px,env(safe-area-inset-bottom))] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0">

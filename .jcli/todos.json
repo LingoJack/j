@@ -1,22 +1,22 @@
 [
   {
     "id": "1",
-    "content": "修复 tool call 被挤压问题：保留所有工具调用历史而非替换",
+    "content": "修复消息被挤压问题 - ToolCallMsg 和 ToolResultMsg 需要设置最小高度",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "添加消息大屏查看详情功能：点击消息弹出模态框",
+    "content": "修复详情弹窗复制功能无反馈问题",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "优化整体 UI 样式和用户体验",
+    "content": "优化导航栏的文字和 icon 布局",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "构建并验证更改",
+    "content": "将状态 bar 移到顶部显示",
     "status": "completed"
   }
 ]
