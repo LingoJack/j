@@ -1,17 +1,1 @@
-[
-  {
-    "id": "1",
-    "content": "修复 MessageDetailModal 的 Markdown 渲染样式问题",
-    "status": "completed"
-  },
-  {
-    "id": "2",
-    "content": "优化 Markdown 组件的表格渲染",
-    "status": "completed"
-  },
-  {
-    "id": "3",
-    "content": "测试构建验证修复效果",
-    "status": "completed"
-  }
-]
+[]
