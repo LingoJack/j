@@ -1,32 +1,22 @@
 [
   {
     "id": "1",
-    "content": "",
+    "content": "修复 tool call 被挤压问题：保留所有工具调用历史而非替换",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "",
+    "content": "添加消息大屏查看详情功能：点击消息弹出模态框",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "",
+    "content": "优化整体 UI 样式和用户体验",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "",
-    "status": "completed"
-  },
-  {
-    "id": "5",
-    "content": "",
-    "status": "completed"
-  },
-  {
-    "id": "6",
-    "content": "",
+    "content": "构建并验证更改",
     "status": "completed"
   }
 ]

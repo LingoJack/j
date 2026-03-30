@@ -10,7 +10,7 @@
   --color-accent:       #64b4ff;
   --color-accent-dim:   #5064c8;
   --color-ok:           #78dca0;
-  --color-danger:       #c84646;
+  --color-err:          #c84646;
   --color-warn:         #ffc850;
   --color-border:       #32374a;
   --color-border-light: #506480;
@@ -23,6 +23,8 @@
   /* 动画定义 */
   --animate-blink: blink 1s infinite;
   --animate-pulse-dot: pulse 1.2s ease-in-out infinite;
+  --animate-fade-in: fadeIn 0.2s ease-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
 
   @keyframes blink {
     50% { opacity: 0; }
@@ -31,6 +33,22 @@
   @keyframes pulse {
     0%, 100% { opacity: 0.3; }
     50% { opacity: 1; }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { 
+      opacity: 0; 
+      transform: translateY(10px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
   }
 }
 
@@ -127,5 +145,104 @@
   .streaming .msg-content::after {
     content: '▋';
     @apply animate-blink text-accent;
+  }
+
+  /* 消息卡片增强 */
+  .message-card {
+    @apply relative;
+    animation: slideUp 0.25s ease-out;
+  }
+
+  .message-card:hover {
+    @apply shadow-lg;
+  }
+
+  /* 工具卡片动画 */
+  .tool-card {
+    @apply relative;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .tool-card::before {
+    content: '';
+    @apply absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl;
+  }
+
+  .tool-card.running::before {
+    @apply bg-warn animate-pulse;
+  }
+
+  .tool-card.completed::before {
+    @apply bg-ok;
+  }
+
+  .tool-card.error::before {
+    @apply bg-err;
+  }
+
+  /* 按钮效果增强 */
+  .btn-primary {
+    @apply relative overflow-hidden;
+  }
+
+  .btn-primary::after {
+    content: '';
+    @apply absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-150;
+  }
+
+  .btn-primary:active::after {
+    @apply opacity-100;
+  }
+
+  /* 滚动条美化 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border-light rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-fg3;
+  }
+
+  /* 输入框焦点效果 */
+  .input-glow:focus {
+    box-shadow: 0 0 0 2px rgba(100, 180, 255, 0.2);
+  }
+
+  /* 模态框动画 */
+  .modal-overlay {
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .modal-content {
+    animation: slideUp 0.2s ease-out;
+  }
+
+  /* 状态指示器 */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot.connected {
+    @apply bg-ok;
+    box-shadow: 0 0 8px rgba(120, 220, 160, 0.5);
+  }
+
+  .status-dot.disconnected {
+    @apply bg-err;
+    box-shadow: 0 0 8px rgba(200, 70, 70, 0.5);
+  }
+
+  .status-dot.loading {
+    @apply bg-warn;
+    animation: pulse 1s ease-in-out infinite;
   }
 }

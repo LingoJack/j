@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWebSocket } from './useWebSocket'
 import { truncate } from './utils'
 import Markdown from './Markdown'
+import MessageDetailModal from './MessageDetailModal'
 import ToolModal from './ToolModal'
 import AskModal from './AskModal'
 
@@ -10,38 +11,58 @@ const token = params.get('token') || ''
 const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:'
 const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 
-function Message({ role, content, streaming }) {
+function Message({ role, content, streaming, onDetail }) {
   const isUser = role === 'user'
   const base = 'max-w-[85%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
   const cls = isUser
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-0.5 cursor-pointer active:opacity-80 transition-opacity" onClick={onDetail}>
       <span className={`text-[11px] font-medium ${isUser ? 'self-end text-label-user' : 'self-start text-label-ai'}`}>
         {isUser ? '你' : 'AI'}
       </span>
       <div className={cls}>
         {isUser ? content : <Markdown content={content || ''} />}
       </div>
+      <span className={`text-[10px] text-fg3 ${isUser ? 'self-end' : 'self-start'} mt-0.5 opacity-0 hover:opacity-100 transition-opacity`}>
+        点击查看详情
+      </span>
     </div>
   )
 }
 
-function ToolCallMsg({ name, arguments: args }) {
+function ToolCallMsg({ name, arguments: args, completed, onDetail }) {
   const [expanded, setExpanded] = useState(false)
   let parsed = null
   try { parsed = JSON.parse(args) } catch {}
 
+  const statusIcon = completed 
+    ? <span className="text-ok font-bold text-sm">✓</span>
+    : <span className="w-3 h-3 rounded-full border-2 border-warn animate-spin border-t-transparent inline-block shrink-0" />
+  const statusText = completed ? '已完成' : '执行中'
+  const statusCls = completed ? 'text-ok' : 'text-warn'
+
+  const handleClick = (e) => {
+    if (e.target.closest('.expand-btn')) {
+      setExpanded(e => !e)
+    } else if (onDetail) {
+      onDetail()
+    }
+  }
+
   return (
     <div
-      className="self-start max-w-[85%] rounded-xl border border-border bg-bg2 overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
-      onClick={() => setExpanded(e => !e)}
+      className={`self-start max-w-[85%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
-        <span className="w-3 h-3 rounded-full border-2 border-warn animate-spin border-t-transparent inline-block shrink-0" />
-        <span className="font-semibold text-warn">{name}</span>
-        <span className="text-fg3 text-[11px] ml-auto">执行中</span>
+        {statusIcon}
+        <span className={`font-semibold ${statusCls}`}>{name}</span>
+        <span className={`text-[11px] ml-auto ${completed ? 'text-ok/70' : 'text-fg3'}`}>{statusText}</span>
+        <button className="expand-btn text-fg3 hover:text-fg px-1" onClick={e => e.stopPropagation()}>
+          {expanded ? '收起' : '展开'}
+        </button>
       </div>
       {expanded && parsed && (
         <div className="px-3 pb-2 text-[11px] text-fg2 border-t border-border pt-2">
@@ -62,21 +83,34 @@ function ToolCallMsg({ name, arguments: args }) {
   )
 }
 
-function ToolResultMsg({ toolName, output, isError }) {
+function ToolResultMsg({ toolName, output, isError, onDetail }) {
   const [expanded, setExpanded] = useState(false)
   const icon = isError ? '✗' : '✓'
-  const iconCls = isError ? 'text-danger' : 'text-ok'
+  const iconCls = isError ? 'text-err' : 'text-ok'
   const hasOutput = output && output.trim()
+
+  const handleClick = (e) => {
+    if (e.target.closest('.expand-btn')) {
+      setExpanded(e => !e)
+    } else if (onDetail) {
+      onDetail()
+    }
+  }
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden transition-opacity ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-danger/40 bg-danger/5' : 'border-border bg-bg2'}`}
-      onClick={() => hasOutput && setExpanded(e => !e)}
+      className={`self-start max-w-[85%] rounded-xl border overflow-hidden transition-opacity ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
         <span className={`font-bold text-sm ${iconCls}`}>{icon}</span>
         <span className="font-semibold text-fg2">{toolName}</span>
-        {hasOutput && <span className="text-fg3 text-[11px] ml-auto">{expanded ? '收起' : '详情'}</span>}
+        {hasOutput && (
+          <>
+            <span className="text-fg3 text-[11px] ml-auto">{expanded ? '收起' : '展开'}</span>
+            <button className="expand-btn text-accent text-[11px] hover:underline">详情</button>
+          </>
+        )}
       </div>
       {expanded && hasOutput && (
         <div className="px-3 pb-2 text-[11px] text-fg2 border-t border-border pt-2 whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto">
@@ -102,6 +136,7 @@ export default function App() {
   const [askQuestions, setAskQuestions] = useState(null)
   const [toast, setToast] = useState(null)
   const [inputText, setInputText] = useState('')
+  const [detailMessage, setDetailMessage] = useState(null)
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
@@ -169,27 +204,30 @@ export default function App() {
         break
 
       case 'tool_call':
-        setMessages(prev => {
-          // Replace last tool_call (show only latest running tool)
-          const last = prev[prev.length - 1]
-          if (last?.role === 'tool_call') {
-            return [...prev.slice(0, -1), { role: 'tool_call', name: msg.name, arguments: msg.arguments }]
-          }
-          return [...prev, { role: 'tool_call', name: msg.name, arguments: msg.arguments }]
-        })
+        // Add tool call to history (don't replace)
+        setMessages(prev => [...prev, { 
+          role: 'tool_call', 
+          name: msg.name, 
+          arguments: msg.arguments,
+          id: msg.id || Date.now() 
+        }])
         scrollToBottom()
         break
 
       case 'tool_result': {
         setMessages(prev => {
-          // Remove running tool_call indicator, add result
-          const filtered = prev.filter(m => m.role !== 'tool_call')
-          return [...filtered, {
+          // Mark corresponding tool_call as completed, add result
+          return prev.map(m => {
+            if (m.role === 'tool_call' && m.name === msg.name && !m.completed) {
+              return { ...m, completed: true }
+            }
+            return m
+          }).concat({
             role: 'tool_result',
             toolName: msg.name || 'tool',
             output: msg.output,
             isError: msg.is_error,
-          }]
+          })
         })
         scrollToBottom()
         break
@@ -201,9 +239,11 @@ export default function App() {
           setMessages(prev => {
             const last = prev[prev.length - 1]
             if (last?.streaming) {
-              return [...prev.slice(0, -1), { ...last, streaming: false }].filter(m => m.role !== 'tool_call')
+              return [...prev.slice(0, -1), { ...last, streaming: false }].map(m => 
+                m.role === 'tool_call' ? { ...m, completed: true } : m
+              )
             }
-            return prev.filter(m => m.role !== 'tool_call')
+            return prev.map(m => m.role === 'tool_call' ? { ...m, completed: true } : m)
           })
           streamContentRef.current = ''
         }
@@ -319,22 +359,40 @@ export default function App() {
         )}
         {messages.map((m, i) =>
           m.role === 'tool_call' ? (
-            <ToolCallMsg key={`tc-${i}`} name={m.name} arguments={m.arguments} />
+            <ToolCallMsg 
+              key={`tc-${i}-${m.id || ''}`} 
+              name={m.name} 
+              arguments={m.arguments} 
+              completed={m.completed}
+              onDetail={() => setDetailMessage(m)}
+            />
           ) : m.role === 'tool_result' ? (
-            <ToolResultMsg key={`tr-${i}`} toolName={m.toolName} output={m.output} isError={m.isError} />
+            <ToolResultMsg 
+              key={`tr-${i}`} 
+              toolName={m.toolName} 
+              output={m.output} 
+              isError={m.isError}
+              onDetail={() => setDetailMessage(m)}
+            />
           ) : (
-            <Message key={i} role={m.role} content={m.content} streaming={m.streaming} />
+            <Message 
+              key={i} 
+              role={m.role} 
+              content={m.content} 
+              streaming={m.streaming}
+              onDetail={() => setDetailMessage(m)}
+            />
           )
         )}
       </div>
 
       {/* Toast */}
       {toast && (
-        <div className="px-5 py-2 text-center text-[13px] text-danger bg-danger/10 border-t border-danger/30 shrink-0">{toast}</div>
+        <div className="px-5 py-2 text-center text-[13px] text-err bg-err/10 border-t border-err/30 shrink-0">{toast}</div>
       )}
 
       {/* Status Bar */}
-      <div className={`px-5 py-1.5 text-center text-[12px] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0 flex items-center justify-center gap-2 ${!connected ? 'text-danger' : isLoading ? 'text-warn' : 'text-fg3'}`}>
+      <div className={`px-5 py-1.5 text-center text-[12px] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0 flex items-center justify-center gap-2 ${!connected ? 'text-err' : isLoading ? 'text-warn' : 'text-fg3'}`}>
         {isLoading && connected && <span className="w-2 h-2 rounded-full bg-warn animate-[pulse_1.2s_ease-in-out_infinite]" />}
         {statusText}
       </div>
@@ -359,7 +417,7 @@ export default function App() {
         >↑</button>
         {isLoading && (
           <button
-            className="w-[48px] h-[48px] rounded-full border-none text-lg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-danger text-white active:scale-[0.92]"
+            className="w-[48px] h-[48px] rounded-full border-none text-lg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-err text-white active:scale-[0.92]"
             onClick={cancelStream}
             title="取消"
           >■</button>
@@ -368,6 +426,7 @@ export default function App() {
 
       <ToolModal tools={toolConfirm} currentIndex={toolConfirmIdx} onConfirm={confirmTool} />
       <AskModal questions={askQuestions} onSubmit={submitAsk} />
+      <MessageDetailModal message={detailMessage} onClose={() => setDetailMessage(null)} />
     </div>
   )
 }

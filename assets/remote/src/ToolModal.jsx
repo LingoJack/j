@@ -3,7 +3,7 @@ import { useState } from 'react'
 const optCfg = [
   { label: '允许执行', icon: '▶', border: 'border-ok', text: 'text-ok', hover: 'hover:bg-ok/10' },
   { label: '始终允许', icon: '✓', border: 'border-warn', text: 'text-warn', hover: 'hover:bg-warn/10' },
-  { label: '拒绝', icon: '✗', border: 'border-danger', text: 'text-danger', hover: 'hover:bg-danger/10' },
+  { label: '拒绝', icon: '✗', border: 'border-err', text: 'text-err', hover: 'hover:bg-err/10' },
   { label: '输入原因拒绝...', icon: '✎', border: 'border-fg2', text: 'text-fg2', hover: 'hover:bg-fg2/10' },
 ]
 
@@ -85,7 +85,7 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
             />
             <div className="flex gap-2 justify-end">
               <button className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-bg3 text-fg2" onClick={() => { setMode('select'); setReason('') }}>取消</button>
-              <button className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-danger text-white" onClick={submitReason}>提交</button>
+              <button className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-err text-white" onClick={submitReason}>提交</button>
             </div>
           </div>
         )}
