@@ -16,4 +16,5 @@ allow:
 - Bash(command -v:*)
 - Bash(cd assets/remote:*)
 - Bash(find .:*)
+- Bash(find assets/remote:*)
 deny: []
