@@ -193,7 +193,7 @@ function SessionSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }
         </div>
 
         {/* New session button */}
-        <div className="px-4 py-3 border-t border-border">
+        <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border">
           <button
             className="w-full py-2.5 rounded-xl bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
             onClick={onNew}
