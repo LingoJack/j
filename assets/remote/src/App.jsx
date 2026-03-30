@@ -223,10 +223,21 @@ export default function App() {
   const [sessions, setSessions] = useState([])
   const [showSidebar, setShowSidebar] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState(null)
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
   const autoScrollRef = useRef(true)
+
+  // 主题切换
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'light' : 'dark')
+  }, [])
 
   const scrollToBottom = useCallback(() => {
     if (!autoScrollRef.current) return
@@ -512,6 +523,21 @@ export default function App() {
           <span className="w-px h-4 bg-border" />
           <span className="text-label-ai text-[12px] font-medium">{modelName}</span>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="text-fg3 hover:text-fg text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 transition-colors cursor-pointer"
+              title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+            >
+              {theme === 'dark' ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
             <span className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
             <span className="text-fg3 text-[11px]">{msgCount} 条消息</span>
           </div>

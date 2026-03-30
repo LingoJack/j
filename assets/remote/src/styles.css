@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* 深色主题（默认） */
 @theme {
   --color-bg:           #16161e;
   --color-bg2:          #1c1c28;
@@ -19,6 +20,8 @@
   --color-label-ai:     #78dca0;
   --color-label-user:   #64a0ff;
   --color-tool-confirm: #ffc850;
+  --color-code-bg:      rgba(45,45,60,0.8);
+  --color-link:         #569cd6;
 
   /* 动画定义 */
   --animate-blink: blink 1s infinite;
@@ -59,6 +62,30 @@
       transform: translateX(0);
     }
   }
+}
+
+/* 浅色主题 */
+[data-theme="light"] {
+  --color-bg:           #f5f5f7;
+  --color-bg2:          #ffffff;
+  --color-bg3:          #e8e8ed;
+  --color-fg:           #1d1d1f;
+  --color-fg2:          #515154;
+  --color-fg3:          #86868b;
+  --color-accent:       #007aff;
+  --color-accent-dim:   #5e5ce6;
+  --color-ok:           #34c759;
+  --color-err:          #ff3b30;
+  --color-warn:         #ff9500;
+  --color-border:       #d2d2d7;
+  --color-border-light: #a1a1a6;
+  --color-bubble-user:  #007aff;
+  --color-bubble-ai:    #ffffff;
+  --color-label-ai:     #34c759;
+  --color-label-user:   #007aff;
+  --color-tool-confirm: #ff9500;
+  --color-code-bg:      rgba(0,0,0,0.06);
+  --color-link:         #0066cc;
 }
 
 /* 基础层：全局重置和默认样式 */
@@ -130,7 +157,7 @@
   }
 
   .md-msg code {
-    @apply bg-[rgba(45,45,60,0.8)] px-1.5 py-0.5 rounded-[5px] text-[13px];
+    @apply bg-[var(--color-code-bg)] px-1.5 py-0.5 rounded-[5px] text-[13px];
     font-family: 'SF Mono', 'Menlo', monospace;
   }
 
@@ -143,7 +170,7 @@
   }
 
   .md-msg a {
-    @apply text-[#569cd6] no-underline hover:underline;
+    @apply text-[var(--color-link)] no-underline hover:underline;
   }
 
   .md-msg hr {
