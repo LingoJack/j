@@ -20,7 +20,7 @@ function Message({ role, content, streaming, onDetail }) {
   return (
     <div className="flex flex-col gap-0.5 cursor-pointer active:opacity-80 transition-opacity" onClick={onDetail}>
       <span className={`text-[11px] font-medium ${isUser ? 'self-end text-label-user' : 'self-start text-label-ai'}`}>
-        {isUser ? '你' : 'AI'}
+        {isUser ? '你' : 'Sprite'}
       </span>
       <div className={cls}>
         {isUser ? content : <Markdown content={content || ''} />}
