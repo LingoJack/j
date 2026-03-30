@@ -13,4 +13,5 @@ allow:
 - Bash(uptime:*)
 - Bash(df -h:*)
 - Bash(cargo check:*)
+- Bash(command -v:*)
 deny: []
