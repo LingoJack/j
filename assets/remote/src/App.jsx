@@ -13,7 +13,7 @@ const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 
 function Message({ role, content, streaming, onDetail }) {
   const isUser = role === 'user'
-  const base = 'max-w-[85%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
+  const base = 'w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
   const cls = isUser
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
@@ -53,7 +53,7 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -104,7 +104,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[75%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -487,7 +487,7 @@ export default function App() {
           : '已连接'
 
   return (
-    <div className="flex flex-col h-[100dvh] max-w-[680px] mx-auto">
+    <div className="flex flex-col h-[100dvh] w-full max-w-[100vw] lg:max-w-[900px] xl:max-w-[1100px] mx-auto">
       {/* Header */}
       <div className="bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
         {/* 状态栏 - 放在最上面 */}
