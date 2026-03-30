@@ -1,7 +1,7 @@
 use super::super::input_thread::InputThread;
 use super::super::remote;
 use super::super::remote::bridge::WsBridge;
-use super::super::remote::protocol::{SyncMessage, SyncToolCall, WsInbound, WsOutbound};
+use super::super::remote::protocol::{WsInbound, WsOutbound};
 use super::super::storage::{
     ChatSession, legacy_chat_history_path, load_style, load_system_prompt, save_style,
     save_system_prompt,
@@ -113,15 +113,9 @@ pub fn run_chat_tui(remote_mode: bool, port: u16) {
     }
 }
 
-/// 生成本次会话 ID（时间戳微秒 + 进程 ID，无需外部依赖）
+/// 生成本次会话 ID（委托给 storage 模块）
 fn generate_session_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_micros();
-    let pid = std::process::id();
-    format!("{:x}-{:x}", ts, pid)
+    super::super::storage::generate_session_id()
 }
 
 /// 一次性迁移旧 chat_history.json → 归档，保留历史对话
@@ -286,42 +280,20 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                         app.update(Action::CancelStream);
                     }
                     WsInbound::Sync => {
-                        let messages: Vec<SyncMessage> = app
-                            .state
-                            .session
-                            .messages
-                            .iter()
-                            .map(|m| SyncMessage {
-                                role: m.role.clone(),
-                                content: m.content.clone(),
-                                tool_calls: m.tool_calls.as_ref().map(|tc| {
-                                    tc.iter()
-                                        .map(|t| SyncToolCall {
-                                            id: t.id.clone(),
-                                            name: t.name.clone(),
-                                            arguments: t.arguments.clone(),
-                                        })
-                                        .collect()
-                                }),
-                                tool_call_id: m.tool_call_id.clone(),
-                            })
-                            .collect();
-                        let status = if app.state.is_loading {
-                            "loading"
-                        } else if app.ui.mode == ChatMode::ToolConfirm {
-                            "tool_confirm"
-                        } else {
-                            "idle"
-                        };
-                        let model = app.active_model_name().to_string();
-                        app.broadcast_ws(WsOutbound::SessionSync {
-                            messages,
-                            status: status.to_string(),
-                            model,
-                        });
+                        let sync = app.build_sync_outbound();
+                        app.broadcast_ws(sync);
                     }
                     WsInbound::Ping => {
                         app.broadcast_ws(WsOutbound::Pong);
+                    }
+                    WsInbound::ListSessions => {
+                        app.update(Action::ListSessions);
+                    }
+                    WsInbound::SwitchSession { session_id } => {
+                        app.update(Action::SwitchSession { session_id });
+                    }
+                    WsInbound::NewSession => {
+                        app.update(Action::NewSession);
                     }
                 }
             }

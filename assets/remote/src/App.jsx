@@ -37,7 +37,7 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
   let parsed = null
   try { parsed = JSON.parse(args) } catch {}
 
-  const statusIcon = completed 
+  const statusIcon = completed
     ? <span className="text-ok font-bold text-sm">✓</span>
     : <span className="w-3 h-3 rounded-full border-2 border-warn animate-spin border-t-transparent inline-block shrink-0" />
   const statusText = completed ? '已完成' : '执行中'
@@ -88,9 +88,9 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
   const icon = isError ? '✗' : '✓'
   const iconCls = isError ? 'text-err' : 'text-ok'
   const hasOutput = output && output.trim()
-  
+
   // 生成预览文本（最多 50 字符）
-  const preview = hasOutput 
+  const preview = hasOutput
     ? (output.length > 50 ? output.slice(0, 50) + '...' : output)
     : ''
 
@@ -138,6 +138,74 @@ function isNearBottom(el) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
+function formatRelativeTime(ts) {
+  if (!ts) return ''
+  const now = Math.floor(Date.now() / 1000)
+  const diff = now - ts
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`
+  const d = new Date(ts * 1000)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+function SessionSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }) {
+  return (
+    <div className="sidebar-overlay" onClick={onClose}>
+      <div className="sidebar-panel" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <span className="font-bold text-[15px]">会话列表</span>
+          <button
+            className="text-fg3 hover:text-fg text-xl leading-none px-1"
+            onClick={onClose}
+          >×</button>
+        </div>
+
+        {/* Session list */}
+        <div className="flex-1 overflow-y-auto">
+          {sessions.map(s => {
+            const isCurrent = s.id === currentSessionId
+            return (
+              <div
+                key={s.id}
+                className={`session-item px-4 py-3 border-b border-border/50 cursor-pointer transition-colors ${isCurrent ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-bg3'}`}
+                onClick={() => onSwitch(s.id)}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-[13px] font-medium truncate flex-1 mr-2 ${isCurrent ? 'text-accent' : 'text-fg'}`}>
+                    {s.first_message_preview || '新会话'}
+                  </span>
+                  {isCurrent && <span className="text-[10px] text-accent bg-accent/15 px-1.5 py-0.5 rounded-full shrink-0">当前</span>}
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-fg3">
+                  <span>{s.message_count} 条消息</span>
+                  <span>·</span>
+                  <span>{formatRelativeTime(s.updated_at)}</span>
+                </div>
+              </div>
+            )
+          })}
+          {sessions.length === 0 && (
+            <div className="text-center text-fg3 text-sm py-8">暂无会话</div>
+          )}
+        </div>
+
+        {/* New session button */}
+        <div className="px-4 py-3 border-t border-border">
+          <button
+            className="w-full py-2.5 rounded-xl bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
+            onClick={onNew}
+          >
+            + 新建会话
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [messages, setMessages] = useState([])
   const [state, setState] = useState('idle')
@@ -149,6 +217,9 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const [inputText, setInputText] = useState('')
   const [detailMessage, setDetailMessage] = useState(null)
+  const [sessions, setSessions] = useState([])
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [currentSessionId, setCurrentSessionId] = useState(null)
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
@@ -217,11 +288,11 @@ export default function App() {
 
       case 'tool_call':
         // Add tool call to history (don't replace)
-        setMessages(prev => [...prev, { 
-          role: 'tool_call', 
-          name: msg.name, 
+        setMessages(prev => [...prev, {
+          role: 'tool_call',
+          name: msg.name,
           arguments: msg.arguments,
-          id: msg.id || Date.now() 
+          id: msg.id || Date.now()
         }])
         scrollToBottom()
         break
@@ -251,7 +322,7 @@ export default function App() {
           setMessages(prev => {
             const last = prev[prev.length - 1]
             if (last?.streaming) {
-              return [...prev.slice(0, -1), { ...last, streaming: false }].map(m => 
+              return [...prev.slice(0, -1), { ...last, streaming: false }].map(m =>
                 m.role === 'tool_call' ? { ...m, completed: true } : m
               )
             }
@@ -273,7 +344,7 @@ export default function App() {
             }
           }
         }
-        
+
         const syncedMsgs = []
         for (const m of msg.messages) {
           if (m.tool_calls && m.tool_calls.length > 0) {
@@ -308,6 +379,17 @@ export default function App() {
         setState(msg.status)
         autoScrollRef.current = true
         scrollToBottom()
+        break
+
+      case 'session_list':
+        setSessions(msg.sessions || [])
+        break
+
+      case 'session_switched':
+        setShowSidebar(false)
+        if (msg.session_id) {
+          setCurrentSessionId(msg.session_id)
+        }
         break
 
       case 'error':
@@ -358,6 +440,23 @@ export default function App() {
     send({ type: 'cancel' })
   }, [send])
 
+  const fetchSessions = useCallback(() => {
+    send({ type: 'list_sessions' })
+  }, [send])
+
+  const switchSession = useCallback((id) => {
+    send({ type: 'switch_session', session_id: id })
+  }, [send])
+
+  const newSession = useCallback(() => {
+    send({ type: 'new_session' })
+  }, [send])
+
+  const openSidebar = useCallback(() => {
+    fetchSessions()
+    setShowSidebar(true)
+  }, [fetchSessions])
+
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -398,6 +497,11 @@ export default function App() {
         </div>
         {/* 导航栏 */}
         <div className="flex items-center gap-3 px-4 pt-2.5 pb-2.5">
+          <button
+            className="text-fg3 hover:text-fg text-[18px] leading-none px-0.5 transition-colors"
+            onClick={openSidebar}
+            title="会话列表"
+          >☰</button>
           <div className="flex items-center gap-2">
             <span className="text-[20px] leading-none">🦞</span>
             <span className="font-bold text-[16px] tracking-wide">Sprite</span>
@@ -422,28 +526,28 @@ export default function App() {
         )}
         {messages.map((m, i) =>
           m.role === 'tool_call' ? (
-            <ToolCallMsg 
-              key={`tc-${i}-${m.id || ''}`} 
-              name={m.name} 
-              arguments={m.arguments} 
+            <ToolCallMsg
+              key={`tc-${i}-${m.id || ''}`}
+              name={m.name}
+              arguments={m.arguments}
               completed={m.completed}
               collapsed={m.collapsed}
               onDetail={() => setDetailMessage(m)}
             />
           ) : m.role === 'tool_result' ? (
-            <ToolResultMsg 
-              key={`tr-${i}`} 
-              toolName={m.toolName} 
-              output={m.output} 
+            <ToolResultMsg
+              key={`tr-${i}`}
+              toolName={m.toolName}
+              output={m.output}
               isError={m.isError}
               collapsed={m.collapsed}
               onDetail={() => setDetailMessage(m)}
             />
           ) : (
-            <Message 
-              key={i} 
-              role={m.role} 
-              content={m.content} 
+            <Message
+              key={i}
+              role={m.role}
+              content={m.content}
               streaming={m.streaming}
               onDetail={() => setDetailMessage(m)}
             />
@@ -486,6 +590,17 @@ export default function App() {
       <ToolModal tools={toolConfirm} currentIndex={toolConfirmIdx} onConfirm={confirmTool} />
       <AskModal questions={askQuestions} onSubmit={submitAsk} />
       <MessageDetailModal message={detailMessage} onClose={() => setDetailMessage(null)} />
+
+      {/* Session Sidebar */}
+      {showSidebar && (
+        <SessionSidebar
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          onSwitch={switchSession}
+          onNew={newSession}
+          onClose={() => setShowSidebar(false)}
+        />
+      )}
     </div>
   )
 }

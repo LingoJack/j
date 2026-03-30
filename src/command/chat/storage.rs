@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ========== 数据结构 ==========
 
@@ -476,4 +477,100 @@ pub fn save_soul(content: &str) -> bool {
             false
         }
     }
+}
+
+// ========== 会话元数据 ==========
+
+/// 会话元数据（用于会话列表展示）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionMeta {
+    pub id: String,
+    pub message_count: usize,
+    pub first_message_preview: Option<String>,
+    pub updated_at: u64,
+}
+
+/// 列出所有会话的元数据，按更新时间倒序
+pub fn list_sessions() -> Vec<SessionMeta> {
+    let dir = sessions_dir();
+    let read_dir = match fs::read_dir(&dir) {
+        Ok(rd) => rd,
+        Err(_) => return Vec::new(),
+    };
+    let mut sessions: Vec<SessionMeta> = Vec::new();
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        let updated_at = path
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue, // 损坏的文件跳过
+        };
+
+        let mut message_count: usize = 0;
+        let mut first_user_preview: Option<String> = None;
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Ok(event) = serde_json::from_str::<SessionEvent>(line) {
+                match event {
+                    SessionEvent::Msg(ref msg) => {
+                        message_count += 1;
+                        if first_user_preview.is_none()
+                            && msg.role == "user"
+                            && !msg.content.is_empty()
+                        {
+                            let preview: String = msg.content.chars().take(50).collect();
+                            first_user_preview = Some(preview);
+                        }
+                    }
+                    SessionEvent::Clear => {
+                        message_count = 0;
+                        first_user_preview = None;
+                    }
+                    SessionEvent::Restore { ref messages } => {
+                        message_count = messages.len();
+                        first_user_preview = messages
+                            .iter()
+                            .find(|m| m.role == "user" && !m.content.is_empty())
+                            .map(|m| m.content.chars().take(50).collect());
+                    }
+                }
+            }
+        }
+
+        sessions.push(SessionMeta {
+            id,
+            message_count,
+            first_message_preview: first_user_preview,
+            updated_at,
+        });
+    }
+    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    sessions
+}
+
+/// 生成会话 ID（时间戳微秒 + 进程 ID，无需外部依赖）
+pub fn generate_session_id() -> String {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros();
+    let pid = std::process::id();
+    format!("{:x}-{:x}", ts, pid)
 }

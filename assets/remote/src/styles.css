@@ -41,13 +41,22 @@
   }
 
   @keyframes slideUp {
-    from { 
-      opacity: 0; 
-      transform: translateY(10px); 
+    from {
+      opacity: 0;
+      transform: translateY(10px);
     }
-    to { 
-      opacity: 1; 
-      transform: translateY(0); 
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInLeft {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
     }
   }
 }
@@ -224,6 +233,21 @@
 
   .modal-content {
     animation: slideUp 0.2s ease-out;
+  }
+
+  /* 会话侧边栏 */
+  .sidebar-overlay {
+    @apply fixed inset-0 z-50 bg-black/40;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .sidebar-panel {
+    @apply absolute left-0 top-0 bottom-0 w-[280px] max-w-[80vw] bg-bg2 flex flex-col border-r border-border;
+    animation: slideInLeft 0.2s ease-out;
+  }
+
+  .session-item:active {
+    @apply bg-bg3;
   }
 
   /* 状态指示器 */

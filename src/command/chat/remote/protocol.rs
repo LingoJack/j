@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::super::storage::SessionMeta;
+
 /// 客户端 → 服务端 消息
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -31,6 +33,15 @@ pub enum WsInbound {
     /// 心跳 ping
     #[serde(rename = "ping")]
     Ping,
+    /// 请求会话列表
+    #[serde(rename = "list_sessions")]
+    ListSessions,
+    /// 切换到指定会话
+    #[serde(rename = "switch_session")]
+    SwitchSession { session_id: String },
+    /// 新建会话
+    #[serde(rename = "new_session")]
+    NewSession,
 }
 
 /// 服务端 → 客户端 消息
@@ -76,6 +87,12 @@ pub enum WsOutbound {
     /// 错误消息
     #[serde(rename = "error")]
     Error { message: String },
+    /// 会话列表
+    #[serde(rename = "session_list")]
+    SessionList { sessions: Vec<SessionMeta> },
+    /// 会话已切换
+    #[serde(rename = "session_switched")]
+    SessionSwitched { session_id: String },
 }
 
 /// 工具确认信息

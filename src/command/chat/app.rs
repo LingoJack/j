@@ -7,8 +7,9 @@ use super::sandbox::Sandbox;
 use super::skill::{self, Skill, skills_dir};
 use super::storage::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, SessionEvent, ToolCallItem,
-    append_session_event, load_agent_config, memory_path, save_agent_config, save_memory,
-    save_soul, save_system_prompt, soul_path, system_prompt_path,
+    append_session_event, generate_session_id, list_sessions, load_agent_config, load_session,
+    memory_path, save_agent_config, save_memory, save_soul, save_system_prompt, soul_path,
+    system_prompt_path,
 };
 use super::theme::Theme;
 use super::tools::ToolRegistry;
@@ -1033,6 +1034,13 @@ pub enum Action {
     ArchiveWithCustom,
     /// 清空当前会话（不归档）
     ClearSession,
+
+    /// 列出所有会话（远程）
+    ListSessions,
+    /// 切换到指定会话（远程）
+    SwitchSession { session_id: String },
+    /// 新建会话（远程）
+    NewSession,
 
     /// 启动还原流程（加载归档列表）
     StartArchiveList,
@@ -2095,6 +2103,73 @@ impl ChatApp {
                 self.clear_session();
             }
 
+            Action::ListSessions => {
+                let sessions = list_sessions();
+                self.broadcast_ws(super::remote::protocol::WsOutbound::SessionList { sessions });
+            }
+            Action::SwitchSession { session_id } => {
+                if self.state.is_loading {
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                        message: "AI 正在回复中，无法切换会话".to_string(),
+                    });
+                } else if self.ui.mode == ChatMode::ToolConfirm {
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                        message: "等待工具确认中，无法切换会话".to_string(),
+                    });
+                } else {
+                    // 检查目标文件是否存在
+                    let target_path = super::storage::session_file_path(&session_id);
+                    if !target_path.exists() {
+                        self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                            message: "会话不存在".to_string(),
+                        });
+                    } else {
+                        // 保存当前会话
+                        self.persist_new_messages();
+                        // 加载目标会话
+                        let session = load_session(&session_id);
+                        self.session_id = session_id.clone();
+                        self.last_persisted_len = session.messages.len();
+                        self.state.session = session;
+                        self.ui.scroll_offset = 0;
+                        self.ui.msg_lines_cache = None;
+                        // 广播同步 + 切换通知
+                        let sync = self.build_sync_outbound();
+                        self.broadcast_ws(sync);
+                        self.broadcast_ws(super::remote::protocol::WsOutbound::SessionSwitched {
+                            session_id,
+                        });
+                    }
+                }
+            }
+            Action::NewSession => {
+                if self.state.is_loading {
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                        message: "AI 正在回复中，无法新建会话".to_string(),
+                    });
+                } else if self.ui.mode == ChatMode::ToolConfirm {
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                        message: "等待工具确认中，无法新建会话".to_string(),
+                    });
+                } else {
+                    // 保存当前会话
+                    self.persist_new_messages();
+                    // 生成新会话
+                    let new_id = generate_session_id();
+                    self.session_id = new_id.clone();
+                    self.state.session.messages.clear();
+                    self.last_persisted_len = 0;
+                    self.ui.scroll_offset = 0;
+                    self.ui.msg_lines_cache = None;
+                    // 广播同步 + 切换通知
+                    let sync = self.build_sync_outbound();
+                    self.broadcast_ws(sync);
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::SessionSwitched {
+                        session_id: new_id,
+                    });
+                }
+            }
+
             Action::StartArchiveList => {
                 self.start_archive_list();
             }
@@ -2252,6 +2327,44 @@ impl ChatApp {
     pub fn broadcast_ws(&self, msg: super::remote::protocol::WsOutbound) {
         if let Some(ref ws) = self.ws_bridge {
             ws.broadcast(msg);
+        }
+    }
+
+    /// 构建全量同步消息（复用于 Sync / SwitchSession / NewSession）
+    pub fn build_sync_outbound(&self) -> super::remote::protocol::WsOutbound {
+        use super::remote::protocol::{SyncMessage, SyncToolCall, WsOutbound};
+        let messages: Vec<SyncMessage> = self
+            .state
+            .session
+            .messages
+            .iter()
+            .map(|m| SyncMessage {
+                role: m.role.clone(),
+                content: m.content.clone(),
+                tool_calls: m.tool_calls.as_ref().map(|tc| {
+                    tc.iter()
+                        .map(|t| SyncToolCall {
+                            id: t.id.clone(),
+                            name: t.name.clone(),
+                            arguments: t.arguments.clone(),
+                        })
+                        .collect()
+                }),
+                tool_call_id: m.tool_call_id.clone(),
+            })
+            .collect();
+        let status = if self.state.is_loading {
+            "loading"
+        } else if self.ui.mode == ChatMode::ToolConfirm {
+            "tool_confirm"
+        } else {
+            "idle"
+        };
+        let model = self.active_model_name().to_string();
+        WsOutbound::SessionSync {
+            messages,
+            status: status.to_string(),
+            model,
         }
     }
 
