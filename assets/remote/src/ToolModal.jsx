@@ -73,7 +73,7 @@ export default function ToolModal({ tools, currentIndex, onConfirm }) {
           <div className="flex flex-col gap-2.5">
             <input
               type="text"
-              className="w-full px-4 py-3 border border-[#504020] rounded-xl bg-[#1a180e] text-fg text-sm outline-none font-[inherit] focus:border-warn"
+              className="w-full px-4 py-3 border border-border rounded-xl bg-bg text-fg text-sm outline-none font-[inherit] focus:border-warn"
               placeholder="输入拒绝原因..."
               value={reason}
               onChange={e => setReason(e.target.value)}

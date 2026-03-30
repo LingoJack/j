@@ -13,7 +13,10 @@ const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 
 function Message({ role, content, streaming, onDetail }) {
   const isUser = role === 'user'
-  const base = 'max-w-[85%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
+  const widthCls = isUser
+    ? 'w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%]'
+    : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%]'
+  const base = `${widthCls} px-4 py-3 rounded-2xl leading-relaxed break-words text-sm`
   const cls = isUser
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
@@ -53,7 +56,7 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -104,7 +107,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
 
   return (
     <div
-      className={`self-start max-w-[85%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -193,7 +196,7 @@ function SessionSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }
         </div>
 
         {/* New session button */}
-        <div className="px-4 py-3 border-t border-border">
+        <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border">
           <button
             className="w-full py-2.5 rounded-xl bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
             onClick={onNew}
@@ -220,10 +223,21 @@ export default function App() {
   const [sessions, setSessions] = useState([])
   const [showSidebar, setShowSidebar] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState(null)
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
   const autoScrollRef = useRef(true)
+
+  // 主题切换
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'light' : 'dark')
+  }, [])
 
   const scrollToBottom = useCallback(() => {
     if (!autoScrollRef.current) return
@@ -487,7 +501,7 @@ export default function App() {
           : '已连接'
 
   return (
-    <div className="flex flex-col h-[100dvh] max-w-[680px] mx-auto">
+    <div className="flex flex-col h-[100dvh] w-full max-w-[100vw] lg:max-w-[900px] xl:max-w-[1100px] mx-auto">
       {/* Header */}
       <div className="bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
         {/* 状态栏 - 放在最上面 */}
@@ -509,6 +523,21 @@ export default function App() {
           <span className="w-px h-4 bg-border" />
           <span className="text-label-ai text-[12px] font-medium">{modelName}</span>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="text-fg3 hover:text-fg text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 transition-colors cursor-pointer"
+              title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+            >
+              {theme === 'dark' ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
             <span className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
             <span className="text-fg3 text-[11px]">{msgCount} 条消息</span>
           </div>
