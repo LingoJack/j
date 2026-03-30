@@ -13,7 +13,10 @@ const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 
 function Message({ role, content, streaming, onDetail }) {
   const isUser = role === 'user'
-  const base = 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] px-4 py-3 rounded-2xl leading-relaxed break-words text-sm'
+  const widthCls = isUser
+    ? 'w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%]'
+    : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%]'
+  const base = `${widthCls} px-4 py-3 rounded-2xl leading-relaxed break-words text-sm`
   const cls = isUser
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
