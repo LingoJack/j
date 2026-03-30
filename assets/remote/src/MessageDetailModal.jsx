@@ -22,7 +22,7 @@ export default function MessageDetailModal({ message, onClose }) {
 
   const getRoleInfo = () => {
     if (isUser) return { icon: '👤', label: '用户消息', color: 'text-accent' }
-    if (isAssistant) return { icon: '🤖', label: '助手回复', color: 'text-ok' }
+    if (isAssistant) return { icon: '🦞', label: '助手回复', color: 'text-ok' }
     if (isToolCall) return { icon: '🔧', label: `工具调用: ${message.name}`, color: 'text-warn' }
     if (isToolResult) return { icon: '📋', label: `工具结果: ${message.toolName}`, color: message.isError ? 'text-err' : 'text-fg2' }
     return { icon: '💬', label: '消息', color: 'text-fg' }

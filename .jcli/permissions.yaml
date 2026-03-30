@@ -15,4 +15,5 @@ allow:
 - Bash(cargo check:*)
 - Bash(command -v:*)
 - Bash(cd assets/remote:*)
+- Bash(find .:*)
 deny: []

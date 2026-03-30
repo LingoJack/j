@@ -380,7 +380,7 @@ export default function App() {
   const statusText = !connected
     ? '连接断开，重连中...'
     : isLoading
-      ? 'AI 思考中...'
+      ? 'Sprite 思考中...'
       : state === 'tool_confirm'
         ? '等待工具确认...'
         : state === 'ask'
