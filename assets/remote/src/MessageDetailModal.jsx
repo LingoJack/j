@@ -36,12 +36,37 @@ export default function MessageDetailModal({ message, onClose }) {
       : isToolResult 
         ? message.output 
         : message.content || ''
+    
     try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      // 优先使用现代 Clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+        return
+      }
+      
+      // 备用方案：使用 execCommand (兼容非 HTTPS 环境)
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      textarea.style.top = '-9999px'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      const success = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      
+      if (success) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } else {
+        alert('复制失败，请手动复制')
+      }
     } catch (e) {
       console.error('Copy failed:', e)
+      alert('复制失败: ' + e.message)
     }
   }
 
