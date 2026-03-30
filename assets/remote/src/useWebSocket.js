@@ -1,25 +1,19 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { p256 } from '@noble/curves/nist.js'
+import { gcm } from '@noble/ciphers/aes.js'
+import { randomBytes } from '@noble/ciphers/utils.js'
+import { hkdf } from '@noble/hashes/hkdf.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
 /**
- * ECDH P-256 + AES-256-GCM 加密 WebSocket Hook
+ * ECDH P-256 + AES-256-GCM 加密 WebSocket Hook（纯 JS 实现）
  *
- * 握手流程:
- *   ws.onopen →
- *     收到 server_hello (明文 JSON, 含 server_pk) →
- *     生成客户端 P-256 密钥对 →
- *     发送 key_exchange (明文 JSON, 含 client_pk) →
- *     ECDH deriveBits → HKDF deriveKey → AES-256-GCM CryptoKey →
- *     收到加密的 key_exchange_ok →
- *     协商完成，进入加密通信
- *
- * 后续通信:
- *   send: JSON → TextEncoder → AES-GCM encrypt → [IV(12) + ciphertext] → ws.send(ArrayBuffer)
- *   recv: ArrayBuffer → 拆 IV + ciphertext → AES-GCM decrypt → TextDecoder → JSON.parse
+ * 使用 @noble/curves + @noble/ciphers，不依赖 crypto.subtle，
+ * 因此在 HTTP（非 localhost）环境下也能工作。
  */
 
 // base64url 编解码 (无 padding)
-function b64urlEncode(buf) {
-  const bytes = new Uint8Array(buf)
+function b64urlEncode(bytes) {
   let str = ''
   for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i])
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -30,108 +24,54 @@ function b64urlDecode(str) {
   const bin = atob(str)
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return bytes.buffer
+  return bytes
 }
 
-// 从未压缩 P-256 公钥字节 (65B) 提取 x, y (各 32B)
-function parseUncompressedP256(rawBuf) {
-  const raw = new Uint8Array(rawBuf)
-  if (raw[0] !== 0x04 || raw.length !== 65) throw new Error('Invalid uncompressed P-256 key')
-  return {
-    x: b64urlEncode(raw.slice(1, 33)),
-    y: b64urlEncode(raw.slice(33, 65)),
-  }
+// ECDH: 生成客户端密钥对，返回 { privateKey: Uint8Array(32), publicKey: Uint8Array(65) }
+function generateKeyPair() {
+  const privateKey = p256.utils.randomPrivateKey()
+  const publicKey = p256.getPublicKey(privateKey, false) // uncompressed (65 bytes)
+  return { privateKey, publicKey }
 }
 
-// 导入 P-256 公钥 (base64url 编码的未压缩格式)
-async function importServerPk(b64) {
-  const rawBuf = b64urlDecode(b64)
-  const { x, y } = parseUncompressedP256(rawBuf)
-  return crypto.subtle.importKey(
-    'jwk',
-    { kty: 'EC', crv: 'P-256', x, y },
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false,
-    []
-  )
-}
+// ECDH: 计算 shared secret → HKDF 派生 AES-256 密钥
+function deriveAesKey(clientPrivateKey, serverPublicKeyBytes) {
+  // ECDH shared secret (x coordinate, 32 bytes)
+  const shared = p256.getSharedSecret(clientPrivateKey, serverPublicKeyBytes, false)
+  // getSharedSecret returns uncompressed point (65 bytes), take x coordinate (bytes 1..33)
+  const sharedX = shared.slice(1, 33)
 
-// 生成客户端 P-256 密钥对
-async function generateClientKeyPair() {
-  return crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' },
-    true, // exportable
-    ['deriveBits']
-  )
-}
-
-// 导出公钥为未压缩格式 (65B) → base64url
-async function exportPublicKey(key) {
-  const raw = await crypto.subtle.exportKey('raw', key)
-  return b64urlEncode(raw)
-}
-
-// ECDH deriveBits → HKDF → AES-256-GCM CryptoKey
-async function deriveAesKey(clientPrivateKey, serverPublicKey) {
-  // ECDH → 256-bit shared secret
-  const sharedBits = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: serverPublicKey },
-    clientPrivateKey,
-    256
-  )
-
-  // 导入 shared secret 作为 HKDF 输入
-  const hkdfKey = await crypto.subtle.importKey(
-    'raw', sharedBits, { name: 'HKDF' }, false, ['deriveKey']
-  )
-
-  // HKDF-SHA256 → AES-256-GCM key (info = "j-remote-aes256gcm", 与 Rust 端一致)
+  // HKDF-SHA256, info = "j-remote-aes256gcm" (与 Rust 端一致)
   const info = new TextEncoder().encode('j-remote-aes256gcm')
-  return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info },
-    hkdfKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  )
+  return hkdf(sha256, sharedX, undefined, info, 32)
 }
 
-// AES-256-GCM 加密: 返回 ArrayBuffer = [IV(12) | ciphertext+tag]
-async function aesEncrypt(aesKey, plaintext) {
-  const iv = crypto.getRandomValues(new Uint8Array(12))
+// AES-256-GCM 加密: 返回 Uint8Array = [nonce(12) | ciphertext+tag]
+function aesEncrypt(key, plaintext) {
+  const nonce = randomBytes(12)
   const encoded = new TextEncoder().encode(plaintext)
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    aesKey,
-    encoded
-  )
-  // 拼接 [IV(12) | ciphertext]
-  const result = new Uint8Array(12 + ciphertext.byteLength)
-  result.set(iv, 0)
-  result.set(new Uint8Array(ciphertext), 12)
-  return result.buffer
+  const cipher = gcm(key, nonce)
+  const ciphertext = cipher.encrypt(encoded)
+  // 拼接 [nonce(12) | ciphertext]
+  const result = new Uint8Array(12 + ciphertext.length)
+  result.set(nonce, 0)
+  result.set(ciphertext, 12)
+  return result
 }
 
-// AES-256-GCM 解密: 输入 ArrayBuffer = [IV(12) | ciphertext+tag]
-async function aesDecrypt(aesKey, data) {
-  const buf = new Uint8Array(data)
-  const iv = buf.slice(0, 12)
-  const ciphertext = buf.slice(12)
-  const plainBuf = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    aesKey,
-    ciphertext
-  )
-  return new TextDecoder().decode(plainBuf)
+// AES-256-GCM 解密: 输入 Uint8Array = [nonce(12) | ciphertext+tag]
+function aesDecrypt(key, data) {
+  const nonce = data.slice(0, 12)
+  const ciphertext = data.slice(12)
+  const cipher = gcm(key, nonce)
+  const plaintext = cipher.decrypt(ciphertext)
+  return new TextDecoder().decode(plaintext)
 }
 
 export function useWebSocket(url, onMessage, onStatusChange) {
   const wsRef = useRef(null)
-  // aesKey 引用在闭包中共享
   const aesKeyRef = useRef(null)
-  // 协商完成标志
   const readyRef = useRef(false)
-  // 协商完成前的发送队列
   const pendingRef = useRef([])
 
   const send = useCallback((data) => {
@@ -142,17 +82,16 @@ export function useWebSocket(url, onMessage, onStatusChange) {
     const json = JSON.stringify(data)
 
     if (!readyRef.current || !aesKey) {
-      // 协商未完成，排队
       pendingRef.current.push(json)
       return
     }
 
-    // 加密发送
-    aesEncrypt(aesKey, json).then(buf => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(buf)
-      }
-    }).catch(err => console.error('加密发送失败', err))
+    try {
+      const buf = aesEncrypt(aesKey, json)
+      ws.send(buf.buffer)
+    } catch (err) {
+      console.error('加密发送失败', err)
+    }
   }, [])
 
   useEffect(() => {
@@ -163,7 +102,6 @@ export function useWebSocket(url, onMessage, onStatusChange) {
     function connect() {
       if (destroyed) return
 
-      // 重置加密状态
       aesKeyRef.current = null
       readyRef.current = false
       pendingRef.current = []
@@ -173,7 +111,7 @@ export function useWebSocket(url, onMessage, onStatusChange) {
       wsRef.current = ws
 
       ws.onopen = () => {
-        // 等待 server_hello（通过 onmessage 处理）
+        // 等待 server_hello
       }
 
       ws.onclose = () => {
@@ -181,7 +119,6 @@ export function useWebSocket(url, onMessage, onStatusChange) {
         readyRef.current = false
         aesKeyRef.current = null
         clearInterval(pingInterval)
-        // 自动重连，1.5 秒间隔
         if (!destroyed) {
           reconnectTimer = setTimeout(connect, 1500)
         }
@@ -189,21 +126,21 @@ export function useWebSocket(url, onMessage, onStatusChange) {
 
       ws.onerror = () => {}
 
-      ws.onmessage = async (e) => {
+      ws.onmessage = (e) => {
         try {
-          // 协商阶段：处理明文 JSON 消息
+          // 协商阶段
           if (!readyRef.current) {
             // server_hello 是明文 Text
             if (typeof e.data === 'string') {
               const msg = JSON.parse(e.data)
               if (msg.type === 'server_hello' && msg.server_pk) {
-                await handleServerHello(ws, msg.server_pk)
+                handleServerHello(ws, msg.server_pk)
                 return
               }
             }
             // key_exchange_ok 是加密的 Binary
             if (e.data instanceof ArrayBuffer && aesKeyRef.current) {
-              const text = await aesDecrypt(aesKeyRef.current, e.data)
+              const text = aesDecrypt(aesKeyRef.current, new Uint8Array(e.data))
               const msg = JSON.parse(text)
               if (msg.type === 'key_exchange_ok') {
                 readyRef.current = true
@@ -212,22 +149,22 @@ export function useWebSocket(url, onMessage, onStatusChange) {
                 // 发送排队的消息
                 const pending = pendingRef.current.splice(0)
                 for (const json of pending) {
-                  const buf = await aesEncrypt(aesKeyRef.current, json)
-                  if (ws.readyState === WebSocket.OPEN) ws.send(buf)
+                  const buf = aesEncrypt(aesKeyRef.current, json)
+                  if (ws.readyState === WebSocket.OPEN) ws.send(buf.buffer)
                 }
 
                 // 发送 sync 请求
-                const syncJson = JSON.stringify({ type: 'sync' })
-                const syncBuf = await aesEncrypt(aesKeyRef.current, syncJson)
-                if (ws.readyState === WebSocket.OPEN) ws.send(syncBuf)
+                const syncBuf = aesEncrypt(aesKeyRef.current, JSON.stringify({ type: 'sync' }))
+                if (ws.readyState === WebSocket.OPEN) ws.send(syncBuf.buffer)
 
-                // 启动客户端 ping 间隔 10 秒
+                // 客户端 ping 10 秒间隔
                 clearInterval(pingInterval)
-                pingInterval = setInterval(async () => {
+                pingInterval = setInterval(() => {
                   if (ws.readyState === WebSocket.OPEN && aesKeyRef.current && readyRef.current) {
-                    const pingJson = JSON.stringify({ type: 'ping' })
-                    const buf = await aesEncrypt(aesKeyRef.current, pingJson)
-                    if (ws.readyState === WebSocket.OPEN) ws.send(buf)
+                    try {
+                      const buf = aesEncrypt(aesKeyRef.current, JSON.stringify({ type: 'ping' }))
+                      ws.send(buf.buffer)
+                    } catch {}
                   }
                 }, 10000)
 
@@ -237,9 +174,9 @@ export function useWebSocket(url, onMessage, onStatusChange) {
             return
           }
 
-          // 加密通信阶段：所有消息都是 Binary
+          // 加密通信阶段：Binary
           if (e.data instanceof ArrayBuffer && aesKeyRef.current) {
-            const text = await aesDecrypt(aesKeyRef.current, e.data)
+            const text = aesDecrypt(aesKeyRef.current, new Uint8Array(e.data))
             const msg = JSON.parse(text)
             onMessage(msg)
           }
@@ -249,20 +186,17 @@ export function useWebSocket(url, onMessage, onStatusChange) {
       }
     }
 
-    async function handleServerHello(ws, serverPkB64) {
+    function handleServerHello(ws, serverPkB64) {
       try {
-        // 1. 导入服务端公钥
-        const serverPk = await importServerPk(serverPkB64)
+        const serverPkBytes = b64urlDecode(serverPkB64)
+        const { privateKey, publicKey } = generateKeyPair()
+        const clientPkB64 = b64urlEncode(publicKey)
 
-        // 2. 生成客户端密钥对
-        const clientKeyPair = await generateClientKeyPair()
-        const clientPkB64 = await exportPublicKey(clientKeyPair.publicKey)
-
-        // 3. 发送 key_exchange（明文 JSON）
+        // 发送 key_exchange（明文 JSON）
         ws.send(JSON.stringify({ type: 'key_exchange', client_pk: clientPkB64 }))
 
-        // 4. ECDH + HKDF 派生 AES 密钥
-        const aesKey = await deriveAesKey(clientKeyPair.privateKey, serverPk)
+        // 派生 AES 密钥
+        const aesKey = deriveAesKey(privateKey, serverPkBytes)
         aesKeyRef.current = aesKey
 
         // 等待 key_exchange_ok（在 onmessage 中处理）

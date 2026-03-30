@@ -61,7 +61,8 @@
       "Bash(make run:*)",
       "Bash(cd:*)",
       "Bash(/Users/jacklingo/dev_custom/j/assets/remote/remote.html:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(node:*)"
     ]
   },
   "language": "zh-CN",
