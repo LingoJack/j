@@ -7,8 +7,13 @@ use futures::stream::StreamExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Notify, broadcast, mpsc};
+use tokio::sync::{Notify, broadcast, mpsc, watch};
 use tokio_tungstenite::tungstenite::protocol::Message;
+
+/// 服务端 ping 间隔（秒）
+const PING_INTERVAL_SECS: u64 = 15;
+/// 未收到 pong 的超时时间（秒）
+const PONG_TIMEOUT_SECS: u64 = 30;
 
 /// 启动 HTTP + WS 服务器
 ///
@@ -22,6 +27,9 @@ pub async fn run_server(
     client_connected: Arc<AtomicBool>,
     client_notify: Arc<Notify>,
 ) {
+    // kick_tx 用于踢掉旧的 WS 连接：每次发送新值，旧连接检测到变化后退出
+    let (kick_tx, kick_rx) = watch::channel(0u64);
+
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
             continue;
@@ -32,6 +40,8 @@ pub async fn run_server(
         let outbound_tx = outbound_tx.clone();
         let client_connected = Arc::clone(&client_connected);
         let client_notify = Arc::clone(&client_notify);
+        let kick_tx = kick_tx.clone();
+        let kick_rx = kick_rx.clone();
 
         tokio::spawn(async move {
             if let Err(e) = handle_connection(
@@ -41,6 +51,8 @@ pub async fn run_server(
                 outbound_tx,
                 client_connected,
                 client_notify,
+                kick_tx,
+                kick_rx,
             )
             .await
             {
@@ -60,6 +72,8 @@ async fn handle_connection(
     outbound_tx: broadcast::Sender<WsOutbound>,
     client_connected: Arc<AtomicBool>,
     client_notify: Arc<Notify>,
+    kick_tx: watch::Sender<u64>,
+    kick_rx: watch::Receiver<u64>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 先 peek 请求头判断是 HTTP 还是 WS 升级
     let mut buf = [0u8; 4096];
@@ -87,10 +101,15 @@ async fn handle_connection(
             return Ok(());
         }
 
-        // 单客户端限制
-        if client_connected.load(Ordering::Relaxed) {
-            serve_error(stream, 409, "Conflict: another client already connected").await?;
-            return Ok(());
+        // 踢掉旧连接：发送新的 kick 信号，旧的 handle_websocket 会检测到并退出
+        let _ = kick_tx.send(kick_tx.borrow().wrapping_add(1));
+
+        // 等待旧连接释放（最多 2 秒）
+        for _ in 0..20 {
+            if !client_connected.load(Ordering::Relaxed) {
+                break;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
 
         // WebSocket 升级
@@ -98,7 +117,14 @@ async fn handle_connection(
         client_connected.store(true, Ordering::Relaxed);
         client_notify.notify_one();
 
-        handle_websocket(ws_stream, inbound_tx, outbound_tx, &client_connected).await;
+        handle_websocket(
+            ws_stream,
+            inbound_tx,
+            outbound_tx,
+            &client_connected,
+            kick_rx,
+        )
+        .await;
 
         client_connected.store(false, Ordering::Relaxed);
         return Ok(());
@@ -115,9 +141,22 @@ async fn handle_websocket(
     inbound_tx: mpsc::Sender<WsInbound>,
     outbound_tx: broadcast::Sender<WsOutbound>,
     client_connected: &Arc<AtomicBool>,
+    mut kick_rx: watch::Receiver<u64>,
 ) {
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
     let mut outbound_rx = outbound_tx.subscribe();
+
+    // 服务端主动 ping 定时器
+    let mut ping_interval =
+        tokio::time::interval(tokio::time::Duration::from_secs(PING_INTERVAL_SECS));
+    ping_interval.reset(); // 从现在开始计时
+
+    // pong 超时检测：上次收到客户端任何消息的时间
+    let mut last_activity = tokio::time::Instant::now();
+    let pong_timeout = tokio::time::Duration::from_secs(PONG_TIMEOUT_SECS);
+
+    // 记录当前 kick 版本，后续检测是否有新连接踢掉自己
+    let kick_version = *kick_rx.borrow_and_update();
 
     loop {
         tokio::select! {
@@ -125,6 +164,7 @@ async fn handle_websocket(
             msg = ws_rx.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        last_activity = tokio::time::Instant::now();
                         match serde_json::from_str::<WsInbound>(&text) {
                             Ok(inbound) => {
                                 if inbound_tx.send(inbound).await.is_err() {
@@ -142,7 +182,11 @@ async fn handle_websocket(
                         }
                     }
                     Some(Ok(Message::Ping(data))) => {
+                        last_activity = tokio::time::Instant::now();
                         let _ = ws_tx.send(Message::Pong(data)).await;
+                    }
+                    Some(Ok(Message::Pong(_))) => {
+                        last_activity = tokio::time::Instant::now();
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     _ => {}
@@ -165,6 +209,31 @@ async fn handle_websocket(
                         );
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            // 服务端主动发 ping，并检测 pong 超时
+            _ = ping_interval.tick() => {
+                // 检查是否超时（上次活动距今超过阈值）
+                if last_activity.elapsed() > pong_timeout {
+                    crate::util::log::write_info_log(
+                        "[remote::ws]",
+                        "客户端 pong 超时，断开连接",
+                    );
+                    let _ = ws_tx.send(Message::Close(None)).await;
+                    break;
+                }
+                // 发送 ping
+                let _ = ws_tx.send(Message::Ping(vec![].into())).await;
+            }
+            // 被新连接踢掉
+            _ = kick_rx.changed() => {
+                if *kick_rx.borrow() != kick_version {
+                    crate::util::log::write_info_log(
+                        "[remote::ws]",
+                        "新客户端连接，踢掉旧连接",
+                    );
+                    let _ = ws_tx.send(Message::Close(None)).await;
+                    break;
                 }
             }
         }

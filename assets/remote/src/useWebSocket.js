@@ -11,19 +11,34 @@ export function useWebSocket(url, onMessage, onStatusChange) {
 
   useEffect(() => {
     let reconnectTimer = null
+    let pingInterval = null
+    let destroyed = false
 
     function connect() {
+      if (destroyed) return
       const ws = new WebSocket(url)
       wsRef.current = ws
 
       ws.onopen = () => {
         onStatusChange(true)
         ws.send(JSON.stringify({ type: 'sync' }))
+
+        // 客户端 ping 间隔 10 秒，配合服务端 15 秒 ping + 30 秒超时
+        clearInterval(pingInterval)
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 10000)
       }
 
       ws.onclose = () => {
         onStatusChange(false)
-        reconnectTimer = setTimeout(connect, 3000)
+        clearInterval(pingInterval)
+        // 自动重连，1.5 秒间隔（加快重连速度）
+        if (!destroyed) {
+          reconnectTimer = setTimeout(connect, 1500)
+        }
       }
 
       ws.onerror = () => {}
@@ -39,13 +54,8 @@ export function useWebSocket(url, onMessage, onStatusChange) {
 
     connect()
 
-    const pingInterval = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }))
-      }
-    }, 30000)
-
     return () => {
+      destroyed = true
       clearInterval(pingInterval)
       clearTimeout(reconnectTimer)
       wsRef.current?.close()
