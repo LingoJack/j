@@ -181,42 +181,90 @@ async fn perform_key_exchange(
     ws_tx: &mut futures::stream::SplitSink<tokio_tungstenite::WebSocketStream<TcpStream>, Message>,
     ws_rx: &mut futures::stream::SplitStream<tokio_tungstenite::WebSocketStream<TcpStream>>,
 ) -> Option<[u8; 32]> {
+    let log = |msg: &str| {
+        crate::util::log::write_info_log("[remote::key_exchange]", msg);
+    };
+
     // 1. 生成服务端密钥对
     let (server_sk, server_pk) = crypto::generate_keypair();
     let server_pk_b64 = crypto::export_public_key(&server_pk);
+    log(&format!("server_pk 长度: {}", server_pk_b64.len()));
 
     // 2. 发送 server_hello（明文 JSON）
     let hello = WsOutbound::ServerHello {
         server_pk: server_pk_b64,
     };
     let hello_json = serde_json::to_string(&hello).ok()?;
-    ws_tx.send(Message::Text(hello_json.into())).await.ok()?;
+    if ws_tx.send(Message::Text(hello_json.into())).await.is_err() {
+        log("发送 server_hello 失败");
+        return None;
+    }
+    log("已发送 server_hello");
 
     // 3. 等待客户端 key_exchange 消息（超时 10 秒）
     let timeout = tokio::time::Duration::from_secs(KEY_EXCHANGE_TIMEOUT_SECS);
-    let client_pk_b64 = tokio::time::timeout(timeout, async {
-        while let Some(Ok(msg)) = ws_rx.next().await {
-            if let Message::Text(text) = msg
-                && let Ok(WsInbound::KeyExchange { client_pk }) =
-                    serde_json::from_str::<WsInbound>(&text)
-            {
-                return Some(client_pk);
+    let client_pk_b64 = match tokio::time::timeout(timeout, async {
+        while let Some(result) = ws_rx.next().await {
+            match result {
+                Ok(Message::Text(text)) => {
+                    log(&format!("收到 Text 消息: {}", &text[..text.len().min(200)]));
+                    if let Ok(WsInbound::KeyExchange { client_pk }) =
+                        serde_json::from_str::<WsInbound>(&text)
+                    {
+                        return Some(client_pk);
+                    }
+                }
+                Ok(Message::Close(frame)) => {
+                    log(&format!("客户端关闭连接: {:?}", frame));
+                    return None;
+                }
+                Ok(other) => {
+                    log(&format!("收到非 Text 消息: {:?}", other));
+                }
+                Err(e) => {
+                    log(&format!("ws_rx 错误: {}", e));
+                    return None;
+                }
             }
         }
+        log("ws_rx 流结束");
         None
     })
     .await
-    .ok()??;
+    {
+        Ok(Some(pk)) => pk,
+        Ok(None) => {
+            log("客户端未发送 key_exchange");
+            return None;
+        }
+        Err(_) => {
+            log("等待 key_exchange 超时 (10s)");
+            return None;
+        }
+    };
+
+    log(&format!("收到 client_pk，长度: {}", client_pk_b64.len()));
 
     // 4. 导入客户端公钥 + 计算 shared_secret
-    let client_pk = crypto::import_public_key(&client_pk_b64).ok()?;
+    let client_pk = match crypto::import_public_key(&client_pk_b64) {
+        Ok(pk) => pk,
+        Err(e) => {
+            log(&format!("导入客户端公钥失败: {}", e));
+            return None;
+        }
+    };
     let shared_secret = server_sk.diffie_hellman(&client_pk);
     let aes_key = crypto::derive_aes_key(&shared_secret);
+    log("AES 密钥派生成功");
 
     // 5. 发送加密的 key_exchange_ok 确认
     let ok_msg = serde_json::to_string(&WsOutbound::KeyExchangeOk).ok()?;
     let encrypted = crypto::encrypt(&aes_key, ok_msg.as_bytes());
-    ws_tx.send(Message::Binary(encrypted.into())).await.ok()?;
+    if ws_tx.send(Message::Binary(encrypted.into())).await.is_err() {
+        log("发送 key_exchange_ok 失败");
+        return None;
+    }
+    log("密钥协商完成");
 
     Some(aes_key)
 }
