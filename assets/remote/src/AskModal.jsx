@@ -135,7 +135,7 @@ export default function AskModal({ questions, onSubmit }) {
           <div className="flex flex-col gap-2.5">
             <input
               type="text"
-              className="w-full px-4 py-3 border border-[#3060a0] rounded-xl bg-[#161a28] text-fg text-sm outline-none font-[inherit] focus:border-accent"
+              className="w-full px-4 py-3 border border-accent/30 rounded-xl bg-bg text-fg text-sm outline-none font-[inherit] focus:border-accent"
               placeholder="输入你的回答..."
               value={freeText}
               onChange={e => setFreeText(e.target.value)}
@@ -166,3 +166,4 @@ export default function AskModal({ questions, onSubmit }) {
     </div>
   )
 }
+

@@ -130,7 +130,7 @@ export default function MessageDetailModal({ message, onClose }) {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-[#1a1e2e] border border-border rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
+      <div className="bg-bg3 border border-border rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
