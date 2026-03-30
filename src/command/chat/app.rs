@@ -285,7 +285,7 @@ impl ToolExecutor {
     }
 
     /// 轮询后台工具执行结果，更新状态并转发给 agent loop。
-    /// 返回新完成的工具信息 (tool_name, output_summary, is_error)。
+    /// 返回新完成的工具信息 (tool_name, output_full, is_error)。
     pub fn poll_results(&mut self) -> Vec<(String, String, bool)> {
         let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
         if let Some(ref rx) = self.tool_exec_rx {
@@ -317,6 +317,7 @@ impl ToolExecutor {
         }
         let mut completed = Vec::new();
         for done in exec_done_msgs {
+            // 生成摘要用于内部状态显示（保留原有逻辑）
             let summary = if done.output.len() > 60 {
                 let mut end = 60;
                 while !done.output.is_char_boundary(end) {
@@ -344,15 +345,16 @@ impl ToolExecutor {
                     ToolExecStatus::Done(summary.clone())
                 };
             }
-            completed.push((tool_name, summary, done.is_error));
-            // 转发结果给后台 agent 线程
+            // 返回完整的 output，前端自行处理显示截断
+            // 先转发结果给后台 agent 线程，再 push 到 completed
             if let Some(ref tx) = self.tool_result_tx {
                 let _ = tx.send(ToolResultMsg {
-                    tool_call_id: done.tool_call_id,
-                    result: done.output,
+                    tool_call_id: done.tool_call_id.clone(),
+                    result: done.output.clone(),
                     is_error: done.is_error,
                 });
             }
+            completed.push((tool_name, done.output, done.is_error));
             self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
             if self.tools_executing_count == 0 {
                 self.tool_exec_tx = None;

@@ -88,6 +88,11 @@ function ToolResultMsg({ toolName, output, isError, onDetail }) {
   const icon = isError ? '✗' : '✓'
   const iconCls = isError ? 'text-err' : 'text-ok'
   const hasOutput = output && output.trim()
+  
+  // 生成预览文本（最多 50 字符）
+  const preview = hasOutput 
+    ? (output.length > 50 ? output.slice(0, 50) + '...' : output)
+    : ''
 
   const handleClick = (e) => {
     if (e.target.closest('.expand-btn')) {
@@ -112,6 +117,13 @@ function ToolResultMsg({ toolName, output, isError, onDetail }) {
           </>
         )}
       </div>
+      {/* 收起状态显示预览 */}
+      {!expanded && hasOutput && (
+        <div className="px-3 pb-2 text-[11px] text-fg3 border-t border-border pt-2 truncate">
+          {preview}
+        </div>
+      )}
+      {/* 展开状态显示完整内容 */}
       {expanded && hasOutput && (
         <div className="px-3 pb-2 text-[11px] text-fg2 border-t border-border pt-2 whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto">
           {output}
