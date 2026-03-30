@@ -1,6 +1,7 @@
 //! WsBridge: 主循环与 WebSocket 服务器之间的通道封装
 
 use super::protocol::{WsInbound, WsOutbound};
+use std::process::Child;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{broadcast, mpsc};
@@ -18,6 +19,9 @@ pub struct WsBridge {
     pub client_connected: Arc<AtomicBool>,
     /// 持有 tokio runtime，drop 时自动关闭服务器
     _runtime: tokio::runtime::Runtime,
+    /// caffeinate 子进程，防止 macOS 休眠；drop 时自动 kill
+    #[cfg(target_os = "macos")]
+    _caffeinate: Option<Child>,
 }
 
 impl WsBridge {
@@ -29,11 +33,20 @@ impl WsBridge {
         let (outbound_tx, _) = broadcast::channel::<WsOutbound>(256);
         let client_connected = Arc::new(AtomicBool::new(false));
 
+        // 启动 caffeinate -s 防止 macOS 休眠（合盖也能跑）
+        #[cfg(target_os = "macos")]
+        let caffeinate = std::process::Command::new("caffeinate")
+            .arg("-s")
+            .spawn()
+            .ok();
+
         let bridge = Self {
             inbound_rx,
             outbound_tx: outbound_tx.clone(),
             client_connected,
             _runtime: runtime,
+            #[cfg(target_os = "macos")]
+            _caffeinate: caffeinate,
         };
 
         (bridge, inbound_tx, outbound_tx)
@@ -71,5 +84,14 @@ impl WsBridge {
         F: std::future::Future<Output = ()> + Send + 'static,
     {
         self._runtime.spawn(future);
+    }
+}
+
+impl Drop for WsBridge {
+    fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(ref mut child) = self._caffeinate {
+            let _ = child.kill();
+        }
     }
 }
