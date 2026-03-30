@@ -58,7 +58,10 @@
       "Bash(npm install:*)",
       "Bash(npx vite:*)",
       "Bash(npm run:*)",
-      "Bash(make run:*)"
+      "Bash(make run:*)",
+      "Bash(cd:*)",
+      "Bash(/Users/jacklingo/dev_custom/j/assets/remote/remote.html:*)",
+      "Bash(cp:*)"
     ]
   },
   "language": "zh-CN",
