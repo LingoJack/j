@@ -92,7 +92,7 @@ export default function MessageDetailModal({ message, onClose }) {
     }
 
     return (
-      <div className="prose prose-invert max-w-none text-sm">
+      <div className="md-msg max-w-none">
         <Markdown content={message.content || ''} />
       </div>
     )

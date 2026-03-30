@@ -38,15 +38,23 @@ function CodeBlock({ className, children, ...props }) {
   )
 }
 
-function TableWrap({ children }) {
-  return <div className="table-wrap"><table>{children}</table></div>
+// 表格包装器：添加滚动容器
+function Table({ children }) {
+  return (
+    <div className="table-wrap">
+      <table>{children}</table>
+    </div>
+  )
 }
 
 export default function Markdown({ content }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      components={{ code: CodeBlock, table: TableWrap }}
+      components={{ 
+        code: CodeBlock, 
+        table: Table,
+      }}
     >
       {content}
     </ReactMarkdown>
