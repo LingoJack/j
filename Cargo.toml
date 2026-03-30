@@ -1,6 +1,6 @@
 [package]
 name = "j-cli"
-version = "12.7.35"
+version = "12.7.36"
 edition = "2024"
 rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
