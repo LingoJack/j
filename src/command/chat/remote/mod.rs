@@ -78,20 +78,21 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     // 显示二维码
     display_qr_code(&url);
 
-    // 创建 bridge
-    let (bridge, inbound_tx, outbound_tx) = WsBridge::new();
+    // 创建 tokio runtime
+    let rt = tokio::runtime::Runtime::new()?;
+
+    // 创建 bridge，把 runtime 所有权交给 bridge
+    let (bridge, inbound_tx, outbound_tx) = WsBridge::new(rt);
     let client_connected = Arc::clone(&bridge.client_connected);
     let client_notify = Arc::new(Notify::new());
     let client_notify2 = Arc::clone(&client_notify);
 
-    // 启动 tokio runtime 和服务器
-    let rt = tokio::runtime::Runtime::new()?;
-
-    let listener = rt.block_on(bind_with_reuse(port))?;
+    // 通过 bridge 内部持有的 runtime 来启动服务器和等待连接
+    let listener = bridge.block_on(bind_with_reuse(port))?;
 
     // 在后台 task 中运行服务器
     let token_clone = token.clone();
-    rt.spawn(async move {
+    bridge.spawn(async move {
         server::run_server(
             listener,
             token_clone,
@@ -103,8 +104,8 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
         .await;
     });
 
-    // 等待客户端连接，同时监听 Ctrl+C（使用 tokio::signal 替代 ctrlc crate，支持多次调用）
-    let interrupted = rt.block_on(async {
+    // 等待客户端连接，同时监听 Ctrl+C
+    let interrupted = bridge.block_on(async {
         tokio::select! {
             _ = client_notify.notified() => false,
             _ = tokio::signal::ctrl_c() => true,
@@ -118,9 +119,6 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
 
     println!("  ✅ 客户端已连接！正在启动对话界面...\n");
     std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // 把 runtime 泄漏出去让它一直运行（TUI 退出时进程退出自动清理）
-    std::mem::forget(rt);
 
     Ok((bridge, url))
 }
