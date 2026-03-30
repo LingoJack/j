@@ -40,7 +40,7 @@ fn display_qr_code(url: &str) {
         let string = code
             .render::<char>()
             .quiet_zone(true)
-            .module_dimensions(2, 1)
+            .module_dimensions(1, 1)
             .build();
         for line in string.lines() {
             println!("  {}", line);
