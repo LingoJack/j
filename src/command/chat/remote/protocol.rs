@@ -30,6 +30,9 @@ pub enum WsInbound {
     /// 请求全量状态同步
     #[serde(rename = "sync")]
     Sync,
+    /// ECDH 密钥交换（客户端发送公钥）
+    #[serde(rename = "key_exchange")]
+    KeyExchange { client_pk: String },
     /// 心跳 ping
     #[serde(rename = "ping")]
     Ping,
@@ -84,6 +87,12 @@ pub enum WsOutbound {
     /// 心跳 pong
     #[serde(rename = "pong")]
     Pong,
+    /// ECDH 密钥协商：服务端发送公钥
+    #[serde(rename = "server_hello")]
+    ServerHello { server_pk: String },
+    /// ECDH 密钥协商成功确认
+    #[serde(rename = "key_exchange_ok")]
+    KeyExchangeOk,
     /// 错误消息
     #[serde(rename = "error")]
     Error { message: String },

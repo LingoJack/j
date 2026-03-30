@@ -1,5 +1,6 @@
-//! HTTP + WebSocket 混合服务器
+//! HTTP + WebSocket 混合服务器（ECDH P-256 加密通信）
 
+use super::crypto;
 use super::protocol::{WsInbound, WsOutbound};
 use crate::assets::Assets;
 use futures::SinkExt;
@@ -14,11 +15,13 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 const PING_INTERVAL_SECS: u64 = 15;
 /// 未收到 pong 的超时时间（秒）
 const PONG_TIMEOUT_SECS: u64 = 30;
+/// ECDH 密钥协商超时（秒）
+const KEY_EXCHANGE_TIMEOUT_SECS: u64 = 10;
 
 /// 启动 HTTP + WS 服务器
 ///
 /// - `GET /` → 返回嵌入的 remote.html
-/// - `GET /ws?token=xxx` → WebSocket 升级
+/// - `GET /ws?token=xxx` → WebSocket 升级（含 Origin 校验 + ECDH 协商）
 pub async fn run_server(
     listener: TcpListener,
     token: String,
@@ -26,6 +29,7 @@ pub async fn run_server(
     outbound_tx: broadcast::Sender<WsOutbound>,
     client_connected: Arc<AtomicBool>,
     client_notify: Arc<Notify>,
+    expected_origin: String,
 ) {
     // kick_tx 用于踢掉旧的 WS 连接：每次发送新值，旧连接检测到变化后退出
     let (kick_tx, kick_rx) = watch::channel(0u64);
@@ -42,6 +46,7 @@ pub async fn run_server(
         let client_notify = Arc::clone(&client_notify);
         let kick_tx = kick_tx.clone();
         let kick_rx = kick_rx.clone();
+        let expected_origin = expected_origin.clone();
 
         tokio::spawn(async move {
             if let Err(e) = handle_connection(
@@ -53,6 +58,7 @@ pub async fn run_server(
                 client_notify,
                 kick_tx,
                 kick_rx,
+                &expected_origin,
             )
             .await
             {
@@ -65,6 +71,24 @@ pub async fn run_server(
     }
 }
 
+/// 从 HTTP 请求头中提取指定 header 的值
+fn extract_header<'a>(request: &'a str, header_name: &str) -> Option<&'a str> {
+    let lower_name = header_name.to_ascii_lowercase();
+    for line in request.lines().skip(1) {
+        // header 结束
+        if line.is_empty() || line == "\r" {
+            break;
+        }
+        if let Some((key, value)) = line.split_once(':')
+            && key.trim().to_ascii_lowercase() == lower_name
+        {
+            return Some(value.trim().trim_end_matches('\r'));
+        }
+    }
+    None
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn handle_connection(
     stream: TcpStream,
     token: &str,
@@ -74,6 +98,7 @@ async fn handle_connection(
     client_notify: Arc<Notify>,
     kick_tx: watch::Sender<u64>,
     kick_rx: watch::Receiver<u64>,
+    expected_origin: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 先 peek 请求头判断是 HTTP 还是 WS 升级
     let mut buf = [0u8; 4096];
@@ -98,6 +123,18 @@ async fn handle_connection(
         let query_token = extract_query_param(&request_str, "token");
         if query_token.as_deref() != Some(token) {
             serve_error(stream, 403, "Forbidden: invalid token").await?;
+            return Ok(());
+        }
+
+        // Origin 校验：如果存在 Origin 头则必须匹配，不存在则放行（非浏览器客户端）
+        if let Some(origin) = extract_header(&request_str, "Origin")
+            && origin != expected_origin
+        {
+            crate::util::log::write_error_log(
+                "[remote::server]",
+                &format!("Origin 校验失败: {} != {}", origin, expected_origin),
+            );
+            serve_error(stream, 403, "Forbidden: origin mismatch").await?;
             return Ok(());
         }
 
@@ -139,7 +176,52 @@ async fn handle_connection(
     Ok(())
 }
 
-/// 处理 WebSocket 连接
+/// ECDH 密钥协商：返回派生的 AES-256 密钥，或 None 表示失败/超时
+async fn perform_key_exchange(
+    ws_tx: &mut futures::stream::SplitSink<tokio_tungstenite::WebSocketStream<TcpStream>, Message>,
+    ws_rx: &mut futures::stream::SplitStream<tokio_tungstenite::WebSocketStream<TcpStream>>,
+) -> Option<[u8; 32]> {
+    // 1. 生成服务端密钥对
+    let (server_sk, server_pk) = crypto::generate_keypair();
+    let server_pk_b64 = crypto::export_public_key(&server_pk);
+
+    // 2. 发送 server_hello（明文 JSON）
+    let hello = WsOutbound::ServerHello {
+        server_pk: server_pk_b64,
+    };
+    let hello_json = serde_json::to_string(&hello).ok()?;
+    ws_tx.send(Message::Text(hello_json.into())).await.ok()?;
+
+    // 3. 等待客户端 key_exchange 消息（超时 10 秒）
+    let timeout = tokio::time::Duration::from_secs(KEY_EXCHANGE_TIMEOUT_SECS);
+    let client_pk_b64 = tokio::time::timeout(timeout, async {
+        while let Some(Ok(msg)) = ws_rx.next().await {
+            if let Message::Text(text) = msg
+                && let Ok(WsInbound::KeyExchange { client_pk }) =
+                    serde_json::from_str::<WsInbound>(&text)
+            {
+                return Some(client_pk);
+            }
+        }
+        None
+    })
+    .await
+    .ok()??;
+
+    // 4. 导入客户端公钥 + 计算 shared_secret
+    let client_pk = crypto::import_public_key(&client_pk_b64).ok()?;
+    let shared_secret = server_sk.diffie_hellman(&client_pk);
+    let aes_key = crypto::derive_aes_key(&shared_secret);
+
+    // 5. 发送加密的 key_exchange_ok 确认
+    let ok_msg = serde_json::to_string(&WsOutbound::KeyExchangeOk).ok()?;
+    let encrypted = crypto::encrypt(&aes_key, ok_msg.as_bytes());
+    ws_tx.send(Message::Binary(encrypted.into())).await.ok()?;
+
+    Some(aes_key)
+}
+
+/// 处理 WebSocket 连接（含 ECDH 协商 + AES-256-GCM 加密通信）
 async fn handle_websocket(
     ws_stream: tokio_tungstenite::WebSocketStream<TcpStream>,
     inbound_tx: mpsc::Sender<WsInbound>,
@@ -150,6 +232,18 @@ async fn handle_websocket(
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
     let mut outbound_rx = outbound_tx.subscribe();
 
+    // ---- ECDH 密钥协商 ----
+    let aes_key = match perform_key_exchange(&mut ws_tx, &mut ws_rx).await {
+        Some(key) => key,
+        None => {
+            crate::util::log::write_error_log("[remote::ws]", "ECDH 密钥协商失败或超时，断开连接");
+            let _ = ws_tx.send(Message::Close(None)).await;
+            client_connected.store(false, Ordering::Relaxed);
+            return;
+        }
+    };
+
+    // ---- 加密通信主循环 ----
     // 服务端主动 ping 定时器
     let mut ping_interval =
         tokio::time::interval(tokio::time::Duration::from_secs(PING_INTERVAL_SECS));
@@ -164,24 +258,47 @@ async fn handle_websocket(
 
     loop {
         tokio::select! {
-            // 客户端 → 服务端
+            // 客户端 → 服务端（加密的 Binary 帧）
             msg = ws_rx.next() => {
                 match msg {
-                    Some(Ok(Message::Text(text))) => {
+                    Some(Ok(Message::Binary(data))) => {
                         last_activity = tokio::time::Instant::now();
-                        match serde_json::from_str::<WsInbound>(&text) {
-                            Ok(inbound) => {
-                                if inbound_tx.send(inbound).await.is_err() {
-                                    break;
+                        // 解密
+                        match crypto::decrypt(&aes_key, &data) {
+                            Ok(plaintext) => {
+                                let text = match String::from_utf8(plaintext) {
+                                    Ok(s) => s,
+                                    Err(_) => {
+                                        crate::util::log::write_error_log(
+                                            "[remote::ws]",
+                                            "解密后数据非 UTF-8",
+                                        );
+                                        continue;
+                                    }
+                                };
+                                match serde_json::from_str::<WsInbound>(&text) {
+                                    Ok(inbound) => {
+                                        if inbound_tx.send(inbound).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        // 发送加密的错误消息
+                                        let err_msg = WsOutbound::Error {
+                                            message: format!("解析消息失败: {}", e),
+                                        };
+                                        if let Ok(json) = serde_json::to_string(&err_msg) {
+                                            let enc = crypto::encrypt(&aes_key, json.as_bytes());
+                                            let _ = ws_tx.send(Message::Binary(enc.into())).await;
+                                        }
+                                    }
                                 }
                             }
                             Err(e) => {
-                                let err_msg = WsOutbound::Error {
-                                    message: format!("解析消息失败: {}", e),
-                                };
-                                let _ = ws_tx.send(Message::Text(
-                                    serde_json::to_string(&err_msg).unwrap_or_default().into()
-                                )).await;
+                                crate::util::log::write_error_log(
+                                    "[remote::ws]",
+                                    &format!("消息解密失败: {}", e),
+                                );
                             }
                         }
                     }
@@ -196,14 +313,15 @@ async fn handle_websocket(
                     _ => {}
                 }
             }
-            // 服务端 → 客户端
+            // 服务端 → 客户端（加密发送）
             msg = outbound_rx.recv() => {
                 match msg {
                     Ok(outbound) => {
-                        if let Ok(json) = serde_json::to_string(&outbound)
-                            && ws_tx.send(Message::Text(json.into())).await.is_err()
-                        {
-                            break;
+                        if let Ok(json) = serde_json::to_string(&outbound) {
+                            let encrypted = crypto::encrypt(&aes_key, json.as_bytes());
+                            if ws_tx.send(Message::Binary(encrypted.into())).await.is_err() {
+                                break;
+                            }
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {

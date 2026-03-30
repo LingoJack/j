@@ -295,6 +295,8 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     WsInbound::NewSession => {
                         app.update(Action::NewSession);
                     }
+                    // KeyExchange 在 server.rs 层处理，不会到达 TUI 层
+                    WsInbound::KeyExchange { .. } => {}
                 }
             }
         }

@@ -1,6 +1,7 @@
 //! 远程控制模块入口：启动服务器 + 等待客户端
 
 pub mod bridge;
+pub mod crypto;
 pub mod protocol;
 pub mod server;
 
@@ -22,14 +23,9 @@ fn detect_local_ip() -> String {
     "127.0.0.1".to_string()
 }
 
-/// 生成 6 位随机 token
+/// 生成 UUID token
 fn generate_token() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let chars: Vec<char> = "abcdefghijkmnpqrstuvwxyz23456789".chars().collect();
-    (0..6)
-        .map(|_| chars[rng.gen_range(0..chars.len())])
-        .collect()
+    uuid::Uuid::new_v4().to_string()
 }
 
 /// 在终端显示二维码
@@ -74,6 +70,7 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     let ip = detect_local_ip();
     let token = generate_token();
     let url = format!("http://{}:{}/?token={}", ip, port, token);
+    let expected_origin = format!("http://{}:{}", ip, port);
 
     // 显示二维码
     display_qr_code(&url);
@@ -100,6 +97,7 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
             outbound_tx,
             client_connected,
             client_notify2,
+            expected_origin,
         )
         .await;
     });
