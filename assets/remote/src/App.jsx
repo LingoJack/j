@@ -53,7 +53,7 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
 
   return (
     <div
-      className={`self-start w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -104,7 +104,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
 
   return (
     <div
-      className={`self-start w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[75%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
