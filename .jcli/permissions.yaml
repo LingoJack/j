@@ -7,4 +7,5 @@ allow:
 - Bash(head -500:*)
 - Bash(cd /Users/lingojack/dev_custom/j/assets/remote:*)
 - Write
+- Bash(j check:*)
 deny: []
