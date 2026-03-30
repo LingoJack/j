@@ -102,7 +102,11 @@ async fn handle_connection(
         }
 
         // 踢掉旧连接：发送新的 kick 信号，旧的 handle_websocket 会检测到并退出
-        let _ = kick_tx.send(kick_tx.borrow().wrapping_add(1));
+        let new_ver = {
+            let cur = *kick_tx.borrow();
+            cur.wrapping_add(1)
+        };
+        let _ = kick_tx.send(new_ver);
 
         // 等待旧连接释放（最多 2 秒）
         for _ in 0..20 {
