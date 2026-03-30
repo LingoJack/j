@@ -156,7 +156,7 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
         (
             cmd::CHAT,
             vec![
-                ArgHint::Flags(vec!["--continue", "-c", "--session"]),
+                ArgHint::Flags(vec!["--continue", "-c", "--session", "--remote"]),
                 ArgHint::Placeholder("<message>"),
             ],
         ),
