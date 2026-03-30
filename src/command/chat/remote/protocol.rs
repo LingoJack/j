@@ -16,6 +16,12 @@ pub enum WsInbound {
         #[serde(default)]
         reason: Option<String>,
     },
+    /// Ask 工具回答
+    #[serde(rename = "ask_response")]
+    AskResponse {
+        /// 问题文本 → 用户答案（选项 label 或自由文本）
+        answers: std::collections::HashMap<String, String>,
+    },
     /// 取消当前流式请求
     #[serde(rename = "cancel")]
     Cancel,
@@ -41,10 +47,16 @@ pub enum WsOutbound {
     /// 工具确认请求
     #[serde(rename = "tool_confirm_request")]
     ToolConfirmRequest { tools: Vec<ToolConfirmInfo> },
+    /// Ask 工具提问请求
+    #[serde(rename = "ask_request")]
+    AskRequest { questions: Vec<AskQuestionInfo> },
+    /// 工具开始执行
+    #[serde(rename = "tool_call")]
+    ToolCall { name: String, arguments: String },
     /// 工具执行结果
     #[serde(rename = "tool_result")]
     ToolResult {
-        tool_call_id: String,
+        name: String,
         output: String,
         is_error: bool,
     },
@@ -73,6 +85,22 @@ pub struct ToolConfirmInfo {
     pub name: String,
     pub arguments: String,
     pub confirm_message: String,
+}
+
+/// Ask 工具问题信息
+#[derive(Debug, Clone, Serialize)]
+pub struct AskQuestionInfo {
+    pub question: String,
+    pub header: String,
+    pub options: Vec<AskOptionInfo>,
+    pub multi_select: bool,
+}
+
+/// Ask 工具选项信息
+#[derive(Debug, Clone, Serialize)]
+pub struct AskOptionInfo {
+    pub label: String,
+    pub description: String,
 }
 
 /// 同步消息（简化版 ChatMessage）

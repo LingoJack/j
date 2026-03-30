@@ -284,8 +284,9 @@ impl ToolExecutor {
         }
     }
 
-    /// 轮询后台工具执行结果，更新状态并转发给 agent loop
-    pub fn poll_results(&mut self) {
+    /// 轮询后台工具执行结果，更新状态并转发给 agent loop。
+    /// 返回新完成的工具信息 (tool_name, output_summary, is_error)。
+    pub fn poll_results(&mut self) -> Vec<(String, String, bool)> {
         let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
         if let Some(ref rx) = self.tool_exec_rx {
             loop {
@@ -314,6 +315,7 @@ impl ToolExecutor {
                 ),
             );
         }
+        let mut completed = Vec::new();
         for done in exec_done_msgs {
             let summary = if done.output.len() > 60 {
                 let mut end = 60;
@@ -324,17 +326,25 @@ impl ToolExecutor {
             } else {
                 done.output.clone()
             };
+            // 查找工具名
+            let tool_name = self
+                .active_tool_calls
+                .iter()
+                .find(|tc| tc.tool_call_id == done.tool_call_id)
+                .map(|tc| tc.tool_name.clone())
+                .unwrap_or_default();
             if let Some(tc) = self
                 .active_tool_calls
                 .iter_mut()
                 .find(|tc| tc.tool_call_id == done.tool_call_id)
             {
                 tc.status = if done.is_error {
-                    ToolExecStatus::Failed(summary)
+                    ToolExecStatus::Failed(summary.clone())
                 } else {
-                    ToolExecStatus::Done(summary)
+                    ToolExecStatus::Done(summary.clone())
                 };
             }
+            completed.push((tool_name, summary, done.is_error));
             // 转发结果给后台 agent 线程
             if let Some(ref tx) = self.tool_result_tx {
                 let _ = tx.send(ToolResultMsg {
@@ -352,6 +362,7 @@ impl ToolExecutor {
                     .store(false, std::sync::atomic::Ordering::Relaxed);
             }
         }
+        completed
     }
 
     /// 把所有 Executing 状态的工具放到后台线程执行
@@ -2244,11 +2255,34 @@ impl ChatApp {
 
     /// 从远程客户端注入一条消息（模拟用户输入并发送）
     /// 注意：不广播 user message 回去，发送方 Web 端已经本地显示了
+    ///
+    /// 如果当前正在 loading（agent loop 运行中），消息追加到待处理队列，
+    /// 与 TUI 本地模式下 Enter 的行为一致。
     pub fn inject_remote_message(&mut self, content: String) {
-        if content.trim().is_empty() {
+        let text = content.trim().to_string();
+        if text.is_empty() {
             return;
         }
-        self.send_message_internal(content);
+        if self.state.is_loading {
+            // agent loop 运行中：追加到 pending 队列，下一轮 loop 会处理
+            use crate::command::chat::storage::ChatMessage;
+            self.state
+                .session
+                .messages
+                .push(ChatMessage::text("user", &text));
+            {
+                let mut pending = crate::util::safe_lock(
+                    &self.state.pending_user_messages,
+                    "inject_remote_message::pending",
+                );
+                pending.push(ChatMessage::text("user", &text));
+            }
+            self.ui.msg_lines_cache = None;
+            self.ui.auto_scroll = true;
+            self.ui.scroll_offset = u16::MAX;
+        } else {
+            self.send_message_internal(text);
+        }
     }
 
     /// 清理过期的 toast
@@ -2512,7 +2546,14 @@ impl ChatApp {
 
         // 如果在 ToolConfirm 模式，仍然需要轮询工具执行结果（但暂停流式消息轮询）
         if self.ui.mode == ChatMode::ToolConfirm {
-            self.tool_executor.poll_results();
+            let completed = self.tool_executor.poll_results();
+            for (name, output, is_error) in completed {
+                self.broadcast_ws(super::remote::protocol::WsOutbound::ToolResult {
+                    name,
+                    output,
+                    is_error,
+                });
+            }
             // 轮询 ask 请求
             if let Some(ref rx) = self.ask_request_rx
                 && let Ok(ask_req) = rx.try_recv()
@@ -2526,6 +2567,16 @@ impl ChatApp {
         // 如果上一帧设置了 pending_tool_execution，本帧才真正执行
         if self.tool_executor.pending_tool_execution {
             self.tool_executor.pending_tool_execution = false;
+
+            // 广播工具开始执行到远程客户端
+            if self.ws_bridge.is_some() {
+                for tc in &self.tool_executor.active_tool_calls {
+                    self.broadcast_ws(super::remote::protocol::WsOutbound::ToolCall {
+                        name: tc.tool_name.clone(),
+                        arguments: tc.arguments.clone(),
+                    });
+                }
+            }
 
             // 处理被 .jcli/ deny 拒绝的工具
             for tc in &self.tool_executor.active_tool_calls {
@@ -2586,7 +2637,14 @@ impl ChatApp {
         }
 
         // 轮询后台工具执行结果
-        self.tool_executor.poll_results();
+        let completed = self.tool_executor.poll_results();
+        for (name, output, is_error) in completed {
+            self.broadcast_ws(super::remote::protocol::WsOutbound::ToolResult {
+                name,
+                output,
+                is_error,
+            });
+        }
 
         // 轮询 ask 工具请求
         if let Some(ref rx) = self.ask_request_rx
@@ -2734,6 +2792,31 @@ impl ChatApp {
 
     /// 初始化 ask 模式状态
     fn init_ask_mode(&mut self, ask_req: AskRequest) {
+        // 广播 Ask 请求到远程客户端
+        if self.ws_bridge.is_some() {
+            let questions: Vec<super::remote::protocol::AskQuestionInfo> = ask_req
+                .questions
+                .iter()
+                .map(|q| super::remote::protocol::AskQuestionInfo {
+                    question: q.question.clone(),
+                    header: q.header.clone(),
+                    options: q
+                        .options
+                        .iter()
+                        .map(|o| super::remote::protocol::AskOptionInfo {
+                            label: o.label.clone(),
+                            description: o.description.clone(),
+                        })
+                        .collect(),
+                    multi_select: q.multi_select,
+                })
+                .collect();
+            self.broadcast_ws(super::remote::protocol::WsOutbound::AskRequest { questions });
+            self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                state: "ask".to_string(),
+            });
+        }
+
         self.ui.tool_ask_mode = true;
         self.ui.tool_ask_questions = ask_req.questions;
         self.ui.tool_ask_current_idx = 0;

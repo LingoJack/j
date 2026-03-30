@@ -260,6 +260,28 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                         }
                         _ => app.update(Action::RejectPendingTool),
                     },
+                    WsInbound::AskResponse { answers } => {
+                        if app.ui.tool_ask_mode {
+                            // 将远程回答直接构建为 JSON 响应发送给 Ask 工具
+                            let response = serde_json::json!({ "answers": answers }).to_string();
+                            if let Some(tx) = app.ask_response_tx.take() {
+                                let _ = tx.send(response);
+                            }
+                            // 清理 ask 状态
+                            app.ui.tool_ask_mode = false;
+                            app.ui.tool_ask_questions.clear();
+                            app.ui.tool_ask_current_idx = 0;
+                            app.ui.tool_ask_answers.clear();
+                            app.ui.tool_ask_selections.clear();
+                            app.ui.tool_ask_cursor = 0;
+                            if !app.tool_executor.has_pending_confirm() {
+                                app.ui.mode = ChatMode::Chat;
+                            }
+                            app.broadcast_ws(WsOutbound::Status {
+                                state: "loading".to_string(),
+                            });
+                        }
+                    }
                     WsInbound::Cancel => {
                         app.update(Action::CancelStream);
                     }

@@ -8,4 +8,8 @@ allow:
 - Bash(cd /Users/lingojack/dev_custom/j/assets/remote:*)
 - Write
 - Bash(j check:*)
+- Bash(pwd:*)
+- Bash(date:*)
+- Bash(uptime:*)
+- Bash(df -h:*)
 deny: []

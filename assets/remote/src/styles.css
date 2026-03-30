@@ -86,8 +86,12 @@
     @apply border-l-[3px] border-border-light pl-3 text-fg2 my-1.5;
   }
 
+  .md-msg .table-wrap {
+    @apply overflow-x-auto my-1.5 -mx-1;
+  }
+
   .md-msg table {
-    @apply border-collapse my-1.5 text-[13px] w-full;
+    @apply border-collapse text-[13px] w-full;
   }
 
   .md-msg th, .md-msg td {

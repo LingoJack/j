@@ -38,11 +38,15 @@ function CodeBlock({ className, children, ...props }) {
   )
 }
 
+function TableWrap({ children }) {
+  return <div className="table-wrap"><table>{children}</table></div>
+}
+
 export default function Markdown({ content }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      components={{ code: CodeBlock }}
+      components={{ code: CodeBlock, table: TableWrap }}
     >
       {content}
     </ReactMarkdown>

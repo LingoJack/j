@@ -8,7 +8,6 @@ use bridge::WsBridge;
 use std::io;
 use std::net::UdpSocket;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Notify;
 
 /// 检测本机局域网 IP
@@ -57,6 +56,16 @@ fn display_qr_code(url: &str) {
     println!("\n  等待手机连接...\n");
 }
 
+/// 创建带 SO_REUSEADDR 的 TcpListener，避免 "Address already in use" 错误
+async fn bind_with_reuse(port: u16) -> io::Result<tokio::net::TcpListener> {
+    let socket = tokio::net::TcpSocket::new_v4()?;
+    socket.set_reuseaddr(true)?;
+    #[cfg(target_os = "macos")]
+    socket.set_reuseport(true)?;
+    socket.bind(format!("0.0.0.0:{}", port).parse().unwrap())?;
+    socket.listen(128)
+}
+
 /// 启动远程控制服务器并等待客户端连接
 ///
 /// 返回 `(WsBridge, url)` 或 IO 错误。
@@ -75,21 +84,10 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     let client_notify = Arc::new(Notify::new());
     let client_notify2 = Arc::clone(&client_notify);
 
-    // Ctrl+C 中断标志
-    let interrupted = Arc::new(AtomicBool::new(false));
-    let interrupted2 = Arc::clone(&interrupted);
-    let client_notify3 = Arc::clone(&client_notify);
-    ctrlc::set_handler(move || {
-        interrupted2.store(true, Ordering::Relaxed);
-        client_notify3.notify_one(); // 唤醒等待
-    })
-    .ok();
-
     // 启动 tokio runtime 和服务器
     let rt = tokio::runtime::Runtime::new()?;
 
-    let listener =
-        rt.block_on(async { tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await })?;
+    let listener = rt.block_on(bind_with_reuse(port))?;
 
     // 在后台 task 中运行服务器
     let token_clone = token.clone();
@@ -105,21 +103,18 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
         .await;
     });
 
-    // 等待客户端连接（阻塞当前线程，可被 Ctrl+C 唤醒）
-    rt.block_on(async {
-        client_notify.notified().await;
+    // 等待客户端连接，同时监听 Ctrl+C（使用 tokio::signal 替代 ctrlc crate，支持多次调用）
+    let interrupted = rt.block_on(async {
+        tokio::select! {
+            _ = client_notify.notified() => false,
+            _ = tokio::signal::ctrl_c() => true,
+        }
     });
 
-    // 检查是否是 Ctrl+C 中断
-    if interrupted.load(Ordering::Relaxed) {
-        // 清理 ctrlc handler
-        let _ = ctrlc::set_handler(|| {});
+    if interrupted {
         println!("\n  ⏹  已取消\n");
         return Err(io::Error::new(io::ErrorKind::Interrupted, "用户取消"));
     }
-
-    // 清理 ctrlc handler（TUI 有自己的输入处理）
-    let _ = ctrlc::set_handler(|| {});
 
     println!("  ✅ 客户端已连接！正在启动对话界面...\n");
     std::thread::sleep(std::time::Duration::from_millis(500));
