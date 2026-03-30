@@ -12,4 +12,5 @@ allow:
 - Bash(date:*)
 - Bash(uptime:*)
 - Bash(df -h:*)
+- Bash(cargo check:*)
 deny: []

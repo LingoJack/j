@@ -32,8 +32,8 @@ function Message({ role, content, streaming, onDetail }) {
   )
 }
 
-function ToolCallMsg({ name, arguments: args, completed, onDetail }) {
-  const [expanded, setExpanded] = useState(false)
+function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapsed, onDetail }) {
+  const [expanded, setExpanded] = useState(!initCollapsed)
   let parsed = null
   try { parsed = JSON.parse(args) } catch {}
 
@@ -83,8 +83,8 @@ function ToolCallMsg({ name, arguments: args, completed, onDetail }) {
   )
 }
 
-function ToolResultMsg({ toolName, output, isError, onDetail }) {
-  const [expanded, setExpanded] = useState(false)
+function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, onDetail }) {
+  const [expanded, setExpanded] = useState(!initCollapsed)
   const icon = isError ? '✗' : '✓'
   const iconCls = isError ? 'text-err' : 'text-ok'
   const hasOutput = output && output.trim()
@@ -263,8 +263,47 @@ export default function App() {
 
       case 'session_sync':
         streamContentRef.current = ''
-        // Filter empty messages from sync
-        setMessages(msg.messages.filter(m => m.content).map(m => ({ role: m.role, content: m.content })))
+        // 转换后端消息为前端格式，正确处理 tool_calls 和 tool_result
+        // 先建立 tool_call_id -> tool_name 映射
+        const toolNameMap = {}
+        for (const m of msg.messages) {
+          if (m.tool_calls) {
+            for (const tc of m.tool_calls) {
+              toolNameMap[tc.id] = tc.name
+            }
+          }
+        }
+        
+        const syncedMsgs = []
+        for (const m of msg.messages) {
+          if (m.tool_calls && m.tool_calls.length > 0) {
+            // assistant 消息带有 tool_calls：生成 tool_call 消息，默认折叠
+            for (const tc of m.tool_calls) {
+              syncedMsgs.push({
+                role: 'tool_call',
+                name: tc.name,
+                arguments: tc.arguments,
+                id: tc.id,
+                completed: true, // 断线重连后默认已完成
+                collapsed: true, // 默认折叠
+              })
+            }
+          } else if (m.role === 'tool' && m.tool_call_id) {
+            // tool 消息：生成 tool_result 消息，默认折叠
+            const toolName = toolNameMap[m.tool_call_id] || 'tool'
+            syncedMsgs.push({
+              role: 'tool_result',
+              toolName: toolName,
+              output: m.content,
+              isError: false,
+              collapsed: true, // 默认折叠
+            })
+          } else if (m.content) {
+            // 普通消息
+            syncedMsgs.push({ role: m.role, content: m.content })
+          }
+        }
+        setMessages(syncedMsgs)
         setModelName(msg.model || '--')
         setState(msg.status)
         autoScrollRef.current = true
@@ -388,6 +427,7 @@ export default function App() {
               name={m.name} 
               arguments={m.arguments} 
               completed={m.completed}
+              collapsed={m.collapsed}
               onDetail={() => setDetailMessage(m)}
             />
           ) : m.role === 'tool_result' ? (
@@ -396,6 +436,7 @@ export default function App() {
               toolName={m.toolName} 
               output={m.output} 
               isError={m.isError}
+              collapsed={m.collapsed}
               onDetail={() => setDetailMessage(m)}
             />
           ) : (

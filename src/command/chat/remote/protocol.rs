@@ -103,9 +103,22 @@ pub struct AskOptionInfo {
     pub description: String,
 }
 
-/// 同步消息（简化版 ChatMessage）
+/// 同步工具调用信息
+#[derive(Debug, Clone, Serialize)]
+pub struct SyncToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+/// 同步消息（完整版 ChatMessage）
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncMessage {
     pub role: String,
+    #[serde(default)]
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<SyncToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }

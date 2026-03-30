@@ -1,7 +1,7 @@
 use super::super::input_thread::InputThread;
 use super::super::remote;
 use super::super::remote::bridge::WsBridge;
-use super::super::remote::protocol::{SyncMessage, WsInbound, WsOutbound};
+use super::super::remote::protocol::{SyncMessage, SyncToolCall, WsInbound, WsOutbound};
 use super::super::storage::{
     ChatSession, legacy_chat_history_path, load_style, load_system_prompt, save_style,
     save_system_prompt,
@@ -294,6 +294,16 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                             .map(|m| SyncMessage {
                                 role: m.role.clone(),
                                 content: m.content.clone(),
+                                tool_calls: m.tool_calls.as_ref().map(|tc| {
+                                    tc.iter()
+                                        .map(|t| SyncToolCall {
+                                            id: t.id.clone(),
+                                            name: t.name.clone(),
+                                            arguments: t.arguments.clone(),
+                                        })
+                                        .collect()
+                                }),
+                                tool_call_id: m.tool_call_id.clone(),
                             })
                             .collect();
                         let status = if app.state.is_loading {

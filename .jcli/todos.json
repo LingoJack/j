@@ -1,12 +1,17 @@
 [
   {
     "id": "1",
-    "content": "修复 tool_result 发送截断内容的问题 - 后端发送完整 output",
+    "content": "扩展 SyncMessage 协议，保留 tool_calls 和 tool_call_id 信息",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "验证复制按钮功能是否正常工作",
+    "content": "修改 tui_loop.rs 构建完整同步消息",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "修改前端 App.jsx 解析 session_sync 消息",
     "status": "completed"
   }
 ]
