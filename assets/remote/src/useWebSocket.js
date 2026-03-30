@@ -29,7 +29,7 @@ function b64urlDecode(str) {
 
 // ECDH: 生成客户端密钥对，返回 { privateKey: Uint8Array(32), publicKey: Uint8Array(65) }
 function generateKeyPair() {
-  const privateKey = p256.utils.randomPrivateKey()
+  const privateKey = p256.utils.randomSecretKey()
   const publicKey = p256.getPublicKey(privateKey, false) // uncompressed (65 bytes)
   return { privateKey, publicKey }
 }
