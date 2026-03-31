@@ -227,6 +227,10 @@ pub struct UIState {
     pub image_cache: Arc<Mutex<ImageCache>>,
     /// 是否展开工具调用详情（Ctrl+O 切换）
     pub expand_tools: bool,
+    /// 最近一次按键是否带 Ctrl 修饰符（用于 hint bar 显示 Ctrl 组合键提示）
+    pub ctrl_hint_active: bool,
+    /// 终端是否支持 Kitty keyboard protocol（支持时才启用 Ctrl 按下/释放检测）
+    pub keyboard_enhanced: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
     /// 配置面板当前 Tab
@@ -1311,6 +1315,8 @@ impl ChatApp {
                 pending_style_edit: false,
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
                 expand_tools: false,
+                ctrl_hint_active: false,
+                keyboard_enhanced: false,
                 config_scroll_offset: 0,
                 config_tab: ConfigTab::Model,
                 session_list: Vec::new(),

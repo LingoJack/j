@@ -763,8 +763,23 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
     let hints = match app.ui.mode {
         ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求")],
+        ChatMode::Chat if app.ui.keyboard_enhanced && app.ui.ctrl_hint_active => vec![
+            ("Ctrl+T", "切换模型"),
+            ("Ctrl+L", "归档"),
+            ("Ctrl+Y", "复制"),
+            ("Ctrl+B", "浏览"),
+            ("Ctrl+E", "配置"),
+            ("Ctrl+G", "日志"),
+            ("Ctrl+O", "工具详情"),
+        ],
+        ChatMode::Chat if app.ui.keyboard_enhanced => vec![
+            ("@", "补全"),
+            ("Ctrl", "更多"),
+            ("?/F1", "帮助"),
+            ("Esc", "退出"),
+        ],
         ChatMode::Chat => vec![
-            ("@", "skill/file/command"),
+            ("@", "补全"),
             ("Ctrl+T", "切换模型"),
             ("Ctrl+L", "归档"),
             ("Ctrl+Y", "复制"),

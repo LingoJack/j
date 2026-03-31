@@ -15,7 +15,10 @@ use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
-    event::{self, Event, KeyEventKind, MouseEventKind},
+    event::{
+        self, Event, KeyEventKind, KeyboardEnhancementFlags, MouseEventKind,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -27,6 +30,7 @@ fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
     let _ = execute!(
         io::stdout(),
+        PopKeyboardEnhancementFlags,
         event::DisableMouseCapture,
         LeaveAlternateScreen
     );
@@ -36,8 +40,28 @@ fn restore_terminal() {
 /// 返回 true 表示应退出主循环。
 fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> bool {
     match evt {
+        // Ctrl 单独按下/释放 → 仅切换 hint bar，不转发给按键处理
+        Event::Key(key)
+            if matches!(
+                key.code,
+                crossterm::event::KeyCode::Modifier(
+                    crossterm::event::ModifierKeyCode::LeftControl
+                        | crossterm::event::ModifierKeyCode::RightControl
+                )
+            ) =>
+        {
+            let active = matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat);
+            if app.ui.ctrl_hint_active != active {
+                app.ui.ctrl_hint_active = active;
+                *needs_redraw = true;
+            }
+        }
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             *needs_redraw = true;
+            // Ctrl+其他键组合按下时也显示 Ctrl hints
+            app.ui.ctrl_hint_active = key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL);
             match app.ui.mode {
                 ChatMode::Chat => {
                     if handle_chat_mode(app, key) {
@@ -53,6 +77,13 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                 ChatMode::ArchiveConfirm => handle_archive_confirm_mode(app, key),
                 ChatMode::ArchiveList => handle_archive_list_mode(app, key),
                 ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
+            }
+        }
+        // 非 Press/Repeat 的其他按键事件（如 Release）→ 清除 ctrl hint
+        Event::Key(key) if key.kind == KeyEventKind::Release => {
+            if app.ui.ctrl_hint_active {
+                app.ui.ctrl_hint_active = false;
+                *needs_redraw = true;
             }
         }
         Event::Resize(_, _) => {
@@ -145,6 +176,16 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, event::EnableMouseCapture)?;
+    // 启用 Kitty keyboard protocol 以捕获单独的修饰键按下/释放事件
+    let keyboard_enhanced = terminal::supports_keyboard_enhancement().unwrap_or(false)
+        && execute!(
+            stdout,
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                    | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+            )
+        )
+        .is_ok();
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -154,6 +195,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     let session_id = generate_session_id();
     let mut app = ChatApp::new(session_id);
+    app.ui.keyboard_enhanced = keyboard_enhanced;
     app.ws_bridge = ws_bridge;
     app.remote_connected = app
         .ws_bridge
@@ -467,6 +509,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        PopKeyboardEnhancementFlags,
         event::DisableMouseCapture,
         LeaveAlternateScreen
     )?;
