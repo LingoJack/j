@@ -597,7 +597,10 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         }
     }
 
-    let line_scroll = if wrapped_lines.len() <= inner_height || cursor_line_idx < inner_height {
+    let line_scroll = if inner_height == 0
+        || wrapped_lines.len() <= inner_height
+        || cursor_line_idx < inner_height
+    {
         0
     } else {
         cursor_line_idx.saturating_sub(inner_height - 1)
@@ -759,16 +762,13 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
     let hints = match app.ui.mode {
-        ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求"), ("↑↓", "滚动")],
+        ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求")],
         ChatMode::Chat => vec![
-            ("Enter", "发送"),
-            ("↑↓", "滚动"),
             ("@", "skill/file/command"),
             ("Ctrl+T", "切换模型"),
             ("Ctrl+L", "归档"),
             ("Ctrl+Y", "复制"),
             ("Ctrl+B", "浏览"),
-            ("Ctrl+S", "流式切换"),
             ("Ctrl+E", "配置"),
             ("Ctrl+G", "日志"),
             ("Ctrl+O", "工具详情"),
@@ -1069,13 +1069,6 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 "浏览消息 (↑↓选择, y/Enter复制)",
                 Style::default().fg(t.help_desc),
             ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+S       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("切换流式/整体输出", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(

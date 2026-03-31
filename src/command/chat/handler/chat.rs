@@ -511,12 +511,6 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return false;
     }
 
-    // Ctrl+S 切换流式/非流式输出
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
-        app.update(Action::ToggleStreamMode);
-        return false;
-    }
-
     let char_count = app.ui.input.chars().count();
 
     match key.code {
