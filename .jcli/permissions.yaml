@@ -46,4 +46,15 @@ allow:
 - ComputerUse(rightclick:*)
 - ComputerUse(scroll:*)
 - ComputerUse(drag:*)
+- Bash(find ../claude-code:*)
+- Bash(find ../claude-code/src:*)
+- Bash(find src/command/chat/tools:*)
+- Bash(find ../claude-code/src/tools/BashTool:*)
+- Grep
+- ComputerUse(find_element:*)
+- Bash(echo "ComputerUse:*)
+- Bash(find ../claude-code/src/tools:*)
+- Glob
+- Bash(find web/src:*)
+- Bash(cargo build:*)
 deny: []

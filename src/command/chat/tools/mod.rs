@@ -1,6 +1,7 @@
 pub mod ask;
 pub mod background;
 mod browser;
+pub mod classification;
 pub mod compact;
 mod computer_use;
 mod file;

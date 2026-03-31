@@ -149,10 +149,11 @@ pub fn build_message_lines_incremental(
                 }
             }
             ROLE_TOOL => {
-                let role_label = m
-                    .tool_call_id
-                    .as_ref()
-                    .map(|id| format!("工具 {}", &id[..id.len().min(8)]));
+                let role_label = m.tool_call_id.as_ref().map(|id| {
+                    // 使用字符数截断，避免 UTF-8 边界问题
+                    let truncated: String = id.chars().take(8).collect();
+                    format!("工具 {}", truncated)
+                });
                 render_tool_result_msg(
                     &m.content,
                     role_label.as_deref().unwrap_or("工具结果"),
@@ -1018,97 +1019,233 @@ pub fn render_tool_call_request_msg(
     tool_calls: &[super::storage::ToolCallItem],
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
-    _theme: &Theme,
+    theme: &Theme,
     expand: bool,
 ) {
-    let dim = Style::default().fg(Color::DarkGray);
-    let tool_name_style = Style::default().fg(Color::Rgb(140, 140, 140));
-    let content_w = bubble_max_width.saturating_sub(6); // "  ⏺ " prefix
+    use super::tools::classification::{ToolCategory, ToolStatus};
+
+    let content_w = bubble_max_width.saturating_sub(6);
 
     for tc in tool_calls {
+        let category = ToolCategory::from_name(&tc.name);
+        let icon = category.icon();
+        let tool_color = category.color(theme);
+        let status = ToolStatus::Pending;
+        let status_icon = status.icon();
+        let status_color = status.color(theme);
+
         if expand {
-            // 展开模式：名称一行 + 参数折行
+            // 展开模式：图标 + 工具名 + 状态（第一行）
             lines.push(Line::from(vec![
-                Span::styled("  ⏺ ", dim),
-                Span::styled(tc.name.clone(), tool_name_style),
+                Span::styled("  ", Style::default()),
+                Span::styled(icon, Style::default().fg(tool_color)),
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    tc.name.clone(),
+                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" ", Style::default()),
+                Span::styled(status_icon, Style::default().fg(status_color)),
             ]));
+
+            // 参数详情
             if !tc.arguments.is_empty() {
-                // 尝试格式化 JSON 参数
-                let formatted_args = format_json_args(&tc.arguments, content_w);
-                for wl in formatted_args {
-                    lines.push(Line::from(Span::styled(format!("    {}", wl), dim)));
+                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&tc.arguments) {
+                    render_json_params_enhanced(&json_value, content_w, lines, theme);
+                } else {
+                    // 非 JSON 参数，普通折行显示
+                    for line in wrap_text(&tc.arguments, content_w) {
+                        lines.push(Line::from(vec![
+                            Span::styled("    ", Style::default()),
+                            Span::styled(line, Style::default().fg(theme.text_dim)),
+                        ]));
+                    }
                 }
             }
         } else {
-            // 折叠模式：一行 "  ⏺ name(truncated_args)"
-            let args_preview: String = tc.arguments.chars().take(80).collect();
-            let suffix = if tc.arguments.chars().count() > 80 {
+            // 折叠模式：图标 + 工具名 + 参数预览
+            let args_preview: String = tc.arguments.chars().take(60).collect();
+            let suffix = if tc.arguments.chars().count() > 60 {
                 "…"
             } else {
                 ""
             };
-            let text = if args_preview.is_empty() {
-                format!("  ⏺ {}", tc.name)
+
+            lines.push(Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(icon, Style::default().fg(tool_color)),
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    tc.name.clone(),
+                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                ),
+                if !args_preview.is_empty() {
+                    Span::styled(
+                        format!(" {}{}", args_preview, suffix),
+                        Style::default().fg(theme.text_dim),
+                    )
+                } else {
+                    Span::raw("")
+                },
+            ]));
+        }
+    }
+}
+
+/// 渲染 JSON 参数（增强版）
+fn render_json_params_enhanced(
+    json: &serde_json::Value,
+    max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    use super::tools::classification::format_json_value;
+
+    if let Some(obj) = json.as_object() {
+        for (key, value) in obj {
+            let value_str = format_json_value(value);
+            let max_val_chars = max_width.saturating_sub(key.chars().count() + 7);
+
+            let value_display = if value_str.chars().count() > max_val_chars {
+                let truncated: String = value_str.chars().take(max_val_chars).collect();
+                format!("{}…", truncated)
             } else {
-                format!("  ⏺ {}({}{})", tc.name, args_preview, suffix)
+                value_str
             };
-            // 截断到 bubble_max_width
-            let display: String = text.chars().take(bubble_max_width).collect();
-            lines.push(Line::from(Span::styled(display, dim)));
+
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(format!("{}:", key), Style::default().fg(theme.text_dim)),
+                Span::styled(" ", Style::default()),
+                Span::styled(value_display, Style::default().fg(theme.text_normal)),
+            ]));
+        }
+    } else {
+        // 非 JSON 对象，直接显示
+        let value_str = format_json_value(json);
+        for line in wrap_text(&value_str, max_width) {
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(line, Style::default().fg(theme.text_normal)),
+            ]));
         }
     }
 }
 
 /// 格式化 JSON 参数字符串，返回适合显示的行列表
 /// 如果是有效的 JSON，则美化格式化；否则原样折行显示
-fn format_json_args(args: &str, max_width: usize) -> Vec<String> {
-    // 尝试解析为 JSON 并美化格式化
-    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(args)
-        && let Ok(pretty) = serde_json::to_string_pretty(&json_value)
-    {
-        // 对格式化后的每一行进行折行处理
-        return pretty
-            .lines()
-            .flat_map(|line| {
-                if display_width(line) > max_width {
-                    wrap_text(line, max_width)
-                } else {
-                    vec![line.to_string()]
-                }
-            })
-            .collect();
-    }
-    // 非 JSON 或解析失败，使用普通折行
-    wrap_text(args, max_width)
-}
-
 /// 渲染工具执行结果消息：展开时完整内容，折叠时只显示标签
 pub fn render_tool_result_msg(
     content: &str,
     label: &str,
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
-    _theme: &Theme,
+    theme: &Theme,
     expand: bool,
 ) {
-    let dim = Style::default().fg(Color::DarkGray);
-    // 折叠模式：一行 "  ✓ label"
-    lines.push(Line::from(Span::styled(format!("  ✓ {}", label), dim)));
+    use super::tools::classification::{ToolCategory, ToolStatus, get_result_summary};
+
+    // 解析 label，格式为 "工具名..." 或 "工具名[id]..."
+    let (tool_name, is_error) = parse_tool_label(label);
+    let category = ToolCategory::from_name(&tool_name);
+    let icon = category.icon();
+    let tool_color = category.color(theme);
+
+    let status = if is_error {
+        ToolStatus::Failed
+    } else {
+        ToolStatus::Success
+    };
+    let status_icon = status.icon();
+    let status_color = status.color(theme);
+
+    // 获取结果摘要
+    let summary = get_result_summary(content, is_error);
+
+    // 第一行：图标 + 工具名 + 状态 + 摘要
+    lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled(icon, Style::default().fg(tool_color)),
+        Span::styled(" ", Style::default()),
+        Span::styled(
+            tool_name.clone(),
+            Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" ", Style::default()),
+        Span::styled(status_icon, Style::default().fg(status_color)),
+        Span::styled(" ", Style::default()),
+        Span::styled(summary, Style::default().fg(status_color)),
+    ]));
 
     if !expand || content.is_empty() {
         return;
     }
-    // 展开模式：缩进显示内容，无背景色
-    // 对 content 做 sanitize，防止旧 history 中残留的 ANSI 码 / 控制字符导致渲染乱码
+
+    // 展开模式：缩进显示内容
     let clean = crate::util::text::sanitize_tool_output(content);
-    let content_w = bubble_max_width.saturating_sub(6); // "    " prefix
-    let all_lines: Vec<String> = clean
-        .lines()
-        .flat_map(|l| wrap_text(l, content_w))
-        .collect();
-    for wl in all_lines {
-        lines.push(Line::from(Span::styled(format!("    {}", wl), dim)));
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    // 错误结果特殊处理
+    if is_error {
+        lines.push(Line::from(vec![
+            Span::styled("    ", Style::default()),
+            Span::styled(
+                "Error:",
+                Style::default()
+                    .fg(theme.toast_error_border)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]));
+
+        let error_lines: Vec<&str> = clean.lines().take(20).collect();
+        for line in error_lines {
+            for wrapped in wrap_text(line, content_w) {
+                lines.push(Line::from(Span::styled(
+                    format!("      {}", wrapped),
+                    Style::default().fg(theme.toast_error_border),
+                )));
+            }
+        }
+
+        let total_lines = clean.lines().count();
+        if total_lines > 20 {
+            lines.push(Line::from(Span::styled(
+                format!("    ... (共 {} 行，显示前 20 行)", total_lines),
+                Style::default().fg(theme.text_dim),
+            )));
+        }
+    } else {
+        // 正常结果
+        let all_lines: Vec<&str> = clean.lines().take(100).collect();
+        for line in all_lines {
+            for wrapped in wrap_text(line, content_w) {
+                lines.push(Line::from(Span::styled(
+                    format!("    {}", wrapped),
+                    Style::default().fg(theme.text_dim),
+                )));
+            }
+        }
+
+        let total_lines = clean.lines().count();
+        if total_lines > 100 {
+            lines.push(Line::from(Span::styled(
+                format!("    ... (共 {} 行，显示前 100 行)", total_lines),
+                Style::default().fg(theme.text_dim),
+            )));
+        }
     }
+}
+
+/// 解析工具标签，提取工具名和错误状态
+fn parse_tool_label(label: &str) -> (String, bool) {
+    // label 格式示例: "Read..." 或 "Bash..." 或带错误的
+    let is_error = label.contains("错误") || label.contains("失败") || label.contains("error");
+    let tool_name = label
+        .split(|c| c == '.' || c == ' ')
+        .next()
+        .unwrap_or(label)
+        .to_string();
+    (tool_name, is_error)
 }
 
 /// 计算思考指示器的脉冲颜色：基于 label_ai 颜色在亮暗之间平滑过渡
