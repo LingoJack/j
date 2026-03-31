@@ -18,4 +18,8 @@ allow:
 - Bash(find .:*)
 - Bash(find assets/remote:*)
 - Bash(mkdir -p:*)
+- Bash(which aic:*)
+- Bash(aic --help:*)
+- Bash(aic mouse:*)
+- Bash(system_profiler SPDisplaysDataType:*)
 deny: []
