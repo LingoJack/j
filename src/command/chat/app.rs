@@ -1,4 +1,5 @@
 use super::agent::run_agent_loop;
+use super::command::{self, CustomCommand};
 use super::compact::CompactConfig;
 use super::hook::{HookContext, HookEvent, HookManager};
 use super::markdown::image_cache::ImageCache;
@@ -190,6 +191,14 @@ pub struct UIState {
     pub skill_popup_filter: String,
     /// 技能弹窗中选中项索引
     pub skill_popup_selected: usize,
+    /// 命令补全弹窗是否激活
+    pub command_popup_active: bool,
+    /// @command: 在 input 中的起始字符索引
+    pub command_popup_start_pos: usize,
+    /// @command: 之后的名称过滤文本
+    pub command_popup_filter: String,
+    /// 命令弹窗中选中项索引
+    pub command_popup_selected: usize,
     /// 统一交互区：当前选中项索引（0=continue, 1=allow, 2=refuse, 3=type）
     pub tool_interact_selected: usize,
     /// 统一交互区：是否处于输入模式
@@ -244,6 +253,8 @@ pub struct ChatState {
     pub is_loading: bool,
     /// 已加载的 skills（用于补全和高亮）
     pub loaded_skills: Vec<Skill>,
+    /// 已加载的自定义命令
+    pub loaded_commands: Vec<CustomCommand>,
     /// 排队的任务列表（new_task 工具产生，当前任务完成后自动执行）
     pub queued_tasks: Arc<Mutex<Vec<String>>>,
     /// 用户在 agent loop 期间发送的待处理消息队列
@@ -1185,7 +1196,8 @@ pub fn config_tab_field_count(app: &ChatApp) -> usize {
         ConfigTab::Global => CONFIG_GLOBAL_FIELDS_TAB.len(),
         ConfigTab::Tools => app.tool_registry.tool_names().len(),
         ConfigTab::Skills => app.state.loaded_skills.len(),
-        ConfigTab::Hooks | ConfigTab::Commands => 0,
+        ConfigTab::Commands => app.state.loaded_commands.len(),
+        ConfigTab::Hooks => 0,
         ConfigTab::Session => app.ui.session_list.len(),
     }
 }
@@ -1219,6 +1231,7 @@ impl ChatApp {
         }
         let theme = Theme::from_name(&agent_config.theme);
         let loaded_skills = skill::load_all_skills();
+        let loaded_commands = command::load_all_commands();
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let background_manager = Arc::new(BackgroundManager::new());
@@ -1274,6 +1287,10 @@ impl ChatApp {
                 skill_popup_start_pos: 0,
                 skill_popup_filter: String::new(),
                 skill_popup_selected: 0,
+                command_popup_active: false,
+                command_popup_start_pos: 0,
+                command_popup_filter: String::new(),
+                command_popup_selected: 0,
                 tool_interact_selected: 0,
                 tool_interact_typing: false,
                 tool_interact_input: String::new(),
@@ -1300,6 +1317,7 @@ impl ChatApp {
                 streaming_content: Arc::new(Mutex::new(String::new())),
                 is_loading: false,
                 loaded_skills,
+                loaded_commands,
                 queued_tasks,
                 pending_user_messages: Arc::new(Mutex::new(Vec::new())),
             },
@@ -1929,6 +1947,10 @@ impl ChatApp {
                         // Toggle individual skill
                         self.update(Action::ToggleMenuToggle);
                     }
+                    ConfigTab::Commands => {
+                        // Toggle individual command
+                        self.update(Action::ToggleMenuToggle);
+                    }
                     _ => {}
                 }
             }
@@ -2104,6 +2126,21 @@ impl ChatApp {
                     } else {
                         self.state.agent_config.disabled_skills.push(name);
                     }
+                } else if self.ui.config_tab == ConfigTab::Commands
+                    && let Some(cmd) = self.state.loaded_commands.get(self.ui.config_field_idx)
+                {
+                    let name = cmd.frontmatter.name.clone();
+                    if let Some(pos) = self
+                        .state
+                        .agent_config
+                        .disabled_commands
+                        .iter()
+                        .position(|d| d == &name)
+                    {
+                        self.state.agent_config.disabled_commands.remove(pos);
+                    } else {
+                        self.state.agent_config.disabled_commands.push(name);
+                    }
                 }
             }
             Action::ToggleMenuEnableAll => {
@@ -2113,6 +2150,9 @@ impl ChatApp {
                 } else if self.ui.config_tab == ConfigTab::Skills {
                     self.state.agent_config.disabled_skills.clear();
                     self.show_toast("已启用全部 Skills", false);
+                } else if self.ui.config_tab == ConfigTab::Commands {
+                    self.state.agent_config.disabled_commands.clear();
+                    self.show_toast("已启用全部命令", false);
                 }
             }
             Action::ToggleMenuDisableAll => {
@@ -2132,6 +2172,14 @@ impl ChatApp {
                         .map(|s| s.frontmatter.name.clone())
                         .collect();
                     self.show_toast("已禁用全部 Skills", false);
+                } else if self.ui.config_tab == ConfigTab::Commands {
+                    self.state.agent_config.disabled_commands = self
+                        .state
+                        .loaded_commands
+                        .iter()
+                        .map(|c| c.frontmatter.name.clone())
+                        .collect();
+                    self.show_toast("已禁用全部命令", false);
                 }
             }
 
@@ -2691,6 +2739,13 @@ impl ChatApp {
             text
         };
 
+        // 展开 @command:name 引用
+        let text = command::expand_command_mentions(
+            &text,
+            &self.state.loaded_commands,
+            &self.state.agent_config.disabled_commands,
+        );
+
         // 添加用户消息
         self.state
             .session
@@ -2777,13 +2832,17 @@ impl ChatApp {
 
         // 把 resolve_system_prompt 所需数据 clone 出来，在后台线程里执行文件 IO，避免阻塞主线程
         let loaded_skills = self.state.loaded_skills.clone();
+        let loaded_commands = self.state.loaded_commands.clone();
         let disabled_skills = self.state.agent_config.disabled_skills.clone();
+        let disabled_commands = self.state.agent_config.disabled_commands.clone();
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
         let system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send> = Box::new(move || {
             use super::storage::{load_memory, load_soul, load_style, load_system_prompt};
             let template = load_system_prompt()?;
             let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
+            let commands_summary =
+                command::build_commands_summary(&loaded_commands, &disabled_commands);
             let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
             let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
             let memory_text = load_memory().unwrap_or_default();
@@ -2792,10 +2851,15 @@ impl ChatApp {
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string());
             let skill_dir = skills_dir().to_string_lossy().to_string();
+            let project_skill_dir = skill::project_skills_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
             let resolved = template
                 .replace("{{.current_dir}}", &current_dir)
                 .replace("{{.skills}}", &skills_summary)
                 .replace("{{.skill_dir}}", &skill_dir)
+                .replace("{{.project_skill_dir}}", &project_skill_dir)
+                .replace("{{.commands}}", &commands_summary)
                 .replace("{{.tools}}", &tools_summary)
                 .replace("{{.style}}", &style_text)
                 .replace("{{.memory}}", &memory_text)

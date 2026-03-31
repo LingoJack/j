@@ -1,7 +1,7 @@
 use super::super::autocomplete::{
-    complete_at_mention, complete_file_mention, complete_skill_mention, get_filtered_files,
-    get_filtered_skill_names, get_filtered_skills, update_at_filter, update_file_filter,
-    update_skill_filter,
+    complete_at_mention, complete_command_mention, complete_file_mention, complete_skill_mention,
+    get_filtered_command_names, get_filtered_files, get_filtered_skill_names, get_filtered_skills,
+    update_at_filter, update_command_filter, update_file_filter, update_skill_filter,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::util::safe_lock;
@@ -59,6 +59,24 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         app.ui.skill_popup_start_pos = app.ui.at_popup_start_pos;
                         app.ui.skill_popup_filter.clear();
                         app.ui.skill_popup_selected = 0;
+                    } else if name == "command:" {
+                        // 选中 command: 选项，补全 @command: 到输入框，然后切换到命令补全模式
+                        let chars: Vec<char> = app.ui.input.chars().collect();
+                        let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
+                        let after: String = if app.ui.cursor_pos < chars.len() {
+                            chars[app.ui.cursor_pos..].iter().collect()
+                        } else {
+                            String::new()
+                        };
+                        let replacement = "@command:";
+                        let new_cursor = before.chars().count() + replacement.chars().count();
+                        app.ui.input = format!("{}{}{}", before, replacement, after);
+                        app.ui.cursor_pos = new_cursor;
+                        app.ui.at_popup_active = false;
+                        app.ui.command_popup_active = true;
+                        app.ui.command_popup_start_pos = app.ui.at_popup_start_pos;
+                        app.ui.command_popup_filter.clear();
+                        app.ui.command_popup_selected = 0;
                     } else if name == "file:" {
                         // 选中 file: 选项，补全 @file: 到输入框，然后切换到文件补全模式
                         let chars: Vec<char> = app.ui.input.chars().collect();
@@ -323,6 +341,97 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.ui.input.insert(byte_idx, c);
                     app.ui.cursor_pos += 1;
                     update_skill_filter(app);
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // ===== 命令补全弹窗拦截 =====
+    if app.ui.command_popup_active {
+        let filtered = get_filtered_command_names(app);
+        match key.code {
+            KeyCode::Up => {
+                if !filtered.is_empty() {
+                    if app.ui.command_popup_selected > 0 {
+                        app.ui.command_popup_selected -= 1;
+                    } else {
+                        app.ui.command_popup_selected = filtered.len() - 1;
+                    }
+                }
+                return false;
+            }
+            KeyCode::Down => {
+                if !filtered.is_empty() {
+                    if app.ui.command_popup_selected < filtered.len() - 1 {
+                        app.ui.command_popup_selected += 1;
+                    } else {
+                        app.ui.command_popup_selected = 0;
+                    }
+                }
+                return false;
+            }
+            KeyCode::Tab | KeyCode::Enter => {
+                if !filtered.is_empty() {
+                    let sel = app.ui.command_popup_selected.min(filtered.len() - 1);
+                    let entry = filtered[sel].clone();
+                    complete_command_mention(app, &entry);
+                    app.ui.command_popup_active = false;
+                    return false;
+                }
+                // filtered 为空时，关闭弹窗，让 Enter 继续处理（发送消息）
+                app.ui.command_popup_active = false;
+                // fall through to normal Enter handling
+            }
+            KeyCode::Esc => {
+                app.ui.command_popup_active = false;
+                return false;
+            }
+            KeyCode::Backspace => {
+                if app.ui.cursor_pos > 0 {
+                    let start = app
+                        .ui
+                        .input
+                        .char_indices()
+                        .nth(app.ui.cursor_pos - 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let end = app
+                        .ui
+                        .input
+                        .char_indices()
+                        .nth(app.ui.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.ui.input.len());
+                    app.ui.input.drain(start..end);
+                    app.ui.cursor_pos -= 1;
+                }
+                // @command: 占 9 个字符，起始位置 + 9 = 冒号之后
+                let prefix_end = app.ui.command_popup_start_pos + 9;
+                if app.ui.cursor_pos < prefix_end {
+                    app.ui.command_popup_active = false;
+                } else {
+                    update_command_filter(app);
+                }
+                return false;
+            }
+            KeyCode::Char(c) => {
+                // 空格关闭命令弹窗，让后续输入正常处理
+                if c == ' ' {
+                    app.ui.command_popup_active = false;
+                    // fall through to normal char handling
+                } else {
+                    let byte_idx = app
+                        .ui
+                        .input
+                        .char_indices()
+                        .nth(app.ui.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.ui.input.len());
+                    app.ui.input.insert(byte_idx, c);
+                    app.ui.cursor_pos += 1;
+                    update_command_filter(app);
                     return false;
                 }
             }
