@@ -1,5 +1,7 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
-use super::super::handler::{get_filtered_files, get_filtered_skill_names, get_filtered_skills};
+use super::super::handler::{
+    get_filtered_command_names, get_filtered_files, get_filtered_skill_names, get_filtered_skills,
+};
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
@@ -68,6 +70,11 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     // ========== 技能补全弹窗覆盖层 ==========
     if app.ui.skill_popup_active {
         draw_skill_popup(f, chunks[2], app);
+    }
+
+    // ========== 命令补全弹窗覆盖层 ==========
+    if app.ui.command_popup_active {
+        draw_command_popup(f, chunks[2], app);
     }
 }
 
@@ -1307,6 +1314,46 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
     );
 }
 
+pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
+    let t = &app.ui.theme;
+    let filtered = get_filtered_command_names(app);
+    if filtered.is_empty() {
+        return;
+    }
+    let max_items = filtered.len().min(8);
+    let labels: Vec<String> = filtered
+        .iter()
+        .take(max_items)
+        .map(|n| format!("  {}  ", n))
+        .collect();
+    let items: Vec<ListItem<'static>> = labels
+        .iter()
+        .map(|label| {
+            ListItem::new(Line::from(Span::styled(
+                label.clone(),
+                Style::default().fg(t.label_ai),
+            )))
+        })
+        .collect();
+    let title = if app.ui.command_popup_filter.is_empty() {
+        " Commands ".to_string()
+    } else {
+        format!(" {} ", app.ui.command_popup_filter)
+    };
+    draw_popup_list(
+        f,
+        input_area,
+        items,
+        &labels,
+        title,
+        t.label_ai,
+        t.border_title,
+        t.bg_title,
+        t.model_sel_highlight_bg,
+        app.ui.command_popup_selected,
+    );
+}
+
 /// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)
 fn find_at_mention_ranges(text: &str) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
@@ -1322,6 +1369,16 @@ fn find_at_mention_ranges(text: &str) -> Vec<(usize, usize)> {
                 // 检查 @skill:name 模式
                 if rest.starts_with("skill:") {
                     let mut end = i + 1 + 6; // @skill: 的末尾
+                    while end < len && !chars[end].is_whitespace() {
+                        end += 1;
+                    }
+                    ranges.push((i, end));
+                    i = end;
+                    continue;
+                }
+                // 检查 @command:name 模式
+                if rest.starts_with("command:") {
+                    let mut end = i + 1 + 8; // @command: 的末尾
                     while end < len && !chars[end].is_whitespace() {
                         end += 1;
                     }

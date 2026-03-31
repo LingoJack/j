@@ -3,6 +3,7 @@ pub mod api;
 pub mod app;
 pub mod archive;
 pub mod autocomplete;
+pub mod command;
 pub mod compact;
 pub mod constants;
 pub mod handler;
@@ -792,10 +793,14 @@ fn resolve_oneshot_system_prompt(
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| ".".to_string());
     let skill_dir = skill::skills_dir().to_string_lossy().to_string();
+    let project_skill_dir = skill::project_skills_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
     let resolved = template
         .replace("{{.current_dir}}", &current_dir)
         .replace("{{.skills}}", "")
         .replace("{{.skill_dir}}", &skill_dir)
+        .replace("{{.project_skill_dir}}", &project_skill_dir)
         .replace("{{.tools}}", &tools_summary)
         .replace("{{.style}}", &style_text)
         .replace("{{.memory}}", &memory_text)

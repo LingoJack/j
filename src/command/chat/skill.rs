@@ -1,9 +1,28 @@
 use crate::config::YamlConfig;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 // ========== 数据结构 ==========
+
+/// Skill 来源层级
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillSource {
+    /// 用户级: ~/.jdata/agent/skills/
+    User,
+    /// 项目级: .jcli/skills/
+    Project,
+}
+
+impl SkillSource {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SkillSource::User => "用户",
+            SkillSource::Project => "项目",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SkillFrontmatter {
@@ -22,27 +41,34 @@ pub struct Skill {
     pub body: String,
     /// skill 目录路径
     pub dir_path: PathBuf,
+    /// 来源层级
+    pub source: SkillSource,
 }
 
 // ========== 加载与解析 ==========
 
-/// 返回 skills 目录: ~/.jdata/agent/skills/
+/// 返回用户级 skills 目录: ~/.jdata/agent/skills/
 pub fn skills_dir() -> PathBuf {
     let dir = YamlConfig::data_dir().join("agent").join("skills");
     let _ = fs::create_dir_all(&dir);
     dir
 }
 
-/// 扫描 skills 目录，加载所有 skill
-pub fn load_all_skills() -> Vec<Skill> {
-    let dir = skills_dir();
-    let mut skills = Vec::new();
+/// 返回项目级 skills 目录: .jcli/skills/（如果存在）
+pub fn project_skills_dir() -> Option<PathBuf> {
+    use super::permission::JcliConfig;
+    let config_dir = JcliConfig::find_config_dir()?;
+    let dir = config_dir.join("skills");
+    if dir.is_dir() { Some(dir) } else { None }
+}
 
-    let entries = match fs::read_dir(&dir) {
+/// 从指定目录加载 skills
+fn load_skills_from_dir(dir: &Path, source: SkillSource) -> Vec<Skill> {
+    let mut skills = Vec::new();
+    let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return skills,
     };
-
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
@@ -50,12 +76,32 @@ pub fn load_all_skills() -> Vec<Skill> {
         }
         let skill_md = path.join("SKILL.md");
         if skill_md.exists()
-            && let Some(skill) = parse_skill_md(&skill_md, &path)
+            && let Some(mut skill) = parse_skill_md(&skill_md, &path)
         {
+            skill.source = source;
             skills.push(skill);
         }
     }
+    skills
+}
 
+/// 扫描 skills 目录，加载所有 skill（用户级 + 项目级，同名时项目级覆盖）
+pub fn load_all_skills() -> Vec<Skill> {
+    let mut map: HashMap<String, Skill> = HashMap::new();
+
+    // 1. 用户级
+    for skill in load_skills_from_dir(&skills_dir(), SkillSource::User) {
+        map.insert(skill.frontmatter.name.clone(), skill);
+    }
+
+    // 2. 项目级（覆盖同名）
+    if let Some(dir) = project_skills_dir() {
+        for skill in load_skills_from_dir(&dir, SkillSource::Project) {
+            map.insert(skill.frontmatter.name.clone(), skill);
+        }
+    }
+
+    let mut skills: Vec<Skill> = map.into_values().collect();
     skills.sort_by(|a, b| a.frontmatter.name.cmp(&b.frontmatter.name));
     skills
 }
@@ -74,11 +120,12 @@ fn parse_skill_md(path: &PathBuf, dir: &Path) -> Option<Skill> {
         frontmatter,
         body: body.trim().to_string(),
         dir_path: dir.to_path_buf(),
+        source: SkillSource::User, // 由调用方覆盖
     })
 }
 
 /// 按 `---` 分隔 frontmatter 和 body
-fn split_frontmatter(content: &str) -> Option<(String, String)> {
+pub(super) fn split_frontmatter(content: &str) -> Option<(String, String)> {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return None;

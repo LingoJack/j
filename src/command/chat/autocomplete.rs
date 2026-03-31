@@ -12,13 +12,17 @@ pub fn update_at_filter(app: &mut ChatApp) {
     app.ui.at_popup_selected = 0;
 }
 
-/// 根据 filter 过滤 @ 弹窗的顶级选项（skill: 和 file:）
+/// 根据 filter 过滤 @ 弹窗的顶级选项（skill:, file:, command:）
 pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
     let filter = app.ui.at_popup_filter.to_lowercase();
     let mut items: Vec<String> = Vec::new();
     let skill_label = "skill:".to_string();
     if filter.is_empty() || skill_label.contains(&filter) {
         items.push(skill_label);
+    }
+    let command_label = "command:".to_string();
+    if filter.is_empty() || command_label.contains(&filter) {
+        items.push(command_label);
     }
     let file_label = "file:".to_string();
     if filter.is_empty() || file_label.contains(&filter) {
@@ -258,6 +262,52 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
     });
     scored.truncate(15);
     scored.into_iter().map(|(_, path)| path).collect()
+}
+
+/// 更新命令补全弹窗的过滤文本
+pub fn update_command_filter(app: &mut ChatApp) {
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    // @command: 占 9 个字符, 过滤文本从 start_pos + 9 开始
+    let start = app.ui.command_popup_start_pos + 9;
+    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
+        app.ui.command_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
+    } else {
+        app.ui.command_popup_filter.clear();
+    }
+    app.ui.command_popup_selected = 0;
+}
+
+/// 根据 command_popup_filter 过滤命令名称列表
+pub fn get_filtered_command_names(app: &ChatApp) -> Vec<String> {
+    let filter = app.ui.command_popup_filter.to_lowercase();
+    app.state
+        .loaded_commands
+        .iter()
+        .filter(|c| {
+            !app.state
+                .agent_config
+                .disabled_commands
+                .iter()
+                .any(|d| d == &c.frontmatter.name)
+        })
+        .map(|c| c.frontmatter.name.clone())
+        .filter(|name| filter.is_empty() || name.to_lowercase().contains(&filter))
+        .collect()
+}
+
+/// 替换 input 中 @command:filter 为 @command:完整名称 + 空格
+pub fn complete_command_mention(app: &mut ChatApp, command_name: &str) {
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let before: String = chars[..app.ui.command_popup_start_pos].iter().collect();
+    let after: String = if app.ui.cursor_pos < chars.len() {
+        chars[app.ui.cursor_pos..].iter().collect()
+    } else {
+        String::new()
+    };
+    let replacement = format!("@command:{} ", command_name);
+    let new_cursor = before.chars().count() + replacement.chars().count();
+    app.ui.input = format!("{}{}{}", before, replacement, after);
+    app.ui.cursor_pos = new_cursor;
 }
 
 /// 替换 input 中 @file:filter 为 @file:完整路径 + 空格

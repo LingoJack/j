@@ -137,7 +137,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             draw_tab_hooks_lines(&mut lines, app);
         }
         ConfigTab::Commands => {
-            draw_tab_commands_lines(&mut lines, app);
+            draw_tab_commands_lines(&mut lines, &mut field_line_indices, app);
         }
         ConfigTab::Session => {
             draw_tab_session_lines(&mut lines, &mut field_line_indices, app);
@@ -577,6 +577,7 @@ fn draw_tab_skills_lines<'a>(
             Style::default().fg(t.config_label)
         };
 
+        let source_tag = format!(" [{}]", skill.source.label());
         lines.push(Line::from(vec![
             Span::styled(pointer, pointer_style),
             Span::styled(toggle_text, toggle_style),
@@ -586,6 +587,7 @@ fn draw_tab_skills_lines<'a>(
                 format!("  {}", skill.frontmatter.description),
                 Style::default().fg(t.config_dim),
             ),
+            Span::styled(source_tag, Style::default().fg(t.config_dim)),
         ]));
     }
 }
@@ -668,19 +670,90 @@ fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     }
 }
 
-/// Commands tab（占位）
-fn draw_tab_commands_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
+/// Commands tab 内容
+fn draw_tab_commands_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
     let t = &app.ui.theme;
+    let total = app.state.loaded_commands.len();
+    let enabled_count = total
+        - app
+            .state
+            .agent_config
+            .disabled_commands
+            .iter()
+            .filter(|d| {
+                app.state
+                    .loaded_commands
+                    .iter()
+                    .any(|c| &c.frontmatter.name == *d)
+            })
+            .count();
+
+    lines.push(Line::from(vec![Span::styled(
+        format!("  已启用: {}/{}", enabled_count, total),
+        Style::default()
+            .fg(t.config_toggle_on)
+            .add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  📋 自定义命令（即将推出）",
-        Style::default().fg(t.config_dim),
-    )));
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  自定义命令允许你创建常用操作的快捷方式。",
-        Style::default().fg(t.config_dim),
-    )));
+
+    if total == 0 {
+        lines.push(Line::from(Span::styled(
+            "  (没有自定义命令，在 ~/.jdata/agent/commands/ 或 .jcli/commands/ 下创建)",
+            Style::default().fg(t.config_dim),
+        )));
+        return;
+    }
+
+    for (i, cmd) in app.state.loaded_commands.iter().enumerate() {
+        field_line_indices.push(lines.len());
+        let is_selected = i == app.ui.config_field_idx;
+        let name = &cmd.frontmatter.name;
+        let is_enabled = !app
+            .state
+            .agent_config
+            .disabled_commands
+            .iter()
+            .any(|d| d == name);
+
+        let pointer = if is_selected { "  ▸ " } else { "    " };
+        let pointer_style = if is_selected {
+            Style::default().fg(t.config_pointer)
+        } else {
+            Style::default()
+        };
+        let toggle_style = if is_enabled {
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_toggle_off)
+        };
+        let toggle_text = if is_enabled { "●" } else { "○" };
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_label)
+        };
+
+        let source_tag = format!(" [{}]", cmd.source.label());
+        lines.push(Line::from(vec![
+            Span::styled(pointer, pointer_style),
+            Span::styled(toggle_text, toggle_style),
+            Span::styled(" ", Style::default()),
+            Span::styled(name.to_string(), name_style),
+            Span::styled(
+                format!("  {}", cmd.frontmatter.description),
+                Style::default().fg(t.config_dim),
+            ),
+            Span::styled(source_tag, Style::default().fg(t.config_dim)),
+        ]));
+    }
 }
 
 /// 格式化 Unix 时间戳为人类可读格式
