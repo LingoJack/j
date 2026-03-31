@@ -1,0 +1,445 @@
+import { useState } from 'react'
+
+type Lang = 'en' | 'zh'
+
+const i18n = {
+  en: {
+    nav: {
+      features: 'Features',
+      quickStart: 'Quick Start',
+      github: 'GitHub'
+    },
+    hero: {
+      badge: 'CLI Tool',
+      title: 'Your command line,',
+      titleHighlight: 'supercharged.',
+      subtitle: 'Alias management, daily reports, todo notes, AI chat, and browser automation.',
+      subtitleExtra: 'One command to boost your productivity.',
+      getStarted: 'Get Started',
+      viewGithub: 'View on GitHub →'
+    },
+    features: {
+      title: 'Core Features',
+      subtitle: 'One tool, many capabilities. From daily task management to AI assistance.',
+      list: [
+        { icon: '⚡', title: 'Alias Management', description: 'Register apps, URLs, and scripts. Access them with j <alias>. Supports categorization and combination.' },
+        { icon: '📝', title: 'Daily Reports', description: 'Quick write, view, and search daily reports with automatic week management. Git sync supported.' },
+        { icon: '✓', title: 'Todo & Notes', description: 'Built-in TUI todo manager with Markdown checkbox support. Links to daily reports on completion.' },
+        { icon: '◉', title: 'AI Chat', description: 'TUI AI chat with multi-model support, streaming output, tool calling, and remote control.' },
+        { icon: '◐', title: 'Browser Automation', description: 'Lite mode for lightweight HTTP control, CDP mode for full browser automation with screenshots.' },
+        { icon: '◈', title: 'Script System', description: 'Create and register scripts as aliases with environment variable injection and new window execution.' }
+      ]
+    },
+    quickStart: {
+      title: 'Quick Start',
+      subtitle: 'Get up and running in minutes.',
+      installation: 'Installation',
+      oneLineInstall: 'One-line install (recommended)',
+      cratesInstall: 'Or install from crates.io',
+      usageExamples: 'Usage Examples',
+      examples: [
+        { cmd: 'j set chrome "/Applications/Google Chrome.app"', description: 'Register app alias' },
+        { cmd: 'j set github https://github.com', description: 'Register URL alias' },
+        { cmd: 'j chrome', description: 'Open Chrome' },
+        { cmd: 'j chrome "search query"', description: 'Search with Chrome' },
+        { cmd: 'j report "Completed feature"', description: 'Write to daily report' },
+        { cmd: 'j todo add Buy milk', description: 'Quick add todo' },
+        { cmd: 'j chat', description: 'Enter AI chat' }
+      ]
+    },
+    more: {
+      title: 'And More',
+      list: [
+        { title: 'Interactive Mode', desc: 'REPL with Tab completion and history suggestions.' },
+        { title: 'Permission Control', desc: 'Fine-grained tool permissions for sensitive operations.' },
+        { title: 'Remote Control', desc: 'Connect mobile for remote AI chat control.' },
+        { title: 'Agent Mode', desc: 'Autonomous multi-step reasoning with tool calling.' },
+        { title: 'Context Compact', desc: 'Three-layer compression for context management.' },
+        { title: 'Multiple Themes', desc: 'Dark, Light, Dracula, Gruvbox, Monokai, Nord.' }
+      ]
+    },
+    tech: {
+      title: 'Built with Rust'
+    },
+    cta: {
+      title: 'Ready to get started?',
+      subtitle: 'One command to begin your productivity journey.'
+    },
+    footer: {
+      license: 'MIT License'
+    }
+  },
+  zh: {
+    nav: {
+      features: '功能',
+      quickStart: '快速开始',
+      github: 'GitHub'
+    },
+    hero: {
+      badge: '命令行工具',
+      title: '你的命令行，',
+      titleHighlight: '如虎添翼。',
+      subtitle: '别名管理、日报系统、待办备忘、AI 对话、浏览器自动化。',
+      subtitleExtra: '一个命令，效率翻倍。',
+      getStarted: '快速开始',
+      viewGithub: '查看源码 →'
+    },
+    features: {
+      title: '核心功能',
+      subtitle: '一个工具，多种能力。从日常任务管理到 AI 辅助。',
+      list: [
+        { icon: '⚡', title: '别名管理', description: '注册应用、URL、脚本，通过 j <别名> 快速访问，支持分类标记和组合使用。' },
+        { icon: '📝', title: '日报系统', description: '快速写入、查看、搜索日报，自动周数管理，支持 Git 同步。' },
+        { icon: '✓', title: '待办备忘', description: '内置 TUI 待办管理，支持 Markdown checkbox，完成时可联动写入日报。' },
+        { icon: '◉', title: 'AI 对话', description: 'TUI AI 对话，多模型支持、流式输出、工具调用，支持远程控制。' },
+        { icon: '◐', title: '浏览器自动化', description: 'Lite 模式轻量级 HTTP 控制，CDP 模式完整浏览器自动化，支持截图。' },
+        { icon: '◈', title: '脚本系统', description: '创建脚本并注册为别名，支持环境变量注入、新窗口执行。' }
+      ]
+    },
+    quickStart: {
+      title: '快速开始',
+      subtitle: '几分钟即可上手。',
+      installation: '安装',
+      oneLineInstall: '一键安装（推荐）',
+      cratesInstall: '或从 crates.io 安装',
+      usageExamples: '使用示例',
+      examples: [
+        { cmd: 'j set chrome "/Applications/Google Chrome.app"', description: '注册应用别名' },
+        { cmd: 'j set github https://github.com', description: '注册 URL 别名' },
+        { cmd: 'j chrome', description: '打开 Chrome' },
+        { cmd: 'j chrome "搜索内容"', description: '用 Chrome 搜索' },
+        { cmd: 'j report "完成功能开发"', description: '写入日报' },
+        { cmd: 'j todo add 买牛奶', description: '快速添加待办' },
+        { cmd: 'j chat', description: '进入 AI 对话' }
+      ]
+    },
+    more: {
+      title: '更多特性',
+      list: [
+        { title: '交互模式', desc: '带 Tab 补全和历史建议的 REPL 环境。' },
+        { title: '权限控制', desc: '细粒度的工具权限配置，敏感操作需确认。' },
+        { title: '远程控制', desc: '扫码连接手机，远程操作 AI 对话。' },
+        { title: 'Agent 模式', desc: '自主多步推理，自动调用工具完成复杂任务。' },
+        { title: '对话压缩', desc: '三层压缩机制，智能管理上下文窗口。' },
+        { title: '多主题支持', desc: 'Dark、Light、Dracula、Gruvbox、Monokai、Nord。' }
+      ]
+    },
+    tech: {
+      title: '基于 Rust 构建'
+    },
+    cta: {
+      title: '准备好了吗？',
+      subtitle: '一行命令，开启高效之旅。'
+    },
+    footer: {
+      license: 'MIT 许可证'
+    }
+  }
+}
+
+// Copy button component
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-medium 
+                 text-stone-600 hover:text-stone-900 bg-white hover:bg-stone-50 
+                 rounded border border-stone-300 hover:border-stone-400 transition-colors shadow-sm"
+    >
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
+
+// Code block component
+function CodeBlock({ children, showCopy = true }: { children: string; showCopy?: boolean }) {
+  return (
+    <div className="relative group">
+      <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono border border-stone-200">
+        <code>{children}</code>
+      </pre>
+      {showCopy && <CopyButton text={children} />}
+    </div>
+  )
+}
+
+// Feature card component
+function FeatureCard({ icon, title, description }: { icon: string; title: string; description: string }) {
+  return (
+    <div className="p-6 bg-white rounded-lg border border-stone-200 hover:border-stone-300 transition-colors">
+      <div className="text-2xl mb-3">{icon}</div>
+      <h3 className="text-base font-medium text-stone-900 mb-2">{title}</h3>
+      <p className="text-stone-600 text-sm leading-relaxed">{description}</p>
+    </div>
+  )
+}
+
+// Command example component
+function CommandExample({ cmd, description }: { cmd: string; description: string }) {
+  return (
+    <div className="py-3 border-b border-stone-200 last:border-0">
+      <code className="text-stone-700 font-mono text-sm block mb-1">
+        {cmd}
+      </code>
+      <span className="text-stone-500 text-sm">{description}</span>
+    </div>
+  )
+}
+
+// Section component
+function Section({ id, children, className = '' }: { id?: string; children: React.ReactNode; className?: string }) {
+  return (
+    <section id={id} className={`py-16 md:py-24 px-6 ${className}`}>
+      <div className="max-w-4xl mx-auto">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+export default function App() {
+  const [lang, setLang] = useState<Lang>('en')
+  const t = i18n[lang]
+  
+  const installCmd = 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh'
+
+  return (
+    <div className="min-h-screen bg-[#faf9f6] text-stone-800">
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/90 backdrop-blur-sm border-b border-stone-200/50">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <a href="#" className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-stone-900">j</span>
+            <span className="text-stone-400 text-sm hidden sm:inline">CLI tool</span>
+          </a>
+          <div className="flex items-center gap-6">
+            {/* Language Switcher */}
+            <button 
+              onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
+              className="text-stone-500 hover:text-stone-900 transition-colors text-sm font-medium"
+            >
+              {lang === 'en' ? '中文' : 'EN'}
+            </button>
+            <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm">
+              {t.nav.features}
+            </a>
+            <a href="#quick-start" className="text-stone-500 hover:text-stone-900 transition-colors text-sm">
+              {t.nav.quickStart}
+            </a>
+            <a 
+              href="https://github.com/LingoJack/j" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
+              </svg>
+              <span className="text-sm hidden sm:inline">{t.nav.github}</span>
+            </a>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="pt-32 pb-16 px-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <span className="inline-block px-3 py-1 text-xs font-medium text-stone-600 bg-white rounded-full border border-stone-200">
+              {t.hero.badge}
+            </span>
+          </div>
+          
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-light text-stone-900 mb-6 leading-tight tracking-tight">
+            {t.hero.title}
+            <br />
+            <span className="text-stone-400">{t.hero.titleHighlight}</span>
+          </h1>
+          
+          <p className="text-lg text-stone-600 mb-8 max-w-2xl leading-relaxed">
+            {t.hero.subtitle}
+            <br className="hidden sm:block" />
+            {t.hero.subtitleExtra}
+          </p>
+          
+          <div className="max-w-lg mb-8">
+            <CodeBlock>{installCmd}</CodeBlock>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-4">
+            <a 
+              href="#quick-start"
+              className="px-5 py-2.5 bg-stone-900 text-white rounded-lg font-medium text-sm hover:bg-stone-800 transition-colors"
+            >
+              {t.hero.getStarted}
+            </a>
+            <a 
+              href="https://github.com/LingoJack/j"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-2.5 text-stone-600 hover:text-stone-900 font-medium text-sm transition-colors"
+            >
+              {t.hero.viewGithub}
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <Section id="features" className="bg-white border-y border-stone-200">
+        <div className="mb-12">
+          <h2 className="text-3xl sm:text-4xl font-light text-stone-900 mb-4">
+            {t.features.title}
+          </h2>
+          <p className="text-stone-500 max-w-lg">
+            {t.features.subtitle}
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {t.features.list.map((feature, index) => (
+            <FeatureCard key={index} {...feature} />
+          ))}
+        </div>
+      </Section>
+
+      {/* Quick Start Section */}
+      <Section id="quick-start">
+        <div className="mb-12">
+          <h2 className="text-3xl sm:text-4xl font-light text-stone-900 mb-4">
+            {t.quickStart.title}
+          </h2>
+          <p className="text-stone-500 max-w-lg">
+            {t.quickStart.subtitle}
+          </p>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Installation */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-4">
+              {t.quickStart.installation}
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-stone-400 mb-2">{t.quickStart.oneLineInstall}</p>
+                <CodeBlock>{installCmd}</CodeBlock>
+              </div>
+              <div>
+                <p className="text-xs text-stone-400 mb-2">{t.quickStart.cratesInstall}</p>
+                <CodeBlock showCopy={true}>cargo install j-cli</CodeBlock>
+              </div>
+            </div>
+          </div>
+          
+          {/* Usage */}
+          <div>
+            <h3 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-4">
+              {t.quickStart.usageExamples}
+            </h3>
+            <div className="space-y-0">
+              {t.quickStart.examples.map((item, index) => (
+                <CommandExample key={index} {...item} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* More Features */}
+      <Section className="bg-white border-y border-stone-200">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-light text-stone-900 mb-4">
+            {t.more.title}
+          </h2>
+        </div>
+        
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {t.more.list.map((item, i) => (
+            <div key={i} className="text-center">
+              <h3 className="font-medium text-stone-900 mb-2">{item.title}</h3>
+              <p className="text-stone-500 text-sm">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Tech Stack */}
+      <Section>
+        <div className="text-center">
+          <h2 className="text-2xl font-light text-stone-900 mb-8">
+            {t.tech.title}
+          </h2>
+          <div className="flex flex-wrap justify-center gap-3">
+            {['clap', 'ratatui', 'async-openai', 'serde', 'tokio'].map((tech) => (
+              <span 
+                key={tech}
+                className="px-4 py-1.5 text-sm text-stone-600 bg-white rounded-full border border-stone-200"
+              >
+                {tech}
+              </span>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* CTA Section */}
+      <Section className="bg-stone-900 text-white">
+        <div className="text-center">
+          <h2 className="text-2xl sm:text-3xl font-light mb-4">
+            {t.cta.title}
+          </h2>
+          <p className="text-stone-400 mb-8 max-w-md mx-auto">
+            {t.cta.subtitle}
+          </p>
+          <div className="max-w-lg mx-auto">
+            <div className="relative">
+              <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono text-left border border-stone-200">
+                <code>{installCmd}</code>
+              </pre>
+              <CopyButton text={installCmd} />
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* Footer */}
+      <footer className="border-t border-stone-200 py-8 px-6 bg-[#faf9f6]">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold text-stone-900">j</span>
+            <span className="text-stone-400 text-sm">
+              {t.footer.license}
+            </span>
+          </div>
+          <div className="flex items-center gap-6">
+            <a 
+              href="https://github.com/LingoJack/j" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-stone-400 hover:text-stone-900 transition-colors text-sm"
+            >
+              GitHub
+            </a>
+            <a 
+              href="https://crates.io/crates/j-cli" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-stone-400 hover:text-stone-900 transition-colors text-sm"
+            >
+              crates.io
+            </a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}

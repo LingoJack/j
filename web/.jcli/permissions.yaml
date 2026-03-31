@@ -1,0 +1,5 @@
+allow_all: false
+allow:
+- Bash(npm install:*)
+- Bash(test -f:*)
+deny: []

@@ -22,4 +22,5 @@ allow:
 - Bash(aic --help:*)
 - Bash(aic mouse:*)
 - Bash(system_profiler SPDisplaysDataType:*)
+- Bash(cd /Users/jacklingo/dev_custom/j/web:*)
 deny: []
