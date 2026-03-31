@@ -63,6 +63,7 @@ impl Tool for RegisterHookTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -204,6 +205,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
 - 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑配置文件"#
                 .to_string(),
             is_error: false,
+                    images: vec![],
         }
     }
 
@@ -214,6 +216,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 return ToolResult {
                     output: "缺少 event 参数".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -224,6 +227,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 return ToolResult {
                     output: format!("未知事件: {}", event_str),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -234,6 +238,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 return ToolResult {
                     output: "缺少 command 参数".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -254,11 +259,13 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         event_str, command, timeout
                     ),
                     is_error: false,
+                    images: vec![],
                 }
             }
             Err(e) => ToolResult {
                 output: format!("获取 HookManager 锁失败: {}", e),
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -271,6 +278,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     return ToolResult {
                         output: "当前没有已注册的 hook".to_string(),
                         is_error: false,
+                        images: vec![],
                     };
                 }
 
@@ -288,11 +296,13 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 ToolResult {
                     output,
                     is_error: false,
+                    images: vec![],
                 }
             }
             Err(e) => ToolResult {
                 output: format!("获取 HookManager 锁失败: {}", e),
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -304,6 +314,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 return ToolResult {
                     output: "缺少 event 参数".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -314,6 +325,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 return ToolResult {
                     output: format!("未知事件: {}", event_str),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -329,6 +341,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                             event_str, index
                         ),
                         is_error: false,
+                        images: vec![],
                     }
                 } else {
                     ToolResult {
@@ -337,12 +350,14 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                             event_str, index
                         ),
                         is_error: true,
+                        images: vec![],
                     }
                 }
             }
             Err(e) => ToolResult {
                 output: format!("获取 HookManager 锁失败: {}", e),
                 is_error: true,
+                images: vec![],
             },
         }
     }

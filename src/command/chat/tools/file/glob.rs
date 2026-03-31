@@ -62,6 +62,7 @@ impl Tool for GlobTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -72,6 +73,7 @@ impl Tool for GlobTool {
                 return ToolResult {
                     output: "参数缺少 pattern 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -134,6 +136,7 @@ impl Tool for GlobTool {
                 return ToolResult {
                     output: format!("glob 模式无效: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -153,6 +156,7 @@ impl Tool for GlobTool {
             return ToolResult {
                 output: format!("未找到匹配 '{}' 的文件", pattern),
                 is_error: false,
+                images: vec![],
             };
         }
 
@@ -189,6 +193,7 @@ impl Tool for GlobTool {
         ToolResult {
             output: result,
             is_error: false,
+            images: vec![],
         }
     }
 

@@ -85,6 +85,7 @@ impl Tool for GrepTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -95,6 +96,7 @@ impl Tool for GrepTool {
                 return ToolResult {
                     output: "参数缺少 pattern 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -110,6 +112,7 @@ impl Tool for GrepTool {
                 return ToolResult {
                     output: format!("正则表达式无效: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -181,6 +184,7 @@ impl Tool for GrepTool {
                 return ToolResult {
                     output: "[已取消]".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
 
@@ -276,6 +280,7 @@ impl Tool for GrepTool {
                 return ToolResult {
                     output: format!("未找到匹配 '{}' 的文件", pattern),
                     is_error: false,
+                    images: vec![],
                 };
             }
             let total = file_matches.len();
@@ -299,12 +304,14 @@ impl Tool for GrepTool {
             ToolResult {
                 output,
                 is_error: false,
+                images: vec![],
             }
         } else if output_mode == "count" {
             if file_matches.is_empty() {
                 return ToolResult {
                     output: format!("未找到匹配 '{}' 的内容", pattern),
                     is_error: false,
+                    images: vec![],
                 };
             }
             let mut output = format!("共 {} 处匹配:\n\n", total_count);
@@ -312,12 +319,14 @@ impl Tool for GrepTool {
             ToolResult {
                 output,
                 is_error: false,
+                images: vec![],
             }
         } else {
             if matches.is_empty() {
                 return ToolResult {
                     output: format!("未找到匹配 '{}' 的内容", pattern),
                     is_error: false,
+                    images: vec![],
                 };
             }
             let total = matches.len();
@@ -341,6 +350,7 @@ impl Tool for GrepTool {
             ToolResult {
                 output,
                 is_error: false,
+                images: vec![],
             }
         }
     }

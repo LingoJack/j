@@ -33,11 +33,13 @@ impl Tool for TodoReadTool {
             return ToolResult {
                 output: "No todo items found. Use TodoWrite to create new items.".to_string(),
                 is_error: false,
+                images: vec![],
             };
         }
         ToolResult {
             output: serde_json::to_string_pretty(&items).unwrap_or_default(),
             is_error: false,
+            images: vec![],
         }
     }
 }

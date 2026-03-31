@@ -68,6 +68,7 @@ pub async fn run_agent_loop(
                     content: notif_msg,
                     tool_calls: None,
                     tool_call_id: None,
+                    images: None,
                 });
                 write_info_log(
                     "BackgroundNotification",
@@ -88,6 +89,7 @@ pub async fn run_agent_loop(
                 ),
                 tool_calls: None,
                 tool_call_id: None,
+                images: None,
             });
             write_info_log(
                 "TodoNagReminder",
@@ -313,6 +315,7 @@ pub async fn run_agent_loop(
                                         &tool_result_rx,
                                         &pending_user_messages,
                                         &hook_manager,
+                                        provider.supports_vision,
                                     ) {
                                         Ok(compact_requested) => {
                                             // ── Layer 3: compact tool 触发 ──
@@ -381,6 +384,7 @@ pub async fn run_agent_loop(
                     &tool_result_rx,
                     &pending_user_messages,
                     &hook_manager,
+                    provider.supports_vision,
                 ) {
                     Ok(compact_requested) => {
                         // ── Layer 3: compact tool 触发 ──
@@ -427,6 +431,7 @@ pub async fn run_agent_loop(
                                     &tool_result_rx,
                                     &pending_user_messages,
                                     &hook_manager,
+                                    provider.supports_vision,
                                 ) {
                                     Ok(compact_requested) => {
                                         // ── Layer 3: compact tool 触发 ──
@@ -529,6 +534,7 @@ fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg])
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
 /// 返回 Ok(bool) 表示成功（应 continue 循环），bool 为 true 时表示有 compact tool 被调用
 /// Err(()) 表示 channel 断开（应 return）
+#[allow(clippy::too_many_arguments)]
 fn process_tool_calls(
     tool_items: Vec<ToolCallItem>,
     assistant_text: String,
@@ -537,6 +543,7 @@ fn process_tool_calls(
     tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
     pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
     hook_manager: &HookManager,
+    supports_vision: bool,
 ) -> Result<bool, ()> {
     log_tool_request(&tool_items);
 
@@ -555,6 +562,7 @@ fn process_tool_calls(
         content: assistant_text,
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
+        images: None,
     });
 
     if tx
@@ -576,16 +584,19 @@ fn process_tool_calls(
 
     for result in tool_results {
         let mut result_content = result.result;
+        let result_images = result.images;
+
+        // 查找工具名
+        let tool_name = tool_items
+            .iter()
+            .find(|t| t.id == result.tool_call_id)
+            .map(|t| t.name.clone());
 
         // ★ PostToolExecution hook
         if hook_manager.has_hooks_for(HookEvent::PostToolExecution) {
-            let tool_name = tool_items
-                .iter()
-                .find(|t| t.id == result.tool_call_id)
-                .map(|t| t.name.clone());
             let ctx = HookContext {
                 event: HookEvent::PostToolExecution,
-                tool_name,
+                tool_name: tool_name.clone(),
                 tool_result: Some(result_content.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())
@@ -603,8 +614,29 @@ fn process_tool_calls(
             role: ROLE_TOOL.to_string(),
             content: result_content,
             tool_calls: None,
-            tool_call_id: Some(result.tool_call_id),
+            tool_call_id: Some(result.tool_call_id.clone()),
+            images: None,
         });
+
+        // 如果模型支持视觉且工具返回了图片，注入为 user message
+        if supports_vision && !result_images.is_empty() {
+            let tool_label = tool_name.as_deref().unwrap_or("unknown");
+            messages.push(ChatMessage {
+                role: ROLE_USER.to_string(),
+                content: format!("[图片来自工具: {}]", tool_label),
+                tool_calls: None,
+                tool_call_id: None,
+                images: Some(
+                    result_images
+                        .into_iter()
+                        .map(|img| super::storage::ImageData {
+                            base64: img.base64,
+                            media_type: img.media_type,
+                        })
+                        .collect(),
+                ),
+            });
+        }
     }
 
     // 增量推送本轮新增的 tool_call + tool_result 消息到主线程

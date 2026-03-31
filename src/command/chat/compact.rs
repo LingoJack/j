@@ -232,12 +232,14 @@ pub async fn auto_compact(
         ),
         tool_calls: None,
         tool_call_id: None,
+        images: None,
     });
     messages.push(ChatMessage {
         role: ROLE_ASSISTANT.to_string(),
         content: "Understood. I have the context from the summary. Continuing.".to_string(),
         tool_calls: None,
         tool_call_id: None,
+        images: None,
     });
 
     Ok(())

@@ -76,6 +76,7 @@ impl Tool for ShellTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -86,6 +87,7 @@ impl Tool for ShellTool {
                 return ToolResult {
                     output: "参数缺少 command 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -111,6 +113,7 @@ impl Tool for ShellTool {
             return ToolResult {
                 output: "该命令被安全策略拒绝执行".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -132,6 +135,7 @@ impl Tool for ShellTool {
                 return ToolResult {
                     output: format!("指定的工作目录不存在: {}", dir),
                     is_error: true,
+                    images: vec![],
                 };
             }
             cmd.current_dir(path);
@@ -143,6 +147,7 @@ impl Tool for ShellTool {
                 return ToolResult {
                     output: format!("执行失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -178,6 +183,7 @@ impl Tool for ShellTool {
                 return ToolResult {
                     output: "[已取消]".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
 
@@ -203,6 +209,7 @@ impl Tool for ShellTool {
                         format!("{}\n{}", partial, timeout_msg)
                     },
                     is_error: true,
+                    images: vec![],
                 };
             }
 
@@ -213,6 +220,7 @@ impl Tool for ShellTool {
                     return ToolResult {
                         output: format!("等待进程失败: {}", e),
                         is_error: true,
+                        images: vec![],
                     };
                 }
             }
@@ -231,6 +239,7 @@ impl Tool for ShellTool {
                 result
             },
             is_error,
+            images: vec![],
         }
     }
 
@@ -402,6 +411,7 @@ impl ShellTool {
             })
             .to_string(),
             is_error: false,
+            images: vec![],
         }
     }
 }

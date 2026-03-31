@@ -215,6 +215,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     api_base: "https://api.openai.com/v1".to_string(),
                     api_key: "sk-your-api-key".to_string(),
                     model: "gpt-4o".to_string(),
+                    supports_vision: false,
                 }],
                 active_index: 0,
                 system_prompt: None,
@@ -398,6 +399,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // ================================================================
         // Phase 4: Collect Input — 从 channel 读事件（输入线程持续收集，不受渲染阻塞影响）
         // ================================================================
+        #[allow(clippy::if_same_then_else)]
         let poll_timeout = if app.state.is_loading {
             std::time::Duration::from_millis(300)
         } else if app.ui.mode == ChatMode::ToolConfirm {

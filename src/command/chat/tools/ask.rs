@@ -102,6 +102,7 @@ impl Tool for AskTool {
                 return ToolResult {
                     output: "参数解析失败".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -112,6 +113,7 @@ impl Tool for AskTool {
                 return ToolResult {
                     output: "缺少 questions 参数".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -120,6 +122,7 @@ impl Tool for AskTool {
             return ToolResult {
                 output: "questions 数量必须为 1-4 个".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -165,6 +168,7 @@ impl Tool for AskTool {
                 return ToolResult {
                     output: format!("问题 '{}' 的选项数量必须为 2-4 个", question),
                     is_error: true,
+                    images: vec![],
                 };
             }
 
@@ -188,6 +192,7 @@ impl Tool for AskTool {
             return ToolResult {
                 output: "无法发送提问请求（主线程可能已退出）".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -196,10 +201,12 @@ impl Tool for AskTool {
             Ok(response) => ToolResult {
                 output: response,
                 is_error: false,
+                images: vec![],
             },
             Err(_) => ToolResult {
                 output: "等待用户响应时连接断开".to_string(),
                 is_error: true,
+                images: vec![],
             },
         }
     }

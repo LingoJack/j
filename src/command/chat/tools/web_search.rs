@@ -63,6 +63,7 @@ impl Tool for WebSearchTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -84,6 +85,7 @@ fn exec_search(args: &Value) -> ToolResult {
             return ToolResult {
                 output: "缺少 query 参数".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -104,6 +106,7 @@ fn exec_search(args: &Value) -> ToolResult {
             return ToolResult {
                 output: "未设置 EXA_API_KEY 环境变量。请在 https://exa.ai/ 获取 API Key 并设置环境变量。".to_string(),
                 is_error: true,
+                    images: vec![],
             };
         }
     };
@@ -129,6 +132,7 @@ fn exec_search(args: &Value) -> ToolResult {
             return ToolResult {
                 output: format!("创建 HTTP 客户端失败: {}", e),
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -146,6 +150,7 @@ fn exec_search(args: &Value) -> ToolResult {
             return ToolResult {
                 output: format!("Exa Search 请求失败: {}", e),
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -156,6 +161,7 @@ fn exec_search(args: &Value) -> ToolResult {
         return ToolResult {
             output: format!("Exa Search API 错误 {}: {}", status.as_u16(), body),
             is_error: true,
+            images: vec![],
         };
     }
 
@@ -165,6 +171,7 @@ fn exec_search(args: &Value) -> ToolResult {
             return ToolResult {
                 output: format!("解析 Exa Search 响应失败: {}", e),
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -175,6 +182,7 @@ fn exec_search(args: &Value) -> ToolResult {
             return ToolResult {
                 output: "未找到搜索结果".to_string(),
                 is_error: false,
+                images: vec![],
             };
         }
     };
@@ -183,6 +191,7 @@ fn exec_search(args: &Value) -> ToolResult {
         return ToolResult {
             output: "未找到搜索结果".to_string(),
             is_error: false,
+            images: vec![],
         };
     }
 
@@ -221,5 +230,6 @@ fn exec_search(args: &Value) -> ToolResult {
     ToolResult {
         output,
         is_error: false,
+        images: vec![],
     }
 }
