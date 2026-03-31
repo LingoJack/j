@@ -72,7 +72,8 @@
       "Bash(aic screenshot:*)",
       "Bash(aic mouse:*)",
       "Bash(aic find:*)",
-      "Bash(aic ax:*)"
+      "Bash(aic ax:*)",
+      "Bash(find /Users/jacklingo/dev_custom/aic -name *indicator* -o -name Cargo.toml)"
     ]
   },
   "language": "zh-CN",

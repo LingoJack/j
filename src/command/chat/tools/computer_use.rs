@@ -406,9 +406,11 @@ end tell
         let _ = std::fs::remove_file(&tmp_path);
 
         // 解析 SoM JSON 索引（从 stderr）
+        // aic 的 stderr 可能包含额外文本（如 "Saved to ..."），需要提取 JSON 数组部分
         let mut output = String::new();
         if som && !stderr.is_empty() {
-            match serde_json::from_str::<Vec<SomEntry>>(&stderr) {
+            let som_json = extract_json_array(&stderr).unwrap_or(&stderr);
+            match serde_json::from_str::<Vec<SomEntry>>(som_json) {
                 Ok(entries) => {
                     output.push_str(&format!("[截屏完成，共 {} 个可交互元素]\n", entries.len()));
                     output.push_str(&format!("当前活跃窗口: {}\n\n", active_window));
@@ -453,6 +455,8 @@ end tell
                         if let Some(ref app) = app_name {
                             match Self::ax_click_element(&entry, app) {
                                 Ok(msg) => {
+                                    // 显示光圈指示器（AX 点击绕过了 aic mouse，需手动触发）
+                                    show_click_indicator(entry.center_x, entry.center_y);
                                     let active_window = Self::get_active_window();
                                     return ToolResult {
                                         output: format!(
@@ -961,6 +965,59 @@ end tell
 }
 
 // ========== 辅助函数 ==========
+
+/// 触发 aic-indicator 显示点击光圈（fire-and-forget）
+/// 用于 AX 点击等绕过 aic mouse 命令的场景
+fn show_click_indicator(x: f64, y: f64) {
+    // 尝试找到 aic-indicator 二进制
+    let bin = which_aic_indicator();
+    if let Some(path) = bin {
+        let _ = Command::new(path)
+            .args([x.to_string(), y.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn(); // fire-and-forget
+    }
+}
+
+/// 查找 aic-indicator 二进制路径
+fn which_aic_indicator() -> Option<std::path::PathBuf> {
+    // 先查 aic 同目录
+    if let Ok(output) = Command::new("which").arg("aic").output() {
+        if output.status.success() {
+            let aic_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Some(dir) = std::path::Path::new(&aic_path).parent() {
+                let indicator = dir.join("aic-indicator");
+                if indicator.exists() {
+                    return Some(indicator);
+                }
+            }
+        }
+    }
+    // 再查 PATH
+    if let Ok(output) = Command::new("which").arg("aic-indicator").output() {
+        if output.status.success() {
+            let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !p.is_empty() {
+                return Some(std::path::PathBuf::from(p));
+            }
+        }
+    }
+    None
+}
+
+/// 从可能包含额外文本的字符串中提取 JSON 数组部分
+/// aic 的 stderr 可能输出: `[{...}]\nSaved to /tmp/...` 导致 serde 解析失败
+fn extract_json_array(s: &str) -> Option<&str> {
+    let start = s.find('[')?;
+    // 从后往前找最后一个 ']'
+    let end = s.rfind(']')?;
+    if end > start {
+        Some(&s[start..=end])
+    } else {
+        None
+    }
+}
 
 /// 获取当前鼠标光标位置
 fn get_cursor_position() -> Option<(f64, f64)> {
