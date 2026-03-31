@@ -26,4 +26,6 @@ allow:
 - Bash(git status:*)
 - Bash(git add:*)
 - Bash(git restore:*)
+- Bash(cat /Users/jacklingo/dev_custom/j/Makefile:*)
+- Bash(cd /Users/jacklingo/dev_custom/j:*)
 deny: []

@@ -58,7 +58,7 @@ current_dir: ## 显示当前目录信息
 	@echo "分支: $(GIT_BRANCH)"
 	@echo "======================================"
 
-push: current_dir fmt ## 提交并推送代码
+push: current_dir fmt build-web ## 提交并推送代码
 	@echo "📤 推送代码到远程仓库..."
 	@git add .\
 	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
@@ -80,6 +80,11 @@ build-remote: ## 构建 Remote 前端
 	@echo "🌐 构建 Remote 前端..."
 	@cd assets/remote && npm install --silent && npm run build && cp dist/remote.html ..
 	@echo "☑️ Remote 前端构建完成"
+
+build-web: ## 构建 Web 前端
+	@echo "🌐 构建 Web 前端..."
+	@cd web && npm install --silent && npm run build
+	@echo "☑️ Web 前端构建完成"
 
 build: ## 构建项目（调试模式）
 	@echo "🔨 构建项目..."
