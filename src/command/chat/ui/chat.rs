@@ -756,7 +756,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ChatMode::Chat => vec![
             ("Enter", "发送"),
             ("↑↓", "滚动"),
-            ("@", "技能"),
+            ("@", "skill/file/command"),
             ("Ctrl+T", "切换模型"),
             ("Ctrl+L", "归档"),
             ("Ctrl+R", "还原"),
