@@ -7,9 +7,12 @@ use async_openai::{
     types::chat::{
         ChatCompletionMessageToolCall, ChatCompletionMessageToolCalls,
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestMessageContentPartImage, ChatCompletionRequestMessageContentPartText,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionTools, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, FunctionCall,
+        ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestUserMessageContent, ChatCompletionRequestUserMessageContentPart,
+        ChatCompletionTools, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        FunctionCall, ImageUrl,
     },
 };
 use constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
@@ -33,11 +36,41 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                 .build()
                 .ok()
                 .map(ChatCompletionRequestMessage::System),
-            ROLE_USER => ChatCompletionRequestUserMessageArgs::default()
-                .content(msg.content.as_str())
-                .build()
-                .ok()
-                .map(ChatCompletionRequestMessage::User),
+            ROLE_USER => {
+                if let Some(ref images) = msg.images
+                    && !images.is_empty()
+                {
+                    // 多模态消息：Text + ImageUrl(s)
+                    let mut parts: Vec<ChatCompletionRequestUserMessageContentPart> =
+                        vec![ChatCompletionRequestUserMessageContentPart::Text(
+                            ChatCompletionRequestMessageContentPartText {
+                                text: msg.content.clone(),
+                            },
+                        )];
+                    for img in images {
+                        let data_url = format!("data:{};base64,{}", img.media_type, img.base64);
+                        parts.push(ChatCompletionRequestUserMessageContentPart::ImageUrl(
+                            ChatCompletionRequestMessageContentPartImage {
+                                image_url: ImageUrl {
+                                    url: data_url,
+                                    detail: None,
+                                },
+                            },
+                        ));
+                    }
+                    let user_msg = ChatCompletionRequestUserMessage {
+                        content: ChatCompletionRequestUserMessageContent::Array(parts),
+                        name: None,
+                    };
+                    return Some(ChatCompletionRequestMessage::User(user_msg));
+                }
+                // 纯文本消息
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(msg.content.as_str())
+                    .build()
+                    .ok()
+                    .map(ChatCompletionRequestMessage::User)
+            }
             ROLE_ASSISTANT => {
                 let mut builder = ChatCompletionRequestAssistantMessageArgs::default();
                 if !msg.content.is_empty() {

@@ -1359,6 +1359,7 @@ impl Tool for BrowserTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -1369,6 +1370,7 @@ impl Tool for BrowserTool {
                 return ToolResult {
                     output: "缺少 action 参数。可选: status, start, stop, tabs, open, navigate, screenshot, snapshot, content, close, click, type, press, evaluate".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -1406,10 +1408,12 @@ fn exec_browser_cdp(args: &Value, action: &str) -> ToolResult {
         Ok(output) => ToolResult {
             output,
             is_error: false,
+            images: vec![],
         },
         Err(err) => ToolResult {
             output: err,
             is_error: true,
+            images: vec![],
         },
     }
 }
@@ -1483,10 +1487,12 @@ fn exec_browser_stub(args: &Value, action: &str) -> ToolResult {
         Ok(output) => ToolResult {
             output,
             is_error: false,
+            images: vec![],
         },
         Err(err) => ToolResult {
             output: err,
             is_error: true,
+            images: vec![],
         },
     }
 }

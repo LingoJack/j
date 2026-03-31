@@ -68,6 +68,7 @@ impl Tool for WebFetchTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -89,6 +90,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
             return ToolResult {
                 output: "缺少 url 参数".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -119,6 +121,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
         return ToolResult {
             output: "操作已取消".to_string(),
             is_error: true,
+            images: vec![],
         };
     }
 
@@ -133,6 +136,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
             return ToolResult {
                 output: format!("创建 HTTP 客户端失败: {}", e),
                 is_error: true,
+                    images: vec![],
             };
         }
     };
@@ -154,6 +158,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
             return ToolResult {
                 output: format!("请求失败: {}", e),
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -167,6 +172,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
                 status.canonical_reason().unwrap_or("")
             ),
             is_error: true,
+            images: vec![],
         };
     }
 
@@ -187,6 +193,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
                 content_type
             ),
             is_error: true,
+            images: vec![],
         };
     }
 
@@ -196,6 +203,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
             return ToolResult {
                 output: e,
                 is_error: true,
+                images: vec![],
             };
         }
     };
@@ -228,6 +236,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
     ToolResult {
         output: format!("[来源: {}]\n\n{}", url, truncated),
         is_error: false,
+        images: vec![],
     }
 }
 

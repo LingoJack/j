@@ -56,6 +56,7 @@ impl Tool for LoadSkillTool {
             return ToolResult {
                 output: "参数缺少 name 字段".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -70,6 +71,7 @@ impl Tool for LoadSkillTool {
                 ToolResult {
                     output: resolved,
                     is_error: false,
+                    images: vec![],
                 }
             }
             None => {
@@ -85,6 +87,7 @@ impl Tool for LoadSkillTool {
                         available.join(", ")
                     ),
                     is_error: true,
+                    images: vec![],
                 }
             }
         }

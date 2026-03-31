@@ -21,6 +21,9 @@ pub struct ModelProvider {
     pub api_key: String,
     /// 模型名称（如 "gpt-4o", "deepseek-chat"）
     pub model: String,
+    /// 是否支持视觉/多模态（默认 false）
+    #[serde(default)]
+    pub supports_vision: bool,
 }
 
 /// Agent 配置
@@ -95,6 +98,15 @@ pub struct ToolCallItem {
     pub arguments: String,
 }
 
+/// 图片数据（用于多模态消息，序列化时跳过以节省存储空间）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageData {
+    /// base64 编码的图片数据
+    pub base64: String,
+    /// MIME 类型（如 "image/png", "image/jpeg"）
+    pub media_type: String,
+}
+
 /// 对话消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -108,6 +120,9 @@ pub struct ChatMessage {
     /// 工具执行结果对应的 tool_call_id（仅 tool 角色时非 None）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// 图片数据（用于多模态 user message，不持久化到 session 文件）
+    #[serde(skip)]
+    pub images: Option<Vec<ImageData>>,
 }
 
 impl ChatMessage {
@@ -118,6 +133,27 @@ impl ChatMessage {
             content: content.into(),
             tool_calls: None,
             tool_call_id: None,
+            images: None,
+        }
+    }
+
+    /// 创建带图片的 user 消息
+    #[allow(dead_code)]
+    pub fn with_images(
+        role: impl Into<String>,
+        content: impl Into<String>,
+        images: Vec<ImageData>,
+    ) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            images: if images.is_empty() {
+                None
+            } else {
+                Some(images)
+            },
         }
     }
 }

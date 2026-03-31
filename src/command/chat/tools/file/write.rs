@@ -38,6 +38,7 @@ impl Tool for WriteFileTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -48,6 +49,7 @@ impl Tool for WriteFileTool {
                 return ToolResult {
                     output: "参数缺少 path 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -58,6 +60,7 @@ impl Tool for WriteFileTool {
                 return ToolResult {
                     output: "参数缺少 content 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -71,6 +74,7 @@ impl Tool for WriteFileTool {
             return ToolResult {
                 output: format!("创建目录失败: {}", e),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -78,10 +82,12 @@ impl Tool for WriteFileTool {
             Ok(_) => ToolResult {
                 output: format!("已写入文件: {} ({} 字节)", path, content.len()),
                 is_error: false,
+                images: vec![],
             },
             Err(e) => ToolResult {
                 output: format!("写入文件失败: {}", e),
                 is_error: true,
+                images: vec![],
             },
         }
     }

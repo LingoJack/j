@@ -113,6 +113,7 @@ impl Tool for TaskTool {
                 return ToolResult {
                     output: format!("Failed to parse arguments: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -123,6 +124,7 @@ impl Tool for TaskTool {
                 return ToolResult {
                     output: "action is required (create, get, list, update)".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -138,6 +140,7 @@ impl Tool for TaskTool {
                     other
                 ),
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -151,6 +154,7 @@ impl TaskTool {
                 return ToolResult {
                     output: "title is required for action=create".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -183,10 +187,12 @@ impl TaskTool {
             Ok(task) => ToolResult {
                 output: serde_json::to_string_pretty(&task).unwrap_or_default(),
                 is_error: false,
+                images: vec![],
             },
             Err(e) => ToolResult {
                 output: e.to_string(),
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -198,6 +204,7 @@ impl TaskTool {
                 return ToolResult {
                     output: "taskId is required for action=get".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -206,10 +213,12 @@ impl TaskTool {
             Ok(task) => ToolResult {
                 output: serde_json::to_string_pretty(&task).unwrap_or_default(),
                 is_error: false,
+                images: vec![],
             },
             Err(e) => ToolResult {
                 output: e,
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -235,6 +244,7 @@ impl TaskTool {
                     "No tasks exist".to_string()
                 },
                 is_error: false,
+                images: vec![],
             };
         }
 
@@ -253,6 +263,7 @@ impl TaskTool {
         ToolResult {
             output: serde_json::to_string_pretty(&summary).unwrap_or_default(),
             is_error: false,
+            images: vec![],
         }
     }
 
@@ -263,6 +274,7 @@ impl TaskTool {
                 return ToolResult {
                     output: "taskId is required for action=update".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -283,6 +295,7 @@ impl TaskTool {
                                 .unwrap_or_default()
                         ),
                         is_error: false,
+                        images: vec![],
                     }
                 } else {
                     ToolResult {
@@ -291,12 +304,14 @@ impl TaskTool {
                             serde_json::to_string_pretty(&task).unwrap_or_default()
                         ),
                         is_error: false,
+                        images: vec![],
                     }
                 }
             }
             Err(e) => ToolResult {
                 output: e,
                 is_error: true,
+                images: vec![],
             },
         }
     }

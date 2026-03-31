@@ -42,6 +42,7 @@ impl Tool for EditFileTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -52,6 +53,7 @@ impl Tool for EditFileTool {
                 return ToolResult {
                     output: "参数缺少 path 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -62,6 +64,7 @@ impl Tool for EditFileTool {
                 return ToolResult {
                     output: "参数缺少 old_string 字段".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -79,6 +82,7 @@ impl Tool for EditFileTool {
                 return ToolResult {
                     output: format!("读取文件失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -89,6 +93,7 @@ impl Tool for EditFileTool {
             return ToolResult {
                 output: "未找到匹配的字符串".to_string(),
                 is_error: true,
+                images: vec![],
             };
         }
         if count > 1 {
@@ -98,6 +103,7 @@ impl Tool for EditFileTool {
                     count
                 ),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -107,10 +113,12 @@ impl Tool for EditFileTool {
             Ok(_) => ToolResult {
                 output: format!("已编辑文件: {}", path),
                 is_error: false,
+                images: vec![],
             },
             Err(e) => ToolResult {
                 output: format!("写入文件失败: {}", e),
                 is_error: true,
+                images: vec![],
             },
         }
     }

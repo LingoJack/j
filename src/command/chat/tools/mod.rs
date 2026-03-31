@@ -2,6 +2,7 @@ pub mod ask;
 pub mod background;
 mod browser;
 pub mod compact;
+mod computer_use;
 mod file;
 mod grep;
 pub mod hook;
@@ -18,12 +19,23 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== ToolResult ==========
 
+/// 图片数据（用于多模态工具返回）
+#[derive(Debug, Clone)]
+pub struct ImageData {
+    /// base64 编码的图片数据
+    pub base64: String,
+    /// MIME 类型（如 "image/png", "image/jpeg"）
+    pub media_type: String,
+}
+
 /// 工具执行结果
 pub struct ToolResult {
     /// 返回给 LLM 的内容
     pub output: String,
     /// 是否执行出错
     pub is_error: bool,
+    /// 可选的图片数据（用于多模态模型，由 agent loop 决定是否注入）
+    pub images: Vec<ImageData>,
 }
 
 // ========== Tool trait ==========
@@ -99,6 +111,8 @@ impl ToolRegistry {
                 Box::new(compact::CompactTool),
                 // Hook 管理工具
                 Box::new(hook::RegisterHookTool { hook_manager }),
+                // Computer Use 工具（aic 集成）
+                Box::new(computer_use::ComputerUseTool::new()),
             ],
         };
 
@@ -130,6 +144,7 @@ impl ToolRegistry {
             None => ToolResult {
                 output: format!("未知工具: {}", name),
                 is_error: true,
+                images: vec![],
             },
         }
     }

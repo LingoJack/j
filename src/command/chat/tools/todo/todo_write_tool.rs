@@ -72,6 +72,7 @@ impl Tool for TodoWriteTool {
                 return ToolResult {
                     output: format!("Failed to parse arguments: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -82,6 +83,7 @@ impl Tool for TodoWriteTool {
                 return ToolResult {
                     output: "todos (array) is required".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -116,10 +118,12 @@ impl Tool for TodoWriteTool {
             Ok(all_todos) => ToolResult {
                 output: serde_json::to_string_pretty(&all_todos).unwrap_or_default(),
                 is_error: false,
+                images: vec![],
             },
             Err(e) => ToolResult {
                 output: e,
                 is_error: true,
+                images: vec![],
             },
         }
     }

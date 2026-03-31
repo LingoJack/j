@@ -199,6 +199,18 @@ fn match_condition(tool_name: &str, condition: &str, arguments: &str) -> bool {
         return url_matches_domain(url, domain);
     }
 
+    // ComputerUse: action 前缀匹配（格式 "action:screenshot:*" 或 "screenshot:*"）
+    if tool_name == "ComputerUse" {
+        let action = parsed.get("action").and_then(|v| v.as_str()).unwrap_or("");
+        // 支持 "action:screenshot:*" 和 "screenshot:*" 两种格式
+        let action_pattern = if let Some(rest) = condition.strip_prefix("action:") {
+            rest
+        } else {
+            condition
+        };
+        return match_command_prefix(action_pattern, action);
+    }
+
     // 默认：Bash 命令前缀匹配（格式 "command_prefix:*"）
     if tool_name == "Bash" || tool_name == "Shell" {
         let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("");
@@ -276,6 +288,14 @@ pub fn generate_allow_rule(tool_name: &str, arguments: &str) -> String {
     let parsed: Value = serde_json::from_str(arguments).unwrap_or(Value::Null);
 
     match tool_name {
+        "ComputerUse" => {
+            let action = parsed.get("action").and_then(|v| v.as_str()).unwrap_or("");
+            if !action.is_empty() {
+                format!("ComputerUse({}:*)", action)
+            } else {
+                "ComputerUse".to_string()
+            }
+        }
         "Bash" | "Shell" => {
             let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("");
             let words: Vec<&str> = command.split_whitespace().collect();

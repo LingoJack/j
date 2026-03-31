@@ -1,17 +1,27 @@
 [
   {
     "id": "1",
-    "content": "添加中英文语言切换功能",
+    "content": "测试 ComputerUse 的 screenshot 功能",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "优化 Copy Button 样式对比度",
+    "content": "测试 ComputerUse 的 ax_tree 功能",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "改进字体样式",
+    "content": "测试 ComputerUse 的 click 和 type 功能",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "测试 ComputerUse 的 key 和 key_combo 功能",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "测试 ComputerUse 的 focus_app 功能",
     "status": "completed"
   }
 ]

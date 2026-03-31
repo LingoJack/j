@@ -35,6 +35,7 @@ impl Tool for CompactTool {
         ToolResult {
             output: "Compression requested.".to_string(),
             is_error: false,
+            images: vec![],
         }
     }
 

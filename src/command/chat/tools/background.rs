@@ -197,6 +197,7 @@ impl Tool for TaskOutputTool {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -207,6 +208,7 @@ impl Tool for TaskOutputTool {
                 return ToolResult {
                     output: "缺少 task_id 参数".to_string(),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -227,6 +229,7 @@ impl Tool for TaskOutputTool {
             return ToolResult {
                 output: format!("后台任务 {} 不存在", task_id),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -250,6 +253,7 @@ impl Tool for TaskOutputTool {
                     return ToolResult {
                         output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
                         is_error: false,
+                        images: vec![],
                     };
                 }
                 std::thread::sleep(Duration::from_millis(50));
@@ -261,10 +265,12 @@ impl Tool for TaskOutputTool {
             Some(info) => ToolResult {
                 output: serde_json::to_string_pretty(&info).unwrap_or_default(),
                 is_error: false,
+                images: vec![],
             },
             None => ToolResult {
                 output: format!("后台任务 {} 不存在", task_id),
                 is_error: true,
+                images: vec![],
             },
         }
     }

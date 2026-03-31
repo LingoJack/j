@@ -73,6 +73,8 @@ pub struct ToolResultMsg {
     pub result: String,
     #[allow(dead_code)]
     pub is_error: bool,
+    /// 工具返回的图片数据（用于多模态模型）
+    pub images: Vec<crate::command::chat::tools::ImageData>,
 }
 
 /// 工具后台线程 → 主线程的执行完成消息
@@ -80,6 +82,8 @@ pub struct ToolExecDoneMsg {
     pub tool_call_id: String,
     pub output: String,
     pub is_error: bool,
+    /// 工具返回的图片数据
+    pub images: Vec<crate::command::chat::tools::ImageData>,
 }
 
 /// ask 工具选项
@@ -368,6 +372,7 @@ impl ToolExecutor {
                     tool_call_id: done.tool_call_id.clone(),
                     result: done.output.clone(),
                     is_error: done.is_error,
+                    images: done.images.clone(),
                 });
             }
             completed.push((tool_name, done.output, done.is_error));
@@ -431,6 +436,7 @@ impl ToolExecutor {
                             tool_call_id,
                             output: exec_result.output,
                             is_error: exec_result.is_error,
+                            images: exec_result.images,
                         });
                     }
                     Err(panic_info) => {
@@ -445,6 +451,7 @@ impl ToolExecutor {
                             tool_call_id,
                             output: format!("[Tool panic] {}", msg),
                             is_error: true,
+                            images: vec![],
                         });
                     }
                 }
@@ -508,6 +515,7 @@ impl ToolExecutor {
                         tool_call_id,
                         output: exec_result.output,
                         is_error: exec_result.is_error,
+                        images: exec_result.images,
                     });
                 }
                 Err(panic_info) => {
@@ -522,6 +530,7 @@ impl ToolExecutor {
                         tool_call_id,
                         output: format!("[Tool panic] {}", msg),
                         is_error: true,
+                        images: vec![],
                     });
                 }
             }
@@ -551,6 +560,7 @@ impl ToolExecutor {
                 tool_call_id,
                 result: reject_msg,
                 is_error: true,
+                images: vec![],
             });
         }
 
@@ -2026,6 +2036,7 @@ impl ChatApp {
                     api_base: "https://api.openai.com/v1".to_string(),
                     api_key: String::new(),
                     model: String::new(),
+                    supports_vision: false,
                 };
                 self.state.agent_config.providers.push(new_provider);
                 self.ui.config_provider_idx = self.state.agent_config.providers.len() - 1;
@@ -2968,6 +2979,7 @@ impl ChatApp {
                         tool_call_id: tc.tool_call_id.clone(),
                         result: msg.clone(),
                         is_error: true,
+                        images: vec![],
                     });
                 }
             }

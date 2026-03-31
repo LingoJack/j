@@ -698,6 +698,7 @@ fn run_oneshot_agent(
             content: sr.assistant_text,
             tool_calls: Some(sr.tool_items.clone()),
             tool_call_id: None,
+            images: None,
         });
 
         // 逐个执行工具（同步上下文，reqwest::blocking 安全）
@@ -714,6 +715,7 @@ fn run_oneshot_agent(
                     content: "工具调用被拒绝（deny 规则匹配）".to_string(),
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
+                    images: None,
                 });
                 continue;
             }
@@ -746,6 +748,7 @@ fn run_oneshot_agent(
                             content: "用户拒绝执行该工具".to_string(),
                             tool_calls: None,
                             tool_call_id: Some(item.id.clone()),
+                            images: None,
                         });
                         continue;
                     }
@@ -765,6 +768,7 @@ fn run_oneshot_agent(
                 content: result.output,
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),
+                images: None,
             });
         }
 
