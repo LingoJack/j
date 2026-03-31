@@ -356,12 +356,6 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return false;
     }
 
-    // Ctrl+R 还原归档
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('r') {
-        app.update(Action::StartArchiveList);
-        return false;
-    }
-
     // Ctrl+Y 复制最后一条 AI 回复
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('y') {
         app.update(Action::CopyLastAiReply);

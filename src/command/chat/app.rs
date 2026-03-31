@@ -861,6 +861,8 @@ pub enum ConfigTab {
     Commands,
     /// 会话管理
     Session,
+    /// 归档管理
+    Archive,
 }
 
 impl ConfigTab {
@@ -874,6 +876,7 @@ impl ConfigTab {
             ConfigTab::Skills => "Skills",
             ConfigTab::Hooks => "Hooks",
             ConfigTab::Commands => "Commands",
+            ConfigTab::Archive => "归档",
         }
     }
 
@@ -887,6 +890,7 @@ impl ConfigTab {
             ConfigTab::Skills => 4,
             ConfigTab::Hooks => 5,
             ConfigTab::Commands => 6,
+            ConfigTab::Archive => 7,
         }
     }
 
@@ -899,12 +903,13 @@ impl ConfigTab {
             3 => ConfigTab::Tools,
             4 => ConfigTab::Skills,
             5 => ConfigTab::Hooks,
-            _ => ConfigTab::Commands,
+            6 => ConfigTab::Commands,
+            _ => ConfigTab::Archive,
         }
     }
 
     /// Tab 总数
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 8;
 
     /// 切换到下一个 Tab
     pub fn next(&self) -> Self {
@@ -1187,6 +1192,7 @@ pub fn config_tab_field_count(app: &ChatApp) -> usize {
         ConfigTab::Skills => app.state.loaded_skills.len(),
         ConfigTab::Hooks | ConfigTab::Commands => 0,
         ConfigTab::Session => app.ui.session_list.len(),
+        ConfigTab::Archive => app.ui.archives.len(),
     }
 }
 
@@ -2051,6 +2057,13 @@ impl ChatApp {
                 // 切换到 Session tab 时自动加载列表
                 if self.ui.config_tab == ConfigTab::Session {
                     self.update(Action::LoadSessionList);
+                }
+                // 切换到 Archive tab 时自动加载归档列表
+                if self.ui.config_tab == ConfigTab::Archive {
+                    use super::archive::list_archives;
+                    self.ui.archives = list_archives();
+                    self.ui.archive_list_index = 0;
+                    self.ui.restore_confirm_needed = false;
                 }
             }
             Action::ToggleMenuNavigate(dir) => {

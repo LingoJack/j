@@ -759,7 +759,6 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             ("@", "skill/file/command"),
             ("Ctrl+T", "切换模型"),
             ("Ctrl+L", "归档"),
-            ("Ctrl+R", "还原"),
             ("Ctrl+Y", "复制"),
             ("Ctrl+B", "浏览"),
             ("Ctrl+S", "流式切换"),
@@ -810,6 +809,19 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ],
                 ConfigTab::Hooks | ConfigTab::Commands => {
                     vec![("←→", "切换标签"), ("Esc", "保存返回")]
+                }
+                ConfigTab::Archive => {
+                    if app.ui.restore_confirm_needed {
+                        vec![("y/Enter", "确认还原"), ("Esc", "取消")]
+                    } else {
+                        vec![
+                            ("←→", "切换标签"),
+                            ("↑↓", "选择"),
+                            ("Enter", "还原"),
+                            ("d", "删除"),
+                            ("Esc", "保存返回"),
+                        ]
+                    }
                 }
                 ConfigTab::Session => {
                     if app.ui.session_restore_confirm {
@@ -1033,13 +1045,6 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
             ),
             Span::styled("归档当前对话", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+R       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("还原归档对话", Style::default().fg(t.help_desc)),
         ]),
         Line::from(vec![
             Span::styled(

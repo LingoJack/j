@@ -91,6 +91,46 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
             _ => return,
         },
+        ConfigTab::Archive => {
+            if app.ui.restore_confirm_needed {
+                // 确认还原模式
+                match key.code {
+                    KeyCode::Char('y') | KeyCode::Enter => {
+                        app.ui.restore_confirm_needed = false;
+                        Action::RestoreArchive
+                    }
+                    KeyCode::Esc | KeyCode::Char('n') => {
+                        app.ui.restore_confirm_needed = false;
+                        return;
+                    }
+                    _ => return,
+                }
+            } else {
+                match key.code {
+                    KeyCode::Esc => Action::SaveConfig,
+                    KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
+                    KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        Action::ArchiveListNavigate(CursorDirection::Up)
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        Action::ArchiveListNavigate(CursorDirection::Down)
+                    }
+                    KeyCode::Enter => {
+                        if app.ui.archives.is_empty() {
+                            return;
+                        }
+                        if !app.state.session.messages.is_empty() {
+                            app.ui.restore_confirm_needed = true;
+                            return;
+                        }
+                        Action::RestoreArchive
+                    }
+                    KeyCode::Char('d') => Action::DeleteArchive,
+                    _ => return,
+                }
+            }
+        }
         ConfigTab::Session => {
             if app.ui.session_restore_confirm {
                 // 确认恢复模式

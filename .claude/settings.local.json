@@ -65,7 +65,8 @@
       "Bash(node:*)",
       "Bash(/tmp/config_panel_exploration.md:*)",
       "Bash(/tmp/EXPLORATION_SUMMARY.txt:*)",
-      "Bash(/tmp/README.md:*)"
+      "Bash(/tmp/README.md:*)",
+      "WebFetch(domain:)"
     ]
   },
   "language": "zh-CN",
