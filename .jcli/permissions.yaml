@@ -17,4 +17,5 @@ allow:
 - Bash(cd assets/remote:*)
 - Bash(find .:*)
 - Bash(find assets/remote:*)
+- Bash(mkdir -p:*)
 deny: []
