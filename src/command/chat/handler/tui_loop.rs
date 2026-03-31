@@ -9,8 +9,7 @@ use super::super::storage::{
 use super::super::ui::draw_chat_ui;
 use super::{
     handle_archive_confirm_mode, handle_archive_list_mode, handle_browse_mode, handle_chat_mode,
-    handle_config_mode, handle_select_model, handle_skill_toggle_mode, handle_tool_confirm_mode,
-    handle_tool_toggle_mode,
+    handle_config_mode, handle_select_model, handle_tool_confirm_mode,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
@@ -54,8 +53,6 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                 ChatMode::ArchiveConfirm => handle_archive_confirm_mode(app, key),
                 ChatMode::ArchiveList => handle_archive_list_mode(app, key),
                 ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
-                ChatMode::ToolToggle => handle_tool_toggle_mode(app, key),
-                ChatMode::SkillToggle => handle_skill_toggle_mode(app, key),
             }
         }
         Event::Resize(_, _) => {

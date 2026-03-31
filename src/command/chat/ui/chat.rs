@@ -5,7 +5,7 @@ use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
 use super::super::storage::agent_config_path;
 use super::archive::{draw_archive_confirm, draw_archive_list};
-use super::config::{draw_config_screen, draw_skill_toggle, draw_tool_toggle};
+use super::config::draw_config_screen;
 use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
@@ -43,8 +43,6 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         ChatMode::Config => draw_config_screen(f, chunks[1], app),
         ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
         ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
-        ChatMode::ToolToggle => draw_tool_toggle(f, chunks[1], app),
-        ChatMode::SkillToggle => draw_skill_toggle(f, chunks[1], app),
         _ => draw_messages(f, chunks[1], app),
     }
 
@@ -774,14 +772,47 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ChatMode::SelectModel => vec![("↑↓/jk", "移动"), ("Enter", "确认"), ("Esc", "取消")],
         ChatMode::Browse => vec![("↑↓", "选择消息"), ("y/Enter", "复制"), ("Esc", "返回")],
         ChatMode::Help => vec![("任意键", "返回")],
-        ChatMode::Config => vec![
-            ("↑↓", "切换字段"),
-            ("Enter", "编辑"),
-            ("Tab", "切换 Provider"),
-            ("a", "新增"),
-            ("d", "删除"),
-            ("Esc", "保存返回"),
-        ],
+        ChatMode::Config => {
+            use crate::command::chat::app::ConfigTab;
+            match app.ui.config_tab {
+                ConfigTab::Model => vec![
+                    ("←→", "切换标签"),
+                    ("↑↓", "切换字段"),
+                    ("Enter", "编辑"),
+                    ("Tab", "切换Provider"),
+                    ("a", "新增"),
+                    ("d", "删除"),
+                    ("s", "设为活跃"),
+                    ("Esc", "保存返回"),
+                ],
+                ConfigTab::Global => vec![
+                    ("←→", "切换标签"),
+                    ("↑↓", "切换字段"),
+                    ("Enter", "编辑/切换"),
+                    ("Esc", "保存返回"),
+                ],
+                ConfigTab::Tools => vec![
+                    ("←→", "切换标签"),
+                    ("↑↓", "选择"),
+                    ("Enter/空格", "切换"),
+                    ("t", "总开关"),
+                    ("a", "全部启用"),
+                    ("d", "全部禁用"),
+                    ("Esc", "保存返回"),
+                ],
+                ConfigTab::Skills => vec![
+                    ("←→", "切换标签"),
+                    ("↑↓", "选择"),
+                    ("Enter/空格", "切换"),
+                    ("a", "全部启用"),
+                    ("d", "全部禁用"),
+                    ("Esc", "保存返回"),
+                ],
+                ConfigTab::Hooks | ConfigTab::Commands => {
+                    vec![("←→", "切换标签"), ("Esc", "保存返回")]
+                }
+            }
+        }
         ChatMode::ArchiveConfirm => {
             if app.ui.archive_editing_name {
                 vec![("Enter", "确认"), ("Esc", "取消")]
@@ -806,21 +837,6 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             }
         }
         ChatMode::ToolConfirm => vec![("↑↓", "选择"), ("Enter", "确认"), ("Esc", "拒绝")],
-        ChatMode::ToolToggle => vec![
-            ("↑↓", "选择"),
-            ("Enter/空格", "切换"),
-            ("t", "总开关"),
-            ("a", "全部启用"),
-            ("d", "全部禁用"),
-            ("Esc", "返回"),
-        ],
-        ChatMode::SkillToggle => vec![
-            ("↑↓", "选择"),
-            ("Enter/空格", "切换"),
-            ("a", "全部启用"),
-            ("d", "全部禁用"),
-            ("Esc", "返回"),
-        ],
     };
 
     // 按终端宽度自适应：依次累加 hint，直到放不下为止

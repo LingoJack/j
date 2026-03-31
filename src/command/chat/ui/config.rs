@@ -1,6 +1,9 @@
-use super::super::handler::{config_field_label, config_field_value};
-use crate::command::chat::app::ChatApp;
-use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
+use super::super::ui_helpers::{
+    config_field_label_global, config_field_label_model, config_field_value_global,
+    config_field_value_model,
+};
+use crate::command::chat::app::{ChatApp, ConfigTab};
+use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -53,23 +56,137 @@ fn render_preview_value(raw: &str) -> String {
     }
 }
 
+/// 绘制顶部 Tab 栏（支持窄屏水平滚动）
+fn draw_tab_bar<'a>(app: &ChatApp) -> Line<'a> {
+    let t = &app.ui.theme;
+    let current = app.ui.config_tab;
+    let all_tabs = [
+        ConfigTab::Model,
+        ConfigTab::Global,
+        ConfigTab::Tools,
+        ConfigTab::Skills,
+        ConfigTab::Hooks,
+        ConfigTab::Commands,
+    ];
+
+    let mut spans: Vec<Span<'a>> = vec![Span::styled("  ", Style::default())];
+
+    for (i, tab) in all_tabs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" │ ", Style::default().fg(t.separator)));
+        }
+        let label = format!(" {} ", tab.label());
+        if *tab == current {
+            spans.push(Span::styled(
+                label,
+                Style::default()
+                    .fg(t.config_tab_active_fg)
+                    .bg(t.config_tab_active_bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        } else {
+            spans.push(Span::styled(
+                label,
+                Style::default().fg(t.config_tab_inactive),
+            ));
+        }
+    }
+
+    spans.push(Span::styled(
+        "    (←→ 切换标签)",
+        Style::default().fg(t.config_dim),
+    ));
+
+    Line::from(spans)
+}
+
+/// 配置界面主入口（分发器）
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
     let bg = t.bg_title;
-    let total_provider_fields = CONFIG_FIELDS.len();
 
-    let mut lines: Vec<Line> = Vec::new();
-    // 记录每个字段对应的行号（用于滚动定位）
+    let mut lines: Vec<Line> = vec![
+        Line::from(""),
+        draw_tab_bar(app),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  ─────────────────────────────────────────",
+            Style::default().fg(t.separator),
+        )),
+        Line::from(""),
+    ];
+
     let mut field_line_indices: Vec<usize> = Vec::new();
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "  ⚙️  模型配置",
-        Style::default()
-            .fg(t.config_title)
-            .add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(""));
+    match app.ui.config_tab {
+        ConfigTab::Model => {
+            draw_tab_model_lines(&mut lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Global => {
+            draw_tab_global_lines(&mut lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Tools => {
+            draw_tab_tools_lines(&mut lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Skills => {
+            draw_tab_skills_lines(&mut lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Hooks => {
+            draw_tab_hooks_lines(&mut lines, app);
+        }
+        ConfigTab::Commands => {
+            draw_tab_commands_lines(&mut lines, app);
+        }
+    }
+
+    // 滚动：确保选中字段始终可见
+    let inner_height = area.height.saturating_sub(2) as usize;
+    if let Some(&selected_line) = field_line_indices.get(app.ui.config_field_idx) {
+        let scroll = app.ui.config_scroll_offset as usize;
+        let new_scroll = if selected_line < scroll {
+            selected_line
+        } else if selected_line >= scroll + inner_height {
+            selected_line.saturating_sub(inner_height - 1)
+        } else {
+            scroll
+        };
+        app.ui.config_scroll_offset = new_scroll as u16;
+    }
+
+    let title = match app.ui.config_tab {
+        ConfigTab::Model => " ⚙️  模型配置 ",
+        ConfigTab::Global => " 🌐 全局配置 ",
+        ConfigTab::Tools => " 🔧 工具开关 ",
+        ConfigTab::Skills => " 📦 技能开关 ",
+        ConfigTab::Hooks => " 🪝 Hooks ",
+        ConfigTab::Commands => " 📋 自定义命令 ",
+    };
+
+    let content = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.border_config))
+                .title(Span::styled(
+                    title,
+                    Style::default()
+                        .fg(t.config_label_selected)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(bg)),
+        )
+        .scroll((app.ui.config_scroll_offset, 0));
+    f.render_widget(content, area);
+}
+
+/// Model tab 内容
+fn draw_tab_model_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
 
     let provider_count = app.state.agent_config.providers.len();
     if provider_count > 0 {
@@ -109,29 +226,16 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         )));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
-    lines.push(Line::from(""));
 
     if provider_count > 0 {
-        lines.push(Line::from(Span::styled(
-            "  📦 Provider 配置",
-            Style::default()
-                .fg(t.config_section)
-                .add_modifier(Modifier::BOLD),
-        )));
-        lines.push(Line::from(""));
-
-        for (i, _) in CONFIG_FIELDS.iter().enumerate().take(total_provider_fields) {
+        for (i, provider_field) in CONFIG_FIELDS.iter().enumerate() {
             field_line_indices.push(lines.len());
             let is_selected = app.ui.config_field_idx == i;
-            let label = config_field_label(i);
+            let label = config_field_label_model(i);
             let value = if app.ui.config_editing && is_selected {
                 app.ui.config_edit_buf.clone()
             } else {
-                config_field_value(app, i)
+                config_field_value_model(app, i)
             };
 
             let pointer = if is_selected { "  ▸ " } else { "    " };
@@ -151,7 +255,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                 Style::default().fg(t.text_white).bg(t.config_edit_bg)
             } else if is_selected {
                 Style::default().fg(t.text_white)
-            } else if CONFIG_FIELDS[i] == "api_key" {
+            } else if *provider_field == "api_key" {
                 Style::default().fg(t.config_api_key)
             } else {
                 Style::default().fg(t.config_value)
@@ -189,25 +293,24 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             lines.push(line);
         }
     }
+}
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  🌐 全局配置",
-        Style::default()
-            .fg(t.config_section)
-            .add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
+/// Global tab 内容
+fn draw_tab_global_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
 
-    for (i, field) in CONFIG_GLOBAL_FIELDS.iter().enumerate() {
-        let field_idx = total_provider_fields + i;
+    for (i, field) in CONFIG_GLOBAL_FIELDS_TAB.iter().enumerate() {
         field_line_indices.push(lines.len());
-        let is_selected = app.ui.config_field_idx == field_idx;
-        let label = config_field_label(field_idx);
+        let is_selected = app.ui.config_field_idx == i;
+        let label = config_field_label_global(i);
         let value = if app.ui.config_editing && is_selected {
             app.ui.config_edit_buf.clone()
         } else {
-            config_field_value(app, field_idx)
+            config_field_value_global(app, i)
         };
 
         let pointer = if is_selected { "  ▸ " } else { "    " };
@@ -272,40 +375,6 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
                     Style::default().fg(t.config_dim),
                 ),
             ])
-        } else if *field == "tools_enabled" {
-            let toggle_on = app.state.agent_config.tools_enabled;
-            let tool_names = app.tool_registry.tool_names();
-            let total = tool_names.len();
-            let enabled_count = total
-                - app
-                    .state
-                    .agent_config
-                    .disabled_tools
-                    .iter()
-                    .filter(|d| tool_names.contains(&d.as_str()))
-                    .count();
-            let toggle_style = if toggle_on {
-                Style::default()
-                    .fg(t.config_toggle_on)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.config_toggle_off)
-            };
-            let toggle_text = if toggle_on {
-                format!("● 开启 ({}/{})", enabled_count, total)
-            } else {
-                "○ 关闭".to_string()
-            };
-            Line::from(vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-                Span::styled(toggle_text, toggle_style),
-                Span::styled(
-                    if is_selected { "  (Enter 设置)" } else { "" },
-                    Style::default().fg(t.config_dim),
-                ),
-            ])
         } else if *field == "system_prompt" || *field == "style" {
             Line::from(vec![
                 Span::styled(pointer, pointer_style),
@@ -352,102 +421,15 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         };
         lines.push(line);
     }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("    ", Style::default()),
-        Span::styled(
-            "↑↓/jk",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 切换字段  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Enter",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 编辑  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Tab/←→",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 切换 Provider  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "a",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 新增  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "d",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 删除  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "s",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 设为活跃  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 保存返回", Style::default().fg(t.config_hint_desc)),
-    ]));
-
-    // 滚动：确保选中字段始终可见
-    let inner_height = area.height.saturating_sub(2) as usize;
-    if let Some(&selected_line) = field_line_indices.get(app.ui.config_field_idx) {
-        let scroll = app.ui.config_scroll_offset as usize;
-        let new_scroll = if selected_line < scroll {
-            selected_line
-        } else if selected_line >= scroll + inner_height {
-            selected_line.saturating_sub(inner_height - 1)
-        } else {
-            scroll
-        };
-        app.ui.config_scroll_offset = new_scroll as u16;
-    }
-
-    let content = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_config))
-                .title(Span::styled(
-                    " ⚙️  模型配置编辑 ",
-                    Style::default()
-                        .fg(t.config_label_selected)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(bg)),
-        )
-        .scroll((app.ui.config_scroll_offset, 0));
-    f.render_widget(content, area);
 }
 
-pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+/// Tools tab 内容
+fn draw_tab_tools_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
     let t = &app.ui.theme;
-    let bg = t.bg_title;
     let tool_names = app.tool_registry.tool_names();
     let total = tool_names.len();
     let enabled_count = total
@@ -458,16 +440,6 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             .iter()
             .filter(|d| tool_names.contains(&d.as_str()))
             .count();
-
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "  🔧 工具开关",
-        Style::default()
-            .fg(t.config_title)
-            .add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(""));
 
     let master_style = if app.state.agent_config.tools_enabled {
         Style::default()
@@ -486,17 +458,10 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         Span::styled("  (t 切换)", Style::default().fg(t.config_dim)),
     ]));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
-    lines.push(Line::from(""));
-
-    // 列表起始行号（用于滚动定位）
-    let list_start_line = lines.len();
 
     for (i, name) in tool_names.iter().enumerate() {
-        let is_selected = i == app.ui.tool_toggle_index;
+        field_line_indices.push(lines.len());
+        let is_selected = i == app.ui.config_field_idx;
         let is_enabled = !app
             .state
             .agent_config
@@ -533,93 +498,15 @@ pub fn draw_tool_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             Span::styled(name.to_string(), name_style),
         ]));
     }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("    ", Style::default()),
-        Span::styled(
-            "↑↓/jk",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 选择  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Enter/空格",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 切换  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "t",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 总开关  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "a",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 全部启用  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "d",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 全部禁用  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 返回", Style::default().fg(t.config_hint_desc)),
-    ]));
-
-    // 滚动：确保选中工具始终可见
-    let inner_height = area.height.saturating_sub(2) as usize;
-    let selected_line = list_start_line + app.ui.tool_toggle_index;
-    let scroll = app.ui.config_scroll_offset as usize;
-    let new_scroll = if selected_line < scroll {
-        selected_line
-    } else if selected_line >= scroll + inner_height {
-        selected_line.saturating_sub(inner_height - 1)
-    } else {
-        scroll
-    };
-    app.ui.config_scroll_offset = new_scroll as u16;
-
-    let content = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_config))
-                .title(Span::styled(
-                    " 🔧 工具开关设置 ",
-                    Style::default()
-                        .fg(t.config_label_selected)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(bg)),
-        )
-        .scroll((app.ui.config_scroll_offset, 0));
-    f.render_widget(content, area);
 }
 
-pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+/// Skills tab 内容
+fn draw_tab_skills_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
     let t = &app.ui.theme;
-    let bg = t.bg_title;
     let total = app.state.loaded_skills.len();
     let enabled_count = total
         - app
@@ -635,15 +522,6 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             })
             .count();
 
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "  📦 Skill 开关",
-        Style::default()
-            .fg(t.config_title)
-            .add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
         format!("  已启用: {}/{}", enabled_count, total),
         Style::default()
@@ -651,16 +529,10 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             .add_modifier(Modifier::BOLD),
     )]));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
-    lines.push(Line::from(""));
-
-    let list_start_line = lines.len();
 
     for (i, skill) in app.state.loaded_skills.iter().enumerate() {
-        let is_selected = i == app.ui.skill_toggle_index;
+        field_line_indices.push(lines.len());
+        let is_selected = i == app.ui.config_field_idx;
         let name = &skill.frontmatter.name;
         let is_enabled = !app
             .state
@@ -702,79 +574,34 @@ pub fn draw_skill_toggle(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) 
             ),
         ]));
     }
+}
 
+/// Hooks tab（占位）
+fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
+    let t = &app.ui.theme;
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
+        "  🪝 Hooks（即将推出）",
+        Style::default().fg(t.config_dim),
     )));
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("    ", Style::default()),
-        Span::styled(
-            "↑↓/jk",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 选择  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Enter/空格",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 切换  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "a",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 全部启用  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "d",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 全部禁用  ", Style::default().fg(t.config_hint_desc)),
-        Span::styled(
-            "Esc",
-            Style::default()
-                .fg(t.config_hint_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" 返回", Style::default().fg(t.config_hint_desc)),
-    ]));
+    lines.push(Line::from(Span::styled(
+        "  Hook 系统允许你在特定事件发生时自动执行自定义操作。",
+        Style::default().fg(t.config_dim),
+    )));
+}
 
-    // 滚动：确保选中 skill 始终可见
-    let inner_height = area.height.saturating_sub(2) as usize;
-    let selected_line = list_start_line + app.ui.skill_toggle_index;
-    let scroll = app.ui.config_scroll_offset as usize;
-    let new_scroll = if selected_line < scroll {
-        selected_line
-    } else if selected_line >= scroll + inner_height {
-        selected_line.saturating_sub(inner_height - 1)
-    } else {
-        scroll
-    };
-    app.ui.config_scroll_offset = new_scroll as u16;
-
-    let content = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_config))
-                .title(Span::styled(
-                    " 📦 Skill 开关设置 ",
-                    Style::default()
-                        .fg(t.config_label_selected)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(bg)),
-        )
-        .scroll((app.ui.config_scroll_offset, 0));
-    f.render_widget(content, area);
+/// Commands tab（占位）
+fn draw_tab_commands_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
+    let t = &app.ui.theme;
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  📋 自定义命令（即将推出）",
+        Style::default().fg(t.config_dim),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  自定义命令允许你创建常用操作的快捷方式。",
+        Style::default().fg(t.config_dim),
+    )));
 }

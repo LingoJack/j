@@ -15,7 +15,7 @@ use super::theme::Theme;
 use super::tools::ToolRegistry;
 use super::tools::background::BackgroundManager;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
-use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS, TOAST_DURATION_SECS};
+use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
@@ -216,14 +216,12 @@ pub struct UIState {
     pub pending_style_edit: bool,
     /// 图片缓存（渲染终端图片）
     pub image_cache: Arc<Mutex<ImageCache>>,
-    /// 工具开关子菜单中选中的索引
-    pub tool_toggle_index: usize,
-    /// Skill 开关子菜单中选中的索引
-    pub skill_toggle_index: usize,
     /// 是否展开工具调用详情（Ctrl+O 切换）
     pub expand_tools: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
+    /// 配置面板当前 Tab
+    pub config_tab: ConfigTab,
 }
 
 // ========== 后端状态 ==========
@@ -838,10 +836,74 @@ pub enum ChatMode {
     ArchiveList,
     /// 工具调用确认模式（选项式交互区域）
     ToolConfirm,
-    /// 工具开关子菜单模式（逐个启用/禁用工具）
-    ToolToggle,
-    /// Skill 开关子菜单模式（逐个启用/禁用 skill）
-    SkillToggle,
+}
+
+/// 配置面板 Tab 分页枚举
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigTab {
+    /// 模型配置
+    Model,
+    /// 全局配置
+    Global,
+    /// 工具开关
+    Tools,
+    /// 技能开关
+    Skills,
+    /// Hooks（占位）
+    Hooks,
+    /// 自定义命令（占位）
+    Commands,
+}
+
+impl ConfigTab {
+    /// 返回 Tab 显示标签
+    pub fn label(&self) -> &'static str {
+        match self {
+            ConfigTab::Model => "模型",
+            ConfigTab::Global => "全局",
+            ConfigTab::Tools => "工具",
+            ConfigTab::Skills => "技能",
+            ConfigTab::Hooks => "Hooks",
+            ConfigTab::Commands => "命令",
+        }
+    }
+
+    /// 返回 Tab 索引
+    pub fn index(&self) -> usize {
+        match self {
+            ConfigTab::Model => 0,
+            ConfigTab::Global => 1,
+            ConfigTab::Tools => 2,
+            ConfigTab::Skills => 3,
+            ConfigTab::Hooks => 4,
+            ConfigTab::Commands => 5,
+        }
+    }
+
+    /// 从索引创建 Tab
+    pub fn from_index(idx: usize) -> Self {
+        match idx {
+            0 => ConfigTab::Model,
+            1 => ConfigTab::Global,
+            2 => ConfigTab::Tools,
+            3 => ConfigTab::Skills,
+            4 => ConfigTab::Hooks,
+            _ => ConfigTab::Commands,
+        }
+    }
+
+    /// Tab 总数
+    pub const COUNT: usize = 6;
+
+    /// 切换到下一个 Tab
+    pub fn next(&self) -> Self {
+        ConfigTab::from_index((self.index() + 1) % Self::COUNT)
+    }
+
+    /// 切换到上一个 Tab
+    pub fn prev(&self) -> Self {
+        ConfigTab::from_index((self.index() + Self::COUNT - 1) % Self::COUNT)
+    }
 }
 
 /// Redux-like Action 枚举：所有用户输入和系统事件都转化为 Action
@@ -998,11 +1060,9 @@ pub enum Action {
     ConfigDeleteProvider,
     /// 配置界面：设置当前 Provider 为活跃
     ConfigSetActiveProvider,
-    /// 进入工具开关子菜单
-    EnterToolToggleMenu,
-    /// 进入 Skill 开关子菜单
-    EnterSkillToggleMenu,
-    /// 工具/Skill 开关：导航
+    /// 配置界面：切换 Tab 分页（Left/Right）
+    ConfigSwitchTab(CursorDirection),
+    /// 工具/Skill 开关：导航（统一使用 config_field_idx）
     ToggleMenuNavigate(CursorDirection),
     /// 工具/Skill 开关：切换当前项
     ToggleMenuToggle,
@@ -1095,8 +1155,16 @@ pub enum CursorDirection {
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
-pub fn config_total_fields() -> usize {
-    CONFIG_FIELDS.len() + CONFIG_GLOBAL_FIELDS.len()
+/// 根据当前 tab 计算字段总数
+pub fn config_tab_field_count(app: &ChatApp) -> usize {
+    use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
+    match app.ui.config_tab {
+        ConfigTab::Model => CONFIG_FIELDS.len(),
+        ConfigTab::Global => CONFIG_GLOBAL_FIELDS_TAB.len(),
+        ConfigTab::Tools => app.tool_registry.tool_names().len(),
+        ConfigTab::Skills => app.state.loaded_skills.len(),
+        ConfigTab::Hooks | ConfigTab::Commands => 0,
+    }
 }
 
 impl ChatApp {
@@ -1196,10 +1264,9 @@ impl ChatApp {
                 pending_system_prompt_edit: false,
                 pending_style_edit: false,
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
-                tool_toggle_index: 0,
-                skill_toggle_index: 0,
                 expand_tools: false,
                 config_scroll_offset: 0,
+                config_tab: ConfigTab::Model,
             },
             state: ChatState {
                 agent_config,
@@ -1738,7 +1805,10 @@ impl ChatApp {
 
             // ========== 配置编辑 ==========
             Action::ConfigNavigate(dir) => {
-                let total_fields = config_total_fields();
+                let total_fields = config_tab_field_count(self);
+                if total_fields == 0 {
+                    return;
+                }
                 match dir {
                     CursorDirection::Up => {
                         if self.ui.config_field_idx > 0 {
@@ -1753,6 +1823,9 @@ impl ChatApp {
                 }
             }
             Action::ConfigSwitchProvider(dir) => {
+                if self.ui.config_tab != ConfigTab::Model {
+                    return;
+                }
                 let count = self.state.agent_config.providers.len();
                 if count > 1 {
                     match dir {
@@ -1770,47 +1843,57 @@ impl ChatApp {
                 }
             }
             Action::ConfigEnter => {
-                use super::ui_helpers::config_field_raw_value;
-                use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS};
-                let total_provider = CONFIG_FIELDS.len();
-                if self.ui.config_field_idx < total_provider
-                    && self.state.agent_config.providers.is_empty()
-                {
-                    self.show_toast("还没有 Provider，按 a 新增", true);
-                    return;
+                use super::ui_helpers::{
+                    config_field_raw_value_global, config_field_raw_value_model,
+                };
+                use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
+                match self.ui.config_tab {
+                    ConfigTab::Model => {
+                        if self.state.agent_config.providers.is_empty() {
+                            self.show_toast("还没有 Provider，按 a 新增", true);
+                            return;
+                        }
+                        self.ui.config_edit_buf =
+                            config_field_raw_value_model(self, self.ui.config_field_idx);
+                        self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
+                        self.ui.config_editing = true;
+                    }
+                    ConfigTab::Global => {
+                        let idx = self.ui.config_field_idx;
+                        if idx < CONFIG_GLOBAL_FIELDS_TAB.len() {
+                            let field = CONFIG_GLOBAL_FIELDS_TAB[idx];
+                            if field == "stream_mode" {
+                                self.state.agent_config.stream_mode =
+                                    !self.state.agent_config.stream_mode;
+                                return;
+                            }
+                            if field == "theme" {
+                                self.switch_theme();
+                                return;
+                            }
+                            if field == "system_prompt" {
+                                self.ui.pending_system_prompt_edit = true;
+                                return;
+                            }
+                            if field == "style" {
+                                self.ui.pending_style_edit = true;
+                                return;
+                            }
+                            self.ui.config_edit_buf = config_field_raw_value_global(self, idx);
+                            self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
+                            self.ui.config_editing = true;
+                        }
+                    }
+                    ConfigTab::Tools => {
+                        // Toggle individual tool
+                        self.update(Action::ToggleMenuToggle);
+                    }
+                    ConfigTab::Skills => {
+                        // Toggle individual skill
+                        self.update(Action::ToggleMenuToggle);
+                    }
+                    _ => {}
                 }
-                let gi = self.ui.config_field_idx.checked_sub(total_provider);
-                if let Some(gi) = gi {
-                    if CONFIG_GLOBAL_FIELDS[gi] == "stream_mode" {
-                        self.state.agent_config.stream_mode = !self.state.agent_config.stream_mode;
-                        return;
-                    }
-                    if CONFIG_GLOBAL_FIELDS[gi] == "tools_enabled" {
-                        self.ui.tool_toggle_index = 0;
-                        self.ui.mode = ChatMode::ToolToggle;
-                        return;
-                    }
-                    if CONFIG_GLOBAL_FIELDS[gi] == "skills_enabled" {
-                        self.ui.skill_toggle_index = 0;
-                        self.ui.mode = ChatMode::SkillToggle;
-                        return;
-                    }
-                    if CONFIG_GLOBAL_FIELDS[gi] == "theme" {
-                        self.switch_theme();
-                        return;
-                    }
-                    if CONFIG_GLOBAL_FIELDS[gi] == "system_prompt" {
-                        self.ui.pending_system_prompt_edit = true;
-                        return;
-                    }
-                    if CONFIG_GLOBAL_FIELDS[gi] == "style" {
-                        self.ui.pending_style_edit = true;
-                        return;
-                    }
-                }
-                self.ui.config_edit_buf = config_field_raw_value(self, self.ui.config_field_idx);
-                self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
-                self.ui.config_editing = true;
             }
             Action::ConfigEditChar(c) => {
                 let byte_idx = self
@@ -1859,9 +1942,17 @@ impl ChatApp {
                 }
             },
             Action::ConfigEditSubmit => {
-                use super::ui_helpers::config_field_set;
+                use super::ui_helpers::{config_field_set_global, config_field_set_model};
                 let val = self.ui.config_edit_buf.clone();
-                config_field_set(self, self.ui.config_field_idx, &val);
+                match self.ui.config_tab {
+                    ConfigTab::Model => {
+                        config_field_set_model(self, self.ui.config_field_idx, &val);
+                    }
+                    ConfigTab::Global => {
+                        config_field_set_global(self, self.ui.config_field_idx, &val);
+                    }
+                    _ => {}
+                }
                 self.ui.config_editing = false;
             }
             Action::ConfigAddProvider => {
@@ -1912,62 +2003,38 @@ impl ChatApp {
                     self.show_toast(format!("已设为活跃模型: {}", name), false);
                 }
             }
-            Action::EnterToolToggleMenu => {
-                self.ui.mode = ChatMode::ToolToggle;
-                self.ui.tool_toggle_index = 0;
+            Action::ConfigSwitchTab(dir) => {
+                self.ui.config_tab = match dir {
+                    CursorDirection::Down => self.ui.config_tab.next(),
+                    CursorDirection::Up => self.ui.config_tab.prev(),
+                };
+                self.ui.config_field_idx = 0;
                 self.ui.config_scroll_offset = 0;
-            }
-            Action::EnterSkillToggleMenu => {
-                self.ui.mode = ChatMode::SkillToggle;
-                self.ui.skill_toggle_index = 0;
-                self.ui.config_scroll_offset = 0;
+                self.ui.config_editing = false;
             }
             Action::ToggleMenuNavigate(dir) => {
-                // Used by both ToolToggle and SkillToggle modes
-                // The total count is determined by mode in the handler
-                // Here we just navigate generically
+                // Used by Tools and Skills tabs via config_field_idx
+                let total = config_tab_field_count(self);
+                if total == 0 {
+                    return;
+                }
                 match dir {
                     CursorDirection::Up => {
-                        if self.ui.mode == ChatMode::ToolToggle {
-                            let total = self.tool_registry.tool_names().len();
-                            if total > 0 {
-                                if self.ui.tool_toggle_index == 0 {
-                                    self.ui.tool_toggle_index = total - 1;
-                                } else {
-                                    self.ui.tool_toggle_index -= 1;
-                                }
-                            }
+                        if self.ui.config_field_idx == 0 {
+                            self.ui.config_field_idx = total - 1;
                         } else {
-                            let total = self.state.loaded_skills.len();
-                            if total > 0 {
-                                if self.ui.skill_toggle_index == 0 {
-                                    self.ui.skill_toggle_index = total - 1;
-                                } else {
-                                    self.ui.skill_toggle_index -= 1;
-                                }
-                            }
+                            self.ui.config_field_idx -= 1;
                         }
                     }
                     CursorDirection::Down => {
-                        if self.ui.mode == ChatMode::ToolToggle {
-                            let total = self.tool_registry.tool_names().len();
-                            if total > 0 {
-                                self.ui.tool_toggle_index = (self.ui.tool_toggle_index + 1) % total;
-                            }
-                        } else {
-                            let total = self.state.loaded_skills.len();
-                            if total > 0 {
-                                self.ui.skill_toggle_index =
-                                    (self.ui.skill_toggle_index + 1) % total;
-                            }
-                        }
+                        self.ui.config_field_idx = (self.ui.config_field_idx + 1) % total;
                     }
                 }
             }
             Action::ToggleMenuToggle => {
-                if self.ui.mode == ChatMode::ToolToggle {
+                if self.ui.config_tab == ConfigTab::Tools {
                     let tool_names = self.tool_registry.tool_names();
-                    if let Some(name) = tool_names.get(self.ui.tool_toggle_index) {
+                    if let Some(name) = tool_names.get(self.ui.config_field_idx) {
                         let name = name.to_string();
                         if let Some(pos) = self
                             .state
@@ -1981,7 +2048,8 @@ impl ChatApp {
                             self.state.agent_config.disabled_tools.push(name);
                         }
                     }
-                } else if let Some(skill) = self.state.loaded_skills.get(self.ui.skill_toggle_index)
+                } else if self.ui.config_tab == ConfigTab::Skills
+                    && let Some(skill) = self.state.loaded_skills.get(self.ui.config_field_idx)
                 {
                     let name = skill.frontmatter.name.clone();
                     if let Some(pos) = self
@@ -1998,16 +2066,16 @@ impl ChatApp {
                 }
             }
             Action::ToggleMenuEnableAll => {
-                if self.ui.mode == ChatMode::ToolToggle {
+                if self.ui.config_tab == ConfigTab::Tools {
                     self.state.agent_config.disabled_tools.clear();
                     self.show_toast("已启用全部工具", false);
-                } else {
+                } else if self.ui.config_tab == ConfigTab::Skills {
                     self.state.agent_config.disabled_skills.clear();
                     self.show_toast("已启用全部 Skills", false);
                 }
             }
             Action::ToggleMenuDisableAll => {
-                if self.ui.mode == ChatMode::ToolToggle {
+                if self.ui.config_tab == ConfigTab::Tools {
                     self.state.agent_config.disabled_tools = self
                         .tool_registry
                         .tool_names()
@@ -2015,7 +2083,7 @@ impl ChatApp {
                         .map(|n| n.to_string())
                         .collect();
                     self.show_toast("已禁用全部工具", false);
-                } else {
+                } else if self.ui.config_tab == ConfigTab::Skills {
                     self.state.agent_config.disabled_skills = self
                         .state
                         .loaded_skills

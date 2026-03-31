@@ -27,7 +27,8 @@ pub const INSTALL_SOURCE: &str = match option_env!("INSTALL_SOURCE") {
 
 /// 配置编辑界面的字段列表
 pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
-/// 全局配置字段
+/// 全局配置字段（旧版，保留向后兼容）
+#[allow(dead_code)]
 pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "system_prompt",
     "style",
@@ -38,6 +39,17 @@ pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "max_tool_rounds",
     "tool_confirm_timeout",
     "skills_enabled",
+];
+
+/// 全局配置字段（Tab 分页版，去掉 tools_enabled 和 skills_enabled）
+pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
+    "system_prompt",
+    "style",
+    "stream_mode",
+    "max_history_messages",
+    "theme",
+    "max_tool_rounds",
+    "tool_confirm_timeout",
 ];
 
 /// Toast 通知显示时长（秒）
