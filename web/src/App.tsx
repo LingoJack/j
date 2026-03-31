@@ -12,7 +12,7 @@ const i18n = {
     hero: {
       badge: 'CLI Tool',
       title: 'Your command line,',
-      titleHighlight: 'supercharged.',
+      titleHighlight: 'simple, but works.',
       subtitle: 'Alias management, daily reports, todo notes, AI chat, and browser automation.',
       subtitleExtra: 'One command to boost your productivity.',
       getStarted: 'Get Started',
@@ -78,7 +78,7 @@ const i18n = {
     hero: {
       badge: '命令行工具',
       title: '你的命令行，',
-      titleHighlight: '如虎添翼。',
+      titleHighlight: '简洁高效。',
       subtitle: '别名管理、日报系统、待办备忘、AI 对话、浏览器自动化。',
       subtitleExtra: '一个命令，效率翻倍。',
       getStarted: '快速开始',
