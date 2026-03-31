@@ -67,6 +67,7 @@ fn draw_tab_bar<'a>(app: &ChatApp) -> Line<'a> {
         ConfigTab::Skills,
         ConfigTab::Hooks,
         ConfigTab::Commands,
+        ConfigTab::Session,
     ];
 
     let mut spans: Vec<Span<'a>> = vec![Span::styled("  ", Style::default())];
@@ -137,6 +138,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Commands => {
             draw_tab_commands_lines(&mut lines, app);
         }
+        ConfigTab::Session => {
+            draw_tab_session_lines(&mut lines, &mut field_line_indices, app);
+        }
     }
 
     // 滚动：确保选中字段始终可见
@@ -160,6 +164,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Skills => " 📦 技能开关 ",
         ConfigTab::Hooks => " 🪝 Hooks ",
         ConfigTab::Commands => " 📋 自定义命令 ",
+        ConfigTab::Session => " 💬 会话管理 ",
     };
 
     let content = Paragraph::new(lines)
@@ -334,8 +339,12 @@ fn draw_tab_global_lines<'a>(
             Style::default().fg(t.config_value)
         };
 
-        let line = if *field == "stream_mode" {
-            let toggle_on = app.state.agent_config.stream_mode;
+        let line = if *field == "stream_mode" || *field == "auto_restore_session" {
+            let toggle_on = match *field {
+                "stream_mode" => app.state.agent_config.stream_mode,
+                "auto_restore_session" => app.state.agent_config.auto_restore_session,
+                _ => false,
+            };
             let toggle_style = if toggle_on {
                 Style::default()
                     .fg(t.config_toggle_on)
@@ -604,4 +613,150 @@ fn draw_tab_commands_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
         "  自定义命令允许你创建常用操作的快捷方式。",
         Style::default().fg(t.config_dim),
     )));
+}
+
+/// 格式化 Unix 时间戳为人类可读格式
+fn format_timestamp(ts: u64) -> String {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    let dt = UNIX_EPOCH + Duration::from_secs(ts);
+    let now = SystemTime::now();
+    let elapsed = now.duration_since(dt).unwrap_or_default();
+    if elapsed.as_secs() < 60 {
+        "刚刚".to_string()
+    } else if elapsed.as_secs() < 3600 {
+        format!("{}分钟前", elapsed.as_secs() / 60)
+    } else if elapsed.as_secs() < 86400 {
+        format!("{}小时前", elapsed.as_secs() / 3600)
+    } else if elapsed.as_secs() < 86400 * 30 {
+        format!("{}天前", elapsed.as_secs() / 86400)
+    } else {
+        // 使用简单日期格式
+        let secs = ts;
+        let days = secs / 86400;
+        // 简单计算：1970-01-01 起的天数转日期
+        let (y, m, d) = days_to_ymd(days);
+        format!("{:04}-{:02}-{:02}", y, m, d)
+    }
+}
+
+/// 将 1970-01-01 起的天数转为 (year, month, day)
+fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+    // 简单算法，足够展示用途
+    let mut y = 1970;
+    let mut remaining = days;
+    loop {
+        let days_in_year = if is_leap(y) { 366 } else { 365 };
+        if remaining < days_in_year {
+            break;
+        }
+        remaining -= days_in_year;
+        y += 1;
+    }
+    let month_days = if is_leap(y) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut m = 1;
+    for &md in &month_days {
+        if remaining < md {
+            break;
+        }
+        remaining -= md;
+        m += 1;
+    }
+    (y, m, remaining + 1)
+}
+
+fn is_leap(y: u64) -> bool {
+    y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400))
+}
+
+/// Session tab 内容
+fn draw_tab_session_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
+
+    // 当前会话信息
+    let msg_count = app.state.session.messages.len();
+    lines.push(Line::from(vec![
+        Span::styled("  当前会话: ", Style::default().fg(t.config_label)),
+        Span::styled(
+            format!("{} ({} 条消息)", &app.session_id, msg_count),
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    lines.push(Line::from(""));
+
+    // 确认恢复覆盖层
+    if app.ui.session_restore_confirm {
+        lines.push(Line::from(Span::styled(
+            "  ⚠️  当前会话有消息，恢复将切换到历史会话（当前会话已自动保存）",
+            Style::default()
+                .fg(t.config_toggle_off)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  按 y/Enter 确认恢复，Esc 取消",
+            Style::default().fg(t.config_dim),
+        )));
+        lines.push(Line::from(""));
+    }
+
+    if app.ui.session_list.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  (没有历史会话)",
+            Style::default().fg(t.config_dim),
+        )));
+        return;
+    }
+
+    lines.push(Line::from(Span::styled(
+        format!("  历史会话 ({})", app.ui.session_list.len()),
+        Style::default()
+            .fg(t.config_label)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    for (i, session) in app.ui.session_list.iter().enumerate() {
+        field_line_indices.push(lines.len());
+        let is_selected = i == app.ui.session_list_index;
+
+        let pointer = if is_selected { "  ▸ " } else { "    " };
+        let pointer_style = if is_selected {
+            Style::default().fg(t.config_pointer)
+        } else {
+            Style::default()
+        };
+
+        let preview = session
+            .first_message_preview
+            .as_deref()
+            .unwrap_or("(空会话)");
+        let preview_truncated: String = preview.chars().take(40).collect();
+        let time_str = format_timestamp(session.updated_at);
+
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_label)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(pointer, pointer_style),
+            Span::styled(preview_truncated, name_style),
+            Span::styled(
+                format!("  ({} 条, {})", session.message_count, time_str),
+                Style::default().fg(t.config_dim),
+            ),
+        ]));
+    }
 }

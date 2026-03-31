@@ -811,6 +811,20 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 ConfigTab::Hooks | ConfigTab::Commands => {
                     vec![("←→", "切换标签"), ("Esc", "保存返回")]
                 }
+                ConfigTab::Session => {
+                    if app.ui.session_restore_confirm {
+                        vec![("y/Enter", "确认恢复"), ("Esc", "取消")]
+                    } else {
+                        vec![
+                            ("←→", "切换标签"),
+                            ("↑↓", "选择"),
+                            ("Enter", "恢复"),
+                            ("d", "删除"),
+                            ("n", "新建"),
+                            ("Esc", "保存返回"),
+                        ]
+                    }
+                }
             }
         }
         ChatMode::ArchiveConfirm => {

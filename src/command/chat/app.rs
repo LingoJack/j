@@ -7,9 +7,9 @@ use super::sandbox::Sandbox;
 use super::skill::{self, Skill, skills_dir};
 use super::storage::{
     AgentConfig, ChatMessage, ChatSession, ModelProvider, SessionEvent, ToolCallItem,
-    append_session_event, generate_session_id, list_sessions, load_agent_config, load_session,
-    memory_path, save_agent_config, save_memory, save_soul, save_system_prompt, soul_path,
-    system_prompt_path,
+    append_session_event, delete_session, generate_session_id, list_sessions, load_agent_config,
+    load_session, memory_path, save_agent_config, save_memory, save_soul, save_system_prompt,
+    soul_path, system_prompt_path,
 };
 use super::theme::Theme;
 use super::tools::ToolRegistry;
@@ -222,6 +222,12 @@ pub struct UIState {
     pub config_scroll_offset: u16,
     /// 配置面板当前 Tab
     pub config_tab: ConfigTab,
+    /// 会话列表（缓存）
+    pub session_list: Vec<super::storage::SessionMeta>,
+    /// 会话列表选中索引
+    pub session_list_index: usize,
+    /// 会话恢复确认模式（当前有消息时需要确认）
+    pub session_restore_confirm: bool,
 }
 
 // ========== 后端状态 ==========
@@ -853,6 +859,8 @@ pub enum ConfigTab {
     Hooks,
     /// 自定义命令（占位）
     Commands,
+    /// 会话管理
+    Session,
 }
 
 impl ConfigTab {
@@ -865,6 +873,7 @@ impl ConfigTab {
             ConfigTab::Skills => "技能",
             ConfigTab::Hooks => "Hooks",
             ConfigTab::Commands => "命令",
+            ConfigTab::Session => "会话",
         }
     }
 
@@ -877,6 +886,7 @@ impl ConfigTab {
             ConfigTab::Skills => 3,
             ConfigTab::Hooks => 4,
             ConfigTab::Commands => 5,
+            ConfigTab::Session => 6,
         }
     }
 
@@ -888,12 +898,13 @@ impl ConfigTab {
             2 => ConfigTab::Tools,
             3 => ConfigTab::Skills,
             4 => ConfigTab::Hooks,
-            _ => ConfigTab::Commands,
+            5 => ConfigTab::Commands,
+            _ => ConfigTab::Session,
         }
     }
 
     /// Tab 总数
-    pub const COUNT: usize = 6;
+    pub const COUNT: usize = 7;
 
     /// 切换到下一个 Tab
     pub fn next(&self) -> Self {
@@ -1102,6 +1113,17 @@ pub enum Action {
     /// 新建会话（远程）
     NewSession,
 
+    /// 加载 session 列表（进入 Session tab 时调用）
+    LoadSessionList,
+    /// Session 列表导航
+    SessionListNavigate(CursorDirection),
+    /// 恢复选中的 session
+    RestoreSession,
+    /// 删除选中的 session
+    DeleteSession,
+    /// 新建空 session（从 session 列表中）
+    NewSessionFromList,
+
     /// 启动还原流程（加载归档列表）
     StartArchiveList,
     /// 归档列表：导航
@@ -1164,6 +1186,7 @@ pub fn config_tab_field_count(app: &ChatApp) -> usize {
         ConfigTab::Tools => app.tool_registry.tool_names().len(),
         ConfigTab::Skills => app.state.loaded_skills.len(),
         ConfigTab::Hooks | ConfigTab::Commands => 0,
+        ConfigTab::Session => app.ui.session_list.len(),
     }
 }
 
@@ -1267,6 +1290,9 @@ impl ChatApp {
                 expand_tools: false,
                 config_scroll_offset: 0,
                 config_tab: ConfigTab::Model,
+                session_list: Vec::new(),
+                session_list_index: 0,
+                session_restore_confirm: false,
             },
             state: ChatState {
                 agent_config,
@@ -1867,6 +1893,17 @@ impl ChatApp {
                                     !self.state.agent_config.stream_mode;
                                 return;
                             }
+                            if field == "auto_restore_session" {
+                                self.state.agent_config.auto_restore_session =
+                                    !self.state.agent_config.auto_restore_session;
+                                let status = if self.state.agent_config.auto_restore_session {
+                                    "开启"
+                                } else {
+                                    "关闭"
+                                };
+                                self.show_toast(format!("自动恢复会话已{}", status), false);
+                                return;
+                            }
                             if field == "theme" {
                                 self.switch_theme();
                                 return;
@@ -2011,6 +2048,10 @@ impl ChatApp {
                 self.ui.config_field_idx = 0;
                 self.ui.config_scroll_offset = 0;
                 self.ui.config_editing = false;
+                // 切换到 Session tab 时自动加载列表
+                if self.ui.config_tab == ConfigTab::Session {
+                    self.update(Action::LoadSessionList);
+                }
             }
             Action::ToggleMenuNavigate(dir) => {
                 // Used by Tools and Skills tabs via config_field_idx
@@ -2236,6 +2277,86 @@ impl ChatApp {
                         session_id: new_id,
                     });
                 }
+            }
+
+            Action::LoadSessionList => {
+                let mut sessions = list_sessions();
+                // 过滤掉当前 session
+                sessions.retain(|s| s.id != self.session_id);
+                self.ui.session_list = sessions;
+                self.ui.session_list_index = 0;
+                self.ui.session_restore_confirm = false;
+            }
+            Action::SessionListNavigate(dir) => {
+                let count = self.ui.session_list.len();
+                if count > 0 {
+                    match dir {
+                        CursorDirection::Up => {
+                            self.ui.session_list_index = if self.ui.session_list_index == 0 {
+                                count - 1
+                            } else {
+                                self.ui.session_list_index - 1
+                            };
+                        }
+                        CursorDirection::Down => {
+                            self.ui.session_list_index = (self.ui.session_list_index + 1) % count;
+                        }
+                    }
+                }
+            }
+            Action::RestoreSession => {
+                if self.ui.session_list.is_empty() {
+                    return;
+                }
+                let idx = self.ui.session_list_index;
+                if let Some(meta) = self.ui.session_list.get(idx) {
+                    let target_id = meta.id.clone();
+                    // 保存当前会话
+                    self.persist_new_messages();
+                    // 加载目标会话
+                    let session = load_session(&target_id);
+                    self.last_persisted_len = session.messages.len();
+                    self.session_id = target_id;
+                    self.state.session = session;
+                    self.ui.scroll_offset = u16::MAX;
+                    self.ui.msg_lines_cache = None;
+                    self.ui.session_restore_confirm = false;
+                    self.ui.mode = ChatMode::Chat;
+                    self.show_toast("会话已恢复".to_string(), false);
+                }
+            }
+            Action::DeleteSession => {
+                if self.ui.session_list.is_empty() {
+                    return;
+                }
+                let idx = self.ui.session_list_index;
+                if let Some(meta) = self.ui.session_list.get(idx) {
+                    let id = meta.id.clone();
+                    if delete_session(&id) {
+                        self.ui.session_list.remove(idx);
+                        if self.ui.session_list_index >= self.ui.session_list.len()
+                            && self.ui.session_list_index > 0
+                        {
+                            self.ui.session_list_index -= 1;
+                        }
+                        self.show_toast("会话已删除".to_string(), false);
+                    } else {
+                        self.show_toast("删除失败".to_string(), true);
+                    }
+                }
+            }
+            Action::NewSessionFromList => {
+                // 保存当前会话
+                self.persist_new_messages();
+                // 生成新会话
+                let new_id = generate_session_id();
+                self.session_id = new_id;
+                self.state.session.messages.clear();
+                self.last_persisted_len = 0;
+                self.ui.scroll_offset = 0;
+                self.ui.msg_lines_cache = None;
+                self.ui.mode = ChatMode::Chat;
+                self.show_toast("已新建会话".to_string(), false);
             }
 
             Action::StartArchiveList => {

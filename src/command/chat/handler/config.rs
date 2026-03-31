@@ -91,6 +91,47 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
             _ => return,
         },
+        ConfigTab::Session => {
+            if app.ui.session_restore_confirm {
+                // 确认恢复模式
+                match key.code {
+                    KeyCode::Char('y') | KeyCode::Enter => {
+                        app.ui.session_restore_confirm = false;
+                        Action::RestoreSession
+                    }
+                    KeyCode::Esc | KeyCode::Char('n') => {
+                        app.ui.session_restore_confirm = false;
+                        return;
+                    }
+                    _ => return,
+                }
+            } else {
+                match key.code {
+                    KeyCode::Esc => Action::SaveConfig,
+                    KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
+                    KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        Action::SessionListNavigate(CursorDirection::Up)
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        Action::SessionListNavigate(CursorDirection::Down)
+                    }
+                    KeyCode::Enter => {
+                        if app.ui.session_list.is_empty() {
+                            return;
+                        }
+                        if !app.state.session.messages.is_empty() {
+                            app.ui.session_restore_confirm = true;
+                            return;
+                        }
+                        Action::RestoreSession
+                    }
+                    KeyCode::Char('d') => Action::DeleteSession,
+                    KeyCode::Char('n') => Action::NewSessionFromList,
+                    _ => return,
+                }
+            }
+        }
     };
     app.update(action);
 }

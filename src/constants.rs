@@ -50,6 +50,7 @@ pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "theme",
     "max_tool_rounds",
     "tool_confirm_timeout",
+    "auto_restore_session",
 ];
 
 /// Toast 通知显示时长（秒）

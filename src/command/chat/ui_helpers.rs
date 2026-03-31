@@ -104,6 +104,7 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "theme" => "主题风格",
         "max_tool_rounds" => "工具轮数上限",
         "tool_confirm_timeout" => "确认超时(秒)",
+        "auto_restore_session" => "自动恢复会话",
         _ => field_name,
     }
 }
@@ -132,6 +133,13 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
                 format!("{}秒", app.state.agent_config.tool_confirm_timeout)
             }
         }
+        "auto_restore_session" => {
+            if app.state.agent_config.auto_restore_session {
+                "开启".into()
+            } else {
+                "关闭".into()
+            }
+        }
         _ => String::new(),
     }
 }
@@ -153,6 +161,13 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
         "theme" => app.state.agent_config.theme.to_str().to_string(),
         "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
         "tool_confirm_timeout" => app.state.agent_config.tool_confirm_timeout.to_string(),
+        "auto_restore_session" => {
+            if app.state.agent_config.auto_restore_session {
+                "true".into()
+            } else {
+                "false".into()
+            }
+        }
         _ => String::new(),
     }
 }
@@ -193,6 +208,12 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
             if let Ok(num) = value.trim().parse::<u64>() {
                 app.state.agent_config.tool_confirm_timeout = num;
             }
+        }
+        "auto_restore_session" => {
+            app.state.agent_config.auto_restore_session = matches!(
+                value.trim().to_lowercase().as_str(),
+                "true" | "1" | "开启" | "on" | "yes"
+            );
         }
         _ => {}
     }

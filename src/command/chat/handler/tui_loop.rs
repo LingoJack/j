@@ -161,6 +161,20 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         .map(|ws| ws.has_client())
         .unwrap_or(false);
 
+    // 自动恢复最近的 session（如果开启了 auto_restore_session）
+    if app.state.agent_config.auto_restore_session
+        && let Some(latest_id) = super::super::storage::find_latest_session_id()
+    {
+        let session = super::super::storage::load_session(&latest_id);
+        if !session.messages.is_empty() {
+            app.session_id = latest_id;
+            app.last_persisted_len = session.messages.len();
+            app.state.session = session;
+            app.ui.scroll_offset = u16::MAX; // 滚动到底部
+            app.ui.msg_lines_cache = None;
+        }
+    }
+
     // 首次运行（尚未配置 provider）时，自动进入配置界面引导用户完成配置
     if app.state.agent_config.providers.is_empty() {
         use super::super::storage::{
@@ -188,6 +202,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 disabled_tools: Vec::new(),
                 disabled_skills: Vec::new(),
                 compact: Default::default(),
+                auto_restore_session: false,
             };
             let _ = save_agent_config(&example);
             app.state.agent_config = example;

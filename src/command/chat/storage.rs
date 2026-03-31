@@ -65,6 +65,9 @@ pub struct AgentConfig {
     /// Context compact 配置
     #[serde(default)]
     pub compact: CompactConfig,
+    /// 启动时是否自动恢复最近的 session
+    #[serde(default)]
+    pub auto_restore_session: bool,
 }
 
 fn default_max_history_messages() -> usize {
@@ -573,4 +576,14 @@ pub fn generate_session_id() -> String {
         .as_micros();
     let pid = std::process::id();
     format!("{:x}-{:x}", ts, pid)
+}
+
+/// 删除指定 session 的 JSONL 文件
+pub fn delete_session(session_id: &str) -> bool {
+    let path = session_file_path(session_id);
+    match fs::remove_file(&path) {
+        Ok(_) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+        Err(_) => false,
+    }
 }
