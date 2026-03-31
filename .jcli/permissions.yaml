@@ -54,4 +54,7 @@ allow:
 - ComputerUse(find_element:*)
 - Bash(echo "ComputerUse:*)
 - Bash(find ../claude-code/src/tools:*)
+- Glob
+- Bash(find web/src:*)
+- Bash(cargo build:*)
 deny: []

@@ -335,8 +335,9 @@ end tell
         let mut lines = Vec::new();
         for e in entries {
             let title = e.title.as_deref().unwrap_or("");
-            let title_display = if title.len() > 40 {
-                format!("{}...", &title[..37])
+            let title_display = if title.chars().count() > 40 {
+                let truncated: String = title.chars().take(37).collect();
+                format!("{}...", truncated)
             } else {
                 title.to_string()
             };
