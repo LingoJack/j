@@ -62,12 +62,12 @@ fn draw_tab_bar<'a>(app: &ChatApp) -> Line<'a> {
     let current = app.ui.config_tab;
     let all_tabs = [
         ConfigTab::Model,
+        ConfigTab::Session,
         ConfigTab::Global,
         ConfigTab::Tools,
         ConfigTab::Skills,
         ConfigTab::Hooks,
         ConfigTab::Commands,
-        ConfigTab::Session,
     ];
 
     let mut spans: Vec<Span<'a>> = vec![Span::styled("  ", Style::default())];

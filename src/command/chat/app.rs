@@ -868,12 +868,12 @@ impl ConfigTab {
     pub fn label(&self) -> &'static str {
         match self {
             ConfigTab::Model => "Model",
+            ConfigTab::Session => "Session",
             ConfigTab::Global => "Global",
             ConfigTab::Tools => "Tools",
             ConfigTab::Skills => "Skills",
             ConfigTab::Hooks => "Hooks",
             ConfigTab::Commands => "Commands",
-            ConfigTab::Session => "Session",
         }
     }
 
@@ -881,12 +881,12 @@ impl ConfigTab {
     pub fn index(&self) -> usize {
         match self {
             ConfigTab::Model => 0,
-            ConfigTab::Global => 1,
-            ConfigTab::Tools => 2,
-            ConfigTab::Skills => 3,
-            ConfigTab::Hooks => 4,
-            ConfigTab::Commands => 5,
-            ConfigTab::Session => 6,
+            ConfigTab::Session => 1,
+            ConfigTab::Global => 2,
+            ConfigTab::Tools => 3,
+            ConfigTab::Skills => 4,
+            ConfigTab::Hooks => 5,
+            ConfigTab::Commands => 6,
         }
     }
 
@@ -894,12 +894,12 @@ impl ConfigTab {
     pub fn from_index(idx: usize) -> Self {
         match idx {
             0 => ConfigTab::Model,
-            1 => ConfigTab::Global,
-            2 => ConfigTab::Tools,
-            3 => ConfigTab::Skills,
-            4 => ConfigTab::Hooks,
-            5 => ConfigTab::Commands,
-            _ => ConfigTab::Session,
+            1 => ConfigTab::Session,
+            2 => ConfigTab::Global,
+            3 => ConfigTab::Tools,
+            4 => ConfigTab::Skills,
+            5 => ConfigTab::Hooks,
+            _ => ConfigTab::Commands,
         }
     }
 
