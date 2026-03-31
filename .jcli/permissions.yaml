@@ -58,4 +58,11 @@ allow:
 - Bash(find web/src:*)
 - Bash(cargo build:*)
 - Bash(find web:*)
+- Bash(find /Users/lingojack/.jdata:*)
+- Bash(find src/command:*)
+- Bash(find src/command/todo:*)
+- Bash(grep -n:*)
+- Bash(sed -n:*)
+- Bash(find src:*)
+- Bash(cd web:*)
 deny: []

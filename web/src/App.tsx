@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 type Lang = 'en' | 'zh'
 
@@ -56,6 +57,57 @@ const i18n = {
         { title: 'Agent Mode', desc: 'Autonomous multi-step reasoning with tool calling.' },
         { title: 'Context Compact', desc: 'Three-layer compression for context management.' },
         { title: 'Multiple Themes', desc: 'Dark, Light, Dracula, Gruvbox, Monokai, Nord.' }
+      ]
+    },
+    bestPractices: {
+      title: 'Best Practices',
+      subtitle: 'Practical tips to maximize your productivity with jcli.',
+      categories: [
+        {
+          title: 'Alias Management',
+          tips: [
+            { title: 'Categorize aliases', desc: 'Use sections like browser, editor, inner_url, outer_url to organize aliases by type.', example: 'j set browser:chrome "/Applications/Google Chrome.app"' },
+            { title: 'Quick search', desc: 'Register a browser and search directly with text. No need to open browser first.', example: 'j chrome "search query"' },
+            { title: 'Combine with VPN', desc: 'Mark URLs as outer_url to auto-connect VPN when opening.', example: 'j set outer_url:work-portal https://internal.company.com' },
+            { title: 'Script as alias', desc: 'Register frequently used scripts as aliases with environment variables.', example: 'j set script:deploy ~/scripts/deploy.sh' }
+          ]
+        },
+        {
+          title: 'Daily Reports',
+          tips: [
+            { title: 'Write immediately', desc: 'Add notes right after completing tasks. Use quotes for multi-word content.', example: 'j report "Implemented user authentication feature"' },
+            { title: 'Use TUI editor', desc: 'Run j report without arguments to open TUI for multi-line editing with history.', example: 'j report' },
+            { title: 'Weekly sync', desc: 'Use reportctl to create weekly reports and sync across devices.', example: 'j reportctl new && j reportctl push' },
+            { title: 'Search history', desc: 'Quickly search past reports with fuzzy matching.', example: 'j report search authentication' }
+          ]
+        },
+        {
+          title: 'Todo & Notes',
+          tips: [
+            { title: 'Quick capture', desc: 'Add todos on the fly without interrupting your workflow.', example: 'j todo add Review pull request' },
+            { title: 'Link to reports', desc: 'Completed todos can automatically write to daily reports.', example: 'j todo done 1 --report' },
+            { title: 'Use TUI manager', desc: 'Interactive TUI for managing complex todo lists.', example: 'j todo' },
+            { title: 'Markdown support', desc: 'Write todos with Markdown checkboxes in report files.', example: '- [x] Completed task' }
+          ]
+        },
+        {
+          title: 'AI Chat Workflow',
+          tips: [
+            { title: 'Context files', desc: 'Use @file: to include local files as context for AI.', example: '@file:src/main.rs Explain this code' },
+            { title: 'Web search', desc: 'Enable web search to let AI fetch latest information.', example: 'What are the new features in React 19?' },
+            { title: 'Tool permissions', desc: 'Configure fine-grained permissions for sensitive operations.', example: 'Allow: Read, Bash, WebFetch' },
+            { title: 'Compact context', desc: 'Use /compact to compress conversation and free context window.', example: '/compact focus:current task' }
+          ]
+        },
+        {
+          title: 'Script Execution',
+          tips: [
+            { title: 'Create script', desc: 'Create executable script with content, auto-registered to script section.', example: 'j concat open "open $1"' },
+            { title: 'TUI editor', desc: 'Open TUI editor to write script when no content provided.', example: 'j concat deploy' },
+            { title: 'New window', desc: 'Execute script in new terminal window without blocking.', example: 'j open -w README.md' },
+            { title: 'Pass arguments', desc: 'Pass arguments to script, referenced as $1, $2, etc.', example: 'j open README.md' }
+          ]
+        }
       ]
     },
     tech: {
@@ -122,6 +174,56 @@ const i18n = {
         { title: 'Agent 模式', desc: '自主多步推理，自动调用工具完成复杂任务。' },
         { title: '对话压缩', desc: '三层压缩机制，智能管理上下文窗口。' },
         { title: '多主题支持', desc: 'Dark、Light、Dracula、Gruvbox、Monokai、Nord。' }
+      ]
+    },
+    bestPractices: {
+      title: '最佳实践',
+      subtitle: '高效使用 jcli 的实用技巧。',
+      categories: [
+        {
+          title: '别名管理',
+          tips: [
+            { title: '设置常用别名', desc: '将常用的应用、目录、网址设置为别名，快速访问。', example: 'j set code /Users/you/projects' },
+            { title: '分类标记', desc: '用 note 命令标记别名类型（browser/editor/vpn/script/outer_url）。', example: 'j note chrome browser' },
+            { title: '快速查找', desc: '在指定分类中查找别名，支持多个分类逗号分隔。', example: 'j find chrome browser,vpn' },
+            { title: '重命名别名', desc: '重命名已有别名，保持路径不变。', example: 'j rn chrome browser' }
+          ]
+        },
+        {
+          title: '浏览器与搜索',
+          tips: [
+            { title: '快速搜索', desc: '浏览器别名后接搜索文本，自动使用搜索引擎。', example: 'j chrome React 教程' },
+            { title: '打开内网地址', desc: '将内网地址设为 inner_url，直接通过别名打开。', example: 'j set wiki https://wiki.company.com' },
+            { title: '联动 VPN', desc: '将外网地址标记为 outer_url，打开时自动连接 VPN。', example: 'j note portal outer_url' },
+            { title: '指定搜索引擎', desc: '搜索时可指定搜索引擎（google/bing/baidu）。', example: 'j chrome Rust 文档 baidu' }
+          ]
+        },
+        {
+          title: '日报系统',
+          tips: [
+            { title: '快速写入', desc: '直接写入日报内容，支持多参数拼接。', example: 'j report 完成用户模块开发' },
+            { title: 'TUI 编辑', desc: '无参数运行 report 打开 TUI 编辑器，支持多行编辑。', example: 'j report' },
+            { title: '查看日报', desc: '查看最近 N 行日报内容。', example: 'j check 10' },
+            { title: '搜索历史', desc: '在日报中搜索关键字，支持模糊匹配。', example: 'j search all 用户 -fuzzy' }
+          ]
+        },
+        {
+          title: '待办备忘',
+          tips: [
+            { title: '快速添加', desc: '命令行直接添加待办事项。', example: 'j todo add 完成代码审查' },
+            { title: '列出待办', desc: '以 Markdown 格式输出待办列表，可过滤已完成/未完成。', example: 'j todo list --undone' },
+            { title: 'TUI 管理', desc: '无参数运行进入 TUI 界面，交互式管理待办。', example: 'j todo' }
+          ]
+        },
+        {
+          title: '脚本执行',
+          tips: [
+            { title: '创建脚本', desc: '创建可执行脚本，自动保存到数据目录的 scripts 文件夹。', example: 'j concat open "open $1"' },
+            { title: 'TUI 编辑', desc: '不提供内容时打开 TUI 编辑器编写脚本。', example: 'j concat open' },
+            { title: '新窗口执行', desc: '脚本可在新终端窗口中执行，不阻塞当前终端。', example: 'j open -w README.md' },
+            { title: '传递参数', desc: '执行脚本时可传递参数，脚本内用 $1、$2 等引用。', example: 'j open README.md' }
+          ]
+        }
       ]
     },
     tech: {
@@ -194,6 +296,19 @@ function CommandExample({ cmd, description }: { cmd: string; description: string
   )
 }
 
+// Tip card component for best practices
+function TipCard({ title, desc, example }: { title: string; desc: string; example: string }) {
+  return (
+    <div className="p-5 bg-white rounded-lg border border-stone-200 hover:border-stone-300 transition-colors">
+      <h4 className="font-medium text-stone-900 mb-2">{title}</h4>
+      <p className="text-stone-600 text-sm mb-3 leading-relaxed">{desc}</p>
+      <div className="bg-[#faf9f6] rounded px-3 py-2 border border-stone-200">
+        <code className="text-stone-700 text-xs font-mono">{example}</code>
+      </div>
+    </div>
+  )
+}
+
 // Section component
 function Section({ id, children, className = '' }: { id?: string; children: React.ReactNode; className?: string }) {
   return (
@@ -206,7 +321,7 @@ function Section({ id, children, className = '' }: { id?: string; children: Reac
 }
 
 export default function App() {
-  const [lang, setLang] = useState<Lang>('en')
+  const [lang, setLang] = useState<Lang>('zh')  // 默认中文
   const t = i18n[lang]
   
   const installCmd = 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh'
@@ -246,6 +361,9 @@ export default function App() {
             </div>
             <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.features}
+            </a>
+            <a href="#best-practices" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
+              {lang === 'en' ? 'Best Practices' : '最佳实践'}
             </a>
             <a href="#quick-start" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.quickStart}
@@ -385,6 +503,46 @@ export default function App() {
               <p className="text-stone-500 text-sm">{item.desc}</p>
             </div>
           ))}
+        </div>
+      </Section>
+
+      {/* Best Practices Section */}
+      <Section id="best-practices">
+        <div className="mb-12">
+          <h2 className="text-3xl sm:text-4xl font-light text-stone-900 mb-4">
+            {t.bestPractices.title}
+          </h2>
+          <p className="text-stone-500 max-w-lg">
+            {t.bestPractices.subtitle}
+          </p>
+        </div>
+        
+        <div className="space-y-12">
+          {t.bestPractices.categories.map((category, idx) => (
+            <div key={idx}>
+              <h3 className="text-lg font-medium text-stone-900 mb-4 pb-2 border-b border-stone-200">
+                {category.title}
+              </h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {category.tips.map((tip, tipIdx) => (
+                  <TipCard key={tipIdx} {...tip} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Link to docs */}
+        <div className="mt-12 text-center">
+          <Link 
+            to="/docs" 
+            className="inline-flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors group"
+          >
+            <span>{lang === 'en' ? 'View full documentation' : '查看完整文档'}</span>
+            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
         </div>
       </Section>
 
