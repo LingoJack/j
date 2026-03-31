@@ -220,22 +220,34 @@ export default function App() {
             <span className="text-2xl font-bold text-stone-900">j</span>
             <span className="text-stone-400 text-sm hidden sm:inline">CLI tool</span>
           </a>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-5">
             {/* Language Switcher */}
-            <button 
-              onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
-              className="text-stone-500 hover:text-stone-900 transition-colors"
-              title={lang === 'en' ? 'Switch to Chinese' : '切换到英文'}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                <circle cx="12" cy="12" r="10" />
-                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-            </button>
-            <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm">
+            <div className="relative group">
+              <button className="text-stone-500 hover:text-stone-900 transition-colors text-sm flex items-center gap-0.5 whitespace-nowrap">
+                {lang === 'en' ? 'EN' : '中文'}
+                <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible absolute top-full left-0 mt-1 bg-white rounded shadow-lg py-1 z-50 transition-all">
+                <button
+                  onClick={() => setLang('en')}
+                  className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'en' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => setLang('zh')}
+                  className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'zh' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                >
+                  中文
+                </button>
+              </div>
+            </div>
+            <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.features}
             </a>
-            <a href="#quick-start" className="text-stone-500 hover:text-stone-900 transition-colors text-sm">
+            <a href="#quick-start" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.quickStart}
             </a>
             <a 
@@ -247,7 +259,7 @@ export default function App() {
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
               </svg>
-              <span className="text-sm hidden sm:inline">{t.nav.github}</span>
+              <span className="text-sm">{t.nav.github}</span>
             </a>
           </div>
         </div>
