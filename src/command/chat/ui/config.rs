@@ -158,7 +158,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     }
 
     let title = match app.ui.config_tab {
-        ConfigTab::Model => " ⚙️  模型配置 ",
+        ConfigTab::Model => " ⚙️ 模型配置 ",
         ConfigTab::Global => " 🌐 全局配置 ",
         ConfigTab::Tools => " 🔧 工具开关 ",
         ConfigTab::Skills => " 📦 技能开关 ",
