@@ -224,9 +224,13 @@ export default function App() {
             {/* Language Switcher */}
             <button 
               onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
-              className="text-stone-500 hover:text-stone-900 transition-colors text-sm font-medium"
+              className="text-stone-500 hover:text-stone-900 transition-colors"
+              title={lang === 'en' ? 'Switch to Chinese' : '切换到英文'}
             >
-              {lang === 'en' ? '中文' : 'EN'}
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
             </button>
             <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm">
               {t.nav.features}
