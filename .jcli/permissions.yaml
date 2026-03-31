@@ -23,4 +23,6 @@ allow:
 - Bash(aic mouse:*)
 - Bash(system_profiler SPDisplaysDataType:*)
 - Bash(cd /Users/jacklingo/dev_custom/j/web:*)
+- Bash(git status:*)
+- Bash(git add:*)
 deny: []

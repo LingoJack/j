@@ -27,6 +27,7 @@ fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
     let _ = execute!(
         io::stdout(),
+        event::DisableBracketedPaste,
         event::DisableMouseCapture,
         LeaveAlternateScreen
     );
@@ -53,6 +54,26 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                 ChatMode::ArchiveConfirm => handle_archive_confirm_mode(app, key),
                 ChatMode::ArchiveList => handle_archive_list_mode(app, key),
                 ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
+            }
+        }
+        Event::Paste(text) => {
+            // 粘贴事件：逐字符插入到输入框（仅 Chat 模式且非 loading）
+            if matches!(app.ui.mode, ChatMode::Chat) {
+                for c in text.chars() {
+                    if c == '\n' || c == '\r' {
+                        continue; // 忽略换行，输入框为单行
+                    }
+                    let byte_idx = app
+                        .ui
+                        .input
+                        .char_indices()
+                        .nth(app.ui.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(app.ui.input.len());
+                    app.ui.input.insert(byte_idx, c);
+                    app.ui.cursor_pos += 1;
+                }
+                *needs_redraw = true;
             }
         }
         Event::Resize(_, _) => {
@@ -144,7 +165,12 @@ fn migrate_legacy_session_if_needed() {
 pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, event::EnableMouseCapture)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        event::EnableMouseCapture,
+        event::EnableBracketedPaste
+    )?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -375,9 +401,9 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         let poll_timeout = if app.state.is_loading {
             std::time::Duration::from_millis(300)
         } else if app.ui.mode == ChatMode::ToolConfirm {
-            std::time::Duration::from_millis(1000)
+            std::time::Duration::from_millis(500)
         } else {
-            std::time::Duration::from_millis(2000)
+            std::time::Duration::from_millis(500)
         };
 
         // 阻塞等待第一个事件（受 poll_timeout 限制）
@@ -472,6 +498,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        event::DisableBracketedPaste,
         event::DisableMouseCapture,
         LeaveAlternateScreen
     )?;

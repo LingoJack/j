@@ -45,8 +45,8 @@ impl InputThread {
 
     /// 线程内部循环
     fn run_loop(tx: mpsc::Sender<Event>, quit: Arc<AtomicBool>, pause: Arc<AtomicBool>) {
-        while !quit.load(Ordering::Relaxed) {
-            if pause.load(Ordering::Relaxed) {
+        while !quit.load(Ordering::Acquire) {
+            if pause.load(Ordering::Acquire) {
                 std::thread::sleep(std::time::Duration::from_millis(50));
                 continue;
             }
@@ -54,7 +54,7 @@ impl InputThread {
             match event::poll(std::time::Duration::from_millis(50)) {
                 Ok(true) => {
                     // 二次检查 pause，避免 poll 返回 true 后 pause 已被设置
-                    if pause.load(Ordering::Relaxed) {
+                    if pause.load(Ordering::Acquire) {
                         continue;
                     }
                     match event::read() {
@@ -83,15 +83,16 @@ impl InputThread {
 
     /// 暂停输入线程（编辑器需要独占 stdin 时调用）
     ///
-    /// 设置 pause_flag 后 sleep 60ms，确保线程退出当前 poll 周期
+    /// 设置 pause_flag 后 sleep 120ms，确保线程退出当前 poll 周期。
+    /// 使用 Release ordering 保证 store 对其他线程立即可见。
     pub fn pause(&self) {
-        self.pause_flag.store(true, Ordering::Relaxed);
-        std::thread::sleep(std::time::Duration::from_millis(60));
+        self.pause_flag.store(true, Ordering::Release);
+        std::thread::sleep(std::time::Duration::from_millis(120));
     }
 
     /// 恢复输入线程
     pub fn resume(&self) {
-        self.pause_flag.store(false, Ordering::Relaxed);
+        self.pause_flag.store(false, Ordering::Release);
     }
 
     /// 清空 channel 中的残留事件
@@ -106,7 +107,7 @@ impl InputThread {
 
     /// 内部停止逻辑（shutdown 和 Drop 共用）
     fn stop_inner(&mut self) {
-        self.quit_flag.store(true, Ordering::Relaxed);
+        self.quit_flag.store(true, Ordering::Release);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
