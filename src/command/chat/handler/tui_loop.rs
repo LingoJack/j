@@ -463,6 +463,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     // 停止输入线程
     input_thread.shutdown();
 
+    // ★ 空会话不保存：删除无消息的 session 文件
+    if app.state.session.messages.is_empty() {
+        super::super::storage::delete_session(&app.session_id);
+    }
+
     // ★ 先恢复终端，再跑 SessionEnd hook（避免 hook 阻塞时终端卡在 raw mode）
     terminal::disable_raw_mode()?;
     execute!(
