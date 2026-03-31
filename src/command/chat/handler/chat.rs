@@ -13,6 +13,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return true;
     }
 
+    // 非 Esc 按键清除模式切换抑制标志
+    if key.code != KeyCode::Esc {
+        app.ui.suppress_next_esc = false;
+    }
+
     // ===== @ 补全弹窗拦截 =====
     if app.ui.at_popup_active {
         let filtered = get_filtered_skills(app);
@@ -515,6 +520,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
     match key.code {
         KeyCode::Esc => {
+            // 从其他模式刚切回 Chat 时，抑制紧随的第一个 Esc（防止退出配置时连带退出对话）
+            if app.ui.suppress_next_esc {
+                app.ui.suppress_next_esc = false;
+                return false;
+            }
             if app.state.is_loading {
                 if app.tool_executor.tools_executing_count > 0
                     && !app

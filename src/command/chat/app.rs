@@ -231,6 +231,8 @@ pub struct UIState {
     pub ctrl_hint_active: bool,
     /// 终端是否支持 Kitty keyboard protocol（支持时才启用 Ctrl 按下/释放检测）
     pub keyboard_enhanced: bool,
+    /// 从其他模式切回 Chat 后，抑制紧随的第一个 Esc（防止退出配置时连带退出对话）
+    pub suppress_next_esc: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
     /// 配置面板当前 Tab
@@ -839,7 +841,7 @@ pub struct PerMsgCache {
     pub is_selected: bool,
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum ChatMode {
     /// 正常对话模式（焦点在输入框）
     Chat,
@@ -1317,6 +1319,7 @@ impl ChatApp {
                 expand_tools: false,
                 ctrl_hint_active: false,
                 keyboard_enhanced: false,
+                suppress_next_esc: false,
                 config_scroll_offset: 0,
                 config_tab: ConfigTab::Model,
                 session_list: Vec::new(),

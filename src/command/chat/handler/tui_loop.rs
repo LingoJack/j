@@ -36,6 +36,44 @@ fn restore_terminal() {
     );
 }
 
+/// Kitty 协议 REPORT_ALL_KEYS_AS_ESCAPE_CODES 模式下，Shift+字符报告为原始键+SHIFT 修饰符，
+/// 需要手动映射为组合后的字符（基于 US QWERTY 布局）。
+fn translate_shift_char(key: &mut crossterm::event::KeyEvent) {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    // 仅处理纯 SHIFT（无 Ctrl/Alt）的 Char 事件
+    if key.modifiers == KeyModifiers::SHIFT {
+        if let KeyCode::Char(c) = key.code {
+            let shifted = match c {
+                'a'..='z' => c.to_ascii_uppercase(),
+                '1' => '!',
+                '2' => '@',
+                '3' => '#',
+                '4' => '$',
+                '5' => '%',
+                '6' => '^',
+                '7' => '&',
+                '8' => '*',
+                '9' => '(',
+                '0' => ')',
+                '-' => '_',
+                '=' => '+',
+                '[' => '{',
+                ']' => '}',
+                '\\' => '|',
+                ';' => ':',
+                '\'' => '"',
+                ',' => '<',
+                '.' => '>',
+                '/' => '?',
+                '`' => '~',
+                _ => return,
+            };
+            key.code = KeyCode::Char(shifted);
+            key.modifiers = KeyModifiers::NONE;
+        }
+    }
+}
+
 /// 将单个 crossterm Event 分发到对应的 handler / Action。
 /// 返回 true 表示应退出主循环。
 fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> bool {
@@ -56,12 +94,24 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                 *needs_redraw = true;
             }
         }
-        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+        // Shift/其他修饰键单独按下 → 忽略（不转发给按键处理）
+        Event::Key(key)
+            if matches!(key.code, crossterm::event::KeyCode::Modifier(_))
+                && matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
+        {
+            // 不做任何处理，避免修饰键事件进入 handler
+        }
+        Event::Key(mut key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             *needs_redraw = true;
+            // Kitty 协议下 Shift+字符需要手动映射
+            if app.ui.keyboard_enhanced {
+                translate_shift_char(&mut key);
+            }
             // Ctrl+其他键组合按下时也显示 Ctrl hints
             app.ui.ctrl_hint_active = key
                 .modifiers
                 .contains(crossterm::event::KeyModifiers::CONTROL);
+            let mode_before = app.ui.mode;
             match app.ui.mode {
                 ChatMode::Chat => {
                     if handle_chat_mode(app, key) {
@@ -77,6 +127,10 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                 ChatMode::ArchiveConfirm => handle_archive_confirm_mode(app, key),
                 ChatMode::ArchiveList => handle_archive_list_mode(app, key),
                 ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
+            }
+            // 从非 Chat 模式切回 Chat 时，标记抑制下一个 Esc（防止连带退出）
+            if mode_before != ChatMode::Chat && app.ui.mode == ChatMode::Chat {
+                app.ui.suppress_next_esc = true;
             }
         }
         // 非 Press/Repeat 的其他按键事件（如 Release）→ 清除 ctrl hint
@@ -425,12 +479,18 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // 阻塞等待第一个事件（受 poll_timeout 限制）
         let first = input_thread.rx.recv_timeout(poll_timeout);
         if let Ok(evt) = first {
+            let mode_before = app.ui.mode;
             let mut should_quit = dispatch_event(&mut app, evt, &mut needs_redraw);
             // 批量消费所有已缓冲的后续事件（非阻塞）
-            if !should_quit {
+            // 注意：如果模式发生了切换，停止批处理，避免后续事件在新模式下被误处理
+            if !should_quit && app.ui.mode == mode_before {
                 while let Ok(evt) = input_thread.rx.try_recv() {
+                    let mode_before = app.ui.mode;
                     if dispatch_event(&mut app, evt, &mut needs_redraw) {
                         should_quit = true;
+                        break;
+                    }
+                    if app.ui.mode != mode_before {
                         break;
                     }
                 }
@@ -504,6 +564,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // 停止输入线程
     input_thread.shutdown();
+
+    // ★ 空会话不保存：如果没有任何消息，删除 session 文件
+    if app.state.session.messages.is_empty() {
+        super::super::storage::delete_session(&app.session_id);
+    }
 
     // ★ 先恢复终端，再跑 SessionEnd hook（避免 hook 阻塞时终端卡在 raw mode）
     terminal::disable_raw_mode()?;

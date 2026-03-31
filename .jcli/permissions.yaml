@@ -18,4 +18,5 @@ allow:
 - Bash(find .:*)
 - Bash(find assets/remote:*)
 - Bash(mkdir -p:*)
+- Bash(find ~/.jdata/agent/data/sessions/:*)
 deny: []
