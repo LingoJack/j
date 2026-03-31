@@ -859,12 +859,12 @@ impl ConfigTab {
     /// 返回 Tab 显示标签
     pub fn label(&self) -> &'static str {
         match self {
-            ConfigTab::Model => "模型",
-            ConfigTab::Global => "全局",
-            ConfigTab::Tools => "工具",
-            ConfigTab::Skills => "技能",
+            ConfigTab::Model => "Model",
+            ConfigTab::Global => "Global",
+            ConfigTab::Tools => "Tools",
+            ConfigTab::Skills => "Skills",
             ConfigTab::Hooks => "Hooks",
-            ConfigTab::Commands => "命令",
+            ConfigTab::Commands => "Commands",
         }
     }
 
