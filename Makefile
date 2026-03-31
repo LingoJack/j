@@ -13,7 +13,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # ============================================
 .PHONY: help \
         current_dir push pull status \
-        build release debug \
+        build release debug build-indicator \
         install uninstall reinstall \
         publish publish-check tag tags bump-version set-version \
         test test-all bench \
@@ -86,12 +86,18 @@ build-web: ## 构建 Web 前端
 	@cd web && npm install --silent && npm run build
 	@echo "☑️ Web 前端构建完成"
 
+build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
+	@echo "🔴 构建 j-indicator..."
+	@mkdir -p $(TARGET_DIR)
+	@swiftc helpers/indicator.swift -o $(TARGET_DIR)/j-indicator -O
+	@echo "☑️ j-indicator 构建完成: $(TARGET_DIR)/j-indicator"
+
 build: ## 构建项目（调试模式）
 	@echo "🔨 构建项目..."
 	@cargo build
 	@echo "☑️ 构建完成"
 
-release: current_dir build-remote ## 构建发布版本
+release: current_dir build-remote build-indicator ## 构建发布版本
 	@echo "🚀 构建发布版本..."
 	@cargo build --release
 	@echo "☑️ 发布版本构建完成: $(TARGET_DIR)/j"
@@ -108,7 +114,10 @@ install: release ## 安装到系统
 	@echo "📦 安装到系统..."
 	@cp $(TARGET_DIR)/j $(BIN_PATH)
 	@chmod +x $(BIN_PATH)
+	@cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator
+	@chmod +x /usr/local/bin/j-indicator
 	@echo "☑️ j 已安装到 $(BIN_PATH)"
+	@echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"
 	@echo "   版本: $(VERSION)"
 
 uninstall: ## 卸载

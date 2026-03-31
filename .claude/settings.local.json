@@ -73,7 +73,8 @@
       "Bash(aic mouse:*)",
       "Bash(aic find:*)",
       "Bash(aic ax:*)",
-      "Bash(find /Users/jacklingo/dev_custom/aic -name *indicator* -o -name Cargo.toml)"
+      "Bash(find /Users/jacklingo/dev_custom/aic -name *indicator* -o -name Cargo.toml)",
+      "Bash(swiftc helpers/indicator.swift -o target/release/j-indicator -O)"
     ]
   },
   "language": "zh-CN",

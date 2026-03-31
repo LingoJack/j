@@ -241,28 +241,20 @@ end tell
         }
     }
 
-    /// 通过坐标点击，保存/恢复鼠标位置以减少干扰
-    fn click_with_cursor_restore(
+    /// 通过坐标点击
+    fn click_at_coordinates(
         x: f64,
         y: f64,
         click_type: &str,
         cancelled: &Arc<AtomicBool>,
     ) -> Result<String, String> {
-        // 1. 保存当前光标位置
-        let saved_pos = get_cursor_position();
+        // 显示光圈指示器
+        show_click_indicator(x, y, Some("Click"));
 
-        // 2. 执行点击
         let x_str = format!("{:.0}", x);
         let y_str = format!("{:.0}", y);
         let args = vec!["mouse", click_type, &x_str, &y_str];
         Self::run_aic(&args, cancelled)?;
-
-        // 3. 恢复光标位置（best-effort）
-        if let Some((ox, oy)) = saved_pos {
-            let ox_str = format!("{:.0}", ox);
-            let oy_str = format!("{:.0}", oy);
-            let _ = Self::run_aic(&["mouse", "move", &ox_str, &oy_str], cancelled);
-        }
 
         Ok(format!("坐标点击 ({:.0}, {:.0})", x, y))
     }
@@ -451,41 +443,45 @@ end tell
             match self.get_som_entry(element) {
                 Ok((entry, app_name)) => {
                     // 尝试 AX 点击（仅支持 click，doubleclick/rightclick 回退坐标）
-                    if click_type == "click" {
-                        if let Some(ref app) = app_name {
-                            match Self::ax_click_element(&entry, app) {
-                                Ok(msg) => {
-                                    // 显示光圈指示器（AX 点击绕过了 aic mouse，需手动触发）
-                                    show_click_indicator(entry.center_x, entry.center_y);
-                                    let active_window = Self::get_active_window();
-                                    return ToolResult {
-                                        output: format!(
-                                            "[{} 完成 via AX] 元素 #{}: {} \"{}\"\n{}\n当前活跃窗口: {}",
-                                            click_type,
-                                            element,
-                                            entry.role,
-                                            entry.title.as_deref().unwrap_or(""),
-                                            msg,
-                                            active_window
-                                        ),
-                                        is_error: false,
-                                        images: vec![],
-                                    };
-                                }
-                                Err(_) => {
-                                    // AX 失败，回退到坐标点击（带光标恢复）
-                                }
+                    if click_type == "click"
+                        && let Some(ref app) = app_name
+                    {
+                        match Self::ax_click_element(&entry, app) {
+                            Ok(msg) => {
+                                // 显示光圈指示器（AX 点击绕过了 aic mouse，需手动触发）
+                                show_click_indicator(
+                                    entry.center_x,
+                                    entry.center_y,
+                                    Some(&format!("AX #{}", element)),
+                                );
+                                let active_window = Self::get_active_window();
+                                return ToolResult {
+                                    output: format!(
+                                        "[{} 完成 via AX] 元素 #{}: {} \"{}\"\n{}\n当前活跃窗口: {}",
+                                        click_type,
+                                        element,
+                                        entry.role,
+                                        entry.title.as_deref().unwrap_or(""),
+                                        msg,
+                                        active_window
+                                    ),
+                                    is_error: false,
+                                    images: vec![],
+                                };
+                            }
+                            Err(_) => {
+                                // AX 失败，回退到坐标点击
                             }
                         }
                     }
-                    // AX 不可用或非 click，使用坐标 + 光标恢复
+                    // AX 不可用或非 click，使用坐标点击
                     let (x, y) = (entry.center_x, entry.center_y);
-                    match Self::click_with_cursor_restore(x, y, click_type, cancelled) {
+                    match Self::click_at_coordinates(x, y, click_type, cancelled) {
                         Ok(_) => {
                             let active_window = Self::get_active_window();
                             return ToolResult {
                                 output: format!(
-                                    "[{} 完成] 元素 #{} → ({:.0}, {:.0})（光标已恢复）\n当前活跃窗口: {}",
+                                    "[{} 完成] 元素 #{} → ({:.0}, {:.0})\n当前活跃窗口: {}",
                                     click_type, element, x, y, active_window
                                 ),
                                 is_error: false,
@@ -523,12 +519,12 @@ end tell
             }
         };
 
-        match Self::click_with_cursor_restore(x, y, click_type, cancelled) {
+        match Self::click_at_coordinates(x, y, click_type, cancelled) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
                     output: format!(
-                        "[{} 完成] 坐标: ({:.0}, {:.0})（光标已恢复）\n当前活跃窗口: {}",
+                        "[{} 完成] 坐标: ({:.0}, {:.0})\n当前活跃窗口: {}",
                         click_type, x, y, active_window
                     ),
                     is_error: false,
@@ -757,8 +753,8 @@ end tell
             }
         };
 
-        // 保存光标位置
-        let saved_pos = get_cursor_position();
+        // 显示起点光圈指示器
+        show_click_indicator(sx, sy, Some("Drag\u{2197}"));
 
         let sx_str = format!("{:.0}", sx);
         let sy_str = format!("{:.0}", sy);
@@ -775,16 +771,10 @@ end tell
 
         match Self::run_aic(&args, cancelled) {
             Ok(_) => {
-                // 恢复光标位置
-                if let Some((ox, oy)) = saved_pos {
-                    let ox_str = format!("{:.0}", ox);
-                    let oy_str = format!("{:.0}", oy);
-                    let _ = Self::run_aic(&["mouse", "move", &ox_str, &oy_str], cancelled);
-                }
                 let active_window = Self::get_active_window();
                 ToolResult {
                     output: format!(
-                        "[拖拽完成] ({:.0},{:.0}) → ({:.0},{:.0})（光标已恢复）\n当前活跃窗口: {}",
+                        "[拖拽完成] ({:.0},{:.0}) → ({:.0},{:.0})\n当前活跃窗口: {}",
                         sx, sy, ex, ey, active_window
                     ),
                     is_error: false,
@@ -962,45 +952,82 @@ end tell
             },
         }
     }
+
+    /// 执行单个 action
+    fn execute_single_action(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
+        let action = match v.get("action").and_then(|a| a.as_str()) {
+            Some(a) => a,
+            None => {
+                return ToolResult {
+                    output: "缺少 action 参数".to_string(),
+                    is_error: true,
+                    images: vec![],
+                };
+            }
+        };
+
+        match action {
+            "screenshot" => self.action_screenshot(v, cancelled),
+            "click" => self.action_click(v, cancelled, "click"),
+            "doubleclick" => self.action_click(v, cancelled, "doubleclick"),
+            "rightclick" => self.action_click(v, cancelled, "rightclick"),
+            "type" => self.action_type(v, cancelled),
+            "key" => self.action_key(v, cancelled),
+            "key_combo" => self.action_key_combo(v, cancelled),
+            "scroll" => self.action_scroll(v, cancelled),
+            "drag" => self.action_drag(v, cancelled),
+            "ax_tree" => self.action_ax_tree(v, cancelled),
+            "find_element" => self.action_find_element(v, cancelled),
+            "focus_app" => self.action_focus_app(v, cancelled),
+            "cursor_position" => self.action_cursor_position(v, cancelled),
+            _ => ToolResult {
+                output: format!("未知 action: {}", action),
+                is_error: true,
+                images: vec![],
+            },
+        }
+    }
 }
 
 // ========== 辅助函数 ==========
 
-/// 触发 aic-indicator 显示点击光圈（fire-and-forget）
-/// 用于 AX 点击等绕过 aic mouse 命令的场景
-fn show_click_indicator(x: f64, y: f64) {
-    // 尝试找到 aic-indicator 二进制
-    let bin = which_aic_indicator();
+/// 触发 j-indicator 显示点击光圈（fire-and-forget）
+fn show_click_indicator(x: f64, y: f64, label: Option<&str>) {
+    let bin = which_j_indicator();
     if let Some(path) = bin {
+        let mut args = vec![x.to_string(), y.to_string()];
+        if let Some(lbl) = label {
+            args.push(lbl.to_string());
+        }
         let _ = Command::new(path)
-            .args([x.to_string(), y.to_string()])
+            .args(&args)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn(); // fire-and-forget
     }
 }
 
-/// 查找 aic-indicator 二进制路径
-fn which_aic_indicator() -> Option<std::path::PathBuf> {
-    // 先查 aic 同目录
-    if let Ok(output) = Command::new("which").arg("aic").output() {
-        if output.status.success() {
-            let aic_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if let Some(dir) = std::path::Path::new(&aic_path).parent() {
-                let indicator = dir.join("aic-indicator");
-                if indicator.exists() {
-                    return Some(indicator);
-                }
+/// 查找 j-indicator 二进制路径
+fn which_j_indicator() -> Option<std::path::PathBuf> {
+    // 先查 j 同目录
+    if let Ok(output) = Command::new("which").arg("j").output()
+        && output.status.success()
+    {
+        let j_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if let Some(dir) = std::path::Path::new(&j_path).parent() {
+            let indicator = dir.join("j-indicator");
+            if indicator.exists() {
+                return Some(indicator);
             }
         }
     }
     // 再查 PATH
-    if let Ok(output) = Command::new("which").arg("aic-indicator").output() {
-        if output.status.success() {
-            let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !p.is_empty() {
-                return Some(std::path::PathBuf::from(p));
-            }
+    if let Ok(output) = Command::new("which").arg("j-indicator").output()
+        && output.status.success()
+    {
+        let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !p.is_empty() {
+            return Some(std::path::PathBuf::from(p));
         }
     }
     None
@@ -1085,7 +1112,15 @@ impl Tool for ComputerUseTool {
                         "type", "key", "key_combo", "scroll", "drag",
                         "ax_tree", "find_element", "focus_app", "cursor_position"
                     ],
-                    "description": "Action to perform"
+                    "description": "Action to perform (for single action mode)"
+                },
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "description": "Each item has 'action' plus action-specific params"
+                    },
+                    "description": "Batch mode: array of action objects executed sequentially. Stops on first error."
                 },
                 "x": { "type": "number", "description": "X coordinate (logical points)" },
                 "y": { "type": "number", "description": "Y coordinate (logical points)" },
@@ -1109,8 +1144,7 @@ impl Tool for ComputerUseTool {
                 "som": { "type": "boolean", "description": "Enable SoM annotations on screenshot (default: true)" },
                 "query": { "type": "string", "description": "Search query for find_element" },
                 "role": { "type": "string", "description": "Accessibility role filter (e.g. 'AXButton')" }
-            },
-            "required": ["action"]
+            }
         })
     }
 
@@ -1126,37 +1160,45 @@ impl Tool for ComputerUseTool {
             }
         };
 
-        let action = match v.get("action").and_then(|a| a.as_str()) {
-            Some(a) => a,
-            None => {
-                return ToolResult {
-                    output: "缺少 action 参数".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
+        // 批量模式：actions 数组
+        if let Some(actions) = v.get("actions").and_then(|a| a.as_array()) {
+            let mut outputs = Vec::new();
+            let mut all_images = Vec::new();
+            for (i, action_v) in actions.iter().enumerate() {
+                if cancelled.load(Ordering::Relaxed) {
+                    outputs.push(format!("[操作 #{} 已取消]", i + 1));
+                    break;
+                }
+                let result = self.execute_single_action(action_v, cancelled);
+                let action_name = action_v
+                    .get("action")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("?");
+                outputs.push(format!(
+                    "--- 操作 #{} ({}) ---\n{}",
+                    i + 1,
+                    action_name,
+                    result.output
+                ));
+                all_images.extend(result.images);
+                if result.is_error {
+                    outputs.push(format!("[操作 #{} 出错，批量执行中止]", i + 1));
+                    return ToolResult {
+                        output: outputs.join("\n\n"),
+                        is_error: true,
+                        images: all_images,
+                    };
+                }
             }
-        };
-
-        match action {
-            "screenshot" => self.action_screenshot(&v, cancelled),
-            "click" => self.action_click(&v, cancelled, "click"),
-            "doubleclick" => self.action_click(&v, cancelled, "doubleclick"),
-            "rightclick" => self.action_click(&v, cancelled, "rightclick"),
-            "type" => self.action_type(&v, cancelled),
-            "key" => self.action_key(&v, cancelled),
-            "key_combo" => self.action_key_combo(&v, cancelled),
-            "scroll" => self.action_scroll(&v, cancelled),
-            "drag" => self.action_drag(&v, cancelled),
-            "ax_tree" => self.action_ax_tree(&v, cancelled),
-            "find_element" => self.action_find_element(&v, cancelled),
-            "focus_app" => self.action_focus_app(&v, cancelled),
-            "cursor_position" => self.action_cursor_position(&v, cancelled),
-            _ => ToolResult {
-                output: format!("未知 action: {}", action),
-                is_error: true,
-                images: vec![],
-            },
+            return ToolResult {
+                output: outputs.join("\n\n"),
+                is_error: false,
+                images: all_images,
+            };
         }
+
+        // 单 action 模式（向后兼容）
+        self.execute_single_action(&v, cancelled)
     }
 
     fn requires_confirmation(&self) -> bool {
@@ -1165,6 +1207,64 @@ impl Tool for ComputerUseTool {
 
     fn confirmation_message(&self, arguments: &str) -> String {
         let v: Value = serde_json::from_str(arguments).unwrap_or_default();
+
+        // 批量模式
+        if let Some(actions) = v.get("actions").and_then(|a| a.as_array()) {
+            let summaries: Vec<String> = actions
+                .iter()
+                .enumerate()
+                .map(|(i, av)| {
+                    let action = av.get("action").and_then(|a| a.as_str()).unwrap_or("?");
+                    match action {
+                        "click" | "doubleclick" | "rightclick" => {
+                            if let Some(el) = av.get("element").and_then(|e| e.as_u64()) {
+                                format!("{}(#{})", action, el)
+                            } else {
+                                format!(
+                                    "{}({:.0},{:.0})",
+                                    action,
+                                    av.get("x").and_then(|x| x.as_f64()).unwrap_or(0.0),
+                                    av.get("y").and_then(|y| y.as_f64()).unwrap_or(0.0),
+                                )
+                            }
+                        }
+                        "type" => {
+                            let text = av.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                            let preview = if text.len() > 15 {
+                                format!("{}...", &text[..12])
+                            } else {
+                                text.to_string()
+                            };
+                            format!("type(\"{}\")", preview)
+                        }
+                        "key" => {
+                            let key = av.get("key").and_then(|k| k.as_str()).unwrap_or("?");
+                            format!("key({})", key)
+                        }
+                        "key_combo" => {
+                            let keys = av
+                                .get("keys")
+                                .and_then(|k| k.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|k| k.as_str())
+                                        .collect::<Vec<_>>()
+                                        .join("+")
+                                })
+                                .unwrap_or_default();
+                            format!("key_combo({})", keys)
+                        }
+                        _ => format!("{}(#{})", action, i + 1),
+                    }
+                })
+                .collect();
+            return format!(
+                "ComputerUse: [{}个操作] {}",
+                actions.len(),
+                summaries.join(" → ")
+            );
+        }
+
         let action = v
             .get("action")
             .and_then(|a| a.as_str())
