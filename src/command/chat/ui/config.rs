@@ -149,7 +149,12 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     // 滚动：确保选中字段始终可见
     let inner_height = area.height.saturating_sub(2) as usize;
-    if let Some(&selected_line) = field_line_indices.get(app.ui.config_field_idx) {
+    let selected_idx = match app.ui.config_tab {
+        ConfigTab::Session => app.ui.session_list_index,
+        ConfigTab::Archive => app.ui.archive_list_index,
+        _ => app.ui.config_field_idx,
+    };
+    if let Some(&selected_line) = field_line_indices.get(selected_idx) {
         let scroll = app.ui.config_scroll_offset as usize;
         let new_scroll = if selected_line < scroll {
             selected_line
