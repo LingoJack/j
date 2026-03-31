@@ -1185,8 +1185,9 @@ impl Tool for ComputerUseTool {
             }
             "type" => {
                 let text = v.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                let preview = if text.len() > 30 {
-                    format!("{}...", &text[..27])
+                let preview = if text.chars().count() > 30 {
+                    let truncated: String = text.chars().take(27).collect();
+                    format!("{}...", truncated)
                 } else {
                     text.to_string()
                 };
