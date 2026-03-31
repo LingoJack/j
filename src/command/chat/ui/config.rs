@@ -68,6 +68,7 @@ fn draw_tab_bar<'a>(app: &ChatApp) -> Line<'a> {
         ConfigTab::Skills,
         ConfigTab::Hooks,
         ConfigTab::Commands,
+        ConfigTab::Archive,
     ];
 
     let mut spans: Vec<Span<'a>> = vec![Span::styled("  ", Style::default())];
@@ -141,6 +142,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Session => {
             draw_tab_session_lines(&mut lines, &mut field_line_indices, app);
         }
+        ConfigTab::Archive => {
+            draw_tab_archive_lines(&mut lines, &mut field_line_indices, app);
+        }
     }
 
     // 滚动：确保选中字段始终可见
@@ -165,6 +169,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Hooks => " 🪝 Hooks ",
         ConfigTab::Commands => " 📋 自定义命令 ",
         ConfigTab::Session => " 💬 会话管理 ",
+        ConfigTab::Archive => " 📦 归档管理 ",
     };
 
     let content = Paragraph::new(lines)
@@ -587,19 +592,82 @@ fn draw_tab_skills_lines<'a>(
     }
 }
 
-/// Hooks tab（占位）
+/// Hooks tab（展示已注册的 hooks）
 fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
-    lines.push(Line::from(""));
+    let hooks = if let Ok(manager) = app.hook_manager.lock() {
+        manager
+            .list_hooks()
+            .into_iter()
+            .map(|(event, def, source)| (event, def.clone(), source.to_string()))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    if hooks.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  (暂无 hooks)",
+            Style::default().fg(t.config_dim),
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  用户级: ~/.jdata/agent/hooks.yaml",
+            Style::default().fg(t.config_dim),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  项目级: .jcli/hooks.yaml",
+            Style::default().fg(t.config_dim),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  运行时: 通过 RegisterHook 工具注册",
+            Style::default().fg(t.config_dim),
+        )));
+        return;
+    }
+
     lines.push(Line::from(Span::styled(
-        "  🪝 Hooks（即将推出）",
-        Style::default().fg(t.config_dim),
+        format!("  🪝 已注册 Hooks ({})", hooks.len()),
+        Style::default()
+            .fg(t.config_label)
+            .add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  Hook 系统允许你在特定事件发生时自动执行自定义操作。",
-        Style::default().fg(t.config_dim),
-    )));
+
+    for (event, def, source) in &hooks {
+        let source_style = match source.as_str() {
+            "user" => Style::default()
+                .fg(ratatui::style::Color::Green)
+                .add_modifier(Modifier::BOLD),
+            "project" => Style::default()
+                .fg(ratatui::style::Color::Blue)
+                .add_modifier(Modifier::BOLD),
+            _ => Style::default()
+                .fg(ratatui::style::Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        };
+
+        let cmd_display: String = if def.command.chars().count() > 40 {
+            let truncated: String = def.command.chars().take(40).collect();
+            format!("{}...", truncated)
+        } else {
+            def.command.clone()
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("    [{:<7}]  ", source), source_style),
+            Span::styled(
+                format!("{:<22}  ", event.as_str()),
+                Style::default().fg(t.config_label),
+            ),
+            Span::styled(cmd_display, Style::default().fg(t.config_value)),
+            Span::styled(
+                format!("  {}s", def.timeout),
+                Style::default().fg(t.config_dim),
+            ),
+        ]));
+    }
 }
 
 /// Commands tab 内容
@@ -743,6 +811,78 @@ fn days_to_ymd(days: u64) -> (u64, u64, u64) {
 
 fn is_leap(y: u64) -> bool {
     y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400))
+}
+
+/// Archive tab 内容
+fn draw_tab_archive_lines<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
+
+    // 确认还原覆盖层
+    if app.ui.restore_confirm_needed {
+        lines.push(Line::from(Span::styled(
+            "  ⚠️  当前会话有消息，还原将替换当前对话（当前会话已自动保存）",
+            Style::default()
+                .fg(t.config_toggle_off)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  按 y/Enter 确认还原，Esc 取消",
+            Style::default().fg(t.config_dim),
+        )));
+        lines.push(Line::from(""));
+    }
+
+    if app.ui.archives.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  (暂无归档)",
+            Style::default().fg(t.config_dim),
+        )));
+        return;
+    }
+
+    lines.push(Line::from(Span::styled(
+        format!("  归档列表 ({})", app.ui.archives.len()),
+        Style::default()
+            .fg(t.config_label)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    for (i, archive) in app.ui.archives.iter().enumerate() {
+        field_line_indices.push(lines.len());
+        let is_selected = i == app.ui.archive_list_index;
+
+        let pointer = if is_selected { "  ▸ " } else { "    " };
+        let pointer_style = if is_selected {
+            Style::default().fg(t.config_pointer)
+        } else {
+            Style::default()
+        };
+
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_label)
+        };
+
+        let name_truncated: String = archive.name.chars().take(40).collect();
+        let time_str = &archive.created_at;
+
+        lines.push(Line::from(vec![
+            Span::styled(pointer, pointer_style),
+            Span::styled(name_truncated, name_style),
+            Span::styled(
+                format!("  ({} 条, {})", archive.messages.len(), time_str),
+                Style::default().fg(t.config_dim),
+            ),
+        ]));
+    }
 }
 
 /// Session tab 内容
