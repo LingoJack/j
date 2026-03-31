@@ -34,11 +34,14 @@ jobs:
           CFLAGS: -march=armv8-a
           CXXFLAGS: -march=armv8-a
 
+      - name: Build j-indicator
+        run: swiftc helpers/indicator.swift -o target/aarch64-apple-darwin/release/j-indicator -O
+
       - name: Package
         run: |
           cd target/aarch64-apple-darwin/release
           strip j
-          tar -czvf j-darwin-arm64.tar.gz j
+          tar -czvf j-darwin-arm64.tar.gz j j-indicator
           shasum -a 256 j-darwin-arm64.tar.gz > j-darwin-arm64.tar.gz.sha256
 
       - name: Upload artifact

@@ -1240,11 +1240,7 @@ pub fn render_tool_result_msg(
 fn parse_tool_label(label: &str) -> (String, bool) {
     // label 格式示例: "Read..." 或 "Bash..." 或带错误的
     let is_error = label.contains("错误") || label.contains("失败") || label.contains("error");
-    let tool_name = label
-        .split(|c| c == '.' || c == ' ')
-        .next()
-        .unwrap_or(label)
-        .to_string();
+    let tool_name = label.split(['.', ' ']).next().unwrap_or(label).to_string();
     (tool_name, is_error)
 }
 
