@@ -57,4 +57,5 @@ allow:
 - Glob
 - Bash(find web/src:*)
 - Bash(cargo build:*)
+- Bash(find web:*)
 deny: []
