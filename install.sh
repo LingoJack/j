@@ -115,6 +115,12 @@ install() {
     info "正在解压..."
     tar -xzf "$tmp_dir/j.tar.gz" -C "$tmp_dir"
 
+    # 检查安装目录是否存在，不存在则创建
+    if [ ! -d "$INSTALL_DIR" ]; then
+        info "创建安装目录 $INSTALL_DIR..."
+        sudo mkdir -p "$INSTALL_DIR"
+    fi
+
     # 检查安装目录权限
     if [ ! -w "$INSTALL_DIR" ]; then
         warn "安装目录 $INSTALL_DIR 需要管理员权限"
