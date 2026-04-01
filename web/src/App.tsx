@@ -313,7 +313,7 @@ function TipCard({ title, desc, example }: { title: string; desc: string; exampl
 function Section({ id, children, className = '' }: { id?: string; children: React.ReactNode; className?: string }) {
   return (
     <section id={id} className={`py-16 md:py-24 px-6 ${className}`}>
-      <div className="max-w-4xl mx-auto w-full overflow-x-hidden">
+      <div className="max-w-4xl mx-auto">
         {children}
       </div>
     </section>
