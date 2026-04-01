@@ -1529,7 +1529,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     if (escapedCodeMatch && escapedCodeMatch.index !== undefined) {
       const before = remaining.slice(0, escapedCodeMatch.index)
       if (before) {
-        parts.push(<span key={key++}>{before}</span>)
+        parts.push(<span key={key++}>{renderInlineMarkdown(before)}</span>)
       }
       parts.push(
         <code key={key++} className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-xs font-mono">
@@ -1545,7 +1545,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     if (codeMatch && codeMatch.index !== undefined) {
       const before = remaining.slice(0, codeMatch.index)
       if (before) {
-        parts.push(<span key={key++}>{before}</span>)
+        parts.push(<span key={key++}>{renderInlineMarkdown(before)}</span>)
       }
       parts.push(
         <code key={key++} className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-xs font-mono">
@@ -1556,12 +1556,12 @@ function renderInlineMarkdown(text: string): React.ReactNode {
       continue
     }
 
-    // Bold **...** (improved regex to handle various characters)
-    const boldMatch = remaining.match(/\*\*([^*]+?)\*\*/)
+    // Bold **...** (match any characters except line breaks, non-greedy)
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/)
     if (boldMatch && boldMatch.index !== undefined) {
       const before = remaining.slice(0, boldMatch.index)
       if (before) {
-        parts.push(<span key={key++}>{before}</span>)
+        parts.push(<span key={key++}>{renderInlineMarkdown(before)}</span>)
       }
       parts.push(
         <strong key={key++} className="font-semibold text-stone-900">
@@ -1577,7 +1577,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     if (italicMatch && italicMatch.index !== undefined) {
       const before = remaining.slice(0, italicMatch.index)
       if (before) {
-        parts.push(<span key={key++}>{before}</span>)
+        parts.push(<span key={key++}>{renderInlineMarkdown(before)}</span>)
       }
       parts.push(
         <em key={key++} className="italic">
