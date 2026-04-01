@@ -65,4 +65,6 @@ allow:
 - Bash(sed -n:*)
 - Bash(find src:*)
 - Bash(cd web:*)
+- Bash(git push:*)
+- Bash(curl -fsSL:*)
 deny: []
