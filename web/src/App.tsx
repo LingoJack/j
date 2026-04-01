@@ -23,8 +23,8 @@ const i18n = {
       title: 'Core Features',
       subtitle: 'One tool, many capabilities. From daily task management to AI assistance.',
       list: [
-        { icon: '⚡', title: 'Alias Management', description: 'Register apps, URLs, and scripts. Access them with j <alias>. Supports categorization and combination.' },
-        { icon: '📝', title: 'Daily Reports', description: 'Quick write, view, and search daily reports with automatic week management. Git sync supported.' },
+        { icon: '→', title: 'Alias Management', description: 'Register apps, URLs, and scripts. Access them with j <alias>. Supports categorization and combination.' },
+        { icon: '■', title: 'Daily Reports', description: 'Quick write, view, and search daily reports with automatic week management. Git sync supported.' },
         { icon: '✓', title: 'Todo & Notes', description: 'Built-in TUI todo manager with Markdown checkbox support. Links to daily reports on completion.' },
         { icon: '◉', title: 'AI Chat', description: 'TUI AI chat with multi-model support, streaming output, tool calling, and remote control.' },
         { icon: '◐', title: 'Browser Automation', description: 'Lite mode for lightweight HTTP control, CDP mode for full browser automation with screenshots.' },
@@ -140,8 +140,8 @@ const i18n = {
       title: '核心功能',
       subtitle: '一个工具，多种能力。从日常任务管理到 AI 辅助。',
       list: [
-        { icon: '⚡', title: '别名管理', description: '注册应用、URL、脚本，通过 j <别名> 快速访问，支持分类标记和组合使用。' },
-        { icon: '📝', title: '日报系统', description: '快速写入、查看、搜索日报，自动周数管理，支持 Git 同步。' },
+        { icon: '→', title: '别名管理', description: '注册应用、URL、脚本，通过 j <别名> 快速访问，支持分类标记和组合使用。' },
+        { icon: '■', title: '日报系统', description: '快速写入、查看、搜索日报，自动周数管理，支持 Git 同步。' },
         { icon: '✓', title: '待办备忘', description: '内置 TUI 待办管理，支持 Markdown checkbox，完成时可联动写入日报。' },
         { icon: '◉', title: 'AI 对话', description: 'TUI AI 对话，多模型支持、流式输出、工具调用，支持远程控制。' },
         { icon: '◐', title: '浏览器自动化', description: 'Lite 模式轻量级 HTTP 控制，CDP 模式完整浏览器自动化，支持截图。' },
