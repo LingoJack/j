@@ -13,7 +13,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # ============================================
 .PHONY: help \
         current_dir push pull status \
-        build release debug build-indicator \
+        build release debug build-indicator build-ax \
         install uninstall reinstall \
         publish publish-check tag tags bump-version set-version \
         test test-all bench \
@@ -92,12 +92,18 @@ build-indicator: ## 构建 j-indicator (macOS 点击光圈指示器)
 	@swiftc helpers/indicator.swift -o $(TARGET_DIR)/j-indicator -O
 	@echo "☑️ j-indicator 构建完成: $(TARGET_DIR)/j-indicator"
 
+build-ax: ## 构建 j-ax (macOS Accessibility API helper)
+	@echo "♿ 构建 j-ax..."
+	@mkdir -p $(TARGET_DIR)
+	@swiftc helpers/ax.swift -o $(TARGET_DIR)/j-ax -O -framework Cocoa -framework ApplicationServices
+	@echo "☑️ j-ax 构建完成: $(TARGET_DIR)/j-ax"
+
 build: ## 构建项目（调试模式）
 	@echo "🔨 构建项目..."
 	@cargo build
 	@echo "☑️ 构建完成"
 
-release: current_dir build-remote build-indicator ## 构建发布版本
+release: current_dir build-remote build-indicator build-ax ## 构建发布版本
 	@echo "🚀 构建发布版本..."
 	@cargo build --release
 	@echo "☑️ 发布版本构建完成: $(TARGET_DIR)/j"
@@ -116,8 +122,11 @@ install: release ## 安装到系统
 	@chmod +x $(BIN_PATH)
 	@cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator
 	@chmod +x /usr/local/bin/j-indicator
+	@cp $(TARGET_DIR)/j-ax /usr/local/bin/j-ax
+	@chmod +x /usr/local/bin/j-ax
 	@echo "☑️ j 已安装到 $(BIN_PATH)"
 	@echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"
+	@echo "☑️ j-ax 已安装到 /usr/local/bin/j-ax"
 	@echo "   版本: $(VERSION)"
 
 uninstall: ## 卸载

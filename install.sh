@@ -141,6 +141,15 @@ install() {
     $SUDO mv "$tmp_dir/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
     $SUDO chmod +x "$INSTALL_DIR/$BINARY_NAME"
 
+    # 安装 Swift helpers（如果存在）
+    for helper in j-indicator j-ax; do
+        if [ -f "$tmp_dir/$helper" ]; then
+            $SUDO mv "$tmp_dir/$helper" "$INSTALL_DIR/$helper"
+            $SUDO chmod +x "$INSTALL_DIR/$helper"
+            info "已安装 $helper"
+        fi
+    done
+
     # 验证安装
     if [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
         info "☑️ 安装成功！"
@@ -166,7 +175,9 @@ uninstall() {
             SUDO=""
         fi
         $SUDO rm -f "$INSTALL_DIR/$BINARY_NAME"
-        info "☑️ 已卸载程序"
+        $SUDO rm -f "$INSTALL_DIR/j-indicator"
+        $SUDO rm -f "$INSTALL_DIR/j-ax"
+        info "☑️ 已卸载程序及 helpers"
     else
         warn "程序未安装"
     fi

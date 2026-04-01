@@ -1,7 +1,15 @@
+mod ax;
+mod error;
+mod keyboard;
+mod keymap;
+mod mouse;
+mod preview;
+mod screenshot;
+mod som;
+
 use crate::command::chat::tools::{ImageData, Tool, ToolResult};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::io::Read as IoRead;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -43,119 +51,6 @@ impl ComputerUseTool {
         }
     }
 
-    /// 执行 aic 子进程，并发读取 stdout/stderr 避免 pipe buffer 死锁
-    fn run_aic(args: &[&str], cancelled: &Arc<AtomicBool>) -> Result<(String, String), String> {
-        let mut child = Command::new("aic")
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "未找到 aic 命令。请确保已安装 aic 并在 PATH 中。".to_string()
-                } else {
-                    format!("启动 aic 失败: {}", e)
-                }
-            })?;
-
-        // 在单独的线程中读取 stdout 和 stderr，避免 pipe buffer 满导致死锁
-        let mut child_stdout = child.stdout.take();
-        let mut child_stderr = child.stderr.take();
-
-        let stdout_handle = std::thread::spawn(move || {
-            let mut buf = String::new();
-            if let Some(ref mut out) = child_stdout {
-                let _ = out.read_to_string(&mut buf);
-            }
-            buf
-        });
-        let stderr_handle = std::thread::spawn(move || {
-            let mut buf = String::new();
-            if let Some(ref mut err) = child_stderr {
-                let _ = err.read_to_string(&mut buf);
-            }
-            buf
-        });
-
-        // 等待进程完成，支持取消和超时
-        let timeout = std::time::Duration::from_secs(30);
-        let start = Instant::now();
-        loop {
-            if cancelled.load(Ordering::Relaxed) {
-                let _ = child.kill();
-                return Err("操作已取消".to_string());
-            }
-            match child.try_wait() {
-                Ok(Some(_status)) => break,
-                Ok(None) => {
-                    if start.elapsed() > timeout {
-                        let _ = child.kill();
-                        return Err("aic 执行超时 (30s)".to_string());
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(e) => return Err(format!("等待 aic 进程失败: {}", e)),
-            }
-        }
-
-        let stdout = stdout_handle.join().unwrap_or_default();
-        let stderr = stderr_handle.join().unwrap_or_default();
-
-        Ok((stdout.trim().to_string(), stderr.trim().to_string()))
-    }
-
-    /// 执行 aic 子进程，但 stdout 输出到文件（避免大数据走 pipe）
-    fn run_aic_with_output_file(
-        args: &[&str],
-        cancelled: &Arc<AtomicBool>,
-    ) -> Result<(String, String), String> {
-        // stdout 不 pipe（让 aic -o 写文件），只读 stderr
-        let mut child = Command::new("aic")
-            .args(args)
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "未找到 aic 命令。请确保已安装 aic 并在 PATH 中。".to_string()
-                } else {
-                    format!("启动 aic 失败: {}", e)
-                }
-            })?;
-
-        let mut child_stderr = child.stderr.take();
-        let stderr_handle = std::thread::spawn(move || {
-            let mut buf = String::new();
-            if let Some(ref mut err) = child_stderr {
-                let _ = err.read_to_string(&mut buf);
-            }
-            buf
-        });
-
-        let timeout = std::time::Duration::from_secs(30);
-        let start = Instant::now();
-        loop {
-            if cancelled.load(Ordering::Relaxed) {
-                let _ = child.kill();
-                return Err("操作已取消".to_string());
-            }
-            match child.try_wait() {
-                Ok(Some(_status)) => break,
-                Ok(None) => {
-                    if start.elapsed() > timeout {
-                        let _ = child.kill();
-                        return Err("aic 执行超时 (30s)".to_string());
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(e) => return Err(format!("等待 aic 进程失败: {}", e)),
-            }
-        }
-
-        let stderr = stderr_handle.join().unwrap_or_default();
-        Ok((String::new(), stderr.trim().to_string()))
-    }
-
     /// 获取当前活跃窗口名称
     fn get_active_window() -> String {
         let output = Command::new("osascript")
@@ -170,24 +65,18 @@ impl ComputerUseTool {
         }
     }
 
-    /// 通过 Accessibility API (JXA) 对元素执行 AXPress，不移动鼠标
-    /// 使用 SoM entry 的 title + role 在目标 app 中定位元素并点击
+    /// 通过 Accessibility API (AppleScript) 对元素执行 AXPress，不移动鼠标
     fn ax_click_element(entry: &SomEntry, app_name: &str) -> Result<String, String> {
-        // 使用 JXA (JavaScript for Automation) 通过 System Events 执行 AXPress
         let role = &entry.role;
         let title = entry.title.as_deref().unwrap_or("");
 
-        // 优先用 title 精确匹配；如果没有 title 则回退到坐标方式
         if title.is_empty() {
             return Err("元素没有 title，无法通过 AX 定位，将使用坐标点击".to_string());
         }
 
-        // 转义 title 中的引号
         let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
         let escaped_app = app_name.replace('\\', "\\\\").replace('"', "\\\"");
 
-        // 构建 osascript 来查找并点击元素
-        // 先尝试直接通过 role + title 查找
         let script = format!(
             r#"
 tell application "System Events"
@@ -241,27 +130,24 @@ end tell
         }
     }
 
-    /// 通过坐标点击
-    fn click_at_coordinates(
-        x: f64,
-        y: f64,
-        click_type: &str,
-        cancelled: &Arc<AtomicBool>,
-    ) -> Result<String, String> {
-        // 显示光圈指示器
+    /// 通过坐标点击（直接调用内部模块）
+    fn click_at_coordinates(x: f64, y: f64, click_type: &str) -> Result<String, String> {
         show_click_indicator(x, y, Some("Click"));
 
-        let x_str = format!("{:.0}", x);
-        let y_str = format!("{:.0}", y);
-        let args = vec!["mouse", click_type, &x_str, &y_str];
-        Self::run_aic(&args, cancelled)?;
+        let result = match click_type {
+            "click" => mouse::click(x, y),
+            "doubleclick" => mouse::double_click(x, y),
+            "rightclick" => mouse::right_click(x, y),
+            _ => mouse::click(x, y),
+        };
 
-        Ok(format!("坐标点击 ({:.0}, {:.0})", x, y))
+        result
+            .map(|_| format!("坐标点击 ({:.0}, {:.0})", x, y))
+            .map_err(|e| e.to_string())
     }
 
     /// 从 SoM 状态中解析坐标
     fn resolve_coordinates(&self, v: &Value) -> Result<(f64, f64), String> {
-        // 优先使用 element 编号
         if let Some(element) = v.get("element").and_then(|e| e.as_u64()) {
             let state = self.som_state.lock().unwrap();
             match state.as_ref() {
@@ -289,7 +175,6 @@ end tell
             }
         }
 
-        // 使用明确的 x, y 坐标
         let x = v
             .get("x")
             .and_then(|x| x.as_f64())
@@ -343,68 +228,30 @@ end tell
 
     // ========== Action 实现 ==========
 
-    fn action_screenshot(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let som = v.get("som").and_then(|s| s.as_bool()).unwrap_or(true);
+    fn action_screenshot(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+        let use_som = v.get("som").and_then(|s| s.as_bool()).unwrap_or(true);
 
-        // 使用临时文件而非 stdout pipe，避免大 base64 数据的 pipe buffer 死锁
-        let tmp_path = format!("/tmp/j_screenshot_{}.png", std::process::id());
+        let app_name = v.get("app").and_then(|a| a.as_str());
 
-        let mut args: Vec<&str> = vec!["screenshot", "-o", &tmp_path];
-        if som {
-            args.push("--som");
-        }
+        if use_som {
+            // SoM screenshot: capture with annotations
+            match som::capture_som(app_name, None) {
+                Ok((b64, som_entries)) => {
+                    let active_window = Self::get_active_window();
 
-        // 可选指定 app
-        let app_str;
-        if let Some(app) = v.get("app").and_then(|a| a.as_str()) {
-            app_str = app.to_string();
-            args.push("--app");
-            args.push(&app_str);
-        }
+                    // Convert som entries to our SomEntry format for state storage
+                    let entries: Vec<SomEntry> = som_entries
+                        .iter()
+                        .map(|e| SomEntry {
+                            index: e.index,
+                            role: e.role.clone(),
+                            title: e.title.clone(),
+                            center_x: e.center_x,
+                            center_y: e.center_y,
+                        })
+                        .collect();
 
-        let (_, stderr) = match Self::run_aic_with_output_file(&args, cancelled) {
-            Ok(result) => result,
-            Err(e) => {
-                let _ = std::fs::remove_file(&tmp_path);
-                return ToolResult {
-                    output: format!("截屏失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let active_window = Self::get_active_window();
-        let mut images = vec![];
-
-        // 读取临时文件并转为 base64
-        match std::fs::read(&tmp_path) {
-            Ok(bytes) => {
-                use base64::Engine;
-                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                images.push(ImageData {
-                    base64: b64,
-                    media_type: "image/png".to_string(),
-                });
-            }
-            Err(e) => {
-                let _ = std::fs::remove_file(&tmp_path);
-                return ToolResult {
-                    output: format!("读取截屏文件失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        }
-        let _ = std::fs::remove_file(&tmp_path);
-
-        // 解析 SoM JSON 索引（从 stderr）
-        // aic 的 stderr 可能包含额外文本（如 "Saved to ..."），需要提取 JSON 数组部分
-        let mut output = String::new();
-        if som && !stderr.is_empty() {
-            let som_json = extract_json_array(&stderr).unwrap_or(&stderr);
-            match serde_json::from_str::<Vec<SomEntry>>(som_json) {
-                Ok(entries) => {
+                    let mut output = String::new();
                     output.push_str(&format!("[截屏完成，共 {} 个可交互元素]\n", entries.len()));
                     output.push_str(&format!("当前活跃窗口: {}\n\n", active_window));
                     output.push_str("元素索引:\n");
@@ -412,44 +259,68 @@ end tell
                     output
                         .push_str("\n\n使用 click/doubleclick/rightclick 指定 element=N 来交互。");
 
-                    // 更新 SoM 状态（保存 app 名称用于 AX 点击）
+                    // 更新 SoM 状态
                     let mut state = self.som_state.lock().unwrap();
                     *state = Some(SomState {
                         entries,
                         timestamp: Instant::now(),
-                        app_name: Some(active_window.clone()),
+                        app_name: Some(active_window),
                     });
+
+                    ToolResult {
+                        output,
+                        is_error: false,
+                        images: vec![ImageData {
+                            base64: b64,
+                            media_type: "image/png".to_string(),
+                        }],
+                    }
                 }
-                Err(e) => {
-                    output.push_str(&format!(
-                        "[截屏完成]\n当前活跃窗口: {}\n(SoM 解析失败: {})\n\nstderr: {}",
-                        active_window, e, stderr
-                    ));
-                }
+                Err(e) => ToolResult {
+                    output: format!("截屏失败: {}", e),
+                    is_error: true,
+                    images: vec![],
+                },
             }
         } else {
-            output.push_str(&format!("[截屏完成]\n当前活跃窗口: {}", active_window));
-        }
-
-        ToolResult {
-            output,
-            is_error: false,
-            images,
+            // Plain screenshot without SoM
+            match som::capture_plain_screenshot() {
+                Ok(b64) => {
+                    let active_window = Self::get_active_window();
+                    ToolResult {
+                        output: format!("[截屏完成]\n当前活跃窗口: {}", active_window),
+                        is_error: false,
+                        images: vec![ImageData {
+                            base64: b64,
+                            media_type: "image/png".to_string(),
+                        }],
+                    }
+                }
+                Err(e) => ToolResult {
+                    output: format!("截屏失败: {}", e),
+                    is_error: true,
+                    images: vec![],
+                },
+            }
         }
     }
 
-    fn action_click(&self, v: &Value, cancelled: &Arc<AtomicBool>, click_type: &str) -> ToolResult {
-        // 如果使用 element 编号，优先尝试 Accessibility API 点击（不移动鼠标）
+    fn action_click(
+        &self,
+        v: &Value,
+        _cancelled: &Arc<AtomicBool>,
+        click_type: &str,
+    ) -> ToolResult {
+        // 如果使用 element 编号，优先尝试 Accessibility API 点击
         if let Some(element) = v.get("element").and_then(|e| e.as_u64()) {
             match self.get_som_entry(element) {
                 Ok((entry, app_name)) => {
-                    // 尝试 AX 点击（仅支持 click，doubleclick/rightclick 回退坐标）
+                    // 尝试 AX 点击（仅支持 click）
                     if click_type == "click"
                         && let Some(ref app) = app_name
                     {
                         match Self::ax_click_element(&entry, app) {
                             Ok(msg) => {
-                                // 显示光圈指示器（AX 点击绕过了 aic mouse，需手动触发）
                                 show_click_indicator(
                                     entry.center_x,
                                     entry.center_y,
@@ -475,9 +346,9 @@ end tell
                             }
                         }
                     }
-                    // AX 不可用或非 click，使用坐标点击
+                    // 使用坐标点击
                     let (x, y) = (entry.center_x, entry.center_y);
-                    match Self::click_at_coordinates(x, y, click_type, cancelled) {
+                    match Self::click_at_coordinates(x, y, click_type) {
                         Ok(_) => {
                             let active_window = Self::get_active_window();
                             return ToolResult {
@@ -508,7 +379,7 @@ end tell
             }
         }
 
-        // 使用 x,y 坐标点击（带光标恢复）
+        // 使用 x,y 坐标点击
         let (x, y) = match self.resolve_coordinates(v) {
             Ok(coords) => coords,
             Err(e) => {
@@ -520,7 +391,7 @@ end tell
             }
         };
 
-        match Self::click_at_coordinates(x, y, click_type, cancelled) {
+        match Self::click_at_coordinates(x, y, click_type) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
@@ -540,7 +411,7 @@ end tell
         }
     }
 
-    fn action_type(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn action_type(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let text = match v.get("text").and_then(|t| t.as_str()) {
             Some(t) => t,
             None => {
@@ -552,15 +423,9 @@ end tell
             }
         };
 
-        let mut args = vec!["type", text];
-        let delay_str;
-        if let Some(delay) = v.get("delay_ms").and_then(|d| d.as_u64()) {
-            delay_str = delay.to_string();
-            args.push("--delay-ms");
-            args.push(&delay_str);
-        }
+        let delay_ms = v.get("delay_ms").and_then(|d| d.as_u64()).unwrap_or(10);
 
-        match Self::run_aic(&args, cancelled) {
+        match keyboard::type_text(text, delay_ms) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
@@ -581,7 +446,7 @@ end tell
         }
     }
 
-    fn action_key(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn action_key(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let key = match v.get("key").and_then(|k| k.as_str()) {
             Some(k) => k,
             None => {
@@ -593,8 +458,7 @@ end tell
             }
         };
 
-        let args = vec!["key", "press", key];
-        match Self::run_aic(&args, cancelled) {
+        match keyboard::press_key(key) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
@@ -611,9 +475,13 @@ end tell
         }
     }
 
-    fn action_key_combo(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn action_key_combo(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let keys = match v.get("keys").and_then(|k| k.as_array()) {
-            Some(arr) => arr.iter().filter_map(|k| k.as_str()).collect::<Vec<_>>(),
+            Some(arr) => arr
+                .iter()
+                .filter_map(|k| k.as_str())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
             None => {
                 return ToolResult {
                     output: "缺少 keys 数组参数".to_string(),
@@ -631,12 +499,7 @@ end tell
             };
         }
 
-        let mut args = vec!["key", "combo"];
-        for k in &keys {
-            args.push(k);
-        }
-
-        match Self::run_aic(&args, cancelled) {
+        match keyboard::key_combo(&keys) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
@@ -657,27 +520,18 @@ end tell
         }
     }
 
-    fn action_scroll(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let dx = v.get("dx").and_then(|d| d.as_i64()).unwrap_or(0);
-        let dy = v.get("dy").and_then(|d| d.as_i64()).unwrap_or(0);
-
-        let dx_str = dx.to_string();
-        let dy_str = dy.to_string();
-        let mut args = vec!["mouse", "scroll", &dx_str, &dy_str];
+    fn action_scroll(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+        let dx = v.get("dx").and_then(|d| d.as_i64()).unwrap_or(0) as i32;
+        let dy = v.get("dy").and_then(|d| d.as_i64()).unwrap_or(0) as i32;
 
         // 可选位置
-        let x_str;
-        let y_str;
-        if let Ok((x, y)) = self.resolve_coordinates(v) {
-            x_str = format!("{:.0}", x);
-            y_str = format!("{:.0}", y);
-            args.push("--x");
-            args.push(&x_str);
-            args.push("--y");
-            args.push(&y_str);
+        let at = self.resolve_coordinates(v).ok();
+
+        if let Some((x, y)) = at {
+            show_click_indicator(x, y, Some("Scroll"));
         }
 
-        match Self::run_aic(&args, cancelled) {
+        match mouse::scroll(dx, dy, at) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
@@ -697,7 +551,7 @@ end tell
         }
     }
 
-    fn action_drag(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn action_drag(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         // 解析起点
         let (sx, sy) = if let Some(se) = v.get("start_element") {
             let sv = json!({"element": se});
@@ -754,23 +608,11 @@ end tell
             }
         };
 
-        // 显示起点光圈指示器
         show_click_indicator(sx, sy, Some("Drag\u{2197}"));
 
-        let sx_str = format!("{:.0}", sx);
-        let sy_str = format!("{:.0}", sy);
-        let ex_str = format!("{:.0}", ex);
-        let ey_str = format!("{:.0}", ey);
-        let mut args = vec!["mouse", "drag", &sx_str, &sy_str, &ex_str, &ey_str];
+        let duration_ms = v.get("duration_ms").and_then(|d| d.as_u64()).unwrap_or(500);
 
-        let dur_str;
-        if let Some(dur) = v.get("duration_ms").and_then(|d| d.as_u64()) {
-            dur_str = dur.to_string();
-            args.push("--duration-ms");
-            args.push(&dur_str);
-        }
-
-        match Self::run_aic(&args, cancelled) {
+        match mouse::drag(sx, sy, ex, ey, duration_ms) {
             Ok(_) => {
                 let active_window = Self::get_active_window();
                 ToolResult {
@@ -790,41 +632,26 @@ end tell
         }
     }
 
-    fn action_ax_tree(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let mut args = vec!["ax"];
-
-        let app_str;
-        if let Some(app) = v.get("app").and_then(|a| a.as_str()) {
-            app_str = app.to_string();
-            args.push("--app");
-            args.push(&app_str);
-        }
-
-        let depth_str;
-        if let Some(depth) = v.get("depth").and_then(|d| d.as_u64()) {
-            depth_str = depth.to_string();
-            args.push("--depth");
-            args.push(&depth_str);
-        }
-
-        if v.get("clickable")
+    fn action_ax_tree(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+        let app = v.get("app").and_then(|a| a.as_str());
+        let depth = v.get("depth").and_then(|d| d.as_u64()).map(|d| d as u32);
+        let clickable = v
+            .get("clickable")
             .and_then(|c| c.as_bool())
-            .unwrap_or(false)
-        {
-            args.push("--clickable");
-        }
+            .unwrap_or(false);
 
-        match Self::run_aic(&args, cancelled) {
-            Ok((stdout, _)) => {
+        match ax::query_tree(app, depth, clickable) {
+            Ok(tree) => {
                 let active_window = Self::get_active_window();
                 let mut output = format!("[无障碍树]\n当前活跃窗口: {}\n\n", active_window);
-                // 限制输出长度
-                if stdout.len() > 20000 {
-                    output.push_str(&stdout[..20000]);
+
+                let json_str = serde_json::to_string_pretty(&tree).unwrap_or_default();
+                if json_str.len() > 20000 {
+                    output.push_str(&json_str[..20000]);
                     output
                         .push_str("\n...(输出过长已截断，请使用 depth 或 clickable 参数缩小范围)");
                 } else {
-                    output.push_str(&stdout);
+                    output.push_str(&json_str);
                 }
                 ToolResult {
                     output,
@@ -840,7 +667,7 @@ end tell
         }
     }
 
-    fn action_find_element(&self, v: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn action_find_element(&self, v: &Value, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let query = match v.get("query").and_then(|q| q.as_str()) {
             Some(q) => q,
             None => {
@@ -852,29 +679,17 @@ end tell
             }
         };
 
-        let mut args = vec!["find", query];
+        let app = v.get("app").and_then(|a| a.as_str());
+        let role = v.get("role").and_then(|r| r.as_str());
 
-        let app_str;
-        if let Some(app) = v.get("app").and_then(|a| a.as_str()) {
-            app_str = app.to_string();
-            args.push("--app");
-            args.push(&app_str);
-        }
-
-        let role_str;
-        if let Some(role) = v.get("role").and_then(|r| r.as_str()) {
-            role_str = role.to_string();
-            args.push("--role");
-            args.push(&role_str);
-        }
-
-        match Self::run_aic(&args, cancelled) {
-            Ok((stdout, _)) => {
+        match ax::find_elements(query, app, role) {
+            Ok(results) => {
                 let active_window = Self::get_active_window();
+                let json_str = serde_json::to_string_pretty(&results).unwrap_or_default();
                 ToolResult {
                     output: format!(
                         "[元素搜索: \"{}\"]\n当前活跃窗口: {}\n\n{}",
-                        query, active_window, stdout
+                        query, active_window, json_str
                     ),
                     is_error: false,
                     images: vec![],
@@ -905,7 +720,6 @@ end tell
         match result {
             Ok(output) => {
                 if output.status.success() {
-                    // 等待窗口激活
                     std::thread::sleep(std::time::Duration::from_millis(300));
                     let active_window = Self::get_active_window();
                     ToolResult {
@@ -1032,19 +846,6 @@ fn which_j_indicator() -> Option<std::path::PathBuf> {
         }
     }
     None
-}
-
-/// 从可能包含额外文本的字符串中提取 JSON 数组部分
-/// aic 的 stderr 可能输出: `[{...}]\nSaved to /tmp/...` 导致 serde 解析失败
-fn extract_json_array(s: &str) -> Option<&str> {
-    let start = s.find('[')?;
-    // 从后往前找最后一个 ']'
-    let end = s.rfind(']')?;
-    if end > start {
-        Some(&s[start..=end])
-    } else {
-        None
-    }
 }
 
 /// 获取当前鼠标光标位置
@@ -1198,7 +999,7 @@ impl Tool for ComputerUseTool {
             };
         }
 
-        // 单 action 模式（向后兼容）
+        // 单 action 模式
         self.execute_single_action(&v, cancelled)
     }
 

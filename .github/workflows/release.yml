@@ -37,11 +37,14 @@ jobs:
       - name: Build j-indicator
         run: swiftc helpers/indicator.swift -o target/aarch64-apple-darwin/release/j-indicator -O
 
+      - name: Build j-ax
+        run: swiftc helpers/ax.swift -o target/aarch64-apple-darwin/release/j-ax -O -framework Cocoa -framework ApplicationServices
+
       - name: Package
         run: |
           cd target/aarch64-apple-darwin/release
           strip j
-          tar -czvf j-darwin-arm64.tar.gz j j-indicator
+          tar -czvf j-darwin-arm64.tar.gz j j-indicator j-ax
           shasum -a 256 j-darwin-arm64.tar.gz > j-darwin-arm64.tar.gz.sha256
 
       - name: Upload artifact

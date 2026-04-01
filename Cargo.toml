@@ -63,6 +63,8 @@ aes-gcm = "0.10"
 hkdf = "0.12"
 sha2 = "0.10"
 ctrlc = "3.4"
+core-graphics = "0.24"
+core-foundation = "0.10"
 
 [features]
 default = []
