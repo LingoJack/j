@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod ask;
 pub mod background;
 mod browser;
@@ -7,6 +8,7 @@ mod computer_use;
 mod file;
 mod grep;
 pub mod hook;
+pub mod plan;
 mod shell;
 pub mod skill;
 pub mod task;
@@ -65,6 +67,8 @@ pub struct ToolRegistry {
     tools: Vec<Box<dyn Tool>>,
     /// Todo 管理器（供外部获取以传入 agent loop）
     pub todo_manager: Arc<todo::TodoManager>,
+    /// Plan Mode 状态（供外部检查当前是否处于 plan mode）
+    pub plan_mode_state: Arc<plan::PlanModeState>,
 }
 
 impl ToolRegistry {
@@ -77,9 +81,11 @@ impl ToolRegistry {
         hook_manager: Arc<Mutex<crate::command::chat::hook::HookManager>>,
     ) -> Self {
         let todo_manager = Arc::new(todo::TodoManager::new());
+        let plan_mode_state = Arc::new(plan::PlanModeState::new());
 
         let mut registry = Self {
             todo_manager: Arc::clone(&todo_manager),
+            plan_mode_state: Arc::clone(&plan_mode_state),
             tools: vec![
                 Box::new(shell::ShellTool {
                     manager: Arc::clone(&background_manager),
@@ -92,7 +98,9 @@ impl ToolRegistry {
                 Box::new(web_fetch::WebFetchTool),
                 Box::new(web_search::WebSearchTool),
                 Box::new(browser::BrowserTool),
-                Box::new(ask::AskTool { ask_tx }),
+                Box::new(ask::AskTool {
+                    ask_tx: ask_tx.clone(),
+                }),
                 // 后台任务工具
                 Box::new(background::TaskOutputTool {
                     manager: Arc::clone(&background_manager),
@@ -114,6 +122,14 @@ impl ToolRegistry {
                 Box::new(hook::RegisterHookTool { hook_manager }),
                 // Computer Use 工具（aic 集成）
                 Box::new(computer_use::ComputerUseTool::new()),
+                // Plan Mode 工具
+                Box::new(plan::EnterPlanModeTool {
+                    plan_state: Arc::clone(&plan_mode_state),
+                }),
+                Box::new(plan::ExitPlanModeTool {
+                    plan_state: Arc::clone(&plan_mode_state),
+                    ask_tx,
+                }),
             ],
         };
 
@@ -139,7 +155,21 @@ impl ToolRegistry {
     }
 
     /// 按名称执行工具，返回结果（可在任何线程调用，ToolRegistry: Send + Sync）
+    /// 自动检查 plan mode：若 plan mode 激活且工具不在白名单中，返回错误
     pub fn execute(&self, name: &str, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
+        // Plan mode 检查
+        if self.plan_mode_state.is_active() && !plan::is_allowed_in_plan_mode(name) {
+            return ToolResult {
+                output: format!(
+                    "Tool '{}' is not available in plan mode. Only read-only tools are allowed. \
+                     Use ExitPlanMode to exit plan mode first.",
+                    name
+                ),
+                is_error: true,
+                images: vec![],
+            };
+        }
+
         match self.get(name) {
             Some(tool) => tool.execute(arguments, cancelled),
             None => ToolResult {

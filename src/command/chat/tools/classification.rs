@@ -12,6 +12,10 @@ pub enum ToolCategory {
     Execute,
     /// 网络类 (WebFetch, WebSearch)
     Network,
+    /// 计划类 (EnterPlanMode, ExitPlanMode)
+    Plan,
+    /// 代理类 (Agent)
+    Agent,
     /// 其他类
     Other,
 }
@@ -28,6 +32,8 @@ impl ToolCategory {
                 Self::Execute
             }
             "WebFetch" | "WebSearch" | "WebBrowser" => Self::Network,
+            "EnterPlanMode" | "ExitPlanMode" => Self::Plan,
+            "Agent" => Self::Agent,
             _ => Self::Other,
         }
     }
@@ -39,6 +45,8 @@ impl ToolCategory {
             Self::Search => "🔍",
             Self::Execute => "⚡",
             Self::Network => "🌐",
+            Self::Plan => "📋",
+            Self::Agent => "🤖",
             Self::Other => "🔧",
         }
     }
@@ -50,6 +58,8 @@ impl ToolCategory {
             Self::Search => theme.label_ai,       // 绿色系
             Self::Execute => theme.title_loading, // 黄/橙色系
             Self::Network => theme.config_title,  // 青色系
+            Self::Plan => theme.label_ai,         // 绿色系
+            Self::Agent => theme.title_loading,   // 黄/橙色系
             Self::Other => theme.text_dim,        // 灰色
         }
     }
