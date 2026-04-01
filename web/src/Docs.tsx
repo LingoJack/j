@@ -1512,6 +1512,69 @@ permissions:
   }
 }
 
+// Inline markdown renderer (handles `code`, **bold**, *italic*)
+function renderInlineMarkdown(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = []
+  let remaining = text
+  let key = 0
+
+  while (remaining.length > 0) {
+    // Inline code `...`
+    const codeMatch = remaining.match(/`([^`]+)`/)
+    if (codeMatch) {
+      const before = remaining.slice(0, codeMatch.index!)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <code key={key++} className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-xs font-mono">
+          {codeMatch[1]}
+        </code>
+      )
+      remaining = remaining.slice(codeMatch.index! + codeMatch[0].length)
+      continue
+    }
+
+    // Bold **...**
+    const boldMatch = remaining.match(/\*\*([^*]+)\*\*/)
+    if (boldMatch) {
+      const before = remaining.slice(0, boldMatch.index!)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <strong key={key++} className="font-semibold text-stone-900">
+          {boldMatch[1]}
+        </strong>
+      )
+      remaining = remaining.slice(boldMatch.index! + boldMatch[0].length)
+      continue
+    }
+
+    // Italic *...* (but not **...**)
+    const italicMatch = remaining.match(/(?<!\*)\*(?!\*)([^*]+)(?<!\*)\*(?!\*)/)
+    if (italicMatch) {
+      const before = remaining.slice(0, italicMatch.index!)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <em key={key++} className="italic">
+          {italicMatch[1]}
+        </em>
+      )
+      remaining = remaining.slice(italicMatch.index! + italicMatch[0].length)
+      continue
+    }
+
+    // No more matches, push remaining text
+    parts.push(<span key={key++}>{remaining}</span>)
+    break
+  }
+
+  return parts.length > 0 ? parts : text
+}
+
 // Markdown renderer (simple)
 function Markdown({ content }: { content: string }) {
   const lines = content.split('\n')
@@ -1565,7 +1628,7 @@ function Markdown({ content }: { content: string }) {
               <tr>
                 {tableRows[0]?.map((cell, i) => (
                   <th key={i} className="border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium">
-                    {cell}
+                    {renderInlineMarkdown(cell)}
                   </th>
                 ))}
               </tr>
@@ -1575,7 +1638,7 @@ function Markdown({ content }: { content: string }) {
                 <tr key={i}>
                   {row.map((cell, j) => (
                     <td key={j} className="border border-stone-200 px-4 py-2 text-sm">
-                      {cell}
+                      {renderInlineMarkdown(cell)}
                     </td>
                   ))}
                 </tr>
@@ -1586,13 +1649,23 @@ function Markdown({ content }: { content: string }) {
       )
     }
 
+    // Blockquotes
+    if (line.startsWith('> ')) {
+      elements.push(
+        <blockquote key={index} className="border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic">
+          {renderInlineMarkdown(line.slice(2))}
+        </blockquote>
+      )
+      return
+    }
+
     // Headings
     if (line.startsWith('## ')) {
-      elements.push(<h2 key={index} className="text-2xl font-light text-stone-900 mt-8 mb-4">{line.slice(3)}</h2>)
+      elements.push(<h2 key={index} className="text-2xl font-light text-stone-900 mt-8 mb-4">{renderInlineMarkdown(line.slice(3))}</h2>)
       return
     }
     if (line.startsWith('### ')) {
-      elements.push(<h3 key={index} className="text-lg font-medium text-stone-900 mt-6 mb-3">{line.slice(4)}</h3>)
+      elements.push(<h3 key={index} className="text-lg font-medium text-stone-900 mt-6 mb-3">{renderInlineMarkdown(line.slice(4))}</h3>)
       return
     }
 
@@ -1600,7 +1673,7 @@ function Markdown({ content }: { content: string }) {
     if (line.startsWith('- ') || line.startsWith('* ')) {
       elements.push(
         <li key={index} className="text-stone-600 text-sm ml-4 mb-1 list-disc">
-          {line.slice(2)}
+          {renderInlineMarkdown(line.slice(2))}
         </li>
       )
       return
@@ -1611,7 +1684,7 @@ function Markdown({ content }: { content: string }) {
     if (numMatch) {
       elements.push(
         <li key={index} className="text-stone-600 text-sm ml-4 mb-1 list-decimal">
-          {line.slice(numMatch[0].length)}
+          {renderInlineMarkdown(line.slice(numMatch[0].length))}
         </li>
       )
       return
@@ -1621,7 +1694,7 @@ function Markdown({ content }: { content: string }) {
     if (line.trim()) {
       elements.push(
         <p key={index} className="text-stone-600 text-sm leading-relaxed mb-3">
-          {line}
+          {renderInlineMarkdown(line)}
         </p>
       )
     }
