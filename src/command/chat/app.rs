@@ -231,6 +231,9 @@ pub struct UIState {
     pub image_cache: Arc<Mutex<ImageCache>>,
     /// 是否展开工具调用详情（Ctrl+O 切换）
     pub expand_tools: bool,
+    /// 是否处于 plan mode（由 ToolRegistry 同步）
+    #[allow(dead_code)]
+    pub plan_mode_active: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
     /// 配置面板当前 Tab
@@ -799,6 +802,12 @@ pub struct ChatApp {
     pub ws_bridge: Option<super::remote::bridge::WsBridge>,
     /// 远程客户端是否已连接
     pub remote_connected: bool,
+    /// AgentTool 的 provider 共享引用（每次发送请求前更新）
+    #[allow(dead_code)]
+    pub agent_tool_provider: Arc<Mutex<ModelProvider>>,
+    /// AgentTool 的 system_prompt 共享引用（每次发送请求前更新）
+    #[allow(dead_code)]
+    pub agent_tool_system_prompt: Arc<Mutex<Option<String>>>,
 }
 
 /// 消息渲染行缓存
@@ -1253,7 +1262,7 @@ impl ChatApp {
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(super::tools::task::TaskManager::new());
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
-        let tool_registry = ToolRegistry::new(
+        let mut tool_registry = ToolRegistry::new(
             loaded_skills.clone(),
             ask_req_tx,
             Arc::clone(&background_manager),
@@ -1261,6 +1270,33 @@ impl ChatApp {
             Arc::clone(&hook_manager),
         );
         let todo_manager = Arc::clone(&tool_registry.todo_manager);
+
+        // AgentTool 需要 provider 和 system_prompt 的共享引用（运行时动态获取）
+        let default_provider = agent_config
+            .providers
+            .get(agent_config.active_index)
+            .cloned()
+            .unwrap_or_else(|| ModelProvider {
+                name: String::new(),
+                api_base: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+                supports_vision: false,
+            });
+        let agent_provider: Arc<Mutex<ModelProvider>> = Arc::new(Mutex::new(default_provider));
+        let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
+        tool_registry.register(Box::new(super::tools::agent::AgentTool {
+            background_manager: Arc::clone(&background_manager),
+            provider: Arc::clone(&agent_provider),
+            system_prompt: Arc::clone(&agent_system_prompt),
+            jcli_config: Arc::new(JcliConfig::load()),
+            compact_config: agent_config.compact.clone(),
+            hook_manager: Arc::clone(&hook_manager),
+            task_manager: Arc::clone(&task_manager),
+            todo_manager: Arc::clone(&todo_manager),
+            disabled_tools: Arc::clone(&disabled_tools_arc),
+        }));
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
 
@@ -1321,6 +1357,7 @@ impl ChatApp {
                 pending_style_edit: false,
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
                 expand_tools: false,
+                plan_mode_active: false,
                 config_scroll_offset: 0,
                 config_tab: ConfigTab::Model,
                 session_list: Vec::new(),
@@ -1351,6 +1388,8 @@ impl ChatApp {
             last_persisted_len: 0,
             ws_bridge: None,
             remote_connected: false,
+            agent_tool_provider: agent_provider,
+            agent_tool_system_prompt: agent_system_prompt,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -2811,6 +2850,12 @@ impl ChatApp {
                 return;
             }
         };
+
+        // 同步更新 AgentTool 的 provider（子代理使用最新的 provider）
+        {
+            let mut p = safe_lock(&self.agent_tool_provider, "send_message::agent_provider");
+            *p = provider.clone();
+        }
 
         self.state.is_loading = true;
         // 重置流式节流状态和缓存

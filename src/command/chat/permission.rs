@@ -1,6 +1,9 @@
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
 
 /// .jcli/ 目录权限配置
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
@@ -177,6 +180,8 @@ fn matches_rule(rule: &str, tool_name: &str, arguments: &str) -> bool {
 /// - `"cargo build:*"` → Bash 命令前缀（取 arguments.command）
 /// - `"path:/foo/*"` → 文件路径前缀（取 arguments.file_path）
 /// - `"domain:docs.rs"` → URL 域名（取 arguments.url）
+/// - 支持 regex: `/pattern/` 语法，如 `"path:/\.rs$/"`, `"/^cargo (build|test)/"`
+/// - `"domain:/.*\.google\.com$/"` → regex 域名匹配
 fn match_condition(tool_name: &str, condition: &str, arguments: &str) -> bool {
     let parsed: Value = match serde_json::from_str(arguments) {
         Ok(v) => v,
@@ -190,12 +195,20 @@ fn match_condition(tool_name: &str, condition: &str, arguments: &str) -> bool {
             .or_else(|| parsed.get("path"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
+        if is_regex_pattern(path_pattern) {
+            return match_regex(path_pattern, file_path);
+        }
         return match_glob_prefix(path_pattern, file_path);
     }
 
     // domain: 前缀 → URL 域名匹配（WebFetch, WebSearch）
     if let Some(domain) = condition.strip_prefix("domain:") {
         let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        if is_regex_pattern(domain) {
+            // 提取 host 后对 host 做 regex 匹配
+            let host = extract_host(url);
+            return match_regex(domain, &host);
+        }
         return url_matches_domain(url, domain);
     }
 
@@ -208,16 +221,75 @@ fn match_condition(tool_name: &str, condition: &str, arguments: &str) -> bool {
         } else {
             condition
         };
+        if is_regex_pattern(action_pattern) {
+            return match_regex(action_pattern, action);
+        }
         return match_command_prefix(action_pattern, action);
     }
 
     // 默认：Bash 命令前缀匹配（格式 "command_prefix:*"）
     if tool_name == "Bash" || tool_name == "Shell" {
         let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        if is_regex_pattern(condition) {
+            return match_regex(condition, command);
+        }
         return match_command_prefix(condition, command);
     }
 
     false
+}
+
+// ========== Regex 辅助函数 ==========
+
+/// 全局 regex 编译缓存（避免重复编译同一正则表达式）
+static REGEX_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// 判断是否为 `/pattern/` 格式的 regex 模式
+fn is_regex_pattern(pattern: &str) -> bool {
+    pattern.starts_with('/') && pattern.ends_with('/') && pattern.len() >= 2
+}
+
+/// 用 `/pattern/` 匹配 input，带编译缓存
+/// 返回 regex 是否匹配（`is_match` 语义）
+fn match_regex(pattern: &str, input: &str) -> bool {
+    // 去掉首尾的 /
+    let regex_str = &pattern[1..pattern.len() - 1];
+    if regex_str.is_empty() {
+        return false;
+    }
+
+    let mut cache = match REGEX_CACHE.lock() {
+        Ok(c) => c,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    let re = cache
+        .entry(regex_str.to_string())
+        .or_insert_with(|| match Regex::new(regex_str) {
+            Ok(r) => r,
+            Err(_) => Regex::new("^$").unwrap(), // 编译失败则永不匹配
+        });
+
+    re.is_match(input)
+}
+
+/// 从 URL 中提取 host 部分
+fn extract_host(url: &str) -> String {
+    let url_lower = url.to_lowercase();
+    let after_scheme = if let Some(pos) = url_lower.find("://") {
+        &url_lower[pos + 3..]
+    } else {
+        &url_lower
+    };
+    after_scheme
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_string()
 }
 
 /// Bash 命令前缀匹配
@@ -492,5 +564,71 @@ mod tests {
         assert_eq!(generate_allow_rule("Read", "{}"), "Read");
         assert_eq!(generate_allow_rule("Grep", "{}"), "Grep");
         assert_eq!(generate_allow_rule("Glob", "{}"), "Glob");
+    }
+
+    // ========== Regex 匹配测试 ==========
+
+    #[test]
+    fn test_regex_bash_command() {
+        // Bash(/^cargo (build|test)/) 匹配 cargo build 和 cargo test
+        let args_build = r#"{"command": "cargo build --release"}"#;
+        let args_test = r#"{"command": "cargo test --lib"}"#;
+        let args_run = r#"{"command": "cargo run"}"#;
+        assert!(matches_rule(
+            "Bash(/^cargo (build|test)/)",
+            "Bash",
+            args_build
+        ));
+        assert!(matches_rule(
+            "Bash(/^cargo (build|test)/)",
+            "Bash",
+            args_test
+        ));
+        assert!(!matches_rule(
+            "Bash(/^cargo (build|test)/)",
+            "Bash",
+            args_run
+        ));
+    }
+
+    #[test]
+    fn test_regex_path_pattern() {
+        // Write(path:/\.rs$/) 匹配所有 .rs 文件
+        let args_rs = r#"{"file_path": "/Users/jack/projects/foo/bar.rs"}"#;
+        let args_ts = r#"{"file_path": "/Users/jack/projects/foo/bar.ts"}"#;
+        assert!(matches_rule("Write(path:/\\.rs$/)", "Write", args_rs));
+        assert!(!matches_rule("Write(path:/\\.rs$/)", "Write", args_ts));
+    }
+
+    #[test]
+    fn test_regex_domain_pattern() {
+        // WebFetch(domain:/.*\.google\.com$/) 匹配所有 google.com 子域名
+        let args_google = r#"{"url": "https://maps.google.com/api"}"#;
+        let args_docs = r#"{"url": "https://docs.google.com/document"}"#;
+        let args_other = r#"{"url": "https://evil.com/google.com"}"#;
+        assert!(matches_rule(
+            "WebFetch(domain:/.*\\.google\\.com$/)",
+            "WebFetch",
+            args_google
+        ));
+        assert!(matches_rule(
+            "WebFetch(domain:/.*\\.google\\.com$/)",
+            "WebFetch",
+            args_docs
+        ));
+        assert!(!matches_rule(
+            "WebFetch(domain:/.*\\.google\\.com$/)",
+            "WebFetch",
+            args_other
+        ));
+    }
+
+    #[test]
+    fn test_regex_invalid_pattern() {
+        // 无效的 regex 不匹配
+        let args = r#"{"command": "anything"}"#;
+        assert!(!matches_rule("Bash(/[invalid/)", "Bash", args));
+        // 空 regex 不匹配
+        assert!(!matches_rule("Bash(//)", "Bash", args));
     }
 }
