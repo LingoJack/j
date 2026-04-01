@@ -68,4 +68,6 @@ allow:
 - Bash(git push:*)
 - Bash(curl -fsSL:*)
 - Bash(cd /Users/lingojack/dev_custom/j/web:*)
+- Bash(npm run:*)
+- Bash(lsof -ti:5173:*)
 deny: []
