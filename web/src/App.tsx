@@ -322,6 +322,7 @@ function Section({ id, children, className = '' }: { id?: string; children: Reac
 
 export default function App() {
   const [lang, setLang] = useState<Lang>('zh')  // 默认中文
+  const [langMenuOpen, setLangMenuOpen] = useState(false)
   const t = i18n[lang]
   
   const installCmd = 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh'
@@ -337,27 +338,33 @@ export default function App() {
           </a>
           <div className="flex items-center gap-5">
             {/* Language Switcher */}
-            <div className="relative group">
-              <button className="text-stone-500 hover:text-stone-900 transition-colors text-sm flex items-center gap-0.5 whitespace-nowrap">
+            <div className="relative">
+              <button 
+                onClick={() => setLangMenuOpen(!langMenuOpen)}
+                onBlur={() => setTimeout(() => setLangMenuOpen(false), 150)}
+                className="text-stone-500 hover:text-stone-900 transition-colors text-sm flex items-center gap-0.5 whitespace-nowrap"
+              >
                 {lang === 'en' ? 'EN' : '中文'}
-                <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className={`w-3 h-3 ml-0.5 transition-transform ${langMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible absolute top-full left-0 mt-1 bg-white rounded shadow-lg py-1 z-50 transition-all">
-                <button
-                  onClick={() => setLang('en')}
-                  className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'en' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
-                >
-                  EN
-                </button>
-                <button
-                  onClick={() => setLang('zh')}
-                  className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'zh' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
-                >
-                  中文
-                </button>
-              </div>
+              {langMenuOpen && (
+                <div className="absolute top-full left-0 mt-1 bg-white rounded shadow-lg py-1 z-50 min-w-[60px]">
+                  <button
+                    onClick={() => { setLang('en'); setLangMenuOpen(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'en' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                  >
+                    EN
+                  </button>
+                  <button
+                    onClick={() => { setLang('zh'); setLangMenuOpen(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'zh' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                  >
+                    中文
+                  </button>
+                </div>
+              )}
             </div>
             <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.features}
