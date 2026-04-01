@@ -1,4 +1,4 @@
-use super::api::{build_request_with_tools, create_openai_client};
+use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
 use super::compact::{self, CompactConfig};
 use super::hook::{HookContext, HookEvent, HookManager};
@@ -288,25 +288,18 @@ pub async fn run_agent_loop(
                     let mut sc = safe_lock(&streaming_content, "agent::fallback_clear");
                     sc.clear();
                 }
-                // 重新构建请求（不带 stream）
-                let chat_client = client.chat();
-                let create_fut = chat_client.create(request);
+                // 使用宽松反序列化的非流式调用（兼容非标准 finish_reason）
+                let create_fut = call_openai_non_stream_lenient(&provider, &request);
                 tokio::select! {
                     result = create_fut => match result {
-                    Ok(response) => {
-                        if let Some(choice) = response.choices.first() {
-                            let is_tool_calls = matches!(
-                                choice.finish_reason,
-                                Some(async_openai::types::chat::FinishReason::ToolCalls)
-                            );
-                            if is_tool_calls
-                                && let Some(ref tc_list) = choice.message.tool_calls {
-                                    let tool_items = extract_tool_items(tc_list);
+                    Ok(fallback_result) => {
+                        if fallback_result.is_tool_calls
+                            && let Some(tool_items) = fallback_result.tool_calls {
                                     if tool_items.is_empty() {
                                         break;
                                     }
                                     let assistant_text =
-                                        choice.message.content.clone().unwrap_or_default();
+                                        fallback_result.content.clone().unwrap_or_default();
                                     match process_tool_calls(
                                         tool_items,
                                         assistant_text,
@@ -327,14 +320,25 @@ pub async fn run_agent_loop(
                                         Err(()) => return,
                                     }
                                 }
-                            // 普通文本回复
-                            if let Some(ref content) = choice.message.content {
+                        // 普通文本回复（或非标准 finish_reason 如 network_error）
+                        if let Some(ref content) = fallback_result.content
+                            && !content.is_empty()
+                        {
                                 write_info_log("Sprite 回复", content);
                                 let mut sc = safe_lock(&streaming_content, "agent::fallback_content");
                                 sc.push_str(content);
                                 drop(sc);
                                 let _ = tx.send(StreamMsg::Chunk);
-                            }
+                        }
+                        // 非标准 finish_reason 且无内容时，报告错误
+                        if let Some(ref reason) = fallback_result.finish_reason
+                            && !matches!(reason.as_str(), "stop" | "length" | "tool_calls" | "content_filter" | "function_call")
+                            && fallback_result.content.as_deref().unwrap_or_default().is_empty()
+                        {
+                                let error_msg = format!("API 返回异常: finish_reason={}", reason);
+                                write_error_log("Sprite API fallback 非流式", &error_msg);
+                                let _ = tx.send(StreamMsg::Error(error_msg));
+                                return;
                         }
                     }
                     Err(e) => {
