@@ -1,42 +1,59 @@
 ## Overview
 
-Hooks allow custom scripts to run at specific events.
+Hooks allow running custom scripts on specific events, managed via the `RegisterHook` tool.
 
 ## Hook Events
 
-| Event | When it runs |
-|-------|--------------|
-| `pre_send_message` | Before sending message to AI |
-| `post_llm_response` | After receiving AI response |
+| Event | When Triggered |
+|-------|----------------|
+| `pre_send_message` | Before sending user message |
+| `post_send_message` | After sending user message |
+| `pre_llm_request` | Before LLM request |
+| `post_llm_response` | After LLM response |
 | `pre_tool_execution` | Before tool execution |
 | `post_tool_execution` | After tool execution |
 | `session_start` | When session starts |
 | `session_end` | When session ends |
 
-## Registering Hooks
+## Register Hooks
+
+Manage session-level hooks via `RegisterHook` tool:
+
+```
+# View hook protocol documentation
+RegisterHook action="help"
+
+# List registered hooks
+RegisterHook action="list"
+
+# Register a hook
+RegisterHook event="pre_send_message" command="echo 'Sending...'"
+
+# Remove a hook
+RegisterHook action="remove" event="pre_send_message" index=0
+```
+
+## Configuration Files
+
+Hooks can also be managed via config files:
+
+```yaml
+# User level: ~/.jdata/agent/hooks.yaml
+# Project level: .jcli/hooks.yaml
+
+hooks:
+  - event: pre_send_message
+    command: "echo 'Sending...'"
+    timeout: 10
+```
+
+## Hook Script Protocol
+
+Scripts receive JSON via stdin, return modifications via stdout:
 
 ```bash
-# Register a hook
-j hook register pre_send_message "echo 'Sending message...'"
-
-# List hooks
-j hook list
-
-# Remove hook
-j hook remove pre_send_message 0
+#!/bin/bash
+input=$(cat)
+# Modify user_input
+echo '{"user_input": "Modified message"}'
 ```
-
-## Hook Scripts
-
-Hook scripts receive JSON via stdin:
-
-```json
-{
-  "event": "pre_send_message",
-  "data": {
-    "message": "user message"
-  }
-}
-```
-
-Scripts should output JSON to stdout to modify the data.

@@ -1,24 +1,24 @@
 ## Overview
 
-Skills are specialized prompts that extend AI capabilities.
+Skills are specialized prompt modules that extend AI capabilities, loaded via the `LoadSkill` tool.
 
 ## Skill Structure
 
 ```
 ~/.jdata/agent/skills/<skill_name>/
-├── skill.md         # Skill definition
-├── assets/          # Supporting files
-└── examples/        # Example usage
+├── SKILL.md          # Skill definition (required)
+├── references/       # Reference documents
+└── scripts/          # Script files
 ```
 
-## Creating Skills
+## Creating a Skill
 
 ```markdown
-# skill.md
+# SKILL.md
 ---
 name: code-review
-description: Review code for best practices
-trigger: code review
+description: Code review best practices
+argument-hint: file path  # optional, hints the argument user passes
 ---
 
 You are a code reviewer. Analyze code for:
@@ -30,14 +30,13 @@ You are a code reviewer. Analyze code for:
 
 ## Using Skills
 
-```bash
-# In AI chat
-> code review this file @file:src/main.rs
+AI loads skills via the `LoadSkill` tool:
+
+```
+Load the code-review skill
 ```
 
-## Built-in Skills
+## Skill Sources
 
-- `code-review`: Code analysis
-- `test-gen`: Generate tests
-- `doc-gen`: Generate documentation
-- `refactor`: Refactoring suggestions
+- **User level**: `~/.jdata/agent/skills/`
+- **Project level**: `.jcli/skills/` (project level overrides user level when names conflict)

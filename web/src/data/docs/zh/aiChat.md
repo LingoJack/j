@@ -1,44 +1,42 @@
 ## 启动 AI 对话
 
 ```bash
-j chat              # 打开 TUI 对话
-j chat "你好"       # 快速提问
+j chat              # 进入 TUI 对话界面
+j chat "你好"       # 快速提问并打印回复
+j chat -c           # 延续上一个会话
+j chat --session <id>  # 恢复指定会话
 ```
 
-## 功能特性
+## 远程控制
 
-- **多模型支持**：OpenAI、Claude、Gemini、Ollama
-- **流式输出**：实时响应
-- **工具调用**：AI 可以使用工具
-- **上下文引用**：包含文件和 URL
+```bash
+j chat --remote     # 启用远程控制（手机扫码）
+j chat --remote --port 9390  # 指定端口
+```
+
+## 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Enter` | 发送消息 |
+| `Esc` | 取消响应/退出 |
+| `Ctrl+T` | 切换模型 |
+| `Ctrl+L` | 归档对话 |
+| `Ctrl+Y` | 复制最后一条 AI 回复 |
+| `Ctrl+B` | 消息浏览模式 |
+| `Ctrl+E` | 打开配置界面 |
+| `F1` 或 `?` | 显示帮助 |
 
 ## 上下文引用
 
-```bash
-# 包含本地文件
-@file:src/main.rs 解释这段代码
+输入框中以 `@` 触发补全：
 
-# 包含目录
-@dir:src/ 分析这个代码库
-
-# 包含 URL
-@url:https://example.com 总结这个页面
+```
+@skill:<name>       # 引用技能
+@command:<name>     # 引用自定义命令
+@file:<path>        # 引用文件内容（支持图片）
 ```
 
-## 命令
+## 多模型支持
 
-| 命令 | 描述 |
-|------|------|
-| `/help` | 显示可用命令 |
-| `/compact` | 压缩对话上下文 |
-| `/clear` | 清空对话历史 |
-| `/model` | 切换 AI 模型 |
-| `/export` | 导出对话 |
-
-## 网络搜索
-
-启用网络搜索让 AI 获取最新信息：
-
-```bash
-React 19 有哪些新功能？
-```
+支持 OpenAI、Claude、Gemini、Ollama 等模型，通过 `Ctrl+E` 打开配置界面管理。

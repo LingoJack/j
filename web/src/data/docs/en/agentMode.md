@@ -1,35 +1,34 @@
 ## Overview
 
-Agent mode enables autonomous multi-step reasoning with tool calling.
+Agent mode is an enhanced AI chat mode with autonomous multi-step reasoning and tool usage.
 
-## Activation
+## Start
 
 ```bash
-j ai
+j chat              # Enter TUI chat
 ```
+
+In the conversation, AI automatically uses tools to execute multi-step operations as needed.
 
 ## Features
 
-- **Autonomous reasoning**: AI plans and executes multi-step tasks
-- **Tool integration**: Uses available tools automatically
-- **Task management**: Breaks down complex requests
+- **Autonomous Reasoning**: AI plans and executes multi-step tasks
+- **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
+- **Task Management**: Task and Todo tools manage complex tasks
 
 ## Example Tasks
 
-```bash
-# Code analysis
+```
 Analyze the codebase and suggest improvements
 
-# File operations
-Find all TODO comments in the code and create a summary
+Find all TODO comments in the code and generate a summary
 
-# Research
-Research the best practices for React state management and create a report
+Research React state management best practices and generate a report
 ```
 
-## Tool Permissions
+## Tool Permission Configuration
 
-Configure which tools the agent can use:
+Configure which tools the AI can use:
 
 ```yaml
 # ~/.jdata/agent/data/agent_config.yaml

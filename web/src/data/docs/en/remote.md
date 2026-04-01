@@ -1,32 +1,22 @@
 ## Overview
 
-Control AI chat from mobile devices via WebSocket.
+Control AI chat from mobile devices via WebSocket, started with `j chat --remote`.
 
-## Setup
+## Start
 
 ```bash
-# Start remote control server
-j remote start
-
-# Show connection QR code
-j remote qr
+j chat --remote              # Start remote control (default port 9390)
+j chat --remote --port 9390  # Specify port
 ```
+
+A QR code will be displayed for phone scanning.
 
 ## Features
 
-- **Mobile control**: Use phone to send messages
-- **Voice input**: Dictate messages
-- **Push notifications**: Receive responses on mobile
-- **Session sync**: Continue conversations across devices
+- **Mobile Control**: Send messages from your phone
+- **Real-time Sync**: Continue conversations across devices
+- **QR Connection**: No need to type addresses manually
 
-## Security
-
-- WebSocket secure connection
-- Token-based authentication
-- End-to-end encryption
-
-## Client Apps
+## Client
 
 - **Web**: Scan QR code to connect
-- **iOS**: Shortcuts integration
-- **Android**: Tasker integration

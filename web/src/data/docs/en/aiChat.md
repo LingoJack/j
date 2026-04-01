@@ -1,44 +1,42 @@
-## Starting AI Chat
+## Start AI Chat
 
 ```bash
-j chat              # Open TUI chat
-j chat "Hello"      # Quick question
+j chat              # Enter TUI chat interface
+j chat "Hello"      # Quick question and print response
+j chat -c           # Continue last session
+j chat --session <id>  # Resume specific session
 ```
 
-## Features
-
-- **Multi-model support**: OpenAI, Claude, Gemini, Ollama
-- **Streaming output**: Real-time responses
-- **Tool calling**: AI can use tools
-- **Context management**: Include files and URLs
-
-## Context Reference
+## Remote Control
 
 ```bash
-# Include local files
-@file:src/main.rs Explain this code
-
-# Include directories
-@dir:src/ Analyze this codebase
-
-# Include URLs
-@url:https://example.com Summarize this page
+j chat --remote     # Enable remote control (scan QR with phone)
+j chat --remote --port 9390  # Specify port
 ```
 
-## Commands
+## Shortcuts
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands |
-| `/compact` | Compress conversation context |
-| `/clear` | Clear conversation history |
-| `/model` | Switch AI model |
-| `/export` | Export conversation |
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Esc` | Cancel response/Exit |
+| `Ctrl+T` | Switch model |
+| `Ctrl+L` | Archive conversation |
+| `Ctrl+Y` | Copy last AI reply |
+| `Ctrl+B` | Message browse mode |
+| `Ctrl+E` | Open config panel |
+| `F1` or `?` | Show help |
 
-## Web Search
+## Context References
 
-Enable web search to let AI fetch latest information:
+Type `@` in input to trigger completion:
 
-```bash
-What are the new features in React 19?
 ```
+@skill:<name>       # Reference skill
+@command:<name>     # Reference custom command
+@file:<path>        # Reference file content (supports images)
+```
+
+## Multi-Model Support
+
+Supports OpenAI, Claude, Gemini, Ollama and more. Use `Ctrl+E` to open config panel.

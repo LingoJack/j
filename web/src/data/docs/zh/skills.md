@@ -1,24 +1,24 @@
 ## 概述
 
-Skill 是扩展 AI 能力的专用提示词。
+Skill 是扩展 AI 能力的专用提示词模块，通过 `LoadSkill` 工具加载。
 
 ## Skill 结构
 
 ```
 ~/.jdata/agent/skills/<skill_name>/
-├── skill.md         # Skill 定义
-├── assets/          # 支持文件
-└── examples/        # 使用示例
+├── SKILL.md          # Skill 定义（必需）
+├── references/       # 参考文档
+└── scripts/          # 脚本文件
 ```
 
 ## 创建 Skill
 
 ```markdown
-# skill.md
+# SKILL.md
 ---
 name: code-review
 description: 代码审查最佳实践
-trigger: 代码审查
+argument-hint: 文件路径  # 可选，提示用户传入的参数
 ---
 
 你是一个代码审查者。分析代码的：
@@ -30,14 +30,13 @@ trigger: 代码审查
 
 ## 使用 Skill
 
-```bash
-# 在 AI 对话中
-> 代码审查这个文件 @file:src/main.rs
+AI 通过 `LoadSkill` 工具加载 skill：
+
+```
+加载 code-review skill
 ```
 
-## 内置 Skill
+## Skill 来源
 
-- `code-review`：代码分析
-- `test-gen`：生成测试
-- `doc-gen`：生成文档
-- `refactor`：重构建议
+- **用户级**：`~/.jdata/agent/skills/`
+- **项目级**：`.jcli/skills/`（同名时项目级覆盖用户级）
