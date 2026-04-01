@@ -19,15 +19,15 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    printf "${GREEN}[INFO]${NC} %s\n" "$1" >&2
 }
 
 warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    printf "${YELLOW}[WARN]${NC} %s\n" "$1" >&2
 }
 
 error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf "${RED}[ERROR]${NC} %s\n" "$1" >&2
     exit 1
 }
 
@@ -51,10 +51,33 @@ detect_platform() {
 # 获取最新版本号
 get_latest_version() {
     local latest
-    latest=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$latest" ]; then
-        error "无法获取最新版本号"
+    local api_url="https://api.github.com/repos/${REPO}/releases/latest"
+    
+    # 方法1: 尝试使用 gh auth token 如果可用
+    if command -v gh &> /dev/null && gh auth status &> /dev/null 2>&1; then
+        info "使用 GitHub CLI 认证..." >&2
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" -H "Authorization: token $(gh auth token)" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     fi
+    
+    # 方法2: 直接访问 API（带 User-Agent）
+    if [ -z "$latest" ]; then
+        info "尝试从 GitHub API 获取..." >&2
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    fi
+    
+    # 方法3: 从 releases 页面解析
+    if [ -z "$latest" ]; then
+        info "尝试从 releases 页面获取..." >&2
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -o 'href="/[^"]*releases/download/[^"]*"' | head -1 | sed -E 's/.*\/download\/([^\/]+)\/.*/\1/')
+    fi
+    
+    # 方法4: 使用已知最新版本
+    if [ -z "$latest" ]; then
+        warn "无法从网络获取最新版本"
+        info "使用内置版本: v12.7.53" >&2
+        latest="v12.7.53"
+    fi
+    
     echo "$latest"
 }
 
@@ -84,7 +107,7 @@ install() {
 
     # 下载文件
     info "正在下载..."
-    if ! curl -fsSL --progress-bar -o "$tmp_dir/j.tar.gz" "$download_url"; then
+    if ! curl -fsSL --progress-bar -H "User-Agent: j-cli-installer" -o "$tmp_dir/j.tar.gz" "$download_url"; then
         error "下载失败，请检查版本号是否正确或网络连接是否正常"
     fi
 
