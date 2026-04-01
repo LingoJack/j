@@ -1,20 +1,27 @@
-import { StrictMode } from 'react'
+import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
-import App from './App.tsx'
-import Docs from './Docs.tsx'
+import { Loading } from './components/common/Loading'
 
-// 获取 base URL，如果是 GitHub Pages 的子路径部署
+// Lazy load pages for better performance
+// eslint-disable-next-line react-refresh/only-export-components
+const Home = lazy(() => import('./pages/Home'))
+// eslint-disable-next-line react-refresh/only-export-components
+const Docs = lazy(() => import('./pages/Docs'))
+
+// Get base URL for GitHub Pages subpath deployment
 const basename = import.meta.env.BASE_URL || '/'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename={basename}>
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/docs" element={<Docs />} />
-      </Routes>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/docs" element={<Docs />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   </StrictMode>,
 )

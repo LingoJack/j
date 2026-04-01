@@ -70,4 +70,7 @@ allow:
 - Bash(cd /Users/lingojack/dev_custom/j/web:*)
 - Bash(npm run:*)
 - Bash(lsof -ti:5173:*)
+- Bash(find /Users/jacklingo/dev_custom/j/web:*)
+- Bash(cd /Users/jacklingo/dev_custom/j/web/src:*)
+- Bash(rm /Users/jacklingo/dev_custom/j/web/src/App.tsx:*)
 deny: []
