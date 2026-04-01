@@ -17,6 +17,14 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Prevent horizontal scroll on mobile */
+img {
+  max-width: 100%;
+  height: auto;
 }
 
 /* Headings */
