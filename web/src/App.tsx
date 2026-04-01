@@ -23,8 +23,8 @@ const i18n = {
       title: 'Core Features',
       subtitle: 'One tool, many capabilities. From daily task management to AI assistance.',
       list: [
-        { icon: '⚡', title: 'Alias Management', description: 'Register apps, URLs, and scripts. Access them with j <alias>. Supports categorization and combination.' },
-        { icon: '📝', title: 'Daily Reports', description: 'Quick write, view, and search daily reports with automatic week management. Git sync supported.' },
+        { icon: '→', title: 'Alias Management', description: 'Register apps, URLs, and scripts. Access them with j <alias>. Supports categorization and combination.' },
+        { icon: '■', title: 'Daily Reports', description: 'Quick write, view, and search daily reports with automatic week management. Git sync supported.' },
         { icon: '✓', title: 'Todo & Notes', description: 'Built-in TUI todo manager with Markdown checkbox support. Links to daily reports on completion.' },
         { icon: '◉', title: 'AI Chat', description: 'TUI AI chat with multi-model support, streaming output, tool calling, and remote control.' },
         { icon: '◐', title: 'Browser Automation', description: 'Lite mode for lightweight HTTP control, CDP mode for full browser automation with screenshots.' },
@@ -140,8 +140,8 @@ const i18n = {
       title: '核心功能',
       subtitle: '一个工具，多种能力。从日常任务管理到 AI 辅助。',
       list: [
-        { icon: '⚡', title: '别名管理', description: '注册应用、URL、脚本，通过 j <别名> 快速访问，支持分类标记和组合使用。' },
-        { icon: '📝', title: '日报系统', description: '快速写入、查看、搜索日报，自动周数管理，支持 Git 同步。' },
+        { icon: '→', title: '别名管理', description: '注册应用、URL、脚本，通过 j <别名> 快速访问，支持分类标记和组合使用。' },
+        { icon: '■', title: '日报系统', description: '快速写入、查看、搜索日报，自动周数管理，支持 Git 同步。' },
         { icon: '✓', title: '待办备忘', description: '内置 TUI 待办管理，支持 Markdown checkbox，完成时可联动写入日报。' },
         { icon: '◉', title: 'AI 对话', description: 'TUI AI 对话，多模型支持、流式输出、工具调用，支持远程控制。' },
         { icon: '◐', title: '浏览器自动化', description: 'Lite 模式轻量级 HTTP 控制，CDP 模式完整浏览器自动化，支持截图。' },
@@ -264,9 +264,9 @@ function CopyButton({ text }: { text: string }) {
 // Code block component
 function CodeBlock({ children, showCopy = true }: { children: string; showCopy?: boolean }) {
   return (
-    <div className="relative group">
-      <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono border border-stone-200">
-        <code>{children}</code>
+    <div className="relative group max-w-full">
+      <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono border border-stone-200 max-w-full">
+        <code className="block whitespace-pre-wrap break-words sm:whitespace-pre sm:break-normal">{children}</code>
       </pre>
       {showCopy && <CopyButton text={children} />}
     </div>
@@ -288,7 +288,7 @@ function FeatureCard({ icon, title, description }: { icon: string; title: string
 function CommandExample({ cmd, description }: { cmd: string; description: string }) {
   return (
     <div className="py-3 border-b border-stone-200 last:border-0">
-      <code className="text-stone-700 font-mono text-sm block mb-1">
+      <code className="text-stone-700 font-mono text-sm block mb-1 break-all">
         {cmd}
       </code>
       <span className="text-stone-500 text-sm">{description}</span>
@@ -302,8 +302,8 @@ function TipCard({ title, desc, example }: { title: string; desc: string; exampl
     <div className="p-5 bg-white rounded-lg border border-stone-200 hover:border-stone-300 transition-colors">
       <h4 className="font-medium text-stone-900 mb-2">{title}</h4>
       <p className="text-stone-600 text-sm mb-3 leading-relaxed">{desc}</p>
-      <div className="bg-[#faf9f6] rounded px-3 py-2 border border-stone-200">
-        <code className="text-stone-700 text-xs font-mono">{example}</code>
+      <div className="bg-[#faf9f6] rounded px-3 py-2 border border-stone-200 overflow-x-auto">
+        <code className="text-stone-700 text-xs font-mono whitespace-pre-wrap break-all sm:whitespace-pre">{example}</code>
       </div>
     </div>
   )
@@ -322,12 +322,14 @@ function Section({ id, children, className = '' }: { id?: string; children: Reac
 
 export default function App() {
   const [lang, setLang] = useState<Lang>('zh')  // 默认中文
+  const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const t = i18n[lang]
   
   const installCmd = 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh'
 
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-stone-800">
+    <div className="min-h-screen bg-[#faf9f6] text-stone-800 overflow-x-hidden">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/90 backdrop-blur-sm border-b border-stone-200/50">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -335,29 +337,37 @@ export default function App() {
             <span className="text-2xl font-bold text-stone-900">j</span>
             <span className="text-stone-400 text-sm hidden sm:inline">CLI tool</span>
           </a>
-          <div className="flex items-center gap-5">
+          
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-5">
             {/* Language Switcher */}
-            <div className="relative group">
-              <button className="text-stone-500 hover:text-stone-900 transition-colors text-sm flex items-center gap-0.5 whitespace-nowrap">
+            <div className="relative">
+              <button 
+                onClick={() => setLangMenuOpen(!langMenuOpen)}
+                onBlur={() => setTimeout(() => setLangMenuOpen(false), 150)}
+                className="text-stone-500 hover:text-stone-900 transition-colors text-sm flex items-center gap-0.5 whitespace-nowrap"
+              >
                 {lang === 'en' ? 'EN' : '中文'}
-                <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className={`w-3 h-3 ml-0.5 transition-transform ${langMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible absolute top-full left-0 mt-1 bg-white rounded shadow-lg py-1 z-50 transition-all">
-                <button
-                  onClick={() => setLang('en')}
-                  className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'en' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
-                >
-                  EN
-                </button>
-                <button
-                  onClick={() => setLang('zh')}
-                  className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'zh' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
-                >
-                  中文
-                </button>
-              </div>
+              {langMenuOpen && (
+                <div className="absolute top-full left-0 mt-1 bg-white rounded shadow-lg py-1 z-50 min-w-[60px]">
+                  <button
+                    onClick={() => { setLang('en'); setLangMenuOpen(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'en' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                  >
+                    EN
+                  </button>
+                  <button
+                    onClick={() => { setLang('zh'); setLangMenuOpen(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 whitespace-nowrap ${lang === 'zh' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                  >
+                    中文
+                  </button>
+                </div>
+              )}
             </div>
             <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.features}
@@ -380,7 +390,88 @@ export default function App() {
               <span className="text-sm">{t.nav.github}</span>
             </a>
           </div>
+
+          {/* Mobile Menu Button */}
+          <div className="flex md:hidden items-center gap-3">
+            {/* Mobile Language Switcher */}
+            <div className="relative">
+              <button 
+                onClick={() => setLangMenuOpen(!langMenuOpen)}
+                className="text-stone-500 hover:text-stone-900 transition-colors text-sm"
+              >
+                {lang === 'en' ? 'EN' : '中文'}
+              </button>
+              {langMenuOpen && (
+                <div className="absolute top-full right-0 mt-1 bg-white rounded shadow-lg py-1 z-50 min-w-[60px]">
+                  <button
+                    onClick={() => { setLang('en'); setLangMenuOpen(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 ${lang === 'en' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                  >
+                    EN
+                  </button>
+                  <button
+                    onClick={() => { setLang('zh'); setLangMenuOpen(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-50 ${lang === 'zh' ? 'text-stone-900 font-medium' : 'text-stone-500'}`}
+                  >
+                    中文
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Hamburger Button */}
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="text-stone-500 hover:text-stone-900 transition-colors p-1"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-[#faf9f6] border-t border-stone-200 px-6 py-4 space-y-3">
+            <a 
+              href="#features" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-stone-500 hover:text-stone-900 transition-colors text-sm py-2"
+            >
+              {t.nav.features}
+            </a>
+            <a 
+              href="#best-practices" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-stone-500 hover:text-stone-900 transition-colors text-sm py-2"
+            >
+              {lang === 'en' ? 'Best Practices' : '最佳实践'}
+            </a>
+            <a 
+              href="#quick-start" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-stone-500 hover:text-stone-900 transition-colors text-sm py-2"
+            >
+              {t.nav.quickStart}
+            </a>
+            <a 
+              href="https://github.com/LingoJack/j" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors text-sm py-2"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
+              </svg>
+              <span>{t.nav.github}</span>
+            </a>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
@@ -576,8 +667,8 @@ export default function App() {
           </p>
           <div className="max-w-lg mx-auto">
             <div className="relative">
-              <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono text-left border border-stone-200">
-                <code>{installCmd}</code>
+              <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono text-left border border-stone-200 max-w-full">
+                <code className="block whitespace-pre-wrap break-words sm:whitespace-pre">{installCmd}</code>
               </pre>
               <CopyButton text={installCmd} />
             </div>
