@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Sidebar } from '../components/docs/Sidebar'
 import { Markdown } from '../components/docs/Markdown'
+import { PageNav } from '../components/docs/PageNav'
 import { LanguageSwitcher } from '../components/common/LanguageSwitcher'
 import { docTree, docI18n } from '../data/docs'
 import type { Language } from '../types'
@@ -90,6 +91,7 @@ export default function Docs() {
       <main className="lg:ml-72 pt-[65px]">
         <div className="max-w-3xl mx-auto px-6 pb-16">
           {renderSection()}
+          <PageNav lang={lang} activeSection={activeSection} onNavigate={setActiveSection} />
         </div>
       </main>
 

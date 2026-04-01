@@ -488,6 +488,12 @@ fn drain_pending_user_messages(
 ) {
     let mut pending = safe_lock(pending_user_messages, "agent::drain_pending");
     if !pending.is_empty() {
+        // 给每条追加的用户消息添加 [User appended] 标记
+        for msg in pending.iter_mut() {
+            if msg.role == "user" {
+                msg.content = format!("[User appended] {}", msg.content);
+            }
+        }
         messages.append(&mut *pending);
     }
 }
