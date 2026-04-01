@@ -11,6 +11,16 @@
 | `WebFetch` | Fetch web page content |
 | `WebSearch` | Search the web |
 | `Ask` | Ask user for input |
+| `TaskOutput` | Get background task output |
+| `Task` | Manage tasks |
+| `TodoWrite` | Write todo items |
+| `TodoRead` | Read todo items |
+| `Compact` | Compress conversation context |
+| `RegisterHook` | Register hooks |
+| `ComputerUse` | macOS desktop control |
+| `EnterPlanMode` | Enter plan mode |
+| `ExitPlanMode` | Exit plan mode |
+| `LoadSkill` | Load skills |
 
 ## Permission Configuration
 

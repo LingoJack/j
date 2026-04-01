@@ -11,6 +11,16 @@
 | `WebFetch` | 获取网页内容 |
 | `WebSearch` | 搜索网络 |
 | `Ask` | 向用户请求输入 |
+| `TaskOutput` | 获取后台任务输出 |
+| `Task` | 管理任务 |
+| `TodoWrite` | 写入待办事项 |
+| `TodoRead` | 读取待办事项 |
+| `Compact` | 压缩对话上下文 |
+| `RegisterHook` | 注册钩子 |
+| `ComputerUse` | macOS 桌面控制 |
+| `EnterPlanMode` | 进入计划模式 |
+| `ExitPlanMode` | 退出计划模式 |
+| `LoadSkill` | 加载技能 |
 
 ## 权限配置
 
