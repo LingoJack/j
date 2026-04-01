@@ -1,17 +1,7 @@
 [
   {
     "id": "1",
-    "content": "修复 CTA Section 代码复制按钮不可见",
-    "status": "completed"
-  },
-  {
-    "id": "2",
-    "content": "将文档内容移到独立 markdown 文件",
-    "status": "completed"
-  },
-  {
-    "id": "3",
-    "content": "添加文档页底部的 Next 导航",
+    "content": "修复文档加载问题（glob 路径和 ?raw 导入）",
     "status": "completed"
   }
 ]

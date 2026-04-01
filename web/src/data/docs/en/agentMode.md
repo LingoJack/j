@@ -5,7 +5,7 @@ Agent mode enables autonomous multi-step reasoning with tool calling.
 ## Activation
 
 ```bash
-j agent
+j ai
 ```
 
 ## Features

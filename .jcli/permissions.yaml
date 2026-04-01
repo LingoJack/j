@@ -73,4 +73,5 @@ allow:
 - Bash(find /Users/jacklingo/dev_custom/j/web:*)
 - Bash(cd /Users/jacklingo/dev_custom/j/web/src:*)
 - Bash(rm /Users/jacklingo/dev_custom/j/web/src/App.tsx:*)
+- Bash(ifconfig |:*)
 deny: []

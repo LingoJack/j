@@ -4,14 +4,14 @@ import { Sidebar } from '../components/docs/Sidebar'
 import { Markdown } from '../components/docs/Markdown'
 import { PageNav } from '../components/docs/PageNav'
 import { LanguageSwitcher } from '../components/common/LanguageSwitcher'
-import { docTree, docI18n } from '../data/docs'
+import { docTree, docNavI18n, getDocContent, getSectionTitle } from '../data/docs'
 import type { Language } from '../types'
 
 export default function Docs() {
   const [lang, setLang] = useState<Language>('zh')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeSection, setActiveSection] = useState('installation')
-  const t = docI18n[lang]
+  const t = docNavI18n[lang]
   const tree = docTree[lang]
   
   // Scroll to section on navigate
@@ -24,13 +24,15 @@ export default function Docs() {
   
   // Render section content
   const renderSection = () => {
-    const section = t.sections[activeSection as keyof typeof t.sections]
-    if (!section) return null
+    const content = getDocContent(lang, activeSection)
+    const title = getSectionTitle(lang, activeSection)
+    
+    if (!content) return null
     
     return (
-      <div id={activeSection} className="py-8">
-        <h1 className="text-3xl font-light text-stone-900 mb-6">{section.title}</h1>
-        <Markdown content={section.content} />
+      <div key={`${lang}-${activeSection}`} id={activeSection} className="py-8">
+        <h1 className="text-3xl font-light text-stone-900 mb-6">{title}</h1>
+        <Markdown content={content} />
       </div>
     )
   }
@@ -72,7 +74,7 @@ export default function Docs() {
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
               </svg>
-              <span className="text-sm hidden sm:inline">{t.nav.github}</span>
+              <span className="text-sm hidden sm:inline">{t.github}</span>
             </a>
           </div>
         </div>
@@ -99,7 +101,7 @@ export default function Docs() {
       <footer className="lg:ml-72 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]">
         <div className="max-w-3xl mx-auto flex items-center justify-between text-sm">
           <Link to="/" className="text-stone-500 hover:text-stone-900 transition-colors">
-            {t.nav.back}
+            {t.back}
           </Link>
           <div className="flex items-center gap-6">
             <a 
