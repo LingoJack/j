@@ -56,24 +56,31 @@ get_latest_version() {
     # 方法1: 尝试使用 gh auth token 如果可用
     if command -v gh &> /dev/null && gh auth status &> /dev/null 2>&1; then
         info "使用 GitHub CLI 认证..." >&2
-        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" -H "Authorization: token $(gh auth token)" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" -H "Authorization: token $(gh auth token)" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
     fi
     
     # 方法2: 直接访问 API（带 User-Agent）
     if [ -z "$latest" ]; then
         info "尝试从 GitHub API 获取..." >&2
-        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
     fi
     
-    # 方法3: 从 releases 页面解析
+    # 方法3: 从 releases 页面解析（更精确的匹配）
     if [ -z "$latest" ]; then
         info "尝试从 releases 页面获取..." >&2
-        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -o 'href="/[^"]*releases/download/[^"]*"' | head -1 | sed -E 's/.*\/download\/([^\/]+)\/.*/\1/')
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -oE '/releases/download/v[0-9]+\.[0-9]+\.[0-9]+/' | head -1 | sed -E 's#/releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/#\1#')
     fi
     
     # 方法4: 使用已知最新版本
     if [ -z "$latest" ]; then
         warn "无法从网络获取最新版本"
+        info "使用内置版本: v12.7.53" >&2
+        latest="v12.7.53"
+    fi
+    
+    # 验证版本号格式
+    if ! echo "$latest" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+        warn "获取到的版本号格式不正确: $latest"
         info "使用内置版本: v12.7.53" >&2
         latest="v12.7.53"
     fi
