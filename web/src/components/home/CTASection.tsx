@@ -27,8 +27,8 @@ export function CTASection({ t, installCmd }: CTASectionProps) {
         </p>
         <div className="max-w-lg mx-auto">
           <div className="relative group">
-            <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono text-left border border-stone-200 max-w-full">
-              <code className="block whitespace-pre-wrap break-words sm:whitespace-pre">{installCmd}</code>
+            <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono text-left border border-stone-200">
+              <code className="block whitespace-pre">{installCmd}</code>
             </pre>
             <button
               onClick={handleCopy}
