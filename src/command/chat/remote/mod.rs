@@ -31,17 +31,14 @@ fn generate_token() -> String {
 /// 在终端显示二维码
 fn display_qr_code(url: &str) {
     use qrcode::QrCode;
+    use qrcode::render::unicode;
 
     println!("\n  📱 远程控制已启用\n");
     println!("  扫描下方二维码或访问:");
     println!("  \x1b[1;36m{}\x1b[0m\n", url);
 
     if let Ok(code) = QrCode::new(url.as_bytes()) {
-        let string = code
-            .render::<char>()
-            .quiet_zone(true)
-            .module_dimensions(2, 1)
-            .build();
+        let string = code.render::<unicode::Dense1x2>().quiet_zone(true).build();
         for line in string.lines() {
             println!("  {}", line);
         }
