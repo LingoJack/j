@@ -159,15 +159,35 @@ impl ToolRegistry {
     pub fn execute(&self, name: &str, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         // Plan mode 检查
         if self.plan_mode_state.is_active() && !plan::is_allowed_in_plan_mode(name) {
-            return ToolResult {
-                output: format!(
-                    "Tool '{}' is not available in plan mode. Only read-only tools are allowed. \
-                     Use ExitPlanMode to exit plan mode first.",
-                    name
-                ),
-                is_error: true,
-                images: vec![],
+            // 允许 Write/Edit 工具写入 plan 文件
+            let is_plan_file_write = (name == "Write" || name == "Edit") && {
+                if let Some(plan_path) = self.plan_mode_state.get_plan_file_path() {
+                    // 从工具参数中提取目标路径
+                    serde_json::from_str::<serde_json::Value>(arguments)
+                        .ok()
+                        .and_then(|v| {
+                            v.get("path")
+                                .or_else(|| v.get("file_path"))
+                                .and_then(|p| p.as_str())
+                                .map(|p| p == plan_path)
+                        })
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
             };
+
+            if !is_plan_file_write {
+                return ToolResult {
+                    output: format!(
+                        "Tool '{}' is not available in plan mode. Only read-only tools are allowed. \
+                         Use ExitPlanMode to exit plan mode first.",
+                        name
+                    ),
+                    is_error: true,
+                    images: vec![],
+                };
+            }
         }
 
         match self.get(name) {
