@@ -372,9 +372,9 @@ export default function App() {
             <a href="#features" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.features}
             </a>
-            <a href="#best-practices" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
-              {lang === 'en' ? 'Best Practices' : '最佳实践'}
-            </a>
+            <Link to="/docs" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
+              {lang === 'en' ? 'Docs' : '文档'}
+            </Link>
             <a href="#quick-start" className="text-stone-500 hover:text-stone-900 transition-colors text-sm whitespace-nowrap">
               {t.nav.quickStart}
             </a>
@@ -445,13 +445,13 @@ export default function App() {
             >
               {t.nav.features}
             </a>
-            <a 
-              href="#best-practices" 
+            <Link 
+              to="/docs" 
               onClick={() => setMobileMenuOpen(false)}
               className="block text-stone-500 hover:text-stone-900 transition-colors text-sm py-2"
             >
-              {lang === 'en' ? 'Best Practices' : '最佳实践'}
-            </a>
+              {lang === 'en' ? 'Docs' : '文档'}
+            </Link>
             <a 
               href="#quick-start" 
               onClick={() => setMobileMenuOpen(false)}
