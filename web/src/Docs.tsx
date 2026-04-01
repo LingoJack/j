@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 type Lang = 'en' | 'zh'
 
@@ -1512,12 +1514,95 @@ permissions:
   }
 }
 
+// Inline markdown renderer (handles `code`, **bold**, *italic*)
+function renderInlineMarkdown(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = []
+  let remaining = text
+  let key = 0
+
+  // First, handle escaped backticks: \`...\` -> treat as inline code
+  remaining = remaining.replace(/\\`([^`]+)`/g, '\x00CODE_START$1CODE_END\x00')
+
+  while (remaining.length > 0) {
+    // Escaped backtick code (converted to special marker)
+    const escapedCodeMatch = remaining.match(/\x00CODE_START(.+?)CODE_END\x00/)
+    if (escapedCodeMatch && escapedCodeMatch.index !== undefined) {
+      const before = remaining.slice(0, escapedCodeMatch.index)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <code key={key++} className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-xs font-mono">
+          {escapedCodeMatch[1]}
+        </code>
+      )
+      remaining = remaining.slice(escapedCodeMatch.index + escapedCodeMatch[0].length)
+      continue
+    }
+
+    // Inline code `...`
+    const codeMatch = remaining.match(/`([^`]+)`/)
+    if (codeMatch && codeMatch.index !== undefined) {
+      const before = remaining.slice(0, codeMatch.index)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <code key={key++} className="bg-stone-100 text-stone-800 px-1.5 py-0.5 rounded text-xs font-mono">
+          {codeMatch[1]}
+        </code>
+      )
+      remaining = remaining.slice(codeMatch.index + codeMatch[0].length)
+      continue
+    }
+
+    // Bold **...** (improved regex to handle various characters)
+    const boldMatch = remaining.match(/\*\*([^*]+?)\*\*/)
+    if (boldMatch && boldMatch.index !== undefined) {
+      const before = remaining.slice(0, boldMatch.index)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <strong key={key++} className="font-semibold text-stone-900">
+          {boldMatch[1]}
+        </strong>
+      )
+      remaining = remaining.slice(boldMatch.index + boldMatch[0].length)
+      continue
+    }
+
+    // Italic *...* (but not **...**)
+    const italicMatch = remaining.match(/(?<!\*)\*(?!\*)([^*]+)(?<!\*)\*(?!\*)/)
+    if (italicMatch && italicMatch.index !== undefined) {
+      const before = remaining.slice(0, italicMatch.index)
+      if (before) {
+        parts.push(<span key={key++}>{before}</span>)
+      }
+      parts.push(
+        <em key={key++} className="italic">
+          {italicMatch[1]}
+        </em>
+      )
+      remaining = remaining.slice(italicMatch.index + italicMatch[0].length)
+      continue
+    }
+
+    // No more matches, push remaining text
+    parts.push(<span key={key++}>{remaining}</span>)
+    break
+  }
+
+  return parts.length > 0 ? parts : text
+}
+
 // Markdown renderer (simple)
 function Markdown({ content }: { content: string }) {
   const lines = content.split('\n')
   const elements: React.JSX.Element[] = []
   let inCodeBlock = false
   let codeContent = ''
+  let codeLang = ''
   let inTable = false
   let tableRows: string[][] = []
 
@@ -1526,14 +1611,67 @@ function Markdown({ content }: { content: string }) {
     if (line.startsWith('```')) {
       if (!inCodeBlock) {
         inCodeBlock = true
+        codeLang = line.slice(3).trim() || 'text'
         codeContent = ''
       } else {
         inCodeBlock = false
+        // Map common language names
+        const langMap: Record<string, string> = {
+          'bash': 'bash',
+          'shell': 'bash',
+          'sh': 'bash',
+          'zsh': 'bash',
+          'typescript': 'typescript',
+          'ts': 'typescript',
+          'javascript': 'javascript',
+          'js': 'javascript',
+          'python': 'python',
+          'py': 'python',
+          'rust': 'rust',
+          'rs': 'rust',
+          'go': 'go',
+          'golang': 'go',
+          'java': 'java',
+          'c': 'c',
+          'cpp': 'cpp',
+          'c++': 'cpp',
+          'csharp': 'csharp',
+          'c#': 'csharp',
+          'ruby': 'ruby',
+          'rb': 'ruby',
+          'sql': 'sql',
+          'json': 'json',
+          'yaml': 'yaml',
+          'yml': 'yaml',
+          'toml': 'toml',
+          'markdown': 'markdown',
+          'md': 'markdown',
+          'html': 'html',
+          'css': 'css',
+          'scss': 'scss',
+        }
+        const lang = langMap[codeLang.toLowerCase()] || codeLang || 'text'
+        
         elements.push(
           <div key={index} className="relative group my-4">
-            <pre className="bg-[#faf9f6] text-stone-800 rounded-lg p-4 text-sm overflow-x-auto font-mono border border-stone-200">
-              <code className="block whitespace-pre-wrap break-words sm:whitespace-pre">{codeContent}</code>
-            </pre>
+            <SyntaxHighlighter
+              language={lang}
+              style={oneLight}
+              customStyle={{
+                margin: 0,
+                borderRadius: '0.5rem',
+                fontSize: '0.875rem',
+                backgroundColor: '#faf9f6',
+                border: '1px solid #e7e5e4',
+              }}
+              codeTagProps={{
+                style: {
+                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                }
+              }}
+            >
+              {codeContent}
+            </SyntaxHighlighter>
           </div>
         )
       }
@@ -1551,13 +1689,16 @@ function Markdown({ content }: { content: string }) {
         inTable = true
         tableRows = []
       }
-      const cells = line.split('|').filter(c => c.trim()).map(c => c.trim())
+      // Don't filter empty cells - just trim whitespace
+      const cells = line.split('|').slice(1, -1).map(c => c.trim())
       if (!line.includes('---')) {
         tableRows.push(cells)
       }
       return
     } else if (inTable) {
       inTable = false
+      // Find the maximum column count to ensure all rows have the same number of columns
+      const maxCols = Math.max(...tableRows.map(row => row.length))
       elements.push(
         <div key={`table-${index}`} className="overflow-x-auto my-4">
           <table className="min-w-full border-collapse">
@@ -1565,7 +1706,7 @@ function Markdown({ content }: { content: string }) {
               <tr>
                 {tableRows[0]?.map((cell, i) => (
                   <th key={i} className="border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium">
-                    {cell}
+                    {renderInlineMarkdown(cell)}
                   </th>
                 ))}
               </tr>
@@ -1573,9 +1714,9 @@ function Markdown({ content }: { content: string }) {
             <tbody>
               {tableRows.slice(1).map((row, i) => (
                 <tr key={i}>
-                  {row.map((cell, j) => (
+                  {Array.from({ length: maxCols }).map((_, j) => (
                     <td key={j} className="border border-stone-200 px-4 py-2 text-sm">
-                      {cell}
+                      {renderInlineMarkdown(row[j] || '')}
                     </td>
                   ))}
                 </tr>
@@ -1586,13 +1727,23 @@ function Markdown({ content }: { content: string }) {
       )
     }
 
+    // Blockquotes
+    if (line.startsWith('> ')) {
+      elements.push(
+        <blockquote key={index} className="border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic">
+          {renderInlineMarkdown(line.slice(2))}
+        </blockquote>
+      )
+      return
+    }
+
     // Headings
     if (line.startsWith('## ')) {
-      elements.push(<h2 key={index} className="text-2xl font-light text-stone-900 mt-8 mb-4">{line.slice(3)}</h2>)
+      elements.push(<h2 key={index} className="text-2xl font-light text-stone-900 mt-8 mb-4">{renderInlineMarkdown(line.slice(3))}</h2>)
       return
     }
     if (line.startsWith('### ')) {
-      elements.push(<h3 key={index} className="text-lg font-medium text-stone-900 mt-6 mb-3">{line.slice(4)}</h3>)
+      elements.push(<h3 key={index} className="text-lg font-medium text-stone-900 mt-6 mb-3">{renderInlineMarkdown(line.slice(4))}</h3>)
       return
     }
 
@@ -1600,7 +1751,7 @@ function Markdown({ content }: { content: string }) {
     if (line.startsWith('- ') || line.startsWith('* ')) {
       elements.push(
         <li key={index} className="text-stone-600 text-sm ml-4 mb-1 list-disc">
-          {line.slice(2)}
+          {renderInlineMarkdown(line.slice(2))}
         </li>
       )
       return
@@ -1611,7 +1762,7 @@ function Markdown({ content }: { content: string }) {
     if (numMatch) {
       elements.push(
         <li key={index} className="text-stone-600 text-sm ml-4 mb-1 list-decimal">
-          {line.slice(numMatch[0].length)}
+          {renderInlineMarkdown(line.slice(numMatch[0].length))}
         </li>
       )
       return
@@ -1621,7 +1772,7 @@ function Markdown({ content }: { content: string }) {
     if (line.trim()) {
       elements.push(
         <p key={index} className="text-stone-600 text-sm leading-relaxed mb-3">
-          {line}
+          {renderInlineMarkdown(line)}
         </p>
       )
     }
