@@ -67,4 +67,5 @@ allow:
 - Bash(cd web:*)
 - Bash(git push:*)
 - Bash(curl -fsSL:*)
+- Bash(cd /Users/lingojack/dev_custom/j/web:*)
 deny: []
