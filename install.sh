@@ -56,13 +56,13 @@ get_latest_version() {
     # 方法1: 尝试使用 gh auth token 如果可用
     if command -v gh &> /dev/null && gh auth status &> /dev/null 2>&1; then
         info "使用 GitHub CLI 认证..." >&2
-        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" -H "Authorization: token $(gh auth token)" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" -H "Authorization: token $(gh auth token)" "$api_url" 2>/dev/null | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9]+\.[0-9]+\.[0-9]+"' | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
     fi
-    
+
     # 方法2: 直接访问 API（带 User-Agent）
     if [ -z "$latest" ]; then
         info "尝试从 GitHub API 获取..." >&2
-        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "$api_url" 2>/dev/null | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9]+\.[0-9]+\.[0-9]+"' | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
     fi
     
     # 方法3: 从 releases 页面解析（更精确的匹配）
