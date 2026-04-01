@@ -1,6 +1,6 @@
-use super::storage::{ChatMessage, ModelProvider};
+use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use crate::command::chat::constants;
-use crate::util::log::write_info_log;
+use crate::util::log::{write_error_log, write_info_log};
 use async_openai::{
     Client,
     config::OpenAIConfig,
@@ -17,6 +17,7 @@ use async_openai::{
 };
 use constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use futures::StreamExt;
+use serde::Deserialize;
 
 /// 根据 ModelProvider 配置创建 async-openai Client
 pub fn create_openai_client(provider: &ModelProvider) -> Client<OpenAIConfig> {
@@ -232,6 +233,156 @@ pub async fn call_openai_stream_async(
     }
 
     Ok(full_content)
+}
+
+// ==================== 宽松反序列化结构（兼容非标准 finish_reason）====================
+
+/// 宽松版 tool call function
+#[derive(Debug, Deserialize)]
+pub struct LenientFunctionCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+/// 宽松版 tool call
+#[derive(Debug, Deserialize)]
+pub struct LenientToolCall {
+    pub id: String,
+    pub function: LenientFunctionCall,
+}
+
+/// 宽松版 choice message
+#[derive(Debug, Deserialize)]
+pub struct LenientMessage {
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<LenientToolCall>>,
+}
+
+/// 宽松版 choice —— finish_reason 用 String 接收，兼容任意非标准值
+#[derive(Debug, Deserialize)]
+pub struct LenientChoice {
+    pub message: LenientMessage,
+    pub finish_reason: Option<String>,
+}
+
+/// 宽松版 API 响应
+#[derive(Debug, Deserialize)]
+pub struct LenientChatResponse {
+    pub choices: Vec<LenientChoice>,
+}
+
+/// fallback 非流式调用结果
+pub struct FallbackResult {
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCallItem>>,
+    pub is_tool_calls: bool,
+    pub finish_reason: Option<String>,
+}
+
+/// 使用 reqwest 发送非流式请求，用宽松结构反序列化，兼容非标准 finish_reason
+pub async fn call_openai_non_stream_lenient(
+    provider: &ModelProvider,
+    request: &CreateChatCompletionRequest,
+) -> Result<FallbackResult, String> {
+    let url = format!(
+        "{}/chat/completions",
+        provider.api_base.trim_end_matches('/')
+    );
+    let request_body =
+        serde_json::to_string(request).unwrap_or_else(|e| format!("序列化request失败: {}", e));
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", provider.api_key))
+        .body(request_body.clone())
+        .send()
+        .await
+        .map_err(|e| {
+            let err_msg = format!("API 请求失败(fallback lenient): {}", e);
+            write_error_log(
+                "call_openai_non_stream_lenient HTTP",
+                &format!("{}\nrequest body:\n{}", err_msg, request_body),
+            );
+            err_msg
+        })?;
+
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取响应 body 失败: {}", e))?;
+
+    if !status.is_success() {
+        let err_msg = format!(
+            "API 返回错误 status={}, body: {}",
+            status,
+            &body[..body.len().min(500)]
+        );
+        write_error_log(
+            "call_openai_non_stream_lenient HTTP status",
+            &format!("{}\nrequest body:\n{}", err_msg, request_body),
+        );
+        return Err(err_msg);
+    }
+
+    let parsed: LenientChatResponse = serde_json::from_str(&body).map_err(|e| {
+        let err_msg = format!(
+            "反序列化响应失败(lenient): {}, body: {}",
+            e,
+            &body[..body.len().min(500)]
+        );
+        write_error_log("call_openai_non_stream_lenient parse", &err_msg);
+        err_msg
+    })?;
+
+    let choice = match parsed.choices.first() {
+        Some(c) => c,
+        None => {
+            return Ok(FallbackResult {
+                content: None,
+                tool_calls: None,
+                is_tool_calls: false,
+                finish_reason: None,
+            });
+        }
+    };
+
+    let is_tool_calls = choice
+        .finish_reason
+        .as_deref()
+        .is_some_and(|r| r == "tool_calls");
+
+    let tool_items = choice.message.tool_calls.as_ref().map(|tcs| {
+        tcs.iter()
+            .map(|tc| ToolCallItem {
+                id: tc.id.clone(),
+                name: tc.function.name.clone(),
+                arguments: tc.function.arguments.clone(),
+            })
+            .collect()
+    });
+
+    // 如果 finish_reason 是非标准值（如 network_error），记录警告日志
+    if let Some(ref reason) = choice.finish_reason
+        && !matches!(
+            reason.as_str(),
+            "stop" | "length" | "tool_calls" | "content_filter" | "function_call"
+        )
+    {
+        write_info_log(
+            "call_openai_non_stream_lenient",
+            &format!("非标准 finish_reason: {}", reason),
+        );
+    }
+
+    Ok(FallbackResult {
+        content: choice.message.content.clone(),
+        tool_calls: tool_items,
+        is_tool_calls,
+        finish_reason: choice.finish_reason.clone(),
+    })
 }
 
 /// 同步包装：创建 tokio runtime 执行异步流式调用
