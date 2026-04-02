@@ -27,16 +27,34 @@ impl Tool for ShellTool {
     fn description(&self) -> &str {
         r#"
         Execute shell commands on the current system, returning stdout and stderr. Each call creates a new process; state does not persist.
+
+        IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed. Instead, use the appropriate dedicated tool:
+        - File search: Use Glob (NOT find or ls)
+        - Content search: Use Grep (NOT grep or rg)
+        - Read files: Use Read (NOT cat/head/tail)
+        - Edit files: Use Edit (NOT sed/awk)
+        - Write files: Use Write (NOT echo >/cat <<EOF)
+
         Important limitations:
         - Interactive commands are not supported (stdin is not connected)
         - Commands that exceed the timeout (default 120s) are automatically terminated and partial output is returned
         - For build commands, increase the timeout value as needed (max 600)
+
         Usage tips:
-        - Chain independent commands with && instead of making multiple calls
-        - Use absolute paths; avoid relying on cd to switch directories
-        - Quote file paths containing spaces with double quotes
-        - Prefer Read/Write/Edit tools for file operations instead of cat/sed/echo
-        - Set run_in_background: true for long-running commands (builds, servers, etc.) to get a task_id immediately; use TaskOutput to retrieve results
+        - If your command will create new directories or files, first run `ls` to verify the parent directory exists
+        - Always quote file paths containing spaces with double quotes
+        - Try to maintain your current working directory by using absolute paths and avoiding `cd`
+        - When issuing multiple commands:
+          - If commands are independent and can run in parallel, make multiple Bash tool calls in a single response
+          - If commands depend on each other, use && to chain them sequentially
+          - Use ; only when you don't care if earlier commands fail
+          - DO NOT use newlines to separate commands
+        - Set run_in_background: true for long-running commands (builds, servers, etc.) to get a task_id immediately; use TaskOutput to retrieve results. You do not need to poll — you will be notified when it finishes
+        - Avoid unnecessary `sleep` commands: do not sleep between commands, do not retry in a sleep loop — diagnose the root cause instead
+        - For git commands:
+          - Prefer creating a new commit rather than amending
+          - Before running destructive operations (git reset --hard, git push --force), consider safer alternatives
+          - Never skip hooks (--no-verify) unless the user explicitly asks
         "#
     }
 

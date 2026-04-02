@@ -25,7 +25,16 @@ impl Tool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        "Fetch web page content and convert to Markdown or plain text. Supports custom headers and authorization."
+        r#"
+        Fetches content from a specified URL, converts HTML to Markdown or plain text.
+
+        Usage notes:
+        - The URL must be a fully-formed valid URL starting with http:// or https://
+        - The tool is read-only and does not modify any files
+        - Results may be truncated if the content is very large
+        - Supports custom headers and authorization for authenticated APIs
+        - For GitHub URLs, prefer using the `gh` CLI via Bash instead (e.g., gh pr view, gh issue view, gh api)
+        "#
     }
 
     fn parameters_schema(&self) -> Value {

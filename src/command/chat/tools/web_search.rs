@@ -27,7 +27,14 @@ impl Tool for WebSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search the web using Exa Search API. Requires the EXA_API_KEY environment variable."
+        r#"
+        Search the web for up-to-date information. Requires the EXA_API_KEY environment variable.
+
+        Usage notes:
+        - Use this tool for accessing information beyond your knowledge cutoff
+        - After answering the user's question with search results, you SHOULD include a "Sources:" section listing relevant URLs
+        - Returns search results with titles, URLs, and highlighted snippets
+        "#
     }
 
     fn parameters_schema(&self) -> Value {

@@ -46,14 +46,18 @@ impl Tool for AgentTool {
         The sub-agent runs with a fresh context (system prompt + your prompt as user message).
         It can use all tools except Agent (to prevent recursion).
 
-        Parameters:
-        - prompt (required): The task for the sub-agent to perform
-        - description (optional): A short (3-5 word) description of the task
-        - run_in_background (optional): Set to true to run in background, returns task_id immediately
+        When NOT to use the Agent tool:
+        - If you want to read a specific file path, use Read or Glob instead
+        - If you are searching for a specific class/function definition, use Grep or Glob instead
+        - If you are searching code within a specific file or 2-3 files, use Read instead
 
-        The sub-agent will execute tools directly without user confirmation (subject to permission rules).
-        Use foreground (default) when you need results before proceeding.
-        Use background when you have independent work to do in parallel.
+        Usage notes:
+        - Always include a short description (3-5 words) summarizing what the agent will do
+        - The result returned by the agent is not visible to the user. To show the user the result, send a text message with a concise summary
+        - Use foreground (default) when you need the agent's results before proceeding
+        - Use background when you have genuinely independent work to do in parallel
+        - Clearly tell the agent whether you expect it to write code or just do research (search, file reads, web fetches, etc.)
+        - Provide clear, detailed prompts so the agent can work autonomously — explain what you're trying to accomplish, what you've already learned, and give enough context for the agent to make judgment calls
         "#
     }
 

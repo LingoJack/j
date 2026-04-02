@@ -45,7 +45,19 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Read local file contents and return with line numbers. Supports reading by line range via offset and limit parameters. Can also read image files (png/jpg/gif/webp/bmp) and return them as visual content for multimodal models."
+        r#"
+        Reads a file from the local filesystem. You can access any file directly by using this tool.
+
+        Usage:
+        - The path parameter can be absolute or relative to the current working directory
+        - By default, it reads the entire file with line numbers
+        - You can optionally specify offset and limit for large files, but it's recommended to read the whole file first
+        - Results are returned with line numbers (1-based)
+        - This tool can read image files (PNG, JPG, GIF, WEBP, BMP). When reading an image, the contents are presented visually
+        - This tool can only read files, not directories. To list a directory, use `ls` via the Bash tool
+        - You will regularly be asked to read screenshots. If the user provides a path to a screenshot, ALWAYS use this tool to view the file
+        - You can call multiple tools in a single response. It is always better to speculatively read multiple potentially useful files in parallel
+        "#
     }
 
     fn parameters_schema(&self) -> Value {

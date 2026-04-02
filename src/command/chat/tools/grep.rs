@@ -17,9 +17,12 @@ impl Tool for GrepTool {
 
     fn description(&self) -> &str {
         r###"
-        - Powerful regex-based search tool for searching within file contents
+        A powerful regex-based search tool for searching within file contents.
+
+        Usage:
+        - ALWAYS use Grep for content search tasks. NEVER invoke `grep` or `rg` as a Bash command
         - Supports full regex syntax, e.g. "log.*Error", "function\s+\w+"
-        - Filter files with the glob parameter (e.g. "*.js", "**/*.tsx") or the type parameter for language types
+        - Filter files with the glob parameter (e.g. "*.js", "**/*.tsx") or the type parameter (e.g. "js", "py", "rust")
         - Output modes:
           - "content": show matching lines with line numbers (default)
           - "files_with_matches": return file paths only
@@ -27,6 +30,7 @@ impl Tool for GrepTool {
         - Supports pagination: head_limit limits output count, offset skips the first N results
         - Use the context parameter to show N lines of context around each match
         - For finding files by name, use the Glob tool; Grep is for searching file contents
+        - Use Agent tool for open-ended searches requiring multiple rounds
         - Multiple tools can be called in a single response. For independent patterns, run searches in parallel
         - Important: if no path is needed, omit the field entirely — do not enter "undefined", "null", or empty string
         "###

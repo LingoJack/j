@@ -83,7 +83,15 @@ impl Tool for EnterPlanModeTool {
         Enter plan mode to explore the codebase and design an implementation approach before writing code.
         In plan mode, only read-only tools (Read, Glob, Grep, WebFetch, WebSearch, Ask, etc.) are available.
         Write tools (Bash, Write, Edit, etc.) will be blocked until plan mode is exited.
-        Use this before starting non-trivial implementation tasks to get user approval on your approach.
+
+        Use this proactively before starting non-trivial implementation tasks. Prefer using EnterPlanMode when ANY of these apply:
+        - New feature implementation with architectural decisions
+        - Multiple valid approaches exist and user should choose
+        - Code modifications that affect existing behavior
+        - Multi-file changes (touching more than 2-3 files)
+        - Unclear requirements that need exploration first
+
+        Do NOT use for: single-line fixes, typos, or purely research/exploration tasks.
         "#
     }
 

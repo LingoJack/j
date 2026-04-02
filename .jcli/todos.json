@@ -1,22 +1,27 @@
 [
   {
     "id": "1",
-    "content": "",
+    "content": "读取文档内容并对比源码进行勘误",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "",
+    "content": "检查 tools.md 文档",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "",
+    "content": "检查 agentMode.md 文档",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "调研 Claude Code 与 jcli 工具描述差异",
+    "content": "检查 skills.md 文档",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "检查其他文档",
     "status": "in_progress"
   }
 ]

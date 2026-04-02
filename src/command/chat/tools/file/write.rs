@@ -11,7 +11,17 @@ impl Tool for WriteFileTool {
     }
 
     fn description(&self) -> &str {
-        "Write content to a specified file. Overwrites if the file exists; auto-creates directories if they don't exist."
+        r#"
+        Writes a file to the local filesystem.
+
+        Usage:
+        - This tool will overwrite the existing file if there is one at the provided path
+        - If this is an existing file, you MUST use the Read tool first to read the file's contents
+        - Prefer the Edit tool for modifying existing files — it only sends the diff. Only use this tool to create new files or for complete rewrites
+        - NEVER create documentation files (*.md) or README files unless explicitly requested by the User
+        - Only use emojis if the user explicitly requests it
+        - Auto-creates parent directories if they don't exist
+        "#
     }
 
     fn parameters_schema(&self) -> Value {

@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-D7OgJH_x.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CMgaoHpG.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-72 bg-[#faf9f6] border-r border-stone-200 
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0
@@ -16,6 +16,7 @@ Agent mode is an enhanced AI chat mode with autonomous multi-step reasoning and 
 
 \`\`\`bash
 j chat              # Enter TUI chat
+j chat --auto-apply # Auto-apply all tools (skip confirmation)
 \`\`\`
 
 In the conversation, AI automatically uses tools to execute multi-step operations as needed.
@@ -25,6 +26,38 @@ In the conversation, AI automatically uses tools to execute multi-step operation
 - **Autonomous Reasoning**: AI plans and executes multi-step tasks
 - **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
+- **Plan Mode**: EnterPlanMode allows exploring codebase before making plan
+- **Sub-agent**: Agent tool can spawn sub-agents for complex tasks in parallel
+
+## Sub-agent (Agent Tool)
+
+Agent tool allows the main agent to spawn sub-agents for complex tasks:
+
+- **No recursion**: Sub-agent cannot call Agent tool
+- **Max rounds**: 30 tool call limit
+- **Execution mode**: Foreground (blocking) or background (async)
+- **Permission control**: Follows deny/allow rules
+
+\`\`\`
+# Example: Spawn sub-agent to search and organize code
+Search all files containing 'TODO' and organize by directory
+\`\`\`
+
+## Plan Mode
+
+For complex tasks, enter plan mode to explore codebase first:
+
+\`\`\`
+# Enter plan mode
+Analyze this project's architecture and design a refactoring plan
+
+# AI will:
+1. Enter plan mode (read-only tools available)
+2. Explore codebase structure
+3. Generate detailed plan
+4. Submit plan for user approval
+5. Execute after approval
+\`\`\`
 
 ## Example Tasks
 
@@ -38,17 +71,19 @@ Research React state management best practices and generate a report
 
 ## Tool Permission Configuration
 
-Configure which tools the AI can use:
+Configure which tools the AI can use (in \`.jcli/permissions.yaml\`):
 
 \`\`\`yaml
-# ~/.jdata/agent/data/agent_config.yaml
 permissions:
-  allow:
+  allow_all: false   # Set to true to skip all confirmations
+  
+  allow:             # Skip confirmation if matched
     - Read
     - Grep
     - Glob
     - WebFetch
-  deny:
+  
+  deny:              # Takes priority over allow, blocks execution
     - Bash
     - Write
 \`\`\`
@@ -169,18 +204,57 @@ Click the submit button
 ## Lite Mode
 
 Default mode using HTTP requests to fetch web content:
-- Get page text
-- Extract page structure
-- Get interactive element list
+
+| Action | Description |
+|--------|-------------|
+| \`status\` | Check browser status |
+| \`open\` | Open URL and fetch page content |
+| \`snapshot\` | Get interactive element list |
+| \`content\` | Extract body text |
+| \`tabs\` | List open tabs |
+| \`close\` | Close tab |
+
+**Limitations**: Does not support \`click\`, \`type\`, \`press\`, \`evaluate\`, \`screenshot\`
 
 ## CDP Mode
 
 Full browser automation when \`browser_cdp\` feature is enabled:
-- Screenshot capture
-- Element click and input
-- Page navigation
-- Script injection
-- Cookie management
+
+| Action | Description |
+|--------|-------------|
+| \`start\` | Launch browser |
+| \`stop\` | Stop browser |
+| \`open\` | Open new tab |
+| \`navigate\` | Navigate to URL |
+| \`screenshot\` | Capture screenshot (supports full page) |
+| \`snapshot\` | Get page snapshot (with element selectors) |
+| \`content\` | Extract body text |
+| \`click\` | Click element |
+| \`type\` | Type text (supports Unicode) |
+| \`press\` | Press key (Enter/Tab/Escape etc.) |
+| \`evaluate\` | Execute JavaScript |
+| \`tabs\` | List tabs |
+| \`close\` | Close tab |
+
+### Typical Workflow
+
+\`\`\`
+1. open to open a page
+2. snapshot to get interactive elements (returns selectors)
+3. Use returned selector (e.g., [data-jref="e3"]) for click/type
+4. content to get results
+\`\`\`
+
+### Headless Configuration
+
+Configure in \`.jcli/config.yaml\`:
+
+\`\`\`yaml
+settings:
+  browser_headless: true  # true=no window, false=show window
+\`\`\`
+
+Or override via parameter: \`{ "action": "start", "headless": false }\`
 
 ## Build with CDP
 
@@ -668,8 +742,8 @@ Skills are specialized prompt modules that extend AI capabilities, loaded via th
 \`\`\`
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill definition (required)
-├── references/       # Reference documents
-└── scripts/          # Script files
+├── references/       # Reference documents (AI reads on demand via Read tool)
+└── scripts/          # Script files (AI executes on demand via Bash tool)
 \`\`\`
 
 ## Creating a Skill
@@ -697,10 +771,28 @@ AI loads skills via the \`LoadSkill\` tool:
 Load the code-review skill
 \`\`\`
 
+After loading, AI will:
+1. Get the skill's body content as context
+2. List file paths in references/ and scripts/ directories
+3. Read reference documents on demand via Read tool
+4. Execute scripts on demand via Bash tool
+
 ## Skill Sources
 
-- **User level**: \`~/.jdata/agent/skills/\`
-- **Project level**: \`.jcli/skills/\` (project level overrides user level when names conflict)
+| Source | Path | Priority |
+|--------|------|----------|
+| User level | \`~/.jdata/agent/skills/\` | Low |
+| Project level | \`.jcli/skills/\` | High (overrides user level) |
+
+## Disabling Skills
+
+Disable specific skills in \`.jcli/config.yaml\`:
+
+\`\`\`yaml
+disabled_skills:
+  - skill-name-1
+  - skill-name-2
+\`\`\`
 `,R=e({default:()=>z}),z=`## Commands
 
 | Command | Description |
@@ -745,7 +837,7 @@ Todos can be written in daily reports using Markdown:
 - [ ] Pending task
 - [ ] Another pending task
 \`\`\`
-`,B=e({default:()=>V}),V="## Available Tools\n\n| Tool | Description |\n|------|-------------|\n| `Read` | Read file contents |\n| `Write` | Write to files |\n| `Edit` | Edit files with string replacement |\n| `Glob` | Find files by pattern |\n| `Grep` | Search file contents |\n| `Bash` | Execute shell commands |\n| `WebFetch` | Fetch web page content |\n| `WebSearch` | Search the web |\n| `Ask` | Ask user for input |\n| `TaskOutput` | Get background task output |\n| `Task` | Manage tasks |\n| `TodoWrite` | Write todo items |\n| `TodoRead` | Read todo items |\n| `Compact` | Compress conversation context |\n| `RegisterHook` | Register hooks |\n| `ComputerUse` | macOS desktop control |\n| `EnterPlanMode` | Enter plan mode |\n| `ExitPlanMode` | Exit plan mode |\n| `LoadSkill` | Load skills |\n\n## Permission Configuration\n\n```yaml\n# ~/.jdata/agent/data/agent_config.yaml\ntools:\n  - name: Read\n    permission: allow\n  - name: Bash\n    permission: ask  # Require user confirmation\n  - name: Write\n    permission: deny\n```\n\n## Context References\n\n| Reference | Description |\n|-----------|-------------|\n| `@file:path` | Include file content |\n| `@dir:path` | Include directory structure |\n| `@url:url` | Include web page content |\n| `@grep:pattern` | Include search results |\n",H=e({default:()=>U}),U=`## 概述
+`,B=e({default:()=>V}),V='## Available Tools\n\n| Tool | Description |\n|------|-------------|\n| `Read` | Read file contents (supports images: png/jpg/gif/webp/bmp) |\n| `Write` | Write to files (auto-create directories) |\n| `Edit` | Edit files with string replacement (old_string must match uniquely) |\n| `Glob` | Find files by pattern (supports glob like `**/*.rs`) |\n| `Grep` | Regex search file contents (supports context, pagination) |\n| `Bash` | Execute shell commands (supports background execution) |\n| `WebFetch` | Fetch web page content (convert to Markdown or text) |\n| `WebSearch` | Search the web via Exa (requires EXA_API_KEY) |\n| `Ask` | Ask user for structured input (single/multi-select) |\n| `TaskOutput` | Get background task output |\n| `Task` | Manage tasks (create/get/list/update) |\n| `TodoWrite` | Write todo items (only one in_progress allowed) |\n| `TodoRead` | Read todo items list |\n| `Compact` | Compress conversation context (auto-triggered) |\n| `RegisterHook` | Register session-level hooks |\n| `ComputerUse` | macOS desktop control (screenshot, click, type) |\n| `EnterPlanMode` | Enter plan mode (read-only tools) |\n| `ExitPlanMode` | Exit plan mode (submit plan) |\n| `LoadSkill` | Load skills (registered on demand) |\n| `Agent` | Sub-agent for complex tasks (prevents recursion) |\n| `Browser` | Browser tool (Lite/CDP mode) |\n\n## Permission Configuration\n\nPermissions are configured in `.jcli/permissions.yaml` with three rule types:\n\n```yaml\n# .jcli/permissions.yaml\npermissions:\n  # Allow all tools without confirmation\n  allow_all: false\n  \n  # Allow list (skip confirmation if matched, supports regex)\n  allow:\n    - Read\n    - Grep\n    - Glob\n    - "Bash:ls.*"       # Regex match command arguments\n    - "Bash:git status"\n  \n  # Deny list (takes priority over allow, blocks execution)\n  deny:\n    - "Bash:rm -rf.*"   # Block dangerous commands\n    - "Bash:.*sudo.*"   # Block sudo commands\n```\n\n### Rule Matching\n\n- **Simple match**: Tool name (e.g., `Read`, `Bash`)\n- **Regex match**: `ToolName:regex_pattern` (e.g., `Bash:rm.*` matches Bash tool\'s command argument)\n- **Priority**: deny > allow > default requires confirmation\n\n## Context References\n\n| Reference | Description |\n|-----------|-------------|\n| `@file:path` | Include file content |\n| `@dir:path` | Include directory structure |\n| `@url:url` | Include web page content |\n| `@grep:pattern` | Include search results |\n',H=e({default:()=>U}),U=`## 概述
 
 Agent 模式是 AI 对话的增强模式，支持自主多步推理和工具调用。
 
@@ -753,6 +845,7 @@ Agent 模式是 AI 对话的增强模式，支持自主多步推理和工具调�
 
 \`\`\`bash
 j chat              # 进入 TUI 对话
+j chat --auto-apply # 自动应用所有工具（跳过确认）
 \`\`\`
 
 在对话中，AI 会根据任务需要自动使用工具执行多步操作。
@@ -762,6 +855,38 @@ j chat              # 进入 TUI 对话
 - **自主推理**：AI 规划并执行多步任务
 - **工具集成**：自动使用可用工具（Read、Write、Bash 等）
 - **任务管理**：Task 和 Todo 工具管理复杂任务
+- **计划模式**：EnterPlanMode 可先探索代码库再制定计划
+- **子代理**：Agent 工具可派生子代理并行处理复杂任务
+
+## 子代理（Agent 工具）
+
+Agent 工具允许主代理派生子代理执行复杂任务：
+
+- **防递归**：子代理无法调用 Agent 工具
+- **最大轮数**：30 轮工具调用限制
+- **执行模式**：前台（阻塞）或后台（异步）
+- **权限控制**：遵循 deny/allow 规则
+
+\`\`\`
+# 示例：派生子代理搜索并整理代码
+搜索所有包含 'TODO' 的文件并按目录分类整理
+\`\`\`
+
+## 计划模式
+
+对于复杂任务，可先进入计划模式探索代码库：
+
+\`\`\`
+# 进入计划模式
+分析这个项目的架构并设计重构方案
+
+# AI 会：
+1. 进入计划模式（只读工具可用）
+2. 探索代码库结构
+3. 生成详细计划
+4. 提交计划等待用户确认
+5. 用户确认后执行
+\`\`\`
 
 ## 示例任务
 
@@ -775,17 +900,19 @@ j chat              # 进入 TUI 对话
 
 ## 工具权限配置
 
-配置 AI 可以使用的工具：
+配置 AI 可以使用的工具（位于 \`.jcli/permissions.yaml\`）：
 
 \`\`\`yaml
-# ~/.jdata/agent/data/agent_config.yaml
 permissions:
-  allow:
+  allow_all: false   # 设为 true 跳过所有确认
+  
+  allow:             # 匹配则跳过确认
     - Read
     - Grep
     - Glob
     - WebFetch
-  deny:
+  
+  deny:              # 优先于 allow，直接拒绝
     - Bash
     - Write
 \`\`\`
@@ -906,18 +1033,57 @@ Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取�
 ## Lite 模式
 
 默认模式，使用 HTTP 请求获取网页内容：
-- 获取页面文本
-- 提取页面结构
-- 获取交互元素列表
+
+| Action | 描述 |
+|--------|------|
+| \`status\` | 检查浏览器状态 |
+| \`open\` | 打开 URL，获取页面内容 |
+| \`snapshot\` | 获取交互元素列表 |
+| \`content\` | 提取正文文本 |
+| \`tabs\` | 列出已打开的标签页 |
+| \`close\` | 关闭标签页 |
+
+**限制**：不支持 \`click\`、\`type\`、\`press\`、\`evaluate\`、\`screenshot\`
 
 ## CDP 模式
 
 启用 \`browser_cdp\` feature 后支持完整浏览器自动化：
-- 截图捕获
-- 元素点击和输入
-- 页面导航
-- 脚本注入
-- Cookie 管理
+
+| Action | 描述 |
+|--------|------|
+| \`start\` | 启动浏览器 |
+| \`stop\` | 停止浏览器 |
+| \`open\` | 打开新标签页 |
+| \`navigate\` | 导航到 URL |
+| \`screenshot\` | 截图（支持全页） |
+| \`snapshot\` | 获取页面快照（含元素 selector） |
+| \`content\` | 提取正文文本 |
+| \`click\` | 点击元素 |
+| \`type\` | 输入文本（支持中文） |
+| \`press\` | 按键（Enter/Tab/Escape 等） |
+| \`evaluate\` | 执行 JavaScript |
+| \`tabs\` | 列出标签页 |
+| \`close\` | 关闭标签页 |
+
+### 典型工作流
+
+\`\`\`
+1. open 打开页面
+2. snapshot 获取可交互元素列表（返回 selector）
+3. 使用返回的 selector（如 [data-jref="e3"]）进行 click/type
+4. content 获取结果
+\`\`\`
+
+### headless 配置
+
+在 \`.jcli/config.yaml\` 中配置：
+
+\`\`\`yaml
+settings:
+  browser_headless: true  # true=无窗口，false=显示窗口
+\`\`\`
+
+或通过参数覆盖：\`{ "action": "start", "headless": false }\`
 
 ## 编译启用 CDP
 
@@ -1151,59 +1317,83 @@ rm ~/.cargo/bin/j          # Cargo 安装
 # （可选）删除数据目录
 rm -rf ~/.jdata
 \`\`\`
-`,le=e({default:()=>ue}),ue=`## 权限级别
+`,le=e({default:()=>ue}),ue=`## 权限配置文件
 
-| 级别 | 描述 |
-|------|------|
-| \`allow\` | 始终允许 |
-| \`ask\` | 请求确认 |
-| \`deny\` | 始终拒绝 |
-
-## 配置
+权限配置位于项目目录 \`.jcli/permissions.yaml\`：
 
 \`\`\`yaml
-# ~/.jdata/agent/data/agent_config.yaml
 permissions:
-  # 读取操作 - 始终允许
-  - tool: Read
-    permission: allow
+  # 完全放开（跳过所有工具确认）
+  allow_all: false
   
-  # 写入操作 - 请求确认
-  - tool: Write
-    permission: ask
+  # 允许列表（匹配则跳过确认）
+  allow:
+    - Read
+    - Grep
+    - Glob
+    - "Bash(cargo build:*)"
+    - "Bash(git status:*)"
   
-  # Shell 命令 - 请求确认
-  - tool: Bash
-    permission: ask
-    rules:
-      - pattern: "ls *"        # 允许 ls 命令
-        permission: allow
-      - pattern: "rm *"        # rm 始终询问
-        permission: ask
-  
-  # 网络访问 - 始终允许
-  - tool: WebFetch
-    permission: allow
-  - tool: WebSearch
-    permission: allow
+  # 拒绝列表（优先于 allow，匹配则直接拒绝执行）
+  deny:
+    - "Bash(rm -rf:*)"
+    - "Bash(/.*sudo.*/)"    # 正则匹配
 \`\`\`
 
-## 细粒度规则
+## 规则格式
+
+| 格式 | 说明 | 示例 |
+|------|------|------|
+| \`*\` | 匹配所有工具 | \`*\` |
+| \`ToolName\` | 匹配该工具所有调用 | \`Read\`, \`Grep\` |
+| \`ToolName(prefix:*)\` | 前缀匹配 | \`Bash(cargo build:*)\` |
+| \`ToolName(path:/dir/*)\` | 路径匹配 | \`Write(path:/src/*)\` |
+| \`ToolName(domain:example.com)\` | 域名匹配 | \`WebFetch(domain:docs.rs)\` |
+| \`ToolName(/regex/)\` | 正则匹配 | \`Bash(/^cargo (build\\|test)/)\` |
+
+## 匹配优先级
+
+\`\`\`
+deny > allow > 默认需要确认
+\`\`\`
+
+- \`deny\` 列表优先级最高，匹配则直接拒绝执行
+- \`allow\` 列表匹配则跳过确认
+- \`allow_all: true\` 跳过所有确认（但 deny 仍优先）
+
+## 工具特定规则
+
+### Bash 命令匹配
 
 \`\`\`yaml
-permissions:
-  - tool: Bash
-    permission: ask
-    rules:
-      # 允许特定模式
-      - pattern: "git status"
-        permission: allow
-      - pattern: "cargo build"
-        permission: allow
-      
-      # 拒绝危险模式
-      - pattern: "rm -rf /*"
-        permission: deny
+allow:
+  - "Bash(cargo:*)"        # cargo build, cargo test 等
+  - "Bash(git status:*)"   # git status
+  - "Bash(ls:*)"           # ls, ls -la 等
+  
+deny:
+  - "Bash(rm -rf:*)"       # 阻止 rm -rf
+  - "Bash(/.*sudo.*/)"     # 阻止所有 sudo 命令
+\`\`\`
+
+### 文件路径匹配（Write/Edit/Read）
+
+\`\`\`yaml
+allow:
+  - "Write(path:/src/*)"   # 允许写入 /src 目录
+  - "Edit(path:/lib/*)"    # 允许编辑 /lib 目录
+  
+deny:
+  - "Write(path:/etc/*)"   # 阻止写入 /etc
+\`\`\`
+
+### URL 域名匹配（WebFetch）
+
+\`\`\`yaml
+allow:
+  - "WebFetch(domain:docs.rs)"
+  - "WebFetch(domain:github.com)"
+  - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # 正则匹配所有 google 子域名
 \`\`\`
 `,de=e({default:()=>fe}),fe=`## 注册应用别名
 
@@ -1405,8 +1595,8 @@ Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具�
 \`\`\`
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill 定义（必需）
-├── references/       # 参考文档
-└── scripts/          # 脚本文件
+├── references/       # 参考文档（AI 按需 Read 读取）
+└── scripts/          # 脚本文件（AI 按需 Bash 执行）
 \`\`\`
 
 ## 创建 Skill
@@ -1434,10 +1624,28 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
 加载 code-review skill
 \`\`\`
 
+加载后，AI 会：
+1. 获取 skill 的 body 内容作为上下文
+2. 列出 references/ 和 scripts/ 目录中的文件路径
+3. 按需使用 Read 工具读取参考文档
+4. 按需使用 Bash 工具执行脚本
+
 ## Skill 来源
 
-- **用户级**：\`~/.jdata/agent/skills/\`
-- **项目级**：\`.jcli/skills/\`（同名时项目级覆盖用户级）
+| 来源 | 路径 | 优先级 |
+|------|------|--------|
+| 用户级 | \`~/.jdata/agent/skills/\` | 低 |
+| 项目级 | \`.jcli/skills/\` | 高（覆盖用户级） |
+
+## 禁用 Skill
+
+在 \`.jcli/config.yaml\` 中禁用特定 skill：
+
+\`\`\`yaml
+disabled_skills:
+  - skill-name-1
+  - skill-name-2
+\`\`\`
 `,xe=e({default:()=>Se}),Se=`## 命令
 
 | 命令 | 描述 |
@@ -1482,4 +1690,4 @@ j todo done 1 --report   # 同时写入日报
 - [ ] 待处理的任务
 - [ ] 另一个待处理任务
 \`\`\`
-`,Ce=e({default:()=>we}),we="## 可用工具\n\n| 工具 | 描述 |\n|------|------|\n| `Read` | 读取文件内容 |\n| `Write` | 写入文件 |\n| `Edit` | 字符串替换编辑文件 |\n| `Glob` | 按模式查找文件 |\n| `Grep` | 搜索文件内容 |\n| `Bash` | 执行 shell 命令 |\n| `WebFetch` | 获取网页内容 |\n| `WebSearch` | 搜索网络 |\n| `Ask` | 向用户请求输入 |\n| `TaskOutput` | 获取后台任务输出 |\n| `Task` | 管理任务 |\n| `TodoWrite` | 写入待办事项 |\n| `TodoRead` | 读取待办事项 |\n| `Compact` | 压缩对话上下文 |\n| `RegisterHook` | 注册钩子 |\n| `ComputerUse` | macOS 桌面控制 |\n| `EnterPlanMode` | 进入计划模式 |\n| `ExitPlanMode` | 退出计划模式 |\n| `LoadSkill` | 加载技能 |\n\n## 权限配置\n\n```yaml\n# ~/.jdata/agent/data/agent_config.yaml\ntools:\n  - name: Read\n    permission: allow\n  - name: Bash\n    permission: ask  # 需要用户确认\n  - name: Write\n    permission: deny\n```\n\n## 上下文引用\n\n| 引用 | 描述 |\n|------|------|\n| `@file:路径` | 包含文件内容 |\n| `@dir:路径` | 包含目录结构 |\n| `@url:url` | 包含网页内容 |\n| `@grep:模式` | 包含搜索结果 |\n",Te={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Ee={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},Z={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function De(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`aiChat`,`agentMode`,`tools`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Oe=Object.assign({"./en/agentMode.md":g,"./en/aiChat.md":te,"./en/alias.md":re,"./en/browser.md":v,"./en/dataDirectory.md":b,"./en/hooks.md":S,"./en/installation.md":w,"./en/permissions.md":E,"./en/quickStart.md":O,"./en/remote.md":A,"./en/report.md":M,"./en/script.md":P,"./en/skills.md":I,"./en/todo.md":R,"./en/tools.md":B}),Q=Object.assign({"./zh/agentMode.md":H,"./zh/aiChat.md":W,"./zh/alias.md":K,"./zh/browser.md":J,"./zh/dataDirectory.md":X,"./zh/hooks.md":ae,"./zh/installation.md":se,"./zh/permissions.md":le,"./zh/quickStart.md":de,"./zh/remote.md":pe,"./zh/report.md":he,"./zh/script.md":_e,"./zh/skills.md":ye,"./zh/todo.md":xe,"./zh/tools.md":Ce});function ke(){let e={en:{},zh:{}};for(let[t,n]of Object.entries(Oe)){let r=t.match(/\.\/en\/(\w+)\.md$/);r&&n?.default&&(e.en[r[1]]=n.default)}for(let[t,n]of Object.entries(Q)){let r=t.match(/\.\/zh\/(\w+)\.md$/);r&&n?.default&&(e.zh[r[1]]=n.default)}return e}var $=ke();function Ae(e,t){return $[e]?.[t]||$.en[t]||``}function je(e,t){return Z[e]?.[t]||Z.en[t]||t}var Me={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ne({lang:e,activeSection:t,onNavigate:n}){let r=De(),i=Z[e],a=Me[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}function Pe(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Ee[n],m=Te[n],g=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:g,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-72 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=Ae(n,c),t=je(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(h,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ne,{lang:n,activeSection:c,onNavigate:g})]})}),(0,d.jsx)(`footer`,{className:`lg:ml-72 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Pe as default};
+`,Ce=e({default:()=>we}),we='## 可用工具\n\n| 工具 | 描述 |\n|------|------|\n| `Read` | 读取文件内容（支持图片：png/jpg/gif/webp/bmp） |\n| `Write` | 写入文件（自动创建目录） |\n| `Edit` | 字符串替换编辑文件（old_string 必须唯一匹配） |\n| `Glob` | 按模式查找文件（支持 `**/*.rs` 等 glob 模式） |\n| `Grep` | 正则搜索文件内容（支持 context、pagination） |\n| `Bash` | 执行 shell 命令（支持后台执行） |\n| `WebFetch` | 获取网页内容（转 Markdown 或纯文本） |\n| `WebSearch` | Exa 搜索网络（需 EXA_API_KEY） |\n| `Ask` | 向用户请求结构化输入（单选/多选） |\n| `TaskOutput` | 获取后台任务输出 |\n| `Task` | 管理任务（create/get/list/update） |\n| `TodoWrite` | 写入待办事项（仅一个 in_progress） |\n| `TodoRead` | 读取待办事项列表 |\n| `Compact` | 压缩对话上下文（自动触发） |\n| `RegisterHook` | 注册 session 级钩子 |\n| `ComputerUse` | macOS 桌面控制（截图、点击、输入） |\n| `EnterPlanMode` | 进入计划模式（只读工具） |\n| `ExitPlanMode` | 退出计划模式（提交计划） |\n| `LoadSkill` | 加载技能（按需注册） |\n| `Agent` | 子代理执行复杂任务（防止递归） |\n| `Browser` | 浏览器工具（Lite/CDP 模式） |\n\n## 权限配置\n\n权限配置位于 `.jcli/permissions.yaml`，支持三种规则：\n\n```yaml\n# .jcli/permissions.yaml\npermissions:\n  # 完全放开（跳过所有工具确认）\n  allow_all: false\n  \n  # 允许列表（匹配则跳过确认，支持正则）\n  allow:\n    - Read\n    - Grep\n    - Glob\n    - "Bash:ls.*"       # 正则匹配命令参数\n    - "Bash:git status"\n  \n  # 拒绝列表（优先于 allow，匹配则直接拒绝）\n  deny:\n    - "Bash:rm -rf.*"   # 阻止危险命令\n    - "Bash:.*sudo.*"   # 阻止 sudo 命令\n```\n\n### 规则匹配说明\n\n- **简单匹配**：工具名（如 `Read`、`Bash`）\n- **正则匹配**：`工具名:正则表达式`（如 `Bash:rm.*` 匹配 Bash 工具的 command 参数）\n- **优先级**：deny > allow > 默认需要确认\n\n## 上下文引用\n\n| 引用 | 描述 |\n|------|------|\n| `@file:路径` | 包含文件内容 |\n| `@dir:路径` | 包含目录结构 |\n| `@url:url` | 包含网页内容 |\n| `@grep:模式` | 包含搜索结果 |\n',Te={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Ee={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},Z={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function De(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`aiChat`,`agentMode`,`tools`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Oe=Object.assign({"./en/agentMode.md":g,"./en/aiChat.md":te,"./en/alias.md":re,"./en/browser.md":v,"./en/dataDirectory.md":b,"./en/hooks.md":S,"./en/installation.md":w,"./en/permissions.md":E,"./en/quickStart.md":O,"./en/remote.md":A,"./en/report.md":M,"./en/script.md":P,"./en/skills.md":I,"./en/todo.md":R,"./en/tools.md":B}),Q=Object.assign({"./zh/agentMode.md":H,"./zh/aiChat.md":W,"./zh/alias.md":K,"./zh/browser.md":J,"./zh/dataDirectory.md":X,"./zh/hooks.md":ae,"./zh/installation.md":se,"./zh/permissions.md":le,"./zh/quickStart.md":de,"./zh/remote.md":pe,"./zh/report.md":he,"./zh/script.md":_e,"./zh/skills.md":ye,"./zh/todo.md":xe,"./zh/tools.md":Ce});function ke(){let e={en:{},zh:{}};for(let[t,n]of Object.entries(Oe)){let r=t.match(/\.\/en\/(\w+)\.md$/);r&&n?.default&&(e.en[r[1]]=n.default)}for(let[t,n]of Object.entries(Q)){let r=t.match(/\.\/zh\/(\w+)\.md$/);r&&n?.default&&(e.zh[r[1]]=n.default)}return e}var $=ke();function Ae(e,t){return $[e]?.[t]||$.en[t]||``}function je(e,t){return Z[e]?.[t]||Z.en[t]||t}var Me={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ne({lang:e,activeSection:t,onNavigate:n}){let r=De(),i=Z[e],a=Me[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}function Pe(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Ee[n],m=Te[n],g=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:g,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-72 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=Ae(n,c),t=je(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(h,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ne,{lang:n,activeSection:c,onNavigate:g})]})}),(0,d.jsx)(`footer`,{className:`lg:ml-72 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Pe as default};

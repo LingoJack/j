@@ -11,7 +11,17 @@ impl Tool for EditFileTool {
     }
 
     fn description(&self) -> &str {
-        "Edit a file by exact string match and replace. old_string must match uniquely in the file and is replaced with new_string. If new_string is empty, the matched content is deleted."
+        r#"
+        Performs exact string replacements in files.
+
+        Usage:
+        - You must use your Read tool at least once in the conversation before editing. Read the file first to understand its content
+        - When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces). The line number prefix format is: number + │. Everything after │ is the actual file content to match. Never include any part of the line number prefix in old_string or new_string
+        - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required
+        - Only use emojis if the user explicitly requests it
+        - The edit will FAIL if old_string is not unique in the file. Either provide a larger string with more surrounding context to make it unique, or break the edit into smaller unique chunks
+        - If new_string is empty, the matched content is deleted
+        "#
     }
 
     fn parameters_schema(&self) -> Value {

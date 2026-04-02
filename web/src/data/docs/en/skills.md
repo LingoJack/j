@@ -7,8 +7,8 @@ Skills are specialized prompt modules that extend AI capabilities, loaded via th
 ```
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill definition (required)
-├── references/       # Reference documents
-└── scripts/          # Script files
+├── references/       # Reference documents (AI reads on demand via Read tool)
+└── scripts/          # Script files (AI executes on demand via Bash tool)
 ```
 
 ## Creating a Skill
@@ -36,7 +36,25 @@ AI loads skills via the `LoadSkill` tool:
 Load the code-review skill
 ```
 
+After loading, AI will:
+1. Get the skill's body content as context
+2. List file paths in references/ and scripts/ directories
+3. Read reference documents on demand via Read tool
+4. Execute scripts on demand via Bash tool
+
 ## Skill Sources
 
-- **User level**: `~/.jdata/agent/skills/`
-- **Project level**: `.jcli/skills/` (project level overrides user level when names conflict)
+| Source | Path | Priority |
+|--------|------|----------|
+| User level | `~/.jdata/agent/skills/` | Low |
+| Project level | `.jcli/skills/` | High (overrides user level) |
+
+## Disabling Skills
+
+Disable specific skills in `.jcli/config.yaml`:
+
+```yaml
+disabled_skills:
+  - skill-name-1
+  - skill-name-2
+```

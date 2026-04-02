@@ -16,11 +16,9 @@ impl Tool for GlobTool {
         - Supports glob patterns like "**/*.js" or "src/**/*.tsx"
         - Returns matching file paths sorted by modification time
         - Use this tool when you need to find files by name pattern, e.g. "src/components/**/*.tsx"
-        - For open-ended searches that may require multiple rounds of glob and grep, use the Agent tool instead
-        - Multiple tools can be called in a single response. If multiple file patterns may be useful, run glob searches in parallel
+        - When you are doing an open-ended search that may require multiple rounds of glob and grep, use the Agent tool instead
+        - You can call multiple tools in a single response. If multiple file patterns may be useful, run glob searches in parallel
         - Important: if no path is needed, omit the field entirely — do not enter "undefined", "null", or empty string
-        - Important: always prefer editing existing files in the codebase; do not create new files unless explicitly required
-        - Important: only use emojis if the user explicitly requests it
         "###
     }
 
