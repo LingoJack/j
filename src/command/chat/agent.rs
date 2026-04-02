@@ -564,9 +564,6 @@ fn process_tool_calls(
     // 检查是否有 compact tool 被调用
     let compact_requested = tool_items.iter().any(|t| t.name == CompactTool {}.name());
 
-    // 记录新增消息的起始位置
-    let msg_start = messages.len();
-
     messages.push(ChatMessage {
         role: ROLE_ASSISTANT.to_string(),
         content: assistant_text,
@@ -581,6 +578,11 @@ fn process_tool_calls(
     {
         return Err(());
     }
+
+    // ★ 立即推送 assistant tool_call 消息到 UI，让用户看到工具调用请求
+    let _ = tx.send(StreamMsg::AgentMessages(vec![
+        messages.last().unwrap().clone(),
+    ]));
 
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
     for _ in &tool_items {
@@ -620,18 +622,21 @@ fn process_tool_calls(
             }
         }
 
-        messages.push(ChatMessage {
+        let tool_msg = ChatMessage {
             role: ROLE_TOOL.to_string(),
             content: result_content,
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id.clone()),
             images: None,
-        });
+        };
+        messages.push(tool_msg.clone());
+
+        let mut incremental = vec![tool_msg];
 
         // 如果模型支持视觉且工具返回了图片，注入为 user message
         if supports_vision && !result_images.is_empty() {
             let tool_label = tool_name.as_deref().unwrap_or("unknown");
-            messages.push(ChatMessage {
+            let img_msg = ChatMessage {
                 role: ROLE_USER.to_string(),
                 content: format!("[图片来自工具: {}]", tool_label),
                 tool_calls: None,
@@ -645,13 +650,14 @@ fn process_tool_calls(
                         })
                         .collect(),
                 ),
-            });
+            };
+            messages.push(img_msg.clone());
+            incremental.push(img_msg);
         }
-    }
 
-    // 增量推送本轮新增的 tool_call + tool_result 消息到主线程
-    let new_msgs: Vec<ChatMessage> = messages[msg_start..].to_vec();
-    let _ = tx.send(StreamMsg::AgentMessages(new_msgs));
+        // ★ 每个工具完成后立即推送结果到 UI
+        let _ = tx.send(StreamMsg::AgentMessages(incremental));
+    }
 
     drain_pending_user_messages(messages, pending_user_messages);
     Ok(compact_requested)
