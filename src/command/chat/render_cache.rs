@@ -1046,7 +1046,14 @@ pub fn render_tool_call_request_msg(
 
     let content_w = bubble_max_width.saturating_sub(6);
 
-    for tc in tool_calls {
+    // 与前一条消息之间留一行间距
+    lines.push(Line::from(""));
+
+    for (i, tc) in tool_calls.iter().enumerate() {
+        // 多个 tool_call 之间留一行间距
+        if i > 0 {
+            lines.push(Line::from(""));
+        }
         let category = ToolCategory::from_name(&tc.name);
         let icon = category.icon();
         let tool_color = category.color(theme);
@@ -1164,6 +1171,9 @@ pub fn render_tool_result_msg(
     expand: bool,
 ) {
     use super::tools::classification::{ToolCategory, ToolStatus, get_result_summary};
+
+    // 与前一条消息（tool_call）之间留一行间距
+    lines.push(Line::from(""));
 
     // 解析 label，格式为 "工具名..." 或 "工具名[id]..."
     let (tool_name, is_error) = parse_tool_label(label);

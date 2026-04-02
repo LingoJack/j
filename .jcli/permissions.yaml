@@ -82,4 +82,5 @@ allow:
 - Bash(cat >:*)
 - Bash(find /Users/jacklingo:*)
 - Bash(tree -L:*)
+- Bash(head -5:*)
 deny: []
