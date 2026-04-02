@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CMgaoHpG.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CZo2m8Oq.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-72 bg-[#faf9f6] border-r border-stone-200 
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0
@@ -214,7 +214,7 @@ Default mode using HTTP requests to fetch web content:
 | \`tabs\` | List open tabs |
 | \`close\` | Close tab |
 
-**Limitations**: Does not support \`click\`, \`type\`, \`press\`, \`evaluate\`, \`screenshot\`
+Limitations: Does not support \`click\`, \`type\`, \`press\`, \`evaluate\`, \`screenshot\`
 
 ## CDP Mode
 
@@ -261,7 +261,7 @@ Or override via parameter: \`{ "action": "start", "headless": false }\`
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,b=e({default:()=>x}),x="All data is stored in `~/.jdata/` (customizable via `J_DATA_PATH` environment variable):\n\n```\n~/.jdata/\n├── config.yaml          # Main config (aliases, categories, settings)\n├── agent/               # AI Agent data\n│   ├── data/            # Agent data directory\n│   │   ├── agent_config.json   # Agent config (model, API)\n│   │   ├── chat_history.json   # Chat history\n│   │   ├── archives/           # Archived conversations\n│   │   ├── system_prompt.md    # System prompt\n│   │   ├── memory.md           # Memory file\n│   │   ├── soul.md             # Soul file\n│   │   └── style.md            # Response style\n│   ├── logs/            # Agent logs\n│   │   ├── info.log\n│   │   └── error.log\n│   └── skills/          # Skills directory\n├── bin/                 # Built-in tools\n│   └── md_render        # Markdown renderer\n├── report/              # Daily reports\n│   ├── week_report.md   # Week report file\n│   ├── settings.json    # Report settings\n│   ├── todo.json        # Todo data\n│   └── .git/            # Git repository\n├── scripts/             # Scripts created via j concat\n```\n\n## Config File Structure (`config.yaml`)\n\n| Section | Description | Example |\n|---------|-------------|---------|\n| `path` | Local app/file paths | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL links | `github: https://github.com` |\n| `outer_url` | URLs requiring VPN | `docs: https://internal.example.com` |\n| `browser` | Browser list | `chrome: chrome` |\n| `editor` | Editor list | `vscode: vscode` |\n| `vpn` | VPN application | |\n| `script` | Registered scripts | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | Report system config | `git_repo: https://github.com/xxx/report` |\n| `setting` | Global settings | `search-engine: bing` |\n| `log` | Log settings | `mode: concise` |\n",S=e({default:()=>C}),C=`## Overview
+`,b=e({default:()=>x}),x="All data is stored in `~/.jdata/` (customizable via `J_DATA_PATH` environment variable):\n\n```\n~/.jdata/\n├── config.yaml          # Main config (aliases, categories, settings)\n├── history.txt          # Command history\n├── agent/               # AI Agent data\n│   ├── data/            # Agent data directory\n│   │   ├── agent_config.yaml   # Agent config (model, API)\n│   │   ├── sessions/           # Chat sessions storage\n│   │   ├── archives/           # Archived conversations\n│   │   ├── system_prompt.md    # System prompt\n│   │   ├── memory.md           # Memory file\n│   │   └── soul.md             # Soul file\n│   ├── logs/            # Agent logs\n│   │   ├── info.log\n│   │   └── error.log\n│   ├── skills/          # User-level skills directory\n│   ├── commands/        # User-level custom commands\n│   └── hooks.yaml       # User-level hooks config\n├── report/              # Daily reports\n│   ├── week_report.md   # Week report file\n│   ├── settings.json    # Report settings\n│   ├── todo.json        # Todo data\n│   └── .git/            # Git repository\n└── scripts/             # Scripts created via j concat\n```\n\n## Project-level Config\n\nCreate `.jcli/` in project directory for project-level configuration:\n\n```\n.jcli/\n├── config.yaml          # Project-level config\n├── permissions.yaml     # Tool permissions\n├── hooks.yaml           # Project-level hooks\n├── skills/              # Project-level skills (override user-level)\n└── commands/            # Project-level custom commands\n```\n\n## Config File Structure (`config.yaml`)\n\n| Section | Description | Example |\n|---------|-------------|---------|\n| `path` | Local app/file paths | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL links | `github: https://github.com` |\n| `outer_url` | URLs requiring VPN | `docs: https://internal.example.com` |\n| `browser` | Browser list | `chrome: chrome` |\n| `editor` | Editor list | `vscode: vscode` |\n| `vpn` | VPN application | |\n| `script` | Registered scripts | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | Report system config | `git_repo: https://github.com/xxx/report` |\n| `setting` | Global settings | `search-engine: bing` |\n| `log` | Log settings | `mode: concise` |\n\n## Agent Config (`agent_config.yaml`)\n\n| Setting | Description | Default |\n|---------|-------------|---------|\n| `providers` | Model provider list | - |\n| `active_index` | Current active provider index | 0 |\n| `system_prompt` | System prompt | - |\n| `stream_mode` | Stream output | true |\n| `max_history_messages` | Max history messages sent to API | 20 |\n| `tools_enabled` | Enable tool calling | false |\n| `max_tool_rounds` | Max tool call rounds | 100 |\n| `tool_confirm_timeout` | Tool confirm timeout seconds | 0 (no timeout) |\n| `disabled_tools` | Disabled tools list | [] |\n| `disabled_skills` | Disabled skills list | [] |\n| `disabled_commands` | Disabled commands list | [] |\n| `auto_restore_session` | Auto restore last session on startup | false |\n",S=e({default:()=>C}),C=`## Overview
 
 Hooks allow running custom scripts on specific events, managed via the \`RegisterHook\` tool or config files.
 
@@ -488,59 +488,83 @@ rm ~/.cargo/bin/j          # Cargo install
 # (Optional) Remove data directory
 rm -rf ~/.jdata
 \`\`\`
-`,E=e({default:()=>D}),D=`## Permission Levels
+`,E=e({default:()=>D}),D=`## Permission Configuration File
 
-| Level | Description |
-|-------|-------------|
-| \`allow\` | Always allowed |
-| \`ask\` | Ask for confirmation |
-| \`deny\` | Always denied |
-
-## Configuration
+Permissions are configured in \`.jcli/permissions.yaml\` in your project directory:
 
 \`\`\`yaml
-# ~/.jdata/agent/data/agent_config.yaml
 permissions:
-  # Read operations - always allowed
-  - tool: Read
-    permission: allow
+  # Allow all tools without confirmation
+  allow_all: false
   
-  # Write operations - ask for confirmation
-  - tool: Write
-    permission: ask
+  # Allow list (skip confirmation if matched)
+  allow:
+    - Read
+    - Grep
+    - Glob
+    - "Bash(cargo build:*)"
+    - "Bash(git status:*)"
   
-  # Shell commands - ask for confirmation
-  - tool: Bash
-    permission: ask
-    rules:
-      - pattern: "ls *"        # Allow ls commands
-        permission: allow
-      - pattern: "rm *"        # Always ask for rm
-        permission: ask
-  
-  # Web access - always allowed
-  - tool: WebFetch
-    permission: allow
-  - tool: WebSearch
-    permission: allow
+  # Deny list (takes priority over allow, blocks execution)
+  deny:
+    - "Bash(rm -rf:*)"
+    - "Bash(/.*sudo.*/)"    # Regex match
 \`\`\`
 
-## Fine-grained Rules
+## Rule Formats
+
+| Format | Description | Example |
+|--------|-------------|---------|
+| \`*\` | Match all tools | \`*\` |
+| \`ToolName\` | Match all calls to this tool | \`Read\`, \`Grep\` |
+| \`ToolName(prefix:*)\` | Prefix match | \`Bash(cargo build:*)\` |
+| \`ToolName(path:/dir/*)\` | Path match | \`Write(path:/src/*)\` |
+| \`ToolName(domain:example.com)\` | Domain match | \`WebFetch(domain:docs.rs)\` |
+| \`ToolName(/regex/)\` | Regex match | \`Bash(/^cargo (build\\|test)/)\` |
+
+## Match Priority
+
+\`\`\`
+deny > allow > default requires confirmation
+\`\`\`
+
+- \`deny\` list has highest priority, blocks execution if matched
+- \`allow\` list skips confirmation if matched
+- \`allow_all: true\` skips all confirmations (but deny still takes priority)
+
+## Tool-Specific Rules
+
+### Bash Command Matching
 
 \`\`\`yaml
-permissions:
-  - tool: Bash
-    permission: ask
-    rules:
-      # Allow specific patterns
-      - pattern: "git status"
-        permission: allow
-      - pattern: "cargo build"
-        permission: allow
-      
-      # Deny dangerous patterns
-      - pattern: "rm -rf /*"
-        permission: deny
+allow:
+  - "Bash(cargo:*)"        # cargo build, cargo test, etc.
+  - "Bash(git status:*)"   # git status
+  - "Bash(ls:*)"           # ls, ls -la, etc.
+  
+deny:
+  - "Bash(rm -rf:*)"       # Block rm -rf
+  - "Bash(/.*sudo.*/)"     # Block all sudo commands
+\`\`\`
+
+### File Path Matching (Write/Edit/Read)
+
+\`\`\`yaml
+allow:
+  - "Write(path:/src/*)"   # Allow writes to /src directory
+  - "Edit(path:/lib/*)"    # Allow edits to /lib directory
+  
+deny:
+  - "Write(path:/etc/*)"   # Block writes to /etc
+\`\`\`
+
+### URL Domain Matching (WebFetch)
+
+\`\`\`yaml
+allow:
+  - "WebFetch(domain:docs.rs)"
+  - "WebFetch(domain:github.com)"
+  - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # Regex match all google subdomains
 \`\`\`
 `,O=e({default:()=>k}),k=`## Register App Aliases
 
@@ -1043,7 +1067,7 @@ Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取�
 | \`tabs\` | 列出已打开的标签页 |
 | \`close\` | 关闭标签页 |
 
-**限制**：不支持 \`click\`、\`type\`、\`press\`、\`evaluate\`、\`screenshot\`
+限制：不支持 \`click\`、\`type\`、\`press\`、\`evaluate\`、\`screenshot\`
 
 ## CDP 模式
 
@@ -1090,7 +1114,7 @@ settings:
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,X=e({default:()=>ie}),ie="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.json   # Agent 配置（模型、API）\n│   │   ├── chat_history.json   # 对话历史\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   ├── soul.md             # 灵魂文件\n│   │   └── style.md            # 响应风格\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   └── skills/          # 技能目录\n├── bin/                 # 内置工具\n│   └── md_render        # Markdown 渲染器\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n├── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n",ae=e({default:()=>oe}),oe=`## 概述
+`,X=e({default:()=>ie}),ie="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── history.txt          # 命令历史\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.yaml   # Agent 配置（模型、API）\n│   │   ├── sessions/           # 对话会话存储\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   └── soul.md             # 灵魂文件\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   ├── skills/          # 用户级技能目录\n│   ├── commands/        # 用户级自定义命令\n│   └── hooks.yaml       # 用户级钩子配置\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n└── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 项目级配置\n\n项目目录下可创建 `.jcli/` 存放项目级配置：\n\n```\n.jcli/\n├── config.yaml          # 项目级配置\n├── permissions.yaml     # 工具权限配置\n├── hooks.yaml           # 项目级钩子\n├── skills/              # 项目级技能（覆盖用户级）\n└── commands/            # 项目级自定义命令\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n\n## Agent 配置（`agent_config.yaml`）\n\n| 配置项 | 描述 | 默认值 |\n|--------|------|--------|\n| `providers` | 模型提供方列表 | - |\n| `active_index` | 当前选中的 provider 索引 | 0 |\n| `system_prompt` | 系统提示词 | - |\n| `stream_mode` | 流式输出 | true |\n| `max_history_messages` | 发送给 API 的历史消息数量限制 | 20 |\n| `tools_enabled` | 启用工具调用 | false |\n| `max_tool_rounds` | 工具调用最大轮数 | 100 |\n| `tool_confirm_timeout` | 工具确认超时秒数 | 0（不超时） |\n| `disabled_tools` | 禁用的工具列表 | [] |\n| `disabled_skills` | 禁用的 skill 列表 | [] |\n| `disabled_commands` | 禁用的 command 列表 | [] |\n| `auto_restore_session` | 启动时自动恢复最近的 session | false |\n",ae=e({default:()=>oe}),oe=`## 概述
 
 Hook 允许在特定事件时运行自定义脚本，通过 \`RegisterHook\` 工具或配置文件管理。
 

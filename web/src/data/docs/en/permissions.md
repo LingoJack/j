@@ -1,54 +1,78 @@
-## Permission Levels
+## Permission Configuration File
 
-| Level | Description |
-|-------|-------------|
-| `allow` | Always allowed |
-| `ask` | Ask for confirmation |
-| `deny` | Always denied |
-
-## Configuration
+Permissions are configured in `.jcli/permissions.yaml` in your project directory:
 
 ```yaml
-# ~/.jdata/agent/data/agent_config.yaml
 permissions:
-  # Read operations - always allowed
-  - tool: Read
-    permission: allow
+  # Allow all tools without confirmation
+  allow_all: false
   
-  # Write operations - ask for confirmation
-  - tool: Write
-    permission: ask
+  # Allow list (skip confirmation if matched)
+  allow:
+    - Read
+    - Grep
+    - Glob
+    - "Bash(cargo build:*)"
+    - "Bash(git status:*)"
   
-  # Shell commands - ask for confirmation
-  - tool: Bash
-    permission: ask
-    rules:
-      - pattern: "ls *"        # Allow ls commands
-        permission: allow
-      - pattern: "rm *"        # Always ask for rm
-        permission: ask
-  
-  # Web access - always allowed
-  - tool: WebFetch
-    permission: allow
-  - tool: WebSearch
-    permission: allow
+  # Deny list (takes priority over allow, blocks execution)
+  deny:
+    - "Bash(rm -rf:*)"
+    - "Bash(/.*sudo.*/)"    # Regex match
 ```
 
-## Fine-grained Rules
+## Rule Formats
+
+| Format | Description | Example |
+|--------|-------------|---------|
+| `*` | Match all tools | `*` |
+| `ToolName` | Match all calls to this tool | `Read`, `Grep` |
+| `ToolName(prefix:*)` | Prefix match | `Bash(cargo build:*)` |
+| `ToolName(path:/dir/*)` | Path match | `Write(path:/src/*)` |
+| `ToolName(domain:example.com)` | Domain match | `WebFetch(domain:docs.rs)` |
+| `ToolName(/regex/)` | Regex match | `Bash(/^cargo (build\|test)/)` |
+
+## Match Priority
+
+```
+deny > allow > default requires confirmation
+```
+
+- `deny` list has highest priority, blocks execution if matched
+- `allow` list skips confirmation if matched
+- `allow_all: true` skips all confirmations (but deny still takes priority)
+
+## Tool-Specific Rules
+
+### Bash Command Matching
 
 ```yaml
-permissions:
-  - tool: Bash
-    permission: ask
-    rules:
-      # Allow specific patterns
-      - pattern: "git status"
-        permission: allow
-      - pattern: "cargo build"
-        permission: allow
-      
-      # Deny dangerous patterns
-      - pattern: "rm -rf /*"
-        permission: deny
+allow:
+  - "Bash(cargo:*)"        # cargo build, cargo test, etc.
+  - "Bash(git status:*)"   # git status
+  - "Bash(ls:*)"           # ls, ls -la, etc.
+  
+deny:
+  - "Bash(rm -rf:*)"       # Block rm -rf
+  - "Bash(/.*sudo.*/)"     # Block all sudo commands
+```
+
+### File Path Matching (Write/Edit/Read)
+
+```yaml
+allow:
+  - "Write(path:/src/*)"   # Allow writes to /src directory
+  - "Edit(path:/lib/*)"    # Allow edits to /lib directory
+  
+deny:
+  - "Write(path:/etc/*)"   # Block writes to /etc
+```
+
+### URL Domain Matching (WebFetch)
+
+```yaml
+allow:
+  - "WebFetch(domain:docs.rs)"
+  - "WebFetch(domain:github.com)"
+  - "WebFetch(domain:/.*\\.google\\.com$/)"  # Regex match all google subdomains
 ```

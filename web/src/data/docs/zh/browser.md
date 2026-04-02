@@ -32,7 +32,7 @@ Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取�
 | `tabs` | 列出已打开的标签页 |
 | `close` | 关闭标签页 |
 
-**限制**：不支持 `click`、`type`、`press`、`evaluate`、`screenshot`
+限制：不支持 `click`、`type`、`press`、`evaluate`、`screenshot`
 
 ## CDP 模式
 
