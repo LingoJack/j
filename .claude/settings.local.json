@@ -75,7 +75,8 @@
       "Bash(aic ax:*)",
       "Bash(find /Users/jacklingo/dev_custom/aic -name *indicator* -o -name Cargo.toml)",
       "Bash(swiftc helpers/indicator.swift -o target/release/j-indicator -O)",
-      "Bash(make build-ax:*)"
+      "Bash(make build-ax:*)",
+      "Bash(find /Users/jacklingo/dev_custom/claude-code/claude-code-backup/src -type f -name *.ts -o -name *.tsx -o -name *.rs)"
     ]
   },
   "language": "zh-CN",

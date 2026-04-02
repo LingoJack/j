@@ -1,7 +1,17 @@
 [
   {
     "id": "1",
-    "content": "修复文档加载问题（glob 路径和 ?raw 导入）",
+    "content": "分析 Claude Code 模板 Agent 的提示词结构",
     "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "对比 jcli 当前 system_prompt_default.md 的差异",
+    "status": "in_progress"
+  },
+  {
+    "id": "3",
+    "content": "输出优化建议报告",
+    "status": "pending"
   }
 ]
