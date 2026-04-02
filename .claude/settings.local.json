@@ -82,7 +82,9 @@
       "Bash(rm -rf /tmp/test_kit)",
       "WebFetch(domain:yexiyue.github.io)",
       "Bash(rm -rf /tmp/test_realm /tmp/test_kit2)",
-      "Bash(find /Users/jacklingo/dev_custom/claude-code/claude-code-backup/src/components -type f -name *Screen* -o -name *Layout*)"
+      "Bash(find /Users/jacklingo/dev_custom/claude-code/claude-code-backup/src/components -type f -name *Screen* -o -name *Layout*)",
+      "Bash(/tmp/quick_reference.txt:*)",
+      "Read(//private/tmp/**)"
     ]
   },
   "language": "zh-CN",

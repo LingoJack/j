@@ -33,8 +33,6 @@ pub enum StreamMsg {
     Chunk,
     /// LLM 请求执行工具（附带完整工具调用列表）
     ToolCallRequest(Vec<ToolCallItem>),
-    /// Agent loop 中新增的消息（tool_call assistant + tool results），增量推送
-    AgentMessages(Vec<super::storage::ChatMessage>),
     /// 流式响应完成
     Done,
     /// 发生错误
@@ -677,6 +675,7 @@ impl AgentHandle {
         compact_config: CompactConfig,
         hook_manager: super::hook::HookManager,
         todo_manager: Arc<super::tools::todo::TodoManager>,
+        shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
     ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
         let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
         let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
@@ -717,6 +716,7 @@ impl AgentHandle {
                     compact_config,
                     hook_manager,
                     todo_manager,
+                    shared_messages,
                 ));
             }));
 
@@ -810,8 +810,10 @@ pub struct ChatApp {
     /// AgentTool 的 system_prompt 共享引用（每次发送请求前更新）
     #[allow(dead_code)]
     pub agent_tool_system_prompt: Arc<Mutex<Option<String>>>,
-    /// 暂存的非 AgentMessages 类型的流式消息（在 poll_stream_actions 中使用）
-    pub deferred_stream_msgs: Vec<StreamMsg>,
+    /// Agent 与 UI 共享的消息列表（agent 线程 push，UI 线程 poll len 变化）
+    pub shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// UI 侧已读取到的位置（用于增量检测）
+    pub shared_messages_read_cursor: usize,
 }
 
 /// 消息渲染行缓存
@@ -1397,7 +1399,8 @@ impl ChatApp {
             remote_connected: false,
             agent_tool_provider: agent_provider,
             agent_tool_system_prompt: agent_system_prompt,
-            deferred_stream_msgs: Vec::new(),
+            shared_agent_messages: Arc::new(Mutex::new(Vec::new())),
+            shared_messages_read_cursor: 0,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -2952,6 +2955,13 @@ impl ChatApp {
 
         let todo_manager = Arc::clone(&self.todo_manager);
 
+        // 重置共享消息状态
+        {
+            let mut shared = safe_lock(&self.shared_agent_messages, "start_agent::clear_shared");
+            shared.clear();
+        }
+        self.shared_messages_read_cursor = 0;
+
         // 启动 agent handle
         let (handle, tool_result_tx) = AgentHandle::spawn(
             provider,
@@ -2966,6 +2976,7 @@ impl ChatApp {
             compact_config,
             hook_manager_clone,
             todo_manager,
+            Arc::clone(&self.shared_agent_messages),
         );
 
         self.agent = Some(handle);
@@ -2976,10 +2987,11 @@ impl ChatApp {
     /// 轮询后台流式消息并收集 Actions（Step 6: collect + dispatch 分离）
     ///
     /// 该方法完成以下职责：
-    /// 1. 轮询工具执行结果（ToolExecutor 内部状态更新）
-    /// 2. 轮询 Ask 工具请求（初始化 ask mode）
-    /// 3. 处理延迟工具执行（pending_tool_execution）
-    /// 4. 轮询 Agent StreamMsg 并映射为 Action
+    /// 1. 从共享消息列表中增量检测新消息，追加到 session.messages
+    /// 2. 轮询工具执行结果（ToolExecutor 内部状态更新）
+    /// 3. 轮询 Ask 工具请求（初始化 ask mode）
+    /// 4. 处理延迟工具执行（pending_tool_execution）
+    /// 5. 轮询 Agent StreamMsg 并映射为 Action
     ///
     /// 返回需要通过 update() 分发的 Actions 列表
     pub fn poll_stream_actions(&mut self) -> Vec<Action> {
@@ -2989,23 +3001,17 @@ impl ChatApp {
             return actions;
         }
 
-        // ★ 无条件轮询 AgentMessages：不论处于什么模式，都从 agent channel 中
-        //   取出 AgentMessages 立即应用到 session，让 UI 实时显示 tool_call/tool_result。
-        //   其它消息类型暂存到 deferred_msgs，留给后面正常流程处理。
-        if let Some(ref agent) = self.agent {
-            let msgs = agent.poll();
-            for msg in msgs {
-                match msg {
-                    StreamMsg::AgentMessages(new_msgs) => {
-                        for m in new_msgs {
-                            self.state.session.messages.push(m);
-                        }
-                        self.ui.msg_lines_cache = None;
-                    }
-                    other => {
-                        self.deferred_stream_msgs.push(other);
-                    }
+        // ★ 从共享消息列表中检测新消息，增量追加到 session.messages
+        //   无条件执行，不受模式限制，确保任何模式下消息都能实时显示
+        {
+            let shared = safe_lock(&self.shared_agent_messages, "poll::shared_msgs");
+            let new_count = shared.len();
+            if new_count > self.shared_messages_read_cursor {
+                for msg in &shared[self.shared_messages_read_cursor..] {
+                    self.state.session.messages.push(msg.clone());
                 }
+                self.shared_messages_read_cursor = new_count;
+                self.ui.msg_lines_cache = None;
             }
         }
 
@@ -3122,118 +3128,125 @@ impl ChatApp {
             return actions;
         }
 
-        // 处理暂存的非 AgentMessages 消息（在方法开头已从 channel 取出）
-        let deferred = std::mem::take(&mut self.deferred_stream_msgs);
-        for msg in deferred {
-            match msg {
-                StreamMsg::Chunk => {
-                    actions.push(Action::StreamChunk);
-                }
-                StreamMsg::ToolCallRequest(tool_calls) => {
-                    // 初始化工具调用状态（需要访问 jcli_config 和 tool_registry）
-                    self.tool_executor.active_tool_calls.clear();
-                    self.tool_executor.pending_tool_idx = 0;
+        // 直接轮询 agent channel 中的流式消息
+        if let Some(ref agent) = self.agent {
+            let msgs = agent.poll();
+            for msg in msgs {
+                match msg {
+                    StreamMsg::Chunk => {
+                        actions.push(Action::StreamChunk);
+                    }
+                    StreamMsg::ToolCallRequest(tool_calls) => {
+                        // 初始化工具调用状态（需要访问 jcli_config 和 tool_registry）
+                        self.tool_executor.active_tool_calls.clear();
+                        self.tool_executor.pending_tool_idx = 0;
 
-                    for mut tc in tool_calls {
-                        // ★ PreToolExecution hook（同步，需要返回值）
-                        {
-                            let has_hooks = self
-                                .hook_manager
-                                .lock()
-                                .map(|m| m.has_hooks_for(HookEvent::PreToolExecution))
-                                .unwrap_or(false);
-                            if has_hooks {
-                                let ctx = HookContext {
-                                    event: HookEvent::PreToolExecution,
-                                    tool_name: Some(tc.name.clone()),
-                                    tool_arguments: Some(tc.arguments.clone()),
-                                    cwd: std::env::current_dir()
-                                        .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|_| ".".to_string()),
-                                    ..Default::default()
-                                };
-                                if let Ok(manager) = self.hook_manager.lock()
-                                    && let Some(result) =
-                                        manager.execute(HookEvent::PreToolExecution, ctx)
-                                {
-                                    if result.abort {
-                                        self.tool_executor.active_tool_calls.push(ToolCallStatus {
-                                            tool_call_id: tc.id.clone(),
-                                            tool_name: tc.name.clone(),
-                                            arguments: tc.arguments.clone(),
-                                            confirm_message: format!("🚫 {} 被 hook 拦截", tc.name),
-                                            status: ToolExecStatus::Failed(
-                                                "该工具调用被 hook 拦截".to_string(),
-                                            ),
-                                        });
-                                        continue;
-                                    }
-                                    if let Some(new_args) = result.tool_arguments {
-                                        tc.arguments = new_args;
+                        for mut tc in tool_calls {
+                            // ★ PreToolExecution hook（同步，需要返回值）
+                            {
+                                let has_hooks = self
+                                    .hook_manager
+                                    .lock()
+                                    .map(|m| m.has_hooks_for(HookEvent::PreToolExecution))
+                                    .unwrap_or(false);
+                                if has_hooks {
+                                    let ctx = HookContext {
+                                        event: HookEvent::PreToolExecution,
+                                        tool_name: Some(tc.name.clone()),
+                                        tool_arguments: Some(tc.arguments.clone()),
+                                        cwd: std::env::current_dir()
+                                            .map(|p| p.display().to_string())
+                                            .unwrap_or_else(|_| ".".to_string()),
+                                        ..Default::default()
+                                    };
+                                    if let Ok(manager) = self.hook_manager.lock()
+                                        && let Some(result) =
+                                            manager.execute(HookEvent::PreToolExecution, ctx)
+                                    {
+                                        if result.abort {
+                                            self.tool_executor.active_tool_calls.push(
+                                                ToolCallStatus {
+                                                    tool_call_id: tc.id.clone(),
+                                                    tool_name: tc.name.clone(),
+                                                    arguments: tc.arguments.clone(),
+                                                    confirm_message: format!(
+                                                        "🚫 {} 被 hook 拦截",
+                                                        tc.name
+                                                    ),
+                                                    status: ToolExecStatus::Failed(
+                                                        "该工具调用被 hook 拦截".to_string(),
+                                                    ),
+                                                },
+                                            );
+                                            continue;
+                                        }
+                                        if let Some(new_args) = result.tool_arguments {
+                                            tc.arguments = new_args;
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        if self.jcli_config.is_denied(&tc.name, &tc.arguments) {
+                            if self.jcli_config.is_denied(&tc.name, &tc.arguments) {
+                                self.tool_executor.active_tool_calls.push(ToolCallStatus {
+                                    tool_call_id: tc.id.clone(),
+                                    tool_name: tc.name.clone(),
+                                    arguments: tc.arguments.clone(),
+                                    confirm_message: format!(
+                                        "🚫 {} 被 .jcli/ 权限配置拒绝",
+                                        tc.name
+                                    ),
+                                    status: ToolExecStatus::Failed(
+                                        "该命令被 .jcli/ 权限配置拒绝".to_string(),
+                                    ),
+                                });
+                                continue;
+                            }
+
+                            let sandbox_outside = self.sandbox.is_outside(&tc.name, &tc.arguments);
+                            let confirm_msg = if sandbox_outside {
+                                self.sandbox.outside_message(&tc.name, &tc.arguments)
+                            } else if let Some(tool) = self.tool_registry.get(&tc.name) {
+                                tool.confirmation_message(&tc.arguments)
+                            } else {
+                                format!("调用工具 {} 参数: {}", tc.name, tc.arguments)
+                            };
+                            let tool_needs_confirm = self
+                                .tool_registry
+                                .get(&tc.name)
+                                .map(|t| t.requires_confirmation())
+                                .unwrap_or(false);
+                            let needs_confirm = (tool_needs_confirm || sandbox_outside)
+                                && !self.jcli_config.is_allowed(&tc.name, &tc.arguments);
                             self.tool_executor.active_tool_calls.push(ToolCallStatus {
                                 tool_call_id: tc.id.clone(),
                                 tool_name: tc.name.clone(),
                                 arguments: tc.arguments.clone(),
-                                confirm_message: format!("🚫 {} 被 .jcli/ 权限配置拒绝", tc.name),
-                                status: ToolExecStatus::Failed(
-                                    "该命令被 .jcli/ 权限配置拒绝".to_string(),
-                                ),
+                                confirm_message: confirm_msg,
+                                status: if needs_confirm {
+                                    ToolExecStatus::PendingConfirm
+                                } else {
+                                    ToolExecStatus::Executing
+                                },
                             });
-                            continue;
                         }
 
-                        let sandbox_outside = self.sandbox.is_outside(&tc.name, &tc.arguments);
-                        let confirm_msg = if sandbox_outside {
-                            self.sandbox.outside_message(&tc.name, &tc.arguments)
-                        } else if let Some(tool) = self.tool_registry.get(&tc.name) {
-                            tool.confirmation_message(&tc.arguments)
-                        } else {
-                            format!("调用工具 {} 参数: {}", tc.name, tc.arguments)
-                        };
-                        let tool_needs_confirm = self
-                            .tool_registry
-                            .get(&tc.name)
-                            .map(|t| t.requires_confirmation())
-                            .unwrap_or(false);
-                        let needs_confirm = (tool_needs_confirm || sandbox_outside)
-                            && !self.jcli_config.is_allowed(&tc.name, &tc.arguments);
-                        self.tool_executor.active_tool_calls.push(ToolCallStatus {
-                            tool_call_id: tc.id.clone(),
-                            tool_name: tc.name.clone(),
-                            arguments: tc.arguments.clone(),
-                            confirm_message: confirm_msg,
-                            status: if needs_confirm {
-                                ToolExecStatus::PendingConfirm
-                            } else {
-                                ToolExecStatus::Executing
-                            },
-                        });
+                        // 延迟一帧再执行
+                        self.tool_executor.pending_tool_execution = true;
+                        break;
                     }
-
-                    // 延迟一帧再执行
-                    self.tool_executor.pending_tool_execution = true;
-                    break;
-                }
-                StreamMsg::AgentMessages(_) => {
-                    // 已在方法开头统一处理，此处不应出现
-                }
-                StreamMsg::Done => {
-                    actions.push(Action::StreamDone);
-                    break;
-                }
-                StreamMsg::Error(e) => {
-                    actions.push(Action::StreamError(e));
-                    break;
-                }
-                StreamMsg::Cancelled => {
-                    actions.push(Action::StreamCancelled);
-                    break;
+                    StreamMsg::Done => {
+                        actions.push(Action::StreamDone);
+                        break;
+                    }
+                    StreamMsg::Error(e) => {
+                        actions.push(Action::StreamError(e));
+                        break;
+                    }
+                    StreamMsg::Cancelled => {
+                        actions.push(Action::StreamCancelled);
+                        break;
+                    }
                 }
             }
         }

@@ -33,6 +33,7 @@ pub async fn run_agent_loop(
     compact_config: CompactConfig,
     hook_manager: HookManager,
     todo_manager: Arc<TodoManager>,
+    shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
 ) {
     let client = create_openai_client(&provider);
 
@@ -309,6 +310,7 @@ pub async fn run_agent_loop(
                                         &pending_user_messages,
                                         &hook_manager,
                                         provider.supports_vision,
+                                        &shared_messages,
                                     ) {
                                         Ok(compact_requested) => {
                                             // ── Layer 3: compact tool 触发 ──
@@ -389,6 +391,7 @@ pub async fn run_agent_loop(
                     &pending_user_messages,
                     &hook_manager,
                     provider.supports_vision,
+                    &shared_messages,
                 ) {
                     Ok(compact_requested) => {
                         // ── Layer 3: compact tool 触发 ──
@@ -436,6 +439,7 @@ pub async fn run_agent_loop(
                                     &pending_user_messages,
                                     &hook_manager,
                                     provider.supports_vision,
+                                    &shared_messages,
                                 ) {
                                     Ok(compact_requested) => {
                                         // ── Layer 3: compact tool 触发 ──
@@ -516,6 +520,13 @@ fn extract_tool_items(raw_tool_list: &[ChatCompletionMessageToolCalls]) -> Vec<T
         .collect()
 }
 
+/// 向共享消息列表中追加一条消息（agent 线程写入，UI 线程读取）
+fn push_shared(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
+    if let Ok(mut msgs) = shared.lock() {
+        msgs.push(msg);
+    }
+}
+
 /// 记录工具调用请求日志
 fn log_tool_request(tool_items: &[ToolCallItem]) {
     let mut log_content = String::new();
@@ -554,6 +565,7 @@ fn process_tool_calls(
     pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
     hook_manager: &HookManager,
     supports_vision: bool,
+    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> Result<bool, ()> {
     log_tool_request(&tool_items);
 
@@ -564,13 +576,15 @@ fn process_tool_calls(
     // 检查是否有 compact tool 被调用
     let compact_requested = tool_items.iter().any(|t| t.name == CompactTool {}.name());
 
-    messages.push(ChatMessage {
+    let assistant_msg = ChatMessage {
         role: ROLE_ASSISTANT.to_string(),
         content: assistant_text,
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
         images: None,
-    });
+    };
+    messages.push(assistant_msg.clone());
+    push_shared(shared_messages, assistant_msg);
 
     if tx
         .send(StreamMsg::ToolCallRequest(tool_items.clone()))
@@ -578,11 +592,6 @@ fn process_tool_calls(
     {
         return Err(());
     }
-
-    // ★ 立即推送 assistant tool_call 消息到 UI，让用户看到工具调用请求
-    let _ = tx.send(StreamMsg::AgentMessages(vec![
-        messages.last().unwrap().clone(),
-    ]));
 
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
     for _ in &tool_items {
@@ -630,8 +639,7 @@ fn process_tool_calls(
             images: None,
         };
         messages.push(tool_msg.clone());
-
-        let mut incremental = vec![tool_msg];
+        push_shared(shared_messages, tool_msg);
 
         // 如果模型支持视觉且工具返回了图片，注入为 user message
         if supports_vision && !result_images.is_empty() {
@@ -652,11 +660,8 @@ fn process_tool_calls(
                 ),
             };
             messages.push(img_msg.clone());
-            incremental.push(img_msg);
+            push_shared(shared_messages, img_msg);
         }
-
-        // ★ 每个工具完成后立即推送结果到 UI
-        let _ = tx.send(StreamMsg::AgentMessages(incremental));
     }
 
     drain_pending_user_messages(messages, pending_user_messages);
