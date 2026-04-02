@@ -311,6 +311,7 @@ pub async fn run_agent_loop(
                                         &hook_manager,
                                         provider.supports_vision,
                                         &shared_messages,
+                                        &streaming_content,
                                     ) {
                                         Ok(compact_requested) => {
                                             // ── Layer 3: compact tool 触发 ──
@@ -393,6 +394,7 @@ pub async fn run_agent_loop(
                     &hook_manager,
                     provider.supports_vision,
                     &shared_messages,
+                    &streaming_content,
                 ) {
                     Ok(compact_requested) => {
                         // ── Layer 3: compact tool 触发 ──
@@ -442,6 +444,7 @@ pub async fn run_agent_loop(
                                     &hook_manager,
                                     provider.supports_vision,
                                     &shared_messages,
+                                    &streaming_content,
                                 ) {
                                     Ok(compact_requested) => {
                                         // ── Layer 3: compact tool 触发 ──
@@ -591,6 +594,7 @@ fn process_tool_calls(
     hook_manager: &HookManager,
     supports_vision: bool,
     shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    streaming_content: &Arc<Mutex<String>>,
 ) -> Result<bool, ()> {
     log_tool_request(&tool_items);
 
@@ -601,15 +605,35 @@ fn process_tool_calls(
     // 检查是否有 compact tool 被调用
     let compact_requested = tool_items.iter().any(|t| t.name == CompactTool {}.name());
 
-    let assistant_msg = ChatMessage {
+    // ★ 如果 LLM 同时返回了文本和 tool_calls，拆成两条消息：
+    //   1. 纯文本 assistant 消息（让 UI 先渲染文字）
+    //   2. tool_call assistant 消息（content 为空，只带 tool_calls）
+    //   这样渲染时文字在上面，tool_call 在下面
+    if !assistant_text.is_empty() {
+        let text_msg = ChatMessage {
+            role: ROLE_ASSISTANT.to_string(),
+            content: assistant_text,
+            tool_calls: None,
+            tool_call_id: None,
+            images: None,
+        };
+        messages.push(text_msg.clone());
+        push_shared(shared_messages, text_msg);
+        // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
+        if let Ok(mut sc) = streaming_content.lock() {
+            sc.clear();
+        }
+    }
+
+    let tool_call_msg = ChatMessage {
         role: ROLE_ASSISTANT.to_string(),
-        content: assistant_text,
+        content: String::new(),
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
         images: None,
     };
-    messages.push(assistant_msg.clone());
-    push_shared(shared_messages, assistant_msg);
+    messages.push(tool_call_msg.clone());
+    push_shared(shared_messages, tool_call_msg);
 
     if tx
         .send(StreamMsg::ToolCallRequest(tool_items.clone()))
