@@ -1,4 +1,5 @@
 use super::super::app::ChatApp;
+use super::components::{cursor_spans, help_key_row, section_header, separator_line};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -13,59 +14,43 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let mut lines: Vec<Line> = Vec::new();
 
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  🗂️ 归档当前对话",
-        Style::default()
-            .fg(t.help_title)
-            .add_modifier(Modifier::BOLD),
-    )));
+    lines.push(section_header(
+        "\u{1f5c2}\u{fe0f}",
+        "\u{5f52}\u{6863}\u{5f53}\u{524d}\u{5bf9}\u{8bdd}",
+        t,
+    ));
+    lines.push(Line::from(""));
+    lines.push(separator_line(area.width, t));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    )));
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  即将归档当前对话，归档后当前会话将被清空。",
+        "  \u{5373}\u{5c06}\u{5f52}\u{6863}\u{5f53}\u{524d}\u{5bf9}\u{8bdd}\u{ff0c}\u{5f52}\u{6863}\u{540e}\u{5f53}\u{524d}\u{4f1a}\u{8bdd}\u{5c06}\u{88ab}\u{6e05}\u{7a7a}\u{3002}",
         Style::default().fg(t.text_dim),
     )));
     lines.push(Line::from(""));
 
     if app.ui.archive_editing_name {
         lines.push(Line::from(Span::styled(
-            "  请输入归档名称：",
+            "  \u{8bf7}\u{8f93}\u{5165}\u{5f52}\u{6863}\u{540d}\u{79f0}\u{ff1a}",
             Style::default().fg(t.text_white),
         )));
         lines.push(Line::from(""));
 
+        let value_style = Style::default().fg(t.text_white);
         let name_with_cursor = if app.ui.archive_custom_name.is_empty() {
             vec![Span::styled(
                 " ",
                 Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
             )]
         } else {
-            let chars: Vec<char> = app.ui.archive_custom_name.chars().collect();
-            let mut spans: Vec<Span> = Vec::new();
-            for (i, &ch) in chars.iter().enumerate() {
-                if i == app.ui.archive_edit_cursor {
-                    spans.push(Span::styled(
-                        ch.to_string(),
-                        Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-                    ));
-                } else {
-                    spans.push(Span::styled(
-                        ch.to_string(),
-                        Style::default().fg(t.text_white),
-                    ));
-                }
-            }
-            if app.ui.archive_edit_cursor >= chars.len() {
-                spans.push(Span::styled(
-                    " ",
-                    Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
-                ));
-            }
-            spans
+            cursor_spans(
+                &app.ui.archive_custom_name,
+                app.ui.archive_edit_cursor,
+                value_style,
+                t,
+            )
+            .into_iter()
+            .filter(|s| s.content != " \u{270f}\u{fe0f}") // 去掉编辑图标
+            .collect()
         };
 
         lines.push(Line::from(vec![
@@ -82,34 +67,25 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  提示：留空则使用默认名称（如 archive-2026-02-25）",
+            "  \u{63d0}\u{793a}\u{ff1a}\u{7559}\u{7a7a}\u{5219}\u{4f7f}\u{7528}\u{9ed8}\u{8ba4}\u{540d}\u{79f0}\u{ff08}\u{5982} archive-2026-02-25\u{ff09}",
             Style::default().fg(t.text_dim),
         )));
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "  ─────────────────────────────────────────",
-            Style::default().fg(t.separator),
-        )));
+        lines.push(separator_line(area.width, t));
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "Enter",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  确认归档", Style::default().fg(t.help_desc)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "Esc",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("    取消", Style::default().fg(t.help_desc)),
-        ]));
+        lines.push(help_key_row(
+            "Enter",
+            "\u{786e}\u{8ba4}\u{5f52}\u{6863}",
+            7,
+            t,
+        ));
+        lines.push(help_key_row("Esc", "\u{53d6}\u{6d88}", 7, t));
     } else {
         lines.push(Line::from(vec![
-            Span::styled("  默认名称：", Style::default().fg(t.text_dim)),
+            Span::styled(
+                "  \u{9ed8}\u{8ba4}\u{540d}\u{79f0}\u{ff1a}",
+                Style::default().fg(t.text_dim),
+            ),
             Span::styled(
                 &app.ui.archive_default_name,
                 Style::default()
@@ -118,50 +94,37 @@ pub fn draw_archive_confirm(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             ),
         ]));
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "  ─────────────────────────────────────────",
-            Style::default().fg(t.separator),
-        )));
+        lines.push(separator_line(area.width, t));
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "Enter",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  使用默认名称归档", Style::default().fg(t.help_desc)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "n",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("      自定义名称", Style::default().fg(t.help_desc)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "d",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("      仅清空不归档", Style::default().fg(t.help_desc)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "Esc",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("    取消", Style::default().fg(t.help_desc)),
-        ]));
+        lines.push(help_key_row(
+            "Enter",
+            "\u{4f7f}\u{7528}\u{9ed8}\u{8ba4}\u{540d}\u{79f0}\u{5f52}\u{6863}",
+            7,
+            t,
+        ));
+        lines.push(help_key_row(
+            "n",
+            "\u{81ea}\u{5b9a}\u{4e49}\u{540d}\u{79f0}",
+            7,
+            t,
+        ));
+        lines.push(help_key_row(
+            "d",
+            "\u{4ec5}\u{6e05}\u{7a7a}\u{4e0d}\u{5f52}\u{6863}",
+            7,
+            t,
+        ));
+        lines.push(help_key_row("Esc", "\u{53d6}\u{6d88}", 7, t));
     }
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(t.border_title))
-        .title(Span::styled(" 归档确认 ", Style::default().fg(t.text_dim)))
+        .title(Span::styled(
+            " \u{5f52}\u{6863}\u{786e}\u{8ba4} ",
+            Style::default().fg(t.text_dim),
+        ))
         .style(Style::default().bg(t.help_bg));
     let widget = Paragraph::new(lines).block(block);
     f.render_widget(widget, area);
@@ -175,26 +138,25 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     if app.ui.restore_confirm_needed {
         let mut lines: Vec<Line> = Vec::new();
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "  ⚠️  确认还原",
-            Style::default()
-                .fg(t.toast_error_text)
-                .add_modifier(Modifier::BOLD),
-        )));
+        lines.push(section_header(
+            "\u{26a0}\u{fe0f}",
+            "\u{786e}\u{8ba4}\u{8fd8}\u{539f}",
+            t,
+        ));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  当前对话未归档，还原将丢失当前对话内容！",
+            "  \u{5f53}\u{524d}\u{5bf9}\u{8bdd}\u{672a}\u{5f52}\u{6863}\u{ff0c}\u{8fd8}\u{539f}\u{5c06}\u{4e22}\u{5931}\u{5f53}\u{524d}\u{5bf9}\u{8bdd}\u{5185}\u{5bb9}\u{ff01}",
             Style::default().fg(t.text_white),
         )));
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "  ─────────────────────────────────────────",
-            Style::default().fg(t.separator),
-        )));
+        lines.push(separator_line(area.width, t));
         lines.push(Line::from(""));
         if let Some(archive) = app.ui.archives.get(app.ui.archive_list_index) {
             lines.push(Line::from(vec![
-                Span::styled("  将还原归档：", Style::default().fg(t.text_dim)),
+                Span::styled(
+                    "  \u{5c06}\u{8fd8}\u{539f}\u{5f52}\u{6863}\u{ff1a}",
+                    Style::default().fg(t.text_dim),
+                ),
                 Span::styled(
                     &archive.name,
                     Style::default()
@@ -204,28 +166,22 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             ]));
         }
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "y/Enter",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  确认还原", Style::default().fg(t.help_desc)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                "Esc",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("     取消", Style::default().fg(t.help_desc)),
-        ]));
+        lines.push(help_key_row(
+            "y/Enter",
+            "\u{786e}\u{8ba4}\u{8fd8}\u{539f}",
+            8,
+            t,
+        ));
+        lines.push(help_key_row("Esc", "\u{53d6}\u{6d88}", 8, t));
 
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(Style::default().fg(t.toast_error_border))
-            .title(Span::styled(" 还原确认 ", Style::default().fg(t.text_dim)))
+            .title(Span::styled(
+                " \u{8fd8}\u{539f}\u{786e}\u{8ba4} ",
+                Style::default().fg(t.text_dim),
+            ))
             .style(Style::default().bg(t.help_bg));
         let widget = Paragraph::new(lines).block(block);
         f.render_widget(widget, area);
@@ -237,17 +193,17 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             Line::from(""),
             Line::from(""),
             Line::from(Span::styled(
-                "  📦 暂无归档对话",
+                "  \u{1f4e6} \u{6682}\u{65e0}\u{5f52}\u{6863}\u{5bf9}\u{8bdd}",
                 Style::default().fg(t.text_dim).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "  按 Ctrl+L 归档当前对话",
+                "  \u{6309} Ctrl+L \u{5f52}\u{6863}\u{5f53}\u{524d}\u{5bf9}\u{8bdd}",
                 Style::default().fg(t.text_dim),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "  按 Esc 返回聊天",
+                "  \u{6309} Esc \u{8fd4}\u{56de}\u{804a}\u{5929}",
                 Style::default().fg(t.text_dim),
             )),
         ];
@@ -256,7 +212,10 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(Style::default().fg(t.border_title))
-            .title(Span::styled(" 归档列表 ", Style::default().fg(t.text_dim)))
+            .title(Span::styled(
+                " \u{5f52}\u{6863}\u{5217}\u{8868} ",
+                Style::default().fg(t.text_dim),
+            ))
             .style(Style::default().bg(t.help_bg));
         let widget = Paragraph::new(lines).block(block);
         f.render_widget(widget, area);
@@ -270,7 +229,11 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .enumerate()
         .map(|(i, archive)| {
             let is_selected = i == app.ui.archive_list_index;
-            let marker = if is_selected { "  ▸ " } else { "    " };
+            let marker = if is_selected {
+                super::components::POINTER_SELECTED
+            } else {
+                super::components::POINTER_EMPTY
+            };
             let msg_count = archive.messages.len();
             let created_at = archive
                 .created_at
@@ -285,7 +248,7 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 Style::default().fg(t.model_sel_inactive)
             };
             let detail = format!(
-                "{}{}  📨 {} 条消息  📅 {}",
+                "{}{}  \u{1f4e8} {} \u{6761}\u{6d88}\u{606f}  \u{1f4c5} {}",
                 marker, archive.name, msg_count, created_at
             );
             ListItem::new(Line::from(Span::styled(detail, style)))
@@ -299,7 +262,7 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 .border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(Style::default().fg(t.model_sel_border))
                 .title(Span::styled(
-                    " 📦 归档列表 (Enter 还原, d 删除, Esc 返回) ",
+                    " \u{1f4e6} \u{5f52}\u{6863}\u{5217}\u{8868} (Enter \u{8fd8}\u{539f}, d \u{5220}\u{9664}, Esc \u{8fd4}\u{56de}) ",
                     Style::default()
                         .fg(t.model_sel_title)
                         .add_modifier(Modifier::BOLD),

@@ -120,11 +120,22 @@ impl Tool for EditFileTool {
         // 执行替换
         let new_content = content.replacen(&old_string, &new_string, 1);
         match std::fs::write(&path, &new_content) {
-            Ok(_) => ToolResult {
-                output: format!("已编辑文件: {}", path),
-                is_error: false,
-                images: vec![],
-            },
+            Ok(_) => {
+                // 构建含 diff 的输出
+                let mut output = format!("已编辑文件: {}\n```diff\n", path);
+                for line in old_string.lines() {
+                    output.push_str(&format!("- {}\n", line));
+                }
+                for line in new_string.lines() {
+                    output.push_str(&format!("+ {}\n", line));
+                }
+                output.push_str("```");
+                ToolResult {
+                    output,
+                    is_error: false,
+                    images: vec![],
+                }
+            }
             Err(e) => ToolResult {
                 output: format!("写入文件失败: {}", e),
                 is_error: true,

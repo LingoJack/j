@@ -150,14 +150,33 @@ pub fn build_message_lines_incremental(
                 }
             }
             ROLE_TOOL => {
-                let role_label = m.tool_call_id.as_ref().map(|id| {
-                    // 使用字符数截断，避免 UTF-8 边界问题
-                    let truncated: String = id.chars().take(8).collect();
-                    format!("工具 {}", truncated)
-                });
+                // 查找对应的工具名：向前搜索 assistant 消息中匹配 tool_call_id 的 ToolCallItem
+                let tool_name = m
+                    .tool_call_id
+                    .as_ref()
+                    .and_then(|tid| {
+                        app.state.session.messages[..idx]
+                            .iter()
+                            .rev()
+                            .find_map(|prev| {
+                                prev.tool_calls.as_ref().and_then(|tcs| {
+                                    tcs.iter()
+                                        .find(|tc| tc.id == *tid)
+                                        .map(|tc| tc.name.clone())
+                                })
+                            })
+                    })
+                    .unwrap_or_default();
+
+                let label = if tool_name.is_empty() {
+                    "工具结果".to_string()
+                } else {
+                    tool_name
+                };
+
                 render_tool_result_msg(
                     &m.content,
-                    role_label.as_deref().unwrap_or("工具结果"),
+                    &label,
                     bubble_max_width,
                     &mut tmp_lines,
                     t,
@@ -1215,6 +1234,12 @@ pub fn render_tool_result_msg(
                 Style::default().fg(theme.text_dim),
             )));
         }
+    } else if clean.contains("```diff\n") {
+        // Diff 块特殊渲染
+        render_diff_content(&clean, content_w, lines, theme);
+    } else if tool_name == "Agent" {
+        // Agent 结果嵌套显示
+        render_agent_result_nested(&clean, content_w, lines, theme);
     } else {
         // 正常结果
         let all_lines: Vec<&str> = clean.lines().take(100).collect();
@@ -1237,11 +1262,105 @@ pub fn render_tool_result_msg(
     }
 }
 
+/// 渲染包含 diff 块的工具结果内容
+fn render_diff_content(
+    content: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    let mut in_diff = false;
+    for line in content.lines() {
+        if line.starts_with("```diff") {
+            in_diff = true;
+            continue;
+        }
+        if in_diff && line.starts_with("```") {
+            in_diff = false;
+            continue;
+        }
+        if in_diff {
+            let color = if line.starts_with("- ")
+                || line.starts_with('-') && !line.starts_with("---")
+            {
+                theme.diff_del
+            } else if line.starts_with("+ ") || line.starts_with('+') && !line.starts_with("+++") {
+                theme.diff_add
+            } else if line.starts_with("@@ ") {
+                theme.diff_header
+            } else {
+                theme.text_dim
+            };
+            for wrapped in wrap_text(line, content_w) {
+                lines.push(Line::from(Span::styled(
+                    format!("    {}", wrapped),
+                    Style::default().fg(color),
+                )));
+            }
+        } else {
+            // diff 块外的文本正常渲染
+            for wrapped in wrap_text(line, content_w) {
+                lines.push(Line::from(Span::styled(
+                    format!("    {}", wrapped),
+                    Style::default().fg(theme.text_dim),
+                )));
+            }
+        }
+    }
+}
+
+/// 渲染 Agent 工具结果（嵌套缩进显示）
+fn render_agent_result_nested(
+    content: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    let all_lines: Vec<&str> = content.lines().collect();
+    let total = all_lines.len();
+    let max_display = 30;
+    let display_lines = &all_lines[..total.min(max_display)];
+
+    for (i, line) in display_lines.iter().enumerate() {
+        let prefix = if i == display_lines.len() - 1 && total <= max_display {
+            "  └─ "
+        } else {
+            "  ├─ "
+        };
+        let available_w = content_w.saturating_sub(5);
+        for (j, wrapped) in wrap_text(line, available_w).iter().enumerate() {
+            let p = if j == 0 { prefix } else { "  │  " };
+            lines.push(Line::from(Span::styled(
+                format!("    {}{}", p, wrapped),
+                Style::default().fg(theme.text_dim),
+            )));
+        }
+    }
+
+    if total > max_display {
+        lines.push(Line::from(Span::styled(
+            format!("    ... (共 {} 行)", total),
+            Style::default().fg(theme.text_dim),
+        )));
+    }
+}
+
 /// 解析工具标签，提取工具名和错误状态
 fn parse_tool_label(label: &str) -> (String, bool) {
-    // label 格式示例: "Read..." 或 "Bash..." 或带错误的
     let is_error = label.contains("错误") || label.contains("失败") || label.contains("error");
-    let tool_name = label.split(['.', ' ']).next().unwrap_or(label).to_string();
+    // 兼容旧格式 "工具 xxx" 和新格式直接工具名
+    let tool_name = if label.starts_with("工具 ") {
+        label
+            .chars()
+            .skip(3)
+            .collect::<String>()
+            .split(['.', ' '])
+            .next()
+            .unwrap_or(label)
+            .to_string()
+    } else {
+        label.split(['.', ' ']).next().unwrap_or(label).to_string()
+    };
     (tool_name, is_error)
 }
 

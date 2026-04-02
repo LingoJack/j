@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod chat;
+pub mod components;
 pub mod config;
 
 #[allow(unused_imports)]

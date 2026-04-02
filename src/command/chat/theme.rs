@@ -326,6 +326,14 @@ pub struct Theme {
     pub help_path: Color,
     /// 帮助背景颜色
     pub help_bg: Color,
+
+    // ===== Diff 显示 =====
+    /// 新增行颜色（绿色）
+    pub diff_add: Color,
+    /// 删除行颜色（红色）
+    pub diff_del: Color,
+    /// diff header 颜色（青色）
+    pub diff_header: Color,
 }
 
 impl Theme {
@@ -454,6 +462,10 @@ impl Theme {
             help_desc: Color::Reset,
             help_path: Color::DarkGray,
             help_bg: Color::Reset,
+            // Diff
+            diff_add: Color::LightGreen,
+            diff_del: Color::LightRed,
+            diff_header: Color::LightCyan,
         }
     }
 
@@ -599,6 +611,10 @@ impl Theme {
             help_desc: Color::Rgb(200, 200, 220),
             help_path: Color::Rgb(100, 100, 130),
             help_bg: Color::Rgb(24, 24, 34),
+            // Diff
+            diff_add: Color::Rgb(80, 200, 80),
+            diff_del: Color::Rgb(220, 80, 80),
+            diff_header: Color::Rgb(100, 180, 220),
         }
     }
 
@@ -744,6 +760,10 @@ impl Theme {
             help_desc: Color::Rgb(200, 200, 200),
             help_path: Color::Rgb(100, 100, 100),
             help_bg: Color::Rgb(37, 37, 38),
+            // Diff
+            diff_add: Color::Rgb(80, 200, 80),
+            diff_del: Color::Rgb(220, 80, 80),
+            diff_header: Color::Rgb(100, 180, 220),
         }
     }
 
@@ -889,6 +909,10 @@ impl Theme {
             help_desc: Color::Rgb(50, 50, 60),
             help_path: Color::Rgb(120, 120, 140),
             help_bg: Color::Rgb(248, 248, 248),
+            // Diff
+            diff_add: Color::Rgb(30, 150, 30),
+            diff_del: Color::Rgb(200, 50, 50),
+            diff_header: Color::Rgb(40, 120, 180),
         }
     }
 
@@ -1034,6 +1058,10 @@ impl Theme {
             help_desc: Color::Rgb(216, 222, 233),  // nord4
             help_path: Color::Rgb(100, 112, 130),
             help_bg: Color::Rgb(59, 66, 82), // nord1
+            // Diff
+            diff_add: Color::Rgb(163, 190, 140), // nord14 green
+            diff_del: Color::Rgb(191, 97, 106),  // nord11 red
+            diff_header: Color::Rgb(136, 192, 208), // nord8 cyan
         }
     }
 
@@ -1179,6 +1207,10 @@ impl Theme {
             help_desc: Color::Rgb(248, 248, 242),
             help_path: Color::Rgb(117, 113, 94),
             help_bg: Color::Rgb(49, 50, 44),
+            // Diff
+            diff_add: Color::Rgb(166, 226, 46), // monokai green
+            diff_del: Color::Rgb(249, 38, 114), // monokai pink
+            diff_header: Color::Rgb(102, 217, 239), // monokai cyan
         }
     }
 }

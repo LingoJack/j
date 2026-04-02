@@ -199,42 +199,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     // 空消息时显示欢迎界面
     if app.state.session.messages.is_empty() && !app.state.is_loading {
-        let welcome_lines = vec![
-            Line::from(""),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  ╭──────────────────────────────────────╮",
-                Style::default().fg(t.welcome_border),
-            )),
-            Line::from(Span::styled(
-                "  │                                      │",
-                Style::default().fg(t.welcome_border),
-            )),
-            Line::from(vec![
-                Span::styled("  │     ", Style::default().fg(t.welcome_border)),
-                Span::styled(
-                    "Hi! What can I help you?  ",
-                    Style::default().fg(t.welcome_text),
-                ),
-                Span::styled("       │", Style::default().fg(t.welcome_border)),
-            ]),
-            Line::from(Span::styled(
-                "  │                                      │",
-                Style::default().fg(t.welcome_border),
-            )),
-            Line::from(Span::styled(
-                "  │     Type a message, press Enter      │",
-                Style::default().fg(t.welcome_hint),
-            )),
-            Line::from(Span::styled(
-                "  │                                      │",
-                Style::default().fg(t.welcome_border),
-            )),
-            Line::from(Span::styled(
-                "  ╰──────────────────────────────────────╯",
-                Style::default().fg(t.welcome_border),
-            )),
-        ];
+        let inner_width = area.width.saturating_sub(4);
+        let welcome_lines = super::components::welcome_box(inner_width, t);
         let empty = Paragraph::new(welcome_lines).block(block);
         f.render_widget(empty, area);
         return;
@@ -903,14 +869,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         if i > 0 {
             spans.push(Span::styled("  │  ", Style::default().fg(t.hint_separator)));
         }
-        spans.push(Span::styled(
-            format!(" {} ", key),
-            Style::default().fg(t.hint_key_fg).bg(t.hint_key_bg),
-        ));
-        spans.push(Span::styled(
-            format!(" {}", desc),
-            Style::default().fg(t.hint_desc),
-        ));
+        spans.extend(super::components::hint_spans(key, desc, t));
         used += need_w;
     }
 
@@ -1017,116 +976,40 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
 /// 绘制帮助界面
 pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
-    let separator = Line::from(Span::styled(
-        "  ─────────────────────────────────────────",
-        Style::default().fg(t.separator),
-    ));
+    let sep = super::components::separator_line(area.width, t);
 
-    let help_lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  📖 快捷键帮助",
-            Style::default()
-                .fg(t.help_title)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        separator.clone(),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "  Enter        ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("发送消息", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ↑ / ↓        ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("滚动对话记录", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ← / →        ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("移动输入光标", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+T       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("切换模型", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+L       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("归档当前对话", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+Y       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("复制最后一条 AI 回复", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+B       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "浏览消息 (↑↓选择, y/Enter复制)",
-                Style::default().fg(t.help_desc),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+E       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("打开配置界面", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Ctrl+G       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("实时查看日志", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  Esc / Ctrl+C ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("退出对话", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ? / F1       ",
-                Style::default().fg(t.help_key).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("显示 / 关闭此帮助", Style::default().fg(t.help_desc)),
-        ]),
-        Line::from(""),
-        separator,
-        Line::from(""),
-        Line::from(Span::styled(
-            "  📁 配置文件:",
-            Style::default()
-                .fg(t.help_title)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(Span::styled(
-            format!("     {}", agent_config_path().display()),
-            Style::default().fg(t.help_path),
-        )),
+    let shortcuts: &[(&str, &str)] = &[
+        ("Enter", "发送消息"),
+        ("↑ / ↓", "滚动对话记录"),
+        ("← / →", "移动输入光标"),
+        ("Ctrl+T", "切换模型"),
+        ("Ctrl+L", "归档当前对话"),
+        ("Ctrl+Y", "复制最后一条 AI 回复"),
+        ("Ctrl+B", "浏览消息 (↑↓选择, y/Enter复制)"),
+        ("Ctrl+E", "打开配置界面"),
+        ("Ctrl+G", "实时查看日志"),
+        ("Esc / Ctrl+C", "退出对话"),
+        ("? / F1", "显示 / 关闭此帮助"),
     ];
+
+    let mut help_lines = vec![
+        Line::from(""),
+        super::components::section_header("📖", "快捷键帮助", t),
+        Line::from(""),
+        sep.clone(),
+        Line::from(""),
+    ];
+    for (key, desc) in shortcuts {
+        help_lines.push(super::components::help_key_row(key, desc, 15, t));
+    }
+    help_lines.push(Line::from(""));
+    help_lines.push(sep);
+    help_lines.push(Line::from(""));
+    help_lines.push(super::components::section_header("📁", "配置文件:", t));
+    help_lines.push(Line::from(Span::styled(
+        format!("     {}", agent_config_path().display()),
+        Style::default().fg(t.help_path),
+    )));
 
     let help_block = Block::default()
         .borders(Borders::ALL)

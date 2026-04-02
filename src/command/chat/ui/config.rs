@@ -2,6 +2,10 @@ use super::super::ui_helpers::{
     config_field_label_global, config_field_label_model, config_field_value_global,
     config_field_value_model,
 };
+use super::components::{
+    preview_field_row, secret_field_row, selectable_row, separator_line, tab_bar, text_field_row,
+    theme_field_row, toggle_list_item, toggle_row,
+};
 use crate::command::chat::app::{ChatApp, ConfigTab};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 use ratatui::{
@@ -11,54 +15,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-/// 构建"带行内光标的可编辑字段"span 列表
-fn render_cursor_spans<'a>(
-    value: &str,
-    cursor: usize,
-    value_style: Style,
-    cursor_fg: ratatui::style::Color,
-    cursor_bg: ratatui::style::Color,
-) -> Vec<Span<'a>> {
-    let chars: Vec<char> = value.chars().collect();
-    let before: String = chars[..cursor.min(chars.len())].iter().collect();
-    let cursor_ch = if cursor < chars.len() {
-        chars[cursor].to_string()
-    } else {
-        " ".to_string()
-    };
-    let after: String = if cursor < chars.len() {
-        chars[cursor + 1..].iter().collect()
-    } else {
-        String::new()
-    };
-    vec![
-        Span::styled(before, value_style),
-        Span::styled(cursor_ch, Style::default().fg(cursor_fg).bg(cursor_bg)),
-        Span::styled(after, value_style),
-        Span::styled(" ✏️", Style::default()),
-    ]
-}
-
-/// 构建长文本字段的截断预览值（替换换行为空格，超 40 字符截断）
-fn render_preview_value(raw: &str) -> String {
-    if raw.is_empty() {
-        return "(空)".to_string();
-    }
-    let flat: String = raw
-        .chars()
-        .map(|c| if c == '\n' { ' ' } else { c })
-        .collect();
-    if flat.chars().count() > 40 {
-        let truncated: String = flat.chars().take(40).collect();
-        format!("{}...", truncated)
-    } else {
-        flat
-    }
-}
-
 /// 绘制顶部 Tab 栏（支持窄屏水平滚动）
-fn draw_tab_bar<'a>(app: &ChatApp) -> Line<'a> {
-    let t = &app.ui.theme;
+fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
     let current = app.ui.config_tab;
     let all_tabs = [
         ConfigTab::Model,
@@ -70,36 +28,15 @@ fn draw_tab_bar<'a>(app: &ChatApp) -> Line<'a> {
         ConfigTab::Commands,
         ConfigTab::Archive,
     ];
-
-    let mut spans: Vec<Span<'a>> = vec![Span::styled("  ", Style::default())];
-
-    for (i, tab) in all_tabs.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(" │ ", Style::default().fg(t.separator)));
-        }
-        let label = format!(" {} ", tab.label());
-        if *tab == current {
-            spans.push(Span::styled(
-                label,
-                Style::default()
-                    .fg(t.config_tab_active_fg)
-                    .bg(t.config_tab_active_bg)
-                    .add_modifier(Modifier::BOLD),
-            ));
-        } else {
-            spans.push(Span::styled(
-                label,
-                Style::default().fg(t.config_tab_inactive),
-            ));
-        }
-    }
-
-    spans.push(Span::styled(
-        "    (←→ 切换标签)",
-        Style::default().fg(t.config_dim),
-    ));
-
-    Line::from(spans)
+    let tabs: Vec<(&str, bool)> = all_tabs
+        .iter()
+        .map(|tab| (tab.label(), *tab == current))
+        .collect();
+    tab_bar(
+        &tabs,
+        "\u{2190}\u{2192} \u{5207}\u{6362}\u{6807}\u{7b7e}",
+        &app.ui.theme,
+    )
 }
 
 /// 配置界面主入口（分发器）
@@ -109,42 +46,23 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
 
     let mut lines: Vec<Line> = vec![
         Line::from(""),
-        draw_tab_bar(app),
+        draw_tab_bar_line(app),
         Line::from(""),
-        Line::from(Span::styled(
-            "  ─────────────────────────────────────────",
-            Style::default().fg(t.separator),
-        )),
+        separator_line(area.width, t),
         Line::from(""),
     ];
 
     let mut field_line_indices: Vec<usize> = Vec::new();
 
     match app.ui.config_tab {
-        ConfigTab::Model => {
-            draw_tab_model_lines(&mut lines, &mut field_line_indices, app);
-        }
-        ConfigTab::Global => {
-            draw_tab_global_lines(&mut lines, &mut field_line_indices, app);
-        }
-        ConfigTab::Tools => {
-            draw_tab_tools_lines(&mut lines, &mut field_line_indices, app);
-        }
-        ConfigTab::Skills => {
-            draw_tab_skills_lines(&mut lines, &mut field_line_indices, app);
-        }
-        ConfigTab::Hooks => {
-            draw_tab_hooks_lines(&mut lines, app);
-        }
-        ConfigTab::Commands => {
-            draw_tab_commands_lines(&mut lines, &mut field_line_indices, app);
-        }
-        ConfigTab::Session => {
-            draw_tab_session_lines(&mut lines, &mut field_line_indices, app);
-        }
-        ConfigTab::Archive => {
-            draw_tab_archive_lines(&mut lines, &mut field_line_indices, app);
-        }
+        ConfigTab::Model => draw_tab_model_lines(&mut lines, &mut field_line_indices, app),
+        ConfigTab::Global => draw_tab_global_lines(&mut lines, &mut field_line_indices, app),
+        ConfigTab::Tools => draw_tab_tools_lines(&mut lines, &mut field_line_indices, app),
+        ConfigTab::Skills => draw_tab_skills_lines(&mut lines, &mut field_line_indices, app),
+        ConfigTab::Hooks => draw_tab_hooks_lines(&mut lines, app),
+        ConfigTab::Commands => draw_tab_commands_lines(&mut lines, &mut field_line_indices, app),
+        ConfigTab::Session => draw_tab_session_lines(&mut lines, &mut field_line_indices, app),
+        ConfigTab::Archive => draw_tab_archive_lines(&mut lines, &mut field_line_indices, app),
     }
 
     // 滚动：确保选中字段始终可见
@@ -167,14 +85,14 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     }
 
     let title = match app.ui.config_tab {
-        ConfigTab::Model => " ⚙️ 模型配置 ",
-        ConfigTab::Global => " 🌐 全局配置 ",
-        ConfigTab::Tools => " 🔧 工具开关 ",
-        ConfigTab::Skills => " 📦 技能开关 ",
-        ConfigTab::Hooks => " 🪝 Hooks ",
-        ConfigTab::Commands => " 📋 自定义命令 ",
-        ConfigTab::Session => " 💬 会话管理 ",
-        ConfigTab::Archive => " 📦 归档管理 ",
+        ConfigTab::Model => " \u{2699}\u{fe0f} \u{6a21}\u{578b}\u{914d}\u{7f6e} ",
+        ConfigTab::Global => " \u{1f310} \u{5168}\u{5c40}\u{914d}\u{7f6e} ",
+        ConfigTab::Tools => " \u{1f527} \u{5de5}\u{5177}\u{5f00}\u{5173} ",
+        ConfigTab::Skills => " \u{1f4e6} \u{6280}\u{80fd}\u{5f00}\u{5173} ",
+        ConfigTab::Hooks => " \u{1fa9d} Hooks ",
+        ConfigTab::Commands => " \u{1f4cb} \u{81ea}\u{5b9a}\u{4e49}\u{547d}\u{4ee4} ",
+        ConfigTab::Session => " \u{1f4ac} \u{4f1a}\u{8bdd}\u{7ba1}\u{7406} ",
+        ConfigTab::Archive => " \u{1f4e6} \u{5f52}\u{6863}\u{7ba1}\u{7406} ",
     };
 
     let content = Paragraph::new(lines)
@@ -205,12 +123,34 @@ fn draw_tab_model_lines<'a>(
 
     let provider_count = app.state.agent_config.providers.len();
     if provider_count > 0 {
+        let tabs: Vec<(&str, bool)> = app
+            .state
+            .agent_config
+            .providers
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let is_active = i == app.state.agent_config.active_index;
+                let is_current = i == app.ui.config_provider_idx;
+                // We need owned strings but tab_bar takes &str, so we build manually
+                let _ = (is_active, is_current, p);
+                // Fall back to manual rendering for provider sub-tabs due to marker prefix
+                ("", false) // placeholder, not used
+            })
+            .collect();
+        let _ = tabs;
+
+        // Provider sub-tabs with ● / ○ markers need custom rendering
         let mut tab_spans: Vec<Span> = vec![Span::styled("  ", Style::default())];
         for (i, p) in app.state.agent_config.providers.iter().enumerate() {
             let is_current = i == app.ui.config_provider_idx;
             let is_active = i == app.state.agent_config.active_index;
-            let marker = if is_active { "● " } else { "○ " };
-            let label = format!(" {}{} ", marker, p.name);
+            let marker = if is_active {
+                super::components::TOGGLE_ON
+            } else {
+                super::components::TOGGLE_OFF
+            };
+            let label = format!(" {marker} {} ", p.name);
             if is_current {
                 tab_spans.push(Span::styled(
                     label,
@@ -226,17 +166,23 @@ fn draw_tab_model_lines<'a>(
                 ));
             }
             if i < provider_count - 1 {
-                tab_spans.push(Span::styled(" │ ", Style::default().fg(t.separator)));
+                tab_spans.push(Span::styled(
+                    format!(" {} ", super::components::SEPARATOR_V),
+                    Style::default().fg(t.separator),
+                ));
             }
         }
         tab_spans.push(Span::styled(
-            "    (● = 活跃模型, Tab 切换, s 设为活跃)",
+            format!(
+                "    ({} = \u{6d3b}\u{8dc3}\u{6a21}\u{578b}, Tab \u{5207}\u{6362}, s \u{8bbe}\u{4e3a}\u{6d3b}\u{8dc3})",
+                super::components::TOGGLE_ON
+            ),
             Style::default().fg(t.config_dim),
         ));
         lines.push(Line::from(tab_spans));
     } else {
         lines.push(Line::from(Span::styled(
-            "  (无 Provider，按 a 新增)",
+            "  (\u{65e0} Provider\u{ff0c}\u{6309} a \u{65b0}\u{589e})",
             Style::default().fg(t.config_toggle_off),
         )));
     }
@@ -253,59 +199,27 @@ fn draw_tab_model_lines<'a>(
                 config_field_value_model(app, i)
             };
 
-            let pointer = if is_selected { "  ▸ " } else { "    " };
-            let pointer_style = if is_selected {
-                Style::default().fg(t.config_pointer)
-            } else {
-                Style::default()
-            };
-            let label_style = if is_selected {
-                Style::default()
-                    .fg(t.config_label_selected)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.config_label)
-            };
-            let value_style = if app.ui.config_editing && is_selected {
-                Style::default().fg(t.text_white).bg(t.config_edit_bg)
-            } else if is_selected {
-                Style::default().fg(t.text_white)
-            } else if *provider_field == "api_key" {
-                Style::default().fg(t.config_api_key)
-            } else {
-                Style::default().fg(t.config_value)
-            };
-
-            let line = if app.ui.config_editing && is_selected {
-                let mut spans = vec![
-                    Span::styled(pointer, pointer_style),
-                    Span::styled(format!("{:<10}", label), label_style),
-                    Span::styled("  ", Style::default()),
-                ];
-                spans.extend(render_cursor_spans(
+            let line = if *provider_field == "api_key" {
+                secret_field_row(
+                    label,
                     &value,
+                    is_selected,
+                    app.ui.config_editing,
                     app.ui.config_edit_cursor,
-                    value_style,
-                    t.cursor_fg,
-                    t.cursor_bg,
-                ));
-                Line::from(spans)
+                    t,
+                )
             } else {
-                Line::from(vec![
-                    Span::styled(pointer, pointer_style),
-                    Span::styled(format!("{:<10}", label), label_style),
-                    Span::styled("  ", Style::default()),
-                    Span::styled(
-                        if value.is_empty() {
-                            "(空)".to_string()
-                        } else {
-                            value
-                        },
-                        value_style,
-                    ),
-                ])
+                text_field_row(
+                    label,
+                    &value,
+                    is_selected,
+                    app.ui.config_editing,
+                    app.ui.config_edit_cursor,
+                    t,
+                )
             };
             lines.push(line);
+            lines.push(Line::from(""));
         }
     }
 }
@@ -328,117 +242,30 @@ fn draw_tab_global_lines<'a>(
             config_field_value_global(app, i)
         };
 
-        let pointer = if is_selected { "  ▸ " } else { "    " };
-        let pointer_style = if is_selected {
-            Style::default().fg(t.config_pointer)
-        } else {
-            Style::default()
-        };
-        let label_style = if is_selected {
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_label)
-        };
-        let value_style = if app.ui.config_editing && is_selected {
-            Style::default().fg(t.text_white).bg(t.config_edit_bg)
-        } else if is_selected {
-            Style::default().fg(t.text_white)
-        } else {
-            Style::default().fg(t.config_value)
-        };
-
         let line = if *field == "stream_mode" || *field == "auto_restore_session" {
             let toggle_on = match *field {
                 "stream_mode" => app.state.agent_config.stream_mode,
                 "auto_restore_session" => app.state.agent_config.auto_restore_session,
                 _ => false,
             };
-            let toggle_style = if toggle_on {
-                Style::default()
-                    .fg(t.config_toggle_on)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.config_toggle_off)
-            };
-            let toggle_text = if toggle_on {
-                "● 开启"
-            } else {
-                "○ 关闭"
-            };
-            Line::from(vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-                Span::styled(toggle_text, toggle_style),
-                Span::styled(
-                    if is_selected { "  (Enter 切换)" } else { "" },
-                    Style::default().fg(t.config_dim),
-                ),
-            ])
+            toggle_row(label, toggle_on, is_selected, "Enter \u{5207}\u{6362}", t)
         } else if *field == "theme" {
             let theme_name = app.state.agent_config.theme.display_name();
-            Line::from(vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    format!("🎨 {}", theme_name),
-                    Style::default()
-                        .fg(t.config_toggle_on)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    if is_selected { "  (Enter 切换)" } else { "" },
-                    Style::default().fg(t.config_dim),
-                ),
-            ])
+            theme_field_row(label, theme_name, is_selected, "Enter \u{5207}\u{6362}", t)
         } else if *field == "system_prompt" || *field == "style" {
-            Line::from(vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-                Span::styled(render_preview_value(&value), value_style),
-                Span::styled(
-                    if is_selected {
-                        "  (Enter 编辑)".to_string()
-                    } else {
-                        String::new()
-                    },
-                    Style::default().fg(t.config_dim),
-                ),
-            ])
-        } else if app.ui.config_editing && is_selected {
-            let mut spans = vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-            ];
-            spans.extend(render_cursor_spans(
-                &value,
-                app.ui.config_edit_cursor,
-                value_style,
-                t.cursor_fg,
-                t.cursor_bg,
-            ));
-            Line::from(spans)
+            preview_field_row(label, &value, is_selected, "Enter \u{7f16}\u{8f91}", t)
         } else {
-            Line::from(vec![
-                Span::styled(pointer, pointer_style),
-                Span::styled(format!("{:<10}", label), label_style),
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    if value.is_empty() {
-                        "(空)".to_string()
-                    } else {
-                        value
-                    },
-                    value_style,
-                ),
-            ])
+            text_field_row(
+                label,
+                &value,
+                is_selected,
+                app.ui.config_editing,
+                app.ui.config_edit_cursor,
+                t,
+            )
         };
         lines.push(line);
+        lines.push(Line::from(""));
     }
 }
 
@@ -468,13 +295,21 @@ fn draw_tab_tools_lines<'a>(
         Style::default().fg(t.config_toggle_off)
     };
     let master_text = if app.state.agent_config.tools_enabled {
-        format!("  总开关: ● 开启 ({}/{})", enabled_count, total)
+        format!(
+            "  \u{603b}\u{5f00}\u{5173}: {} \u{5f00}\u{542f} ({}/{})",
+            super::components::TOGGLE_ON,
+            enabled_count,
+            total
+        )
     } else {
-        "  总开关: ○ 关闭".to_string()
+        format!(
+            "  \u{603b}\u{5f00}\u{5173}: {} \u{5173}\u{95ed}",
+            super::components::TOGGLE_OFF
+        )
     };
     lines.push(Line::from(vec![
         Span::styled(master_text, master_style),
-        Span::styled("  (t 切换)", Style::default().fg(t.config_dim)),
+        Span::styled("  (t \u{5207}\u{6362})", Style::default().fg(t.config_dim)),
     ]));
     lines.push(Line::from(""));
 
@@ -487,35 +322,15 @@ fn draw_tab_tools_lines<'a>(
             .disabled_tools
             .iter()
             .any(|d| d == *name);
-
-        let pointer = if is_selected { "  ▸ " } else { "    " };
-        let pointer_style = if is_selected {
-            Style::default().fg(t.config_pointer)
-        } else {
-            Style::default()
-        };
-        let toggle_style = if is_enabled {
-            Style::default()
-                .fg(t.config_toggle_on)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_toggle_off)
-        };
-        let toggle_text = if is_enabled { "●" } else { "○" };
-        let name_style = if is_selected {
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_label)
-        };
-
-        lines.push(Line::from(vec![
-            Span::styled(pointer, pointer_style),
-            Span::styled(toggle_text, toggle_style),
-            Span::styled(" ", Style::default()),
-            Span::styled(name.to_string(), name_style),
-        ]));
+        lines.push(toggle_list_item(
+            name,
+            is_enabled,
+            is_selected,
+            None,
+            None,
+            t,
+        ));
+        lines.push(Line::from(""));
     }
 }
 
@@ -542,7 +357,7 @@ fn draw_tab_skills_lines<'a>(
             .count();
 
     lines.push(Line::from(vec![Span::styled(
-        format!("  已启用: {}/{}", enabled_count, total),
+        format!("  \u{5df2}\u{542f}\u{7528}: {}/{}", enabled_count, total),
         Style::default()
             .fg(t.config_toggle_on)
             .add_modifier(Modifier::BOLD),
@@ -559,41 +374,15 @@ fn draw_tab_skills_lines<'a>(
             .disabled_skills
             .iter()
             .any(|d| d == name);
-
-        let pointer = if is_selected { "  ▸ " } else { "    " };
-        let pointer_style = if is_selected {
-            Style::default().fg(t.config_pointer)
-        } else {
-            Style::default()
-        };
-        let toggle_style = if is_enabled {
-            Style::default()
-                .fg(t.config_toggle_on)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_toggle_off)
-        };
-        let toggle_text = if is_enabled { "●" } else { "○" };
-        let name_style = if is_selected {
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_label)
-        };
-
-        let source_tag = format!(" [{}]", skill.source.label());
-        lines.push(Line::from(vec![
-            Span::styled(pointer, pointer_style),
-            Span::styled(toggle_text, toggle_style),
-            Span::styled(" ", Style::default()),
-            Span::styled(name.to_string(), name_style),
-            Span::styled(
-                format!("  {}", skill.frontmatter.description),
-                Style::default().fg(t.config_dim),
-            ),
-            Span::styled(source_tag, Style::default().fg(t.config_dim)),
-        ]));
+        lines.push(toggle_list_item(
+            name,
+            is_enabled,
+            is_selected,
+            Some(&skill.frontmatter.description),
+            Some(skill.source.label()),
+            t,
+        ));
+        lines.push(Line::from(""));
     }
 }
 
@@ -613,27 +402,30 @@ fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     if hooks.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  (暂无 hooks)",
+            "  (\u{6682}\u{65e0} hooks)",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  用户级: ~/.jdata/agent/hooks.yaml",
+            "  \u{7528}\u{6237}\u{7ea7}: ~/.jdata/agent/hooks.yaml",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(Span::styled(
-            "  项目级: .jcli/hooks.yaml",
+            "  \u{9879}\u{76ee}\u{7ea7}: .jcli/hooks.yaml",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(Span::styled(
-            "  运行时: 通过 RegisterHook 工具注册",
+            "  \u{8fd0}\u{884c}\u{65f6}: \u{901a}\u{8fc7} RegisterHook \u{5de5}\u{5177}\u{6ce8}\u{518c}",
             Style::default().fg(t.config_dim),
         )));
         return;
     }
 
     lines.push(Line::from(Span::styled(
-        format!("  🪝 已注册 Hooks ({})", hooks.len()),
+        format!(
+            "  \u{1fa9d} \u{5df2}\u{6ce8}\u{518c} Hooks ({})",
+            hooks.len()
+        ),
         Style::default()
             .fg(t.config_label)
             .add_modifier(Modifier::BOLD),
@@ -655,7 +447,7 @@ fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 
         let cmd_display: String = if def.command.chars().count() > 40 {
             let truncated: String = def.command.chars().take(40).collect();
-            format!("{}...", truncated)
+            format!("{truncated}...")
         } else {
             def.command.clone()
         };
@@ -698,7 +490,7 @@ fn draw_tab_commands_lines<'a>(
             .count();
 
     lines.push(Line::from(vec![Span::styled(
-        format!("  已启用: {}/{}", enabled_count, total),
+        format!("  \u{5df2}\u{542f}\u{7528}: {}/{}", enabled_count, total),
         Style::default()
             .fg(t.config_toggle_on)
             .add_modifier(Modifier::BOLD),
@@ -707,7 +499,7 @@ fn draw_tab_commands_lines<'a>(
 
     if total == 0 {
         lines.push(Line::from(Span::styled(
-            "  (没有自定义命令，在 ~/.jdata/agent/commands/ 或 .jcli/commands/ 下创建)",
+            "  (\u{6ca1}\u{6709}\u{81ea}\u{5b9a}\u{4e49}\u{547d}\u{4ee4}\u{ff0c}\u{5728} ~/.jdata/agent/commands/ \u{6216} .jcli/commands/ \u{4e0b}\u{521b}\u{5efa})",
             Style::default().fg(t.config_dim),
         )));
         return;
@@ -723,41 +515,15 @@ fn draw_tab_commands_lines<'a>(
             .disabled_commands
             .iter()
             .any(|d| d == name);
-
-        let pointer = if is_selected { "  ▸ " } else { "    " };
-        let pointer_style = if is_selected {
-            Style::default().fg(t.config_pointer)
-        } else {
-            Style::default()
-        };
-        let toggle_style = if is_enabled {
-            Style::default()
-                .fg(t.config_toggle_on)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_toggle_off)
-        };
-        let toggle_text = if is_enabled { "●" } else { "○" };
-        let name_style = if is_selected {
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_label)
-        };
-
-        let source_tag = format!(" [{}]", cmd.source.label());
-        lines.push(Line::from(vec![
-            Span::styled(pointer, pointer_style),
-            Span::styled(toggle_text, toggle_style),
-            Span::styled(" ", Style::default()),
-            Span::styled(name.to_string(), name_style),
-            Span::styled(
-                format!("  {}", cmd.frontmatter.description),
-                Style::default().fg(t.config_dim),
-            ),
-            Span::styled(source_tag, Style::default().fg(t.config_dim)),
-        ]));
+        lines.push(toggle_list_item(
+            name,
+            is_enabled,
+            is_selected,
+            Some(&cmd.frontmatter.description),
+            Some(cmd.source.label()),
+            t,
+        ));
+        lines.push(Line::from(""));
     }
 }
 
@@ -768,26 +534,23 @@ fn format_timestamp(ts: u64) -> String {
     let now = SystemTime::now();
     let elapsed = now.duration_since(dt).unwrap_or_default();
     if elapsed.as_secs() < 60 {
-        "刚刚".to_string()
+        "\u{521a}\u{521a}".to_string()
     } else if elapsed.as_secs() < 3600 {
-        format!("{}分钟前", elapsed.as_secs() / 60)
+        format!("{}\u{5206}\u{949f}\u{524d}", elapsed.as_secs() / 60)
     } else if elapsed.as_secs() < 86400 {
-        format!("{}小时前", elapsed.as_secs() / 3600)
+        format!("{}\u{5c0f}\u{65f6}\u{524d}", elapsed.as_secs() / 3600)
     } else if elapsed.as_secs() < 86400 * 30 {
-        format!("{}天前", elapsed.as_secs() / 86400)
+        format!("{}\u{5929}\u{524d}", elapsed.as_secs() / 86400)
     } else {
-        // 使用简单日期格式
         let secs = ts;
         let days = secs / 86400;
-        // 简单计算：1970-01-01 起的天数转日期
         let (y, m, d) = days_to_ymd(days);
-        format!("{:04}-{:02}-{:02}", y, m, d)
+        format!("{y:04}-{m:02}-{d:02}")
     }
 }
 
 /// 将 1970-01-01 起的天数转为 (year, month, day)
 fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    // 简单算法，足够展示用途
     let mut y = 1970;
     let mut remaining = days;
     loop {
@@ -829,13 +592,13 @@ fn draw_tab_archive_lines<'a>(
     // 确认还原覆盖层
     if app.ui.restore_confirm_needed {
         lines.push(Line::from(Span::styled(
-            "  ⚠️  当前会话有消息，还原将替换当前对话（当前会话已自动保存）",
+            "  \u{26a0}\u{fe0f}  \u{5f53}\u{524d}\u{4f1a}\u{8bdd}\u{6709}\u{6d88}\u{606f}\u{ff0c}\u{8fd8}\u{539f}\u{5c06}\u{66ff}\u{6362}\u{5f53}\u{524d}\u{5bf9}\u{8bdd}\u{ff08}\u{5f53}\u{524d}\u{4f1a}\u{8bdd}\u{5df2}\u{81ea}\u{52a8}\u{4fdd}\u{5b58}\u{ff09}",
             Style::default()
                 .fg(t.config_toggle_off)
                 .add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::styled(
-            "  按 y/Enter 确认还原，Esc 取消",
+            "  \u{6309} y/Enter \u{786e}\u{8ba4}\u{8fd8}\u{539f}\u{ff0c}Esc \u{53d6}\u{6d88}",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(""));
@@ -843,14 +606,17 @@ fn draw_tab_archive_lines<'a>(
 
     if app.ui.archives.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  (暂无归档)",
+            "  (\u{6682}\u{65e0}\u{5f52}\u{6863})",
             Style::default().fg(t.config_dim),
         )));
         return;
     }
 
     lines.push(Line::from(Span::styled(
-        format!("  归档列表 ({})", app.ui.archives.len()),
+        format!(
+            "  \u{5f52}\u{6863}\u{5217}\u{8868} ({})",
+            app.ui.archives.len()
+        ),
         Style::default()
             .fg(t.config_label)
             .add_modifier(Modifier::BOLD),
@@ -860,33 +626,11 @@ fn draw_tab_archive_lines<'a>(
     for (i, archive) in app.ui.archives.iter().enumerate() {
         field_line_indices.push(lines.len());
         let is_selected = i == app.ui.archive_list_index;
-
-        let pointer = if is_selected { "  ▸ " } else { "    " };
-        let pointer_style = if is_selected {
-            Style::default().fg(t.config_pointer)
-        } else {
-            Style::default()
-        };
-
-        let name_style = if is_selected {
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_label)
-        };
-
         let name_truncated: String = archive.name.chars().take(40).collect();
         let time_str = &archive.created_at;
-
-        lines.push(Line::from(vec![
-            Span::styled(pointer, pointer_style),
-            Span::styled(name_truncated, name_style),
-            Span::styled(
-                format!("  ({} 条, {})", archive.messages.len(), time_str),
-                Style::default().fg(t.config_dim),
-            ),
-        ]));
+        let secondary = format!("({} \u{6761}, {})", archive.messages.len(), time_str);
+        lines.push(selectable_row(&name_truncated, &secondary, is_selected, t));
+        lines.push(Line::from(""));
     }
 }
 
@@ -901,9 +645,15 @@ fn draw_tab_session_lines<'a>(
     // 当前会话信息
     let msg_count = app.state.session.messages.len();
     lines.push(Line::from(vec![
-        Span::styled("  当前会话: ", Style::default().fg(t.config_label)),
         Span::styled(
-            format!("{} ({} 条消息)", &app.session_id, msg_count),
+            "  \u{5f53}\u{524d}\u{4f1a}\u{8bdd}: ",
+            Style::default().fg(t.config_label),
+        ),
+        Span::styled(
+            format!(
+                "{} ({} \u{6761}\u{6d88}\u{606f})",
+                &app.session_id, msg_count
+            ),
             Style::default()
                 .fg(t.config_toggle_on)
                 .add_modifier(Modifier::BOLD),
@@ -914,13 +664,13 @@ fn draw_tab_session_lines<'a>(
     // 确认恢复覆盖层
     if app.ui.session_restore_confirm {
         lines.push(Line::from(Span::styled(
-            "  ⚠️  当前会话有消息，恢复将切换到历史会话（当前会话已自动保存）",
+            "  \u{26a0}\u{fe0f}  \u{5f53}\u{524d}\u{4f1a}\u{8bdd}\u{6709}\u{6d88}\u{606f}\u{ff0c}\u{6062}\u{590d}\u{5c06}\u{5207}\u{6362}\u{5230}\u{5386}\u{53f2}\u{4f1a}\u{8bdd}\u{ff08}\u{5f53}\u{524d}\u{4f1a}\u{8bdd}\u{5df2}\u{81ea}\u{52a8}\u{4fdd}\u{5b58}\u{ff09}",
             Style::default()
                 .fg(t.config_toggle_off)
                 .add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::styled(
-            "  按 y/Enter 确认恢复，Esc 取消",
+            "  \u{6309} y/Enter \u{786e}\u{8ba4}\u{6062}\u{590d}\u{ff0c}Esc \u{53d6}\u{6d88}",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(""));
@@ -928,14 +678,17 @@ fn draw_tab_session_lines<'a>(
 
     if app.ui.session_list.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  (没有历史会话)",
+            "  (\u{6ca1}\u{6709}\u{5386}\u{53f2}\u{4f1a}\u{8bdd})",
             Style::default().fg(t.config_dim),
         )));
         return;
     }
 
     lines.push(Line::from(Span::styled(
-        format!("  历史会话 ({})", app.ui.session_list.len()),
+        format!(
+            "  \u{5386}\u{53f2}\u{4f1a}\u{8bdd} ({})",
+            app.ui.session_list.len()
+        ),
         Style::default()
             .fg(t.config_label)
             .add_modifier(Modifier::BOLD),
@@ -945,36 +698,19 @@ fn draw_tab_session_lines<'a>(
     for (i, session) in app.ui.session_list.iter().enumerate() {
         field_line_indices.push(lines.len());
         let is_selected = i == app.ui.session_list_index;
-
-        let pointer = if is_selected { "  ▸ " } else { "    " };
-        let pointer_style = if is_selected {
-            Style::default().fg(t.config_pointer)
-        } else {
-            Style::default()
-        };
-
         let preview = session
             .first_message_preview
             .as_deref()
-            .unwrap_or("(空会话)");
+            .unwrap_or("(\u{7a7a}\u{4f1a}\u{8bdd})");
         let preview_truncated: String = preview.chars().take(40).collect();
         let time_str = format_timestamp(session.updated_at);
-
-        let name_style = if is_selected {
-            Style::default()
-                .fg(t.config_label_selected)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.config_label)
-        };
-
-        lines.push(Line::from(vec![
-            Span::styled(pointer, pointer_style),
-            Span::styled(preview_truncated, name_style),
-            Span::styled(
-                format!("  ({} 条, {})", session.message_count, time_str),
-                Style::default().fg(t.config_dim),
-            ),
-        ]));
+        let secondary = format!("({} \u{6761}, {})", session.message_count, time_str);
+        lines.push(selectable_row(
+            &preview_truncated,
+            &secondary,
+            is_selected,
+            t,
+        ));
+        lines.push(Line::from(""));
     }
 }
