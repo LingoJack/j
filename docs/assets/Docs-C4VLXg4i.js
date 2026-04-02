@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{t as i}from"./index-D3LW4-Cj.js";import{n as a,t as o}from"./syntax-highlight-DDfxEX0b.js";import{n as s,t as c}from"./LanguageSwitcher-BoZx07nq.js";var l=t(n(),1),u=r();function d({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,u.jsxs)(u.Fragment,{children:[r&&(0,u.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,u.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{t as i}from"./index-BjrEp65J.js";import{n as a,t as o}from"./syntax-highlight-DDfxEX0b.js";import{n as s,t as c}from"./LanguageSwitcher-BoZx07nq.js";var l=t(n(),1),u=r();function d({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,u.jsxs)(u.Fragment,{children:[r&&(0,u.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,u.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-72 bg-[#faf9f6] border-r border-stone-200 
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0
@@ -250,18 +250,20 @@ pre_tool_execution:
 
 ### Execution Environment
 
-- **Execution**: \`sh -c "<command>"\`
-- **Working Directory**: User's current directory
-- **Environment Variables**:
-  - \`JCLI_HOOK_EVENT\`: Event name
-  - \`JCLI_CWD\`: Current directory
+| Item | Description |
+|------|-------------|
+| Execution | \`sh -c "<command>"\` |
+| Working Directory | User's current directory |
+| Environment Variables | \`JCLI_HOOK_EVENT\` (event name), \`JCLI_CWD\` (current directory) |
 
 ### stdin/stdout
 
-- **stdin**: HookContext JSON
-- **stdout**: HookResult JSON (empty or \`{}\` means no modification)
-- **exit 0**: Success
-- **exit non-zero**: Treated as abort
+| Item | Description |
+|------|-------------|
+| stdin | HookContext JSON |
+| stdout | HookResult JSON (empty or \`{}\` means no modification) |
+| exit 0 | Success |
+| exit non-zero | Treated as abort |
 
 ### stdin HookContext Example
 
@@ -985,18 +987,20 @@ pre_tool_execution:
 
 ### 执行环境
 
-- **执行方式**：\`sh -c "<command>"\`
-- **工作目录**：用户当前目录
-- **环境变量**：
-  - \`JCLI_HOOK_EVENT\`：事件名
-  - \`JCLI_CWD\`：当前目录
+| 项目 | 说明 |
+|------|------|
+| 执行方式 | \`sh -c "<command>"\` |
+| 工作目录 | 用户当前目录 |
+| 环境变量 | \`JCLI_HOOK_EVENT\`（事件名）、\`JCLI_CWD\`（当前目录） |
 
 ### stdin/stdout
 
-- **stdin**：HookContext JSON
-- **stdout**：HookResult JSON（空或 \`{}\` 表示无修改）
-- **exit 0**：成功
-- **exit 非 0**：视为 abort
+| 项目 | 说明 |
+|------|------|
+| stdin | HookContext JSON |
+| stdout | HookResult JSON（空或 \`{}\` 表示无修改） |
+| exit 0 | 成功 |
+| exit 非 0 | 视为 abort |
 
 ### stdin HookContext 示例
 

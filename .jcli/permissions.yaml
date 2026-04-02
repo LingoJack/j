@@ -75,4 +75,5 @@ allow:
 - Bash(rm /Users/jacklingo/dev_custom/j/web/src/App.tsx:*)
 - Bash(ifconfig |:*)
 - Bash(git commit:*)
+- Bash(git log:*)
 deny: []
