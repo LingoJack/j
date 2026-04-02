@@ -1168,8 +1168,9 @@ pub fn render_tool_result_msg(
     // 解析 label，格式为 "工具名..." 或 "工具名[id]..."
     let (tool_name, is_error) = parse_tool_label(label);
     let category = ToolCategory::from_name(&tool_name);
-    let icon = category.icon();
     let tool_color = category.color(theme);
+    // tool_result 统一使用 🔧 图标，与 tool_call_request 的分类图标区分
+    let icon = "🔧";
 
     let status = if is_error {
         ToolStatus::Failed

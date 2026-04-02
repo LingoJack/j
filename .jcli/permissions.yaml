@@ -81,4 +81,5 @@ allow:
 - Bash(find /Users/jacklingo/dev_custom:*)
 - Bash(cat >:*)
 - Bash(find /Users/jacklingo:*)
+- Bash(tree -L:*)
 deny: []
