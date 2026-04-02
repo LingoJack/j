@@ -61,18 +61,20 @@ pre_tool_execution:
 
 ### 执行环境
 
-- **执行方式**：`sh -c "<command>"`
-- **工作目录**：用户当前目录
-- **环境变量**：
-  - `JCLI_HOOK_EVENT`：事件名
-  - `JCLI_CWD`：当前目录
+| 项目 | 说明 |
+|------|------|
+| 执行方式 | `sh -c "<command>"` |
+| 工作目录 | 用户当前目录 |
+| 环境变量 | `JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（当前目录） |
 
 ### stdin/stdout
 
-- **stdin**：HookContext JSON
-- **stdout**：HookResult JSON（空或 `{}` 表示无修改）
-- **exit 0**：成功
-- **exit 非 0**：视为 abort
+| 项目 | 说明 |
+|------|------|
+| stdin | HookContext JSON |
+| stdout | HookResult JSON（空或 `{}` 表示无修改） |
+| exit 0 | 成功 |
+| exit 非 0 | 视为 abort |
 
 ### stdin HookContext 示例
 

@@ -61,18 +61,20 @@ pre_tool_execution:
 
 ### Execution Environment
 
-- **Execution**: `sh -c "<command>"`
-- **Working Directory**: User's current directory
-- **Environment Variables**:
-  - `JCLI_HOOK_EVENT`: Event name
-  - `JCLI_CWD`: Current directory
+| Item | Description |
+|------|-------------|
+| Execution | `sh -c "<command>"` |
+| Working Directory | User's current directory |
+| Environment Variables | `JCLI_HOOK_EVENT` (event name), `JCLI_CWD` (current directory) |
 
 ### stdin/stdout
 
-- **stdin**: HookContext JSON
-- **stdout**: HookResult JSON (empty or `{}` means no modification)
-- **exit 0**: Success
-- **exit non-zero**: Treated as abort
+| Item | Description |
+|------|-------------|
+| stdin | HookContext JSON |
+| stdout | HookResult JSON (empty or `{}` means no modification) |
+| exit 0 | Success |
+| exit non-zero | Treated as abort |
 
 ### stdin HookContext Example
 
