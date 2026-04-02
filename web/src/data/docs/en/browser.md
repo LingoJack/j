@@ -32,7 +32,7 @@ Default mode using HTTP requests to fetch web content:
 | `tabs` | List open tabs |
 | `close` | Close tab |
 
-Limitations: Does not support `click`, `type`, `press`, `evaluate`, `screenshot`
+**Limitations:** Does not support `click`, `type`, `press`, `evaluate`, `screenshot`
 
 ## CDP Mode
 

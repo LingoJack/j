@@ -79,4 +79,5 @@ allow:
 - Bash(find ../claude-code/claude-code-backup/src:*)
 - Bash(find /Users/jacklingo/dev_custom/j/claude-code:*)
 - Bash(find /Users/jacklingo/dev_custom:*)
+- Bash(cat >:*)
 deny: []

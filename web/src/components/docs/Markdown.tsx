@@ -46,57 +46,59 @@ function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
   let keyIndex = 0
   
   while (remaining.length > 0) {
-    // Inline code
+    // Find all matches and pick the one with smallest index
     const codeMatch = remaining.match(/`([^`]+)`/)
+    const boldMatch = remaining.match(/\*\*([^*]+)\*\*/)
+    const italicMatch = remaining.match(/\*([^*]+)\*/)
+    
+    // Collect all valid matches with their indices
+    const matches: Array<{ type: string; match: RegExpMatchArray; index: number }> = []
     if (codeMatch && codeMatch.index !== undefined) {
-      const before = remaining.slice(0, codeMatch.index)
-      if (before) {
-        parts.push(<span key={`${baseKey}-txt-${keyIndex++}`}>{before}</span>)
-      }
+      matches.push({ type: 'code', match: codeMatch, index: codeMatch.index })
+    }
+    if (boldMatch && boldMatch.index !== undefined) {
+      matches.push({ type: 'bold', match: boldMatch, index: boldMatch.index })
+    }
+    if (italicMatch && italicMatch.index !== undefined) {
+      matches.push({ type: 'italic', match: italicMatch, index: italicMatch.index })
+    }
+    
+    // No matches found
+    if (matches.length === 0) {
+      parts.push(<span key={`${baseKey}-txt-${keyIndex++}`}>{remaining}</span>)
+      break
+    }
+    
+    // Sort by index and pick the first one
+    matches.sort((a, b) => a.index - b.index)
+    const first = matches[0]
+    
+    const before = remaining.slice(0, first.index)
+    if (before) {
+      parts.push(<span key={`${baseKey}-txt-${keyIndex++}`}>{before}</span>)
+    }
+    
+    if (first.type === 'code') {
       parts.push(
         <code key={`${baseKey}-code-${keyIndex++}`} className="bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono">
-          {codeMatch[1]}
+          {first.match[1]}
         </code>
       )
-      remaining = remaining.slice(codeMatch.index + codeMatch[0].length)
-      continue
-    }
-    
-    // Bold
-    const boldMatch = remaining.match(/\*\*([^*]+)\*\*/)
-    if (boldMatch && boldMatch.index !== undefined) {
-      const before = remaining.slice(0, boldMatch.index)
-      if (before) {
-        parts.push(<span key={`${baseKey}-txt-${keyIndex++}`}>{before}</span>)
-      }
+    } else if (first.type === 'bold') {
       parts.push(
         <strong key={`${baseKey}-bold-${keyIndex++}`} className="font-medium text-stone-900">
-          {boldMatch[1]}
+          {first.match[1]}
         </strong>
       )
-      remaining = remaining.slice(boldMatch.index + boldMatch[0].length)
-      continue
-    }
-    
-    // Italic
-    const italicMatch = remaining.match(/\*([^*]+)\*/)
-    if (italicMatch && italicMatch.index !== undefined) {
-      const before = remaining.slice(0, italicMatch.index)
-      if (before) {
-        parts.push(<span key={`${baseKey}-txt-${keyIndex++}`}>{before}</span>)
-      }
+    } else if (first.type === 'italic') {
       parts.push(
         <em key={`${baseKey}-italic-${keyIndex++}`} className="italic">
-          {italicMatch[1]}
+          {first.match[1]}
         </em>
       )
-      remaining = remaining.slice(italicMatch.index + italicMatch[0].length)
-      continue
     }
     
-    // No more matches, push remaining text
-    parts.push(<span key={`${baseKey}-txt-${keyIndex++}`}>{remaining}</span>)
-    break
+    remaining = remaining.slice(first.index + first.match[0].length)
   }
   
   return parts.length > 0 ? parts : text
