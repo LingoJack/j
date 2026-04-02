@@ -1,44 +1,63 @@
-## 命令
+## 概述
 
-| 命令 | 描述 |
-|------|------|
-| `j report [内容]` | 写入日报（无内容时打开 TUI） |
-| `j check [n]` | 查看最近 n 行（默认 10 行） |
-| `j search <关键词>` | 模糊搜索日报 |
+日报/周报系统，支持快速记录、周报管理和 Git 同步。
 
-## 示例
+## 基本命令
 
 ```bash
-# 快速写入
-j report "完成用户认证模块"
-j report "团队会议" "讨论冲刺计划"
-
-# 查看日报
-j check          # 查看最近 10 行
-j check 20       # 查看最近 20 行
-
-# 搜索
-j search 认证
-j search "用户模块" -fuzzy
+j report <内容>         # 快速写入日报
+j report                # 打开 TUI 编辑器（预填历史+日期前缀）
+j check [n]             # 查看最近 n 行（默认 3 行）
+j check open            # 打开 TUI 编辑器编辑全文
+j search <n|all> <关键词> [-f]  # 搜索周报（-f 模糊匹配）
 ```
 
-## TUI 编辑器
+## 周报管理 (reportctl)
 
-不带参数运行 `j report` 会打开 TUI 编辑器：
+```bash
+j reportctl new [日期]      # 开启新的一周
+j reportctl sync [日期]     # 同步周数和日期
+j reportctl set-url <url>   # 设置 Git 仓库地址
+j reportctl push [message]  # 推送到远程仓库
+j reportctl pull            # 从远程仓库拉取
+j reportctl open            # 打开 TUI 编辑器编辑全文
+```
 
-- **多行编辑**：支持更长的内容和格式化
-- **历史建议**：从历史记录自动补全
-- **Tab 补全**：快速插入常用短语
+## 日报格式
+
+```markdown
+# Week1[2024-01-01 - 2024-01-07]
+- 【01-01】 完成项目初始化
+- 【01-02】 实现核心功能
+- 【01-03】 代码审查和优化
+```
 
 ## Git 同步
 
-```bash
-# 初始化 Git 同步
-cd ~/.jdata/report
-git init
-git remote add origin <你的仓库>
+设置远程仓库后可自动同步：
 
-# 日常工作流
-j report "完成功能"
-j reportctl push   # 同步到远程
+```bash
+# 首次设置
+j reportctl set-url https://github.com/user/reports.git
+
+# 推送到远程
+j reportctl push "更新周报"
+
+# 从远程拉取
+j reportctl pull
 ```
+
+## 配置文件
+
+日报配置存储在两个位置：
+
+| 文件 | 描述 |
+|------|------|
+| `~/.jdata/config.yaml` | 主配置（report_file_path、git_repo） |
+| `<report_dir>/settings.json` | 周报元数据（week_num、last_day） |
+
+## 自动周切换
+
+当当前日期超过 `last_day` 时，写入日报会自动：
+1. 生成新周标题 `# WeekN[开始日期 - 结束日期]`
+2. 更新 week_num 和 last_day

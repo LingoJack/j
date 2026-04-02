@@ -1,33 +1,33 @@
 ## 概述
 
-Hook 允许在特定事件时运行自定义脚本，通过 `RegisterHook` 工具管理。
+Hook 允许在特定事件时运行自定义脚本，通过 `RegisterHook` 工具或配置文件管理。
 
 ## Hook 事件
 
-| 事件 | 触发时机 |
-|------|----------|
-| `pre_send_message` | 用户消息发送前 |
-| `post_send_message` | 用户消息发送后 |
-| `pre_llm_request` | LLM 请求前 |
-| `post_llm_response` | LLM 回复后 |
-| `pre_tool_execution` | 工具执行前 |
-| `post_tool_execution` | 工具执行后 |
-| `session_start` | 会话开始 |
-| `session_end` | 会话结束 |
+| 事件 | 触发时机 | 可读字段 | 可写字段 |
+|------|----------|----------|----------|
+| `pre_send_message` | 用户消息发送前 | user_input, messages | user_input, abort |
+| `post_send_message` | 用户消息发送后 | user_input, messages | 仅通知，返回值忽略 |
+| `pre_llm_request` | LLM 请求前 | messages, system_prompt, model | messages, system_prompt, inject_messages, abort |
+| `post_llm_response` | LLM 回复后 | assistant_output, messages | assistant_output |
+| `pre_tool_execution` | 工具执行前 | tool_name, tool_arguments | tool_arguments, abort |
+| `post_tool_execution` | 工具执行后 | tool_name, tool_result | tool_result |
+| `session_start` | 会话开始 | messages | 仅通知 |
+| `session_end` | 会话结束 | messages | 仅通知 |
 
-## 注册 Hook
+## 使用 RegisterHook 工具
 
-通过 `RegisterHook` 工具管理 session 级 hook：
+在 AI 对话中通过工具管理 session 级 hook：
 
 ```
-# 查看 hook 协议文档
+# 查看协议文档
 RegisterHook action="help"
 
 # 列出已注册的 hook
 RegisterHook action="list"
 
 # 注册 hook
-RegisterHook event="pre_send_message" command="echo '发送消息...'"
+RegisterHook event="pre_send_message" command="echo '{\"user_input\": \"[modified]\"}'" timeout=10
 
 # 移除 hook
 RegisterHook action="remove" event="pre_send_message" index=0
@@ -35,25 +35,125 @@ RegisterHook action="remove" event="pre_send_message" index=0
 
 ## 配置文件
 
-Hook 也可以通过配置文件管理：
+通过 YAML 文件管理持久化 hook：
 
 ```yaml
 # 用户级: ~/.jdata/agent/hooks.yaml
 # 项目级: .jcli/hooks.yaml
 
-hooks:
-  - event: pre_send_message
-    command: "echo '发送消息...'"
+pre_send_message:
+  - command: "echo '{\"user_input\": \"[timestamp] \" + $(cat | jq -r .user_input)}'"
+    timeout: 5
+
+pre_tool_execution:
+  - command: |
+      input=$(cat)
+      tool=$(echo "$input" | jq -r .tool_name)
+      if [ "$tool" = "Bash" ]; then
+        echo '{"abort": true}'
+      else
+        echo '{}'
+      fi
     timeout: 10
 ```
 
-## Hook 脚本协议
+## 脚本协议
 
-脚本通过 stdin 接收 JSON，通过 stdout 返回修改：
+### 执行环境
+
+- **执行方式**：`sh -c "<command>"`
+- **工作目录**：用户当前目录
+- **环境变量**：
+  - `JCLI_HOOK_EVENT`：事件名
+  - `JCLI_CWD`：当前目录
+
+### stdin/stdout
+
+- **stdin**：HookContext JSON
+- **stdout**：HookResult JSON（空或 `{}` 表示无修改）
+- **exit 0**：成功
+- **exit 非 0**：视为 abort
+
+### stdin HookContext 示例
+
+```json
+{
+  "event": "pre_send_message",
+  "cwd": "/path/to/project",
+  "user_input": "用户输入文本",
+  "messages": [{"role": "user", "content": "..."}],
+  "system_prompt": "系统提示词",
+  "model": "gpt-4o",
+  "assistant_output": "AI 回复文本",
+  "tool_name": "Bash",
+  "tool_arguments": "{\"command\": \"ls\"}",
+  "tool_result": "工具执行结果"
+}
+```
+
+### stdout HookResult 示例
+
+```json
+{
+  "user_input": "修改后的用户消息",
+  "assistant_output": "修改后的 AI 回复",
+  "messages": [{"role": "user", "content": "..."}],
+  "system_prompt": "修改后的提示词",
+  "tool_arguments": "修改后的工具参数",
+  "tool_result": "修改后的工具结果",
+  "inject_messages": [{"role": "user", "content": "注入消息"}],
+  "abort": false
+}
+```
+
+## 脚本示例
+
+### 给用户消息加时间戳
 
 ```bash
 #!/bin/bash
 input=$(cat)
-# 修改 user_input
-echo '{"user_input": "修改后的消息"}'
+msg=$(echo "$input" | jq -r .user_input)
+echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
 ```
+
+### 拦截危险命令
+
+```bash
+#!/bin/bash
+input=$(cat)
+tool=$(echo "$input" | jq -r .tool_name)
+args=$(echo "$input" | jq -r .tool_arguments)
+
+if [ "$tool" = "Bash" ] && echo "$args" | grep -q "rm -rf"; then
+  echo '{"abort": true}'
+else
+  echo '{}'
+fi
+```
+
+### 纯通知 hook
+
+```bash
+#!/bin/bash
+cat > /dev/null  # 必须读取 stdin，否则可能 SIGPIPE
+```
+
+## 三级 Hook 优先级
+
+Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
+
+| 级别 | 配置位置 | 生命周期 |
+|------|----------|----------|
+| 用户级 | `~/.jdata/agent/hooks.yaml` | 持久化 |
+| 项目级 | `.jcli/hooks.yaml` | 项目内持久化 |
+| Session 级 | RegisterHook 工具 | 仅当前会话 |
+
+链式执行时，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。任何 `abort` 立即中止整条链。
+
+## 注意事项
+
+- 先用 Write/Bash 工具创建脚本文件，再用 RegisterHook 注册
+- 脚本必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
+- timeout 默认 10 秒，超时后脚本被 kill
+- 只有 session 级 hook 可通过工具管理；用户级/项目级需手动编辑配置文件

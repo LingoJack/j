@@ -1,33 +1,33 @@
 ## Overview
 
-Hooks allow running custom scripts on specific events, managed via the `RegisterHook` tool.
+Hooks allow running custom scripts on specific events, managed via the `RegisterHook` tool or config files.
 
 ## Hook Events
 
-| Event | When Triggered |
-|-------|----------------|
-| `pre_send_message` | Before sending user message |
-| `post_send_message` | After sending user message |
-| `pre_llm_request` | Before LLM request |
-| `post_llm_response` | After LLM response |
-| `pre_tool_execution` | Before tool execution |
-| `post_tool_execution` | After tool execution |
-| `session_start` | When session starts |
-| `session_end` | When session ends |
+| Event | When Triggered | Readable Fields | Writable Fields |
+|-------|----------------|-----------------|-----------------|
+| `pre_send_message` | Before sending user message | user_input, messages | user_input, abort |
+| `post_send_message` | After sending user message | user_input, messages | Notification only |
+| `pre_llm_request` | Before LLM request | messages, system_prompt, model | messages, system_prompt, inject_messages, abort |
+| `post_llm_response` | After LLM response | assistant_output, messages | assistant_output |
+| `pre_tool_execution` | Before tool execution | tool_name, tool_arguments | tool_arguments, abort |
+| `post_tool_execution` | After tool execution | tool_name, tool_result | tool_result |
+| `session_start` | Session starts | messages | Notification only |
+| `session_end` | Session ends | messages | Notification only |
 
-## Register Hooks
+## Using RegisterHook Tool
 
-Manage session-level hooks via `RegisterHook` tool:
+Manage session-level hooks via tool in AI chat:
 
 ```
-# View hook protocol documentation
+# View protocol documentation
 RegisterHook action="help"
 
 # List registered hooks
 RegisterHook action="list"
 
 # Register a hook
-RegisterHook event="pre_send_message" command="echo 'Sending...'"
+RegisterHook event="pre_send_message" command="echo '{\"user_input\": \"[modified]\"}'" timeout=10
 
 # Remove a hook
 RegisterHook action="remove" event="pre_send_message" index=0
@@ -35,25 +35,125 @@ RegisterHook action="remove" event="pre_send_message" index=0
 
 ## Configuration Files
 
-Hooks can also be managed via config files:
+Manage persistent hooks via YAML files:
 
 ```yaml
 # User level: ~/.jdata/agent/hooks.yaml
 # Project level: .jcli/hooks.yaml
 
-hooks:
-  - event: pre_send_message
-    command: "echo 'Sending...'"
+pre_send_message:
+  - command: "echo '{\"user_input\": \"[timestamp] \" + $(cat | jq -r .user_input)}'"
+    timeout: 5
+
+pre_tool_execution:
+  - command: |
+      input=$(cat)
+      tool=$(echo "$input" | jq -r .tool_name)
+      if [ "$tool" = "Bash" ]; then
+        echo '{"abort": true}'
+      else
+        echo '{}'
+      fi
     timeout: 10
 ```
 
-## Hook Script Protocol
+## Script Protocol
 
-Scripts receive JSON via stdin, return modifications via stdout:
+### Execution Environment
+
+- **Execution**: `sh -c "<command>"`
+- **Working Directory**: User's current directory
+- **Environment Variables**:
+  - `JCLI_HOOK_EVENT`: Event name
+  - `JCLI_CWD`: Current directory
+
+### stdin/stdout
+
+- **stdin**: HookContext JSON
+- **stdout**: HookResult JSON (empty or `{}` means no modification)
+- **exit 0**: Success
+- **exit non-zero**: Treated as abort
+
+### stdin HookContext Example
+
+```json
+{
+  "event": "pre_send_message",
+  "cwd": "/path/to/project",
+  "user_input": "User input text",
+  "messages": [{"role": "user", "content": "..."}],
+  "system_prompt": "System prompt",
+  "model": "gpt-4o",
+  "assistant_output": "AI response text",
+  "tool_name": "Bash",
+  "tool_arguments": "{\"command\": \"ls\"}",
+  "tool_result": "Tool execution result"
+}
+```
+
+### stdout HookResult Example
+
+```json
+{
+  "user_input": "Modified user message",
+  "assistant_output": "Modified AI response",
+  "messages": [{"role": "user", "content": "..."}],
+  "system_prompt": "Modified prompt",
+  "tool_arguments": "Modified tool arguments",
+  "tool_result": "Modified tool result",
+  "inject_messages": [{"role": "user", "content": "Injected message"}],
+  "abort": false
+}
+```
+
+## Script Examples
+
+### Add Timestamp to User Message
 
 ```bash
 #!/bin/bash
 input=$(cat)
-# Modify user_input
-echo '{"user_input": "Modified message"}'
+msg=$(echo "$input" | jq -r .user_input)
+echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
 ```
+
+### Block Dangerous Commands
+
+```bash
+#!/bin/bash
+input=$(cat)
+tool=$(echo "$input" | jq -r .tool_name)
+args=$(echo "$input" | jq -r .tool_arguments)
+
+if [ "$tool" = "Bash" ] && echo "$args" | grep -q "rm -rf"; then
+  echo '{"abort": true}'
+else
+  echo '{}'
+fi
+```
+
+### Notification-only Hook
+
+```bash
+#!/bin/bash
+cat > /dev/null  # Must read stdin to avoid SIGPIPE
+```
+
+## Three-Level Hook Priority
+
+Hooks exist at three levels, executed in order: User → Project → Session
+
+| Level | Config Location | Lifecycle |
+|-------|-----------------|-----------|
+| User | `~/.jdata/agent/hooks.yaml` | Persistent |
+| Project | `.jcli/hooks.yaml` | Persistent within project |
+| Session | RegisterHook tool | Current session only |
+
+During chain execution, the previous hook's output updates the context for the next hook. Any `abort` immediately stops the entire chain.
+
+## Notes
+
+- Create script files with Write/Bash tools first, then register with RegisterHook
+- Scripts must read from stdin (at least `cat > /dev/null`) to avoid SIGPIPE
+- Default timeout is 10 seconds; scripts are killed on timeout
+- Only session-level hooks can be managed via tool; user/project levels require manual config editing
