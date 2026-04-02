@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-BDsSqDTz.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-Bkh9sIyi.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-72 bg-[#faf9f6] border-r border-stone-200 
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0
@@ -16,10 +16,11 @@ Agent mode is an enhanced AI chat mode with autonomous multi-step reasoning and 
 
 \`\`\`bash
 j chat              # Enter TUI chat
-j chat --auto-apply # Auto-apply all tools (skip confirmation)
 \`\`\`
 
 In the conversation, AI automatically uses tools to execute multi-step operations as needed.
+
+> **Auto-apply tools**: Create \`.jcli/permissions.yaml\` in project root with \`allow_all: true\` to skip all tool confirmations. See "Tool Permission Configuration" below.
 
 ## Features
 
@@ -869,10 +870,11 @@ Agent 模式是 AI 对话的增强模式，支持自主多步推理和工具调�
 
 \`\`\`bash
 j chat              # 进入 TUI 对话
-j chat --auto-apply # 自动应用所有工具（跳过确认）
 \`\`\`
 
 在对话中，AI 会根据任务需要自动使用工具执行多步操作。
+
+> **自动应用工具**：在项目根目录创建 \`.jcli/permissions.yaml\`，设置 \`allow_all: true\` 可跳过所有工具确认。详见下方"工具权限配置"。
 
 ## 功能特性
 

@@ -6,10 +6,11 @@ Agent mode is an enhanced AI chat mode with autonomous multi-step reasoning and 
 
 ```bash
 j chat              # Enter TUI chat
-j chat --auto-apply # Auto-apply all tools (skip confirmation)
 ```
 
 In the conversation, AI automatically uses tools to execute multi-step operations as needed.
+
+> **Auto-apply tools**: Create `.jcli/permissions.yaml` in project root with `allow_all: true` to skip all tool confirmations. See "Tool Permission Configuration" below.
 
 ## Features
 
