@@ -357,6 +357,7 @@ pub async fn run_agent_loop(
                 }
                 // fallback 非流式正常结束，但如果有用户增量消息则继续循环
                 if !safe_lock(&pending_user_messages, "agent::pending_check_fallback").is_empty() {
+                    flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
                     continue;
                 }
                 break;
@@ -405,6 +406,7 @@ pub async fn run_agent_loop(
             } else {
                 // 正常结束，但如果有用户增量消息则继续循环
                 if !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty() {
+                    flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
                     continue;
                 }
                 break;
@@ -476,6 +478,7 @@ pub async fn run_agent_loop(
             }
             // 非流式正常结束，但如果有用户增量消息则继续循环
             if !safe_lock(&pending_user_messages, "agent::pending_check_non_stream").is_empty() {
+                flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
                 continue;
             }
             break;
@@ -524,6 +527,28 @@ fn extract_tool_items(raw_tool_list: &[ChatCompletionMessageToolCalls]) -> Vec<T
 fn push_shared(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
     if let Ok(mut msgs) = shared.lock() {
         msgs.push(msg);
+    }
+}
+
+/// 将 streaming_content 中的文本保存为 assistant 消息（多轮 agent loop 中间轮的文本回复）
+/// 调用后 streaming_content 被清空，避免 UI 侧 finish_loading 再次保存导致重复
+fn flush_streaming_as_message(
+    streaming_content: &Arc<Mutex<String>>,
+    messages: &mut Vec<ChatMessage>,
+    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+) {
+    let mut sc = safe_lock(streaming_content, "agent::flush_streaming");
+    if !sc.is_empty() {
+        let text_msg = ChatMessage {
+            role: ROLE_ASSISTANT.to_string(),
+            content: sc.clone(),
+            tool_calls: None,
+            tool_call_id: None,
+            images: None,
+        };
+        messages.push(text_msg.clone());
+        push_shared(shared_messages, text_msg);
+        sc.clear();
     }
 }
 
