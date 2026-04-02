@@ -140,6 +140,9 @@ export function getOrderedSections(): string[] {
   ]
 }
 
+// Default section (first in order)
+export const defaultSection = 'installation'
+
 // Import all markdown files as raw strings
 const mdFilesEn = import.meta.glob<{ default: string }>(
   './en/*.md',

@@ -1,14 +1,14 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{t as i}from"./index-BjrEp65J.js";import{n as a,t as o}from"./syntax-highlight-DDfxEX0b.js";import{n as s,t as c}from"./LanguageSwitcher-BoZx07nq.js";var l=t(n(),1),u=r();function d({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,u.jsxs)(u.Fragment,{children:[r&&(0,u.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,u.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-D7OgJH_x.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-72 bg-[#faf9f6] border-r border-stone-200 
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0
         ${r?`translate-x-0`:`-translate-x-full`}
-      `,children:(0,u.jsx)(`nav`,{className:`p-6`,children:Object.entries(e).map(([e,r])=>(0,u.jsxs)(`div`,{className:`mb-6`,children:[(0,u.jsx)(`h3`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3`,children:r.title}),(0,u.jsx)(`ul`,{className:`space-y-1`,children:Object.entries(r.children).map(([e,r])=>(0,u.jsx)(`li`,{children:(0,u.jsx)(`button`,{onClick:()=>{n(e),i()},className:`
+      `,children:(0,d.jsx)(`nav`,{className:`p-6`,children:Object.entries(e).map(([e,r])=>(0,d.jsxs)(`div`,{className:`mb-6`,children:[(0,d.jsx)(`h3`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3`,children:r.title}),(0,d.jsx)(`ul`,{className:`space-y-1`,children:Object.entries(r.children).map(([e,r])=>(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>{n(e),i()},className:`
                         w-full text-left px-3 py-2 rounded-lg text-sm transition-colors
                         ${t===e?`bg-stone-200 text-stone-900 font-medium`:`text-stone-600 hover:bg-stone-100`}
-                      `,children:r})},e))})]},e))})})]})}var f={bash:`bash`,shell:`bash`,sh:`bash`,zsh:`bash`,typescript:`typescript`,ts:`typescript`,javascript:`javascript`,js:`javascript`,python:`python`,py:`python`,rust:`rust`,rs:`rust`,go:`go`,golang:`go`,java:`java`,c:`c`,cpp:`cpp`,"c++":`cpp`,csharp:`csharp`,"c#":`csharp`,ruby:`ruby`,rb:`ruby`,sql:`sql`,json:`json`,yaml:`yaml`,yml:`yaml`,toml:`toml`,markdown:`markdown`,md:`markdown`,html:`html`,css:`css`,scss:`scss`};function p(e,t){let n=[],r=e,i=0;for(;r.length>0;){let e=r.match(/`([^`]+)`/);if(e&&e.index!==void 0){let a=r.slice(0,e.index);a&&n.push((0,u.jsx)(`span`,{children:a},`${t}-txt-${i++}`)),n.push((0,u.jsx)(`code`,{className:`bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono`,children:e[1]},`${t}-code-${i++}`)),r=r.slice(e.index+e[0].length);continue}let a=r.match(/\*\*([^*]+)\*\*/);if(a&&a.index!==void 0){let e=r.slice(0,a.index);e&&n.push((0,u.jsx)(`span`,{children:e},`${t}-txt-${i++}`)),n.push((0,u.jsx)(`strong`,{className:`font-medium text-stone-900`,children:a[1]},`${t}-bold-${i++}`)),r=r.slice(a.index+a[0].length);continue}let o=r.match(/\*([^*]+)\*/);if(o&&o.index!==void 0){let e=r.slice(0,o.index);e&&n.push((0,u.jsx)(`span`,{children:e},`${t}-txt-${i++}`)),n.push((0,u.jsx)(`em`,{className:`italic`,children:o[1]},`${t}-italic-${i++}`)),r=r.slice(o.index+o[0].length);continue}n.push((0,u.jsx)(`span`,{children:r},`${t}-txt-${i++}`));break}return n.length>0?n:e}function m({content:e}){return(0,u.jsx)(u.Fragment,{children:(0,l.useMemo)(()=>{let t=e.split(`
-`),n=[],r=!1,i=``,c=``,l=!1,d=[],m=0,h=()=>{if(d.length>0){let e=Math.max(...d.map(e=>e.length)),t=`table-${m++}`;n.push((0,u.jsx)(`div`,{className:`overflow-x-auto my-4`,children:(0,u.jsxs)(`table`,{className:`min-w-full border-collapse`,children:[(0,u.jsx)(`thead`,{children:(0,u.jsx)(`tr`,{children:d[0]?.map((e,n)=>(0,u.jsx)(`th`,{className:`border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium`,children:p(e,`${t}-h${n}`)},`th-${n}`))})}),(0,u.jsx)(`tbody`,{children:d.slice(1).map((n,r)=>(0,u.jsx)(`tr`,{children:Array.from({length:e}).map((e,i)=>(0,u.jsx)(`td`,{className:`border border-stone-200 px-4 py-2 text-sm`,children:p(n[i]||``,`${t}-r${r}c${i}`)},`td-${i}`))},`tr-${r}`))})]})},t)),d=[]}};return t.forEach(e=>{let t=`line-${m++}`;if(e.startsWith("```")){if(!r)h(),r=!0,c=e.slice(3).trim()||`text`,i=``;else{r=!1;let e=f[c.toLowerCase()]||c||`text`;n.push((0,u.jsxs)(`div`,{className:`relative group my-4`,children:[(0,u.jsx)(a,{language:e,style:o,customStyle:{margin:0,borderRadius:`0.5rem`,fontSize:`0.875rem`,backgroundColor:`#faf9f6`,border:`1px solid #e7e5e4`},codeTagProps:{style:{fontFamily:`ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace`}},children:i}),(0,u.jsx)(s,{text:i})]},`code-${m++}`))}return}if(r){i+=(i?`
-`:``)+e;return}if(e.startsWith(`|`)){l||(l=!0,d=[]);let t=e.split(`|`).slice(1,-1).map(e=>e.trim());e.includes(`---`)||d.push(t);return}else l&&(l=!1,h());if(e.startsWith(`> `)){n.push((0,u.jsx)(`blockquote`,{className:`border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic`,children:p(e.slice(2),`${t}-q`)},t));return}if(e.startsWith(`## `)){n.push((0,u.jsx)(`h2`,{className:`text-2xl font-light text-stone-900 mt-8 mb-4`,children:p(e.slice(3),`${t}-h2`)},t));return}if(e.startsWith(`### `)){n.push((0,u.jsx)(`h3`,{className:`text-lg font-medium text-stone-900 mt-6 mb-3`,children:p(e.slice(4),`${t}-h3`)},t));return}if(e.startsWith(`- `)||e.startsWith(`* `)){n.push((0,u.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-disc`,children:p(e.slice(2),`${t}-li`)},t));return}let g=e.match(/^(\d+)\.\s/);if(g){n.push((0,u.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-decimal`,children:p(e.slice(g[0].length),`${t}-nli`)},t));return}e.trim()&&n.push((0,u.jsx)(`p`,{className:`text-stone-600 text-sm leading-relaxed mb-3`,children:p(e,`${t}-p`)},t))}),l&&h(),n},[e])})}var h=e({default:()=>g}),g=`## Overview
+                      `,children:r})},e))})]},e))})})]})}var p={bash:`bash`,shell:`bash`,sh:`bash`,zsh:`bash`,typescript:`typescript`,ts:`typescript`,javascript:`javascript`,js:`javascript`,python:`python`,py:`python`,rust:`rust`,rs:`rust`,go:`go`,golang:`go`,java:`java`,c:`c`,cpp:`cpp`,"c++":`cpp`,csharp:`csharp`,"c#":`csharp`,ruby:`ruby`,rb:`ruby`,sql:`sql`,json:`json`,yaml:`yaml`,yml:`yaml`,toml:`toml`,markdown:`markdown`,md:`markdown`,html:`html`,css:`css`,scss:`scss`};function m(e,t){let n=[],r=e,i=0;for(;r.length>0;){let e=r.match(/`([^`]+)`/);if(e&&e.index!==void 0){let a=r.slice(0,e.index);a&&n.push((0,d.jsx)(`span`,{children:a},`${t}-txt-${i++}`)),n.push((0,d.jsx)(`code`,{className:`bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono`,children:e[1]},`${t}-code-${i++}`)),r=r.slice(e.index+e[0].length);continue}let a=r.match(/\*\*([^*]+)\*\*/);if(a&&a.index!==void 0){let e=r.slice(0,a.index);e&&n.push((0,d.jsx)(`span`,{children:e},`${t}-txt-${i++}`)),n.push((0,d.jsx)(`strong`,{className:`font-medium text-stone-900`,children:a[1]},`${t}-bold-${i++}`)),r=r.slice(a.index+a[0].length);continue}let o=r.match(/\*([^*]+)\*/);if(o&&o.index!==void 0){let e=r.slice(0,o.index);e&&n.push((0,d.jsx)(`span`,{children:e},`${t}-txt-${i++}`)),n.push((0,d.jsx)(`em`,{className:`italic`,children:o[1]},`${t}-italic-${i++}`)),r=r.slice(o.index+o[0].length);continue}n.push((0,d.jsx)(`span`,{children:r},`${t}-txt-${i++}`));break}return n.length>0?n:e}function h({content:e}){return(0,d.jsx)(d.Fragment,{children:(0,u.useMemo)(()=>{let t=e.split(`
+`),n=[],r=!1,i=``,a=``,l=!1,u=[],f=0,h=()=>{if(u.length>0){let e=Math.max(...u.map(e=>e.length)),t=`table-${f++}`;n.push((0,d.jsx)(`div`,{className:`overflow-x-auto my-4`,children:(0,d.jsxs)(`table`,{className:`min-w-full border-collapse`,children:[(0,d.jsx)(`thead`,{children:(0,d.jsx)(`tr`,{children:u[0]?.map((e,n)=>(0,d.jsx)(`th`,{className:`border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium`,children:m(e,`${t}-h${n}`)},`th-${n}`))})}),(0,d.jsx)(`tbody`,{children:u.slice(1).map((n,r)=>(0,d.jsx)(`tr`,{children:Array.from({length:e}).map((e,i)=>(0,d.jsx)(`td`,{className:`border border-stone-200 px-4 py-2 text-sm`,children:m(n[i]||``,`${t}-r${r}c${i}`)},`td-${i}`))},`tr-${r}`))})]})},t)),u=[]}};return t.forEach(e=>{let t=`line-${f++}`;if(e.startsWith("```")){if(!r)h(),r=!0,a=e.slice(3).trim()||`text`,i=``;else{r=!1;let e=p[a.toLowerCase()]||a||`text`;n.push((0,d.jsxs)(`div`,{className:`relative group my-4`,children:[(0,d.jsx)(o,{language:e,style:s,customStyle:{margin:0,borderRadius:`0.5rem`,fontSize:`0.875rem`,backgroundColor:`#faf9f6`,border:`1px solid #e7e5e4`},codeTagProps:{style:{fontFamily:`ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace`}},children:i}),(0,d.jsx)(c,{text:i})]},`code-${f++}`))}return}if(r){i+=(i?`
+`:``)+e;return}if(e.startsWith(`|`)){l||(l=!0,u=[]);let t=e.split(`|`).slice(1,-1).map(e=>e.trim());e.includes(`---`)||u.push(t);return}else l&&(l=!1,h());if(e.startsWith(`> `)){n.push((0,d.jsx)(`blockquote`,{className:`border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic`,children:m(e.slice(2),`${t}-q`)},t));return}if(e.startsWith(`## `)){n.push((0,d.jsx)(`h2`,{className:`text-2xl font-light text-stone-900 mt-8 mb-4`,children:m(e.slice(3),`${t}-h2`)},t));return}if(e.startsWith(`### `)){n.push((0,d.jsx)(`h3`,{className:`text-lg font-medium text-stone-900 mt-6 mb-3`,children:m(e.slice(4),`${t}-h3`)},t));return}if(e.startsWith(`- `)||e.startsWith(`* `)){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-disc`,children:m(e.slice(2),`${t}-li`)},t));return}let g=e.match(/^(\d+)\.\s/);if(g){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-decimal`,children:m(e.slice(g[0].length),`${t}-nli`)},t));return}e.trim()&&n.push((0,d.jsx)(`p`,{className:`text-stone-600 text-sm leading-relaxed mb-3`,children:m(e,`${t}-p`)},t))}),l&&h(),n},[e])})}var g=e({default:()=>ee}),ee=`## Overview
 
 Agent mode is an enhanced AI chat mode with autonomous multi-step reasoning and tool usage.
 
@@ -52,7 +52,7 @@ permissions:
     - Bash
     - Write
 \`\`\`
-`,ee=e({default:()=>te}),te=`## Start AI Chat
+`,te=e({default:()=>ne}),ne=`## Start AI Chat
 
 \`\`\`bash
 j chat              # Enter TUI chat interface
@@ -94,7 +94,7 @@ Type \`@\` in input to trigger completion:
 ## Multi-Model Support
 
 Supports OpenAI, Claude, Gemini, Ollama and more. Use \`Ctrl+E\` to open config panel.
-`,ne=e({default:()=>re}),re=`## Commands
+`,re=e({default:()=>_}),_=`## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -145,7 +145,7 @@ j chrome "rust lang"       # Search with Chrome
 j chrome github            # Open github URL with Chrome
 j vscode proj              # Open proj directory with VSCode
 \`\`\`
-`,_=e({default:()=>v}),v=`## Overview
+`,v=e({default:()=>y}),y=`## Overview
 
 Browser is a tool in AI chat for web browsing, interaction, and content extraction.
 
@@ -187,7 +187,7 @@ Full browser automation when \`browser_cdp\` feature is enabled:
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,y=e({default:()=>b}),b="All data is stored in `~/.jdata/` (customizable via `J_DATA_PATH` environment variable):\n\n```\n~/.jdata/\n├── config.yaml          # Main config (aliases, categories, settings)\n├── agent/               # AI Agent data\n│   ├── data/            # Agent data directory\n│   │   ├── agent_config.json   # Agent config (model, API)\n│   │   ├── chat_history.json   # Chat history\n│   │   ├── archives/           # Archived conversations\n│   │   ├── system_prompt.md    # System prompt\n│   │   ├── memory.md           # Memory file\n│   │   ├── soul.md             # Soul file\n│   │   └── style.md            # Response style\n│   ├── logs/            # Agent logs\n│   │   ├── info.log\n│   │   └── error.log\n│   └── skills/          # Skills directory\n├── bin/                 # Built-in tools\n│   └── md_render        # Markdown renderer\n├── report/              # Daily reports\n│   ├── week_report.md   # Week report file\n│   ├── settings.json    # Report settings\n│   ├── todo.json        # Todo data\n│   └── .git/            # Git repository\n├── scripts/             # Scripts created via j concat\n```\n\n## Config File Structure (`config.yaml`)\n\n| Section | Description | Example |\n|---------|-------------|---------|\n| `path` | Local app/file paths | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL links | `github: https://github.com` |\n| `outer_url` | URLs requiring VPN | `docs: https://internal.example.com` |\n| `browser` | Browser list | `chrome: chrome` |\n| `editor` | Editor list | `vscode: vscode` |\n| `vpn` | VPN application | |\n| `script` | Registered scripts | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | Report system config | `git_repo: https://github.com/xxx/report` |\n| `setting` | Global settings | `search-engine: bing` |\n| `log` | Log settings | `mode: concise` |\n",x=e({default:()=>S}),S=`## Overview
+`,b=e({default:()=>x}),x="All data is stored in `~/.jdata/` (customizable via `J_DATA_PATH` environment variable):\n\n```\n~/.jdata/\n├── config.yaml          # Main config (aliases, categories, settings)\n├── agent/               # AI Agent data\n│   ├── data/            # Agent data directory\n│   │   ├── agent_config.json   # Agent config (model, API)\n│   │   ├── chat_history.json   # Chat history\n│   │   ├── archives/           # Archived conversations\n│   │   ├── system_prompt.md    # System prompt\n│   │   ├── memory.md           # Memory file\n│   │   ├── soul.md             # Soul file\n│   │   └── style.md            # Response style\n│   ├── logs/            # Agent logs\n│   │   ├── info.log\n│   │   └── error.log\n│   └── skills/          # Skills directory\n├── bin/                 # Built-in tools\n│   └── md_render        # Markdown renderer\n├── report/              # Daily reports\n│   ├── week_report.md   # Week report file\n│   ├── settings.json    # Report settings\n│   ├── todo.json        # Todo data\n│   └── .git/            # Git repository\n├── scripts/             # Scripts created via j concat\n```\n\n## Config File Structure (`config.yaml`)\n\n| Section | Description | Example |\n|---------|-------------|---------|\n| `path` | Local app/file paths | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL links | `github: https://github.com` |\n| `outer_url` | URLs requiring VPN | `docs: https://internal.example.com` |\n| `browser` | Browser list | `chrome: chrome` |\n| `editor` | Editor list | `vscode: vscode` |\n| `vpn` | VPN application | |\n| `script` | Registered scripts | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | Report system config | `git_repo: https://github.com/xxx/report` |\n| `setting` | Global settings | `search-engine: bing` |\n| `log` | Log settings | `mode: concise` |\n",S=e({default:()=>C}),C=`## Overview
 
 Hooks allow running custom scripts on specific events, managed via the \`RegisterHook\` tool or config files.
 
@@ -348,7 +348,7 @@ During chain execution, the previous hook's output updates the context for the n
 - Scripts must read from stdin (at least \`cat > /dev/null\`) to avoid SIGPIPE
 - Default timeout is 10 seconds; scripts are killed on timeout
 - Only session-level hooks can be managed via tool; user/project levels require manual config editing
-`,C=e({default:()=>w}),w=`## One-click Install (Recommended)
+`,w=e({default:()=>T}),T=`## One-click Install (Recommended)
 
 \`\`\`bash
 # Install latest version
@@ -414,7 +414,7 @@ rm ~/.cargo/bin/j          # Cargo install
 # (Optional) Remove data directory
 rm -rf ~/.jdata
 \`\`\`
-`,T=e({default:()=>E}),E=`## Permission Levels
+`,E=e({default:()=>D}),D=`## Permission Levels
 
 | Level | Description |
 |-------|-------------|
@@ -468,7 +468,7 @@ permissions:
       - pattern: "rm -rf /*"
         permission: deny
 \`\`\`
-`,D=e({default:()=>O}),O=`## Register App Aliases
+`,O=e({default:()=>k}),k=`## Register App Aliases
 
 \`\`\`bash
 j set chrome "/Applications/Google Chrome.app"
@@ -521,7 +521,7 @@ j chat Hello              # Quick question
 \`\`\`bash
 j                         # Enter interactive mode with Tab completion
 \`\`\`
-`,k=e({default:()=>A}),A=`## Overview
+`,A=e({default:()=>j}),j=`## Overview
 
 Control AI chat from mobile devices via WebSocket, started with \`j chat --remote\`.
 
@@ -543,7 +543,7 @@ A QR code will be displayed for phone scanning.
 ## Client
 
 - **Web**: Scan QR code to connect
-`,j=e({default:()=>M}),M=`## Overview
+`,M=e({default:()=>N}),N=`## Overview
 
 Daily/weekly report system with quick logging, week management, and Git sync.
 
@@ -606,7 +606,7 @@ Report settings are stored in two locations:
 When current date exceeds \`last_day\`, writing to report automatically:
 1. Generates new week title \`# WeekN[start_date - end_date]\`
 2. Updates week_num and last_day
-`,N=e({default:()=>P}),P=`## Commands
+`,P=e({default:()=>F}),F=`## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -659,7 +659,7 @@ j concat backup "cp -r $1 ~/.jdata/backups/$(date +%Y%m%d)"
 # Open in editor
 j concat edit "code $1"
 \`\`\`
-`,F=e({default:()=>I}),I=`## Overview
+`,I=e({default:()=>L}),L=`## Overview
 
 Skills are specialized prompt modules that extend AI capabilities, loaded via the \`LoadSkill\` tool.
 
@@ -701,7 +701,7 @@ Load the code-review skill
 
 - **User level**: \`~/.jdata/agent/skills/\`
 - **Project level**: \`.jcli/skills/\` (project level overrides user level when names conflict)
-`,L=e({default:()=>R}),R=`## Commands
+`,R=e({default:()=>z}),z=`## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -745,7 +745,7 @@ Todos can be written in daily reports using Markdown:
 - [ ] Pending task
 - [ ] Another pending task
 \`\`\`
-`,z=e({default:()=>B}),B="## Available Tools\n\n| Tool | Description |\n|------|-------------|\n| `Read` | Read file contents |\n| `Write` | Write to files |\n| `Edit` | Edit files with string replacement |\n| `Glob` | Find files by pattern |\n| `Grep` | Search file contents |\n| `Bash` | Execute shell commands |\n| `WebFetch` | Fetch web page content |\n| `WebSearch` | Search the web |\n| `Ask` | Ask user for input |\n| `TaskOutput` | Get background task output |\n| `Task` | Manage tasks |\n| `TodoWrite` | Write todo items |\n| `TodoRead` | Read todo items |\n| `Compact` | Compress conversation context |\n| `RegisterHook` | Register hooks |\n| `ComputerUse` | macOS desktop control |\n| `EnterPlanMode` | Enter plan mode |\n| `ExitPlanMode` | Exit plan mode |\n| `LoadSkill` | Load skills |\n\n## Permission Configuration\n\n```yaml\n# ~/.jdata/agent/data/agent_config.yaml\ntools:\n  - name: Read\n    permission: allow\n  - name: Bash\n    permission: ask  # Require user confirmation\n  - name: Write\n    permission: deny\n```\n\n## Context References\n\n| Reference | Description |\n|-----------|-------------|\n| `@file:path` | Include file content |\n| `@dir:path` | Include directory structure |\n| `@url:url` | Include web page content |\n| `@grep:pattern` | Include search results |\n",V=e({default:()=>H}),H=`## 概述
+`,B=e({default:()=>V}),V="## Available Tools\n\n| Tool | Description |\n|------|-------------|\n| `Read` | Read file contents |\n| `Write` | Write to files |\n| `Edit` | Edit files with string replacement |\n| `Glob` | Find files by pattern |\n| `Grep` | Search file contents |\n| `Bash` | Execute shell commands |\n| `WebFetch` | Fetch web page content |\n| `WebSearch` | Search the web |\n| `Ask` | Ask user for input |\n| `TaskOutput` | Get background task output |\n| `Task` | Manage tasks |\n| `TodoWrite` | Write todo items |\n| `TodoRead` | Read todo items |\n| `Compact` | Compress conversation context |\n| `RegisterHook` | Register hooks |\n| `ComputerUse` | macOS desktop control |\n| `EnterPlanMode` | Enter plan mode |\n| `ExitPlanMode` | Exit plan mode |\n| `LoadSkill` | Load skills |\n\n## Permission Configuration\n\n```yaml\n# ~/.jdata/agent/data/agent_config.yaml\ntools:\n  - name: Read\n    permission: allow\n  - name: Bash\n    permission: ask  # Require user confirmation\n  - name: Write\n    permission: deny\n```\n\n## Context References\n\n| Reference | Description |\n|-----------|-------------|\n| `@file:path` | Include file content |\n| `@dir:path` | Include directory structure |\n| `@url:url` | Include web page content |\n| `@grep:pattern` | Include search results |\n",H=e({default:()=>U}),U=`## 概述
 
 Agent 模式是 AI 对话的增强模式，支持自主多步推理和工具调用。
 
@@ -789,7 +789,7 @@ permissions:
     - Bash
     - Write
 \`\`\`
-`,U=e({default:()=>W}),W=`## 启动 AI 对话
+`,W=e({default:()=>G}),G=`## 启动 AI 对话
 
 \`\`\`bash
 j chat              # 进入 TUI 对话界面
@@ -831,7 +831,7 @@ j chat --remote --port 9390  # 指定端口
 ## 多模型支持
 
 支持 OpenAI、Claude、Gemini、Ollama 等模型，通过 \`Ctrl+E\` 打开配置界面管理。
-`,G=e({default:()=>K}),K=`## 命令
+`,K=e({default:()=>q}),q=`## 命令
 
 | 命令 | 描述 |
 |------|------|
@@ -882,7 +882,7 @@ j chrome "rust lang"       # 用 Chrome 搜索
 j chrome github            # 用 Chrome 打开 github
 j vscode proj              # 用 VSCode 打开 proj 目录
 \`\`\`
-`,q=e({default:()=>J}),J=`## 概述
+`,J=e({default:()=>Y}),Y=`## 概述
 
 Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取。
 
@@ -924,7 +924,7 @@ Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取�
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,Y=e({default:()=>X}),X="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.json   # Agent 配置（模型、API）\n│   │   ├── chat_history.json   # 对话历史\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   ├── soul.md             # 灵魂文件\n│   │   └── style.md            # 响应风格\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   └── skills/          # 技能目录\n├── bin/                 # 内置工具\n│   └── md_render        # Markdown 渲染器\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n├── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n",ie=e({default:()=>ae}),ae=`## 概述
+`,X=e({default:()=>ie}),ie="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.json   # Agent 配置（模型、API）\n│   │   ├── chat_history.json   # 对话历史\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   ├── soul.md             # 灵魂文件\n│   │   └── style.md            # 响应风格\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   └── skills/          # 技能目录\n├── bin/                 # 内置工具\n│   └── md_render        # Markdown 渲染器\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n├── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n",ae=e({default:()=>oe}),oe=`## 概述
 
 Hook 允许在特定事件时运行自定义脚本，通过 \`RegisterHook\` 工具或配置文件管理。
 
@@ -1085,7 +1085,7 @@ Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
 - 脚本必须从 stdin 读取（至少 \`cat > /dev/null\`），否则可能 SIGPIPE
 - timeout 默认 10 秒，超时后脚本被 kill
 - 只有 session 级 hook 可通过工具管理；用户级/项目级需手动编辑配置文件
-`,oe=e({default:()=>se}),se=`## 一键安装（推荐）
+`,se=e({default:()=>ce}),ce=`## 一键安装（推荐）
 
 \`\`\`bash
 # 安装最新版本
@@ -1151,7 +1151,7 @@ rm ~/.cargo/bin/j          # Cargo 安装
 # （可选）删除数据目录
 rm -rf ~/.jdata
 \`\`\`
-`,ce=e({default:()=>le}),le=`## 权限级别
+`,le=e({default:()=>ue}),ue=`## 权限级别
 
 | 级别 | 描述 |
 |------|------|
@@ -1205,7 +1205,7 @@ permissions:
       - pattern: "rm -rf /*"
         permission: deny
 \`\`\`
-`,ue=e({default:()=>de}),de=`## 注册应用别名
+`,de=e({default:()=>fe}),fe=`## 注册应用别名
 
 \`\`\`bash
 j set chrome "/Applications/Google Chrome.app"
@@ -1258,7 +1258,7 @@ j chat 你好               # 快速提问
 \`\`\`bash
 j                         # 进入交互模式，支持 Tab 补全
 \`\`\`
-`,fe=e({default:()=>pe}),pe=`## 概述
+`,pe=e({default:()=>me}),me=`## 概述
 
 通过 WebSocket 从移动设备控制 AI 对话，使用 \`j chat --remote\` 启动。
 
@@ -1280,7 +1280,7 @@ j chat --remote --port 9390  # 指定端口
 ## 客户端
 
 - **Web**：扫描二维码连接
-`,me=e({default:()=>he}),he=`## 概述
+`,he=e({default:()=>ge}),ge=`## 概述
 
 日报/周报系统，支持快速记录、周报管理和 Git 同步。
 
@@ -1343,7 +1343,7 @@ j reportctl pull
 当当前日期超过 \`last_day\` 时，写入日报会自动：
 1. 生成新周标题 \`# WeekN[开始日期 - 结束日期]\`
 2. 更新 week_num 和 last_day
-`,ge=e({default:()=>_e}),_e=`## 命令
+`,_e=e({default:()=>ve}),ve=`## 命令
 
 | 命令 | 描述 |
 |------|------|
@@ -1396,7 +1396,7 @@ j concat backup "cp -r $1 ~/.jdata/backups/$(date +%Y%m%d)"
 # 编辑器脚本
 j concat edit "code $1"
 \`\`\`
-`,ve=e({default:()=>ye}),ye=`## 概述
+`,ye=e({default:()=>be}),be=`## 概述
 
 Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具加载。
 
@@ -1438,7 +1438,7 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
 
 - **用户级**：\`~/.jdata/agent/skills/\`
 - **项目级**：\`.jcli/skills/\`（同名时项目级覆盖用户级）
-`,be=e({default:()=>xe}),xe=`## 命令
+`,xe=e({default:()=>Se}),Se=`## 命令
 
 | 命令 | 描述 |
 |------|------|
@@ -1482,4 +1482,4 @@ j todo done 1 --report   # 同时写入日报
 - [ ] 待处理的任务
 - [ ] 另一个待处理任务
 \`\`\`
-`,Se=e({default:()=>Ce}),Ce="## 可用工具\n\n| 工具 | 描述 |\n|------|------|\n| `Read` | 读取文件内容 |\n| `Write` | 写入文件 |\n| `Edit` | 字符串替换编辑文件 |\n| `Glob` | 按模式查找文件 |\n| `Grep` | 搜索文件内容 |\n| `Bash` | 执行 shell 命令 |\n| `WebFetch` | 获取网页内容 |\n| `WebSearch` | 搜索网络 |\n| `Ask` | 向用户请求输入 |\n| `TaskOutput` | 获取后台任务输出 |\n| `Task` | 管理任务 |\n| `TodoWrite` | 写入待办事项 |\n| `TodoRead` | 读取待办事项 |\n| `Compact` | 压缩对话上下文 |\n| `RegisterHook` | 注册钩子 |\n| `ComputerUse` | macOS 桌面控制 |\n| `EnterPlanMode` | 进入计划模式 |\n| `ExitPlanMode` | 退出计划模式 |\n| `LoadSkill` | 加载技能 |\n\n## 权限配置\n\n```yaml\n# ~/.jdata/agent/data/agent_config.yaml\ntools:\n  - name: Read\n    permission: allow\n  - name: Bash\n    permission: ask  # 需要用户确认\n  - name: Write\n    permission: deny\n```\n\n## 上下文引用\n\n| 引用 | 描述 |\n|------|------|\n| `@file:路径` | 包含文件内容 |\n| `@dir:路径` | 包含目录结构 |\n| `@url:url` | 包含网页内容 |\n| `@grep:模式` | 包含搜索结果 |\n",we={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Te={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},Z={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function Ee(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`aiChat`,`agentMode`,`tools`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var De=Object.assign({"./en/agentMode.md":h,"./en/aiChat.md":ee,"./en/alias.md":ne,"./en/browser.md":_,"./en/dataDirectory.md":y,"./en/hooks.md":x,"./en/installation.md":C,"./en/permissions.md":T,"./en/quickStart.md":D,"./en/remote.md":k,"./en/report.md":j,"./en/script.md":N,"./en/skills.md":F,"./en/todo.md":L,"./en/tools.md":z}),Oe=Object.assign({"./zh/agentMode.md":V,"./zh/aiChat.md":U,"./zh/alias.md":G,"./zh/browser.md":q,"./zh/dataDirectory.md":Y,"./zh/hooks.md":ie,"./zh/installation.md":oe,"./zh/permissions.md":ce,"./zh/quickStart.md":ue,"./zh/remote.md":fe,"./zh/report.md":me,"./zh/script.md":ge,"./zh/skills.md":ve,"./zh/todo.md":be,"./zh/tools.md":Se});function ke(){let e={en:{},zh:{}};for(let[t,n]of Object.entries(De)){let r=t.match(/\.\/en\/(\w+)\.md$/);r&&n?.default&&(e.en[r[1]]=n.default)}for(let[t,n]of Object.entries(Oe)){let r=t.match(/\.\/zh\/(\w+)\.md$/);r&&n?.default&&(e.zh[r[1]]=n.default)}return e}var Q=ke();function Ae(e,t){return Q[e]?.[t]||Q.en[t]||``}function $(e,t){return Z[e]?.[t]||Z.en[t]||t}var je={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Me({lang:e,activeSection:t,onNavigate:n}){let r=Ee(),i=Z[e],a=je[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,u.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,u.jsx)(`div`,{className:`flex-1`,children:s&&(0,u.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,u.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,u.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,u.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,u.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,u.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,u.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,u.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,u.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,u.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,u.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}function Ne(){let[e,t]=(0,l.useState)(`zh`),[n,r]=(0,l.useState)(!1),[a,o]=(0,l.useState)(`installation`),s=Te[e],f=we[e];return(0,l.useEffect)(()=>{let e=document.getElementById(a);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[a]),(0,u.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,u.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,u.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,u.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,u.jsx)(`button`,{onClick:()=>r(!n),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,u.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:n?(0,u.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,u.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,u.jsxs)(i,{to:`/`,className:`flex items-center gap-2`,children:[(0,u.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,u.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,u.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,u.jsx)(c,{lang:e,onChange:t}),(0,u.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,u.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,u.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,u.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:s.github})]})]})]})}),(0,u.jsx)(d,{tree:f,activeSection:a,onNavigate:o,isOpen:n,onClose:()=>r(!1)}),(0,u.jsx)(`main`,{className:`lg:ml-72 pt-[65px]`,children:(0,u.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let t=Ae(e,a),n=$(e,a);return t?(0,u.jsxs)(`div`,{id:a,className:`py-8`,children:[(0,u.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:n}),(0,u.jsx)(m,{content:t})]},`${e}-${a}`):null})(),(0,u.jsx)(Me,{lang:e,activeSection:a,onNavigate:o})]})}),(0,u.jsx)(`footer`,{className:`lg:ml-72 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,u.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,u.jsx)(i,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:s.back}),(0,u.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,u.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,u.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Ne as default};
+`,Ce=e({default:()=>we}),we="## 可用工具\n\n| 工具 | 描述 |\n|------|------|\n| `Read` | 读取文件内容 |\n| `Write` | 写入文件 |\n| `Edit` | 字符串替换编辑文件 |\n| `Glob` | 按模式查找文件 |\n| `Grep` | 搜索文件内容 |\n| `Bash` | 执行 shell 命令 |\n| `WebFetch` | 获取网页内容 |\n| `WebSearch` | 搜索网络 |\n| `Ask` | 向用户请求输入 |\n| `TaskOutput` | 获取后台任务输出 |\n| `Task` | 管理任务 |\n| `TodoWrite` | 写入待办事项 |\n| `TodoRead` | 读取待办事项 |\n| `Compact` | 压缩对话上下文 |\n| `RegisterHook` | 注册钩子 |\n| `ComputerUse` | macOS 桌面控制 |\n| `EnterPlanMode` | 进入计划模式 |\n| `ExitPlanMode` | 退出计划模式 |\n| `LoadSkill` | 加载技能 |\n\n## 权限配置\n\n```yaml\n# ~/.jdata/agent/data/agent_config.yaml\ntools:\n  - name: Read\n    permission: allow\n  - name: Bash\n    permission: ask  # 需要用户确认\n  - name: Write\n    permission: deny\n```\n\n## 上下文引用\n\n| 引用 | 描述 |\n|------|------|\n| `@file:路径` | 包含文件内容 |\n| `@dir:路径` | 包含目录结构 |\n| `@url:url` | 包含网页内容 |\n| `@grep:模式` | 包含搜索结果 |\n",Te={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Ee={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},Z={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,aiChat:`AI Chat`,agentMode:`Agent Mode`,tools:`AI Tools`,skills:`Skill System`,hooks:`Hook System`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,aiChat:`AI 对话`,agentMode:`Agent 模式`,tools:`AI 工具`,skills:`Skill 技能`,hooks:`Hook 系统`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function De(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`aiChat`,`agentMode`,`tools`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Oe=Object.assign({"./en/agentMode.md":g,"./en/aiChat.md":te,"./en/alias.md":re,"./en/browser.md":v,"./en/dataDirectory.md":b,"./en/hooks.md":S,"./en/installation.md":w,"./en/permissions.md":E,"./en/quickStart.md":O,"./en/remote.md":A,"./en/report.md":M,"./en/script.md":P,"./en/skills.md":I,"./en/todo.md":R,"./en/tools.md":B}),Q=Object.assign({"./zh/agentMode.md":H,"./zh/aiChat.md":W,"./zh/alias.md":K,"./zh/browser.md":J,"./zh/dataDirectory.md":X,"./zh/hooks.md":ae,"./zh/installation.md":se,"./zh/permissions.md":le,"./zh/quickStart.md":de,"./zh/remote.md":pe,"./zh/report.md":he,"./zh/script.md":_e,"./zh/skills.md":ye,"./zh/todo.md":xe,"./zh/tools.md":Ce});function ke(){let e={en:{},zh:{}};for(let[t,n]of Object.entries(Oe)){let r=t.match(/\.\/en\/(\w+)\.md$/);r&&n?.default&&(e.en[r[1]]=n.default)}for(let[t,n]of Object.entries(Q)){let r=t.match(/\.\/zh\/(\w+)\.md$/);r&&n?.default&&(e.zh[r[1]]=n.default)}return e}var $=ke();function Ae(e,t){return $[e]?.[t]||$.en[t]||``}function je(e,t){return Z[e]?.[t]||Z.en[t]||t}var Me={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ne({lang:e,activeSection:t,onNavigate:n}){let r=De(),i=Z[e],a=Me[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}function Pe(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Ee[n],m=Te[n],g=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:g,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-72 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=Ae(n,c),t=je(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(h,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ne,{lang:n,activeSection:c,onNavigate:g})]})}),(0,d.jsx)(`footer`,{className:`lg:ml-72 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Pe as default};

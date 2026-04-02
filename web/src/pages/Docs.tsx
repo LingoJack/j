@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Sidebar } from '../components/docs/Sidebar'
 import { Markdown } from '../components/docs/Markdown'
 import { PageNav } from '../components/docs/PageNav'
 import { LanguageSwitcher } from '../components/common/LanguageSwitcher'
-import { docTree, docNavI18n, getDocContent, getSectionTitle } from '../data/docs'
+import { docTree, docNavI18n, getDocContent, getSectionTitle, defaultSection } from '../data/docs'
 import type { Language } from '../types'
 
 export default function Docs() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [lang, setLang] = useState<Language>('zh')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeSection, setActiveSection] = useState('installation')
+  
+  // 从 URL 读取当前章节，默认为 installation
+  const activeSection = searchParams.get('section') || defaultSection
   const t = docNavI18n[lang]
   const tree = docTree[lang]
+  
+  // 导航到指定章节
+  const navigateToSection = (section: string) => {
+    setSearchParams({ section })
+  }
   
   // Scroll to section on navigate
   useEffect(() => {
@@ -84,7 +92,7 @@ export default function Docs() {
       <Sidebar 
         tree={tree}
         activeSection={activeSection}
-        onNavigate={setActiveSection}
+        onNavigate={navigateToSection}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -93,7 +101,7 @@ export default function Docs() {
       <main className="lg:ml-72 pt-[65px]">
         <div className="max-w-3xl mx-auto px-6 pb-16">
           {renderSection()}
-          <PageNav lang={lang} activeSection={activeSection} onNavigate={setActiveSection} />
+          <PageNav lang={lang} activeSection={activeSection} onNavigate={navigateToSection} />
         </div>
       </main>
 
