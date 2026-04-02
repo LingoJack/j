@@ -19,16 +19,6 @@ use ratatui::{
 use ratatui_image::{Resize, StatefulImage};
 
 pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
-    draw_chat_ui_inner(f, app, false);
-}
-
-/// 仅重绘输入区域（标题栏 + 输入框 + 提示栏 + 弹窗），跳过消息区
-/// ratatui 使用 diff 模式，未重绘的消息区保持上一帧内容
-pub fn draw_chat_ui_input_only(f: &mut ratatui::Frame, app: &mut ChatApp) {
-    draw_chat_ui_inner(f, app, true);
-}
-
-fn draw_chat_ui_inner(f: &mut ratatui::Frame, app: &mut ChatApp, skip_messages: bool) {
     let size = f.area();
 
     // 整体背景
@@ -49,15 +39,13 @@ fn draw_chat_ui_inner(f: &mut ratatui::Frame, app: &mut ChatApp, skip_messages: 
     draw_title_bar(f, chunks[0], app);
 
     // ========== 消息区 ==========
-    if !skip_messages {
-        match app.ui.mode {
-            ChatMode::Help => draw_help(f, chunks[1], app),
-            ChatMode::SelectModel => draw_model_selector(f, chunks[1], app),
-            ChatMode::Config => draw_config_screen(f, chunks[1], app),
-            ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
-            ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
-            _ => draw_messages(f, chunks[1], app),
-        }
+    match app.ui.mode {
+        ChatMode::Help => draw_help(f, chunks[1], app),
+        ChatMode::SelectModel => draw_model_selector(f, chunks[1], app),
+        ChatMode::Config => draw_config_screen(f, chunks[1], app),
+        ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
+        ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
+        _ => draw_messages(f, chunks[1], app),
     }
 
     // ========== 输入区 ==========
