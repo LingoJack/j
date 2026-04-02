@@ -6,7 +6,7 @@ use super::super::storage::{
     ChatSession, legacy_chat_history_path, load_style, load_system_prompt, save_style,
     save_system_prompt,
 };
-use super::super::ui::draw_chat_ui;
+use super::super::ui::{draw_chat_ui, draw_chat_ui_input_only};
 use super::{
     handle_archive_confirm_mode, handle_archive_list_mode, handle_browse_mode, handle_chat_mode,
     handle_config_mode, handle_select_model, handle_tool_confirm_mode,
@@ -34,15 +34,27 @@ fn restore_terminal() {
 }
 
 /// 将单个 crossterm Event 分发到对应的 handler / Action。
-/// 返回 true 表示应退出主循环。
-fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> bool {
+/// 返回 (should_quit, input_only)：
+/// - should_quit: 是否应退出主循环
+/// - input_only: 此事件仅修改了输入框内容/光标（可跳过消息区重绘）
+fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> (bool, bool) {
     match evt {
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             *needs_redraw = true;
+            // 记录事件前的输入状态，用于判断是否仅输入变化
+            let input_before = app.ui.input.clone();
+            let cursor_before = app.ui.cursor_pos;
+            let was_chat_mode = matches!(app.ui.mode, ChatMode::Chat);
+            let scroll_before = app.ui.scroll_offset;
+            let popup_before = app.ui.at_popup_active
+                || app.ui.file_popup_active
+                || app.ui.skill_popup_active
+                || app.ui.command_popup_active;
+
             match app.ui.mode {
                 ChatMode::Chat => {
                     if handle_chat_mode(app, key) {
-                        return true; // quit
+                        return (true, false); // quit
                     }
                 }
                 ChatMode::SelectModel => handle_select_model(app, key),
@@ -55,6 +67,23 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                 ChatMode::ArchiveList => handle_archive_list_mode(app, key),
                 ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
             }
+
+            // 判断是否仅输入变化：模式未变、滚动未变、且弹窗状态变化或仅 input/cursor 变化
+            let popup_after = app.ui.at_popup_active
+                || app.ui.file_popup_active
+                || app.ui.skill_popup_active
+                || app.ui.command_popup_active;
+            let input_only = was_chat_mode
+                && matches!(app.ui.mode, ChatMode::Chat)
+                && scroll_before == app.ui.scroll_offset
+                && !app.state.is_loading
+                && (app.ui.input != input_before
+                    || app.ui.cursor_pos != cursor_before
+                    || popup_before != popup_after)
+                && !app.ui.pending_system_prompt_edit
+                && !app.ui.pending_style_edit;
+
+            (false, input_only)
         }
         Event::Paste(text) => {
             // 粘贴事件：逐字符插入到输入框（仅 Chat 模式且非 loading）
@@ -74,25 +103,29 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                     app.ui.cursor_pos += 1;
                 }
                 *needs_redraw = true;
+                return (false, !app.state.is_loading);
             }
+            (false, false)
         }
         Event::Resize(_, _) => {
             *needs_redraw = true;
+            (false, false)
         }
         Event::Mouse(mouse) => match mouse.kind {
             MouseEventKind::ScrollUp => {
                 app.update(Action::Scroll(CursorDirection::Up));
                 *needs_redraw = true;
+                (false, false)
             }
             MouseEventKind::ScrollDown => {
                 app.update(Action::Scroll(CursorDirection::Down));
                 *needs_redraw = true;
+                (false, false)
             }
-            _ => {}
+            _ => (false, false),
         },
-        _ => {}
+        _ => (false, false),
     }
-    false
 }
 
 pub fn run_chat_tui(remote_mode: bool, port: u16) {
@@ -241,6 +274,9 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     }
 
     let mut needs_redraw = true; // 首次必须绘制
+    let mut input_only_redraw = false; // 仅输入区域变化时跳过消息区重绘
+    let mut last_render_time = std::time::Instant::now();
+    const RENDER_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33); // ~30fps
 
     // 启动独立输入线程：持续从 crossterm 读事件放入 channel，
     // 主循环只从 channel 取，无论渲染多慢输入永远不丢。
@@ -254,6 +290,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         app.update(Action::TickToast);
         if had_toast && app.ui.toast.is_none() {
             needs_redraw = true;
+            input_only_redraw = false; // toast 变化需要完整重绘
         }
 
         // ================================================================
@@ -263,6 +300,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         let stream_actions = app.poll_stream_actions();
         if !stream_actions.is_empty() {
             needs_redraw = true;
+            input_only_redraw = false; // 后台事件需要完整重绘
         }
         for action in stream_actions {
             app.update(action);
@@ -281,6 +319,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
             for (msg,) in ws_actions {
                 needs_redraw = true;
+                input_only_redraw = false; // 远程消息需要完整重绘
                 match msg {
                     WsInbound::SendMessage { content } => {
                         app.inject_remote_message(content);
@@ -344,6 +383,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // 有待执行的工具时强制重绘
         if app.tool_executor.pending_tool_execution {
             needs_redraw = true;
+            input_only_redraw = false;
         }
 
         // ToolConfirm 超时自动执行 → Action
@@ -354,8 +394,10 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             if elapsed >= timeout {
                 app.update(Action::ExecutePendingTool);
                 needs_redraw = true;
+                input_only_redraw = false;
             } else {
                 needs_redraw = true; // 倒计时变化需要重绘
+                input_only_redraw = false;
             }
         }
 
@@ -369,11 +411,13 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 || len == 0
             {
                 needs_redraw = true;
+                input_only_redraw = false;
             }
             len
         } else {
             if was_loading {
                 needs_redraw = true;
+                input_only_redraw = false;
             }
             0
         };
@@ -381,19 +425,33 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // ToolConfirm 模式下：仅在有倒计时时才周期性重绘（用于更新秒数显示）
         if app.ui.mode == ChatMode::ToolConfirm && app.state.agent_config.tool_confirm_timeout > 0 {
             needs_redraw = true;
+            input_only_redraw = false;
         }
 
         // ================================================================
-        // Phase 3: Render — 只在状态变化时重绘
+        // Phase 3: Render — 只在状态变化时重绘，带 30fps 节流
         // ================================================================
         if needs_redraw {
-            terminal.draw(|f| draw_chat_ui(f, &mut app))?;
-            needs_redraw = false;
-            // 更新流式节流状态（复用 Phase 2 已获取的长度，不再重新加锁）
-            if app.state.is_loading {
-                app.ui.last_rendered_streaming_len = streaming_snapshot_len;
-                app.ui.last_stream_render_time = std::time::Instant::now();
+            // 节流：非 input_only 渲染需要间隔至少 33ms（~30fps）
+            // input_only 渲染跳过消息区，本身很快，不需要节流
+            let should_throttle =
+                !input_only_redraw && last_render_time.elapsed() < RENDER_INTERVAL;
+            if !should_throttle {
+                if input_only_redraw {
+                    terminal.draw(|f| draw_chat_ui_input_only(f, &mut app))?;
+                } else {
+                    terminal.draw(|f| draw_chat_ui(f, &mut app))?;
+                }
+                needs_redraw = false;
+                input_only_redraw = false;
+                last_render_time = std::time::Instant::now();
+                // 更新流式节流状态（复用 Phase 2 已获取的长度，不再重新加锁）
+                if app.state.is_loading {
+                    app.ui.last_rendered_streaming_len = streaming_snapshot_len;
+                    app.ui.last_stream_render_time = std::time::Instant::now();
+                }
             }
+            // 如果被节流跳过，needs_redraw 保持 true，下一轮循环会补上
         }
 
         // ================================================================
@@ -411,15 +469,25 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // 阻塞等待第一个事件（受 poll_timeout 限制）
         let first = input_thread.rx.recv_timeout(poll_timeout);
         if let Ok(evt) = first {
-            let mut should_quit = dispatch_event(&mut app, evt, &mut needs_redraw);
+            let (mut should_quit, first_input_only) =
+                dispatch_event(&mut app, evt, &mut needs_redraw);
+            let mut all_input_only = first_input_only;
             // 批量消费所有已缓冲的后续事件（非阻塞）
             if !should_quit {
                 while let Ok(evt) = input_thread.rx.try_recv() {
-                    if dispatch_event(&mut app, evt, &mut needs_redraw) {
+                    let (quit, evt_input_only) = dispatch_event(&mut app, evt, &mut needs_redraw);
+                    if !evt_input_only {
+                        all_input_only = false;
+                    }
+                    if quit {
                         should_quit = true;
                         break;
                     }
                 }
+            }
+            // 只有当所有事件都是 input_only 时才标记为仅输入重绘
+            if all_input_only && needs_redraw {
+                input_only_redraw = true;
             }
             if should_quit {
                 break;

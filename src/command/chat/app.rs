@@ -141,6 +141,8 @@ pub struct UIState {
     pub toast: Option<(String, bool, std::time::Instant)>,
     /// 消息渲染行缓存
     pub msg_lines_cache: Option<MsgLinesCache>,
+    /// @mention 范围缓存：(input 内容, 范围列表)，仅 input 变化时重算
+    pub cached_mention_ranges: Option<(String, Vec<(usize, usize)>)>,
     /// 流式节流：上次实际渲染流式内容时的长度
     pub last_rendered_streaming_len: usize,
     /// 流式节流：上次实际渲染流式内容的时间
@@ -828,6 +830,8 @@ pub struct MsgLinesCache {
     pub tool_confirm_idx: Option<usize>,
     /// 缓存的总行数（历史消息 + 流式内容）
     pub total_line_count: usize,
+    /// 历史消息的总行数（预计算，避免每帧重复求和）
+    pub history_line_count: usize,
     /// 每条消息（按 msg_index）的起始行号（用于浏览模式自动滚动）
     pub msg_start_lines: Vec<(usize, usize)>, // (msg_index, start_line)
     /// 按消息粒度缓存：每条历史消息的渲染行（key: 消息索引）
@@ -835,7 +839,7 @@ pub struct MsgLinesCache {
     /// 流式内容 + tool confirm + 末尾留白的渲染行（与历史消息分开存储）
     pub streaming_lines: Vec<Line<'static>>,
     /// 流式增量渲染缓存：已完成段落的渲染行
-    pub streaming_stable_lines: Vec<Line<'static>>,
+    pub streaming_stable_lines: Arc<Vec<Line<'static>>>,
     /// 流式增量渲染缓存：已缓存到 streaming_content 的字节偏移
     pub streaming_stable_offset: usize,
     /// 工具展开状态（缓存时记录，变化时需重建）
@@ -1312,6 +1316,7 @@ impl ChatApp {
                 model_list_state,
                 toast: None,
                 msg_lines_cache: None,
+                cached_mention_ranges: None,
                 last_rendered_streaming_len: 0,
                 last_stream_render_time: std::time::Instant::now(),
                 config_provider_idx: 0,
@@ -3558,6 +3563,7 @@ impl ChatApp {
             );
             let total_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>()
                 + new_streaming_lines.len();
+            let history_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum();
             self.ui.msg_lines_cache = Some(MsgLinesCache {
                 msg_count,
                 last_msg_len,
@@ -3567,6 +3573,7 @@ impl ChatApp {
                 browse_index: current_browse_index,
                 tool_confirm_idx: current_tool_confirm_idx,
                 total_line_count,
+                history_line_count,
                 msg_start_lines: new_msg_start_lines,
                 per_msg_lines: new_per_msg,
                 streaming_lines: new_streaming_lines,

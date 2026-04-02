@@ -8,6 +8,7 @@ use ratatui::{
     text::{Line, Span},
 };
 use std::io::Write;
+use std::sync::Arc;
 
 pub fn find_stable_boundary(content: &str) -> usize {
     // 统计 ``` 出现次数，奇数说明有未闭合的代码块
@@ -55,7 +56,7 @@ pub fn build_message_lines_incremental(
     Vec<(usize, usize)>,
     Vec<PerMsgCache>,
     Vec<Line<'static>>,
-    Vec<Line<'static>>,
+    Arc<Vec<Line<'static>>>,
     usize,
 ) {
     // 获取流式内容（只 lock 一次，尽快释放锁）
@@ -189,11 +190,11 @@ pub fn build_message_lines_incremental(
     // ===== 流式消息单独渲染进 streaming_lines =====
     let mut streaming_lines: Vec<Line<'static>> = Vec::new();
 
-    // 获取旧的 stable_lines（只 clone 一次，复用于渲染和返回）
+    // 获取旧的 stable_lines（Arc::clone O(1) 代替 Vec::clone O(n)）
     let (mut stable_lines, old_stable_offset) = if let Some(old_c) = old_cache {
         if old_c.bubble_max_width == bubble_max_width {
             (
-                old_c.streaming_stable_lines.clone(),
+                (*old_c.streaming_stable_lines).clone(),
                 old_c.streaming_stable_offset,
             )
         } else {
@@ -311,7 +312,7 @@ pub fn build_message_lines_incremental(
         msg_start_lines,
         per_msg_cache,
         streaming_lines,
-        stable_lines,
+        Arc::new(stable_lines),
         final_stable_offset,
     )
 }

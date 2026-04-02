@@ -1,17 +1,22 @@
 [
   {
     "id": "1",
-    "content": "分析 Claude Code 模板 Agent 的提示词结构",
+    "content": "",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "对比 jcli 当前 system_prompt_default.md 的差异",
-    "status": "in_progress"
+    "content": "",
+    "status": "completed"
   },
   {
     "id": "3",
-    "content": "输出优化建议报告",
-    "status": "pending"
+    "content": "",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "调研 Claude Code 与 jcli 工具描述差异",
+    "status": "in_progress"
   }
 ]

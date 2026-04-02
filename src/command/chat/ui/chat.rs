@@ -19,6 +19,16 @@ use ratatui::{
 use ratatui_image::{Resize, StatefulImage};
 
 pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
+    draw_chat_ui_inner(f, app, false);
+}
+
+/// 仅重绘输入区域（标题栏 + 输入框 + 提示栏 + 弹窗），跳过消息区
+/// ratatui 使用 diff 模式，未重绘的消息区保持上一帧内容
+pub fn draw_chat_ui_input_only(f: &mut ratatui::Frame, app: &mut ChatApp) {
+    draw_chat_ui_inner(f, app, true);
+}
+
+fn draw_chat_ui_inner(f: &mut ratatui::Frame, app: &mut ChatApp, skip_messages: bool) {
     let size = f.area();
 
     // 整体背景
@@ -39,13 +49,15 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     draw_title_bar(f, chunks[0], app);
 
     // ========== 消息区 ==========
-    match app.ui.mode {
-        ChatMode::Help => draw_help(f, chunks[1], app),
-        ChatMode::SelectModel => draw_model_selector(f, chunks[1], app),
-        ChatMode::Config => draw_config_screen(f, chunks[1], app),
-        ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
-        ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
-        _ => draw_messages(f, chunks[1], app),
+    if !skip_messages {
+        match app.ui.mode {
+            ChatMode::Help => draw_help(f, chunks[1], app),
+            ChatMode::SelectModel => draw_model_selector(f, chunks[1], app),
+            ChatMode::Config => draw_config_screen(f, chunks[1], app),
+            ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
+            ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
+            _ => draw_messages(f, chunks[1], app),
+        }
     }
 
     // ========== 输入区 ==========
@@ -298,6 +310,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         ) = build_message_lines_incremental(app, inner_width, bubble_max_width, old_cache.as_ref());
         let total_line_count: usize =
             new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>() + new_streaming_lines.len();
+        let history_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum();
         app.ui.msg_lines_cache = Some(MsgLinesCache {
             msg_count,
             last_msg_len,
@@ -307,6 +320,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             browse_index: current_browse_index,
             tool_confirm_idx: current_tool_confirm_idx,
             total_line_count,
+            history_line_count,
             msg_start_lines: new_msg_start_lines,
             per_msg_lines: new_per_msg,
             streaming_lines: new_streaming_lines,
@@ -366,7 +380,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     let start = app.ui.scroll_offset as usize;
     let end = (start + visible_height as usize).min(cached.total_line_count);
-    let history_total: usize = cached.per_msg_lines.iter().map(|p| p.lines.len()).sum();
+    let history_total = cached.history_line_count;
     let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
 
     // 单 pass：渲染文字的同时收集图片标记 (display_row, height, url)
@@ -529,7 +543,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 }
 
-pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
     let usable_width = area.width.saturating_sub(2) as usize;
 
@@ -606,8 +620,21 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         cursor_line_idx.saturating_sub(inner_height - 1)
     };
 
-    // 计算 @mention 高亮范围（基于全局 char index, 相对于 input 起始）
-    let mention_ranges = find_at_mention_ranges(&app.ui.input);
+    // 计算 @mention 高亮范围（缓存：仅 input 变化时重算）
+    let mention_ranges =
+        if let Some((ref cached_input, ref cached_ranges)) = app.ui.cached_mention_ranges {
+            if cached_input == &app.ui.input {
+                cached_ranges.clone()
+            } else {
+                let ranges = find_at_mention_ranges(&app.ui.input);
+                app.ui.cached_mention_ranges = Some((app.ui.input.clone(), ranges.clone()));
+                ranges
+            }
+        } else {
+            let ranges = find_at_mention_ranges(&app.ui.input);
+            app.ui.cached_mention_ranges = Some((app.ui.input.clone(), ranges.clone()));
+            ranges
+        };
     // 转换为相对于 scroll_offset_chars 的偏移
     let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
 

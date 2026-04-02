@@ -76,4 +76,5 @@ allow:
 - Bash(ifconfig |:*)
 - Bash(git commit:*)
 - Bash(git log:*)
+- Bash(find ../claude-code/claude-code-backup/src:*)
 deny: []
