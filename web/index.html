@@ -12,6 +12,16 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://github.com/LingoJack/j" />
     <title>j - 快捷命令行工具</title>
+    <script>
+      // SPA 路由恢复：必须在 React 加载前执行，这样 BrowserRouter 才能正确读取路由
+      (function() {
+        var redirect = sessionStorage.getItem('spa:redirect');
+        if (redirect) {
+          sessionStorage.removeItem('spa:redirect');
+          history.replaceState(null, '', redirect);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

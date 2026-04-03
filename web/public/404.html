@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>j - 快捷命令行工具</title>
+    <script>
+      // SPA 404 重定向处理
+      // 将当前路径存储到 sessionStorage，然后重定向到 index.html
+      var pathSegmentsToKeep = 1; // 保持 /j/ 这个基础路径
+      var l = window.location;
+      var path = l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
+      sessionStorage.setItem('spa:redirect', l.pathname.slice(path.length - 1) + l.search + l.hash);
+      l.replace(path);
+    </script>
+  </head>
+  <body>
+    <p>Redirecting...</p>
+  </body>
+</html>
