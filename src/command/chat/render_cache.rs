@@ -1106,11 +1106,37 @@ pub fn render_tool_call_request_msg(
             }
         } else {
             // 折叠模式：图标 + 工具名 + 参数预览
-            let args_preview: String = tc.arguments.chars().take(60).collect();
-            let suffix = if tc.arguments.chars().count() > 60 {
-                "…"
+            let total_len = tc.arguments.chars().count();
+            let truncated = total_len > 60;
+
+            // 检测 JSON 开括号类型，用于截断时添加闭合括号
+            let closing_bracket = if truncated {
+                tc.arguments.chars().next().and_then(|c| match c {
+                    '{' => Some('}'),
+                    '[' => Some(']'),
+                    _ => None,
+                })
             } else {
-                ""
+                None
+            };
+
+            // 如果需要闭合括号，预留 4 字符给 "...}" 或 "...]"
+            let preview_len = if closing_bracket.is_some() {
+                60 - 4
+            } else {
+                60
+            };
+
+            let args_preview: String = tc.arguments.chars().take(preview_len).collect();
+
+            let suffix = if truncated {
+                if let Some(bracket) = closing_bracket {
+                    format!("...{}", bracket)
+                } else {
+                    "…".to_string()
+                }
+            } else {
+                "".to_string()
             };
 
             lines.push(Line::from(vec![
@@ -1221,7 +1247,7 @@ pub fn render_tool_result_msg(
         Span::styled(" ", Style::default()),
         Span::styled(status_icon, Style::default().fg(status_color)),
         Span::styled(" ", Style::default()),
-        Span::styled(summary, Style::default().fg(status_color)),
+        Span::styled(summary, Style::default().fg(theme.text_dim)),
     ]));
 
     if !expand || content.is_empty() {

@@ -228,7 +228,7 @@ fn get_bash_summary(content: &str, tool_args: Option<&str>) -> String {
         } else {
             ""
         };
-        format!("`{}{}`{}", short_cmd, suffix, line_info)
+        format!("{}{}{}", short_cmd, suffix, line_info)
     } else {
         format!("完成{}", line_info)
     }
