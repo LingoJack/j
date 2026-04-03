@@ -86,7 +86,10 @@
       "Bash(/tmp/quick_reference.txt:*)",
       "Read(//private/tmp/**)",
       "Bash(du -sh /Users/jacklingo/.claude-internal/plans/auto_compact* /Users/jacklingo/.claude-internal/plans/AUTO_COMPACT*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(sort -t: -k2 -nr)",
+      "Bash(du -sh TOOL_*.md)",
+      "Bash(du -sh TOOL_*.md DOCUMENTATION_MANIFEST.txt、)"
     ]
   },
   "language": "zh-CN",
