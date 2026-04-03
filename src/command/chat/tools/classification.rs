@@ -152,8 +152,19 @@ pub fn format_json_value(value: &serde_json::Value) -> String {
     }
 }
 
-/// 获取结果摘要
+/// 获取结果摘要（兼容旧调用）
+#[allow(dead_code)]
 pub fn get_result_summary(content: &str, is_error: bool) -> String {
+    get_result_summary_for_tool(content, is_error, "", None)
+}
+
+/// 获取工具特性化结果摘要
+pub fn get_result_summary_for_tool(
+    content: &str,
+    is_error: bool,
+    tool_name: &str,
+    tool_args: Option<&str>,
+) -> String {
     if is_error {
         return "失败".to_string();
     }
@@ -162,7 +173,180 @@ pub fn get_result_summary(content: &str, is_error: bool) -> String {
         return "无输出".to_string();
     }
 
-    // 统计信息
+    // 工具特性化摘要
+    match tool_name {
+        "Read" | "FileRead" => get_read_summary(content, tool_args),
+        "Bash" => get_bash_summary(content, tool_args),
+        "TodoWrite" => get_todo_write_summary(content, tool_args),
+        "TodoRead" => get_todo_read_summary(content),
+        "Task" | "TaskCreate" | "TaskGet" | "TaskUpdate" => get_task_summary(content, tool_args),
+        _ => get_generic_summary(content),
+    }
+}
+
+/// Read 工具摘要：显示文件路径和行数
+fn get_read_summary(content: &str, tool_args: Option<&str>) -> String {
+    let lines = content.lines().count();
+    let file_path = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("file_path")
+                .and_then(|p| p.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(path) = file_path {
+        // 只取文件名部分，避免过长
+        let short = short_path(&path, 40);
+        format!("{} ({} 行)", short, lines)
+    } else {
+        format!("{} 行", lines)
+    }
+}
+
+/// Bash 工具摘要：显示命令预览
+fn get_bash_summary(content: &str, tool_args: Option<&str>) -> String {
+    let command = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("command")
+                .and_then(|c| c.as_str().map(|s| s.to_string()))
+        });
+
+    let lines = content.lines().count();
+    let line_info = if lines > 1 {
+        format!(" ({} 行输出)", lines)
+    } else {
+        String::new()
+    };
+
+    if let Some(cmd) = command {
+        // 截取命令的第一行前 50 字符
+        let first_line = cmd.lines().next().unwrap_or(&cmd);
+        let short_cmd: String = first_line.chars().take(50).collect();
+        let suffix = if first_line.chars().count() > 50 {
+            "…"
+        } else {
+            ""
+        };
+        format!("`{}{}`{}", short_cmd, suffix, line_info)
+    } else {
+        format!("完成{}", line_info)
+    }
+}
+
+/// TodoWrite 工具摘要：从结果内容统计状态（与 TodoRead 一致）
+fn get_todo_write_summary(content: &str, tool_args: Option<&str>) -> String {
+    // TodoWrite 返回更新后的全部 todo 列表，用相同的统计逻辑
+    let action_prefix = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .map(|v| {
+            let is_merge = v.get("merge").and_then(|m| m.as_bool()).unwrap_or(false);
+            let count = v
+                .get("todos")
+                .and_then(|t| t.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            if is_merge {
+                format!("更新 {} 项 → ", count)
+            } else {
+                format!("写入 {} 项 → ", count)
+            }
+        })
+        .unwrap_or_default();
+
+    let status_summary = get_todo_status_summary(content);
+    format!("{}{}", action_prefix, status_summary)
+}
+
+/// TodoRead 工具摘要：解析 JSON 内容统计状态
+fn get_todo_read_summary(content: &str) -> String {
+    get_todo_status_summary(content)
+}
+
+/// 从 todo JSON 列表中统计状态摘要
+fn get_todo_status_summary(content: &str) -> String {
+    if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(content) {
+        let total = items.len();
+        let completed = items
+            .iter()
+            .filter(|i| i.get("status").and_then(|s| s.as_str()) == Some("completed"))
+            .count();
+        let in_progress = items
+            .iter()
+            .filter(|i| i.get("status").and_then(|s| s.as_str()) == Some("in_progress"))
+            .count();
+        let pending = total.saturating_sub(completed + in_progress);
+
+        let mut parts = Vec::new();
+        if pending > 0 {
+            parts.push(format!("⬜{}", pending));
+        }
+        if in_progress > 0 {
+            parts.push(format!("[~]{}", in_progress));
+        }
+        if completed > 0 {
+            parts.push(format!("☑️{}", completed));
+        }
+        format!("{} 项 ({})", total, parts.join(" "))
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// Task 工具摘要
+fn get_task_summary(content: &str, tool_args: Option<&str>) -> String {
+    let parsed = tool_args.and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok());
+
+    if let Some(ref v) = parsed {
+        let action = v.get("action").and_then(|a| a.as_str()).unwrap_or("");
+        match action {
+            "create" => {
+                let title = v
+                    .get("title")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("untitled");
+                let short: String = title.chars().take(30).collect();
+                format!("create: \"{}\"", short)
+            }
+            "list" => {
+                // 从 content 中尝试统计任务数
+                let count = content.lines().filter(|l| l.contains("\"id\"")).count();
+                if count > 0 {
+                    format!("list: {} 项任务", count)
+                } else {
+                    "list".to_string()
+                }
+            }
+            "get" => {
+                let task_id = v
+                    .get("taskId")
+                    .and_then(|t| t.as_u64())
+                    .map(|id| format!("#{}", id))
+                    .unwrap_or_default();
+                format!("get {}", task_id)
+            }
+            "update" => {
+                let task_id = v
+                    .get("taskId")
+                    .and_then(|t| t.as_u64())
+                    .map(|id| format!("#{}", id))
+                    .unwrap_or_default();
+                let status = v.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                if !status.is_empty() {
+                    format!("update {} -> {}", task_id, status)
+                } else {
+                    format!("update {}", task_id)
+                }
+            }
+            _ => get_generic_summary(content),
+        }
+    } else {
+        get_generic_summary(content)
+    }
+}
+
+/// 通用摘要（原有逻辑）
+fn get_generic_summary(content: &str) -> String {
     let lines = content.lines().count();
     let chars = content.chars().count();
 
@@ -177,6 +361,32 @@ pub fn get_result_summary(content: &str, is_error: bool) -> String {
     } else {
         format!("{} 字符", chars)
     }
+}
+
+/// 截断路径，保留文件名和部分目录
+fn short_path(path: &str, max_len: usize) -> String {
+    if path.chars().count() <= max_len {
+        return path.to_string();
+    }
+    // 取最后几个路径段
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() <= 2 {
+        let truncated: String = path.chars().take(max_len.saturating_sub(1)).collect();
+        return format!("{}…", truncated);
+    }
+    // 保留最后 2-3 段
+    let mut result = String::new();
+    for i in (0..parts.len()).rev() {
+        let candidate = parts[i..].join("/");
+        if candidate.chars().count() + 2 > max_len {
+            break;
+        }
+        result = candidate;
+    }
+    if result.is_empty() {
+        result = parts.last().unwrap_or(&"").to_string();
+    }
+    format!("…/{}", result)
 }
 
 /// 格式化执行时间

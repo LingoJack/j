@@ -168,6 +168,20 @@ pub fn build_message_lines_incremental(
                     })
                     .unwrap_or_default();
 
+                // 获取对应的 tool_call arguments（用于特性化渲染）
+                let tool_args = m.tool_call_id.as_ref().and_then(|tid| {
+                    app.state.session.messages[..idx]
+                        .iter()
+                        .rev()
+                        .find_map(|prev| {
+                            prev.tool_calls.as_ref().and_then(|tcs| {
+                                tcs.iter()
+                                    .find(|tc| tc.id == *tid)
+                                    .map(|tc| tc.arguments.clone())
+                            })
+                        })
+                });
+
                 let label = if tool_name.is_empty() {
                     "工具结果".to_string()
                 } else {
@@ -177,6 +191,7 @@ pub fn build_message_lines_incremental(
                 render_tool_result_msg(
                     &m.content,
                     &label,
+                    tool_args.as_deref(),
                     bubble_max_width,
                     &mut tmp_lines,
                     t,
@@ -1165,12 +1180,13 @@ fn render_json_params_enhanced(
 pub fn render_tool_result_msg(
     content: &str,
     label: &str,
+    tool_args: Option<&str>,
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
     expand: bool,
 ) {
-    use super::tools::classification::{ToolCategory, ToolStatus, get_result_summary};
+    use super::tools::classification::{ToolCategory, ToolStatus, get_result_summary_for_tool};
 
     // 与前一条消息（tool_call）之间留一行间距
     lines.push(Line::from(""));
@@ -1191,7 +1207,7 @@ pub fn render_tool_result_msg(
     let status_color = status.color(theme);
 
     // 获取结果摘要
-    let summary = get_result_summary(content, is_error);
+    let summary = get_result_summary_for_tool(content, is_error, &tool_name, tool_args);
 
     // 第一行：图标 + 工具名 + 状态 + 摘要
     lines.push(Line::from(vec![
@@ -1251,6 +1267,12 @@ pub fn render_tool_result_msg(
     } else if tool_name == "Agent" {
         // Agent 结果嵌套显示
         render_agent_result_nested(&clean, content_w, lines, theme);
+    } else if tool_name == "Bash" {
+        // Bash 结果：命令行高亮 + 输出
+        render_bash_result(&clean, tool_args, content_w, lines, theme);
+    } else if tool_name == "TodoRead" || tool_name == "TodoWrite" {
+        // TodoRead/TodoWrite 结果：checkbox 样式
+        render_todo_result(content, content_w, lines, theme);
     } else {
         // 正常结果
         let all_lines: Vec<&str> = clean.lines().take(100).collect();
@@ -1353,6 +1375,134 @@ fn render_agent_result_nested(
             format!("    ... (共 {} 行)", total),
             Style::default().fg(theme.text_dim),
         )));
+    }
+}
+
+/// 渲染 Bash 工具结果（命令行高亮 + 输出）
+fn render_bash_result(
+    content: &str,
+    tool_args: Option<&str>,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    // 提取命令
+    let command = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("command")
+                .and_then(|c| c.as_str().map(|s| s.to_string()))
+        });
+
+    if let Some(cmd) = command {
+        // 命令行用高亮颜色显示
+        let cmd_w = content_w.saturating_sub(6); // "    $ " 前缀
+        for (i, cmd_line) in cmd.lines().enumerate() {
+            let prefix = if i == 0 { "    $ " } else { "      " };
+            for wrapped in wrap_text(cmd_line, cmd_w) {
+                lines.push(Line::from(vec![
+                    Span::styled(prefix, Style::default().fg(theme.label_ai)),
+                    Span::styled(
+                        wrapped,
+                        Style::default()
+                            .fg(theme.text_white)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]));
+            }
+        }
+    }
+
+    // 输出内容（灰色）
+    let output_lines: Vec<&str> = content.lines().take(100).collect();
+    for line in &output_lines {
+        for wrapped in wrap_text(line, content_w) {
+            lines.push(Line::from(Span::styled(
+                format!("    {}", wrapped),
+                Style::default().fg(theme.text_dim),
+            )));
+        }
+    }
+
+    let total_lines = content.lines().count();
+    if total_lines > 100 {
+        lines.push(Line::from(Span::styled(
+            format!("    ... (共 {} 行，显示前 100 行)", total_lines),
+            Style::default().fg(theme.text_dim),
+        )));
+    }
+}
+
+/// 渲染 TodoRead/TodoWrite 工具结果（checkbox 样式，与 todo TUI 一致）
+fn render_todo_result(
+    content: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(content) {
+        for item in &items {
+            let status = item
+                .get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("pending");
+            let text = item
+                .get("content")
+                .and_then(|c| c.as_str())
+                .unwrap_or("(empty)");
+            let id = item.get("id").and_then(|i| i.as_str()).unwrap_or("");
+
+            // 与 todo TUI 保持一致的 checkbox 样式和颜色
+            let (checkbox, color) = match status {
+                "completed" => ("[x]", theme.label_ai), // 绿色，与 todo UI 一致
+                "in_progress" => ("[~]", theme.title_loading), // 黄色
+                "cancelled" => ("[-]", theme.text_dim), // 灰色
+                _ => ("[ ]", Color::Yellow),            // pending: 黄色，与 todo UI 一致
+            };
+
+            let id_display = if !id.is_empty() {
+                format!("{} ", id)
+            } else {
+                String::new()
+            };
+
+            let item_text = format!("{}{}", id_display, text);
+            let max_w = content_w.saturating_sub(10); // "    [x] " prefix
+            for (i, wrapped) in wrap_text(&item_text, max_w).iter().enumerate() {
+                if i == 0 {
+                    lines.push(Line::from(vec![
+                        Span::styled("    ", Style::default()),
+                        Span::styled(format!("{} ", checkbox), Style::default().fg(color)),
+                        Span::styled(
+                            wrapped.clone(),
+                            if status == "completed" {
+                                Style::default()
+                                    .fg(theme.text_dim)
+                                    .add_modifier(Modifier::CROSSED_OUT)
+                            } else {
+                                Style::default().fg(theme.text_white)
+                            },
+                        ),
+                    ]));
+                } else {
+                    lines.push(Line::from(Span::styled(
+                        format!("        {}", wrapped),
+                        Style::default().fg(theme.text_dim),
+                    )));
+                }
+            }
+        }
+    } else {
+        // 非 JSON，回退到普通显示
+        let all_lines: Vec<&str> = content.lines().take(100).collect();
+        for line in all_lines {
+            for wrapped in wrap_text(line, content_w) {
+                lines.push(Line::from(Span::styled(
+                    format!("    {}", wrapped),
+                    Style::default().fg(theme.text_dim),
+                )));
+            }
+        }
     }
 }
 

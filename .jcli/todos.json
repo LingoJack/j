@@ -1,32 +1,22 @@
 [
   {
     "id": "1",
-    "content": "读取文档内容并对比源码进行勘误",
+    "content": "演示 TodoWrite 工具的使用",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "检查 tools.md 文档",
+    "content": "演示 TodoRead 工具读取列表",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "检查 agentMode.md 文档",
+    "content": "演示更新待办状态",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "检查 skills.md 文档",
-    "status": "completed"
-  },
-  {
-    "id": "5",
-    "content": "检查其他文档",
-    "status": "completed"
-  },
-  {
-    "id": "6",
-    "content": "修复 Markdown 渲染器的行内元素解析顺序问题",
+    "content": "总结 TODO 工具的用法",
     "status": "completed"
   }
 ]

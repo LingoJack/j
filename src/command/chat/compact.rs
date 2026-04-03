@@ -242,5 +242,14 @@ pub async fn auto_compact(
         images: None,
     });
 
+    // UI 提示：在消息区显示系统消息
+    messages.push(ChatMessage {
+        role: "system".to_string(),
+        content: format!("📦 上下文已压缩 (transcript: {})", transcript_path),
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
+    });
+
     Ok(())
 }

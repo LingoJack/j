@@ -84,7 +84,9 @@
       "Bash(rm -rf /tmp/test_realm /tmp/test_kit2)",
       "Bash(find /Users/jacklingo/dev_custom/claude-code/claude-code-backup/src/components -type f -name *Screen* -o -name *Layout*)",
       "Bash(/tmp/quick_reference.txt:*)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(du -sh /Users/jacklingo/.claude-internal/plans/auto_compact* /Users/jacklingo/.claude-internal/plans/AUTO_COMPACT*)",
+      "Bash(find:*)"
     ]
   },
   "language": "zh-CN",
