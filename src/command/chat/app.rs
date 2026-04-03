@@ -75,13 +75,11 @@ pub struct ToolResultMsg {
     pub images: Vec<crate::command::chat::tools::ImageData>,
 }
 
-/// 工具后台线程 → 主线程的执行完成消息
-pub struct ToolExecDoneMsg {
+/// Worker 线程完成后写入共享状态，供 UI poll 更新显示
+pub struct CompletedToolResult {
     pub tool_call_id: String,
-    pub output: String,
+    pub summary: String,
     pub is_error: bool,
-    /// 工具返回的图片数据
-    pub images: Vec<crate::command::chat::tools::ImageData>,
 }
 
 /// ask 工具选项
@@ -284,11 +282,9 @@ pub struct ToolExecutor {
     pub tools_executing_count: usize,
     /// 工具执行取消标志
     pub tool_cancelled: Arc<std::sync::atomic::AtomicBool>,
-    /// 工具后台线程 → 主线程的执行结果 channel（发送端）
-    pub tool_exec_tx: Option<mpsc::Sender<ToolExecDoneMsg>>,
-    /// 工具后台线程 → 主线程的执行结果 channel
-    pub tool_exec_rx: Option<mpsc::Receiver<ToolExecDoneMsg>>,
-    /// 工具结果发送通道（主线程 → 后台线程）
+    /// Worker 完成后写入的共享结果（UI poll 时 drain）
+    pub completed_results: Arc<Mutex<Vec<CompletedToolResult>>>,
+    /// 工具结果发送通道（Worker/UI → Agent 线程）
     pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
 }
 
@@ -301,55 +297,34 @@ impl ToolExecutor {
             pending_tool_execution: false,
             tools_executing_count: 0,
             tool_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            tool_exec_tx: None,
-            tool_exec_rx: None,
+            completed_results: Arc::new(Mutex::new(Vec::new())),
             tool_result_tx: None,
         }
     }
 
-    /// 轮询后台工具执行结果，更新状态并转发给 agent loop。
-    /// 返回新完成的工具信息 (tool_name, output_full, is_error)。
+    /// 轮询后台工具执行结果，更新 UI 状态。
+    /// Worker 已直接发 ToolResultMsg 给 Agent，这里只更新 active_tool_calls 的显示状态。
+    /// 返回新完成的工具信息 (tool_name, summary, is_error)（供 broadcast_ws 使用）。
     pub fn poll_results(&mut self) -> Vec<(String, String, bool)> {
-        let mut exec_done_msgs: Vec<ToolExecDoneMsg> = Vec::new();
-        if let Some(ref rx) = self.tool_exec_rx {
-            loop {
-                match rx.try_recv() {
-                    Ok(done) => {
-                        exec_done_msgs.push(done);
-                    }
-                    Err(mpsc::TryRecvError::Empty) => break,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        write_info_log("poll_tool_exec_results", "tool_exec_rx disconnected");
-                        self.tool_exec_tx = None;
-                        self.tool_exec_rx = None;
-                        break;
-                    }
-                }
+        let done_items: Vec<CompletedToolResult> = {
+            if let Ok(mut results) = self.completed_results.lock() {
+                results.drain(..).collect()
+            } else {
+                return Vec::new();
             }
-        }
-        if !exec_done_msgs.is_empty() {
+        };
+        if !done_items.is_empty() {
             write_info_log(
                 "poll_tool_exec_results",
                 &format!(
-                    "收到 {} 个工具结果, tools_executing_count={}, tool_result_tx={}",
-                    exec_done_msgs.len(),
+                    "收到 {} 个工具结果, tools_executing_count={}",
+                    done_items.len(),
                     self.tools_executing_count,
-                    self.tool_result_tx.is_some(),
                 ),
             );
         }
         let mut completed = Vec::new();
-        for done in exec_done_msgs {
-            // 生成摘要用于内部状态显示（保留原有逻辑）
-            let summary = if done.output.len() > 60 {
-                let mut end = 60;
-                while !done.output.is_char_boundary(end) {
-                    end -= 1;
-                }
-                format!("{}...", &done.output[..end])
-            } else {
-                done.output.clone()
-            };
+        for done in done_items {
             // 查找工具名
             let tool_name = self
                 .active_tool_calls
@@ -357,32 +332,21 @@ impl ToolExecutor {
                 .find(|tc| tc.tool_call_id == done.tool_call_id)
                 .map(|tc| tc.tool_name.clone())
                 .unwrap_or_default();
+            // 更新 UI 显示状态
             if let Some(tc) = self
                 .active_tool_calls
                 .iter_mut()
                 .find(|tc| tc.tool_call_id == done.tool_call_id)
             {
                 tc.status = if done.is_error {
-                    ToolExecStatus::Failed(summary.clone())
+                    ToolExecStatus::Failed(done.summary.clone())
                 } else {
-                    ToolExecStatus::Done(summary.clone())
+                    ToolExecStatus::Done(done.summary.clone())
                 };
             }
-            // 返回完整的 output，前端自行处理显示截断
-            // 先转发结果给后台 agent 线程，再 push 到 completed
-            if let Some(ref tx) = self.tool_result_tx {
-                let _ = tx.send(ToolResultMsg {
-                    tool_call_id: done.tool_call_id.clone(),
-                    result: done.output.clone(),
-                    is_error: done.is_error,
-                    images: done.images.clone(),
-                });
-            }
-            completed.push((tool_name, done.output, done.is_error));
+            completed.push((tool_name, done.summary, done.is_error));
             self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
             if self.tools_executing_count == 0 {
-                self.tool_exec_tx = None;
-                self.tool_exec_rx = None;
                 // 本批工具全部完成，重置取消标志
                 self.tool_cancelled
                     .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -416,31 +380,21 @@ impl ToolExecutor {
 
         self.tools_executing_count += tasks.len();
 
-        let exec_tx = if let Some(ref tx) = self.tool_exec_tx {
-            tx.clone()
-        } else {
-            let (tx, rx) = mpsc::channel::<ToolExecDoneMsg>();
-            self.tool_exec_tx = Some(tx.clone());
-            self.tool_exec_rx = Some(rx);
-            tx
-        };
+        let result_tx = self.tool_result_tx.clone();
+        let completed_results = Arc::clone(&self.completed_results);
 
         for (tool_call_id, tool_name, arguments) in tasks {
-            let tx = exec_tx.clone();
+            let result_tx = result_tx.clone();
+            let completed_results = Arc::clone(&completed_results);
             let registry = Arc::clone(registry);
             let cancelled = Arc::clone(&self.tool_cancelled);
             std::thread::spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     registry.execute(&tool_name, &arguments, &cancelled)
                 }));
-                match result {
+                let (output, is_error, images) = match result {
                     Ok(exec_result) => {
-                        let _ = tx.send(ToolExecDoneMsg {
-                            tool_call_id,
-                            output: exec_result.output,
-                            is_error: exec_result.is_error,
-                            images: exec_result.images,
-                        });
+                        (exec_result.output, exec_result.is_error, exec_result.images)
                     }
                     Err(panic_info) => {
                         let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
@@ -450,13 +404,35 @@ impl ToolExecutor {
                         } else {
                             "unknown panic".to_string()
                         };
-                        let _ = tx.send(ToolExecDoneMsg {
-                            tool_call_id,
-                            output: format!("[Tool panic] {}", msg),
-                            is_error: true,
-                            images: vec![],
-                        });
+                        (format!("[Tool panic] {}", msg), true, vec![])
                     }
+                };
+                // 生成摘要供 UI 显示
+                let summary = if output.len() > 60 {
+                    let mut end = 60;
+                    while !output.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    format!("{}...", &output[..end])
+                } else {
+                    output.clone()
+                };
+                // 写入共享状态（供 UI poll）
+                if let Ok(mut results) = completed_results.lock() {
+                    results.push(CompletedToolResult {
+                        tool_call_id: tool_call_id.clone(),
+                        summary,
+                        is_error,
+                    });
+                }
+                // 直接发给 Agent 线程
+                if let Some(ref tx) = result_tx {
+                    let _ = tx.send(ToolResultMsg {
+                        tool_call_id,
+                        result: output,
+                        is_error,
+                        images,
+                    });
                 }
             });
         }
@@ -472,11 +448,8 @@ impl ToolExecutor {
         write_info_log(
             "execute_pending_tool",
             &format!(
-                "确认执行 idx={}, tool={}, tools_executing_count={}, tool_exec_tx={}",
-                idx,
-                self.active_tool_calls[idx].tool_name,
-                self.tools_executing_count,
-                self.tool_exec_tx.is_some(),
+                "确认执行 idx={}, tool={}, tools_executing_count={}",
+                idx, self.active_tool_calls[idx].tool_name, self.tools_executing_count,
             ),
         );
 
@@ -497,30 +470,16 @@ impl ToolExecutor {
         self.tool_cancelled
             .store(false, std::sync::atomic::Ordering::Relaxed);
 
-        let exec_tx = if let Some(ref tx) = self.tool_exec_tx {
-            tx.clone()
-        } else {
-            let (tx, rx) = mpsc::channel::<ToolExecDoneMsg>();
-            self.tool_exec_tx = Some(tx.clone());
-            self.tool_exec_rx = Some(rx);
-            tx
-        };
-
+        let result_tx = self.tool_result_tx.clone();
+        let completed_results = Arc::clone(&self.completed_results);
         let registry = Arc::clone(registry);
         let cancelled = Arc::clone(&self.tool_cancelled);
         std::thread::spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 registry.execute(&tool_name, &arguments, &cancelled)
             }));
-            match result {
-                Ok(exec_result) => {
-                    let _ = exec_tx.send(ToolExecDoneMsg {
-                        tool_call_id,
-                        output: exec_result.output,
-                        is_error: exec_result.is_error,
-                        images: exec_result.images,
-                    });
-                }
+            let (output, is_error, images) = match result {
+                Ok(exec_result) => (exec_result.output, exec_result.is_error, exec_result.images),
                 Err(panic_info) => {
                     let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
                         s.to_string()
@@ -529,13 +488,35 @@ impl ToolExecutor {
                     } else {
                         "unknown panic".to_string()
                     };
-                    let _ = exec_tx.send(ToolExecDoneMsg {
-                        tool_call_id,
-                        output: format!("[Tool panic] {}", msg),
-                        is_error: true,
-                        images: vec![],
-                    });
+                    (format!("[Tool panic] {}", msg), true, vec![])
                 }
+            };
+            // 生成摘要供 UI 显示
+            let summary = if output.len() > 60 {
+                let mut end = 60;
+                while !output.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &output[..end])
+            } else {
+                output.clone()
+            };
+            // 写入共享状态（供 UI poll）
+            if let Ok(mut results) = completed_results.lock() {
+                results.push(CompletedToolResult {
+                    tool_call_id: tool_call_id.clone(),
+                    summary,
+                    is_error,
+                });
+            }
+            // 直接发给 Agent 线程
+            if let Some(ref tx) = result_tx {
+                let _ = tx.send(ToolResultMsg {
+                    tool_call_id,
+                    result: output,
+                    is_error,
+                    images,
+                });
             }
         });
 
@@ -640,8 +621,9 @@ impl ToolExecutor {
     pub fn reset(&mut self) {
         self.active_tool_calls.clear();
         self.pending_tool_idx = 0;
-        self.tool_exec_tx = None;
-        self.tool_exec_rx = None;
+        if let Ok(mut results) = self.completed_results.lock() {
+            results.clear();
+        }
         self.tools_executing_count = 0;
         self.pending_tool_execution = false;
         self.tool_cancelled
@@ -1046,8 +1028,6 @@ pub enum Action {
     RejectPendingToolWithReason(String),
     /// 允许并执行当前工具（记住规则到 .jcli/）
     AllowAndExecutePendingTool,
-    /// 工具后台执行完成
-    ToolExecDone(ToolExecDoneMsg),
 
     // ========== Ask 工具交互 ==========
     /// Ask 工具问题导航（上一题/下一题）
@@ -1616,9 +1596,6 @@ impl ChatApp {
             }
             Action::AllowAndExecutePendingTool => {
                 self.allow_and_execute_pending_tool();
-            }
-            Action::ToolExecDone(ref _msg) => {
-                // Will delegate to helper (existing ToolExecutor::poll_results logic)
             }
 
             // ========== Ask 工具交互 ==========
@@ -3359,8 +3336,6 @@ impl ChatApp {
     fn finish_loading(&mut self, had_error: bool, was_cancelled: bool) {
         self.agent = None;
         self.tool_executor.tool_result_tx = None;
-        self.tool_executor.tool_exec_tx = None;
-        self.tool_executor.tool_exec_rx = None;
         self.tool_executor.tools_executing_count = 0;
         self.state.is_loading = false;
         self.ui.last_rendered_streaming_len = 0;
