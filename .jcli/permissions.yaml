@@ -83,4 +83,6 @@ allow:
 - Bash(find /Users/jacklingo:*)
 - Bash(tree -L:*)
 - Bash(head -5:*)
+- Bash(cargo info:*)
+- Bash(grep -r:*)
 deny: []

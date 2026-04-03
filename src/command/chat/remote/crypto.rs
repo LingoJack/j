@@ -1,6 +1,7 @@
 //! ECDH P-256 密钥协商 + AES-256-GCM 加密工具
 
 use aes_gcm::aead::Aead;
+use aes_gcm::aead::generic_array::typenum::U12;
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -37,7 +38,7 @@ pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
     let cipher = Aes256Gcm::new(key.into());
     let mut nonce_bytes = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce: &Nonce<U12> = (&nonce_bytes).into();
 
     let ciphertext = cipher
         .encrypt(nonce, plaintext)
@@ -58,7 +59,7 @@ pub fn decrypt(key: &[u8; 32], data: &[u8]) -> Result<Vec<u8>, &'static str> {
     }
     let (nonce_bytes, ciphertext) = data.split_at(NONCE_LEN);
     let cipher = Aes256Gcm::new(key.into());
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce: &Nonce<U12> = nonce_bytes.into();
 
     cipher.decrypt(nonce, ciphertext).map_err(|_| "解密失败")
 }

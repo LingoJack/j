@@ -41,10 +41,10 @@ pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
 self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
 nix = { version = "0.31", features = ["process"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip", "brotli", "deflate"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "json"] }
 urlencoding = "2.1"
-html2text = "0.14"
-scraper = "0.25"
+html2text = "0.16"
+scraper = "0.26"
 html2md = "0.2"
 ratatui-image = "8.0.2"
 image = "0.25"
@@ -54,16 +54,16 @@ chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-
 base64 = "0.22"
 ignore = "0.4.25"
 regex = "1.12.3"
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.29"
 qrcode = "0.14"
 rand = "0.8"
 uuid = { version = "1", features = ["v4"] }
 p256 = { version = "0.13", features = ["ecdh"] }
 aes-gcm = "0.10"
-hkdf = "0.12"
-sha2 = "0.10"
-ctrlc = "3.4"
-core-graphics = "0.24"
+hkdf = "0.13"
+sha2 = "0.11"
+ctrlc = "3.5"
+core-graphics = "0.25"
 core-foundation = "0.10"
 
 [features]
@@ -72,3 +72,4 @@ browser_cdp = ["dep:chromiumoxide"]
 
 [patch.crates-io]
 tui-textarea = { path = "patches/tui-textarea-0.7.0" }
+
