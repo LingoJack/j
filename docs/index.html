@@ -18,7 +18,8 @@
         var redirect = sessionStorage.getItem('spa:redirect');
         if (redirect) {
           sessionStorage.removeItem('spa:redirect');
-          history.replaceState(null, '', redirect);
+          // 恢复完整路径，包含基础路径 /j/
+          history.replaceState(null, '', '/j' + redirect);
         }
       })();
     </script>

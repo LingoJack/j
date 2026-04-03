@@ -5,12 +5,14 @@
     <title>j - 快捷命令行工具</title>
     <script>
       // SPA 404 重定向处理
-      // 将当前路径存储到 sessionStorage，然后重定向到 index.html
-      var pathSegmentsToKeep = 1; // 保持 /j/ 这个基础路径
+      // GitHub Pages 项目站点路径是 /<repo-name>/
+      // 用户访问 /j/docs 时，需要保存 /docs，然后重定向到 /j/
       var l = window.location;
-      var path = l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
-      sessionStorage.setItem('spa:redirect', l.pathname.slice(path.length - 1) + l.search + l.hash);
-      l.replace(path);
+      var baseUrl = '/j'; // 项目基础路径（不带末尾斜杠）
+      // 保存去掉 /j 前缀后的路径，例如 /j/docs -> /docs
+      var pathWithoutBase = l.pathname.slice(baseUrl.length) || '/';
+      sessionStorage.setItem('spa:redirect', pathWithoutBase + l.search + l.hash);
+      l.replace(baseUrl + '/');
     </script>
   </head>
   <body>
