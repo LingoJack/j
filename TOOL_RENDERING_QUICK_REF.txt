@@ -1,0 +1,163 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           J-CLI TOOL CALL RENDERING - QUICK REFERENCE GUIDE                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📍 PRIMARY FILE: src/command/chat/render_cache.rs
+
+┌─ TOOL CALL RENDERING FLOW ──────────────────────────────────────────────────┐
+│                                                                              │
+│  1. build_message_lines_incremental() [Lines 50-337]                        │
+│     ↓ (dispatches on message role)                                          │
+│                                                                              │
+│  2a. ROLE_ASSISTANT with tool_calls:                                        │
+│      render_tool_call_request_msg() [Lines 1038-1120]                       │
+│      ├─ Collapsed: 📄 Read /path (60 char preview)…                         │
+│      └─ Expanded:  📄 Read ⏳                                               │
+│                      path: /path/to/file                                    │
+│                                                                              │
+│  2b. ROLE_TOOL (result):                                                    │
+│      render_tool_result_msg() [Lines 1165-1274]                             │
+│      ├─ Collapsed: 🔧 Bash ✓ 12 lines, 450 chars                           │
+│      └─ Expanded:  🔧 Bash ✓ 12 lines, 450 chars                           │
+│                      [output content - up to 100 lines]                     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TOOL CATEGORIES & ICONS ───────────────────────────────────────────────────┐
+│                                                                              │
+│  📄 File    (Blue)        Read, Write, Edit, Glob                           │
+│  🔍 Search  (Green)       Grep                                              │
+│  ⚡ Execute (Yellow)      Bash, Task, TaskOutput, TaskCreate/Update/Get     │
+│  🌐 Network (Cyan)        WebFetch, WebSearch, WebBrowser                   │
+│  📋 Plan    (Green)       EnterPlanMode, ExitPlanMode                       │
+│  🤖 Agent   (Yellow)      Agent                                             │
+│  🔧 Other   (Gray)        Unknown tools                                     │
+│                                                                              │
+│  File: src/command/chat/tools/classification.rs [Lines 1-66]               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TOOL CALL STATUS ICONS ────────────────────────────────────────────────────┐
+│                                                                              │
+│  ⏳ Pending    - Waiting for execution (Yellow)                             │
+│  ✓  Success    - Tool succeeded (Green)                                    │
+│  ✗  Failed     - Tool failed (Red)                                         │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ KEY DATA STRUCTURES ───────────────────────────────────────────────────────┐
+│                                                                              │
+│  ToolCallItem (src/command/chat/storage.rs:93-99)                          │
+│  ├─ id: String           (unique call ID)                                   │
+│  ├─ name: String         (tool name: "Read", "Bash", etc)                   │
+│  └─ arguments: String    (JSON string of parameters)                        │
+│                                                                              │
+│  ChatMessage (src/command/chat/storage.rs:117-125)                         │
+│  ├─ role: String         ("user"|"assistant"|"tool"|"system")              │
+│  ├─ content: String      (message text)                                     │
+│  ├─ tool_calls: Option<Vec<ToolCallItem>>  (only for assistant)            │
+│  ├─ tool_call_id: Option<String>           (only for tool messages)        │
+│  └─ images: Vec<ImageData>                 (multimodal data)                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ EXPAND_TOOLS FLAG CONTROL ─────────────────────────────────────────────────┐
+│                                                                              │
+│  Location: src/command/chat/app.rs (UiState struct)                        │
+│  Default: false (collapsed)                                                 │
+│  Toggle: Ctrl+O                                                             │
+│                                                                              │
+│  When toggled:                                                              │
+│  ├─ Mark expand_tools = !expand_tools                                      │
+│  └─ Invalidate ALL tool message caches (Lines 84-89 in render_cache.rs)   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ RESULT SUMMARY CALCULATION ────────────────────────────────────────────────┐
+│                                                                              │
+│  get_result_summary() [src/command/chat/tools/classification.rs:156-180]   │
+│                                                                              │
+│  Empty:              "无输出"                                               │
+│  1 line, <100 chars: "{N} 字符"         (e.g., "42 字符")                 │
+│  1 line, ≥100 chars: "{size}KB"        (e.g., "1.2KB")                    │
+│  Multi-line, <1KB:  "{N} 行, {M} 字符" (e.g., "12 行, 450 字符")          │
+│  Multi-line, ≥1KB:  "{N} 行, {size}KB" (e.g., "45 行, 2.3KB")             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SPECIAL CONTENT HANDLING (Expanded Mode) ──────────────────────────────────┐
+│                                                                              │
+│  Diff Content:                                                              │
+│  ├─ Function: render_diff_content() [Lines 1277-1321]                      │
+│  ├─ Detects: ```diff blocks in output                                      │
+│  ├─ Highlights:                                                             │
+│  │  ├─ Lines with "- " → Red (theme.diff_del)                              │
+│  │  ├─ Lines with "+ " → Green (theme.diff_add)                            │
+│  │  └─ Lines with "@@ " → Cyan (theme.diff_header)                         │
+│  └─ Max: 100 lines + continuation notice                                    │
+│                                                                              │
+│  Agent Results:                                                             │
+│  ├─ Function: render_agent_result_nested() [Lines 1324-1357]               │
+│  ├─ Format: Tree-style with ├─, └─ prefixes                                │
+│  └─ Max: 30 lines + continuation notice                                     │
+│                                                                              │
+│  Error Results:                                                             │
+│  ├─ Triggered: Content matches error pattern                               │
+│  ├─ Label: "Error:" in red                                                 │
+│  └─ Max: 20 lines + truncation notice                                      │
+│                                                                              │
+│  Normal Results:                                                            │
+│  ├─ Simple indented text display                                           │
+│  └─ Max: 100 lines + truncation notice                                     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ JSON PARAMETER RENDERING ──────────────────────────────────────────────────┐
+│                                                                              │
+│  Function: render_json_params_enhanced() [Lines 1123-1160]                 │
+│                                                                              │
+│  For each parameter in JSON object:                                        │
+│  ├─ Display: "    key: value"                                              │
+│  ├─ Truncation: value > max_width → "value…"                               │
+│  └─ Smart formatting via format_json_value():                              │
+│     ├─ Strings:  "text" (truncate @ 50 chars)                              │
+│     ├─ Arrays:   "[N items]"                                               │
+│     └─ Objects:  "{key1, key2, key3}"                                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ PERFORMANCE OPTIMIZATIONS (P0/P1/P2) ──────────────────────────────────────┐
+│                                                                              │
+│  P0: Message-Level Caching                                                 │
+│  └─ Per-message rendering cached; reuse on unchanged content               │
+│                                                                              │
+│  P1: Incremental Streaming                                                 │
+│  └─ Only last incomplete paragraph re-parsed; completed cached (Arc)       │
+│                                                                              │
+│  P2: Direct Indexing                                                       │
+│  └─ msg_start_lines map (index → line offset); no flat Vec assembly        │
+│                                                                              │
+│  Cache Invalidation Triggers:                                              │
+│  ├─ bubble_max_width changed                                               │
+│  ├─ expand_tools changed                                                   │
+│  ├─ message content length changed                                         │
+│  └─ is_selected (browse mode highlight) changed                            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ KEY CODE LOCATIONS (LINE NUMBERS) ─────────────────────────────────────────┐
+│                                                                              │
+│  Main Dispatcher:           render_cache.rs:50-337 (build_message_lines…)  │
+│  Tool Call Request:         render_cache.rs:1038-1120                      │
+│  Tool Result:               render_cache.rs:1165-1274                      │
+│  JSON Params:               render_cache.rs:1123-1160                      │
+│  Diff Rendering:            render_cache.rs:1277-1321                      │
+│  Agent Results:             render_cache.rs:1324-1357                      │
+│  Tool Categories:           classification.rs:1-66                         │
+│  Result Summary:            classification.rs:156-180                      │
+│  expand_tools Flag:         app.rs (~line 400)                             │
+│  ToolCallItem Struct:       storage.rs:93-99                               │
+│  ChatMessage Struct:        storage.rs:117-125                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
