@@ -1,6 +1,7 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
 use super::super::handler::{
-    get_filtered_command_names, get_filtered_files, get_filtered_skill_names, get_filtered_skills,
+    AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
+    get_filtered_skill_names,
 };
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
@@ -1087,22 +1088,29 @@ fn draw_popup_list(
 /// 绘制 @ 补全弹窗（输入区域上方浮动）
 pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
-    let filtered = get_filtered_skills(app);
+    let filtered = get_filtered_all_items(app);
     if filtered.is_empty() {
         return;
     }
-    let max_items = filtered.len().min(8);
+    let max_items = filtered.len().min(15);
     let labels: Vec<String> = filtered
         .iter()
         .take(max_items)
-        .map(|n| format!("  @{}  ", n))
+        .map(|item| item.display_label())
         .collect();
-    let items: Vec<ListItem<'static>> = labels
+    let items: Vec<ListItem<'static>> = filtered
         .iter()
-        .map(|label| {
+        .take(max_items)
+        .map(|item| {
+            let color = match item {
+                AtPopupItem::Category(_) => t.label_ai,
+                AtPopupItem::Skill(_) => t.label_ai,
+                AtPopupItem::Command(_) => t.text_system,
+                AtPopupItem::File(_) => t.label_user,
+            };
             ListItem::new(Line::from(Span::styled(
-                label.clone(),
-                Style::default().fg(t.label_ai),
+                item.display_label(),
+                Style::default().fg(color),
             )))
         })
         .collect();
@@ -1111,7 +1119,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         input_area,
         items,
         &labels,
-        " Skills ".to_string(),
+        " @ 补全 ".to_string(),
         t.label_ai,
         t.border_title,
         t.bg_title,

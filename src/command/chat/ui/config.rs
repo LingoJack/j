@@ -9,7 +9,7 @@ use super::components::{
 use crate::command::chat::app::{ChatApp, ConfigTab};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -40,49 +40,14 @@ fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
 }
 
 /// 配置界面主入口（分发器）
+///
+/// 将面板拆分为三层：
+///   1. 固定头部：边框标题 + Tab 栏 + 分隔线
+///   2. 固定 Tab 头部：每个 Tab 自身的摘要信息（如"当前会话"、"总开关"等）
+///   3. 可滚动列表：只有列表项跟随选中项滚动
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
     let bg = t.bg_title;
-
-    let mut lines: Vec<Line> = vec![
-        Line::from(""),
-        draw_tab_bar_line(app),
-        Line::from(""),
-        separator_line(area.width, t),
-        Line::from(""),
-    ];
-
-    let mut field_line_indices: Vec<usize> = Vec::new();
-
-    match app.ui.config_tab {
-        ConfigTab::Model => draw_tab_model_lines(&mut lines, &mut field_line_indices, app),
-        ConfigTab::Global => draw_tab_global_lines(&mut lines, &mut field_line_indices, app),
-        ConfigTab::Tools => draw_tab_tools_lines(&mut lines, &mut field_line_indices, app),
-        ConfigTab::Skills => draw_tab_skills_lines(&mut lines, &mut field_line_indices, app),
-        ConfigTab::Hooks => draw_tab_hooks_lines(&mut lines, app),
-        ConfigTab::Commands => draw_tab_commands_lines(&mut lines, &mut field_line_indices, app),
-        ConfigTab::Session => draw_tab_session_lines(&mut lines, &mut field_line_indices, app),
-        ConfigTab::Archive => draw_tab_archive_lines(&mut lines, &mut field_line_indices, app),
-    }
-
-    // 滚动：确保选中字段始终可见
-    let inner_height = area.height.saturating_sub(2) as usize;
-    let selected_idx = match app.ui.config_tab {
-        ConfigTab::Session => app.ui.session_list_index,
-        ConfigTab::Archive => app.ui.archive_list_index,
-        _ => app.ui.config_field_idx,
-    };
-    if let Some(&selected_line) = field_line_indices.get(selected_idx) {
-        let scroll = app.ui.config_scroll_offset as usize;
-        let new_scroll = if selected_line < scroll {
-            selected_line
-        } else if selected_line >= scroll + inner_height {
-            selected_line.saturating_sub(inner_height - 1)
-        } else {
-            scroll
-        };
-        app.ui.config_scroll_offset = new_scroll as u16;
-    }
 
     let title = match app.ui.config_tab {
         ConfigTab::Model => " \u{2699}\u{fe0f} \u{6a21}\u{578b}\u{914d}\u{7f6e} ",
@@ -95,51 +60,154 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Archive => " \u{1f4e6} \u{5f52}\u{6863}\u{7ba1}\u{7406} ",
     };
 
-    let content = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(t.border_config))
-                .title(Span::styled(
-                    title,
-                    Style::default()
-                        .fg(t.config_label_selected)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(bg)),
-        )
+    // ── 收集每个 Tab 的固定头部行和可滚动列表行 ──
+    let mut tab_header_lines: Vec<Line> = Vec::new();
+    let mut list_lines: Vec<Line> = Vec::new();
+    let mut field_line_indices: Vec<usize> = Vec::new();
+
+    match app.ui.config_tab {
+        ConfigTab::Model => {
+            draw_tab_model_header(&mut tab_header_lines, app);
+            draw_tab_model_list(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Global => {
+            // Global 没有固定头部，全部是字段列表
+            draw_tab_global_lines(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Tools => {
+            draw_tab_tools_header(&mut tab_header_lines, app);
+            draw_tab_tools_list(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Skills => {
+            draw_tab_skills_header(&mut tab_header_lines, app);
+            draw_tab_skills_list(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Hooks => {
+            // Hooks 没有可选列表，全部固定展示
+            draw_tab_hooks_lines(&mut tab_header_lines, app);
+        }
+        ConfigTab::Commands => {
+            draw_tab_commands_header(&mut tab_header_lines, app);
+            draw_tab_commands_list(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Session => {
+            draw_tab_session_header(&mut tab_header_lines, app);
+            draw_tab_session_list(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Archive => {
+            draw_tab_archive_header(&mut tab_header_lines, app);
+            draw_tab_archive_list(&mut list_lines, &mut field_line_indices, app);
+        }
+    }
+
+    // Tab 栏行数: 空行 + tab_bar + 空行 + separator = 4
+    let tab_bar_lines: u16 = 4;
+    // 顶部 border 占 1 行
+    let top_border: u16 = 1;
+    let tab_header_h = tab_header_lines.len() as u16;
+    let fixed_h = top_border + tab_bar_lines + tab_header_h;
+
+    // 如果没有可滚动列表，或终端太小，回退到整体渲染
+    if list_lines.is_empty() || area.height <= fixed_h + 1 {
+        let mut all_lines: Vec<Line> = vec![
+            Line::from(""),
+            draw_tab_bar_line(app),
+            Line::from(""),
+            separator_line(area.width, t),
+        ];
+        all_lines.append(&mut tab_header_lines);
+        all_lines.append(&mut list_lines);
+        let widget = Paragraph::new(all_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(t.border_config))
+                    .title(Span::styled(
+                        title,
+                        Style::default()
+                            .fg(t.config_label_selected)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .style(Style::default().bg(bg)),
+            )
+            .scroll((app.ui.config_scroll_offset, 0));
+        f.render_widget(widget, area);
+        return;
+    }
+
+    // ── 三段布局 ──
+    let header_area_h = fixed_h; // 顶部 border + tab_bar + tab_header
+    let list_area_h = area.height.saturating_sub(header_area_h);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(header_area_h),
+            Constraint::Min(list_area_h),
+        ])
+        .split(area);
+
+    // ── 固定头部：顶部边框 + 标题 + Tab 栏 + Tab 专属头部 ──
+    let mut header_lines: Vec<Line> = vec![
+        Line::from(""),
+        draw_tab_bar_line(app),
+        Line::from(""),
+        separator_line(area.width, t),
+    ];
+    header_lines.append(&mut tab_header_lines);
+
+    let header_block = Block::default()
+        .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(t.border_config))
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().bg(bg));
+    let header_widget = Paragraph::new(header_lines).block(header_block);
+    f.render_widget(header_widget, chunks[0]);
+
+    // ── 可滚动列表区域 ──
+    // 可见高度 = list_area_h - 1（底部 border）
+    let inner_height = list_area_h.saturating_sub(1) as usize;
+    let selected_idx = match app.ui.config_tab {
+        ConfigTab::Session => app.ui.session_list_index,
+        ConfigTab::Archive => app.ui.archive_list_index,
+        _ => app.ui.config_field_idx,
+    };
+    if let Some(&selected_line) = field_line_indices.get(selected_idx) {
+        let scroll = app.ui.config_scroll_offset as usize;
+        let new_scroll = if selected_line < scroll {
+            selected_line
+        } else if inner_height > 0 && selected_line >= scroll + inner_height {
+            selected_line.saturating_sub(inner_height - 1)
+        } else {
+            scroll
+        };
+        app.ui.config_scroll_offset = new_scroll as u16;
+    }
+
+    let list_block = Block::default()
+        .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(t.border_config))
+        .style(Style::default().bg(bg));
+    let list_widget = Paragraph::new(list_lines)
+        .block(list_block)
         .scroll((app.ui.config_scroll_offset, 0));
-    f.render_widget(content, area);
+    f.render_widget(list_widget, chunks[1]);
 }
 
-/// Model tab 内容
-fn draw_tab_model_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+/// Model tab 固定头部（Provider sub-tabs）
+fn draw_tab_model_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
 
     let provider_count = app.state.agent_config.providers.len();
     if provider_count > 0 {
-        let tabs: Vec<(&str, bool)> = app
-            .state
-            .agent_config
-            .providers
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let is_active = i == app.state.agent_config.active_index;
-                let is_current = i == app.ui.config_provider_idx;
-                // We need owned strings but tab_bar takes &str, so we build manually
-                let _ = (is_active, is_current, p);
-                // Fall back to manual rendering for provider sub-tabs due to marker prefix
-                ("", false) // placeholder, not used
-            })
-            .collect();
-        let _ = tabs;
-
         // Provider sub-tabs with ● / ○ markers need custom rendering
         let mut tab_spans: Vec<Span> = vec![Span::styled("  ", Style::default())];
         for (i, p) in app.state.agent_config.providers.iter().enumerate() {
@@ -187,6 +255,16 @@ fn draw_tab_model_lines<'a>(
         )));
     }
     lines.push(Line::from(""));
+}
+
+/// Model tab 可滚动列表（配置字段）
+fn draw_tab_model_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
+    let provider_count = app.state.agent_config.providers.len();
 
     if provider_count > 0 {
         for (i, provider_field) in CONFIG_FIELDS.iter().enumerate() {
@@ -269,12 +347,8 @@ fn draw_tab_global_lines<'a>(
     }
 }
 
-/// Tools tab 内容
-fn draw_tab_tools_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+/// Tools tab 固定头部（总开关）
+fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
     let total = tool_names.len();
@@ -312,6 +386,16 @@ fn draw_tab_tools_lines<'a>(
         Span::styled("  (t \u{5207}\u{6362})", Style::default().fg(t.config_dim)),
     ]));
     lines.push(Line::from(""));
+}
+
+/// Tools tab 可滚动列表
+fn draw_tab_tools_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
+    let tool_names = app.tool_registry.tool_names();
 
     for (i, name) in tool_names.iter().enumerate() {
         field_line_indices.push(lines.len());
@@ -334,12 +418,8 @@ fn draw_tab_tools_lines<'a>(
     }
 }
 
-/// Skills tab 内容
-fn draw_tab_skills_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+/// Skills tab 固定头部（已启用计数）
+fn draw_tab_skills_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
     let total = app.state.loaded_skills.len();
     let enabled_count = total
@@ -363,6 +443,15 @@ fn draw_tab_skills_lines<'a>(
             .add_modifier(Modifier::BOLD),
     )]));
     lines.push(Line::from(""));
+}
+
+/// Skills tab 可滚动列表
+fn draw_tab_skills_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
 
     for (i, skill) in app.state.loaded_skills.iter().enumerate() {
         field_line_indices.push(lines.len());
@@ -467,12 +556,8 @@ fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     }
 }
 
-/// Commands tab 内容
-fn draw_tab_commands_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+/// Commands tab 固定头部（已启用计数）
+fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
     let total = app.state.loaded_commands.len();
     let enabled_count = total
@@ -502,8 +587,16 @@ fn draw_tab_commands_lines<'a>(
             "  (\u{6ca1}\u{6709}\u{81ea}\u{5b9a}\u{4e49}\u{547d}\u{4ee4}\u{ff0c}\u{5728} ~/.jdata/agent/commands/ \u{6216} .jcli/commands/ \u{4e0b}\u{521b}\u{5efa})",
             Style::default().fg(t.config_dim),
         )));
-        return;
     }
+}
+
+/// Commands tab 可滚动列表
+fn draw_tab_commands_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
 
     for (i, cmd) in app.state.loaded_commands.iter().enumerate() {
         field_line_indices.push(lines.len());
@@ -581,12 +674,8 @@ fn is_leap(y: u64) -> bool {
     y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400))
 }
 
-/// Archive tab 内容
-fn draw_tab_archive_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+/// Archive tab 固定头部（确认还原 + 归档列表标题）
+fn draw_tab_archive_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
 
     // 确认还原覆盖层
@@ -609,19 +698,27 @@ fn draw_tab_archive_lines<'a>(
             "  (\u{6682}\u{65e0}\u{5f52}\u{6863})",
             Style::default().fg(t.config_dim),
         )));
-        return;
+    } else {
+        lines.push(Line::from(Span::styled(
+            format!(
+                "  \u{5f52}\u{6863}\u{5217}\u{8868} ({})",
+                app.ui.archives.len()
+            ),
+            Style::default()
+                .fg(t.config_label)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
     }
+}
 
-    lines.push(Line::from(Span::styled(
-        format!(
-            "  \u{5f52}\u{6863}\u{5217}\u{8868} ({})",
-            app.ui.archives.len()
-        ),
-        Style::default()
-            .fg(t.config_label)
-            .add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
+/// Archive tab 可滚动列表（归档列表）
+fn draw_tab_archive_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
 
     for (i, archive) in app.ui.archives.iter().enumerate() {
         field_line_indices.push(lines.len());
@@ -634,12 +731,8 @@ fn draw_tab_archive_lines<'a>(
     }
 }
 
-/// Session tab 内容
-fn draw_tab_session_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+/// Session tab 固定头部（当前会话 + 确认恢复 + 历史会话标题）
+fn draw_tab_session_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
 
     // 当前会话信息
@@ -681,19 +774,27 @@ fn draw_tab_session_lines<'a>(
             "  (\u{6ca1}\u{6709}\u{5386}\u{53f2}\u{4f1a}\u{8bdd})",
             Style::default().fg(t.config_dim),
         )));
-        return;
+    } else {
+        lines.push(Line::from(Span::styled(
+            format!(
+                "  \u{5386}\u{53f2}\u{4f1a}\u{8bdd} ({})",
+                app.ui.session_list.len()
+            ),
+            Style::default()
+                .fg(t.config_label)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
     }
+}
 
-    lines.push(Line::from(Span::styled(
-        format!(
-            "  \u{5386}\u{53f2}\u{4f1a}\u{8bdd} ({})",
-            app.ui.session_list.len()
-        ),
-        Style::default()
-            .fg(t.config_label)
-            .add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
+/// Session tab 可滚动列表（历史会话列表）
+fn draw_tab_session_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
 
     for (i, session) in app.ui.session_list.iter().enumerate() {
         field_line_indices.push(lines.len());

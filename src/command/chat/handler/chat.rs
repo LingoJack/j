@@ -1,7 +1,8 @@
 use super::super::autocomplete::{
-    complete_at_mention, complete_command_mention, complete_file_mention, complete_skill_mention,
-    get_filtered_command_names, get_filtered_files, get_filtered_skill_names, get_filtered_skills,
-    update_at_filter, update_command_filter, update_file_filter, update_skill_filter,
+    AtPopupItem, complete_at_direct, complete_command_mention, complete_file_mention,
+    complete_skill_mention, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
+    get_filtered_skill_names, update_at_filter, update_command_filter, update_file_filter,
+    update_skill_filter,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::util::safe_lock;
@@ -15,7 +16,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
     // ===== @ 补全弹窗拦截 =====
     if app.ui.at_popup_active {
-        let filtered = get_filtered_skills(app);
+        let filtered = get_filtered_all_items(app);
         match key.code {
             KeyCode::Up => {
                 if !filtered.is_empty() {
@@ -40,64 +41,72 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             KeyCode::Tab | KeyCode::Enter => {
                 if !filtered.is_empty() {
                     let sel = app.ui.at_popup_selected.min(filtered.len() - 1);
-                    let name = filtered[sel].clone();
-                    if name == "skill:" {
-                        // 选中 skill: 选项，补全 @skill: 到输入框，然后切换到技能补全模式
-                        let chars: Vec<char> = app.ui.input.chars().collect();
-                        let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
-                        let after: String = if app.ui.cursor_pos < chars.len() {
-                            chars[app.ui.cursor_pos..].iter().collect()
-                        } else {
-                            String::new()
-                        };
-                        let replacement = "@skill:";
-                        let new_cursor = before.chars().count() + replacement.chars().count();
-                        app.ui.input = format!("{}{}{}", before, replacement, after);
-                        app.ui.cursor_pos = new_cursor;
-                        app.ui.at_popup_active = false;
-                        app.ui.skill_popup_active = true;
-                        app.ui.skill_popup_start_pos = app.ui.at_popup_start_pos;
-                        app.ui.skill_popup_filter.clear();
-                        app.ui.skill_popup_selected = 0;
-                    } else if name == "command:" {
-                        // 选中 command: 选项，补全 @command: 到输入框，然后切换到命令补全模式
-                        let chars: Vec<char> = app.ui.input.chars().collect();
-                        let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
-                        let after: String = if app.ui.cursor_pos < chars.len() {
-                            chars[app.ui.cursor_pos..].iter().collect()
-                        } else {
-                            String::new()
-                        };
-                        let replacement = "@command:";
-                        let new_cursor = before.chars().count() + replacement.chars().count();
-                        app.ui.input = format!("{}{}{}", before, replacement, after);
-                        app.ui.cursor_pos = new_cursor;
-                        app.ui.at_popup_active = false;
-                        app.ui.command_popup_active = true;
-                        app.ui.command_popup_start_pos = app.ui.at_popup_start_pos;
-                        app.ui.command_popup_filter.clear();
-                        app.ui.command_popup_selected = 0;
-                    } else if name == "file:" {
-                        // 选中 file: 选项，补全 @file: 到输入框，然后切换到文件补全模式
-                        let chars: Vec<char> = app.ui.input.chars().collect();
-                        let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
-                        let after: String = if app.ui.cursor_pos < chars.len() {
-                            chars[app.ui.cursor_pos..].iter().collect()
-                        } else {
-                            String::new()
-                        };
-                        let replacement = "@file:";
-                        let new_cursor = before.chars().count() + replacement.chars().count();
-                        app.ui.input = format!("{}{}{}", before, replacement, after);
-                        app.ui.cursor_pos = new_cursor;
-                        app.ui.at_popup_active = false;
-                        app.ui.file_popup_active = true;
-                        app.ui.file_popup_start_pos = app.ui.at_popup_start_pos;
-                        app.ui.file_popup_filter.clear();
-                        app.ui.file_popup_selected = 0;
-                    } else {
-                        complete_at_mention(app, &name);
-                        app.ui.at_popup_active = false;
+                    let item = filtered[sel].clone();
+                    match item {
+                        AtPopupItem::Category(ref name) if name == "skill:" => {
+                            let chars: Vec<char> = app.ui.input.chars().collect();
+                            let before: String =
+                                chars[..app.ui.at_popup_start_pos].iter().collect();
+                            let after: String = if app.ui.cursor_pos < chars.len() {
+                                chars[app.ui.cursor_pos..].iter().collect()
+                            } else {
+                                String::new()
+                            };
+                            let replacement = "@skill:";
+                            let new_cursor = before.chars().count() + replacement.chars().count();
+                            app.ui.input = format!("{}{}{}", before, replacement, after);
+                            app.ui.cursor_pos = new_cursor;
+                            app.ui.at_popup_active = false;
+                            app.ui.skill_popup_active = true;
+                            app.ui.skill_popup_start_pos = app.ui.at_popup_start_pos;
+                            app.ui.skill_popup_filter.clear();
+                            app.ui.skill_popup_selected = 0;
+                        }
+                        AtPopupItem::Category(ref name) if name == "command:" => {
+                            let chars: Vec<char> = app.ui.input.chars().collect();
+                            let before: String =
+                                chars[..app.ui.at_popup_start_pos].iter().collect();
+                            let after: String = if app.ui.cursor_pos < chars.len() {
+                                chars[app.ui.cursor_pos..].iter().collect()
+                            } else {
+                                String::new()
+                            };
+                            let replacement = "@command:";
+                            let new_cursor = before.chars().count() + replacement.chars().count();
+                            app.ui.input = format!("{}{}{}", before, replacement, after);
+                            app.ui.cursor_pos = new_cursor;
+                            app.ui.at_popup_active = false;
+                            app.ui.command_popup_active = true;
+                            app.ui.command_popup_start_pos = app.ui.at_popup_start_pos;
+                            app.ui.command_popup_filter.clear();
+                            app.ui.command_popup_selected = 0;
+                        }
+                        AtPopupItem::Category(ref name) if name == "file:" => {
+                            let chars: Vec<char> = app.ui.input.chars().collect();
+                            let before: String =
+                                chars[..app.ui.at_popup_start_pos].iter().collect();
+                            let after: String = if app.ui.cursor_pos < chars.len() {
+                                chars[app.ui.cursor_pos..].iter().collect()
+                            } else {
+                                String::new()
+                            };
+                            let replacement = "@file:";
+                            let new_cursor = before.chars().count() + replacement.chars().count();
+                            app.ui.input = format!("{}{}{}", before, replacement, after);
+                            app.ui.cursor_pos = new_cursor;
+                            app.ui.at_popup_active = false;
+                            app.ui.file_popup_active = true;
+                            app.ui.file_popup_start_pos = app.ui.at_popup_start_pos;
+                            app.ui.file_popup_filter.clear();
+                            app.ui.file_popup_selected = 0;
+                        }
+                        AtPopupItem::Skill(_) | AtPopupItem::Command(_) | AtPopupItem::File(_) => {
+                            complete_at_direct(app, &item);
+                            app.ui.at_popup_active = false;
+                        }
+                        _ => {
+                            app.ui.at_popup_active = false;
+                        }
                     }
                 } else {
                     app.ui.at_popup_active = false;
@@ -664,6 +673,12 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.ui.file_popup_start_pos = app.ui.at_popup_start_pos;
                     app.ui.file_popup_filter.clear();
                     app.ui.file_popup_selected = 0;
+                } else if app.ui.at_popup_filter == "command:" {
+                    app.ui.at_popup_active = false;
+                    app.ui.command_popup_active = true;
+                    app.ui.command_popup_start_pos = app.ui.at_popup_start_pos;
+                    app.ui.command_popup_filter.clear();
+                    app.ui.command_popup_selected = 0;
                 }
             }
         }

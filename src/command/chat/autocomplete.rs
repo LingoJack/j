@@ -1,5 +1,29 @@
 use super::app::ChatApp;
 
+/// @ 弹窗中的混合搜索结果类型
+#[derive(Clone, Debug)]
+pub enum AtPopupItem {
+    /// 分类入口: "skill:", "command:", "file:"
+    Category(String),
+    /// 匹配到的技能名
+    Skill(String),
+    /// 匹配到的命令名
+    Command(String),
+    /// 匹配到的文件路径
+    File(String),
+}
+
+impl AtPopupItem {
+    pub fn display_label(&self) -> String {
+        match self {
+            AtPopupItem::Category(s) => format!("  @{}  ", s),
+            AtPopupItem::Skill(s) => format!("  [skill] {}  ", s),
+            AtPopupItem::Command(s) => format!("  [cmd] {}  ", s),
+            AtPopupItem::File(s) => format!("  [file] {}  ", s),
+        }
+    }
+}
+
 pub fn update_at_filter(app: &mut ChatApp) {
     let chars: Vec<char> = app.ui.input.chars().collect();
     let start = app.ui.at_popup_start_pos + 1; // @ 之后
@@ -12,23 +36,141 @@ pub fn update_at_filter(app: &mut ChatApp) {
     app.ui.at_popup_selected = 0;
 }
 
-/// 根据 filter 过滤 @ 弹窗的顶级选项（skill:, file:, command:）
-pub fn get_filtered_skills(app: &ChatApp) -> Vec<String> {
+/// 混合搜索：当 filter 非空时，同时在 skill/command/file 三个来源中搜索
+pub fn get_filtered_all_items(app: &ChatApp) -> Vec<AtPopupItem> {
     let filter = app.ui.at_popup_filter.to_lowercase();
-    let mut items: Vec<String> = Vec::new();
-    let skill_label = "skill:".to_string();
-    if filter.is_empty() || skill_label.contains(&filter) {
-        items.push(skill_label);
+
+    // filter 为空时只返回三个分类入口
+    if filter.is_empty() {
+        return vec![
+            AtPopupItem::Category("skill:".to_string()),
+            AtPopupItem::Category("command:".to_string()),
+            AtPopupItem::Category("file:".to_string()),
+        ];
     }
-    let command_label = "command:".to_string();
-    if filter.is_empty() || command_label.contains(&filter) {
-        items.push(command_label);
+
+    let mut items: Vec<AtPopupItem> = Vec::new();
+
+    // 1. 匹配的分类入口
+    for label in &["skill:", "command:", "file:"] {
+        if label.contains(&filter) {
+            items.push(AtPopupItem::Category(label.to_string()));
+        }
     }
-    let file_label = "file:".to_string();
-    if filter.is_empty() || file_label.contains(&filter) {
-        items.push(file_label);
+
+    // 2. 匹配的技能名（最多 5 个）
+    let skills: Vec<String> = app
+        .state
+        .loaded_skills
+        .iter()
+        .filter(|s| {
+            !app.state
+                .agent_config
+                .disabled_skills
+                .iter()
+                .any(|d| d == &s.frontmatter.name)
+        })
+        .map(|s| s.frontmatter.name.clone())
+        .filter(|name| name.to_lowercase().contains(&filter))
+        .take(5)
+        .collect();
+    for s in skills {
+        items.push(AtPopupItem::Skill(s));
     }
+
+    // 3. 匹配的命令名（最多 5 个）
+    let commands: Vec<String> = app
+        .state
+        .loaded_commands
+        .iter()
+        .filter(|c| {
+            !app.state
+                .agent_config
+                .disabled_commands
+                .iter()
+                .any(|d| d == &c.frontmatter.name)
+        })
+        .map(|c| c.frontmatter.name.clone())
+        .filter(|name| name.to_lowercase().contains(&filter))
+        .take(5)
+        .collect();
+    for c in commands {
+        items.push(AtPopupItem::Command(c));
+    }
+
+    // 4. 匹配的文件（模糊匹配，最多 5 个）
+    let search_root = std::path::PathBuf::from(".");
+    let walker = ignore::WalkBuilder::new(&search_root)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .max_depth(Some(6))
+        .build();
+
+    let mut scored_files: Vec<(i32, String)> = Vec::new();
+    for entry in walker.flatten() {
+        let path = entry.path();
+        if path == std::path::Path::new(".") {
+            continue;
+        }
+        let rel = path
+            .strip_prefix(&search_root)
+            .unwrap_or(path)
+            .to_string_lossy();
+        let rel_str = rel.as_ref();
+
+        // 跳过隐藏路径
+        if !filter.starts_with('.') && rel_str.split('/').any(|seg| seg.starts_with('.')) {
+            continue;
+        }
+
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        if let Some(score) = fuzzy_match(&file_name, &filter) {
+            let is_dir = path.is_dir();
+            let display = if is_dir {
+                format!("{}/", rel_str)
+            } else {
+                rel_str.to_string()
+            };
+            let depth = rel_str.matches('/').count() as i32;
+            scored_files.push((score * 10 + depth, display));
+        }
+    }
+    scored_files.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
+    });
+    for (_, path) in scored_files.into_iter().take(5) {
+        items.push(AtPopupItem::File(path));
+    }
+
+    items.truncate(15);
     items
+}
+
+/// 在 @ 弹窗中直接选中一个混合搜索结果时，替换输入框内容
+pub fn complete_at_direct(app: &mut ChatApp, item: &AtPopupItem) {
+    let mention = match item {
+        AtPopupItem::Skill(name) => format!("@skill:{} ", name),
+        AtPopupItem::Command(name) => format!("@command:{} ", name),
+        AtPopupItem::File(path) => format!("@file:{} ", path),
+        AtPopupItem::Category(_) => return, // 分类不在此处处理
+    };
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
+    let after: String = if app.ui.cursor_pos < chars.len() {
+        chars[app.ui.cursor_pos..].iter().collect()
+    } else {
+        String::new()
+    };
+    let new_cursor = before.chars().count() + mention.chars().count();
+    app.ui.input = format!("{}{}{}", before, mention, after);
+    app.ui.cursor_pos = new_cursor;
 }
 
 /// 更新技能补全弹窗的过滤文本
@@ -72,21 +214,6 @@ pub fn complete_skill_mention(app: &mut ChatApp, skill_name: &str) {
         String::new()
     };
     let replacement = format!("@skill:{} ", skill_name);
-    let new_cursor = before.chars().count() + replacement.chars().count();
-    app.ui.input = format!("{}{}{}", before, replacement, after);
-    app.ui.cursor_pos = new_cursor;
-}
-
-/// 替换 input 中 @... 为 @skill_name 并加空格
-pub fn complete_at_mention(app: &mut ChatApp, skill_name: &str) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
-    let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
-    let after: String = if app.ui.cursor_pos < chars.len() {
-        chars[app.ui.cursor_pos..].iter().collect()
-    } else {
-        String::new()
-    };
-    let replacement = format!("@{} ", skill_name);
     let new_cursor = before.chars().count() + replacement.chars().count();
     app.ui.input = format!("{}{}{}", before, replacement, after);
     app.ui.cursor_pos = new_cursor;
