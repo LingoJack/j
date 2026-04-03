@@ -73,9 +73,13 @@ pub struct EnterPlanModeTool {
     pub plan_state: Arc<PlanModeState>,
 }
 
+impl EnterPlanModeTool {
+    pub const NAME: &'static str = "EnterPlanMode";
+}
+
 impl Tool for EnterPlanModeTool {
     fn name(&self) -> &str {
-        "EnterPlanMode"
+        Self::NAME
     }
 
     fn description(&self) -> &str {
@@ -159,9 +163,13 @@ pub struct ExitPlanModeTool {
     pub ask_tx: mpsc::Sender<AskRequest>,
 }
 
+impl ExitPlanModeTool {
+    pub const NAME: &'static str = "ExitPlanMode";
+}
+
 impl Tool for ExitPlanModeTool {
     fn name(&self) -> &str {
-        "ExitPlanMode"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

@@ -35,9 +35,13 @@ pub struct AgentTool {
     pub disabled_tools: Arc<Vec<String>>,
 }
 
+impl AgentTool {
+    pub const NAME: &'static str = "Agent";
+}
+
 impl Tool for AgentTool {
     fn name(&self) -> &str {
-        "Agent"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

@@ -5,6 +5,8 @@ use super::tools::skill::LoadSkillTool;
 use super::tools::task::TaskTool;
 use super::tools::todo::{TodoReadTool, TodoWriteTool};
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL};
+use crate::command::chat::tools::agent::AgentTool;
+use crate::command::chat::tools::plan::{EnterPlanModeTool, ExitPlanModeTool};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
@@ -96,6 +98,9 @@ pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
         TaskTool::NAME,
         TodoWriteTool::NAME,
         TodoReadTool::NAME,
+        EnterPlanModeTool::NAME,
+        ExitPlanModeTool::NAME,
+        AgentTool::NAME,
         AskTool::NAME,
     ];
 
