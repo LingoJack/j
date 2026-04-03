@@ -51,10 +51,10 @@ AI 通过 `LoadSkill` 工具加载 skill：
 
 ## 禁用 Skill
 
-在 `.jcli/config.yaml` 中禁用特定 skill：
+在 TUI 配置界面中禁用特定 skill，配置保存在 `~/.jdata/agent/data/agent_config.json`：
 
-```yaml
-disabled_skills:
-  - skill-name-1
-  - skill-name-2
+```json
+{
+  "disabled_skills": ["skill-name-1", "skill-name-2"]
+}
 ```

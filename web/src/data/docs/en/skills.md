@@ -51,10 +51,10 @@ After loading, AI will:
 
 ## Disabling Skills
 
-Disable specific skills in `.jcli/config.yaml`:
+Disable specific skills via the TUI configuration interface. Settings are saved in `~/.jdata/agent/data/agent_config.json`:
 
-```yaml
-disabled_skills:
-  - skill-name-1
-  - skill-name-2
+```json
+{
+  "disabled_skills": ["skill-name-1", "skill-name-2"]
+}
 ```

@@ -58,7 +58,5 @@ permissions:
 
 | Reference | Description |
 |-----------|-------------|
-| `@file:path` | Include file content |
-| `@dir:path` | Include directory structure |
-| `@url:url` | Include web page content |
-| `@grep:pattern` | Include search results |
+| `@file:path` | Include file content (auto-read and inject into context) |
+| `@skill:name` | Load and activate the specified skill |
