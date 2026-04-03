@@ -66,12 +66,30 @@ fn check_for_update() {
 fn perform_update(interactive: bool) {
     println!("{}", "正在更新...".yellow());
 
+    // 根据当前架构确定 target 名称（匹配 GitHub Release 资产命名）
+    // 资产命名格式: j-darwin-arm64.tar.gz, j-darwin-x64.tar.gz
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    let target = "darwin-arm64";
+
+    #[cfg(all(target_arch = "x86_64", target_os = "macos"))]
+    let target = "darwin-x64";
+
+    #[cfg(not(any(
+        all(target_arch = "aarch64", target_os = "macos"),
+        all(target_arch = "x86_64", target_os = "macos")
+    )))]
+    let target = {
+        println!("{}", "当前平台暂不支持自动更新，请手动更新".red());
+        return;
+    };
+
     let result = self_update::backends::github::Update::configure()
         .repo_owner("LingoJack")
         .repo_name("j")
         .bin_name("j")
         .show_download_progress(true)
         .current_version(VERSION)
+        .target(target)
         .build();
 
     match result {
