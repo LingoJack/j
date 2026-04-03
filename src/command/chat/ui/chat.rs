@@ -209,8 +209,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     // 内部可用宽度（减去边框和左右各1的 padding）
     let inner_width = area.width.saturating_sub(4) as usize;
-    // 消息内容最大宽度为可用宽度的 75%
-    let bubble_max_width = (inner_width * 75 / 100).max(20);
+    // 消息内容最大宽度为可用宽度的 85%
+    let bubble_max_width = (inner_width * 85 / 100).max(20);
 
     let msg_count = app.state.session.messages.len();
     let last_msg_len = app
