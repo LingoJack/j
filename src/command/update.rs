@@ -83,6 +83,57 @@ fn perform_update(interactive: bool) {
         return;
     };
 
+    // 检查是否有权限写入目标目录
+    let exe_path = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("{} {}", "无法获取当前可执行文件路径:".red(), e);
+            return;
+        }
+    };
+
+    let exe_dir = match exe_path.parent() {
+        Some(d) => d,
+        None => {
+            println!("{}", "无法获取可执行文件所在目录".red());
+            return;
+        }
+    };
+
+    // 检查目标目录是否有写入权限
+    let has_write_permission = exe_dir
+        .metadata()
+        .map(|m| !m.permissions().readonly())
+        .unwrap_or(false);
+
+    // 尝试创建临时文件来验证实际的写入权限
+    let can_actually_write = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(exe_dir.join(".j_write_test"))
+        .map(|_| {
+            let _ = std::fs::remove_file(exe_dir.join(".j_write_test"));
+            true
+        })
+        .unwrap_or(false);
+
+    if !has_write_permission || !can_actually_write {
+        // 没有写入权限，需要使用 sudo
+        println!(
+            "{}",
+            "需要管理员权限来更新 j（安装目录需要 root 权限）".yellow()
+        );
+        println!();
+        println!("请使用以下命令之一更新：");
+        println!();
+        println!("  {} (推荐)", "sudo j update".cyan());
+        println!(
+            "  {}",
+            "curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh".cyan()
+        );
+        return;
+    }
+
     let result = self_update::backends::github::Update::configure()
         .repo_owner("LingoJack")
         .repo_name("j")
