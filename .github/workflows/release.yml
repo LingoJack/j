@@ -21,7 +21,7 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
-      - name: Install whisper-rs dependencies
+      - name: Install build dependencies
         run: brew install cmake
 
       - name: Build
@@ -29,10 +29,6 @@ jobs:
         env:
           # 标记安装来源为 github，用于 j update 命令识别
           INSTALL_SOURCE: github
-          # 禁用 ARM i8mm 指令集优化，避免编译错误
-          # whisper.cpp 会自动检测并使用合适的 NEON 优化
-          CFLAGS: -march=armv8-a
-          CXXFLAGS: -march=armv8-a
 
       - name: Build j-indicator
         run: swiftc helpers/indicator.swift -o target/aarch64-apple-darwin/release/j-indicator -O

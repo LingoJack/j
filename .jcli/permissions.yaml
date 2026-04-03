@@ -85,4 +85,6 @@ allow:
 - Bash(head -5:*)
 - Bash(cargo info:*)
 - Bash(grep -r:*)
+- Bash(cargo tree:*)
+- Bash(cargo search:*)
 deny: []
