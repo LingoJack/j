@@ -1,10 +1,13 @@
 use super::api::create_openai_client;
+use super::constants::{
+    COMPACT_KEEP_RECENT, COMPACT_TOKEN_THRESHOLD, MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT,
+    ROLE_TOOL,
+};
 use super::storage::{ChatMessage, ModelProvider, agent_data_dir};
 use super::tools::ask::AskTool;
 use super::tools::skill::LoadSkillTool;
 use super::tools::task::TaskTool;
 use super::tools::todo::{TodoReadTool, TodoWriteTool};
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL};
 use crate::command::chat::tools::agent::AgentTool;
 use crate::command::chat::tools::plan::{EnterPlanModeTool, ExitPlanModeTool};
 use crate::util::log::{write_error_log, write_info_log};
@@ -31,18 +34,16 @@ pub struct CompactConfig {
     pub keep_recent: usize,
 }
 
-const MICRO_COMPACT_BYTES_COUNT_THRESHOLD: usize = 800;
-
 fn default_compact_enabled() -> bool {
     true
 }
 
 fn default_token_threshold() -> usize {
-    256 * 800
+    COMPACT_TOKEN_THRESHOLD
 }
 
 fn default_keep_recent() -> usize {
-    10
+    COMPACT_KEEP_RECENT
 }
 
 impl Default for CompactConfig {
@@ -63,7 +64,7 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 /// Layer 1: micro_compact - 替换旧 tool result 为占位符，保留最近 keep_recent 个
 ///
 /// 纯内存操作，零 API 成本。
-/// 将较早的 role="tool" 消息中内容长度 > MICRO_COMPACT_BYTES_COUNT_THRESHOLD 的替换为 "[Previous: used {tool_name}]"
+/// 将较早的 role="tool" 消息中内容长度 > MICRO_COMPACT_BYTES_THRESHOLD 的替换为 "[Previous: used {tool_name}]"
 pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
     let mut tool_name_map: HashMap<String, String> = HashMap::new();
@@ -89,7 +90,7 @@ pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
         return;
     }
 
-    // 3. 除最近 keep_recent 个外，content.len() > MICRO_COMPACT_BYTES_COUNT_THRESHOLD 的替换为占位符
+    // 3. 除最近 keep_recent 个外，content.len() > MICRO_COMPACT_BYTES_THRESHOLD 的替换为占位符
     let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
     // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
@@ -106,7 +107,7 @@ pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
 
     for &idx in to_compact {
         let msg = &messages[idx];
-        if msg.content.chars().count() > MICRO_COMPACT_BYTES_COUNT_THRESHOLD {
+        if msg.content.chars().count() > MICRO_COMPACT_BYTES_THRESHOLD {
             let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
             let tool_name = tool_name_map
                 .get(&tool_call_id)

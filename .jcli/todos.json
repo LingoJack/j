@@ -1,17 +1,47 @@
 [
   {
     "id": "1",
-    "content": "确认所有 tool 都已统一使用 JsonSchema 结构体",
-    "status": "completed"
-  },
-  {
-    "id": "3",
-    "content": "修复 agent.rs 中 timeout 字段类型不匹配问题 (string->u64 反序列化)",
+    "content": "在 src/command/chat/constants.rs 添加工具相关常量",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "验证构建通过",
+    "content": "更新 agent.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "更新 storage.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "更新 compact.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "更新 shell.rs, web_fetch.rs, web_search.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "更新 browser.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "7",
+    "content": "更新 app.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "8",
+    "content": "更新 classification.rs 使用常量",
+    "status": "completed"
+  },
+  {
+    "id": "9",
+    "content": "运行 cargo clippy 验证",
     "status": "completed"
   }
 ]

@@ -1,3 +1,6 @@
+use crate::command::chat::constants::{
+    WEB_REQUEST_TIMEOUT_SECS, WEB_RESPONSE_DEFAULT_MAX_CHARS, WEB_RESPONSE_MAX_BYTES,
+};
 use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::html_extract;
 use schemars::JsonSchema;
@@ -7,15 +10,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
-
-// ==================== 常量 ====================
-
-/// 请求超时时间（秒）
-const REQUEST_TIMEOUT_SECS: u64 = 15;
-/// 最大响应体大小（字节）：1MB
-const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
-/// 默认最大输出字符数
-const DEFAULT_MAX_CHARS: usize = 50000;
 
 /// WebFetchTool 参数
 #[derive(Deserialize, JsonSchema)]
@@ -41,7 +35,7 @@ fn default_extract_mode() -> String {
 }
 
 fn default_max_chars() -> usize {
-    DEFAULT_MAX_CHARS
+    WEB_RESPONSE_DEFAULT_MAX_CHARS
 }
 
 // ==================== WebFetchTool ====================
@@ -98,7 +92,7 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
 
     // 构建 HTTP 客户端
     let client = match reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(WEB_REQUEST_TIMEOUT_SECS))
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
     {
@@ -216,19 +210,19 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
 /// 读取响应体，超过限制则截断
 fn read_response_body(response: reqwest::blocking::Response) -> Result<String, String> {
     if let Some(len) = response.content_length()
-        && len as usize > MAX_RESPONSE_BYTES
+        && len as usize > WEB_RESPONSE_MAX_BYTES
     {
         return Err(format!(
             "响应体过大（{:.1} MB），超过 {} MB 限制",
             len as f64 / 1024.0 / 1024.0,
-            MAX_RESPONSE_BYTES / 1024 / 1024
+            WEB_RESPONSE_MAX_BYTES / 1024 / 1024
         ));
     }
 
     match response.text() {
         Ok(text) => {
-            if text.len() > MAX_RESPONSE_BYTES {
-                let mut end = MAX_RESPONSE_BYTES;
+            if text.len() > WEB_RESPONSE_MAX_BYTES {
+                let mut end = WEB_RESPONSE_MAX_BYTES;
                 while end > 0 && !text.is_char_boundary(end) {
                     end -= 1;
                 }

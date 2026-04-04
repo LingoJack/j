@@ -1,4 +1,7 @@
 use super::compact::CompactConfig;
+use super::constants::{
+    DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS, MESSAGE_PREVIEW_MAX_LEN,
+};
 use super::theme::ThemeName;
 use crate::config::YamlConfig;
 use crate::error;
@@ -77,7 +80,7 @@ pub struct AgentConfig {
 }
 
 fn default_max_history_messages() -> usize {
-    20
+    DEFAULT_MAX_HISTORY_MESSAGES
 }
 
 /// 默认流式输出
@@ -87,7 +90,7 @@ fn default_stream_mode() -> bool {
 
 /// 默认工具调用最大轮数
 fn default_max_tool_rounds() -> usize {
-    100
+    DEFAULT_MAX_TOOL_ROUNDS
 }
 
 /// 单次工具调用请求（序列化到历史记录）
@@ -577,7 +580,8 @@ pub fn list_sessions() -> Vec<SessionMeta> {
                             && msg.role == "user"
                             && !msg.content.is_empty()
                         {
-                            let preview: String = msg.content.chars().take(50).collect();
+                            let preview: String =
+                                msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect();
                             first_user_preview = Some(preview);
                         }
                     }
@@ -590,7 +594,7 @@ pub fn list_sessions() -> Vec<SessionMeta> {
                         first_user_preview = messages
                             .iter()
                             .find(|m| m.role == "user" && !m.content.is_empty())
-                            .map(|m| m.content.chars().take(50).collect());
+                            .map(|m| m.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
                     }
                 }
             }

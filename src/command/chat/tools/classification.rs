@@ -1,3 +1,7 @@
+use crate::command::chat::constants::{
+    CLASSIFY_MS_THRESHOLD, CLASSIFY_SEC_THRESHOLD, CLASSIFY_SIZE_THRESHOLD_BYTES,
+    CLASSIFY_SIZE_THRESHOLD_CHARS, CLASSIFY_TITLE_TRUNCATE_LEN, CLASSIFY_TRUNCATE_LEN,
+};
 use crate::command::chat::theme::Theme;
 use ratatui::style::Color;
 
@@ -124,8 +128,8 @@ pub fn format_json_value(value: &serde_json::Value) -> String {
         serde_json::Value::String(s) => {
             // 使用字符数而不是字节数来截断，避免 UTF-8 边界问题
             let char_count = s.chars().count();
-            if char_count > 50 {
-                let truncated: String = s.chars().take(47).collect();
+            if char_count > CLASSIFY_TRUNCATE_LEN {
+                let truncated: String = s.chars().take(CLASSIFY_TRUNCATE_LEN - 3).collect();
                 format!("\"{}...\"", truncated)
             } else {
                 format!("\"{}\"", s)
@@ -222,8 +226,8 @@ fn get_bash_summary(content: &str, tool_args: Option<&str>) -> String {
     if let Some(cmd) = command {
         // 截取命令的第一行前 50 字符
         let first_line = cmd.lines().next().unwrap_or(&cmd);
-        let short_cmd: String = first_line.chars().take(50).collect();
-        let suffix = if first_line.chars().count() > 50 {
+        let short_cmd: String = first_line.chars().take(CLASSIFY_TRUNCATE_LEN).collect();
+        let suffix = if first_line.chars().count() > CLASSIFY_TRUNCATE_LEN {
             "…"
         } else {
             ""
@@ -305,7 +309,7 @@ fn get_task_summary(content: &str, tool_args: Option<&str>) -> String {
                     .get("title")
                     .and_then(|t| t.as_str())
                     .unwrap_or("untitled");
-                let short: String = title.chars().take(30).collect();
+                let short: String = title.chars().take(CLASSIFY_TITLE_TRUNCATE_LEN).collect();
                 format!("create: \"{}\"", short)
             }
             "list" => {
@@ -351,12 +355,12 @@ fn get_generic_summary(content: &str) -> String {
     let chars = content.chars().count();
 
     if lines > 1 {
-        if chars > 1024 {
+        if chars > CLASSIFY_SIZE_THRESHOLD_BYTES {
             format!("{} 行, {:.1}KB", lines, chars as f64 / 1024.0)
         } else {
             format!("{} 行, {} 字符", lines, chars)
         }
-    } else if chars > 100 {
+    } else if chars > CLASSIFY_SIZE_THRESHOLD_CHARS {
         format!("{:.1}KB", chars as f64 / 1024.0)
     } else {
         format!("{} 字符", chars)
@@ -392,9 +396,9 @@ fn short_path(path: &str, max_len: usize) -> String {
 /// 格式化执行时间
 #[allow(dead_code)]
 pub fn format_duration(ms: u64) -> String {
-    if ms < 1000 {
+    if ms < CLASSIFY_MS_THRESHOLD {
         format!("{}ms", ms)
-    } else if ms < 60000 {
+    } else if ms < CLASSIFY_SEC_THRESHOLD {
         format!("{:.1}s", ms as f64 / 1000.0)
     } else {
         format!("{:.1}m", ms as f64 / 60000.0)

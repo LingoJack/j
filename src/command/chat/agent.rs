@@ -5,7 +5,9 @@ use super::hook::{HookContext, HookEvent, HookManager};
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use super::tools::background::BackgroundManager;
 use super::tools::todo::TodoManager;
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::constants::{
+    ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER, TODO_NAG_INTERVAL_ROUNDS,
+};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
 use crate::util::log::{write_error_log, write_info_log};
@@ -80,7 +82,9 @@ pub async fn run_agent_loop(
 
         // 检查是否有待办事项
         todo_manager.increment_turn();
-        if todo_manager.has_todos() && todo_manager.turns_since_last_call() >= 15 {
+        if todo_manager.has_todos()
+            && todo_manager.turns_since_last_call() >= TODO_NAG_INTERVAL_ROUNDS
+        {
             let todos_summary = todo_manager.format_todos_summary();
             messages.push(ChatMessage {
                 role: ROLE_TOOL.to_string(),

@@ -15,7 +15,9 @@ use super::storage::{
 use super::theme::Theme;
 use super::tools::ToolRegistry;
 use super::tools::background::BackgroundManager;
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::constants::{
+    INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER, TOOL_OUTPUT_SUMMARY_MAX_LEN,
+};
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
@@ -408,8 +410,8 @@ impl ToolExecutor {
                     }
                 };
                 // 生成摘要供 UI 显示
-                let summary = if output.len() > 60 {
-                    let mut end = 60;
+                let summary = if output.len() > TOOL_OUTPUT_SUMMARY_MAX_LEN {
+                    let mut end = TOOL_OUTPUT_SUMMARY_MAX_LEN;
                     while !output.is_char_boundary(end) {
                         end -= 1;
                     }
@@ -502,8 +504,8 @@ impl ToolExecutor {
                 }
             };
             // 生成摘要供 UI 显示
-            let summary = if output.len() > 60 {
-                let mut end = 60;
+            let summary = if output.len() > TOOL_OUTPUT_SUMMARY_MAX_LEN {
+                let mut end = TOOL_OUTPUT_SUMMARY_MAX_LEN;
                 while !output.is_char_boundary(end) {
                     end -= 1;
                 }
@@ -1437,7 +1439,7 @@ impl ChatApp {
             // ========== Chat 输入和文本编辑 ==========
             Action::SendMessage => self.send_message(),
             Action::InsertChar(ch) => {
-                if self.ui.input.len() < 16384 {
+                if self.ui.input.len() < INPUT_BUFFER_MAX_LEN {
                     self.ui.input.insert(self.ui.cursor_pos, ch);
                     self.ui.cursor_pos += ch.len_utf8();
                 }

@@ -1,3 +1,7 @@
+use crate::command::chat::constants::{
+    WEB_REQUEST_TIMEOUT_SECS, WEB_SEARCH_DEFAULT_COUNT, WEB_SEARCH_HIGHLIGHTS_MAX_CHARS,
+    WEB_SEARCH_MAX_COUNT,
+};
 use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -5,18 +9,8 @@ use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
 
-// ==================== 常量 ====================
-
-/// 请求超时时间（秒）
-const REQUEST_TIMEOUT_SECS: u64 = 15;
-/// 默认搜索结果数量
-const DEFAULT_SEARCH_COUNT: usize = 5;
-/// 最大搜索结果数量
-const MAX_SEARCH_COUNT: usize = 10;
 /// Exa API 端点
 const EXA_API_URL: &str = "https://api.exa.ai/search";
-/// highlights 最大字符数
-const HIGHLIGHTS_MAX_CHARS: usize = 4000;
 
 /// WebSearchTool 参数
 #[derive(Deserialize, JsonSchema)]
@@ -32,7 +26,7 @@ struct WebSearchParams {
 }
 
 fn default_count() -> usize {
-    DEFAULT_SEARCH_COUNT
+    WEB_SEARCH_DEFAULT_COUNT
 }
 
 fn default_search_type() -> String {
@@ -81,7 +75,7 @@ impl Tool for WebSearchTool {
 // ==================== Search 实现 ====================
 
 fn exec_search(params: &WebSearchParams) -> ToolResult {
-    let count = params.count.clamp(1, MAX_SEARCH_COUNT);
+    let count = params.count.clamp(1, WEB_SEARCH_MAX_COUNT);
 
     // 检查 API Key
     let api_key = match std::env::var("EXA_API_KEY") {
@@ -102,13 +96,13 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
         "numResults": count,
         "contents": {
             "highlights": {
-                "maxCharacters": HIGHLIGHTS_MAX_CHARS
+                "maxCharacters": WEB_SEARCH_HIGHLIGHTS_MAX_CHARS
             }
         }
     });
 
     let client = match reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(WEB_REQUEST_TIMEOUT_SECS))
         .build()
     {
         Ok(c) => c,

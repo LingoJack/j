@@ -1,5 +1,8 @@
 use super::ToolResult;
 use super::background::BackgroundManager;
+use crate::command::chat::constants::{
+    SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
+};
 use crate::command::chat::tools::{
     Tool, is_dangerous_command, parse_tool_args, schema_to_tool_params,
 };
@@ -12,9 +15,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
-
-/// 默认超时秒数
-const DEFAULT_TIMEOUT_SECS: u64 = 120;
 
 /// ShellTool 参数
 #[derive(Deserialize, JsonSchema)]
@@ -92,7 +92,10 @@ impl Tool for ShellTool {
             Err(e) => return e,
         };
 
-        let timeout_secs = params.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS).min(600);
+        let timeout_secs = params
+            .timeout
+            .unwrap_or(SHELL_DEFAULT_TIMEOUT_SECS)
+            .min(SHELL_MAX_TIMEOUT_SECS);
 
         // 安全过滤
         if is_dangerous_command(&params.command) {
@@ -201,7 +204,7 @@ impl Tool for ShellTool {
 
             match child.try_wait() {
                 Ok(Some(status)) => break status,
-                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                Ok(None) => std::thread::sleep(Duration::from_millis(SHELL_POLL_INTERVAL_MS)),
                 Err(e) => {
                     return ToolResult {
                         output: format!("等待进程失败: {}", e),
@@ -346,7 +349,7 @@ impl ShellTool {
 
                 match child.try_wait() {
                     Ok(Some(status)) => break status,
-                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                    Ok(None) => std::thread::sleep(Duration::from_millis(SHELL_POLL_INTERVAL_MS)),
                     Err(e) => {
                         let mut buf = output_buffer.lock().unwrap();
                         *buf = format!("等待进程失败: {}", e);
