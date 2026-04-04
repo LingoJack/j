@@ -1,4 +1,5 @@
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
+use crate::command::chat::tools::file::ReadFileTool;
 use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
