@@ -1933,12 +1933,35 @@ impl ChatApp {
                 use super::ui_helpers::{
                     config_field_raw_value_global, config_field_raw_value_model,
                 };
-                use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
+                use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
                 match self.ui.config_tab {
                     ConfigTab::Model => {
                         if self.state.agent_config.providers.is_empty() {
                             self.show_toast("还没有 Provider，按 a 新增", true);
                             return;
+                        }
+                        // supports_vision 是布尔开关，直接 toggle
+                        if self.ui.config_field_idx < CONFIG_FIELDS.len()
+                            && CONFIG_FIELDS[self.ui.config_field_idx] == "supports_vision"
+                        {
+                            if let Some(p) = self
+                                .state
+                                .agent_config
+                                .providers
+                                .get_mut(self.ui.config_provider_idx)
+                            {
+                                p.supports_vision = !p.supports_vision;
+                                let status = if p.supports_vision {
+                                    "开启"
+                                } else {
+                                    "关闭"
+                                };
+                                self.show_toast(
+                                    format!("当前 Provider 支持视觉已{}", status),
+                                    false,
+                                );
+                                return;
+                            }
                         }
                         self.ui.config_edit_buf =
                             config_field_raw_value_model(self, self.ui.config_field_idx);
