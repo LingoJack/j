@@ -90,4 +90,5 @@ allow:
 - Bash(cd /Users/lingojack/dev_custom/j:*)
 - Bash(cargo clippy:*)
 - ComputerUse(focus:*)
+- Bash(which j:*)
 deny: []
