@@ -18,5 +18,30 @@
     "id": "4",
     "content": "验证编译并修复 breaking changes",
     "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "在 CONFIG_FIELDS 中添加 supports_vision 字段",
+    "status": "completed"
+  },
+  {
+    "id": "10",
+    "content": "更新 ui_helpers.rs 中 Model tab 的 label/value/set 逻辑",
+    "status": "completed"
+  },
+  {
+    "id": "12",
+    "content": "更新 app.rs ConfigEnter 为 toggle supports_vision",
+    "status": "completed"
+  },
+  {
+    "id": "14",
+    "content": "渲染 UI 支持 supports_vision 行切换样式",
+    "status": "completed"
+  },
+  {
+    "id": "13",
+    "content": "验证编译通过",
+    "status": "completed"
   }
 ]

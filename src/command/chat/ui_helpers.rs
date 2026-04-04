@@ -14,6 +14,7 @@ pub fn config_field_label_model(idx: usize) -> &'static str {
         "api_base" => "API Base",
         "api_key" => "API Key",
         "model" => "模型名称",
+        "supports_vision" => "支持视觉",
         _ => CONFIG_FIELDS[idx],
     }
 }
@@ -44,6 +45,13 @@ pub fn config_field_value_model(app: &ChatApp, idx: usize) -> String {
             }
         }
         "model" => p.model.clone(),
+        "supports_vision" => {
+            if p.supports_vision {
+                "开启".into()
+            } else {
+                "关闭".into()
+            }
+        }
         _ => String::new(),
     }
 }
@@ -65,6 +73,7 @@ pub fn config_field_raw_value_model(app: &ChatApp, idx: usize) -> String {
         "api_base" => p.api_base.clone(),
         "api_key" => p.api_key.clone(),
         "model" => p.model.clone(),
+        "supports_vision" => p.supports_vision.to_string(),
         _ => String::new(),
     }
 }
@@ -86,6 +95,13 @@ pub fn config_field_set_model(app: &mut ChatApp, idx: usize, value: &str) {
         "api_base" => p.api_base = value.to_string(),
         "api_key" => p.api_key = value.to_string(),
         "model" => p.model = value.to_string(),
+        "supports_vision" => {
+            p.supports_vision = matches!(
+                value.trim().to_lowercase().as_str(),
+                "true" | "1" | "开启" | "on" | "yes"
+            );
+            app.ui.msg_lines_cache = None;
+        }
         _ => {}
     }
 }

@@ -26,7 +26,7 @@ pub const INSTALL_SOURCE: &str = match option_env!("INSTALL_SOURCE") {
 };
 
 /// 配置编辑界面的字段列表
-pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model"];
+pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model", "supports_vision"];
 /// 全局配置字段（旧版，保留向后兼容）
 #[allow(dead_code)]
 pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[

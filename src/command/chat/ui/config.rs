@@ -286,6 +286,18 @@ fn draw_tab_model_list<'a>(
                     app.ui.config_edit_cursor,
                     t,
                 )
+            } else if *provider_field == "supports_vision" {
+                let toggle_on = if let Some(p) = app
+                    .state
+                    .agent_config
+                    .providers
+                    .get(app.ui.config_provider_idx)
+                {
+                    p.supports_vision
+                } else {
+                    false
+                };
+                toggle_row(label, toggle_on, is_selected, "Enter \u{5207}\u{6362}", t)
             } else {
                 text_field_row(
                     label,
