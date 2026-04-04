@@ -83,6 +83,19 @@ fn perform_update(interactive: bool) {
         return;
     };
 
+    // 检查是否已经有 root 权限
+    #[cfg(unix)]
+    let is_root = unsafe { libc::getuid() == 0 };
+
+    #[cfg(not(unix))]
+    let is_root = false;
+
+    // 如果已经有 root 权限，直接执行更新
+    if is_root {
+        perform_update_internal(target, interactive);
+        return;
+    }
+
     // 检查是否有权限写入目标目录
     let exe_path = match std::env::current_exe() {
         Ok(p) => p,
@@ -100,12 +113,6 @@ fn perform_update(interactive: bool) {
         }
     };
 
-    // 检查目标目录是否有写入权限
-    let has_write_permission = exe_dir
-        .metadata()
-        .map(|m| !m.permissions().readonly())
-        .unwrap_or(false);
-
     // 尝试创建临时文件来验证实际的写入权限
     let can_actually_write = std::fs::OpenOptions::new()
         .write(true)
@@ -117,23 +124,54 @@ fn perform_update(interactive: bool) {
         })
         .unwrap_or(false);
 
-    if !has_write_permission || !can_actually_write {
-        // 没有写入权限，需要使用 sudo
-        println!(
-            "{}",
-            "需要管理员权限来更新 j（安装目录需要 root 权限）".yellow()
-        );
-        println!();
-        println!("请使用以下命令之一更新：");
-        println!();
-        println!("  {} (推荐)", "sudo j update".cyan());
-        println!(
-            "  {}",
-            "curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh".cyan()
-        );
+    if can_actually_write {
+        // 有写入权限，直接执行更新
+        perform_update_internal(target, interactive);
         return;
     }
 
+    // 没有写入权限，需要使用 sudo 重新执行
+    println!(
+        "{}",
+        "需要管理员权限来更新 j（安装目录需要 root 权限）".yellow()
+    );
+    println!("{}", "正在请求管理员权限...".cyan());
+
+    // 使用 osascript 弹出图形化授权对话框
+    let exe_str = exe_path.to_string_lossy();
+    let script = format!(
+        r#"do shell script "{} update" with administrator privileges"#,
+        exe_str
+    );
+
+    let result = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .status();
+
+    match result {
+        Ok(status) if status.success() => {
+            println!("{}", "更新完成！".green());
+        }
+        Ok(status) => {
+            println!(
+                "{} 退出码: {}",
+                "更新失败".red(),
+                status.code().unwrap_or(-1)
+            );
+            println!("请尝试手动更新:");
+            println!("  {}", "sudo j update".cyan());
+        }
+        Err(e) => {
+            println!("{} {}", "请求权限失败:".red(), e);
+            println!("请尝试手动更新:");
+            println!("  {}", "sudo j update".cyan());
+        }
+    }
+}
+
+/// 内部更新逻辑（假设已有权限）
+fn perform_update_internal(target: &str, interactive: bool) {
     let result = self_update::backends::github::Update::configure()
         .repo_owner("LingoJack")
         .repo_name("j")
