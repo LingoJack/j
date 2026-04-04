@@ -1,7 +1,19 @@
 use crate::command::chat::skill::Skill;
-use crate::command::chat::tools::{Tool, ToolResult};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool};
+
+/// LoadSkillTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct LoadSkillParams {
+    /// Name of the skill to load
+    name: String,
+    /// Arguments to pass to the skill (optional)
+    #[serde(default)]
+    arguments: Option<String>,
+}
 
 // ========== LoadSkillTool ==========
 
@@ -23,36 +35,16 @@ impl Tool for LoadSkillTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Name of the skill to load"
-                },
-                "arguments": {
-                    "type": "string",
-                    "description": "Arguments to pass to the skill (optional)"
-                }
-            },
-            "required": ["name"]
-        })
+        schema_to_tool_params::<LoadSkillParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed = serde_json::from_str::<Value>(arguments).ok();
+        let params: LoadSkillParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
 
-        let skill_name = parsed
-            .as_ref()
-            .and_then(|v| v.get("name").and_then(|n| n.as_str()))
-            .unwrap_or("");
-
-        let args_str = parsed
-            .as_ref()
-            .and_then(|v| v.get("arguments").and_then(|a| a.as_str()))
-            .unwrap_or("");
-
-        if skill_name.is_empty() {
+        if params.name.is_empty() {
             return ToolResult {
                 output: "参数缺少 name 字段".to_string(),
                 is_error: true,
@@ -60,10 +52,12 @@ impl Tool for LoadSkillTool {
             };
         }
 
+        let args_str = params.arguments.as_deref().unwrap_or("");
+
         match self
             .skills
             .iter()
-            .find(|s| s.frontmatter.name == skill_name)
+            .find(|s| s.frontmatter.name == params.name)
         {
             Some(skill) => {
                 let content = crate::command::chat::skill::resolve_skill_content(skill);
@@ -83,7 +77,7 @@ impl Tool for LoadSkillTool {
                 ToolResult {
                     output: format!(
                         "未找到技能 '{}'。可用技能: {}",
-                        skill_name,
+                        params.name,
                         available.join(", ")
                     ),
                     is_error: true,

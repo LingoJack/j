@@ -1,7 +1,35 @@
-use crate::command::chat::tools::{Tool, ToolResult, expand_tilde};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{
+    Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+
+/// GlobTool 参数
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct GlobParams {
+    /// File glob pattern to match (e.g. **/*.js, *.{ts,tsx}, src/**/*.py)
+    pattern: String,
+    /// Directory path to search. Defaults to current working directory if not specified. Important: omit this field if not needed — do not enter undefined, null, or empty string
+    #[serde(default)]
+    path: Option<String>,
+    /// Maximum number of results to return, default 100
+    #[serde(default = "default_limit")]
+    limit: usize,
+    /// Skip the first N results, for pagination with limit
+    #[serde(default)]
+    offset: usize,
+    /// File glob pattern to exclude (e.g. **/node_modules/**, **/.git/**)
+    #[serde(default)]
+    exclude_pattern: Option<String>,
+}
+
+fn default_limit() -> usize {
+    100
+}
 
 pub struct GlobTool;
 
@@ -23,63 +51,19 @@ impl Tool for GlobTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "properties": {
-                "limit": {
-                    "default": 100,
-                    "description": "Maximum number of results to return, default 100",
-                    "type": "integer"
-                },
-                "offset": {
-                    "default": 0,
-                    "description": "Skip the first N results, for pagination with limit",
-                    "type": "integer"
-                },
-                "path": {
-                    "description": "Directory path to search. Defaults to current working directory if not specified. Important: omit this field if not needed — do not enter undefined, null, or empty string",
-                    "type": "string"
-                },
-                "pattern": {
-                    "description": "File glob pattern to match (e.g. **/*.js, *.{ts,tsx}, src/**/*.py)",
-                    "type": "string"
-                },
-                "excludePattern": {
-                    "description": "File glob pattern to exclude (e.g. **/node_modules/**, **/.git/**)",
-                    "type": "string"
-                }
-            },
-            "required": ["pattern"],
-            "type": "object"
-        })
+        schema_to_tool_params::<GlobParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let v = match serde_json::from_str::<Value>(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let pattern = match v.get("pattern").and_then(|p| p.as_str()) {
-            Some(p) => p,
-            None => {
-                return ToolResult {
-                    output: "参数缺少 pattern 字段".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: GlobParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
         // 获取搜索路径，默认为当前目录
-        let base_path = v
-            .get("path")
-            .and_then(|p| p.as_str())
+        let base_path = params
+            .path
+            .as_deref()
             .filter(|s| !s.is_empty())
             .map(expand_tilde)
             .unwrap_or_else(|| {
@@ -88,32 +72,20 @@ impl Tool for GlobTool {
                     .unwrap_or_else(|_| ".".to_string())
             });
 
-        // 获取限制数量
-        let limit = v
-            .get("limit")
-            .and_then(|l| l.as_u64())
-            .map(|l| (l as usize).clamp(1, 1000))
-            .unwrap_or(100);
-
-        // 获取偏移量
-        let offset = v
-            .get("offset")
-            .and_then(|o| o.as_u64())
-            .map(|o| o as usize)
-            .unwrap_or(0);
+        let limit = params.limit.clamp(1, 1000);
 
         // 解析排除模式
-        let exclude_pattern = v
-            .get("excludePattern")
-            .and_then(|p| p.as_str())
+        let exclude_pattern = params
+            .exclude_pattern
+            .as_deref()
             .filter(|s| !s.is_empty())
             .and_then(|p| glob::Pattern::new(p).ok());
 
         // 构建完整的 glob 模式
-        let full_pattern = if pattern.starts_with('/') {
-            pattern.to_string()
+        let full_pattern = if params.pattern.starts_with('/') {
+            params.pattern.clone()
         } else {
-            format!("{}/{}", base_path.trim_end_matches('/'), pattern)
+            format!("{}/{}", base_path.trim_end_matches('/'), params.pattern)
         };
 
         // 执行 glob 搜索
@@ -152,25 +124,29 @@ impl Tool for GlobTool {
 
         if total == 0 {
             return ToolResult {
-                output: format!("未找到匹配 '{}' 的文件", pattern),
+                output: format!("未找到匹配 '{}' 的文件", params.pattern),
                 is_error: false,
                 images: vec![],
             };
         }
 
         // 应用分页
-        let paginated: Vec<_> = matches.into_iter().skip(offset).take(limit).collect();
+        let paginated: Vec<_> = matches
+            .into_iter()
+            .skip(params.offset)
+            .take(limit)
+            .collect();
 
         let displayed = paginated.len();
 
         // 格式化输出
         let mut result = String::new();
         result.push_str(&format!("找到 {} 个匹配文件", total));
-        if offset > 0 || offset + displayed < total {
+        if params.offset > 0 || params.offset + displayed < total {
             result.push_str(&format!(
                 "（显示 {}-{} 项，共 {} 项）",
-                offset + 1,
-                offset + displayed,
+                params.offset + 1,
+                params.offset + displayed,
                 total
             ));
         }
@@ -180,11 +156,11 @@ impl Tool for GlobTool {
             result.push_str(&format!("{}\n", path.display()));
         }
 
-        if offset + displayed < total {
+        if params.offset + displayed < total {
             result.push_str(&format!(
                 "\n... 还有 {} 个结果未显示（使用 offset={} 继续查看）",
-                total - offset - displayed,
-                offset + displayed
+                total - params.offset - displayed,
+                params.offset + displayed
             ));
         }
 

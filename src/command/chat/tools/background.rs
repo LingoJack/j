@@ -1,5 +1,7 @@
-use super::{Tool, ToolResult};
+use super::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::safe_lock;
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
@@ -151,6 +153,27 @@ impl BackgroundManager {
 
 // ========== TaskOutputTool ==========
 
+/// TaskOutputTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct TaskOutputParams {
+    /// The task ID to get output from (returned by Bash with run_in_background: true)
+    task_id: String,
+    /// Whether to wait for task completion (default: true). Set to false for a non-blocking check of current status.
+    #[serde(default = "default_block")]
+    block: bool,
+    /// Max wait time in milliseconds when block=true (default: 30000, max: 600000)
+    #[serde(default = "default_timeout_ms")]
+    timeout: u64,
+}
+
+fn default_block() -> bool {
+    true
+}
+
+fn default_timeout_ms() -> u64 {
+    30_000
+}
+
 /// 查询后台任务输出的工具（替代 CheckBackgroundTool）
 pub struct TaskOutputTool {
     pub manager: Arc<BackgroundManager>,
@@ -170,79 +193,39 @@ impl Tool for TaskOutputTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "task_id": {
-                    "type": "string",
-                    "description": "The task ID to get output from (returned by Bash with run_in_background: true)"
-                },
-                "block": {
-                    "type": "boolean",
-                    "description": "Whether to wait for task completion (default: true). Set to false for a non-blocking check of current status."
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Max wait time in milliseconds when block=true (default: 30000, max: 600000)"
-                }
-            },
-            "required": ["task_id"]
-        })
+        schema_to_tool_params::<TaskOutputParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: TaskOutputParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let task_id = match parsed.get("task_id").and_then(|v| v.as_str()) {
-            Some(id) => id.to_string(),
-            None => {
-                return ToolResult {
-                    output: "缺少 task_id 参数".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let block = parsed
-            .get("block")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-
-        let timeout_ms = parsed
-            .get("timeout")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(30_000)
-            .min(600_000);
+        let timeout_ms = params.timeout.min(600_000);
 
         // 若任务不存在，直接报错
-        if self.manager.get_task_status(&task_id).is_none() {
+        if self.manager.get_task_status(&params.task_id).is_none() {
             return ToolResult {
-                output: format!("后台任务 {} 不存在", task_id),
+                output: format!("后台任务 {} 不存在", params.task_id),
                 is_error: true,
                 images: vec![],
             };
         }
 
         // block=true 且任务仍在运行时，轮询等待
-        if block && self.manager.is_running(&task_id) {
+        if params.block && self.manager.is_running(&params.task_id) {
             let deadline = Instant::now() + Duration::from_millis(timeout_ms);
             loop {
-                if !self.manager.is_running(&task_id) {
+                if !self.manager.is_running(&params.task_id) {
                     break;
                 }
                 if Instant::now() >= deadline {
                     // 超时，返回当前状态
-                    let info = self.manager.get_task_status(&task_id).unwrap_or(json!({}));
+                    let info = self
+                        .manager
+                        .get_task_status(&params.task_id)
+                        .unwrap_or(json!({}));
                     let mut obj = info.clone();
                     if let Some(map) = obj.as_object_mut() {
                         map.insert(
@@ -261,14 +244,14 @@ impl Tool for TaskOutputTool {
         }
 
         // 返回当前状态（已完成或 block=false）
-        match self.manager.get_task_status(&task_id) {
+        match self.manager.get_task_status(&params.task_id) {
             Some(info) => ToolResult {
                 output: serde_json::to_string_pretty(&info).unwrap_or_default(),
                 is_error: false,
                 images: vec![],
             },
             None => ToolResult {
-                output: format!("后台任务 {} 不存在", task_id),
+                output: format!("后台任务 {} 不存在", params.task_id),
                 is_error: true,
                 images: vec![],
             },

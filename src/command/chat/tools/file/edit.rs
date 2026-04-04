@@ -1,6 +1,22 @@
-use crate::command::chat::tools::{Tool, ToolResult, expand_tilde};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{
+    Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool};
+
+/// EditFileTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct EditFileParams {
+    /// File path to edit
+    path: String,
+    /// Original string to replace (must be unique in the file)
+    old_string: String,
+    /// Replacement string; empty string means delete
+    #[serde(default)]
+    new_string: String,
+}
 
 /// 编辑文件的工具（基于字符串替换）
 pub struct EditFileTool;
@@ -25,65 +41,16 @@ impl Tool for EditFileTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "File path to edit"
-                },
-                "old_string": {
-                    "type": "string",
-                    "description": "Original string to replace (must be unique in the file)"
-                },
-                "new_string": {
-                    "type": "string",
-                    "description": "Replacement string; empty string means delete"
-                }
-            },
-            "required": ["path", "old_string", "new_string"]
-        })
+        schema_to_tool_params::<EditFileParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let v = match serde_json::from_str::<Value>(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: EditFileParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let path = match v.get("path").and_then(|c| c.as_str()) {
-            Some(p) => expand_tilde(p),
-            None => {
-                return ToolResult {
-                    output: "参数缺少 path 字段".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let old_string = match v.get("old_string").and_then(|c| c.as_str()) {
-            Some(s) => s.to_string(),
-            None => {
-                return ToolResult {
-                    output: "参数缺少 old_string 字段".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let new_string = v
-            .get("new_string")
-            .and_then(|c| c.as_str())
-            .unwrap_or("")
-            .to_string();
+        let path = expand_tilde(&params.path);
 
         // 读取文件
         let content = match std::fs::read_to_string(&path) {
@@ -98,7 +65,7 @@ impl Tool for EditFileTool {
         };
 
         // 检查匹配次数
-        let count = content.matches(&old_string).count();
+        let count = content.matches(&params.old_string).count();
         if count == 0 {
             return ToolResult {
                 output: "未找到匹配的字符串".to_string(),
@@ -118,15 +85,15 @@ impl Tool for EditFileTool {
         }
 
         // 执行替换
-        let new_content = content.replacen(&old_string, &new_string, 1);
+        let new_content = content.replacen(&params.old_string, &params.new_string, 1);
         match std::fs::write(&path, &new_content) {
             Ok(_) => {
                 // 构建含 diff 的输出
                 let mut output = format!("已编辑文件: {}\n```diff\n", path);
-                for line in old_string.lines() {
+                for line in params.old_string.lines() {
                     output.push_str(&format!("- {}\n", line));
                 }
-                for line in new_string.lines() {
+                for line in params.new_string.lines() {
                     output.push_str(&format!("+ {}\n", line));
                 }
                 output.push_str("```");
@@ -149,22 +116,18 @@ impl Tool for EditFileTool {
     }
 
     fn confirmation_message(&self, arguments: &str) -> String {
-        let v = serde_json::from_str::<Value>(arguments).ok();
-        let path = v
-            .as_ref()
-            .and_then(|v| v.get("path").and_then(|c| c.as_str()).map(expand_tilde))
-            .unwrap_or_else(|| "未知路径".to_string());
-        let old = v
-            .as_ref()
-            .and_then(|v| v.get("old_string").and_then(|c| c.as_str()))
-            .unwrap_or("");
-        let first_line = old.lines().next().unwrap_or("");
-        let has_more = old.lines().count() > 1;
-        let preview = if has_more {
-            format!("{}...", first_line)
+        if let Ok(params) = serde_json::from_str::<EditFileParams>(arguments) {
+            let path = expand_tilde(&params.path);
+            let first_line = params.old_string.lines().next().unwrap_or("");
+            let has_more = params.old_string.lines().count() > 1;
+            let preview = if has_more {
+                format!("{}...", first_line)
+            } else {
+                first_line.to_string()
+            };
+            format!("即将编辑文件 {} (替换: \"{}\")", path, preview)
         } else {
-            first_line.to_string()
-        };
-        format!("即将编辑文件 {} (替换: \"{}\")", path, preview)
+            "即将编辑文件".to_string()
+        }
     }
 }

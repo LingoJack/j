@@ -17,8 +17,37 @@ mod web_fetch;
 mod web_search;
 
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::Value;
 use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+
+/// 从 `schemars::schema_for!` 生成的 root schema 中提取 OpenAI tool 需要的
+/// `{"type":"object","properties":...,"required":...}` 格式。
+///
+/// schemars 0.8 生成的 root schema 自带 `$schema` / `title` / `definitions` 等顶层字段，
+/// 但 LLM function calling 只需要核心的 object schema 部分。此函数做以下事情：
+///  1. 剔除 `$schema`、`title`、`definitions`
+///  2. 如果 schema 没有 `"type":"object"`，原样返回（不做裁剪）
+pub fn schema_to_tool_params<T: JsonSchema>() -> Value {
+    let root = schemars::schema_for!(T);
+    let mut v = serde_json::to_value(root).unwrap_or_default();
+    if let Some(obj) = v.as_object_mut() {
+        obj.remove("$schema");
+        obj.remove("title");
+        obj.remove("definitions");
+    }
+    v
+}
+
+/// 便捷：解析 tool 参数 JSON 字符串为 `T`，返回友好错误
+pub fn parse_tool_args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<T, ToolResult> {
+    serde_json::from_str::<T>(arguments).map_err(|e| ToolResult {
+        output: format!("参数解析失败: {}", e),
+        is_error: true,
+        images: vec![],
+    })
+}
 
 // ========== ToolResult ==========
 

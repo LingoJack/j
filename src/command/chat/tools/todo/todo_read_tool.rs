@@ -1,7 +1,13 @@
-use super::super::{Tool, ToolResult};
+use super::super::{Tool, ToolResult, schema_to_tool_params};
 use super::todo_manager::TodoManager;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool};
+
+/// TodoReadTool 参数（无参数）
+#[derive(Deserialize, JsonSchema)]
+struct TodoReadParams {}
 
 pub struct TodoReadTool {
     pub manager: Arc<TodoManager>,
@@ -21,10 +27,7 @@ impl Tool for TodoReadTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {}
-        })
+        schema_to_tool_params::<TodoReadParams>()
     }
 
     fn execute(&self, _arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {

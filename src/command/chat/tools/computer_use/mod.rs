@@ -7,13 +7,92 @@ mod preview;
 mod screenshot;
 mod som;
 
-use crate::command::chat::tools::{ImageData, Tool, ToolResult};
+use crate::command::chat::tools::{ImageData, Tool, ToolResult, schema_to_tool_params};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+/// ComputerUseTool 参数
+#[derive(Deserialize, JsonSchema)]
+#[allow(dead_code)]
+struct ComputerUseParams {
+    /// Action to perform (for single action mode)
+    #[serde(default)]
+    action: Option<String>,
+    /// Batch mode: array of action objects executed sequentially. Stops on first error.
+    #[serde(default)]
+    actions: Option<Vec<Value>>,
+    /// X coordinate (logical points)
+    #[serde(default)]
+    x: Option<f64>,
+    /// Y coordinate (logical points)
+    #[serde(default)]
+    y: Option<f64>,
+    /// SoM element number from last screenshot
+    #[serde(default)]
+    element: Option<u64>,
+    /// Text to type (for 'type' action)
+    #[serde(default)]
+    text: Option<String>,
+    /// Key name (for 'key' action, e.g. 'enter', 'tab', 'escape')
+    #[serde(default)]
+    key: Option<String>,
+    /// Key names for combo (e.g. ["cmd", "c"])
+    #[serde(default)]
+    keys: Option<Vec<String>>,
+    /// Horizontal scroll amount
+    #[serde(default)]
+    dx: Option<i32>,
+    /// Vertical scroll amount (negative=up)
+    #[serde(default)]
+    dy: Option<i32>,
+    /// Drag start X
+    #[serde(default)]
+    start_x: Option<f64>,
+    /// Drag start Y
+    #[serde(default)]
+    start_y: Option<f64>,
+    /// Drag end X
+    #[serde(default)]
+    end_x: Option<f64>,
+    /// Drag end Y
+    #[serde(default)]
+    end_y: Option<f64>,
+    /// Drag start SoM element
+    #[serde(default)]
+    start_element: Option<u64>,
+    /// Drag end SoM element
+    #[serde(default)]
+    end_element: Option<u64>,
+    /// Drag duration in milliseconds
+    #[serde(default)]
+    duration_ms: Option<u64>,
+    /// Delay between keystrokes in ms (for 'type')
+    #[serde(default)]
+    delay_ms: Option<u64>,
+    /// Target application name
+    #[serde(default)]
+    app: Option<String>,
+    /// Accessibility tree depth limit
+    #[serde(default)]
+    depth: Option<u32>,
+    /// Only show clickable elements in ax_tree
+    #[serde(default)]
+    clickable: Option<bool>,
+    /// Enable SoM annotations on screenshot (default: true)
+    #[serde(default)]
+    som: Option<bool>,
+    /// Search query for find_element
+    #[serde(default)]
+    query: Option<String>,
+    /// Accessibility role filter (e.g. 'AXButton')
+    #[serde(default)]
+    role: Option<String>,
+}
 
 // ========== SoM 状态 ==========
 
@@ -904,50 +983,7 @@ impl Tool for ComputerUseTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": [
-                        "screenshot", "click", "doubleclick", "rightclick",
-                        "type", "key", "key_combo", "scroll", "drag",
-                        "ax_tree", "find_element", "focus_app", "cursor_position"
-                    ],
-                    "description": "Action to perform (for single action mode)"
-                },
-                "actions": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "description": "Each item has 'action' plus action-specific params"
-                    },
-                    "description": "Batch mode: array of action objects executed sequentially. Stops on first error."
-                },
-                "x": { "type": "number", "description": "X coordinate (logical points)" },
-                "y": { "type": "number", "description": "Y coordinate (logical points)" },
-                "element": { "type": "integer", "description": "SoM element number from last screenshot" },
-                "text": { "type": "string", "description": "Text to type (for 'type' action)" },
-                "key": { "type": "string", "description": "Key name (for 'key' action, e.g. 'enter', 'tab', 'escape')" },
-                "keys": { "type": "array", "items": { "type": "string" }, "description": "Key names for combo (e.g. [\"cmd\", \"c\"])" },
-                "dx": { "type": "integer", "description": "Horizontal scroll amount" },
-                "dy": { "type": "integer", "description": "Vertical scroll amount (negative=up)" },
-                "start_x": { "type": "number", "description": "Drag start X" },
-                "start_y": { "type": "number", "description": "Drag start Y" },
-                "end_x": { "type": "number", "description": "Drag end X" },
-                "end_y": { "type": "number", "description": "Drag end Y" },
-                "start_element": { "type": "integer", "description": "Drag start SoM element" },
-                "end_element": { "type": "integer", "description": "Drag end SoM element" },
-                "duration_ms": { "type": "integer", "description": "Drag duration in milliseconds" },
-                "delay_ms": { "type": "integer", "description": "Delay between keystrokes in ms (for 'type')" },
-                "app": { "type": "string", "description": "Target application name" },
-                "depth": { "type": "integer", "description": "Accessibility tree depth limit" },
-                "clickable": { "type": "boolean", "description": "Only show clickable elements in ax_tree" },
-                "som": { "type": "boolean", "description": "Enable SoM annotations on screenshot (default: true)" },
-                "query": { "type": "string", "description": "Search query for find_element" },
-                "role": { "type": "string", "description": "Accessibility role filter (e.g. 'AXButton')" }
-            }
-        })
+        schema_to_tool_params::<ComputerUseParams>()
     }
 
     fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {

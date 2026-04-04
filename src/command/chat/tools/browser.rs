@@ -3,7 +3,9 @@
 //! 启用 `browser_cdp` feature 时，使用 chromiumoxide 进行真实 CDP 浏览器控制。
 //! 未启用时，退化为基于 reqwest 的 Lite 模式（HTTP 抓取 + HTML 解析）。
 
-use crate::command::chat::tools::{Tool, ToolResult};
+use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};
 
@@ -1272,6 +1274,41 @@ mod lite {
 
 // ==================== BrowserTool ====================
 
+/// BrowserTool 参数
+#[derive(Deserialize, JsonSchema)]
+#[allow(dead_code)]
+struct BrowserParams {
+    /// Action type. status=check status; start=launch browser; stop=stop browser; tabs=list tabs; open=open new tab(requires url); navigate=navigate existing tab(requires url); screenshot=capture screenshot(requires output_dir); snapshot=get interactive element snapshot; content=extract page text; close=close tab(requires tab_id); click=click element(requires selector); type=type text(requires selector+text); press=key press(requires key); evaluate=execute JS(requires script)
+    action: String,
+    /// [open/navigate] Target URL, must include full protocol (e.g. https://example.com)
+    #[serde(default)]
+    url: Option<String>,
+    /// Target tab ID (defaults to the first tab if not specified)
+    #[serde(default)]
+    tab_id: Option<String>,
+    /// [click/type] CSS selector to locate a page element. Strongly recommended to use the selector field returned by snapshot (e.g. '[data-jref="e3"]') for precise matching
+    #[serde(default)]
+    selector: Option<String>,
+    /// [type] Text to input into the target element, supports Unicode characters
+    #[serde(default)]
+    text: Option<String>,
+    /// [press] Key name to press, e.g. 'Enter', 'Tab', 'Escape', 'ArrowDown', 'Backspace', or a single character like 'a'
+    #[serde(default)]
+    key: Option<String>,
+    /// [evaluate] JavaScript code to execute in the page context
+    #[serde(default)]
+    script: Option<String>,
+    /// [screenshot] Absolute path to the screenshot output directory
+    #[serde(default)]
+    output_dir: Option<String>,
+    /// [screenshot] Whether to capture the full page (including parts requiring scrolling). false captures only the current viewport
+    #[serde(default)]
+    full_page: Option<bool>,
+    /// Whether to run the browser in headless mode. true=no browser window, false=show window. Overrides the config.yaml setting
+    #[serde(default)]
+    headless: Option<bool>,
+}
+
 pub struct BrowserTool;
 
 impl Tool for BrowserTool {
@@ -1300,61 +1337,12 @@ impl Tool for BrowserTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["status", "start", "stop", "tabs", "open", "navigate",
-                             "screenshot", "snapshot", "content", "close",
-                             "click", "type", "press", "evaluate"],
-                    "description": "Action type. status=check status; start=launch browser; stop=stop browser; tabs=list tabs; open=open new tab(requires url); navigate=navigate existing tab(requires url); screenshot=capture screenshot(requires output_dir); snapshot=get interactive element snapshot; content=extract page text; close=close tab(requires tab_id); click=click element(requires selector); type=type text(requires selector+text); press=key press(requires key); evaluate=execute JS(requires script)"
-                },
-                "url": {
-                    "type": "string",
-                    "description": "[open/navigate] Target URL, must include full protocol (e.g. https://example.com)"
-                },
-                "tab_id": {
-                    "type": "string",
-                    "description": "Target tab ID (defaults to the first tab if not specified)"
-                },
-                "selector": {
-                    "type": "string",
-                    "description": "[click/type] CSS selector to locate a page element. Strongly recommended to use the selector field returned by snapshot (e.g. '[data-jref=\"e3\"]') for precise matching"
-                },
-                "text": {
-                    "type": "string",
-                    "description": "[type] Text to input into the target element, supports Unicode characters"
-                },
-                "key": {
-                    "type": "string",
-                    "description": "[press] Key name to press, e.g. 'Enter', 'Tab', 'Escape', 'ArrowDown', 'Backspace', or a single character like 'a'"
-                },
-                "script": {
-                    "type": "string",
-                    "description": "[evaluate] JavaScript code to execute in the page context. Can be used to get dynamically rendered content (e.g. `document.body.innerText`), manipulate the DOM, extract specific data, etc. Returns the JS expression result"
-                },
-                "output_dir": {
-                    "type": "string",
-                    "description": "[screenshot] Absolute path to the screenshot output directory. Screenshots are saved as PNG with timestamped filenames (directory is auto-created)"
-                },
-                "full_page": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "[screenshot] Whether to capture the full page (including parts requiring scrolling). false captures only the current viewport"
-                },
-                "headless": {
-                    "type": "boolean",
-                    "description": "Whether to run the browser in headless mode. true=no browser window (for background automation), false=show window (for debugging). Overrides the config.yaml setting; omit to use config value (default true)"
-                }
-            },
-            "required": ["action"]
-        })
+        schema_to_tool_params::<BrowserParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let args: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
+        let params: BrowserParams = match serde_json::from_str(arguments) {
+            Ok(p) => p,
             Err(e) => {
                 return ToolResult {
                     output: format!("参数解析失败: {}", e),
@@ -1364,25 +1352,17 @@ impl Tool for BrowserTool {
             }
         };
 
-        let action = match args.get("action").and_then(|a| a.as_str()) {
-            Some(a) => a,
-            None => {
-                return ToolResult {
-                    output: "缺少 action 参数。可选: status, start, stop, tabs, open, navigate, screenshot, snapshot, content, close, click, type, press, evaluate".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
+        // 也解析为 Value 以便传给 cdp/lite dispatch（它们使用 .get()）
+        let args: Value = serde_json::from_str(arguments).unwrap_or_default();
 
         #[cfg(feature = "browser_cdp")]
         {
-            exec_browser_cdp(&args, action)
+            exec_browser_cdp(&args, &params.action)
         }
 
         #[cfg(not(feature = "browser_cdp"))]
         {
-            exec_browser_stub(&args, action)
+            exec_browser_stub(&args, &params.action)
         }
     }
 

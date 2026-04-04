@@ -1,6 +1,10 @@
 use super::ToolResult;
 use super::background::BackgroundManager;
-use crate::command::chat::tools::{Tool, is_dangerous_command};
+use crate::command::chat::tools::{
+    Tool, is_dangerous_command, parse_tool_args, schema_to_tool_params,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::io::BufRead;
 use std::sync::{
@@ -11,6 +15,26 @@ use std::time::{Duration, Instant};
 
 /// 默认超时秒数
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
+
+/// ShellTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct ShellParams {
+    /// The shell command to execute (runs in bash -c). Interactive input is not supported; use non-interactive flags (e.g. -y, --yes, --no-input).
+    command: String,
+    /// A short description of the command (5-10 words), displayed in the UI
+    #[serde(default)]
+    #[allow(dead_code)]
+    description: Option<String>,
+    /// Working directory for the command (absolute path). Defaults to the current process working directory if not specified.
+    #[serde(default)]
+    cwd: Option<String>,
+    /// Timeout in seconds, default 120, max 600. The process is automatically killed on timeout and partial output is returned. For build commands (npm run build, cargo build, etc.) use 300-600.
+    #[serde(default)]
+    timeout: Option<u64>,
+    /// If true, run the command in background and return a task_id immediately. Use TaskOutput to retrieve results.
+    #[serde(default)]
+    run_in_background: bool,
+}
 
 // ========== ShellTool ==========
 
@@ -59,75 +83,19 @@ impl Tool for ShellTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute (runs in bash -c). Interactive input is not supported; use non-interactive flags (e.g. -y, --yes, --no-input)."
-                },
-                "description": {
-                    "type": "string",
-                    "description": "A short description of the command (5-10 words), displayed in the UI"
-                },
-                "cwd": {
-                    "type": "string",
-                    "description": "Working directory for the command (absolute path). Defaults to the current process working directory if not specified."
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Timeout in seconds, default 120, max 600. The process is automatically killed on timeout and partial output is returned. For build commands (npm run build, cargo build, etc.) use 300-600."
-                },
-                "run_in_background": {
-                    "type": "boolean",
-                    "description": "If true, run the command in background and return a task_id immediately. Use TaskOutput to retrieve results."
-                }
-            },
-            "required": ["command"]
-        })
+        schema_to_tool_params::<ShellParams>()
     }
 
     fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed = match serde_json::from_str::<Value>(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: ShellParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let command = match parsed.get("command").and_then(|c| c.as_str()) {
-            Some(cmd) => cmd.to_string(),
-            None => {
-                return ToolResult {
-                    output: "参数缺少 command 字段".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let cwd = parsed
-            .get("cwd")
-            .and_then(|c| c.as_str())
-            .map(|s| s.to_string());
-
-        let timeout_secs = parsed
-            .get("timeout")
-            .and_then(|t| t.as_u64())
-            .unwrap_or(DEFAULT_TIMEOUT_SECS)
-            .min(600);
-
-        let run_in_background = parsed
-            .get("run_in_background")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let timeout_secs = params.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS).min(600);
 
         // 安全过滤
-        if is_dangerous_command(&command) {
+        if is_dangerous_command(&params.command) {
             return ToolResult {
                 output: "该命令被安全策略拒绝执行".to_string(),
                 is_error: true,
@@ -135,19 +103,19 @@ impl Tool for ShellTool {
             };
         }
 
-        if run_in_background {
-            return self.execute_background(command, cwd, timeout_secs);
+        if params.run_in_background {
+            return self.execute_background(params.command, params.cwd, timeout_secs);
         }
 
         // ===== 同步执行（原有逻辑） =====
         let mut cmd = std::process::Command::new("bash");
         cmd.arg("-c")
-            .arg(&command)
+            .arg(&params.command)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
         // 设置工作目录
-        if let Some(ref dir) = cwd {
+        if let Some(ref dir) = params.cwd {
             let path = std::path::Path::new(dir);
             if !path.is_dir() {
                 return ToolResult {
@@ -266,31 +234,19 @@ impl Tool for ShellTool {
     }
 
     fn confirmation_message(&self, arguments: &str) -> String {
-        let parsed = serde_json::from_str::<Value>(arguments).ok();
+        if let Ok(params) = serde_json::from_str::<ShellParams>(arguments) {
+            let prefix = if params.run_in_background {
+                "Background execute"
+            } else {
+                "Execute"
+            };
 
-        let cmd = parsed
-            .as_ref()
-            .and_then(|v| v.get("command").and_then(|c| c.as_str()))
-            .unwrap_or(arguments);
-
-        let cwd = parsed
-            .as_ref()
-            .and_then(|v| v.get("cwd").and_then(|c| c.as_str()));
-
-        let is_bg = parsed
-            .as_ref()
-            .and_then(|v| v.get("run_in_background").and_then(|b| b.as_bool()))
-            .unwrap_or(false);
-
-        let prefix = if is_bg {
-            "Background execute"
+            match params.cwd {
+                Some(dir) => format!("{}: {} (cwd: {})", prefix, params.command, dir),
+                None => format!("{}: {}", prefix, params.command),
+            }
         } else {
-            "Execute"
-        };
-
-        match cwd {
-            Some(dir) => format!("{}: {} (cwd: {})", prefix, cmd, dir),
-            None => format!("{}: {}", prefix, cmd),
+            format!("Execute: {}", arguments)
         }
     }
 }
