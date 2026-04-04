@@ -1,6 +1,8 @@
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
-use crate::command::chat::tools::{Tool, ToolResult};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -69,6 +71,14 @@ pub fn is_allowed_in_plan_mode(tool_name: &str) -> bool {
 
 // ========== EnterPlanModeTool ==========
 
+/// EnterPlanMode 参数
+#[derive(Deserialize, JsonSchema)]
+struct EnterPlanModeParams {
+    /// Optional short description of what you plan to investigate
+    #[serde(default)]
+    description: Option<String>,
+}
+
 pub struct EnterPlanModeTool {
     pub plan_state: Arc<PlanModeState>,
 }
@@ -100,15 +110,7 @@ impl Tool for EnterPlanModeTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "description": "Optional short description of what you plan to investigate"
-                }
-            }
-        })
+        schema_to_tool_params::<EnterPlanModeParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
@@ -120,10 +122,11 @@ impl Tool for EnterPlanModeTool {
             };
         }
 
-        let parsed: Value = serde_json::from_str(arguments).unwrap_or(Value::Null);
-        let description = parsed
-            .get("description")
-            .and_then(|v| v.as_str())
+        let params: EnterPlanModeParams =
+            serde_json::from_str(arguments).unwrap_or(EnterPlanModeParams { description: None });
+        let description = params
+            .description
+            .as_deref()
             .unwrap_or("implementation plan");
 
         // 创建 plan 文件
@@ -158,6 +161,28 @@ impl Tool for EnterPlanModeTool {
 
 // ========== ExitPlanModeTool ==========
 
+/// ExitPlanMode 参数
+#[derive(Deserialize, JsonSchema)]
+#[allow(dead_code)]
+struct ExitPlanModeParams {
+    /// Optional list of prompt-based permissions needed to implement the plan
+    #[serde(default)]
+    #[serde(rename = "allowedPrompts")]
+    allowed_prompts: Option<Vec<AllowedPrompt>>,
+}
+
+/// 计划实施所需的权限描述
+#[derive(Deserialize, JsonSchema)]
+#[allow(dead_code)]
+struct AllowedPrompt {
+    /// The tool this prompt applies to (e.g. 'Bash')
+    #[serde(default)]
+    tool: Option<String>,
+    /// Semantic description of the action (e.g. 'run tests')
+    #[serde(default)]
+    prompt: Option<String>,
+}
+
 pub struct ExitPlanModeTool {
     pub plan_state: Arc<PlanModeState>,
     pub ask_tx: mpsc::Sender<AskRequest>,
@@ -182,28 +207,7 @@ impl Tool for ExitPlanModeTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "allowedPrompts": {
-                    "type": "array",
-                    "description": "Optional list of prompt-based permissions needed to implement the plan",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "tool": {
-                                "type": "string",
-                                "description": "The tool this prompt applies to (e.g. 'Bash')"
-                            },
-                            "prompt": {
-                                "type": "string",
-                                "description": "Semantic description of the action (e.g. 'run tests')"
-                            }
-                        }
-                    }
-                }
-            }
-        })
+        schema_to_tool_params::<ExitPlanModeParams>()
     }
 
     fn execute(&self, _arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {

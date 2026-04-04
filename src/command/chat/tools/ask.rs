@@ -1,7 +1,39 @@
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
-use crate::command::chat::tools::{Tool, ToolResult};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool, mpsc};
+
+/// 选项参数
+#[derive(Deserialize, JsonSchema)]
+struct AskOptionParam {
+    /// Option display text (1-5 words)
+    label: String,
+    /// Option description
+    description: String,
+}
+
+/// 问题参数
+#[derive(Deserialize, JsonSchema)]
+struct AskQuestionParam {
+    /// Full question text
+    question: String,
+    /// Short tag (max 12 chars), e.g. 'Auth method'
+    header: String,
+    /// List of options (2-4)
+    options: Vec<AskOptionParam>,
+    /// Whether to allow multiple selections (default false)
+    #[serde(default)]
+    multi_select: bool,
+}
+
+/// AskTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct AskParams {
+    /// List of questions to ask (1-4)
+    questions: Vec<AskQuestionParam>,
+}
 
 // ========== AskTool ==========
 
@@ -47,78 +79,16 @@ impl Tool for AskTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "questions": {
-                    "type": "array",
-                    "description": "List of questions to ask (1-4)",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "question": {
-                                "type": "string",
-                                "description": "Full question text"
-                            },
-                            "header": {
-                                "type": "string",
-                                "description": "Short tag (max 12 chars), e.g. 'Auth method'"
-                            },
-                            "options": {
-                                "type": "array",
-                                "description": "List of options (2-4)",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "label": {
-                                            "type": "string",
-                                            "description": "Option display text (1-5 words)"
-                                        },
-                                        "description": {
-                                            "type": "string",
-                                            "description": "Option description"
-                                        }
-                                    },
-                                    "required": ["label", "description"]
-                                }
-                            },
-                            "multi_select": {
-                                "type": "boolean",
-                                "description": "Whether to allow multiple selections (default false)"
-                            }
-                        },
-                        "required": ["question", "header", "options"]
-                    }
-                }
-            },
-            "required": ["questions"]
-        })
+        schema_to_tool_params::<AskParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(_) => {
-                return ToolResult {
-                    output: "参数解析失败".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: AskParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let questions_val = match parsed.get("questions").and_then(|v| v.as_array()) {
-            Some(arr) => arr,
-            None => {
-                return ToolResult {
-                    output: "缺少 questions 参数".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        if questions_val.is_empty() || questions_val.len() > 4 {
+        if params.questions.is_empty() || params.questions.len() > 4 {
             return ToolResult {
                 output: "questions 数量必须为 1-4 个".to_string(),
                 is_error: true,
@@ -127,56 +97,27 @@ impl Tool for AskTool {
         }
 
         let mut questions: Vec<AskQuestion> = Vec::new();
-        for q_val in questions_val {
-            let question = q_val
-                .get("question")
-                .and_then(|v| v.as_str())
-                .unwrap_or("请回答")
-                .to_string();
-            let header = q_val
-                .get("header")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let multi_select = q_val
-                .get("multi_select")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            let options = q_val
-                .get("options")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .map(|o| AskOption {
-                            label: o
-                                .get("label")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            description: o
-                                .get("description")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
-            if options.len() < 2 || options.len() > 4 {
+        for q in &params.questions {
+            if q.options.len() < 2 || q.options.len() > 4 {
                 return ToolResult {
-                    output: format!("问题 '{}' 的选项数量必须为 2-4 个", question),
+                    output: format!("问题 '{}' 的选项数量必须为 2-4 个", q.question),
                     is_error: true,
                     images: vec![],
                 };
             }
 
             questions.push(AskQuestion {
-                question,
-                header,
-                options,
-                multi_select,
+                question: q.question.clone(),
+                header: q.header.clone(),
+                options: q
+                    .options
+                    .iter()
+                    .map(|o| AskOption {
+                        label: o.label.clone(),
+                        description: o.description.clone(),
+                    })
+                    .collect(),
+                multi_select: q.multi_select,
             });
         }
 

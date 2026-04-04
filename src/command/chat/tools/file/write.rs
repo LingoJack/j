@@ -1,6 +1,19 @@
-use crate::command::chat::tools::{Tool, ToolResult, expand_tilde};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{
+    Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool};
+
+/// WriteFileTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct WriteFileParams {
+    /// File path to write (absolute or relative to current working directory)
+    path: String,
+    /// Content to write to the file
+    content: String,
+}
 
 /// 写入文件的工具
 pub struct WriteFileTool;
@@ -25,55 +38,16 @@ impl Tool for WriteFileTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "File path to write (absolute or relative to current working directory)"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Content to write to the file"
-                }
-            },
-            "required": ["path", "content"]
-        })
+        schema_to_tool_params::<WriteFileParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let v = match serde_json::from_str::<Value>(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: WriteFileParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let path = match v.get("path").and_then(|c| c.as_str()) {
-            Some(p) => expand_tilde(p),
-            None => {
-                return ToolResult {
-                    output: "参数缺少 path 字段".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let content = match v.get("content").and_then(|c| c.as_str()) {
-            Some(c) => c.to_string(),
-            None => {
-                return ToolResult {
-                    output: "参数缺少 content 字段".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
+        let path = expand_tilde(&params.path);
 
         // 自动创建父目录
         let file_path = std::path::Path::new(&path);
@@ -88,9 +62,9 @@ impl Tool for WriteFileTool {
             };
         }
 
-        match std::fs::write(&path, &content) {
+        match std::fs::write(&path, &params.content) {
             Ok(_) => ToolResult {
-                output: format!("已写入文件: {} ({} 字节)", path, content.len()),
+                output: format!("已写入文件: {} ({} 字节)", path, params.content.len()),
                 is_error: false,
                 images: vec![],
             },
@@ -107,9 +81,9 @@ impl Tool for WriteFileTool {
     }
 
     fn confirmation_message(&self, arguments: &str) -> String {
-        let path = serde_json::from_str::<Value>(arguments)
+        let path = serde_json::from_str::<WriteFileParams>(arguments)
             .ok()
-            .and_then(|v| v.get("path").and_then(|c| c.as_str()).map(expand_tilde))
+            .map(|p| expand_tilde(&p.path))
             .unwrap_or_else(|| "未知路径".to_string());
         format!("即将写入文件: {}", path)
     }

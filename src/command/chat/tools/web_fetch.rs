@@ -1,7 +1,10 @@
-use crate::command::chat::tools::{Tool, ToolResult};
+use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::html_extract;
+use schemars::JsonSchema;
 use scraper::Html;
-use serde_json::{Value, json};
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
 
@@ -13,6 +16,33 @@ const REQUEST_TIMEOUT_SECS: u64 = 15;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 /// 默认最大输出字符数
 const DEFAULT_MAX_CHARS: usize = 50000;
+
+/// WebFetchTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct WebFetchParams {
+    /// Target URL (must start with http:// or https://)
+    url: String,
+    /// Output format: markdown or text
+    #[serde(default = "default_extract_mode")]
+    extract_mode: String,
+    /// Maximum number of characters to return
+    #[serde(default = "default_max_chars")]
+    max_chars: usize,
+    /// Authorization header value
+    #[serde(default)]
+    authorization: Option<String>,
+    /// Custom request headers
+    #[serde(default)]
+    headers: Option<HashMap<String, String>>,
+}
+
+fn default_extract_mode() -> String {
+    "markdown".to_string()
+}
+
+fn default_max_chars() -> usize {
+    DEFAULT_MAX_CHARS
+}
 
 // ==================== WebFetchTool ====================
 
@@ -38,51 +68,16 @@ impl Tool for WebFetchTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Target URL (must start with http:// or https://)"
-                },
-                "extract_mode": {
-                    "type": "string",
-                    "enum": ["markdown", "text"],
-                    "default": "markdown",
-                    "description": "Output format: markdown or text"
-                },
-                "max_chars": {
-                    "type": "integer",
-                    "default": 50000,
-                    "description": "Maximum number of characters to return"
-                },
-                "authorization": {
-                    "type": "string",
-                    "description": "Authorization header value"
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "Custom request headers",
-                    "additionalProperties": { "type": "string" }
-                }
-            },
-            "required": ["url"]
-        })
+        schema_to_tool_params::<WebFetchParams>()
     }
 
     fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let args: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: WebFetchParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        exec_fetch(&args, cancelled)
+        exec_fetch(&params, cancelled)
     }
 
     fn requires_confirmation(&self) -> bool {
@@ -92,40 +87,7 @@ impl Tool for WebFetchTool {
 
 // ==================== Fetch 实现 ====================
 
-fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
-    let url = match args.get("url").and_then(|u| u.as_str()) {
-        Some(u) => u,
-        None => {
-            return ToolResult {
-                output: "缺少 url 参数".to_string(),
-                is_error: true,
-                images: vec![],
-            };
-        }
-    };
-
-    let extract_mode = args
-        .get("extract_mode")
-        .and_then(|m| m.as_str())
-        .unwrap_or("markdown");
-
-    let max_chars = args
-        .get("max_chars")
-        .and_then(|c| c.as_u64())
-        .map(|c| c as usize)
-        .unwrap_or(DEFAULT_MAX_CHARS);
-
-    let authorization = args
-        .get("authorization")
-        .and_then(|a| a.as_str())
-        .map(|s| s.to_string());
-
-    let headers = args.get("headers").and_then(|h| h.as_object()).map(|obj| {
-        obj.iter()
-            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-            .collect::<Vec<_>>()
-    });
-
+fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResult {
     if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
         return ToolResult {
             output: "操作已取消".to_string(),
@@ -150,12 +112,12 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
         }
     };
 
-    let mut request = client.get(url).header("Referer", url);
+    let mut request = client.get(&params.url).header("Referer", &params.url);
 
-    if let Some(ref auth) = authorization {
+    if let Some(ref auth) = params.authorization {
         request = request.header("Authorization", auth.as_str());
     }
-    if let Some(ref custom_headers) = headers {
+    if let Some(ref custom_headers) = params.headers {
         for (key, value) in custom_headers {
             request = request.header(key.as_str(), value.as_str());
         }
@@ -220,7 +182,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
     let text = if is_html || (!is_text && content_type.is_empty()) {
         let document = Html::parse_document(&body);
         let content_html = html_extract::extract_readable_content(&document);
-        match extract_mode {
+        match params.extract_mode.as_str() {
             "text" => html_extract::html_to_text(&content_html),
             _ => html2md::parse_html(&content_html),
         }
@@ -228,8 +190,8 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
         body
     };
 
-    let truncated = if text.len() > max_chars {
-        let mut end = max_chars;
+    let truncated = if text.len() > params.max_chars {
+        let mut end = params.max_chars;
         while end > 0 && !text.is_char_boundary(end) {
             end -= 1;
         }
@@ -243,7 +205,7 @@ fn exec_fetch(args: &Value, cancelled: &Arc<AtomicBool>) -> ToolResult {
     };
 
     ToolResult {
-        output: format!("[来源: {}]\n\n{}", url, truncated),
+        output: format!("[来源: {}]\n\n{}", params.url, truncated),
         is_error: false,
         images: vec![],
     }

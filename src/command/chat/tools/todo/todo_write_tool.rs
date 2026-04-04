@@ -1,8 +1,37 @@
-use super::super::{Tool, ToolResult};
+use super::super::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use super::entity::TodoItem;
 use super::todo_manager::TodoManager;
-use serde_json::{Value, json};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool};
+
+/// Todo 项参数
+#[derive(Deserialize, JsonSchema)]
+struct TodoItemParam {
+    /// Item ID. Required when merge=true to update existing items. Auto-generated if omitted.
+    #[serde(default)]
+    id: Option<String>,
+    /// The todo item text
+    content: String,
+    /// Item status: pending, in_progress, completed, or cancelled
+    #[serde(default = "default_status")]
+    status: String,
+}
+
+fn default_status() -> String {
+    "pending".to_string()
+}
+
+/// TodoWriteTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct TodoWriteParams {
+    /// Array of todo items
+    todos: Vec<TodoItemParam>,
+    /// If false (default), replace the entire list. If true, only update/add the provided items by id.
+    #[serde(default)]
+    merge: bool,
+}
 
 pub struct TodoWriteTool {
     pub manager: Arc<TodoManager>,
@@ -20,7 +49,7 @@ impl Tool for TodoWriteTool {
     fn description(&self) -> &str {
         r#"
         Create and manage a structured todo list to maintain state across long turns.
-    
+
         CRITICAL RULES:
         1. Only ONE item can be 'in_progress' at any time; the system enforces this automatically.
         2. For updates, always use 'merge=true' and only provide the specific items being modified.
@@ -30,91 +59,26 @@ impl Tool for TodoWriteTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "todos": {
-                    "type": "array",
-                    "description": "Array of todo items. Each item has: id (string, optional for new items), content (string, the todo text), status (string, optional, defaults to 'pending')",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "type": "string",
-                                "description": "Item ID. Required when merge=true to update existing items. Auto-generated if omitted."
-                            },
-                            "content": {
-                                "type": "string",
-                                "description": "The todo item text"
-                            },
-                            "status": {
-                                "type": "string",
-                                "description": "Item status: pending, in_progress, completed, or cancelled",
-                                "enum": ["pending", "in_progress", "completed", "cancelled"]
-                            }
-                        },
-                        "required": ["content"]
-                    }
-                },
-                "merge": {
-                    "type": "boolean",
-                    "description": "If false (default), replace the entire list. If true, only update/add the provided items by id."
-                }
-            },
-            "required": ["todos"]
-        })
+        schema_to_tool_params::<TodoWriteParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("Failed to parse arguments: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: TodoWriteParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let todos_arr = match parsed.get("todos").and_then(|v| v.as_array()) {
-            Some(arr) => arr,
-            None => {
-                return ToolResult {
-                    output: "todos (array) is required".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let merge = parsed
-            .get("merge")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let items: Vec<TodoItem> = todos_arr
+        let items: Vec<TodoItem> = params
+            .todos
             .iter()
             .map(|item| TodoItem {
-                id: item
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                content: item
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                status: item
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("pending")
-                    .to_string(),
+                id: item.id.clone().unwrap_or_default(),
+                content: item.content.clone(),
+                status: item.status.clone(),
             })
             .collect();
 
-        match self.manager.write_todos(items, merge) {
+        match self.manager.write_todos(items, params.merge) {
             Ok(all_todos) => ToolResult {
                 output: serde_json::to_string_pretty(&all_todos).unwrap_or_default(),
                 is_error: false,

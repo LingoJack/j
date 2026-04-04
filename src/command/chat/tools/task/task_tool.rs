@@ -1,7 +1,46 @@
-use super::super::{Tool, ToolResult};
+use super::super::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use super::task_manager::TaskManager;
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};
+
+/// TaskTool 参数
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct TaskParams {
+    /// Operation to perform: create, get, list, or update
+    action: String,
+    /// A brief, actionable title for the task (required for create)
+    #[serde(default)]
+    title: Option<String>,
+    /// Detailed description of what needs to be done
+    #[serde(default)]
+    description: Option<String>,
+    /// Paths to task documents containing full details about the task
+    #[serde(default)]
+    task_doc_paths: Option<Vec<String>>,
+    /// List of task IDs that must complete before this task can start (for create)
+    #[serde(default)]
+    blocked_by: Option<Vec<u64>>,
+    /// The ID of the task to retrieve or update (required for get/update)
+    #[serde(default)]
+    task_id: Option<u64>,
+    /// When true (list only), return only tasks that are pending and have no unresolved blockers
+    #[serde(default)]
+    ready: bool,
+    /// New status for the task (for update)
+    #[serde(default)]
+    status: Option<String>,
+    /// Person or agent responsible for the task (for update)
+    #[serde(default)]
+    #[allow(dead_code)]
+    owner: Option<String>,
+    /// Task IDs to add as blockers of the current task (for update)
+    #[serde(default)]
+    #[allow(dead_code)]
+    add_blocked_by: Option<Vec<u64>>,
+}
 
 pub struct TaskTool {
     pub manager: Arc<TaskManager>,
@@ -53,87 +92,23 @@ impl Tool for TaskTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "required": ["action"],
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["create", "get", "list", "update"],
-                    "description": "Operation to perform: create, get, list, or update"
-                },
-                "title": {
-                    "type": "string",
-                    "description": "A brief, actionable title for the task (required for create)"
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Detailed description of what needs to be done"
-                },
-                "taskDocPaths": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "description": "Paths to task documents containing full details about the task"
-                },
-                "blockedBy": {
-                    "type": "array",
-                    "items": { "type": "integer" },
-                    "description": "List of task IDs that must complete before this task can start (for create)"
-                },
-                "taskId": {
-                    "type": "integer",
-                    "description": "The ID of the task to retrieve or update (required for get/update)"
-                },
-                "ready": {
-                    "type": "boolean",
-                    "description": "When true (list only), return only tasks that are pending and have no unresolved blockers"
-                },
-                "status": {
-                    "type": "string",
-                    "enum": ["pending", "in_progress", "completed", "deleted"],
-                    "description": "New status for the task (for update)"
-                },
-                "owner": {
-                    "type": "string",
-                    "description": "Person or agent responsible for the task (for update)"
-                },
-                "addBlockedBy": {
-                    "type": "array",
-                    "items": { "type": "integer" },
-                    "description": "Task IDs to add as blockers of the current task (for update)"
-                }
-            }
-        })
+        schema_to_tool_params::<TaskParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("Failed to parse arguments: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: TaskParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let action = match parsed.get("action").and_then(|v| v.as_str()) {
-            Some(a) => a,
-            None => {
-                return ToolResult {
-                    output: "action is required (create, get, list, update)".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
+        // We also parse as Value for update_task which takes a Value
+        let parsed: Value = serde_json::from_str(arguments).unwrap_or_default();
 
-        match action {
-            "create" => self.execute_create(&parsed),
-            "get" => self.execute_get(&parsed),
-            "list" => self.execute_list(&parsed),
-            "update" => self.execute_update(&parsed),
+        match params.action.as_str() {
+            "create" => self.execute_create(&params),
+            "get" => self.execute_get(&params),
+            "list" => self.execute_list(&params),
+            "update" => self.execute_update(&params, &parsed),
             other => ToolResult {
                 output: format!(
                     "Unknown action: '{}'. Must be one of: create, get, list, update",
@@ -147,8 +122,8 @@ impl Tool for TaskTool {
 }
 
 impl TaskTool {
-    fn execute_create(&self, parsed: &Value) -> ToolResult {
-        let title = match parsed.get("title").and_then(|s| s.as_str()) {
+    fn execute_create(&self, params: &TaskParams) -> ToolResult {
+        let title = match params.title.as_deref() {
             Some(s) => s,
             None => {
                 return ToolResult {
@@ -159,26 +134,9 @@ impl TaskTool {
             }
         };
 
-        let description = parsed
-            .get("description")
-            .and_then(|s| s.as_str())
-            .unwrap_or("");
-
-        let blocked_by: Vec<u64> = parsed
-            .get("blockedBy")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
-            .unwrap_or_default();
-
-        let task_doc_paths: Vec<String> = parsed
-            .get("taskDocPaths")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let description = params.description.as_deref().unwrap_or("");
+        let blocked_by = params.blocked_by.clone().unwrap_or_default();
+        let task_doc_paths = params.task_doc_paths.clone().unwrap_or_default();
 
         match self
             .manager
@@ -197,8 +155,8 @@ impl TaskTool {
         }
     }
 
-    fn execute_get(&self, parsed: &Value) -> ToolResult {
-        let task_id = match parsed.get("taskId").and_then(|v| v.as_u64()) {
+    fn execute_get(&self, params: &TaskParams) -> ToolResult {
+        let task_id = match params.task_id {
             Some(id) => id,
             None => {
                 return ToolResult {
@@ -223,13 +181,8 @@ impl TaskTool {
         }
     }
 
-    fn execute_list(&self, parsed: &Value) -> ToolResult {
-        let ready = parsed
-            .get("ready")
-            .and_then(|r| r.as_bool())
-            .unwrap_or(false);
-
-        let tasks = if ready {
+    fn execute_list(&self, params: &TaskParams) -> ToolResult {
+        let tasks = if params.ready {
             self.manager.list_ready_tasks()
         } else {
             self.manager.list_tasks()
@@ -237,7 +190,7 @@ impl TaskTool {
 
         if tasks.is_empty() {
             return ToolResult {
-                output: if ready {
+                output: if params.ready {
                     "No ready tasks found (all tasks are either blocked, in progress, or completed)"
                         .to_string()
                 } else {
@@ -267,8 +220,8 @@ impl TaskTool {
         }
     }
 
-    fn execute_update(&self, parsed: &Value) -> ToolResult {
-        let task_id = match parsed.get("taskId").and_then(|v| v.as_u64()) {
+    fn execute_update(&self, params: &TaskParams, parsed: &Value) -> ToolResult {
+        let task_id = match params.task_id {
             Some(id) => id,
             None => {
                 return ToolResult {
@@ -279,11 +232,7 @@ impl TaskTool {
             }
         };
 
-        let status = parsed
-            .get("status")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_default();
+        let status = params.status.as_deref().unwrap_or_default();
 
         match self.manager.update_task(task_id, parsed) {
             Ok(task) => {

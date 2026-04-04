@@ -1,7 +1,33 @@
 use crate::command::chat::hook::{HookDef, HookEvent, HookManager};
-use crate::command::chat::tools::{Tool, ToolResult};
-use serde_json::{Value, json};
+use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
+
+/// RegisterHookTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct RegisterHookParams {
+    /// Action type: register (default), list, remove, help
+    #[serde(default = "default_action")]
+    action: String,
+    /// Hook event name (required for register/remove)
+    #[serde(default)]
+    event: Option<String>,
+    /// Shell command to execute (required for register)
+    #[serde(default)]
+    command: Option<String>,
+    /// Timeout in seconds (default 10)
+    #[serde(default)]
+    timeout: Option<u64>,
+    /// Index of the hook to remove (required for remove)
+    #[serde(default)]
+    index: Option<usize>,
+}
+
+fn default_action() -> String {
+    "register".to_string()
+}
 
 /// register_hook 工具：让 LLM 动态注册/管理 session 级 hook
 pub struct RegisterHookTool {
@@ -22,62 +48,20 @@ impl Tool for RegisterHookTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "description": "Action type: register (default), list, remove, help",
-                    "enum": ["register", "list", "remove", "help"]
-                },
-                "event": {
-                    "type": "string",
-                    "description": "Hook event name (required for register/remove)",
-                    "enum": [
-                        "pre_send_message", "post_send_message",
-                        "pre_llm_request", "post_llm_response",
-                        "pre_tool_execution", "post_tool_execution",
-                        "session_start", "session_end"
-                    ]
-                },
-                "command": {
-                    "type": "string",
-                    "description": "Shell command to execute (required for register)"
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Timeout in seconds (default 10)"
-                },
-                "index": {
-                    "type": "integer",
-                    "description": "Index of the hook to remove (required for remove)"
-                }
-            }
-        })
+        schema_to_tool_params::<RegisterHookParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: RegisterHookParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let action = parsed
-            .get("action")
-            .and_then(|v| v.as_str())
-            .unwrap_or("register");
-
-        match action {
+        match params.action.as_str() {
             "help" => Self::handle_help(),
             "list" => self.handle_list(),
-            "remove" => self.handle_remove(&parsed),
-            _ => self.handle_register(&parsed),
+            "remove" => self.handle_remove(&params),
+            _ => self.handle_register(&params),
         }
     }
 
@@ -86,28 +70,23 @@ impl Tool for RegisterHookTool {
     }
 
     fn confirmation_message(&self, arguments: &str) -> String {
-        let parsed: Value = serde_json::from_str(arguments).unwrap_or(Value::Null);
-        let action = parsed
-            .get("action")
-            .and_then(|v| v.as_str())
-            .unwrap_or("register");
-
-        match action {
-            "help" => "View Hook protocol documentation".to_string(),
-            "list" => "List all registered hooks".to_string(),
-            "remove" => {
-                let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
-                let index = parsed.get("index").and_then(|v| v.as_u64()).unwrap_or(0);
-                format!("Remove hook: event={}, index={}", event, index)
+        if let Ok(params) = serde_json::from_str::<RegisterHookParams>(arguments) {
+            match params.action.as_str() {
+                "help" => "View Hook protocol documentation".to_string(),
+                "list" => "List all registered hooks".to_string(),
+                "remove" => {
+                    let event = params.event.as_deref().unwrap_or("?");
+                    let index = params.index.unwrap_or(0);
+                    format!("Remove hook: event={}, index={}", event, index)
+                }
+                _ => {
+                    let event = params.event.as_deref().unwrap_or("?");
+                    let command = params.command.as_deref().unwrap_or("?");
+                    format!("Register hook: event={}, command={}", event, command)
+                }
             }
-            _ => {
-                let event = parsed.get("event").and_then(|v| v.as_str()).unwrap_or("?");
-                let command = parsed
-                    .get("command")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
-                format!("Register hook: event={}, command={}", event, command)
-            }
+        } else {
+            "RegisterHook operation".to_string()
         }
     }
 }
@@ -209,8 +188,8 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
         }
     }
 
-    fn handle_register(&self, parsed: &Value) -> ToolResult {
-        let event_str = match parsed.get("event").and_then(|v| v.as_str()) {
+    fn handle_register(&self, params: &RegisterHookParams) -> ToolResult {
+        let event_str = match params.event.as_deref() {
             Some(e) => e,
             None => {
                 return ToolResult {
@@ -232,7 +211,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             }
         };
 
-        let command = match parsed.get("command").and_then(|v| v.as_str()) {
+        let command = match params.command.as_deref() {
             Some(c) => c.to_string(),
             None => {
                 return ToolResult {
@@ -243,7 +222,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             }
         };
 
-        let timeout = parsed.get("timeout").and_then(|v| v.as_u64()).unwrap_or(10);
+        let timeout = params.timeout.unwrap_or(10);
 
         let hook_def = HookDef {
             command: command.clone(),
@@ -307,8 +286,8 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
         }
     }
 
-    fn handle_remove(&self, parsed: &Value) -> ToolResult {
-        let event_str = match parsed.get("event").and_then(|v| v.as_str()) {
+    fn handle_remove(&self, params: &RegisterHookParams) -> ToolResult {
+        let event_str = match params.event.as_deref() {
             Some(e) => e,
             None => {
                 return ToolResult {
@@ -330,7 +309,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             }
         };
 
-        let index = parsed.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        let index = params.index.unwrap_or(0);
 
         match self.hook_manager.lock() {
             Ok(mut manager) => {

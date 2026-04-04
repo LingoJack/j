@@ -1,4 +1,6 @@
-use crate::command::chat::tools::{Tool, ToolResult};
+use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
@@ -15,6 +17,27 @@ const MAX_SEARCH_COUNT: usize = 10;
 const EXA_API_URL: &str = "https://api.exa.ai/search";
 /// highlights 最大字符数
 const HIGHLIGHTS_MAX_CHARS: usize = 4000;
+
+/// WebSearchTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct WebSearchParams {
+    /// Search keywords
+    query: String,
+    /// Number of search results (1-10, default 5)
+    #[serde(default = "default_count")]
+    count: usize,
+    /// Search type: auto, keyword, or neural (semantic)
+    #[serde(default = "default_search_type", rename = "type")]
+    search_type: String,
+}
+
+fn default_count() -> usize {
+    DEFAULT_SEARCH_COUNT
+}
+
+fn default_search_type() -> String {
+    "auto".to_string()
+}
 
 // ==================== WebSearchTool ====================
 
@@ -38,44 +61,16 @@ impl Tool for WebSearchTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search keywords"
-                },
-                "count": {
-                    "type": "integer",
-                    "default": 5,
-                    "minimum": 1,
-                    "maximum": 10,
-                    "description": "Number of search results"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": ["auto", "keyword", "neural"],
-                    "default": "auto",
-                    "description": "Search type: auto, keyword, or neural (semantic)"
-                }
-            },
-            "required": ["query"]
-        })
+        schema_to_tool_params::<WebSearchParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let args: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: WebSearchParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        exec_search(&args)
+        exec_search(&params)
     }
 
     fn requires_confirmation(&self) -> bool {
@@ -85,26 +80,8 @@ impl Tool for WebSearchTool {
 
 // ==================== Search 实现 ====================
 
-fn exec_search(args: &Value) -> ToolResult {
-    let query = match args.get("query").and_then(|q| q.as_str()) {
-        Some(q) => q,
-        None => {
-            return ToolResult {
-                output: "缺少 query 参数".to_string(),
-                is_error: true,
-                images: vec![],
-            };
-        }
-    };
-
-    let count = args
-        .get("count")
-        .and_then(|c| c.as_u64())
-        .map(|c| c as usize)
-        .unwrap_or(DEFAULT_SEARCH_COUNT)
-        .clamp(1, MAX_SEARCH_COUNT);
-
-    let search_type = args.get("type").and_then(|t| t.as_str()).unwrap_or("auto");
+fn exec_search(params: &WebSearchParams) -> ToolResult {
+    let count = params.count.clamp(1, MAX_SEARCH_COUNT);
 
     // 检查 API Key
     let api_key = match std::env::var("EXA_API_KEY") {
@@ -120,8 +97,8 @@ fn exec_search(args: &Value) -> ToolResult {
 
     // 构建请求体
     let request_body = json!({
-        "query": query,
-        "type": search_type,
+        "query": params.query,
+        "type": params.search_type,
         "numResults": count,
         "contents": {
             "highlights": {
@@ -202,7 +179,7 @@ fn exec_search(args: &Value) -> ToolResult {
         };
     }
 
-    let mut output = format!("搜索: {}\n\n", query);
+    let mut output = format!("搜索: {}\n\n", params.query);
     for (i, result) in results.iter().take(count).enumerate() {
         let title = result
             .get("title")
