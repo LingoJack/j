@@ -87,4 +87,5 @@ allow:
 - Bash(grep -r:*)
 - Bash(cargo tree:*)
 - Bash(cargo search:*)
+- Bash(cd /Users/lingojack/dev_custom/j:*)
 deny: []

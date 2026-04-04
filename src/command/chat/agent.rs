@@ -695,7 +695,9 @@ fn process_tool_calls(
             let tool_label = tool_name.as_deref().unwrap_or("unknown");
             let img_msg = ChatMessage {
                 role: ROLE_USER.to_string(),
-                content: format!("[图片来自工具: {}]", tool_label),
+                content: format!(
+                    "[{tool_label} 返回了以下图片，请描述图片内容并继续帮助完成任务]\n"
+                ),
                 tool_calls: None,
                 tool_call_id: None,
                 images: Some(
