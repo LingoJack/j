@@ -1,57 +1,17 @@
 [
   {
     "id": "1",
-    "content": "增加搜索深度 6->8 和文件结果数量 5->10",
-    "status": "completed"
-  },
-  {
-    "id": "2",
-    "content": "支持路径导航（包含 / 时目录浏览模式）",
+    "content": "确认所有 tool 都已统一使用 JsonSchema 结构体",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "支持 ~ 展开（home 目录）",
+    "content": "修复 agent.rs 中 timeout 字段类型不匹配问题 (string->u64 反序列化)",
     "status": "completed"
   },
   {
-    "id": "4",
-    "content": "优化评分排序（扩展名优先级、匹配位置等）",
-    "status": "completed"
-  },
-  {
-    "id": "5",
-    "content": "调整各类型结果配额",
-    "status": "completed"
-  },
-  {
-    "id": "6",
+    "id": "2",
     "content": "验证构建通过",
-    "status": "completed"
-  },
-  {
-    "id": "5",
-    "content": "在 CONFIG_FIELDS 中添加 supports_vision 字段",
-    "status": "completed"
-  },
-  {
-    "id": "10",
-    "content": "更新 ui_helpers.rs 中 Model tab 的 label/value/set 逻辑",
-    "status": "completed"
-  },
-  {
-    "id": "12",
-    "content": "更新 app.rs ConfigEnter 为 toggle supports_vision",
-    "status": "completed"
-  },
-  {
-    "id": "14",
-    "content": "渲染 UI 支持 supports_vision 行切换样式",
-    "status": "completed"
-  },
-  {
-    "id": "13",
-    "content": "验证编译通过",
     "status": "completed"
   }
 ]

@@ -6,16 +6,33 @@ use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::task::TaskManager;
 use crate::command::chat::tools::todo::TodoManager;
-use crate::command::chat::tools::{Tool, ToolRegistry, ToolResult};
+use crate::command::chat::tools::{
+    Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc,
 };
+
+/// AgentTool 参数
+#[derive(Deserialize, JsonSchema)]
+struct AgentParams {
+    /// The task for the sub-agent to perform
+    prompt: String,
+    /// A short (3-5 word) description of the task
+    #[serde(default)]
+    description: Option<String>,
+    /// Set to true to run in background. Returns task_id immediately.
+    #[serde(default)]
+    run_in_background: bool,
+}
 
 // ========== AgentTool ==========
 
@@ -66,59 +83,20 @@ impl Tool for AgentTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "prompt": {
-                    "type": "string",
-                    "description": "The task for the sub-agent to perform"
-                },
-                "description": {
-                    "type": "string",
-                    "description": "A short (3-5 word) description of the task"
-                },
-                "run_in_background": {
-                    "type": "boolean",
-                    "description": "Set to true to run in background. Returns task_id immediately."
-                }
-            },
-            "required": ["prompt"]
-        })
+        schema_to_tool_params::<AgentParams>()
     }
 
     fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let parsed: Value = match serde_json::from_str(arguments) {
-            Ok(v) => v,
-            Err(e) => {
-                return ToolResult {
-                    output: format!("参数解析失败: {}", e),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
+        let params: AgentParams = match parse_tool_args(arguments) {
+            Ok(p) => p,
+            Err(e) => return e,
         };
 
-        let prompt = match parsed.get("prompt").and_then(|v| v.as_str()) {
-            Some(p) => p.to_string(),
-            None => {
-                return ToolResult {
-                    output: "缺少 prompt 参数".to_string(),
-                    is_error: true,
-                    images: vec![],
-                };
-            }
-        };
-
-        let description = parsed
-            .get("description")
-            .and_then(|v| v.as_str())
-            .unwrap_or("sub-agent task")
-            .to_string();
-
-        let run_in_background = parsed
-            .get("run_in_background")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let prompt = params.prompt;
+        let description = params
+            .description
+            .unwrap_or_else(|| "sub-agent task".to_string());
+        let run_in_background = params.run_in_background;
 
         // 获取 provider 和 system prompt 的快照
         let provider = safe_lock(&self.provider, "AgentTool::provider").clone();
