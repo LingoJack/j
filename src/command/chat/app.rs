@@ -1953,25 +1953,20 @@ impl ChatApp {
                         // supports_vision 是布尔开关，直接 toggle
                         if self.ui.config_field_idx < CONFIG_FIELDS.len()
                             && CONFIG_FIELDS[self.ui.config_field_idx] == "supports_vision"
-                        {
-                            if let Some(p) = self
+                            && let Some(p) = self
                                 .state
                                 .agent_config
                                 .providers
                                 .get_mut(self.ui.config_provider_idx)
-                            {
-                                p.supports_vision = !p.supports_vision;
-                                let status = if p.supports_vision {
-                                    "开启"
-                                } else {
-                                    "关闭"
-                                };
-                                self.show_toast(
-                                    format!("当前 Provider 支持视觉已{}", status),
-                                    false,
-                                );
-                                return;
-                            }
+                        {
+                            p.supports_vision = !p.supports_vision;
+                            let status = if p.supports_vision {
+                                "开启"
+                            } else {
+                                "关闭"
+                            };
+                            self.show_toast(format!("当前 Provider 支持视觉已{}", status), false);
+                            return;
                         }
                         self.ui.config_edit_buf =
                             config_field_raw_value_model(self, self.ui.config_field_idx);

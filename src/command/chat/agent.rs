@@ -182,7 +182,7 @@ pub async fn run_agent_loop(
         {
             let has_images = messages
                 .iter()
-                .any(|m| m.images.as_ref().map_or(false, |imgs| !imgs.is_empty()));
+                .any(|m| m.images.as_ref().is_some_and(|imgs| !imgs.is_empty()));
             write_info_log(
                 "agent_loop",
                 &format!(

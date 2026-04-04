@@ -88,4 +88,5 @@ allow:
 - Bash(cargo tree:*)
 - Bash(cargo search:*)
 - Bash(cd /Users/lingojack/dev_custom/j:*)
+- Bash(cargo clippy:*)
 deny: []
