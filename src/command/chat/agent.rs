@@ -178,13 +178,34 @@ pub async fn run_agent_loop(
             }
         }
 
+        // 记录本轮请求的消息统计
+        {
+            let has_images = messages
+                .iter()
+                .any(|m| m.images.as_ref().map_or(false, |imgs| !imgs.is_empty()));
+            write_info_log(
+                "agent_loop",
+                &format!(
+                    "第 {} 轮请求: messages={}, has_images={}, use_stream={}, supports_vision={}",
+                    _round,
+                    messages.len(),
+                    has_images,
+                    use_stream,
+                    provider.supports_vision
+                ),
+            );
+        }
+
         let request = match build_request_with_tools(
             &provider,
             &messages,
             tools.clone(),
             system_prompt.as_deref(),
         ) {
-            Ok(req) => req,
+            Ok(req) => {
+                write_info_log("agent_loop", "build_request_with_tools 成功");
+                req
+            }
             Err(e) => {
                 let _ = tx.send(StreamMsg::Error(format!("构建请求失败: {}", e)));
                 return;
@@ -193,8 +214,12 @@ pub async fn run_agent_loop(
 
         if use_stream {
             // 流式模式
+            write_info_log("agent_loop", "开始创建流式请求...");
             let mut stream = match client.chat().create_stream(request.clone()).await {
-                Ok(s) => s,
+                Ok(s) => {
+                    write_info_log("agent_loop", "流式请求创建成功");
+                    s
+                }
                 Err(e) => {
                     let error_msg = format!("API 请求失败: {}", e);
                     write_error_log("Chat API 流式请求创建", &error_msg);
@@ -255,6 +280,7 @@ pub async fn run_agent_loop(
                             }
                             Some(Err(e)) => {
                                 let error_str = format!("{}", e);
+                                write_error_log("Chat API 流式响应 error", &error_str);
                                 // 检测是否是 tool_calls 反序列化错误（Gemini 等不返回 chunk index）
                                 if error_str.contains("missing field `index`")
                                     || error_str.contains("tool_calls")
@@ -267,7 +293,10 @@ pub async fn run_agent_loop(
                                 let _ = tx.send(StreamMsg::Error(error_str));
                                 return;
                             }
-                            None => break 'stream,
+                            None => {
+                                write_info_log("agent_loop", "流式结束 (stream returned None)");
+                                break 'stream;
+                            }
                         }
                     }
                     _ = cancel_token.cancelled() => {
@@ -281,6 +310,17 @@ pub async fn run_agent_loop(
             if !assistant_text.is_empty() {
                 write_info_log("Sprite 回复", &assistant_text);
             }
+
+            write_info_log(
+                "agent_loop",
+                &format!(
+                    "流式循环结束: finish_reason={:?}, assistant_text_len={}, raw_tool_calls={}, stream_had_deserialize_error={}",
+                    finish_reason,
+                    assistant_text.len(),
+                    raw_tool_calls.len(),
+                    stream_had_deserialize_error
+                ),
+            );
 
             // 如果流式遇到 tool_calls 反序列化错误，fallback 到非流式获取完整响应
             if stream_had_deserialize_error {
