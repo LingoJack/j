@@ -1,22 +1,32 @@
 [
   {
     "id": "1",
-    "content": "升级 rand 0.8 → 0.10",
+    "content": "增加搜索深度 6->8 和文件结果数量 5->10",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "升级 rustyline 17 → 18",
+    "content": "支持路径导航（包含 / 时目录浏览模式）",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "升级 reqwest 0.12 → 0.13",
+    "content": "支持 ~ 展开（home 目录）",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "验证编译并修复 breaking changes",
+    "content": "优化评分排序（扩展名优先级、匹配位置等）",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "调整各类型结果配额",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "验证构建通过",
     "status": "completed"
   }
 ]
