@@ -427,6 +427,16 @@ impl ToolExecutor {
                 }
                 // 直接发给 Agent 线程
                 if let Some(ref tx) = result_tx {
+                    write_info_log(
+                        "ToolExecutor",
+                        &format!(
+                            "发送工具结果: tool_call_id={}, is_error={}, images_count={}, output_len={}",
+                            tool_call_id,
+                            is_error,
+                            images.len(),
+                            output.len()
+                        ),
+                    );
                     let _ = tx.send(ToolResultMsg {
                         tool_call_id,
                         result: output,

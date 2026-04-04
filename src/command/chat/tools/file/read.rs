@@ -132,6 +132,7 @@ impl Tool for ReadFileTool {
 
 /// 读取图片文件，返回 base64 图片数据
 fn read_image_file(path: &str) -> ToolResult {
+    use crate::util::log::write_info_log;
     use base64::Engine;
 
     match std::fs::read(path) {
@@ -139,6 +140,17 @@ fn read_image_file(path: &str) -> ToolResult {
             let size_kb = bytes.len() as f64 / 1024.0;
             let media_type = image_media_type(path);
             let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+            write_info_log(
+                "ReadFileTool",
+                &format!(
+                    "读取图片文件: {}, 大小: {:.1} KB, 类型: {}, base64长度: {}",
+                    path,
+                    size_kb,
+                    media_type,
+                    b64.len()
+                ),
+            );
 
             let output = format!(
                 "图片文件: {}\n大小: {:.1} KB\n类型: {}",

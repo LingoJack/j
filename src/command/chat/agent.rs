@@ -652,6 +652,10 @@ fn process_tool_calls(
 
     log_tool_results(&tool_items, &tool_results);
 
+    // 收集需要延迟注入的图片消息（在所有 tool results 之后统一注入，
+    // 避免在 tool results 中间插入 user 消息导致 API 报错）
+    let mut deferred_image_msgs: Vec<ChatMessage> = Vec::new();
+
     for result in tool_results {
         let mut result_content = result.result;
         let result_images = result.images;
@@ -690,26 +694,58 @@ fn process_tool_calls(
         messages.push(tool_msg.clone());
         push_shared(shared_messages, tool_msg);
 
-        // 如果模型支持视觉且工具返回了图片，注入为 user message
-        if supports_vision && !result_images.is_empty() {
+        // 如果模型支持视觉且工具返回了图片，先收集，稍后统一注入
+        if !result_images.is_empty() {
             let tool_label = tool_name.as_deref().unwrap_or("unknown");
-            let img_msg = ChatMessage {
-                role: ROLE_USER.to_string(),
-                content: format!(
-                    "[{tool_label} 返回了以下图片，请描述图片内容并继续帮助完成任务]\n"
+            let img_count = result_images.len();
+            write_info_log(
+                "ImageInjection",
+                &format!(
+                    "工具 {} 返回了 {} 张图片, supports_vision={}",
+                    tool_label, img_count, supports_vision
                 ),
-                tool_calls: None,
-                tool_call_id: None,
-                images: Some(
-                    result_images
-                        .into_iter()
-                        .map(|img| super::storage::ImageData {
-                            base64: img.base64,
-                            media_type: img.media_type,
-                        })
-                        .collect(),
-                ),
-            };
+            );
+            if supports_vision {
+                let img_msg = ChatMessage {
+                    role: ROLE_USER.to_string(),
+                    content: format!(
+                        "[{tool_label} 返回了 {img_count} 张图片，请查看图片内容并继续帮助完成任务]"
+                    ),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    images: Some(
+                        result_images
+                            .into_iter()
+                            .map(|img| super::storage::ImageData {
+                                base64: img.base64,
+                                media_type: img.media_type,
+                            })
+                            .collect(),
+                    ),
+                };
+                deferred_image_msgs.push(img_msg);
+            } else {
+                write_info_log(
+                    "ImageInjection",
+                    &format!(
+                        "supports_vision=false，丢弃 {} 返回的 {} 张图片",
+                        tool_label, img_count
+                    ),
+                );
+            }
+        }
+    }
+
+    // ★ 所有 tool results 处理完毕后，统一注入图片 user messages
+    if !deferred_image_msgs.is_empty() {
+        write_info_log(
+            "ImageInjection",
+            &format!(
+                "在所有 tool results 之后注入 {} 条图片消息",
+                deferred_image_msgs.len()
+            ),
+        );
+        for img_msg in deferred_image_msgs {
             messages.push(img_msg.clone());
             push_shared(shared_messages, img_msg);
         }

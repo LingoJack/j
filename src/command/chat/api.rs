@@ -42,6 +42,14 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                     && !images.is_empty()
                 {
                     // 多模态消息：Text + ImageUrl(s)
+                    write_info_log(
+                        "to_openai_messages",
+                        &format!(
+                            "构建多模态 user 消息: text_len={}, images_count={}",
+                            msg.content.len(),
+                            images.len()
+                        ),
+                    );
                     let mut parts: Vec<ChatCompletionRequestUserMessageContentPart> =
                         vec![ChatCompletionRequestUserMessageContentPart::Text(
                             ChatCompletionRequestMessageContentPartText {
