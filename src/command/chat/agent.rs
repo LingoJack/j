@@ -341,18 +341,19 @@ pub async fn run_agent_loop(
                 ),
             );
 
-            // 如果流式遇到 tool_calls 反序列化错误，或者流式返回空响应（finish_reason=None 且无内容），
-            // fallback 到非流式获取完整响应
-            if stream_had_deserialize_error
-                || (finish_reason.is_none()
-                    && assistant_text.is_empty()
-                    && raw_tool_calls.is_empty()
-                    && stream_chunk_count == 0)
-            {
-                if finish_reason.is_none() && stream_chunk_count == 0 {
+            // 如果流式遇到 tool_calls 反序列化错误，或者流式返回空响应（finish_reason=None 且无有效内容），
+            // fallback 到非流式获取完整响应。
+            // 常见场景：某些 API 对多模态+流式组合返回空 choices，需要非流式重试。
+            let stream_empty =
+                finish_reason.is_none() && assistant_text.is_empty() && raw_tool_calls.is_empty();
+            if stream_had_deserialize_error || stream_empty {
+                if stream_empty {
                     write_info_log(
                         "agent_loop",
-                        "流式返回空响应 (0 chunks)，fallback 到非流式重试",
+                        &format!(
+                            "流式返回空响应 (chunks={}, finish_reason=None, 无内容)，fallback 到非流式重试",
+                            stream_chunk_count
+                        ),
                     );
                 }
                 // 清空流式内容（切换到非流式）
