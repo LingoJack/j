@@ -9,8 +9,10 @@ use std::sync::{Arc, atomic::AtomicBool, mpsc};
 #[derive(Deserialize, JsonSchema)]
 struct AskOptionParam {
     /// Option display text (1-5 words)
+    #[serde(default)]
     label: String,
     /// Option description
+    #[serde(default)]
     description: String,
 }
 
