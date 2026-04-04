@@ -235,11 +235,30 @@ pub async fn run_agent_loop(
                 std::collections::BTreeMap::new();
             let mut stream_had_deserialize_error = false;
 
+            let mut stream_chunk_count: u32 = 0;
+
             'stream: loop {
                 tokio::select! {
                     result = stream.next() => {
                         match result {
                             Some(Ok(response)) => {
+                                stream_chunk_count += 1;
+                                // 记录前几个 chunk 的原始信息，便于调试
+                                if stream_chunk_count <= 3 {
+                                    let choices_debug: Vec<String> = response.choices.iter().map(|c| {
+                                        format!(
+                                            "idx={}, finish_reason={:?}, has_content={}, has_tool_calls={}",
+                                            c.index,
+                                            c.finish_reason,
+                                            c.delta.content.is_some(),
+                                            c.delta.tool_calls.is_some(),
+                                        )
+                                    }).collect();
+                                    write_info_log(
+                                        "stream_chunk",
+                                        &format!("chunk #{}: choices=[{}]", stream_chunk_count, choices_debug.join("; ")),
+                                    );
+                                }
                                 for choice in &response.choices {
                                     if let Some(ref content) = choice.delta.content {
                                         assistant_text.push_str(content);
@@ -322,8 +341,20 @@ pub async fn run_agent_loop(
                 ),
             );
 
-            // 如果流式遇到 tool_calls 反序列化错误，fallback 到非流式获取完整响应
-            if stream_had_deserialize_error {
+            // 如果流式遇到 tool_calls 反序列化错误，或者流式返回空响应（finish_reason=None 且无内容），
+            // fallback 到非流式获取完整响应
+            if stream_had_deserialize_error
+                || (finish_reason.is_none()
+                    && assistant_text.is_empty()
+                    && raw_tool_calls.is_empty()
+                    && stream_chunk_count == 0)
+            {
+                if finish_reason.is_none() && stream_chunk_count == 0 {
+                    write_info_log(
+                        "agent_loop",
+                        "流式返回空响应 (0 chunks)，fallback 到非流式重试",
+                    );
+                }
                 // 清空流式内容（切换到非流式）
                 {
                     let mut sc = safe_lock(&streaming_content, "agent::fallback_clear");
