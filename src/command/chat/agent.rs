@@ -818,8 +818,8 @@ fn process_tool_calls(
             ),
         );
         for img_msg in deferred_image_msgs {
-            messages.push(img_msg.clone());
-            push_shared(shared_messages, img_msg);
+            // 只加入 LLM 上下文，不推送到 shared_messages（避免 UI 渲染这条内部消息）
+            messages.push(img_msg);
         }
     }
 
