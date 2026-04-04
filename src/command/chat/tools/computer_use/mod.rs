@@ -12,7 +12,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -21,11 +21,7 @@ use std::time::Instant;
 #[allow(dead_code)]
 struct ComputerUseParams {
     /// Action to perform (for single action mode)
-    #[serde(default)]
-    action: Option<String>,
-    /// Batch mode: array of action objects executed sequentially. Stops on first error.
-    #[serde(default)]
-    actions: Option<Vec<Value>>,
+    action: String,
     /// X coordinate (logical points)
     #[serde(default)]
     x: Option<f64>,
@@ -998,44 +994,6 @@ impl Tool for ComputerUseTool {
             }
         };
 
-        // 批量模式：actions 数组
-        if let Some(actions) = v.get("actions").and_then(|a| a.as_array()) {
-            let mut outputs = Vec::new();
-            let mut all_images = Vec::new();
-            for (i, action_v) in actions.iter().enumerate() {
-                if cancelled.load(Ordering::Relaxed) {
-                    outputs.push(format!("[操作 #{} 已取消]", i + 1));
-                    break;
-                }
-                let result = self.execute_single_action(action_v, cancelled);
-                let action_name = action_v
-                    .get("action")
-                    .and_then(|a| a.as_str())
-                    .unwrap_or("?");
-                outputs.push(format!(
-                    "--- 操作 #{} ({}) ---\n{}",
-                    i + 1,
-                    action_name,
-                    result.output
-                ));
-                all_images.extend(result.images);
-                if result.is_error {
-                    outputs.push(format!("[操作 #{} 出错，批量执行中止]", i + 1));
-                    return ToolResult {
-                        output: outputs.join("\n\n"),
-                        is_error: true,
-                        images: all_images,
-                    };
-                }
-            }
-            return ToolResult {
-                output: outputs.join("\n\n"),
-                is_error: false,
-                images: all_images,
-            };
-        }
-
-        // 单 action 模式
         self.execute_single_action(&v, cancelled)
     }
 
@@ -1045,63 +1003,6 @@ impl Tool for ComputerUseTool {
 
     fn confirmation_message(&self, arguments: &str) -> String {
         let v: Value = serde_json::from_str(arguments).unwrap_or_default();
-
-        // 批量模式
-        if let Some(actions) = v.get("actions").and_then(|a| a.as_array()) {
-            let summaries: Vec<String> = actions
-                .iter()
-                .enumerate()
-                .map(|(i, av)| {
-                    let action = av.get("action").and_then(|a| a.as_str()).unwrap_or("?");
-                    match action {
-                        "click" | "doubleclick" | "rightclick" => {
-                            if let Some(el) = av.get("element").and_then(|e| e.as_u64()) {
-                                format!("{}(#{})", action, el)
-                            } else {
-                                format!(
-                                    "{}({:.0},{:.0})",
-                                    action,
-                                    av.get("x").and_then(|x| x.as_f64()).unwrap_or(0.0),
-                                    av.get("y").and_then(|y| y.as_f64()).unwrap_or(0.0),
-                                )
-                            }
-                        }
-                        "type" => {
-                            let text = av.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                            let preview = if text.len() > 15 {
-                                format!("{}...", &text[..12])
-                            } else {
-                                text.to_string()
-                            };
-                            format!("type(\"{}\")", preview)
-                        }
-                        "key" => {
-                            let key = av.get("key").and_then(|k| k.as_str()).unwrap_or("?");
-                            format!("key({})", key)
-                        }
-                        "key_combo" => {
-                            let keys = av
-                                .get("keys")
-                                .and_then(|k| k.as_array())
-                                .map(|arr| {
-                                    arr.iter()
-                                        .filter_map(|k| k.as_str())
-                                        .collect::<Vec<_>>()
-                                        .join("+")
-                                })
-                                .unwrap_or_default();
-                            format!("key_combo({})", keys)
-                        }
-                        _ => format!("{}(#{})", action, i + 1),
-                    }
-                })
-                .collect();
-            return format!(
-                "ComputerUse: [{}个操作] {}",
-                actions.len(),
-                summaries.join(" → ")
-            );
-        }
 
         let action = v
             .get("action")
