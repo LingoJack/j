@@ -91,4 +91,5 @@ allow:
 - Bash(cargo clippy:*)
 - ComputerUse(focus:*)
 - Bash(which j:*)
+- Bash(find /Users/jacklingo/dev_custom/j/web/src:*)
 deny: []
