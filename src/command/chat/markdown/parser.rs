@@ -208,11 +208,15 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     format!(" {} ", code_block_lang)
                 };
                 let label_w = display_width(&label);
-                let border_fill = content_width.saturating_sub(2 + label_w);
-                let top_border = format!("┌─{}{}", label, "─".repeat(border_fill));
+                // 顶边框：┌─ label ───┐
+                // 结构：┌(1) + ─(1) + label + ─*(border_fill) + ┐(1)
+                // 目标总宽度 = content_width
+                // border_fill = content_width - 1 - 1 - label_w - 1 = content_width - 3 - label_w
+                let border_fill = content_width.saturating_sub(3 + label_w);
+                let top_border = format!("┌─{}{}┐", label, "─".repeat(border_fill));
                 lines.push(Line::from(Span::styled(
                     top_border,
-                    Style::default().fg(theme.code_border),
+                    Style::default().fg(theme.code_border).bg(theme.code_bg),
                 )));
             }
             Event::End(TagEnd::CodeBlock) => {
@@ -226,13 +230,16 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             highlighted.iter().map(|s| display_width(&s.content)).sum();
                         let fill = code_inner_w.saturating_sub(text_w);
                         let mut spans_vec = Vec::new();
+                        // 左侧边框：│ (2字符，无背景色)
                         spans_vec.push(Span::styled("│ ", Style::default().fg(theme.code_border)));
+                        // 代码内容（有背景色）
                         for hs in highlighted {
                             spans_vec.push(Span::styled(
                                 hs.content.to_string(),
                                 hs.style.bg(theme.code_bg),
                             ));
                         }
+                        // 右侧填充 + 边框：fill空格 + │ (fill+2字符，有背景色)
                         spans_vec.push(Span::styled(
                             format!("{} │", " ".repeat(fill)),
                             Style::default().fg(theme.code_border).bg(theme.code_bg),
@@ -240,10 +247,12 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         lines.push(Line::from(spans_vec));
                     }
                 }
-                let bottom_border = format!("└{}", "─".repeat(content_width.saturating_sub(1)));
+                // 底边框：└──────┘（与顶边框和代码行对齐）
+                // 结构：└(1) + ─*(content_width-2) + ┘(1) = content_width 总宽度
+                let bottom_border = format!("└{}┘", "─".repeat(content_width.saturating_sub(2)));
                 lines.push(Line::from(Span::styled(
                     bottom_border,
-                    Style::default().fg(theme.code_border),
+                    Style::default().fg(theme.code_border).bg(theme.code_bg),
                 )));
                 in_code_block = false;
                 code_block_content.clear();
