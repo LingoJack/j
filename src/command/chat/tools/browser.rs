@@ -6,7 +6,7 @@
 use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::sync::{Arc, atomic::AtomicBool};
 
 // ==================== CDP 模块 ====================
@@ -1447,12 +1447,12 @@ fn exec_browser_stub(args: &Value, action: &str) -> ToolResult {
             }
         }
 
-        "click" | "type" | "press" => Ok(json!({
+        "click" | "type" | "press" => Ok(serde_json::json!({
             "note": format!("操作 '{}' 需要 'browser_cdp' feature（CDP）。使用 'snapshot' 查看页面交互元素。", action),
         })
         .to_string()),
 
-        "evaluate" => Ok(json!({
+        "evaluate" => Ok(serde_json::json!({
             "note": "JavaScript 执行需要 'browser_cdp' feature（CDP）。使用 'content' 获取页面文本。",
         })
         .to_string()),
