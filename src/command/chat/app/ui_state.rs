@@ -95,6 +95,12 @@ pub struct UIState {
     pub command_popup_filter: String,
     /// 命令弹窗中选中项索引
     pub command_popup_selected: usize,
+    /// / 斜杠命令弹窗是否激活
+    pub slash_popup_active: bool,
+    /// / 之后的过滤文本
+    pub slash_popup_filter: String,
+    /// 弹窗中选中项索引
+    pub slash_popup_selected: usize,
     /// 统一交互区：当前选中项索引（0=continue, 1=allow, 2=refuse, 3=type）
     pub tool_interact_selected: usize,
     /// 统一交互区：是否处于输入模式

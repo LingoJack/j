@@ -1,156 +1,135 @@
-# Plan: 顶部状态栏优化方案
+# / 斜杠命令弹窗系统设计
 
 ## 目标
-- **信息展示**：新增 Context Usage（替代模型名称）
-- **视觉风格**：极简单行 + 底部分割线
-- **实现策略**：纯估算方案，不依赖 API token 用量
 
----
+实现类似 `@` 弹窗的 `/` 斜杠命令系统，用于替代部分快捷键，减少 hint bar 的干扰。
 
-## 一、现状分析
+## 核心需求
 
-### 1. 当前状态栏结构 (`draw_title_bar` in `chat.rs`)
+1. **触发条件**：只有在输入框为空时，输入 `/` 才能唤起弹窗
+2. **交互方式**：与 `@` 弹窗一致（Up/Down 导航，Tab/Enter 确认，Esc 关闭）
+3. **支持的命令**：
+   - `/copy` - 复制最后一条 AI 回复
+   - `/log` - 打开日志窗口
+   - `/browse` - 进入消息浏览模式
+   - `/config` - 打开配置界面
+   - `/model` - 切换模型
+4. **执行后行为**：清除输入框，执行对应操作
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 🦞 Sprite  │  💫 model_name  │  📬 N 条消息  [加载状态] [远程] │
-└─────────────────────────────────────────────────────────────────┘
-```
-- 高度：3 行（含圆角边框）
-- 元素从左到右线性排列
+## 实现步骤
 
-### 2. 上下文长度估算
+### Step 1: UIState 添加 slash 弹窗状态字段
 
-`compact.rs` 中已有估算函数：
+**文件**: `src/command/chat/app/ui_state.rs`
+
+添加字段：
 ```rust
-pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
-    serde_json::to_string(messages).unwrap_or_default().len() / 4
-}
-```
-- 基于字符数粗略估算（~4 chars/token）
-- 可以直接复用
-
----
-
-## 二、优化方案：极简单行 + 底部分割线
-
-```
-🦞 Sprite │ 💫 Context: 12K │ 💬 42 │ ⏳ ...
-──────────────────────────────────────────────────────────────────
+/// / 斜杠命令弹窗是否激活
+pub slash_popup_active: bool,
+/// / 之后的过滤文本
+pub slash_popup_filter: String,
+/// / 在 input 中的字符索引（始终为 0）
+pub slash_popup_start_pos: usize,
+/// 弹窗中选中项索引
+pub slash_popup_selected: usize,
 ```
 
-**高度**：2 行（1 行内容 + 1 行分割线）
+### Step 2: autocomplete.rs 添加 slash 命令数据结构
 
-**信息布局**（从左到右）：
-| 位置 | 内容 | 示例 |
-|------|------|------|
-| 品牌 | 图标 + 应用名 | `🦞 Sprite` |
-| 上下文 | 💫 + Context + 估算值 | `💫 Context: 12K` |
-| 消息 | 会话消息数 | `📬 42` |
-| 状态 | 动态状态 | `⏳ ...` 或 `🔗 remote` |
+**文件**: `src/command/chat/autocomplete.rs`
 
-**视觉效果**：
-- 移除上边框和左右边框
-- 仅保留底部分割线（`─` 字符横线）
-- 使用 `│` 分隔各信息块
-- 保持现有 emoji 风格
-
----
-
-## 三、技术实现
-
-### Step 1: 新增上下文格式化工具函数
-
+1. 定义 `SlashCommand` 枚举：
 ```rust
-/// 格式化上下文估算值
-fn format_context_tokens(tokens: usize) -> String {
-    if tokens >= 1000 {
-        format!("{}K", tokens / 1000)
-    } else {
-        tokens.to_string()
-    }
+#[derive(Clone, Debug)]
+pub enum SlashCommand {
+    Copy,    // 复制最后一条 AI 回复
+    Log,     // 打开日志窗口
+    Browse,  // 浏览消息
+    Config,  // 打开配置
+    Model,   // 切换模型
 }
 ```
 
-### Step 2: 重写 `draw_title_bar`
+2. 实现方法：
+   - `display_label(&self) -> String`: 显示标签
+   - `description(&self) -> String`: 命令描述
+   - `get_filtered_slash_commands(filter: &str) -> Vec<SlashCommand>`: 根据过滤文本返回匹配命令
 
-改为单行内容 + 底部分割线：
+### Step 3: handler/chat.rs 添加 / 触发和弹窗处理逻辑
+
+**文件**: `src/command/chat/handler/chat.rs`
+
+1. 在 `handle_chat_mode` 函数开头添加 slash 弹窗拦截逻辑（类似 at_popup 拦截）
+2. 处理 Up/Down/Tab/Enter/Esc/Backspace 按键
+3. 在 `KeyCode::Char('/')` 处理中，检测输入框是否为空，若是则激活 slash 弹窗
+4. 实现 `execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand)` 函数执行命令
+
+### Step 4: ui/chat.rs 添加 slash 弹窗绘制
+
+**文件**: `src/command/chat/ui/chat.rs`
+
+1. 在 `draw_chat_ui` 中添加 `draw_slash_popup` 调用
+2. 实现 `draw_slash_popup` 函数（复用 `draw_popup_list` 通用函数）
+
+### Step 5: 简化 hint bar 中的快捷键提示
+
+**文件**: `src/command/chat/ui/chat.rs`
+
+修改 `draw_hint_bar` 函数中 `ChatMode::Chat` 的 hints：
+- 移除 `Ctrl+Y`, `Ctrl+G`, `Ctrl+B`, `Ctrl+E`, `Ctrl+T` 的提示
+- 添加 `/` 命令提示
+
+### Step 6: 在 ChatApp::new 中初始化新字段
+
+**文件**: `src/command/chat/app/chat_app.rs`
+
+在 `UIState` 初始化中添加：
 ```rust
-fn draw_title_bar(&self, area: Rect, buf: &mut Buffer) {
-    // 估算上下文
-    let estimated = compact::estimate_tokens(&self.state.session.messages);
-    let ctx_str = format_context_tokens(estimated);
-    
-    // 第一行：状态信息
-    let content_line = Line::default()
-        .spans(vec![
-            Span::styled("🦞 Sprite ", style_icon),
-            Span::styled("│ ", style_sep),
-            Span::styled("💫 Context: ", style_context_icon),
-            Span::styled(ctx_str, style_context),
-            Span::styled(" │ ", style_sep),
-            Span::styled(format!("📬 {}", msg_count), style_count),
-            // 动态状态
-            status_span,
-        ]);
-    
-    // 第二行：底部分割线
-    let separator = Line::styled("─".repeat(area.width as usize), style_dim);
-    
-    content_line.render(area, buf);
-    separator.render(Rect::new(area.x, area.y + 1, area.width, 1), buf);
-}
+slash_popup_active: false,
+slash_popup_filter: String::new(),
+slash_popup_start_pos: 0,
+slash_popup_selected: 0,
 ```
 
-### Step 3: 调整 `draw_chat` 中的布局
+## 文件修改清单
 
-状态栏高度从 3 行改为 2 行：
-```rust
-let title_height = 2; // 内容行 + 分割线
-let msg_area = Rect::new(
-    area.x, 
-    area.y + title_height, 
-    area.width, 
-    area.height - title_height - input_height
-);
-```
-
----
-
-## 四、文件变更清单
-
-| 文件 | 变更内容 |
+| 文件 | 修改内容 |
 |------|----------|
-| `src/command/chat/ui/chat.rs` | 重写 `draw_title_bar`，移除模型名称，添加底部分割线 |
-| `src/command/chat/compact.rs` | 确保 `estimate_tokens` 为 pub |
+| `src/command/chat/app/ui_state.rs` | 添加 slash 弹窗状态字段 |
+| `src/command/chat/autocomplete.rs` | 添加 SlashCommand 枚举和过滤函数 |
+| `src/command/chat/handler/chat.rs` | 添加 / 触发和弹窗处理逻辑 |
+| `src/command/chat/ui/chat.rs` | 添加弹窗绘制，简化 hint bar |
+| `src/command/chat/app/chat_app.rs` | 初始化新字段 |
 
----
+## 命令映射表
 
-## 五、用户体验
+| 命令 | 对应 Action | 描述 |
+|------|-------------|------|
+| `/copy` | `Action::CopyLastAiReply` | 复制最后一条 AI 回复 |
+| `/log` | `Action::OpenLogWindows` | 打开日志窗口 |
+| `/browse` | `Action::EnterMode(ChatMode::Browse)` | 进入消息浏览模式 |
+| `/config` | `Action::EnterMode(ChatMode::Config)` | 打开配置界面 |
+| `/model` | `Action::EnterMode(ChatMode::SelectModel)` | 切换模型 |
 
-### 正常状态
+## 交互流程
+
 ```
-🦞 Sprite │ 💫 Context: 12K │ 📬 42
-──────────────────────────────────────────────────────────────────
+用户输入 / (输入框为空)
+    ↓
+激活 slash_popup，显示命令列表
+    ↓
+用户输入过滤文本（如 "co"）
+    ↓
+列表过滤为 /copy, /config
+    ↓
+用户按 Tab/Enter
+    ↓
+执行选中命令，关闭弹窗，清空输入框
 ```
 
-### 加载中
-```
-🦞 Sprite │ 💫 Context: 12K │ 📬 43 │ ⏳ thinking...
-──────────────────────────────────────────────────────────────────
-```
+## 注意事项
 
-### 远程连接
-```
-🦞 Sprite │ 💫 Context: 12K │ 📬 42 │ 🔗 remote
-──────────────────────────────────────────────────────────────────
-```
-
----
-
-## 六、实现步骤
-
-1. 新增 `format_context_tokens` 工具函数
-2. 重写 `draw_title_bar`：移除模型名称、改为单行 + 底部分割线
-3. 调整 `draw_chat` 布局计算（title_height = 2）
-4. 测试各模式下的显示效果
+1. **触发条件严格**：只有输入框完全为空时，输入 `/` 才触发弹窗
+2. **与其他弹窗互斥**：激活 slash 弹窗时，关闭其他弹窗
+3. **Esc 关闭**：按 Esc 关闭弹窗，保留 `/` 字符在输入框中
+4. **Backspace 处理**：当 filter 为空时按 Backspace，关闭弹窗并删除 `/` 字符

@@ -1,8 +1,8 @@
 use super::super::autocomplete::{
-    AtPopupItem, complete_at_direct, complete_command_mention, complete_file_mention,
+    AtPopupItem, SlashCommand, complete_at_direct, complete_command_mention, complete_file_mention,
     complete_skill_mention, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
-    get_filtered_skill_names, update_at_filter, update_command_filter, update_file_filter,
-    update_skill_filter,
+    get_filtered_skill_names, get_filtered_slash_commands, update_at_filter, update_command_filter,
+    update_file_filter, update_skill_filter,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::util::safe_lock;
@@ -12,6 +12,70 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     // Ctrl+C 强制退出
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return true;
+    }
+
+    // ===== / 斜杠命令弹窗拦截 =====
+    if app.ui.slash_popup_active {
+        let filtered = get_filtered_slash_commands(&app.ui.slash_popup_filter);
+        match key.code {
+            KeyCode::Up => {
+                if !filtered.is_empty() {
+                    if app.ui.slash_popup_selected > 0 {
+                        app.ui.slash_popup_selected -= 1;
+                    } else {
+                        app.ui.slash_popup_selected = filtered.len() - 1;
+                    }
+                }
+                return false;
+            }
+            KeyCode::Down => {
+                if !filtered.is_empty() {
+                    if app.ui.slash_popup_selected < filtered.len() - 1 {
+                        app.ui.slash_popup_selected += 1;
+                    } else {
+                        app.ui.slash_popup_selected = 0;
+                    }
+                }
+                return false;
+            }
+            KeyCode::Tab | KeyCode::Enter => {
+                if !filtered.is_empty() {
+                    let sel = app.ui.slash_popup_selected.min(filtered.len() - 1);
+                    let cmd = filtered[sel].clone();
+                    execute_slash_command(app, &cmd);
+                }
+                app.ui.slash_popup_active = false;
+                return false;
+            }
+            KeyCode::Esc => {
+                app.ui.slash_popup_active = false;
+                return false;
+            }
+            KeyCode::Backspace => {
+                if !app.ui.slash_popup_filter.is_empty() {
+                    app.ui.slash_popup_filter.pop();
+                    app.ui.slash_popup_selected = 0;
+                } else {
+                    // filter 为空时关闭弹窗并删除 /
+                    app.ui.slash_popup_active = false;
+                    app.ui.input.clear();
+                    app.ui.cursor_pos = 0;
+                }
+                return false;
+            }
+            KeyCode::Char(c) => {
+                // 空格关闭斜杠弹窗
+                if c == ' ' {
+                    app.ui.slash_popup_active = false;
+                    // fall through to normal char handling
+                } else {
+                    app.ui.slash_popup_filter.push(c);
+                    app.ui.slash_popup_selected = 0;
+                    return false;
+                }
+            }
+            _ => {}
+        }
     }
 
     // ===== @ 补全弹窗拦截 =====
@@ -450,30 +514,6 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
     // ===== Ctrl 快捷键 → Actions =====
 
-    // Ctrl+T 切换模型
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('t') {
-        if !app.state.agent_config.providers.is_empty() {
-            app.ui
-                .model_list_state
-                .select(Some(app.state.agent_config.active_index));
-            app.update(Action::EnterMode(ChatMode::SelectModel));
-        }
-        return false;
-    }
-
-    // Ctrl+L 归档对话
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('l') {
-        if app.state.session.messages.is_empty() {
-            app.update(Action::ShowToast(
-                "当前对话为空，无法归档".to_string(),
-                true,
-            ));
-        } else {
-            app.update(Action::StartArchiveConfirm);
-        }
-        return false;
-    }
-
     // Ctrl+Y 复制最后一条 AI 回复
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('y') {
         app.update(Action::CopyLastAiReply);
@@ -655,8 +695,14 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             app.ui.input.insert(byte_idx, c);
             app.ui.cursor_pos += 1;
 
+            // / 斜杠命令弹窗触发逻辑（仅输入框为空时）
+            if c == '/' && app.ui.input == "/" {
+                app.ui.slash_popup_active = true;
+                app.ui.slash_popup_filter.clear();
+                app.ui.slash_popup_selected = 0;
+            }
             // @ 补全弹窗触发逻辑
-            if c == '@' {
+            else if c == '@' {
                 let valid = app.ui.cursor_pos <= 1 || {
                     let chars: Vec<char> = app.ui.input.chars().collect();
                     app.ui.cursor_pos >= 2 && chars[app.ui.cursor_pos - 2].is_whitespace()
@@ -801,4 +847,61 @@ fn close_all_popups(app: &mut ChatApp) {
     app.ui.skill_popup_active = false;
     app.ui.file_popup_active = false;
     app.ui.command_popup_active = false;
+    app.ui.slash_popup_active = false;
+}
+
+/// 执行斜杠命令
+fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
+    // 清空输入框
+    app.ui.input.clear();
+    app.ui.cursor_pos = 0;
+
+    match cmd {
+        SlashCommand::Copy => {
+            app.update(Action::CopyLastAiReply);
+        }
+        SlashCommand::Log => {
+            app.update(Action::OpenLogWindows);
+        }
+        SlashCommand::Browse => {
+            if !app.state.session.messages.is_empty() {
+                app.ui.browse_msg_index = app.state.session.messages.len() - 1;
+                app.ui.browse_scroll_offset = 0;
+                app.ui.msg_lines_cache = None;
+                app.update(Action::EnterMode(ChatMode::Browse));
+            } else {
+                app.update(Action::ShowToast("暂无消息可浏览".to_string(), true));
+            }
+        }
+        SlashCommand::Config => {
+            app.ui.config_provider_idx = app
+                .state
+                .agent_config
+                .active_index
+                .min(app.state.agent_config.providers.len().saturating_sub(1));
+            app.ui.config_field_idx = 0;
+            app.ui.config_editing = false;
+            app.ui.config_edit_buf.clear();
+            app.ui.config_scroll_offset = 0;
+            app.update(Action::EnterMode(ChatMode::Config));
+        }
+        SlashCommand::Model => {
+            if !app.state.agent_config.providers.is_empty() {
+                app.ui
+                    .model_list_state
+                    .select(Some(app.state.agent_config.active_index));
+                app.update(Action::EnterMode(ChatMode::SelectModel));
+            }
+        }
+        SlashCommand::Archive => {
+            if app.state.session.messages.is_empty() {
+                app.update(Action::ShowToast(
+                    "当前对话为空，无法归档".to_string(),
+                    true,
+                ));
+            } else {
+                app.update(Action::StartArchiveConfirm);
+            }
+        }
+    }
 }

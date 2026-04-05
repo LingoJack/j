@@ -1,5 +1,78 @@
 use super::app::ChatApp;
 
+// ========== 斜杠命令定义 ==========
+
+/// / 斜杠命令类型
+#[derive(Clone, Debug, PartialEq)]
+pub enum SlashCommand {
+    /// 复制最后一条 AI 回复
+    Copy,
+    /// 打开日志窗口
+    Log,
+    /// 浏览消息
+    Browse,
+    /// 打开配置界面
+    Config,
+    /// 切换模型
+    Model,
+    /// 归档对话
+    Archive,
+}
+
+impl SlashCommand {
+    /// 返回显示标签（如 "/copy"）
+    pub fn display_label(&self) -> String {
+        match self {
+            SlashCommand::Copy => "/copy".to_string(),
+            SlashCommand::Log => "/log".to_string(),
+            SlashCommand::Browse => "/browse".to_string(),
+            SlashCommand::Config => "/config".to_string(),
+            SlashCommand::Model => "/model".to_string(),
+            SlashCommand::Archive => "/archive".to_string(),
+        }
+    }
+
+    /// 返回命令描述
+    pub fn description(&self) -> String {
+        match self {
+            SlashCommand::Copy => "复制最后一条 AI 回复".to_string(),
+            SlashCommand::Log => "打开日志窗口".to_string(),
+            SlashCommand::Browse => "浏览历史消息".to_string(),
+            SlashCommand::Config => "打开配置界面".to_string(),
+            SlashCommand::Model => "切换模型".to_string(),
+            SlashCommand::Archive => "归档当前对话".to_string(),
+        }
+    }
+
+    /// 返回所有可用命令
+    pub fn all() -> Vec<SlashCommand> {
+        vec![
+            SlashCommand::Copy,
+            SlashCommand::Log,
+            SlashCommand::Browse,
+            SlashCommand::Config,
+            SlashCommand::Model,
+            SlashCommand::Archive,
+        ]
+    }
+}
+
+/// 根据过滤文本返回匹配的斜杠命令列表
+pub fn get_filtered_slash_commands(filter: &str) -> Vec<SlashCommand> {
+    let filter_lower = filter.to_lowercase();
+    SlashCommand::all()
+        .into_iter()
+        .filter(|cmd| {
+            if filter_lower.is_empty() {
+                return true;
+            }
+            cmd.display_label().to_lowercase().contains(&filter_lower)
+        })
+        .collect()
+}
+
+// ========== @ 弹窗定义 ==========
+
 /// @ 弹窗中的混合搜索结果类型
 #[derive(Clone, Debug)]
 pub enum AtPopupItem {

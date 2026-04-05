@@ -2,7 +2,7 @@ use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
 use super::super::compact::estimate_tokens;
 use super::super::handler::{
     AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
-    get_filtered_skill_names,
+    get_filtered_skill_names, get_filtered_slash_commands,
 };
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
@@ -77,6 +77,11 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     // ========== 命令补全弹窗覆盖层 ==========
     if app.ui.command_popup_active {
         draw_command_popup(f, chunks[2], app);
+    }
+
+    // ========== / 斜杠命令弹窗覆盖层 ==========
+    if app.ui.slash_popup_active {
+        draw_slash_popup(f, chunks[2], app);
     }
 }
 
@@ -772,12 +777,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求")],
         ChatMode::Chat => vec![
             ("@", "引用"),
-            ("Ctrl+T", "切换模型"),
-            ("Ctrl+L", "归档"),
-            ("Ctrl+Y", "复制"),
-            ("Ctrl+B", "浏览"),
-            ("Ctrl+E", "配置"),
-            ("Ctrl+G", "日志"),
+            ("/", "命令"),
             ("Ctrl+O", "工具详情"),
             ("?/F1", "帮助"),
             ("Esc", "退出"),
@@ -1017,12 +1017,9 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ("Enter", "发送消息"),
         ("↑ / ↓", "滚动对话记录"),
         ("← / →", "移动输入光标"),
-        ("Ctrl+T", "切换模型"),
-        ("Ctrl+L", "归档当前对话"),
-        ("Ctrl+Y", "复制最后一条 AI 回复"),
-        ("Ctrl+B", "浏览消息 (↑↓选择, y/Enter复制)"),
-        ("Ctrl+E", "打开配置界面"),
-        ("Ctrl+G", "实时查看日志"),
+        ("/", "斜杠命令（copy/log/browse/config/model/archive）"),
+        ("@", "引用（skill/file/command）"),
+        ("Ctrl+O", "展开/折叠工具详情"),
         ("Esc / Ctrl+C", "退出对话"),
         ("? / F1", "显示 / 关闭此帮助"),
     ];
@@ -1289,6 +1286,60 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         t.model_sel_highlight_bg,
         t.model_sel_highlight_fg,
         app.ui.command_popup_selected,
+    );
+}
+
+/// 绘制 / 斜杠命令弹窗（输入区域上方浮动）
+pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
+    let t = &app.ui.theme;
+    let filtered = get_filtered_slash_commands(&app.ui.slash_popup_filter);
+    if filtered.is_empty() {
+        return;
+    }
+
+    // 构建显示项：命令 + 描述
+    let max_items = filtered.len().min(8);
+    let labels: Vec<String> = filtered
+        .iter()
+        .take(max_items)
+        .map(|cmd| format!("{} - {}", cmd.display_label(), cmd.description()))
+        .collect();
+
+    let items: Vec<ListItem<'static>> = filtered
+        .iter()
+        .take(max_items)
+        .map(|cmd| {
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    cmd.display_label(),
+                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" - {}", cmd.description()),
+                    Style::default().fg(t.text_dim),
+                ),
+            ]))
+        })
+        .collect();
+
+    let title = if app.ui.slash_popup_filter.is_empty() {
+        " / 命令 ".to_string()
+    } else {
+        format!(" /{} ", app.ui.slash_popup_filter)
+    };
+
+    draw_popup_list(
+        f,
+        input_area,
+        items,
+        &labels,
+        title,
+        t.label_ai,
+        t.border_title,
+        t.bg_title,
+        t.model_sel_highlight_bg,
+        t.model_sel_highlight_fg,
+        app.ui.slash_popup_selected,
     );
 }
 
