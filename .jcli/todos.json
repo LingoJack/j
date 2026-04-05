@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "id": "1",
+    "content": "新增 format_context_tokens 工具函数",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "重写 draw_title_bar：移除模型名称、改为单行 + 底部分割线",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "调整 draw_chat 布局计算（title_height = 2）",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "测试编译和运行效果",
+    "status": "completed"
+  }
+]

@@ -1,4 +1,5 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
+use super::super::compact::estimate_tokens;
 use super::super::handler::{
     AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
     get_filtered_skill_names,
@@ -29,7 +30,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // 标题栏
+            Constraint::Length(3), // 标题栏（顶部分割线 + 内容行 + 底部分割线）
             Constraint::Min(5),    // 消息区
             Constraint::Length(5), // 输入区
             Constraint::Length(1), // 操作提示栏（始终可见）
@@ -79,11 +80,24 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     }
 }
 
+/// 格式化上下文估算值
+fn format_context_tokens(tokens: usize) -> String {
+    if tokens >= 1000 {
+        format!("{}K", tokens / 1000)
+    } else {
+        tokens.to_string()
+    }
+}
+
 /// 绘制标题栏
 pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
-    let model_name = app.active_model_name();
     let msg_count = app.state.session.messages.len();
+
+    // 估算上下文 tokens
+    let estimated_tokens = estimate_tokens(&app.state.session.messages);
+    let ctx_str = format_context_tokens(estimated_tokens);
+
     let loading = if app.state.is_loading {
         // 优先显示正在执行中的工具，其次显示等待确认的工具
         let tool_info = app
@@ -108,18 +122,27 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         String::new()
     };
 
+    // 第一行：顶部分割线
+    let top_separator = Paragraph::new(Line::styled(
+        "─".repeat(area.width as usize),
+        Style::default().fg(t.border_title),
+    ))
+    .style(Style::default().bg(t.bg_title));
+    f.render_widget(top_separator, Rect::new(area.x, area.y, area.width, 1));
+
+    // 第二行：状态信息
     let mut title_spans = vec![
         Span::styled(" 🦞 ", Style::default().fg(t.title_icon)),
         Span::styled(
-            " Sprite",
+            "Sprite",
             Style::default()
                 .fg(t.text_white)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled("  │  ", Style::default().fg(t.title_separator)),
-        Span::styled("💫  ", Style::default()),
+        Span::styled("💫 ", Style::default()),
         Span::styled(
-            model_name,
+            format!("Context: {}", ctx_str),
             Style::default()
                 .fg(t.title_model)
                 .add_modifier(Modifier::BOLD),
@@ -151,14 +174,21 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ));
     }
 
-    let title_block = Paragraph::new(Line::from(title_spans)).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(t.border_title))
-            .style(Style::default().bg(t.bg_title)),
+    // 渲染内容行
+    let content_line =
+        Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_title));
+    f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
+
+    // 第三行：底部分割线
+    let bottom_separator = Paragraph::new(Line::styled(
+        "─".repeat(area.width as usize),
+        Style::default().fg(t.border_title),
+    ))
+    .style(Style::default().bg(t.bg_title));
+    f.render_widget(
+        bottom_separator,
+        Rect::new(area.x, area.y + 2, area.width, 1),
     );
-    f.render_widget(title_block, area);
 }
 
 /// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用
