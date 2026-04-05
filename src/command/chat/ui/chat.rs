@@ -503,7 +503,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     // 提示符逻辑
     let (prompt, prompt_style) = if app.state.is_loading {
-        (" ~> ", Style::default().fg(t.input_prompt_loading))
+        (" + ", Style::default().fg(t.input_prompt_loading))
     } else {
         (" > ", Style::default().fg(t.input_prompt))
     };
