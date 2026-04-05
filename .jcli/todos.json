@@ -1,22 +1,22 @@
 [
   {
     "id": "1",
-    "content": "添加代码块宽度计算辅助函数 calculate_code_block_width",
+    "content": "移除 ``` 自动补全逻辑",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "修改 render_code_block_line 方法添加右侧边框",
+    "content": "添加代码块配对检测函数",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "实现 ``` 自动补全逻辑",
+    "content": "修改渲染逻辑：只有成对才渲染围框",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "测试和验证功能",
+    "content": "测试验证",
     "status": "completed"
   }
 ]

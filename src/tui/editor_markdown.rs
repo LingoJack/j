@@ -252,56 +252,9 @@ fn handle_vim_input(
     }
 }
 
-/// 检查是否在代码块内部（光标在开始围栏之后）
-fn is_inside_code_block(cursor_row: usize, lines: &[String]) -> bool {
-    let mut in_block = false;
-    for (i, line) in lines.iter().enumerate() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") {
-            if i < cursor_row {
-                in_block = !in_block;
-            } else if i == cursor_row {
-                // 当前围栏行，返回之前的状态
-                return in_block;
-            } else {
-                break;
-            }
-        }
-    }
-    in_block
-}
-
 fn handle_insert_mode(input: &Input, textarea: &mut TextArea<'_>) -> Transition {
     match input.key {
         Key::Esc => Transition::Mode(Mode::Normal),
-        Key::Enter => {
-            let (cursor_row, _cursor_col) = textarea.cursor();
-            let lines = textarea.lines();
-
-            // 检查当前行是否是 ``` 开头
-            if let Some(current_line) = lines.get(cursor_row) {
-                let trimmed = current_line.trim_start();
-
-                // 检测是否是 ``` 开头（可能有语言标识）
-                if trimmed.starts_with("```") && trimmed.len() >= 3 {
-                    // 检查是否已经有闭合围栏（避免在已有闭合的代码块内重复补全）
-                    // 只有当这是一个新的开始围栏时才补全
-                    if !is_inside_code_block(cursor_row, lines) {
-                        // 插入空行和闭合 ```
-                        textarea.insert_newline();
-                        textarea.insert_newline();
-                        textarea.insert_str("```");
-                        // 将光标移到空行（两个 ``` 之间）
-                        textarea.move_cursor(CursorMove::Up);
-                        return Transition::Nop;
-                    }
-                }
-            }
-
-            // 正常回车处理
-            textarea.input(input.clone());
-            Transition::Nop
-        }
         _ => {
             textarea.input(input.clone());
             Transition::Nop
@@ -658,6 +611,67 @@ impl<'a> MarkdownEditorState<'a> {
         line.trim_start().starts_with("```")
     }
 
+    /// 检测指定围栏行是否有配对的围栏
+    /// 返回 Some((start_idx, end_idx)) 如果代码块完整
+    /// 返回 None 如果代码块不完整（没有配对）
+    fn find_complete_code_block(
+        &self,
+        fence_line: usize,
+        lines: &[String],
+    ) -> Option<(usize, usize)> {
+        let mut in_block = false;
+        let mut block_start = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") {
+                if !in_block {
+                    // 开始新的代码块
+                    in_block = true;
+                    block_start = i;
+                } else {
+                    // 结束当前代码块
+                    if block_start == fence_line || i == fence_line {
+                        // 当前围栏行是这个完整代码块的一部分
+                        return Some((block_start, i));
+                    }
+                    in_block = false;
+                }
+            }
+        }
+        // 没有找到配对
+        None
+    }
+
+    /// 判断围栏行是否属于完整的代码块
+    fn is_fence_line_paired(&self, fence_line: usize, lines: &[String]) -> bool {
+        self.find_complete_code_block(fence_line, lines).is_some()
+    }
+
+    /// 判断某行是否在完整的代码块内（不包括围栏行本身，且代码块必须有配对）
+    fn is_line_in_complete_code_block(&self, line_idx: usize, lines: &[String]) -> bool {
+        let mut in_block = false;
+        let mut block_start = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") {
+                if !in_block {
+                    // 开始新的代码块
+                    in_block = true;
+                    block_start = i;
+                } else {
+                    // 结束当前代码块 - 这是一个完整的代码块
+                    if block_start < line_idx && line_idx < i {
+                        return true;
+                    }
+                    in_block = false;
+                }
+            }
+        }
+        false
+    }
+
     /// 获取代码块的语言标识
     fn get_code_block_language(&self, line_idx: usize, lines: &[String]) -> Option<String> {
         let mut in_block = false;
@@ -686,24 +700,6 @@ impl<'a> MarkdownEditorState<'a> {
             }
         }
         None
-    }
-
-    /// 判断某行是否在代码块内（不包括围栏行本身）
-    fn is_line_in_code_block(&self, line_idx: usize, lines: &[String]) -> bool {
-        let mut in_block = false;
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                // 围栏行本身不算在代码块内
-                if i == line_idx {
-                    return false;
-                }
-                in_block = !in_block;
-            } else if i == line_idx {
-                return in_block;
-            }
-        }
-        false
     }
 
     /// 查找包含指定行的代码块范围 (开始行, 结束行)
@@ -763,11 +759,16 @@ impl<'a> MarkdownEditorState<'a> {
 
         // 检查是否是代码块围栏行
         if Self::is_code_fence_line(line_content) {
-            return self.render_code_fence_line(line_content, line_idx, lines);
+            // 只有成对的围栏才渲染围框样式
+            if self.is_fence_line_paired(line_idx, lines) {
+                return self.render_code_fence_line(line_content, line_idx, lines);
+            }
+            // 不成对的围栏，渲染为普通文本
+            return self.render_source_line(line_content, line_idx, false);
         }
 
-        // 检查是否在代码块内
-        let is_in_code_block = self.is_line_in_code_block(line_idx, lines);
+        // 检查是否在完整的代码块内
+        let is_in_code_block = self.is_line_in_complete_code_block(line_idx, lines);
 
         // 当前编辑行 - 显示源码
         if line_idx == self.cursor_line() {
@@ -794,56 +795,144 @@ impl<'a> MarkdownEditorState<'a> {
         let trimmed = line.trim_start();
 
         // 判断是开始围栏还是结束围栏
+        // 开始围栏：在代码块外部（之前的代码块都已闭合）
+        // 结束围栏：在代码块内部（之前有一个未闭合的开始围栏）
         let is_start = {
-            let mut found_fence = false;
+            let mut in_block = false;
             for (i, l) in lines.iter().enumerate() {
-                if i == line_idx {
+                if i >= line_idx {
+                    // 到达当前行，不切换状态，直接判断
                     break;
                 }
                 if Self::is_code_fence_line(l) {
-                    found_fence = !found_fence;
+                    in_block = !in_block;
                 }
             }
-            !found_fence // 如果之前没有未关闭的围栏，则是开始围栏
+            // 如果不在代码块内，当前围栏就是开始围栏
+            !in_block
         };
 
+        // 计算代码块内容的最大宽度
+        let content_max_width = self
+            .find_code_block_range_for_fence(line_idx, lines)
+            .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
+            .unwrap_or(10);
+
+        // 目标格式：
+        // 开始围栏：┌─ lang ──────┐
+        // 内容行：  │ code        │
+        // 结束围栏：└─────────────┘
+        //
+        // 宽度计算：
+        // - 内容区域宽度 = content_max_width
+        // - 总宽度 = 1(左│) + content_max_width + 1(右│) = content_max_width + 2
+
+        let total_width = content_max_width + 2; // 内容宽度 + 两侧边框
+
         if is_start {
-            // 开始围栏：显示语言标识
+            // 开始围栏：┌─ lang ──────┐
             let lang = trimmed[3..].trim();
-            let lang_display = if lang.is_empty() { "" } else { lang };
+
+            // 构建左侧部分：┌─ lang ─ (如果有lang) 或 ┌─ (如果没有)
+            let (left_part, left_width) = if lang.is_empty() {
+                ("┌─".to_string(), 2)
+            } else {
+                let s = format!("┌─ {} ─", lang);
+                let w = display_width(&s);
+                (s, w)
+            };
+
+            // 破折号数量 = 总宽度 - 左侧宽度 - 右侧┐(1字符)
+            let dash_count = total_width.saturating_sub(left_width + 1).max(1);
+
             Line::from(vec![
                 Span::styled(line_num, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    format!("┌─ {} ", lang_display),
+                    left_part,
                     Style::default()
                         .fg(self.theme.text_dim)
                         .bg(self.theme.code_bg),
                 ),
                 Span::styled(
-                    "─".repeat(20),
+                    "─".repeat(dash_count),
+                    Style::default()
+                        .fg(self.theme.text_dim)
+                        .bg(self.theme.code_bg),
+                ),
+                Span::styled(
+                    "┐",
                     Style::default()
                         .fg(self.theme.text_dim)
                         .bg(self.theme.code_bg),
                 ),
             ])
         } else {
-            // 结束围栏
+            // 结束围栏：└─────────────┘
+            // 破折号数量 = 总宽度 - 2 (└ 和 ┘)
+            let dash_count = total_width.saturating_sub(2).max(1);
+
             Line::from(vec![
                 Span::styled(line_num, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    "└─",
+                    "└",
                     Style::default()
                         .fg(self.theme.text_dim)
                         .bg(self.theme.code_bg),
                 ),
                 Span::styled(
-                    "─".repeat(20),
+                    "─".repeat(dash_count),
+                    Style::default()
+                        .fg(self.theme.text_dim)
+                        .bg(self.theme.code_bg),
+                ),
+                Span::styled(
+                    "┘",
                     Style::default()
                         .fg(self.theme.text_dim)
                         .bg(self.theme.code_bg),
                 ),
             ])
         }
+    }
+
+    /// 查找围栏行对应的代码块范围
+    /// 对于开始围栏，返回 (当前行, 结束围栏行)
+    /// 对于结束围栏，返回 (开始围栏行, 当前行)
+    fn find_code_block_range_for_fence(
+        &self,
+        fence_line: usize,
+        lines: &[String],
+    ) -> Option<(usize, usize)> {
+        let mut in_block = false;
+        let mut block_start = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") {
+                if !in_block {
+                    // 开始新的代码块
+                    in_block = true;
+                    block_start = i;
+                    if i == fence_line {
+                        // 当前围栏是开始围栏，查找结束围栏
+                        for j in (i + 1)..lines.len() {
+                            let t = lines[j].trim_start();
+                            if t.starts_with("```") {
+                                return Some((block_start, j));
+                            }
+                        }
+                    }
+                } else {
+                    // 结束当前代码块
+                    if i == fence_line {
+                        // 当前围栏是结束围栏
+                        return Some((block_start, i));
+                    }
+                    in_block = false;
+                }
+            }
+        }
+        None
     }
 
     /// 渲染代码块内容行
@@ -880,21 +969,22 @@ impl<'a> MarkdownEditorState<'a> {
         // 计算需要填充的空格数
         let fill_width = max_width.saturating_sub(content_width);
 
-        // 构建结果：行号 + 左侧竖线 + 高亮代码 + 填充 + 右侧竖线
+        // 格式：│ code │
+        // 宽度 = 1 + max_width + 1
         let mut spans = vec![
             Span::styled(
                 line_num,
                 Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
             ),
             Span::styled(
-                "│ ",
+                "│",
                 Style::default()
                     .fg(self.theme.text_dim)
                     .bg(self.theme.code_bg),
             ),
         ];
 
-        // 为高亮的 spans 添加代码背景色
+        // 添加高亮代码
         for span in highlighted_spans {
             spans.push(Span::styled(
                 span.content,
@@ -908,7 +998,7 @@ impl<'a> MarkdownEditorState<'a> {
             Style::default().bg(self.theme.code_bg),
         ));
         spans.push(Span::styled(
-            " │",
+            "│",
             Style::default()
                 .fg(self.theme.text_dim)
                 .bg(self.theme.code_bg),
