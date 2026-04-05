@@ -90,11 +90,51 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         .add_modifier(Modifier::BOLD),
                 };
                 style_stack.push(heading_style);
+
+                // 添加前缀
+                let (prefix, prefix_style) = match level as u8 {
+                    1 => (
+                        "◆ ",
+                        Style::default()
+                            .fg(theme.md_h1)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    2 => (
+                        "◇ ",
+                        Style::default()
+                            .fg(theme.md_h2)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    3 => (
+                        "〈",
+                        Style::default()
+                            .fg(theme.md_h3)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    _ => (
+                        "› ",
+                        Style::default()
+                            .fg(theme.md_h4)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                };
+                current_spans.push(Span::styled(prefix.to_string(), prefix_style));
             }
             Event::End(TagEnd::Heading(level)) => {
+                let level_u8 = level as u8;
+                // H3 添加文艺风格后缀
+                if level_u8 == 3 {
+                    current_spans.push(Span::styled(
+                        "〉".to_string(),
+                        Style::default()
+                            .fg(theme.md_h3)
+                            .add_modifier(Modifier::BOLD),
+                    ));
+                }
                 flush_line(&mut current_spans, &mut lines);
-                if (level as u8) <= 2 {
-                    let sep_char = if (level as u8) == 1 { "━" } else { "─" };
+                // H1/H2 显示分隔线
+                if level_u8 <= 2 {
+                    let sep_char = if level_u8 == 1 { "━" } else { "─" };
                     lines.push(Line::from(Span::styled(
                         sep_char.repeat(content_width),
                         Style::default().fg(theme.md_heading_sep),
@@ -319,37 +359,6 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 } else {
                     let style = *style_stack.last().unwrap_or(&base_style);
                     let text_str = text.to_string().replace('\u{200B}', "");
-
-                    if let Some(level) = heading_level {
-                        let (prefix, prefix_style) = match level {
-                            1 => (
-                                "◆ ",
-                                Style::default()
-                                    .fg(theme.md_h1)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            2 => (
-                                "◇ ",
-                                Style::default()
-                                    .fg(theme.md_h2)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            3 => (
-                                "▸ ",
-                                Style::default()
-                                    .fg(theme.md_h3)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            _ => (
-                                "▹ ",
-                                Style::default()
-                                    .fg(theme.md_h4)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                        };
-                        current_spans.push(Span::styled(prefix.to_string(), prefix_style));
-                        heading_level = None;
-                    }
 
                     let effective_prefix_w = if in_blockquote { 2 } else { 0 };
                     let full_line_w = content_width.saturating_sub(effective_prefix_w);

@@ -92,4 +92,6 @@ allow:
 - ComputerUse(focus:*)
 - Bash(which j:*)
 - Bash(find /Users/jacklingo/dev_custom/j/web/src:*)
+- Bash(diskutil list:*)
+- Bash(du -sh:*)
 deny: []
