@@ -511,16 +511,39 @@ impl ChatApp {
             Action::AskOptionNavigate(dir) => {
                 if let Some(q) = self.ui.tool_ask_questions.get(self.ui.tool_ask_current_idx) {
                     let option_count = q.options.len() + 1; // +1 for free input
-                    match dir {
+                    let free_input_idx = q.options.len();
+
+                    let new_cursor = match dir {
                         CursorDirection::Up => {
                             if self.ui.tool_ask_cursor > 0 {
-                                self.ui.tool_ask_cursor -= 1;
+                                self.ui.tool_ask_cursor - 1
+                            } else {
+                                self.ui.tool_ask_cursor
                             }
                         }
                         CursorDirection::Down => {
                             if self.ui.tool_ask_cursor < option_count - 1 {
-                                self.ui.tool_ask_cursor += 1;
+                                self.ui.tool_ask_cursor + 1
+                            } else {
+                                self.ui.tool_ask_cursor
                             }
+                        }
+                    };
+
+                    // 如果光标位置发生变化
+                    if new_cursor != self.ui.tool_ask_cursor {
+                        self.ui.tool_ask_cursor = new_cursor;
+
+                        // 移动到自由输入选项时，自动进入输入模式
+                        if new_cursor == free_input_idx {
+                            self.ui.tool_interact_typing = true;
+                            self.ui.tool_interact_input.clear();
+                            self.ui.tool_interact_cursor = 0;
+                        } else {
+                            // 移动到其他选项时，退出输入模式
+                            self.ui.tool_interact_typing = false;
+                            self.ui.tool_interact_input.clear();
+                            self.ui.tool_interact_cursor = 0;
                         }
                     }
                 }
@@ -2196,6 +2219,18 @@ impl ChatApp {
         if let Some(q) = self.ui.tool_ask_questions.get(self.ui.tool_ask_current_idx) {
             self.ui.tool_ask_selections = vec![false; q.options.len() + 1];
             self.ui.tool_ask_cursor = 0;
+
+            // 如果问题没有预设选项（只有自由输入），自动进入输入模式
+            if q.options.is_empty() {
+                self.ui.tool_interact_typing = true;
+                self.ui.tool_interact_input.clear();
+                self.ui.tool_interact_cursor = 0;
+            } else {
+                // 有预设选项时，重置输入状态
+                self.ui.tool_interact_typing = false;
+                self.ui.tool_interact_input.clear();
+                self.ui.tool_interact_cursor = 0;
+            }
         }
     }
 

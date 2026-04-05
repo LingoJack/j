@@ -82,10 +82,20 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
     if app.ui.tool_interact_typing {
         let action = match key.code {
             KeyCode::Esc => {
+                // 如果输入为空，退出输入模式返回选项列表
+                // 如果有输入内容，也退出输入模式（清空输入）
                 app.ui.tool_interact_typing = false;
+                app.ui.tool_interact_input.clear();
+                app.ui.tool_interact_cursor = 0;
                 return;
             }
-            KeyCode::Enter => Action::AskSubmitAnswer,
+            KeyCode::Enter => {
+                // 空输入时无效，不提交
+                if app.ui.tool_interact_input.trim().is_empty() {
+                    return;
+                }
+                Action::AskSubmitAnswer
+            }
             KeyCode::Backspace => Action::AskDeleteChar,
             KeyCode::Left => {
                 if app.ui.tool_interact_cursor > 0 {

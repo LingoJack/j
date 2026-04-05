@@ -820,13 +820,32 @@ fn render_ask_questions(
                     .fg(Color::Cyan)
                     .bg(confirm_bg)
                     .add_modifier(Modifier::BOLD);
+
+                // 块状光标渲染
+                let input = &app.ui.tool_interact_input;
+                let cursor_pos = app.ui.tool_interact_cursor;
+                let chars: Vec<char> = input.chars().collect();
+
+                // 光标前的文本
+                let before: String = chars[..cursor_pos].iter().collect();
+                // 光标处的字符（如果没有则使用空格）
+                let cursor_char = chars.get(cursor_pos).copied().unwrap_or(' ');
+                // 光标后的文本
+                let after: String = chars[cursor_pos.min(chars.len())..].iter().collect();
+
+                // 普通文本样式
+                let text_style = Style::default().fg(t.text_white).bg(confirm_bg);
+                // 块状光标样式（反向颜色：深灰背景 + 白色前景）
+                let cursor_style = Style::default()
+                    .fg(Color::Rgb(50, 50, 50)) // 深色前景（文字颜色）
+                    .bg(t.text_white); // 白色背景
+
                 lines.push(bordered_line(
                     vec![
                         Span::styled(" ❯ ✏ ", pointer_style),
-                        Span::styled(
-                            format!("{}|", app.ui.tool_interact_input),
-                            Style::default().fg(t.text_white).bg(confirm_bg),
-                        ),
+                        Span::styled(before, text_style),
+                        Span::styled(cursor_char.to_string(), cursor_style),
+                        Span::styled(after, text_style),
                     ],
                     bubble_max_width,
                     border_color,

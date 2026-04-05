@@ -21,6 +21,7 @@ use std::fmt;
 use std::io;
 use tui_textarea::{CursorMove, Input, Key, TextArea};
 
+use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
 
 // ========== Vim 模式定义 ==========
@@ -604,15 +605,53 @@ impl<'a> MarkdownEditorState<'a> {
         self.textarea.cursor().1
     }
 
-    /// 判断某行是否在代码块内
+    /// 判断某行是否是代码块围栏 (```)
+    fn is_code_fence_line(line: &str) -> bool {
+        line.trim_start().starts_with("```")
+    }
+
+    /// 获取代码块的语言标识
+    fn get_code_block_language(&self, line_idx: usize, lines: &[String]) -> Option<String> {
+        let mut in_block = false;
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") {
+                if !in_block {
+                    // 开始新的代码块，提取语言标识
+                    let lang = trimmed[3..].trim();
+                    if i <= line_idx && line_idx < lines.len() {
+                        in_block = true;
+                        // 检查当前行是否在这个代码块内
+                        for j in (i + 1)..lines.len() {
+                            if Self::is_code_fence_line(&lines[j]) {
+                                // 找到结束围栏
+                                if line_idx < j {
+                                    return Some(lang.to_string());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    in_block = false;
+                }
+            }
+        }
+        None
+    }
+
+    /// 判断某行是否在代码块内（不包括围栏行本身）
     fn is_line_in_code_block(&self, line_idx: usize, lines: &[String]) -> bool {
         let mut in_block = false;
         for (i, line) in lines.iter().enumerate() {
             let trimmed = line.trim_start();
             if trimmed.starts_with("```") {
+                // 围栏行本身不算在代码块内
+                if i == line_idx {
+                    return false;
+                }
                 in_block = !in_block;
-            }
-            if i == line_idx {
+            } else if i == line_idx {
                 return in_block;
             }
         }
@@ -626,6 +665,11 @@ impl<'a> MarkdownEditorState<'a> {
             return Line::default();
         };
 
+        // 检查是否是代码块围栏行
+        if Self::is_code_fence_line(line_content) {
+            return self.render_code_fence_line(line_content, line_idx, lines);
+        }
+
         // 检查是否在代码块内
         let is_in_code_block = self.is_line_in_code_block(line_idx, lines);
 
@@ -634,13 +678,123 @@ impl<'a> MarkdownEditorState<'a> {
             return self.render_source_line(line_content, line_idx, is_in_code_block);
         }
 
-        // 代码块内的行 - 也显示源码
+        // 代码块内的行 - 渲染代码块样式
         if is_in_code_block {
-            return self.render_source_line(line_content, line_idx, true);
+            return self.render_code_block_line(line_content, line_idx, lines);
         }
 
         // 其他行 - 尝试渲染（带行号）
         self.render_single_line_with_number(line_content, line_idx, max_width)
+    }
+
+    /// 渲染代码块围栏行 (```)
+    fn render_code_fence_line(
+        &self,
+        line: &str,
+        line_idx: usize,
+        lines: &[String],
+    ) -> Line<'static> {
+        let line_num = format!("{:4} ", line_idx + 1);
+        let trimmed = line.trim_start();
+
+        // 判断是开始围栏还是结束围栏
+        let is_start = {
+            let mut found_fence = false;
+            for (i, l) in lines.iter().enumerate() {
+                if i == line_idx {
+                    break;
+                }
+                if Self::is_code_fence_line(l) {
+                    found_fence = !found_fence;
+                }
+            }
+            !found_fence // 如果之前没有未关闭的围栏，则是开始围栏
+        };
+
+        if is_start {
+            // 开始围栏：显示语言标识
+            let lang = trimmed[3..].trim();
+            let lang_display = if lang.is_empty() { "" } else { lang };
+            Line::from(vec![
+                Span::styled(line_num, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("┌─ {} ", lang_display),
+                    Style::default()
+                        .fg(self.theme.text_dim)
+                        .bg(self.theme.code_bg),
+                ),
+                Span::styled(
+                    "─".repeat(20),
+                    Style::default()
+                        .fg(self.theme.text_dim)
+                        .bg(self.theme.code_bg),
+                ),
+            ])
+        } else {
+            // 结束围栏
+            Line::from(vec![
+                Span::styled(line_num, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    "└─",
+                    Style::default()
+                        .fg(self.theme.text_dim)
+                        .bg(self.theme.code_bg),
+                ),
+                Span::styled(
+                    "─".repeat(20),
+                    Style::default()
+                        .fg(self.theme.text_dim)
+                        .bg(self.theme.code_bg),
+                ),
+            ])
+        }
+    }
+
+    /// 渲染代码块内容行
+    fn render_code_block_line(
+        &self,
+        line: &str,
+        line_idx: usize,
+        lines: &[String],
+    ) -> Line<'static> {
+        let line_num = format!("{:4} ", line_idx + 1);
+
+        // 应用水平滚动
+        let chars: Vec<char> = line.chars().collect();
+        let visible_chars: Vec<char> = chars.iter().skip(self.horizontal_scroll).copied().collect();
+        let visible_line: String = visible_chars.iter().collect();
+
+        // 获取代码块语言
+        let lang = self
+            .get_code_block_language(line_idx, lines)
+            .unwrap_or_default();
+
+        // 应用语法高亮
+        let highlighted_spans = highlight_code_line(&visible_line, &lang, &self.theme);
+
+        // 构建结果：行号 + 左侧竖线 + 高亮代码
+        let mut spans = vec![
+            Span::styled(
+                line_num,
+                Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+            ),
+            Span::styled(
+                "│ ",
+                Style::default()
+                    .fg(self.theme.text_dim)
+                    .bg(self.theme.code_bg),
+            ),
+        ];
+
+        // 为高亮的 spans 添加代码背景色
+        for span in highlighted_spans {
+            spans.push(Span::styled(
+                span.content,
+                span.style.bg(self.theme.code_bg),
+            ));
+        }
+
+        Line::from(spans)
     }
 
     /// 创建带背景色的 Style
