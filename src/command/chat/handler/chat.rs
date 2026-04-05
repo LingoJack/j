@@ -577,15 +577,23 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         KeyCode::Left => {
             if app.ui.cursor_pos > 0 {
                 app.ui.cursor_pos -= 1;
+                check_and_activate_mention_popup(app);
             }
         }
         KeyCode::Right => {
             if app.ui.cursor_pos < char_count {
                 app.ui.cursor_pos += 1;
+                check_and_activate_mention_popup(app);
             }
         }
-        KeyCode::Home => app.ui.cursor_pos = 0,
-        KeyCode::End => app.ui.cursor_pos = char_count,
+        KeyCode::Home => {
+            app.ui.cursor_pos = 0;
+            close_all_popups(app);
+        }
+        KeyCode::End => {
+            app.ui.cursor_pos = char_count;
+            close_all_popups(app);
+        }
 
         // 删除
         KeyCode::Backspace => {
@@ -687,4 +695,110 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     }
 
     false
+}
+
+/// 检测光标是否在某个 mention 范围内，若是则激活对应的补全弹窗
+fn check_and_activate_mention_popup(app: &mut ChatApp) {
+    let chars: Vec<char> = app.ui.input.chars().collect();
+    let pos = app.ui.cursor_pos;
+
+    // 从光标位置向前搜索 @ 符号
+    let mut at_pos: Option<usize> = None;
+    for i in (0..pos).rev() {
+        if chars.get(i) == Some(&'@') {
+            // 检查 @ 是否在有效位置（行首或前面是空白）
+            if i == 0 || chars.get(i - 1).map(|c| c.is_whitespace()).unwrap_or(true) {
+                at_pos = Some(i);
+                break;
+            }
+        }
+        // 遇到空白字符停止搜索（@mention 不能跨空格）
+        if chars.get(i).map(|c| c.is_whitespace()).unwrap_or(false) {
+            break;
+        }
+    }
+
+    let Some(at_idx) = at_pos else {
+        // 光标不在任何 @mention 范围内，关闭所有弹窗
+        close_all_popups(app);
+        return;
+    };
+
+    // 检查光标是否在该 @mention 的有效范围内
+    // 有效范围：从 @ 到第一个空白字符之前（不含空白字符本身）
+    // 如果光标停在 mention 末尾（后面是空白），应该激活弹窗
+    // 如果光标停在空白字符后面（前面是空白），不应该激活弹窗
+
+    // 检查光标前面的字符：如果是空白，说明光标已离开 mention
+    if pos > 0
+        && chars
+            .get(pos - 1)
+            .map(|c| c.is_whitespace())
+            .unwrap_or(false)
+    {
+        close_all_popups(app);
+        return;
+    }
+
+    // 提取 @ 之后的内容用于判断类型
+    let after_at: String = chars[at_idx + 1..pos.min(chars.len())].iter().collect();
+
+    // 判断是否匹配特定类型的 mention
+    if after_at.starts_with("skill:") {
+        // 激活技能弹窗
+        app.ui.at_popup_active = false;
+        app.ui.file_popup_active = false;
+        app.ui.command_popup_active = false;
+        app.ui.skill_popup_active = true;
+        app.ui.skill_popup_start_pos = at_idx;
+        app.ui.skill_popup_filter = if after_at.len() > 6 {
+            after_at[6..].to_string()
+        } else {
+            String::new()
+        };
+        app.ui.skill_popup_selected = 0;
+    } else if after_at.starts_with("file:") {
+        // 激活文件弹窗
+        app.ui.at_popup_active = false;
+        app.ui.skill_popup_active = false;
+        app.ui.command_popup_active = false;
+        app.ui.file_popup_active = true;
+        app.ui.file_popup_start_pos = at_idx;
+        app.ui.file_popup_filter = if after_at.len() > 5 {
+            after_at[5..].to_string()
+        } else {
+            String::new()
+        };
+        app.ui.file_popup_selected = 0;
+    } else if after_at.starts_with("command:") {
+        // 激活命令弹窗
+        app.ui.at_popup_active = false;
+        app.ui.skill_popup_active = false;
+        app.ui.file_popup_active = false;
+        app.ui.command_popup_active = true;
+        app.ui.command_popup_start_pos = at_idx;
+        app.ui.command_popup_filter = if after_at.len() > 8 {
+            after_at[8..].to_string()
+        } else {
+            String::new()
+        };
+        app.ui.command_popup_selected = 0;
+    } else {
+        // 普通的 @ 弹窗
+        app.ui.skill_popup_active = false;
+        app.ui.file_popup_active = false;
+        app.ui.command_popup_active = false;
+        app.ui.at_popup_active = true;
+        app.ui.at_popup_start_pos = at_idx;
+        app.ui.at_popup_filter = after_at;
+        app.ui.at_popup_selected = 0;
+    }
+}
+
+/// 关闭所有补全弹窗
+fn close_all_popups(app: &mut ChatApp) {
+    app.ui.at_popup_active = false;
+    app.ui.skill_popup_active = false;
+    app.ui.file_popup_active = false;
+    app.ui.command_popup_active = false;
 }
