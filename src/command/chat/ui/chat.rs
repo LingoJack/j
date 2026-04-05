@@ -500,8 +500,16 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
 pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
-    let usable_width = area.width.saturating_sub(2) as usize;
 
+    // 提示符逻辑
+    let (prompt, prompt_style) = if app.state.is_loading {
+        (" ~> ", Style::default().fg(t.input_prompt_loading))
+    } else {
+        (" > ", Style::default().fg(t.input_prompt))
+    };
+    let prompt_width: usize = 3; // " > " 或 " ~> " 都是 3 个显示宽度
+
+    let usable_width = area.width.saturating_sub(2) as usize;
     let chars: Vec<char> = app.ui.input.chars().collect();
 
     // 安全检查：cursor_pos 不能超过字符数
@@ -543,9 +551,15 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         String::new()
     };
 
-    let loading_prefix = if app.state.is_loading { " · " } else { "" };
+    // 占位符逻辑：输入为空时显示
+    let is_empty = chars.is_empty();
+    let placeholder = "输入消息，按 Enter 发送...";
 
-    let full_visible = format!("{}{}{}", before, cursor_ch, after);
+    let full_visible = if is_empty {
+        placeholder.to_string()
+    } else {
+        format!("{}{}{}", before, cursor_ch, after)
+    };
     let inner_height = area.height.saturating_sub(2) as usize;
     let wrapped_lines = wrap_text(&full_visible, usable_width);
 
@@ -606,14 +620,21 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .take(inner_height.max(1))
     {
         let mut spans: Vec<Span> = Vec::new();
-        if _line_idx == 0 && line_scroll == 0 && !loading_prefix.is_empty() {
-            spans.push(Span::styled(
-                loading_prefix,
-                Style::default().fg(t.input_prompt_loading),
-            ));
+
+        // 第一行添加提示符
+        if _line_idx == 0 && line_scroll == 0 {
+            spans.push(Span::styled(prompt, prompt_style));
         }
 
         let line_chars: Vec<char> = wl.chars().collect();
+
+        // 空输入时显示占位符
+        if is_empty && _line_idx == 0 {
+            spans.push(Span::styled(placeholder, Style::default().fg(t.text_dim)));
+            display_lines.push(Line::from(spans));
+            continue;
+        }
+
         let mut seg_start = 0;
         for (ci, &ch) in line_chars.iter().enumerate() {
             let global_idx = scroll_offset_chars + char_offset + ci;
@@ -692,51 +713,37 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         )]));
     }
 
-    let input_widget = Paragraph::new(display_lines).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(if app.state.is_loading {
-                Style::default().fg(t.border_input_loading)
-            } else {
-                Style::default().fg(t.border_input)
-            })
-            .title(Span::styled(" 输入消息 ", Style::default().fg(t.text_dim)))
-            .style(Style::default().bg(t.bg_input)),
-    );
+    let input_widget = Paragraph::new(display_lines).style(Style::default().bg(t.bg_input));
 
     f.render_widget(input_widget, area);
 
-    if !app.state.is_loading {
-        let prompt_w: u16 = 0;
-        let border_left: u16 = 1;
-
-        let cursor_col_in_line = {
-            let mut col = 0usize;
-            let mut char_count = 0usize;
-            let mut skip_chars = 0usize;
-            for wl in wrapped_lines.iter().take(line_scroll) {
-                skip_chars += wl.chars().count();
-            }
-            for wl in wrapped_lines.iter().skip(line_scroll) {
-                let line_len = wl.chars().count();
-                if skip_chars + char_count + line_len > cursor_global_pos {
-                    let pos_in_line = cursor_global_pos - (skip_chars + char_count);
-                    col = wl.chars().take(pos_in_line).map(char_width).sum();
-                    break;
-                }
-                char_count += line_len;
-            }
-            col as u16
-        };
-
-        let cursor_row_in_display = (cursor_line_idx - line_scroll) as u16;
-        let cursor_x = area.x + border_left + prompt_w + cursor_col_in_line;
-        let cursor_y = area.y + 1 + cursor_row_in_display;
-
-        if cursor_x < area.x + area.width && cursor_y < area.y + area.height {
-            f.set_cursor_position((cursor_x, cursor_y));
+    // 光标位置计算（考虑提示符偏移）
+    let cursor_col_in_line = {
+        let mut col = 0usize;
+        let mut char_count = 0usize;
+        let mut skip_chars = 0usize;
+        for wl in wrapped_lines.iter().take(line_scroll) {
+            skip_chars += wl.chars().count();
         }
+        for wl in wrapped_lines.iter().skip(line_scroll) {
+            let line_len = wl.chars().count();
+            if skip_chars + char_count + line_len > cursor_global_pos {
+                let pos_in_line = cursor_global_pos - (skip_chars + char_count);
+                col = wl.chars().take(pos_in_line).map(char_width).sum();
+                break;
+            }
+            char_count += line_len;
+        }
+        col as u16
+    };
+
+    let cursor_row_in_display = (cursor_line_idx - line_scroll) as u16;
+    // 光标 x 位置 = 提示符宽度 + 光标在行中的位置
+    let cursor_x = area.x + prompt_width as u16 + cursor_col_in_line;
+    let cursor_y = area.y + cursor_row_in_display;
+
+    if cursor_x < area.x + area.width && cursor_y < area.y + area.height {
+        f.set_cursor_position((cursor_x, cursor_y));
     }
 }
 
@@ -746,7 +753,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let hints = match app.ui.mode {
         ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求")],
         ChatMode::Chat => vec![
-            ("@", "skill/file/command"),
+            ("@", "引用"),
             ("Ctrl+T", "切换模型"),
             ("Ctrl+L", "归档"),
             ("Ctrl+Y", "复制"),
