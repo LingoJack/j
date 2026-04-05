@@ -444,10 +444,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 input_thread.pause();
                 input_thread.drain();
                 let current_prompt = load_system_prompt().unwrap_or_default();
-                match crate::tui::editor::open_editor_on_terminal(
+                match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
                     &mut terminal,
                     "编辑系统提示词 (System Prompt)",
                     &current_prompt,
+                    &app.ui.theme,
                 ) {
                     Ok(Some(new_text)) => {
                         if save_system_prompt(&new_text) {
@@ -473,10 +474,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 input_thread.pause();
                 input_thread.drain();
                 let current_style = load_style().unwrap_or_default();
-                match crate::tui::editor::open_editor_on_terminal(
+                match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
                     &mut terminal,
                     "编辑回复风格 (Style)",
                     &current_style,
+                    &app.ui.theme,
                 ) {
                     Ok(Some(new_text)) => {
                         if save_style(&new_text) {

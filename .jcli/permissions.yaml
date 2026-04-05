@@ -94,4 +94,8 @@ allow:
 - Bash(find /Users/jacklingo/dev_custom/j/web/src:*)
 - Bash(diskutil list:*)
 - Bash(du -sh:*)
+- Bash(wc -l:*)
+- Bash(rustfmt --check:*)
+- Bash(cat src/tui/editor_markdown.rs:*)
+- Bash(find .jcli:*)
 deny: []

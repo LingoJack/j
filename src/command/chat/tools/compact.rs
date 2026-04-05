@@ -25,9 +25,12 @@ impl Tool for CompactTool {
     }
 
     fn description(&self) -> &str {
-        "Trigger conversation compression to free up context window. \
-         Use this when the conversation is getting long and you want to \
-         summarize and compress the history to continue working efficiently."
+        r#"
+        Trigger conversation compression to free up context window.
+        Use when 
+        - the conversation is getting long and you want to summarize and compress the history to continue working efficiently.
+        - when you try to solve a issue but fail too many time, this tool help you free down your mind and help you solve clearly.
+        "#
     }
 
     fn parameters_schema(&self) -> Value {

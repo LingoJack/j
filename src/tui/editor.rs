@@ -743,6 +743,7 @@ pub fn open_multiline_editor_with_content(
 /// 编辑完毕后直接返回，不做终端状态切换。
 ///
 /// 返回 Some(text) 表示提交，None 表示取消
+#[allow(dead_code)]
 pub fn open_editor_on_terminal(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     title: &str,

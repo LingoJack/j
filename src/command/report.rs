@@ -1,3 +1,4 @@
+use crate::command::chat::theme::{Theme, ThemeName};
 use crate::config::YamlConfig;
 use crate::constants::{
     DEFAULT_CHECK_LINES, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, config_key, rmeta_action,
@@ -172,8 +173,13 @@ fn handle_report_tui(config: &mut YamlConfig) {
     initial_lines.push(date_prefix);
 
     // 打开带初始内容的编辑器（NORMAL 模式）
-    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报", &initial_lines)
-    {
+    // 使用默认主题
+    let theme = Theme::from_name(&ThemeName::default());
+    match crate::tui::editor_markdown::open_markdown_editor_with_content(
+        "编辑日报",
+        &initial_lines,
+        &theme,
+    ) {
         Ok(Some(text)) => {
             // 用户提交了内容
             // 计算原始上下文有多少行（用于替换）
@@ -627,8 +633,12 @@ fn handle_open_report(config: &YamlConfig) {
     let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
 
     // 用 TUI 编辑器打开全文（NORMAL 模式）
-    match crate::tui::editor::open_multiline_editor_with_content("📝 编辑日报文件", &lines)
-    {
+    let theme = Theme::from_name(&ThemeName::default());
+    match crate::tui::editor_markdown::open_markdown_editor_with_content(
+        "编辑日报文件",
+        &lines,
+        &theme,
+    ) {
         Ok(Some(text)) => {
             // 用户提交了内容，整体回写文件
             let mut result = text;
