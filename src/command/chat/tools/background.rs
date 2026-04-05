@@ -17,10 +17,6 @@ pub(super) struct BgTask {
     /// 共享输出缓冲区，reader 线程实时写入，查询时可直接读取中间输出
     pub output_buffer: Arc<Mutex<String>>,
     pub result: Option<String>,
-    #[allow(dead_code)]
-    pub started_at: Instant,
-    #[allow(dead_code)]
-    pub cwd: Option<String>,
 }
 
 /// 后台任务完成通知
@@ -62,7 +58,7 @@ impl BackgroundManager {
     pub fn spawn_command(
         &self,
         command: &str,
-        cwd: Option<String>,
+        _cwd: Option<String>,
         _timeout_secs: u64,
     ) -> (String, Arc<Mutex<String>>) {
         let task_id = self.gen_id();
@@ -74,8 +70,6 @@ impl BackgroundManager {
             status: "running".to_string(),
             output_buffer: Arc::clone(&output_buffer),
             result: None,
-            started_at: Instant::now(),
-            cwd,
         };
 
         {

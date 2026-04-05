@@ -312,7 +312,6 @@ pub fn find_latest_session_id() -> Option<String> {
 }
 
 /// 从 JSONL 文件 replay 出 ChatSession（供 resume 等功能使用）
-#[allow(dead_code)]
 pub fn load_session(session_id: &str) -> ChatSession {
     let path = session_file_path(session_id);
     if !path.exists() {

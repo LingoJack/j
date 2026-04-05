@@ -5,7 +5,7 @@ use super::tool_executor::ToolExecutor;
 use super::types::{
     AskAnswer, AskRequest, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
 };
-use super::ui_state::{ChatMode, ConfigTab, MsgLinesCache, UIState};
+use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
 use crate::command::chat::command;
 use crate::command::chat::constants::{INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
@@ -66,7 +66,6 @@ pub struct ChatApp {
     /// 远程客户端是否已连接
     pub remote_connected: bool,
     /// AgentTool 的 provider 共享引用（每次发送请求前更新）
-    #[allow(dead_code)]
     pub agent_tool_provider: Arc<Mutex<ModelProvider>>,
     /// AgentTool 的 system_prompt 共享引用（每次发送请求前更新）
     #[allow(dead_code)]
@@ -224,7 +223,6 @@ impl ChatApp {
                 pending_style_edit: false,
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
                 expand_tools: false,
-                plan_mode_active: false,
                 config_scroll_offset: 0,
                 config_tab: ConfigTab::Model,
                 session_list: Vec::new(),
@@ -2411,122 +2409,6 @@ impl ChatApp {
     /// 向下滚动消息
     pub fn scroll_down(&mut self) {
         self.ui.scroll_offset = self.ui.scroll_offset.saturating_add(3);
-    }
-
-    /// 预渲染阶段：更新消息行缓存（Step 8）
-    /// 该方法在 render() 之前调用，确保所有 UI 状态已准备好
-    #[allow(dead_code)]
-    pub fn prepare_for_render(&mut self) {
-        // 消息行缓存检查和更新
-        let inner_width = 100_usize; // 占位值，实际在 render 时计算
-        let bubble_max_width = (inner_width * 75 / 100).max(20);
-
-        let msg_count = self.state.session.messages.len();
-        let last_msg_len = self
-            .state
-            .session
-            .messages
-            .last()
-            .map(|m| m.content.len())
-            .unwrap_or(0);
-        let streaming_len = safe_lock(
-            &self.state.streaming_content,
-            "prepare_for_render::streaming_content",
-        )
-        .len();
-        let current_browse_index = if self.ui.mode == ChatMode::Browse {
-            Some(self.ui.browse_msg_index)
-        } else {
-            None
-        };
-        let current_tool_confirm_idx = if self.ui.mode == ChatMode::ToolConfirm {
-            Some(self.tool_executor.pending_tool_idx)
-        } else {
-            None
-        };
-
-        let cache_hit = if let Some(ref cache) = self.ui.msg_lines_cache {
-            cache.msg_count == msg_count
-                && cache.last_msg_len == last_msg_len
-                && cache.streaming_len == streaming_len
-                && cache.is_loading == self.state.is_loading
-                && cache.browse_index == current_browse_index
-                && cache.tool_confirm_idx == current_tool_confirm_idx
-        } else {
-            false
-        };
-
-        if !cache_hit {
-            let old_cache = self.ui.msg_lines_cache.take();
-            let (
-                new_msg_start_lines,
-                new_per_msg,
-                new_streaming_lines,
-                new_stable_lines,
-                new_stable_offset,
-            ) = crate::command::chat::render_cache::build_message_lines_incremental(
-                self,
-                inner_width,
-                bubble_max_width,
-                old_cache.as_ref(),
-            );
-            let total_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>()
-                + new_streaming_lines.len();
-            let history_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum();
-            self.ui.msg_lines_cache = Some(MsgLinesCache {
-                msg_count,
-                last_msg_len,
-                streaming_len,
-                is_loading: self.state.is_loading,
-                bubble_max_width,
-                browse_index: current_browse_index,
-                tool_confirm_idx: current_tool_confirm_idx,
-                total_line_count,
-                history_line_count,
-                msg_start_lines: new_msg_start_lines,
-                per_msg_lines: new_per_msg,
-                streaming_lines: new_streaming_lines,
-                streaming_stable_lines: new_stable_lines,
-                streaming_stable_offset: new_stable_offset,
-                expand_tools: self.ui.expand_tools,
-            });
-        }
-    }
-
-    /// 预渲染阶段：管理滚动状态（Step 8）
-    /// 根据模式和窗口大小，调整滚动偏移以确保内容可见
-    #[allow(dead_code)]
-    pub fn prepare_scroll_state(&mut self, visible_height: u16, max_scroll: u16) {
-        if self.ui.mode != ChatMode::Browse {
-            if self.ui.mode == ChatMode::ToolConfirm {
-                if self.ui.auto_scroll || self.ui.scroll_offset == u16::MAX {
-                    self.ui.scroll_offset = max_scroll;
-                    self.ui.auto_scroll = true;
-                } else if self.ui.scroll_offset > max_scroll {
-                    self.ui.scroll_offset = max_scroll;
-                }
-            } else if self.ui.scroll_offset == u16::MAX || self.ui.scroll_offset > max_scroll {
-                self.ui.scroll_offset = max_scroll;
-                self.ui.auto_scroll = true;
-            }
-        } else if let Some(cache) = self.ui.msg_lines_cache.as_ref()
-            && let Some(msg_start) = cache
-                .msg_start_lines
-                .iter()
-                .find(|(idx, _)| *idx == self.ui.browse_msg_index)
-                .map(|(_, line)| *line as u16)
-        {
-            let msg_line_count = cache
-                .per_msg_lines
-                .get(self.ui.browse_msg_index)
-                .map(|c| c.lines.len())
-                .unwrap_or(1) as u16;
-            let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
-            if self.ui.browse_scroll_offset > msg_max_scroll {
-                self.ui.browse_scroll_offset = msg_max_scroll;
-            }
-            self.ui.scroll_offset = (msg_start + self.ui.browse_scroll_offset).min(max_scroll);
-        }
     }
 
     // ========== 归档相关方法 ==========

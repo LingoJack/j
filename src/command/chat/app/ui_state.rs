@@ -123,9 +123,6 @@ pub struct UIState {
     pub image_cache: Arc<Mutex<ImageCache>>,
     /// 是否展开工具调用详情（Ctrl+O 切换）
     pub expand_tools: bool,
-    /// 是否处于 plan mode（由 ToolRegistry 同步）
-    #[allow(dead_code)]
-    pub plan_mode_active: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
     /// 配置面板当前 Tab

@@ -3,9 +3,9 @@ use ratatui_image::protocol::StatefulProtocol;
 use std::collections::HashMap;
 
 /// 图片渲染状态
-#[allow(dead_code)]
 pub enum ImageState {
     /// 等待加载
+    #[allow(dead_code)]
     Pending,
     /// 加载中
     Loading,

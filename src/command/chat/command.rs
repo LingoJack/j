@@ -37,9 +37,6 @@ pub struct CustomCommand {
     pub body: String,
     /// 来源层级
     pub source: CommandSource,
-    /// 文件路径（用于调试）
-    #[allow(dead_code)]
-    pub file_path: PathBuf,
 }
 
 // ========== 加载与解析 ==========
@@ -73,7 +70,6 @@ fn parse_command_md(path: &Path, source: CommandSource) -> Option<CustomCommand>
         frontmatter,
         body: body.trim().to_string(),
         source,
-        file_path: path.to_path_buf(),
     })
 }
 

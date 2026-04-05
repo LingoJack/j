@@ -87,9 +87,3 @@ pub const CLASSIFY_SIZE_THRESHOLD_BYTES: usize = 1024;
 
 /// 分类文件大小阈值（字符）
 pub const CLASSIFY_SIZE_THRESHOLD_CHARS: usize = 100;
-
-/// 分类毫秒阈值
-pub const CLASSIFY_MS_THRESHOLD: u64 = 1000;
-
-/// 分类秒阈值
-pub const CLASSIFY_SEC_THRESHOLD: u64 = 60000;

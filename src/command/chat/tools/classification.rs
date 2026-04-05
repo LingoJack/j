@@ -1,6 +1,6 @@
 use crate::command::chat::constants::{
-    CLASSIFY_MS_THRESHOLD, CLASSIFY_SEC_THRESHOLD, CLASSIFY_SIZE_THRESHOLD_BYTES,
-    CLASSIFY_SIZE_THRESHOLD_CHARS, CLASSIFY_TITLE_TRUNCATE_LEN, CLASSIFY_TRUNCATE_LEN,
+    CLASSIFY_SIZE_THRESHOLD_BYTES, CLASSIFY_SIZE_THRESHOLD_CHARS, CLASSIFY_TITLE_TRUNCATE_LEN,
+    CLASSIFY_TRUNCATE_LEN,
 };
 use crate::command::chat::theme::Theme;
 use ratatui::style::Color;
@@ -154,12 +154,6 @@ pub fn format_json_value(value: &serde_json::Value) -> String {
             }
         }
     }
-}
-
-/// 获取结果摘要（兼容旧调用）
-#[allow(dead_code)]
-pub fn get_result_summary(content: &str, is_error: bool) -> String {
-    get_result_summary_for_tool(content, is_error, "", None)
 }
 
 /// 获取工具特性化结果摘要
@@ -391,16 +385,4 @@ fn short_path(path: &str, max_len: usize) -> String {
         result = parts.last().unwrap_or(&"").to_string();
     }
     format!("…/{}", result)
-}
-
-/// 格式化执行时间
-#[allow(dead_code)]
-pub fn format_duration(ms: u64) -> String {
-    if ms < CLASSIFY_MS_THRESHOLD {
-        format!("{}ms", ms)
-    } else if ms < CLASSIFY_SEC_THRESHOLD {
-        format!("{:.1}s", ms as f64 / 1000.0)
-    } else {
-        format!("{:.1}m", ms as f64 / 60000.0)
-    }
 }

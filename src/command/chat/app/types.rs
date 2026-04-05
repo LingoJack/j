@@ -18,13 +18,13 @@ pub enum StreamMsg {
 }
 
 /// 工具执行状态
-#[allow(dead_code)]
 pub enum ToolExecStatus {
     /// 等待用户确认
     PendingConfirm,
     /// 执行中
     Executing,
     /// 完成（摘要）
+    #[allow(dead_code)]
     Done(String),
     /// 用户拒绝
     Rejected,

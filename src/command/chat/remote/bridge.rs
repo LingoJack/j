@@ -67,12 +67,6 @@ impl WsBridge {
         self.client_connected.load(Ordering::Relaxed)
     }
 
-    /// 获取 outbound_tx 的克隆（用于订阅）
-    #[allow(dead_code)]
-    pub fn subscribe_outbound(&self) -> broadcast::Receiver<WsOutbound> {
-        self.outbound_tx.subscribe()
-    }
-
     /// 在 runtime 上阻塞执行 future
     pub fn block_on<F: std::future::Future>(&self, future: F) -> F::Output {
         self._runtime.block_on(future)

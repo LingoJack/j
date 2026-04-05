@@ -42,12 +42,6 @@ macro_rules! debug_log {
     }};
 }
 
-/// 打印分隔线
-#[allow(dead_code)]
-pub fn print_line() {
-    println!("- - - - - - - - - - - - - - - - - - - - - - -");
-}
-
 /// 首字母大写
 pub fn capitalize_first_letter(s: &str) -> String {
     let mut chars = s.chars();
