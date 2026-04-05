@@ -577,9 +577,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 占位符逻辑：输入为空时显示，根据加载状态显示不同提示
     let is_empty = chars.is_empty();
     let placeholder = if app.state.is_loading {
-        "补充消息，Enter 发送，或 Esc 终止推理"
+        "补充消息，按 Enter 发送，或 Esc 打断"
     } else {
-        "输入消息，Enter 发送，或 Esc 退出 Sprite"
+        "输入消息，按 Enter 发送，或 Esc 退出"
     };
 
     let full_visible = if is_empty {
