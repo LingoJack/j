@@ -89,7 +89,8 @@
       "Bash(find:*)",
       "Bash(sort -t: -k2 -nr)",
       "Bash(du -sh TOOL_*.md)",
-      "Bash(du -sh TOOL_*.md DOCUMENTATION_MANIFEST.txt、)"
+      "Bash(du -sh TOOL_*.md DOCUMENTATION_MANIFEST.txt、)",
+      "Bash(awk 'NR>=85 {print}')"
     ]
   },
   "language": "zh-CN",
