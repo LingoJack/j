@@ -19,7 +19,7 @@ pub struct ChatState {
     pub loaded_skills: Vec<Skill>,
     /// 已加载的自定义命令
     pub loaded_commands: Vec<CustomCommand>,
-    /// 排队的任务列表（new_task 工具产生，当前任务完成后自动执行）
+    /// 排队的任务列表（processing期间产生，当前任务完成后自动执行）
     pub queued_tasks: Arc<Mutex<Vec<String>>>,
     /// 用户在 agent loop 期间发送的待处理消息队列
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
