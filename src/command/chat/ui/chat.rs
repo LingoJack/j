@@ -574,9 +574,13 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         String::new()
     };
 
-    // 占位符逻辑：输入为空时显示
+    // 占位符逻辑：输入为空时显示，根据加载状态显示不同提示
     let is_empty = chars.is_empty();
-    let placeholder = "输入消息，按 Enter 发送...";
+    let placeholder = if app.state.is_loading {
+        "补充消息，Enter 发送，或 Esc 终止推理"
+    } else {
+        "输入消息，Enter 发送，或 Esc 退出 Sprite"
+    };
 
     let full_visible = if is_empty {
         placeholder.to_string()
@@ -774,13 +778,13 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
     let hints = match app.ui.mode {
-        ChatMode::Chat if app.state.is_loading => vec![("Esc", "取消请求")],
+        ChatMode::Chat if app.state.is_loading => vec![], // 加载中时无提示，placeholder 会显示
         ChatMode::Chat => vec![
             ("@", "引用"),
             ("/", "命令"),
             ("Ctrl+O", "工具详情"),
             ("?/F1", "帮助"),
-            ("Esc", "退出"),
+            // Esc 是基础操作，不显示在 hint bar
         ],
         ChatMode::SelectModel => vec![("↑↓/jk", "移动"), ("Enter", "确认"), ("Esc", "取消")],
         ChatMode::Browse => vec![("↑↓", "选择消息"), ("y/Enter", "复制"), ("Esc", "返回")],
