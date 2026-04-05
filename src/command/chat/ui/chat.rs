@@ -154,7 +154,7 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ),
         Span::styled("  │  ", Style::default().fg(t.title_separator)),
         Span::styled(
-            format!("📬 {}", msg_count),
+            format!("📬 Message: {}", msg_count),
             Style::default().fg(t.title_count),
         ),
         Span::styled(
