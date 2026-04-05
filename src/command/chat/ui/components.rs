@@ -122,7 +122,7 @@ fn render_preview_value(raw: &str) -> String {
 
 // ── 开关行 ───────────────────────────────────────────
 
-/// 开关字段行（stream_mode / auto_restore_session 等）
+/// 开关字段行（auto_restore_session 等）
 pub fn toggle_row<'a>(
     label: &str,
     is_on: bool,

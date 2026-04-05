@@ -1,766 +1,33 @@
-use super::agent::run_agent_loop;
-use super::command::{self, CustomCommand};
-use super::compact::CompactConfig;
-use super::hook::{HookContext, HookEvent, HookManager};
-use super::markdown::image_cache::ImageCache;
-use super::permission::JcliConfig;
-use super::sandbox::Sandbox;
-use super::skill::{self, Skill, skills_dir};
-use super::storage::{
-    AgentConfig, ChatMessage, ChatSession, ModelProvider, SessionEvent, ToolCallItem,
-    append_session_event, delete_session, generate_session_id, list_sessions, load_agent_config,
-    load_session, memory_path, save_agent_config, save_memory, save_soul, save_system_prompt,
-    soul_path, system_prompt_path,
+use super::action::{Action, CursorDirection};
+use super::agent_handle::AgentHandle;
+use super::chat_state::ChatState;
+use super::tool_executor::ToolExecutor;
+use super::types::{
+    AskAnswer, AskRequest, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
 };
-use super::theme::Theme;
-use super::tools::ToolRegistry;
-use super::tools::background::BackgroundManager;
-use crate::command::chat::constants::{
-    INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER, TOOL_OUTPUT_SUMMARY_MAX_LEN,
+use super::ui_state::{ChatMode, ConfigTab, MsgLinesCache, UIState};
+use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
+use crate::command::chat::command;
+use crate::command::chat::constants::{INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::hook::{HookContext, HookEvent, HookManager};
+use crate::command::chat::markdown::image_cache::ImageCache;
+use crate::command::chat::permission::JcliConfig;
+use crate::command::chat::sandbox::Sandbox;
+use crate::command::chat::skill::{self, skills_dir};
+use crate::command::chat::storage::{
+    ChatMessage, ChatSession, ModelProvider, SessionEvent, append_session_event, delete_session,
+    generate_session_id, list_sessions, load_agent_config, load_session, memory_path,
+    save_agent_config, save_memory, save_soul, save_system_prompt, soul_path, system_prompt_path,
 };
+use crate::command::chat::theme::Theme;
+use crate::command::chat::tools::ToolRegistry;
+use crate::command::chat::tools::background::BackgroundManager;
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
-use async_openai::types::chat::ChatCompletionTools;
-use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::sync::{Arc, Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
-
-// ========== 消息类型（跨线程通信）==========
-
-/// 后台线程发送给 TUI 的消息类型
-pub enum StreamMsg {
-    /// 收到一个流式文本块
-    Chunk,
-    /// LLM 请求执行工具（附带完整工具调用列表）
-    ToolCallRequest(Vec<ToolCallItem>),
-    /// 流式响应完成
-    Done,
-    /// 发生错误
-    Error(String),
-    /// 用户主动取消
-    Cancelled,
-}
-
-/// 工具执行状态
-#[allow(dead_code)]
-pub enum ToolExecStatus {
-    /// 等待用户确认
-    PendingConfirm,
-    /// 执行中
-    Executing,
-    /// 完成（摘要）
-    Done(String),
-    /// 用户拒绝
-    Rejected,
-    /// 执行失败
-    Failed(String),
-}
-
-/// 工具调用执行状态（运行时，不序列化）
-pub struct ToolCallStatus {
-    pub tool_call_id: String,
-    pub tool_name: String,
-    pub arguments: String,
-    pub confirm_message: String,
-    pub status: ToolExecStatus,
-}
-
-/// 主线程 → 后台线程的工具结果消息
-pub struct ToolResultMsg {
-    pub tool_call_id: String,
-    pub result: String,
-    #[allow(dead_code)]
-    pub is_error: bool,
-    /// 工具返回的图片数据（用于多模态模型）
-    pub images: Vec<crate::command::chat::tools::ImageData>,
-}
-
-/// Worker 线程完成后写入共享状态，供 UI poll 更新显示
-pub struct CompletedToolResult {
-    pub tool_call_id: String,
-    pub summary: String,
-    pub is_error: bool,
-}
-
-/// ask 工具选项
-#[derive(Clone)]
-pub struct AskOption {
-    pub label: String,
-    pub description: String,
-}
-
-/// ask 工具单个问题
-#[derive(Clone)]
-pub struct AskQuestion {
-    pub question: String,
-    pub header: String,
-    pub options: Vec<AskOption>,
-    pub multi_select: bool,
-}
-
-/// ask 工具单题答案
-#[derive(Clone)]
-pub enum AskAnswer {
-    /// 选中的选项索引（单选/多选）
-    Selected(Vec<usize>),
-    /// 自由输入文本
-    FreeText(String),
-}
-
-/// ask 工具 → 主线程的请求消息
-pub struct AskRequest {
-    pub questions: Vec<AskQuestion>,
-    pub response_tx: mpsc::Sender<String>,
-}
-
-// ========== 前端状态 ==========
-
-/// UI 前端状态：所有与界面展示相关的字段
-pub struct UIState {
-    /// 输入缓冲区
-    pub input: String,
-    /// 光标位置（字符索引）
-    pub cursor_pos: usize,
-    /// 当前模式
-    pub mode: ChatMode,
-    /// 消息列表滚动偏移
-    pub scroll_offset: u16,
-    /// 流式输出时是否自动滚动到底部
-    pub auto_scroll: bool,
-    /// 消息浏览模式中选中的消息索引
-    pub browse_msg_index: usize,
-    /// 浏览模式下当前消息内部的滚动偏移
-    pub browse_scroll_offset: u16,
-    /// 模型选择列表状态
-    pub model_list_state: ListState,
-    /// Toast 通知消息 (内容, 是否错误, 创建时间)
-    pub toast: Option<(String, bool, std::time::Instant)>,
-    /// 消息渲染行缓存
-    pub msg_lines_cache: Option<MsgLinesCache>,
-    /// @mention 范围缓存：(input 内容, 范围列表)，仅 input 变化时重算
-    pub cached_mention_ranges: Option<(String, Vec<(usize, usize)>)>,
-    /// 流式节流：上次实际渲染流式内容时的长度
-    pub last_rendered_streaming_len: usize,
-    /// 流式节流：上次实际渲染流式内容的时间
-    pub last_stream_render_time: std::time::Instant,
-    /// 配置界面：当前选中的 provider 索引
-    pub config_provider_idx: usize,
-    /// 配置界面：当前选中的字段索引
-    pub config_field_idx: usize,
-    /// 配置界面：是否正在编辑某个字段
-    pub config_editing: bool,
-    /// 配置界面：编辑缓冲区
-    pub config_edit_buf: String,
-    /// 配置界面：编辑光标位置
-    pub config_edit_cursor: usize,
-    /// 当前主题
-    pub theme: Theme,
-    /// 归档列表（缓存）
-    pub archives: Vec<super::archive::ChatArchive>,
-    /// 归档列表选中索引
-    pub archive_list_index: usize,
-    /// 归档确认模式的默认名称
-    pub archive_default_name: String,
-    /// 归档确认模式的用户自定义名称
-    pub archive_custom_name: String,
-    /// 归档确认模式是否正在编辑名称
-    pub archive_editing_name: bool,
-    /// 归档确认模式的光标位置
-    pub archive_edit_cursor: usize,
-    /// 还原确认模式：是否需要确认当前会话有消息
-    pub restore_confirm_needed: bool,
-    /// @ 补全弹窗是否激活
-    pub at_popup_active: bool,
-    /// @ 之后的过滤文本
-    pub at_popup_filter: String,
-    /// @ 在 input 中的字符索引
-    pub at_popup_start_pos: usize,
-    /// 弹窗中选中项索引
-    pub at_popup_selected: usize,
-    /// 文件补全弹窗是否激活
-    pub file_popup_active: bool,
-    /// @file: 在 input 中的起始字符索引
-    pub file_popup_start_pos: usize,
-    /// @file: 之后的路径过滤文本
-    pub file_popup_filter: String,
-    /// 文件弹窗中选中项索引
-    pub file_popup_selected: usize,
-    /// 技能补全弹窗是否激活
-    pub skill_popup_active: bool,
-    /// @skill: 在 input 中的起始字符索引
-    pub skill_popup_start_pos: usize,
-    /// @skill: 之后的名称过滤文本
-    pub skill_popup_filter: String,
-    /// 技能弹窗中选中项索引
-    pub skill_popup_selected: usize,
-    /// 命令补全弹窗是否激活
-    pub command_popup_active: bool,
-    /// @command: 在 input 中的起始字符索引
-    pub command_popup_start_pos: usize,
-    /// @command: 之后的名称过滤文本
-    pub command_popup_filter: String,
-    /// 命令弹窗中选中项索引
-    pub command_popup_selected: usize,
-    /// 统一交互区：当前选中项索引（0=continue, 1=allow, 2=refuse, 3=type）
-    pub tool_interact_selected: usize,
-    /// 统一交互区：是否处于输入模式
-    pub tool_interact_typing: bool,
-    /// 统一交互区：输入缓冲
-    pub tool_interact_input: String,
-    /// 统一交互区：输入光标位置
-    pub tool_interact_cursor: usize,
-    /// 是否为 ask 工具的交互模式（区别于普通工具确认）
-    pub tool_ask_mode: bool,
-    /// ask 工具的所有问题
-    pub tool_ask_questions: Vec<AskQuestion>,
-    /// ask 工具当前问题索引
-    pub tool_ask_current_idx: usize,
-    /// ask 工具每题答案
-    pub tool_ask_answers: Vec<AskAnswer>,
-    /// ask 工具当前问题各选项的选中状态（多选用）
-    pub tool_ask_selections: Vec<bool>,
-    /// ask 工具当前问题的选项游标位置
-    pub tool_ask_cursor: usize,
-    /// 配置界面：是否有待处理的 system_prompt 编辑
-    pub pending_system_prompt_edit: bool,
-    /// 配置界面：是否有待处理的 style 编辑
-    pub pending_style_edit: bool,
-    /// 图片缓存（渲染终端图片）
-    pub image_cache: Arc<Mutex<ImageCache>>,
-    /// 是否展开工具调用详情（Ctrl+O 切换）
-    pub expand_tools: bool,
-    /// 是否处于 plan mode（由 ToolRegistry 同步）
-    #[allow(dead_code)]
-    pub plan_mode_active: bool,
-    /// 配置/工具/技能列表界面的垂直滚动偏移
-    pub config_scroll_offset: u16,
-    /// 配置面板当前 Tab
-    pub config_tab: ConfigTab,
-    /// 会话列表（缓存）
-    pub session_list: Vec<super::storage::SessionMeta>,
-    /// 会话列表选中索引
-    pub session_list_index: usize,
-    /// 会话恢复确认模式（当前有消息时需要确认）
-    pub session_restore_confirm: bool,
-}
-
-// ========== 后端状态 ==========
-
-/// Chat 后端数据状态：对话、配置、模型相关
-pub struct ChatState {
-    /// Agent 配置
-    pub agent_config: AgentConfig,
-    /// 当前对话会话
-    pub session: ChatSession,
-    /// 当前正在流式接收的 AI 回复内容（实时更新）
-    pub streaming_content: Arc<Mutex<String>>,
-    /// 是否正在等待 AI 回复
-    pub is_loading: bool,
-    /// 已加载的 skills（用于补全和高亮）
-    pub loaded_skills: Vec<Skill>,
-    /// 已加载的自定义命令
-    pub loaded_commands: Vec<CustomCommand>,
-    /// 排队的任务列表（new_task 工具产生，当前任务完成后自动执行）
-    pub queued_tasks: Arc<Mutex<Vec<String>>>,
-    /// 用户在 agent loop 期间发送的待处理消息队列
-    pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
-}
-
-// ========== 工具执行器 ==========
-
-/// 工具执行器：管理工具调用的状态和执行
-pub struct ToolExecutor {
-    /// 当前活跃的工具调用状态列表
-    pub active_tool_calls: Vec<ToolCallStatus>,
-    /// ToolConfirm 模式中当前待处理工具的索引
-    pub pending_tool_idx: usize,
-    /// 进入 ToolConfirm 模式的时间（用于超时自动执行）
-    pub tool_confirm_entered_at: std::time::Instant,
-    /// 是否有待执行的工具（已设为 Executing 状态但尚未实际调用）
-    pub pending_tool_execution: bool,
-    /// 当前正在后台执行的工具数量
-    pub tools_executing_count: usize,
-    /// 工具执行取消标志
-    pub tool_cancelled: Arc<std::sync::atomic::AtomicBool>,
-    /// Worker 完成后写入的共享结果（UI poll 时 drain）
-    pub completed_results: Arc<Mutex<Vec<CompletedToolResult>>>,
-    /// 工具结果发送通道（Worker/UI → Agent 线程）
-    pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
-}
-
-impl ToolExecutor {
-    pub fn new() -> Self {
-        Self {
-            active_tool_calls: Vec::new(),
-            pending_tool_idx: 0,
-            tool_confirm_entered_at: std::time::Instant::now(),
-            pending_tool_execution: false,
-            tools_executing_count: 0,
-            tool_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            completed_results: Arc::new(Mutex::new(Vec::new())),
-            tool_result_tx: None,
-        }
-    }
-
-    /// 轮询后台工具执行结果，更新 UI 状态。
-    /// Worker 已直接发 ToolResultMsg 给 Agent，这里只更新 active_tool_calls 的显示状态。
-    /// 返回新完成的工具信息 (tool_name, summary, is_error)（供 broadcast_ws 使用）。
-    pub fn poll_results(&mut self) -> Vec<(String, String, bool)> {
-        let done_items: Vec<CompletedToolResult> = {
-            if let Ok(mut results) = self.completed_results.lock() {
-                results.drain(..).collect()
-            } else {
-                return Vec::new();
-            }
-        };
-        if !done_items.is_empty() {
-            write_info_log(
-                "poll_tool_exec_results",
-                &format!(
-                    "收到 {} 个工具结果, tools_executing_count={}",
-                    done_items.len(),
-                    self.tools_executing_count,
-                ),
-            );
-        }
-        let mut completed = Vec::new();
-        for done in done_items {
-            // 查找工具名
-            let tool_name = self
-                .active_tool_calls
-                .iter()
-                .find(|tc| tc.tool_call_id == done.tool_call_id)
-                .map(|tc| tc.tool_name.clone())
-                .unwrap_or_default();
-            // 更新 UI 显示状态
-            if let Some(tc) = self
-                .active_tool_calls
-                .iter_mut()
-                .find(|tc| tc.tool_call_id == done.tool_call_id)
-            {
-                tc.status = if done.is_error {
-                    ToolExecStatus::Failed(done.summary.clone())
-                } else {
-                    ToolExecStatus::Done(done.summary.clone())
-                };
-            }
-            completed.push((tool_name, done.summary, done.is_error));
-            self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
-            if self.tools_executing_count == 0 {
-                // 本批工具全部完成，重置取消标志
-                self.tool_cancelled
-                    .store(false, std::sync::atomic::Ordering::Relaxed);
-            }
-        }
-        completed
-    }
-
-    /// 把所有 Executing 状态的工具放到后台线程执行
-    pub fn execute_batch(&mut self, registry: &Arc<ToolRegistry>) {
-        let tasks: Vec<(String, String, String)> = self
-            .active_tool_calls
-            .iter()
-            .filter(|tc| matches!(tc.status, ToolExecStatus::Executing))
-            .map(|tc| {
-                (
-                    tc.tool_call_id.clone(),
-                    tc.tool_name.clone(),
-                    tc.arguments.clone(),
-                )
-            })
-            .collect();
-
-        if tasks.is_empty() {
-            return;
-        }
-
-        // 新一批工具开始前，清除上一批的取消标志
-        self.tool_cancelled
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-
-        self.tools_executing_count += tasks.len();
-
-        let result_tx = self.tool_result_tx.clone();
-        let completed_results = Arc::clone(&self.completed_results);
-
-        for (tool_call_id, tool_name, arguments) in tasks {
-            let result_tx = result_tx.clone();
-            let completed_results = Arc::clone(&completed_results);
-            let registry = Arc::clone(registry);
-            let cancelled = Arc::clone(&self.tool_cancelled);
-            std::thread::spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    registry.execute(&tool_name, &arguments, &cancelled)
-                }));
-                let (output, is_error, images) = match result {
-                    Ok(exec_result) => {
-                        (exec_result.output, exec_result.is_error, exec_result.images)
-                    }
-                    Err(panic_info) => {
-                        let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                            s.to_string()
-                        } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                            s.clone()
-                        } else {
-                            "unknown panic".to_string()
-                        };
-                        (format!("[Tool panic] {}", msg), true, vec![])
-                    }
-                };
-                // 生成摘要供 UI 显示
-                let summary = if output.len() > TOOL_OUTPUT_SUMMARY_MAX_LEN {
-                    let mut end = TOOL_OUTPUT_SUMMARY_MAX_LEN;
-                    while !output.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    format!("{}...", &output[..end])
-                } else {
-                    output.clone()
-                };
-                // 写入共享状态（供 UI poll）
-                if let Ok(mut results) = completed_results.lock() {
-                    results.push(CompletedToolResult {
-                        tool_call_id: tool_call_id.clone(),
-                        summary,
-                        is_error,
-                    });
-                }
-                // 直接发给 Agent 线程
-                if let Some(ref tx) = result_tx {
-                    write_info_log(
-                        "ToolExecutor",
-                        &format!(
-                            "发送工具结果: tool_call_id={}, is_error={}, images_count={}, output_len={}",
-                            tool_call_id,
-                            is_error,
-                            images.len(),
-                            output.len()
-                        ),
-                    );
-                    let _ = tx.send(ToolResultMsg {
-                        tool_call_id,
-                        result: output,
-                        is_error,
-                        images,
-                    });
-                }
-            });
-        }
-    }
-
-    /// 用户确认执行当前待处理工具 → 返回 Some(ChatMode) 表示需要切换模式
-    pub fn execute_current(&mut self, registry: &Arc<ToolRegistry>) -> Option<ChatMode> {
-        let idx = self.pending_tool_idx;
-        if idx >= self.active_tool_calls.len() {
-            return Some(ChatMode::Chat);
-        }
-
-        write_info_log(
-            "execute_pending_tool",
-            &format!(
-                "确认执行 idx={}, tool={}, tools_executing_count={}",
-                idx, self.active_tool_calls[idx].tool_name, self.tools_executing_count,
-            ),
-        );
-
-        self.active_tool_calls[idx].status = ToolExecStatus::Executing;
-
-        let (tool_name, arguments, tool_call_id) = {
-            let tc = &self.active_tool_calls[idx];
-            (
-                tc.tool_name.clone(),
-                tc.arguments.clone(),
-                tc.tool_call_id.clone(),
-            )
-        };
-
-        self.tools_executing_count += 1;
-
-        // 新工具开始前，清除上一批的取消标志
-        self.tool_cancelled
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-
-        let result_tx = self.tool_result_tx.clone();
-        let completed_results = Arc::clone(&self.completed_results);
-        let registry = Arc::clone(registry);
-        let cancelled = Arc::clone(&self.tool_cancelled);
-        std::thread::spawn(move || {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                registry.execute(&tool_name, &arguments, &cancelled)
-            }));
-            let (output, is_error, images) = match result {
-                Ok(exec_result) => (exec_result.output, exec_result.is_error, exec_result.images),
-                Err(panic_info) => {
-                    let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                        s.to_string()
-                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                        s.clone()
-                    } else {
-                        "unknown panic".to_string()
-                    };
-                    (format!("[Tool panic] {}", msg), true, vec![])
-                }
-            };
-            // 生成摘要供 UI 显示
-            let summary = if output.len() > TOOL_OUTPUT_SUMMARY_MAX_LEN {
-                let mut end = TOOL_OUTPUT_SUMMARY_MAX_LEN;
-                while !output.is_char_boundary(end) {
-                    end -= 1;
-                }
-                format!("{}...", &output[..end])
-            } else {
-                output.clone()
-            };
-            // 写入共享状态（供 UI poll）
-            if let Ok(mut results) = completed_results.lock() {
-                results.push(CompletedToolResult {
-                    tool_call_id: tool_call_id.clone(),
-                    summary,
-                    is_error,
-                });
-            }
-            // 直接发给 Agent 线程
-            if let Some(ref tx) = result_tx {
-                let _ = tx.send(ToolResultMsg {
-                    tool_call_id,
-                    result: output,
-                    is_error,
-                    images,
-                });
-            }
-        });
-
-        self.advance()
-    }
-
-    /// 用户拒绝执行当前待处理工具 → 返回 Some(ChatMode) 表示需要切换模式
-    pub fn reject_current(&mut self, reason: &str) -> Option<ChatMode> {
-        let idx = self.pending_tool_idx;
-        if idx >= self.active_tool_calls.len() {
-            return Some(ChatMode::Chat);
-        }
-
-        let tool_call_id = self.active_tool_calls[idx].tool_call_id.clone();
-        self.active_tool_calls[idx].status = ToolExecStatus::Rejected;
-
-        let reject_msg = if reason.is_empty() {
-            "用户拒绝执行该工具".to_string()
-        } else {
-            format!("用户拒绝执行该工具。用户说: {}", reason)
-        };
-
-        if let Some(ref tx) = self.tool_result_tx {
-            let _ = tx.send(ToolResultMsg {
-                tool_call_id,
-                result: reject_msg,
-                is_error: true,
-                images: vec![],
-            });
-        }
-
-        self.advance()
-    }
-
-    /// 用户选择 "允许并记住" → 返回 Some(ChatMode) 表示需要切换模式
-    pub fn allow_and_execute(
-        &mut self,
-        registry: &Arc<ToolRegistry>,
-        jcli_config: &mut Arc<JcliConfig>,
-    ) -> Option<ChatMode> {
-        let idx = self.pending_tool_idx;
-        if idx >= self.active_tool_calls.len() {
-            return Some(ChatMode::Chat);
-        }
-
-        let tool_name = self.active_tool_calls[idx].tool_name.clone();
-        let arguments = self.active_tool_calls[idx].arguments.clone();
-
-        // 生成 allow 规则并写入 .jcli/permissions.yaml
-        let rule = super::permission::generate_allow_rule(&tool_name, &arguments);
-        let mut jcli = (**jcli_config).clone();
-        jcli.add_allow_rule(&rule);
-        *jcli_config = Arc::new(jcli);
-
-        // 执行工具
-        self.execute_current(registry)
-    }
-
-    /// 是否还有待确认的工具
-    pub fn has_pending_confirm(&self) -> bool {
-        self.active_tool_calls
-            .iter()
-            .any(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
-    }
-
-    /// 推进到下一个待确认工具，或返回 Some(ChatMode::Chat) 退出确认模式
-    pub fn advance(&mut self) -> Option<ChatMode> {
-        let next = self
-            .active_tool_calls
-            .iter()
-            .enumerate()
-            .find(|(_, tc)| matches!(tc.status, ToolExecStatus::PendingConfirm))
-            .map(|(i, _)| i);
-
-        if let Some(next_idx) = next {
-            self.pending_tool_idx = next_idx;
-            self.tool_confirm_entered_at = std::time::Instant::now();
-            write_info_log(
-                "advance_tool_confirm",
-                &format!("推进到 pending_tool_idx={}", next_idx),
-            );
-            None // 继续保持 ToolConfirm 模式
-        } else {
-            write_info_log(
-                "advance_tool_confirm",
-                &format!(
-                    "所有工具已处理, 退出 ToolConfirm, tools_executing_count={}",
-                    self.tools_executing_count,
-                ),
-            );
-            Some(ChatMode::Chat)
-        }
-    }
-
-    /// 只取消工具执行，不终止 agent loop
-    pub fn cancel(&mut self) {
-        self.tool_cancelled
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    /// 重置所有工具状态（新消息发送时调用）
-    pub fn reset(&mut self) {
-        self.active_tool_calls.clear();
-        self.pending_tool_idx = 0;
-        if let Ok(mut results) = self.completed_results.lock() {
-            results.clear();
-        }
-        self.tools_executing_count = 0;
-        self.pending_tool_execution = false;
-        self.tool_cancelled
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-// ========== Agent 生命周期句柄 ==========
-
-/// Agent 生命周期管理：封装 stream channel、取消令牌等
-pub struct AgentHandle {
-    /// 用于接收后台流式回复的 channel
-    pub stream_rx: mpsc::Receiver<StreamMsg>,
-    /// 流式请求取消令牌
-    pub cancel_token: CancellationToken,
-}
-
-impl AgentHandle {
-    /// 启动一个 agent loop，返回 (AgentHandle, tool_result_tx)
-    #[allow(clippy::too_many_arguments)]
-    pub fn spawn(
-        provider: ModelProvider,
-        api_messages: Vec<ChatMessage>,
-        tools: Vec<ChatCompletionTools>,
-        system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send>,
-        use_stream: bool,
-        streaming_content: Arc<Mutex<String>>,
-        max_tool_rounds: usize,
-        pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
-        background_manager: Arc<BackgroundManager>,
-        compact_config: CompactConfig,
-        hook_manager: super::hook::HookManager,
-        todo_manager: Arc<super::tools::todo::TodoManager>,
-        shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
-    ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
-        let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
-        let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
-
-        let cancel_token = CancellationToken::new();
-        let cancel_token_clone = cancel_token.clone();
-
-        std::thread::spawn(move || {
-            // 保留一个 stream_tx 副本，用于 panic 后向主线程发送错误消息
-            let stream_tx_panic = stream_tx.clone();
-
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-                // 在后台线程里执行文件 IO（resolve_system_prompt），避免阻塞主线程
-                let system_prompt = system_prompt_fn();
-
-                let runtime = match tokio::runtime::Runtime::new() {
-                    Ok(rt) => rt,
-                    Err(e) => {
-                        let _ =
-                            stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
-                        return;
-                    }
-                };
-
-                runtime.block_on(run_agent_loop(
-                    provider,
-                    api_messages,
-                    tools,
-                    system_prompt,
-                    use_stream,
-                    streaming_content,
-                    stream_tx,
-                    tool_result_rx,
-                    max_tool_rounds,
-                    cancel_token_clone,
-                    pending_user_messages,
-                    background_manager,
-                    compact_config,
-                    hook_manager,
-                    todo_manager,
-                    shared_messages,
-                ));
-            }));
-
-            if let Err(panic_info) = result {
-                // 尝试提取 panic 信息
-                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                    format!("Agent 线程 panic: {}", s)
-                } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                    format!("Agent 线程 panic: {}", s)
-                } else {
-                    "Agent 线程发生未知 panic".to_string()
-                };
-                crate::util::log::write_error_log("AgentHandle::spawn", &panic_msg);
-                // 通知主线程，避免 loading 状态永久卡住
-                let _ = stream_tx_panic.send(StreamMsg::Error(panic_msg));
-            }
-        });
-
-        // 这里是一个表达式
-        (
-            AgentHandle {
-                stream_rx,
-                cancel_token,
-            },
-            tool_result_tx,
-        )
-    }
-
-    /// 取消当前流式请求
-    pub fn cancel(&self) {
-        self.cancel_token.cancel();
-    }
-
-    /// 非阻塞地获取所有可用的流式消息
-    pub fn poll(&self) -> Vec<StreamMsg> {
-        let mut msgs = Vec::new();
-        loop {
-            match self.stream_rx.try_recv() {
-                Ok(msg) => msgs.push(msg),
-                Err(mpsc::TryRecvError::Empty) => break,
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    // channel 断开，标记为完成
-                    msgs.push(StreamMsg::Done);
-                    break;
-                }
-            }
-        }
-        msgs
-    }
-}
 
 // ========== 主应用结构体 ==========
 
@@ -781,7 +48,7 @@ pub struct ChatApp {
     /// 后台任务管理器
     pub background_manager: Arc<BackgroundManager>,
     /// Todo 管理器
-    pub todo_manager: Arc<super::tools::todo::TodoManager>,
+    pub todo_manager: Arc<crate::command::chat::tools::todo::TodoManager>,
     /// ask 工具响应发送通道
     pub ask_response_tx: Option<mpsc::Sender<String>>,
     /// ask 工具请求接收通道
@@ -795,7 +62,7 @@ pub struct ChatApp {
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
     pub last_persisted_len: usize,
     /// 远程控制 WebSocket 桥接器
-    pub ws_bridge: Option<super::remote::bridge::WsBridge>,
+    pub ws_bridge: Option<crate::command::chat::remote::bridge::WsBridge>,
     /// 远程客户端是否已连接
     pub remote_connected: bool,
     /// AgentTool 的 provider 共享引用（每次发送请求前更新）
@@ -808,407 +75,6 @@ pub struct ChatApp {
     pub shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// UI 侧已读取到的位置（用于增量检测）
     pub shared_messages_read_cursor: usize,
-}
-
-/// 消息渲染行缓存
-pub struct MsgLinesCache {
-    /// 会话消息数量
-    pub msg_count: usize,
-    /// 最后一条消息的内容长度（用于检测流式更新）
-    pub last_msg_len: usize,
-    /// 流式内容长度
-    pub streaming_len: usize,
-    /// 是否正在加载
-    pub is_loading: bool,
-    /// 气泡最大宽度（窗口变化时需要重算）
-    pub bubble_max_width: usize,
-    /// 浏览模式选中索引（None 表示非浏览模式）
-    pub browse_index: Option<usize>,
-    /// 工具确认模式中待处理工具的索引（None 表示非确认模式）
-    pub tool_confirm_idx: Option<usize>,
-    /// 缓存的总行数（历史消息 + 流式内容）
-    pub total_line_count: usize,
-    /// 历史消息的总行数（预计算，避免每帧重复求和）
-    pub history_line_count: usize,
-    /// 每条消息（按 msg_index）的起始行号（用于浏览模式自动滚动）
-    pub msg_start_lines: Vec<(usize, usize)>, // (msg_index, start_line)
-    /// 按消息粒度缓存：每条历史消息的渲染行（key: 消息索引）
-    pub per_msg_lines: Vec<PerMsgCache>,
-    /// 流式内容 + tool confirm + 末尾留白的渲染行（与历史消息分开存储）
-    pub streaming_lines: Vec<Line<'static>>,
-    /// 流式增量渲染缓存：已完成段落的渲染行
-    pub streaming_stable_lines: Arc<Vec<Line<'static>>>,
-    /// 流式增量渲染缓存：已缓存到 streaming_content 的字节偏移
-    pub streaming_stable_offset: usize,
-    /// 工具展开状态（缓存时记录，变化时需重建）
-    pub expand_tools: bool,
-}
-
-/// 单条消息的渲染缓存
-pub struct PerMsgCache {
-    /// 消息内容长度（用于检测变化）
-    pub content_len: usize,
-    /// 渲染好的行
-    pub lines: Vec<Line<'static>>,
-    /// 对应的 msg_start_line（此消息在全局行列表中的起始行号，需在拼装时更新）
-    pub msg_index: usize,
-    /// 渲染时此消息是否被选中（用于浏览模式下检测选中状态变化）
-    pub is_selected: bool,
-}
-
-#[derive(PartialEq)]
-pub enum ChatMode {
-    /// 正常对话模式（焦点在输入框）
-    Chat,
-    /// 模型选择模式
-    SelectModel,
-    /// 消息浏览模式（可选中消息并复制）
-    Browse,
-    /// 帮助
-    Help,
-    /// 配置编辑模式
-    Config,
-    /// 归档确认模式（确认归档名称）
-    ArchiveConfirm,
-    /// 归档列表模式（查看和还原归档）
-    ArchiveList,
-    /// 工具调用确认模式（选项式交互区域）
-    ToolConfirm,
-}
-
-/// 配置面板 Tab 分页枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfigTab {
-    /// 模型配置
-    Model,
-    /// 全局配置
-    Global,
-    /// 工具开关
-    Tools,
-    /// 技能开关
-    Skills,
-    /// Hooks（占位）
-    Hooks,
-    /// 自定义命令（占位）
-    Commands,
-    /// 会话管理
-    Session,
-    /// 归档管理
-    Archive,
-}
-
-impl ConfigTab {
-    /// 返回 Tab 显示标签
-    pub fn label(&self) -> &'static str {
-        match self {
-            ConfigTab::Model => "Model",
-            ConfigTab::Session => "Session",
-            ConfigTab::Global => "Global",
-            ConfigTab::Tools => "Tools",
-            ConfigTab::Skills => "Skills",
-            ConfigTab::Hooks => "Hooks",
-            ConfigTab::Commands => "Commands",
-            ConfigTab::Archive => "归档",
-        }
-    }
-
-    /// 返回 Tab 索引
-    pub fn index(&self) -> usize {
-        match self {
-            ConfigTab::Model => 0,
-            ConfigTab::Session => 1,
-            ConfigTab::Global => 2,
-            ConfigTab::Tools => 3,
-            ConfigTab::Skills => 4,
-            ConfigTab::Hooks => 5,
-            ConfigTab::Commands => 6,
-            ConfigTab::Archive => 7,
-        }
-    }
-
-    /// 从索引创建 Tab
-    pub fn from_index(idx: usize) -> Self {
-        match idx {
-            0 => ConfigTab::Model,
-            1 => ConfigTab::Session,
-            2 => ConfigTab::Global,
-            3 => ConfigTab::Tools,
-            4 => ConfigTab::Skills,
-            5 => ConfigTab::Hooks,
-            6 => ConfigTab::Commands,
-            _ => ConfigTab::Archive,
-        }
-    }
-
-    /// Tab 总数
-    pub const COUNT: usize = 8;
-
-    /// 切换到下一个 Tab
-    pub fn next(&self) -> Self {
-        ConfigTab::from_index((self.index() + 1) % Self::COUNT)
-    }
-
-    /// 切换到上一个 Tab
-    pub fn prev(&self) -> Self {
-        ConfigTab::from_index((self.index() + Self::COUNT - 1) % Self::COUNT)
-    }
-}
-
-/// Redux-like Action 枚举：所有用户输入和系统事件都转化为 Action
-///
-/// 设计原则：
-/// 1. 完备性：覆盖所有操作入口（处理程序、流式事件、UI 状态变化）
-/// 2. 原语性：Actions 是操作的原语，不包含复杂的条件逻辑
-/// 3. 单向流向：KeyEvent/StreamMsg → Action → update() → ChatApp 状态变化 → 渲染
-///
-/// 按分类组织：
-/// - Chat 模式：消息输入、文本编辑、弹窗交互
-/// - 流式生命周期：流式块、工具调用请求、完成/错误/取消
-/// - 工具执行：工具结果回调、工具确认/拒绝、Ask 工具交互
-/// - 导航：模式切换、滚动、列表选择
-/// - 配置：字段编辑、开关切换、保存
-/// - 数据：清空会话、归档操作、主题切换
-/// - UI 管理：Toast 展示、窗口 Tick
-#[allow(dead_code)]
-pub enum Action {
-    // ========== Chat 输入和文本编辑 ==========
-    /// 发送消息（当前输入框内容）
-    SendMessage,
-    /// 在光标位置插入字符
-    InsertChar(char),
-    /// 删除光标前的字符（Backspace）
-    DeleteChar,
-    /// 删除光标后的字符（Delete）
-    DeleteForward,
-    /// 移动光标
-    MoveCursor(CursorDirection),
-    /// 清空输入框
-    ClearInput,
-
-    // ========== 弹窗交互（@ 补全、文件补全、Ask） ==========
-    /// 激活 @ 补全弹窗（在 "@" 之后）
-    AtPopupActivate,
-    /// 关闭 @ 补全弹窗
-    AtPopupClose,
-    /// 更新 @ 补全过滤文本
-    AtPopupFilter(String),
-    /// 在 @ 补全中导航（向上/向下）
-    AtPopupNavigate(CursorDirection),
-    /// 在 @ 补全中确认选择（插入技能名称）
-    AtPopupConfirm,
-
-    /// 激活文件补全弹窗（在 "@file:" 之后）
-    FilePopupActivate,
-    /// 关闭文件补全弹窗
-    FilePopupClose,
-    /// 更新文件补全过滤路径
-    FilePopupFilter(String),
-    /// 在文件补全中导航
-    FilePopupNavigate(CursorDirection),
-    /// 在文件补全中确认（插入文件路径）
-    FilePopupConfirm,
-
-    /// 激活技能补全弹窗（在 "@skill:" 之后）
-    SkillPopupActivate,
-    /// 关闭技能补全弹窗
-    SkillPopupClose,
-    /// 更新技能补全过滤文本
-    SkillPopupFilter(String),
-    /// 在技能补全中导航
-    SkillPopupNavigate(CursorDirection),
-    /// 在技能补全中确认（插入技能名称）
-    SkillPopupConfirm,
-
-    // ========== 流式生命周期（来自后台 Agent） ==========
-    /// 收到一个流式文本块（实时回复）
-    StreamChunk,
-    /// LLM 请求执行工具（包含完整工具调用列表）
-    ToolCallRequest(Vec<ToolCallItem>),
-    /// 流式完成（正常结束）
-    StreamDone,
-    /// 流式错误
-    StreamError(String),
-    /// 流式被用户取消
-    StreamCancelled,
-
-    // ========== 工具执行和确认 ==========
-    /// 执行当前待处理工具（用户确认）
-    ExecutePendingTool,
-    /// 拒绝当前待处理工具（无原因）
-    RejectPendingTool,
-    /// 拒绝当前待处理工具（带拒绝原因）
-    RejectPendingToolWithReason(String),
-    /// 允许并执行当前工具（记住规则到 .jcli/）
-    AllowAndExecutePendingTool,
-
-    // ========== Ask 工具交互 ==========
-    /// Ask 工具问题导航（上一题/下一题）
-    AskNavigate(CursorDirection),
-    /// Ask 工具选项导航（上下移动选项/输入框）
-    AskOptionNavigate(CursorDirection),
-    /// Ask 工具单选确认（选中当前选项）
-    AskSingleSelect,
-    /// Ask 工具多选勾选（切换当前选项的选中状态）
-    AskToggleMultiSelect,
-    /// Ask 工具自由文本输入
-    AskInputChar(char),
-    /// Ask 工具自由文本删除字符
-    AskDeleteChar,
-    /// Ask 工具提交答案（当前问题）
-    AskSubmitAnswer,
-    /// Ask 工具取消（放弃所有问题）
-    AskCancel,
-
-    // ========== 工具交互区（统一交互 UI） ==========
-    /// 工具交互区选项导航（Continue → Allow → Refuse → Type Reason）
-    ToolInteractNavigate(CursorDirection),
-    /// 工具交互区拒绝原因输入
-    ToolInteractInputChar(char),
-    /// 工具交互区拒绝原因删除字符
-    ToolInteractDeleteChar,
-    /// 工具交互区确认当前选项（执行/允许/拒绝）
-    ToolInteractConfirm,
-
-    // ========== 模式切换和导航 ==========
-    /// 进入指定模式
-    EnterMode(ChatMode),
-    /// 返回到 Chat 模式
-    ExitToChat,
-    /// 滚动消息（向上/向下）
-    Scroll(CursorDirection),
-    /// 分页滚动消息（Page Up/Page Down）
-    PageScroll(CursorDirection),
-    /// 消息浏览模式：选择上一条/下一条消息
-    BrowseNavigate(CursorDirection),
-    /// 消息浏览模式：微调滚动（某条消息内的细粒度滚动）
-    BrowseFineScroll(CursorDirection),
-    /// 消息浏览模式：复制选中消息到剪贴板
-    BrowseCopyMessage,
-
-    // ========== 配置编辑 ==========
-    /// 配置界面：选择上一个/下一个字段
-    ConfigNavigate(CursorDirection),
-    /// 配置界面：切换上一个/下一个 provider
-    ConfigSwitchProvider(CursorDirection),
-    /// 配置界面：开始编辑当前字段或触发特殊操作
-    ConfigEnter,
-    /// 配置编辑模式：输入字符
-    ConfigEditChar(char),
-    /// 配置编辑模式：删除字符
-    ConfigEditDelete,
-    /// 配置编辑模式：移动光标
-    ConfigEditMoveCursor(CursorDirection),
-    /// 配置编辑模式：提交编辑
-    ConfigEditSubmit,
-    /// 配置界面：添加新 Provider
-    ConfigAddProvider,
-    /// 配置界面：删除当前 Provider
-    ConfigDeleteProvider,
-    /// 配置界面：设置当前 Provider 为活跃
-    ConfigSetActiveProvider,
-    /// 配置界面：切换 Tab 分页（Left/Right）
-    ConfigSwitchTab(CursorDirection),
-    /// 工具/Skill 开关：导航（统一使用 config_field_idx）
-    ToggleMenuNavigate(CursorDirection),
-    /// 工具/Skill 开关：切换当前项
-    ToggleMenuToggle,
-    /// 工具/Skill 开关：全部启用
-    ToggleMenuEnableAll,
-    /// 工具/Skill 开关：全部禁用
-    ToggleMenuDisableAll,
-
-    // ========== 模型选择 ==========
-    /// 模型选择模式：导航
-    ModelSelectNavigate(CursorDirection),
-    /// 模型选择模式：确认切换
-    ModelSelectConfirm,
-
-    // ========== 归档管理 ==========
-    /// 启动归档确认流程
-    StartArchiveConfirm,
-    /// 归档确认：编辑自定义名称
-    ArchiveConfirmEditName,
-    /// 归档确认：编辑光标移动
-    ArchiveConfirmMoveCursor(CursorDirection),
-    /// 归档确认：编辑字符输入
-    ArchiveConfirmInputChar(char),
-    /// 归档确认：编辑字符删除
-    ArchiveConfirmDeleteChar,
-    /// 归档确认：使用默认名称保存
-    ArchiveWithDefault,
-    /// 归档确认：使用自定义名称保存
-    ArchiveWithCustom,
-    /// 清空当前会话（不归档）
-    ClearSession,
-
-    /// 列出所有会话（远程）
-    ListSessions,
-    /// 切换到指定会话（远程）
-    SwitchSession { session_id: String },
-    /// 新建会话（远程）
-    NewSession,
-
-    /// 加载 session 列表（进入 Session tab 时调用）
-    LoadSessionList,
-    /// Session 列表导航
-    SessionListNavigate(CursorDirection),
-    /// 恢复选中的 session
-    RestoreSession,
-    /// 删除选中的 session
-    DeleteSession,
-    /// 新建空 session（从 session 列表中）
-    NewSessionFromList,
-
-    /// 启动还原流程（加载归档列表）
-    StartArchiveList,
-    /// 归档列表：导航
-    ArchiveListNavigate(CursorDirection),
-    /// 归档列表：还原选中的归档
-    RestoreArchive,
-    /// 归档列表：删除选中的归档
-    DeleteArchive,
-
-    // ========== 模型和主题切换 ==========
-    /// 进入模型选择模式（Ctrl+T）
-    SwitchModel,
-    /// 切换主题
-    SwitchTheme,
-    /// 切换流式 vs 批处理模式
-    ToggleStreamMode,
-
-    // ========== 流式控制 ==========
-    /// 用户取消当前流式请求（Esc）
-    CancelStream,
-    /// 只取消工具执行，不中断 Agent Loop
-    CancelToolsOnly,
-
-    // ========== UI 管理 ==========
-    /// Toast 通知（消息内容, 是否为错误）
-    ShowToast(String, bool),
-    /// 定时器 Tick（检查 Toast 过期）
-    TickToast,
-    /// 保存配置（Esc 离开配置屏）
-    SaveConfig,
-
-    // ========== 快速操作 ==========
-    /// 复制最后一条 AI 回复（Ctrl+Y）
-    CopyLastAiReply,
-    /// 显示帮助（F1 或 "?"）
-    ShowHelp,
-    /// 打开日志窗口（Ctrl+G）
-    OpenLogWindows,
-
-    // ========== 应用控制 ==========
-    /// 正常退出（Ctrl+C）
-    Quit,
-    /// 切换工具详情展开/折叠（Ctrl+O）
-    ToggleExpandTools,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum CursorDirection {
-    Up,
-    Down,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -1260,7 +126,7 @@ impl ChatApp {
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let background_manager = Arc::new(BackgroundManager::new());
-        let task_manager = Arc::new(super::tools::task::TaskManager::new());
+        let task_manager = Arc::new(crate::command::chat::tools::task::TaskManager::new());
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
         let mut tool_registry = ToolRegistry::new(
             loaded_skills.clone(),
@@ -1286,7 +152,7 @@ impl ChatApp {
         let agent_provider: Arc<Mutex<ModelProvider>> = Arc::new(Mutex::new(default_provider));
         let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
-        tool_registry.register(Box::new(super::tools::agent::AgentTool {
+        tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
             system_prompt: Arc::clone(&agent_system_prompt),
@@ -1556,7 +422,9 @@ impl ChatApp {
                     let content =
                         safe_lock(&self.state.streaming_content, "ws_stream_chunk").clone();
                     // 只发最新增量（简单实现：发整段，客户端会替换）
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::StreamChunk { content });
+                    self.broadcast_ws(
+                        crate::command::chat::remote::protocol::WsOutbound::StreamChunk { content },
+                    );
                 }
             }
             Action::ToolCallRequest(_tool_calls) => {
@@ -1568,29 +436,31 @@ impl ChatApp {
                     if let Some(last_msg) = self.state.session.messages.last()
                         && last_msg.role == "assistant"
                     {
-                        self.broadcast_ws(super::remote::protocol::WsOutbound::Message {
-                            role: "assistant".to_string(),
-                            content: last_msg.content.clone(),
-                        });
+                        self.broadcast_ws(
+                            crate::command::chat::remote::protocol::WsOutbound::Message {
+                                role: "assistant".to_string(),
+                                content: last_msg.content.clone(),
+                            },
+                        );
                     }
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                         state: "idle".to_string(),
                     });
                 }
                 self.finish_loading(false, false);
             }
             Action::StreamError(ref e) => {
-                self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
                     message: format!("请求失败: {}", e),
                 });
-                self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                     state: "idle".to_string(),
                 });
                 self.show_toast(format!("请求失败: {}", e), true);
                 self.finish_loading(true, false);
             }
             Action::StreamCancelled => {
-                self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                     state: "idle".to_string(),
                 });
                 self.finish_loading(false, true);
@@ -1802,24 +672,26 @@ impl ChatApp {
             Action::EnterMode(mode) => {
                 // 广播工具确认请求到远程
                 if mode == ChatMode::ToolConfirm && self.ws_bridge.is_some() {
-                    let tools: Vec<super::remote::protocol::ToolConfirmInfo> = self
+                    let tools: Vec<crate::command::chat::remote::protocol::ToolConfirmInfo> = self
                         .tool_executor
                         .active_tool_calls
                         .iter()
                         .filter(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
-                        .map(|tc| super::remote::protocol::ToolConfirmInfo {
-                            id: tc.tool_call_id.clone(),
-                            name: tc.tool_name.clone(),
-                            arguments: tc.arguments.clone(),
-                            confirm_message: tc.confirm_message.clone(),
-                        })
+                        .map(
+                            |tc| crate::command::chat::remote::protocol::ToolConfirmInfo {
+                                id: tc.tool_call_id.clone(),
+                                name: tc.tool_name.clone(),
+                                arguments: tc.arguments.clone(),
+                                confirm_message: tc.confirm_message.clone(),
+                            },
+                        )
                         .collect();
                     if !tools.is_empty() {
                         self.broadcast_ws(
-                            super::remote::protocol::WsOutbound::ToolConfirmRequest { tools },
+                            crate::command::chat::remote::protocol::WsOutbound::ToolConfirmRequest { tools },
                         );
                     }
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                         state: "tool_confirm".to_string(),
                     });
                 }
@@ -1877,7 +749,7 @@ impl ChatApp {
                 }
             },
             Action::BrowseCopyMessage => {
-                use super::render_cache::copy_to_clipboard;
+                use crate::command::chat::render_cache::copy_to_clipboard;
                 if let Some(msg) = self.state.session.messages.get(self.ui.browse_msg_index) {
                     let content = msg.content.clone();
                     let role_label = if msg.role == ROLE_ASSISTANT {
@@ -1942,7 +814,7 @@ impl ChatApp {
                 }
             }
             Action::ConfigEnter => {
-                use super::ui_helpers::{
+                use crate::command::chat::ui_helpers::{
                     config_field_raw_value_global, config_field_raw_value_model,
                 };
                 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
@@ -1979,11 +851,6 @@ impl ChatApp {
                         let idx = self.ui.config_field_idx;
                         if idx < CONFIG_GLOBAL_FIELDS_TAB.len() {
                             let field = CONFIG_GLOBAL_FIELDS_TAB[idx];
-                            if field == "stream_mode" {
-                                self.state.agent_config.stream_mode =
-                                    !self.state.agent_config.stream_mode;
-                                return;
-                            }
                             if field == "auto_restore_session" {
                                 self.state.agent_config.auto_restore_session =
                                     !self.state.agent_config.auto_restore_session;
@@ -2074,7 +941,9 @@ impl ChatApp {
                 }
             },
             Action::ConfigEditSubmit => {
-                use super::ui_helpers::{config_field_set_global, config_field_set_model};
+                use crate::command::chat::ui_helpers::{
+                    config_field_set_global, config_field_set_model,
+                };
                 let val = self.ui.config_edit_buf.clone();
                 match self.ui.config_tab {
                     ConfigTab::Model => {
@@ -2150,7 +1019,7 @@ impl ChatApp {
                 }
                 // 切换到 Archive tab 时自动加载归档列表
                 if self.ui.config_tab == ConfigTab::Archive {
-                    use super::archive::list_archives;
+                    use crate::command::chat::archive::list_archives;
                     self.ui.archives = list_archives();
                     self.ui.archive_list_index = 0;
                     self.ui.restore_confirm_needed = false;
@@ -2343,24 +1212,28 @@ impl ChatApp {
 
             Action::ListSessions => {
                 let sessions = list_sessions();
-                self.broadcast_ws(super::remote::protocol::WsOutbound::SessionList { sessions });
+                self.broadcast_ws(
+                    crate::command::chat::remote::protocol::WsOutbound::SessionList { sessions },
+                );
             }
             Action::SwitchSession { session_id } => {
                 if self.state.is_loading {
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
                         message: "AI 正在回复中，无法切换会话".to_string(),
                     });
                 } else if self.ui.mode == ChatMode::ToolConfirm {
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
                         message: "等待工具确认中，无法切换会话".to_string(),
                     });
                 } else {
                     // 检查目标文件是否存在
-                    let target_path = super::storage::session_file_path(&session_id);
+                    let target_path = crate::command::chat::storage::session_file_path(&session_id);
                     if !target_path.exists() {
-                        self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
-                            message: "会话不存在".to_string(),
-                        });
+                        self.broadcast_ws(
+                            crate::command::chat::remote::protocol::WsOutbound::Error {
+                                message: "会话不存在".to_string(),
+                            },
+                        );
                     } else {
                         // 保存当前会话
                         self.persist_new_messages();
@@ -2374,19 +1247,21 @@ impl ChatApp {
                         // 广播同步 + 切换通知
                         let sync = self.build_sync_outbound();
                         self.broadcast_ws(sync);
-                        self.broadcast_ws(super::remote::protocol::WsOutbound::SessionSwitched {
-                            session_id,
-                        });
+                        self.broadcast_ws(
+                            crate::command::chat::remote::protocol::WsOutbound::SessionSwitched {
+                                session_id,
+                            },
+                        );
                     }
                 }
             }
             Action::NewSession => {
                 if self.state.is_loading {
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
                         message: "AI 正在回复中，无法新建会话".to_string(),
                     });
                 } else if self.ui.mode == ChatMode::ToolConfirm {
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
                         message: "等待工具确认中，无法新建会话".to_string(),
                     });
                 } else {
@@ -2402,9 +1277,11 @@ impl ChatApp {
                     // 广播同步 + 切换通知
                     let sync = self.build_sync_outbound();
                     self.broadcast_ws(sync);
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::SessionSwitched {
-                        session_id: new_id,
-                    });
+                    self.broadcast_ws(
+                        crate::command::chat::remote::protocol::WsOutbound::SessionSwitched {
+                            session_id: new_id,
+                        },
+                    );
                 }
             }
 
@@ -2527,17 +1404,6 @@ impl ChatApp {
             Action::SwitchTheme => {
                 self.switch_theme();
             }
-            Action::ToggleStreamMode => {
-                self.state.agent_config.stream_mode = !self.state.agent_config.stream_mode;
-                let mode_name = if self.state.agent_config.stream_mode {
-                    "流式"
-                } else {
-                    "批处理"
-                };
-                self.show_toast(format!("已切换为{}模式", mode_name), false);
-                let _ = save_agent_config(&self.state.agent_config);
-            }
-
             // ========== 流式控制 ==========
             Action::CancelStream => {
                 self.cancel_stream();
@@ -2560,7 +1426,7 @@ impl ChatApp {
 
             // ========== 快速操作 ==========
             Action::CopyLastAiReply => {
-                use super::render_cache::copy_to_clipboard;
+                use crate::command::chat::render_cache::copy_to_clipboard;
                 if let Some(last_ai) = self
                     .state
                     .session
@@ -2642,15 +1508,15 @@ impl ChatApp {
     }
 
     /// 广播 WebSocket 消息给远程客户端
-    pub fn broadcast_ws(&self, msg: super::remote::protocol::WsOutbound) {
+    pub fn broadcast_ws(&self, msg: crate::command::chat::remote::protocol::WsOutbound) {
         if let Some(ref ws) = self.ws_bridge {
             ws.broadcast(msg);
         }
     }
 
     /// 构建全量同步消息（复用于 Sync / SwitchSession / NewSession）
-    pub fn build_sync_outbound(&self) -> super::remote::protocol::WsOutbound {
-        use super::remote::protocol::{SyncMessage, SyncToolCall, WsOutbound};
+    pub fn build_sync_outbound(&self) -> crate::command::chat::remote::protocol::WsOutbound {
+        use crate::command::chat::remote::protocol::{SyncMessage, SyncToolCall, WsOutbound};
         let messages: Vec<SyncMessage> = self
             .state
             .session
@@ -2903,7 +1769,6 @@ impl ChatApp {
         }
 
         let streaming_content = Arc::clone(&self.state.streaming_content);
-        let use_stream = self.state.agent_config.stream_mode;
         let tools_enabled = self.state.agent_config.tools_enabled;
         let max_tool_rounds = self.state.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
@@ -2925,7 +1790,9 @@ impl ChatApp {
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
         let system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send> = Box::new(move || {
-            use super::storage::{load_memory, load_soul, load_style, load_system_prompt};
+            use crate::command::chat::storage::{
+                load_memory, load_soul, load_style, load_system_prompt,
+            };
             let template = load_system_prompt()?;
             let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
             let commands_summary =
@@ -2970,20 +1837,26 @@ impl ChatApp {
         self.shared_messages_read_cursor = 0;
 
         // 启动 agent handle
-        let (handle, tool_result_tx) = AgentHandle::spawn(
+        let agent_config = AgentLoopConfig {
             provider,
+            max_tool_rounds,
+            compact_config,
+            hook_manager: hook_manager_clone,
+            cancel_token: CancellationToken::new(),
+        };
+        let agent_shared = AgentSharedState {
+            streaming_content,
+            pending_user_messages,
+            background_manager,
+            todo_manager,
+            shared_messages: Arc::clone(&self.shared_agent_messages),
+        };
+        let (handle, tool_result_tx) = AgentHandle::spawn(
+            agent_config,
+            agent_shared,
             api_messages,
             tools,
             system_prompt_fn,
-            use_stream,
-            streaming_content,
-            max_tool_rounds,
-            pending_user_messages,
-            background_manager,
-            compact_config,
-            hook_manager_clone,
-            todo_manager,
-            Arc::clone(&self.shared_agent_messages),
         );
 
         self.agent = Some(handle);
@@ -3026,11 +1899,13 @@ impl ChatApp {
         if self.ui.mode == ChatMode::ToolConfirm {
             let completed = self.tool_executor.poll_results();
             for (name, output, is_error) in completed {
-                self.broadcast_ws(super::remote::protocol::WsOutbound::ToolResult {
-                    name,
-                    output,
-                    is_error,
-                });
+                self.broadcast_ws(
+                    crate::command::chat::remote::protocol::WsOutbound::ToolResult {
+                        name,
+                        output,
+                        is_error,
+                    },
+                );
             }
             // 轮询 ask 请求
             if let Some(ref rx) = self.ask_request_rx
@@ -3049,10 +1924,12 @@ impl ChatApp {
             // 广播工具开始执行到远程客户端
             if self.ws_bridge.is_some() {
                 for tc in &self.tool_executor.active_tool_calls {
-                    self.broadcast_ws(super::remote::protocol::WsOutbound::ToolCall {
-                        name: tc.tool_name.clone(),
-                        arguments: tc.arguments.clone(),
-                    });
+                    self.broadcast_ws(
+                        crate::command::chat::remote::protocol::WsOutbound::ToolCall {
+                            name: tc.tool_name.clone(),
+                            arguments: tc.arguments.clone(),
+                        },
+                    );
                 }
             }
 
@@ -3118,11 +1995,13 @@ impl ChatApp {
         // 轮询后台工具执行结果
         let completed = self.tool_executor.poll_results();
         for (name, output, is_error) in completed {
-            self.broadcast_ws(super::remote::protocol::WsOutbound::ToolResult {
-                name,
-                output,
-                is_error,
-            });
+            self.broadcast_ws(
+                crate::command::chat::remote::protocol::WsOutbound::ToolResult {
+                    name,
+                    output,
+                    is_error,
+                },
+            );
         }
 
         // 轮询 ask 工具请求
@@ -3265,25 +2144,29 @@ impl ChatApp {
     fn init_ask_mode(&mut self, ask_req: AskRequest) {
         // 广播 Ask 请求到远程客户端
         if self.ws_bridge.is_some() {
-            let questions: Vec<super::remote::protocol::AskQuestionInfo> = ask_req
+            let questions: Vec<crate::command::chat::remote::protocol::AskQuestionInfo> = ask_req
                 .questions
                 .iter()
-                .map(|q| super::remote::protocol::AskQuestionInfo {
-                    question: q.question.clone(),
-                    header: q.header.clone(),
-                    options: q
-                        .options
-                        .iter()
-                        .map(|o| super::remote::protocol::AskOptionInfo {
-                            label: o.label.clone(),
-                            description: o.description.clone(),
-                        })
-                        .collect(),
-                    multi_select: q.multi_select,
-                })
+                .map(
+                    |q| crate::command::chat::remote::protocol::AskQuestionInfo {
+                        question: q.question.clone(),
+                        header: q.header.clone(),
+                        options: q
+                            .options
+                            .iter()
+                            .map(|o| crate::command::chat::remote::protocol::AskOptionInfo {
+                                label: o.label.clone(),
+                                description: o.description.clone(),
+                            })
+                            .collect(),
+                        multi_select: q.multi_select,
+                    },
+                )
                 .collect();
-            self.broadcast_ws(super::remote::protocol::WsOutbound::AskRequest { questions });
-            self.broadcast_ws(super::remote::protocol::WsOutbound::Status {
+            self.broadcast_ws(
+                crate::command::chat::remote::protocol::WsOutbound::AskRequest { questions },
+            );
+            self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                 state: "ask".to_string(),
             });
         }
@@ -3581,7 +2464,7 @@ impl ChatApp {
                 new_streaming_lines,
                 new_stable_lines,
                 new_stable_offset,
-            ) = super::render_cache::build_message_lines_incremental(
+            ) = crate::command::chat::render_cache::build_message_lines_incremental(
                 self,
                 inner_width,
                 bubble_max_width,
@@ -3650,7 +2533,7 @@ impl ChatApp {
 
     /// 开始归档确认流程
     pub fn start_archive_confirm(&mut self) {
-        use super::archive::generate_default_archive_name;
+        use crate::command::chat::archive::generate_default_archive_name;
         self.ui.archive_default_name = generate_default_archive_name();
         self.ui.archive_custom_name = String::new();
         self.ui.archive_editing_name = false;
@@ -3660,7 +2543,7 @@ impl ChatApp {
 
     /// 开始还原流程（加载归档列表）
     pub fn start_archive_list(&mut self) {
-        use super::archive::list_archives;
+        use crate::command::chat::archive::list_archives;
         self.ui.archives = list_archives();
         self.ui.archive_list_index = 0;
         self.ui.restore_confirm_needed = false;
@@ -3669,7 +2552,7 @@ impl ChatApp {
 
     /// 执行归档
     pub fn do_archive(&mut self, name: &str) {
-        use super::archive::create_archive;
+        use crate::command::chat::archive::create_archive;
 
         match create_archive(name, self.state.session.messages.clone()) {
             Ok(_) => {
@@ -3685,7 +2568,7 @@ impl ChatApp {
 
     /// 执行还原归档
     pub fn do_restore(&mut self) {
-        use super::archive::restore_archive;
+        use crate::command::chat::archive::restore_archive;
 
         if let Some(archive) = self.ui.archives.get(self.ui.archive_list_index) {
             match restore_archive(&archive.name) {
@@ -3709,13 +2592,13 @@ impl ChatApp {
 
     /// 删除选中的归档
     pub fn do_delete_archive(&mut self) {
-        use super::archive::delete_archive;
+        use crate::command::chat::archive::delete_archive;
 
         if let Some(archive) = self.ui.archives.get(self.ui.archive_list_index) {
             match delete_archive(&archive.name) {
                 Ok(_) => {
                     self.show_toast(format!("归档已删除: {}", archive.name), false);
-                    self.ui.archives = super::archive::list_archives();
+                    self.ui.archives = crate::command::chat::archive::list_archives();
                     if self.ui.archive_list_index >= self.ui.archives.len()
                         && self.ui.archive_list_index > 0
                     {

@@ -1,10 +1,9 @@
+use super::agent_config::{AgentLoopConfig, AgentSharedState};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
-use super::compact::{self, CompactConfig};
+use super::compact;
 use super::hook::{HookContext, HookEvent, HookManager};
-use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
-use super::tools::background::BackgroundManager;
-use super::tools::todo::TodoManager;
+use super::storage::{ChatMessage, ToolCallItem};
 use crate::command::chat::constants::{
     ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER, TODO_NAG_INTERVAL_ROUNDS,
 };
@@ -12,32 +11,57 @@ use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
-use async_openai::types::chat::{ChatCompletionMessageToolCalls, ChatCompletionTools};
+use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
 use std::sync::{Arc, Mutex, mpsc};
-use tokio_util::sync::CancellationToken;
+
+/// process_tool_calls 所需的通道和共享状态
+struct ToolCallContext<'a> {
+    tx: &'a mpsc::Sender<StreamMsg>,
+    tool_result_rx: &'a mpsc::Receiver<ToolResultMsg>,
+    pending_user_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
+    hook_manager: &'a HookManager,
+    supports_vision: bool,
+    shared_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
+    streaming_content: &'a Arc<Mutex<String>>,
+}
 
 /// 后台 Agent 循环：支持多轮工具调用
-#[allow(clippy::too_many_arguments)]
 pub async fn run_agent_loop(
-    provider: ModelProvider,
+    config: AgentLoopConfig,
+    shared: AgentSharedState,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ChatCompletionTools>,
     mut system_prompt: Option<String>,
-    use_stream: bool,
-    streaming_content: Arc<Mutex<String>>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
-    max_tool_rounds: usize,
-    cancel_token: CancellationToken,
-    pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
-    background_manager: Arc<BackgroundManager>,
-    compact_config: CompactConfig,
-    hook_manager: HookManager,
-    todo_manager: Arc<TodoManager>,
-    shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
 ) {
+    let AgentLoopConfig {
+        provider,
+        max_tool_rounds,
+        compact_config,
+        hook_manager,
+        cancel_token,
+    } = config;
+    let AgentSharedState {
+        streaming_content,
+        pending_user_messages,
+        background_manager,
+        todo_manager,
+        shared_messages,
+    } = shared;
+
     let client = create_openai_client(&provider);
+
+    let tool_ctx = ToolCallContext {
+        tx: &tx,
+        tool_result_rx: &tool_result_rx,
+        pending_user_messages: &pending_user_messages,
+        hook_manager: &hook_manager,
+        supports_vision: provider.supports_vision,
+        shared_messages: &shared_messages,
+        streaming_content: &streaming_content,
+    };
 
     for _round in 0..max_tool_rounds {
         // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
@@ -190,11 +214,10 @@ pub async fn run_agent_loop(
             write_info_log(
                 "agent_loop",
                 &format!(
-                    "第 {} 轮请求: messages={}, has_images={}, use_stream={}, supports_vision={}",
+                    "第 {} 轮请求: messages={}, has_images={}, supports_vision={}",
                     _round,
                     messages.len(),
                     has_images,
-                    use_stream,
                     provider.supports_vision
                 ),
             );
@@ -216,8 +239,7 @@ pub async fn run_agent_loop(
             }
         };
 
-        if use_stream {
-            // 流式模式
+        {
             write_info_log("agent_loop", "开始创建流式请求...");
             let mut stream = match client.chat().create_stream(request.clone()).await {
                 Ok(s) => {
@@ -381,13 +403,7 @@ pub async fn run_agent_loop(
                                         tool_items,
                                         assistant_text,
                                         &mut messages,
-                                        &tx,
-                                        &tool_result_rx,
-                                        &pending_user_messages,
-                                        &hook_manager,
-                                        provider.supports_vision,
-                                        &shared_messages,
-                                        &streaming_content,
+                                        &tool_ctx,
                                     ) {
                                         Ok(compact_requested) => {
                                             // ── Layer 3: compact tool 触发 ──
@@ -460,18 +476,7 @@ pub async fn run_agent_loop(
                     break;
                 }
 
-                match process_tool_calls(
-                    tool_items,
-                    assistant_text,
-                    &mut messages,
-                    &tx,
-                    &tool_result_rx,
-                    &pending_user_messages,
-                    &hook_manager,
-                    provider.supports_vision,
-                    &shared_messages,
-                    &streaming_content,
-                ) {
+                match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
                     Ok(compact_requested) => {
                         // ── Layer 3: compact tool 触发 ──
                         if compact_requested && compact_config.enabled {
@@ -489,78 +494,6 @@ pub async fn run_agent_loop(
                 }
                 break;
             }
-        } else {
-            // 非流式模式
-            let chat_client = client.chat();
-            let create_fut = chat_client.create(request);
-            tokio::select! {
-                result = create_fut => match result {
-                Ok(response) => {
-                    if let Some(choice) = response.choices.first() {
-                        let is_tool_calls = matches!(
-                            choice.finish_reason,
-                            Some(async_openai::types::chat::FinishReason::ToolCalls)
-                        );
-
-                        if is_tool_calls
-                            && let Some(ref tc_list) = choice.message.tool_calls {
-                                let tool_items = extract_tool_items(tc_list);
-                                if tool_items.is_empty() {
-                                    break;
-                                }
-                                let assistant_text =
-                                    choice.message.content.clone().unwrap_or_default();
-                                match process_tool_calls(
-                                    tool_items,
-                                    assistant_text,
-                                    &mut messages,
-                                    &tx,
-                                    &tool_result_rx,
-                                    &pending_user_messages,
-                                    &hook_manager,
-                                    provider.supports_vision,
-                                    &shared_messages,
-                                    &streaming_content,
-                                ) {
-                                    Ok(compact_requested) => {
-                                        // ── Layer 3: compact tool 触发 ──
-                                        if compact_requested && compact_config.enabled {
-                                            let _ = compact::auto_compact(&mut messages, &provider).await;
-                                        }
-                                        continue;
-                                    }
-                                    Err(()) => return,
-                                }
-                            }
-
-                        // 正常文本回复
-                        if let Some(ref content) = choice.message.content {
-                            write_info_log("Chat 回复", content);
-                            let mut sc = safe_lock(&streaming_content, "agent::non_stream_content");
-                            sc.push_str(content);
-                            drop(sc);
-                            let _ = tx.send(StreamMsg::Chunk);
-                        }
-                    }
-                }
-                Err(e) => {
-                    let error_msg = format!("API 请求失败: {}", e);
-                    write_error_log("Chat API 非流式请求", &error_msg);
-                    let _ = tx.send(StreamMsg::Error(error_msg));
-                    return;
-                }
-                },
-                _ = cancel_token.cancelled() => {
-                    let _ = tx.send(StreamMsg::Cancelled);
-                    return;
-                }
-            }
-            // 非流式正常结束，但如果有用户增量消息则继续循环
-            if !safe_lock(&pending_user_messages, "agent::pending_check_non_stream").is_empty() {
-                flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
-                continue;
-            }
-            break;
         }
     }
 
@@ -582,24 +515,6 @@ fn drain_pending_user_messages(
         }
         messages.append(&mut *pending);
     }
-}
-
-/// 从非流式响应的 tool_calls 列表中提取 ToolCallItem
-fn extract_tool_items(raw_tool_list: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
-    raw_tool_list
-        .iter()
-        .filter_map(|tc| {
-            if let ChatCompletionMessageToolCalls::Function(function) = tc {
-                Some(ToolCallItem {
-                    id: function.id.clone(),
-                    name: function.function.name.clone(),
-                    arguments: function.function.arguments.clone(),
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 /// 向共享消息列表中追加一条消息（agent 线程写入，UI 线程读取）
@@ -659,18 +574,11 @@ fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg])
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
 /// 返回 Ok(bool) 表示成功（应 continue 循环），bool 为 true 时表示有 compact tool 被调用
 /// Err(()) 表示 channel 断开（应 return）
-#[allow(clippy::too_many_arguments)]
 fn process_tool_calls(
     tool_items: Vec<ToolCallItem>,
     assistant_text: String,
     messages: &mut Vec<ChatMessage>,
-    tx: &mpsc::Sender<StreamMsg>,
-    tool_result_rx: &mpsc::Receiver<ToolResultMsg>,
-    pending_user_messages: &Arc<Mutex<Vec<ChatMessage>>>,
-    hook_manager: &HookManager,
-    supports_vision: bool,
-    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
-    streaming_content: &Arc<Mutex<String>>,
+    ctx: &ToolCallContext<'_>,
 ) -> Result<bool, ()> {
     log_tool_request(&tool_items);
 
@@ -694,9 +602,9 @@ fn process_tool_calls(
             images: None,
         };
         messages.push(text_msg.clone());
-        push_shared(shared_messages, text_msg);
+        push_shared(ctx.shared_messages, text_msg);
         // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
-        if let Ok(mut sc) = streaming_content.lock() {
+        if let Ok(mut sc) = ctx.streaming_content.lock() {
             sc.clear();
         }
     }
@@ -709,9 +617,10 @@ fn process_tool_calls(
         images: None,
     };
     messages.push(tool_call_msg.clone());
-    push_shared(shared_messages, tool_call_msg);
+    push_shared(ctx.shared_messages, tool_call_msg);
 
-    if tx
+    if ctx
+        .tx
         .send(StreamMsg::ToolCallRequest(tool_items.clone()))
         .is_err()
     {
@@ -720,7 +629,7 @@ fn process_tool_calls(
 
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
     for _ in &tool_items {
-        match tool_result_rx.recv() {
+        match ctx.tool_result_rx.recv() {
             Ok(result) => tool_results.push(result),
             Err(_) => return Err(()),
         }
@@ -743,8 +652,8 @@ fn process_tool_calls(
             .map(|t| t.name.clone());
 
         // ★ PostToolExecution hook
-        if hook_manager.has_hooks_for(HookEvent::PostToolExecution) {
-            let ctx = HookContext {
+        if ctx.hook_manager.has_hooks_for(HookEvent::PostToolExecution) {
+            let hook_ctx = HookContext {
                 event: HookEvent::PostToolExecution,
                 tool_name: tool_name.clone(),
                 tool_result: Some(result_content.clone()),
@@ -753,7 +662,9 @@ fn process_tool_calls(
                     .unwrap_or_else(|_| ".".to_string()),
                 ..Default::default()
             };
-            if let Some(hook_result) = hook_manager.execute(HookEvent::PostToolExecution, ctx)
+            if let Some(hook_result) = ctx
+                .hook_manager
+                .execute(HookEvent::PostToolExecution, hook_ctx)
                 && let Some(new_result) = hook_result.tool_result
             {
                 result_content = new_result;
@@ -768,7 +679,7 @@ fn process_tool_calls(
             images: None,
         };
         messages.push(tool_msg.clone());
-        push_shared(shared_messages, tool_msg);
+        push_shared(ctx.shared_messages, tool_msg);
 
         // 如果模型支持视觉且工具返回了图片，先收集，稍后统一注入
         if !result_images.is_empty() {
@@ -778,10 +689,10 @@ fn process_tool_calls(
                 "ImageInjection",
                 &format!(
                     "工具 {} 返回了 {} 张图片, supports_vision={}",
-                    tool_label, img_count, supports_vision
+                    tool_label, img_count, ctx.supports_vision
                 ),
             );
-            if supports_vision {
+            if ctx.supports_vision {
                 let img_msg = ChatMessage {
                     role: ROLE_USER.to_string(),
                     content: format!(
@@ -827,6 +738,6 @@ fn process_tool_calls(
         }
     }
 
-    drain_pending_user_messages(messages, pending_user_messages);
+    drain_pending_user_messages(messages, ctx.pending_user_messages);
     Ok(compact_requested)
 }

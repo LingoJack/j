@@ -41,9 +41,6 @@ pub struct AgentConfig {
     /// 系统提示词（可选）
     #[serde(default)]
     pub system_prompt: Option<String>,
-    /// 是否使用流式输出（默认 true，设为 false 则等回复完整后再显示）
-    #[serde(default = "default_stream_mode")]
-    pub stream_mode: bool,
     /// 发送给 API 的历史消息数量限制（默认 20 条，避免 token 消耗过大）
     #[serde(default = "default_max_history_messages")]
     pub max_history_messages: usize,
@@ -81,11 +78,6 @@ pub struct AgentConfig {
 
 fn default_max_history_messages() -> usize {
     DEFAULT_MAX_HISTORY_MESSAGES
-}
-
-/// 默认流式输出
-fn default_stream_mode() -> bool {
-    true
 }
 
 /// 默认工具调用最大轮数

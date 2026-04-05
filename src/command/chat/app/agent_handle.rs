@@ -1,0 +1,107 @@
+use super::types::{StreamMsg, ToolResultMsg};
+use crate::command::chat::agent::run_agent_loop;
+use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
+use crate::command::chat::storage::ChatMessage;
+use async_openai::types::chat::ChatCompletionTools;
+use std::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+
+// ========== Agent 生命周期句柄 ==========
+
+/// Agent 生命周期管理：封装 stream channel、取消令牌等
+pub struct AgentHandle {
+    /// 用于接收后台流式回复的 channel
+    pub stream_rx: mpsc::Receiver<StreamMsg>,
+    /// 流式请求取消令牌
+    pub cancel_token: CancellationToken,
+}
+
+impl AgentHandle {
+    /// 启动一个 agent loop，返回 (AgentHandle, tool_result_tx)
+    pub fn spawn(
+        config: AgentLoopConfig,
+        shared: AgentSharedState,
+        api_messages: Vec<ChatMessage>,
+        tools: Vec<ChatCompletionTools>,
+        system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send>,
+    ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
+        let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
+        let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
+
+        let cancel_token = config.cancel_token.clone();
+
+        std::thread::spawn(move || {
+            // 保留一个 stream_tx 副本，用于 panic 后向主线程发送错误消息
+            let stream_tx_panic = stream_tx.clone();
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                // 在后台线程里执行文件 IO（resolve_system_prompt），避免阻塞主线程
+                let system_prompt = system_prompt_fn();
+
+                let runtime = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        let _ =
+                            stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
+                        return;
+                    }
+                };
+
+                runtime.block_on(run_agent_loop(
+                    config,
+                    shared,
+                    api_messages,
+                    tools,
+                    system_prompt,
+                    stream_tx,
+                    tool_result_rx,
+                ));
+            }));
+
+            if let Err(panic_info) = result {
+                // 尝试提取 panic 信息
+                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    format!("Agent 线程 panic: {}", s)
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    format!("Agent 线程 panic: {}", s)
+                } else {
+                    "Agent 线程发生未知 panic".to_string()
+                };
+                crate::util::log::write_error_log("AgentHandle::spawn", &panic_msg);
+                // 通知主线程，避免 loading 状态永久卡住
+                let _ = stream_tx_panic.send(StreamMsg::Error(panic_msg));
+            }
+        });
+
+        // 这里是一个表达式
+        (
+            AgentHandle {
+                stream_rx,
+                cancel_token,
+            },
+            tool_result_tx,
+        )
+    }
+
+    /// 取消当前流式请求
+    pub fn cancel(&self) {
+        self.cancel_token.cancel();
+    }
+
+    /// 非阻塞地获取所有可用的流式消息
+    pub fn poll(&self) -> Vec<StreamMsg> {
+        let mut msgs = Vec::new();
+        loop {
+            match self.stream_rx.try_recv() {
+                Ok(msg) => msgs.push(msg),
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    // channel 断开，标记为完成
+                    msgs.push(StreamMsg::Done);
+                    break;
+                }
+            }
+        }
+        msgs
+    }
+}

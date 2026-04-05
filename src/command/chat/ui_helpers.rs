@@ -115,7 +115,6 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
     match *field_name {
         "system_prompt" => "系统提示词",
         "style" => "回复风格",
-        "stream_mode" => "流式输出",
         "max_history_messages" => "历史消息数",
         "theme" => "主题风格",
         "max_tool_rounds" => "工具轮数上限",
@@ -132,13 +131,6 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
     match *field_name {
         "system_prompt" => load_system_prompt().unwrap_or_default(),
         "style" => load_style().unwrap_or_default(),
-        "stream_mode" => {
-            if app.state.agent_config.stream_mode {
-                "开启".into()
-            } else {
-                "关闭".into()
-            }
-        }
         "max_history_messages" => app.state.agent_config.max_history_messages.to_string(),
         "theme" => app.state.agent_config.theme.display_name().to_string(),
         "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
@@ -167,13 +159,6 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
     match *field_name {
         "system_prompt" => load_system_prompt().unwrap_or_default(),
         "style" => load_style().unwrap_or_default(),
-        "stream_mode" => {
-            if app.state.agent_config.stream_mode {
-                "true".into()
-            } else {
-                "false".into()
-            }
-        }
         "theme" => app.state.agent_config.theme.to_str().to_string(),
         "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
         "tool_confirm_timeout" => app.state.agent_config.tool_confirm_timeout.to_string(),
@@ -198,12 +183,6 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
         }
         "style" => {
             save_style(value);
-        }
-        "stream_mode" => {
-            app.state.agent_config.stream_mode = matches!(
-                value.trim().to_lowercase().as_str(),
-                "true" | "1" | "开启" | "on" | "yes"
-            );
         }
         "max_history_messages" => {
             if let Ok(num) = value.trim().parse::<usize>() {

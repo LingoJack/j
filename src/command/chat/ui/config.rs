@@ -332,12 +332,8 @@ fn draw_tab_global_lines<'a>(
             config_field_value_global(app, i)
         };
 
-        let line = if *field == "stream_mode" || *field == "auto_restore_session" {
-            let toggle_on = match *field {
-                "stream_mode" => app.state.agent_config.stream_mode,
-                "auto_restore_session" => app.state.agent_config.auto_restore_session,
-                _ => false,
-            };
+        let line = if *field == "auto_restore_session" {
+            let toggle_on = app.state.agent_config.auto_restore_session;
             toggle_row(label, toggle_on, is_selected, "Enter \u{5207}\u{6362}", t)
         } else if *field == "theme" {
             let theme_name = app.state.agent_config.theme.display_name();

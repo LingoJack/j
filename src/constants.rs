@@ -32,7 +32,6 @@ pub const CONFIG_FIELDS: &[&str] = &["name", "api_base", "api_key", "model", "su
 pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
     "system_prompt",
     "style",
-    "stream_mode",
     "max_history_messages",
     "theme",
     "tools_enabled",
@@ -45,7 +44,6 @@ pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
 pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "system_prompt",
     "style",
-    "stream_mode",
     "max_history_messages",
     "theme",
     "max_tool_rounds",
