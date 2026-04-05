@@ -1481,6 +1481,9 @@ impl ChatApp {
             Action::ToggleExpandTools => {
                 self.ui.expand_tools = !self.ui.expand_tools;
                 self.ui.msg_lines_cache = None;
+                // 展开工具后自动滚动到底部，确保用户能立即看到展开的内容
+                self.ui.auto_scroll = true;
+                self.ui.scroll_offset = u16::MAX;
                 self.show_toast(
                     if self.ui.expand_tools {
                         "展开工具详情"
@@ -1890,6 +1893,9 @@ impl ChatApp {
                 }
                 self.shared_messages_read_cursor = new_count;
                 self.ui.msg_lines_cache = None;
+                // 新消息到达时自动滚动到底部（包括 tool result）
+                self.ui.auto_scroll = true;
+                self.ui.scroll_offset = u16::MAX;
             }
         }
 

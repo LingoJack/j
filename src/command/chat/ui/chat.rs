@@ -30,7 +30,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // 标题栏（顶部分割线 + 内容行 + 底部分割线）
+            Constraint::Length(3), // 标题栏（顶部分割线 + 内容行 + 底部留白）
             Constraint::Min(5),    // 消息区
             Constraint::Length(5), // 输入区
             Constraint::Length(1), // 操作提示栏（始终可见）
@@ -149,7 +149,7 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ),
         Span::styled("  │  ", Style::default().fg(t.title_separator)),
         Span::styled(
-            format!("📬  {} 条消息", msg_count),
+            format!("📬 {}", msg_count),
             Style::default().fg(t.title_count),
         ),
         Span::styled(
@@ -179,16 +179,9 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_title));
     f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
 
-    // 第三行：底部分割线
-    let bottom_separator = Paragraph::new(Line::styled(
-        "─".repeat(area.width as usize),
-        Style::default().fg(t.border_title),
-    ))
-    .style(Style::default().bg(t.bg_title));
-    f.render_widget(
-        bottom_separator,
-        Rect::new(area.x, area.y + 2, area.width, 1),
-    );
+    // 第三行：底部留白（与对话记录保持间距）
+    let empty_line = Paragraph::new(Line::default()).style(Style::default().bg(t.bg_title));
+    f.render_widget(empty_line, Rect::new(area.x, area.y + 2, area.width, 1));
 }
 
 /// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用
@@ -221,11 +214,6 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(t.border_message))
-        .title(Span::styled(
-            " 对话记录 ",
-            Style::default().fg(t.text_dim).add_modifier(Modifier::BOLD),
-        ))
-        .title_alignment(ratatui::layout::Alignment::Left)
         .style(Style::default().bg(t.bg_primary));
 
     // 空消息时显示欢迎界面
@@ -973,15 +961,29 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
         .enumerate()
         .map(|(i, p)| {
             let is_active = i == app.state.agent_config.active_index;
-            let marker = if is_active { " ● " } else { " ○ " };
-            let style = if is_active {
+            let marker = if is_active {
+                format!("{} ", super::components::TOGGLE_ON)
+            } else {
+                format!("{} ", super::components::TOGGLE_OFF)
+            };
+            let is_selected = i == app.ui.model_list_state.selected().unwrap_or(0);
+            let style = if is_selected {
+                Style::default()
+                    .fg(t.text_white)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_active {
                 Style::default()
                     .fg(t.model_sel_active)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(t.model_sel_inactive)
             };
-            let detail = format!("{}{}  ({})", marker, p.name, p.model);
+            let pointer = if is_selected {
+                super::components::POINTER_SELECTED
+            } else {
+                super::components::POINTER_EMPTY
+            };
+            let detail = format!("{}{}{}  ({})", pointer, marker, p.name, p.model);
             ListItem::new(Line::from(Span::styled(detail, style)))
         })
         .collect();
@@ -993,20 +995,15 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
                 .border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(Style::default().fg(t.model_sel_border))
                 .title(Span::styled(
-                    " 🔄 选择模型 ",
+                    " \u{1f504} \u{9009}\u{62e9}\u{6a21}\u{578b} ",
                     Style::default()
-                        .fg(t.model_sel_title)
+                        .fg(t.config_label_selected)
                         .add_modifier(Modifier::BOLD),
                 ))
                 .style(Style::default().bg(t.bg_title)),
         )
-        .highlight_style(
-            Style::default()
-                .bg(t.model_sel_highlight_bg)
-                .fg(t.text_white)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("  ▸ ");
+        .highlight_style(Style::default())
+        .highlight_symbol("");
 
     f.render_stateful_widget(list, area, &mut app.ui.model_list_state);
 }
