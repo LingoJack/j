@@ -1037,6 +1037,7 @@ fn draw_popup_list(
     border_color: ratatui::style::Color,
     bg_color: ratatui::style::Color,
     highlight_bg: ratatui::style::Color,
+    highlight_fg: ratatui::style::Color,
     selected: usize,
 ) {
     if items.is_empty() {
@@ -1077,7 +1078,7 @@ fn draw_popup_list(
         .highlight_style(
             Style::default()
                 .bg(highlight_bg)
-                .fg(ratatui::style::Color::White)
+                .fg(highlight_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -1124,6 +1125,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         t.border_title,
         t.bg_title,
         t.model_sel_highlight_bg,
+        t.model_sel_highlight_fg,
         app.ui.at_popup_selected,
     );
 }
@@ -1168,6 +1170,7 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         t.border_title,
         t.bg_title,
         t.model_sel_highlight_bg,
+        t.model_sel_highlight_fg,
         app.ui.file_popup_selected,
     );
 }
@@ -1209,6 +1212,7 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         t.border_title,
         t.bg_title,
         t.model_sel_highlight_bg,
+        t.model_sel_highlight_fg,
         app.ui.skill_popup_selected,
     );
 }
@@ -1249,6 +1253,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         t.border_title,
         t.bg_title,
         t.model_sel_highlight_bg,
+        t.model_sel_highlight_fg,
         app.ui.command_popup_selected,
     );
 }

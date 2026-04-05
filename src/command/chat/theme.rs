@@ -218,6 +218,8 @@ pub struct Theme {
     pub model_sel_inactive: Color,
     /// 选中高亮背景
     pub model_sel_highlight_bg: Color,
+    /// 选中高亮前景
+    pub model_sel_highlight_fg: Color,
 
     // ===== 配置界面 =====
     /// 配置标题颜色
@@ -409,6 +411,7 @@ impl Theme {
             model_sel_active: Color::LightGreen,
             model_sel_inactive: Color::Reset,
             model_sel_highlight_bg: Color::Reset,
+            model_sel_highlight_fg: Color::Yellow,
             config_title: Color::LightCyan,
             config_section: Color::LightGreen,
             config_pointer: Color::Yellow,
@@ -552,6 +555,7 @@ impl Theme {
             model_sel_active: Color::Rgb(120, 220, 160),
             model_sel_inactive: Color::Rgb(180, 180, 200),
             model_sel_highlight_bg: Color::Rgb(50, 55, 80),
+            model_sel_highlight_fg: Color::Rgb(255, 220, 120),
 
             // 配置界面
             config_title: Color::Rgb(120, 180, 255),
@@ -701,6 +705,7 @@ impl Theme {
             model_sel_active: Color::Rgb(80, 200, 120),
             model_sel_inactive: Color::Rgb(170, 170, 170),
             model_sel_highlight_bg: Color::Rgb(50, 50, 60),
+            model_sel_highlight_fg: Color::Rgb(255, 220, 120),
 
             // 配置界面
             config_title: Color::Rgb(100, 160, 240),
@@ -773,120 +778,121 @@ impl Theme {
             // 全局背景
             bg_primary: Color::Rgb(255, 255, 255),
             bg_title: Color::Rgb(243, 243, 243),
-            bg_input: Color::Rgb(248, 248, 248),
-            bg_panel: Color::Rgb(248, 248, 248),
+            bg_input: Color::Rgb(250, 250, 252),
+            bg_panel: Color::Rgb(248, 248, 250),
 
             // 边框
-            border_title: Color::Rgb(190, 190, 200),
-            border_message: Color::Rgb(210, 210, 220),
-            border_input: Color::Rgb(160, 200, 160),
-            border_input_loading: Color::Rgb(180, 150, 50),
+            border_title: Color::Rgb(200, 200, 210),
+            border_message: Color::Rgb(220, 220, 230),
+            border_input: Color::Rgb(100, 180, 100),
+            border_input_loading: Color::Rgb(200, 160, 60),
             border_config: Color::Rgb(190, 190, 200),
-            separator: Color::Rgb(210, 210, 220),
+            separator: Color::Rgb(220, 220, 230),
 
             // 气泡
-            bubble_ai: Color::Rgb(244, 244, 248),
-            bubble_ai_selected: Color::Rgb(255, 255, 255),
-            bubble_user: Color::Rgb(210, 230, 255),
-            bubble_user_selected: Color::Rgb(255, 255, 255),
+            bubble_ai: Color::Rgb(248, 248, 252),
+            bubble_ai_selected: Color::Rgb(230, 240, 255),
+            bubble_user: Color::Rgb(220, 235, 255),
+            bubble_user_selected: Color::Rgb(200, 225, 255),
 
             // 标签
-            label_ai: Color::Rgb(40, 140, 80),
-            label_user: Color::Rgb(30, 100, 200),
-            label_selected: Color::Rgb(180, 130, 20),
+            label_ai: Color::Rgb(34, 139, 80),
+            label_user: Color::Rgb(25, 100, 210),
+            label_selected: Color::Rgb(180, 120, 20),
 
             // 文字
-            text_normal: Color::Rgb(40, 40, 50),
-            text_bold: Color::Rgb(30, 100, 60),
-            text_dim: Color::Rgb(120, 120, 140),
-            text_very_dim: Color::Rgb(170, 170, 180),
-            text_white: Color::Rgb(40, 40, 50),
-            text_system: Color::Rgb(140, 140, 160),
+            text_normal: Color::Rgb(45, 45, 55),
+            text_bold: Color::Rgb(30, 80, 50),
+            text_dim: Color::Rgb(110, 110, 130),
+            text_very_dim: Color::Rgb(160, 160, 175),
+            text_white: Color::Rgb(45, 45, 55),
+            text_system: Color::Rgb(130, 130, 150),
 
             // 标题栏
-            title_icon: Color::Rgb(40, 100, 200),
-            title_separator: Color::Rgb(200, 200, 210),
-            title_model: Color::Rgb(40, 140, 80),
-            title_count: Color::Rgb(100, 100, 120),
-            title_loading: Color::Rgb(180, 130, 20),
+            title_icon: Color::Rgb(30, 100, 200),
+            title_separator: Color::Rgb(210, 210, 220),
+            title_model: Color::Rgb(34, 139, 80),
+            title_count: Color::Rgb(100, 100, 115),
+            title_loading: Color::Rgb(200, 140, 30),
 
             // 输入区
-            input_prompt: Color::Rgb(40, 140, 80),
-            input_prompt_loading: Color::Rgb(180, 130, 20),
+            input_prompt: Color::Rgb(34, 139, 80),
+            input_prompt_loading: Color::Rgb(200, 140, 30),
             cursor_fg: Color::Rgb(255, 255, 255),
             cursor_bg: Color::Rgb(50, 100, 200),
 
             // 提示栏
             hint_key_fg: Color::Rgb(255, 255, 255),
-            hint_key_bg: Color::Rgb(100, 110, 130),
-            hint_desc: Color::Rgb(120, 120, 140),
-            hint_separator: Color::Rgb(210, 210, 220),
+            hint_key_bg: Color::Rgb(90, 100, 120),
+            hint_desc: Color::Rgb(100, 100, 115),
+            hint_separator: Color::Rgb(200, 200, 210),
 
             // Toast
-            toast_success_border: Color::Rgb(60, 160, 80),
-            toast_success_bg: Color::Rgb(230, 250, 235),
-            toast_success_text: Color::Rgb(30, 100, 50),
-            toast_error_border: Color::Rgb(200, 70, 70),
-            toast_error_bg: Color::Rgb(255, 235, 235),
-            toast_error_text: Color::Rgb(160, 30, 30),
+            toast_success_border: Color::Rgb(50, 160, 75),
+            toast_success_bg: Color::Rgb(235, 255, 240),
+            toast_success_text: Color::Rgb(25, 100, 50),
+            toast_error_border: Color::Rgb(200, 60, 60),
+            toast_error_bg: Color::Rgb(255, 240, 240),
+            toast_error_text: Color::Rgb(160, 25, 25),
 
-            // 工具确认区
-            tool_confirm_border: Color::Rgb(180, 140, 40),
-            tool_confirm_bg: Color::Rgb(255, 250, 235),
-            tool_confirm_title: Color::Rgb(160, 120, 20),
-            tool_confirm_name: Color::Rgb(160, 120, 20),
-            tool_confirm_text: Color::Rgb(40, 40, 50),
-            tool_confirm_label: Color::Rgb(120, 120, 140),
-            tool_confirm_hint: Color::Rgb(80, 80, 100),
+            // 工具确认区 - 重新设计，增加层次感
+            tool_confirm_border: Color::Rgb(210, 160, 50),
+            tool_confirm_bg: Color::Rgb(255, 252, 240),
+            tool_confirm_title: Color::Rgb(180, 100, 20),
+            tool_confirm_name: Color::Rgb(140, 90, 180),
+            tool_confirm_text: Color::Rgb(45, 45, 55),
+            tool_confirm_label: Color::Rgb(100, 100, 120),
+            tool_confirm_hint: Color::Rgb(70, 70, 90),
 
             // 欢迎界面
             welcome_border: Color::Rgb(180, 190, 210),
-            welcome_text: Color::Rgb(60, 80, 130),
-            welcome_hint: Color::Rgb(140, 150, 170),
+            welcome_text: Color::Rgb(55, 80, 140),
+            welcome_hint: Color::Rgb(130, 140, 160),
 
             // 模型选择
-            model_sel_border: Color::Rgb(180, 160, 80),
-            model_sel_title: Color::Rgb(140, 110, 30),
-            model_sel_active: Color::Rgb(40, 140, 80),
-            model_sel_inactive: Color::Rgb(100, 100, 120),
-            model_sel_highlight_bg: Color::Rgb(225, 230, 245),
+            model_sel_border: Color::Rgb(180, 150, 70),
+            model_sel_title: Color::Rgb(140, 100, 30),
+            model_sel_active: Color::Rgb(34, 139, 80),
+            model_sel_inactive: Color::Rgb(100, 100, 115),
+            model_sel_highlight_bg: Color::Rgb(200, 220, 250),
+            model_sel_highlight_fg: Color::Rgb(25, 50, 120),
 
             // 配置界面
-            config_title: Color::Rgb(40, 100, 200),
-            config_section: Color::Rgb(40, 140, 80),
-            config_pointer: Color::Rgb(180, 130, 20),
-            config_label_selected: Color::Rgb(140, 110, 30),
-            config_label: Color::Rgb(120, 120, 140),
-            config_value: Color::Rgb(60, 60, 80),
-            config_edit_bg: Color::Rgb(225, 230, 245),
-            config_tab_active_bg: Color::Rgb(40, 100, 200),
+            config_title: Color::Rgb(30, 100, 200),
+            config_section: Color::Rgb(34, 139, 80),
+            config_pointer: Color::Rgb(200, 140, 30),
+            config_label_selected: Color::Rgb(140, 100, 30),
+            config_label: Color::Rgb(100, 100, 115),
+            config_value: Color::Rgb(60, 60, 75),
+            config_edit_bg: Color::Rgb(235, 240, 250),
+            config_tab_active_bg: Color::Rgb(30, 100, 200),
             config_tab_active_fg: Color::Rgb(255, 255, 255),
-            config_tab_inactive: Color::Rgb(120, 120, 140),
-            config_hint_key: Color::Rgb(140, 110, 30),
-            config_hint_desc: Color::Rgb(120, 120, 140),
-            config_toggle_on: Color::Rgb(40, 140, 80),
-            config_toggle_off: Color::Rgb(200, 80, 80),
-            config_dim: Color::Rgb(170, 170, 180),
-            config_api_key: Color::Rgb(160, 160, 170),
+            config_tab_inactive: Color::Rgb(110, 110, 130),
+            config_hint_key: Color::Rgb(140, 100, 30),
+            config_hint_desc: Color::Rgb(100, 100, 115),
+            config_toggle_on: Color::Rgb(34, 139, 80),
+            config_toggle_off: Color::Rgb(200, 75, 75),
+            config_dim: Color::Rgb(160, 160, 175),
+            config_api_key: Color::Rgb(140, 140, 155),
 
             // Markdown
-            md_h1: Color::Rgb(30, 80, 180),
-            md_h2: Color::Rgb(40, 100, 200),
-            md_h3: Color::Rgb(50, 110, 210),
-            md_h4: Color::Rgb(60, 120, 220),
-            md_heading_sep: Color::Rgb(180, 190, 210),
-            md_inline_code_fg: Color::Rgb(160, 80, 30),
-            md_inline_code_bg: Color::Rgb(240, 235, 225),
-            md_list_bullet: Color::Rgb(30, 100, 200),
+            md_h1: Color::Rgb(25, 80, 180),
+            md_h2: Color::Rgb(35, 100, 200),
+            md_h3: Color::Rgb(45, 115, 210),
+            md_h4: Color::Rgb(55, 125, 220),
+            md_heading_sep: Color::Rgb(180, 185, 200),
+            md_inline_code_fg: Color::Rgb(165, 75, 25),
+            md_inline_code_bg: Color::Rgb(248, 244, 235),
+            md_list_bullet: Color::Rgb(25, 100, 200),
             md_blockquote_bar: Color::Rgb(100, 130, 180),
             md_blockquote_text: Color::Rgb(80, 90, 110),
-            md_rule: Color::Rgb(190, 195, 210),
+            md_rule: Color::Rgb(195, 200, 215),
             md_link: Color::Rgb(0, 102, 204),
 
             // 代码块（VS Code Light+ 风格）
-            code_border: Color::Rgb(190, 195, 210),
-            code_bg: Color::Rgb(245, 245, 248),
-            code_default: Color::Rgb(40, 40, 50),
+            code_border: Color::Rgb(195, 200, 210),
+            code_bg: Color::Rgb(250, 250, 252),
+            code_default: Color::Rgb(45, 45, 55),
             code_keyword: Color::Rgb(175, 0, 219),
             code_string: Color::Rgb(163, 21, 21),
             code_comment: Color::Rgb(0, 128, 0),
@@ -899,19 +905,19 @@ impl Theme {
             code_shell_var: Color::Rgb(0, 112, 193),
 
             // 表格
-            table_border: Color::Rgb(180, 190, 210),
-            table_header: Color::Rgb(30, 80, 180),
-            table_body: Color::Rgb(60, 60, 80),
+            table_border: Color::Rgb(185, 195, 210),
+            table_header: Color::Rgb(25, 80, 180),
+            table_body: Color::Rgb(60, 60, 75),
 
             // 帮助界面
-            help_title: Color::Rgb(40, 100, 200),
-            help_key: Color::Rgb(140, 110, 30),
+            help_title: Color::Rgb(30, 100, 200),
+            help_key: Color::Rgb(140, 100, 30),
             help_desc: Color::Rgb(50, 50, 60),
-            help_path: Color::Rgb(120, 120, 140),
-            help_bg: Color::Rgb(248, 248, 248),
+            help_path: Color::Rgb(110, 110, 130),
+            help_bg: Color::Rgb(248, 248, 250),
             // Diff
-            diff_add: Color::Rgb(30, 150, 30),
-            diff_del: Color::Rgb(200, 50, 50),
+            diff_add: Color::Rgb(25, 150, 35),
+            diff_del: Color::Rgb(200, 45, 45),
             diff_header: Color::Rgb(40, 120, 180),
         }
     }
@@ -999,6 +1005,7 @@ impl Theme {
             model_sel_active: Color::Rgb(163, 190, 140), // nord14
             model_sel_inactive: Color::Rgb(178, 186, 202),
             model_sel_highlight_bg: Color::Rgb(67, 76, 94), // nord2
+            model_sel_highlight_fg: Color::Rgb(216, 222, 233), // nord4
 
             // 配置界面
             config_title: Color::Rgb(129, 161, 193), // nord9
@@ -1148,6 +1155,7 @@ impl Theme {
             model_sel_active: Color::Rgb(166, 226, 46),
             model_sel_inactive: Color::Rgb(190, 190, 180),
             model_sel_highlight_bg: Color::Rgb(60, 62, 54),
+            model_sel_highlight_fg: Color::Rgb(235, 219, 178), // fg
 
             // 配置界面
             config_title: Color::Rgb(102, 217, 239),
