@@ -1,135 +1,193 @@
-# / 斜杠命令弹窗系统设计
+# Plan: Typora 风格实时 Markdown 编辑器 + Editor 组件拆分调研
 
-## 目标
+## 调研结论
 
-实现类似 `@` 弹窗的 `/` 斜杠命令系统，用于替代部分快捷键，减少 hint bar 的干扰。
+---
 
-## 核心需求
+### 一、当前 Editor 组件使用情况分析
 
-1. **触发条件**：只有在输入框为空时，输入 `/` 才能唤起弹窗
-2. **交互方式**：与 `@` 弹窗一致（Up/Down 导航，Tab/Enter 确认，Esc 关闭）
-3. **支持的命令**：
-   - `/copy` - 复制最后一条 AI 回复
-   - `/log` - 打开日志窗口
-   - `/browse` - 进入消息浏览模式
-   - `/config` - 打开配置界面
-   - `/model` - 切换模型
-4. **执行后行为**：清除输入框，执行对应操作
+#### 1. 调用点统计
 
-## 实现步骤
+| 调用位置 | 函数 | 用途 | 内容类型 |
+|---------|------|------|----------|
+| `src/command/chat/handler/tui_loop.rs:447` | `open_editor_on_terminal` | 编辑 System Prompt | Markdown 文本 |
+| `src/command/chat/handler/tui_loop.rs:476` | `open_editor_on_terminal` | 编辑 Style | 纯文本 |
+| `src/command/report.rs:175` | `open_multiline_editor_with_content` | 编辑日报 | Markdown 文本 |
+| `src/command/report.rs:630` | `open_multiline_editor_with_content` | 编辑日报文件 | Markdown 文本 |
+| `src/command/script.rs:44` | `open_multiline_editor_with_content` | 创建脚本 | Shell 脚本 |
+| `src/command/script.rs:81` | `open_multiline_editor_with_content` | 编辑脚本 | Shell 脚本 |
 
-### Step 1: UIState 添加 slash 弹窗状态字段
+#### 2. 分析结论
 
-**文件**: `src/command/chat/app/ui_state.rs`
+当前所有场景共用同一套编辑器实现，**暂不需要拆分**。
 
-添加字段：
-```rust
-/// / 斜杠命令弹窗是否激活
-pub slash_popup_active: bool,
-/// / 之后的过滤文本
-pub slash_popup_filter: String,
-/// / 在 input 中的字符索引（始终为 0）
-pub slash_popup_start_pos: usize,
-/// 弹窗中选中项索引
-pub slash_popup_selected: usize,
+---
+
+### 二、已有 Markdown 渲染能力
+
+```
+src/command/chat/markdown/
+├── parser.rs        # Markdown → Ratatui Line 渲染（核心）
+├── highlight.rs     # 代码语法高亮
+├── image_cache.rs   # 图片缓存
+└── image_loader.rs  # 图片加载
 ```
 
-### Step 2: autocomplete.rs 添加 slash 命令数据结构
+**已支持**：标题、加粗、斜体、删除线、链接、代码块、列表、表格、引用块等。
 
-**文件**: `src/command/chat/autocomplete.rs`
+---
 
-1. 定义 `SlashCommand` 枚举：
+### 三、选定方案：行级渲染切换（接近 Typora）
+
+#### 效果示意
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ◆ 标题一                    ← 渲染显示（蓝色加粗 + 下划线）   │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━ ← 分隔线                        │
+│  |**粗体** 文字              ← 当前编辑行（显示源码 + 光标）   │
+│  • 列表项                    ← 渲染显示                       │
+│  • 另一个列表                ← 渲染显示                       │
+│  ┌─ code ──────────────────┐ ← 代码块渲染                    │
+│  │ fn main() {             │                                 │
+│  │     println!("Hello");  │                                 │
+│  └─────────────────────────┘                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 核心原理
+
+1. **当前编辑行**：显示原始 Markdown 源码，可编辑
+2. **非编辑行**：显示渲染后的效果
+3. **行切换**：光标移动时动态切换行的显示模式
+
+---
+
+### 四、技术实现方案
+
+#### 1. 核心数据结构
+
 ```rust
-#[derive(Clone, Debug)]
-pub enum SlashCommand {
-    Copy,    // 复制最后一条 AI 回复
-    Log,     // 打开日志窗口
-    Browse,  // 浏览消息
-    Config,  // 打开配置
-    Model,   // 切换模型
+struct MarkdownEditor<'a> {
+    // 源码存储
+    lines: Vec<String>,
+    // 光标位置
+    cursor_line: usize,
+    cursor_col: usize,
+    // 滚动偏移
+    scroll_offset: usize,
+    // 渲染缓存（行号 -> 渲染结果）
+    rendered_cache: HashMap<usize, Vec<Line<'a>>>,
+    // 主题
+    theme: Theme,
+    // 编辑模式
+    mode: EditMode, // Normal, Insert, Visual, Command
 }
 ```
 
-2. 实现方法：
-   - `display_label(&self) -> String`: 显示标签
-   - `description(&self) -> String`: 命令描述
-   - `get_filtered_slash_commands(filter: &str) -> Vec<SlashCommand>`: 根据过滤文本返回匹配命令
+#### 2. 渲染流程
 
-### Step 3: handler/chat.rs 添加 / 触发和弹窗处理逻辑
-
-**文件**: `src/command/chat/handler/chat.rs`
-
-1. 在 `handle_chat_mode` 函数开头添加 slash 弹窗拦截逻辑（类似 at_popup 拦截）
-2. 处理 Up/Down/Tab/Enter/Esc/Backspace 按键
-3. 在 `KeyCode::Char('/')` 处理中，检测输入框是否为空，若是则激活 slash 弹窗
-4. 实现 `execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand)` 函数执行命令
-
-### Step 4: ui/chat.rs 添加 slash 弹窗绘制
-
-**文件**: `src/command/chat/ui/chat.rs`
-
-1. 在 `draw_chat_ui` 中添加 `draw_slash_popup` 调用
-2. 实现 `draw_slash_popup` 函数（复用 `draw_popup_list` 通用函数）
-
-### Step 5: 简化 hint bar 中的快捷键提示
-
-**文件**: `src/command/chat/ui/chat.rs`
-
-修改 `draw_hint_bar` 函数中 `ChatMode::Chat` 的 hints：
-- 移除 `Ctrl+Y`, `Ctrl+G`, `Ctrl+B`, `Ctrl+E`, `Ctrl+T` 的提示
-- 添加 `/` 命令提示
-
-### Step 6: 在 ChatApp::new 中初始化新字段
-
-**文件**: `src/command/chat/app/chat_app.rs`
-
-在 `UIState` 初始化中添加：
-```rust
-slash_popup_active: false,
-slash_popup_filter: String::new(),
-slash_popup_start_pos: 0,
-slash_popup_selected: 0,
+```
+每一帧渲染:
+1. 遍历可见行（viewport 范围）
+2. 判断每行是否为当前编辑行
+   - 是：显示源码 + 光标
+   - 否：调用 markdown_to_lines() 渲染
+3. 处理滚动同步
 ```
 
-## 文件修改清单
+#### 3. 关键难点与解决方案
 
-| 文件 | 修改内容 |
+| 难点 | 解决方案 |
 |------|----------|
-| `src/command/chat/app/ui_state.rs` | 添加 slash 弹窗状态字段 |
-| `src/command/chat/autocomplete.rs` | 添加 SlashCommand 枚举和过滤函数 |
-| `src/command/chat/handler/chat.rs` | 添加 / 触发和弹窗处理逻辑 |
-| `src/command/chat/ui/chat.rs` | 添加弹窗绘制，简化 hint bar |
-| `src/command/chat/app/chat_app.rs` | 初始化新字段 |
+| 渲染行数 != 源码行数 | 维护 `源码行号 -> 渲染行号` 映射表 |
+| 代码块渲染为多行 | 代码块作为一个整体单元处理 |
+| 光标位置计算 | 编辑行使用源码位置，非编辑行跳转到对应源码行 |
+| 性能优化 | 只渲染可见区域 + 缓存 |
 
-## 命令映射表
+#### 4. 行类型定义
 
-| 命令 | 对应 Action | 描述 |
-|------|-------------|------|
-| `/copy` | `Action::CopyLastAiReply` | 复制最后一条 AI 回复 |
-| `/log` | `Action::OpenLogWindows` | 打开日志窗口 |
-| `/browse` | `Action::EnterMode(ChatMode::Browse)` | 进入消息浏览模式 |
-| `/config` | `Action::EnterMode(ChatMode::Config)` | 打开配置界面 |
-| `/model` | `Action::EnterMode(ChatMode::SelectModel)` | 切换模型 |
-
-## 交互流程
-
-```
-用户输入 / (输入框为空)
-    ↓
-激活 slash_popup，显示命令列表
-    ↓
-用户输入过滤文本（如 "co"）
-    ↓
-列表过滤为 /copy, /config
-    ↓
-用户按 Tab/Enter
-    ↓
-执行选中命令，关闭弹窗，清空输入框
+```rust
+enum LineType {
+    // 普通行：一行源码 = 一行渲染
+    Normal,
+    // 标题：渲染后可能有前缀和分隔线
+    Heading { level: u8 },
+    // 代码块：多行源码 = 多行渲染
+    CodeBlock { 
+        start_line: usize, 
+        end_line: usize,
+        lang: String,
+    },
+    // 列表项：可能有嵌套
+    ListItem { depth: usize },
+    // 表格：多行源码 = 多行渲染
+    Table { start_line: usize, end_line: usize },
+}
 ```
 
-## 注意事项
+---
 
-1. **触发条件严格**：只有输入框完全为空时，输入 `/` 才触发弹窗
-2. **与其他弹窗互斥**：激活 slash 弹窗时，关闭其他弹窗
-3. **Esc 关闭**：按 Esc 关闭弹窗，保留 `/` 字符在输入框中
-4. **Backspace 处理**：当 filter 为空时按 Backspace，关闭弹窗并删除 `/` 字符
+### 五、实现步骤
+
+#### Phase 1：基础框架（2 天）
+
+- [ ] 创建 `src/tui/editor_markdown.rs`
+- [ ] 实现基础编辑功能（插入、删除、换行）
+- [ ] 实现行级渲染切换（简单文本）
+- [ ] 集成 `markdown_to_lines()`
+
+#### Phase 2：复杂块处理（2 天）
+
+- [ ] 代码块的多行渲染处理
+- [ ] 表格的多行渲染处理
+- [ ] 光标在块内移动的逻辑
+
+#### Phase 3：Vim 模式 + 搜索（2 天）
+
+- [ ] 移植现有 Vim 模式逻辑
+- [ ] 搜索时显示源码（搜索结果高亮）
+- [ ] 撤销/重做
+
+#### Phase 4：细节优化（1 天）
+
+- [ ] 性能优化：渲染缓存
+- [ ] 状态栏：行号、列号、修改标记
+- [ ] 快捷键帮助
+
+---
+
+### 六、文件结构
+
+```
+src/tui/
+├── editor.rs              # 通用编辑器（保持现有，用于脚本）
+├── editor_markdown.rs     # Markdown 编辑器（新增）
+│   ├── MarkdownEditor
+│   ├── LineType
+│   └── RenderCache
+└── mod.rs
+
+src/command/chat/markdown/
+├── parser.rs              # 复用现有渲染逻辑
+└── ...
+```
+
+---
+
+### 七、调用点修改
+
+| 文件 | 函数 | 修改 |
+|------|------|------|
+| `tui_loop.rs` | System Prompt 编辑 | 使用 `MarkdownEditor` |
+| `tui_loop.rs` | Style 编辑 | 保持通用编辑器 |
+| `report.rs` | 日报编辑 | 使用 `MarkdownEditor` |
+| `script.rs` | 脚本编辑 | 保持通用编辑器 |
+
+---
+
+## 决策点确认
+
+1. **方案选择**：行级渲染切换 ✓
+2. **Vim 模式**：保留现有功能 ✓
+3. **代码块处理**：作为整体单元渲染 ✓

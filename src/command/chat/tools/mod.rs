@@ -198,7 +198,34 @@ impl ToolRegistry {
                             v.get("path")
                                 .or_else(|| v.get("file_path"))
                                 .and_then(|p| p.as_str())
-                                .map(|p| p == plan_path)
+                                .map(|p| {
+                                    // 规范化路径比较：支持相对路径和绝对路径
+                                    let input_path = std::path::Path::new(p);
+                                    let plan_path_buf = std::path::Path::new(&plan_path);
+
+                                    // 直接比较
+                                    if p == plan_path {
+                                        return true;
+                                    }
+
+                                    // 尝试将相对路径转为绝对路径后比较
+                                    if input_path.is_relative() {
+                                        if let Ok(cwd) = std::env::current_dir() {
+                                            let absolute_path = cwd.join(input_path);
+                                            if let Ok(canonical_input) =
+                                                absolute_path.canonicalize()
+                                            {
+                                                if let Ok(canonical_plan) =
+                                                    plan_path_buf.canonicalize()
+                                                {
+                                                    return canonical_input == canonical_plan;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    false
+                                })
                         })
                         .unwrap_or(false)
                 } else {
