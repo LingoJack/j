@@ -17,7 +17,7 @@ export function Nav({ lang, t, onLangChange }: NavProps) {
       <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
         <a href="#" className="flex items-center gap-2">
           <span className="text-2xl font-bold text-stone-900">j</span>
-          <span className="text-stone-400 text-sm hidden sm:inline">CLI tool</span>
+          <span className="text-stone-400 text-sm hidden sm:inline">Productivity CLI</span>
         </a>
         
         {/* Desktop Navigation */}

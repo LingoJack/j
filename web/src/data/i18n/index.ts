@@ -181,7 +181,7 @@ export const i18n: Record<Language, I18nData> = {
           title: '别名管理',
           tips: [
             { title: '设置常用别名', desc: '将常用的应用、目录、网址设置为别名，快速访问。', example: 'j set code /Users/you/projects' },
-            { title: '分类标记', desc: '用 note 命令标记别名类型（browser/editor/vpn/script/outer_url）。', example: 'j note chrome browser' },
+            { title: '分类标记', desc: '用 note 命令标记别名类型，便于分类查找。', example: 'j note chrome browser' },
             { title: '快速查找', desc: '在指定分类中查找别名，支持多个分类逗号分隔。', example: 'j find chrome browser,vpn' },
             { title: '重命名别名', desc: '重命名已有别名，保持路径不变。', example: 'j rn chrome browser' }
           ]

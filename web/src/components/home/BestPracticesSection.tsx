@@ -26,7 +26,7 @@ export function BestPracticesSection({ lang, t }: BestPracticesSectionProps) {
             <h3 className="text-lg font-medium text-stone-900 mb-4 pb-2 border-b border-stone-200">
               {category.title}
             </h3>
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-2 gap-1">
               {category.tips.map((tip, tipIdx) => (
                 <TipCard key={tipIdx} {...tip} />
               ))}
