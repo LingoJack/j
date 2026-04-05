@@ -130,10 +130,9 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Enter => {
             let cursor = app.ui.tool_ask_cursor;
             if cursor == cur_q.options.len() {
-                // "自由输入"选项：进入输入模式
-                app.ui.tool_interact_typing = true;
-                app.ui.tool_interact_input.clear();
-                app.ui.tool_interact_cursor = 0;
+                // "自由输入"选项：由于选中时已自动进入输入模式，
+                // 到这里说明用户之前按 Esc 退出了输入模式但光标还在自由输入选项上
+                // 此时按 Enter 无效，用户应该用 ↓ 键移动到其他选项或直接输入
                 return;
             } else if is_multi {
                 // 多选：收集所有选中的选项
@@ -162,6 +161,19 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Esc => Action::AskCancel,
         KeyCode::PageUp => Action::PageScroll(CursorDirection::Up),
         KeyCode::PageDown => Action::PageScroll(CursorDirection::Down),
+        KeyCode::Char(c) => {
+            // 如果光标在自由输入选项上，直接输入字符
+            let cursor = app.ui.tool_ask_cursor;
+            if cursor == cur_q.options.len() {
+                app.ui.tool_interact_typing = true;
+                app.ui.tool_interact_input.clear();
+                app.ui.tool_interact_cursor = 0;
+                // 处理输入的字符
+                app.update(Action::AskInputChar(c));
+                return;
+            }
+            return;
+        }
         _ => return,
     };
     app.update(action);

@@ -1,22 +1,22 @@
 [
   {
     "id": "1",
-    "content": "修改 chat_app.rs 实现自动切换输入模式",
+    "content": "添加代码块宽度计算辅助函数 calculate_code_block_width",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "修改 render_cache.rs 实现块状光标渲染",
+    "content": "修改 render_code_block_line 方法添加右侧边框",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "修改 tool_confirm.rs 调整 Enter/Esc 键行为",
+    "content": "实现 ``` 自动补全逻辑",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "测试验证交互体验",
-    "status": "in_progress"
+    "content": "测试和验证功能",
+    "status": "completed"
   }
 ]

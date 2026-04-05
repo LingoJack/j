@@ -23,6 +23,7 @@ use tui_textarea::{CursorMove, Input, Key, TextArea};
 
 use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
+use crate::util::text::display_width;
 
 // ========== Vim 模式定义 ==========
 
@@ -251,9 +252,56 @@ fn handle_vim_input(
     }
 }
 
+/// 检查是否在代码块内部（光标在开始围栏之后）
+fn is_inside_code_block(cursor_row: usize, lines: &[String]) -> bool {
+    let mut in_block = false;
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            if i < cursor_row {
+                in_block = !in_block;
+            } else if i == cursor_row {
+                // 当前围栏行，返回之前的状态
+                return in_block;
+            } else {
+                break;
+            }
+        }
+    }
+    in_block
+}
+
 fn handle_insert_mode(input: &Input, textarea: &mut TextArea<'_>) -> Transition {
     match input.key {
         Key::Esc => Transition::Mode(Mode::Normal),
+        Key::Enter => {
+            let (cursor_row, _cursor_col) = textarea.cursor();
+            let lines = textarea.lines();
+
+            // 检查当前行是否是 ``` 开头
+            if let Some(current_line) = lines.get(cursor_row) {
+                let trimmed = current_line.trim_start();
+
+                // 检测是否是 ``` 开头（可能有语言标识）
+                if trimmed.starts_with("```") && trimmed.len() >= 3 {
+                    // 检查是否已经有闭合围栏（避免在已有闭合的代码块内重复补全）
+                    // 只有当这是一个新的开始围栏时才补全
+                    if !is_inside_code_block(cursor_row, lines) {
+                        // 插入空行和闭合 ```
+                        textarea.insert_newline();
+                        textarea.insert_newline();
+                        textarea.insert_str("```");
+                        // 将光标移到空行（两个 ``` 之间）
+                        textarea.move_cursor(CursorMove::Up);
+                        return Transition::Nop;
+                    }
+                }
+            }
+
+            // 正常回车处理
+            textarea.input(input.clone());
+            Transition::Nop
+        }
         _ => {
             textarea.input(input.clone());
             Transition::Nop
@@ -658,6 +706,54 @@ impl<'a> MarkdownEditorState<'a> {
         false
     }
 
+    /// 查找包含指定行的代码块范围 (开始行, 结束行)
+    /// 返回 (start_fence_idx, end_fence_idx)，如果不在此代码块内则返回 None
+    fn find_code_block_range(&self, line_idx: usize, lines: &[String]) -> Option<(usize, usize)> {
+        let mut in_block = false;
+        let mut block_start = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") {
+                if !in_block {
+                    // 开始新的代码块
+                    in_block = true;
+                    block_start = i;
+                } else {
+                    // 结束当前代码块
+                    if block_start < line_idx && line_idx < i {
+                        return Some((block_start, i));
+                    }
+                    in_block = false;
+                }
+            }
+        }
+        None
+    }
+
+    /// 计算代码块内容的最大显示宽度
+    fn calculate_code_block_max_width(
+        &self,
+        start_idx: usize,
+        end_idx: usize,
+        lines: &[String],
+    ) -> usize {
+        let mut max_width = 0;
+        for i in (start_idx + 1)..end_idx {
+            if let Some(line) = lines.get(i) {
+                // 应用水平滚动来计算可见部分的宽度
+                let chars: Vec<char> = line.chars().collect();
+                let visible_chars: Vec<char> =
+                    chars.iter().skip(self.horizontal_scroll).copied().collect();
+                let visible_line: String = visible_chars.iter().collect();
+                let width = display_width(&visible_line);
+                max_width = max_width.max(width);
+            }
+        }
+        // 至少保证有一个最小宽度
+        max_width.max(10)
+    }
+
     /// 渲染单行（源码或渲染效果）
     fn render_line(&self, line_idx: usize, max_width: usize) -> Line<'static> {
         let lines = self.textarea.lines();
@@ -772,7 +868,19 @@ impl<'a> MarkdownEditorState<'a> {
         // 应用语法高亮
         let highlighted_spans = highlight_code_line(&visible_line, &lang, &self.theme);
 
-        // 构建结果：行号 + 左侧竖线 + 高亮代码
+        // 计算当前行的显示宽度
+        let content_width = display_width(&visible_line);
+
+        // 查找代码块范围并计算最大宽度
+        let max_width = self
+            .find_code_block_range(line_idx, lines)
+            .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
+            .unwrap_or(content_width);
+
+        // 计算需要填充的空格数
+        let fill_width = max_width.saturating_sub(content_width);
+
+        // 构建结果：行号 + 左侧竖线 + 高亮代码 + 填充 + 右侧竖线
         let mut spans = vec![
             Span::styled(
                 line_num,
@@ -793,6 +901,18 @@ impl<'a> MarkdownEditorState<'a> {
                 span.style.bg(self.theme.code_bg),
             ));
         }
+
+        // 添加填充空格和右侧竖线
+        spans.push(Span::styled(
+            " ".repeat(fill_width),
+            Style::default().bg(self.theme.code_bg),
+        ));
+        spans.push(Span::styled(
+            " │",
+            Style::default()
+                .fg(self.theme.text_dim)
+                .bg(self.theme.code_bg),
+        ));
 
         Line::from(spans)
     }

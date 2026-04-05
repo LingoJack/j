@@ -830,15 +830,17 @@ fn render_ask_questions(
                 let before: String = chars[..cursor_pos].iter().collect();
                 // 光标处的字符（如果没有则使用空格）
                 let cursor_char = chars.get(cursor_pos).copied().unwrap_or(' ');
-                // 光标后的文本
-                let after: String = chars[cursor_pos.min(chars.len())..].iter().collect();
+                // 光标后的文本（光标位置+1 开始）
+                let after: String = if cursor_pos < chars.len() {
+                    chars[cursor_pos + 1..].iter().collect()
+                } else {
+                    String::new()
+                };
 
                 // 普通文本样式
                 let text_style = Style::default().fg(t.text_white).bg(confirm_bg);
-                // 块状光标样式（反向颜色：深灰背景 + 白色前景）
-                let cursor_style = Style::default()
-                    .fg(Color::Rgb(50, 50, 50)) // 深色前景（文字颜色）
-                    .bg(t.text_white); // 白色背景
+                // 块状光标样式（使用主题定义的光标颜色）
+                let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
 
                 lines.push(bordered_line(
                     vec![
