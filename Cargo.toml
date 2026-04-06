@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "src-tauri"]
+resolver = "2"
+
 [package]
 name = "j-cli"
 version = "12.8.3"
@@ -11,6 +15,10 @@ homepage = "https://github.com/LingoJack/j"
 readme = "README.md"
 keywords = ["cli", "alias", "productivity", "launcher"]
 categories = ["command-line-utilities"]
+
+[lib]
+name = "j_cli"
+path = "src/lib.rs"
 
 [[bin]]
 name = "j"

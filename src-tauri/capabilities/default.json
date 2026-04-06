@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.tauri.app/config/2/capability",
+  "identifier": "default",
+  "description": "默认权限",
+  "windows": ["spotlight"],
+  "permissions": [
+    "core:default",
+    "global-shortcut:default"
+  ]
+}

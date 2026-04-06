@@ -90,7 +90,13 @@
       "Bash(sort -t: -k2 -nr)",
       "Bash(du -sh TOOL_*.md)",
       "Bash(du -sh TOOL_*.md DOCUMENTATION_MANIFEST.txt、)",
-      "Bash(awk 'NR>=85 {print}')"
+      "Bash(awk 'NR>=85 {print}')",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(npm list:*)",
+      "Bash(cargo install:*)",
+      "Bash(cargo tauri:*)",
+      "Bash(pip3 install:*)"
     ]
   },
   "language": "zh-CN",

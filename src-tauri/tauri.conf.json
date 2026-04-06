@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "j-cli-gui",
+  "version": "0.1.0",
+  "identifier": "com.lingojack.jcli",
+  "build": {
+    "frontendDist": "../src-ui/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "cd ../src-ui && npm run dev",
+    "beforeBuildCommand": "cd ../src-ui && npm run build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "spotlight",
+        "title": "j-cli",
+        "width": 600,
+        "height": 400,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/tray.png",
+      "iconAsTemplate": true
+    },
+    "macOSPrivateApi": true
+  },
+  "plugins": {}
+}
