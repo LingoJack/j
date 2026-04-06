@@ -478,7 +478,106 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 ```
 
-### 2. tauri.conf.json (核心配置)
+### 2. package.json (前端依赖)
+
+```json
+{
+  "name": "j-cli-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0",
+    "@tauri-apps/api": "^2.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+### 3. globals.css (Tailwind v4 配置)
+
+```css
+/* Tailwind v4 配置内置于 CSS 文件 */
+@import "tailwindcss";
+
+/* 自定义主题配置 */
+@theme {
+  --color-primary: #007AFF;
+  --color-secondary: #5856D6;
+  --color-background: rgba(30, 30, 30, 0.85);
+  --color-surface: rgba(45, 45, 45, 0.9);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-text: #FFFFFF;
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  
+  --blur-glass: blur(20px);
+}
+
+/* 毛玻璃效果 */
+.glass {
+  background: var(--color-background);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+}
+
+/* macOS 风格滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+```
+
+### 4. vite.config.ts
+
+```typescript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  clearScreen: false,
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+  envPrefix: ['VITE_', 'TAURI_'],
+  build: {
+    target: ['es2021', 'chrome100', 'safari13'],
+    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+    sourcemap: !!process.env.TAURI_DEBUG,
+  },
+});
+```
+
+### 5. tauri.conf.json (核心配置)
 
 ```json
 {
