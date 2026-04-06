@@ -62,6 +62,8 @@ pub const PLAN_MODE_WHITELIST: &[&str] = &[
     "Task",
     "EnterPlanMode",
     "ExitPlanMode",
+    "EnterWorktree",
+    "ExitWorktree",
 ];
 
 /// 检查工具是否在 plan mode 白名单中

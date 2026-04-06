@@ -15,6 +15,7 @@ pub mod task;
 pub mod todo;
 mod web_fetch;
 mod web_search;
+pub mod worktree;
 
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use schemars::JsonSchema;
@@ -98,6 +99,8 @@ pub struct ToolRegistry {
     pub todo_manager: Arc<todo::TodoManager>,
     /// Plan Mode 状态（供外部检查当前是否处于 plan mode）
     pub plan_mode_state: Arc<plan::PlanModeState>,
+    /// Worktree 状态（跨工具共享）
+    pub worktree_state: Arc<worktree::WorktreeState>,
 }
 
 impl ToolRegistry {
@@ -111,10 +114,12 @@ impl ToolRegistry {
     ) -> Self {
         let todo_manager = Arc::new(todo::TodoManager::new());
         let plan_mode_state = Arc::new(plan::PlanModeState::new());
+        let worktree_state = Arc::new(worktree::WorktreeState::new());
 
         let mut registry = Self {
             todo_manager: Arc::clone(&todo_manager),
             plan_mode_state: Arc::clone(&plan_mode_state),
+            worktree_state: Arc::clone(&worktree_state),
             tools: vec![
                 Box::new(shell::ShellTool {
                     manager: Arc::clone(&background_manager),
@@ -158,6 +163,13 @@ impl ToolRegistry {
                 Box::new(plan::ExitPlanModeTool {
                     plan_state: Arc::clone(&plan_mode_state),
                     ask_tx,
+                }),
+                // Worktree 隔离工具
+                Box::new(worktree::EnterWorktreeTool {
+                    state: Arc::clone(&worktree_state),
+                }),
+                Box::new(worktree::ExitWorktreeTool {
+                    state: Arc::clone(&worktree_state),
                 }),
             ],
         };
