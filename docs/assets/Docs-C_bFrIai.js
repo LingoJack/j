@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-BylaVhpx.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-Btcgsn2s.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -12,9 +12,9 @@ import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}f
 
 \`\`\`bash
 j chat              # Enter TUI chat interface
-j chat "Hello"      # Quick question and print response
-j chat -c           # Continue last session
-j chat --session <id>  # Resume specific session
+j chat "Hello"      # Quick question with response printed
+j chat -c           # Continue previous session
+j chat --session <id>  # Restore specific session
 \`\`\`
 
 ## Shortcuts
@@ -23,10 +23,10 @@ j chat --session <id>  # Resume specific session
 |----------|--------|
 | \`Enter\` | Send message |
 | \`Esc\` | Cancel response/Exit |
-| \`Ctrl+T\` | Switch model |
-| \`Ctrl+L\` | Archive conversation |
 | \`Ctrl+Y\` | Copy last AI reply |
 | \`Ctrl+B\` | Message browse mode |
+| \`Ctrl+G\` | Open log windows |
+| \`Ctrl+O\` | Toggle tool details |
 | \`Ctrl+E\` | Open config panel |
 | \`F1\` or \`?\` | Show help |
 
@@ -37,7 +37,7 @@ Type \`/\` in the input box to trigger slash commands:
 | Command | Action |
 |---------|--------|
 | \`/copy\` | Copy last AI reply |
-| \`/log\` | Open log window |
+| \`/log\` | Open log windows |
 | \`/browse\` | Browse message history |
 | \`/config\` | Open config panel |
 | \`/model\` | Switch model |
@@ -45,11 +45,11 @@ Type \`/\` in the input box to trigger slash commands:
 
 ## Context References
 
-Type \`@\` in input to trigger completion:
+Type \`@\` in the input box to trigger completion:
 
 \`\`\`
-@skill:<name>       # Reference skill
-@command:<name>     # Reference custom command
+@skill:<name>       # Reference a skill
+@command:<name>     # Reference a custom command
 @file:<path>        # Reference file content (supports images)
 \`\`\`
 
@@ -60,32 +60,32 @@ AI chat has built-in Agent capabilities for autonomous multi-step task execution
 - **Autonomous Reasoning**: AI plans and executes multi-step tasks
 - **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
-- **Plan Mode**: Explore codebase before making plan
-- **Sub-agent**: Spawn sub-agents for complex tasks in parallel
+- **Plan Mode**: Explore codebase before making a plan
+- **Sub-Agent**: Spawn sub-agents for complex tasks in parallel
 
 ### Plan Mode
 
-For complex tasks, enter plan mode to explore codebase first:
+For complex tasks, enter plan mode to explore the codebase first:
 
 \`\`\`
 # Enter plan mode
-Analyze this project's architecture and design a refactoring plan
+Analyze the project architecture and design a refactoring plan
 
 # AI will:
 1. Enter plan mode (read-only tools available)
 2. Explore codebase structure
 3. Generate detailed plan
-4. Submit plan for user approval
-5. Execute after approval
+4. Submit plan for user confirmation
+5. Execute after user approval
 \`\`\`
 
-### Sub-agent
+### Sub-Agent
 
 Agent tool allows spawning sub-agents for complex tasks:
 
-- **No recursion**: Sub-agent cannot call Agent tool
-- **Max rounds**: 30 tool call limit
-- **Execution mode**: Foreground (blocking) or background (async)
+- **No Recursion**: Sub-agents cannot call Agent tool
+- **Max Rounds**: 30 tool call rounds limit
+- **Execution Mode**: Foreground (blocking) or Background (async)
 
 \`\`\`
 # Example: Spawn sub-agent to search and organize code
@@ -105,7 +105,7 @@ permissions:
     - Grep
     - Glob
   
-  deny:              # Takes priority over allow, blocks execution
+  deny:              # Takes priority over allow, direct reject
     - Bash
     - Write
 \`\`\`
@@ -115,64 +115,120 @@ permissions:
 ## Remote Control
 
 \`\`\`bash
-j chat --remote     # Enable remote control (scan QR with phone)
-j chat --remote --port 9390  # Specify port
+j chat --remote     # Enable remote control (scan QR code with phone)
+j chat --remote --port 9390  # Custom port
 \`\`\`
 
 ## Multi-Model Support
 
-Supports OpenAI, Claude, Gemini, Ollama and more. Use \`Ctrl+E\` to open config panel.
-`,ee=e({default:()=>te}),te=`## Commands
+Supports OpenAI, Claude, Gemini, Ollama and more. Manage via \`Ctrl+E\` config panel.
+`,ee=e({default:()=>te}),te=`## Overview
 
-| Command | Description |
-|---------|-------------|
-| \`j set <alias> <path>\` | Set alias (paths → path section, URLs → inner_url) |
-| \`j rm <alias>\` | Remove alias (cleans associated category marks) |
-| \`j rename <alias> <new>\` | Rename alias (updates all category references) |
-| \`j mf <alias> <new_path>\` | Modify alias path |
+The alias system allows creating short aliases for common commands and applications, improving command-line efficiency.
 
-## Category Marking
+Core features:
+- **Command Aliases**: Simplify long commands into short aliases
+- **App Aliases**: Quickly open frequently used apps and URLs
+- **Group Management**: Organize aliases by project or category
+- **Dynamic Extension**: Support runtime addition and deletion
 
-\`\`\`bash
-j note <alias> <category>   # Mark alias with category
-j find <category>           # Find aliases by category
-j note chrome browser       # Mark chrome as browser
-j note github outer_url     # Mark github as outer_url (auto-connect VPN)
-\`\`\`
+## Basic Usage
 
-## Categories
-
-| Category | Description |
-|----------|-------------|
-| \`browser\` | Web browsers |
-| \`editor\` | Code editors |
-| \`vpn\` | VPN applications |
-| \`script\` | Custom scripts |
-| \`inner_url\` | Internal URLs |
-| \`outer_url\` | External URLs (auto-connect VPN) |
-
-## Examples
+### Execute Alias
 
 \`\`\`bash
-# Set app aliases
-j set chrome "/Applications/Google Chrome.app"
-j set safari "/Applications/Safari.app"
-j set vscode "/Applications/Visual Studio Code.app"
-
-# Set URL aliases
-j set github https://github.com
-j set google https://google.com
-
-# Set directory aliases
-j set proj ~/Projects
-j set docs ~/Documents
-
-# Open apps
-j chrome                   # Open Chrome
-j chrome "rust lang"       # Search with Chrome
-j chrome github            # Open github URL with Chrome
-j vscode proj              # Open proj directory with VSCode
+j <alias>            # Execute alias command
+j <alias> <args...>  # Execute with arguments
 \`\`\`
+
+### Manage Aliases
+
+\`\`\`bash
+j alias              # List all aliases
+j alias add <name> <command>  # Add alias
+j alias rm <name>    # Remove alias
+\`\`\`
+
+## Alias Types
+
+### Command Aliases
+
+Simplify common commands:
+
+\`\`\`bash
+# Add alias
+j alias add gs "git status"
+j alias add gp "git push"
+
+# Use alias
+j gs
+j gp origin main
+\`\`\`
+
+### App Aliases
+
+Quickly open apps or URLs:
+
+\`\`\`bash
+# Open application
+j alias add chrome "open -a 'Google Chrome'"
+j alias add vscode "open -a 'Visual Studio Code'"
+
+# Open URL
+j alias add gh "open https://github.com"
+
+# Usage
+j chrome
+j gh
+\`\`\`
+
+## Alias Files
+
+Aliases are stored in \`~/.jdata/aliases/\` directory:
+
+\`\`\`
+~/.jdata/aliases/
+├── git.json      # Git related aliases
+├── apps.json     # App aliases
+└── work.json     # Work related aliases
+\`\`\`
+
+### Alias File Format
+
+\`\`\`json
+[
+  {
+    "name": "gs",
+    "command": "git status",
+    "description": "Show Git status"
+  },
+  {
+    "name": "chrome",
+    "command": "open -a 'Google Chrome'",
+    "description": "Open Chrome browser"
+  }
+]
+\`\`\`
+
+## Parameterized Aliases
+
+Aliases support \`$1\`, \`$2\` parameter placeholders:
+
+\`\`\`bash
+# Add alias with parameters
+j alias add find-file "find . -name '$1' -type f"
+
+# Usage
+j find-file "*.rs"
+\`\`\`
+
+## Use Cases
+
+- Git command simplification
+- Quick project switching
+- Fast app launching
+- URL bookmarks
+- SSH connection shortcuts
 `,ne=e({default:()=>re}),re=`## Overview
 
 Browser is a tool in AI chat for web browsing, interaction, and content extraction.
@@ -574,7 +630,148 @@ rm ~/.cargo/bin/j          # Cargo install
 # (Optional) Remove data directory
 rm -rf ~/.jdata
 \`\`\`
-`,w=e({default:()=>T}),T=`## Permission Configuration File
+`,w=e({default:()=>T}),T=`## Overview
+
+The built-in Markdown editor is a Typora-like terminal editor with line-level rendering toggle and full Vim mode support.
+
+Core features:
+- **Line-level rendering**: Current editing line shows source code, other lines show rendered output
+- **Vim mode**: Full support for Normal, Insert, Visual, Command, and Search modes
+- **Live preview**: Instant rendering of headings, code blocks, tables, lists, etc.
+
+## Vim Modes
+
+### Mode Switching
+
+| Mode | Border Color | Description |
+|------|--------------|-------------|
+| Normal | Dark gray | Default browsing mode |
+| Insert | Cyan | Text editing mode |
+| Visual | Yellow | Visual selection mode |
+| Command | Dark gray | Command mode (\`:\`) |
+| Search | Magenta | Search mode (\`/\`) |
+
+### Normal Mode Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| \`h/j/k/l\` | Move left/down/up/right |
+| \`w/b/e\` | Word forward/back/end |
+| \`0/$\` | Line start/end |
+| \`g/G\` | File top/bottom |
+| \`i/a/A/I\` | Enter Insert mode |
+| \`o/O\` | Insert new line below/above |
+| \`x/X\` | Delete character |
+| \`dd\` | Delete line |
+| \`dw/d$\` | Delete word/to end of line |
+| \`cc\` | Change entire line |
+| \`cw/c$\` | Change word/to end of line |
+| \`yy\` | Yank (copy) line |
+| \`p\` | Paste |
+| \`u\` | Undo |
+| \`Ctrl+R\` | Redo |
+| \`v\` | Enter Visual mode |
+| \`:\` | Enter Command mode |
+| \`/\` | Enter Search mode |
+| \`n/N\` | Next/previous search match |
+
+### Insert Mode
+
+| Shortcut | Action |
+|----------|--------|
+| \`Esc\` | Return to Normal mode |
+| Others | Normal text input |
+
+### Visual Mode
+
+| Shortcut | Action |
+|----------|--------|
+| \`h/j/k/l\` | Extend selection |
+| \`y\` | Yank (copy) selection |
+| \`Esc\` | Return to Normal mode |
+
+### Command Mode
+
+| Command | Action |
+|---------|--------|
+| \`:w\` | Save and submit |
+| \`:wq\` | Save and submit |
+| \`:x\` | Save and submit |
+| \`:q\` | Cancel editing |
+| \`:q!\` | Cancel editing |
+
+### Search Mode
+
+- Press \`Enter\` after typing search pattern to search
+- \`n\` jumps to next match
+- \`N\` jumps to previous match
+
+## Global Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| \`Ctrl+S\` | Save and submit |
+| \`Ctrl+Q\` | Cancel editing |
+| \`PageUp/PageDown\` | Page scroll |
+
+## Markdown Rendering
+
+### Headings
+
+\`\`\`
+# Heading 1     →  ◆ Heading 1
+## Heading 2    →  ◇ Heading 2
+### Heading 3   →  〈 Heading 3
+#### Heading 4  →  › Heading 4
+\`\`\`
+
+### Code Blocks
+
+Code blocks render with a bordered style:
+
+\`\`\`
+┌─ rust ────────────┐
+│ let x = 42;       │
+│ println!("{}", x);│
+└───────────────────┘
+\`\`\`
+
+Syntax highlighting is supported, language identifier extracted from fence line (e.g., \` \`\`\`rust\`).
+
+### Tables
+
+Auto-aligned column widths, rendered as a formatted table:
+
+\`\`\`
+│ Header1 │ Header2 │
+├────────┼────────┤
+│ cell1  │ cell2  │
+\`\`\`
+
+### Other Elements
+
+| Syntax | Rendered |
+|--------|----------|
+| \`**bold**\` | **bold** |
+| \`*italic*\` | *italic* |
+| \`~~strikethrough~~\` | ~~strikethrough~~ |
+| \`\` \`code\` \`\` | \`code\` |
+| \`- list item\` | • list item |
+| \`- [ ] task\` | ○ task |
+| \`- [x] done\` | ● done |
+| \`> quote\` | │ quote |
+| \`[link](url)\` | link ↗ |
+| \`![image](url)\` | 🖼 alt |
+
+## Use Cases
+
+- Writing daily/weekly reports
+- Editing Markdown documents
+- Quick note-taking
+- Code snippet editing
+
+The editor returns the edited content on save, and returns empty on cancel.
+`,E=e({default:()=>D}),D=`## Permission Configuration File
 
 Permissions are configured in \`.jcli/permissions.yaml\` in your project directory:
 
@@ -652,7 +849,7 @@ allow:
   - "WebFetch(domain:github.com)"
   - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # Regex match all google subdomains
 \`\`\`
-`,E=e({default:()=>D}),D=`## Register App Aliases
+`,O=e({default:()=>k}),k=`## Register App Aliases
 
 \`\`\`bash
 j set chrome "/Applications/Google Chrome.app"
@@ -705,7 +902,7 @@ j chat Hello              # Quick question
 \`\`\`bash
 j                         # Enter interactive mode with Tab completion
 \`\`\`
-`,O=e({default:()=>k}),k=`## Overview
+`,A=e({default:()=>j}),j=`## Overview
 
 Control AI chat from mobile devices via WebSocket, started with \`j chat --remote\`.
 
@@ -727,7 +924,7 @@ A QR code will be displayed for phone scanning.
 ## Client
 
 - **Web**: Scan QR code to connect
-`,A=e({default:()=>j}),j=`## Overview
+`,M=e({default:()=>N}),N=`## Overview
 
 Daily/weekly report system with quick logging, week management, and Git sync.
 
@@ -790,60 +987,92 @@ Report settings are stored in two locations:
 When current date exceeds \`last_day\`, writing to report automatically:
 1. Generates new week title \`# WeekN[start_date - end_date]\`
 2. Updates week_num and last_day
-`,M=e({default:()=>N}),N=`## Commands
-
-| Command | Description |
-|---------|-------------|
-| \`j concat <name> [content]\` | Create/edit script |
-| \`j <script> [args]\` | Execute script with arguments |
-
-## Creating Scripts
-
-\`\`\`bash
-# Create script with content
-j concat open "open $1"
-
-# Create script with TUI editor
-j concat deploy
-
-# Create in new window
-j concat build -w
-\`\`\`
-
-## Executing Scripts
-
-\`\`\`bash
-# Execute script
-j open README.md         # Passes README.md as $1
-j build                  # Execute without arguments
-
-# Execute in new window
-j open -w README.md
-\`\`\`
-
-## Environment Variables
-
-Scripts can use environment variables:
-
-| Variable | Description |
-|----------|-------------|
-| \`$1\`, \`$2\`, ... | Script arguments |
-| \`$@\` | All arguments |
-| \`$J_DATA_PATH\` | Data directory path |
-
-## Examples
-
-\`\`\`bash
-# Deployment script
-j concat deploy "git pull && cargo build --release && systemctl restart myapp"
-
-# Backup script
-j concat backup "cp -r $1 ~/.jdata/backups/$(date +%Y%m%d)"
-
-# Open in editor
-j concat edit "code $1"
-\`\`\`
 `,P=e({default:()=>F}),F=`## Overview
+
+The script system allows defining and executing preset shell command sequences with parameterization and conditional execution.
+
+Core features:
+- **Predefined Scripts**: Save common command sequences as reusable scripts
+- **Parameterized Execution**: Scripts support placeholders for runtime arguments
+- **Command Chaining**: Support for sequential command execution
+- **Environment Isolation**: Each script runs in an independent shell
+
+## Basic Usage
+
+### Execute Script
+
+\`\`\`bash
+j script <name>           # Execute specified script
+j script <name> <args...> # Execute with arguments
+\`\`\`
+
+### Manage Scripts
+
+Scripts are stored in \`~/.jdata/scripts/\` directory, each script as a Markdown file:
+
+\`\`\`
+~/.jdata/scripts/
+├── deploy.md
+├── build.md
+└── test.md
+\`\`\`
+
+## Script Format
+
+Scripts use Markdown format with frontmatter configuration:
+
+\`\`\`markdown
+---
+name: deploy
+description: Deploy to production
+---
+
+#!/bin/bash
+set -e
+
+echo "Building..."
+npm run build
+
+echo "Deploying..."
+rsync -avz dist/ user@server:/var/www/
+\`\`\`
+
+### Frontmatter Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | Script name |
+| description | string | No | Script description |
+
+## Parameterization
+
+Scripts support \`{{.param}}\` placeholders:
+
+\`\`\`markdown
+---
+name: greet
+description: Greeting script
+---
+
+#!/bin/bash
+name="{{.name}}"
+echo "Hello, $name!"
+\`\`\`
+
+Execute with arguments:
+
+\`\`\`bash
+j script greet --name World
+\`\`\`
+
+## Use Cases
+
+- Project build and deployment
+- Code formatting and linting
+- Database backup
+- Environment initialization
+- Scheduled task wrapper
+`,I=e({default:()=>L}),L=`## Overview
 
 Skills are specialized prompt modules that extend AI capabilities, loaded via the \`LoadSkill\` tool.
 
@@ -903,51 +1132,86 @@ Disable specific skills via the TUI configuration interface. Settings are saved 
   "disabled_skills": ["skill-name-1", "skill-name-2"]
 }
 \`\`\`
-`,I=e({default:()=>L}),L=`## Commands
+`,R=e({default:()=>z}),z=`## Overview
 
-| Command | Description |
-|---------|-------------|
-| \`j todo\` | Open TUI todo manager |
-| \`j todo add <text>\` | Quick add todo item |
-| \`j todo done <id>\` | Mark todo as done |
-| \`j todo list\` | List todos (supports --done/--undone) |
+The todo management system provides lightweight task tracking with status transitions and priority management.
 
-## Examples
+Core features:
+- **Quick Add**: Add todo items with a single command
+- **Status Management**: pending, in_progress, completed state transitions
+- **List View**: Filter and sort by status
+- **Data Persistence**: Auto-save to local file
+
+## Basic Usage
+
+### View Todos
 
 \`\`\`bash
-# Quick add
-j todo add Buy milk
-j todo add Review pull request
-
-# List todos
-j todo list              # All todos
-j todo list --undone     # Only pending
-j todo list --done       # Only completed
-
-# Mark as done
-j todo done 1
-j todo done 1 --report   # Also write to daily report
+j todo              # View all todos
+j todo -s pending   # Filter by status
 \`\`\`
 
-## TUI Manager
+### Add Todo
 
-Running \`j todo\` opens the interactive TUI:
-
-- **Add/Edit/Delete**: Manage todos interactively
-- **Priority**: Set priority levels
-- **Due dates**: Add deadlines
-- **Categories**: Organize by project/context
-
-## Markdown Integration
-
-Todos can be written in daily reports using Markdown:
-
-\`\`\`markdown
-- [x] Completed task
-- [ ] Pending task
-- [ ] Another pending task
+\`\`\`bash
+j todo add "Finish documentation"
+j todo add "Fix bug" -p high  # High priority
 \`\`\`
-`,R=e({default:()=>z}),z=`## File Tools
+
+### Update Status
+
+\`\`\`bash
+j todo start <id>     # Mark as in progress
+j todo done <id>      # Mark as completed
+j todo cancel <id>    # Cancel todo
+\`\`\`
+
+### Delete Todo
+
+\`\`\`bash
+j todo rm <id>        # Delete specified todo
+j todo clear          # Clear completed items
+\`\`\`
+
+## Todo Status
+
+| Status | Description |
+|--------|-------------|
+| pending | Pending |
+| in_progress | In Progress |
+| completed | Completed |
+
+## Priority
+
+| Level | Identifier |
+|-------|------------|
+| Low | low |
+| Medium | medium (default) |
+| High | high |
+
+## Data Storage
+
+Todo data is stored in \`~/.jdata/todos.json\`:
+
+\`\`\`json
+[
+  {
+    "id": 1,
+    "content": "Finish documentation",
+    "status": "pending",
+    "priority": "high",
+    "created_at": "2024-01-15T10:00:00Z"
+  }
+]
+\`\`\`
+
+## Use Cases
+
+- Daily task management
+- Project progress tracking
+- Personal memo
+- Team task assignment
+`,B=e({default:()=>V}),V=`## File Tools
 
 ### Read
 
@@ -1392,7 +1656,7 @@ permissions:
 |------|------|
 | \`@file:path\` | Include file content (auto-read and inject into context) |
 | \`@skill:name\` | Load and activate specified skill |
-`,B=e({default:()=>V}),V=`## 启动 AI 对话
+`,H=e({default:()=>U}),U=`## 启动 AI 对话
 
 \`\`\`bash
 j chat              # 进入 TUI 对话界面
@@ -1407,10 +1671,10 @@ j chat --session <id>  # 恢复指定会话
 |--------|------|
 | \`Enter\` | 发送消息 |
 | \`Esc\` | 取消响应/退出 |
-| \`Ctrl+T\` | 切换模型 |
-| \`Ctrl+L\` | 归档对话 |
 | \`Ctrl+Y\` | 复制最后一条 AI 回复 |
 | \`Ctrl+B\` | 消息浏览模式 |
+| \`Ctrl+G\` | 打开日志窗口 |
+| \`Ctrl+O\` | 展开/折叠工具详情 |
 | \`Ctrl+E\` | 打开配置界面 |
 | \`F1\` 或 \`?\` | 显示帮助 |
 
@@ -1506,58 +1770,114 @@ j chat --remote --port 9390  # 指定端口
 ## 多模型支持
 
 支持 OpenAI、Claude、Gemini、Ollama 等模型，通过 \`Ctrl+E\` 打开配置界面管理。
-`,H=e({default:()=>U}),U=`## 命令
-
-| 命令 | 描述 |
-|------|------|
-| \`j set <别名> <路径>\` | 设置别名（路径 → path 配置，URL → inner_url） |
-| \`j rm <别名>\` | 删除别名（同时清理关联的分类标记） |
-| \`j rename <别名> <新别名>\` | 重命名别名（更新所有分类引用） |
-| \`j mf <别名> <新路径>\` | 修改别名路径 |
-
-## 分类标记
-
-\`\`\`bash
-j note <别名> <分类>   # 为别名标记分类
-j find <分类>         # 按分类查找别名
-j note chrome browser # 将 chrome 标记为浏览器
-j note github outer_url # 将 github 标记为外网（自动连接 VPN）
-\`\`\`
-
-## 分类说明
-
-| 分类 | 描述 |
-|------|------|
-| \`browser\` | 浏览器 |
-| \`editor\` | 编辑器 |
-| \`vpn\` | VPN 应用 |
-| \`script\` | 自定义脚本 |
-| \`inner_url\` | 内网 URL |
-| \`outer_url\` | 外网 URL（自动连接 VPN） |
-
-## 示例
-
-\`\`\`bash
-# 设置应用别名
-j set chrome "/Applications/Google Chrome.app"
-j set safari "/Applications/Safari.app"
-j set vscode "/Applications/Visual Studio Code.app"
-
-# 设置 URL 别名
-j set github https://github.com
-j set google https://google.com
-
-# 设置目录别名
-j set proj ~/Projects
-j set docs ~/Documents
-
-# 打开应用
-j chrome                   # 打开 Chrome
-j chrome "rust lang"       # 用 Chrome 搜索
-j chrome github            # 用 Chrome 打开 github
-j vscode proj              # 用 VSCode 打开 proj 目录
-\`\`\`
 `,W=e({default:()=>G}),G=`## 概述
+
+别名系统允许为常用命令和应用程序创建简短别名，提高命令行效率。
+
+核心特性：
+- **命令别名**：将长命令简化为短别名
+- **应用别名**：快速打开常用应用和网址
+- **分组管理**：按项目或类别组织别名
+- **动态扩展**：支持运行时添加和删除
+
+## 基本用法
+
+### 执行别名
+
+\`\`\`bash
+j <alias>            # 执行别名命令
+j <alias> <args...>  # 带参数执行
+\`\`\`
+
+### 管理别名
+
+\`\`\`bash
+j alias              # 列出所有别名
+j alias add <name> <command>  # 添加别名
+j alias rm <name>    # 删除别名
+\`\`\`
+
+## 别名类型
+
+### 命令别名
+
+将常用命令简化：
+
+\`\`\`bash
+# 添加别名
+j alias add gs "git status"
+j alias add gp "git push"
+
+# 使用别名
+j gs
+j gp origin main
+\`\`\`
+
+### 应用别名
+
+快速打开应用或网址：
+
+\`\`\`bash
+# 打开应用
+j alias add chrome "open -a 'Google Chrome'"
+j alias add vscode "open -a 'Visual Studio Code'"
+
+# 打开网址
+j alias add gh "open https://github.com"
+
+# 使用
+j chrome
+j gh
+\`\`\`
+
+## 别名文件
+
+别名单独存放在 \`~/.jdata/aliases/\` 目录：
+
+\`\`\`
+~/.jdata/aliases/
+├── git.json      # Git 相关别名
+├── apps.json     # 应用别名
+└── work.json     # 工作相关别名
+\`\`\`
+
+### 别名文件格式
+
+\`\`\`json
+[
+  {
+    "name": "gs",
+    "command": "git status",
+    "description": "查看 Git 状态"
+  },
+  {
+    "name": "chrome",
+    "command": "open -a 'Google Chrome'",
+    "description": "打开 Chrome 浏览器"
+  }
+]
+\`\`\`
+
+## 参数化别名
+
+别名支持 \`$1\`、\`$2\` 等参数占位符：
+
+\`\`\`bash
+# 添加带参数的别名
+j alias add find-file "find . -name '$1' -type f"
+
+# 使用
+j find-file "*.rs"
+\`\`\`
+
+## 使用场景
+
+- Git 命令简化
+- 项目快速切换
+- 应用快速启动
+- 常用网址书签
+- SSH 连接快捷方式
+`,K=e({default:()=>q}),q=`## 概述
 
 Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取。
 
@@ -1638,7 +1958,7 @@ settings:
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,K=e({default:()=>q}),q=`## 概述
+`,se=e({default:()=>ce}),ce=`## 概述
 
 Commands 是可复用的提示词片段，帮助快速调用预设的提示词。
 
@@ -1731,7 +2051,7 @@ description: 进入 PLAN 模式
 ### 管理命令
 
 在 TUI 中按 \`Ctrl+E\` 打开配置界面，切换到 Commands 标签页，可以启用或禁用命令。
-`,se=e({default:()=>ce}),ce="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── history.txt          # 命令历史\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.yaml   # Agent 配置（模型、API）\n│   │   ├── sessions/           # 对话会话存储\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   └── soul.md             # 灵魂文件\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   ├── skills/          # 用户级技能目录\n│   ├── commands/        # 用户级自定义命令\n│   └── hooks.yaml       # 用户级钩子配置\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n└── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 项目级配置\n\n项目目录下可创建 `.jcli/` 存放项目级配置：\n\n```\n.jcli/\n├── config.yaml          # 项目级配置\n├── permissions.yaml     # 工具权限配置\n├── hooks.yaml           # 项目级钩子\n├── skills/              # 项目级技能（覆盖用户级）\n└── commands/            # 项目级自定义命令\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n\n## Agent 配置（`agent_config.yaml`）\n\n| 配置项 | 描述 | 默认值 |\n|--------|------|--------|\n| `providers` | 模型提供方列表 | - |\n| `active_index` | 当前选中的 provider 索引 | 0 |\n| `system_prompt` | 系统提示词 | - |\n| `stream_mode` | 流式输出 | true |\n| `max_history_messages` | 发送给 API 的历史消息数量限制 | 20 |\n| `tools_enabled` | 启用工具调用 | false |\n| `max_tool_rounds` | 工具调用最大轮数 | 100 |\n| `tool_confirm_timeout` | 工具确认超时秒数 | 0（不超时） |\n| `disabled_tools` | 禁用的工具列表 | [] |\n| `disabled_skills` | 禁用的 skill 列表 | [] |\n| `disabled_commands` | 禁用的 command 列表 | [] |\n| `auto_restore_session` | 启动时自动恢复最近的 session | false |\n",le=e({default:()=>ue}),ue=`## 概述
+`,le=e({default:()=>ue}),ue="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── history.txt          # 命令历史\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.yaml   # Agent 配置（模型、API）\n│   │   ├── sessions/           # 对话会话存储\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   └── soul.md             # 灵魂文件\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   ├── skills/          # 用户级技能目录\n│   ├── commands/        # 用户级自定义命令\n│   └── hooks.yaml       # 用户级钩子配置\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n└── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 项目级配置\n\n项目目录下可创建 `.jcli/` 存放项目级配置：\n\n```\n.jcli/\n├── config.yaml          # 项目级配置\n├── permissions.yaml     # 工具权限配置\n├── hooks.yaml           # 项目级钩子\n├── skills/              # 项目级技能（覆盖用户级）\n└── commands/            # 项目级自定义命令\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n\n## Agent 配置（`agent_config.yaml`）\n\n| 配置项 | 描述 | 默认值 |\n|--------|------|--------|\n| `providers` | 模型提供方列表 | - |\n| `active_index` | 当前选中的 provider 索引 | 0 |\n| `system_prompt` | 系统提示词 | - |\n| `stream_mode` | 流式输出 | true |\n| `max_history_messages` | 发送给 API 的历史消息数量限制 | 20 |\n| `tools_enabled` | 启用工具调用 | false |\n| `max_tool_rounds` | 工具调用最大轮数 | 100 |\n| `tool_confirm_timeout` | 工具确认超时秒数 | 0（不超时） |\n| `disabled_tools` | 禁用的工具列表 | [] |\n| `disabled_skills` | 禁用的 skill 列表 | [] |\n| `disabled_commands` | 禁用的 command 列表 | [] |\n| `auto_restore_session` | 启动时自动恢复最近的 session | false |\n",de=e({default:()=>fe}),fe=`## 概述
 
 Hook 允许在特定事件时运行自定义脚本，通过 \`RegisterHook\` 工具或配置文件管理。
 
@@ -1892,7 +2212,7 @@ Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
 - 脚本必须从 stdin 读取（至少 \`cat > /dev/null\`），否则可能 SIGPIPE
 - timeout 默认 10 秒，超时后脚本被 kill
 - 只有 session 级 hook 可通过工具管理；用户级/项目级需手动编辑配置文件
-`,de=e({default:()=>fe}),fe=`## 一键安装（推荐）
+`,pe=e({default:()=>me}),me=`## 一键安装（推荐）
 
 \`\`\`bash
 # 安装最新版本
@@ -1958,7 +2278,148 @@ rm ~/.cargo/bin/j          # Cargo 安装
 # （可选）删除数据目录
 rm -rf ~/.jdata
 \`\`\`
-`,pe=e({default:()=>me}),me=`## 权限配置文件
+`,he=e({default:()=>ge}),ge=`## 概述
+
+内置 Markdown 编辑器是一个类 Typora 的终端编辑器，支持行级渲染切换和完整 Vim 模式。
+
+核心特性：
+- **行级渲染**：当前编辑行显示源码，其他行显示渲染效果
+- **Vim 模式**：Normal、Insert、Visual、Command、Search 完整支持
+- **实时预览**：标题、代码块、表格、列表等即时渲染
+
+## Vim 模式
+
+### 模式切换
+
+| 模式 | 边框颜色 | 说明 |
+|------|----------|------|
+| Normal | 深灰 | 默认浏览模式 |
+| Insert | 青色 | 文本编辑模式 |
+| Visual | 黄色 | 可视选择模式 |
+| Command | 深灰 | 命令模式（\`:\`） |
+| Search | 紫色 | 搜索模式（\`/\`） |
+
+### Normal 模式快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`h/j/k/l\` | 左/下/上/右移动 |
+| \`w/b/e\` | 按词移动 |
+| \`0/$\` | 行首/行尾 |
+| \`g/G\` | 文件首/尾 |
+| \`i/a/A/I\` | 进入 Insert 模式 |
+| \`o/O\` | 在下方/上方插入新行 |
+| \`x/X\` | 删除字符 |
+| \`dd\` | 删除整行 |
+| \`dw/d$\` | 删除词/删除到行尾 |
+| \`cc\` | 修改整行 |
+| \`cw/c$\` | 修改词/修改到行尾 |
+| \`yy\` | 复制行 |
+| \`p\` | 粘贴 |
+| \`u\` | 撤销 |
+| \`Ctrl+R\` | 重做 |
+| \`v\` | 进入 Visual 模式 |
+| \`:\` | 进入 Command 模式 |
+| \`/\` | 进入 Search 模式 |
+| \`n/N\` | 下一个/上一个搜索结果 |
+
+### Insert 模式
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`Esc\` | 返回 Normal 模式 |
+| 其他 | 正常文本输入 |
+
+### Visual 模式
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`h/j/k/l\` | 扩展选择 |
+| \`y\` | 复制选中内容 |
+| \`Esc\` | 返回 Normal 模式 |
+
+### Command 模式
+
+| 命令 | 功能 |
+|------|------|
+| \`:w\` | 保存并提交 |
+| \`:wq\` | 保存并提交 |
+| \`:x\` | 保存并提交 |
+| \`:q\` | 取消编辑 |
+| \`:q!\` | 取消编辑 |
+
+### Search 模式
+
+- 输入搜索词后按 \`Enter\` 开始搜索
+- \`n\` 跳转到下一个匹配
+- \`N\` 跳转到上一个匹配
+
+## 全局快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| \`Ctrl+S\` | 保存并提交 |
+| \`Ctrl+Q\` | 取消编辑 |
+| \`PageUp/PageDown\` | 翻页 |
+
+## Markdown 渲染
+
+### 标题
+
+\`\`\`
+# 一级标题      →  ◆ 一级标题
+## 二级标题     →  ◇ 二级标题
+### 三级标题    →  〈 三级标题
+#### 四级标题   →  › 四级标题
+\`\`\`
+
+### 代码块
+
+代码块会渲染为带边框的样式：
+
+\`\`\`
+┌─ rust ────────────┐
+│ let x = 42;       │
+│ println!("{}", x);│
+└───────────────────┘
+\`\`\`
+
+支持语法高亮，语言标识从围栏行提取（如 \` \`\`\`rust\`）。
+
+### 表格
+
+自动对齐列宽，渲染为美观的表格格式：
+
+\`\`\`
+│ Header1 │ Header2 │
+├────────┼────────┤
+│ cell1  │ cell2  │
+\`\`\`
+
+### 其他元素
+
+| 语法 | 渲染效果 |
+|------|----------|
+| \`**粗体**\` | **粗体** |
+| \`*斜体*\` | *斜体* |
+| \`~~删除线~~\` | ~~删除线~~ |
+| \`\` \`代码\` \`\` | \`代码\` |
+| \`- 列表项\` | • 列表项 |
+| \`- [ ] 任务\` | ○ 任务 |
+| \`- [x] 完成\` | ● 完成 |
+| \`> 引用\` | │ 引用 |
+| \`[链接](url)\` | 链接 ↗ |
+| \`![图片](url)\` | 🖼 alt |
+
+## 使用场景
+
+- 编写日报、周报
+- 编辑 Markdown 文档
+- 快速记录笔记
+- 代码片段编辑
+
+编辑器会在保存时返回编辑后的内容，取消时返回空。
+`,_e=e({default:()=>ve}),ve=`## 权限配置文件
 
 权限配置位于项目目录 \`.jcli/permissions.yaml\`：
 
@@ -2036,7 +2497,7 @@ allow:
   - "WebFetch(domain:github.com)"
   - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # 正则匹配所有 google 子域名
 \`\`\`
-`,he=e({default:()=>ge}),ge=`## 注册应用别名
+`,ye=e({default:()=>be}),be=`## 注册应用别名
 
 \`\`\`bash
 j set chrome "/Applications/Google Chrome.app"
@@ -2089,7 +2550,7 @@ j chat 你好               # 快速提问
 \`\`\`bash
 j                         # 进入交互模式，支持 Tab 补全
 \`\`\`
-`,_e=e({default:()=>ve}),ve=`## 概述
+`,xe=e({default:()=>Se}),Se=`## 概述
 
 通过 WebSocket 从移动设备控制 AI 对话，使用 \`j chat --remote\` 启动。
 
@@ -2111,7 +2572,7 @@ j chat --remote --port 9390  # 指定端口
 ## 客户端
 
 - **Web**：扫描二维码连接
-`,ye=e({default:()=>be}),be=`## 概述
+`,Ce=e({default:()=>we}),we=`## 概述
 
 日报/周报系统，支持快速记录、周报管理和 Git 同步。
 
@@ -2174,60 +2635,92 @@ j reportctl pull
 当当前日期超过 \`last_day\` 时，写入日报会自动：
 1. 生成新周标题 \`# WeekN[开始日期 - 结束日期]\`
 2. 更新 week_num 和 last_day
-`,xe=e({default:()=>Se}),Se=`## 命令
+`,Te=e({default:()=>Ee}),Ee=`## 概述
 
-| 命令 | 描述 |
-|------|------|
-| \`j concat <名称> [内容]\` | 创建/编辑脚本 |
-| \`j <脚本名> [参数]\` | 执行脚本并传递参数 |
+脚本系统允许定义和执行预设的 Shell 命令序列，支持参数化和条件执行。
 
-## 创建脚本
+核心特性：
+- **预定义脚本**：将常用命令序列保存为可复用脚本
+- **参数化执行**：脚本支持占位符，运行时传入参数
+- **多命令串联**：支持命令链式执行
+- **环境隔离**：每个脚本在独立 Shell 中执行
 
-\`\`\`bash
-# 创建脚本并指定内容
-j concat open "open $1"
+## 基本用法
 
-# 使用 TUI 编辑器创建
-j concat deploy
-
-# 在新窗口中创建
-j concat build -w
-\`\`\`
-
-## 执行脚本
+### 执行脚本
 
 \`\`\`bash
-# 执行脚本
-j open README.md         # README.md 作为 $1 传入
-j build                  # 无参数执行
-
-# 在新窗口中执行
-j open -w README.md
+j script <name>           # 执行指定脚本
+j script <name> <args...> # 带参数执行
 \`\`\`
 
-## 环境变量
+### 管理脚本
 
-脚本可以使用以下环境变量：
+脚本存放在 \`~/.jdata/scripts/\` 目录，每个脚本为一个 Markdown 文件：
 
-| 变量 | 描述 |
-|------|------|
-| \`$1\`, \`$2\`, ... | 脚本参数 |
-| \`$@\` | 所有参数 |
-| \`$J_DATA_PATH\` | 数据目录路径 |
+\`\`\`
+~/.jdata/scripts/
+├── deploy.md
+├── build.md
+└── test.md
+\`\`\`
 
-## 示例
+## 脚本格式
+
+脚本使用 Markdown 格式，支持 frontmatter 配置：
+
+\`\`\`markdown
+---
+name: deploy
+description: 部署到生产环境
+---
+
+#!/bin/bash
+set -e
+
+echo "Building..."
+npm run build
+
+echo "Deploying..."
+rsync -avz dist/ user@server:/var/www/
+\`\`\`
+
+### Frontmatter 字段
+
+| 字段 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| name | string | 是 | 脚本名称 |
+| description | string | 否 | 脚本描述 |
+
+## 参数化
+
+脚本支持 \`{{.param}}\` 占位符：
+
+\`\`\`markdown
+---
+name: greet
+description: 问候脚本
+---
+
+#!/bin/bash
+name="{{.name}}"
+echo "Hello, $name!"
+\`\`\`
+
+执行时传入参数：
 
 \`\`\`bash
-# 部署脚本
-j concat deploy "git pull && cargo build --release && systemctl restart myapp"
-
-# 备份脚本
-j concat backup "cp -r $1 ~/.jdata/backups/$(date +%Y%m%d)"
-
-# 编辑器脚本
-j concat edit "code $1"
+j script greet --name World
 \`\`\`
-`,Ce=e({default:()=>we}),we=`## 概述
+
+## 使用场景
+
+- 项目构建和部署
+- 代码格式化和检查
+- 数据库备份
+- 环境初始化
+- 定时任务封装
+`,De=e({default:()=>Oe}),Oe=`## 概述
 
 Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具加载。
 
@@ -2287,51 +2780,86 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
   "disabled_skills": ["skill-name-1", "skill-name-2"]
 }
 \`\`\`
-`,Te=e({default:()=>Ee}),Ee=`## 命令
+`,ke=e({default:()=>Ae}),Ae=`## 概述
 
-| 命令 | 描述 |
-|------|------|
-| \`j todo\` | 打开 TUI 待办管理器 |
-| \`j todo add <内容>\` | 快速添加待办 |
-| \`j todo done <id>\` | 标记待办完成 |
-| \`j todo list\` | 列出待办（支持 --done/--undone） |
+待办管理系统提供轻量级的任务跟踪能力，支持状态流转和优先级管理。
 
-## 示例
+核心特性：
+- **快速添加**：一行命令添加待办事项
+- **状态管理**：pending、in_progress、completed 状态流转
+- **列表查看**：按状态筛选和排序
+- **数据持久化**：自动保存到本地文件
+
+## 基本用法
+
+### 查看待办
 
 \`\`\`bash
-# 快速添加
-j todo add 买牛奶
-j todo add 审查 PR
-
-# 列出待办
-j todo list              # 所有待办
-j todo list --undone     # 仅未完成
-j todo list --done       # 仅已完成
-
-# 标记完成
-j todo done 1
-j todo done 1 --report   # 同时写入日报
+j todo              # 查看所有待办
+j todo -s pending   # 按状态筛选
 \`\`\`
 
-## TUI 管理器
+### 添加待办
 
-运行 \`j todo\` 打开交互式 TUI：
-
-- **添加/编辑/删除**：交互式管理待办
-- **优先级**：设置优先级
-- **截止日期**：添加截止时间
-- **分类**：按项目/上下文组织
-
-## Markdown 集成
-
-待办可以在日报中使用 Markdown 格式：
-
-\`\`\`markdown
-- [x] 已完成的任务
-- [ ] 待处理的任务
-- [ ] 另一个待处理任务
+\`\`\`bash
+j todo add "完成文档编写"
+j todo add "修复Bug" -p high  # 高优先级
 \`\`\`
-`,De=e({default:()=>Oe}),Oe=`## 文件工具
+
+### 更新状态
+
+\`\`\`bash
+j todo start <id>     # 标记为进行中
+j todo done <id>      # 标记为已完成
+j todo cancel <id>    # 取消待办
+\`\`\`
+
+### 删除待办
+
+\`\`\`bash
+j todo rm <id>        # 删除指定待办
+j todo clear          # 清空已完成
+\`\`\`
+
+## 待办状态
+
+| 状态 | 说明 |
+|------|------|
+| pending | 待处理 |
+| in_progress | 进行中 |
+| completed | 已完成 |
+
+## 优先级
+
+| 级别 | 标识 |
+|------|------|
+| 低 | low |
+| 中 | medium（默认） |
+| 高 | high |
+
+## 数据存储
+
+待办数据存储在 \`~/.jdata/todos.json\`：
+
+\`\`\`json
+[
+  {
+    "id": 1,
+    "content": "完成文档编写",
+    "status": "pending",
+    "priority": "high",
+    "created_at": "2024-01-15T10:00:00Z"
+  }
+]
+\`\`\`
+
+## 使用场景
+
+- 日常任务管理
+- 项目进度跟踪
+- 个人备忘录
+- 团队协作任务分配
+`,je=e({default:()=>Me}),Me=`## 文件工具
 
 ### Read
 
@@ -2776,9 +3304,9 @@ permissions:
 |------|------|
 | \`@file:路径\` | 包含文件内容（自动读取并注入上下文） |
 | \`@skill:名称\` | 加载并激活指定 skill |
-`,ke={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Ae={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function je(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Y=Object.assign({"./en/aiChat.md":_,"./en/alias.md":ee,"./en/browser.md":ne,"./en/commands.md":ie,"./en/dataDirectory.md":oe,"./en/hooks.md":b,"./en/installation.md":S,"./en/permissions.md":w,"./en/quickStart.md":E,"./en/remote.md":O,"./en/report.md":A,"./en/script.md":M,"./en/skills.md":P,"./en/todo.md":I,"./en/tools.md":R}),Me=Object.assign({"./zh/aiChat.md":B,"./zh/alias.md":H,"./zh/browser.md":W,"./zh/commands.md":K,"./zh/dataDirectory.md":se,"./zh/hooks.md":le,"./zh/installation.md":de,"./zh/permissions.md":pe,"./zh/quickStart.md":he,"./zh/remote.md":_e,"./zh/report.md":ye,"./zh/script.md":xe,"./zh/skills.md":Ce,"./zh/todo.md":Te,"./zh/tools.md":De});function Ne(){let e={en:{},zh:{}};for(let[t,n]of Object.entries(Y)){let r=t.match(/\.\/en\/(\w+)\.md$/);r&&n?.default&&(e.en[r[1]]=n.default)}for(let[t,n]of Object.entries(Me)){let r=t.match(/\.\/zh\/(\w+)\.md$/);r&&n?.default&&(e.zh[r[1]]=n.default)}return e}var X=Ne();function Z(e,t){return X[e]?.[t]||X.en[t]||``}function Pe(e,t){return J[e]?.[t]||J.en[t]||t}var Fe={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ie({lang:e,activeSection:t,onNavigate:n}){let r=je(),i=J[e],a=Fe[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Le={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function Re(e){let t=e.split(`
-`),n=[],r=new Set;return t.forEach(e=>{let t,i;if(e.startsWith(`## `))t=e.slice(3).trim(),i=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),i=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),i=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let a=$(t),o=1;for(;r.has(a);)a=`${$(t)}-${o}`,o++;r.add(a),n.push({id:a,text:t,level:i})}),n}function ze({content:e,lang:t}){let n=(0,u.useMemo)(()=>Re(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Le[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
+`,Ne={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Pe={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function Fe(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`markdownEditor`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Ie=Object.assign({"./en/aiChat.md":_,"./en/alias.md":ee,"./en/browser.md":ne,"./en/commands.md":ie,"./en/dataDirectory.md":oe,"./en/hooks.md":b,"./en/installation.md":S,"./en/markdown-editor.md":w,"./en/permissions.md":E,"./en/quickStart.md":O,"./en/remote.md":A,"./en/report.md":M,"./en/script.md":P,"./en/skills.md":I,"./en/todo.md":R,"./en/tools.md":B}),Le=Object.assign({"./zh/aiChat.md":H,"./zh/alias.md":W,"./zh/browser.md":K,"./zh/commands.md":se,"./zh/dataDirectory.md":le,"./zh/hooks.md":de,"./zh/installation.md":pe,"./zh/markdown-editor.md":he,"./zh/permissions.md":_e,"./zh/quickStart.md":ye,"./zh/remote.md":xe,"./zh/report.md":Ce,"./zh/script.md":Te,"./zh/skills.md":De,"./zh/todo.md":ke,"./zh/tools.md":je});function Re(){let e={en:{},zh:{}},t=e=>e.replace(/-([a-z])/g,(e,t)=>t.toUpperCase());for(let[n,r]of Object.entries(Ie)){let i=n.match(/\.\/en\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.en[n]=r.default}}for(let[n,r]of Object.entries(Le)){let i=n.match(/\.\/zh\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.zh[n]=r.default}}return e}var Y=Re();function X(e,t){return Y[e]?.[t]||Y.en[t]||``}function ze(e,t){return J[e]?.[t]||J.en[t]||t}var Z={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Be({lang:e,activeSection:t,onNavigate:n}){let r=Fe(),i=J[e],a=Z[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Ve={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function He(e){let t=e.split(`
+`),n=[],r=new Set;return t.forEach(e=>{let t,i;if(e.startsWith(`## `))t=e.slice(3).trim(),i=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),i=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),i=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let a=$(t),o=1;for(;r.has(a);)a=`${$(t)}-${o}`,o++;r.add(a),n.push({id:a,text:t,level:i})}),n}function Ue({content:e,lang:t}){let n=(0,u.useMemo)(()=>He(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Ve[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
                   relative w-full text-left py-1.5 px-3 rounded-lg transition-all duration-200
                   ${s?`pl-8 text-xs`:a?`pl-6 text-xs`:`text-sm mt-1`}
                   ${i?s?`text-stone-700 font-medium bg-stone-50 before:absolute before:left-5 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-400 before:rounded-full`:a?`text-stone-800 font-medium bg-stone-50 before:absolute before:left-3 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-500 before:rounded-full`:`text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-stone-900 before:rounded-full`:s?`text-stone-400 hover:text-stone-500 hover:bg-stone-50`:a?`text-stone-400 hover:text-stone-600 hover:bg-stone-50`:`text-stone-500 hover:text-stone-700 hover:bg-stone-50`}
-                `,children:t})},e)})})]})}function Be(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Ae[n],m=ke[n],h=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline`,children:n===`zh`?`首页`:`Home`}),(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:h,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-64 xl:mr-52 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=Z(n,c),t=Pe(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(g,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ie,{lang:n,activeSection:c,onNavigate:h})]})}),(0,d.jsx)(ze,{content:Z(n,c)||``,lang:n}),(0,d.jsx)(`footer`,{className:`lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Be as default};
+                `,children:t})},e)})})]})}function We(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Pe[n],m=Ne[n],h=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline`,children:n===`zh`?`首页`:`Home`}),(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:h,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-64 xl:mr-52 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=X(n,c),t=ze(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(g,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Be,{lang:n,activeSection:c,onNavigate:h})]})}),(0,d.jsx)(Ue,{content:X(n,c)||``,lang:n}),(0,d.jsx)(`footer`,{className:`lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{We as default};

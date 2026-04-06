@@ -2,9 +2,9 @@
 
 ```bash
 j chat              # Enter TUI chat interface
-j chat "Hello"      # Quick question and print response
-j chat -c           # Continue last session
-j chat --session <id>  # Resume specific session
+j chat "Hello"      # Quick question with response printed
+j chat -c           # Continue previous session
+j chat --session <id>  # Restore specific session
 ```
 
 ## Shortcuts
@@ -13,10 +13,10 @@ j chat --session <id>  # Resume specific session
 |----------|--------|
 | `Enter` | Send message |
 | `Esc` | Cancel response/Exit |
-| `Ctrl+T` | Switch model |
-| `Ctrl+L` | Archive conversation |
 | `Ctrl+Y` | Copy last AI reply |
 | `Ctrl+B` | Message browse mode |
+| `Ctrl+G` | Open log windows |
+| `Ctrl+O` | Toggle tool details |
 | `Ctrl+E` | Open config panel |
 | `F1` or `?` | Show help |
 
@@ -27,7 +27,7 @@ Type `/` in the input box to trigger slash commands:
 | Command | Action |
 |---------|--------|
 | `/copy` | Copy last AI reply |
-| `/log` | Open log window |
+| `/log` | Open log windows |
 | `/browse` | Browse message history |
 | `/config` | Open config panel |
 | `/model` | Switch model |
@@ -35,11 +35,11 @@ Type `/` in the input box to trigger slash commands:
 
 ## Context References
 
-Type `@` in input to trigger completion:
+Type `@` in the input box to trigger completion:
 
 ```
-@skill:<name>       # Reference skill
-@command:<name>     # Reference custom command
+@skill:<name>       # Reference a skill
+@command:<name>     # Reference a custom command
 @file:<path>        # Reference file content (supports images)
 ```
 
@@ -50,32 +50,32 @@ AI chat has built-in Agent capabilities for autonomous multi-step task execution
 - **Autonomous Reasoning**: AI plans and executes multi-step tasks
 - **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
-- **Plan Mode**: Explore codebase before making plan
-- **Sub-agent**: Spawn sub-agents for complex tasks in parallel
+- **Plan Mode**: Explore codebase before making a plan
+- **Sub-Agent**: Spawn sub-agents for complex tasks in parallel
 
 ### Plan Mode
 
-For complex tasks, enter plan mode to explore codebase first:
+For complex tasks, enter plan mode to explore the codebase first:
 
 ```
 # Enter plan mode
-Analyze this project's architecture and design a refactoring plan
+Analyze the project architecture and design a refactoring plan
 
 # AI will:
 1. Enter plan mode (read-only tools available)
 2. Explore codebase structure
 3. Generate detailed plan
-4. Submit plan for user approval
-5. Execute after approval
+4. Submit plan for user confirmation
+5. Execute after user approval
 ```
 
-### Sub-agent
+### Sub-Agent
 
 Agent tool allows spawning sub-agents for complex tasks:
 
-- **No recursion**: Sub-agent cannot call Agent tool
-- **Max rounds**: 30 tool call limit
-- **Execution mode**: Foreground (blocking) or background (async)
+- **No Recursion**: Sub-agents cannot call Agent tool
+- **Max Rounds**: 30 tool call rounds limit
+- **Execution Mode**: Foreground (blocking) or Background (async)
 
 ```
 # Example: Spawn sub-agent to search and organize code
@@ -95,7 +95,7 @@ permissions:
     - Grep
     - Glob
   
-  deny:              # Takes priority over allow, blocks execution
+  deny:              # Takes priority over allow, direct reject
     - Bash
     - Write
 ```
@@ -105,10 +105,10 @@ permissions:
 ## Remote Control
 
 ```bash
-j chat --remote     # Enable remote control (scan QR with phone)
-j chat --remote --port 9390  # Specify port
+j chat --remote     # Enable remote control (scan QR code with phone)
+j chat --remote --port 9390  # Custom port
 ```
 
 ## Multi-Model Support
 
-Supports OpenAI, Claude, Gemini, Ollama and more. Use `Ctrl+E` to open config panel.
+Supports OpenAI, Claude, Gemini, Ollama and more. Manage via `Ctrl+E` config panel.

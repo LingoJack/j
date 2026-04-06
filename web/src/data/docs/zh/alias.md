@@ -1,51 +1,107 @@
-## 命令
+## 概述
 
-| 命令 | 描述 |
-|------|------|
-| `j set <别名> <路径>` | 设置别名（路径 → path 配置，URL → inner_url） |
-| `j rm <别名>` | 删除别名（同时清理关联的分类标记） |
-| `j rename <别名> <新别名>` | 重命名别名（更新所有分类引用） |
-| `j mf <别名> <新路径>` | 修改别名路径 |
+别名系统允许为常用命令和应用程序创建简短别名，提高命令行效率。
 
-## 分类标记
+核心特性：
+- **命令别名**：将长命令简化为短别名
+- **应用别名**：快速打开常用应用和网址
+- **分组管理**：按项目或类别组织别名
+- **动态扩展**：支持运行时添加和删除
+
+## 基本用法
+
+### 执行别名
 
 ```bash
-j note <别名> <分类>   # 为别名标记分类
-j find <分类>         # 按分类查找别名
-j note chrome browser # 将 chrome 标记为浏览器
-j note github outer_url # 将 github 标记为外网（自动连接 VPN）
+j <alias>            # 执行别名命令
+j <alias> <args...>  # 带参数执行
 ```
 
-## 分类说明
-
-| 分类 | 描述 |
-|------|------|
-| `browser` | 浏览器 |
-| `editor` | 编辑器 |
-| `vpn` | VPN 应用 |
-| `script` | 自定义脚本 |
-| `inner_url` | 内网 URL |
-| `outer_url` | 外网 URL（自动连接 VPN） |
-
-## 示例
+### 管理别名
 
 ```bash
-# 设置应用别名
-j set chrome "/Applications/Google Chrome.app"
-j set safari "/Applications/Safari.app"
-j set vscode "/Applications/Visual Studio Code.app"
+j alias              # 列出所有别名
+j alias add <name> <command>  # 添加别名
+j alias rm <name>    # 删除别名
+```
 
-# 设置 URL 别名
-j set github https://github.com
-j set google https://google.com
+## 别名类型
 
-# 设置目录别名
-j set proj ~/Projects
-j set docs ~/Documents
+### 命令别名
 
+将常用命令简化：
+
+```bash
+# 添加别名
+j alias add gs "git status"
+j alias add gp "git push"
+
+# 使用别名
+j gs
+j gp origin main
+```
+
+### 应用别名
+
+快速打开应用或网址：
+
+```bash
 # 打开应用
-j chrome                   # 打开 Chrome
-j chrome "rust lang"       # 用 Chrome 搜索
-j chrome github            # 用 Chrome 打开 github
-j vscode proj              # 用 VSCode 打开 proj 目录
+j alias add chrome "open -a 'Google Chrome'"
+j alias add vscode "open -a 'Visual Studio Code'"
+
+# 打开网址
+j alias add gh "open https://github.com"
+
+# 使用
+j chrome
+j gh
 ```
+
+## 别名文件
+
+别名单独存放在 `~/.jdata/aliases/` 目录：
+
+```
+~/.jdata/aliases/
+├── git.json      # Git 相关别名
+├── apps.json     # 应用别名
+└── work.json     # 工作相关别名
+```
+
+### 别名文件格式
+
+```json
+[
+  {
+    "name": "gs",
+    "command": "git status",
+    "description": "查看 Git 状态"
+  },
+  {
+    "name": "chrome",
+    "command": "open -a 'Google Chrome'",
+    "description": "打开 Chrome 浏览器"
+  }
+]
+```
+
+## 参数化别名
+
+别名支持 `$1`、`$2` 等参数占位符：
+
+```bash
+# 添加带参数的别名
+j alias add find-file "find . -name '$1' -type f"
+
+# 使用
+j find-file "*.rs"
+```
+
+## 使用场景
+
+- Git 命令简化
+- 项目快速切换
+- 应用快速启动
+- 常用网址书签
+- SSH 连接快捷方式

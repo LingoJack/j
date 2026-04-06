@@ -1,53 +1,85 @@
-## 命令
+## 概述
 
-| 命令 | 描述 |
-|------|------|
-| `j concat <名称> [内容]` | 创建/编辑脚本 |
-| `j <脚本名> [参数]` | 执行脚本并传递参数 |
+脚本系统允许定义和执行预设的 Shell 命令序列，支持参数化和条件执行。
 
-## 创建脚本
+核心特性：
+- **预定义脚本**：将常用命令序列保存为可复用脚本
+- **参数化执行**：脚本支持占位符，运行时传入参数
+- **多命令串联**：支持命令链式执行
+- **环境隔离**：每个脚本在独立 Shell 中执行
 
-```bash
-# 创建脚本并指定内容
-j concat open "open $1"
+## 基本用法
 
-# 使用 TUI 编辑器创建
-j concat deploy
-
-# 在新窗口中创建
-j concat build -w
-```
-
-## 执行脚本
+### 执行脚本
 
 ```bash
-# 执行脚本
-j open README.md         # README.md 作为 $1 传入
-j build                  # 无参数执行
-
-# 在新窗口中执行
-j open -w README.md
+j script <name>           # 执行指定脚本
+j script <name> <args...> # 带参数执行
 ```
 
-## 环境变量
+### 管理脚本
 
-脚本可以使用以下环境变量：
+脚本存放在 `~/.jdata/scripts/` 目录，每个脚本为一个 Markdown 文件：
 
-| 变量 | 描述 |
-|------|------|
-| `$1`, `$2`, ... | 脚本参数 |
-| `$@` | 所有参数 |
-| `$J_DATA_PATH` | 数据目录路径 |
+```
+~/.jdata/scripts/
+├── deploy.md
+├── build.md
+└── test.md
+```
 
-## 示例
+## 脚本格式
+
+脚本使用 Markdown 格式，支持 frontmatter 配置：
+
+```markdown
+---
+name: deploy
+description: 部署到生产环境
+---
+
+#!/bin/bash
+set -e
+
+echo "Building..."
+npm run build
+
+echo "Deploying..."
+rsync -avz dist/ user@server:/var/www/
+```
+
+### Frontmatter 字段
+
+| 字段 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| name | string | 是 | 脚本名称 |
+| description | string | 否 | 脚本描述 |
+
+## 参数化
+
+脚本支持 `{{.param}}` 占位符：
+
+```markdown
+---
+name: greet
+description: 问候脚本
+---
+
+#!/bin/bash
+name="{{.name}}"
+echo "Hello, $name!"
+```
+
+执行时传入参数：
 
 ```bash
-# 部署脚本
-j concat deploy "git pull && cargo build --release && systemctl restart myapp"
-
-# 备份脚本
-j concat backup "cp -r $1 ~/.jdata/backups/$(date +%Y%m%d)"
-
-# 编辑器脚本
-j concat edit "code $1"
+j script greet --name World
 ```
+
+## 使用场景
+
+- 项目构建和部署
+- 代码格式化和检查
+- 数据库备份
+- 环境初始化
+- 定时任务封装

@@ -1,44 +1,79 @@
-## 命令
+## 概述
 
-| 命令 | 描述 |
-|------|------|
-| `j todo` | 打开 TUI 待办管理器 |
-| `j todo add <内容>` | 快速添加待办 |
-| `j todo done <id>` | 标记待办完成 |
-| `j todo list` | 列出待办（支持 --done/--undone） |
+待办管理系统提供轻量级的任务跟踪能力，支持状态流转和优先级管理。
 
-## 示例
+核心特性：
+- **快速添加**：一行命令添加待办事项
+- **状态管理**：pending、in_progress、completed 状态流转
+- **列表查看**：按状态筛选和排序
+- **数据持久化**：自动保存到本地文件
+
+## 基本用法
+
+### 查看待办
 
 ```bash
-# 快速添加
-j todo add 买牛奶
-j todo add 审查 PR
-
-# 列出待办
-j todo list              # 所有待办
-j todo list --undone     # 仅未完成
-j todo list --done       # 仅已完成
-
-# 标记完成
-j todo done 1
-j todo done 1 --report   # 同时写入日报
+j todo              # 查看所有待办
+j todo -s pending   # 按状态筛选
 ```
 
-## TUI 管理器
+### 添加待办
 
-运行 `j todo` 打开交互式 TUI：
-
-- **添加/编辑/删除**：交互式管理待办
-- **优先级**：设置优先级
-- **截止日期**：添加截止时间
-- **分类**：按项目/上下文组织
-
-## Markdown 集成
-
-待办可以在日报中使用 Markdown 格式：
-
-```markdown
-- [x] 已完成的任务
-- [ ] 待处理的任务
-- [ ] 另一个待处理任务
+```bash
+j todo add "完成文档编写"
+j todo add "修复Bug" -p high  # 高优先级
 ```
+
+### 更新状态
+
+```bash
+j todo start <id>     # 标记为进行中
+j todo done <id>      # 标记为已完成
+j todo cancel <id>    # 取消待办
+```
+
+### 删除待办
+
+```bash
+j todo rm <id>        # 删除指定待办
+j todo clear          # 清空已完成
+```
+
+## 待办状态
+
+| 状态 | 说明 |
+|------|------|
+| pending | 待处理 |
+| in_progress | 进行中 |
+| completed | 已完成 |
+
+## 优先级
+
+| 级别 | 标识 |
+|------|------|
+| 低 | low |
+| 中 | medium（默认） |
+| 高 | high |
+
+## 数据存储
+
+待办数据存储在 `~/.jdata/todos.json`：
+
+```json
+[
+  {
+    "id": 1,
+    "content": "完成文档编写",
+    "status": "pending",
+    "priority": "high",
+    "created_at": "2024-01-15T10:00:00Z"
+  }
+]
+```
+
+## 使用场景
+
+- 日常任务管理
+- 项目进度跟踪
+- 个人备忘录
+- 团队协作任务分配

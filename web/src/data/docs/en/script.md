@@ -1,53 +1,85 @@
-## Commands
+## Overview
 
-| Command | Description |
-|---------|-------------|
-| `j concat <name> [content]` | Create/edit script |
-| `j <script> [args]` | Execute script with arguments |
+The script system allows defining and executing preset shell command sequences with parameterization and conditional execution.
 
-## Creating Scripts
+Core features:
+- **Predefined Scripts**: Save common command sequences as reusable scripts
+- **Parameterized Execution**: Scripts support placeholders for runtime arguments
+- **Command Chaining**: Support for sequential command execution
+- **Environment Isolation**: Each script runs in an independent shell
 
-```bash
-# Create script with content
-j concat open "open $1"
+## Basic Usage
 
-# Create script with TUI editor
-j concat deploy
-
-# Create in new window
-j concat build -w
-```
-
-## Executing Scripts
+### Execute Script
 
 ```bash
-# Execute script
-j open README.md         # Passes README.md as $1
-j build                  # Execute without arguments
-
-# Execute in new window
-j open -w README.md
+j script <name>           # Execute specified script
+j script <name> <args...> # Execute with arguments
 ```
 
-## Environment Variables
+### Manage Scripts
 
-Scripts can use environment variables:
+Scripts are stored in `~/.jdata/scripts/` directory, each script as a Markdown file:
 
-| Variable | Description |
-|----------|-------------|
-| `$1`, `$2`, ... | Script arguments |
-| `$@` | All arguments |
-| `$J_DATA_PATH` | Data directory path |
+```
+~/.jdata/scripts/
+├── deploy.md
+├── build.md
+└── test.md
+```
 
-## Examples
+## Script Format
+
+Scripts use Markdown format with frontmatter configuration:
+
+```markdown
+---
+name: deploy
+description: Deploy to production
+---
+
+#!/bin/bash
+set -e
+
+echo "Building..."
+npm run build
+
+echo "Deploying..."
+rsync -avz dist/ user@server:/var/www/
+```
+
+### Frontmatter Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | Script name |
+| description | string | No | Script description |
+
+## Parameterization
+
+Scripts support `{{.param}}` placeholders:
+
+```markdown
+---
+name: greet
+description: Greeting script
+---
+
+#!/bin/bash
+name="{{.name}}"
+echo "Hello, $name!"
+```
+
+Execute with arguments:
 
 ```bash
-# Deployment script
-j concat deploy "git pull && cargo build --release && systemctl restart myapp"
-
-# Backup script
-j concat backup "cp -r $1 ~/.jdata/backups/$(date +%Y%m%d)"
-
-# Open in editor
-j concat edit "code $1"
+j script greet --name World
 ```
+
+## Use Cases
+
+- Project build and deployment
+- Code formatting and linting
+- Database backup
+- Environment initialization
+- Scheduled task wrapper

@@ -17,7 +17,8 @@ export const docTree: Record<Language, Record<string, { title: string; children:
         alias: 'Alias Management',
         report: 'Daily Reports',
         todo: 'Todo Management',
-        script: 'Script System'
+        script: 'Script System',
+        markdownEditor: 'Markdown Editor'
       }
     },
     aiFeatures: {
@@ -54,7 +55,8 @@ export const docTree: Record<Language, Record<string, { title: string; children:
         alias: '别名管理',
         report: '日报系统',
         todo: '待办管理',
-        script: '脚本系统'
+        script: '脚本系统',
+        markdownEditor: 'Markdown 编辑器'
       }
     },
     aiFeatures: {
@@ -102,6 +104,7 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
     report: 'Daily Reports',
     todo: 'Todo Management',
     script: 'Script System',
+    markdownEditor: 'Markdown Editor',
     aiChat: 'AI Chat',
     tools: 'AI Tools',
     commands: 'Command',
@@ -119,6 +122,7 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
     report: '日报系统',
     todo: '待办管理',
     script: '脚本系统',
+    markdownEditor: 'Markdown 编辑器',
     aiChat: 'AI 对话',
     tools: 'AI 工具',
     commands: 'Command',
@@ -134,7 +138,7 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
 export function getOrderedSections(): string[] {
   return [
     'installation', 'quickStart', 'dataDirectory',
-    'alias', 'report', 'todo', 'script',
+    'alias', 'report', 'todo', 'script', 'markdownEditor',
     'aiChat', 'tools', 'commands', 'skills', 'hooks',
     'browser', 'remote', 'permissions'
   ]
@@ -161,19 +165,26 @@ function buildContentMap(): Record<Language, Record<string, string>> {
     zh: {}
   }
 
+  // Convert kebab-case to camelCase
+  const toCamelCase = (str: string): string => {
+    return str.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
+  }
+
   // Process English files
   for (const [path, module] of Object.entries(mdFilesEn)) {
-    const match = path.match(/\.\/en\/(\w+)\.md$/)
+    const match = path.match(/\.\/en\/([\w-]+)\.md$/)
     if (match && module?.default) {
-      contentMap.en[match[1]] = module.default
+      const key = toCamelCase(match[1])
+      contentMap.en[key] = module.default
     }
   }
 
   // Process Chinese files
   for (const [path, module] of Object.entries(mdFilesZh)) {
-    const match = path.match(/\.\/zh\/(\w+)\.md$/)
+    const match = path.match(/\.\/zh\/([\w-]+)\.md$/)
     if (match && module?.default) {
-      contentMap.zh[match[1]] = module.default
+      const key = toCamelCase(match[1])
+      contentMap.zh[key] = module.default
     }
   }
 
