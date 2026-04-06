@@ -358,8 +358,6 @@ fn json_schema_to_xml_params(schema: &Value) -> String {
 /// 简单的危险命令过滤
 pub fn is_dangerous_command(cmd: &str) -> bool {
     let dangerous_patterns = [
-        "rm -rf /",
-        "rm -rf /*",
         "mkfs",
         "dd if=",
         ":(){:|:&};:",
