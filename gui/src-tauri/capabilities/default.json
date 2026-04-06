@@ -5,6 +5,7 @@
   "windows": ["spotlight"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-size",
     "global-shortcut:default"
   ]
 }

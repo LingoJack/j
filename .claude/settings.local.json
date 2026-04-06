@@ -96,7 +96,8 @@
       "Bash(npm list:*)",
       "Bash(cargo install:*)",
       "Bash(cargo tauri:*)",
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(npx tsc:*)"
     ]
   },
   "language": "zh-CN",
