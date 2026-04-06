@@ -12,14 +12,12 @@ export function App() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [showResults, setShowResults] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 搜索
   const performSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
       setResults([]);
-      setShowResults(false);
       return;
     }
 
@@ -28,11 +26,9 @@ export function App() {
       const res = await invoke<SearchResult[]>('search_aliases', { query: q });
       setResults(res);
       setSelectedIndex(0);
-      setShowResults(true);
     } catch (e) {
       console.error('Search failed:', e);
       setResults([]);
-      setShowResults(false);
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +41,6 @@ export function App() {
       await invoke('hide_window');
       setQuery('');
       setResults([]);
-      setShowResults(false);
     } catch (e) {
       console.error('Execute failed:', e);
     }
@@ -60,7 +55,6 @@ export function App() {
           invoke('hide_window');
           setQuery('');
           setResults([]);
-          setShowResults(false);
           break;
         case 'Enter':
           e.preventDefault();
@@ -101,36 +95,32 @@ export function App() {
 
   return (
     <div className="spotlight-container">
-      <div className="spotlight-window">
-        <div className="search-box">
-          <span className="search-icon">j</span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="输入命令或搜索..."
-            className="search-input"
-            spellCheck={false}
-          />
-          {isLoading && <span className="loading-indicator" />}
-        </div>
-
-        {showResults && results.length > 0 && (
-          <div className="result-list">
-            {results.map((result, index) => (
-              <div
-                key={result.alias}
-                className={`result-item ${index === selectedIndex ? 'selected' : ''}`}
-                onClick={() => executeCommand(result.alias)}
-              >
-                <span className="result-alias">{result.alias}</span>
-                <span className="result-description">{result.description}</span>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="search-box">
+        <span className="search-icon">j</span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="输入命令或搜索..."
+          className="search-input"
+          spellCheck={false}
+        />
+        {isLoading && <span className="loading-indicator" />}
       </div>
+      {results.length > 0 && (
+        <div className="results-list">
+          {results.map((result, index) => (
+            <div
+              key={result.alias}
+              className={`result-item ${index === selectedIndex ? 'selected' : ''}`}
+            >
+              <span className="result-alias">{result.alias}</span>
+              <span className="result-description">{result.description}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

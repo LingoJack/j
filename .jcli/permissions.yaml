@@ -107,4 +107,7 @@ allow:
 - Bash(cd gui/src-ui:*)
 - Bash(find /Users/lingojack/dev_custom/j/gui:*)
 - Bash(cd /Users/lingojack/dev_custom/j/gui/src-ui:*)
+- Bash(file /Users/lingojack/dev_custom/j/gui/src-tauri/icons/icon.icns:*)
+- Bash(cd /Users/lingojack/dev_custom/j/gui:*)
+- Bash(cd /Users/lingojack/dev_custom/j/gui/src-tauri:*)
 deny: []
