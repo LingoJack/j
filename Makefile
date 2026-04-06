@@ -336,11 +336,11 @@ docker-run: docker-build ## 运行 Docker 容器
 # ============================================
 # GUI (Tauri) 相关
 # ============================================
-gui-dev: ## 启动 GUI 开发模式
+dev-app: ## 启动 GUI 开发模式
 	@echo "🖥️  启动 GUI 开发模式..."
 	@cd gui && cargo tauri dev
 
-gui-clean: ## 清理 GUI 构建产物
+clean-app: ## 清理 GUI 构建产物
 	@echo "🧹 清理 GUI 构建产物..."
 	@rm -rf gui/src-tauri/target
 	@rm -rf gui/src-ui/dist src-ui/node_modules

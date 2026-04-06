@@ -15,8 +15,8 @@
       {
         "label": "spotlight",
         "title": "j-cli",
-        "width": 600,
-        "height": 100,
+        "width": 560,
+        "height": 56,
         "center": true,
         "resizable": false,
         "decorations": false,
