@@ -98,4 +98,5 @@ allow:
 - Bash(rustfmt --check:*)
 - Bash(cat src/tui/editor_markdown.rs:*)
 - Bash(find .jcli:*)
+- Bash(echo '**register_hook:*)
 deny: []

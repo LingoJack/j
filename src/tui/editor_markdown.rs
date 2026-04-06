@@ -527,6 +527,7 @@ enum TableAlign {
 /// 表格上下文
 struct TableContext {
     start_idx: usize,
+    #[allow(dead_code)]
     end_idx: usize,
     col_widths: Vec<usize>,
     alignments: Vec<TableAlign>,
@@ -693,15 +694,15 @@ impl<'a> MarkdownEditorState<'a> {
         let mut in_block = false;
         for (i, line) in lines.iter().enumerate() {
             let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
+            if let Some(stripped) = trimmed.strip_prefix("```") {
                 if !in_block {
                     // 开始新的代码块，提取语言标识
-                    let lang = trimmed[3..].trim();
+                    let lang = stripped.trim();
                     if i <= line_idx && line_idx < lines.len() {
                         in_block = true;
                         // 检查当前行是否在这个代码块内
-                        for j in (i + 1)..lines.len() {
-                            if Self::is_code_fence_line(&lines[j]) {
+                        for (j, block_line) in lines.iter().enumerate().skip(i + 1) {
+                            if Self::is_code_fence_line(block_line) {
                                 // 找到结束围栏
                                 if line_idx < j {
                                     return Some(lang.to_string());
@@ -1130,8 +1131,8 @@ impl<'a> MarkdownEditorState<'a> {
                     block_start = i;
                     if i == fence_line {
                         // 当前围栏是开始围栏，查找结束围栏
-                        for j in (i + 1)..lines.len() {
-                            let t = lines[j].trim_start();
+                        for (j, end_line) in lines.iter().enumerate().skip(i + 1) {
+                            let t = end_line.trim_start();
                             if t.starts_with("```") {
                                 return Some((block_start, j));
                             }
@@ -1389,32 +1390,32 @@ impl<'a> MarkdownEditorState<'a> {
         let indent = " ".repeat(indent_len);
 
         // 标题
-        if trimmed.starts_with("# ") {
-            let text = trimmed[2..].trim();
+        if let Some(stripped) = trimmed.strip_prefix("# ") {
+            let text = stripped.trim();
             return Line::from(vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
                 Span::styled(format!("◆ {}", text), self.style_bold(self.theme.md_h1)),
             ]);
         }
-        if trimmed.starts_with("## ") {
-            let text = trimmed[3..].trim();
+        if let Some(stripped) = trimmed.strip_prefix("## ") {
+            let text = stripped.trim();
             return Line::from(vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
                 Span::styled(format!("◇ {}", text), self.style_bold(self.theme.md_h2)),
             ]);
         }
-        if trimmed.starts_with("### ") {
-            let text = trimmed[4..].trim();
+        if let Some(stripped) = trimmed.strip_prefix("### ") {
+            let text = stripped.trim();
             return Line::from(vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
                 Span::styled(format!("〈 {} ", text), self.style_bold(self.theme.md_h3)),
             ]);
         }
-        if trimmed.starts_with("#### ") {
-            let text = trimmed[5..].trim();
+        if let Some(stripped) = trimmed.strip_prefix("#### ") {
+            let text = stripped.trim();
             return Line::from(vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
@@ -1446,8 +1447,8 @@ impl<'a> MarkdownEditorState<'a> {
         }
 
         // 任务列表
-        if trimmed.starts_with("- [ ]") {
-            let text = trimmed[5..].trim();
+        if let Some(stripped) = trimmed.strip_prefix("- [ ]") {
+            let text = stripped.trim();
             let rendered = self.render_inline(text);
             let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
@@ -1470,23 +1471,21 @@ impl<'a> MarkdownEditorState<'a> {
         }
 
         // 有序列表
-        if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_ascii_digit()) {
-            if let Some(num_end) = rest.find(|c: char| c == '.' || c == ')') {
-                if rest.get(num_end..num_end + 2) == Some(". ")
-                    || rest.get(num_end..num_end + 2) == Some(") ")
-                {
-                    let num_str = &trimmed[..rest.len() - rest.len() + num_end + 1];
-                    let text = &rest[num_end + 2..];
-                    let rendered = self.render_inline(text);
-                    let mut spans = vec![
-                        Span::styled(line_num, self.style(Color::DarkGray)),
-                        Span::styled(indent, self.style(self.theme.text_normal)),
-                        Span::styled(format!("{} ", num_str), self.style(self.theme.text_normal)),
-                    ];
-                    spans.extend(rendered);
-                    return Line::from(spans);
-                }
-            }
+        if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_ascii_digit())
+            && let Some(num_end) = rest.find(['.', ')'])
+            && (rest.get(num_end..num_end + 2) == Some(". ")
+                || rest.get(num_end..num_end + 2) == Some(") "))
+        {
+            let num_str = &trimmed[..rest.len() - rest.len() + num_end + 1];
+            let text = &rest[num_end + 2..];
+            let rendered = self.render_inline(text);
+            let mut spans = vec![
+                Span::styled(line_num, self.style(Color::DarkGray)),
+                Span::styled(indent, self.style(self.theme.text_normal)),
+                Span::styled(format!("{} ", num_str), self.style(self.theme.text_normal)),
+            ];
+            spans.extend(rendered);
+            return Line::from(spans);
         }
 
         // 引用块 - 支持嵌套
@@ -1536,18 +1535,55 @@ impl<'a> MarkdownEditorState<'a> {
         let mut remaining = text;
 
         while !remaining.is_empty() {
+            // 找到所有可能的语法起始位置
+            let code_pos = remaining.find('`');
+            let img_pos = remaining.find("![");
+            let bold_pos = remaining.find("**");
+            let strike_pos = remaining.find("~~");
+            let italic_pos = remaining.find('*');
+            let link_pos = remaining.find('[');
+
+            // 找最小的非空位置
+            // 注意：粗体 ** 必须在斜体 * 之前处理，图片 ![ 必须在链接 [ 之前处理
+            let min_pos = [
+                code_pos, img_pos, bold_pos, strike_pos, italic_pos, link_pos,
+            ]
+            .iter()
+            .filter_map(|&p| p)
+            .min();
+
+            let Some(pos) = min_pos else {
+                // 没有找到任何特殊语法，输出剩余文本
+                spans.push(Span::styled(
+                    remaining.to_string(),
+                    self.style(self.theme.text_normal),
+                ));
+                break;
+            };
+
+            // 确定是哪种语法（按优先级判断）
+            let is_code = code_pos == Some(pos);
+            let is_img = img_pos == Some(pos);
+            let is_bold = bold_pos == Some(pos);
+            let is_strike = strike_pos == Some(pos);
+            let is_italic = italic_pos == Some(pos) && !is_bold; // 粗体优先于斜体
+            let is_link = link_pos == Some(pos) && !is_img; // 图片优先于链接
+
+            // 输出语法之前的内容
+            if pos > 0 {
+                spans.push(Span::styled(
+                    remaining[..pos].to_string(),
+                    self.style(self.theme.text_normal),
+                ));
+            }
+
+            remaining = &remaining[pos..];
+
             // 行内代码
-            if let Some(start) = remaining.find('`') {
-                if start > 0 {
-                    spans.push(Span::styled(
-                        remaining[..start].to_string(),
-                        self.style(self.theme.text_normal),
-                    ));
-                }
-                remaining = &remaining[start + 1..];
+            if is_code {
+                remaining = &remaining[1..]; // 跳过 `
                 if let Some(end) = remaining.find('`') {
                     let code = &remaining[..end];
-                    // 行内代码使用特殊背景色
                     spans.push(Span::styled(
                         code.to_string(),
                         Style::default()
@@ -1564,19 +1600,12 @@ impl<'a> MarkdownEditorState<'a> {
                 }
             }
             // 图片 ![alt](url)
-            else if let Some(pos) = remaining.find("![") {
-                if pos > 0 {
-                    spans.push(Span::styled(
-                        remaining[..pos].to_string(),
-                        self.style(self.theme.text_normal),
-                    ));
-                }
-                remaining = &remaining[pos + 2..];
+            else if is_img {
+                remaining = &remaining[2..]; // 跳过 ![
                 if let Some(alt_end) = remaining.find("](") {
                     let alt = &remaining[..alt_end];
                     remaining = &remaining[alt_end + 2..];
                     if let Some(url_end) = remaining.find(')') {
-                        // 渲染图片：🖼 alt
                         spans.push(Span::styled(
                             format!("🖼 {}", alt),
                             Style::default()
@@ -1599,20 +1628,68 @@ impl<'a> MarkdownEditorState<'a> {
                     break;
                 }
             }
-            // 链接 [text](url)
-            else if let Some(pos) = remaining.find('[') {
-                if pos > 0 {
+            // 粗体 **text**
+            else if is_bold {
+                remaining = &remaining[2..]; // 跳过 **
+                if let Some(end) = remaining.find("**") {
+                    let bold_text = &remaining[..end];
                     spans.push(Span::styled(
-                        remaining[..pos].to_string(),
+                        bold_text.to_string(),
+                        self.style_bold(self.theme.text_normal),
+                    ));
+                    remaining = &remaining[end + 2..];
+                } else {
+                    spans.push(Span::styled(
+                        format!("**{}", remaining),
                         self.style(self.theme.text_normal),
                     ));
+                    break;
                 }
-                remaining = &remaining[pos + 1..];
+            }
+            // 删除线 ~~text~~
+            else if is_strike {
+                remaining = &remaining[2..]; // 跳过 ~~
+                if let Some(end) = remaining.find("~~") {
+                    let struck_text = &remaining[..end];
+                    spans.push(Span::styled(
+                        struck_text.to_string(),
+                        self.style(self.theme.text_dim)
+                            .add_modifier(Modifier::CROSSED_OUT),
+                    ));
+                    remaining = &remaining[end + 2..];
+                } else {
+                    spans.push(Span::styled(
+                        format!("~~{}", remaining),
+                        self.style(self.theme.text_normal),
+                    ));
+                    break;
+                }
+            }
+            // 斜体 *text*
+            else if is_italic {
+                remaining = &remaining[1..]; // 跳过 *
+                if let Some(end) = remaining.find('*') {
+                    let italic_text = &remaining[..end];
+                    spans.push(Span::styled(
+                        italic_text.to_string(),
+                        self.style_italic(self.theme.text_normal),
+                    ));
+                    remaining = &remaining[end + 1..];
+                } else {
+                    spans.push(Span::styled(
+                        format!("*{}", remaining),
+                        self.style(self.theme.text_normal),
+                    ));
+                    break;
+                }
+            }
+            // 链接 [text](url)
+            else if is_link {
+                remaining = &remaining[1..]; // 跳过 [
                 if let Some(text_end) = remaining.find("](") {
                     let link_text = &remaining[..text_end];
                     remaining = &remaining[text_end + 2..];
                     if let Some(url_end) = remaining.find(')') {
-                        // 渲染链接：text ↗ 或 text (url)
                         spans.push(Span::styled(
                             link_text.to_string(),
                             self.style(self.theme.md_link)
@@ -1637,85 +1714,6 @@ impl<'a> MarkdownEditorState<'a> {
                     ));
                     break;
                 }
-            }
-            // 删除线 ~~text~~
-            else if let Some(pos) = remaining.find("~~") {
-                if pos > 0 {
-                    spans.push(Span::styled(
-                        remaining[..pos].to_string(),
-                        self.style(self.theme.text_normal),
-                    ));
-                }
-                remaining = &remaining[pos + 2..];
-                if let Some(end) = remaining.find("~~") {
-                    let struck_text = &remaining[..end];
-                    spans.push(Span::styled(
-                        struck_text.to_string(),
-                        self.style(self.theme.text_dim)
-                            .add_modifier(Modifier::CROSSED_OUT),
-                    ));
-                    remaining = &remaining[end + 2..];
-                } else {
-                    spans.push(Span::styled(
-                        format!("~~{}", remaining),
-                        self.style(self.theme.text_normal),
-                    ));
-                    break;
-                }
-            }
-            // 粗体
-            else if let Some(pos) = remaining.find("**") {
-                if pos > 0 {
-                    spans.push(Span::styled(
-                        remaining[..pos].to_string(),
-                        self.style(self.theme.text_normal),
-                    ));
-                }
-                remaining = &remaining[pos + 2..];
-                if let Some(end) = remaining.find("**") {
-                    let bold_text = &remaining[..end];
-                    spans.push(Span::styled(
-                        bold_text.to_string(),
-                        self.style_bold(self.theme.text_normal),
-                    ));
-                    remaining = &remaining[end + 2..];
-                } else {
-                    spans.push(Span::styled(
-                        format!("**{}", remaining),
-                        self.style(self.theme.text_normal),
-                    ));
-                    break;
-                }
-            }
-            // 斜体
-            else if let Some(pos) = remaining.find('*') {
-                if pos > 0 {
-                    spans.push(Span::styled(
-                        remaining[..pos].to_string(),
-                        self.style(self.theme.text_normal),
-                    ));
-                }
-                remaining = &remaining[pos + 1..];
-                if let Some(end) = remaining.find('*') {
-                    let italic_text = &remaining[..end];
-                    spans.push(Span::styled(
-                        italic_text.to_string(),
-                        self.style_italic(self.theme.text_normal),
-                    ));
-                    remaining = &remaining[end + 1..];
-                } else {
-                    spans.push(Span::styled(
-                        format!("*{}", remaining),
-                        self.style(self.theme.text_normal),
-                    ));
-                    break;
-                }
-            } else {
-                spans.push(Span::styled(
-                    remaining.to_string(),
-                    self.style(self.theme.text_normal),
-                ));
-                break;
             }
         }
 

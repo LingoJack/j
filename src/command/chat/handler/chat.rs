@@ -790,7 +790,7 @@ fn check_and_activate_mention_popup(app: &mut ChatApp) {
     let after_at: String = chars[at_idx + 1..pos.min(chars.len())].iter().collect();
 
     // 判断是否匹配特定类型的 mention
-    if after_at.starts_with("skill:") {
+    if let Some(stripped) = after_at.strip_prefix("skill:") {
         // 激活技能弹窗
         app.ui.at_popup_active = false;
         app.ui.file_popup_active = false;
@@ -798,12 +798,12 @@ fn check_and_activate_mention_popup(app: &mut ChatApp) {
         app.ui.skill_popup_active = true;
         app.ui.skill_popup_start_pos = at_idx;
         app.ui.skill_popup_filter = if after_at.len() > 6 {
-            after_at[6..].to_string()
+            stripped.to_string()
         } else {
             String::new()
         };
         app.ui.skill_popup_selected = 0;
-    } else if after_at.starts_with("file:") {
+    } else if let Some(stripped) = after_at.strip_prefix("file:") {
         // 激活文件弹窗
         app.ui.at_popup_active = false;
         app.ui.skill_popup_active = false;
@@ -811,12 +811,12 @@ fn check_and_activate_mention_popup(app: &mut ChatApp) {
         app.ui.file_popup_active = true;
         app.ui.file_popup_start_pos = at_idx;
         app.ui.file_popup_filter = if after_at.len() > 5 {
-            after_at[5..].to_string()
+            stripped.to_string()
         } else {
             String::new()
         };
         app.ui.file_popup_selected = 0;
-    } else if after_at.starts_with("command:") {
+    } else if let Some(stripped) = after_at.strip_prefix("command:") {
         // 激活命令弹窗
         app.ui.at_popup_active = false;
         app.ui.skill_popup_active = false;
@@ -824,7 +824,7 @@ fn check_and_activate_mention_popup(app: &mut ChatApp) {
         app.ui.command_popup_active = true;
         app.ui.command_popup_start_pos = at_idx;
         app.ui.command_popup_filter = if after_at.len() > 8 {
-            after_at[8..].to_string()
+            stripped.to_string()
         } else {
             String::new()
         };

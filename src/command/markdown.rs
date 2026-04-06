@@ -44,13 +44,12 @@ pub fn handle_md(file: &str, _config: &YamlConfig) {
             // 6. 保存文件
             // 检查内容是否变化
             if new_content != content {
-                if let Some(parent) = path.parent() {
-                    if !parent.exists() {
-                        if let Err(e) = fs::create_dir_all(parent) {
-                            error!("创建目录失败: {} - {}", parent.display(), e);
-                            return;
-                        }
-                    }
+                if let Some(parent) = path.parent()
+                    && !parent.exists()
+                    && let Err(e) = fs::create_dir_all(parent)
+                {
+                    error!("创建目录失败: {} - {}", parent.display(), e);
+                    return;
                 }
 
                 match fs::write(&path, &new_content) {

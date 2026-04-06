@@ -209,18 +209,14 @@ impl ToolRegistry {
                                     }
 
                                     // 尝试将相对路径转为绝对路径后比较
-                                    if input_path.is_relative() {
-                                        if let Ok(cwd) = std::env::current_dir() {
-                                            let absolute_path = cwd.join(input_path);
-                                            if let Ok(canonical_input) =
-                                                absolute_path.canonicalize()
-                                            {
-                                                if let Ok(canonical_plan) =
-                                                    plan_path_buf.canonicalize()
-                                                {
-                                                    return canonical_input == canonical_plan;
-                                                }
-                                            }
+                                    if input_path.is_relative()
+                                        && let Ok(cwd) = std::env::current_dir()
+                                    {
+                                        let absolute_path = cwd.join(input_path);
+                                        if let Ok(canonical_input) = absolute_path.canonicalize()
+                                            && let Ok(canonical_plan) = plan_path_buf.canonicalize()
+                                        {
+                                            return canonical_input == canonical_plan;
                                         }
                                     }
 
