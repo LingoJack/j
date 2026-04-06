@@ -100,6 +100,7 @@ pub struct ToolRegistry {
     /// Plan Mode 状态（供外部检查当前是否处于 plan mode）
     pub plan_mode_state: Arc<plan::PlanModeState>,
     /// Worktree 状态（跨工具共享）
+    #[allow(dead_code)]
     pub worktree_state: Arc<worktree::WorktreeState>,
 }
 

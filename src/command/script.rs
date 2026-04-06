@@ -158,3 +158,60 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
 
     info!("☑️ 成功创建脚本 {{{}}}，路径: {}", name, script_path_str);
 }
+
+/// GUI 用：创建脚本（直接提供内容，不打开 TUI 编辑器）
+pub fn handle_concat_with_content(name: &str, content: &str, config: &mut YamlConfig) {
+    // 检查脚本名是否已存在
+    if config.contains(section::PATH, name) {
+        // 更新已有脚本
+        let existing_path = match config
+            .get_property(section::SCRIPT, name)
+            .or_else(|| config.get_property(section::PATH, name))
+        {
+            Some(p) => p.clone(),
+            None => return,
+        };
+
+        if let Err(_) = fs::write(&existing_path, content) {
+            return;
+        }
+        return;
+    }
+
+    // 创建新脚本
+    if content.trim().is_empty() {
+        return;
+    }
+
+    let scripts_dir = YamlConfig::scripts_dir();
+    let ext = if std::env::consts::OS == shell::WINDOWS_OS {
+        ".cmd"
+    } else {
+        ".sh"
+    };
+    let script_path = scripts_dir.join(format!("{}{}", name, ext));
+    let script_path_str = script_path.to_string_lossy().to_string();
+
+    if let Some(parent) = script_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if fs::write(&script_path, content).is_err() {
+        return;
+    }
+
+    // 设置执行权限（非 Windows）
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = fs::metadata(&script_path) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            let _ = fs::set_permissions(&script_path, perms);
+        }
+    }
+
+    // 注册到 path 和 script
+    config.set_property(section::PATH, name, &script_path_str);
+    config.set_property(section::SCRIPT, name, &script_path_str);
+}

@@ -42,6 +42,12 @@ fn terminal_supports_graphics() -> bool {
     }
 }
 
+impl Default for ImageCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImageCache {
     pub fn new() -> Self {
         let picker = if terminal_supports_graphics() {

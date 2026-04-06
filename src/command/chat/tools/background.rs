@@ -36,6 +36,12 @@ pub struct BackgroundManager {
     next_id: Mutex<u64>,
 }
 
+impl Default for BackgroundManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BackgroundManager {
     pub fn new() -> Self {
         Self {

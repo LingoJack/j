@@ -99,4 +99,8 @@ allow:
 - Bash(cat src/tui/editor_markdown.rs:*)
 - Bash(find .jcli:*)
 - Bash(echo '**register_hook:*)
+- Bash(cd /Users/lingojack/dev_custom/j/src-ui:*)
+- Bash(cd /Users/lingojack/dev_custom/j/src-tauri:*)
+- Bash(cd /Users/lingojack/dev_custom/j/src-tauri/icons:*)
+- Bash(file /Users/lingojack/dev_custom/j/src-ui/public/j.png:*)
 deny: []

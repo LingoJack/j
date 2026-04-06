@@ -28,6 +28,12 @@ pub struct ToolExecutor {
     pub tool_result_tx: Option<mpsc::SyncSender<ToolResultMsg>>,
 }
 
+impl Default for ToolExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ToolExecutor {
     pub fn new() -> Self {
         Self {

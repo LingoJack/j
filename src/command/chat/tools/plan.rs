@@ -19,6 +19,12 @@ pub struct PlanModeState {
     pub plan_file_path: Mutex<Option<String>>,
 }
 
+impl Default for PlanModeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlanModeState {
     pub fn new() -> Self {
         Self {

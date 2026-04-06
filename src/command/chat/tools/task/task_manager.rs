@@ -14,6 +14,12 @@ pub struct TaskManager {
     write_lock: Mutex<()>,
 }
 
+impl Default for TaskManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskManager {
     pub fn new() -> Self {
         // 优先使用 .jcli/tasks/，找不到则在 cwd 下创建 .jcli/tasks/

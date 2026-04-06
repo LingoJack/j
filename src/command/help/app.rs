@@ -114,6 +114,12 @@ pub struct HelpApp {
     theme: Theme,
 }
 
+impl Default for HelpApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HelpApp {
     pub fn new() -> Self {
         let tab_raw_contents = split_help_into_tabs();

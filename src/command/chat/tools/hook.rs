@@ -200,7 +200,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             }
         };
 
-        let event = match HookEvent::from_str(event_str) {
+        let event = match HookEvent::parse(event_str) {
             Some(e) => e,
             None => {
                 return ToolResult {
@@ -298,7 +298,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             }
         };
 
-        let event = match HookEvent::from_str(event_str) {
+        let event = match HookEvent::parse(event_str) {
             Some(e) => e,
             None => {
                 return ToolResult {

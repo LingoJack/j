@@ -133,6 +133,12 @@ pub enum AppMode {
     Help,
 }
 
+impl Default for TodoApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TodoApp {
     pub fn new() -> Self {
         let list = load_todo_list();

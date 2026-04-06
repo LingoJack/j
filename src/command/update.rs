@@ -576,3 +576,34 @@ fn restart_self() {
     println!("{} {:?}", "重启失败:".red(), err);
     println!("请手动重启 j 以使用新版本。");
 }
+
+// ========== GUI 友好的函数（无终端依赖） ==========
+
+/// GUI 用：检查是否有新版本
+pub fn check_update() -> Result<String, String> {
+    match self_update::backends::github::ReleaseList::configure()
+        .repo_owner("LingoJack")
+        .repo_name("j")
+        .build()
+    {
+        Ok(release_list) => match release_list.fetch() {
+            Ok(releases) => {
+                if let Some(latest) = releases.first() {
+                    let latest_version = latest.version.trim_start_matches('v');
+                    if latest_version == VERSION {
+                        Ok(format!("当前版本 v{}，已是最新版本", VERSION))
+                    } else {
+                        Ok(format!(
+                            "发现新版本 v{}\n当前版本 v{}\n请在终端运行 `j update` 进行更新",
+                            latest_version, VERSION
+                        ))
+                    }
+                } else {
+                    Err("未找到发布版本".to_string())
+                }
+            }
+            Err(e) => Err(format!("检查更新失败: {}", e)),
+        },
+        Err(e) => Err(format!("配置更新源失败: {}", e)),
+    }
+}

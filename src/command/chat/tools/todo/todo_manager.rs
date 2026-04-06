@@ -14,6 +14,12 @@ pub struct TodoManager {
     turns_without_call: AtomicU32,
 }
 
+impl Default for TodoManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TodoManager {
     pub fn new() -> Self {
         // 优先使用 .jcli/todos.json，找不到则在 cwd 下创建 .jcli/todos.json

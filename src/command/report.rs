@@ -1232,3 +1232,133 @@ fn read_last_n_lines(path: &Path, n: usize) -> Vec<String> {
     lines.reverse();
     lines
 }
+
+// ========== GUI 友好的函数（无终端依赖） ==========
+
+/// GUI 用：写入日报，返回 Result
+pub fn write_report(content: &str) -> Result<String, String> {
+    let mut config = YamlConfig::load();
+    let report_path = get_report_path_silent(&config).ok_or("无法获取日报路径")?;
+
+    let report_file = Path::new(&report_path);
+    let config_path = get_settings_json_path(&report_path).ok_or("无法获取配置路径")?;
+
+    load_config_from_json_silent(&config_path, &mut config);
+
+    let now = Local::now().date_naive();
+
+    let week_num = config
+        .get_property(section::REPORT, config_key::WEEK_NUM)
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(1);
+
+    let last_day_str = config
+        .get_property(section::REPORT, config_key::LAST_DAY)
+        .cloned()
+        .unwrap_or_default();
+
+    let last_day = parse_date(&last_day_str);
+
+    match last_day {
+        Some(last_day) => {
+            if now > last_day {
+                let next_last_day = now + chrono::Duration::days(6);
+                let new_week_title = format!(
+                    "# Week{}[{}-{}]\n",
+                    week_num,
+                    now.format(DATE_FORMAT),
+                    next_last_day.format(DATE_FORMAT)
+                );
+                update_config_files_silent(week_num + 1, &next_last_day, &config_path, &mut config);
+                append_to_file(report_file, &new_week_title);
+            }
+        }
+        None => {
+            let next_last_day = now + chrono::Duration::days(6);
+            let new_week_title = format!(
+                "# Week{}[{}-{}]\n",
+                week_num,
+                now.format(DATE_FORMAT),
+                next_last_day.format(DATE_FORMAT)
+            );
+            update_config_files_silent(week_num + 1, &next_last_day, &config_path, &mut config);
+            append_to_file(report_file, &new_week_title);
+        }
+    }
+
+    let today_str = now.format(SIMPLE_DATE_FORMAT);
+    let log_entry = format!("- 【{}】 {}\n", today_str, content);
+    append_to_file(report_file, &log_entry);
+
+    Ok(format!("✅ 已写入日报: {}", content))
+}
+
+/// GUI 用：处理 reportctl 命令
+pub fn handle_reportctl(action: &str, arg: Option<&str>) -> Result<String, String> {
+    let mut config = YamlConfig::load();
+    match action {
+        "new" => {
+            handle_week_update(arg, &mut config);
+            Ok("✅ 已创建新周报".to_string())
+        }
+        "sync" => {
+            handle_sync(arg, &mut config);
+            Ok("✅ 已同步日报".to_string())
+        }
+        "push" => {
+            handle_push(arg, &config);
+            Ok("✅ 已推送日报".to_string())
+        }
+        "pull" => {
+            handle_pull(&config);
+            Ok("✅ 已拉取日报".to_string())
+        }
+        _ => Err(format!("未知操作: {}，可用: new, sync, push, pull", action)),
+    }
+}
+
+/// GUI 用：查看日报
+pub fn check_report(line_count: usize) -> Result<String, String> {
+    let config = YamlConfig::load();
+    let report_path = get_report_path_silent(&config).ok_or("无法获取日报路径")?;
+
+    let path = Path::new(&report_path);
+    if !path.is_file() {
+        return Err("日报文件不存在".to_string());
+    }
+
+    let lines = read_last_n_lines(path, line_count);
+    Ok(lines.join("\n"))
+}
+
+/// GUI 用：搜索日报
+pub fn search_report(line_count: usize, target: &str, fuzzy: bool) -> Result<String, String> {
+    let config = YamlConfig::load();
+    let report_path = get_report_path_silent(&config).ok_or("无法获取日报路径")?;
+
+    let path = Path::new(&report_path);
+    if !path.is_file() {
+        return Err("日报文件不存在".to_string());
+    }
+
+    let lines = read_last_n_lines(path, line_count);
+    let mut results = Vec::new();
+
+    for line in &lines {
+        let matched = if fuzzy {
+            fuzzy::fuzzy_match(line, target)
+        } else {
+            line.contains(target)
+        };
+
+        if matched {
+            results.push(line.clone());
+        }
+    }
+
+    if results.is_empty() {
+        Ok(String::new())
+    } else {
+        Ok(results.join("\n"))
+    }
+}

@@ -5,8 +5,17 @@ import { useSearchStore } from '../../stores/searchStore';
 import { openAlias, hideWindow } from '../../services/tauri';
 
 export function SpotlightWindow() {
-  const { results, selectedIndex, moveSelection, query, execute, feedback, feedbackType, reset } =
-    useSearchStore();
+  const { 
+    results, 
+    selectedIndex, 
+    moveSelection, 
+    query, 
+    execute, 
+    feedback, 
+    feedbackType, 
+    outputMode,
+    reset 
+  } = useSearchStore();
 
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
@@ -31,12 +40,14 @@ export function SpotlightWindow() {
             await hideWindow();
             reset();
           } else if (query.trim()) {
-            // 无搜索结果时：作为命令执行
+            // 执行命令
             const result = await execute(query.trim());
+            // 如果是打开别名命令成功，关闭窗口
             if (result.success && result.command === 'open') {
               await hideWindow();
               reset();
             }
+            // 其他命令保持窗口打开，显示结果
           }
           break;
         case 'Escape':
@@ -54,19 +65,24 @@ export function SpotlightWindow() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // 是否显示结果列表区域
+  const showResultList = outputMode === 'list' || outputMode === 'text';
+
   return (
-    <div className="glass rounded-xl overflow-hidden no-select">
-      <SearchBar />
-      {feedback && (
-        <div
-          className={`px-4 py-2 text-[13px] border-t border-white/[0.06] ${
-            feedbackType === 'error' ? 'text-red-400' : 'text-green-400'
-          }`}
-        >
-          {feedback}
-        </div>
-      )}
-      {results.length > 0 && <ResultList />}
+    <div className="h-screen w-screen flex items-start justify-center pt-[15vh] px-4">
+      <div className="w-full max-w-[560px] glass rounded-xl overflow-hidden no-select">
+        <SearchBar />
+        {feedback && (
+          <div
+            className={`px-4 py-2 text-[13px] border-t border-white/[0.06] ${
+              feedbackType === 'error' ? 'text-red-400' : 'text-green-400'
+            }`}
+          >
+            {feedback}
+          </div>
+        )}
+        {showResultList && <ResultList />}
+      </div>
     </div>
   );
 }

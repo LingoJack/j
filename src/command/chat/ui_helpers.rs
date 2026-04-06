@@ -190,7 +190,7 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
             }
         }
         "theme" => {
-            app.state.agent_config.theme = ThemeName::from_str(value.trim());
+            app.state.agent_config.theme = ThemeName::parse(value.trim());
             app.ui.theme = super::theme::Theme::from_name(&app.state.agent_config.theme);
             app.ui.msg_lines_cache = None;
         }

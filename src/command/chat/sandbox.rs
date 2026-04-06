@@ -13,6 +13,12 @@ pub struct Sandbox {
     enabled: bool,
 }
 
+impl Default for Sandbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sandbox {
     /// 创建沙箱，默认安全目录为 cwd
     pub fn new() -> Self {

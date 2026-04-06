@@ -26,6 +26,12 @@ pub struct WorktreeState {
     session: Mutex<Option<WorktreeSession>>,
 }
 
+impl Default for WorktreeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorktreeState {
     pub fn new() -> Self {
         Self {

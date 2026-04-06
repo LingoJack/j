@@ -17,6 +17,21 @@ pub enum ThemeName {
     Monokai,
 }
 
+impl std::str::FromStr for ThemeName {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "dark" => Ok(ThemeName::Dark),
+            "light" => Ok(ThemeName::Light),
+            "midnight" => Ok(ThemeName::Midnight),
+            "nord" => Ok(ThemeName::Nord),
+            "monokai" => Ok(ThemeName::Monokai),
+            _ => Ok(ThemeName::default()),
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl ThemeName {
     /// 获取所有主题名称列表（用于配置界面循环切换）
@@ -53,15 +68,8 @@ impl ThemeName {
     }
 
     /// 从字符串解析
-    pub fn from_str(s: &str) -> ThemeName {
-        match s.to_lowercase().as_str() {
-            "dark" => ThemeName::Dark,
-            "light" => ThemeName::Light,
-            "midnight" => ThemeName::Midnight,
-            "nord" => ThemeName::Nord,
-            "monokai" => ThemeName::Monokai,
-            _ => ThemeName::default(),
-        }
+    pub fn parse(s: &str) -> ThemeName {
+        s.parse().unwrap_or_default()
     }
 
     /// 转为字符串

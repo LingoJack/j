@@ -36,6 +36,24 @@ pub enum HookEvent {
     SessionEnd,
 }
 
+impl std::str::FromStr for HookEvent {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pre_send_message" => Ok(HookEvent::PreSendMessage),
+            "post_send_message" => Ok(HookEvent::PostSendMessage),
+            "pre_llm_request" => Ok(HookEvent::PreLlmRequest),
+            "post_llm_response" => Ok(HookEvent::PostLlmResponse),
+            "pre_tool_execution" => Ok(HookEvent::PreToolExecution),
+            "post_tool_execution" => Ok(HookEvent::PostToolExecution),
+            "session_start" => Ok(HookEvent::SessionStart),
+            "session_end" => Ok(HookEvent::SessionEnd),
+            _ => Err(()),
+        }
+    }
+}
+
 impl HookEvent {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -63,18 +81,9 @@ impl HookEvent {
         ]
     }
 
-    pub fn from_str(s: &str) -> Option<HookEvent> {
-        match s {
-            "pre_send_message" => Some(HookEvent::PreSendMessage),
-            "post_send_message" => Some(HookEvent::PostSendMessage),
-            "pre_llm_request" => Some(HookEvent::PreLlmRequest),
-            "post_llm_response" => Some(HookEvent::PostLlmResponse),
-            "pre_tool_execution" => Some(HookEvent::PreToolExecution),
-            "post_tool_execution" => Some(HookEvent::PostToolExecution),
-            "session_start" => Some(HookEvent::SessionStart),
-            "session_end" => Some(HookEvent::SessionEnd),
-            _ => None,
-        }
+    /// 从字符串解析，不匹配时返回 None
+    pub fn parse(s: &str) -> Option<HookEvent> {
+        s.parse().ok()
     }
 }
 
@@ -233,7 +242,7 @@ impl HookManager {
                     match serde_yaml::from_str::<HashMap<String, Vec<HookDef>>>(&content) {
                         Ok(hooks_map) => {
                             for (event_name, defs) in hooks_map {
-                                if let Some(event) = HookEvent::from_str(&event_name) {
+                                if let Some(event) = HookEvent::parse(&event_name) {
                                     manager.user_hooks.entry(event).or_default().extend(defs);
                                 } else {
                                     write_error_log(
@@ -270,7 +279,7 @@ impl HookManager {
                         match serde_yaml::from_str::<HashMap<String, Vec<HookDef>>>(&content) {
                             Ok(hooks_map) => {
                                 for (event_name, defs) in hooks_map {
-                                    if let Some(event) = HookEvent::from_str(&event_name) {
+                                    if let Some(event) = HookEvent::parse(&event_name) {
                                         manager
                                             .project_hooks
                                             .entry(event)
@@ -578,14 +587,14 @@ mod tests {
     fn test_hook_event_roundtrip() {
         for event in HookEvent::all() {
             let s = event.as_str();
-            let parsed = HookEvent::from_str(s).unwrap();
+            let parsed = HookEvent::parse(s).unwrap();
             assert_eq!(*event, parsed);
         }
     }
 
     #[test]
     fn test_hook_event_from_str_invalid() {
-        assert!(HookEvent::from_str("unknown_event").is_none());
+        assert!(HookEvent::parse("unknown_event").is_none());
     }
 
     #[test]
