@@ -1,341 +1,544 @@
-# Plan: 优化导航栏和页内导航
+# Plan: j-cli GUI 版本 (Tauri) 项目规划
 
-## 问题分析
+## 一、项目概述
 
-### 问题 1：导航栏在 docs 和 index 上很不同
+### 目标
+为 j-cli 开发一个 macOS 原生风格的 GUI 版本，核心特性：
+- 聚焦搜索界面（类似 Spotlight/Alfred/Raycast）
+- 全局快捷键 `Cmd + J` 唤起，随用随到
+- 系统托盘整合（解决托盘过多问题）
+- 复用现有 j-cli 核心逻辑
 
-**Home 页面 Nav.tsx:**
-- 完整导航：Features、Docs、Quick Start、GitHub
-- 带下拉菜单
-- 响应式设计完善
+### 技术栈
+- **Tauri 2.x**: Rust 后端 + Web 前端
+- **前端框架**: React 19 + TypeScript + Tailwind CSS v4
+- **状态管理**: Zustand
+- **UI 组件**: shadcn/ui 或自定义组件
+- **构建工具**: Vite 6.x
 
-**Docs 页面 Docs.tsx:**
-- 简洁导航：只有 logo + "docs" + 语言切换 + GitHub
-- 缺少返回首页的链接（虽然有 footer 里的 back 链接）
+---
 
-**建议：** 统一导航风格，Docs 页面添加返回首页链接。
+## 二、代码复用性分析（关键）
 
-### 问题 2：右侧页内导航定位不准确
+### Breaking Change 风险评估
 
-**当前实现问题：**
-1. IntersectionObserver 的 rootMargin 设置为 `'-80px 0px -70% 0px'`，但顶部导航高度是 65px
-2. 点击 TOC 项后滚动，但没有立即更新 activeId
-3. 滚动时 threshold: 0 可能在某些情况下不稳定
+**关键结论**: 采用 **适配器模式**，可以 **零 Breaking Change**。
 
-**解决方案：**
-1. 修正 rootMargin 为 `'-70px 0px -80% 0px'`（顶部 70px 为导航栏高度）
-2. 点击时立即设置 activeId，然后平滑滚动
-3. 滚动完成后重新计算当前激活项
+#### 现有代码调用链分析
 
-### 问题 3：字体大小不合适
-
-**当前样式：**
-- h2 项：`text-sm` (14px)
-- h3 项：`text-xs` (12px)
-
-**建议调整：**
-- h2 项：`text-sm` 保持不变，但增加行高
-- h3 项：`text-sm` 提升到 14px
-- 整体 padding 和间距优化
-
-## 解决方案
-
-### Part 1: 统一导航栏风格
-
-**Docs 页面导航优化：**
-- 添加返回首页链接
-- 保持简洁风格但增加关键入口
-
-```tsx
-// Docs.tsx navigation
-<nav>
-  <div className="flex items-center gap-3">
-    <Link to="/" className="flex items-center gap-2">
-      <span className="text-2xl font-bold text-stone-900">j</span>
-      <span className="text-stone-400 text-sm hidden sm:inline">docs</span>
-    </Link>
-  </div>
-  
-  <div className="flex items-center gap-4">
-    <Link to="/" className="text-stone-500 hover:text-stone-900 text-sm">
-      {lang === 'zh' ? '首页' : 'Home'}
-    </Link>
-    <LanguageSwitcher ... />
-    <a href="github..." ... />
-  </div>
-</nav>
+```
+main.rs -> cli.rs -> command/handler.rs -> command/*.rs (具体命令)
+                                    ↓
+                              config::YamlConfig
 ```
 
-### Part 2: 修复 TOC 滚动定位
+#### 零 Breaking Change 策略
 
-**优化滚动检测逻辑：**
+**核心原则**: 只增不改，适配器封装
 
-```tsx
-// TOC.tsx 改进
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     安全重构策略                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  现有 CLI 路径（保持不变）                                   │
+│  ────────────────────                                       │
+│  main.rs -> cli.rs -> handler.rs -> command/open.rs         │
+│                                      └── handle_open()      │
+│                                           ↓                 │
+│                                      info!/error! 输出       │
+│                                                             │
+│  新增 GUI 路径（独立添加）                                   │
+│  ────────────────────                                       │
+│  Tauri Command -> core/open.rs                              │
+│                    └── open_alias_silent()                  │
+│                         ↓                                   │
+│                    command/open.rs (复用逻辑)               │
+│                    或直接实现（避免终端依赖）                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
-// 1. 点击时立即更新 activeId，再滚动
-const handleClick = (id: string) => {
-  setActiveId(id)  // 立即更新
-  const element = document.getElementById(id)
-  if (element) {
-    const navHeight = 70  // 导航栏高度
-    const elementTop = element.offsetTop - navHeight
-    window.scrollTo({
-      top: elementTop,
-      behavior: 'smooth'
-    })
-  }
+#### 具体方案对比
+
+| 方案 | Breaking Change 风险 | 说明 |
+|------|---------------------|------|
+| ❌ 方案 A: 修改现有函数签名 | **高** | 改动 handle_open() 参数/返回值，影响 CLI |
+| ❌ 方案 B: 抽取核心函数，修改原函数调用 | **中** | 需要修改现有 command/*.rs 文件 |
+| ✅ **方案 C: 新增 silent 版本函数** | **无** | 只新增，不修改现有代码 |
+
+#### 推荐方案 C: 新增 silent 版本
+
+```rust
+// ============ 现有代码（完全不变）============
+// src/command/open.rs
+
+/// CLI 入口，保持不变
+pub fn handle_open(args: &[String], config: &YamlConfig) {
+    // 现有实现完全不变
+    let alias = &args[0];
+    match do_open(alias, args, config) {
+        Ok(msg) => info!("{}", msg),
+        Err(e) => error!("{}", e),
+    }
 }
 
-// 2. IntersectionObserver 使用更精确的 rootMargin
-const observer = new IntersectionObserver(
-  (entries) => {
-    // 从上往下找第一个进入视口的标题
-    const visibleEntries = entries
-      .filter(e => e.isIntersecting)
-      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-    
-    if (visibleEntries.length > 0) {
-      setActiveId(visibleEntries[0].target.id)
-    }
-  },
-  {
-    rootMargin: '-70px 0px -80% 0px',  // 顶部 70px 为导航栏
-    threshold: 0
-  }
-)
+// 内部实现（保持不变）
+fn do_open(alias: &str, args: &[String], config: &YamlConfig) -> Result<String, String> {
+    // 现有逻辑...
+}
 
-// 3. 使用 scroll 事件作为备用检测
-useEffect(() => {
-  const handleScroll = () => {
-    // 找到当前视口中最靠近顶部的标题
-    const headings = headingsRef.current
-    const navHeight = 70
-    const scrollY = window.scrollY + navHeight
-    
-    for (let i = headings.length - 1; i >= 0; i--) {
-      const el = document.getElementById(headings[i].id)
-      if (el && el.offsetTop <= scrollY) {
-        setActiveId(headings[i].id)
-        break
-      }
-    }
-  }
-  
-  window.addEventListener('scroll', handleScroll, { passive: true })
-  return () => window.removeEventListener('scroll', handleScroll)
-}, [headings])
+// ============ 新增代码（仅添加）============
+// src/core/open.rs（新文件）
+
+/// GUI 友好版本：静默执行，返回结果
+/// 注意：这是新增函数，不修改任何现有代码
+pub fn open_alias_silent(alias: &str, args: &[String]) -> Result<String, String> {
+    let config = YamlConfig::load();
+    // 直接调用现有的内部实现
+    crate::command::open::do_open(alias, args, &config)
+}
 ```
 
-### Part 3: 优化 TOC 字体和样式
+**关键点**：
+1. `core/` 模块是 **新增** 的，不修改现有 `command/` 模块
+2. 现有 `handle_open()` 保持完全不变
+3. 只需要将现有的私有函数 `do_open()` 改为 `pub(crate)`（模块内可见）
+4. 或者：core 模块直接复制逻辑（代码略有重复，但最安全）
 
-**调整字体大小：**
-```tsx
-// h2 项
-className="text-sm py-1.5 px-3 ..."  // 14px，保持不变
+#### 需要的小调整（非 Breaking）
 
-// h3 项  
-className="text-sm py-1 px-3 pl-6 ..."  // 从 text-xs 改为 text-sm
+| 调整 | 影响 | 风险 |
+|------|------|------|
+| 将内部函数改为 `pub(crate)` | 仅模块可见性 | 无 |
+| 新增 `src/lib.rs` | 暴露公共模块 | 无 |
+| 新增 `src/core/` 目录 | 新增代码 | 无 |
 
-// 或者区分更明显：
-// h2: text-sm font-medium
-// h3: text-xs (保持小一号)
-```
+#### 验证清单
 
-## 文件变更清单
+- [ ] `cargo build` 通过（CLI 正常编译）
+- [ ] `j open chrome` 行为不变
+- [ ] `j report test` 行为不变
+- [ ] 所有现有测试通过
 
-| 文件 | 操作 |
+### 现有代码结构分析
+
+经过详细代码审查，现有 j-cli 代码 **高度可复用**：
+
+#### 可直接复用的模块（无需修改）
+
+| 模块 | 路径 | 复用方式 | 说明 |
+|------|------|----------|------|
+| **YamlConfig** | `src/config/yaml_config.rs` | 直接引用 | 配置加载/保存/查询，完全独立 |
+| **constants** | `src/constants.rs` | 直接引用 | 所有常量定义 |
+| **util** | `src/util/` | 直接引用 | 工具函数（模糊匹配、文本处理等） |
+| **alias 核心逻辑** | `src/command/alias.rs` | 抽取核心函数 | 别名 CRUD 操作 |
+| **open 核心逻辑** | `src/command/open.rs` | 抽取核心函数 | 应用/URL/脚本启动 |
+
+#### 需要适配的模块（轻量封装）
+
+| 模块 | 原始依赖 | 适配方案 |
+|------|----------|----------|
+| **report** | TUI 编辑器、终端输出 | 抽取 `write_to_report()` 核心逻辑，GUI 直接调用 |
+| **script** | 终端执行 | 通过 Tauri Command 调用，结果通过 IPC 返回 |
+| **fuzzy 搜索** | 终端渲染 | 核心算法 `fuzzy::fuzzy_match()` 直接复用 |
+
+#### 不适用 GUI 的模块（保留 CLI 专用）
+
+| 模块 | 原因 |
 |------|------|
-| `web/src/components/docs/TOC.tsx` | 修复滚动定位 + 优化字体 |
-| `web/src/pages/Docs.tsx` | 添加返回首页链接 |
+| `src/tui/` | 终端 UI 组件，GUI 使用 React 替代 |
+| `src/interactive/` | 终端交互式输入，GUI 使用 Web 组件替代 |
+| `src/command/chat/` | 复杂 TUI Chat 界面，GUI 可选择性移植 |
 
-## 详细实现
+### 代码复用策略
 
-### 1. TOC.tsx 完整重写
+#### Step 1: 创建 lib.rs 暴露公共 API
 
-```tsx
-import { useMemo, useEffect, useState, useRef, useCallback } from 'react'
-import type { Language } from '../../types'
+```rust
+// src/lib.rs (新增)
+//! j-cli 核心库，供 CLI 和 GUI 共同使用
 
-interface TOCItem {
-  id: string
-  text: string
-  level: number
-}
+pub mod command;
+pub mod config;
+pub mod constants;
+pub mod util;
 
-interface TOCProps {
-  content: string
-  lang: Language
-}
+// 重导出核心类型
+pub use config::YamlConfig;
+pub use constants::*;
 
-const tocTitleI18n: Record<Language, string> = {
-  en: 'On This Page',
-  zh: '本文目录'
-}
-
-const NAV_HEIGHT = 70  // 顶部导航栏高度
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50)
-}
-
-function extractHeadings(content: string): TOCItem[] {
-  const lines = content.split('\n')
-  const headings: TOCItem[] = []
-  const usedIds = new Set<string>()
-  
-  lines.forEach(line => {
-    let text: string
-    let level: number
+// 暴露核心功能接口
+pub mod core {
+    //! GUI 友好的核心接口（无终端依赖）
     
-    if (line.startsWith('## ')) {
-      text = line.slice(3).trim()
-      level = 2
-    } else if (line.startsWith('### ')) {
-      text = line.slice(4).trim()
-      level = 3
-    } else {
-      return
+    use crate::config::YamlConfig;
+    
+    /// 打开别名对应的应用/路径
+    pub fn open_alias(alias: &str, args: &[String]) -> Result<(), String> {
+        let config = YamlConfig::load();
+        // 调用 command::open 的核心逻辑（去除 info!/error! 宏）
+        ...
     }
     
-    text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
-    text = text.replace(/\*([^*]+)\*/g, '$1')
-    text = text.replace(/`([^`]+)`/g, '$1')
-    
-    let id = slugify(text)
-    let counter = 1
-    while (usedIds.has(id)) {
-      id = `${slugify(text)}-${counter}`
-      counter++
-    }
-    usedIds.add(id)
-    
-    headings.push({ id, text, level })
-  })
-  
-  return headings
-}
-
-export function TOC({ content, lang }: TOCProps) {
-  const headings = useMemo(() => extractHeadings(content), [content])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const isScrollingRef = useRef(false)
-  
-  // 点击滚动
-  const scrollToHeading = useCallback((id: string) => {
-    const element = document.getElementById(id)
-    if (!element) return
-    
-    setActiveId(id)
-    isScrollingRef.current = true
-    
-    const elementTop = element.offsetTop - NAV_HEIGHT
-    window.scrollTo({
-      top: elementTop,
-      behavior: 'smooth'
-    })
-    
-    // 滚动结束后恢复检测
-    setTimeout(() => {
-      isScrollingRef.current = false
-    }, 500)
-  }, [])
-  
-  // 滚动检测
-  useEffect(() => {
-    if (headings.length === 0) return
-    
-    const handleScroll = () => {
-      if (isScrollingRef.current) return
-      
-      const scrollY = window.scrollY + NAV_HEIGHT + 10
-      
-      // 找到当前滚动位置对应的标题
-      let currentId: string | null = null
-      for (const heading of headings) {
-        const el = document.getElementById(heading.id)
-        if (el && el.offsetTop <= scrollY) {
-          currentId = heading.id
-        }
-      }
-      
-      if (currentId) {
-        setActiveId(currentId)
-      }
+    /// 搜索别名（模糊匹配）
+    pub fn search_aliases(query: &str, config: &YamlConfig) -> Vec<SearchResult> {
+        ...
     }
     
-    // 初始化
-    handleScroll()
-    
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [headings])
-  
-  if (headings.length === 0) return null
-  
-  return (
-    <nav className="hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm">
-      <div className="sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]">
-        <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
-          {tocTitleI18n[lang]}
-        </span>
-      </div>
-      
-      <ul className="p-2 overflow-y-auto max-h-[calc(100vh-120px)]">
-        {headings.map(({ id, text, level }) => (
-          <li key={id}>
-            <button
-              onClick={() => scrollToHeading(id)}
-              className={`
-                relative w-full text-left py-1.5 px-3 rounded-lg transition-all duration-200
-                ${level === 3 ? 'pl-6 text-xs text-stone-400' : 'text-sm'}
-                ${activeId === id 
-                  ? 'text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-stone-900 before:rounded-full' 
-                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
-                }
-              `}
-            >
-              {text}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  )
+    /// 写入日报
+    pub fn write_report(content: &str) -> Result<(), String> {
+        ...
+    }
 }
 ```
 
-### 2. Docs.tsx 导航栏优化
+#### Step 2: 分离终端依赖
 
-```tsx
-// 在导航栏右侧添加返回首页链接
-<div className="flex items-center gap-3 sm:gap-5">
-  <Link 
-    to="/" 
-    className="text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline"
-  >
-    {lang === 'zh' ? '首页' : 'Home'}
-  </Link>
-  <LanguageSwitcher lang={lang} onChange={setLang} />
-  <a href="github..." ... />
-</div>
+现有代码中使用 `info!` / `error!` 宏输出到终端，需要改造：
+
+```rust
+// 方案 A: 使用 trait 抽象输出
+pub trait Output {
+    fn info(&self, msg: &str);
+    fn error(&self, msg: &str);
+}
+
+// CLI 实现
+struct TerminalOutput;
+impl Output for TerminalOutput {
+    fn info(&self, msg: &str) { println!("{}", msg); }
+    fn error(&self, msg: &str) { eprintln!("{}", msg); }
+}
+
+// GUI 实现（返回 Result）
+// GUI 直接使用 Result<String, String>，不依赖输出
+
+// 方案 B（推荐）: 核心逻辑返回 Result，CLI 层包装输出
+// src/command/open_core.rs（新增）
+pub fn open_alias_core(alias: &str, args: &[String], config: &YamlConfig) -> Result<String, String> {
+    // 纯逻辑，返回结果
+}
+
+// src/command/open.rs（保留，CLI 入口）
+pub fn handle_open(args: &[String], config: &YamlConfig) {
+    match open_alias_core(&args[0], &args[1..], config) {
+        Ok(msg) => info!("{}", msg),
+        Err(e) => error!("{}", e),
+    }
+}
 ```
 
-## 预期效果
+#### Step 3: Tauri Command 封装
 
-### 导航栏
-- Docs 页面导航增加返回首页入口
-- 风格与 Home 页面保持一致
+```rust
+// src-tauri/src/commands/alias.rs
+use j_cli::core;
 
-### TOC 滚动定位
-- 点击 TOC 项立即高亮
-- 滚动位置准确（考虑顶部导航栏 70px 高度）
-- 滚动过程中正确追踪当前阅读位置
+#[tauri::command]
+pub fn open_alias(alias: String, args: Vec<String>) -> Result<String, String> {
+    core::open_alias(&alias, &args)
+}
 
-### 字体大小
-- h2 项：14px (text-sm)
-- h3 项：12px (text-xs)，比 h2 小一号，层次分明
+#[tauri::command]
+pub fn search_aliases(query: String) -> Vec<SearchResult> {
+    let config = j_cli::YamlConfig::load();
+    core::search_aliases(&query, &config)
+}
+```
+
+### 复用度评估
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    j-cli 代码复用度                          │
+├─────────────────────────────────────────────────────────────┤
+│ █████████████████████████████████████░░░░░  85% 可复用      │
+├─────────────────────────────────────────────────────────────┤
+│ ✅ config/        100% 直接复用                              │
+│ ✅ constants.rs   100% 直接复用                              │
+│ ✅ util/          100% 直接复用                              │
+│ ✅ command/open   90%  抽取核心逻辑                          │
+│ ✅ command/alias  90%  抽取核心逻辑                          │
+│ ✅ command/report 80%  核心写入逻辑复用                       │
+│ ✅ command/script 85%  执行逻辑复用                          │
+│ ⚠️ tui/           0%   GUI 不需要                            │
+│ ⚠️ interactive/   0%   GUI 不需要                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**结论**: 约 **85%** 的核心代码可直接或经轻量封装后复用于 GUI 版本。
+
+---
+
+## 三、项目文件结构规划
+
+```
+j/
+├── src/                          # 现有 j-cli Rust 代码（保留）
+│   ├── lib.rs                   # 新增：库入口，暴露公共 API
+│   ├── main.rs                  # CLI 入口（保留）
+│   ├── cli.rs
+│   ├── core/                    # 新增：GUI 友好的核心接口
+│   │   ├── mod.rs
+│   │   ├── alias.rs             # 别名操作核心逻辑
+│   │   ├── open.rs              # 打开应用核心逻辑
+│   │   ├── report.rs            # 日报核心逻辑
+│   │   └── search.rs            # 搜索核心逻辑
+│   ├── command/                 # 现有命令实现（逐步重构调用 core）
+│   ├── config/
+│   ├── constants.rs
+│   ├── interactive/
+│   ├── tui/
+│   └── util/
+│
+├── src-tauri/                    # Tauri 后端（新增）
+│   ├── Cargo.toml
+│   ├── tauri.conf.json
+│   ├── capabilities/
+│   │   └── default.json
+│   ├── icons/
+│   │   ├── icon.icns
+│   │   ├── icon.png
+│   │   └── tray.png
+│   ├── src/
+│   │   ├── main.rs
+│   │   ├── lib.rs
+│   │   ├── app/
+│   │   │   ├── mod.rs
+│   │   │   ├── setup.rs
+│   │   │   └── tray.rs
+│   │   ├── commands/
+│   │   │   ├── mod.rs
+│   │   │   ├── alias.rs
+│   │   │   ├── search.rs
+│   │   │   ├── report.rs
+│   │   │   ├── todo.rs
+│   │   │   ├── launcher.rs
+│   │   │   └── system.rs
+│   │   ├── hotkey/
+│   │   │   ├── mod.rs
+│   │   │   └── manager.rs
+│   │   └── window/
+│   │       ├── mod.rs
+│   │       └── spotlight.rs
+│   └── build.rs
+│
+├── src-ui/                       # 前端代码（新增）
+│   ├── index.html
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   ├── postcss.config.js         # PostCSS 配置（Tailwind v4 需要）
+│   ├── src/
+│   │   ├── main.tsx
+│   │   ├── App.tsx
+│   │   ├── styles/
+│   │   │   └── globals.css       # Tailwind v4 配置在此文件中
+│   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── SpotlightWindow.tsx
+│   │   │   │   ├── SearchBar.tsx
+│   │   │   │   └── ResultList.tsx
+│   │   │   ├── features/
+│   │   │   │   ├── AliasPanel.tsx
+│   │   │   │   ├── ReportPanel.tsx
+│   │   │   │   ├── TodoPanel.tsx
+│   │   │   │   ├── ScriptPanel.tsx
+│   │   │   │   └── SettingsPanel.tsx
+│   │   │   └── ui/
+│   │   │       ├── Button.tsx
+│   │   │       ├── Input.tsx
+│   │   │       ├── Dialog.tsx
+│   │   │       ├── Toast.tsx
+│   │   │       └── ScrollArea.tsx
+│   │   ├── hooks/
+│   │   │   ├── useSearch.ts
+│   │   │   ├── useHotkey.ts
+│   │   │   ├── useAliases.ts
+│   │   │   └── useTauri.ts
+│   │   ├── stores/
+│   │   │   ├── searchStore.ts
+│   │   │   ├── aliasStore.ts
+│   │   │   └── settingsStore.ts
+│   │   ├── services/
+│   │   │   └── tauri.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   └── utils/
+│   │       └── index.ts
+│   └── public/
+│
+├── Cargo.toml                    # Workspace 配置
+├── Cargo.lock
+└── README.md
+```
+
+---
+
+## 四、核心模块设计
+
+### 1. 窗口系统（Spotlight 风格）
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      macOS Desktop                          │
+│                                                             │
+│         ┌─────────────────────────────────────┐            │
+│         │  🔍 搜索别名、命令、应用...          │            │
+│         └─────────────────────────────────────┘            │
+│         ┌─────────────────────────────────────┐            │
+│         │ 📁 chrome      → 打开浏览器         │            │
+│         │ 📝 report      → 写入日报           │            │
+│         │ ✅ todo        → 待办事项           │            │
+│         │ 🚀 script      → 执行脚本           │            │
+│         └─────────────────────────────────────┘            │
+│                                                             │
+│                                       [🚀 托盘图标]          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**窗口特性**：
+- 居中悬浮显示
+- 毛玻璃背景效果
+- 动画进入/退出
+- ESC 关闭，点击外部关闭
+- 无任务栏图标（隐藏 dock）
+
+### 2. 系统托盘整合
+
+托盘菜单结构：
+```
+┌─────────────────────┐
+│ 🔍 打开搜索         │
+├─────────────────────┤
+│ 📝 快速写日报       │
+│ ✅ 查看待办         │
+├─────────────────────┤
+│ 🚀 快捷别名         │
+│    └─ chrome        │
+│    └─ vscode        │
+│    └─ ...           │
+├─────────────────────┤
+│ ⚙️ 设置            │
+│ ❌ 退出            │
+└─────────────────────┘
+```
+
+---
+
+## 五、分阶段实现计划
+
+### Phase 1: 基础框架 (Week 1)
+- [ ] 初始化 Tauri 项目结构
+- [ ] 配置 Cargo workspace
+- [ ] 创建 `src/lib.rs` 和 `src/core/` 模块
+- [ ] 实现基础 Spotlight 窗口
+- [ ] 全局快捷键 `Cmd + J` 注册
+- [ ] 系统托盘基础功能
+
+### Phase 2: 核心功能 (Week 2)
+- [ ] 重构 `command/open.rs` 抽取核心逻辑
+- [ ] 重构 `command/alias.rs` 抽取核心逻辑
+- [ ] 别名搜索与打开（GUI）
+- [ ] 搜索结果模糊匹配
+- [ ] 日报快速写入
+
+### Phase 3: 扩展功能 (Week 3)
+- [ ] 脚本执行
+- [ ] 设置面板
+- [ ] 托盘菜单完善
+- [ ] 开机自启动
+
+### Phase 4: 优化打磨 (Week 4)
+- [ ] 动画效果
+- [ ] 性能优化
+- [ ] 错误处理
+- [ ] 打包发布
+
+---
+
+## 六、关键配置文件
+
+### 1. Cargo.toml (Workspace)
+
+```toml
+[workspace]
+members = ["src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+authors = ["lingojack"]
+edition = "2021"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+```
+
+### 2. tauri.conf.json (核心配置)
+
+```json
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "j-cli-gui",
+  "version": "0.1.0",
+  "identifier": "com.lingojack.jcli",
+  "build": {
+    "frontendDist": "../src-ui/dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "spotlight",
+        "title": "j-cli",
+        "width": 600,
+        "height": 400,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/tray.png",
+      "iconAsTemplate": true
+    },
+    "macOSPrivateApi": true
+  },
+  "plugins": {
+    "global-shortcut": {
+      "shortcuts": ["CommandOrControl+J"]
+    }
+  }
+}
+```
+
+---
+
+## 七、技术风险与缓解
+
+| 风险 | 影响 | 缓解措施 |
+|------|------|----------|
+| 全局快捷键冲突 | 中 | `Cmd + J` 冲突较少，提供可配置 |
+| 毛玻璃性能 | 低 | 使用系统原生效果 |
+| 权限问题 | 中 | 正确配置 entitlements |
+| 代码重构工作量 | 中 | 渐进式重构，保持 CLI 稳定 |
+
+---
+
+## 八、确认事项（已确认）
+
+- **全局快捷键**: `Cmd + J`
+- **代码复用**: 约 85% 核心代码可复用
+- **Breaking Change**: **零风险**，采用"只增不改"策略
+  - 新增 `src/core/` 模块，不修改现有 `command/` 模块
+  - 现有 CLI 功能保持 100% 兼容
+  - 仅将部分内部函数可见性改为 `pub(crate)`
