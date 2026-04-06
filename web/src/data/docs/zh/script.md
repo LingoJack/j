@@ -1,85 +1,60 @@
 ## 概述
 
-脚本系统允许定义和执行预设的 Shell 命令序列，支持参数化和条件执行。
-
-核心特性：
-- **预定义脚本**：将常用命令序列保存为可复用脚本
-- **参数化执行**：脚本支持占位符，运行时传入参数
-- **多命令串联**：支持命令链式执行
-- **环境隔离**：每个脚本在独立 Shell 中执行
+脚本系统，通过 `concat` 命令创建和管理可执行脚本。
 
 ## 基本用法
 
-### 执行脚本
+### 创建脚本
 
 ```bash
-j script <name>           # 执行指定脚本
-j script <name> <args...> # 带参数执行
+j concat <name>              # 打开 TUI 编辑器编写脚本
+j concat <name> "<content>"  # 直接创建脚本
 ```
 
-### 管理脚本
+### 编辑脚本
 
-脚本存放在 `~/.jdata/scripts/` 目录，每个脚本为一个 Markdown 文件：
+```bash
+j concat <name>              # 如果脚本已存在，进入编辑模式
+```
+
+### 运行脚本
+
+```bash
+j <name>           # 直接通过别名运行
+j <name> <args...> # 带参数运行
+```
+
+### 删除脚本
+
+```bash
+j rm <name>        # 删除别名（同时删除脚本文件）
+```
+
+## 脚本存储
+
+脚本统一存储在 `~/.jdata/scripts/` 目录：
 
 ```
 ~/.jdata/scripts/
-├── deploy.md
-├── build.md
-└── test.md
+├── deploy.sh
+├── build.sh
+└── test.sh
 ```
 
-## 脚本格式
+脚本创建后自动注册为别名，可直接通过 `j <name>` 执行。
 
-脚本使用 Markdown 格式，支持 frontmatter 配置：
-
-```markdown
----
-name: deploy
-description: 部署到生产环境
----
-
-#!/bin/bash
-set -e
-
-echo "Building..."
-npm run build
-
-echo "Deploying..."
-rsync -avz dist/ user@server:/var/www/
-```
-
-### Frontmatter 字段
-
-| 字段 | 类型 | 必填 | 描述 |
-|------|------|------|------|
-| name | string | 是 | 脚本名称 |
-| description | string | 否 | 脚本描述 |
-
-## 参数化
-
-脚本支持 `{{.param}}` 占位符：
-
-```markdown
----
-name: greet
-description: 问候脚本
----
-
-#!/bin/bash
-name="{{.name}}"
-echo "Hello, $name!"
-```
-
-执行时传入参数：
+## 示例
 
 ```bash
-j script greet --name World
+# 创建部署脚本
+j concat deploy
+
+# 在编辑器中输入：
+#!/bin/bash
+set -e
+npm run build
+rsync -avz dist/ user@server:/var/www/
+
+# 运行脚本
+j deploy
 ```
-
-## 使用场景
-
-- 项目构建和部署
-- 代码格式化和检查
-- 数据库备份
-- 环境初始化
-- 定时任务封装

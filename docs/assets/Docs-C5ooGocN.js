@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-Btcgsn2s.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-C1Mmnm2p.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -6,9 +6,13 @@ import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}f
       `,children:(0,d.jsx)(`nav`,{className:`p-4`,children:Object.entries(e).map(([e,r],a,o)=>(0,d.jsxs)(`div`,{className:`mb-6 ${a<o.length-1?`pb-6 border-b border-stone-200/50`:``}`,children:[(0,d.jsxs)(`h3`,{className:`flex items-center gap-2 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3 px-3`,children:[(0,d.jsx)(`span`,{className:`w-1 h-4 bg-stone-300 rounded-full flex-shrink-0`}),r.title]}),(0,d.jsx)(`ul`,{className:`space-y-0.5`,children:Object.entries(r.children).map(([e,r])=>(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>{n(e),i()},className:`
                         relative w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-200
                         ${t===e?`text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-stone-900 before:rounded-full`:`text-stone-500 hover:text-stone-700 hover:bg-stone-50`}
-                      `,children:r})},e))})]},e))})})]})}var p={bash:`bash`,shell:`bash`,sh:`bash`,zsh:`bash`,typescript:`typescript`,ts:`typescript`,javascript:`javascript`,js:`javascript`,python:`python`,py:`python`,rust:`rust`,rs:`rust`,go:`go`,golang:`go`,java:`java`,c:`c`,cpp:`cpp`,"c++":`cpp`,csharp:`csharp`,"c#":`csharp`,ruby:`ruby`,rb:`ruby`,sql:`sql`,json:`json`,yaml:`yaml`,yml:`yaml`,toml:`toml`,markdown:`markdown`,md:`markdown`,html:`html`,css:`css`,scss:`scss`};function m(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function h(e,t){let n=[],r=e,i=0;for(;r.length>0;){let e=r.match(/`([^`]+)`/),a=r.match(/\*\*([^*]+)\*\*/),o=r.match(/\*([^*]+)\*/),s=[];if(e&&e.index!==void 0&&s.push({type:`code`,match:e,index:e.index}),a&&a.index!==void 0&&s.push({type:`bold`,match:a,index:a.index}),o&&o.index!==void 0&&s.push({type:`italic`,match:o,index:o.index}),s.length===0){n.push((0,d.jsx)(`span`,{children:r},`${t}-txt-${i++}`));break}s.sort((e,t)=>e.index-t.index);let c=s[0],l=r.slice(0,c.index);l&&n.push((0,d.jsx)(`span`,{children:l},`${t}-txt-${i++}`)),c.type===`code`?n.push((0,d.jsx)(`code`,{className:`bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono`,children:c.match[1]},`${t}-code-${i++}`)):c.type===`bold`?n.push((0,d.jsx)(`strong`,{className:`font-medium text-stone-900`,children:c.match[1]},`${t}-bold-${i++}`)):c.type===`italic`&&n.push((0,d.jsx)(`em`,{className:`italic`,children:c.match[1]},`${t}-italic-${i++}`)),r=r.slice(c.index+c.match[0].length)}return n.length>0?n:e}function g({content:e}){return(0,d.jsx)(d.Fragment,{children:(0,u.useMemo)(()=>{let t=e.split(`
+                      `,children:r})},e))})]},e))})})]})}var p={bash:`bash`,shell:`bash`,sh:`bash`,zsh:`bash`,typescript:`typescript`,ts:`typescript`,javascript:`javascript`,js:`javascript`,python:`python`,py:`python`,rust:`rust`,rs:`rust`,go:`go`,golang:`go`,java:`java`,c:`c`,cpp:`cpp`,"c++":`cpp`,csharp:`csharp`,"c#":`csharp`,ruby:`ruby`,rb:`ruby`,sql:`sql`,json:`json`,yaml:`yaml`,yml:`yaml`,toml:`toml`,markdown:`markdown`,md:`markdown`,html:`html`,css:`css`,scss:`scss`};function m(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function h(e,t){let n=[],r=e,i=0;for(;r.length>0;){let e=r.match(/`([^`]+)`/),a=r.match(/\*\*([^*]+)\*\*/),o=r.match(/\*([^*]+)\*/),s=r.match(/~~([^~]+)~~/),c=[];if(e&&e.index!==void 0&&c.push({type:`code`,match:e,index:e.index}),a&&a.index!==void 0&&c.push({type:`bold`,match:a,index:a.index}),o&&o.index!==void 0&&c.push({type:`italic`,match:o,index:o.index}),s&&s.index!==void 0&&c.push({type:`strike`,match:s,index:s.index}),c.length===0){n.push((0,d.jsx)(`span`,{children:r},`${t}-txt-${i++}`));break}c.sort((e,t)=>e.index-t.index);let l=c[0],u=r.slice(0,l.index);u&&n.push((0,d.jsx)(`span`,{children:u},`${t}-txt-${i++}`)),l.type===`code`?n.push((0,d.jsx)(`code`,{className:`bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono`,children:l.match[1]},`${t}-code-${i++}`)):l.type===`bold`?n.push((0,d.jsx)(`strong`,{className:`font-medium text-stone-900`,children:l.match[1]},`${t}-bold-${i++}`)):l.type===`italic`?n.push((0,d.jsx)(`em`,{className:`italic`,children:l.match[1]},`${t}-italic-${i++}`)):l.type===`strike`&&n.push((0,d.jsx)(`del`,{className:`line-through text-stone-400`,children:l.match[1]},`${t}-strike-${i++}`)),r=r.slice(l.index+l.match[0].length)}return n.length>0?n:e}function g({content:e}){return(0,d.jsx)(d.Fragment,{children:(0,u.useMemo)(()=>{let t=e.split(`
 `),n=[],r=!1,i=``,a=``,l=!1,u=[],f=0,g=new Set,_=()=>{if(u.length>0){let e=Math.max(...u.map(e=>e.length)),t=`table-${f++}`;n.push((0,d.jsx)(`div`,{className:`overflow-x-auto my-4`,children:(0,d.jsxs)(`table`,{className:`min-w-full border-collapse`,children:[(0,d.jsx)(`thead`,{children:(0,d.jsx)(`tr`,{children:u[0]?.map((e,n)=>(0,d.jsx)(`th`,{className:`border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium`,children:h(e,`${t}-h${n}`)},`th-${n}`))})}),(0,d.jsx)(`tbody`,{children:u.slice(1).map((n,r)=>(0,d.jsx)(`tr`,{children:Array.from({length:e}).map((e,i)=>(0,d.jsx)(`td`,{className:`border border-stone-200 px-4 py-2 text-sm`,children:h(n[i]||``,`${t}-r${r}c${i}`)},`td-${i}`))},`tr-${r}`))})]})},t)),u=[]}};return t.forEach(e=>{let t=`line-${f++}`;if(e.startsWith("```")){if(!r)_(),r=!0,a=e.slice(3).trim()||`text`,i=``;else{r=!1;let e=p[a.toLowerCase()]||a||`text`;n.push((0,d.jsxs)(`div`,{className:`relative group my-4`,children:[(0,d.jsx)(o,{language:e,style:s,customStyle:{margin:0,borderRadius:`0.5rem`,fontSize:`0.875rem`,backgroundColor:`#faf9f6`,border:`1px solid #e7e5e4`},codeTagProps:{style:{fontFamily:`ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace`}},children:i}),(0,d.jsx)(c,{text:i})]},`code-${f++}`))}return}if(r){i+=(i?`
-`:``)+e;return}if(e.startsWith(`|`)){l||(l=!0,u=[]);let t=e.split(`|`).slice(1,-1).map(e=>e.trim());e.includes(`---`)||u.push(t);return}else l&&(l=!1,_());if(e.startsWith(`> `)){n.push((0,d.jsx)(`blockquote`,{className:`border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic`,children:h(e.slice(2),`${t}-q`)},t));return}if(e.startsWith(`## `)){let r=e.slice(3).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h2`,{id:i,className:`text-2xl font-light text-stone-900 mt-12 mb-5`,children:h(r,`${t}-h2`)},t));return}if(e.startsWith(`### `)){let r=e.slice(4).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h3`,{id:i,className:`text-lg font-medium text-stone-900 mt-8 mb-4`,children:h(r,`${t}-h3`)},t));return}if(e.startsWith(`#### `)){let r=e.slice(5).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h4`,{id:i,className:`text-base font-semibold text-stone-800 mt-6 mb-3`,children:h(r,`${t}-h4`)},t));return}if(e.startsWith(`- `)||e.startsWith(`* `)){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-disc`,children:h(e.slice(2),`${t}-li`)},t));return}let v=e.match(/^(\d+)\.\s/);if(v){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-decimal`,children:h(e.slice(v[0].length),`${t}-nli`)},t));return}e.trim()&&n.push((0,d.jsx)(`p`,{className:`text-stone-600 text-sm leading-relaxed mb-3`,children:h(e,`${t}-p`)},t))}),l&&_(),n},[e])})}var _=e({default:()=>v}),v=`## Start AI Chat
+`:``)+e;return}if(e.startsWith(`|`)){l||(l=!0,u=[]);let t=e.split(`|`).slice(1,-1).map(e=>e.trim());e.includes(`---`)||u.push(t);return}else l&&(l=!1,_());if(e.startsWith(`> `)){n.push((0,d.jsx)(`blockquote`,{className:`border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic`,children:h(e.slice(2),`${t}-q`)},t));return}if(e.startsWith(`## `)){let r=e.slice(3).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h2`,{id:i,className:`text-2xl font-light text-stone-900 mt-12 mb-5`,children:h(r,`${t}-h2`)},t));return}if(e.startsWith(`### `)){let r=e.slice(4).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h3`,{id:i,className:`text-lg font-medium text-stone-900 mt-8 mb-4`,children:h(r,`${t}-h3`)},t));return}if(e.startsWith(`#### `)){let r=e.slice(5).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h4`,{id:i,className:`text-base font-semibold text-stone-800 mt-6 mb-3`,children:h(r,`${t}-h4`)},t));return}if(e.startsWith(`- `)||e.startsWith(`* `)){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-disc`,children:h(e.slice(2),`${t}-li`)},t));return}let v=e.match(/^(\d+)\.\s/);if(v){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-decimal`,children:h(e.slice(v[0].length),`${t}-nli`)},t));return}e.trim()&&n.push((0,d.jsx)(`p`,{className:`text-stone-600 text-sm leading-relaxed mb-3`,children:h(e,`${t}-p`)},t))}),l&&_(),n},[e])})}var _=e({default:()=>v}),v=`## Overview
+
+AI chat system with multi-model support, context references, and autonomous agent execution.
+
+## Start Chat
 
 \`\`\`bash
 j chat              # Enter TUI chat interface
@@ -61,14 +65,12 @@ AI chat has built-in Agent capabilities for autonomous multi-step task execution
 - **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
 - **Plan Mode**: Explore codebase before making a plan
-- **Sub-Agent**: Spawn sub-agents for complex tasks in parallel
 
 ### Plan Mode
 
 For complex tasks, enter plan mode to explore the codebase first:
 
 \`\`\`
-# Enter plan mode
 Analyze the project architecture and design a refactoring plan
 
 # AI will:
@@ -76,41 +78,23 @@ Analyze the project architecture and design a refactoring plan
 2. Explore codebase structure
 3. Generate detailed plan
 4. Submit plan for user confirmation
-5. Execute after user approval
-\`\`\`
-
-### Sub-Agent
-
-Agent tool allows spawning sub-agents for complex tasks:
-
-- **No Recursion**: Sub-agents cannot call Agent tool
-- **Max Rounds**: 30 tool call rounds limit
-- **Execution Mode**: Foreground (blocking) or Background (async)
-
-\`\`\`
-# Example: Spawn sub-agent to search and organize code
-Search all files containing 'TODO' and organize by directory
 \`\`\`
 
 ### Tool Permission Configuration
 
-Create \`.jcli/permissions.yaml\` in project root to configure tool permissions:
+Create \`.jcli/permissions.yaml\` in project root:
 
 \`\`\`yaml
 permissions:
-  allow_all: false   # Set to true to skip all confirmations
-  
-  allow:             # Skip confirmation if matched
+  allow_all: false
+  allow:
     - Read
     - Grep
     - Glob
-  
-  deny:              # Takes priority over allow, direct reject
+  deny:
     - Bash
     - Write
 \`\`\`
-
-> See [AI Tools](tools) for details.
 
 ## Remote Control
 
@@ -118,117 +102,72 @@ permissions:
 j chat --remote     # Enable remote control (scan QR code with phone)
 j chat --remote --port 9390  # Custom port
 \`\`\`
-
-## Multi-Model Support
-
-Supports OpenAI, Claude, Gemini, Ollama and more. Manage via \`Ctrl+E\` config panel.
 `,ee=e({default:()=>te}),te=`## Overview
 
-The alias system allows creating short aliases for common commands and applications, improving command-line efficiency.
-
-Core features:
-- **Command Aliases**: Simplify long commands into short aliases
-- **App Aliases**: Quickly open frequently used apps and URLs
-- **Group Management**: Organize aliases by project or category
-- **Dynamic Extension**: Support runtime addition and deletion
+Alias system for creating short aliases to paths and URLs for quick access.
 
 ## Basic Usage
+
+### Add Alias
+
+\`\`\`bash
+j set <alias> <path>    # Add path alias
+j set <alias> <url>     # Add URL alias
+\`\`\`
 
 ### Execute Alias
 
 \`\`\`bash
-j <alias>            # Execute alias command
-j <alias> <args...>  # Execute with arguments
+j <alias>               # Open path or URL
 \`\`\`
 
 ### Manage Aliases
 
 \`\`\`bash
-j alias              # List all aliases
-j alias add <name> <command>  # Add alias
-j alias rm <name>    # Remove alias
+j rm <alias>            # Remove alias
+j rename <old> <new>    # Rename alias
+j mf <alias> <new_path> # Modify alias target
 \`\`\`
 
 ## Alias Types
 
-### Command Aliases
-
-Simplify common commands:
+### Path Alias
 
 \`\`\`bash
-# Add alias
-j alias add gs "git status"
-j alias add gp "git push"
+# Add path
+j set work ~/Projects/work
+j set notes ~/Documents/notes
 
-# Use alias
-j gs
-j gp origin main
+# Open path
+j work    # Open in file manager
+j notes   # Open in file manager
 \`\`\`
 
-### App Aliases
-
-Quickly open apps or URLs:
+### URL Alias
 
 \`\`\`bash
-# Open application
-j alias add chrome "open -a 'Google Chrome'"
-j alias add vscode "open -a 'Visual Studio Code'"
+# Add URL
+j set gh https://github.com
+j set gh-issues https://github.com/issues
 
 # Open URL
-j alias add gh "open https://github.com"
-
-# Usage
-j chrome
-j gh
+j gh        # Open in browser
+j gh-issues # Open in browser
 \`\`\`
 
-## Alias Files
+## Alias Storage
 
-Aliases are stored in \`~/.jdata/aliases/\` directory:
+Aliases are stored in \`~/.jdata/config.yaml\`:
 
+\`\`\`yaml
+path:
+  work: /Users/user/Projects/work
+  notes: /Users/user/Documents/notes
+
+inner_url:
+  gh: https://github.com
+  gh-issues: https://github.com/issues
 \`\`\`
-~/.jdata/aliases/
-├── git.json      # Git related aliases
-├── apps.json     # App aliases
-└── work.json     # Work related aliases
-\`\`\`
-
-### Alias File Format
-
-\`\`\`json
-[
-  {
-    "name": "gs",
-    "command": "git status",
-    "description": "Show Git status"
-  },
-  {
-    "name": "chrome",
-    "command": "open -a 'Google Chrome'",
-    "description": "Open Chrome browser"
-  }
-]
-\`\`\`
-
-## Parameterized Aliases
-
-Aliases support \`$1\`, \`$2\` parameter placeholders:
-
-\`\`\`bash
-# Add alias with parameters
-j alias add find-file "find . -name '$1' -type f"
-
-# Usage
-j find-file "*.rs"
-\`\`\`
-
-## Use Cases
-
-- Git command simplification
-- Quick project switching
-- Fast app launching
-- URL bookmarks
-- SSH connection shortcuts
 `,ne=e({default:()=>re}),re=`## Overview
 
 Browser is a tool in AI chat for web browsing, interaction, and content extraction.
@@ -989,89 +928,64 @@ When current date exceeds \`last_day\`, writing to report automatically:
 2. Updates week_num and last_day
 `,P=e({default:()=>F}),F=`## Overview
 
-The script system allows defining and executing preset shell command sequences with parameterization and conditional execution.
-
-Core features:
-- **Predefined Scripts**: Save common command sequences as reusable scripts
-- **Parameterized Execution**: Scripts support placeholders for runtime arguments
-- **Command Chaining**: Support for sequential command execution
-- **Environment Isolation**: Each script runs in an independent shell
+Script system for creating and managing executable scripts via \`concat\` command.
 
 ## Basic Usage
 
-### Execute Script
+### Create Script
 
 \`\`\`bash
-j script <name>           # Execute specified script
-j script <name> <args...> # Execute with arguments
+j concat <name>              # Open TUI editor to write script
+j concat <name> "<content>"  # Create script directly
 \`\`\`
 
-### Manage Scripts
+### Edit Script
 
-Scripts are stored in \`~/.jdata/scripts/\` directory, each script as a Markdown file:
+\`\`\`bash
+j concat <name>              # Enter edit mode if script exists
+\`\`\`
+
+### Run Script
+
+\`\`\`bash
+j <name>           # Run via alias directly
+j <name> <args...> # Run with arguments
+\`\`\`
+
+### Delete Script
+
+\`\`\`bash
+j rm <name>        # Remove alias (also deletes script file)
+\`\`\`
+
+## Script Storage
+
+Scripts are stored in \`~/.jdata/scripts/\` directory:
 
 \`\`\`
 ~/.jdata/scripts/
-├── deploy.md
-├── build.md
-└── test.md
+├── deploy.sh
+├── build.sh
+└── test.sh
 \`\`\`
 
-## Script Format
+Scripts are automatically registered as aliases after creation, executable via \`j <name>\`.
 
-Scripts use Markdown format with frontmatter configuration:
-
-\`\`\`markdown
----
-name: deploy
-description: Deploy to production
----
-
-#!/bin/bash
-set -e
-
-echo "Building..."
-npm run build
-
-echo "Deploying..."
-rsync -avz dist/ user@server:/var/www/
-\`\`\`
-
-### Frontmatter Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| name | string | Yes | Script name |
-| description | string | No | Script description |
-
-## Parameterization
-
-Scripts support \`{{.param}}\` placeholders:
-
-\`\`\`markdown
----
-name: greet
-description: Greeting script
----
-
-#!/bin/bash
-name="{{.name}}"
-echo "Hello, $name!"
-\`\`\`
-
-Execute with arguments:
+## Example
 
 \`\`\`bash
-j script greet --name World
+# Create deploy script
+j concat deploy
+
+# In editor, input:
+#!/bin/bash
+set -e
+npm run build
+rsync -avz dist/ user@server:/var/www/
+
+# Run script
+j deploy
 \`\`\`
-
-## Use Cases
-
-- Project build and deployment
-- Code formatting and linting
-- Database backup
-- Environment initialization
-- Scheduled task wrapper
 `,I=e({default:()=>L}),L=`## Overview
 
 Skills are specialized prompt modules that extend AI capabilities, loaded via the \`LoadSkill\` tool.
@@ -1134,83 +1048,49 @@ Disable specific skills via the TUI configuration interface. Settings are saved 
 \`\`\`
 `,R=e({default:()=>z}),z=`## Overview
 
-The todo management system provides lightweight task tracking with status transitions and priority management.
-
-Core features:
-- **Quick Add**: Add todo items with a single command
-- **Status Management**: pending, in_progress, completed state transitions
-- **List View**: Filter and sort by status
-- **Data Persistence**: Auto-save to local file
+Todo management system with status transitions and TUI interface.
 
 ## Basic Usage
 
-### View Todos
+### Open TUI Interface
 
 \`\`\`bash
-j todo              # View all todos
-j todo -s pending   # Filter by status
+j todo              # Open todo management TUI
 \`\`\`
 
-### Add Todo
+### Command Line Operations
 
 \`\`\`bash
-j todo add "Finish documentation"
-j todo add "Fix bug" -p high  # High priority
+j todo list              # List all todos
+j todo list --done       # List completed only
+j todo list --undone     # List undone only
+j todo add "Finish docs"  # Quick add todo
 \`\`\`
 
-### Update Status
+## TUI Operations
 
-\`\`\`bash
-j todo start <id>     # Mark as in progress
-j todo done <id>      # Mark as completed
-j todo cancel <id>    # Cancel todo
-\`\`\`
-
-### Delete Todo
-
-\`\`\`bash
-j todo rm <id>        # Delete specified todo
-j todo clear          # Clear completed items
-\`\`\`
+| Shortcut | Action |
+|----------|--------|
+| \`j/k\` | Move up/down |
+| \`Enter\` | Toggle completion |
+| \`a\` | Add new todo |
+| \`e\` | Edit current item |
+| \`d\` | Delete current item |
+| \`r\` | Write to daily report |
+| \`Tab\` | Toggle filter (all/undone/done) |
+| \`?\` | Show help |
+| \`q/Esc\` | Exit |
 
 ## Todo Status
 
-| Status | Description |
-|--------|-------------|
-| pending | Pending |
-| in_progress | In Progress |
-| completed | Completed |
-
-## Priority
-
-| Level | Identifier |
-|-------|------------|
-| Low | low |
-| Medium | medium (default) |
-| High | high |
+| Status | Display |
+|--------|---------|
+| Undone | \`[ ]\` |
+| Done | \`[x]\` |
 
 ## Data Storage
 
-Todo data is stored in \`~/.jdata/todos.json\`:
-
-\`\`\`json
-[
-  {
-    "id": 1,
-    "content": "Finish documentation",
-    "status": "pending",
-    "priority": "high",
-    "created_at": "2024-01-15T10:00:00Z"
-  }
-]
-\`\`\`
-
-## Use Cases
-
-- Daily task management
-- Project progress tracking
-- Personal memo
-- Team task assignment
+Todo data is stored in \`~/.jdata/report/todo.json\`.
 `,B=e({default:()=>V}),V=`## File Tools
 
 ### Read
@@ -1656,7 +1536,11 @@ permissions:
 |------|------|
 | \`@file:path\` | Include file content (auto-read and inject into context) |
 | \`@skill:name\` | Load and activate specified skill |
-`,H=e({default:()=>U}),U=`## 启动 AI 对话
+`,H=e({default:()=>U}),U=`## 概述
+
+AI 对话系统，支持多模型、上下文引用和 Agent 自主执行。
+
+## 启动对话
 
 \`\`\`bash
 j chat              # 进入 TUI 对话界面
@@ -1709,14 +1593,12 @@ AI 对话内置 Agent 能力，可自主规划并执行多步骤任务：
 - **工具集成**：自动使用可用工具（Read、Write、Bash 等）
 - **任务管理**：Task 和 Todo 工具管理复杂任务
 - **计划模式**：先探索代码库再制定计划
-- **子代理**：派生子代理并行处理复杂任务
 
 ### 计划模式
 
 对于复杂任务，可先进入计划模式探索代码库：
 
 \`\`\`
-# 进入计划模式
 分析这个项目的架构并设计重构方案
 
 # AI 会：
@@ -1724,41 +1606,23 @@ AI 对话内置 Agent 能力，可自主规划并执行多步骤任务：
 2. 探索代码库结构
 3. 生成详细计划
 4. 提交计划等待用户确认
-5. 用户确认后执行
-\`\`\`
-
-### 子代理
-
-Agent 工具允许派生子代理执行复杂任务：
-
-- **防递归**：子代理无法调用 Agent 工具
-- **最大轮数**：30 轮工具调用限制
-- **执行模式**：前台（阻塞）或后台（异步）
-
-\`\`\`
-# 示例：派生子代理搜索并整理代码
-搜索所有包含 'TODO' 的文件并按目录分类整理
 \`\`\`
 
 ### 工具权限配置
 
-在项目根目录创建 \`.jcli/permissions.yaml\` 配置工具权限：
+在项目根目录创建 \`.jcli/permissions.yaml\`：
 
 \`\`\`yaml
 permissions:
-  allow_all: false   # 设为 true 跳过所有确认
-  
-  allow:             # 匹配则跳过确认
+  allow_all: false
+  allow:
     - Read
     - Grep
     - Glob
-  
-  deny:              # 优先于 allow，直接拒绝
+  deny:
     - Bash
     - Write
 \`\`\`
-
-> 详见 [AI 工具](tools)。
 
 ## 远程控制
 
@@ -1766,117 +1630,72 @@ permissions:
 j chat --remote     # 启用远程控制（手机扫码）
 j chat --remote --port 9390  # 指定端口
 \`\`\`
-
-## 多模型支持
-
-支持 OpenAI、Claude、Gemini、Ollama 等模型，通过 \`Ctrl+E\` 打开配置界面管理。
 `,W=e({default:()=>G}),G=`## 概述
 
-别名系统允许为常用命令和应用程序创建简短别名，提高命令行效率。
-
-核心特性：
-- **命令别名**：将长命令简化为短别名
-- **应用别名**：快速打开常用应用和网址
-- **分组管理**：按项目或类别组织别名
-- **动态扩展**：支持运行时添加和删除
+别名系统，为路径和网址创建简短别名以便快速访问。
 
 ## 基本用法
+
+### 添加别名
+
+\`\`\`bash
+j set <alias> <path>    # 添加路径别名
+j set <alias> <url>     # 添加网址别名
+\`\`\`
 
 ### 执行别名
 
 \`\`\`bash
-j <alias>            # 执行别名命令
-j <alias> <args...>  # 带参数执行
+j <alias>               # 打开路径或网址
 \`\`\`
 
 ### 管理别名
 
 \`\`\`bash
-j alias              # 列出所有别名
-j alias add <name> <command>  # 添加别名
-j alias rm <name>    # 删除别名
+j rm <alias>            # 删除别名
+j rename <old> <new>    # 重命名别名
+j mf <alias> <new_path> # 修改别名指向
 \`\`\`
 
 ## 别名类型
 
-### 命令别名
-
-将常用命令简化：
+### 路径别名
 
 \`\`\`bash
-# 添加别名
-j alias add gs "git status"
-j alias add gp "git push"
+# 添加路径
+j set work ~/Projects/work
+j set notes ~/Documents/notes
 
-# 使用别名
-j gs
-j gp origin main
+# 打开路径
+j work    # 在文件管理器中打开
+j notes   # 在文件管理器中打开
 \`\`\`
 
-### 应用别名
-
-快速打开应用或网址：
+### 网址别名
 
 \`\`\`bash
-# 打开应用
-j alias add chrome "open -a 'Google Chrome'"
-j alias add vscode "open -a 'Visual Studio Code'"
+# 添加网址
+j set gh https://github.com
+j set gh-issues https://github.com/issues
 
 # 打开网址
-j alias add gh "open https://github.com"
-
-# 使用
-j chrome
-j gh
+j gh        # 在浏览器中打开
+j gh-issues # 在浏览器中打开
 \`\`\`
 
-## 别名文件
+## 别名存储
 
-别名单独存放在 \`~/.jdata/aliases/\` 目录：
+别名单独存放在 \`~/.jdata/config.yaml\`：
 
+\`\`\`yaml
+path:
+  work: /Users/user/Projects/work
+  notes: /Users/user/Documents/notes
+
+inner_url:
+  gh: https://github.com
+  gh-issues: https://github.com/issues
 \`\`\`
-~/.jdata/aliases/
-├── git.json      # Git 相关别名
-├── apps.json     # 应用别名
-└── work.json     # 工作相关别名
-\`\`\`
-
-### 别名文件格式
-
-\`\`\`json
-[
-  {
-    "name": "gs",
-    "command": "git status",
-    "description": "查看 Git 状态"
-  },
-  {
-    "name": "chrome",
-    "command": "open -a 'Google Chrome'",
-    "description": "打开 Chrome 浏览器"
-  }
-]
-\`\`\`
-
-## 参数化别名
-
-别名支持 \`$1\`、\`$2\` 等参数占位符：
-
-\`\`\`bash
-# 添加带参数的别名
-j alias add find-file "find . -name '$1' -type f"
-
-# 使用
-j find-file "*.rs"
-\`\`\`
-
-## 使用场景
-
-- Git 命令简化
-- 项目快速切换
-- 应用快速启动
-- 常用网址书签
-- SSH 连接快捷方式
 `,K=e({default:()=>q}),q=`## 概述
 
 Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取。
@@ -2637,89 +2456,64 @@ j reportctl pull
 2. 更新 week_num 和 last_day
 `,Te=e({default:()=>Ee}),Ee=`## 概述
 
-脚本系统允许定义和执行预设的 Shell 命令序列，支持参数化和条件执行。
-
-核心特性：
-- **预定义脚本**：将常用命令序列保存为可复用脚本
-- **参数化执行**：脚本支持占位符，运行时传入参数
-- **多命令串联**：支持命令链式执行
-- **环境隔离**：每个脚本在独立 Shell 中执行
+脚本系统，通过 \`concat\` 命令创建和管理可执行脚本。
 
 ## 基本用法
 
-### 执行脚本
+### 创建脚本
 
 \`\`\`bash
-j script <name>           # 执行指定脚本
-j script <name> <args...> # 带参数执行
+j concat <name>              # 打开 TUI 编辑器编写脚本
+j concat <name> "<content>"  # 直接创建脚本
 \`\`\`
 
-### 管理脚本
+### 编辑脚本
 
-脚本存放在 \`~/.jdata/scripts/\` 目录，每个脚本为一个 Markdown 文件：
+\`\`\`bash
+j concat <name>              # 如果脚本已存在，进入编辑模式
+\`\`\`
+
+### 运行脚本
+
+\`\`\`bash
+j <name>           # 直接通过别名运行
+j <name> <args...> # 带参数运行
+\`\`\`
+
+### 删除脚本
+
+\`\`\`bash
+j rm <name>        # 删除别名（同时删除脚本文件）
+\`\`\`
+
+## 脚本存储
+
+脚本统一存储在 \`~/.jdata/scripts/\` 目录：
 
 \`\`\`
 ~/.jdata/scripts/
-├── deploy.md
-├── build.md
-└── test.md
+├── deploy.sh
+├── build.sh
+└── test.sh
 \`\`\`
 
-## 脚本格式
+脚本创建后自动注册为别名，可直接通过 \`j <name>\` 执行。
 
-脚本使用 Markdown 格式，支持 frontmatter 配置：
-
-\`\`\`markdown
----
-name: deploy
-description: 部署到生产环境
----
-
-#!/bin/bash
-set -e
-
-echo "Building..."
-npm run build
-
-echo "Deploying..."
-rsync -avz dist/ user@server:/var/www/
-\`\`\`
-
-### Frontmatter 字段
-
-| 字段 | 类型 | 必填 | 描述 |
-|------|------|------|------|
-| name | string | 是 | 脚本名称 |
-| description | string | 否 | 脚本描述 |
-
-## 参数化
-
-脚本支持 \`{{.param}}\` 占位符：
-
-\`\`\`markdown
----
-name: greet
-description: 问候脚本
----
-
-#!/bin/bash
-name="{{.name}}"
-echo "Hello, $name!"
-\`\`\`
-
-执行时传入参数：
+## 示例
 
 \`\`\`bash
-j script greet --name World
+# 创建部署脚本
+j concat deploy
+
+# 在编辑器中输入：
+#!/bin/bash
+set -e
+npm run build
+rsync -avz dist/ user@server:/var/www/
+
+# 运行脚本
+j deploy
 \`\`\`
-
-## 使用场景
-
-- 项目构建和部署
-- 代码格式化和检查
-- 数据库备份
-- 环境初始化
-- 定时任务封装
 `,De=e({default:()=>Oe}),Oe=`## 概述
 
 Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具加载。
@@ -2782,83 +2576,49 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
 \`\`\`
 `,ke=e({default:()=>Ae}),Ae=`## 概述
 
-待办管理系统提供轻量级的任务跟踪能力，支持状态流转和优先级管理。
-
-核心特性：
-- **快速添加**：一行命令添加待办事项
-- **状态管理**：pending、in_progress、completed 状态流转
-- **列表查看**：按状态筛选和排序
-- **数据持久化**：自动保存到本地文件
+待办管理系统，支持任务状态流转和 TUI 交互界面。
 
 ## 基本用法
 
-### 查看待办
+### 进入 TUI 界面
 
 \`\`\`bash
-j todo              # 查看所有待办
-j todo -s pending   # 按状态筛选
+j todo              # 打开待办管理 TUI
 \`\`\`
 
-### 添加待办
+### 命令行操作
 
 \`\`\`bash
-j todo add "完成文档编写"
-j todo add "修复Bug" -p high  # 高优先级
+j todo list              # 列出所有待办
+j todo list --done       # 只列出已完成
+j todo list --undone     # 只列出未完成
+j todo add "完成文档"     # 快速添加待办
 \`\`\`
 
-### 更新状态
+## TUI 操作
 
-\`\`\`bash
-j todo start <id>     # 标记为进行中
-j todo done <id>      # 标记为已完成
-j todo cancel <id>    # 取消待办
-\`\`\`
-
-### 删除待办
-
-\`\`\`bash
-j todo rm <id>        # 删除指定待办
-j todo clear          # 清空已完成
-\`\`\`
+| 快捷键 | 功能 |
+|--------|------|
+| \`j/k\` | 上下移动 |
+| \`Enter\` | 切换完成状态 |
+| \`a\` | 添加新待办 |
+| \`e\` | 编辑当前项 |
+| \`d\` | 删除当前项 |
+| \`r\` | 写入日报 |
+| \`Tab\` | 切换筛选（全部/未完成/已完成） |
+| \`?\` | 显示帮助 |
+| \`q/Esc\` | 退出 |
 
 ## 待办状态
 
-| 状态 | 说明 |
+| 状态 | 显示 |
 |------|------|
-| pending | 待处理 |
-| in_progress | 进行中 |
-| completed | 已完成 |
-
-## 优先级
-
-| 级别 | 标识 |
-|------|------|
-| 低 | low |
-| 中 | medium（默认） |
-| 高 | high |
+| 未完成 | \`[ ]\` |
+| 已完成 | \`[x]\` |
 
 ## 数据存储
 
-待办数据存储在 \`~/.jdata/todos.json\`：
-
-\`\`\`json
-[
-  {
-    "id": 1,
-    "content": "完成文档编写",
-    "status": "pending",
-    "priority": "high",
-    "created_at": "2024-01-15T10:00:00Z"
-  }
-]
-\`\`\`
-
-## 使用场景
-
-- 日常任务管理
-- 项目进度跟踪
-- 个人备忘录
-- 团队协作任务分配
+待办数据存储在 \`~/.jdata/report/todo.json\`。
 `,je=e({default:()=>Me}),Me=`## 文件工具
 
 ### Read
@@ -3305,7 +3065,7 @@ permissions:
 | \`@file:路径\` | 包含文件内容（自动读取并注入上下文） |
 | \`@skill:名称\` | 加载并激活指定 skill |
 `,Ne={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Pe={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function Fe(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`markdownEditor`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Ie=Object.assign({"./en/aiChat.md":_,"./en/alias.md":ee,"./en/browser.md":ne,"./en/commands.md":ie,"./en/dataDirectory.md":oe,"./en/hooks.md":b,"./en/installation.md":S,"./en/markdown-editor.md":w,"./en/permissions.md":E,"./en/quickStart.md":O,"./en/remote.md":A,"./en/report.md":M,"./en/script.md":P,"./en/skills.md":I,"./en/todo.md":R,"./en/tools.md":B}),Le=Object.assign({"./zh/aiChat.md":H,"./zh/alias.md":W,"./zh/browser.md":K,"./zh/commands.md":se,"./zh/dataDirectory.md":le,"./zh/hooks.md":de,"./zh/installation.md":pe,"./zh/markdown-editor.md":he,"./zh/permissions.md":_e,"./zh/quickStart.md":ye,"./zh/remote.md":xe,"./zh/report.md":Ce,"./zh/script.md":Te,"./zh/skills.md":De,"./zh/todo.md":ke,"./zh/tools.md":je});function Re(){let e={en:{},zh:{}},t=e=>e.replace(/-([a-z])/g,(e,t)=>t.toUpperCase());for(let[n,r]of Object.entries(Ie)){let i=n.match(/\.\/en\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.en[n]=r.default}}for(let[n,r]of Object.entries(Le)){let i=n.match(/\.\/zh\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.zh[n]=r.default}}return e}var Y=Re();function X(e,t){return Y[e]?.[t]||Y.en[t]||``}function ze(e,t){return J[e]?.[t]||J.en[t]||t}var Z={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Be({lang:e,activeSection:t,onNavigate:n}){let r=Fe(),i=J[e],a=Z[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Ve={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function He(e){let t=e.split(`
-`),n=[],r=new Set;return t.forEach(e=>{let t,i;if(e.startsWith(`## `))t=e.slice(3).trim(),i=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),i=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),i=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let a=$(t),o=1;for(;r.has(a);)a=`${$(t)}-${o}`,o++;r.add(a),n.push({id:a,text:t,level:i})}),n}function Ue({content:e,lang:t}){let n=(0,u.useMemo)(()=>He(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Ve[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
+`),n=[],r=new Set,i=!1;return t.forEach(e=>{if(e.startsWith("```")){i=!i;return}if(i)return;let t,a;if(e.startsWith(`## `))t=e.slice(3).trim(),a=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),a=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),a=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let o=$(t),s=1;for(;r.has(o);)o=`${$(t)}-${s}`,s++;r.add(o),n.push({id:o,text:t,level:a})}),n}function Ue({content:e,lang:t}){let n=(0,u.useMemo)(()=>He(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Ve[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
                   relative w-full text-left py-1.5 px-3 rounded-lg transition-all duration-200
                   ${s?`pl-8 text-xs`:a?`pl-6 text-xs`:`text-sm mt-1`}
                   ${i?s?`text-stone-700 font-medium bg-stone-50 before:absolute before:left-5 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-400 before:rounded-full`:a?`text-stone-800 font-medium bg-stone-50 before:absolute before:left-3 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-500 before:rounded-full`:`text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-stone-900 before:rounded-full`:s?`text-stone-400 hover:text-stone-500 hover:bg-stone-50`:a?`text-stone-400 hover:text-stone-600 hover:bg-stone-50`:`text-stone-500 hover:text-stone-700 hover:bg-stone-50`}

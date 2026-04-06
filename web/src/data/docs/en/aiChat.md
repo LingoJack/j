@@ -1,4 +1,8 @@
-## Start AI Chat
+## Overview
+
+AI chat system with multi-model support, context references, and autonomous agent execution.
+
+## Start Chat
 
 ```bash
 j chat              # Enter TUI chat interface
@@ -51,14 +55,12 @@ AI chat has built-in Agent capabilities for autonomous multi-step task execution
 - **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
 - **Plan Mode**: Explore codebase before making a plan
-- **Sub-Agent**: Spawn sub-agents for complex tasks in parallel
 
 ### Plan Mode
 
 For complex tasks, enter plan mode to explore the codebase first:
 
 ```
-# Enter plan mode
 Analyze the project architecture and design a refactoring plan
 
 # AI will:
@@ -66,41 +68,23 @@ Analyze the project architecture and design a refactoring plan
 2. Explore codebase structure
 3. Generate detailed plan
 4. Submit plan for user confirmation
-5. Execute after user approval
-```
-
-### Sub-Agent
-
-Agent tool allows spawning sub-agents for complex tasks:
-
-- **No Recursion**: Sub-agents cannot call Agent tool
-- **Max Rounds**: 30 tool call rounds limit
-- **Execution Mode**: Foreground (blocking) or Background (async)
-
-```
-# Example: Spawn sub-agent to search and organize code
-Search all files containing 'TODO' and organize by directory
 ```
 
 ### Tool Permission Configuration
 
-Create `.jcli/permissions.yaml` in project root to configure tool permissions:
+Create `.jcli/permissions.yaml` in project root:
 
 ```yaml
 permissions:
-  allow_all: false   # Set to true to skip all confirmations
-  
-  allow:             # Skip confirmation if matched
+  allow_all: false
+  allow:
     - Read
     - Grep
     - Glob
-  
-  deny:              # Takes priority over allow, direct reject
+  deny:
     - Bash
     - Write
 ```
-
-> See [AI Tools](tools) for details.
 
 ## Remote Control
 
@@ -108,7 +92,3 @@ permissions:
 j chat --remote     # Enable remote control (scan QR code with phone)
 j chat --remote --port 9390  # Custom port
 ```
-
-## Multi-Model Support
-
-Supports OpenAI, Claude, Gemini, Ollama and more. Manage via `Ctrl+E` config panel.

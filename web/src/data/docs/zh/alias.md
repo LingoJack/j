@@ -1,107 +1,66 @@
 ## 概述
 
-别名系统允许为常用命令和应用程序创建简短别名，提高命令行效率。
-
-核心特性：
-- **命令别名**：将长命令简化为短别名
-- **应用别名**：快速打开常用应用和网址
-- **分组管理**：按项目或类别组织别名
-- **动态扩展**：支持运行时添加和删除
+别名系统，为路径和网址创建简短别名以便快速访问。
 
 ## 基本用法
+
+### 添加别名
+
+```bash
+j set <alias> <path>    # 添加路径别名
+j set <alias> <url>     # 添加网址别名
+```
 
 ### 执行别名
 
 ```bash
-j <alias>            # 执行别名命令
-j <alias> <args...>  # 带参数执行
+j <alias>               # 打开路径或网址
 ```
 
 ### 管理别名
 
 ```bash
-j alias              # 列出所有别名
-j alias add <name> <command>  # 添加别名
-j alias rm <name>    # 删除别名
+j rm <alias>            # 删除别名
+j rename <old> <new>    # 重命名别名
+j mf <alias> <new_path> # 修改别名指向
 ```
 
 ## 别名类型
 
-### 命令别名
-
-将常用命令简化：
+### 路径别名
 
 ```bash
-# 添加别名
-j alias add gs "git status"
-j alias add gp "git push"
+# 添加路径
+j set work ~/Projects/work
+j set notes ~/Documents/notes
 
-# 使用别名
-j gs
-j gp origin main
+# 打开路径
+j work    # 在文件管理器中打开
+j notes   # 在文件管理器中打开
 ```
 
-### 应用别名
-
-快速打开应用或网址：
+### 网址别名
 
 ```bash
-# 打开应用
-j alias add chrome "open -a 'Google Chrome'"
-j alias add vscode "open -a 'Visual Studio Code'"
+# 添加网址
+j set gh https://github.com
+j set gh-issues https://github.com/issues
 
 # 打开网址
-j alias add gh "open https://github.com"
-
-# 使用
-j chrome
-j gh
+j gh        # 在浏览器中打开
+j gh-issues # 在浏览器中打开
 ```
 
-## 别名文件
+## 别名存储
 
-别名单独存放在 `~/.jdata/aliases/` 目录：
+别名单独存放在 `~/.jdata/config.yaml`：
 
+```yaml
+path:
+  work: /Users/user/Projects/work
+  notes: /Users/user/Documents/notes
+
+inner_url:
+  gh: https://github.com
+  gh-issues: https://github.com/issues
 ```
-~/.jdata/aliases/
-├── git.json      # Git 相关别名
-├── apps.json     # 应用别名
-└── work.json     # 工作相关别名
-```
-
-### 别名文件格式
-
-```json
-[
-  {
-    "name": "gs",
-    "command": "git status",
-    "description": "查看 Git 状态"
-  },
-  {
-    "name": "chrome",
-    "command": "open -a 'Google Chrome'",
-    "description": "打开 Chrome 浏览器"
-  }
-]
-```
-
-## 参数化别名
-
-别名支持 `$1`、`$2` 等参数占位符：
-
-```bash
-# 添加带参数的别名
-j alias add find-file "find . -name '$1' -type f"
-
-# 使用
-j find-file "*.rs"
-```
-
-## 使用场景
-
-- Git 命令简化
-- 项目快速切换
-- 应用快速启动
-- 常用网址书签
-- SSH 连接快捷方式

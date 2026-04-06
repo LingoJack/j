@@ -35,8 +35,18 @@ function extractHeadings(content: string): TOCItem[] {
   const lines = content.split('\n')
   const headings: TOCItem[] = []
   const usedIds = new Set<string>()
+  let inCodeBlock = false
   
   lines.forEach(line => {
+    // Track code block boundaries
+    if (line.startsWith('```')) {
+      inCodeBlock = !inCodeBlock
+      return
+    }
+    
+    // Skip content inside code blocks
+    if (inCodeBlock) return
+    
     let text: string
     let level: number
     

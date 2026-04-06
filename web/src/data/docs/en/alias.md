@@ -1,107 +1,66 @@
 ## Overview
 
-The alias system allows creating short aliases for common commands and applications, improving command-line efficiency.
-
-Core features:
-- **Command Aliases**: Simplify long commands into short aliases
-- **App Aliases**: Quickly open frequently used apps and URLs
-- **Group Management**: Organize aliases by project or category
-- **Dynamic Extension**: Support runtime addition and deletion
+Alias system for creating short aliases to paths and URLs for quick access.
 
 ## Basic Usage
+
+### Add Alias
+
+```bash
+j set <alias> <path>    # Add path alias
+j set <alias> <url>     # Add URL alias
+```
 
 ### Execute Alias
 
 ```bash
-j <alias>            # Execute alias command
-j <alias> <args...>  # Execute with arguments
+j <alias>               # Open path or URL
 ```
 
 ### Manage Aliases
 
 ```bash
-j alias              # List all aliases
-j alias add <name> <command>  # Add alias
-j alias rm <name>    # Remove alias
+j rm <alias>            # Remove alias
+j rename <old> <new>    # Rename alias
+j mf <alias> <new_path> # Modify alias target
 ```
 
 ## Alias Types
 
-### Command Aliases
-
-Simplify common commands:
+### Path Alias
 
 ```bash
-# Add alias
-j alias add gs "git status"
-j alias add gp "git push"
+# Add path
+j set work ~/Projects/work
+j set notes ~/Documents/notes
 
-# Use alias
-j gs
-j gp origin main
+# Open path
+j work    # Open in file manager
+j notes   # Open in file manager
 ```
 
-### App Aliases
-
-Quickly open apps or URLs:
+### URL Alias
 
 ```bash
-# Open application
-j alias add chrome "open -a 'Google Chrome'"
-j alias add vscode "open -a 'Visual Studio Code'"
+# Add URL
+j set gh https://github.com
+j set gh-issues https://github.com/issues
 
 # Open URL
-j alias add gh "open https://github.com"
-
-# Usage
-j chrome
-j gh
+j gh        # Open in browser
+j gh-issues # Open in browser
 ```
 
-## Alias Files
+## Alias Storage
 
-Aliases are stored in `~/.jdata/aliases/` directory:
+Aliases are stored in `~/.jdata/config.yaml`:
 
+```yaml
+path:
+  work: /Users/user/Projects/work
+  notes: /Users/user/Documents/notes
+
+inner_url:
+  gh: https://github.com
+  gh-issues: https://github.com/issues
 ```
-~/.jdata/aliases/
-├── git.json      # Git related aliases
-├── apps.json     # App aliases
-└── work.json     # Work related aliases
-```
-
-### Alias File Format
-
-```json
-[
-  {
-    "name": "gs",
-    "command": "git status",
-    "description": "Show Git status"
-  },
-  {
-    "name": "chrome",
-    "command": "open -a 'Google Chrome'",
-    "description": "Open Chrome browser"
-  }
-]
-```
-
-## Parameterized Aliases
-
-Aliases support `$1`, `$2` parameter placeholders:
-
-```bash
-# Add alias with parameters
-j alias add find-file "find . -name '$1' -type f"
-
-# Usage
-j find-file "*.rs"
-```
-
-## Use Cases
-
-- Git command simplification
-- Quick project switching
-- Fast app launching
-- URL bookmarks
-- SSH connection shortcuts

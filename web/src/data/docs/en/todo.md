@@ -1,79 +1,45 @@
 ## Overview
 
-The todo management system provides lightweight task tracking with status transitions and priority management.
-
-Core features:
-- **Quick Add**: Add todo items with a single command
-- **Status Management**: pending, in_progress, completed state transitions
-- **List View**: Filter and sort by status
-- **Data Persistence**: Auto-save to local file
+Todo management system with status transitions and TUI interface.
 
 ## Basic Usage
 
-### View Todos
+### Open TUI Interface
 
 ```bash
-j todo              # View all todos
-j todo -s pending   # Filter by status
+j todo              # Open todo management TUI
 ```
 
-### Add Todo
+### Command Line Operations
 
 ```bash
-j todo add "Finish documentation"
-j todo add "Fix bug" -p high  # High priority
+j todo list              # List all todos
+j todo list --done       # List completed only
+j todo list --undone     # List undone only
+j todo add "Finish docs"  # Quick add todo
 ```
 
-### Update Status
+## TUI Operations
 
-```bash
-j todo start <id>     # Mark as in progress
-j todo done <id>      # Mark as completed
-j todo cancel <id>    # Cancel todo
-```
-
-### Delete Todo
-
-```bash
-j todo rm <id>        # Delete specified todo
-j todo clear          # Clear completed items
-```
+| Shortcut | Action |
+|----------|--------|
+| `j/k` | Move up/down |
+| `Enter` | Toggle completion |
+| `a` | Add new todo |
+| `e` | Edit current item |
+| `d` | Delete current item |
+| `r` | Write to daily report |
+| `Tab` | Toggle filter (all/undone/done) |
+| `?` | Show help |
+| `q/Esc` | Exit |
 
 ## Todo Status
 
-| Status | Description |
-|--------|-------------|
-| pending | Pending |
-| in_progress | In Progress |
-| completed | Completed |
-
-## Priority
-
-| Level | Identifier |
-|-------|------------|
-| Low | low |
-| Medium | medium (default) |
-| High | high |
+| Status | Display |
+|--------|---------|
+| Undone | `[ ]` |
+| Done | `[x]` |
 
 ## Data Storage
 
-Todo data is stored in `~/.jdata/todos.json`:
-
-```json
-[
-  {
-    "id": 1,
-    "content": "Finish documentation",
-    "status": "pending",
-    "priority": "high",
-    "created_at": "2024-01-15T10:00:00Z"
-  }
-]
-```
-
-## Use Cases
-
-- Daily task management
-- Project progress tracking
-- Personal memo
-- Team task assignment
+Todo data is stored in `~/.jdata/report/todo.json`.

@@ -48,7 +48,7 @@ function slugify(text: string): string {
     .slice(0, 50)
 }
 
-// Render inline markdown elements (bold, code, links)
+// Render inline markdown elements (bold, code, links, strikethrough)
 function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
   const parts: React.ReactNode[] = []
   let remaining = text
@@ -59,6 +59,7 @@ function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
     const codeMatch = remaining.match(/`([^`]+)`/)
     const boldMatch = remaining.match(/\*\*([^*]+)\*\*/)
     const italicMatch = remaining.match(/\*([^*]+)\*/)
+    const strikeMatch = remaining.match(/~~([^~]+)~~/)
     
     // Collect all valid matches with their indices
     const matches: Array<{ type: string; match: RegExpMatchArray; index: number }> = []
@@ -70,6 +71,9 @@ function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
     }
     if (italicMatch && italicMatch.index !== undefined) {
       matches.push({ type: 'italic', match: italicMatch, index: italicMatch.index })
+    }
+    if (strikeMatch && strikeMatch.index !== undefined) {
+      matches.push({ type: 'strike', match: strikeMatch, index: strikeMatch.index })
     }
     
     // No matches found
@@ -104,6 +108,12 @@ function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
         <em key={`${baseKey}-italic-${keyIndex++}`} className="italic">
           {first.match[1]}
         </em>
+      )
+    } else if (first.type === 'strike') {
+      parts.push(
+        <del key={`${baseKey}-strike-${keyIndex++}`} className="line-through text-stone-400">
+          {first.match[1]}
+        </del>
       )
     }
     
