@@ -502,15 +502,18 @@ pub fn complete_file_path(partial: &str) -> Vec<Pair> {
             (std::path::Path::new(&expanded).to_path_buf(), String::new())
         } else {
             let p = std::path::Path::new(&expanded);
-            let parent = p
-                .parent()
-                .unwrap_or(std::path::Path::new("."))
-                .to_path_buf();
+            let parent = p.parent().unwrap_or(std::path::Path::new("."));
+            // 空路径视为当前目录
+            let parent = if parent.as_os_str().is_empty() {
+                std::path::Path::new(".")
+            } else {
+                parent
+            };
             let fp = p
                 .file_name()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
-            (parent, fp)
+            (parent.to_path_buf(), fp)
         };
 
     if let Ok(entries) = std::fs::read_dir(&dir_path) {

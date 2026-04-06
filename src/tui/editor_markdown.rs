@@ -516,6 +516,22 @@ fn handle_operator_mode(
 
 // ========== Markdown 编辑器状态 ==========
 
+/// 表格对齐方式
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TableAlign {
+    Left,
+    Center,
+    Right,
+}
+
+/// 表格上下文
+struct TableContext {
+    start_idx: usize,
+    end_idx: usize,
+    col_widths: Vec<usize>,
+    alignments: Vec<TableAlign>,
+}
+
 struct MarkdownEditorState<'a> {
     textarea: TextArea<'a>,
     mode: Mode,
@@ -780,8 +796,207 @@ impl<'a> MarkdownEditorState<'a> {
             return self.render_code_block_line(line_content, line_idx, lines);
         }
 
+        // 检查是否在表格内（表格行不显示源码，直接渲染）
+        if let Some(table_ctx) = self.find_table_context(line_idx, lines) {
+            return self.render_table_line(line_content, line_idx, &table_ctx, lines);
+        }
+
         // 其他行 - 尝试渲染（带行号）
         self.render_single_line_with_number(line_content, line_idx, max_width)
+    }
+
+    // ========== 表格支持 ==========
+
+    /// 判断一行是否是表格分隔行（如 |---|---|）
+    fn is_table_separator_line(line: &str) -> bool {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') || !trimmed.ends_with('|') {
+            return false;
+        }
+        // 检查是否全是 -、|、: 和空格
+        let inner = trimmed.trim_matches('|');
+        inner.split('|').all(|cell| {
+            let cell = cell.trim();
+            cell.chars().all(|c| c == '-' || c == ':' || c == ' ')
+        })
+    }
+
+    /// 判断一行是否是表格行
+    fn is_table_row(line: &str) -> bool {
+        let trimmed = line.trim();
+        trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.contains('|')
+    }
+
+    /// 查找包含指定行的表格上下文
+    fn find_table_context(&self, line_idx: usize, lines: &[String]) -> Option<TableContext> {
+        let line = lines.get(line_idx)?;
+        if !Self::is_table_row(line) {
+            return None;
+        }
+
+        // 向上查找表格开始
+        let mut start_idx = line_idx;
+        while start_idx > 0 {
+            if let Some(prev) = lines.get(start_idx - 1) {
+                if Self::is_table_row(prev) {
+                    start_idx -= 1;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // 向下查找表格结束
+        let mut end_idx = line_idx;
+        while end_idx < lines.len() - 1 {
+            if let Some(next) = lines.get(end_idx + 1) {
+                if Self::is_table_row(next) {
+                    end_idx += 1;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // 必须至少有表头和分隔行
+        if end_idx - start_idx < 1 {
+            return None;
+        }
+
+        // 解析对齐方式（从分隔行获取）
+        let alignments = if let Some(sep_line) = lines.get(start_idx + 1) {
+            Self::parse_table_alignments(sep_line)
+        } else {
+            return None;
+        };
+
+        // 计算每列最大宽度
+        let num_cols = alignments.len();
+        let mut col_widths = vec![1; num_cols];
+
+        for row_idx in start_idx..=end_idx {
+            let row_line = lines.get(row_idx)?;
+            let cells = Self::parse_table_cells(row_line);
+            for (i, cell) in cells.iter().enumerate() {
+                if i < num_cols {
+                    col_widths[i] = col_widths[i].max(display_width(cell));
+                }
+            }
+        }
+
+        Some(TableContext {
+            start_idx,
+            end_idx,
+            col_widths,
+            alignments,
+        })
+    }
+
+    /// 解析表格对齐方式
+    fn parse_table_alignments(line: &str) -> Vec<TableAlign> {
+        let trimmed = line.trim();
+        let inner = trimmed.trim_matches('|');
+        inner
+            .split('|')
+            .map(|cell| {
+                let cell = cell.trim();
+                let left = cell.starts_with(':');
+                let right = cell.ends_with(':');
+                if left && right {
+                    TableAlign::Center
+                } else if right {
+                    TableAlign::Right
+                } else {
+                    TableAlign::Left
+                }
+            })
+            .collect()
+    }
+
+    /// 解析表格单元格
+    fn parse_table_cells(line: &str) -> Vec<String> {
+        let trimmed = line.trim();
+        let inner = trimmed.trim_matches('|');
+        inner.split('|').map(|s| s.trim().to_string()).collect()
+    }
+
+    /// 渲染表格行
+    fn render_table_line(
+        &self,
+        line: &str,
+        line_idx: usize,
+        ctx: &TableContext,
+        _lines: &[String],
+    ) -> Line<'static> {
+        let line_num = format!("{:4} ", line_idx + 1);
+        let cells = Self::parse_table_cells(line);
+
+        // 判断是否是分隔行
+        if Self::is_table_separator_line(line) {
+            // 渲染分隔线
+            let mut spans = vec![Span::styled(line_num, Style::default().fg(Color::DarkGray))];
+
+            // 表头行的分隔线样式：├─┼─┤
+            let border_style = Style::default().fg(self.theme.text_dim);
+
+            spans.push(Span::styled("├", border_style));
+            for (i, cw) in ctx.col_widths.iter().enumerate() {
+                spans.push(Span::styled("─".repeat(*cw + 2), border_style));
+                if i < ctx.col_widths.len() - 1 {
+                    spans.push(Span::styled("┼", border_style));
+                }
+            }
+            spans.push(Span::styled("┤", border_style));
+
+            return Line::from(spans);
+        }
+
+        // 判断是否是表头行（表格第一行）
+        let is_header = line_idx == ctx.start_idx;
+
+        // 渲染表格内容行
+        let mut spans = vec![Span::styled(line_num, Style::default().fg(Color::DarkGray))];
+        let border_style = Style::default().fg(self.theme.text_dim);
+        let content_style = if is_header {
+            Style::default()
+                .fg(self.theme.text_bold)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(self.theme.text_normal)
+        };
+
+        // 左边框
+        spans.push(Span::styled("│", border_style));
+
+        for (i, cw) in ctx.col_widths.iter().enumerate() {
+            let cell_text = cells.get(i).map(|s: &String| s.as_str()).unwrap_or("");
+            let cell_width = display_width(cell_text);
+            let fill = cw.saturating_sub(cell_width);
+
+            let align = ctx.alignments.get(i).copied().unwrap_or(TableAlign::Left);
+            let formatted = match align {
+                TableAlign::Center => {
+                    let left = fill / 2;
+                    let right = fill - left;
+                    format!(" {}{}{} ", " ".repeat(left), cell_text, " ".repeat(right))
+                }
+                TableAlign::Right => {
+                    format!(" {}{} ", " ".repeat(fill), cell_text)
+                }
+                TableAlign::Left => {
+                    format!(" {}{} ", cell_text, " ".repeat(fill))
+                }
+            };
+
+            spans.push(Span::styled(formatted, content_style));
+            spans.push(Span::styled("│", border_style));
+        }
+
+        Line::from(spans)
     }
 
     /// 渲染代码块围栏行 (```)
