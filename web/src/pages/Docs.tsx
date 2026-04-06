@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Sidebar } from '../components/docs/Sidebar'
 import { Markdown } from '../components/docs/Markdown'
 import { PageNav } from '../components/docs/PageNav'
+import { TOC } from '../components/docs/TOC'
 import { LanguageSwitcher } from '../components/common/LanguageSwitcher'
 import { docTree, docNavI18n, getDocContent, getSectionTitle, defaultSection } from '../data/docs'
 import type { Language } from '../types'
@@ -72,6 +73,12 @@ export default function Docs() {
           </div>
           
           <div className="flex items-center gap-3 sm:gap-5">
+            <Link 
+              to="/" 
+              className="text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline"
+            >
+              {lang === 'zh' ? '首页' : 'Home'}
+            </Link>
             <LanguageSwitcher lang={lang} onChange={setLang} />
             <a 
               href="https://github.com/LingoJack/j" 
@@ -98,15 +105,18 @@ export default function Docs() {
       />
 
       {/* Main Content */}
-      <main className="lg:ml-72 pt-[65px]">
+      <main className="lg:ml-64 xl:mr-52 pt-[65px]">
         <div className="max-w-3xl mx-auto px-6 pb-16">
           {renderSection()}
           <PageNav lang={lang} activeSection={activeSection} onNavigate={navigateToSection} />
         </div>
       </main>
 
+      {/* TOC */}
+      <TOC content={getDocContent(lang, activeSection) || ''} lang={lang} />
+
       {/* Footer */}
-      <footer className="lg:ml-72 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]">
+      <footer className="lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]">
         <div className="max-w-3xl mx-auto flex items-center justify-between text-sm">
           <Link to="/" className="text-stone-500 hover:text-stone-900 transition-colors">
             {t.back}

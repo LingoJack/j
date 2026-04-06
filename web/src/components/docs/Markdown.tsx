@@ -39,6 +39,15 @@ const langMap: Record<string, string> = {
   'scss': 'scss',
 }
 
+// Generate slug from text (must match TOC.tsx)
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50)
+}
+
 // Render inline markdown elements (bold, code, links)
 function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
   const parts: React.ReactNode[] = []
@@ -119,6 +128,7 @@ export function Markdown({ content }: MarkdownProps) {
     let inTable = false
     let tableRows: string[][] = []
     let blockCounter = 0
+    const usedIds = new Set<string>()
     
     const flushTable = () => {
       if (tableRows.length > 0) {
@@ -228,11 +238,39 @@ export function Markdown({ content }: MarkdownProps) {
       
       // Headings
       if (line.startsWith('## ')) {
-        result.push(<h2 key={lineKey} className="text-2xl font-light text-stone-900 mt-8 mb-4">{renderInlineMarkdown(line.slice(3), `${lineKey}-h2`)}</h2>)
+        const text = line.slice(3).trim()
+        let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
+        let counter = 1
+        while (usedIds.has(id)) {
+          id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
+          counter++
+        }
+        usedIds.add(id)
+        result.push(<h2 key={lineKey} id={id} className="text-2xl font-light text-stone-900 mt-12 mb-5">{renderInlineMarkdown(text, `${lineKey}-h2`)}</h2>)
         return
       }
       if (line.startsWith('### ')) {
-        result.push(<h3 key={lineKey} className="text-lg font-medium text-stone-900 mt-6 mb-3">{renderInlineMarkdown(line.slice(4), `${lineKey}-h3`)}</h3>)
+        const text = line.slice(4).trim()
+        let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
+        let counter = 1
+        while (usedIds.has(id)) {
+          id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
+          counter++
+        }
+        usedIds.add(id)
+        result.push(<h3 key={lineKey} id={id} className="text-lg font-medium text-stone-900 mt-8 mb-4">{renderInlineMarkdown(text, `${lineKey}-h3`)}</h3>)
+        return
+      }
+      if (line.startsWith('#### ')) {
+        const text = line.slice(5).trim()
+        let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
+        let counter = 1
+        while (usedIds.has(id)) {
+          id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
+          counter++
+        }
+        usedIds.add(id)
+        result.push(<h4 key={lineKey} id={id} className="text-base font-semibold text-stone-800 mt-6 mb-3">{renderInlineMarkdown(text, `${lineKey}-h4`)}</h4>)
         return
       }
       

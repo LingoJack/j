@@ -24,10 +24,10 @@ export const docTree: Record<Language, Record<string, { title: string; children:
       title: 'AI Features',
       children: {
         aiChat: 'AI Chat',
-        agentMode: 'Agent Mode',
         tools: 'AI Tools',
-        skills: 'Skill System',
-        hooks: 'Hook System'
+        commands: 'Command',
+        skills: 'Skill',
+        hooks: 'Hook'
       }
     },
     advanced: {
@@ -61,10 +61,10 @@ export const docTree: Record<Language, Record<string, { title: string; children:
       title: 'AI 功能',
       children: {
         aiChat: 'AI 对话',
-        agentMode: 'Agent 模式',
         tools: 'AI 工具',
-        skills: 'Skill 技能',
-        hooks: 'Hook 系统'
+        commands: 'Command',
+        skills: 'Skill',
+        hooks: 'Hook'
       }
     },
     advanced: {
@@ -103,10 +103,10 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
     todo: 'Todo Management',
     script: 'Script System',
     aiChat: 'AI Chat',
-    agentMode: 'Agent Mode',
     tools: 'AI Tools',
-    skills: 'Skill System',
-    hooks: 'Hook System',
+    commands: 'Command',
+    skills: 'Skill',
+    hooks: 'Hook',
     browser: 'Browser Automation',
     remote: 'Remote Control',
     permissions: 'Permissions'
@@ -120,10 +120,10 @@ export const sectionTitles: Record<Language, Record<string, string>> = {
     todo: '待办管理',
     script: '脚本系统',
     aiChat: 'AI 对话',
-    agentMode: 'Agent 模式',
     tools: 'AI 工具',
-    skills: 'Skill 技能',
-    hooks: 'Hook 系统',
+    commands: 'Command',
+    skills: 'Skill',
+    hooks: 'Hook',
     browser: '浏览器自动化',
     remote: '远程控制',
     permissions: '权限配置'
@@ -135,7 +135,7 @@ export function getOrderedSections(): string[] {
   return [
     'installation', 'quickStart', 'dataDirectory',
     'alias', 'report', 'todo', 'script',
-    'aiChat', 'agentMode', 'tools', 'skills', 'hooks',
+    'aiChat', 'tools', 'commands', 'skills', 'hooks',
     'browser', 'remote', 'permissions'
   ]
 }

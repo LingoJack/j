@@ -1,459 +1,341 @@
-# Plan: 调查 Context 占用追踪机制的实现方式、准确性以及 Compact 后的更新行为
+# Plan: 优化导航栏和页内导航
 
-## 调查发现
+## 问题分析
 
-### 1. Token 估算机制
-- **位置**: `src/command/chat/compact.rs:60-62`
-- **实现**: `estimate_tokens(messages) = serde_json::to_string(messages).len() / 4`
-- 这是一个粗略估算，假设每 4 个字符约等于 1 个 token
+### 问题 1：导航栏在 docs 和 index 上很不同
 
-### 2. UI 显示逻辑
-- **位置**: `src/command/chat/ui/chat.rs:103-104`
-- 标题栏每帧绘制时调用 `estimate_tokens(&app.state.session.messages)`
-- **数据源**: `app.state.session.messages`
+**Home 页面 Nav.tsx:**
+- 完整导航：Features、Docs、Quick Start、GitHub
+- 带下拉菜单
+- 响应式设计完善
 
-### 3. 消息同步架构
-```
-Agent Thread                          UI Thread
-─────────────                         ─────────────
-messages (本地)          ──────>      shared_messages (Arc<Mutex>)
-                                       │
-                                       ↓ (增量同步)
-                                  session.messages
-                                       │
-                                       ↓
-                                  estimate_tokens()
-```
+**Docs 页面 Docs.tsx:**
+- 简洁导航：只有 logo + "docs" + 语言切换 + GitHub
+- 缺少返回首页的链接（虽然有 footer 里的 back 链接）
 
-### 4. 问题根源
+**建议：** 统一导航风格，Docs 页面添加返回首页链接。
 
-**核心问题**: `auto_compact` 执行后，消息同步链路中存在数据不一致。
+### 问题 2：右侧页内导航定位不准确
 
-#### 问题细节:
-1. `auto_compact(&mut messages, ...)` 清空并替换 `messages`（agent.rs:79-81）
-2. 新的摘要消息通过 `push_shared()` 追加到 `shared_messages`（compact.rs:232-258）
-3. **但 `session.messages` 中的旧消息从未被清除**
-4. UI 的增量同步机制只会追加，不会删除旧消息
+**当前实现问题：**
+1. IntersectionObserver 的 rootMargin 设置为 `'-80px 0px -70% 0px'`，但顶部导航高度是 65px
+2. 点击 TOC 项后滚动，但没有立即更新 activeId
+3. 滚动时 threshold: 0 可能在某些情况下不稳定
 
-#### 代码路径分析:
-```rust
-// agent.rs:79-81
-if let Err(e) = compact::auto_compact(&mut messages, &provider).await {
-    write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
-}
+**解决方案：**
+1. 修正 rootMargin 为 `'-70px 0px -80% 0px'`（顶部 70px 为导航栏高度）
+2. 点击时立即设置 activeId，然后平滑滚动
+3. 滚动完成后重新计算当前激活项
 
-// compact.rs:232-258 - auto_compact 内部
-messages.clear();  // 清空 agent 本地的 messages
-messages.push(summary_user_msg);
-messages.push(understood_assistant_msg);
-messages.push(system_notification);
-// 注意：这些新消息会被后续操作 push_shared 到 shared_messages
-```
+### 问题 3：字体大小不合适
 
-#### UI 增量同步逻辑 (chat_app.rs:1911-1925):
-```rust
-let shared = safe_lock(&self.shared_agent_messages, "poll::shared_msgs");
-let new_count = shared.len();
-if new_count > self.shared_messages_read_cursor {
-    for msg in &shared[self.shared_messages_read_cursor..] {
-        self.state.session.messages.push(msg.clone());  // 只追加，不清除
-    }
-    self.shared_messages_read_cursor = new_count;
-}
-```
+**当前样式：**
+- h2 项：`text-sm` (14px)
+- h3 项：`text-xs` (12px)
 
-### 5. 影响范围
-
-1. **Context Token 显示不准确**: `session.messages` 包含压缩前的旧消息 + 压缩后的新消息
-2. **消息重复显示**: UI 可能同时显示旧消息和摘要消息
-3. **micro_compact 同样受影响**: 它修改 `messages` 内容但不反映到 UI
+**建议调整：**
+- h2 项：`text-sm` 保持不变，但增加行高
+- h3 项：`text-sm` 提升到 14px
+- 整体 padding 和间距优化
 
 ## 解决方案
 
-### 方案 A: 在 UI 侧处理 compact 通知
-1. `auto_compact` 推入一条特殊系统消息（带标记）
-2. UI 检测到该消息后清空 `session.messages`，再执行增量同步
-3. **优点**: 改动最小，保持现有架构
-4. **缺点**: 需要特殊消息类型
+### Part 1: 统一导航栏风格
 
-### 方案 B: 添加 compact 事件通道
-1. 新增 `compact_event: Arc<AtomicBool>` 到共享状态
-2. `auto_compact` 完成后设置标志
-3. UI 检测到标志后重置 `session.messages` 和 cursor
-4. **优点**: 逻辑清晰，不依赖消息内容
-5. **缺点**: 需要新增共享状态
+**Docs 页面导航优化：**
+- 添加返回首页链接
+- 保持简洁风格但增加关键入口
 
-### 方案 C: 重构消息同步机制（推荐）
-1. 将 `shared_messages` 设计为单一数据源
-2. `auto_compact` 时：清空 `shared_messages`，重置 cursor，推入新消息
-3. UI 检测到 `shared_messages` 缩小时自动清空 `session.messages`
-4. **优点**: 从根本上解决问题，架构更健壮
-5. **缺点**: 改动较大
-
-## 推荐方案
-
-采用 **方案 B**（compact 事件通道），原因：
-1. 改动范围适中
-2. 逻辑清晰可靠
-3. 不需要特殊消息类型
-4. 易于测试和验证
-
-### 实施步骤
-
-1. 在 `AgentSharedState` 中添加 `compact_happened: Arc<AtomicBool>`
-2. 在 `auto_compact` 完成后设置该标志
-3. 在 `poll_stream_actions` 中检测标志，执行重置逻辑
-4. 确保重置后 token 估算基于新的 `session.messages`
-
-## 关于物理存储的说明
-
-### 对话记录存储机制
-1. **Archive（归档）**: 用户手动归档，保存在 `~/.jdata/agent/data/archives/{name}.json`
-2. **Transcript**: `auto_compact` 前自动保存完整对话，保存在 `~/.jdata/agent/data/transcripts/transcript_{timestamp}.jsonl`
-
-### 方案 C 对存储的影响
-**方案 C 不影响物理存储**。原因：
-1. 方案 C 只涉及**内存中的消息同步机制**
-   - `shared_messages` (Arc<Mutex<Vec<ChatMessage>>>)
-   - `session.messages` (UI 本地缓存)
-2. `auto_compact` 在清空前已调用 `save_transcript()` 保存完整对话
-3. Archive 是用户手动触发的，与 compact 机制无关
-
-### 数据流图
-```
-auto_compact 触发
-    │
-    ├─→ save_transcript() → transcripts/transcript_xxx.jsonl (物理存储，不受影响)
-    │
-    └─→ messages.clear() + push(summary) → shared_messages (内存，方案C修改这里)
-                                              │
-                                              ↓
-                                         session.messages (内存，方案C修改这里)
+```tsx
+// Docs.tsx navigation
+<nav>
+  <div className="flex items-center gap-3">
+    <Link to="/" className="flex items-center gap-2">
+      <span className="text-2xl font-bold text-stone-900">j</span>
+      <span className="text-stone-400 text-sm hidden sm:inline">docs</span>
+    </Link>
+  </div>
+  
+  <div className="flex items-center gap-4">
+    <Link to="/" className="text-stone-500 hover:text-stone-900 text-sm">
+      {lang === 'zh' ? '首页' : 'Home'}
+    </Link>
+    <LanguageSwitcher ... />
+    <a href="github..." ... />
+  </div>
+</nav>
 ```
 
-## 方案 C 详细实现
+### Part 2: 修复 TOC 滚动定位
 
-### 核心思路
-让 `shared_messages` 成为消息的**唯一数据源**，UI 的 `session.messages` 只是它的完整副本。当 `shared_messages` 被重置时，UI 自动清空并重建。
+**优化滚动检测逻辑：**
 
-### 实现步骤
+```tsx
+// TOC.tsx 改进
 
-#### Step 1: 修改 `auto_compact` 接收 `shared_messages` 参数
-
-```rust
-// compact.rs
-pub async fn auto_compact(
-    messages: &mut Vec<ChatMessage>,
-    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,  // 新增参数
-    provider: &ModelProvider,
-) -> Result<(), String> {
-    // ... 摘要逻辑不变 ...
-
-    // 替换 messages 并同步到 shared_messages
-    messages.clear();
-    messages.push(summary_user_msg.clone());
-    messages.push(understood_assistant_msg.clone());
-    messages.push(system_notification.clone());
-
-    // ★ 关键修改：清空并重建 shared_messages
-    if let Ok(mut shared) = shared_messages.lock() {
-        shared.clear();
-        shared.push(summary_user_msg);
-        shared.push(understood_assistant_msg);
-        shared.push(system_notification);
-    }
-
-    Ok(())
-}
-```
-
-#### Step 2: 修改 `run_agent_loop` 传递 `shared_messages`
-
-```rust
-// agent.rs:79-81
-if compact::estimate_tokens(&messages) > compact_config.token_threshold {
-    write_info_log("agent_loop", "auto_compact triggered");
-    // 传入 shared_messages
-    if let Err(e) = compact::auto_compact(&mut messages, &shared_messages, &provider).await {
-        write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
-    }
+// 1. 点击时立即更新 activeId，再滚动
+const handleClick = (id: string) => {
+  setActiveId(id)  // 立即更新
+  const element = document.getElementById(id)
+  if (element) {
+    const navHeight = 70  // 导航栏高度
+    const elementTop = element.offsetTop - navHeight
+    window.scrollTo({
+      top: elementTop,
+      behavior: 'smooth'
+    })
+  }
 }
 
-// agent.rs:411 和 483 - compact tool 触发也需要传递
-if compact_requested && compact_config.enabled {
-    let _ = compact::auto_compact(&mut messages, &shared_messages, &provider).await;
-}
-```
-
-#### Step 3: 修改 UI 增量同步逻辑检测 `shared_messages` 缩小
-
-```rust
-// chat_app.rs:1911-1926
-{
-    let shared = safe_lock(&self.shared_agent_messages, "poll::shared_msgs");
-    let new_count = shared.len();
-
-    // ★ 检测 shared_messages 是否缩小（compact 发生）
-    if new_count < self.shared_messages_read_cursor {
-        // compact 发生，清空 session.messages 并重建
-        self.state.session.messages.clear();
-        self.shared_messages_read_cursor = 0;
-        // 重置消息渲染缓存
-        self.ui.msg_lines_cache = None;
-        write_info_log("poll_stream", "检测到 compact，已清空 session.messages");
-    }
-
-    // 正常增量同步
-    if new_count > self.shared_messages_read_cursor {
-        for msg in &shared[self.shared_messages_read_cursor..] {
-            self.state.session.messages.push(msg.clone());
-        }
-        self.shared_messages_read_cursor = new_count;
-        self.ui.msg_lines_cache = None;
-        self.ui.auto_scroll = true;
-        self.ui.scroll_offset = u16::MAX;
-    }
-}
-```
-
-### 修改文件清单
-
-| 文件 | 修改内容 |
-|------|----------|
-| `src/command/chat/compact.rs` | `auto_compact` 添加 `shared_messages` 参数，在清空 `messages` 后同步清空 `shared_messages` |
-| `src/command/chat/agent.rs` | 三处调用 `auto_compact` 时传入 `shared_messages` |
-| `src/command/chat/app/chat_app.rs` | `poll_stream_actions` 中检测 `shared_messages.len() < cursor` 触发清空逻辑 |
-
-### 边界情况处理
-
-1. **并发安全**: `shared_messages.lock()` 在 `auto_compact` 内部获取，确保原子性
-2. **UI 渲染中断**: 清空 `session.messages` 后立即重建，用户只看到短暂闪烁
-3. **micro_compact**: 不影响消息数量，只修改内容，无需特殊处理
-
-### 优点分析
-
-1. **架构简洁**: `shared_messages` 成为唯一数据源，消除不一致可能
-2. **向后兼容**: 不改变 `push_shared` 等现有接口
-3. **物理存储独立**: 只影响内存，不影响 transcript 和 archive
-
-## Breaking Change 风险分析
-
-### 公共 API 影响
-
-| 函数/类型 | 可见性 | 调用方 | 影响 |
-|-----------|--------|--------|------|
-| `auto_compact()` | `pub async fn` | 仅 `agent.rs` 内部 | **无外部调用** |
-| `micro_compact()` | `pub fn` | 仅 `agent.rs:73` | 不修改签名 |
-| `estimate_tokens()` | `pub fn` | `agent.rs`, `ui/chat.rs` | 不修改签名 |
-| `CompactConfig` | `pub struct` | 多个模块（配置加载） | 不修改 |
-
-### 详细影响评估
-
-#### 1. 函数签名变更
-```rust
-// 当前
-pub async fn auto_compact(
-    messages: &mut Vec<ChatMessage>,
-    provider: &ModelProvider,
-) -> Result<(), String>
-
-// 方案 C 修改后
-pub async fn auto_compact(
-    messages: &mut Vec<ChatMessage>,
-    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,  // 新增参数
-    provider: &ModelProvider,
-) -> Result<(), String>
-```
-
-**结论**：这是**内部 API 变更**，不是 breaking change。原因：
-- `auto_compact` 虽然是 `pub`，但只在 `src/command/chat/agent.rs` 中调用
-- 没有外部 crate 或其他模块依赖此函数
-
-#### 2. 调用点修改
-所有三个调用点都在 `run_agent_loop` 内部：
-- `agent.rs:79` - token 阈值触发
-- `agent.rs:411` - fallback 模式 compact tool 触发
-- `agent.rs:483` - 流式模式 compact tool 触发
-
-`run_agent_loop` 已拥有 `shared_messages`（从 `AgentSharedState` 解构）：
-```rust
-let AgentSharedState {
-    streaming_content,
-    pending_user_messages,
-    background_manager,
-    todo_manager,
-    shared_messages,  // ← 已存在
-} = shared;
-```
-
-**结论**：**无需新增数据传递**，所有调用点都能直接获取 `shared_messages`。
-
-#### 3. UI 增量同步变更
-`chat_app.rs:1911-1926` 的增量同步逻辑需要修改，这是**行为变更**，但：
-- 不影响公共 API
-- 只改变内部同步逻辑
-- 向后兼容：当 `shared_messages` 增长时行为不变，只在缩小时触发清空
-
-#### 4. oneshot 模式
-`run_oneshot_agent`（mod.rs:211-783）不使用 `auto_compact`，不受影响。
-
-### Breaking Change 结论
-
-**方案 C 不会造成 breaking change**：
-1. 只修改内部函数签名，无外部依赖
-2. 所有调用点都在同一模块内，可同步修改
-3. UI 同步逻辑变更是内部实现细节
-4. 物理存储（transcript/archive）完全独立
-
-## 最终方案
-
-采用 **方案 C**，实施步骤如下：
-
-### Step 1: 修改 `compact.rs` - 添加 `shared_messages` 参数
-
-```rust
-// 在 auto_compact 函数中：
-pub async fn auto_compact(
-    messages: &mut Vec<ChatMessage>,
-    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,  // 新增
-    provider: &ModelProvider,
-) -> Result<(), String> {
-    // ... 现有摘要逻辑 ...
-
-    // 替换 messages
-    messages.clear();
-    let summary_msg = ChatMessage { ... };
-    let understood_msg = ChatMessage { ... };
-    let system_msg = ChatMessage { ... };
+// 2. IntersectionObserver 使用更精确的 rootMargin
+const observer = new IntersectionObserver(
+  (entries) => {
+    // 从上往下找第一个进入视口的标题
+    const visibleEntries = entries
+      .filter(e => e.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
     
-    messages.push(summary_msg.clone());
-    messages.push(understood_msg.clone());
-    messages.push(system_msg.clone());
-
-    // ★ 新增：同步清空并重建 shared_messages
-    if let Ok(mut shared) = shared_messages.lock() {
-        shared.clear();
-        shared.push(summary_msg);
-        shared.push(understood_msg);
-        shared.push(system_msg);
+    if (visibleEntries.length > 0) {
+      setActiveId(visibleEntries[0].target.id)
     }
+  },
+  {
+    rootMargin: '-70px 0px -80% 0px',  // 顶部 70px 为导航栏
+    threshold: 0
+  }
+)
 
-    Ok(())
+// 3. 使用 scroll 事件作为备用检测
+useEffect(() => {
+  const handleScroll = () => {
+    // 找到当前视口中最靠近顶部的标题
+    const headings = headingsRef.current
+    const navHeight = 70
+    const scrollY = window.scrollY + navHeight
+    
+    for (let i = headings.length - 1; i >= 0; i--) {
+      const el = document.getElementById(headings[i].id)
+      if (el && el.offsetTop <= scrollY) {
+        setActiveId(headings[i].id)
+        break
+      }
+    }
+  }
+  
+  window.addEventListener('scroll', handleScroll, { passive: true })
+  return () => window.removeEventListener('scroll', handleScroll)
+}, [headings])
+```
+
+### Part 3: 优化 TOC 字体和样式
+
+**调整字体大小：**
+```tsx
+// h2 项
+className="text-sm py-1.5 px-3 ..."  // 14px，保持不变
+
+// h3 项  
+className="text-sm py-1 px-3 pl-6 ..."  // 从 text-xs 改为 text-sm
+
+// 或者区分更明显：
+// h2: text-sm font-medium
+// h3: text-xs (保持小一号)
+```
+
+## 文件变更清单
+
+| 文件 | 操作 |
+|------|------|
+| `web/src/components/docs/TOC.tsx` | 修复滚动定位 + 优化字体 |
+| `web/src/pages/Docs.tsx` | 添加返回首页链接 |
+
+## 详细实现
+
+### 1. TOC.tsx 完整重写
+
+```tsx
+import { useMemo, useEffect, useState, useRef, useCallback } from 'react'
+import type { Language } from '../../types'
+
+interface TOCItem {
+  id: string
+  text: string
+  level: number
 }
-```
 
-### Step 2: 修改 `agent.rs` - 三处调用点传入 `shared_messages`
+interface TOCProps {
+  content: string
+  lang: Language
+}
 
-```rust
-// Line 79
-if let Err(e) = compact::auto_compact(&mut messages, &shared_messages, &provider).await {
+const tocTitleI18n: Record<Language, string> = {
+  en: 'On This Page',
+  zh: '本文目录'
+}
 
-// Line 411
-let _ = compact::auto_compact(&mut messages, &shared_messages, &provider).await;
+const NAV_HEIGHT = 70  // 顶部导航栏高度
 
-// Line 483
-let _ = compact::auto_compact(&mut messages, &shared_messages, &provider).await;
-```
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50)
+}
 
-### Step 3: 修改 `chat_app.rs` - 检测 shared_messages 缩小
-
-```rust
-// poll_stream_actions 中，增量同步逻辑修改为：
-{
-    let shared = safe_lock(&self.shared_agent_messages, "poll::shared_msgs");
-    let new_count = shared.len();
-
-    // ★ 检测 compact：shared_messages 缩小说明发生了压缩
-    if new_count < self.shared_messages_read_cursor {
-        self.state.session.messages.clear();
-        self.shared_messages_read_cursor = 0;
-        self.ui.msg_lines_cache = None;
+function extractHeadings(content: string): TOCItem[] {
+  const lines = content.split('\n')
+  const headings: TOCItem[] = []
+  const usedIds = new Set<string>()
+  
+  lines.forEach(line => {
+    let text: string
+    let level: number
+    
+    if (line.startsWith('## ')) {
+      text = line.slice(3).trim()
+      level = 2
+    } else if (line.startsWith('### ')) {
+      text = line.slice(4).trim()
+      level = 3
+    } else {
+      return
     }
+    
+    text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
+    text = text.replace(/\*([^*]+)\*/g, '$1')
+    text = text.replace(/`([^`]+)`/g, '$1')
+    
+    let id = slugify(text)
+    let counter = 1
+    while (usedIds.has(id)) {
+      id = `${slugify(text)}-${counter}`
+      counter++
+    }
+    usedIds.add(id)
+    
+    headings.push({ id, text, level })
+  })
+  
+  return headings
+}
 
-    // 正常增量同步
-    if new_count > self.shared_messages_read_cursor {
-        for msg in &shared[self.shared_messages_read_cursor..] {
-            self.state.session.messages.push(msg.clone());
+export function TOC({ content, lang }: TOCProps) {
+  const headings = useMemo(() => extractHeadings(content), [content])
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const isScrollingRef = useRef(false)
+  
+  // 点击滚动
+  const scrollToHeading = useCallback((id: string) => {
+    const element = document.getElementById(id)
+    if (!element) return
+    
+    setActiveId(id)
+    isScrollingRef.current = true
+    
+    const elementTop = element.offsetTop - NAV_HEIGHT
+    window.scrollTo({
+      top: elementTop,
+      behavior: 'smooth'
+    })
+    
+    // 滚动结束后恢复检测
+    setTimeout(() => {
+      isScrollingRef.current = false
+    }, 500)
+  }, [])
+  
+  // 滚动检测
+  useEffect(() => {
+    if (headings.length === 0) return
+    
+    const handleScroll = () => {
+      if (isScrollingRef.current) return
+      
+      const scrollY = window.scrollY + NAV_HEIGHT + 10
+      
+      // 找到当前滚动位置对应的标题
+      let currentId: string | null = null
+      for (const heading of headings) {
+        const el = document.getElementById(heading.id)
+        if (el && el.offsetTop <= scrollY) {
+          currentId = heading.id
         }
-        self.shared_messages_read_cursor = new_count;
-        self.ui.msg_lines_cache = None;
-        self.ui.auto_scroll = true;
-        self.ui.scroll_offset = u16::MAX;
+      }
+      
+      if (currentId) {
+        setActiveId(currentId)
+      }
     }
+    
+    // 初始化
+    handleScroll()
+    
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [headings])
+  
+  if (headings.length === 0) return null
+  
+  return (
+    <nav className="hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm">
+      <div className="sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]">
+        <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
+          {tocTitleI18n[lang]}
+        </span>
+      </div>
+      
+      <ul className="p-2 overflow-y-auto max-h-[calc(100vh-120px)]">
+        {headings.map(({ id, text, level }) => (
+          <li key={id}>
+            <button
+              onClick={() => scrollToHeading(id)}
+              className={`
+                relative w-full text-left py-1.5 px-3 rounded-lg transition-all duration-200
+                ${level === 3 ? 'pl-6 text-xs text-stone-400' : 'text-sm'}
+                ${activeId === id 
+                  ? 'text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-stone-900 before:rounded-full' 
+                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
+                }
+              `}
+            >
+              {text}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
 }
 ```
 
-### 修改文件清单
+### 2. Docs.tsx 导航栏优化
 
-| 文件 | 行号 | 修改内容 |
-|------|------|----------|
-| `compact.rs` | 180-260 | 函数签名 + 清空 shared_messages |
-| `agent.rs` | 79, 411, 483 | 传入 `&shared_messages` |
-| `chat_app.rs` | 1911-1926 | 检测缩小并清空 |
-
-## UI 影响分析
-
-### 方案C 对用户界面的影响
-
-#### 1. 视觉效果
-当 `auto_compact` 触发时，用户会看到：
-```
-[长对话消息列表] 
-     ↓ (compact 触发，约 1 帧)
-[闪烁：清空]
-     ↓ (同一帧内重建)
-[3条摘要消息]
+```tsx
+// 在导航栏右侧添加返回首页链接
+<div className="flex items-center gap-3 sm:gap-5">
+  <Link 
+    to="/" 
+    className="text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline"
+  >
+    {lang === 'zh' ? '首页' : 'Home'}
+  </Link>
+  <LanguageSwitcher lang={lang} onChange={setLang} />
+  <a href="github..." ... />
+</div>
 ```
 
-**这是预期行为**：
-- Compact 的目的就是压缩历史，UI 应该反映这一变化
-- 用户看到压缩后的摘要，知道上下文已被精简
-- 标题栏的 Context Token 会立即显示正确的压缩后数值
+## 预期效果
 
-#### 2. 消息渲染缓存机制
-UI 使用 `msg_lines_cache` 缓存消息渲染结果：
-```rust
-// chat.rs:268-278
-let cache_hit = if let Some(ref cache) = app.ui.msg_lines_cache {
-    cache.msg_count == msg_count  // 消息数量变化 → 缓存失效
-        && cache.last_msg_len == last_msg_len
-        // ...
-};
-```
+### 导航栏
+- Docs 页面导航增加返回首页入口
+- 风格与 Home 页面保持一致
 
-方案C在 `poll_stream_actions` 中设置 `msg_lines_cache = None`，触发下一帧重新渲染。
+### TOC 滚动定位
+- 点击 TOC 项立即高亮
+- 滚动位置准确（考虑顶部导航栏 70px 高度）
+- 滚动过程中正确追踪当前阅读位置
 
-#### 3. 滚动位置
-```rust
-// 方案C 会重置：
-self.shared_messages_read_cursor = 0;
-self.ui.msg_lines_cache = None;
-self.ui.auto_scroll = true;
-self.ui.scroll_offset = u16::MAX;  // 滚动到底部
-```
-
-用户会被带到摘要消息底部，这是合理的行为——用户需要阅读新的摘要内容。
-
-#### 4. 与当前行为的对比
-
-| 场景 | 当前行为（Bug） | 方案C修复后 |
-|------|-----------------|-------------|
-| Compact 触发 | 旧消息保留 + 新摘要追加 → 消息重复 | 旧消息清除 → 只显示摘要 |
-| Context Token | 显示错误（旧+新） | 显示正确（仅新消息） |
-| 用户感知 | 困惑（消息重复、token不准） | 清晰（看到压缩后的摘要） |
-
-### 结论
-
-**方案C 对 UI 的影响是正向的**：
-1. 修复了消息重复显示的 bug
-2. Context Token 显示正确
-3. 用户能看到压缩结果，符合预期
-4. 无需额外的 UI 组件或状态
-
-## 待确认
-
-- [x] 方案 C 不影响物理存储
-- [x] 方案 C 实现细节已明确
-- [x] 方案 C 不造成 breaking change
-- [x] 方案 C 对 UI 影响是正向的（修复 bug）
-- [ ] 是否批准方案 C 并开始实施？
+### 字体大小
+- h2 项：14px (text-sm)
+- h3 项：12px (text-xs)，比 h2 小一号，层次分明
