@@ -134,8 +134,8 @@ command_handlers! {
     },
 
     // ========== Markdown 编辑器 ==========
-    MdCmd { file: Option<String> } => |self, config| {
-        crate::command::markdown::handle_md(self.file.as_deref(), config);
+    MdCmd { file: String } => |self, config| {
+        crate::command::markdown::handle_md(&self.file, config);
     },
 }
 

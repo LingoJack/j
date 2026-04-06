@@ -10,64 +10,55 @@ use std::fs;
 use std::path::PathBuf;
 
 /// 处理 `j md` 命令
-pub fn handle_md(file: Option<&str>, _config: &YamlConfig) {
+pub fn handle_md(file: &str, _config: &YamlConfig) {
     // 1. 解析文件路径
-    let (content, file_path) = match file {
-        Some(path) => {
-            let expanded = expand_tilde(path);
-            let path = PathBuf::from(&expanded);
+    let expanded = expand_tilde(file);
+    let path = PathBuf::from(&expanded);
 
-            if path.exists() {
-                match fs::read_to_string(&path) {
-                    Ok(c) => (c, Some(path)),
-                    Err(e) => {
-                        error!("读取文件失败: {} - {}", path.display(), e);
-                        return;
-                    }
-                }
-            } else {
-                // 文件不存在，创建新文件
-                (String::new(), Some(path))
+    let (content, is_new_file) = if path.exists() {
+        match fs::read_to_string(&path) {
+            Ok(c) => (c, false),
+            Err(e) => {
+                error!("读取文件失败: {} - {}", path.display(), e);
+                return;
             }
         }
-        None => (String::new(), None),
+    } else {
+        // 文件不存在，创建新文件
+        (String::new(), true)
     };
 
-    // 2. 获取主题
+    // 3. 获取主题
     let theme = Theme::from_name(&ThemeName::default());
 
-    // 3. 构建标题
-    let title = file_path
-        .as_ref()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "新文件".to_string());
+    // 4. 构建标题
+    let title = if is_new_file {
+        format!("{} (新文件)", path.display())
+    } else {
+        path.display().to_string()
+    };
 
-    // 4. 打开编辑器
+    // 5. 打开编辑器
     match open_markdown_editor(&title, &content, &theme) {
         Ok(Some(new_content)) => {
-            // 5. 保存文件
-            if let Some(ref path) = file_path {
-                // 检查内容是否变化
-                if new_content != content {
-                    if let Some(parent) = path.parent() {
-                        if !parent.exists() {
-                            if let Err(e) = fs::create_dir_all(parent) {
-                                error!("创建目录失败: {} - {}", parent.display(), e);
-                                return;
-                            }
+            // 6. 保存文件
+            // 检查内容是否变化
+            if new_content != content {
+                if let Some(parent) = path.parent() {
+                    if !parent.exists() {
+                        if let Err(e) = fs::create_dir_all(parent) {
+                            error!("创建目录失败: {} - {}", parent.display(), e);
+                            return;
                         }
                     }
+                }
 
-                    match fs::write(path, &new_content) {
-                        Ok(()) => info!("文件已保存: {}", path.display()),
-                        Err(e) => error!("保存文件失败: {} - {}", path.display(), e),
-                    }
-                } else {
-                    info!("内容未变化，跳过保存");
+                match fs::write(&path, &new_content) {
+                    Ok(()) => info!("文件已保存: {}", path.display()),
+                    Err(e) => error!("保存文件失败: {} - {}", path.display(), e),
                 }
             } else {
-                // 无文件路径时，输出到 stdout
-                print!("{}", new_content);
+                info!("内容未变化，跳过保存");
             }
         }
         Ok(None) => info!("已取消编辑"),

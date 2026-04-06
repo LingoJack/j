@@ -251,9 +251,13 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             interactive: true,
         })
     } else if is(cmd::MD) {
-        ParseResult::Matched(SubCmd::Md {
-            file: rest.first().cloned(),
-        })
+        match rest.first() {
+            Some(file) => ParseResult::Matched(SubCmd::Md { file: file.clone() }),
+            None => {
+                eprintln!("错误: 必须提供文件路径，例如: md README.md");
+                ParseResult::Handled
+            }
+        }
     } else {
         ParseResult::NotFound
     }

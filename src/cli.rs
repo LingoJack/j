@@ -235,7 +235,7 @@ pub enum SubCmd {
     /// 用 Markdown 编辑器打开文件
     #[command(alias = "markdown")]
     Md {
-        /// 文件路径（可选，不提供则新建文件）
-        file: Option<String>,
+        /// 文件路径（支持 ~ 展开，不存在则新建）
+        file: String,
     },
 }
