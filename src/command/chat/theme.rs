@@ -276,6 +276,8 @@ pub struct Theme {
     pub md_blockquote_bar: Color,
     /// 引用块文字颜色
     pub md_blockquote_text: Color,
+    /// 引用块背景颜色
+    pub md_blockquote_bg: Color,
     /// 分隔线颜色
     pub md_rule: Color,
     /// 链接/URL 颜色
@@ -439,6 +441,7 @@ impl Theme {
             md_list_bullet: Color::LightGreen,
             md_blockquote_bar: Color::DarkGray,
             md_blockquote_text: Color::Gray,
+            md_blockquote_bg: Color::Reset,
             md_rule: Color::DarkGray,
             md_link: Color::LightBlue,
             // 代码块
@@ -586,6 +589,7 @@ impl Theme {
             md_list_bullet: Color::Rgb(100, 160, 255),
             md_blockquote_bar: Color::Rgb(80, 100, 140),
             md_blockquote_text: Color::Rgb(150, 160, 180),
+            md_blockquote_bg: Color::Rgb(35, 35, 48),
             md_rule: Color::Rgb(70, 75, 90),
             md_link: Color::Rgb(86, 156, 214),
 
@@ -736,6 +740,7 @@ impl Theme {
             md_list_bullet: Color::Rgb(80, 150, 240),
             md_blockquote_bar: Color::Rgb(70, 90, 130),
             md_blockquote_text: Color::Rgb(150, 150, 170),
+            md_blockquote_bg: Color::Rgb(40, 40, 50),
             md_rule: Color::Rgb(70, 70, 80),
             md_link: Color::Rgb(86, 156, 214),
 
@@ -886,6 +891,7 @@ impl Theme {
             md_list_bullet: Color::Rgb(25, 100, 200),
             md_blockquote_bar: Color::Rgb(100, 130, 180),
             md_blockquote_text: Color::Rgb(80, 90, 110),
+            md_blockquote_bg: Color::Rgb(245, 242, 235),
             md_rule: Color::Rgb(195, 200, 215),
             md_link: Color::Rgb(0, 102, 204),
 
@@ -1036,8 +1042,9 @@ impl Theme {
             md_list_bullet: Color::Rgb(129, 161, 193), // nord9
             md_blockquote_bar: Color::Rgb(76, 86, 106), // nord3
             md_blockquote_text: Color::Rgb(160, 170, 185),
-            md_rule: Color::Rgb(67, 76, 94),    // nord2
-            md_link: Color::Rgb(136, 192, 208), // nord8
+            md_blockquote_bg: Color::Rgb(59, 66, 82), // nord1
+            md_rule: Color::Rgb(67, 76, 94),          // nord2
+            md_link: Color::Rgb(136, 192, 208),       // nord8
 
             // 代码块 — Nord 风格语法高亮
             code_border: Color::Rgb(76, 86, 106),    // nord3
@@ -1186,6 +1193,7 @@ impl Theme {
             md_list_bullet: Color::Rgb(249, 38, 114), // monokai pink
             md_blockquote_bar: Color::Rgb(117, 113, 94),
             md_blockquote_text: Color::Rgb(170, 170, 160),
+            md_blockquote_bg: Color::Rgb(55, 55, 45),
             md_rule: Color::Rgb(80, 80, 70),
             md_link: Color::Rgb(102, 217, 239),
 

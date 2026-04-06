@@ -261,12 +261,15 @@ pub mod cmd {
     // 自更新
     pub const UPDATE: &[&str] = &["update", "up"];
 
+    // Markdown 编辑器
+    pub const MD: &[&str] = &["md", "markdown"];
+
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
             SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
-            AGENT, SYSTEM, UPDATE,
+            AGENT, SYSTEM, UPDATE, MD,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }

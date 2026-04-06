@@ -277,7 +277,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         if in_blockquote {
                             current_spans.push(Span::styled(
                                 "| ".to_string(),
-                                Style::default().fg(theme.md_blockquote_bar),
+                                Style::default()
+                                    .fg(theme.md_blockquote_bar)
+                                    .bg(theme.md_blockquote_bg),
                             ));
                         }
                     }
@@ -351,7 +353,11 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
             Event::Start(Tag::BlockQuote(_)) => {
                 flush_line(&mut current_spans, &mut lines);
                 in_blockquote = true;
-                style_stack.push(Style::default().fg(theme.md_blockquote_text));
+                style_stack.push(
+                    Style::default()
+                        .fg(theme.md_blockquote_text)
+                        .bg(theme.md_blockquote_bg),
+                );
             }
             Event::End(TagEnd::BlockQuote(_)) => {
                 flush_line(&mut current_spans, &mut lines);
@@ -385,7 +391,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         if in_blockquote {
                             current_spans.push(Span::styled(
                                 "| ".to_string(),
-                                Style::default().fg(theme.md_blockquote_bar),
+                                Style::default()
+                                    .fg(theme.md_blockquote_bar)
+                                    .bg(theme.md_blockquote_bg),
                             ));
                         }
                         full_line_w
@@ -439,7 +447,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             if in_blockquote {
                                 current_spans.push(Span::styled(
                                     "| ".to_string(),
-                                    Style::default().fg(theme.md_blockquote_bar),
+                                    Style::default()
+                                        .fg(theme.md_blockquote_bar)
+                                        .bg(theme.md_blockquote_bg),
                                 ));
                                 cur_line_w = 2;
                             } else {
@@ -474,7 +484,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                 if in_blockquote {
                                     current_spans.push(Span::styled(
                                         "| ".to_string(),
-                                        Style::default().fg(theme.md_blockquote_bar),
+                                        Style::default()
+                                            .fg(theme.md_blockquote_bar)
+                                            .bg(theme.md_blockquote_bg),
                                     ));
                                 }
                                 let rest_wrapped = wrap_text(&rest, full_line_w.max(1));
@@ -484,7 +496,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                         if in_blockquote {
                                             current_spans.push(Span::styled(
                                                 "| ".to_string(),
-                                                Style::default().fg(theme.md_blockquote_bar),
+                                                Style::default()
+                                                    .fg(theme.md_blockquote_bar)
+                                                    .bg(theme.md_blockquote_bg),
                                             ));
                                         }
                                     }

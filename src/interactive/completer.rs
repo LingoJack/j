@@ -180,6 +180,7 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
         (cmd::CLEAR, vec![]),
         (cmd::EXIT, vec![]),
         (cmd::UPDATE, vec![ArgHint::Fixed(vec!["--check"])]),
+        (cmd::MD, vec![ArgHint::FilePath]),
     ]
 }
 

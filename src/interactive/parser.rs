@@ -250,6 +250,10 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                 .unwrap_or(false),
             interactive: true,
         })
+    } else if is(cmd::MD) {
+        ParseResult::Matched(SubCmd::Md {
+            file: rest.first().cloned(),
+        })
     } else {
         ParseResult::NotFound
     }

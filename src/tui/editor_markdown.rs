@@ -1274,14 +1274,32 @@ impl<'a> MarkdownEditorState<'a> {
             }
         }
 
-        // 引用块
-        if trimmed.starts_with("> ") {
-            let text = &trimmed[2..];
+        // 引用块 - 支持嵌套
+        if trimmed.starts_with('>') {
+            // 计算嵌套层级
+            let mut level = 0;
+            let mut rest = trimmed;
+            while rest.starts_with('>') {
+                level += 1;
+                rest = rest[1..].trim_start();
+            }
+            let text = rest;
+
+            // 根据层级选择不同的竖线样式
+            let prefix: String = (0..level).map(|_| "│").collect::<Vec<_>>().join("");
+            let prefix_style = if level == 1 {
+                self.style(self.theme.text_dim)
+            } else {
+                Style::default()
+                    .fg(self.theme.text_dim)
+                    .bg(self.theme.bg_primary)
+            };
+
             let rendered = self.render_inline(text);
             let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled("│ ", self.style(self.theme.text_dim)),
+                Span::styled(format!("{} ", prefix), prefix_style),
             ];
             spans.extend(rendered);
             return Line::from(spans);
@@ -1325,6 +1343,106 @@ impl<'a> MarkdownEditorState<'a> {
                 } else {
                     spans.push(Span::styled(
                         format!("`{}", remaining),
+                        self.style(self.theme.text_normal),
+                    ));
+                    break;
+                }
+            }
+            // 图片 ![alt](url)
+            else if let Some(pos) = remaining.find("![") {
+                if pos > 0 {
+                    spans.push(Span::styled(
+                        remaining[..pos].to_string(),
+                        self.style(self.theme.text_normal),
+                    ));
+                }
+                remaining = &remaining[pos + 2..];
+                if let Some(alt_end) = remaining.find("](") {
+                    let alt = &remaining[..alt_end];
+                    remaining = &remaining[alt_end + 2..];
+                    if let Some(url_end) = remaining.find(')') {
+                        // 渲染图片：🖼 alt
+                        spans.push(Span::styled(
+                            format!("🖼 {}", alt),
+                            Style::default()
+                                .fg(self.theme.text_dim)
+                                .add_modifier(Modifier::ITALIC),
+                        ));
+                        remaining = &remaining[url_end + 1..];
+                    } else {
+                        spans.push(Span::styled(
+                            format!("![{}{}", alt, remaining),
+                            self.style(self.theme.text_normal),
+                        ));
+                        break;
+                    }
+                } else {
+                    spans.push(Span::styled(
+                        format!("![{}", remaining),
+                        self.style(self.theme.text_normal),
+                    ));
+                    break;
+                }
+            }
+            // 链接 [text](url)
+            else if let Some(pos) = remaining.find('[') {
+                if pos > 0 {
+                    spans.push(Span::styled(
+                        remaining[..pos].to_string(),
+                        self.style(self.theme.text_normal),
+                    ));
+                }
+                remaining = &remaining[pos + 1..];
+                if let Some(text_end) = remaining.find("](") {
+                    let link_text = &remaining[..text_end];
+                    remaining = &remaining[text_end + 2..];
+                    if let Some(url_end) = remaining.find(')') {
+                        // 渲染链接：text ↗ 或 text (url)
+                        spans.push(Span::styled(
+                            link_text.to_string(),
+                            self.style(self.theme.md_link)
+                                .add_modifier(Modifier::UNDERLINED),
+                        ));
+                        spans.push(Span::styled(
+                            " ↗".to_string(),
+                            self.style(self.theme.text_dim),
+                        ));
+                        remaining = &remaining[url_end + 1..];
+                    } else {
+                        spans.push(Span::styled(
+                            format!("[{}{}", link_text, remaining),
+                            self.style(self.theme.text_normal),
+                        ));
+                        break;
+                    }
+                } else {
+                    spans.push(Span::styled(
+                        format!("[{}", remaining),
+                        self.style(self.theme.text_normal),
+                    ));
+                    break;
+                }
+            }
+            // 删除线 ~~text~~
+            else if let Some(pos) = remaining.find("~~") {
+                if pos > 0 {
+                    spans.push(Span::styled(
+                        remaining[..pos].to_string(),
+                        self.style(self.theme.text_normal),
+                    ));
+                }
+                remaining = &remaining[pos + 2..];
+                if let Some(end) = remaining.find("~~") {
+                    let struck_text = &remaining[..end];
+                    spans.push(Span::styled(
+                        struck_text.to_string(),
+                        self.style(self.theme.text_dim)
+                            .add_modifier(Modifier::CROSSED_OUT),
+                    ));
+                    remaining = &remaining[end + 2..];
+                } else {
+                    spans.push(Span::styled(
+                        format!("~~{}", remaining),
                         self.style(self.theme.text_normal),
                     ));
                     break;

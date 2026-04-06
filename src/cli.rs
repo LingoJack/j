@@ -230,4 +230,12 @@ pub enum SubCmd {
         #[arg(skip)]
         interactive: bool,
     },
+
+    // ========== Markdown 编辑器 ==========
+    /// 用 Markdown 编辑器打开文件
+    #[command(alias = "markdown")]
+    Md {
+        /// 文件路径（可选，不提供则新建文件）
+        file: Option<String>,
+    },
 }

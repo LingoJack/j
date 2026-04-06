@@ -132,6 +132,11 @@ command_handlers! {
     UpdateCmd { check: bool, interactive: bool } => |self, _config| {
         crate::command::update::handle_update(self.check, self.interactive);
     },
+
+    // ========== Markdown 编辑器 ==========
+    MdCmd { file: Option<String> } => |self, config| {
+        crate::command::markdown::handle_md(self.file.as_deref(), config);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -199,6 +204,9 @@ impl SubCmd {
 
             // 自更新
             SubCmd::Update { check, interactive } => Box::new(UpdateCmd { check, interactive }),
+
+            // Markdown 编辑器
+            SubCmd::Md { file } => Box::new(MdCmd { file }),
         }
     }
 }
