@@ -14,7 +14,7 @@ name = "j-cli-gui"
 path = "src/main.rs"
 
 [dependencies]
-j-cli = { path = ".." }
+j-cli = { path = "../.." }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }

@@ -10,8 +10,8 @@ export function SearchBar() {
   }, []);
 
   return (
-    <div className="flex items-center px-4 py-3 drag-region">
-      <span className="text-text-secondary/60 mr-3 text-lg no-drag">j</span>
+    <div className="flex items-center px-4 py-3 drag-region bg-[rgba(22,22,26,0.98)] rounded-[18px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)]">
+      <span className="text-text-secondary/70 mr-3 text-lg no-drag">j</span>
       <input
         ref={inputRef}
         type="text"

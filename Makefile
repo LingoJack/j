@@ -338,20 +338,10 @@ docker-run: docker-build ## 运行 Docker 容器
 # ============================================
 gui-dev: ## 启动 GUI 开发模式
 	@echo "🖥️  启动 GUI 开发模式..."
-	@cargo tauri dev
-
-gui-build: ## 构建 GUI 发布版本
-	@echo "📦 构建 GUI 发布版本..."
-	@cargo tauri build
-	@echo "☑️ GUI 构建完成"
-
-gui-install: gui-build ## 构建并安装 GUI 到 /Applications
-	@echo "📦 安装 GUI 到 /Applications..."
-	@cp -r src-tauri/target/release/bundle/macos/j-cli-gui.app /Applications/
-	@echo "☑️ j-cli-gui 已安装到 /Applications/j-cli-gui.app"
+	@cd gui && cargo tauri dev
 
 gui-clean: ## 清理 GUI 构建产物
 	@echo "🧹 清理 GUI 构建产物..."
-	@rm -rf src-tauri/target
-	@rm -rf src-ui/dist src-ui/node_modules
+	@rm -rf gui/src-tauri/target
+	@rm -rf gui/src-ui/dist src-ui/node_modules
 	@echo "☑️ GUI 清理完成"

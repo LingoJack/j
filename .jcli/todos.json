@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "id": "1",
+    "content": "重构 SpotlightWindow.tsx - 只保留输入框",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "简化 searchStore.ts - 移除多余状态",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "删除 ResultList.tsx",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "测试构建",
+    "status": "completed"
+  }
+]
