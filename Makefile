@@ -99,21 +99,6 @@ build-ax: ## 构建 j-ax (macOS Accessibility API helper)
 	@swiftc helpers/ax.swift -o $(TARGET_DIR)/j-ax -O -framework Cocoa -framework ApplicationServices
 	@echo "☑️ j-ax 构建完成: $(TARGET_DIR)/j-ax"
 
-build: ## 构建项目（调试模式）
-	@echo "🔨 构建项目..."
-	@cargo build
-	@echo "☑️ 构建完成"
-
-release: current_dir build-remote build-indicator build-ax ## 构建发布版本
-	@echo "🚀 构建发布版本..."
-	@cargo build --release
-	@echo "☑️ 发布版本构建完成: $(TARGET_DIR)/j"
-
-debug: ## 构建调试版本
-	@echo "🐛 构建调试版本..."
-	@cargo build --debug
-	@echo "☑️ 调试版本构建完成"
-
 # ============================================
 # 安装相关
 # ============================================
@@ -134,9 +119,6 @@ uninstall: ## 卸载
 	@echo "🗑️  卸载..."
 	@rm -f $(BIN_PATH)
 	@echo "☑️ j 已卸载"
-
-reinstall: uninstall install ## 重新安装
-	@echo "🔄 重新安装完成"
 
 # ============================================
 # 发布相关
