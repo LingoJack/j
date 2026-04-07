@@ -1,797 +1,507 @@
-# Plan: 将 j-cli 重构为可复用的多 crate 架构
+# Plan: 一次性完成 j-cli 的多 crate 重构方案
 
-## 1. 背景与结论
+## 1. 改造目标
 
-当前 `j-cli` 已经同时承担了三类职责：
+方案目标为一次性完成 `j-cli` 的最终架构改造，将现有“CLI 驱动的一体化程序”重构为“可复用内核 + CLI/TUI 适配层”的完整架构，完成以下结果：
 
-1. CLI 参数解析与终端输出
-2. 业务逻辑与文件系统/Git/网络操作
-3. TUI 交互与状态管理
+1. 核心业务从 `src/command/**` 抽离到独立 crate
+2. CLI 不再承载业务逻辑，只负责参数解析、调用 core、渲染输出
+3. TUI 不再直接操作底层状态，只通过 core 服务完成业务
+4. 配置、存储、错误、命令输入输出全部收敛为统一模型
+5. alias、list、category、report、script、open、system、time、todo、chat 的核心能力全部归入 core
+6. 旧的 handler 链路、直接打印式业务函数、半核心半界面的混合模块一次性清理
 
-这三层目前混杂在同一个 crate 中，直接带来的问题不是“代码不优雅”，而是以下实际阻碍：
-
-- 命令处理函数大量直接打印，无法稳定复用于 GUI、HTTP、Remote Agent 等宿主
-- `SubCmd -> Handler -> handle_xxx()` 的链路本质仍是 CLI 驱动，业务层没有独立 API
-- `YamlConfig::load/save()`、日报、todo、chat、script 等状态管理逻辑缺少统一错误模型
-- TUI 模块与业务逻辑纠缠，导致“无界面复用”和“自动化测试”成本很高
-- 后续新增 GUI/daemon/remote bridge 时，只能复制逻辑或继续放大耦合
-
-结论：这次重构应该以“抽出稳定内核 API”为核心，而不是先追求彻底拆分 UI。优先把 CLI 从“直接执行业务”改为“适配层”，并建立可渐进迁移的 workspace 结构。
+文档仅描述最终交付形态，不包含拆步实施路线。
 
 ---
 
-## 2. 当前架构现状
+## 2. 改造必要性
 
-### 2.1 代码结构
+当前项目的根问题不是模块拆得不够细，而是边界定义错误：
 
-当前主干结构大致如下：
+1. `SubCmd -> handler -> handle_xxx()` 让 CLI 表达直接成为业务入口
+2. 业务函数大量直接打印，导致逻辑无法被 GUI、remote、测试稳定复用
+3. `YamlConfig` 同时承担配置模型、路径推导、状态存储、并发写入语义
+4. `report`、`todo`、`chat` 等流程把“核心业务”和“TUI/交互表现”耦在一起
+5. `src/command/**` 既像 application layer，又像 infra，又带 presentation 细节
 
-```text
-src/
-├── main.rs                 # CLI 入口 + interactive fallback
-├── lib.rs                  # 目前仅做少量导出
-├── cli.rs                  # Clap SubCmd 定义
-├── command/
-│   ├── mod.rs              # dispatch(SubCmd, &mut YamlConfig)
-│   ├── handler.rs          # SubCmd -> Box<dyn CommandHandler>
-│   ├── alias.rs
-│   ├── category.rs
-│   ├── list.rs
-│   ├── open.rs
-│   ├── report.rs
-│   ├── script.rs
-│   ├── system.rs
-│   ├── time.rs
-│   ├── update.rs
-│   ├── todo/
-│   └── chat/
-├── config/
-│   └── yaml_config.rs      # 配置存储与部分路径逻辑
-├── interactive/            # REPL
-├── tui/                    # 通用编辑器/TUI 组件
-└── util/
-```
+拆步实施会直接导致以下问题：
 
-### 2.2 已有可复用资产
+1. 新旧两套调用链长期并存
+2. 旧输出宏和新结构化输出双轨存在
+3. core 会在很长时间内只是“新壳套旧逻辑”
+4. 文档、代码、测试、认知模型全部被中间态污染
 
-- `YamlConfig` 已具备独立模型价值，且有并发写锁处理
-- `src/lib.rs` 已经存在，可作为抽象对外暴露起点
-- `command/` 已按领域拆分，适合逐模块抽出 service
-- `todo`、`chat` 内部已有状态对象和工具模块，具备进一步分层基础
+方案原则如下：
 
-### 2.3 关键问题
-
-#### 问题 A：业务逻辑与输出耦合
-
-例如 `report.rs`、`alias.rs`、`system.rs` 等模块直接依赖 `info!`、`error!`、`usage!` 宏输出。这意味着：
-
-- GUI 无法拿到结构化结果
-- 测试只能靠捕获 stdout/stderr
-- 错误无法区分“用户输入问题”和“系统执行问题”
-
-#### 问题 B：业务入口完全依赖 Clap 枚举
-
-当前主链路是：
-
-```text
-Cli::parse()
-  -> SubCmd
-  -> into_handler()
-  -> handle_xxx(...)
-```
-
-`SubCmd` 是 CLI 表达，不应成为核心业务 API。否则任何非 CLI 宿主都需要绕过或复刻这套表示。
-
-#### 问题 C：配置、存储、执行上下文混在一起
-
-当前大量函数签名类似：
-
-```rust
-fn handle_xxx(args..., config: &mut YamlConfig)
-```
-
-这会导致：
-
-- 文件路径、运行模式、外部命令能力无法统一注入
-- 未来想做 mock/store replacement 很困难
-- chat/remote/GUI 对同一能力的调用缺少一致上下文
-
-#### 问题 D：TUI 和核心能力没有明确边界
-
-例如日报的 “打开编辑器 + 预填内容 + 写回文件” 是一个完整用户流，但其中只有一部分是核心能力；另一部分是纯 TUI 表现。目前两者耦在一起，不利于重用。
+1. 只定义最终架构
+2. 不引入中间态设计
+3. 所有实现、测试、文档均以最终边界为准
 
 ---
 
-## 3. 重构目标
-
-### 3.1 必须达成
-
-1. CLI 变成适配层，而不是业务承载层
-2. 核心命令返回结构化结果，不直接打印
-3. 建立统一错误模型和运行时上下文
-4. 支持 CLI、TUI、未来 GUI/remote 共用同一套 service API
-5. 支持渐进迁移，期间保持现有命令行为基本可用
-
-### 3.2 明确不在第一阶段解决
-
-以下内容不应绑在首轮重构内，否则范围会失控：
-
-- 不追求一次性把所有命令迁完
-- 不强行把 chat TUI 整体抽成完全无 UI 的纯内核
-- 不在首轮引入复杂 IoC/DI 框架
-- 不优先做“所有输出格式完全统一”
-- 不要求一开始就拆成很多细粒度 crate
-
-原则：先稳定核心边界，再扩展。
-
----
-
-## 4. 目标架构
-
-### 4.1 推荐 workspace 结构
+## 3. 一次性重构后的目标结构
 
 ```text
 j-cli/
 ├── Cargo.toml
-├── src/                    # 现有 CLI crate，逐步瘦身
+├── src/
 │   ├── main.rs
 │   ├── cli.rs
 │   ├── output.rs
-│   └── interactive/
-└── crates/
-    ├── j-core/             # 核心领域与服务
-    │   ├── src/
-    │   │   ├── lib.rs
-    │   │   ├── app/
-    │   │   │   ├── context.rs
-    │   │   │   ├── dispatcher.rs
-    │   │   │   └── output.rs
-    │   │   ├── command/
-    │   │   │   ├── mod.rs
-    │   │   │   ├── alias.rs
-    │   │   │   ├── report.rs
-    │   │   │   ├── todo.rs
-    │   │   │   └── ...
-    │   │   ├── service/
-    │   │   ├── store/
-    │   │   ├── config/
-    │   │   ├── error.rs
-    │   │   └── types.rs
-    │
-    └── j-tui/              # 可选，后续抽离 TUI 复用组件
-        └── src/
+│   ├── interactive/
+│   └── tui/
+├── crates/
+│   ├── j-core/
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── app/
+│   │   │   │   ├── context.rs
+│   │   │   │   ├── dispatcher.rs
+│   │   │   │   └── runtime.rs
+│   │   │   ├── command/
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── alias.rs
+│   │   │   │   ├── report.rs
+│   │   │   │   ├── todo.rs
+│   │   │   │   ├── chat.rs
+│   │   │   │   ├── script.rs
+│   │   │   │   ├── open.rs
+│   │   │   │   ├── system.rs
+│   │   │   │   ├── time.rs
+│   │   │   │   └── update.rs
+│   │   │   ├── service/
+│   │   │   ├── store/
+│   │   │   ├── config/
+│   │   │   ├── model/
+│   │   │   ├── error.rs
+│   │   │   └── types.rs
+│   └── j-tui/
+│       └── src/
+└── assets/
 ```
 
-说明：
+结构说明：
 
-- `j-core` 是这次重构的核心产物
-- `j-tui` 不必首轮创建，可以在 report/todo/chat 迁移后再评估
-- 根 crate 仍保留二进制 `j`，避免一次性改发布方式
-
-### 4.2 分层职责
-
-#### Presentation Layer
-
-- `src/main.rs`
-- `src/cli.rs`
-- `src/interactive/`
-- 未来 GUI/remote server
-
-职责：
-
-- 解析输入
-- 调用 `j-core`
-- 把结构化结果渲染为终端文本 / TUI / GUI 状态
-
-#### Application Layer
-
-- `AppContext`
-- `Command`
-- `CommandDispatcher`
-- `CommandOutput`
-- `JError`
-
-职责：
-
-- 对外提供统一用法
-- 路由命令到对应 service
-- 约束输入输出与错误边界
-
-#### Domain / Service Layer
-
-- `AliasService`
-- `ReportService`
-- `TodoService`
-- `ScriptService`
-- `OpenService`
-- `SystemService`
-
-职责：
-
-- 封装业务流程
-- 不直接处理终端 UI
-- 返回结构化结果
-
-#### Store / Infra Layer
-
-- `YamlConfigStore`
-- `TodoStore`
-- `ReportStore`
-- `GitClient`
-- `ShellOpener`
-
-职责：
-
-- 文件、Git、外部命令、路径管理
-- 为 service 提供可替换依赖
+1. `j-core` 是唯一核心业务内核
+2. 根 crate 保留 `j` 二进制与 CLI/TUI 入口
+3. `j-tui` 只承载可复用 TUI 组件；如果当前没有必要单独发布，也可以先继续放在根 crate，但业务逻辑不能留在里面
+4. `src/command/**` 旧目录不再作为业务层保留；能删除就删除，不能删除也只能保留为输入适配薄层
 
 ---
 
-## 5. 核心接口设计
+## 4. 清晰的分层定义
 
-### 5.1 命令模型
+### 4.1 Presentation Layer
 
-不要直接把现有 `SubCmd` 原样搬到 core。推荐做两层模型：
+位置：
 
-1. CLI 输入模型：保留在 `src/cli.rs`
-2. Core 命令模型：定义在 `j-core`
+1. `src/main.rs`
+2. `src/cli.rs`
+3. `src/output.rs`
+4. `src/interactive/**`
+5. `src/tui/**` 或 `crates/j-tui/**`
 
-示例：
+职责：
+
+1. 解析用户输入
+2. 组装 `j_core::Command`
+3. 调用 dispatcher 或 service
+4. 将 `CommandOutput` 渲染为 CLI 文本、TUI 状态、交互结果
+
+禁止事项：
+
+1. 不允许直接读写业务文件
+2. 不允许直接修改配置
+3. 不允许直接执行 alias/report/todo/chat 的业务规则
+4. 不允许直接依赖 `YamlConfig` 细节
+
+### 4.2 Application Layer
+
+位置：
+
+1. `j_core::app::context`
+2. `j_core::app::dispatcher`
+3. `j_core::command::*`
+4. `j_core::error`
+5. `j_core::types`
+
+职责：
+
+1. 定义统一命令模型
+2. 定义统一输出模型
+3. 定义统一错误模型
+4. 组织 service 调用与权限边界
+
+### 4.3 Domain / Service Layer
+
+位置：
+
+1. `j_core::service::alias`
+2. `j_core::service::report`
+3. `j_core::service::todo`
+4. `j_core::service::chat`
+5. `j_core::service::script`
+6. `j_core::service::open`
+7. `j_core::service::system`
+8. `j_core::service::time`
+9. `j_core::service::update`
+
+职责：
+
+1. 只表达业务流程
+2. 只返回结构化结果
+3. 不关心终端打印、颜色、交互控件
+
+### 4.4 Store / Infra Layer
+
+位置：
+
+1. `j_core::store::*`
+2. `j_core::config::*`
+
+职责：
+
+1. 文件系统访问
+2. Git 访问
+3. 外部命令执行
+4. 配置加载与保存
+5. 路径与环境解析
+
+---
+
+## 5. 统一核心模型
+
+### 5.1 Command
+
+核心层不接受 `SubCmd`，只接受自己的命令模型：
 
 ```rust
 pub enum Command {
     Alias(AliasCommand),
+    Category(CategoryCommand),
+    List(ListCommand),
     Report(ReportCommand),
     Todo(TodoCommand),
+    Chat(ChatCommand),
     Script(ScriptCommand),
     Open(OpenCommand),
     System(SystemCommand),
-}
-
-pub enum ReportCommand {
-    Write { content: String },
-    Check { lines: usize },
-    Search { query: String, lines: Option<usize>, fuzzy: bool },
-    NewWeek { date: Option<NaiveDate> },
-    Sync { date: Option<NaiveDate> },
-    Push { message: Option<String> },
-    Pull,
-    SetUrl { url: String },
-    Open,
+    Time(TimeCommand),
+    Update(UpdateCommand),
 }
 ```
 
-这样做的好处：
+要求：
 
-- 领域更清晰，避免单个大 enum 持续膨胀
-- GUI 和 remote 不需要理解 Clap 细节
-- 未来命令权限、审计、序列化也更自然
+1. 每个子命令类型必须是领域化的，不携带 Clap 细节
+2. 命令模型必须能被 CLI、TUI、remote 共用
+3. 所有默认值、派生参数、语义校验都在 core 内部完成，不散落在 CLI 层
 
-### 5.2 输出模型
+### 5.2 CommandOutput
 
-不建议只做一个 `Success { message }`。建议拆成”通用结果 + 领域结果”：
+不允许再用“打印字符串就是结果”的做法。
 
 ```rust
 pub enum CommandOutput {
     Empty,
     Message(UserMessage),
     AliasList(Vec<AliasEntry>),
+    AliasDetail(AliasEntry),
+    CategoryList(Vec<CategoryEntry>),
     ReportLines(ReportLines),
+    ReportWrite(ReportWriteResult),
     TodoSnapshot(TodoSnapshot),
-    OpenTarget(OpenResult),
-    Version(VersionInfo),
+    ChatSnapshot(ChatSnapshot),
+    ScriptResult(ScriptResult),
+    OpenResult(OpenResult),
+    SystemInfo(SystemInfo),
+    TimeInfo(TimeInfo),
+    UpdateInfo(UpdateInfo),
 }
 ```
 
 要求：
 
-- output 必须可被 CLI 渲染
-- output 必须可被 GUI 直接消费
-- output 不应夹带 ANSI、emoji、颜色等表现层细节
+1. output 必须完全脱离终端表现细节
+2. output 必须足够结构化，CLI 只是 renderer，不再补业务判断
+3. 不允许 `Message(String)` 成为主要返回类型，文字消息只能做补充，不可承载主语义
 
-**分阶段增量定义原则**：不要在阶段 2 就要求所有变体存在。第一版只需：
-
-```rust
-pub enum CommandOutput {
-    Empty,
-    Message(String),          // 兜底，阶段 4 前允许使用
-    AliasList(Vec<AliasEntry>),
-    AliasEntry(AliasEntry),
-}
-```
-
-其余变体（`ReportLines`、`TodoSnapshot` 等）随对应阶段迁移时增量添加，避免提前设计未使用的结构。
-
-### 5.3 错误模型
-
-建议使用：
+### 5.3 JError
 
 ```rust
 pub enum JError {
     InvalidInput(String),
     NotFound(String),
     Conflict(String),
+    PermissionDenied(String),
     Config(String),
     Io(String),
     ExternalCommand(String),
     Network(String),
+    Serialization(String),
     Unsupported(String),
     Internal(String),
 }
 ```
 
-同时提供：
+要求：
 
-```rust
-impl JError {
-    pub fn is_user_error(&self) -> bool { ... }
-}
-```
+1. 错误分类必须足够支持 CLI/TUI/remote 的统一处理
+2. 业务层不得直接输出错误文本到终端
+3. CLI 层只负责把 `JError` 映射成用户可读提示
 
-目的不是做“完美错误分类”，而是让 CLI/GUI 能区分：
+### 5.4 AppContext
 
-- 可以直接提示用户修正
-- 可以建议重试
-- 需要记录技术细节
-
-### 5.4 运行时上下文
-
-长期目标是完全 trait 化：
+`AppContext` 直接采用最终形态。
 
 ```rust
 pub struct AppContext {
     pub paths: AppPaths,
-    pub config_store: Arc<dyn ConfigStore>,
-    pub clock: Arc<dyn Clock>,
-    pub opener: Arc<dyn Opener>,
-    pub git: Arc<dyn GitClient>,
     pub runtime: RuntimeOptions,
+    pub config_store: Arc<dyn ConfigStore>,
+    pub alias_store: Arc<dyn AliasStore>,
+    pub report_store: Arc<dyn ReportStore>,
+    pub todo_store: Arc<dyn TodoStore>,
+    pub chat_store: Arc<dyn ChatStore>,
+    pub git: Arc<dyn GitClient>,
+    pub opener: Arc<dyn Opener>,
+    pub clock: Arc<dyn Clock>,
 }
 ```
 
-**阶段 1-3 的实际定义应保持最小**，只在真正需要替换实现时才引入 trait：
+要求：
 
-```rust
-// 阶段 1-3 使用这个版本
-pub struct AppContext {
-    pub config: Arc<Mutex<YamlConfig>>,  // 保留现有 flock 文件锁语义
-    pub paths: AppPaths,
-}
-```
-
-重要说明：`YamlConfig::save()` 当前使用 `flock` 实现进程级独占锁（基于文件描述符）。一旦包进 `Arc<Mutex<>>` 后，内存锁与文件锁的语义必须同时保留。**阶段 1 不做 trait 化**，等到有真正多宿主需求时（阶段 4+）再引入 `Arc<dyn ConfigStore>`。过早引入 `Arc<dyn Clock>`、`Arc<dyn Opener>`、`Arc<dyn GitClient>` 只会增加无收益的脚手架成本。
+1. 业务层只通过上下文依赖 infra
+2. 所有核心流程都必须可测试、可替换、可脱离 CLI 运行
+3. `YamlConfig::save()` 的 `flock` 语义必须保留在 `ConfigStore` 实现中，而不是暴露给业务层
 
 ---
 
-## 6. 与当前代码的映射策略
+## 6. 现有模块如何一次性归位
 
-### 6.1 第一批优先迁移模块
+### 6.1 alias / category / list
 
-优先级建议：
+这些模块全部下沉到 core，形成统一的 alias 领域：
 
-1. `config/yaml_config.rs`
-2. `command/alias.rs`
-3. `command/list.rs`
-4. `command/category.rs`
-5. `command/report.rs`
-6. `command/script.rs`
-7. `command/open.rs`
+1. `AliasService`
+2. `CategoryService`
+3. `AliasStore`
+4. `AliasEntry`
+5. `CategoryEntry`
 
-原因：
+CLI 不再保留 `handle_set`、`handle_remove`、`handle_list` 一类业务函数。
 
-- 这些模块边界相对清楚
-- 对 chat/todo/TUI 的依赖较少或可局部切开
-- 能尽快验证新架构，不会一开始卡死在 chat 系统
+### 6.2 report
 
-### 6.2 暂缓迁移模块
+`report` 必须明确拆成三块：
 
-- `command/chat/**`
-- `command/todo/ui.rs`
-- `interactive/**`
-- `tui/**`
+1. `ReportService`
+2. `ReportStore`
+3. `ReportTuiAdapter`
 
-这些模块应先做“调用 core 的适配层”，再逐步下沉能力，不适合首刀就深拆。
+归属原则：
 
-### 6.3 现有 dispatch 链路的演进
+1. 写日报、查日报、搜索、同步、Git push/pull、配置 URL 都属于 core
+2. 打开编辑器、预填文本、渲染说明、TUI 输入循环属于 adapter
 
-当前：
+### 6.3 todo
 
-```text
-SubCmd -> into_handler() -> handle_xxx()
-```
+`todo` 不能再维持“UI 驱动业务”的结构，必须拆成：
 
-目标：
+1. `TodoService`
+2. `TodoStore`
+3. `TodoSnapshot`
+4. `TodoAction`
 
-```text
-SubCmd -> TryInto<j_core::Command> -> dispatcher.dispatch()
-       -> CommandOutput / JError -> output formatter
-```
+TUI 只能把用户操作翻译成 `TodoAction`，不能直接改状态文件。
 
-因此 `src/command/handler.rs` 最终大概率会被删除，至少不再作为核心分发机制。
+### 6.4 chat
 
-### 6.4 `command_handlers!` 宏的过渡策略
+`chat` 属于高复杂度领域，但仍需纳入本轮完整边界。
 
-`handler.rs` 当前用 `command_handlers!` 宏生成 35 个 handler struct，这是 CLI 层的核心注册机制。**宏的结构不需要在首轮重构中删除或替换**，只需要修改宏体内的实现从"直接调 handle_xxx"改为"调 service、打印 output"：
+必须收敛成：
 
-```rust
-// 阶段 2 之后：保留宏结构，只改宏体调用链
-command_handlers! {
-    SetCmd { alias, path } => |self, context| {
-        match context.alias_service().set(&self.alias, &self.path) {
-            Ok(out) => print_output(out),
-            Err(e) => print_error(e),
-        }
-    },
-}
-```
+1. `ChatService`
+2. `SessionStore`
+3. `ToolExecutionContext`
+4. `ChatSnapshot`
+5. `ChatAction`
 
-阶段 2 验收标准中明确：宏的注册结构不变，只改宏体。宏本身的删除推迟到阶段 4 完成后，届时评估是否改为更简单的函数表。
+要求：
 
-### 6.5 输出宏的迁移模式
+1. 会话状态与消息存储进入 core
+2. tool 执行上下文进入 core
+3. CLI/TUI 只负责输入和呈现
 
-`alias.rs` 中有 19 处、`report.rs` 中有 85 处 `info!()`/`error!()`/`usage!()` 调用。**直接把这些函数搬进 j-core 会把 terminal 依赖一起带入**，违反 §8.2 的"避免伪抽象"原则。
+### 6.5 script / open / system / time / update
 
-每迁移一个模块时，必须按以下模式改写：
+这些属于标准命令域，全部进入 core，不再保留 CLI 直连逻辑。
 
-```rust
-// 迁移前：alias.rs 中直接打印
-pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
-    if config.contains("path", alias) {
-        error!("别名 {} 已存在", alias);
-        return;
-    }
-    config.set_property("path", alias, &value);
-    config.save();
-    info!("已设置 {} = {}", alias, value);
-}
+其中：
 
-// 迁移后：j-core AliasService，返回结果，不打印
-pub fn set(&self, alias: &str, path: &str) -> Result<CommandOutput, JError> {
-    if self.store.exists("path", alias) {
-        return Err(JError::Conflict(format!("别名 {} 已存在", alias)));
-    }
-    self.store.set("path", alias, path)?;
-    Ok(CommandOutput::Message(format!("已设置 {} = {}", alias, path)))
-}
-
-// CLI 适配层：src/command/alias.rs 保留为薄包装
-fn handle_set(alias: &str, path_parts: &[String], context: &AppContext) {
-    match context.alias_service().set(alias, &joined_path) {
-        Ok(out) => print_output(out),
-        Err(e)  => print_error(e),
-    }
-}
-```
-
-每迁完一个函数，其对应的旧 handle_xxx 变成空壳或立即删除，不允许"新旧两套都打印"的中间状态存在。
+1. `open` 使用 `Opener`
+2. `system` 使用 `SystemService`
+3. `update` 是否调用发布机制由 `UpdateService` 决定，CLI 只负责触发
 
 ---
 
-## 7. 分阶段实施计划
+## 7. 必须删除的旧结构
 
-## 阶段 0：基线与约束确认
+改造完成后，以下旧设计不应继续存在：
 
-目标：在动架构前，先锁定行为基线和迁移边界。
+1. `SubCmd -> into_handler() -> handle_xxx()` 作为核心调用链
+2. `src/command/**` 中直接打印并直接执行业务的函数
+3. `info!()`、`error!()`、`usage!()` 深埋在 core 业务流程中
+4. `YamlConfig` 被广泛以 `&mut` 形式穿透整个系统
+5. 以宏生成 handler struct 作为业务注册中心的模式
+6. report/todo/chat 模块内部直接调用 TUI 组件后再顺手完成业务落盘
 
-工作项：
+可以保留的只有：
 
-1. 梳理命令清单，标记：
-   - 纯命令型
-   - TUI 型
-   - 外部系统依赖型
-2. 为高频命令补最小行为测试，作为阶段 2-3 的回归基线：
-
-   **alias 最小测试集**：
-   - `set`：新增别名成功、重复新增应返回冲突错误
-   - `remove`：删除已有别名、删除不存在别名应返回 NotFound
-   - `list`：返回内容非空、包含已设置的别名
-
-   **report 最小测试集**：
-   - `write`：写入内容后，文件中包含该内容
-   - `check`：读取最近 N 行，返回行数 ≤ N
-
-   没有这组基线，"现有 CLI 行为不变"这个验收条件没有可执行的检验手段。
-
-3. 明确首轮不动 chat 主流程
-4. 明确 workspace 发布策略不变，`j` 仍为唯一对外二进制
-
-验收标准：
-
-- 有一份迁移范围表
-- alias/report 主路径的行为测试可运行且通过
-- 能说明哪些模块禁止在首轮深改
-
-## 阶段 1：建立 workspace 与 j-core 骨架
-
-目标：不改行为，只先抽出承载层。
-
-工作项：
-
-1. ~~把根 `Cargo.toml` 调整为 workspace~~（**已完成**：当前 `Cargo.toml` 已有 `[workspace]` + `members = ["."]`，只需新增成员）
-2. 新建 `crates/j-core/`，并在根 `Cargo.toml` 的 `members` 中添加 `"crates/j-core"`
-3. 在 `j-core` 中创建：
-   - `command`
-   - `error`
-   - `app/context`（使用简化版 `AppContext`，见 §5.4）
-   - `app/dispatcher`
-   - `types`
-4. 将 `YamlConfig` 及其直接相关路径逻辑迁入 `j-core::config`
-5. 根 crate 改为依赖 `j-core`
-
-注意：根 `Cargo.toml` 的 `[patch.crates-io]`（本地 `tui-textarea` 补丁）保留在根，j-core 的 `Cargo.toml` 中**不得**依赖 `tui-textarea` 或任何 ratatui 组件。
-
-验收标准：
-
-- `cargo build` 通过
-- 现有 CLI 行为不变
-- `src/main.rs` 已依赖 `j-core` 的配置类型，而非本地定义
-- `j-core` 的依赖列表中无 `tui-textarea`、`ratatui`、`colored`、`termimad`
-
-## 阶段 2：迁移 alias/list/category 为首批服务
-
-目标：验证”结构化输入/输出”链路。
-
-工作项：
-
-1. 定义（第一版 `CommandOutput` 仅含 alias 相关变体，见 §5.2 分阶段增量定义原则）：
-   - `AliasCommand`
-   - `AliasService`
-   - `AliasEntry`
-2. 把别名增删改查（`alias.rs`）和分类逻辑（`category.rs`）、列表（`list.rs`）一并迁到 `j-core`
-   - 这三个模块边界清楚、无 TUI 依赖，应在同一阶段完成，不要分批
-3. CLI 层新增：
-   - `impl TryFrom<SubCmd> for Command`
-   - `print_output(CommandOutput)`
-4. 按 §6.5 的输出宏迁移模式改写每个函数，旧 handle_xxx 变为空壳后立即删除
-5. `command_handlers!` 宏结构保留，只改宏体调用链（见 §6.4）
-
-验收标准：
-
-- `j set/remove/rename/modify/list/find/note/denote` 均走 `j-core`
-- `alias.rs`、`category.rs`、`list.rs` 中的 `info!()`/`error!()` 调用清零
-- CLI 不再在 alias 业务流程中直接调用 `handle_xxx`
-- 阶段 0 的 alias 基线测试仍全部通过
-
-## 阶段 3：迁移 report，拆开业务与 TUI
-
-目标：解决最典型的 I/O 耦合样板。
-
-现有代码已有部分分层基础，可以利用：
-
-- `write_to_report()`（`report.rs:247`）：已是静默写入，无打印，可直接提升为 `ReportService::write()`，是迁移的最小起步点
-- `handle_check()`/`handle_search()`（`report.rs:1051/1092`）：已用只读引用 `&YamlConfig`，逻辑相对干净
-- `handle_report_tui()`（`report.rs:119`）：已明确分离为 TUI 入口，不需要重新设计边界
-
-工作项：
-
-1. 从 `write_to_report` → `ReportService::write()` 开始，逐函数按 §6.5 模式迁移
-2. 将 `report.rs` 拆成三层：
-   - `ReportService`: 写日报、查最近内容、搜索、元数据更新
-   - `ReportStore`: 文件读写、settings.json、路径处理
-   - `ReportTuiAdapter`: 预填内容、编辑器启动、提交回写（保留在 CLI/TUI 层）
-3. 明确哪些逻辑属于核心：
-   - `write/check/search/new/sync/push/pull/set-url/open`
-4. 明确哪些逻辑属于表现层：
-   - 打开 Markdown 编辑器（调用 `tui::editor_markdown`）
-   - 渲染提示文本
-5. 为 Git push/pull 建立单独错误映射（映射到 `JError::ExternalCommand` / `JError::Network`）
-
-验收标准：
-
-- `reportctl` 主流程可经由 `j-core`
-- `j report` 的无参数 TUI 流程仍可用
-- `j-core` 可以在不启动 TUI 的情况下完成日报读写和查询
-- 阶段 0 的 report 基线测试仍全部通过
-
-## 阶段 4：迁移 script/open/system/time/update
-
-目标：完成常规命令层迁移。
-
-工作项：
-
-1. 抽出 `ScriptService`
-2. 抽出 `OpenService`
-3. 抽出 `SystemService`
-4. 评估 `UpdateService` 是否仍保留在 CLI 层
-
-说明：
-
-- `update` 依赖发布与自更新机制，允许暂时保留在 CLI
-- `time` 比较轻，可以最后迁
-
-验收标准：
-
-- 非 TUI 常规命令基本均已通过 `j-core`
-- `src/command/` 中残留的业务逻辑明显减少
-
-## 阶段 5：todo/chat 的边界治理
-
-目标：先收边界，再决定是否拆 crate。
-
-工作项：
-
-1. 为 todo 提炼：
-   - `TodoService`
-   - `TodoStore`
-   - `TodoSnapshot`
-2. TUI 仅负责状态展示和按键交互
-3. chat 不做一次性迁移，只先拆：
-   - 配置加载
-   - 会话存储
-   - tool 执行上下文
-4. remote bridge 与本地 chat 共用同一核心会话接口
-
-验收标准：
-
-- todo 的基础增删改查可脱离 TUI 使用
-- chat 至少能把一部分“非 UI 状态”下沉到 core
+1. CLI 参数定义
+2. 输入转换逻辑
+3. 输出渲染逻辑
+4. TUI adapter
 
 ---
 
-## 8. 设计原则与实现约束
+## 8. 强约束
 
-### 8.1 渐进迁移，不做一次性大爆炸
+### 8.1 禁止伪重构
 
-每迁一个领域，都应保持：
+以下都算失败：
 
-- 旧命令入口仍可运行
-- 调用链可双轨存在一段时间
-- 迁完一个领域再删旧桥接代码
+1. 把旧 `handle_xxx()` 原样复制到 `j-core`
+2. `j-core` 里继续直接调用打印宏
+3. `CommandOutput` 只是包一层字符串
+4. `AppContext` 名字变了，但内部还是共享 `YamlConfig` 到处直接改
+5. 旧 handler 系统还在承担主业务分发
 
-### 8.2 避免“伪抽象”
+### 8.2 禁止长期双轨
 
-以下做法看起来像重构，实际只是换名字：
+不接受“新旧链路并存一段时间”的设计。
 
-- 把 `handle_xxx()` 复制到 `j-core` 但继续直接打印
-- 把 `SubCmd` 直接公开给 `j-core`
-- 把 `YamlConfig` 放进 `Mutex` 后继续到处可变借用
-- 建一个 `Service` trait，但所有命令都塞进同一个巨大 `match`
+完成标准是：
 
-重构是否成功的判断标准是：CLI 拿掉后，核心逻辑还能独立被别的宿主调用。
+1. 新调用链是唯一真链路
+2. 旧代码只允许作为已废弃包装，且应尽量删除
+3. 文档、测试、实现全部基于同一套架构
 
-### 8.3 优先稳定数据边界，而不是 trait 数量
+### 8.3 core 禁止表现层依赖
 
-首轮重点不是“接口设计得多优雅”，而是：
+`j-core` 不应依赖：
 
-- 输入边界清楚
-- 输出边界清楚
-- 错误边界清楚
-- 存储边界清楚
+1. `colored`
+2. `termimad`
+3. `ratatui`
+4. `tui-textarea`
+5. 任何仅用于终端展示的 crate
 
-只在确实需要替换实现时再引入 trait。
+### 8.4 TUI 禁止绕过 core
 
----
+任何 TUI 操作都必须调用 core service，不允许：
 
-## 9. 风险与应对
-
-### 风险 1：重构范围失控
-
-表现：
-
-- 一开始就试图一起改 chat、todo、interactive、tui
-
-应对：
-
-- 锁定首轮只迁 alias/report/常规命令
-- 对 chat 仅治理边界，不做深拆
-
-### 风险 2：行为回归
-
-表现：
-
-- 原本 CLI 提示、默认值、文件路径、日期逻辑发生变化
-
-应对：
-
-- 在阶段 0 建立回归测试
-- 对 report 和 alias 做 golden/集成测试
-
-### 风险 3：核心层反而继续持有终端依赖
-
-表现：
-
-- `j-core` 继续依赖 `colored`、`termimad`、TUI 组件
-
-应对：
-
-- 明确 `j-core` 禁止引入终端表现依赖
-- 渲染相关代码留在 CLI/TUI 层
-
-### 风险 4：配置并发语义被破坏
-
-表现：
-
-- 迁移后 `YamlConfig::save()` 的锁语义丢失
-
-具体原因：`save()` 当前通过 `flock`（`yaml_config.rs:183`）实现进程级独占文件锁，锁的生命周期绑定在文件描述符上，函数返回时自动释放。这是一个正确的跨进程互斥机制。一旦把 `YamlConfig` 包进 `Arc<dyn ConfigStore>` 并允许多个调用点持有引用，flock 的独占语义可能被绕过（多个 `Arc` 克隆各自打开文件、各自加锁）。
-
-应对：
-
-- 阶段 1-3 使用 `Arc<Mutex<YamlConfig>>`，通过内存锁序列化所有 `save()` 调用，flock 作为跨进程保护层继续有效
-- 在 store 层封装保存行为，业务层只调用 service，不直接调用 `config.save()`
-- trait 化推迟到阶段 4+，届时 `ConfigStore::save()` 的实现必须保留 flock 语义
+1. 直接读配置文件
+2. 直接写 todo/report/chat 状态
+3. 直接拼装业务规则
 
 ---
 
-## 10. 验收标准
+## 9. 测试与验收
 
-本次重构完成的最低标准不是“代码更整齐”，而是以下几点同时成立：
+最终交付必须同时满足以下验收条件。
 
-1. `j-core` 能独立承载 alias、report、list/category 等核心命令
-2. CLI 只负责输入解析和输出格式化
-3. 核心命令返回结构化 `CommandOutput` 与 `JError`
-4. `j report` 的 TUI 流程仍保持可用
-5. 至少有一组集成测试覆盖 alias/report 关键路径
-6. `src/command/handler.rs` 不再是核心业务组织方式
+### 9.1 业务验收
 
-加分项：
+1. `alias` 全量命令走 core
+2. `list/category` 全量命令走 core
+3. `report` 的核心命令走 core
+4. `todo` 的增删改查走 core
+5. `chat` 的会话状态管理走 core
+6. `script/open/system/time/update` 走 core
 
-- todo 基础能力完成下沉
-- remote/chat 复用了一部分 core 能力
-- 未来 GUI 可以直接链接 `j-core`
+### 9.2 架构验收
 
----
+1. CLI 层不再持有核心业务逻辑
+2. `j-core` 能被非 CLI 场景直接调用
+3. 所有核心命令返回结构化 `CommandOutput`
+4. 所有核心错误使用 `JError`
+5. `YamlConfig` 的文件锁语义被 store 层完整保留
 
-## 11. 推荐落地顺序
+### 9.3 测试验收
 
-按实际收益和改动风险，推荐顺序如下：
+至少应有：
 
-1. 建 workspace 与 `j-core` 骨架
-2. 迁 `YamlConfig`
-3. 迁 alias/list/category
-4. 建 CLI `SubCmd -> Command` 转换层
-5. 建统一 output formatter
-6. 迁 report 核心逻辑
-7. 拆 report TUI 适配层
-8. 迁 script/open/system/time
-9. 评估 todo
-10. 最后处理 chat/remote 深层抽象
+1. alias 集成测试
+2. report 集成测试
+3. todo 服务测试
+4. chat 会话存储测试
+5. CLI 到 core 的命令映射测试
+6. 输出 formatter 测试
 
----
+### 9.4 行为验收
 
-## 12. 建议的第一批具体任务
-
-如果按这份计划开始实施，建议先开以下任务单：
-
-### Task 1：workspace 与 j-core 初始化
-
-- ~~调整根 `Cargo.toml`~~（workspace 已存在，只需在 `members` 中追加 `"crates/j-core"`）
-- 新建 `crates/j-core/`
-- 搭建最小 `lib.rs` / `error.rs` / `command/mod.rs`
-- 初始化 `AppContext`（阶段 1 简化版：`Arc<Mutex<YamlConfig>>` + `AppPaths`）
-- 确认 `crates/j-core/Cargo.toml` 依赖列表中无终端渲染相关 crate
-
-### Task 2：迁移配置模型
-
-- 把 `src/config/yaml_config.rs` 移入 `j-core`
-- 修复根 crate 引用
-- 确保 `cargo build` 通过
-
-### Task 3：实现第一版 Command/Output/Error
-
-- 定义 alias/report 的命令模型
-- 增加 dispatcher
-- 增加 CLI output formatter
-
-### Task 4：迁移 alias 全链路
-
-- `set/remove/rename/modify/list/find/note/denote`
-- 让 CLI 完整走 `j-core`
-- 补集成测试
-
-### Task 5：迁移 report 非 TUI 核心
-
-- `write/check/search/reportctl`
-- 先不动编辑器界面，只保留适配桥
+1. 常用命令对用户可见行为不倒退
+2. `j report` 的交互流程仍可用
+3. `j todo` 的 TUI 操作仍可用
+4. `j chat` 的主流程仍可用
 
 ---
 
-## 13. 最终判断
+## 10. 风险与解决方式
 
-这次重构是必要的，但不应该被定义成“全面重写”。正确方向是：
+### 风险 1：重构面太大
 
-- 先抽核心 API
-- 再瘦 CLI
-- 最后治理 TUI/chat 边界
+重构面较大属于既定事实。控制方式应为收紧完成定义与边界，而不是拆成多轮交付。
 
-如果按这个顺序执行，重构收益会很快体现出来；如果一开始就追求把所有模块彻底纯化，大概率会陷入长时间分支开发和高回归风险。
+### 风险 2：chat/todo 边界复杂
+
+解决方式：
+
+1. 不降低目标
+2. 只把 UI 细节留在 adapter
+3. 先定义 snapshot/action/store，再让现有 UI 对接
+
+### 风险 3：配置锁语义被破坏
+
+解决方式：
+
+1. 在 `ConfigStore` 内完整封装 `flock`
+2. 业务层完全不直接接触保存细节
+3. 为并发保存补测试
+
+### 风险 4：输出结构设计过粗
+
+解决方式：
+
+1. 优先建领域输出类型
+2. 禁止“先全用字符串兜底”
+3. formatter 只能消费结构化字段，不能补推导主语义
+
+---
+
+## 11. 一次性交付清单
+
+最终交付结果如下：
+
+1. `crates/j-core/` 存在并承载全部核心业务
+2. 根 crate 只负责 CLI/TUI/interactive 适配
+3. 旧 handler 主链路不再存在
+4. 旧命令模块中的直接打印式业务逻辑被清空或删除
+5. report/todo/chat 的状态和业务归入 core
+6. 核心层可被未来 GUI/remote 直接复用
+7. 测试覆盖核心高风险路径
+
+---
+
+## 12. 方案结语
+
+目标系统定义如下：
+
+1. 边界清晰
+2. 可复用
+3. 可测试
+4. 可被多宿主复用
+
+文档仅保留最终形态、最终边界与最终验收标准。
