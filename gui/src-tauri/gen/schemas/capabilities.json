@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"默认权限","local":true,"windows":["spotlight"],"permissions":["core:default","core:window:allow-set-size","global-shortcut:default"]}}

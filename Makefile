@@ -260,50 +260,12 @@ clean: ## 清理构建产物
 	@cargo clean
 	@echo "☑️ 清理完成"
 
-clean-all: clean ## 彻底清理（包括依赖）
-	@echo "🧹 彻底清理..."
-	@rm -rf target/
-	@echo "☑️ 彻底清理完成"
-
-# ============================================
-# 文档相关
-# ============================================
-doc: ## 生成文档
-	@echo "📚 生成文档..."
-	@cargo doc --no-deps
-	@echo "☑️ 文档生成完成: target/doc/j_cli/index.html"
-
-docs: doc ## 文档别名
-
 # ============================================
 # 运行相关
 # ============================================
 run: build-remote ## 运行项目
 	@echo "🚀 运行项目..."
 	@cargo run --features browser_cdp
-
-run-release: release ## 运行发布版本
-	@echo "🚀 运行发布版本..."
-	@$(TARGET_DIR)/j
-
-# ============================================
-# 测试安装
-# ============================================
-test-install: ## 测试安装脚本
-	@echo "🧪 测试安装脚本..."
-	@./install.sh
-
-# ============================================
-# 依赖管理
-# ============================================
-deps: ## 显示依赖信息
-	@echo "📦 依赖信息:"
-	@cargo tree
-
-update-deps: ## 更新依赖
-	@echo "🔄 更新依赖..."
-	@cargo update
-	@echo "☑️ 依赖更新完成"
 
 # ============================================
 # 开发工具
@@ -320,28 +282,3 @@ coverage: ## 生成代码覆盖率报告
 	@echo "📊 生成代码覆盖率报告..."
 	@cargo tarpaulin --out Html
 	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"
-
-# ============================================
-# Docker 支持
-# ============================================
-docker-build: ## 构建 Docker 镜像
-	@echo "🐳 构建 Docker 镜像..."
-	@docker build -t j-cli:$(VERSION) .
-	@echo "☑️ Docker 镜像构建完成: j-cli:$(VERSION)"
-
-docker-run: docker-build ## 运行 Docker 容器
-	@echo "🐳 运行 Docker 容器..."
-	@docker run -it --rm j-cli:$(VERSION)
-
-# ============================================
-# GUI (Tauri) 相关
-# ============================================
-dev-app: ## 启动 GUI 开发模式
-	@echo "🖥️  启动 GUI 开发模式..."
-	@cd gui && cargo tauri dev
-
-clean-app: ## 清理 GUI 构建产物
-	@echo "🧹 清理 GUI 构建产物..."
-	@rm -rf gui/src-tauri/target
-	@rm -rf gui/src-ui/dist src-ui/node_modules
-	@echo "☑️ GUI 清理完成"
