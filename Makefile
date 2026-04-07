@@ -151,7 +151,7 @@ publish: ## 发布到 crates.io（自动递增版本号）
 	git push origin $(GIT_BRANCH); \
 	git push origin "v$$version"; \
 	echo "📤 发布到 crates.io..."; \
-	cargo publish --registry crates-io; \
+	cargo publish --registry crates-io --allow-dirty; \
 	echo "☑️ 已发布 v$$version! 验证: cargo search j-cli"
 
 publish-check: ## 发布前检查（dry-run）
