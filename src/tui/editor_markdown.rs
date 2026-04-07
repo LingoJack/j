@@ -1411,7 +1411,7 @@ impl<'a> MarkdownEditorState<'a> {
             return Line::from(vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("〈 {} ", text), self.style_bold(self.theme.md_h3)),
+                Span::styled(format!("〈 {} 〉", text), self.style_bold(self.theme.md_h3)),
             ]);
         }
         if let Some(stripped) = trimmed.strip_prefix("#### ") {
