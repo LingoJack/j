@@ -5,7 +5,6 @@ pub mod cli;
 pub mod command;
 pub mod config;
 pub mod constants;
-pub mod core;
 pub mod tui;
 pub mod util;
 
