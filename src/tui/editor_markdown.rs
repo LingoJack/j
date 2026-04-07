@@ -10,7 +10,7 @@ use crossterm::{
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
-    Terminal,
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -1544,7 +1544,6 @@ impl<'a> MarkdownEditorState<'a> {
             let link_pos = remaining.find('[');
 
             // 找最小的非空位置
-            // 注意：粗体 ** 必须在斜体 * 之前处理，图片 ![ 必须在链接 [ 之前处理
             let min_pos = [
                 code_pos, img_pos, bold_pos, strike_pos, italic_pos, link_pos,
             ]
@@ -1553,7 +1552,6 @@ impl<'a> MarkdownEditorState<'a> {
             .min();
 
             let Some(pos) = min_pos else {
-                // 没有找到任何特殊语法，输出剩余文本
                 spans.push(Span::styled(
                     remaining.to_string(),
                     self.style(self.theme.text_normal),
@@ -1562,12 +1560,12 @@ impl<'a> MarkdownEditorState<'a> {
             };
 
             // 确定是哪种语法（按优先级判断）
-            let is_code = code_pos == Some(pos);
             let is_img = img_pos == Some(pos);
+            let is_code = code_pos == Some(pos) && !is_img;
             let is_bold = bold_pos == Some(pos);
             let is_strike = strike_pos == Some(pos);
-            let is_italic = italic_pos == Some(pos) && !is_bold; // 粗体优先于斜体
-            let is_link = link_pos == Some(pos) && !is_img; // 图片优先于链接
+            let is_link = link_pos == Some(pos) && !is_img;
+            let is_italic = italic_pos == Some(pos) && !is_bold && !is_img;
 
             // 输出语法之前的内容
             if pos > 0 {
@@ -1581,11 +1579,10 @@ impl<'a> MarkdownEditorState<'a> {
 
             // 行内代码
             if is_code {
-                remaining = &remaining[1..]; // 跳过 `
+                remaining = &remaining[1..];
                 if let Some(end) = remaining.find('`') {
-                    let code = &remaining[..end];
                     spans.push(Span::styled(
-                        code.to_string(),
+                        remaining[..end].to_string(),
                         Style::default()
                             .fg(self.theme.md_inline_code_fg)
                             .bg(self.theme.md_inline_code_bg),
@@ -1601,7 +1598,7 @@ impl<'a> MarkdownEditorState<'a> {
             }
             // 图片 ![alt](url)
             else if is_img {
-                remaining = &remaining[2..]; // 跳过 ![
+                remaining = &remaining[2..];
                 if let Some(alt_end) = remaining.find("](") {
                     let alt = &remaining[..alt_end];
                     remaining = &remaining[alt_end + 2..];
@@ -1630,11 +1627,10 @@ impl<'a> MarkdownEditorState<'a> {
             }
             // 粗体 **text**
             else if is_bold {
-                remaining = &remaining[2..]; // 跳过 **
+                remaining = &remaining[2..];
                 if let Some(end) = remaining.find("**") {
-                    let bold_text = &remaining[..end];
                     spans.push(Span::styled(
-                        bold_text.to_string(),
+                        remaining[..end].to_string(),
                         self.style_bold(self.theme.text_normal),
                     ));
                     remaining = &remaining[end + 2..];
@@ -1648,11 +1644,10 @@ impl<'a> MarkdownEditorState<'a> {
             }
             // 删除线 ~~text~~
             else if is_strike {
-                remaining = &remaining[2..]; // 跳过 ~~
+                remaining = &remaining[2..];
                 if let Some(end) = remaining.find("~~") {
-                    let struck_text = &remaining[..end];
                     spans.push(Span::styled(
-                        struck_text.to_string(),
+                        remaining[..end].to_string(),
                         self.style(self.theme.text_dim)
                             .add_modifier(Modifier::CROSSED_OUT),
                     ));
@@ -1667,11 +1662,10 @@ impl<'a> MarkdownEditorState<'a> {
             }
             // 斜体 *text*
             else if is_italic {
-                remaining = &remaining[1..]; // 跳过 *
+                remaining = &remaining[1..];
                 if let Some(end) = remaining.find('*') {
-                    let italic_text = &remaining[..end];
                     spans.push(Span::styled(
-                        italic_text.to_string(),
+                        remaining[..end].to_string(),
                         self.style_italic(self.theme.text_normal),
                     ));
                     remaining = &remaining[end + 1..];
@@ -1685,7 +1679,7 @@ impl<'a> MarkdownEditorState<'a> {
             }
             // 链接 [text](url)
             else if is_link {
-                remaining = &remaining[1..]; // 跳过 [
+                remaining = &remaining[1..];
                 if let Some(text_end) = remaining.find("](") {
                     let link_text = &remaining[..text_end];
                     remaining = &remaining[text_end + 2..];
@@ -1761,7 +1755,279 @@ impl<'a> MarkdownEditorState<'a> {
     }
 }
 
+// ========== 辅助函数 ==========
+
+/// 将 crossterm KeyCode 转换为 tui_textarea Key
+fn keycode_to_key(code: KeyCode) -> Key {
+    match code {
+        KeyCode::Char(c) => Key::Char(c),
+        KeyCode::Enter => Key::Enter,
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::Esc => Key::Esc,
+        KeyCode::Left => Key::Left,
+        KeyCode::Right => Key::Right,
+        KeyCode::Up => Key::Up,
+        KeyCode::Down => Key::Down,
+        KeyCode::PageUp => Key::PageUp,
+        KeyCode::PageDown => Key::PageDown,
+        KeyCode::Home => Key::Home,
+        KeyCode::End => Key::End,
+        KeyCode::Tab => Key::Tab,
+        KeyCode::Delete => Key::Delete,
+        _ => Key::Null,
+    }
+}
+
+/// 编辑器事件处理结果
+enum EditorAction {
+    Continue,
+    Submit(String),
+    Cancel,
+}
+
+/// 处理撤销操作
+fn handle_undo(state: &mut MarkdownEditorState<'_>) {
+    let mut lines: Vec<String> = state
+        .textarea
+        .lines()
+        .iter()
+        .map(|l| l.to_string())
+        .collect();
+    if state.vim.undo(&mut lines) {
+        state.textarea = TextArea::new(lines);
+        state.textarea.move_cursor(CursorMove::Bottom);
+    }
+}
+
+/// 处理重做操作
+fn handle_redo(state: &mut MarkdownEditorState<'_>) {
+    let mut lines: Vec<String> = state
+        .textarea
+        .lines()
+        .iter()
+        .map(|l| l.to_string())
+        .collect();
+    if state.vim.redo(&mut lines) {
+        state.textarea = TextArea::new(lines);
+        state.textarea.move_cursor(CursorMove::Bottom);
+    }
+}
+
+/// 处理搜索跳转
+fn handle_search_navigation(state: &mut MarkdownEditorState<'_>, forward: bool) {
+    if forward {
+        state.search.next_match();
+    } else {
+        state.search.prev_match();
+    }
+    if let Some(m) = state.search.current_match() {
+        state
+            .textarea
+            .move_cursor(CursorMove::Jump(m.line as u16, m.start as u16));
+    }
+}
+
+/// 处理 Command 模式字符输入
+fn handle_command_input(cmd: &mut String, key: &Key) {
+    match key {
+        Key::Char(c) => cmd.push(*c),
+        Key::Backspace => {
+            cmd.pop();
+        }
+        _ => {}
+    }
+}
+
+/// 处理 Search 模式字符输入
+fn handle_search_input(state: &mut MarkdownEditorState<'_>, key: &Key) {
+    match key {
+        Key::Char(c) => {
+            state.search.pattern.push(*c);
+            let lines: Vec<String> = state
+                .textarea
+                .lines()
+                .iter()
+                .map(|l| l.to_string())
+                .collect();
+            state.search.search(&state.search.pattern.clone(), &lines);
+        }
+        Key::Backspace => {
+            state.search.pattern.pop();
+            let lines: Vec<String> = state
+                .textarea
+                .lines()
+                .iter()
+                .map(|l| l.to_string())
+                .collect();
+            state.search.search(&state.search.pattern.clone(), &lines);
+        }
+        _ => {}
+    }
+}
+
+/// 统一的输入处理逻辑
+fn process_editor_input(state: &mut MarkdownEditorState<'_>, tui_input: &Input) -> EditorAction {
+    // 处理撤销
+    if state.mode == Mode::Normal && tui_input.key == Key::Char('u') && !tui_input.ctrl {
+        handle_undo(state);
+        return EditorAction::Continue;
+    }
+
+    // 处理重做
+    if state.mode == Mode::Normal && tui_input.key == Key::Char('r') && tui_input.ctrl {
+        handle_redo(state);
+        return EditorAction::Continue;
+    }
+
+    // 处理搜索跳转
+    if state.mode == Mode::Normal && !state.search.pattern.is_empty() {
+        if tui_input.key == Key::Char('n') && !tui_input.ctrl {
+            handle_search_navigation(state, true);
+            return EditorAction::Continue;
+        }
+        if tui_input.key == Key::Char('N') && !tui_input.ctrl {
+            handle_search_navigation(state, false);
+            return EditorAction::Continue;
+        }
+    }
+
+    // Vim 状态机处理
+    let old_mode = state.mode.clone();
+    let transition = handle_vim_input(&state.mode, tui_input, &mut state.textarea, &mut state.vim);
+
+    match transition {
+        Transition::Mode(new_mode) => {
+            // 如果从 Insert 模式退出，保存 undo 点
+            if old_mode == Mode::Insert && new_mode != Mode::Insert {
+                let lines: Vec<String> = state
+                    .textarea
+                    .lines()
+                    .iter()
+                    .map(|l| l.to_string())
+                    .collect();
+                state.vim.push_undo(&lines);
+            }
+            state.mode = new_mode;
+        }
+        Transition::Submit => {
+            let content = state.textarea.lines().join("\n");
+            return EditorAction::Submit(content);
+        }
+        Transition::Cancel => {
+            return EditorAction::Cancel;
+        }
+        Transition::Nop => {
+            // 处理 Command/Search 模式的字符输入
+            match &mut state.mode {
+                Mode::Command(cmd) => handle_command_input(cmd, &tui_input.key),
+                Mode::Search(_) => handle_search_input(state, &tui_input.key),
+                _ => {}
+            }
+        }
+    }
+
+    EditorAction::Continue
+}
+
 // ========== 公共 API ==========
+
+/// 编辑器渲染配置
+#[allow(dead_code)]
+struct RenderConfig {
+    show_status_bar: bool,
+    show_command_bar: bool,
+}
+
+impl Default for RenderConfig {
+    fn default() -> Self {
+        Self {
+            show_status_bar: true,
+            show_command_bar: true,
+        }
+    }
+}
+
+/// 统一的渲染逻辑
+fn render_editor_frame(
+    f: &mut Frame<'_>,
+    state: &mut MarkdownEditorState<'_>,
+    area: Rect,
+    title: &str,
+    _config: &RenderConfig,
+) {
+    let mut lines_to_render = Vec::new();
+
+    // 计算可用内容区域
+    // 边框占用：上下各1行，状态栏1行
+    let content_height = area.height.saturating_sub(3) as usize;
+    let content_width = area.width.saturating_sub(2) as usize;
+
+    state.viewport_height = content_height;
+    state.viewport_width = content_width;
+
+    // 更新垂直滚动偏移
+    let cursor_line = state.cursor_line();
+    if cursor_line < state.scroll_offset {
+        state.scroll_offset = cursor_line;
+    } else if cursor_line >= state.scroll_offset + content_height {
+        state.scroll_offset = cursor_line - content_height + 1;
+    }
+
+    // 更新水平滚动偏移
+    let cursor_col = state.cursor_col();
+    let line_num_width = 5;
+    let effective_width = content_width.saturating_sub(line_num_width);
+
+    if cursor_col < state.horizontal_scroll {
+        state.horizontal_scroll = cursor_col;
+    } else if cursor_col >= state.horizontal_scroll + effective_width {
+        state.horizontal_scroll = cursor_col - effective_width + 1;
+    }
+
+    // 渲染每一行
+    let all_lines = state.textarea.lines();
+    let total_lines = all_lines.len();
+    let end_line = (state.scroll_offset + content_height).min(total_lines);
+
+    for line_idx in state.scroll_offset..end_line {
+        let line = state.render_line(line_idx, area.width as usize);
+        lines_to_render.push(line);
+    }
+
+    // 填充空行
+    for _ in lines_to_render.len()..content_height {
+        lines_to_render.push(Line::from(Span::styled(
+            "~",
+            Style::default()
+                .fg(Color::DarkGray)
+                .bg(state.theme.bg_primary),
+        )));
+    }
+
+    // 主内容区
+    let block = Block::default()
+        .title(format!(" {} ", title))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(state.mode.border_color()))
+        .style(Style::default().bg(state.theme.bg_primary));
+
+    let paragraph = Paragraph::new(lines_to_render).block(block);
+    f.render_widget(paragraph, area);
+
+    // 状态栏
+    let status_bar = state.render_status_bar(area.width as usize);
+    let status_area = Rect::new(0, area.height - 1, area.width, 1);
+    let status_block = Block::default().style(Style::default().bg(state.theme.bg_primary));
+    f.render_widget(Paragraph::new(status_bar).block(status_block), status_area);
+
+    // 命令/搜索栏
+    if matches!(state.mode, Mode::Command(_) | Mode::Search(_)) {
+        let cmd_bar = state.render_command_bar();
+        let cmd_area = Rect::new(0, area.height - 2, area.width, 1);
+        let cmd_block = Block::default().style(Style::default().bg(state.theme.bg_primary));
+        f.render_widget(Paragraph::new(cmd_bar).block(cmd_block), cmd_area);
+    }
+}
 
 /// 打开 Markdown 编辑器（在已有终端上）
 pub fn open_markdown_editor_on_terminal(
@@ -1779,86 +2045,14 @@ pub fn open_markdown_editor_on_terminal(
         .collect();
     state.vim.push_undo(&initial_lines);
 
+    let config = RenderConfig::default();
+
     loop {
-        // 获取终端尺寸
         let size = terminal.size()?;
         let area = Rect::new(0, 0, size.width, size.height);
 
-        // 渲染
         terminal.draw(|f| {
-            let mut lines_to_render = Vec::new();
-
-            // 计算可用内容区域
-            // 边框占用：上下各1行，状态栏1行
-            let content_height = area.height.saturating_sub(3) as usize; // 边框(2) + 状态栏(1)
-            let content_width = area.width.saturating_sub(2) as usize; // 左右边框
-
-            state.viewport_height = content_height;
-            state.viewport_width = content_width;
-
-            // 更新垂直滚动偏移
-            let cursor_line = state.cursor_line();
-            if cursor_line < state.scroll_offset {
-                state.scroll_offset = cursor_line;
-            } else if cursor_line >= state.scroll_offset + content_height {
-                state.scroll_offset = cursor_line - content_height + 1;
-            }
-
-            // 更新水平滚动偏移
-            let cursor_col = state.cursor_col();
-            // 行号占用5个字符（4位数字+空格）
-            let line_num_width = 5;
-            let effective_width = content_width.saturating_sub(line_num_width);
-
-            if cursor_col < state.horizontal_scroll {
-                state.horizontal_scroll = cursor_col;
-            } else if cursor_col >= state.horizontal_scroll + effective_width {
-                state.horizontal_scroll = cursor_col - effective_width + 1;
-            }
-
-            // 渲染每一行
-            let all_lines = state.textarea.lines();
-            let total_lines = all_lines.len();
-            let end_line = (state.scroll_offset + content_height).min(total_lines);
-
-            for line_idx in state.scroll_offset..end_line {
-                let line = state.render_line(line_idx, area.width as usize);
-                lines_to_render.push(line);
-            }
-
-            // 填充空行
-            for _ in lines_to_render.len()..content_height {
-                lines_to_render.push(Line::from(Span::styled(
-                    "~",
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .bg(state.theme.bg_primary),
-                )));
-            }
-
-            // 主内容区（设置背景色）
-            let block = Block::default()
-                .title(format!(" {} ", title))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(state.mode.border_color()))
-                .style(Style::default().bg(state.theme.bg_primary));
-
-            let paragraph = Paragraph::new(lines_to_render).block(block);
-            f.render_widget(paragraph, area);
-
-            // 状态栏（设置背景色）
-            let status_bar = state.render_status_bar(area.width as usize);
-            let status_area = Rect::new(0, area.height - 1, area.width, 1);
-            let status_block = Block::default().style(Style::default().bg(state.theme.bg_primary));
-            f.render_widget(Paragraph::new(status_bar).block(status_block), status_area);
-
-            // 命令/搜索栏（设置背景色）
-            if matches!(state.mode, Mode::Command(_) | Mode::Search(_)) {
-                let cmd_bar = state.render_command_bar();
-                let cmd_area = Rect::new(0, area.height - 2, area.width, 1);
-                let cmd_block = Block::default().style(Style::default().bg(state.theme.bg_primary));
-                f.render_widget(Paragraph::new(cmd_bar).block(cmd_block), cmd_area);
-            }
+            render_editor_frame(f, &mut state, area, title, &config);
         })?;
 
         // 处理输入
@@ -1867,164 +2061,16 @@ pub fn open_markdown_editor_on_terminal(
 
             if let Event::Key(key) = evt {
                 let tui_input = Input {
-                    key: match key.code {
-                        KeyCode::Char(c) => Key::Char(c),
-                        KeyCode::Enter => Key::Enter,
-                        KeyCode::Backspace => Key::Backspace,
-                        KeyCode::Esc => Key::Esc,
-                        KeyCode::Left => Key::Left,
-                        KeyCode::Right => Key::Right,
-                        KeyCode::Up => Key::Up,
-                        KeyCode::Down => Key::Down,
-                        KeyCode::PageUp => Key::PageUp,
-                        KeyCode::PageDown => Key::PageDown,
-                        KeyCode::Home => Key::Home,
-                        KeyCode::End => Key::End,
-                        KeyCode::Tab => Key::Tab,
-                        KeyCode::Delete => Key::Delete,
-                        _ => Key::Null,
-                    },
+                    key: keycode_to_key(key.code),
                     ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
                     alt: key.modifiers.contains(KeyModifiers::ALT),
                     shift: key.modifiers.contains(KeyModifiers::SHIFT),
                 };
 
-                // 处理撤销
-                if state.mode == Mode::Normal && tui_input.key == Key::Char('u') && !tui_input.ctrl
-                {
-                    let mut lines: Vec<String> = state
-                        .textarea
-                        .lines()
-                        .iter()
-                        .map(|l| l.to_string())
-                        .collect();
-                    if state.vim.undo(&mut lines) {
-                        state.textarea = TextArea::new(lines);
-                        state.textarea.move_cursor(CursorMove::Bottom);
-                    }
-                    continue;
-                }
-
-                // 处理重做
-                if state.mode == Mode::Normal && tui_input.key == Key::Char('r') && tui_input.ctrl {
-                    let mut lines: Vec<String> = state
-                        .textarea
-                        .lines()
-                        .iter()
-                        .map(|l| l.to_string())
-                        .collect();
-                    if state.vim.undo(&mut lines) {
-                        state.textarea = TextArea::new(lines);
-                        state.textarea.move_cursor(CursorMove::Bottom);
-                    }
-                    continue;
-                }
-
-                // 处理重做
-                if state.mode == Mode::Normal && tui_input.key == Key::Char('r') && tui_input.ctrl {
-                    let mut lines: Vec<String> = state
-                        .textarea
-                        .lines()
-                        .iter()
-                        .map(|l| l.to_string())
-                        .collect();
-                    if state.vim.redo(&mut lines) {
-                        state.textarea = TextArea::new(lines);
-                        state.textarea.move_cursor(CursorMove::Bottom);
-                    }
-                    continue;
-                }
-
-                // 处理搜索跳转
-                if state.mode == Mode::Normal && !state.search.pattern.is_empty() {
-                    if tui_input.key == Key::Char('n') && !tui_input.ctrl {
-                        state.search.next_match();
-                        if let Some(m) = state.search.current_match() {
-                            state
-                                .textarea
-                                .move_cursor(CursorMove::Jump(m.line as u16, m.start as u16));
-                        }
-                        continue;
-                    }
-                    if tui_input.key == Key::Char('N') && !tui_input.ctrl {
-                        state.search.prev_match();
-                        if let Some(m) = state.search.current_match() {
-                            state
-                                .textarea
-                                .move_cursor(CursorMove::Jump(m.line as u16, m.start as u16));
-                        }
-                        continue;
-                    }
-                }
-
-                // Vim 状态机处理
-                let old_mode = state.mode.clone();
-                let transition =
-                    handle_vim_input(&state.mode, &tui_input, &mut state.textarea, &mut state.vim);
-
-                match transition {
-                    Transition::Mode(new_mode) => {
-                        // 如果从 Insert 模式退出，保存 undo 点
-                        if old_mode == Mode::Insert && new_mode != Mode::Insert {
-                            let lines: Vec<String> = state
-                                .textarea
-                                .lines()
-                                .iter()
-                                .map(|l| l.to_string())
-                                .collect();
-                            state.vim.push_undo(&lines);
-                        }
-                        state.mode = new_mode;
-                    }
-                    Transition::Submit => {
-                        let content = state.textarea.lines().join("\n");
-                        return Ok(Some(content));
-                    }
-                    Transition::Cancel => {
-                        return Ok(None);
-                    }
-                    Transition::Nop => {
-                        // 处理 Command/Search 模式的字符输入
-                        match &mut state.mode {
-                            Mode::Command(cmd) => match tui_input.key {
-                                Key::Char(c) => {
-                                    cmd.push(c);
-                                }
-                                Key::Backspace => {
-                                    cmd.pop();
-                                }
-                                _ => {}
-                            },
-                            Mode::Search(pattern) => {
-                                match tui_input.key {
-                                    Key::Char(c) => {
-                                        pattern.push(c);
-                                        // 实时搜索
-                                        let lines: Vec<String> = state
-                                            .textarea
-                                            .lines()
-                                            .iter()
-                                            .map(|l| l.to_string())
-                                            .collect();
-                                        state.search.search(pattern, &lines);
-                                    }
-                                    Key::Backspace => {
-                                        pattern.pop();
-                                        // 更新搜索
-                                        let lines: Vec<String> = state
-                                            .textarea
-                                            .lines()
-                                            .iter()
-                                            .map(|l| l.to_string())
-                                            .collect();
-                                        state.search.search(pattern, &lines);
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                match process_editor_input(&mut state, &tui_input) {
+                    EditorAction::Submit(content) => return Ok(Some(content)),
+                    EditorAction::Cancel => return Ok(None),
+                    EditorAction::Continue => {}
                 }
             }
         }
@@ -2108,69 +2154,14 @@ fn open_markdown_editor_on_terminal_internal(
     state.vim.push_undo(&initial_lines);
     state.mode = initial_mode;
 
+    let config = RenderConfig::default();
+
     loop {
-        // 获取终端尺寸
         let size = terminal.size()?;
         let area = Rect::new(0, 0, size.width, size.height);
 
-        // 渲染
         terminal.draw(|f| {
-            let mut lines_to_render = Vec::new();
-
-            let content_height = area.height.saturating_sub(2) as usize;
-            state.viewport_height = content_height;
-
-            // 更新滚动偏移
-            let cursor_line = state.cursor_line();
-            if cursor_line < state.scroll_offset {
-                state.scroll_offset = cursor_line;
-            } else if cursor_line >= state.scroll_offset + content_height {
-                state.scroll_offset = cursor_line - content_height + 1;
-            }
-
-            // 渲染每一行
-            let all_lines = state.textarea.lines();
-            let total_lines = all_lines.len();
-            let end_line = (state.scroll_offset + content_height).min(total_lines);
-
-            for line_idx in state.scroll_offset..end_line {
-                let line = state.render_line(line_idx, area.width as usize);
-                lines_to_render.push(line);
-            }
-
-            // 填充空行
-            for _ in lines_to_render.len()..content_height {
-                lines_to_render.push(Line::from(Span::styled(
-                    "~",
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .bg(state.theme.bg_primary),
-                )));
-            }
-
-            // 主内容区（设置背景色）
-            let block = Block::default()
-                .title(format!(" {} ", title))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(state.mode.border_color()))
-                .style(Style::default().bg(state.theme.bg_primary));
-
-            let paragraph = Paragraph::new(lines_to_render).block(block);
-            f.render_widget(paragraph, area);
-
-            // 状态栏（设置背景色）
-            let status_bar = state.render_status_bar(area.width as usize);
-            let status_area = Rect::new(0, area.height - 1, area.width, 1);
-            let status_block = Block::default().style(Style::default().bg(state.theme.bg_primary));
-            f.render_widget(Paragraph::new(status_bar).block(status_block), status_area);
-
-            // 命令/搜索栏（设置背景色）
-            if matches!(state.mode, Mode::Command(_) | Mode::Search(_)) {
-                let cmd_bar = state.render_command_bar();
-                let cmd_area = Rect::new(0, area.height - 2, area.width, 1);
-                let cmd_block = Block::default().style(Style::default().bg(state.theme.bg_primary));
-                f.render_widget(Paragraph::new(cmd_bar).block(cmd_block), cmd_area);
-            }
+            render_editor_frame(f, &mut state, area, title, &config);
         })?;
 
         // 处理输入
@@ -2179,149 +2170,16 @@ fn open_markdown_editor_on_terminal_internal(
 
             if let Event::Key(key) = evt {
                 let tui_input = Input {
-                    key: match key.code {
-                        KeyCode::Char(c) => Key::Char(c),
-                        KeyCode::Enter => Key::Enter,
-                        KeyCode::Backspace => Key::Backspace,
-                        KeyCode::Esc => Key::Esc,
-                        KeyCode::Left => Key::Left,
-                        KeyCode::Right => Key::Right,
-                        KeyCode::Up => Key::Up,
-                        KeyCode::Down => Key::Down,
-                        KeyCode::PageUp => Key::PageUp,
-                        KeyCode::PageDown => Key::PageDown,
-                        KeyCode::Home => Key::Home,
-                        KeyCode::End => Key::End,
-                        KeyCode::Tab => Key::Tab,
-                        KeyCode::Delete => Key::Delete,
-                        _ => Key::Null,
-                    },
+                    key: keycode_to_key(key.code),
                     ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
                     alt: key.modifiers.contains(KeyModifiers::ALT),
                     shift: key.modifiers.contains(KeyModifiers::SHIFT),
                 };
 
-                // 处理撤销
-                if state.mode == Mode::Normal && tui_input.key == Key::Char('u') && !tui_input.ctrl
-                {
-                    let mut lines: Vec<String> = state
-                        .textarea
-                        .lines()
-                        .iter()
-                        .map(|l| l.to_string())
-                        .collect();
-                    if state.vim.undo(&mut lines) {
-                        state.textarea = TextArea::new(lines);
-                        state.textarea.move_cursor(CursorMove::Bottom);
-                    }
-                    continue;
-                }
-
-                // 处理重做
-                if state.mode == Mode::Normal && tui_input.key == Key::Char('r') && tui_input.ctrl {
-                    let mut lines: Vec<String> = state
-                        .textarea
-                        .lines()
-                        .iter()
-                        .map(|l| l.to_string())
-                        .collect();
-                    if state.vim.redo(&mut lines) {
-                        state.textarea = TextArea::new(lines);
-                        state.textarea.move_cursor(CursorMove::Bottom);
-                    }
-                    continue;
-                }
-
-                // 处理搜索跳转
-                if state.mode == Mode::Normal && !state.search.pattern.is_empty() {
-                    if tui_input.key == Key::Char('n') && !tui_input.ctrl {
-                        state.search.next_match();
-                        if let Some(m) = state.search.current_match() {
-                            state
-                                .textarea
-                                .move_cursor(CursorMove::Jump(m.line as u16, m.start as u16));
-                        }
-                        continue;
-                    }
-                    if tui_input.key == Key::Char('N') && !tui_input.ctrl {
-                        state.search.prev_match();
-                        if let Some(m) = state.search.current_match() {
-                            state
-                                .textarea
-                                .move_cursor(CursorMove::Jump(m.line as u16, m.start as u16));
-                        }
-                        continue;
-                    }
-                }
-
-                // Vim 状态机处理
-                let old_mode = state.mode.clone();
-                let transition =
-                    handle_vim_input(&state.mode, &tui_input, &mut state.textarea, &mut state.vim);
-
-                match transition {
-                    Transition::Mode(new_mode) => {
-                        // 如果从 Insert 模式退出，保存 undo 点
-                        if old_mode == Mode::Insert && new_mode != Mode::Insert {
-                            let lines: Vec<String> = state
-                                .textarea
-                                .lines()
-                                .iter()
-                                .map(|l| l.to_string())
-                                .collect();
-                            state.vim.push_undo(&lines);
-                        }
-                        state.mode = new_mode;
-                    }
-                    Transition::Submit => {
-                        let content = state.textarea.lines().join("\n");
-                        return Ok(Some(content));
-                    }
-                    Transition::Cancel => {
-                        return Ok(None);
-                    }
-                    Transition::Nop => {
-                        // 处理 Command/Search 模式的字符输入
-                        match &mut state.mode {
-                            Mode::Command(cmd) => match tui_input.key {
-                                Key::Char(c) => {
-                                    cmd.push(c);
-                                }
-                                Key::Backspace => {
-                                    cmd.pop();
-                                }
-                                _ => {}
-                            },
-                            Mode::Search(pattern) => {
-                                match tui_input.key {
-                                    Key::Char(c) => {
-                                        pattern.push(c);
-                                        // 实时搜索
-                                        let lines: Vec<String> = state
-                                            .textarea
-                                            .lines()
-                                            .iter()
-                                            .map(|l| l.to_string())
-                                            .collect();
-                                        state.search.search(pattern, &lines);
-                                    }
-                                    Key::Backspace => {
-                                        pattern.pop();
-                                        // 更新搜索
-                                        let lines: Vec<String> = state
-                                            .textarea
-                                            .lines()
-                                            .iter()
-                                            .map(|l| l.to_string())
-                                            .collect();
-                                        state.search.search(pattern, &lines);
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                match process_editor_input(&mut state, &tui_input) {
+                    EditorAction::Submit(content) => return Ok(Some(content)),
+                    EditorAction::Cancel => return Ok(None),
+                    EditorAction::Continue => {}
                 }
             }
         }

@@ -1,7 +1,32 @@
 [
   {
+    "id": "1",
+    "content": "移除重复的重做逻辑代码",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "提取输入处理逻辑为独立函数，减少主循环复杂度",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "优化 render_inline 函数，简化代码结构",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "清理未使用的字段和代码",
+    "status": "completed"
+  },
+  {
     "id": "5",
-    "content": "删除 GUI FFI 函数",
+    "content": "删除冗余的缓存优化计划",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "编译检查并修复错误",
     "status": "completed"
   }
 ]
