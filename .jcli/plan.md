@@ -269,7 +269,7 @@ pub enum ReportCommand {
 
 ### 5.2 输出模型
 
-不建议只做一个 `Success { message }`。建议拆成“通用结果 + 领域结果”：
+不建议只做一个 `Success { message }`。建议拆成”通用结果 + 领域结果”：
 
 ```rust
 pub enum CommandOutput {
@@ -288,6 +288,19 @@ pub enum CommandOutput {
 - output 必须可被 CLI 渲染
 - output 必须可被 GUI 直接消费
 - output 不应夹带 ANSI、emoji、颜色等表现层细节
+
+**分阶段增量定义原则**：不要在阶段 2 就要求所有变体存在。第一版只需：
+
+```rust
+pub enum CommandOutput {
+    Empty,
+    Message(String),          // 兜底，阶段 4 前允许使用
+    AliasList(Vec<AliasEntry>),
+    AliasEntry(AliasEntry),
+}
+```
+
+其余变体（`ReportLines`、`TodoSnapshot` 等）随对应阶段迁移时增量添加，避免提前设计未使用的结构。
 
 ### 5.3 错误模型
 
@@ -323,7 +336,7 @@ impl JError {
 
 ### 5.4 运行时上下文
 
-不建议直接在 `AppContext` 中放 `Arc<Mutex<YamlConfig>>` 作为唯一入口。更合理的方向是：
+长期目标是完全 trait 化：
 
 ```rust
 pub struct AppContext {
@@ -336,7 +349,17 @@ pub struct AppContext {
 }
 ```
 
-首轮可以不全部 trait 化，但接口设计应朝这个方向保留空间。否则只是把全局耦合从 CLI 挪进 core。
+**阶段 1-3 的实际定义应保持最小**，只在真正需要替换实现时才引入 trait：
+
+```rust
+// 阶段 1-3 使用这个版本
+pub struct AppContext {
+    pub config: Arc<Mutex<YamlConfig>>,  // 保留现有 flock 文件锁语义
+    pub paths: AppPaths,
+}
+```
+
+重要说明：`YamlConfig::save()` 当前使用 `flock` 实现进程级独占锁（基于文件描述符）。一旦包进 `Arc<Mutex<>>` 后，内存锁与文件锁的语义必须同时保留。**阶段 1 不做 trait 化**，等到有真正多宿主需求时（阶段 4+）再引入 `Arc<dyn ConfigStore>`。过早引入 `Arc<dyn Clock>`、`Arc<dyn Opener>`、`Arc<dyn GitClient>` 只会增加无收益的脚手架成本。
 
 ---
 
@@ -386,6 +409,62 @@ SubCmd -> TryInto<j_core::Command> -> dispatcher.dispatch()
 
 因此 `src/command/handler.rs` 最终大概率会被删除，至少不再作为核心分发机制。
 
+### 6.4 `command_handlers!` 宏的过渡策略
+
+`handler.rs` 当前用 `command_handlers!` 宏生成 35 个 handler struct，这是 CLI 层的核心注册机制。**宏的结构不需要在首轮重构中删除或替换**，只需要修改宏体内的实现从"直接调 handle_xxx"改为"调 service、打印 output"：
+
+```rust
+// 阶段 2 之后：保留宏结构，只改宏体调用链
+command_handlers! {
+    SetCmd { alias, path } => |self, context| {
+        match context.alias_service().set(&self.alias, &self.path) {
+            Ok(out) => print_output(out),
+            Err(e) => print_error(e),
+        }
+    },
+}
+```
+
+阶段 2 验收标准中明确：宏的注册结构不变，只改宏体。宏本身的删除推迟到阶段 4 完成后，届时评估是否改为更简单的函数表。
+
+### 6.5 输出宏的迁移模式
+
+`alias.rs` 中有 19 处、`report.rs` 中有 85 处 `info!()`/`error!()`/`usage!()` 调用。**直接把这些函数搬进 j-core 会把 terminal 依赖一起带入**，违反 §8.2 的"避免伪抽象"原则。
+
+每迁移一个模块时，必须按以下模式改写：
+
+```rust
+// 迁移前：alias.rs 中直接打印
+pub fn handle_set(alias: &str, path_parts: &[String], config: &mut YamlConfig) {
+    if config.contains("path", alias) {
+        error!("别名 {} 已存在", alias);
+        return;
+    }
+    config.set_property("path", alias, &value);
+    config.save();
+    info!("已设置 {} = {}", alias, value);
+}
+
+// 迁移后：j-core AliasService，返回结果，不打印
+pub fn set(&self, alias: &str, path: &str) -> Result<CommandOutput, JError> {
+    if self.store.exists("path", alias) {
+        return Err(JError::Conflict(format!("别名 {} 已存在", alias)));
+    }
+    self.store.set("path", alias, path)?;
+    Ok(CommandOutput::Message(format!("已设置 {} = {}", alias, path)))
+}
+
+// CLI 适配层：src/command/alias.rs 保留为薄包装
+fn handle_set(alias: &str, path_parts: &[String], context: &AppContext) {
+    match context.alias_service().set(alias, &joined_path) {
+        Ok(out) => print_output(out),
+        Err(e)  => print_error(e),
+    }
+}
+```
+
+每迁完一个函数，其对应的旧 handle_xxx 变成空壳或立即删除，不允许"新旧两套都打印"的中间状态存在。
+
 ---
 
 ## 7. 分阶段实施计划
@@ -400,17 +479,26 @@ SubCmd -> TryInto<j_core::Command> -> dispatcher.dispatch()
    - 纯命令型
    - TUI 型
    - 外部系统依赖型
-2. 为高频命令补基础测试或最小行为快照：
-   - `set/remove/rename/modify/list`
-   - `report/check/search/reportctl`
-   - `open`
+2. 为高频命令补最小行为测试，作为阶段 2-3 的回归基线：
+
+   **alias 最小测试集**：
+   - `set`：新增别名成功、重复新增应返回冲突错误
+   - `remove`：删除已有别名、删除不存在别名应返回 NotFound
+   - `list`：返回内容非空、包含已设置的别名
+
+   **report 最小测试集**：
+   - `write`：写入内容后，文件中包含该内容
+   - `check`：读取最近 N 行，返回行数 ≤ N
+
+   没有这组基线，"现有 CLI 行为不变"这个验收条件没有可执行的检验手段。
+
 3. 明确首轮不动 chat 主流程
 4. 明确 workspace 发布策略不变，`j` 仍为唯一对外二进制
 
 验收标准：
 
 - 有一份迁移范围表
-- 至少覆盖 alias/report 主路径的行为测试
+- alias/report 主路径的行为测试可运行且通过
 - 能说明哪些模块禁止在首轮深改
 
 ## 阶段 1：建立 workspace 与 j-core 骨架
@@ -419,67 +507,81 @@ SubCmd -> TryInto<j_core::Command> -> dispatcher.dispatch()
 
 工作项：
 
-1. 把根 `Cargo.toml` 调整为真正的 workspace
-2. 新建 `crates/j-core`
+1. ~~把根 `Cargo.toml` 调整为 workspace~~（**已完成**：当前 `Cargo.toml` 已有 `[workspace]` + `members = ["."]`，只需新增成员）
+2. 新建 `crates/j-core/`，并在根 `Cargo.toml` 的 `members` 中添加 `"crates/j-core"`
 3. 在 `j-core` 中创建：
    - `command`
    - `error`
-   - `app/context`
+   - `app/context`（使用简化版 `AppContext`，见 §5.4）
    - `app/dispatcher`
    - `types`
 4. 将 `YamlConfig` 及其直接相关路径逻辑迁入 `j-core::config`
 5. 根 crate 改为依赖 `j-core`
+
+注意：根 `Cargo.toml` 的 `[patch.crates-io]`（本地 `tui-textarea` 补丁）保留在根，j-core 的 `Cargo.toml` 中**不得**依赖 `tui-textarea` 或任何 ratatui 组件。
 
 验收标准：
 
 - `cargo build` 通过
 - 现有 CLI 行为不变
 - `src/main.rs` 已依赖 `j-core` 的配置类型，而非本地定义
+- `j-core` 的依赖列表中无 `tui-textarea`、`ratatui`、`colored`、`termimad`
 
 ## 阶段 2：迁移 alias/list/category 为首批服务
 
-目标：验证“结构化输入/输出”链路。
+目标：验证”结构化输入/输出”链路。
 
 工作项：
 
-1. 定义：
+1. 定义（第一版 `CommandOutput` 仅含 alias 相关变体，见 §5.2 分阶段增量定义原则）：
    - `AliasCommand`
    - `AliasService`
    - `AliasEntry`
-2. 把别名增删改查和分类逻辑迁到 `j-core`
+2. 把别名增删改查（`alias.rs`）和分类逻辑（`category.rs`）、列表（`list.rs`）一并迁到 `j-core`
+   - 这三个模块边界清楚、无 TUI 依赖，应在同一阶段完成，不要分批
 3. CLI 层新增：
    - `impl TryFrom<SubCmd> for Command`
    - `print_output(CommandOutput)`
-4. 保留旧命令文件作为薄包装或直接删除
+4. 按 §6.5 的输出宏迁移模式改写每个函数，旧 handle_xxx 变为空壳后立即删除
+5. `command_handlers!` 宏结构保留，只改宏体调用链（见 §6.4）
 
 验收标准：
 
 - `j set/remove/rename/modify/list/find/note/denote` 均走 `j-core`
+- `alias.rs`、`category.rs`、`list.rs` 中的 `info!()`/`error!()` 调用清零
 - CLI 不再在 alias 业务流程中直接调用 `handle_xxx`
-- 错误信息与现有行为基本等价
+- 阶段 0 的 alias 基线测试仍全部通过
 
 ## 阶段 3：迁移 report，拆开业务与 TUI
 
 目标：解决最典型的 I/O 耦合样板。
 
+现有代码已有部分分层基础，可以利用：
+
+- `write_to_report()`（`report.rs:247`）：已是静默写入，无打印，可直接提升为 `ReportService::write()`，是迁移的最小起步点
+- `handle_check()`/`handle_search()`（`report.rs:1051/1092`）：已用只读引用 `&YamlConfig`，逻辑相对干净
+- `handle_report_tui()`（`report.rs:119`）：已明确分离为 TUI 入口，不需要重新设计边界
+
 工作项：
 
-1. 将 `report.rs` 拆成三层：
+1. 从 `write_to_report` → `ReportService::write()` 开始，逐函数按 §6.5 模式迁移
+2. 将 `report.rs` 拆成三层：
    - `ReportService`: 写日报、查最近内容、搜索、元数据更新
    - `ReportStore`: 文件读写、settings.json、路径处理
-   - `ReportTuiAdapter`: 预填内容、编辑器启动、提交回写
-2. 明确哪些逻辑属于核心：
+   - `ReportTuiAdapter`: 预填内容、编辑器启动、提交回写（保留在 CLI/TUI 层）
+3. 明确哪些逻辑属于核心：
    - `write/check/search/new/sync/push/pull/set-url/open`
-3. 明确哪些逻辑属于表现层：
-   - 打开 Markdown 编辑器
+4. 明确哪些逻辑属于表现层：
+   - 打开 Markdown 编辑器（调用 `tui::editor_markdown`）
    - 渲染提示文本
-4. 为 Git push/pull 建立单独错误映射
+5. 为 Git push/pull 建立单独错误映射（映射到 `JError::ExternalCommand` / `JError::Network`）
 
 验收标准：
 
 - `reportctl` 主流程可经由 `j-core`
 - `j report` 的无参数 TUI 流程仍可用
 - `j-core` 可以在不启动 TUI 的情况下完成日报读写和查询
+- 阶段 0 的 report 基线测试仍全部通过
 
 ## 阶段 4：迁移 script/open/system/time/update
 
@@ -601,10 +703,13 @@ SubCmd -> TryInto<j_core::Command> -> dispatcher.dispatch()
 
 - 迁移后 `YamlConfig::save()` 的锁语义丢失
 
+具体原因：`save()` 当前通过 `flock`（`yaml_config.rs:183`）实现进程级独占文件锁，锁的生命周期绑定在文件描述符上，函数返回时自动释放。这是一个正确的跨进程互斥机制。一旦把 `YamlConfig` 包进 `Arc<dyn ConfigStore>` 并允许多个调用点持有引用，flock 的独占语义可能被绕过（多个 `Arc` 克隆各自打开文件、各自加锁）。
+
 应对：
 
-- 将现有锁逻辑原样保留并补测试
-- 在 store 层封装保存行为，避免业务层绕写
+- 阶段 1-3 使用 `Arc<Mutex<YamlConfig>>`，通过内存锁序列化所有 `save()` 调用，flock 作为跨进程保护层继续有效
+- 在 store 层封装保存行为，业务层只调用 service，不直接调用 `config.save()`
+- trait 化推迟到阶段 4+，届时 `ConfigStore::save()` 的实现必须保留 flock 语义
 
 ---
 
@@ -650,9 +755,11 @@ SubCmd -> TryInto<j_core::Command> -> dispatcher.dispatch()
 
 ### Task 1：workspace 与 j-core 初始化
 
-- 调整根 `Cargo.toml`
-- 新建 `crates/j-core`
+- ~~调整根 `Cargo.toml`~~（workspace 已存在，只需在 `members` 中追加 `"crates/j-core"`）
+- 新建 `crates/j-core/`
 - 搭建最小 `lib.rs` / `error.rs` / `command/mod.rs`
+- 初始化 `AppContext`（阶段 1 简化版：`Arc<Mutex<YamlConfig>>` + `AppPaths`）
+- 确认 `crates/j-core/Cargo.toml` 依赖列表中无终端渲染相关 crate
 
 ### Task 2：迁移配置模型
 
