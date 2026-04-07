@@ -1,22 +1,7 @@
 [
   {
-    "id": "1",
-    "content": "修改 tauri.conf.json 增加窗口高度到 400px",
-    "status": "completed"
-  },
-  {
-    "id": "2",
-    "content": "修改 App.tsx 添加搜索结果列表渲染",
-    "status": "completed"
-  },
-  {
-    "id": "3",
-    "content": "修改 globals.css 添加布局和结果列表样式",
-    "status": "completed"
-  },
-  {
-    "id": "4",
-    "content": "测试构建验证效果",
+    "id": "5",
+    "content": "删除 GUI FFI 函数",
     "status": "completed"
   }
 ]

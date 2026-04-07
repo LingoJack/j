@@ -2,6 +2,5 @@
 //! 所有函数返回 Result，不使用 info!/error! 宏输出
 
 pub mod alias;
-pub mod executor;
 pub mod open;
 pub mod search;

@@ -243,16 +243,6 @@ pub async fn call_openai_stream_async(
     Ok(full_content)
 }
 
-/// GUI 用：非流式 API 调用（简单封装）
-pub async fn call_openai_simple(
-    provider: &ModelProvider,
-    messages: &[ChatMessage],
-    system_prompt: Option<&str>,
-) -> Result<String, String> {
-    // 复用流式调用，但不输出中间结果
-    call_openai_stream_async(provider, messages, system_prompt, &mut |_| {}).await
-}
-
 // ==================== 宽松反序列化结构（兼容非标准 finish_reason）====================
 
 /// 宽松版 tool call function
