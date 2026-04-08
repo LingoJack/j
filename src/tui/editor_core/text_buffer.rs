@@ -270,11 +270,26 @@ impl TextBuffer {
 
     /// 在当前光标位置插入字符串
     pub fn insert_str(&mut self, s: &str) {
-        for ch in s.chars() {
-            if ch == '\n' {
-                self.insert_newline();
-            } else {
-                self.insert_char(ch);
+        if !s.contains('\n') {
+            // 无换行符：批量插入，避免逐字符重建 Vec<char>
+            let (row, col) = self.cursor;
+            if let Some(line) = self.lines.get_mut(row) {
+                let byte_offset = line
+                    .char_indices()
+                    .nth(col)
+                    .map(|(i, _)| i)
+                    .unwrap_or(line.len());
+                line.insert_str(byte_offset, s);
+                self.cursor.1 = col + s.chars().count();
+                self.modified = true;
+            }
+        } else {
+            for ch in s.chars() {
+                if ch == '\n' {
+                    self.insert_newline();
+                } else {
+                    self.insert_char(ch);
+                }
             }
         }
     }

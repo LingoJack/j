@@ -104,39 +104,66 @@ impl SearchState {
     }
 
     /// 高亮行中的搜索匹配
-    pub fn highlight_line(&self, line_idx: usize, line: &str, theme: &Theme) -> Vec<Span<'static>> {
-        let line_matches: Vec<_> = self.matches.iter().filter(|m| m.line == line_idx).collect();
+    ///
+    /// `line` 可能是视觉行片段（折行后的子串），`char_offset` 是该片段
+    /// 在逻辑行中的字符起始偏移，用于将匹配坐标映射到片段内坐标。
+    pub fn highlight_line(
+        &self,
+        line_idx: usize,
+        line: &str,
+        theme: &Theme,
+        char_offset: usize,
+    ) -> Vec<Span<'static>> {
+        let normal_style = Style::default().fg(theme.text_normal);
+        let highlight_style = Style::default()
+            .fg(Color::Black)
+            .bg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
+
+        let line_matches = if let Some(&(start, count)) = self.line_index.get(&line_idx) {
+            &self.matches[start..start + count]
+        } else {
+            return vec![Span::styled(line.to_string(), normal_style)];
+        };
 
         if line_matches.is_empty() || self.pattern.is_empty() {
-            return vec![Span::styled(
-                line.to_string(),
-                Style::default().fg(theme.text_normal),
-            )];
+            return vec![Span::styled(line.to_string(), normal_style)];
         }
 
-        let mut spans = Vec::new();
-        let mut last_end = 0;
         let chars: Vec<char> = line.chars().collect();
+        let char_end = char_offset + chars.len();
+
+        // 筛选与当前片段重叠的匹配，并裁剪到片段范围内
+        let mut spans = Vec::new();
+        let mut last_local = 0;
 
         for m in line_matches {
-            if m.start > last_end {
-                let text: String = chars[last_end..m.start].iter().collect();
-                spans.push(Span::styled(text, Style::default().fg(theme.text_normal)));
+            // 跳过不与片段重叠的匹配
+            if m.end <= char_offset || m.start >= char_end {
+                continue;
             }
-            let match_text: String = chars[m.start..m.end].iter().collect();
-            spans.push(Span::styled(
-                match_text,
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ));
-            last_end = m.end;
+            // 裁剪到片段内的局部坐标
+            let local_start = m.start.saturating_sub(char_offset).min(chars.len());
+            let local_end = m.end.saturating_sub(char_offset).min(chars.len());
+
+            if local_start > last_local {
+                let text: String = chars[last_local..local_start].iter().collect();
+                spans.push(Span::styled(text, normal_style));
+            }
+            if local_start < local_end {
+                let match_text: String = chars[local_start..local_end].iter().collect();
+                spans.push(Span::styled(match_text, highlight_style));
+            }
+            last_local = local_end;
         }
 
-        if last_end < chars.len() {
-            let text: String = chars[last_end..].iter().collect();
-            spans.push(Span::styled(text, Style::default().fg(theme.text_normal)));
+        if last_local < chars.len() {
+            let text: String = chars[last_local..].iter().collect();
+            spans.push(Span::styled(text, normal_style));
+        }
+
+        if spans.is_empty() {
+            return vec![Span::styled(line.to_string(), normal_style)];
         }
 
         spans
@@ -174,5 +201,55 @@ mod tests {
         search.prev_match();
         let m = search.current_match().unwrap();
         assert_eq!(m.start, 0);
+    }
+
+    #[test]
+    fn test_search_chinese() {
+        let mut search = SearchState::new();
+        let lines = vec!["你好世界，你好宇宙".to_string()];
+
+        let count = search.search("你好", &lines);
+        assert_eq!(count, 2);
+
+        let m = search.current_match().unwrap();
+        assert_eq!(m.start, 0);
+        assert_eq!(m.end, 2);
+
+        search.next_match();
+        let m = search.current_match().unwrap();
+        assert_eq!(m.start, 5);
+        assert_eq!(m.end, 7);
+    }
+
+    #[test]
+    fn test_highlight_line_with_offset() {
+        let mut search = SearchState::new();
+        // 逻辑行 "hello world hello" 被折行成两个视觉行
+        let lines = vec!["hello world hello".to_string()];
+        search.search("hello", &lines);
+        assert_eq!(search.match_count(), 2);
+
+        let theme = Theme::dark();
+
+        // 模拟第二个视觉行片段 "d hello"，char_offset = 10
+        let spans = search.highlight_line(0, "d hello", &theme, 10);
+        // 应该高亮 "hello" (local 2..7)
+        assert!(spans.len() >= 2);
+    }
+
+    #[test]
+    fn test_highlight_chinese_no_panic() {
+        let mut search = SearchState::new();
+        let lines = vec!["测试中文搜索功能".to_string()];
+        search.search("中文", &lines);
+
+        let theme = Theme::dark();
+        // 传入完整行，不应 panic
+        let spans = search.highlight_line(0, "测试中文搜索功能", &theme, 0);
+        assert!(!spans.is_empty());
+
+        // 传入片段（模拟折行），也不应 panic
+        let spans = search.highlight_line(0, "搜索功能", &theme, 4);
+        assert!(!spans.is_empty());
     }
 }

@@ -2,6 +2,8 @@
 //!
 //! 实现简单的撤销/重做栈。
 
+use std::collections::VecDeque;
+
 /// 历史记录快照
 #[derive(Debug, Clone)]
 pub struct Snapshot {
@@ -30,7 +32,7 @@ impl Snapshot {
 #[derive(Debug, Clone)]
 pub struct History {
     /// 历史栈
-    stack: Vec<Snapshot>,
+    stack: VecDeque<Snapshot>,
     /// 当前位置指针
     cursor: usize,
     /// 最大历史记录数
@@ -47,7 +49,7 @@ impl History {
     /// 创建新的历史管理器
     pub fn new() -> Self {
         Self {
-            stack: Vec::new(),
+            stack: VecDeque::new(),
             cursor: 0,
             max_size: 100,
         }
@@ -61,12 +63,12 @@ impl History {
         }
 
         // 推入新快照
-        self.stack.push(snapshot);
+        self.stack.push_back(snapshot);
         self.cursor = self.stack.len();
 
-        // 如果超出最大容量，移除最旧的记录
+        // 如果超出最大容量，移除最旧的记录（O(1)）
         if self.stack.len() > self.max_size {
-            self.stack.remove(0);
+            self.stack.pop_front();
             self.cursor = self.cursor.saturating_sub(1);
         }
     }

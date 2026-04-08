@@ -312,7 +312,7 @@ impl MarkdownRenderer {
             // 普通续行
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
             if !search.pattern.is_empty() && search.match_count() > 0 {
-                spans.extend(search.highlight_line(logical_line, text, &self.theme));
+                spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
             } else {
                 spans.push(Span::styled(
                     text.clone(),
@@ -334,7 +334,7 @@ impl MarkdownRenderer {
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
             if !search.pattern.is_empty() && search.match_count() > 0 {
-                spans.extend(search.highlight_line(logical_line, &truncated, &self.theme));
+                spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             } else {
                 spans.push(Span::styled(truncated, self.style(self.theme.text_normal)));
             }
@@ -418,7 +418,7 @@ impl MarkdownRenderer {
 
         // 搜索高亮
         if !search.pattern.is_empty() && search.match_count() > 0 {
-            spans.extend(search.highlight_line(vl.logical_line, text, &self.theme));
+            spans.extend(search.highlight_line(vl.logical_line, text, &self.theme, vl.start_col));
             return Line::from(spans).patch_style(Style::default().bg(line_num_bg));
         }
 
@@ -584,6 +584,11 @@ impl MarkdownRenderer {
 
     /// 查找代码块范围
     fn find_code_block_range(&self, line_idx: usize, lines: &[String]) -> Option<(usize, usize)> {
+        // 优先使用缓存
+        if self.code_block_cache.valid {
+            return self.code_block_cache.get_block_range(line_idx);
+        }
+
         let mut in_block = false;
         let mut block_start = 0;
 
@@ -648,12 +653,13 @@ impl MarkdownRenderer {
         let mut max_width = 0;
         for i in (start_idx + 1)..end_idx {
             if let Some(line) = lines.get(i) {
-                let chars: Vec<char> = line.chars().collect();
-                let visible_chars: Vec<char> =
-                    chars.iter().skip(self.horizontal_scroll).copied().collect();
-                let visible_line: String = visible_chars.iter().collect();
-                let width = display_width(&visible_line);
-                max_width = max_width.max(width);
+                if self.horizontal_scroll == 0 {
+                    max_width = max_width.max(display_width(line));
+                } else {
+                    // 跳过 horizontal_scroll 个字符后计算宽度
+                    let visible: String = line.chars().skip(self.horizontal_scroll).collect();
+                    max_width = max_width.max(display_width(&visible));
+                }
             }
         }
         max_width.max(10)
