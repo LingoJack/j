@@ -41,7 +41,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
 
         // 打开 TUI 编辑器让用户修改
         let initial_lines: Vec<String> = existing_content.lines().map(|l| l.to_string()).collect();
-        match crate::tui::editor::open_multiline_editor_with_content(
+        match crate::tui::editor_markdown::open_script_editor(
             &format!("📝 编辑脚本: {}", name),
             &initial_lines,
         ) {
@@ -78,7 +78,7 @@ pub fn handle_concat(name: &str, content: &[String], config: &mut YamlConfig) {
             wait_for_key_template(),
         ];
 
-        match crate::tui::editor::open_multiline_editor_with_content(
+        match crate::tui::editor_markdown::open_script_editor(
             &format!("📝 编写脚本: {}", name),
             &initial_lines,
         ) {

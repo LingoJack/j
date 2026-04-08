@@ -175,10 +175,9 @@ fn handle_report_tui(config: &mut YamlConfig) {
     // 打开带初始内容的编辑器（NORMAL 模式）
     // 使用默认主题
     let theme = Theme::from_name(&ThemeName::default());
-    let content_str = initial_lines.join("\n");
     match crate::tui::editor_markdown::open_markdown_editor_with_content(
         "编辑日报",
-        &content_str,
+        &initial_lines,
         &theme,
     ) {
         Ok(Some(text)) => {
@@ -635,10 +634,9 @@ fn handle_open_report(config: &YamlConfig) {
 
     // 用 TUI 编辑器打开全文（NORMAL 模式）
     let theme = Theme::from_name(&ThemeName::default());
-    let content_str = lines.join("\n");
     match crate::tui::editor_markdown::open_markdown_editor_with_content(
         "编辑日报文件",
-        &content_str,
+        &lines,
         &theme,
     ) {
         Ok(Some(text)) => {

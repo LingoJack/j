@@ -91,15 +91,6 @@ impl SearchState {
         self.matches.len()
     }
 
-    /// 当前匹配索引（1-based）
-    pub fn current_index_display(&self) -> usize {
-        if self.matches.is_empty() {
-            0
-        } else {
-            self.current_index + 1
-        }
-    }
-
     /// 高亮行中的搜索匹配
     pub fn highlight_line(&self, line_idx: usize, line: &str, theme: &Theme) -> Vec<Span<'static>> {
         let line_matches: Vec<_> = self.matches.iter().filter(|m| m.line == line_idx).collect();
@@ -137,13 +128,6 @@ impl SearchState {
         }
 
         spans
-    }
-
-    /// 清空搜索
-    pub fn clear(&mut self) {
-        self.pattern.clear();
-        self.matches.clear();
-        self.current_index = 0;
     }
 }
 

@@ -87,48 +87,6 @@ impl MarkdownEditor {
         }
     }
 
-    /// 创建带指定初始模式的编辑器
-    pub fn with_mode(title: &str, content: &str, theme: Theme, initial_mode: Mode) -> Self {
-        let mut editor = Self::new(title, content, theme);
-        editor.vim.set_mode(initial_mode);
-        editor
-    }
-
-    /// 获取当前模式
-    pub fn mode(&self) -> &Mode {
-        self.vim.mode()
-    }
-
-    /// 获取光标位置（逻辑）
-    pub fn cursor(&self) -> (usize, usize) {
-        self.buffer.cursor()
-    }
-
-    /// 获取光标所在行
-    pub fn cursor_line(&self) -> usize {
-        self.buffer.cursor().0
-    }
-
-    /// 获取光标所在列
-    pub fn cursor_col(&self) -> usize {
-        self.buffer.cursor().1
-    }
-
-    /// 获取所有行
-    pub fn lines(&self) -> &[String] {
-        self.buffer.lines()
-    }
-
-    /// 获取可变缓冲区引用
-    pub fn buffer_mut(&mut self) -> &mut TextBuffer {
-        &mut self.buffer
-    }
-
-    /// 获取缓冲区引用
-    pub fn buffer(&self) -> &TextBuffer {
-        &self.buffer
-    }
-
     /// 获取光标所在的视觉行
     pub fn cursor_visual_line(&self) -> usize {
         let (row, col) = self.buffer.cursor();
@@ -180,36 +138,6 @@ impl MarkdownEditor {
             let new_col = current_col.min(end_col.saturating_sub(1)).max(start_col);
             self.buffer.set_cursor(logical_line, new_col);
         }
-    }
-
-    /// 获取视觉行总数
-    pub fn visual_line_count(&self) -> usize {
-        self.wrap.visual_line_count()
-    }
-
-    /// 设置折行宽度
-    pub fn set_wrap_width(&mut self, width: usize) {
-        self.wrap.set_width(width);
-    }
-
-    /// 设置折行开关
-    pub fn set_wrap_enabled(&mut self, enabled: bool) {
-        self.wrap.set_enabled(enabled);
-    }
-
-    /// 刷新折行缓存
-    pub fn refresh_wrap(&mut self) {
-        self.wrap.rebuild_if_needed(self.buffer.lines());
-    }
-
-    /// 获取文本内容
-    pub fn content(&self) -> String {
-        self.buffer.to_string()
-    }
-
-    /// 是否已修改
-    pub fn is_modified(&self) -> bool {
-        self.buffer.is_modified()
     }
 
     // ========== 输入处理 ==========
@@ -621,58 +549,6 @@ pub fn open_markdown_editor_with_content(
     initial_lines: &[String],
     theme: &Theme,
 ) -> io::Result<Option<String>> {
-    terminal::enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
     let content = initial_lines.join("\n");
-    let result = open_markdown_editor_on_terminal_internal(
-        &mut terminal,
-        title,
-        &content,
-        theme,
-        Mode::Normal,
-    );
-
-    terminal::disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-
-    result
-}
-
-/// 内部函数：支持指定初始模式
-fn open_markdown_editor_on_terminal_internal(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    title: &str,
-    content: &str,
-    theme: &Theme,
-    initial_mode: Mode,
-) -> io::Result<Option<String>> {
-    let mut editor = MarkdownEditor::with_mode(title, content, theme.clone(), initial_mode);
-
-    loop {
-        let size = terminal.size()?;
-        let area = Rect::new(0, 0, size.width, size.height);
-
-        terminal.draw(|f| {
-            editor.render(f, area);
-        })?;
-
-        if event::poll(std::time::Duration::from_millis(16))? {
-            let evt = event::read()?;
-
-            if let Event::Key(key) = evt {
-                let input = Input::from_keycode(key.code, key.modifiers);
-
-                match editor.handle_input(&input) {
-                    EditorAction::Submit(content) => return Ok(Some(content)),
-                    EditorAction::Cancel => return Ok(None),
-                    EditorAction::Continue => {}
-                }
-            }
-        }
-    }
+    open_markdown_editor(title, &content, theme)
 }

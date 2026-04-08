@@ -2,9 +2,6 @@
 //!
 //! 独立于任何 UI 库的文本存储和编辑操作。
 
-#[allow(unused_imports)]
-use std::ops::Range;
-
 /// 光标位置 (行号, 列号)
 pub type Cursor = (usize, usize);
 
@@ -15,8 +12,6 @@ pub struct TextBuffer {
     lines: Vec<String>,
     /// 光标位置 (行, 列)
     cursor: Cursor,
-    /// 选择起始位置
-    selection_start: Option<Cursor>,
     /// 是否已修改
     modified: bool,
 }
@@ -33,7 +28,6 @@ impl TextBuffer {
         Self {
             lines: vec![String::new()],
             cursor: (0, 0),
-            selection_start: None,
             modified: false,
         }
     }
@@ -49,7 +43,6 @@ impl TextBuffer {
         Self {
             lines,
             cursor: (0, 0),
-            selection_start: None,
             modified: false,
         }
     }
@@ -91,21 +84,6 @@ impl TextBuffer {
             .get(self.cursor.0)
             .map(|l| l.chars().count())
             .unwrap_or(0)
-    }
-
-    /// 是否已修改
-    pub fn is_modified(&self) -> bool {
-        self.modified
-    }
-
-    /// 设置修改标记
-    pub fn set_modified(&mut self, modified: bool) {
-        self.modified = modified;
-    }
-
-    /// 转换为字符串
-    pub fn to_string(&self) -> String {
-        self.lines.join("\n")
     }
 
     // ========== 光标移动 ==========
@@ -273,11 +251,6 @@ impl TextBuffer {
         self.cursor.1 = col;
     }
 
-    /// 移动光标到指定位置
-    pub fn move_cursor_to(&mut self, row: usize, col: usize) {
-        self.set_cursor(row, col);
-    }
-
     // ========== 文本编辑 ==========
 
     /// 在当前光标位置插入字符
@@ -423,97 +396,6 @@ impl TextBuffer {
         self.modified = true;
     }
 
-    // ========== 选择操作 ==========
-
-    /// 开始选择
-    pub fn start_selection(&mut self) {
-        self.selection_start = Some(self.cursor);
-    }
-
-    /// 结束选择
-    pub fn end_selection(&mut self) {
-        self.selection_start = None;
-    }
-
-    /// 获取选择范围
-    pub fn get_selection(&self) -> Option<(Cursor, Cursor)> {
-        self.selection_start.map(|start| {
-            if start.0 < self.cursor.0 || (start.0 == self.cursor.0 && start.1 < self.cursor.1) {
-                (start, self.cursor)
-            } else {
-                (self.cursor, start)
-            }
-        })
-    }
-
-    /// 获取选择的文本
-    pub fn get_selection_text(&self) -> Option<String> {
-        let (start, end) = self.get_selection()?;
-        if start.0 == end.0 {
-            // 同一行
-            let line = self.lines.get(start.0)?;
-            let chars: Vec<char> = line.chars().collect();
-            Some(chars[start.1..end.1].iter().collect())
-        } else {
-            // 多行
-            let mut result = String::new();
-            for i in start.0..=end.0 {
-                if let Some(line) = self.lines.get(i) {
-                    if i == start.0 {
-                        let chars: Vec<char> = line.chars().collect();
-                        result.push_str(&chars[start.1..].iter().collect::<String>());
-                    } else if i == end.0 {
-                        let chars: Vec<char> = line.chars().collect();
-                        result.push_str(&chars[..end.1].iter().collect::<String>());
-                    } else {
-                        result.push_str(line);
-                    }
-                    if i < end.0 {
-                        result.push('\n');
-                    }
-                }
-            }
-            Some(result)
-        }
-    }
-
-    /// 删除选择的内容
-    pub fn delete_selection(&mut self) {
-        if let Some((start, end)) = self.get_selection() {
-            if start.0 == end.0 {
-                // 同一行
-                if let Some(line) = self.lines.get_mut(start.0) {
-                    let chars: Vec<char> = line.chars().collect();
-                    let mut new_chars: Vec<char> = chars.iter().take(start.1).copied().collect();
-                    new_chars.extend(chars.iter().skip(end.1).copied());
-                    *line = new_chars.into_iter().collect();
-                }
-            } else {
-                // 多行：保留第一行的前半部分和最后一行的后半部分
-                let first_part: String = self
-                    .lines
-                    .get(start.0)
-                    .map(|l| l.chars().take(start.1).collect())
-                    .unwrap_or_default();
-                let last_part: String = self
-                    .lines
-                    .get(end.0)
-                    .map(|l| l.chars().skip(end.1).collect())
-                    .unwrap_or_default();
-
-                // 删除从 start.0 到 end.0 的所有行
-                self.lines.drain(start.0..=end.0);
-
-                // 插入合并后的行
-                let merged = format!("{}{}", first_part, last_part);
-                self.lines.insert(start.0, merged);
-            }
-            self.cursor = start;
-            self.selection_start = None;
-            self.modified = true;
-        }
-    }
-
     // ========== 批量操作 ==========
 
     /// 替换所有行（用于撤销/重做）
@@ -532,6 +414,12 @@ impl TextBuffer {
     /// 获取快照（用于撤销）
     pub fn snapshot(&self) -> Vec<String> {
         self.lines.clone()
+    }
+}
+
+impl std::fmt::Display for TextBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.lines.join("\n"))
     }
 }
 
