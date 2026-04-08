@@ -3,7 +3,6 @@
 //! 将逻辑行转换为视觉行，支持自动折行功能。
 
 use crate::util::text::display_width;
-use ratatui::style::Style;
 
 /// 视觉行：一个逻辑行可能拆分为多个视觉行
 #[derive(Debug, Clone, PartialEq)]
