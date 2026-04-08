@@ -7,6 +7,31 @@ use crossterm::{
 };
 use std::io::{self, Write};
 
+/// 尝试获取 GitHub 认证 token
+/// 优先级: GITHUB_TOKEN 环境变量 > gh auth token
+fn get_github_auth_token() -> Option<String> {
+    // 方法1: 检查 GITHUB_TOKEN 环境变量
+    if let Ok(token) = std::env::var("GITHUB_TOKEN")
+        && !token.is_empty()
+    {
+        return Some(token);
+    }
+
+    // 方法2: 尝试使用 gh auth token
+    if let Ok(output) = std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        && output.status.success()
+    {
+        let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !token.is_empty() {
+            return Some(token);
+        }
+    }
+
+    None
+}
+
 /// 处理 update 命令
 pub fn handle_update(check_only: bool, interactive: bool) {
     match INSTALL_SOURCE {
@@ -32,11 +57,19 @@ fn handle_github_update(check_only: bool, interactive: bool) {
 fn check_for_update() {
     println!("{}", "正在检查更新...".yellow());
 
-    match self_update::backends::github::ReleaseList::configure()
-        .repo_owner("LingoJack")
-        .repo_name("j")
-        .build()
-    {
+    let auth_token = get_github_auth_token();
+    if auth_token.is_some() {
+        println!("{}", "使用 GitHub 认证...".dimmed());
+    }
+
+    let mut binding = self_update::backends::github::ReleaseList::configure();
+    let mut binding = binding.repo_owner("LingoJack").repo_name("j");
+
+    if let Some(ref token) = auth_token {
+        binding = binding.auth_token(token);
+    }
+
+    match binding.build() {
         Ok(release_list) => match release_list.fetch() {
             Ok(releases) => {
                 if let Some(latest) = releases.first() {
@@ -54,6 +87,10 @@ fn check_for_update() {
             }
             Err(e) => {
                 println!("{} {}", "检查更新失败:".red(), e);
+                println!("请尝试手动更新:");
+                println!(
+                    "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
+                );
             }
         },
         Err(e) => {
@@ -172,16 +209,25 @@ fn perform_update(interactive: bool) {
 
 /// 内部更新逻辑（假设已有权限）
 fn perform_update_internal(target: &str, interactive: bool) {
-    let result = self_update::backends::github::Update::configure()
+    let auth_token = get_github_auth_token();
+    if auth_token.is_some() {
+        println!("{}", "使用 GitHub 认证...".dimmed());
+    }
+
+    let mut binding = self_update::backends::github::Update::configure();
+    let mut binding = binding
         .repo_owner("LingoJack")
         .repo_name("j")
         .bin_name("j")
         .show_download_progress(true)
         .current_version(VERSION)
-        .target(target)
-        .build();
+        .target(target);
 
-    match result {
+    if let Some(ref token) = auth_token {
+        binding = binding.auth_token(token);
+    }
+
+    match binding.build() {
         Ok(updater) => match updater.update() {
             Ok(status) => {
                 println!(
@@ -196,11 +242,21 @@ fn perform_update_internal(target: &str, interactive: bool) {
                 }
             }
             Err(e) => {
-                println!("{} {}", "更新失败:".red(), e);
-                println!("请尝试手动更新:");
-                println!(
-                    "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
-                );
+                let err_str = e.to_string();
+                if err_str.contains("403") || err_str.contains("rate limit") {
+                    println!("{} {}", "更新失败:".red(), e);
+                    println!(
+                        "{}",
+                        "GitHub API 请求被限流，尝试使用 curl 方式更新...".yellow()
+                    );
+                    perform_update_curl(target, interactive);
+                } else {
+                    println!("{} {}", "更新失败:".red(), e);
+                    println!("请尝试手动更新:");
+                    println!(
+                        "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
+                    );
+                }
             }
         },
         Err(e) => {
@@ -452,6 +508,205 @@ fn handle_cargo_update(check_only: bool, interactive: bool) {
 fn show_unknown_source_hint(interactive: bool) {
     println!("{}", "无法确定安装来源，尝试通过 cargo 更新...".yellow());
     handle_cargo_update(false, interactive);
+}
+
+/// 使用 curl 方式下载更新（当 self_update 因 API 限流失败时的后备方案）
+/// 模仿 install.sh 的逻辑：先获取最新版本号，再下载 tarball
+fn perform_update_curl(target: &str, interactive: bool) {
+    // 获取最新版本号
+    let version = get_latest_version_curl();
+    let version_display = version.as_deref().unwrap_or("未知").to_string();
+    println!("最新版本: {}", version_display.cyan());
+
+    let version = match version {
+        Some(v) => v,
+        None => {
+            println!("{}", "无法获取最新版本号".red());
+            println!("请尝试手动更新:");
+            println!(
+                "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
+            );
+            return;
+        }
+    };
+
+    // 确定 j 所在目录
+    let exe_path = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("{} {}", "无法获取当前可执行文件路径:".red(), e);
+            return;
+        }
+    };
+    let exe_dir = match exe_path.parent() {
+        Some(d) => d.to_path_buf(),
+        None => {
+            println!("{}", "无法获取可执行文件所在目录".red());
+            return;
+        }
+    };
+
+    let tag = if version.starts_with('v') {
+        version.clone()
+    } else {
+        format!("v{}", version)
+    };
+
+    let asset_name = format!("j-{}", target);
+    let url = format!(
+        "https://github.com/LingoJack/j/releases/download/{}/{}.tar.gz",
+        tag, asset_name
+    );
+
+    println!("下载地址: {}", url.dimmed());
+
+    // 创建临时目录
+    let tmp_dir = std::env::temp_dir().join("j-update-curl");
+    let _ = std::fs::create_dir_all(&tmp_dir);
+    let tmp_tar = tmp_dir.join(format!("{}.tar.gz", asset_name));
+
+    // 用 curl 下载
+    println!("{}", "正在下载...".yellow());
+    let download = std::process::Command::new("curl")
+        .args(["-fsSL", "--progress-bar", "-o"])
+        .arg(&tmp_tar)
+        .arg(&url)
+        .status();
+
+    match download {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            println!(
+                "{} 退出码: {}",
+                "下载失败".red(),
+                status.code().unwrap_or(-1)
+            );
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return;
+        }
+        Err(e) => {
+            println!("{} {}", "下载失败:".red(), e);
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return;
+        }
+    }
+
+    // 解压
+    println!("{}", "正在解压...".yellow());
+    let extract = std::process::Command::new("tar")
+        .args(["-xzf"])
+        .arg(&tmp_tar)
+        .args(["-C"])
+        .arg(&tmp_dir)
+        .status();
+
+    match extract {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            println!(
+                "{} 退出码: {}",
+                "解压失败".red(),
+                status.code().unwrap_or(-1)
+            );
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return;
+        }
+        Err(e) => {
+            println!("{} {}", "解压失败:".red(), e);
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return;
+        }
+    }
+
+    // 替换二进制文件
+    let src_bin = tmp_dir.join("j");
+    let dst_bin = exe_dir.join("j");
+
+    if !src_bin.exists() {
+        println!("{}", "解压后未找到 j 二进制文件".red());
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return;
+    }
+
+    match std::fs::copy(&src_bin, &dst_bin) {
+        Ok(_) => {
+            // 设置可执行权限
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&dst_bin, std::fs::Permissions::from_mode(0o755));
+            }
+            println!(
+                "{} {}",
+                "更新成功！".green(),
+                format!("版本: {}", version_display).cyan()
+            );
+
+            // 尝试同步安装 j-indicator
+            install_indicator_from_release(&version);
+
+            if interactive {
+                restart_self();
+            }
+        }
+        Err(e) => {
+            println!("{} {}", "安装失败:".red(), e);
+            println!("可能需要管理员权限，请尝试:");
+            println!("  {}", "sudo j update".cyan());
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+/// 通过 curl 获取最新版本号（模仿 install.sh 的多种回退策略）
+fn get_latest_version_curl() -> Option<String> {
+    println!("{}", "正在获取最新版本号...".yellow());
+
+    let auth_token = get_github_auth_token();
+
+    // 方法1: 使用 GitHub API（带认证）
+    let mut api_cmd = std::process::Command::new("curl");
+    api_cmd.args(["-fsSL", "-H", "User-Agent: j-cli-updater"]);
+    if let Some(ref token) = auth_token {
+        api_cmd.args(["-H", &format!("Authorization: token {}", token)]);
+    }
+    api_cmd.arg("https://api.github.com/repos/LingoJack/j/releases/latest");
+
+    if let Ok(output) = api_cmd.output()
+        && output.status.success()
+    {
+        let body = String::from_utf8_lossy(&output.stdout);
+        let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
+        // 从 JSON 中提取 tag_name
+        for line in body.lines() {
+            if line.contains("\"tag_name\"")
+                && let Some(re) = &re
+                && let Some(m) = re.find(line)
+            {
+                return Some(m.as_str().to_string());
+            }
+        }
+    }
+
+    // 方法2: 从 releases 页面解析重定向
+    if let Ok(output) = std::process::Command::new("curl")
+        .args(["-fsSL", "-o", "/dev/null", "-w", "%{url_effective}"])
+        .arg("https://github.com/LingoJack/j/releases/latest")
+        .output()
+        && output.status.success()
+    {
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        // 重定向 URL 格式: https://github.com/LingoJack/j/releases/tag/v12.8.10
+        let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
+        if let Some(re) = re
+            && let Some(m) = re.find(&url)
+        {
+            return Some(m.as_str().to_string());
+        }
+    }
+
+    None
 }
 
 /// 从 GitHub Release 下载并安装 j-indicator 到 j 同目录
