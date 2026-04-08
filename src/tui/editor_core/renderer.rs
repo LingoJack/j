@@ -425,7 +425,7 @@ impl MarkdownRenderer {
         // 处理光标位置
         if let Some(col) = cursor_col {
             // 判断光标是否在当前视觉行范围内
-            let cursor_in_this_vl = col >= vl.start_col && col < vl.end_col.max(vl.start_col + 1);
+            let cursor_in_this_vl = col >= vl.start_col && col <= vl.end_col.max(vl.start_col + 1);
 
             if cursor_in_this_vl {
                 // 光标在当前视觉行内
