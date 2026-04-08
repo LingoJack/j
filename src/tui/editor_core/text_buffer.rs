@@ -87,7 +87,10 @@ impl TextBuffer {
 
     /// 获取当前行的字符数
     pub fn current_line_len(&self) -> usize {
-        self.lines.get(self.cursor.0).map(|l| l.chars().count()).unwrap_or(0)
+        self.lines
+            .get(self.cursor.0)
+            .map(|l| l.chars().count())
+            .unwrap_or(0)
     }
 
     /// 是否已修改
@@ -212,7 +215,11 @@ impl TextBuffer {
             if self.cursor.0 > 0 {
                 // 移动到上一行
                 self.cursor.0 -= 1;
-                self.cursor.1 = self.lines.get(self.cursor.0).map(|l| l.chars().count()).unwrap_or(0);
+                self.cursor.1 = self
+                    .lines
+                    .get(self.cursor.0)
+                    .map(|l| l.chars().count())
+                    .unwrap_or(0);
             }
             return;
         }
@@ -220,11 +227,21 @@ impl TextBuffer {
         let mut col = self.cursor.1;
 
         // 如果在空白处，先跳过空白
-        while col > 0 && chars.get(col - 1).map(|c| c.is_whitespace()).unwrap_or(false) {
+        while col > 0
+            && chars
+                .get(col - 1)
+                .map(|c| c.is_whitespace())
+                .unwrap_or(false)
+        {
             col -= 1;
         }
         // 跳过单词字符
-        while col > 0 && chars.get(col - 1).map(|c| !c.is_whitespace()).unwrap_or(false) {
+        while col > 0
+            && chars
+                .get(col - 1)
+                .map(|c| !c.is_whitespace())
+                .unwrap_or(false)
+        {
             col -= 1;
         }
 
@@ -473,16 +490,20 @@ impl TextBuffer {
                 }
             } else {
                 // 多行：保留第一行的前半部分和最后一行的后半部分
-                let first_part: String = self.lines.get(start.0).map(|l| {
-                    l.chars().take(start.1).collect()
-                }).unwrap_or_default();
-                let last_part: String = self.lines.get(end.0).map(|l| {
-                    l.chars().skip(end.1).collect()
-                }).unwrap_or_default();
+                let first_part: String = self
+                    .lines
+                    .get(start.0)
+                    .map(|l| l.chars().take(start.1).collect())
+                    .unwrap_or_default();
+                let last_part: String = self
+                    .lines
+                    .get(end.0)
+                    .map(|l| l.chars().skip(end.1).collect())
+                    .unwrap_or_default();
 
                 // 删除从 start.0 到 end.0 的所有行
                 self.lines.drain(start.0..=end.0);
-                
+
                 // 插入合并后的行
                 let merged = format!("{}{}", first_part, last_part);
                 self.lines.insert(start.0, merged);

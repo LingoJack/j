@@ -3,12 +3,12 @@
 //! 完全摆脱 tui-textarea 依赖，支持自动折行、Vim 模式等。
 
 use super::{
-    text_buffer::TextBuffer,
-    wrap_engine::WrapEngine,
-    vim::{Vim, Mode, Transition, Input, Key},
-    search::SearchState,
-    renderer::MarkdownRenderer,
     history::Snapshot,
+    renderer::MarkdownRenderer,
+    search::SearchState,
+    text_buffer::TextBuffer,
+    vim::{Input, Key, Mode, Transition, Vim},
+    wrap_engine::WrapEngine,
 };
 
 use crossterm::{
@@ -61,18 +61,18 @@ impl MarkdownEditor {
         } else {
             Mode::Normal
         };
-        
+
         let mut vim = Vim::new(initial_mode.clone());
         vim.push_snapshot(Snapshot::new(buffer.snapshot()), buffer.cursor());
-        
+
         let mut wrap = WrapEngine::new();
         wrap.rebuild_cache(buffer.lines());
-        
+
         let renderer = MarkdownRenderer::new(theme.clone());
-        
+
         let viewport_width: usize = 80; // 默认值，会在渲染时更新
         wrap.set_width(viewport_width.saturating_sub(6));
-        
+
         Self {
             buffer,
             wrap,
@@ -146,7 +146,8 @@ impl MarkdownEditor {
 
         // 确保目标行的缓存已构建
         let (target_logical, _) = self.wrap.visual_to_logical(target_visual);
-        self.wrap.build_range(self.buffer.lines(), target_logical, target_logical + 1);
+        self.wrap
+            .build_range(self.buffer.lines(), target_logical, target_logical + 1);
 
         if let Some(target_vl) = self.wrap.get_visual_line(target_visual) {
             let logical_line = target_vl.logical_line;
@@ -169,7 +170,8 @@ impl MarkdownEditor {
 
         // 确保目标行的缓存已构建
         let (target_logical, _) = self.wrap.visual_to_logical(target_visual);
-        self.wrap.build_range(self.buffer.lines(), target_logical, target_logical + 1);
+        self.wrap
+            .build_range(self.buffer.lines(), target_logical, target_logical + 1);
 
         if let Some(target_vl) = self.wrap.get_visual_line(target_visual) {
             let logical_line = target_vl.logical_line;
@@ -223,17 +225,13 @@ impl MarkdownEditor {
         }
 
         // 处理撤销
-        if self.vim.mode() == &Mode::Normal 
-            && input.key == Key::Char('u') 
-            && !input.ctrl {
+        if self.vim.mode() == &Mode::Normal && input.key == Key::Char('u') && !input.ctrl {
             self.undo();
             return EditorAction::Continue;
         }
 
         // 处理重做
-        if self.vim.mode() == &Mode::Normal 
-            && input.key == Key::Char('r') 
-            && input.ctrl {
+        if self.vim.mode() == &Mode::Normal && input.key == Key::Char('r') && input.ctrl {
             self.redo();
             return EditorAction::Continue;
         }
@@ -256,8 +254,8 @@ impl MarkdownEditor {
             let is_normal = self.vim.mode() == &Mode::Normal;
             let is_down = matches!(input.key, Key::Down)
                 || (is_normal && matches!(input.key, Key::Char('j')));
-            let is_up = matches!(input.key, Key::Up)
-                || (is_normal && matches!(input.key, Key::Char('k')));
+            let is_up =
+                matches!(input.key, Key::Up) || (is_normal && matches!(input.key, Key::Char('k')));
 
             if is_down && !input.ctrl {
                 self.move_cursor_visual_down();
@@ -277,7 +275,8 @@ impl MarkdownEditor {
             Transition::Mode(new_mode) => {
                 // 如果从 Insert 模式退出，保存 undo 点
                 if old_mode == Mode::Insert && new_mode != Mode::Insert {
-                    self.vim.push_snapshot(Snapshot::new(self.buffer.snapshot()), self.buffer.cursor());
+                    self.vim
+                        .push_snapshot(Snapshot::new(self.buffer.snapshot()), self.buffer.cursor());
                 }
                 self.vim.set_mode(new_mode);
                 self.rebuild_wrap_cache();
@@ -307,7 +306,9 @@ impl MarkdownEditor {
                 let mut cmd = cmd.clone();
                 match &input.key {
                     Key::Char(c) => cmd.push(*c),
-                    Key::Backspace => { cmd.pop(); }
+                    Key::Backspace => {
+                        cmd.pop();
+                    }
                     _ => {}
                 }
                 self.vim.set_mode(Mode::Command(cmd));
@@ -422,7 +423,8 @@ impl MarkdownEditor {
         let render_end = (end_logical + 3).min(line_count).max(cursor_row + 1);
 
         // 为视口范围构建详细视觉行缓存（只构建未缓存的行）
-        self.wrap.build_range(self.buffer.lines(), render_start, render_end);
+        self.wrap
+            .build_range(self.buffer.lines(), render_start, render_end);
 
         // 使用前缀和获取渲染起始的视觉偏移（O(1)，替代旧的 O(n) 循环）
         let visual_offset = self.wrap.visual_offset_of(render_start);
@@ -437,7 +439,11 @@ impl MarkdownEditor {
                 let line = self.renderer.render_visual_line(
                     vl,
                     is_cursor_line,
-                    if is_cursor_line { Some(cursor_col) } else { None },
+                    if is_cursor_line {
+                        Some(cursor_col)
+                    } else {
+                        None
+                    },
                     self.vim.mode(),
                     &self.search,
                     &self.buffer,
@@ -499,7 +505,11 @@ impl MarkdownEditor {
         let mode_str = format!(" {} ", self.vim.mode());
         let (row, col) = self.buffer.cursor();
         let pos_str = format!(" {}:{} ", row + 1, col + 1);
-        let wrap_str = if self.wrap.is_enabled() { " WRAP " } else { " NOWRAP " };
+        let wrap_str = if self.wrap.is_enabled() {
+            " WRAP "
+        } else {
+            " NOWRAP "
+        };
         let hints = " Ctrl+S 保存 | Ctrl+Q 取消 | :wq 提交 ";
 
         let used_width = mode_str.len() + pos_str.len() + wrap_str.len() + hints.len();

@@ -14,7 +14,10 @@ pub struct Snapshot {
 impl Snapshot {
     /// 创建新快照
     pub fn new(lines: Vec<String>) -> Self {
-        Self { lines, cursor: (0, 0) }
+        Self {
+            lines,
+            cursor: (0, 0),
+        }
     }
 
     /// 创建带光标位置的快照
@@ -160,65 +163,62 @@ mod tests {
     use super::*;
 
     fn make_snapshot(text: &str) -> Snapshot {
-        Snapshot::with_cursor(
-            text.lines().map(|l| l.to_string()).collect(),
-            (0, 0),
-        )
+        Snapshot::with_cursor(text.lines().map(|l| l.to_string()).collect(), (0, 0))
     }
 
     #[test]
     fn test_push_and_undo() {
         let mut history = History::new();
-        
+
         history.push(make_snapshot("first"));
         history.push(make_snapshot("second"));
         history.push(make_snapshot("third"));
-        
+
         assert_eq!(history.len(), 3);
         assert!(history.can_undo());
-        
+
         let snap = history.undo().unwrap();
         assert_eq!(snap.lines[0], "second");
-        
+
         let snap = history.undo().unwrap();
         assert_eq!(snap.lines[0], "first");
-        
+
         assert!(!history.can_undo());
     }
 
     #[test]
     fn test_redo() {
         let mut history = History::new();
-        
+
         history.push(make_snapshot("first"));
         history.push(make_snapshot("second"));
-        
+
         history.undo();
         assert!(history.can_redo());
-        
+
         let snap = history.redo().unwrap();
         assert_eq!(snap.lines[0], "second");
-        
+
         assert!(!history.can_redo());
     }
 
     #[test]
     fn test_push_clears_redo() {
         let mut history = History::new();
-        
+
         history.push(make_snapshot("first"));
         history.push(make_snapshot("second"));
         history.push(make_snapshot("third"));
-        
+
         history.undo(); // -> second
         history.undo(); // -> first
-        
+
         // 现在推入新快照，应该清除 third
         history.push(make_snapshot("new"));
-        
+
         assert_eq!(history.len(), 2);
         assert!(!history.can_redo());
-        
+
         let snap = history.undo().unwrap();
         assert_eq!(snap.lines[0], "first");
     }
@@ -226,14 +226,14 @@ mod tests {
     #[test]
     fn test_max_size() {
         let mut history = History::with_max_size(3);
-        
+
         history.push(make_snapshot("1"));
         history.push(make_snapshot("2"));
         history.push(make_snapshot("3"));
         history.push(make_snapshot("4"));
-        
+
         assert_eq!(history.len(), 3);
-        
+
         // 应该丢弃 "1"
         let snap = history.current().unwrap();
         assert_eq!(snap.lines[0], "4");
@@ -242,12 +242,12 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut history = History::new();
-        
+
         history.push(make_snapshot("first"));
         history.push(make_snapshot("second"));
-        
+
         history.clear();
-        
+
         assert!(history.is_empty());
         assert!(!history.can_undo());
         assert!(!history.can_redo());

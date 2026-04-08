@@ -13,8 +13,7 @@ use crate::command::chat::theme::Theme;
 
 // 直接使用 editor_core 的公共 API
 use crate::tui::editor_core::{
-    open_markdown_editor as core_open,
-    open_markdown_editor_on_terminal as core_open_on_terminal,
+    open_markdown_editor as core_open, open_markdown_editor_on_terminal as core_open_on_terminal,
 };
 
 // ========== 公共 API ==========

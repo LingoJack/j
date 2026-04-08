@@ -2,9 +2,9 @@
 //!
 //! 实现 Vim 风格的编辑模式。
 
-use std::fmt;
-use super::text_buffer::TextBuffer;
 use super::history::{History, Snapshot};
+use super::text_buffer::TextBuffer;
+use std::fmt;
 
 /// Vim 模式
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,7 +77,10 @@ pub struct Input {
 
 impl Input {
     /// 从 crossterm 的 KeyCode 创建 Input
-    pub fn from_keycode(code: crossterm::event::KeyCode, modifiers: crossterm::event::KeyModifiers) -> Self {
+    pub fn from_keycode(
+        code: crossterm::event::KeyCode,
+        modifiers: crossterm::event::KeyModifiers,
+    ) -> Self {
         use crossterm::event::{KeyCode, KeyModifiers};
 
         let key = match code {

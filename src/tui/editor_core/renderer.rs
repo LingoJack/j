@@ -8,10 +8,10 @@ use ratatui::{
     text::{Line, Span},
 };
 
+use super::wrap_engine::{RenderBlock, SizedSpan, StyledVisualLine, VisualLine, wrap_spans};
+use super::{search::SearchState, text_buffer::TextBuffer, vim::Mode};
 use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
-use super::wrap_engine::{VisualLine, SizedSpan, RenderBlock, StyledVisualLine, wrap_spans};
-use super::{search::SearchState, text_buffer::TextBuffer, vim::Mode};
 use crate::util::text::display_width;
 
 /// 表格对齐方式
@@ -68,7 +68,7 @@ impl CodeBlockCache {
         self.line_to_block.clear();
         self.block_languages.clear();
         self.line_to_block.resize(lines.len(), None);
-        
+
         let mut in_block = false;
         let mut block_start = 0;
         let mut current_lang = String::new();
@@ -84,7 +84,8 @@ impl CodeBlockCache {
                 } else {
                     // 结束代码块
                     // 记录语言信息
-                    self.block_languages.push((block_start, i, current_lang.clone()));
+                    self.block_languages
+                        .push((block_start, i, current_lang.clone()));
                     // 标记代码块内的所有行
                     for j in block_start..=i {
                         if j < self.line_to_block.len() {
@@ -139,7 +140,7 @@ pub struct MarkdownRenderer {
 impl MarkdownRenderer {
     /// 创建新的渲染器
     pub fn new(theme: Theme) -> Self {
-        Self { 
+        Self {
             theme,
             horizontal_scroll: 0,
             code_block_cache: CodeBlockCache::new(),
@@ -256,7 +257,10 @@ impl MarkdownRenderer {
 
         // 缩进
         if !indent.is_empty() {
-            spans.push(SizedSpan::plain(&indent, self.style(self.theme.text_normal)));
+            spans.push(SizedSpan::plain(
+                &indent,
+                self.style(self.theme.text_normal),
+            ));
         }
 
         // 标题 h1
@@ -321,7 +325,10 @@ impl MarkdownRenderer {
         // 任务列表 - 已完成
         if trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]") {
             let text = trimmed[5..].trim();
-            spans.push(SizedSpan::plain("● ", self.style(self.theme.md_list_bullet)));
+            spans.push(SizedSpan::plain(
+                "● ",
+                self.style(self.theme.md_list_bullet),
+            ));
             spans.extend(self.render_inline_sized(text));
             return RenderBlock::normal(logical_line, spans);
         }
@@ -354,7 +361,9 @@ impl MarkdownRenderer {
             let prefix_style = if level == 1 {
                 self.style(self.theme.text_dim)
             } else {
-                Style::default().fg(self.theme.text_dim).bg(self.theme.bg_primary)
+                Style::default()
+                    .fg(self.theme.text_dim)
+                    .bg(self.theme.bg_primary)
             };
             spans.push(SizedSpan::styled(format!("{} ", prefix), prefix_style));
             spans.extend(self.render_inline_sized(rest));
@@ -378,8 +387,12 @@ impl MarkdownRenderer {
         let is_start = {
             let mut in_block = false;
             for (i, l) in lines.iter().enumerate() {
-                if i >= logical_line { break; }
-                if Self::is_code_fence_line(l) { in_block = !in_block; }
+                if i >= logical_line {
+                    break;
+                }
+                if Self::is_code_fence_line(l) {
+                    in_block = !in_block;
+                }
             }
             !in_block
         };
@@ -402,13 +415,22 @@ impl MarkdownRenderer {
                 (s, w)
             };
             let dash_count = total_width.saturating_sub(left_width + 1).max(1);
-            spans.push(SizedSpan::styled(left_part, self.style_code(self.theme.text_dim)));
-            spans.push(SizedSpan::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)));
+            spans.push(SizedSpan::styled(
+                left_part,
+                self.style_code(self.theme.text_dim),
+            ));
+            spans.push(SizedSpan::styled(
+                "─".repeat(dash_count),
+                self.style_code(self.theme.text_dim),
+            ));
             spans.push(SizedSpan::styled("┐", self.style_code(self.theme.text_dim)));
         } else {
             let dash_count = total_width.saturating_sub(2).max(1);
             spans.push(SizedSpan::styled("└", self.style_code(self.theme.text_dim)));
-            spans.push(SizedSpan::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)));
+            spans.push(SizedSpan::styled(
+                "─".repeat(dash_count),
+                self.style_code(self.theme.text_dim),
+            ));
             spans.push(SizedSpan::styled("┘", self.style_code(self.theme.text_dim)));
         }
 
@@ -422,7 +444,9 @@ impl MarkdownRenderer {
         line_content: &str,
         lines: &[String],
     ) -> RenderBlock {
-        let lang = self.get_code_block_language(logical_line, lines).unwrap_or_default();
+        let lang = self
+            .get_code_block_language(logical_line, lines)
+            .unwrap_or_default();
         let highlighted_spans = highlight_code_line(line_content, &lang, &self.theme);
         let content_width = display_width(line_content);
 
@@ -481,7 +505,9 @@ impl MarkdownRenderer {
         // 表头或数据行
         let is_header = logical_line == ctx.start_idx;
         let content_style = if is_header {
-            Style::default().fg(self.theme.text_bold).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(self.theme.text_bold)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(self.theme.text_normal)
         };
@@ -512,14 +538,17 @@ impl MarkdownRenderer {
     /// render_inline 的 SizedSpan 版本
     fn render_inline_sized(&self, text: &str) -> Vec<SizedSpan> {
         let spans = self.render_inline(text);
-        spans.into_iter().map(|span| {
-            let width = display_width(&span.content);
-            SizedSpan {
-                content: span.content.into_owned(),
-                style: span.style,
-                display_width: width,
-            }
-        }).collect()
+        spans
+            .into_iter()
+            .map(|span| {
+                let width = display_width(&span.content);
+                SizedSpan {
+                    content: span.content.into_owned(),
+                    style: span.style,
+                    display_width: width,
+                }
+            })
+            .collect()
     }
 
     /// 将 RenderBlock 折行为 StyledVisualLine 列表
@@ -606,7 +635,13 @@ impl MarkdownRenderer {
         // ---- 光标行：显示源码 + 光标 ----
         if is_cursor_line {
             return self.render_cursor_visual_line(
-                vl, &line_num_str, line_num_style, cursor_col, mode, search, is_continuation,
+                vl,
+                &line_num_str,
+                line_num_style,
+                cursor_col,
+                mode,
+                search,
+                is_continuation,
             );
         }
 
@@ -620,7 +655,10 @@ impl MarkdownRenderer {
             if !search.pattern.is_empty() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme));
             } else {
-                spans.push(Span::styled(text.clone(), self.style(self.theme.text_normal)));
+                spans.push(Span::styled(
+                    text.clone(),
+                    self.style(self.theme.text_normal),
+                ));
             }
             return Line::from(spans);
         }
@@ -729,7 +767,10 @@ impl MarkdownRenderer {
                 };
 
                 if char_idx_at_cursor < chars.len() {
-                    spans.push(Span::styled(chars[char_idx_at_cursor].to_string(), cursor_style));
+                    spans.push(Span::styled(
+                        chars[char_idx_at_cursor].to_string(),
+                        cursor_style,
+                    ));
                     if char_idx_at_cursor + 1 < chars.len() {
                         let after: String = chars.iter().skip(char_idx_at_cursor + 1).collect();
                         spans.push(Span::styled(after, self.style(self.theme.text_normal)));
@@ -740,11 +781,17 @@ impl MarkdownRenderer {
                 }
             } else {
                 // 光标不在当前视觉行，正常渲染文本
-                spans.push(Span::styled(text.clone(), self.style(self.theme.text_normal)));
+                spans.push(Span::styled(
+                    text.clone(),
+                    self.style(self.theme.text_normal),
+                ));
             }
         } else {
             // 无光标信息（不应该发生，但作为 fallback）
-            spans.push(Span::styled(text.clone(), self.style(self.theme.text_normal)));
+            spans.push(Span::styled(
+                text.clone(),
+                self.style(self.theme.text_normal),
+            ));
         }
 
         Line::from(spans).patch_style(Style::default().bg(self.theme.bg_input))
@@ -785,7 +832,14 @@ impl MarkdownRenderer {
                 return self.render_code_fence_line(line_content, line_idx, lines);
             }
             // 不成对的围栏，渲染为普通文本
-            return self.render_source_line(line_content, line_idx, cursor_line, cursor_col, mode, search);
+            return self.render_source_line(
+                line_content,
+                line_idx,
+                cursor_line,
+                cursor_col,
+                mode,
+                search,
+            );
         }
 
         // 检查是否在完整的代码块内
@@ -793,7 +847,14 @@ impl MarkdownRenderer {
 
         // 当前编辑行 - 显示源码
         if line_idx == cursor_line {
-            return self.render_source_line(line_content, line_idx, cursor_line, cursor_col, mode, search);
+            return self.render_source_line(
+                line_content,
+                line_idx,
+                cursor_line,
+                cursor_col,
+                mode,
+                search,
+            );
         }
 
         // 代码块内的行 - 渲染代码块样式
@@ -832,7 +893,11 @@ impl MarkdownRenderer {
     }
 
     /// 查找完整代码块
-    fn find_complete_code_block(&self, fence_line: usize, lines: &[String]) -> Option<(usize, usize)> {
+    fn find_complete_code_block(
+        &self,
+        fence_line: usize,
+        lines: &[String],
+    ) -> Option<(usize, usize)> {
         let mut in_block = false;
         let mut block_start = 0;
 
@@ -859,7 +924,7 @@ impl MarkdownRenderer {
         if self.code_block_cache.valid {
             return self.code_block_cache.is_in_block(line_idx);
         }
-        
+
         // 回退到旧逻辑
         let mut in_block = false;
         let mut block_start = 0;
@@ -885,9 +950,12 @@ impl MarkdownRenderer {
     fn get_code_block_language(&self, line_idx: usize, lines: &[String]) -> Option<String> {
         // 使用缓存
         if self.code_block_cache.valid {
-            return self.code_block_cache.get_language(line_idx).map(|s| s.to_string());
+            return self
+                .code_block_cache
+                .get_language(line_idx)
+                .map(|s| s.to_string());
         }
-        
+
         // 回退到旧逻辑
         let mut in_block = false;
         for (i, line) in lines.iter().enumerate() {
@@ -937,7 +1005,11 @@ impl MarkdownRenderer {
     }
 
     /// 查找围栏行对应的代码块范围
-    fn find_code_block_range_for_fence(&self, fence_line: usize, lines: &[String]) -> Option<(usize, usize)> {
+    fn find_code_block_range_for_fence(
+        &self,
+        fence_line: usize,
+        lines: &[String],
+    ) -> Option<(usize, usize)> {
         let mut in_block = false;
         let mut block_start = 0;
 
@@ -967,12 +1039,18 @@ impl MarkdownRenderer {
     }
 
     /// 计算代码块内容的最大显示宽度
-    fn calculate_code_block_max_width(&self, start_idx: usize, end_idx: usize, lines: &[String]) -> usize {
+    fn calculate_code_block_max_width(
+        &self,
+        start_idx: usize,
+        end_idx: usize,
+        lines: &[String],
+    ) -> usize {
         let mut max_width = 0;
         for i in (start_idx + 1)..end_idx {
             if let Some(line) = lines.get(i) {
                 let chars: Vec<char> = line.chars().collect();
-                let visible_chars: Vec<char> = chars.iter().skip(self.horizontal_scroll).copied().collect();
+                let visible_chars: Vec<char> =
+                    chars.iter().skip(self.horizontal_scroll).copied().collect();
                 let visible_line: String = visible_chars.iter().collect();
                 let width = display_width(&visible_line);
                 max_width = max_width.max(width);
@@ -1061,7 +1139,9 @@ impl MarkdownRenderer {
         let visible_line: String = visible_chars.iter().collect();
 
         // 获取代码块语言
-        let lang = self.get_code_block_language(line_idx, lines).unwrap_or_default();
+        let lang = self
+            .get_code_block_language(line_idx, lines)
+            .unwrap_or_default();
 
         // 应用语法高亮
         let highlighted_spans = highlight_code_line(&visible_line, &lang, &self.theme);
@@ -1078,15 +1158,24 @@ impl MarkdownRenderer {
         let fill_width = max_width.saturating_sub(content_width);
 
         let mut spans = vec![
-            Span::styled(line_num, Style::default().fg(Color::DarkGray).bg(self.theme.code_bg)),
+            Span::styled(
+                line_num,
+                Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+            ),
             Span::styled("│", self.style_code(self.theme.text_dim)),
         ];
 
         for span in highlighted_spans {
-            spans.push(Span::styled(span.content, span.style.bg(self.theme.code_bg)));
+            spans.push(Span::styled(
+                span.content,
+                span.style.bg(self.theme.code_bg),
+            ));
         }
 
-        spans.push(Span::styled(" ".repeat(fill_width), Style::default().bg(self.theme.code_bg)));
+        spans.push(Span::styled(
+            " ".repeat(fill_width),
+            Style::default().bg(self.theme.code_bg),
+        ));
         spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
 
         Line::from(spans)
@@ -1817,16 +1906,25 @@ mod tests {
         eprintln!("block total_width = {}", block.total_width);
         eprintln!("block spans count = {}", block.spans.len());
         for (i, s) in block.spans.iter().enumerate() {
-            eprintln!("  span[{}]: len={}, dw={}, content_preview='{}'",
-                i, s.content.len(), s.display_width,
-                &s.content[..s.content.len().min(20)]);
+            eprintln!(
+                "  span[{}]: len={}, dw={}, content_preview='{}'",
+                i,
+                s.content.len(),
+                s.display_width,
+                &s.content[..s.content.len().min(20)]
+            );
         }
 
         let styled_vlines = renderer.wrap_block(&block, true, wrap_width);
         eprintln!("styled_vlines count = {}", styled_vlines.len());
         for (i, svl) in styled_vlines.iter().enumerate() {
-            eprintln!("  svl[{}]: dw={}, continuation={}, spans={}",
-                i, svl.display_width, svl.is_continuation, svl.spans.len());
+            eprintln!(
+                "  svl[{}]: dw={}, continuation={}, spans={}",
+                i,
+                svl.display_width,
+                svl.is_continuation,
+                svl.spans.len()
+            );
         }
         assert!(
             styled_vlines.len() >= 3,

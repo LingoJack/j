@@ -154,10 +154,7 @@ mod tests {
     #[test]
     fn test_search() {
         let mut search = SearchState::new();
-        let lines = vec![
-            "hello world".to_string(),
-            "hello universe".to_string(),
-        ];
+        let lines = vec!["hello world".to_string(), "hello universe".to_string()];
 
         let count = search.search("hello", &lines);
         assert_eq!(count, 2);

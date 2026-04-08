@@ -2,8 +2,8 @@
 //!
 //! 将逻辑行转换为视觉行，支持自动折行功能。
 
-use ratatui::style::Style;
 use crate::util::text::display_width;
+use ratatui::style::Style;
 
 /// 视觉行：一个逻辑行可能拆分为多个视觉行
 #[derive(Debug, Clone, PartialEq)]
@@ -417,10 +417,7 @@ impl WrapEngine {
         if !self.enabled {
             return 1;
         }
-        let display_w: usize = line
-            .chars()
-            .map(|c| if c.is_ascii() { 1 } else { 2 })
-            .sum();
+        let display_w: usize = line.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
         if display_w == 0 {
             1
         } else {
@@ -440,7 +437,12 @@ impl WrapEngine {
     }
 
     /// 构建光标行附近的缓存
-    pub fn build_around_cursor(&mut self, lines: &[String], cursor_row: usize, context_lines: usize) {
+    pub fn build_around_cursor(
+        &mut self,
+        lines: &[String],
+        cursor_row: usize,
+        context_lines: usize,
+    ) {
         let start = cursor_row.saturating_sub(context_lines);
         let end = (cursor_row + context_lines + 1).min(lines.len());
         self.build_range(lines, start, end);
@@ -644,10 +646,7 @@ impl WrapEngine {
 
     /// 获取指定逻辑行在前缀和中的视觉偏移（O(1)）
     pub fn visual_offset_of(&self, logical_line: usize) -> usize {
-        self.prefix_sums
-            .get(logical_line)
-            .copied()
-            .unwrap_or(0)
+        self.prefix_sums.get(logical_line).copied().unwrap_or(0)
     }
 
     /// 计算指定逻辑行的视觉行数量（O(1)）
@@ -802,9 +801,9 @@ mod tests {
         engine.set_width(10);
 
         let lines = vec![
-            "Hello".to_string(),           // 1 visual line (row 0)
-            "HelloWorldTest".to_string(),  // 2 visual lines (row 1, 2)
-            "End".to_string(),             // 1 visual line (row 3)
+            "Hello".to_string(),          // 1 visual line (row 0)
+            "HelloWorldTest".to_string(), // 2 visual lines (row 1, 2)
+            "End".to_string(),            // 1 visual line (row 3)
         ];
         engine.rebuild_cache(&lines);
 
@@ -846,7 +845,11 @@ mod tests {
 
         // 折行宽度 40
         let result = wrap_spans(&spans, 40, 0);
-        assert_eq!(result.len(), 2, "80 chars at width 40 should produce 2 lines");
+        assert_eq!(
+            result.len(),
+            2,
+            "80 chars at width 40 should produce 2 lines"
+        );
         assert_eq!(result[0].display_width, 40);
         assert_eq!(result[1].display_width, 40);
         assert!(!result[0].is_continuation);
