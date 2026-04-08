@@ -1047,6 +1047,16 @@ impl MarkdownRenderer {
             ));
         }
 
+        // 非表头、非最后一行的数据行后渲染行间分割线 ├─┼─┤
+        if !is_header && !is_last_data_row {
+            result.push(Self::render_table_border(
+                "     ",
+                &col_widths,
+                border_style,
+                BorderKind::Middle,
+            ));
+        }
+
         // 最后一行后渲染底部边框 └─┴─┘
         if is_last_data_row {
             result.push(Self::render_table_border(
