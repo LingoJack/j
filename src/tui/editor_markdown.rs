@@ -13,8 +13,8 @@ use crate::command::chat::theme::Theme;
 
 // 直接使用 editor_core 的公共 API
 use crate::tui::editor_core::{
-    open_markdown_editor as core_open,
-    open_markdown_editor_on_terminal as core_open_on_terminal,
+    open_markdown_editor as core_open, open_markdown_editor_on_terminal as core_open_on_terminal,
+    open_markdown_editor_with_content as core_open_with_content,
 };
 
 // ========== 公共 API ==========
@@ -30,7 +30,6 @@ pub fn open_markdown_editor_on_terminal(
 }
 
 /// 打开 Markdown 编辑器（独立终端）
-#[allow(dead_code)]
 pub fn open_markdown_editor(
     title: &str,
     content: &str,
@@ -39,11 +38,18 @@ pub fn open_markdown_editor(
     core_open(title, content, theme)
 }
 
-/// 使用指定内容打开编辑器
+/// 使用指定内容打开编辑器（预填充行，NORMAL 模式启动）
 pub fn open_markdown_editor_with_content(
     title: &str,
-    content: &str,
+    initial_lines: &[String],
     theme: &Theme,
 ) -> io::Result<Option<String>> {
-    core_open(title, content, theme)
+    core_open_with_content(title, initial_lines, theme)
+}
+
+/// 打开脚本编辑器（使用 Dark 主题的便捷函数）
+///
+/// 适用于脚本编辑等不需要外部传入主题的场景
+pub fn open_script_editor(title: &str, initial_lines: &[String]) -> io::Result<Option<String>> {
+    core_open_with_content(title, initial_lines, &Theme::dark())
 }

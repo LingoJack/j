@@ -2,9 +2,9 @@
 //!
 //! 实现 Vim 风格的编辑模式。
 
-use std::fmt;
-use super::text_buffer::TextBuffer;
 use super::history::{History, Snapshot};
+use super::text_buffer::TextBuffer;
+use std::fmt;
 
 /// Vim 模式
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,13 +71,14 @@ pub enum Key {
 pub struct Input {
     pub key: Key,
     pub ctrl: bool,
-    pub alt: bool,
-    pub shift: bool,
 }
 
 impl Input {
     /// 从 crossterm 的 KeyCode 创建 Input
-    pub fn from_keycode(code: crossterm::event::KeyCode, modifiers: crossterm::event::KeyModifiers) -> Self {
+    pub fn from_keycode(
+        code: crossterm::event::KeyCode,
+        modifiers: crossterm::event::KeyModifiers,
+    ) -> Self {
         use crossterm::event::{KeyCode, KeyModifiers};
 
         let key = match code {
@@ -102,8 +103,6 @@ impl Input {
         Self {
             key,
             ctrl: modifiers.contains(KeyModifiers::CONTROL),
-            alt: modifiers.contains(KeyModifiers::ALT),
-            shift: modifiers.contains(KeyModifiers::SHIFT),
         }
     }
 }
@@ -151,26 +150,6 @@ impl Vim {
     /// 设置模式
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
-    }
-
-    /// 获取 yank 寄存器
-    pub fn yank_register(&self) -> &str {
-        &self.yank_register
-    }
-
-    /// 设置 yank 寄存器
-    pub fn set_yank(&mut self, text: String) {
-        self.yank_register = text;
-    }
-
-    /// 获取可视模式起始位置
-    pub fn visual_start(&self) -> (usize, usize) {
-        self.visual_start
-    }
-
-    /// 设置可视模式起始位置
-    pub fn set_visual_start(&mut self, pos: (usize, usize)) {
-        self.visual_start = pos;
     }
 
     /// 处理输入
@@ -488,11 +467,6 @@ impl Vim {
 // ========== 撤销/重做支持 ==========
 
 impl Vim {
-    /// 历史管理器引用
-    pub fn history(&mut self) -> &mut History {
-        &mut self.history
-    }
-
     /// 推入快照
     pub fn push_snapshot(&mut self, snapshot: Snapshot, cursor: (usize, usize)) {
         let snap = Snapshot::with_cursor(snapshot.lines, cursor);
