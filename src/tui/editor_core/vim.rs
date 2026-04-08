@@ -1,0 +1,511 @@
+//! Vim 模式引擎
+//!
+//! 实现 Vim 风格的编辑模式。
+
+use std::fmt;
+use super::text_buffer::TextBuffer;
+use super::history::{History, Snapshot};
+
+/// Vim 模式
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Mode {
+    Normal,
+    Insert,
+    Visual,
+    Operator(char),
+    Command(String),
+    Search(String),
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Normal => write!(f, "NORMAL"),
+            Self::Insert => write!(f, "INSERT"),
+            Self::Visual => write!(f, "VISUAL"),
+            Self::Operator(c) => write!(f, "OPERATOR({})", c),
+            Self::Command(_) => write!(f, "COMMAND"),
+            Self::Search(_) => write!(f, "SEARCH"),
+        }
+    }
+}
+
+impl Mode {
+    /// 获取模式对应的边框颜色
+    pub fn border_color(&self) -> ratatui::style::Color {
+        use ratatui::style::Color;
+        match self {
+            Self::Normal => Color::DarkGray,
+            Self::Insert => Color::Cyan,
+            Self::Visual => Color::LightYellow,
+            Self::Operator(_) => Color::LightGreen,
+            Self::Command(_) => Color::DarkGray,
+            Self::Search(_) => Color::Magenta,
+        }
+    }
+}
+
+/// 按键
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Key {
+    Char(char),
+    Enter,
+    Backspace,
+    Esc,
+    Left,
+    Right,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+    Tab,
+    Delete,
+    F(u8),
+    Null,
+}
+
+/// 输入事件
+#[derive(Debug, Clone)]
+pub struct Input {
+    pub key: Key,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+}
+
+impl Input {
+    /// 从 crossterm 的 KeyCode 创建 Input
+    pub fn from_keycode(code: crossterm::event::KeyCode, modifiers: crossterm::event::KeyModifiers) -> Self {
+        use crossterm::event::{KeyCode, KeyModifiers};
+
+        let key = match code {
+            KeyCode::Char(c) => Key::Char(c),
+            KeyCode::Enter => Key::Enter,
+            KeyCode::Backspace => Key::Backspace,
+            KeyCode::Esc => Key::Esc,
+            KeyCode::Left => Key::Left,
+            KeyCode::Right => Key::Right,
+            KeyCode::Up => Key::Up,
+            KeyCode::Down => Key::Down,
+            KeyCode::PageUp => Key::PageUp,
+            KeyCode::PageDown => Key::PageDown,
+            KeyCode::Home => Key::Home,
+            KeyCode::End => Key::End,
+            KeyCode::Tab => Key::Tab,
+            KeyCode::Delete => Key::Delete,
+            KeyCode::F(n) => Key::F(n),
+            _ => Key::Null,
+        };
+
+        Self {
+            key,
+            ctrl: modifiers.contains(KeyModifiers::CONTROL),
+            alt: modifiers.contains(KeyModifiers::ALT),
+            shift: modifiers.contains(KeyModifiers::SHIFT),
+        }
+    }
+}
+
+/// 状态转换
+#[derive(Debug)]
+pub enum Transition {
+    /// 无操作
+    Nop,
+    /// 切换模式
+    Mode(Mode),
+    /// 提交
+    Submit,
+    /// 取消
+    Cancel,
+    /// 需要重建折行缓存
+    NeedRebuild,
+}
+
+/// Vim 引擎
+#[derive(Debug)]
+pub struct Vim {
+    mode: Mode,
+    yank_register: String,
+    visual_start: (usize, usize),
+    history: History,
+}
+
+impl Vim {
+    /// 创建新的 Vim 引擎
+    pub fn new(initial_mode: Mode) -> Self {
+        Self {
+            mode: initial_mode,
+            yank_register: String::new(),
+            visual_start: (0, 0),
+            history: History::new(),
+        }
+    }
+
+    /// 获取当前模式
+    pub fn mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    /// 设置模式
+    pub fn set_mode(&mut self, mode: Mode) {
+        self.mode = mode;
+    }
+
+    /// 获取 yank 寄存器
+    pub fn yank_register(&self) -> &str {
+        &self.yank_register
+    }
+
+    /// 设置 yank 寄存器
+    pub fn set_yank(&mut self, text: String) {
+        self.yank_register = text;
+    }
+
+    /// 获取可视模式起始位置
+    pub fn visual_start(&self) -> (usize, usize) {
+        self.visual_start
+    }
+
+    /// 设置可视模式起始位置
+    pub fn set_visual_start(&mut self, pos: (usize, usize)) {
+        self.visual_start = pos;
+    }
+
+    /// 处理输入
+    pub fn handle_input(&mut self, input: &Input, buffer: &mut TextBuffer) -> Transition {
+        // 先克隆模式以避免借用冲突
+        let mode = self.mode.clone();
+        match &mode {
+            Mode::Insert => self.handle_insert_mode(input, buffer),
+            Mode::Normal => self.handle_normal_mode(input, buffer),
+            Mode::Command(cmd) => self.handle_command_mode(input, cmd.clone()),
+            Mode::Search(pattern) => self.handle_search_mode(input, pattern.clone()),
+            Mode::Visual => self.handle_visual_mode(input, buffer),
+            Mode::Operator(c) => self.handle_operator_mode(input, *c, buffer),
+        }
+    }
+
+    fn handle_insert_mode(&mut self, input: &Input, buffer: &mut TextBuffer) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Enter => {
+                buffer.insert_newline();
+                Transition::NeedRebuild
+            }
+            Key::Backspace => {
+                buffer.backspace();
+                Transition::NeedRebuild
+            }
+            Key::Delete => {
+                buffer.delete_char();
+                Transition::NeedRebuild
+            }
+            Key::Left => {
+                buffer.move_cursor_back();
+                Transition::Nop
+            }
+            Key::Right => {
+                buffer.move_cursor_forward();
+                Transition::Nop
+            }
+            Key::Up => {
+                buffer.move_cursor_up();
+                Transition::Nop
+            }
+            Key::Down => {
+                buffer.move_cursor_down();
+                Transition::Nop
+            }
+            Key::Char(c) => {
+                buffer.insert_char(c);
+                Transition::NeedRebuild
+            }
+            Key::Tab => {
+                buffer.insert_str("    ");
+                Transition::NeedRebuild
+            }
+            _ => Transition::Nop,
+        }
+    }
+
+    fn handle_normal_mode(&mut self, input: &Input, buffer: &mut TextBuffer) -> Transition {
+        match input.key {
+            Key::Char('i') => Transition::Mode(Mode::Insert),
+            Key::Char('a') => {
+                buffer.move_cursor_forward();
+                Transition::Mode(Mode::Insert)
+            }
+            Key::Char('A') => {
+                buffer.move_cursor_end();
+                Transition::Mode(Mode::Insert)
+            }
+            Key::Char('I') => {
+                buffer.move_cursor_head();
+                Transition::Mode(Mode::Insert)
+            }
+            Key::Char('o') => {
+                buffer.insert_line_below();
+                Transition::Mode(Mode::Insert)
+            }
+            Key::Char('O') => {
+                buffer.insert_line_above();
+                Transition::Mode(Mode::Insert)
+            }
+            Key::Char('h') | Key::Left => {
+                buffer.move_cursor_back();
+                Transition::Nop
+            }
+            Key::Char('j') | Key::Down => {
+                buffer.move_cursor_down();
+                Transition::Nop
+            }
+            Key::Char('k') | Key::Up => {
+                buffer.move_cursor_up();
+                Transition::Nop
+            }
+            Key::Char('l') | Key::Right => {
+                buffer.move_cursor_forward();
+                Transition::Nop
+            }
+            Key::Char('w') => {
+                buffer.move_cursor_word_forward();
+                Transition::Nop
+            }
+            Key::Char('b') => {
+                buffer.move_cursor_word_back();
+                Transition::Nop
+            }
+            Key::Char('e') => {
+                buffer.move_cursor_word_end();
+                Transition::Nop
+            }
+            Key::Char('0') => {
+                buffer.move_cursor_head();
+                Transition::Nop
+            }
+            Key::Char('$') => {
+                buffer.move_cursor_end();
+                Transition::Nop
+            }
+            Key::Char('g') => {
+                buffer.move_cursor_top();
+                Transition::Nop
+            }
+            Key::Char('G') => {
+                buffer.move_cursor_bottom();
+                Transition::Nop
+            }
+            Key::Char('x') => {
+                buffer.delete_char();
+                Transition::NeedRebuild
+            }
+            Key::Char('X') => {
+                buffer.move_cursor_back();
+                buffer.delete_char();
+                Transition::NeedRebuild
+            }
+            Key::Char('d') => Transition::Mode(Mode::Operator('d')),
+            Key::Char('c') => Transition::Mode(Mode::Operator('c')),
+            Key::Char('y') => Transition::Mode(Mode::Operator('y')),
+            Key::Char('p') => {
+                if !self.yank_register.is_empty() {
+                    buffer.move_cursor_end();
+                    buffer.insert_newline();
+                    buffer.insert_str(&self.yank_register);
+                }
+                Transition::NeedRebuild
+            }
+            Key::Char('v') => {
+                self.visual_start = buffer.cursor();
+                Transition::Mode(Mode::Visual)
+            }
+            Key::Char(':') => Transition::Mode(Mode::Command(String::new())),
+            Key::Char('/') => Transition::Mode(Mode::Search(String::new())),
+            Key::PageDown => {
+                for _ in 0..10 {
+                    buffer.move_cursor_down();
+                }
+                Transition::Nop
+            }
+            Key::PageUp => {
+                for _ in 0..10 {
+                    buffer.move_cursor_up();
+                }
+                Transition::Nop
+            }
+            _ => Transition::Nop,
+        }
+    }
+
+    fn handle_command_mode(&mut self, input: &Input, cmd: String) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Enter => {
+                let trimmed = cmd.trim();
+                match trimmed {
+                    "w" | "wq" | "x" => Transition::Submit,
+                    "q" | "q!" => Transition::Cancel,
+                    "set wrap" => {
+                        // 这里需要通知编辑器启用折行
+                        Transition::Mode(Mode::Normal)
+                    }
+                    "set nowrap" => {
+                        // 这里需要通知编辑器禁用折行
+                        Transition::Mode(Mode::Normal)
+                    }
+                    _ => Transition::Mode(Mode::Normal),
+                }
+            }
+            _ => Transition::Nop,
+        }
+    }
+
+    fn handle_search_mode(&mut self, input: &Input, _pattern: String) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Enter => Transition::Mode(Mode::Normal),
+            _ => Transition::Nop,
+        }
+    }
+
+    fn handle_visual_mode(&mut self, input: &Input, buffer: &mut TextBuffer) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Char('y') => {
+                let (start_row, start_col) = self.visual_start;
+                let (end_row, end_col) = buffer.cursor();
+                let (start_row, start_col, end_row, end_col) =
+                    if start_row > end_row || (start_row == end_row && start_col > end_col) {
+                        (end_row, end_col, start_row, start_col)
+                    } else {
+                        (start_row, start_col, end_row, end_col)
+                    };
+
+                let lines = buffer.lines();
+                if start_row == end_row {
+                    if let Some(line) = lines.get(start_row) {
+                        let chars: Vec<char> = line.chars().collect();
+                        self.yank_register = chars[start_col..end_col].iter().collect();
+                    }
+                } else {
+                    let mut yanked = String::new();
+                    for (i, line) in lines.iter().enumerate() {
+                        let chars: Vec<char> = line.chars().collect();
+                        if i == start_row {
+                            yanked.push_str(&chars[start_col..].iter().collect::<String>());
+                            yanked.push('\n');
+                        } else if i == end_row {
+                            yanked.push_str(&chars[..end_col].iter().collect::<String>());
+                        } else if i > start_row && i < end_row {
+                            yanked.push_str(line);
+                            yanked.push('\n');
+                        }
+                    }
+                    self.yank_register = yanked;
+                }
+                Transition::Mode(Mode::Normal)
+            }
+            Key::Char('h') | Key::Left => {
+                buffer.move_cursor_back();
+                Transition::Nop
+            }
+            Key::Char('j') | Key::Down => {
+                buffer.move_cursor_down();
+                Transition::Nop
+            }
+            Key::Char('k') | Key::Up => {
+                buffer.move_cursor_up();
+                Transition::Nop
+            }
+            Key::Char('l') | Key::Right => {
+                buffer.move_cursor_forward();
+                Transition::Nop
+            }
+            _ => Transition::Nop,
+        }
+    }
+
+    fn handle_operator_mode(
+        &mut self,
+        input: &Input,
+        op: char,
+        buffer: &mut TextBuffer,
+    ) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Char('d') if op == 'd' => {
+                let (row, _) = buffer.cursor();
+                self.yank_register = buffer.line(row).cloned().unwrap_or_default();
+                buffer.delete_line();
+                Transition::NeedRebuild
+            }
+            Key::Char('w') => match op {
+                'd' => {
+                    buffer.delete_word();
+                    Transition::NeedRebuild
+                }
+                'c' => {
+                    buffer.delete_word();
+                    Transition::Mode(Mode::Insert)
+                }
+                _ => Transition::Mode(Mode::Normal),
+            },
+            Key::Char('$') => match op {
+                'd' => {
+                    let (row, col) = buffer.cursor();
+                    if let Some(line) = buffer.line(row) {
+                        let chars: Vec<char> = line.chars().collect();
+                        self.yank_register = chars[col..].iter().collect();
+                    }
+                    buffer.delete_line_by_end();
+                    Transition::NeedRebuild
+                }
+                'c' => {
+                    let (row, col) = buffer.cursor();
+                    if let Some(line) = buffer.line(row) {
+                        let chars: Vec<char> = line.chars().collect();
+                        self.yank_register = chars[col..].iter().collect();
+                    }
+                    buffer.delete_line_by_end();
+                    Transition::Mode(Mode::Insert)
+                }
+                _ => Transition::Mode(Mode::Normal),
+            },
+            Key::Char('c') if op == 'c' => {
+                let (row, _) = buffer.cursor();
+                self.yank_register = buffer.line(row).cloned().unwrap_or_default();
+                buffer.delete_line_by_end();
+                buffer.move_cursor_head();
+                Transition::Mode(Mode::Insert)
+            }
+            _ => Transition::Mode(Mode::Normal),
+        }
+    }
+}
+
+// ========== 撤销/重做支持 ==========
+
+impl Vim {
+    /// 历史管理器引用
+    pub fn history(&mut self) -> &mut History {
+        &mut self.history
+    }
+
+    /// 推入快照
+    pub fn push_snapshot(&mut self, snapshot: Snapshot, cursor: (usize, usize)) {
+        let snap = Snapshot::with_cursor(snapshot.lines, cursor);
+        self.history.push(snap);
+    }
+
+    /// 撤销
+    pub fn undo(&mut self) -> Option<Snapshot> {
+        self.history.undo().cloned()
+    }
+
+    /// 重做
+    pub fn redo(&mut self) -> Option<Snapshot> {
+        self.history.redo().cloned()
+    }
+}

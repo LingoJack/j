@@ -110,4 +110,6 @@ allow:
 - Bash(file /Users/lingojack/dev_custom/j/gui/src-tauri/icons/icon.icns:*)
 - Bash(cd /Users/lingojack/dev_custom/j/gui:*)
 - Bash(cd /Users/lingojack/dev_custom/j/gui/src-tauri:*)
+- Bash(cargo test:*)
+- Bash(sed -i:*)
 deny: []
