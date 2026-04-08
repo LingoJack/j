@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use super::wrap_engine::VisualLine;
-use super::{search::SearchState, text_buffer::TextBuffer, vim::Mode};
+use super::{search::SearchState, text_buffer::TextBuffer};
 use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
 use crate::util::text::display_width;
@@ -157,6 +157,12 @@ impl MarkdownRenderer {
         Style::default().fg(fg).bg(self.theme.bg_primary)
     }
 
+    /// 创建带输入区背景色的 Style
+    #[inline]
+    pub fn style_input(&self, fg: Color) -> Style {
+        Style::default().fg(fg).bg(self.theme.bg_input)
+    }
+
     /// 创建带背景色和加粗的 Style
     #[inline]
     pub fn style_bold(&self, fg: Color) -> Style {
@@ -193,7 +199,6 @@ impl MarkdownRenderer {
         vl: &VisualLine,
         is_cursor_line: bool,
         cursor_col: Option<usize>,
-        mode: &Mode,
         search: &SearchState,
         buffer: &TextBuffer,
         wrap_width: usize,
@@ -215,9 +220,10 @@ impl MarkdownRenderer {
         let line_num_style = if is_cursor_line {
             Style::default()
                 .fg(Color::Yellow)
+                .bg(self.theme.bg_input)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(Color::DarkGray).bg(self.theme.bg_input)
         };
 
         // ---- 光标行：显示源码 + 光标 ----
@@ -227,7 +233,6 @@ impl MarkdownRenderer {
                 &line_num_str,
                 line_num_style,
                 cursor_col,
-                mode,
                 search,
                 is_continuation,
             );
@@ -306,7 +311,6 @@ impl MarkdownRenderer {
         line_num_str: &str,
         line_num_style: Style,
         cursor_col: Option<usize>,
-        mode: &Mode,
         search: &SearchState,
         is_continuation: bool,
     ) -> Line<'static> {
@@ -322,7 +326,7 @@ impl MarkdownRenderer {
         // 处理光标位置
         if let Some(col) = cursor_col {
             // 判断光标是否在当前视觉行范围内
-            let cursor_in_this_vl = col >= vl.start_col && col < vl.end_col;
+            let cursor_in_this_vl = col >= vl.start_col && col < vl.end_col.max(vl.start_col + 1);
 
             if cursor_in_this_vl {
                 // 光标在当前视觉行内
@@ -331,22 +335,16 @@ impl MarkdownRenderer {
 
                 if char_idx_at_cursor > 0 {
                     let before: String = chars.iter().take(char_idx_at_cursor).collect();
-                    spans.push(Span::styled(before, self.style(self.theme.text_normal)));
+                    spans.push(Span::styled(
+                        before,
+                        self.style_input(self.theme.text_normal),
+                    ));
                 }
 
-                let cursor_style = match mode {
-                    Mode::Insert => Style::default()
-                        .fg(self.theme.bg_primary)
-                        .bg(self.theme.text_normal)
-                        .add_modifier(Modifier::BOLD),
-                    Mode::Normal => Style::default()
-                        .fg(self.theme.text_normal)
-                        .bg(self.theme.cursor_bg)
-                        .add_modifier(Modifier::UNDERLINED),
-                    _ => Style::default()
-                        .fg(self.theme.bg_primary)
-                        .bg(Color::LightBlue),
-                };
+                let cursor_style = Style::default()
+                    .fg(self.theme.cursor_fg)
+                    .bg(self.theme.cursor_bg)
+                    .add_modifier(Modifier::BOLD);
 
                 if char_idx_at_cursor < chars.len() {
                     spans.push(Span::styled(
@@ -355,28 +353,31 @@ impl MarkdownRenderer {
                     ));
                     if char_idx_at_cursor + 1 < chars.len() {
                         let after: String = chars.iter().skip(char_idx_at_cursor + 1).collect();
-                        spans.push(Span::styled(after, self.style(self.theme.text_normal)));
+                        spans.push(Span::styled(
+                            after,
+                            self.style_input(self.theme.text_normal),
+                        ));
                     }
                 } else {
-                    // 光标在行尾
+                    // 光标在行尾，用空格显示背景色，与字上光标一致
                     spans.push(Span::styled(" ", cursor_style));
                 }
             } else {
                 // 光标不在当前视觉行，正常渲染文本
                 spans.push(Span::styled(
                     text.clone(),
-                    self.style(self.theme.text_normal),
+                    self.style_input(self.theme.text_normal),
                 ));
             }
         } else {
             // 无光标信息（不应该发生，但作为 fallback）
             spans.push(Span::styled(
                 text.clone(),
-                self.style(self.theme.text_normal),
+                self.style_input(self.theme.text_normal),
             ));
         }
 
-        Line::from(spans).patch_style(Style::default().bg(self.theme.bg_input))
+        Line::from(spans)
     }
 
     // ========== 高级 Markdown 渲染 ==========

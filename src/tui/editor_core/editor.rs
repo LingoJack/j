@@ -372,7 +372,6 @@ impl MarkdownEditor {
                     } else {
                         None
                     },
-                    self.vim.mode(),
                     &self.search,
                     &self.buffer,
                     wrap_width,
