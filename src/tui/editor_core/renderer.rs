@@ -12,7 +12,7 @@ use super::wrap_engine::VisualLine;
 use super::{search::SearchState, text_buffer::TextBuffer};
 use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
-use crate::util::text::display_width;
+use crate::util::text::{display_width, wrap_text};
 
 /// 表格对齐方式
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,10 +22,19 @@ pub enum TableAlign {
     Right,
 }
 
+/// 表格边框类型
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum BorderKind {
+    Top,
+    Middle,
+    Bottom,
+}
+
 /// 表格上下文
 #[derive(Debug, Clone)]
 pub struct TableContext {
     pub start_idx: usize,
+    pub end_idx: usize,
     pub col_widths: Vec<usize>,
     pub alignments: Vec<TableAlign>,
 }
@@ -202,11 +211,11 @@ impl MarkdownRenderer {
         search: &SearchState,
         buffer: &TextBuffer,
         wrap_width: usize,
-    ) -> Line<'static> {
+    ) -> Vec<Line<'static>> {
         let lines = buffer.lines();
         let logical_line = vl.logical_line;
         let Some(line_content) = lines.get(logical_line) else {
-            return Line::default();
+            return vec![Line::default()];
         };
 
         let is_continuation = vl.start_col > 0;
@@ -238,14 +247,14 @@ impl MarkdownRenderer {
         };
 
         if is_cursor_line {
-            return self.render_cursor_visual_line(
+            return vec![self.render_cursor_visual_line(
                 vl,
                 &line_num_str,
                 line_num_style,
                 cursor_col,
                 search,
                 code_block_max_width,
-            );
+            )];
         }
 
         // ---- 非光标行：Typora 风格渲染 ----
@@ -287,7 +296,17 @@ impl MarkdownRenderer {
                     Style::default().bg(self.theme.code_bg),
                 ));
                 spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
-                return Line::from(spans);
+                return vec![Line::from(spans)];
+            }
+
+            // 表格续行：保持表格边框样式
+            if Self::is_table_row(line_content) {
+                let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+                spans.push(Span::styled(
+                    text.clone(),
+                    self.style(self.theme.text_normal),
+                ));
+                return vec![Line::from(spans)];
             }
 
             // 普通续行
@@ -300,7 +319,7 @@ impl MarkdownRenderer {
                     self.style(self.theme.text_normal),
                 ));
             }
-            return Line::from(spans);
+            return vec![Line::from(spans)];
         }
 
         // 非续行的非光标行：完整 Markdown 渲染
@@ -310,7 +329,7 @@ impl MarkdownRenderer {
         // 检查是否是代码块围栏行
         if Self::is_code_fence_line(line_content) {
             if self.is_fence_line_paired(logical_line, lines) {
-                return self.render_code_fence_line(line_content, logical_line, lines);
+                return vec![self.render_code_fence_line(line_content, logical_line, lines)];
             }
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
@@ -319,21 +338,27 @@ impl MarkdownRenderer {
             } else {
                 spans.push(Span::styled(truncated, self.style(self.theme.text_normal)));
             }
-            return Line::from(spans);
+            return vec![Line::from(spans)];
         }
 
         // 检查是否在完整的代码块内
         if self.is_line_in_complete_code_block(logical_line, lines) {
-            return self.render_code_block_line(line_content, logical_line, lines);
+            return vec![self.render_code_block_line(line_content, logical_line, lines)];
         }
 
         // 检查是否在表格内
         if let Some(table_ctx) = self.find_table_context(logical_line, lines) {
-            return self.render_table_line(line_content, logical_line, &table_ctx, lines);
+            return self.render_table_rows(
+                line_content,
+                logical_line,
+                &table_ctx,
+                lines,
+                wrap_width,
+            );
         }
 
         // 其他行：Markdown 渲染（标题、列表、引用等）
-        self.render_single_line_with_number(&truncated, logical_line, wrap_width)
+        vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
     }
 
     /// 将文本截断到指定显示宽度（考虑中文字符占两列）
@@ -758,6 +783,44 @@ impl MarkdownRenderer {
 
     // ========== 表格处理 ==========
 
+    /// 计算表格行的总渲染宽度（包含边框）
+    fn calculate_table_render_width_from_col_widths(col_widths: &[usize]) -> usize {
+        // 每列：│ + 空格 + 内容 + 空格 = 1 + cw + 2，最后一列加 │
+        let cols_width: usize = col_widths.iter().map(|cw| cw + 2 + 1).sum();
+        cols_width + 1 // 最左边的 │
+    }
+
+    /// 将 col_widths 缩小以适配 wrap_width（按比例缩减）
+    fn shrink_col_widths(col_widths: &[usize], wrap_width: usize) -> Vec<usize> {
+        let current = Self::calculate_table_render_width_from_col_widths(col_widths);
+        if current <= wrap_width {
+            return col_widths.to_vec();
+        }
+        // 需要缩减的总量
+        let excess = current.saturating_sub(wrap_width);
+        let total_col_width: usize = col_widths.iter().sum();
+        if total_col_width == 0 {
+            return col_widths.to_vec();
+        }
+        // 按比例缩减每列
+        let mut remaining_excess = excess;
+        let mut result = Vec::with_capacity(col_widths.len());
+        for (i, &cw) in col_widths.iter().enumerate() {
+            let is_last = i == col_widths.len() - 1;
+            let shrink = if is_last {
+                // 最后一列承担剩余缩减量
+                remaining_excess
+            } else {
+                // 按比例分配
+                let s = (excess * cw) / total_col_width;
+                remaining_excess = remaining_excess.saturating_sub(s);
+                s
+            };
+            result.push(cw.saturating_sub(shrink).max(1));
+        }
+        result
+    }
+
     /// 判断一行是否是表格分隔行
     pub fn is_table_separator_line(line: &str) -> bool {
         let trimmed = line.trim();
@@ -865,44 +928,38 @@ impl MarkdownRenderer {
 
         Some(TableContext {
             start_idx,
+            end_idx,
             col_widths,
             alignments,
         })
     }
 
-    /// 渲染表格行
-    fn render_table_line(
+    /// 渲染表格行（支持单元格折行，返回多行）
+    fn render_table_rows(
         &self,
         line: &str,
         line_idx: usize,
         ctx: &TableContext,
         _lines: &[String],
-    ) -> Line<'static> {
+        wrap_width: usize,
+    ) -> Vec<Line<'static>> {
         let line_num = format!("{:4} ", line_idx + 1);
-        let cells = Self::parse_table_cells(line);
+        let line_num_width = display_width(&line_num);
+        let available_width = wrap_width.saturating_sub(line_num_width);
 
-        // 判断是否是分隔行
+        // 缩小 col_widths 以适配可用宽度
+        let col_widths = Self::shrink_col_widths(&ctx.col_widths, available_width);
+
+        let border_style = Style::default().fg(self.theme.text_dim);
+
+        // 判断是否是分隔行 — 不再直接渲染，由上下文决定边框样式
         if Self::is_table_separator_line(line) {
-            let mut spans = vec![Span::styled(line_num, Style::default().fg(Color::DarkGray))];
-            let border_style = Style::default().fg(self.theme.text_dim);
-
-            spans.push(Span::styled("├", border_style));
-            for (i, cw) in ctx.col_widths.iter().enumerate() {
-                spans.push(Span::styled("─".repeat(*cw + 2), border_style));
-                if i < ctx.col_widths.len() - 1 {
-                    spans.push(Span::styled("┼", border_style));
-                }
-            }
-            spans.push(Span::styled("┤", border_style));
-
-            return Line::from(spans);
+            return vec![];
         }
 
         // 判断是否是表头行
         let is_header = line_idx == ctx.start_idx;
-
-        let mut spans = vec![Span::styled(line_num, Style::default().fg(Color::DarkGray))];
-        let border_style = Style::default().fg(self.theme.text_dim);
+        let is_last_data_row = line_idx == ctx.end_idx;
         let content_style = if is_header {
             Style::default()
                 .fg(self.theme.text_bold)
@@ -911,31 +968,123 @@ impl MarkdownRenderer {
             Style::default().fg(self.theme.text_normal)
         };
 
-        spans.push(Span::styled("│", border_style));
+        let cells = Self::parse_table_cells(line);
 
-        for (i, cw) in ctx.col_widths.iter().enumerate() {
-            let cell_text = cells.get(i).map(|s: &String| s.as_str()).unwrap_or("");
-            let cell_width = display_width(cell_text);
-            let fill = cw.saturating_sub(cell_width);
+        // 对每个单元格进行折行
+        let wrapped_cells: Vec<Vec<String>> = col_widths
+            .iter()
+            .enumerate()
+            .map(|(i, cw)| {
+                let cell_text = cells.get(i).map(|s| s.as_str()).unwrap_or("");
+                wrap_text(cell_text, *cw)
+            })
+            .collect();
 
-            let align = ctx.alignments.get(i).copied().unwrap_or(TableAlign::Left);
-            let formatted = match align {
-                TableAlign::Center => {
-                    let left = fill / 2;
-                    let right = fill - left;
-                    format!(" {}{}{} ", " ".repeat(left), cell_text, " ".repeat(right))
-                }
-                TableAlign::Right => {
-                    format!(" {}{} ", " ".repeat(fill), cell_text)
-                }
-                TableAlign::Left => {
-                    format!(" {}{} ", cell_text, " ".repeat(fill))
-                }
+        // 计算最大折行数
+        let max_rows = wrapped_cells.iter().map(|r| r.len()).max().unwrap_or(1);
+
+        let mut result = Vec::new();
+
+        // 如果是表头行，先渲染顶部边框 ┌─┬─┐
+        if is_header {
+            result.push(Self::render_table_border(
+                &line_num,
+                &col_widths,
+                border_style,
+                BorderKind::Top,
+            ));
+        }
+
+        // 渲染每一行折行内容
+        for sub_row in 0..max_rows {
+            let num_str = if sub_row == 0 {
+                line_num.clone()
+            } else {
+                "     ".to_string()
             };
 
-            spans.push(Span::styled(formatted, content_style));
+            let mut spans = vec![Span::styled(num_str, Style::default().fg(Color::DarkGray))];
             spans.push(Span::styled("│", border_style));
+
+            for (i, cw) in col_widths.iter().enumerate() {
+                let cell_line = wrapped_cells
+                    .get(i)
+                    .and_then(|lines| lines.get(sub_row))
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
+                let cell_width = display_width(cell_line);
+                let fill = cw.saturating_sub(cell_width);
+
+                let align = ctx.alignments.get(i).copied().unwrap_or(TableAlign::Left);
+                let formatted = match align {
+                    TableAlign::Center => {
+                        let left = fill / 2;
+                        let right = fill - left;
+                        format!(" {}{}{} ", " ".repeat(left), cell_line, " ".repeat(right))
+                    }
+                    TableAlign::Right => {
+                        format!(" {}{} ", " ".repeat(fill), cell_line)
+                    }
+                    TableAlign::Left => {
+                        format!(" {}{} ", cell_line, " ".repeat(fill))
+                    }
+                };
+
+                spans.push(Span::styled(formatted, content_style));
+                spans.push(Span::styled("│", border_style));
+            }
+
+            result.push(Line::from(spans));
         }
+
+        // 表头行后渲染分隔边框 ├─┼─┤
+        if is_header {
+            result.push(Self::render_table_border(
+                "     ",
+                &col_widths,
+                border_style,
+                BorderKind::Middle,
+            ));
+        }
+
+        // 最后一行后渲染底部边框 └─┴─┘
+        if is_last_data_row {
+            result.push(Self::render_table_border(
+                "     ",
+                &col_widths,
+                border_style,
+                BorderKind::Bottom,
+            ));
+        }
+
+        result
+    }
+
+    /// 表格边框类型
+    fn render_table_border(
+        line_num: &str,
+        col_widths: &[usize],
+        border_style: Style,
+        kind: BorderKind,
+    ) -> Line<'static> {
+        let (left, mid, right, fill) = match kind {
+            BorderKind::Top => ("┌", "┬", "┐", "─"),
+            BorderKind::Middle => ("├", "┼", "┤", "─"),
+            BorderKind::Bottom => ("└", "┴", "┘", "─"),
+        };
+
+        let mut spans = vec![Span::styled(
+            line_num.to_string(),
+            Style::default().fg(Color::DarkGray),
+        )];
+        spans.push(Span::styled(left, border_style));
+        for (i, cw) in col_widths.iter().enumerate() {
+            spans.push(Span::styled(fill.repeat(*cw + 2), border_style));
+            if i < col_widths.len() - 1 {
+                spans.push(Span::styled(mid, border_style));
+            }
+        }
+        spans.push(Span::styled(right, border_style));
 
         Line::from(spans)
     }

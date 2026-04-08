@@ -364,7 +364,7 @@ impl MarkdownEditor {
             let cached = self.wrap.get_cached_lines(logical_line);
 
             for vl in cached {
-                let line = self.renderer.render_visual_line(
+                let rendered = self.renderer.render_visual_line(
                     vl,
                     is_cursor_line,
                     if is_cursor_line {
@@ -376,7 +376,7 @@ impl MarkdownEditor {
                     &self.buffer,
                     wrap_width,
                 );
-                all_visual_lines.push(line);
+                all_visual_lines.extend(rendered);
             }
         }
 
