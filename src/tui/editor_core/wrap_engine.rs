@@ -288,20 +288,27 @@ fn build_styled_line(
 }
 
 /// 折行引擎
+///
+/// 使用 HashMap 稀疏缓存 + 前缀和数组实现高性能折行。
+/// - `line_visual_counts`: 每个逻辑行的视觉行数量（总是完整的）
+/// - `prefix_sums`: 前缀和数组，用于 O(log n) 的位置查找
+/// - `line_cache`: 稀疏缓存，只为视口范围内的行存储详细 VisualLine
 #[derive(Debug, Clone)]
 pub struct WrapEngine {
     /// 是否启用折行
     enabled: bool,
     /// 折行宽度
     width: usize,
-    /// 视觉行缓存（按需构建）
-    cache: Vec<VisualLine>,
-    /// 逻辑行 -> 视觉行数量的映射（用于快速计算滚动位置）
+    /// 稀疏视觉行缓存：逻辑行号 -> Vec<VisualLine>
+    line_cache: std::collections::HashMap<usize, Vec<VisualLine>>,
+    /// 每个逻辑行的视觉行数量（总是完整的）
     line_visual_counts: Vec<usize>,
+    /// 前缀和：prefix_sums[i] = line_visual_counts[0..i] 之和
+    /// prefix_sums.len() == line_visual_counts.len() + 1
+    /// prefix_sums[0] = 0, prefix_sums[n] = 总视觉行数
+    prefix_sums: Vec<usize>,
     /// 缓存是否需要更新
     dirty: bool,
-    /// 已构建到第几行（用于增量构建）
-    built_until: usize,
 }
 
 impl Default for WrapEngine {
@@ -316,10 +323,10 @@ impl WrapEngine {
         Self {
             enabled: true,
             width: 80,
-            cache: Vec::new(),
+            line_cache: std::collections::HashMap::new(),
             line_visual_counts: Vec::new(),
+            prefix_sums: vec![0],
             dirty: true,
-            built_until: 0,
         }
     }
 
@@ -328,10 +335,10 @@ impl WrapEngine {
         Self {
             enabled: false,
             width: 80,
-            cache: Vec::new(),
+            line_cache: std::collections::HashMap::new(),
             line_visual_counts: Vec::new(),
+            prefix_sums: vec![0],
             dirty: true,
-            built_until: 0,
         }
     }
 
@@ -355,8 +362,9 @@ impl WrapEngine {
 
     /// 设置折行宽度
     pub fn set_width(&mut self, width: usize) {
+        let width = width.max(10);
         if self.width != width {
-            self.width = width.max(10); // 最小宽度 10
+            self.width = width;
             self.dirty = true;
         }
     }
@@ -378,98 +386,73 @@ impl WrapEngine {
         }
     }
 
-    /// 获取视觉行缓存
-    pub fn visual_lines(&self) -> &[VisualLine] {
-        &self.cache
-    }
-
     /// 获取视觉行总数
     pub fn visual_line_count(&self) -> usize {
-        self.cache.len()
+        self.prefix_sums.last().copied().unwrap_or(0)
     }
 
-    /// 重建视觉行缓存（延迟模式：只初始化元数据）
+    /// 重建元数据（精确的视觉行计数 + 前缀和），清空详细缓存
     pub fn rebuild_cache(&mut self, lines: &[String]) {
-        // 性能优化：延迟构建视觉行缓存
-        // 先只计算每行的视觉行数量（快速估算），稍后按需构建详细缓存
-        self.cache.clear();
+        self.line_cache.clear();
         self.line_visual_counts.clear();
+        self.prefix_sums.clear();
+
         self.line_visual_counts.reserve(lines.len());
-        
-        // 快速计算每行视觉行数量（不构建详细内容）
+        self.prefix_sums.reserve(lines.len() + 1);
+        self.prefix_sums.push(0);
+
+        let mut sum: usize = 0;
         for line in lines {
-            let count = if self.enabled {
-                let char_count: usize = line.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
-                (char_count / self.width.max(1) + 1).max(1)
-            } else {
-                1
-            };
+            let count = self.compute_visual_line_count(line);
             self.line_visual_counts.push(count);
+            sum += count;
+            self.prefix_sums.push(sum);
         }
-        
-        self.built_until = 0;
+
         self.dirty = false;
     }
 
-    /// 确保指定逻辑行的缓存已构建
-    pub fn ensure_built_until(&mut self, lines: &[String], until_line: usize) {
-        if until_line <= self.built_until {
-            return;
+    /// 精确计算一个逻辑行的视觉行数量（与 wrap_line 算法一致）
+    fn compute_visual_line_count(&self, line: &str) -> usize {
+        if !self.enabled {
+            return 1;
         }
-        
-        let start = self.built_until;
-        let end = until_line.min(lines.len());
-        
-        for i in start..end {
-            let line = &lines[i];
-            if self.enabled {
-                self.cache.extend(self.wrap_line(line, i));
-            } else {
-                self.cache.push(VisualLine::from_line(line, i));
-            }
+        let display_w: usize = line
+            .chars()
+            .map(|c| if c.is_ascii() { 1 } else { 2 })
+            .sum();
+        if display_w == 0 {
+            1
+        } else {
+            (display_w + self.width - 1) / self.width
         }
-        
-        self.built_until = end;
     }
 
-    /// 构建光标行附近的缓存（用于显示光标位置）
-    pub fn build_around_cursor(&mut self, lines: &[String], cursor_row: usize, context_lines: usize) {
-        let _start_line = cursor_row.saturating_sub(context_lines);
-        let end_line = (cursor_row + context_lines + 1).min(lines.len());
-        
-        // 如果缓存为空或需要重建
-        if self.cache.is_empty() || self.dirty {
-            self.cache.clear();
-            self.built_until = 0;
+    /// 为指定范围的逻辑行构建详细视觉行缓存（只构建未缓存的行）
+    pub fn build_range(&mut self, lines: &[String], start: usize, end: usize) {
+        let end = end.min(lines.len());
+        for i in start..end {
+            if !self.line_cache.contains_key(&i) {
+                let vlines = self.wrap_line(&lines[i], i);
+                self.line_cache.insert(i, vlines);
+            }
         }
-        
-        // 确保需要的范围已构建
-        self.ensure_built_until(lines, end_line);
+    }
+
+    /// 构建光标行附近的缓存
+    pub fn build_around_cursor(&mut self, lines: &[String], cursor_row: usize, context_lines: usize) {
+        let start = cursor_row.saturating_sub(context_lines);
+        let end = (cursor_row + context_lines + 1).min(lines.len());
+        self.build_range(lines, start, end);
     }
 
     /// 即时构建单行的视觉行缓存
     pub fn build_line(&mut self, line: &str, line_num: usize) -> Vec<usize> {
-        // 检查是否已经构建过
-        let existing: Vec<usize> = self.cache
-            .iter()
-            .enumerate()
-            .filter(|(_, vl)| vl.logical_line == line_num)
-            .map(|(i, _)| i)
-            .collect();
-        
-        if !existing.is_empty() {
-            return existing;
+        if !self.line_cache.contains_key(&line_num) {
+            let vlines = self.wrap_line(line, line_num);
+            self.line_cache.insert(line_num, vlines);
         }
-        
-        // 构建新的视觉行
-        let new_vlines = self.wrap_line(line, line_num);
-        let start_idx = self.cache.len();
-        self.cache.extend(new_vlines);
-        
-        // 更新 built_until
-        self.built_until = self.built_until.max(line_num + 1);
-        
-        (start_idx..self.cache.len()).collect()
+        self.get_visual_lines_for_logical(line_num)
     }
 
     /// 将逻辑行拆分为视觉行
@@ -498,7 +481,6 @@ impl WrapEngine {
         for ch in chars {
             let ch_width = if ch.is_ascii() { 1 } else { 2 };
 
-            // 检查是否需要换行
             if current_width + ch_width > self.width && !current.is_empty() {
                 result.push(VisualLine {
                     logical_line: line_num,
@@ -517,7 +499,6 @@ impl WrapEngine {
             col += 1;
         }
 
-        // 添加最后一个视觉行
         if !current.is_empty() || result.is_empty() {
             result.push(VisualLine {
                 logical_line: line_num,
@@ -531,77 +512,92 @@ impl WrapEngine {
         result
     }
 
-    /// 逻辑位置 -> 视觉行索引（使用快速计算）
-    pub fn logical_to_visual(&self, logical_line: usize, logical_col: usize) -> usize {
-        // 快速模式：使用视觉行计数映射
-        if !self.line_visual_counts.is_empty() {
-            let mut visual_pos = 0;
-            for (i, &count) in self.line_visual_counts.iter().enumerate() {
-                if i == logical_line {
-                    // 在目标行内计算偏移
-                    if self.enabled && self.width > 0 {
-                        // 简化：假设每个视觉行大约容纳 width/2 个字符（考虑中英文混合）
-                        let offset = logical_col / (self.width / 2).max(1);
-                        return visual_pos + offset.min(count.saturating_sub(1));
-                    }
-                    return visual_pos;
-                }
-                visual_pos += count;
-            }
-            return visual_pos.saturating_sub(1);
+    /// 通过二分查找将视觉行号映射到逻辑行号（O(log n)）
+    fn visual_to_logical_line(&self, visual_row: usize) -> usize {
+        if self.prefix_sums.len() <= 1 {
+            return 0;
         }
-        
-        // 回退模式：从缓存中查找
-        let mut last_match = None;
-        for (i, vl) in self.cache.iter().enumerate() {
-            if vl.logical_line == logical_line && vl.start_col <= logical_col {
-                last_match = Some(i);
-            }
+        let max_logical = self.line_visual_counts.len().saturating_sub(1);
+        match self.prefix_sums.binary_search(&visual_row) {
+            Ok(i) => i.min(max_logical),
+            Err(i) => i.saturating_sub(1).min(max_logical),
         }
-        last_match.unwrap_or(self.cache.len().saturating_sub(1))
     }
 
-    /// 视觉行索引 -> 逻辑位置（使用快速计算）
-    pub fn visual_to_logical(&self, visual_row: usize) -> (usize, usize) {
-        // 优先使用缓存
-        if let Some(vl) = self.cache.get(visual_row) {
-            return (vl.logical_line, vl.start_col);
+    /// 逻辑位置 -> 视觉行索引（O(log n) 或 O(1)）
+    pub fn logical_to_visual(&self, logical_line: usize, logical_col: usize) -> usize {
+        if logical_line >= self.line_visual_counts.len() {
+            return self.visual_line_count().saturating_sub(1);
         }
-        
-        // 快速模式：使用视觉行计数映射
-        if !self.line_visual_counts.is_empty() {
-            let mut visual_counter = 0;
-            for (logical_line, &count) in self.line_visual_counts.iter().enumerate() {
-                if visual_counter + count > visual_row {
-                    // 找到了目标逻辑行
-                    let offset_in_line = visual_row - visual_counter;
-                    // 估算起始列（假设每视觉行容纳 width/2 个字符）
-                    let start_col = offset_in_line * (self.width / 2).max(1);
-                    return (logical_line, start_col);
+
+        let base = self.prefix_sums[logical_line];
+
+        if !self.enabled || self.width == 0 {
+            return base;
+        }
+
+        let count = self.line_visual_counts[logical_line];
+        if count <= 1 {
+            return base;
+        }
+
+        // 优先使用精确缓存
+        if let Some(vlines) = self.line_cache.get(&logical_line) {
+            for (i, vl) in vlines.iter().enumerate() {
+                if logical_col < vl.end_col || i == vlines.len() - 1 {
+                    return base + i;
                 }
-                visual_counter += count;
             }
-            // 超出范围，返回最后一行
-            let last_line = self.line_visual_counts.len().saturating_sub(1);
-            return (last_line, 0);
+            return base + vlines.len().saturating_sub(1);
         }
-        
-        (0, 0)
+
+        // 估算：基于列位置和宽度
+        let sub = logical_col / self.width.max(1);
+        base + sub.min(count.saturating_sub(1))
+    }
+
+    /// 视觉行索引 -> 逻辑位置（O(log n)）
+    pub fn visual_to_logical(&self, visual_row: usize) -> (usize, usize) {
+        let logical = self.visual_to_logical_line(visual_row);
+        let base = self.prefix_sums.get(logical).copied().unwrap_or(0);
+        let sub = visual_row.saturating_sub(base);
+
+        // 使用精确缓存
+        if let Some(vlines) = self.line_cache.get(&logical) {
+            if let Some(vl) = vlines.get(sub) {
+                return (logical, vl.start_col);
+            }
+        }
+
+        // 估算 start_col
+        let start_col = sub * self.width;
+        (logical, start_col)
     }
 
     /// 获取指定视觉行的逻辑行号
     pub fn get_logical_line(&self, visual_row: usize) -> Option<usize> {
-        self.cache.get(visual_row).map(|vl| vl.logical_line)
+        Some(self.visual_to_logical_line(visual_row))
     }
 
-    /// 获取指定视觉行
+    /// 获取指定视觉行（需要先 build_range 构建缓存）
     pub fn get_visual_line(&self, visual_row: usize) -> Option<&VisualLine> {
-        self.cache.get(visual_row)
+        let logical = self.visual_to_logical_line(visual_row);
+        let base = self.prefix_sums.get(logical).copied().unwrap_or(0);
+        let sub = visual_row.saturating_sub(base);
+        self.line_cache.get(&logical)?.get(sub)
+    }
+
+    /// 获取指定逻辑行的缓存视觉行（返回切片引用）
+    pub fn get_cached_lines(&self, logical_line: usize) -> &[VisualLine] {
+        self.line_cache
+            .get(&logical_line)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// 在指定视觉行中查找逻辑列对应的显示列
     pub fn logical_col_to_display_col(&self, visual_row: usize, logical_col: usize) -> usize {
-        if let Some(vl) = self.cache.get(visual_row) {
+        if let Some(vl) = self.get_visual_line(visual_row) {
             if logical_col < vl.start_col {
                 return 0;
             }
@@ -616,7 +612,7 @@ impl WrapEngine {
 
     /// 在指定视觉行中，根据显示列查找逻辑列
     pub fn display_col_to_logical_col(&self, visual_row: usize, display_col: usize) -> usize {
-        if let Some(vl) = self.cache.get(visual_row) {
+        if let Some(vl) = self.get_visual_line(visual_row) {
             let chars: Vec<char> = vl.text.chars().collect();
             let mut current_width = 0;
             let mut col = 0;
@@ -636,46 +632,30 @@ impl WrapEngine {
         }
     }
 
-    /// 获取指定逻辑行对应的所有视觉行索引（需要先确保缓存已构建）
+    /// 获取指定逻辑行对应的所有视觉行索引（O(1)，使用前缀和）
     pub fn get_visual_lines_for_logical(&self, logical_line: usize) -> Vec<usize> {
-        // 先尝试从缓存获取
-        let result: Vec<usize> = self.cache
-            .iter()
-            .enumerate()
-            .filter(|(_, vl)| vl.logical_line == logical_line)
-            .map(|(i, _)| i)
-            .collect();
-        
-        if !result.is_empty() {
-            return result;
+        if logical_line >= self.line_visual_counts.len() {
+            return Vec::new();
         }
-        
-        // 如果缓存中没有，基于视觉行计数估算
-        if logical_line < self.line_visual_counts.len() {
-            let mut visual_start = 0;
-            for (i, &count) in self.line_visual_counts.iter().enumerate() {
-                if i == logical_line {
-                    return (visual_start..visual_start + count).collect();
-                }
-                visual_start += count;
-            }
-        }
-        
-        Vec::new()
+        let start = self.prefix_sums[logical_line];
+        let count = self.line_visual_counts[logical_line];
+        (start..start + count).collect()
     }
 
-    /// 计算指定逻辑行的视觉行数量（使用快速估算）
+    /// 获取指定逻辑行在前缀和中的视觉偏移（O(1)）
+    pub fn visual_offset_of(&self, logical_line: usize) -> usize {
+        self.prefix_sums
+            .get(logical_line)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// 计算指定逻辑行的视觉行数量（O(1)）
     pub fn count_visual_lines(&self, logical_line: usize) -> usize {
-        // 优先使用视觉行计数映射
-        if logical_line < self.line_visual_counts.len() {
-            return self.line_visual_counts[logical_line];
-        }
-        
-        // 回退到缓存
-        self.cache
-            .iter()
-            .filter(|vl| vl.logical_line == logical_line)
-            .count()
+        self.line_visual_counts
+            .get(logical_line)
+            .copied()
+            .unwrap_or(1)
     }
 
     /// 向上移动视觉行
@@ -689,11 +669,16 @@ impl WrapEngine {
 
     /// 向下移动视觉行
     pub fn visual_down(&self, current_visual: usize) -> Option<usize> {
-        if current_visual < self.cache.len().saturating_sub(1) {
+        if current_visual < self.visual_line_count().saturating_sub(1) {
             Some(current_visual + 1)
         } else {
             None
         }
+    }
+
+    /// 兼容旧 API
+    pub fn ensure_built_until(&mut self, lines: &[String], until_line: usize) {
+        self.build_range(lines, 0, until_line);
     }
 }
 
@@ -706,7 +691,8 @@ mod tests {
         let mut engine = WrapEngine::no_wrap();
         let lines = vec!["Hello, World!".to_string()];
         engine.rebuild_cache(&lines);
-        
+        engine.build_range(&lines, 0, lines.len());
+
         assert_eq!(engine.visual_line_count(), 1);
         let vl = engine.get_visual_line(0).unwrap();
         assert_eq!(vl.text, "Hello, World!");
@@ -719,40 +705,41 @@ mod tests {
     fn test_wrap_ascii() {
         let mut engine = WrapEngine::new();
         engine.set_width(10);
-        
+
         let lines = vec!["Hello, World!".to_string()];
         engine.rebuild_cache(&lines);
-        
-        // "Hello, Wor" (10 chars) + "ld!" (3 chars)
-        assert!(engine.visual_line_count() >= 1);
+
+        // "Hello, Wor" (10 chars) + "ld!" (3 chars) = 13 display width
+        // ceil(13/10) = 2
+        assert_eq!(engine.visual_line_count(), 2);
     }
 
     #[test]
     fn test_wrap_chinese() {
         let mut engine = WrapEngine::new();
         engine.set_width(10);
-        
-        // 每个中文字符占 2 个显示宽度
+
+        // 每个中文字符占 2 个显示宽度，6 chars = 12 display width
         let lines = vec!["测试中文折行".to_string()];
         engine.rebuild_cache(&lines);
-        
-        // "测试中" = 6 宽度, "文折行" = 6 宽度
-        // 在宽度 10 时应该折为 2 行
-        assert!(engine.visual_line_count() >= 1);
+
+        // ceil(12/10) = 2
+        assert_eq!(engine.visual_line_count(), 2);
     }
 
     #[test]
     fn test_logical_to_visual() {
         let mut engine = WrapEngine::new();
         engine.set_width(10);
-        
+
         let lines = vec!["HelloWorldTest".to_string()];
         engine.rebuild_cache(&lines);
-        
+        engine.build_range(&lines, 0, lines.len());
+
         // 在宽度 10 时，"HelloWorld" (0-10) 是第一行，"Test" (10-14) 是第二行
         let visual = engine.logical_to_visual(0, 3);
         assert_eq!(visual, 0); // "l" 在第一个视觉行
-        
+
         let visual = engine.logical_to_visual(0, 12);
         assert!(visual >= 1, "Expected visual >= 1, got {}", visual); // "e" 在第二个视觉行
     }
@@ -761,10 +748,10 @@ mod tests {
     fn test_visual_to_logical() {
         let mut engine = WrapEngine::new();
         engine.set_width(10);
-        
+
         let lines = vec!["HelloWorldTest".to_string()];
         engine.rebuild_cache(&lines);
-        
+
         let (line, col) = engine.visual_to_logical(0);
         assert_eq!(line, 0);
         assert_eq!(col, 0);
@@ -774,14 +761,80 @@ mod tests {
     fn test_empty_line() {
         let mut engine = WrapEngine::new();
         engine.set_width(10);
-        
+
         let lines = vec!["".to_string(), "Hello".to_string()];
         engine.rebuild_cache(&lines);
-        
+        engine.build_range(&lines, 0, lines.len());
+
         assert_eq!(engine.visual_line_count(), 2);
         let vl = engine.get_visual_line(0).unwrap();
         assert_eq!(vl.text, "");
         assert_eq!(vl.logical_line, 0);
+    }
+
+    #[test]
+    fn test_prefix_sums() {
+        let mut engine = WrapEngine::new();
+        engine.set_width(10);
+
+        // Line 0: "Hello" = 5 width -> 1 visual line
+        // Line 1: "HelloWorldTest" = 14 width -> 2 visual lines
+        // Line 2: "" = 0 width -> 1 visual line
+        let lines = vec![
+            "Hello".to_string(),
+            "HelloWorldTest".to_string(),
+            "".to_string(),
+        ];
+        engine.rebuild_cache(&lines);
+
+        assert_eq!(engine.visual_line_count(), 4); // 1+2+1
+        assert_eq!(engine.visual_offset_of(0), 0);
+        assert_eq!(engine.visual_offset_of(1), 1);
+        assert_eq!(engine.visual_offset_of(2), 3);
+        assert_eq!(engine.count_visual_lines(0), 1);
+        assert_eq!(engine.count_visual_lines(1), 2);
+        assert_eq!(engine.count_visual_lines(2), 1);
+    }
+
+    #[test]
+    fn test_visual_to_logical_binary_search() {
+        let mut engine = WrapEngine::new();
+        engine.set_width(10);
+
+        let lines = vec![
+            "Hello".to_string(),           // 1 visual line (row 0)
+            "HelloWorldTest".to_string(),  // 2 visual lines (row 1, 2)
+            "End".to_string(),             // 1 visual line (row 3)
+        ];
+        engine.rebuild_cache(&lines);
+
+        assert_eq!(engine.visual_to_logical(0).0, 0); // visual 0 -> line 0
+        assert_eq!(engine.visual_to_logical(1).0, 1); // visual 1 -> line 1
+        assert_eq!(engine.visual_to_logical(2).0, 1); // visual 2 -> line 1 (续行)
+        assert_eq!(engine.visual_to_logical(3).0, 2); // visual 3 -> line 2
+    }
+
+    #[test]
+    fn test_sparse_cache() {
+        let mut engine = WrapEngine::new();
+        engine.set_width(10);
+
+        let lines: Vec<String> = (0..1000).map(|i| format!("Line {}", i)).collect();
+        engine.rebuild_cache(&lines);
+
+        // 只构建第 500-510 行
+        engine.build_range(&lines, 500, 510);
+
+        // 第 505 行应该有缓存
+        let cached = engine.get_cached_lines(505);
+        assert!(!cached.is_empty());
+
+        // 第 0 行不应该有缓存
+        let cached = engine.get_cached_lines(0);
+        assert!(cached.is_empty());
+
+        // 但 visual_line_count 仍然正确
+        assert_eq!(engine.visual_line_count(), 1000);
     }
 
     #[test]
