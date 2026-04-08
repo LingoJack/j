@@ -239,7 +239,6 @@ impl MarkdownRenderer {
         if is_continuation {
             let text = &vl.text;
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            spans.push(Span::styled("→ ", self.style(self.theme.text_dim)));
             if !search.pattern.is_empty() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme));
             } else {
@@ -314,11 +313,6 @@ impl MarkdownRenderer {
         let text = &vl.text;
         let mut spans = vec![Span::styled(line_num_str.to_string(), line_num_style)];
 
-        // 续行缩进提示
-        if is_continuation {
-            spans.push(Span::styled("→ ", self.style(self.theme.text_dim)));
-        }
-
         // 搜索高亮
         if !search.pattern.is_empty() && search.match_count() > 0 {
             spans.extend(search.highlight_line(vl.logical_line, text, &self.theme));
@@ -328,7 +322,7 @@ impl MarkdownRenderer {
         // 处理光标位置
         if let Some(col) = cursor_col {
             // 判断光标是否在当前视觉行范围内
-            let cursor_in_this_vl = col >= vl.start_col && col <= vl.end_col;
+            let cursor_in_this_vl = col >= vl.start_col && col < vl.end_col;
 
             if cursor_in_this_vl {
                 // 光标在当前视觉行内

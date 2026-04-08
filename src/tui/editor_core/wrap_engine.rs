@@ -125,12 +125,21 @@ impl WrapEngine {
         if !self.enabled {
             return 1;
         }
-        let display_w: usize = line.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
-        if display_w == 0 {
-            1
-        } else {
-            display_w.div_ceil(self.width)
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+            return 1;
         }
+        let mut count: usize = 1;
+        let mut current_width: usize = 0;
+        for ch in &chars {
+            let ch_width = if ch.is_ascii() { 1 } else { 2 };
+            if current_width + ch_width > self.width && current_width > 0 {
+                count += 1;
+                current_width = 0;
+            }
+            current_width += ch_width;
+        }
+        count
     }
 
     /// 为指定范围的逻辑行构建详细视觉行缓存（只构建未缓存的行）
@@ -399,5 +408,35 @@ mod tests {
 
         // 但 visual_line_count 仍然正确
         assert_eq!(engine.visual_line_count(), 1000);
+    }
+
+    #[test]
+    fn test_compute_count_matches_wrap_line() {
+        // 验证 compute_visual_line_count 与 wrap_line 产生一致的结果
+        let mut engine = WrapEngine::new();
+        engine.set_width(10);
+
+        // 13 chars: "Hello, Wor" (10) + "ld!" (3) = 2 visual lines
+        let line = "Hello, World!";
+        let lines = vec![line.to_string()];
+        engine.rebuild_cache(&lines);
+        engine.build_range(&lines, 0, 1);
+
+        let vlines = engine.get_cached_lines(0);
+        assert_eq!(vlines.len(), engine.line_visual_counts[0]);
+        assert_eq!(vlines.len(), 2);
+
+        // 更长的文本，确保多行折行时一致
+        let long_line = "Rust tests are currently inline unit tests under cfg blocks";
+        let lines2 = vec![long_line.to_string()];
+        engine.rebuild_cache(&lines2);
+        engine.build_range(&lines2, 0, 1);
+
+        let vlines2 = engine.get_cached_lines(0);
+        assert_eq!(vlines2.len(), engine.line_visual_counts[0]);
+
+        // 验证拼接后不丢字
+        let reconstructed: String = vlines2.iter().map(|vl| vl.text.as_str()).collect();
+        assert_eq!(reconstructed, long_line);
     }
 }
