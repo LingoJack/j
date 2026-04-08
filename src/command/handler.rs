@@ -208,7 +208,6 @@ impl SubCmd {
 
             // Markdown 编辑器
             SubCmd::Md { file } => Box::new(MdCmd { file }),
-
         }
     }
 }
