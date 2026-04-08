@@ -227,6 +227,16 @@ impl MarkdownRenderer {
         };
 
         // ---- 光标行：显示源码 + 光标 ----
+        // 代码块内的光标行使用 code_bg 背景以保持视觉一致性
+        let code_block_max_width = if !Self::is_code_fence_line(line_content)
+            && self.is_line_in_complete_code_block(logical_line, lines)
+        {
+            self.find_code_block_range(logical_line, lines)
+                .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
+        } else {
+            None
+        };
+
         if is_cursor_line {
             return self.render_cursor_visual_line(
                 vl,
@@ -234,15 +244,53 @@ impl MarkdownRenderer {
                 line_num_style,
                 cursor_col,
                 search,
-                is_continuation,
+                code_block_max_width,
             );
         }
 
         // ---- 非光标行：Typora 风格渲染 ----
         // 续行（折行后的第二行及之后）无法独立渲染 Markdown，
         // 因为 Markdown 标记可能跨越折行边界，所以续行显示源码
+        // 但代码块内的续行需要保持 code_bg 样式
         if is_continuation {
             let text = &vl.text;
+
+            // 检查续行是否在代码块内（非围栏行）
+            let in_code_block = !Self::is_code_fence_line(line_content)
+                && self.is_line_in_complete_code_block(logical_line, lines);
+
+            if in_code_block {
+                // 代码块续行：保持 code_bg 背景 + 边框
+                let mut spans = vec![
+                    Span::styled(
+                        line_num_str,
+                        Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                    ),
+                    Span::styled("│", self.style_code(self.theme.text_dim)),
+                ];
+                // 续行用 code_bg 背景显示源码，不语法高亮（续行是折行片段）
+                spans.push(Span::styled(
+                    text.clone(),
+                    Style::default()
+                        .fg(self.theme.text_normal)
+                        .bg(self.theme.code_bg),
+                ));
+                // 计算填充宽度以对齐右边框
+                let max_width = self
+                    .find_code_block_range(logical_line, lines)
+                    .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
+                    .unwrap_or(0);
+                let content_width = display_width(text);
+                let fill_width = max_width.saturating_sub(content_width);
+                spans.push(Span::styled(
+                    " ".repeat(fill_width),
+                    Style::default().bg(self.theme.code_bg),
+                ));
+                spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
+                return Line::from(spans);
+            }
+
+            // 普通续行
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
             if !search.pattern.is_empty() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme));
@@ -312,15 +360,41 @@ impl MarkdownRenderer {
         line_num_style: Style,
         cursor_col: Option<usize>,
         search: &SearchState,
-        is_continuation: bool,
+        code_block_max_width: Option<usize>,
     ) -> Line<'static> {
         let text = &vl.text;
-        let mut spans = vec![Span::styled(line_num_str.to_string(), line_num_style)];
+        let in_code_block = code_block_max_width.is_some();
+
+        // 代码块内的光标行使用 code_bg 背景
+        let (text_style, line_num_bg) = if in_code_block {
+            (
+                Style::default()
+                    .fg(self.theme.text_normal)
+                    .bg(self.theme.code_bg),
+                self.theme.code_bg,
+            )
+        } else {
+            (
+                self.style_input(self.theme.text_normal),
+                self.theme.bg_input,
+            )
+        };
+
+        let effective_line_num_style = line_num_style.bg(line_num_bg);
+        let mut spans = vec![Span::styled(
+            line_num_str.to_string(),
+            effective_line_num_style,
+        )];
+
+        // 代码块光标行：添加左边框
+        if in_code_block {
+            spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
+        }
 
         // 搜索高亮
         if !search.pattern.is_empty() && search.match_count() > 0 {
             spans.extend(search.highlight_line(vl.logical_line, text, &self.theme));
-            return Line::from(spans).patch_style(Style::default().bg(self.theme.bg_input));
+            return Line::from(spans).patch_style(Style::default().bg(line_num_bg));
         }
 
         // 处理光标位置
@@ -335,10 +409,7 @@ impl MarkdownRenderer {
 
                 if char_idx_at_cursor > 0 {
                     let before: String = chars.iter().take(char_idx_at_cursor).collect();
-                    spans.push(Span::styled(
-                        before,
-                        self.style_input(self.theme.text_normal),
-                    ));
+                    spans.push(Span::styled(before, text_style));
                 }
 
                 let cursor_style = Style::default()
@@ -353,10 +424,7 @@ impl MarkdownRenderer {
                     ));
                     if char_idx_at_cursor + 1 < chars.len() {
                         let after: String = chars.iter().skip(char_idx_at_cursor + 1).collect();
-                        spans.push(Span::styled(
-                            after,
-                            self.style_input(self.theme.text_normal),
-                        ));
+                        spans.push(Span::styled(after, text_style));
                     }
                 } else {
                     // 光标在行尾，用空格显示背景色，与字上光标一致
@@ -364,17 +432,22 @@ impl MarkdownRenderer {
                 }
             } else {
                 // 光标不在当前视觉行，正常渲染文本
-                spans.push(Span::styled(
-                    text.clone(),
-                    self.style_input(self.theme.text_normal),
-                ));
+                spans.push(Span::styled(text.clone(), text_style));
             }
         } else {
             // 无光标信息（不应该发生，但作为 fallback）
+            spans.push(Span::styled(text.clone(), text_style));
+        }
+
+        // 代码块光标行：添加右边框 + 填充
+        if let Some(max_width) = code_block_max_width {
+            let content_width = display_width(text);
+            let fill_width = max_width.saturating_sub(content_width);
             spans.push(Span::styled(
-                text.clone(),
-                self.style_input(self.theme.text_normal),
+                " ".repeat(fill_width),
+                Style::default().bg(self.theme.code_bg),
             ));
+            spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
         }
 
         Line::from(spans)
