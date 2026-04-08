@@ -441,6 +441,7 @@ impl MarkdownEditor {
                     self.vim.mode(),
                     &self.search,
                     &self.buffer,
+                    wrap_width,
                 );
                 all_visual_lines.push(line);
             }

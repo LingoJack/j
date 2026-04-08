@@ -570,6 +570,7 @@ impl MarkdownRenderer {
     ///
     /// - 光标行：显示原始 Markdown 源码 + 光标
     /// - 非光标行：显示渲染后的 Markdown 效果（代码块围栏、表格、标题等）
+    #[allow(clippy::too_many_arguments)]
     pub fn render_visual_line(
         &self,
         vl: &VisualLine,
@@ -578,6 +579,7 @@ impl MarkdownRenderer {
         mode: &Mode,
         search: &SearchState,
         buffer: &TextBuffer,
+        wrap_width: usize,
     ) -> Line<'static> {
         let lines = buffer.lines();
         let logical_line = vl.logical_line;
@@ -624,18 +626,20 @@ impl MarkdownRenderer {
         }
 
         // 非续行的非光标行：完整 Markdown 渲染
+        // 截断到折行宽度，防止终端二次折行导致重复渲染
+        let truncated = Self::truncate_to_display_width(line_content, wrap_width);
+
         // 检查是否是代码块围栏行
         if Self::is_code_fence_line(line_content) {
             if self.is_fence_line_paired(logical_line, lines) {
                 return self.render_code_fence_line(line_content, logical_line, lines);
             }
             // 不成对的围栏，渲染为普通文本
-            let text = &vl.text;
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
             if !search.pattern.is_empty() && search.match_count() > 0 {
-                spans.extend(search.highlight_line(logical_line, text, &self.theme));
+                spans.extend(search.highlight_line(logical_line, &truncated, &self.theme));
             } else {
-                spans.push(Span::styled(text.clone(), self.style(self.theme.text_normal)));
+                spans.push(Span::styled(truncated, self.style(self.theme.text_normal)));
             }
             return Line::from(spans);
         }
@@ -651,10 +655,26 @@ impl MarkdownRenderer {
         }
 
         // 其他行：Markdown 渲染（标题、列表、引用等）
-        self.render_single_line_with_number(line_content, logical_line, 80)
+        self.render_single_line_with_number(&truncated, logical_line, wrap_width)
+    }
+
+    /// 将文本截断到指定显示宽度（考虑中文字符占两列）
+    fn truncate_to_display_width(text: &str, max_width: usize) -> String {
+        let mut result = String::new();
+        let mut width = 0;
+        for ch in text.chars() {
+            let ch_width = if ch.is_ascii() { 1 } else { 2 };
+            if width + ch_width > max_width {
+                break;
+            }
+            result.push(ch);
+            width += ch_width;
+        }
+        result
     }
 
     /// 渲染光标行的视觉行（源码 + 光标高亮）
+    #[allow(clippy::too_many_arguments)]
     fn render_cursor_visual_line(
         &self,
         vl: &VisualLine,
@@ -740,6 +760,7 @@ impl MarkdownRenderer {
     // ========== 高级 Markdown 渲染 ==========
 
     /// 渲染单行（源码或渲染效果）
+    #[allow(clippy::too_many_arguments)]
     pub fn render_line(
         &self,
         line_idx: usize,
