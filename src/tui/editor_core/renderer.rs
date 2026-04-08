@@ -40,11 +40,100 @@ pub struct CodeBlockContext {
     pub max_width: usize,
 }
 
+/// 代码块范围缓存（用于加速渲染）
+#[derive(Debug, Clone, Default)]
+struct CodeBlockCache {
+    /// 每行所在的代码块范围 (start, end)，None 表示不在代码块内
+    line_to_block: Vec<Option<(usize, usize)>>,
+    /// 代码块语言信息
+    block_languages: Vec<(usize, usize, String)>, // (start, end, language)
+    /// 缓存是否有效
+    valid: bool,
+    /// 缓存对应的文件行数
+    line_count: usize,
+}
+
+impl CodeBlockCache {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// 使缓存失效
+    fn invalidate(&mut self) {
+        self.valid = false;
+    }
+
+    /// 构建缓存
+    fn build(&mut self, lines: &[String]) {
+        self.line_to_block.clear();
+        self.block_languages.clear();
+        self.line_to_block.resize(lines.len(), None);
+        
+        let mut in_block = false;
+        let mut block_start = 0;
+        let mut current_lang = String::new();
+
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if let Some(stripped) = trimmed.strip_prefix("```") {
+                if !in_block {
+                    // 开始代码块
+                    in_block = true;
+                    block_start = i;
+                    current_lang = stripped.trim().to_string();
+                } else {
+                    // 结束代码块
+                    // 记录语言信息
+                    self.block_languages.push((block_start, i, current_lang.clone()));
+                    // 标记代码块内的所有行
+                    for j in block_start..=i {
+                        if j < self.line_to_block.len() {
+                            self.line_to_block[j] = Some((block_start, i));
+                        }
+                    }
+                    in_block = false;
+                }
+            }
+        }
+
+        self.line_count = lines.len();
+        self.valid = true;
+    }
+
+    /// 获取行所在的代码块范围
+    fn get_block_range(&self, line_idx: usize) -> Option<(usize, usize)> {
+        if line_idx < self.line_to_block.len() {
+            self.line_to_block[line_idx]
+        } else {
+            None
+        }
+    }
+
+    /// 判断行是否在代码块内
+    fn is_in_block(&self, line_idx: usize) -> bool {
+        self.get_block_range(line_idx).is_some()
+    }
+
+    /// 获取代码块语言
+    fn get_language(&self, line_idx: usize) -> Option<&str> {
+        if let Some((start, end)) = self.get_block_range(line_idx) {
+            for (s, e, lang) in &self.block_languages {
+                if *s == start && *e == end {
+                    return Some(lang);
+                }
+            }
+        }
+        None
+    }
+}
+
 /// Markdown 渲染器
 pub struct MarkdownRenderer {
     theme: Theme,
     /// 水平滚动偏移
     horizontal_scroll: usize,
+    /// 代码块缓存
+    code_block_cache: CodeBlockCache,
 }
 
 impl MarkdownRenderer {
@@ -53,6 +142,7 @@ impl MarkdownRenderer {
         Self { 
             theme,
             horizontal_scroll: 0,
+            code_block_cache: CodeBlockCache::new(),
         }
     }
 
@@ -64,6 +154,18 @@ impl MarkdownRenderer {
     /// 获取水平滚动偏移
     pub fn horizontal_scroll(&self) -> usize {
         self.horizontal_scroll
+    }
+
+    /// 使代码块缓存失效
+    pub fn invalidate_cache(&mut self) {
+        self.code_block_cache.invalidate();
+    }
+
+    /// 确保代码块缓存有效
+    pub fn ensure_cache_valid(&mut self, lines: &[String]) {
+        if !self.code_block_cache.valid || self.code_block_cache.line_count != lines.len() {
+            self.code_block_cache.build(lines);
+        }
     }
 
     // ========== 基础样式辅助方法 ==========
@@ -110,7 +212,7 @@ impl MarkdownRenderer {
         &self,
         logical_line: usize,
         lines: &[String],
-        cursor_line: usize,
+        _cursor_line: usize,
         max_width: usize,
     ) -> RenderBlock {
         let Some(line_content) = lines.get(logical_line) else {
@@ -732,6 +834,12 @@ impl MarkdownRenderer {
 
     /// 判断某行是否在完整的代码块内（不包括围栏行本身）
     fn is_line_in_complete_code_block(&self, line_idx: usize, lines: &[String]) -> bool {
+        // 使用缓存
+        if self.code_block_cache.valid {
+            return self.code_block_cache.is_in_block(line_idx);
+        }
+        
+        // 回退到旧逻辑
         let mut in_block = false;
         let mut block_start = 0;
 
@@ -754,6 +862,12 @@ impl MarkdownRenderer {
 
     /// 获取代码块语言
     fn get_code_block_language(&self, line_idx: usize, lines: &[String]) -> Option<String> {
+        // 使用缓存
+        if self.code_block_cache.valid {
+            return self.code_block_cache.get_language(line_idx).map(|s| s.to_string());
+        }
+        
+        // 回退到旧逻辑
         let mut in_block = false;
         for (i, line) in lines.iter().enumerate() {
             let trimmed = line.trim_start();

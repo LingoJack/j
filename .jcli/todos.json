@@ -1,12 +1,27 @@
 [
   {
     "id": "1",
-    "content": "修复 :q 无法退出的问题",
+    "content": "分析当前性能瓶颈并制定优化方案",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "修复折行功能不生效的问题",
+    "content": "实现视口裁剪渲染：只渲染可见行",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "添加代码块/表格上下文缓存",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "优化折行引擎：延迟/增量构建",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "测试大文件打开性能",
     "status": "in_progress"
   }
 ]

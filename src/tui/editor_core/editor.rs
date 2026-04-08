@@ -356,16 +356,16 @@ impl MarkdownEditor {
     /// 重建折行缓存
     fn rebuild_wrap_cache(&mut self) {
         self.wrap.rebuild_cache(self.buffer.lines());
+        // 同时使渲染器缓存失效
+        self.renderer.invalidate_cache();
     }
 
-    /// 更新滚动偏移
-    fn update_scroll(&mut self) {
-        let visual_cursor = self.cursor_visual_line();
-        
-        if visual_cursor < self.scroll_offset {
-            self.scroll_offset = visual_cursor;
-        } else if visual_cursor >= self.scroll_offset + self.viewport_height {
-            self.scroll_offset = visual_cursor - self.viewport_height + 1;
+    /// 更新滚动偏移（基于视觉位置）
+    fn update_scroll_from_visual(&mut self, visual_pos: usize, viewport_height: usize) {
+        if visual_pos < self.scroll_offset {
+            self.scroll_offset = visual_pos;
+        } else if visual_pos >= self.scroll_offset + viewport_height {
+            self.scroll_offset = visual_pos - viewport_height + 1;
         }
     }
 
@@ -382,7 +382,7 @@ impl MarkdownEditor {
         let wrap_width = content_width.saturating_sub(6); // 6 = 行号宽度
         self.wrap.set_width(wrap_width);
 
-        // 重建折行缓存（如果需要，用于光标行的原始文本折行）
+        // 重建折行缓存（快速模式：只计算视觉行计数）
         if self.wrap.is_dirty() {
             self.rebuild_wrap_cache();
         }
@@ -391,51 +391,71 @@ impl MarkdownEditor {
         let wrap_enabled = self.wrap.is_enabled();
         let line_count = self.buffer.line_count();
 
-        // Phase 1: 按逻辑行（块）构建所有视觉行
-        let mut all_visual_lines: Vec<Line<'static>> = Vec::new();
-        let mut cursor_visual_pos: usize = 0;
+        // 确保代码块缓存有效（用于快速判断行是否在代码块内）
+        self.renderer.ensure_cache_valid(self.buffer.lines());
 
-        for logical_line in 0..line_count {
+        // 确保光标行的视觉行缓存已构建（用于显示光标）
+        self.wrap.build_around_cursor(self.buffer.lines(), cursor_row, 5);
+
+        // 使用视觉行计数快速计算光标的视觉位置
+        let cursor_visual_pos = self.wrap.logical_to_visual(cursor_row, cursor_col);
+        
+        // 基于视觉位置更新滚动偏移
+        self.update_scroll_from_visual(cursor_visual_pos, content_height);
+
+        // 计算视口范围内需要渲染的逻辑行
+        let first_visible_visual = self.scroll_offset;
+        let last_visible_visual = self.scroll_offset + content_height;
+        
+        // 使用 line_visual_counts 快速定位视口内的逻辑行范围
+        let (start_logical, _) = self.wrap.visual_to_logical(first_visible_visual);
+        let (end_logical, _) = self.wrap.visual_to_logical(last_visible_visual);
+        
+        // 扩展范围以处理边界情况
+        let render_start = start_logical.saturating_sub(2);
+        let render_end = (end_logical + 3).min(line_count);
+        
+        // 确保光标行在渲染范围内
+        let render_start = render_start.min(cursor_row);
+        let render_end = render_end.max(cursor_row + 1);
+
+        // 只渲染视口范围内的行
+        let mut all_visual_lines: Vec<Line<'static>> = Vec::new();
+        let mut cursor_visual_pos_in_viewport: usize = 0;
+        let mut visual_offset: usize = 0;
+        
+        // 计算渲染起始位置的视觉行偏移
+        for i in 0..render_start {
+            visual_offset += self.wrap.count_visual_lines(i);
+        }
+
+        for logical_line in render_start..render_end {
             let is_cursor_line = logical_line == cursor_row;
 
-            if is_cursor_line {
-                // 光标行：使用 WrapEngine 视觉行（显示原始源码 + 光标）
-                let base_pos = all_visual_lines.len();
-                let vline_indices = self.wrap.get_visual_lines_for_logical(logical_line);
-                let cursor_vl_idx = self.wrap.logical_to_visual(cursor_row, cursor_col);
-                let first_vl_idx = vline_indices.first().copied().unwrap_or(0);
-                cursor_visual_pos = base_pos + cursor_vl_idx.saturating_sub(first_vl_idx);
+            // 统一使用 WrapEngine 进行折行（基于原始文本）
+            // 确保该行的视觉行缓存已构建
+            let vline_indices = self.wrap.get_visual_lines_for_logical(logical_line);
+            if vline_indices.is_empty() {
+                let line = self.buffer.line(logical_line).map(|s| s.clone()).unwrap_or_default();
+                let _ = self.wrap.build_line(&line, logical_line);
+            }
+            let vline_indices = self.wrap.get_visual_lines_for_logical(logical_line);
 
-                for &vi in &vline_indices {
-                    if let Some(vl) = self.wrap.get_visual_line(vi) {
-                        let line = self.renderer.render_visual_line(
-                            vl,
-                            true,
-                            Some(cursor_col),
-                            self.vim.mode(),
-                            &self.search,
-                            &self.buffer,
-                        );
-                        all_visual_lines.push(line);
-                    }
-                }
-            } else {
-                // 非光标行：块级渲染（先 Markdown 渲染，再折行）
-                let render_block = self.renderer.build_render_block(
-                    logical_line,
-                    self.buffer.lines(),
-                    cursor_row,
-                    wrap_width,
-                );
-                let styled_vlines = self.renderer.wrap_block(
-                    &render_block,
-                    wrap_enabled,
-                    wrap_width,
-                );
-                for svl in &styled_vlines {
-                    all_visual_lines.push(
-                        self.renderer.styled_visual_line_to_ratatui_line(svl),
+            if is_cursor_line {
+                cursor_visual_pos_in_viewport = all_visual_lines.len();
+            }
+
+            for &vi in &vline_indices {
+                if let Some(vl) = self.wrap.get_visual_line(vi) {
+                    let line = self.renderer.render_visual_line(
+                        vl,
+                        is_cursor_line,
+                        if is_cursor_line { Some(cursor_col) } else { None },
+                        self.vim.mode(),
+                        &self.search,
+                        &self.buffer,
                     );
+                    all_visual_lines.push(line);
                 }
             }
         }
@@ -445,24 +465,23 @@ impl MarkdownEditor {
             let _ = std::fs::write(
                 format!("{}/.jdata/editor_debug.log", home),
                 format!(
-                    "line_count={}, wrap_enabled={}, wrap_width={}, content_width={}, total_visual={}, cursor_row={}\n",
+                    "line_count={}, wrap_enabled={}, wrap_width={}, content_width={}, cursor_row={}, rendered_range={}-{}, rendered_visual={}\n",
                     line_count, wrap_enabled, wrap_width, content_width,
-                    all_visual_lines.len(), cursor_row,
+                    cursor_row, render_start, render_end, all_visual_lines.len(),
                 ),
             );
         }
 
-        // Phase 2: 基于光标视觉位置更新滚动
-        if cursor_visual_pos < self.scroll_offset {
-            self.scroll_offset = cursor_visual_pos;
-        } else if cursor_visual_pos >= self.scroll_offset + content_height {
-            self.scroll_offset = cursor_visual_pos - content_height + 1;
-        }
-
-        // Phase 3: 提取可见行
-        let visible_end = (self.scroll_offset + content_height).min(all_visual_lines.len());
-        let mut lines_to_render: Vec<Line<'static>> = if self.scroll_offset < all_visual_lines.len() {
-            all_visual_lines[self.scroll_offset..visible_end].to_vec()
+        // 计算需要从 all_visual_lines 中提取的范围
+        // all_visual_lines 从 render_start 开始，需要计算相对于 render_start 的偏移
+        let scroll_in_rendered = self.scroll_offset.saturating_sub(visual_offset);
+        
+        // 确保提取的范围合法
+        let visible_start = scroll_in_rendered.min(all_visual_lines.len().saturating_sub(1));
+        let visible_end = (scroll_in_rendered + content_height).min(all_visual_lines.len());
+        
+        let mut lines_to_render: Vec<Line<'static>> = if visible_start < all_visual_lines.len() {
+            all_visual_lines[visible_start..visible_end].to_vec()
         } else {
             Vec::new()
         };
