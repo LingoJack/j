@@ -25,6 +25,8 @@ pub struct SearchState {
     pub pattern: String,
     /// 所有匹配
     matches: Vec<SearchMatch>,
+    /// 按行分组的索引：line_idx -> (matches 中的起始位置, 数量)
+    line_index: std::collections::HashMap<usize, (usize, usize)>,
     /// 当前匹配索引
     current_index: usize,
 }
@@ -39,25 +41,35 @@ impl SearchState {
     pub fn search(&mut self, pattern: &str, lines: &[String]) -> usize {
         self.pattern = pattern.to_string();
         self.matches.clear();
+        self.line_index.clear();
         self.current_index = 0;
 
         if pattern.is_empty() {
             return 0;
         }
 
+        let pattern_char_len = pattern.chars().count();
+
         for (line_idx, line) in lines.iter().enumerate() {
-            let mut start = 0;
-            while let Some(pos) = line[start..].find(pattern) {
-                let abs_start = start + pos;
+            let match_start_idx = self.matches.len();
+            let mut byte_start = 0;
+            while let Some(byte_pos) = line[byte_start..].find(pattern) {
+                let abs_byte = byte_start + byte_pos;
+                // 将字节偏移转换为字符偏移
+                let char_start = line[..abs_byte].chars().count();
                 self.matches.push(SearchMatch {
                     line: line_idx,
-                    start: abs_start,
-                    end: abs_start + pattern.len(),
+                    start: char_start,
+                    end: char_start + pattern_char_len,
                 });
-                start = abs_start + pattern.len();
-                if start >= line.len() {
+                byte_start = abs_byte + pattern.len();
+                if byte_start >= line.len() {
                     break;
                 }
+            }
+            let count = self.matches.len() - match_start_idx;
+            if count > 0 {
+                self.line_index.insert(line_idx, (match_start_idx, count));
             }
         }
         self.matches.len()
