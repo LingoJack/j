@@ -54,7 +54,8 @@ impl SizedSpan {
     }
 
     /// 创建带样式的 SizedSpan
-    pub fn styled(content: String, style: Style) -> Self {
+    pub fn styled(content: impl Into<String>, style: Style) -> Self {
+        let content = content.into();
         let width = display_width(&content);
         Self {
             content,
@@ -455,15 +456,15 @@ impl WrapEngine {
 
     /// 逻辑位置 -> 视觉行索引
     pub fn logical_to_visual(&self, logical_line: usize, logical_col: usize) -> usize {
+        // 找到 start_col <= logical_col 的最后一个视觉行
+        // 避免折行边界处光标被错误匹配到前一个视觉行
+        let mut last_match = None;
         for (i, vl) in self.cache.iter().enumerate() {
-            if vl.logical_line == logical_line 
-                && vl.start_col <= logical_col 
-                && logical_col <= vl.end_col {
-                return i;
+            if vl.logical_line == logical_line && vl.start_col <= logical_col {
+                last_match = Some(i);
             }
         }
-        // 如果没找到，返回最后一个视觉行
-        self.cache.len().saturating_sub(1)
+        last_match.unwrap_or(self.cache.len().saturating_sub(1))
     }
 
     /// 视觉行索引 -> 逻辑位置
@@ -644,5 +645,21 @@ mod tests {
         let vl = engine.get_visual_line(0).unwrap();
         assert_eq!(vl.text, "");
         assert_eq!(vl.logical_line, 0);
+    }
+
+    #[test]
+    fn test_wrap_spans_basic() {
+        use ratatui::style::Style;
+
+        let long_text = "a".repeat(80);
+        let spans = vec![SizedSpan::plain(&long_text, Style::default())];
+
+        // 折行宽度 40
+        let result = wrap_spans(&spans, 40, 0);
+        assert_eq!(result.len(), 2, "80 chars at width 40 should produce 2 lines");
+        assert_eq!(result[0].display_width, 40);
+        assert_eq!(result[1].display_width, 40);
+        assert!(!result[0].is_continuation);
+        assert!(result[1].is_continuation);
     }
 }

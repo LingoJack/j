@@ -379,44 +379,93 @@ impl MarkdownEditor {
 
         self.viewport_height = content_height;
         self.viewport_width = content_width;
-        self.wrap.set_width(content_width.saturating_sub(6));
+        let wrap_width = content_width.saturating_sub(6); // 6 = 行号宽度
+        self.wrap.set_width(wrap_width);
 
-        // 重建折行缓存（如果需要）
+        // 重建折行缓存（如果需要，用于光标行的原始文本折行）
         if self.wrap.is_dirty() {
             self.rebuild_wrap_cache();
         }
 
-        // 更新滚动
-        self.update_scroll();
-
-        // 渲染内容
-        let mut lines_to_render = Vec::new();
-        let visual_lines = self.wrap.visual_lines();
-        let total_visual_lines = visual_lines.len();
-        let end_visual = (self.scroll_offset + content_height).min(total_visual_lines);
-
         let (cursor_row, cursor_col) = self.buffer.cursor();
+        let wrap_enabled = self.wrap.is_enabled();
+        let line_count = self.buffer.line_count();
 
-        for visual_idx in self.scroll_offset..end_visual {
-            if let Some(vl) = visual_lines.get(visual_idx) {
-                let is_cursor_line = vl.logical_line == cursor_row;
-                let cursor_col_in_line = if is_cursor_line {
-                    Some(cursor_col)
-                } else {
-                    None
-                };
+        // Phase 1: 按逻辑行（块）构建所有视觉行
+        let mut all_visual_lines: Vec<Line<'static>> = Vec::new();
+        let mut cursor_visual_pos: usize = 0;
 
-                let line = self.renderer.render_visual_line(
-                    vl,
-                    is_cursor_line,
-                    cursor_col_in_line,
-                    self.vim.mode(),
-                    &self.search,
-                    &self.buffer,
+        for logical_line in 0..line_count {
+            let is_cursor_line = logical_line == cursor_row;
+
+            if is_cursor_line {
+                // 光标行：使用 WrapEngine 视觉行（显示原始源码 + 光标）
+                let base_pos = all_visual_lines.len();
+                let vline_indices = self.wrap.get_visual_lines_for_logical(logical_line);
+                let cursor_vl_idx = self.wrap.logical_to_visual(cursor_row, cursor_col);
+                let first_vl_idx = vline_indices.first().copied().unwrap_or(0);
+                cursor_visual_pos = base_pos + cursor_vl_idx.saturating_sub(first_vl_idx);
+
+                for &vi in &vline_indices {
+                    if let Some(vl) = self.wrap.get_visual_line(vi) {
+                        let line = self.renderer.render_visual_line(
+                            vl,
+                            true,
+                            Some(cursor_col),
+                            self.vim.mode(),
+                            &self.search,
+                            &self.buffer,
+                        );
+                        all_visual_lines.push(line);
+                    }
+                }
+            } else {
+                // 非光标行：块级渲染（先 Markdown 渲染，再折行）
+                let render_block = self.renderer.build_render_block(
+                    logical_line,
+                    self.buffer.lines(),
+                    cursor_row,
+                    wrap_width,
                 );
-                lines_to_render.push(line);
+                let styled_vlines = self.renderer.wrap_block(
+                    &render_block,
+                    wrap_enabled,
+                    wrap_width,
+                );
+                for svl in &styled_vlines {
+                    all_visual_lines.push(
+                        self.renderer.styled_visual_line_to_ratatui_line(svl),
+                    );
+                }
             }
         }
+
+        // DEBUG: 写入调试日志
+        if let Ok(home) = std::env::var("HOME") {
+            let _ = std::fs::write(
+                format!("{}/.jdata/editor_debug.log", home),
+                format!(
+                    "line_count={}, wrap_enabled={}, wrap_width={}, content_width={}, total_visual={}, cursor_row={}\n",
+                    line_count, wrap_enabled, wrap_width, content_width,
+                    all_visual_lines.len(), cursor_row,
+                ),
+            );
+        }
+
+        // Phase 2: 基于光标视觉位置更新滚动
+        if cursor_visual_pos < self.scroll_offset {
+            self.scroll_offset = cursor_visual_pos;
+        } else if cursor_visual_pos >= self.scroll_offset + content_height {
+            self.scroll_offset = cursor_visual_pos - content_height + 1;
+        }
+
+        // Phase 3: 提取可见行
+        let visible_end = (self.scroll_offset + content_height).min(all_visual_lines.len());
+        let mut lines_to_render: Vec<Line<'static>> = if self.scroll_offset < all_visual_lines.len() {
+            all_visual_lines[self.scroll_offset..visible_end].to_vec()
+        } else {
+            Vec::new()
+        };
 
         // 填充空行
         for _ in lines_to_render.len()..content_height {

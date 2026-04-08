@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
-use super::wrap_engine::{VisualLine, SizedSpan, RenderBlock, BlockType, StyledVisualLine, wrap_spans};
+use super::wrap_engine::{VisualLine, SizedSpan, RenderBlock, StyledVisualLine, wrap_spans};
 use super::{search::SearchState, text_buffer::TextBuffer, vim::Mode};
 use crate::util::text::display_width;
 
@@ -336,7 +336,7 @@ impl MarkdownRenderer {
         for span in highlighted_spans {
             let width = display_width(&span.content);
             spans.push(SizedSpan {
-                content: span.content,
+                content: span.content.into_owned(),
                 style: span.style.bg(self.theme.code_bg),
                 display_width: width,
             });
@@ -413,7 +413,7 @@ impl MarkdownRenderer {
         spans.into_iter().map(|span| {
             let width = display_width(&span.content);
             SizedSpan {
-                content: span.content,
+                content: span.content.into_owned(),
                 style: span.style,
                 display_width: width,
             }
@@ -438,6 +438,28 @@ impl MarkdownRenderer {
                 display_width: total_width,
             }]
         }
+    }
+
+    /// 将 StyledVisualLine 转换为 ratatui Line（带行号）
+    pub fn styled_visual_line_to_ratatui_line(&self, svl: &StyledVisualLine) -> Line<'static> {
+        let line_num_str = if svl.is_continuation {
+            "     ".to_string()
+        } else {
+            format!("{:>4} ", svl.logical_line + 1)
+        };
+        let line_num_style = Style::default().fg(Color::DarkGray);
+
+        let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+
+        if svl.is_continuation {
+            spans.push(Span::styled("↪ ", self.style(self.theme.text_dim)));
+        }
+
+        for sized_span in &svl.spans {
+            spans.push(Span::styled(sized_span.content.clone(), sized_span.style));
+        }
+
+        Line::from(spans)
     }
 
     // ========== 视觉行渲染 ==========
@@ -1641,5 +1663,40 @@ mod tests {
         assert_eq!(calc_display_width("hello"), 5);
         assert_eq!(calc_display_width("你好"), 4);
         assert_eq!(calc_display_width("hello世界"), 9);
+    }
+
+    #[test]
+    fn test_block_wrap_pipeline() {
+        use crate::command::chat::theme::Theme;
+
+        let theme = Theme::dark();
+        let renderer = MarkdownRenderer::new(theme);
+
+        // 100 字符的普通文本行
+        let long_line = "a".repeat(100);
+        let lines = vec![long_line.clone()];
+        let wrap_width = 40;
+
+        let block = renderer.build_render_block(0, &lines, 99, wrap_width);
+        assert!(block.is_wrappable(), "Normal text should be wrappable");
+        eprintln!("block total_width = {}", block.total_width);
+        eprintln!("block spans count = {}", block.spans.len());
+        for (i, s) in block.spans.iter().enumerate() {
+            eprintln!("  span[{}]: len={}, dw={}, content_preview='{}'",
+                i, s.content.len(), s.display_width,
+                &s.content[..s.content.len().min(20)]);
+        }
+
+        let styled_vlines = renderer.wrap_block(&block, true, wrap_width);
+        eprintln!("styled_vlines count = {}", styled_vlines.len());
+        for (i, svl) in styled_vlines.iter().enumerate() {
+            eprintln!("  svl[{}]: dw={}, continuation={}, spans={}",
+                i, svl.display_width, svl.is_continuation, svl.spans.len());
+        }
+        assert!(
+            styled_vlines.len() >= 3,
+            "100 chars at width 40 should produce at least 3 visual lines, got {}",
+            styled_vlines.len()
+        );
     }
 }
