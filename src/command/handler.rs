@@ -134,8 +134,9 @@ command_handlers! {
     },
 
     // ========== Markdown 编辑器 ==========
-    MdCmd { file: String } => |self, config| {
-        crate::command::markdown::handle_md(&self.file, config);
+    MdCmd { file: Vec<String> } => |self, config| {
+        let file = self.file.join(" ");
+        crate::command::markdown::handle_md(&file, config);
     },
 }
 
@@ -207,6 +208,7 @@ impl SubCmd {
 
             // Markdown 编辑器
             SubCmd::Md { file } => Box::new(MdCmd { file }),
+
         }
     }
 }

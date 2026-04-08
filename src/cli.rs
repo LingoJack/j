@@ -235,7 +235,8 @@ pub enum SubCmd {
     /// 用 Markdown 编辑器打开文件
     #[command(alias = "markdown")]
     Md {
-        /// 文件路径（支持 ~ 展开，不存在则新建）
-        file: String,
+        /// 文件路径（支持 ~ 展开，不存在则新建；含空格的路径会自动拼接）
+        #[arg(trailing_var_arg = true, num_args = 1..)]
+        file: Vec<String>,
     },
 }
