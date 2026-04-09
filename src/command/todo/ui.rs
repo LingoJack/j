@@ -1,7 +1,4 @@
-use super::app::{
-    AppMode, TodoApp, count_wrapped_lines, cursor_wrapped_line, display_width,
-    split_input_at_cursor, truncate_to_width,
-};
+use super::app::{AppMode, TodoApp, display_width, truncate_to_width};
 use crate::constants::todo_filter;
 use crate::util::text::wrap_text;
 use ratatui::{
@@ -15,31 +12,14 @@ use ratatui::{
 pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     let size = f.area();
 
-    let needs_preview = if app.mode == AppMode::Adding || app.mode == AppMode::Editing {
-        !app.input.is_empty()
-    } else {
-        false
-    };
-
-    let constraints = if needs_preview {
-        vec![
-            Constraint::Length(3),
-            Constraint::Percentage(55),
-            Constraint::Min(5),
-            Constraint::Length(3),
-            Constraint::Length(2),
-        ]
-    } else {
-        vec![
-            Constraint::Length(3),
-            Constraint::Min(5),
-            Constraint::Length(3),
-            Constraint::Length(2),
-        ]
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(constraints)
+        .constraints([
+            Constraint::Length(3), // 标题栏
+            Constraint::Min(5),    // 列表区
+            Constraint::Length(3), // 状态栏
+            Constraint::Length(1), // 帮助栏
+        ])
         .split(size);
 
     // ========== 标题栏 ==========
@@ -52,7 +32,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
     let done = app.list.items.iter().filter(|i| i.done).count();
     let undone = total - done;
     let title = format!(
-        " 📝 待办 {} — 共 {} 条 | ☑️ {} | ⬜ {} ",
+        " 📝 待办{} — 共 {} 条 | ☑️ {} | ⬜ {} ",
         filter_label, total, done, undone
     );
     let title_block = Paragraph::new(Line::from(vec![Span::styled(
@@ -70,322 +50,350 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
 
     // ========== 列表区 ==========
     if app.mode == AppMode::Help {
-        let help_lines = vec![
-            Line::from(Span::styled(
-                "  📖 快捷键帮助",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  n / ↓ / j    ", Style::default().fg(Color::Yellow)),
-                Span::raw("向下移动"),
-            ]),
-            Line::from(vec![
-                Span::styled("  N / ↑ / k    ", Style::default().fg(Color::Yellow)),
-                Span::raw("向上移动"),
-            ]),
-            Line::from(vec![
-                Span::styled("  空格 / 回车   ", Style::default().fg(Color::Yellow)),
-                Span::raw("切换完成状态 [x] / [ ]"),
-            ]),
-            Line::from(vec![
-                Span::styled("  a            ", Style::default().fg(Color::Yellow)),
-                Span::raw("添加新待办"),
-            ]),
-            Line::from(vec![
-                Span::styled("  e            ", Style::default().fg(Color::Yellow)),
-                Span::raw("编辑选中待办"),
-            ]),
-            Line::from(vec![
-                Span::styled("  d            ", Style::default().fg(Color::Yellow)),
-                Span::raw("删除待办（需确认）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  f            ", Style::default().fg(Color::Yellow)),
-                Span::raw("过滤切换（全部 / 未完成 / 已完成）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  J / K        ", Style::default().fg(Color::Yellow)),
-                Span::raw("调整待办顺序（下移 / 上移）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  s            ", Style::default().fg(Color::Yellow)),
-                Span::raw("手动保存"),
-            ]),
-            Line::from(vec![
-                Span::styled("  y            ", Style::default().fg(Color::Yellow)),
-                Span::raw("复制选中待办到剪切板"),
-            ]),
-            Line::from(vec![
-                Span::styled("  q            ", Style::default().fg(Color::Yellow)),
-                Span::raw("退出（有未保存修改时需先保存或用 q! 强制退出）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  q!           ", Style::default().fg(Color::Yellow)),
-                Span::raw("强制退出（丢弃未保存的修改）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  Esc          ", Style::default().fg(Color::Yellow)),
-                Span::raw("退出（同 q）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  Ctrl+C       ", Style::default().fg(Color::Yellow)),
-                Span::raw("强制退出（不保存）"),
-            ]),
-            Line::from(vec![
-                Span::styled("  ?            ", Style::default().fg(Color::Yellow)),
-                Span::raw("显示此帮助"),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  添加/编辑模式下：",
-                Style::default().fg(Color::Gray),
-            )),
-            Line::from(vec![
-                Span::styled("  Alt+↓/↑      ", Style::default().fg(Color::Yellow)),
-                Span::raw("预览区滚动（长文本输入时）"),
-            ]),
-        ];
-        let help_block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan))
-            .title(" 帮助 ");
-        let help_widget = Paragraph::new(help_lines).block(help_block);
-        f.render_widget(help_widget, chunks[1]);
+        render_help(f, chunks[1]);
     } else {
-        let indices = app.filtered_indices();
-        // highlight_symbol " ▶ " 占 3 列（▶ 宽2 + 空格1），加上边框 2 列
-        let list_inner_width = chunks[1].width.saturating_sub(2 + 3) as usize;
-        let items: Vec<ListItem> = indices
-            .iter()
-            .map(|&idx| {
-                let item = &app.list.items[idx];
-                let checkbox = if item.done { "[x]" } else { "[ ]" };
-                let checkbox_style = if item.done {
-                    Style::default().fg(Color::Green)
-                } else {
-                    Style::default().fg(Color::Yellow)
-                };
-                let content_style = if item.done {
-                    Style::default()
-                        .fg(Color::Gray)
-                        .add_modifier(Modifier::CROSSED_OUT)
-                } else {
-                    Style::default().fg(Color::White)
-                };
-
-                let checkbox_str = format!(" {} ", checkbox);
-                let checkbox_display_width = display_width(&checkbox_str);
-
-                let date_str = item
-                    .created_at
-                    .get(..10)
-                    .map(|d| format!("  ({})", d))
-                    .unwrap_or_default();
-                let date_display_width = display_width(&date_str);
-
-                // 第一行内容宽度：需要给日期留位置
-                let first_line_width = list_inner_width
-                    .saturating_sub(checkbox_display_width)
-                    .saturating_sub(date_display_width);
-                // 续行内容宽度：只需给缩进留位置（无日期）
-                let rest_line_width = list_inner_width.saturating_sub(checkbox_display_width);
-
-                // 先用续行宽度折行，再检查第一行是否需要在更窄处断开
-                let wrapped = wrap_text(&item.content, rest_line_width);
-                let indent = " ".repeat(checkbox_display_width);
-
-                let mut item_lines: Vec<Line> = Vec::new();
-                for (i, line_text) in wrapped.iter().enumerate() {
-                    if i == 0 {
-                        // 第一行可能需要更短（给日期留空间）
-                        if display_width(line_text) <= first_line_width {
-                            // 第一行内容完全放得下
-                            let padding_width =
-                                first_line_width.saturating_sub(display_width(line_text));
-                            let padding = " ".repeat(padding_width);
-                            item_lines.push(Line::from(vec![
-                                Span::styled(checkbox_str.clone(), checkbox_style),
-                                Span::styled(line_text.clone(), content_style),
-                                Span::raw(padding),
-                                Span::styled(
-                                    date_str.clone(),
-                                    Style::default().fg(Color::DarkGray),
-                                ),
-                            ]));
-                        } else {
-                            // 第一行内容超出（因为续行宽度 > 第一行宽度），需要在 first_line_width 处截断
-                            let first_part_lines = wrap_text(line_text, first_line_width);
-                            // 第一段 + 日期
-                            let first_part = &first_part_lines[0];
-                            let padding_width =
-                                first_line_width.saturating_sub(display_width(first_part));
-                            let padding = " ".repeat(padding_width);
-                            item_lines.push(Line::from(vec![
-                                Span::styled(checkbox_str.clone(), checkbox_style),
-                                Span::styled(first_part.clone(), content_style),
-                                Span::raw(padding),
-                                Span::styled(
-                                    date_str.clone(),
-                                    Style::default().fg(Color::DarkGray),
-                                ),
-                            ]));
-                            // 第一行溢出的部分作为续行
-                            for extra in first_part_lines.iter().skip(1) {
-                                item_lines.push(Line::from(vec![
-                                    Span::raw(indent.clone()),
-                                    Span::styled(extra.clone(), content_style),
-                                ]));
-                            }
-                        }
-                    } else {
-                        // 续行：缩进 + 内容
-                        item_lines.push(Line::from(vec![
-                            Span::raw(indent.clone()),
-                            Span::styled(line_text.clone(), content_style),
-                        ]));
-                    }
-                }
-
-                ListItem::new(item_lines)
-            })
-            .collect();
-
-        let list_block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::White))
-            .title(" 待办列表 ");
-
-        if items.is_empty() {
-            let empty_hint = List::new(vec![ListItem::new(Line::from(Span::styled(
-                "   (空) 按 a 添加新待办...",
-                Style::default().fg(Color::DarkGray),
-            )))])
-            .block(list_block);
-            f.render_widget(empty_hint, chunks[1]);
-        } else {
-            let list_widget = List::new(items)
-                .block(list_block)
-                .highlight_style(
-                    Style::default()
-                        .bg(Color::Indexed(24))
-                        .add_modifier(Modifier::BOLD),
-                )
-                .highlight_symbol(" ▶ ");
-            f.render_stateful_widget(list_widget, chunks[1], &mut app.state);
-        };
+        render_list(f, app, chunks[1]);
     }
 
-    // ========== 预览区 ==========
-    let (_preview_chunk_idx, status_chunk_idx, help_chunk_idx) = if needs_preview {
-        let input_content = &app.input;
-        let preview_inner_w = (chunks[2].width.saturating_sub(2)) as usize;
-        let preview_inner_h = chunks[2].height.saturating_sub(2) as u16;
+    // ========== 状态栏 ==========
+    render_status_bar(f, app, chunks[2]);
 
-        let total_wrapped = count_wrapped_lines(input_content, preview_inner_w) as u16;
-        let max_scroll = total_wrapped.saturating_sub(preview_inner_h);
+    // ========== 帮助栏 ==========
+    let help_text = match app.mode {
+        AppMode::Normal => {
+            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | y 复制 | f 过滤 | s 保存 | ? 帮助 | q 退出"
+        }
+        AppMode::Adding | AppMode::Editing => {
+            " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾"
+        }
+        AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
+        AppMode::ConfirmReport => " Enter/y 写入日报 | 其他键跳过",
+        AppMode::ConfirmCancelInput => " Enter/y 保存 | n/Esc 放弃 | 其他键继续编辑",
+        AppMode::Help => " 按任意键返回",
+    };
+    let help_widget = Paragraph::new(Line::from(Span::styled(
+        help_text,
+        Style::default().fg(Color::DarkGray),
+    )));
+    f.render_widget(help_widget, chunks[3]);
+}
 
-        // 自动滚动到光标所在行可见
-        let cursor_line = cursor_wrapped_line(input_content, app.cursor_pos, preview_inner_w);
-        let auto_scroll = if preview_inner_h == 0 {
-            0
-        } else if cursor_line < app.preview_scroll {
-            cursor_line
-        } else if cursor_line >= app.preview_scroll + preview_inner_h {
-            cursor_line.saturating_sub(preview_inner_h.saturating_sub(1))
-        } else {
-            app.preview_scroll
-        };
-        let clamped_scroll = auto_scroll.min(max_scroll);
-        app.preview_scroll = clamped_scroll;
+/// 渲染帮助页
+fn render_help(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+    let help_lines = vec![
+        Line::from(Span::styled(
+            "  📖 快捷键帮助",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  n / ↓ / j    ", Style::default().fg(Color::Yellow)),
+            Span::raw("向下移动"),
+        ]),
+        Line::from(vec![
+            Span::styled("  N / ↑ / k    ", Style::default().fg(Color::Yellow)),
+            Span::raw("向上移动"),
+        ]),
+        Line::from(vec![
+            Span::styled("  空格 / 回车   ", Style::default().fg(Color::Yellow)),
+            Span::raw("切换完成状态 [x] / [ ]"),
+        ]),
+        Line::from(vec![
+            Span::styled("  a            ", Style::default().fg(Color::Yellow)),
+            Span::raw("添加新待办"),
+        ]),
+        Line::from(vec![
+            Span::styled("  e            ", Style::default().fg(Color::Yellow)),
+            Span::raw("编辑选中待办"),
+        ]),
+        Line::from(vec![
+            Span::styled("  d            ", Style::default().fg(Color::Yellow)),
+            Span::raw("删除待办（需确认）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  f            ", Style::default().fg(Color::Yellow)),
+            Span::raw("过滤切换（全部 / 未完成 / 已完成）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  J / K        ", Style::default().fg(Color::Yellow)),
+            Span::raw("调整待办顺序（下移 / 上移）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  s            ", Style::default().fg(Color::Yellow)),
+            Span::raw("手动保存"),
+        ]),
+        Line::from(vec![
+            Span::styled("  y            ", Style::default().fg(Color::Yellow)),
+            Span::raw("复制选中待办到剪切板"),
+        ]),
+        Line::from(vec![
+            Span::styled("  q            ", Style::default().fg(Color::Yellow)),
+            Span::raw("退出（有未保存修改时需先保存或用 q! 强制退出）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  q!           ", Style::default().fg(Color::Yellow)),
+            Span::raw("强制退出（丢弃未保存的修改）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Esc          ", Style::default().fg(Color::Yellow)),
+            Span::raw("退出（同 q）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+C       ", Style::default().fg(Color::Yellow)),
+            Span::raw("强制退出（不保存）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ?            ", Style::default().fg(Color::Yellow)),
+            Span::raw("显示此帮助"),
+        ]),
+    ];
+    let help_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" 帮助 ");
+    let help_widget = Paragraph::new(help_lines).block(help_block);
+    f.render_widget(help_widget, area);
+}
 
-        let mode_label = match app.mode {
-            AppMode::Adding => "新待办",
-            AppMode::Editing => "编辑中",
-            _ => "预览",
-        };
-        let title = if total_wrapped > preview_inner_h {
-            format!(
-                " 📖 {} 预览 [{}/{}行] Alt+↓/↑滚动 ",
-                mode_label,
-                clamped_scroll + preview_inner_h,
-                total_wrapped
-            )
-        } else {
-            format!(" 📖 {} 预览 ", mode_label)
-        };
+/// 渲染列表区（含 inline 编辑）
+fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout::Rect) {
+    let indices = app.filtered_indices();
+    // highlight_symbol " ❯ " 占 3 列，加上边框 2 列
+    let list_inner_width = area.width.saturating_sub(2 + 3) as usize;
+    let checkbox_w = display_width(" [x] ");
+    let content_width = list_inner_width.saturating_sub(checkbox_w);
 
-        let preview_block = Block::default()
-            .borders(Borders::ALL)
-            .title(title)
-            .title_style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .border_style(Style::default().fg(Color::Cyan));
+    let mut items: Vec<ListItem> = indices
+        .iter()
+        .map(|&idx| {
+            // 编辑模式下替换选中项为编辑行
+            if app.mode == AppMode::Editing && app.edit_index == Some(idx) {
+                return build_editing_item(&app.input, app.cursor_pos, content_width, checkbox_w);
+            }
+            build_normal_item(&app.list.items[idx], list_inner_width, checkbox_w)
+        })
+        .collect();
 
-        // 构建带光标高亮的预览文本
-        let (before, cursor_ch, after) = split_input_at_cursor(input_content, app.cursor_pos);
-        let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-        let preview_text = vec![Line::from(vec![
-            Span::styled(before, Style::default().fg(Color::White)),
-            Span::styled(cursor_ch, cursor_style),
-            Span::styled(after, Style::default().fg(Color::White)),
-        ])];
+    // 添加模式：在列表末尾追加编辑行
+    if app.mode == AppMode::Adding {
+        items.push(build_editing_item(
+            &app.input,
+            app.cursor_pos,
+            content_width,
+            checkbox_w,
+        ));
+    }
 
-        use ratatui::widgets::Wrap;
-        let preview = Paragraph::new(preview_text)
-            .block(preview_block)
-            .wrap(Wrap { trim: false })
-            .scroll((clamped_scroll, 0));
-        f.render_widget(preview, chunks[2]);
-        (2, 3, 4)
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::White))
+        .title(" 待办列表 ");
+
+    if items.is_empty() {
+        let empty_hint = List::new(vec![ListItem::new(Line::from(Span::styled(
+            "   (空) 按 a 添加新待办...",
+            Style::default().fg(Color::DarkGray),
+        )))])
+        .block(list_block);
+        f.render_widget(empty_hint, area);
     } else {
-        (1, 2, 3)
+        let list_widget = List::new(items)
+            .block(list_block)
+            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+            .highlight_symbol(" ❯ ");
+        f.render_stateful_widget(list_widget, area, &mut app.state);
+    }
+}
+
+/// 构建普通列表项
+fn build_normal_item(
+    item: &super::app::TodoItem,
+    list_inner_width: usize,
+    checkbox_w: usize,
+) -> ListItem<'static> {
+    let checkbox = if item.done { "[x]" } else { "[ ]" };
+    let checkbox_style = if item.done {
+        Style::default().fg(Color::Green)
+    } else {
+        Style::default().fg(Color::Yellow)
+    };
+    let content_style = if item.done {
+        Style::default()
+            .fg(Color::Gray)
+            .add_modifier(Modifier::CROSSED_OUT)
+    } else {
+        Style::default().fg(Color::White)
     };
 
-    // ========== 状态/输入栏 ==========
+    let checkbox_str = format!(" {} ", checkbox);
+    let date_str = item
+        .created_at
+        .get(..10)
+        .map(|d| format!("  ({})", d))
+        .unwrap_or_default();
+    let date_display_width = display_width(&date_str);
+
+    // 所有行统一按完整内容宽度折行，日期不影响折行
+    let content_width = list_inner_width.saturating_sub(checkbox_w);
+    let wrapped = wrap_text(&item.content, content_width);
+    let indent = " ".repeat(checkbox_w);
+
+    let mut item_lines: Vec<Line> = Vec::new();
+    for (i, line_text) in wrapped.iter().enumerate() {
+        if i == 0 {
+            item_lines.push(Line::from(vec![
+                Span::styled(checkbox_str.clone(), checkbox_style),
+                Span::styled(line_text.clone(), content_style),
+            ]));
+        } else {
+            item_lines.push(Line::from(vec![
+                Span::raw(indent.clone()),
+                Span::styled(line_text.clone(), content_style),
+            ]));
+        }
+    }
+
+    // 日期追加在最后一行末尾（放得下）或另起一行
+    let last_content_w = wrapped.last().map(|s| display_width(s)).unwrap_or(0);
+    let last_line_total = checkbox_w + last_content_w + date_display_width;
+
+    if last_line_total <= list_inner_width {
+        // 追加到最后一行
+        if let Some(last) = item_lines.last_mut() {
+            let padding_w =
+                list_inner_width.saturating_sub(checkbox_w + last_content_w + date_display_width);
+            last.spans.push(Span::raw(" ".repeat(padding_w)));
+            last.spans
+                .push(Span::styled(date_str, Style::default().fg(Color::DarkGray)));
+        }
+    } else {
+        // 另起一行，右对齐
+        let padding_w = list_inner_width.saturating_sub(date_display_width);
+        item_lines.push(Line::from(vec![
+            Span::raw(" ".repeat(padding_w)),
+            Span::styled(date_str, Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+
+    ListItem::new(item_lines)
+}
+
+/// 构建 inline 编辑项（添加/编辑模式）
+fn build_editing_item(
+    input: &str,
+    cursor_pos: usize,
+    content_width: usize,
+    checkbox_w: usize,
+) -> ListItem<'static> {
+    let indent = " ".repeat(checkbox_w);
+    let cursor_lines = build_cursor_wrapped_lines(input, cursor_pos, content_width);
+
+    let mut item_lines: Vec<Line> = Vec::new();
+    for line in cursor_lines {
+        let prefix = Span::raw(indent.clone());
+        let mut spans = vec![prefix];
+        spans.extend(line.spans);
+        item_lines.push(Line::from(spans));
+    }
+
+    ListItem::new(item_lines)
+}
+
+/// 将输入文本折行并在正确位置渲染光标
+fn build_cursor_wrapped_lines(input: &str, cursor_pos: usize, width: usize) -> Vec<Line<'static>> {
+    let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+    let text_style = Style::default().fg(Color::White);
+
+    if input.is_empty() {
+        return vec![Line::from(vec![
+            Span::styled(" ".to_string(), cursor_style),
+            Span::styled(
+                " 输入内容…".to_string(),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ])];
+    }
+
+    let wrapped = wrap_text(input, width);
+    let mut char_offset = 0;
+    let mut result = Vec::new();
+    let mut cursor_placed = false;
+
+    for (line_idx, line_str) in wrapped.iter().enumerate() {
+        let line_chars: Vec<char> = line_str.chars().collect();
+        let line_len = line_chars.len();
+        let is_last = line_idx == wrapped.len() - 1;
+
+        let cursor_on_this_line = !cursor_placed
+            && (cursor_pos < char_offset + line_len
+                || (is_last && cursor_pos == char_offset + line_len));
+
+        if cursor_on_this_line {
+            cursor_placed = true;
+            let pos_in_line = cursor_pos - char_offset;
+            let before: String = line_chars[..pos_in_line].iter().collect();
+            let (cursor_ch, after) = if pos_in_line < line_len {
+                (
+                    line_chars[pos_in_line].to_string(),
+                    line_chars[pos_in_line + 1..].iter().collect::<String>(),
+                )
+            } else {
+                (" ".to_string(), String::new())
+            };
+
+            result.push(Line::from(vec![
+                Span::styled(before, text_style),
+                Span::styled(cursor_ch, cursor_style),
+                Span::styled(after, text_style),
+            ]));
+        } else {
+            result.push(Line::from(Span::styled(line_str.clone(), text_style)));
+        }
+
+        char_offset += line_len;
+    }
+
+    result
+}
+
+/// 渲染状态栏
+fn render_status_bar(f: &mut ratatui::Frame, app: &TodoApp, area: ratatui::layout::Rect) {
     match &app.mode {
         AppMode::Adding => {
-            let (before, cursor_ch, after) = split_input_at_cursor(&app.input, app.cursor_pos);
-            let input_widget = Paragraph::new(Line::from(vec![
-                Span::styled(" 新待办: ", Style::default().fg(Color::Green)),
-                Span::raw(before),
+            let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    cursor_ch,
-                    Style::default().fg(Color::Black).bg(Color::White),
+                    " ✏️  添加模式",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(after),
+                Span::styled(" — 在列表中输入内容", Style::default().fg(Color::DarkGray)),
             ]))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Green))
-                    .title(" 添加模式 (Enter 确认 / Esc 取消 / ←→ 移动光标) "),
+                    .border_style(Style::default().fg(Color::Green)),
             );
-            f.render_widget(input_widget, chunks[status_chunk_idx]);
+            f.render_widget(status, area);
         }
         AppMode::Editing => {
-            let (before, cursor_ch, after) = split_input_at_cursor(&app.input, app.cursor_pos);
-            let input_widget = Paragraph::new(Line::from(vec![
-                Span::styled(" 编辑: ", Style::default().fg(Color::Yellow)),
-                Span::raw(before),
+            let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    cursor_ch,
-                    Style::default().fg(Color::Black).bg(Color::White),
+                    " ✏️  编辑模式",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(after),
+                Span::styled(" — 在列表中修改内容", Style::default().fg(Color::DarkGray)),
             ]))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow))
-                    .title(" 编辑模式 (Enter 确认 / Esc 取消 / ←→ 移动光标) "),
+                    .border_style(Style::default().fg(Color::Yellow)),
             );
-            f.render_widget(input_widget, chunks[status_chunk_idx]);
+            f.render_widget(status, area);
         }
         AppMode::ConfirmDelete => {
             let msg = if let Some(real_idx) = app.selected_real_index() {
@@ -406,12 +414,11 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .border_style(Style::default().fg(Color::Red))
                     .title(" ⚠️ 确认删除 "),
             );
-            f.render_widget(confirm_widget, chunks[status_chunk_idx]);
+            f.render_widget(confirm_widget, area);
         }
         AppMode::ConfirmReport => {
-            let inner_width = chunks[status_chunk_idx].width.saturating_sub(2) as usize;
+            let inner_width = area.width.saturating_sub(2) as usize;
             let msg = if let Some(ref content) = app.report_pending_content {
-                // 预留前缀和后缀的显示宽度
                 let prefix = " 写入日报: \"";
                 let suffix = "\" ？ (Enter/y 写入, 其他跳过)";
                 let prefix_w = display_width(prefix);
@@ -432,10 +439,10 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .border_style(Style::default().fg(Color::Cyan))
                     .title(" 📝 写入日报 "),
             );
-            f.render_widget(confirm_widget, chunks[status_chunk_idx]);
+            f.render_widget(confirm_widget, area);
         }
         AppMode::ConfirmCancelInput => {
-            let inner_width = chunks[status_chunk_idx].width.saturating_sub(2) as usize;
+            let inner_width = area.width.saturating_sub(2) as usize;
             let prefix = " ⚠️ 是否保存？当前输入: \"";
             let suffix = "\" (Enter/y 保存 / n/Esc 放弃 / 其他键继续编辑)";
             let prefix_w = display_width(prefix);
@@ -453,9 +460,10 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .border_style(Style::default().fg(Color::Yellow))
                     .title(" ⚠️ 未保存的内容 "),
             );
-            f.render_widget(confirm_widget, chunks[status_chunk_idx]);
+            f.render_widget(confirm_widget, area);
         }
-        AppMode::Normal | AppMode::Help => {
+        _ => {
+            // Normal / Help
             let msg = app.message.as_deref().unwrap_or("按 ? 查看完整帮助");
             let dirty_indicator = if app.is_dirty() { " [未保存]" } else { "" };
             let status_widget = Paragraph::new(Line::from(vec![
@@ -470,26 +478,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::DarkGray)),
             );
-            f.render_widget(status_widget, chunks[status_chunk_idx]);
+            f.render_widget(status_widget, area);
         }
     }
-
-    // ========== 帮助栏 ==========
-    let help_text = match app.mode {
-        AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | y 复制 | f 过滤 | s 保存 | ? 帮助 | q 退出"
-        }
-        AppMode::Adding | AppMode::Editing => {
-            " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾 | Alt+↓/↑ 预览滚动"
-        }
-        AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
-        AppMode::ConfirmReport => " Enter/y 写入日报并保存 | 其他键 跳过",
-        AppMode::ConfirmCancelInput => " Enter/y 保存 | n/Esc 放弃 | 其他键 继续编辑",
-        AppMode::Help => " 按任意键返回",
-    };
-    let help_widget = Paragraph::new(Line::from(Span::styled(
-        help_text,
-        Style::default().fg(Color::DarkGray),
-    )));
-    f.render_widget(help_widget, chunks[help_chunk_idx]);
 }

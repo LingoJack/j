@@ -14,7 +14,7 @@ use constant::{
     CMD_ADD, CMD_LIST, FILTER_DONE, FILTER_DONE_SHORT, FILTER_UNDONE, FILTER_UNDONE_SHORT,
 };
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -164,39 +164,15 @@ fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = TodoApp::new();
-    let mut last_input_len: usize = 0;
     // 记录进入 ConfirmCancelInput 前的模式，用于继续编辑时恢复
     let mut prev_input_mode: Option<AppMode> = None;
 
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
-        let current_input_len = app.input.chars().count();
-        if current_input_len != last_input_len {
-            app.preview_scroll = 0;
-            last_input_len = current_input_len;
-        }
-
         if event::poll(std::time::Duration::from_millis(100))?
             && let Event::Key(key) = event::read()?
         {
-            // Alt+↑/↓ 预览区滚动（在 Adding/Editing 模式下）
-            if (app.mode == AppMode::Adding || app.mode == AppMode::Editing)
-                && key.modifiers.contains(KeyModifiers::ALT)
-            {
-                match key.code {
-                    KeyCode::Down => {
-                        app.preview_scroll = app.preview_scroll.saturating_add(1);
-                        continue;
-                    }
-                    KeyCode::Up => {
-                        app.preview_scroll = app.preview_scroll.saturating_sub(1);
-                        continue;
-                    }
-                    _ => {}
-                }
-            }
-
             match app.mode {
                 AppMode::Normal => {
                     if handle_normal_mode(&mut app, key) {

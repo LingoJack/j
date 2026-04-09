@@ -109,8 +109,6 @@ pub struct TodoApp {
     pub quit_input: String,
     /// 输入模式下的光标位置（字符索引）
     pub cursor_pos: usize,
-    /// 预览区滚动偏移
-    pub preview_scroll: u16,
     /// 待写入日报的内容（toggle done 后暂存）
     pub report_pending_content: Option<String>,
 }
@@ -158,7 +156,6 @@ impl TodoApp {
             filter: todo_filter::DEFAULT,
             quit_input: String::new(),
             cursor_pos: 0,
-            preview_scroll: 0,
             report_pending_content: None,
         }
     }
@@ -397,6 +394,9 @@ pub fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
             app.input.clear();
             app.cursor_pos = 0;
             app.message = None;
+            // 选中新增行（列表末尾）
+            let count = app.filtered_indices().len();
+            app.state.select(Some(count));
         }
         KeyCode::Char('e') => {
             if let Some(real_idx) = app.selected_real_index() {
@@ -637,74 +637,15 @@ pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut Yaml
 
 // ========== 工具函数 ==========
 
-/// 将输入字符串按光标位置分割为三部分：光标前、光标处字符、光标后
-pub fn split_input_at_cursor(input: &str, cursor_pos: usize) -> (String, String, String) {
-    let chars: Vec<char> = input.chars().collect();
-    // 防御性 clamp：cursor_pos 不应超过 chars.len()
-    let pos = cursor_pos.min(chars.len());
-    let before: String = chars[..pos].iter().collect();
-    let cursor_ch = if pos < chars.len() {
-        chars[pos].to_string()
-    } else {
-        " ".to_string()
-    };
-    let after: String = if pos < chars.len() {
-        chars[pos + 1..].iter().collect()
-    } else {
-        String::new()
-    };
-    (before, cursor_ch, after)
-}
-
-/// 计算字符串的显示宽度（中文/全角字符占 2 列，ASCII 占 1 列）
+/// 计算字符串的显示宽度（使用 unicode-width，与 wrap_text 保持一致）
 pub fn display_width(s: &str) -> usize {
-    s.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum()
-}
-
-/// 计算字符串在指定列宽下换行后的行数
-pub fn count_wrapped_lines(s: &str, col_width: usize) -> usize {
-    if col_width == 0 || s.is_empty() {
-        return 1;
-    }
-    let mut lines = 1usize;
-    let mut current_width = 0usize;
-    for c in s.chars() {
-        let char_width = if c.is_ascii() { 1 } else { 2 };
-        if current_width + char_width > col_width {
-            lines += 1;
-            current_width = char_width;
-        } else {
-            current_width += char_width;
-        }
-    }
-    lines
-}
-
-/// 计算光标在指定列宽下 wrap 后所在的行号（0-based）
-pub fn cursor_wrapped_line(s: &str, cursor_pos: usize, col_width: usize) -> u16 {
-    if col_width == 0 {
-        return 0;
-    }
-    let mut line: u16 = 0;
-    let mut current_width: usize = 0;
-    for (i, c) in s.chars().enumerate() {
-        if i == cursor_pos {
-            return line;
-        }
-        let char_width = if c.is_ascii() { 1 } else { 2 };
-        if current_width + char_width > col_width {
-            line += 1;
-            current_width = char_width;
-        } else {
-            current_width += char_width;
-        }
-    }
-    // cursor_pos == chars.len() (cursor at end)
-    line
+    use unicode_width::UnicodeWidthStr;
+    UnicodeWidthStr::width(s)
 }
 
 /// 将字符串截断到指定的显示宽度，超出部分用 ".." 替代
 pub fn truncate_to_width(s: &str, max_width: usize) -> String {
+    use unicode_width::UnicodeWidthChar;
     if max_width == 0 {
         return String::new();
     }
@@ -718,7 +659,7 @@ pub fn truncate_to_width(s: &str, max_width: usize) -> String {
     let mut width = 0;
     let mut result = String::new();
     for ch in s.chars() {
-        let ch_width = if ch.is_ascii() { 1 } else { 2 };
+        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
         if width + ch_width > content_budget {
             break;
         }
