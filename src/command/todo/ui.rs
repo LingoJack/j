@@ -3,6 +3,7 @@ use super::app::{
     split_input_at_cursor, truncate_to_width,
 };
 use crate::constants::todo_filter;
+use crate::util::text::wrap_text;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
@@ -155,6 +156,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         f.render_widget(help_widget, chunks[1]);
     } else {
         let indices = app.filtered_indices();
+        // highlight_symbol " ▶ " 占 3 列（▶ 宽2 + 空格1），加上边框 2 列
         let list_inner_width = chunks[1].width.saturating_sub(2 + 3) as usize;
         let items: Vec<ListItem> = indices
             .iter()
@@ -184,22 +186,70 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
                     .unwrap_or_default();
                 let date_display_width = display_width(&date_str);
 
-                let content_max_width = list_inner_width
+                // 第一行内容宽度：需要给日期留位置
+                let first_line_width = list_inner_width
                     .saturating_sub(checkbox_display_width)
                     .saturating_sub(date_display_width);
+                // 续行内容宽度：只需给缩进留位置（无日期）
+                let rest_line_width = list_inner_width.saturating_sub(checkbox_display_width);
 
-                let content_display = truncate_to_width(&item.content, content_max_width);
-                let content_actual_width = display_width(&content_display);
+                // 先用续行宽度折行，再检查第一行是否需要在更窄处断开
+                let wrapped = wrap_text(&item.content, rest_line_width);
+                let indent = " ".repeat(checkbox_display_width);
 
-                let padding_width = content_max_width.saturating_sub(content_actual_width);
-                let padding = " ".repeat(padding_width);
+                let mut item_lines: Vec<Line> = Vec::new();
+                for (i, line_text) in wrapped.iter().enumerate() {
+                    if i == 0 {
+                        // 第一行可能需要更短（给日期留空间）
+                        if display_width(line_text) <= first_line_width {
+                            // 第一行内容完全放得下
+                            let padding_width =
+                                first_line_width.saturating_sub(display_width(line_text));
+                            let padding = " ".repeat(padding_width);
+                            item_lines.push(Line::from(vec![
+                                Span::styled(checkbox_str.clone(), checkbox_style),
+                                Span::styled(line_text.clone(), content_style),
+                                Span::raw(padding),
+                                Span::styled(
+                                    date_str.clone(),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                            ]));
+                        } else {
+                            // 第一行内容超出（因为续行宽度 > 第一行宽度），需要在 first_line_width 处截断
+                            let first_part_lines = wrap_text(line_text, first_line_width);
+                            // 第一段 + 日期
+                            let first_part = &first_part_lines[0];
+                            let padding_width =
+                                first_line_width.saturating_sub(display_width(first_part));
+                            let padding = " ".repeat(padding_width);
+                            item_lines.push(Line::from(vec![
+                                Span::styled(checkbox_str.clone(), checkbox_style),
+                                Span::styled(first_part.clone(), content_style),
+                                Span::raw(padding),
+                                Span::styled(
+                                    date_str.clone(),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                            ]));
+                            // 第一行溢出的部分作为续行
+                            for extra in first_part_lines.iter().skip(1) {
+                                item_lines.push(Line::from(vec![
+                                    Span::raw(indent.clone()),
+                                    Span::styled(extra.clone(), content_style),
+                                ]));
+                            }
+                        }
+                    } else {
+                        // 续行：缩进 + 内容
+                        item_lines.push(Line::from(vec![
+                            Span::raw(indent.clone()),
+                            Span::styled(line_text.clone(), content_style),
+                        ]));
+                    }
+                }
 
-                ListItem::new(Line::from(vec![
-                    Span::styled(checkbox_str, checkbox_style),
-                    Span::styled(content_display, content_style),
-                    Span::raw(padding),
-                    Span::styled(date_str, Style::default().fg(Color::DarkGray)),
-                ]))
+                ListItem::new(item_lines)
             })
             .collect();
 

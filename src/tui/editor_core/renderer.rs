@@ -1060,20 +1060,7 @@ impl MarkdownRenderer {
             ]);
         }
 
-        // 无序列表
-        if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
-            let text = &trimmed[2..];
-            let rendered = self.render_inline(text);
-            let mut spans = vec![
-                Span::styled(line_num, self.style(Color::DarkGray)),
-                Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled("• ", self.style(self.theme.text_normal)),
-            ];
-            spans.extend(rendered);
-            return Line::from(spans);
-        }
-
-        // 任务列表
+        // 任务列表（必须在无序列表之前检查，因为 `- [ ]` 也以 `- ` 开头）
         if let Some(stripped) = trimmed.strip_prefix("- [ ]") {
             let text = stripped.trim();
             let rendered = self.render_inline(text);
@@ -1092,6 +1079,19 @@ impl MarkdownRenderer {
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
                 Span::styled("● ", self.style(self.theme.md_list_bullet)),
+            ];
+            spans.extend(rendered);
+            return Line::from(spans);
+        }
+
+        // 无序列表
+        if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+            let text = &trimmed[2..];
+            let rendered = self.render_inline(text);
+            let mut spans = vec![
+                Span::styled(line_num, self.style(Color::DarkGray)),
+                Span::styled(indent, self.style(self.theme.text_normal)),
+                Span::styled("• ", self.style(self.theme.text_normal)),
             ];
             spans.extend(rendered);
             return Line::from(spans);
