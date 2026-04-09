@@ -272,14 +272,17 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         .iter()
                         .map(|s| display_width(&s.content))
                         .sum();
-                    if existing_w + code_w > full_line_w && !current_spans.is_empty() {
+                    // existing_w 包含了 prefix span 的宽度，但 full_line_w 已排除了 prefix 空间，需扣除避免双重计算
+                    let content_w_on_line = existing_w.saturating_sub(effective_prefix_w);
+                    if content_w_on_line + code_w > full_line_w && !current_spans.is_empty() {
                         flush_line(&mut current_spans, &mut lines);
                         if in_blockquote {
                             current_spans.push(Span::styled(
                                 "| ".to_string(),
                                 Style::default()
                                     .fg(theme.md_blockquote_bar)
-                                    .bg(theme.md_blockquote_bg),
+                                    .bg(theme.md_blockquote_bg)
+                                    .add_modifier(Modifier::BOLD),
                             ));
                         }
                     }
@@ -352,17 +355,26 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
             }
             Event::Start(Tag::BlockQuote(_)) => {
                 flush_line(&mut current_spans, &mut lines);
+                lines.push(Line::from(""));
                 in_blockquote = true;
                 style_stack.push(
                     Style::default()
                         .fg(theme.md_blockquote_text)
                         .bg(theme.md_blockquote_bg),
                 );
+                current_spans.push(Span::styled(
+                    "| ".to_string(),
+                    Style::default()
+                        .fg(theme.md_blockquote_bar)
+                        .bg(theme.md_blockquote_bg)
+                        .add_modifier(Modifier::BOLD),
+                ));
             }
             Event::End(TagEnd::BlockQuote(_)) => {
                 flush_line(&mut current_spans, &mut lines);
                 in_blockquote = false;
                 style_stack.pop();
+                lines.push(Line::from(""));
             }
             Event::Text(text) => {
                 if image_url.is_some() {
@@ -382,8 +394,9 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         .iter()
                         .map(|s| display_width(&s.content))
                         .sum();
-
-                    let wrap_w = full_line_w.saturating_sub(existing_w);
+                    // existing_w 包含了 prefix span 的宽度，但 full_line_w 已排除了 prefix 空间，需扣除避免双重计算
+                    let content_w_on_line = existing_w.saturating_sub(effective_prefix_w);
+                    let wrap_w = full_line_w.saturating_sub(content_w_on_line);
 
                     let min_useful_w = full_line_w / 4;
                     let wrap_w = if wrap_w < min_useful_w.max(4) && !current_spans.is_empty() {
@@ -393,7 +406,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                 "| ".to_string(),
                                 Style::default()
                                     .fg(theme.md_blockquote_bar)
-                                    .bg(theme.md_blockquote_bg),
+                                    .bg(theme.md_blockquote_bg)
+                                    .add_modifier(Modifier::BOLD),
                             ));
                         }
                         full_line_w
@@ -439,7 +453,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     };
 
                     // 逐片段处理：计算累计宽度，遇到超宽时 wrap 并换行
-                    let mut cur_line_w = existing_w;
+                    // cur_line_w 只追踪内容宽度（不含 prefix），因为 full_line_w 已排除 prefix
+                    let mut cur_line_w = content_w_on_line;
                     let mut first_seg = true;
                     for seg in &segments {
                         if seg.content.as_ref() == "\n" {
@@ -449,9 +464,10 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                     "| ".to_string(),
                                     Style::default()
                                         .fg(theme.md_blockquote_bar)
-                                        .bg(theme.md_blockquote_bg),
+                                        .bg(theme.md_blockquote_bg)
+                                        .add_modifier(Modifier::BOLD),
                                 ));
-                                cur_line_w = 2;
+                                cur_line_w = 0;
                             } else {
                                 cur_line_w = 0;
                             }
@@ -486,7 +502,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                         "| ".to_string(),
                                         Style::default()
                                             .fg(theme.md_blockquote_bar)
-                                            .bg(theme.md_blockquote_bg),
+                                            .bg(theme.md_blockquote_bg)
+                                            .add_modifier(Modifier::BOLD),
                                     ));
                                 }
                                 let rest_wrapped = wrap_text(&rest, full_line_w.max(1));
@@ -498,7 +515,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                                 "| ".to_string(),
                                                 Style::default()
                                                     .fg(theme.md_blockquote_bar)
-                                                    .bg(theme.md_blockquote_bg),
+                                                    .bg(theme.md_blockquote_bg)
+                                                    .add_modifier(Modifier::BOLD),
                                             ));
                                         }
                                     }
@@ -506,14 +524,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                 }
                                 cur_line_w =
                                     display_width(rest_wrapped.last().unwrap_or(&String::new()));
-                                if in_blockquote {
-                                    cur_line_w += 2;
-                                }
                             } else {
                                 cur_line_w = display_width(&first_wrapped[0]);
-                                if in_blockquote {
-                                    cur_line_w += 2;
-                                }
                             }
                         }
                     }

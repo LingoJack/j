@@ -447,7 +447,7 @@ impl Theme {
             md_inline_code_fg: Color::LightYellow,
             md_inline_code_bg: Color::Reset,
             md_list_bullet: Color::LightGreen,
-            md_blockquote_bar: Color::DarkGray,
+            md_blockquote_bar: Color::Cyan,
             md_blockquote_text: Color::Gray,
             md_blockquote_bg: Color::Reset,
             md_rule: Color::DarkGray,
@@ -595,9 +595,9 @@ impl Theme {
             md_inline_code_fg: Color::Rgb(230, 190, 120),
             md_inline_code_bg: Color::Rgb(45, 45, 60),
             md_list_bullet: Color::Rgb(100, 160, 255),
-            md_blockquote_bar: Color::Rgb(80, 100, 140),
-            md_blockquote_text: Color::Rgb(150, 160, 180),
-            md_blockquote_bg: Color::Rgb(35, 35, 48),
+            md_blockquote_bar: Color::Rgb(120, 160, 220),
+            md_blockquote_text: Color::Rgb(180, 190, 210),
+            md_blockquote_bg: Color::Rgb(32, 36, 52),
             md_rule: Color::Rgb(70, 75, 90),
             md_link: Color::Rgb(86, 156, 214),
 
@@ -746,9 +746,9 @@ impl Theme {
             md_inline_code_fg: Color::Rgb(220, 180, 110),
             md_inline_code_bg: Color::Rgb(50, 50, 60),
             md_list_bullet: Color::Rgb(80, 150, 240),
-            md_blockquote_bar: Color::Rgb(70, 90, 130),
-            md_blockquote_text: Color::Rgb(150, 150, 170),
-            md_blockquote_bg: Color::Rgb(40, 40, 50),
+            md_blockquote_bar: Color::Rgb(100, 140, 200),
+            md_blockquote_text: Color::Rgb(175, 175, 195),
+            md_blockquote_bg: Color::Rgb(36, 38, 52),
             md_rule: Color::Rgb(70, 70, 80),
             md_link: Color::Rgb(86, 156, 214),
 
@@ -897,9 +897,9 @@ impl Theme {
             md_inline_code_fg: Color::Rgb(165, 75, 25),
             md_inline_code_bg: Color::Rgb(248, 244, 235),
             md_list_bullet: Color::Rgb(25, 100, 200),
-            md_blockquote_bar: Color::Rgb(100, 130, 180),
-            md_blockquote_text: Color::Rgb(80, 90, 110),
-            md_blockquote_bg: Color::Rgb(245, 242, 235),
+            md_blockquote_bar: Color::Rgb(80, 110, 170),
+            md_blockquote_text: Color::Rgb(60, 70, 95),
+            md_blockquote_bg: Color::Rgb(240, 236, 225),
             md_rule: Color::Rgb(195, 200, 215),
             md_link: Color::Rgb(0, 102, 204),
 
@@ -1048,11 +1048,11 @@ impl Theme {
             md_inline_code_fg: Color::Rgb(235, 203, 139), // nord13
             md_inline_code_bg: Color::Rgb(59, 66, 82), // nord1
             md_list_bullet: Color::Rgb(129, 161, 193), // nord9
-            md_blockquote_bar: Color::Rgb(76, 86, 106), // nord3
-            md_blockquote_text: Color::Rgb(160, 170, 185),
-            md_blockquote_bg: Color::Rgb(59, 66, 82), // nord1
-            md_rule: Color::Rgb(67, 76, 94),          // nord2
-            md_link: Color::Rgb(136, 192, 208),       // nord8
+            md_blockquote_bar: Color::Rgb(129, 161, 193), // nord9
+            md_blockquote_text: Color::Rgb(178, 186, 202),
+            md_blockquote_bg: Color::Rgb(52, 58, 72),
+            md_rule: Color::Rgb(67, 76, 94),    // nord2
+            md_link: Color::Rgb(136, 192, 208), // nord8
 
             // 代码块 — Nord 风格语法高亮
             code_border: Color::Rgb(76, 86, 106),    // nord3
@@ -1199,9 +1199,9 @@ impl Theme {
             md_inline_code_fg: Color::Rgb(230, 219, 116), // monokai yellow
             md_inline_code_bg: Color::Rgb(55, 55, 45),
             md_list_bullet: Color::Rgb(249, 38, 114), // monokai pink
-            md_blockquote_bar: Color::Rgb(117, 113, 94),
-            md_blockquote_text: Color::Rgb(170, 170, 160),
-            md_blockquote_bg: Color::Rgb(55, 55, 45),
+            md_blockquote_bar: Color::Rgb(230, 219, 116), // monokai yellow
+            md_blockquote_text: Color::Rgb(190, 185, 170),
+            md_blockquote_bg: Color::Rgb(48, 48, 38),
             md_rule: Color::Rgb(80, 80, 70),
             md_link: Color::Rgb(102, 217, 239),
 

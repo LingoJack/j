@@ -309,6 +309,32 @@ impl MarkdownRenderer {
                 return vec![Line::from(spans)];
             }
 
+            // 引用块续行：保持引用块样式
+            let trimmed = line_content.trim_start();
+            if trimmed.starts_with('>') {
+                let mut level = 0;
+                let mut rest = trimmed;
+                while rest.starts_with('>') {
+                    level += 1;
+                    rest = rest[1..].trim_start();
+                }
+                let _ = rest; // 续行不需要 rest
+
+                let bar: String = (0..level).map(|_| "▎").collect::<Vec<_>>().join("");
+                let bar_style = Style::default()
+                    .fg(self.theme.md_blockquote_bar)
+                    .bg(self.theme.md_blockquote_bg)
+                    .add_modifier(Modifier::BOLD);
+                let text_style = Style::default()
+                    .fg(self.theme.md_blockquote_text)
+                    .bg(self.theme.md_blockquote_bg);
+
+                let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+                spans.push(Span::styled(format!("{} ", bar), bar_style));
+                spans.push(Span::styled(text.clone(), text_style));
+                return vec![Line::from(spans)];
+            }
+
             // 普通续行
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
             if !search.pattern.is_empty() && search.match_count() > 0 {
@@ -1234,22 +1260,53 @@ impl MarkdownRenderer {
             }
             let text = rest;
 
-            let prefix: String = (0..level).map(|_| "│").collect::<Vec<_>>().join("");
-            let prefix_style = if level == 1 {
-                self.style(self.theme.text_dim)
-            } else {
-                Style::default()
-                    .fg(self.theme.text_dim)
-                    .bg(self.theme.bg_primary)
-            };
+            // 引用块竖线: 每级一个 ▎，加粗显示
+            let bar: String = (0..level).map(|_| "▎").collect::<Vec<_>>().join("");
+            let bar_style = Style::default()
+                .fg(self.theme.md_blockquote_bar)
+                .bg(self.theme.md_blockquote_bg)
+                .add_modifier(Modifier::BOLD);
 
+            // 引用块文字: 使用主题专用颜色 + 背景
+            let text_style = Style::default()
+                .fg(self.theme.md_blockquote_text)
+                .bg(self.theme.md_blockquote_bg);
+
+            // 渲染行内元素，然后覆盖基础文字颜色和背景
             let rendered = self.render_inline(text);
+            let styled_rendered: Vec<Span<'static>> = rendered
+                .into_iter()
+                .map(|span| {
+                    // 保留行内代码等特殊样式，只覆盖基础文字颜色
+                    let has_special_bg = span
+                        .style
+                        .bg
+                        .map_or(false, |bg| bg != self.theme.bg_primary);
+                    if has_special_bg {
+                        span // 保留行内代码等自带背景的样式
+                    } else {
+                        Span::styled(
+                            span.content,
+                            span.style.fg.map_or(text_style, |fg| {
+                                // 对于使用 text_normal 的普通文本，替换为 md_blockquote_text
+                                if fg == self.theme.text_normal {
+                                    text_style
+                                } else {
+                                    // 加粗/斜体等保留原前景色，只加 blockquote 背景
+                                    Style::default().fg(fg).bg(self.theme.md_blockquote_bg)
+                                }
+                            }),
+                        )
+                    }
+                })
+                .collect();
+
             let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("{} ", prefix), prefix_style),
+                Span::styled(format!("{} ", bar), bar_style),
             ];
-            spans.extend(rendered);
+            spans.extend(styled_rendered);
             return Line::from(spans);
         }
 
