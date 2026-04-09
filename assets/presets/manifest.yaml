@@ -5,3 +5,7 @@
   file: open.sh
 - name: ll
   file: ll.sh
+- name: push
+  file: push.sh
+- name: pull
+  file: pull.sh
