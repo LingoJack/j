@@ -259,6 +259,10 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                 file: rest.to_vec(),
             })
         }
+    } else if is(cmd::NOTEBOOK) {
+        ParseResult::Matched(SubCmd::Notebook {
+            args: rest.to_vec(),
+        })
     } else {
         ParseResult::NotFound
     }

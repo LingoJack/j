@@ -1278,10 +1278,8 @@ impl MarkdownRenderer {
                 .into_iter()
                 .map(|span| {
                     // 保留行内代码等特殊样式，只覆盖基础文字颜色
-                    let has_special_bg = span
-                        .style
-                        .bg
-                        .map_or(false, |bg| bg != self.theme.bg_primary);
+                    let has_special_bg =
+                        span.style.bg.is_some_and(|bg| bg != self.theme.bg_primary);
                     if has_special_bg {
                         span // 保留行内代码等自带背景的样式
                     } else {

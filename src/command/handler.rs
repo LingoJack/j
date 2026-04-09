@@ -138,6 +138,11 @@ command_handlers! {
         let file = self.file.join(" ");
         crate::command::markdown::handle_md(&file, config);
     },
+
+    // ========== 笔记本 ==========
+    NotebookCmd { args: Vec<String> } => |self, config| {
+        crate::command::notebook::handle_notebook(&self.args, config);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -208,6 +213,9 @@ impl SubCmd {
 
             // Markdown 编辑器
             SubCmd::Md { file } => Box::new(MdCmd { file }),
+
+            // 笔记本
+            SubCmd::Notebook { args } => Box::new(NotebookCmd { args }),
         }
     }
 }

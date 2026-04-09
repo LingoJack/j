@@ -264,12 +264,15 @@ pub mod cmd {
     // Markdown 编辑器
     pub const MD: &[&str] = &["md", "markdown"];
 
+    // 笔记本
+    pub const NOTEBOOK: &[&str] = &["notebook", "nb"];
+
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
             SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
-            AGENT, SYSTEM, UPDATE, MD,
+            AGENT, SYSTEM, UPDATE, MD, NOTEBOOK,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }
@@ -284,6 +287,16 @@ pub mod rmeta_action {
     pub const PULL: &str = "pull";
     pub const SET_URL: &str = "set-url";
     pub const OPEN: &str = "open";
+}
+
+// ========== notebook 子命令 ==========
+
+pub mod notebook_action {
+    pub const LIST: &str = "list";
+    pub const SEARCH: &str = "search";
+    pub const DELETE: &str = "delete";
+    pub const OPEN: &str = "open";
+    pub const RENAME: &str = "rename";
 }
 
 // ========== time 子命令 ==========

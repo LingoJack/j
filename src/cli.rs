@@ -239,4 +239,13 @@ pub enum SubCmd {
         #[arg(trailing_var_arg = true, num_args = 1..)]
         file: Vec<String>,
     },
+
+    // ========== 笔记本 ==========
+    /// 本地笔记管理（存储于 .jcli/notebook/）
+    #[command(alias = "nb")]
+    Notebook {
+        /// 子命令或笔记标题（list/search/delete/open/rename 或笔记名）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
