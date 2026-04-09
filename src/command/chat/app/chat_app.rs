@@ -74,6 +74,8 @@ pub struct ChatApp {
     pub shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// UI 侧已读取到的位置（用于增量检测）
     pub shared_messages_read_cursor: usize,
+    /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
+    pub context_tokens: Arc<Mutex<usize>>,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -260,6 +262,7 @@ impl ChatApp {
             agent_tool_system_prompt: agent_system_prompt,
             shared_agent_messages: Arc::new(Mutex::new(Vec::new())),
             shared_messages_read_cursor: 0,
+            context_tokens: Arc::new(Mutex::new(0)),
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -1268,6 +1271,9 @@ impl ChatApp {
                         self.state.session = session;
                         self.ui.scroll_offset = 0;
                         self.ui.msg_lines_cache = None;
+                        if let Ok(mut ct) = self.context_tokens.lock() {
+                            *ct = 0;
+                        }
                         // 广播同步 + 切换通知
                         let sync = self.build_sync_outbound();
                         self.broadcast_ws(sync);
@@ -1298,6 +1304,9 @@ impl ChatApp {
                     self.last_persisted_len = 0;
                     self.ui.scroll_offset = 0;
                     self.ui.msg_lines_cache = None;
+                    if let Ok(mut ct) = self.context_tokens.lock() {
+                        *ct = 0;
+                    }
                     // 广播同步 + 切换通知
                     let sync = self.build_sync_outbound();
                     self.broadcast_ws(sync);
@@ -1351,6 +1360,9 @@ impl ChatApp {
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.session_restore_confirm = false;
+                    if let Ok(mut ct) = self.context_tokens.lock() {
+                        *ct = 0;
+                    }
                     self.ui.mode = ChatMode::Chat;
                     self.show_toast("会话已恢复".to_string(), false);
                 }
@@ -1385,6 +1397,9 @@ impl ChatApp {
                 self.last_persisted_len = 0;
                 self.ui.scroll_offset = 0;
                 self.ui.msg_lines_cache = None;
+                if let Ok(mut ct) = self.context_tokens.lock() {
+                    *ct = 0;
+                }
                 self.ui.mode = ChatMode::Chat;
                 self.show_toast("已新建会话".to_string(), false);
             }
@@ -1877,6 +1892,7 @@ impl ChatApp {
             background_manager,
             todo_manager,
             shared_messages: Arc::clone(&self.shared_agent_messages),
+            context_tokens: Arc::clone(&self.context_tokens),
         };
         let (handle, tool_result_tx) = AgentHandle::spawn(
             agent_config,
@@ -2430,6 +2446,10 @@ impl ChatApp {
         self.ui.msg_lines_cache = None;
         append_session_event(&self.session_id, &SessionEvent::Clear);
         self.last_persisted_len = 0;
+        // 重置上下文 token 计数
+        if let Ok(mut ct) = self.context_tokens.lock() {
+            *ct = 0;
+        }
         self.show_toast("对话已清空", false);
     }
 

@@ -99,8 +99,15 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
     let msg_count = app.state.session.messages.len();
 
-    // 估算上下文 tokens
-    let estimated_tokens = estimate_tokens(&app.state.session.messages);
+    // 估算上下文 tokens：优先使用 agent 实际上下文 token 数，否则从 session.messages 估算
+    let estimated_tokens = {
+        let agent_tokens = app.context_tokens.lock().ok().map(|ct| *ct).unwrap_or(0);
+        if agent_tokens > 0 {
+            agent_tokens
+        } else {
+            estimate_tokens(&app.state.session.messages)
+        }
+    };
     let ctx_str = format_context_tokens(estimated_tokens);
 
     let loading = if app.state.is_loading {

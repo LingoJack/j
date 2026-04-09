@@ -32,4 +32,6 @@ pub struct AgentSharedState {
     pub todo_manager: Arc<TodoManager>,
     /// 共享消息列表（agent 写入，UI 读取）
     pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
+    pub context_tokens: Arc<Mutex<usize>>,
 }

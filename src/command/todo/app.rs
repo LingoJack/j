@@ -611,7 +611,8 @@ pub fn handle_confirm_report(app: &mut TodoApp, key: KeyEvent, config: &mut Yaml
     match key.code {
         KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
             if let Some(content) = app.report_pending_content.take() {
-                let write_ok = report::write_to_report(&content, config);
+                let content_with_done = format!("{} [Done]", content);
+                let write_ok = report::write_to_report(&content_with_done, config);
                 // 先保存 todo（save 会覆盖 message）
                 if app.is_dirty() && save_todo_list(&app.list) {
                     app.snapshot = app.list.clone();

@@ -49,6 +49,7 @@ pub async fn run_agent_loop(
         background_manager,
         todo_manager,
         shared_messages,
+        context_tokens,
     } = shared;
 
     let client = create_openai_client(&provider);
@@ -203,6 +204,14 @@ pub async fn run_agent_loop(
                 if let Some(inject) = result.inject_messages {
                     messages.extend(inject);
                 }
+            }
+        }
+
+        // 更新实际上下文 token 估算值（供 UI 显示）
+        {
+            let tokens = compact::estimate_tokens(&messages);
+            if let Ok(mut ct) = context_tokens.lock() {
+                *ct = tokens;
             }
         }
 
