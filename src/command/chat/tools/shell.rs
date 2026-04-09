@@ -4,7 +4,7 @@ use crate::command::chat::constants::{
     SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
 };
 use crate::command::chat::tools::{
-    Tool, is_dangerous_command, parse_tool_args, schema_to_tool_params,
+    Tool, check_blocking_command, is_dangerous_command, parse_tool_args, schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -101,6 +101,17 @@ impl Tool for ShellTool {
         if is_dangerous_command(&params.command) {
             return ToolResult {
                 output: "该命令被安全策略拒绝执行".to_string(),
+                is_error: true,
+                images: vec![],
+            };
+        }
+
+        // 阻塞式命令检测（仅非后台运行时）
+        if !params.run_in_background
+            && let Some(msg) = check_blocking_command(&params.command)
+        {
+            return ToolResult {
+                output: format!("该命令被阻断: {}", msg),
                 is_error: true,
                 images: vec![],
             };
