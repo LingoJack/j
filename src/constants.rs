@@ -216,8 +216,8 @@ pub mod cmd {
     pub const MODIFY: &[&str] = &["mf", "modify"];
 
     // 分类标记
-    pub const NOTE: &[&str] = &["note", "nt"];
-    pub const DENOTE: &[&str] = &["denote", "dnt"];
+    pub const TAG: &[&str] = &["tag", "t"];
+    pub const UNTAG: &[&str] = &["untag", "ut"];
 
     // 列表 & 查找
     pub const LIST: &[&str] = &["ls", "list"];
@@ -233,14 +233,14 @@ pub mod cmd {
     pub const TODO: &[&str] = &["todo", "td"];
 
     // 脚本
-    pub const CONCAT: &[&str] = &["concat"];
+    pub const SCRIPT: &[&str] = &["script", "sc"];
 
     // 倒计时
     pub const TIME: &[&str] = &["time"];
 
     // 系统设置
     pub const LOG: &[&str] = &["log"];
-    pub const CHANGE: &[&str] = &["change", "chg"];
+    pub const CONFIG: &[&str] = &["config", "cfg"];
     pub const CLEAR: &[&str] = &["clear", "cls"];
 
     // 系统信息
@@ -270,8 +270,8 @@ pub mod cmd {
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
-            SET, REMOVE, RENAME, MODIFY, NOTE, DENOTE, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
-            SEARCH, TODO, CHAT, CONCAT, TIME, LOG, CHANGE, CLEAR, VERSION, HELP, EXIT, COMPLETION,
+            SET, REMOVE, RENAME, MODIFY, TAG, UNTAG, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
+            SEARCH, TODO, CHAT, SCRIPT, TIME, LOG, CONFIG, CLEAR, VERSION, HELP, EXIT, COMPLETION,
             AGENT, SYSTEM, UPDATE, MD, NOTEBOOK,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()

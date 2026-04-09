@@ -5,9 +5,9 @@ use crate::{error, info, usage};
 /// 支持标记的分类列表（引用全局常量）
 const VALID_CATEGORIES: &[&str] = constants::NOTE_CATEGORIES;
 
-/// 处理 note 命令: j note <alias> <category>
+/// 处理 tag 命令: j tag <alias> <category>
 /// 将别名标记为指定分类（browser/editor/vpn/outer_url/script）
-pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
+pub fn handle_tag(alias: &str, category: &str, config: &mut YamlConfig) {
     // 校验别名是否存在
     if !config.contains(section::PATH, alias)
         && !config.contains(section::INNER_URL, alias)
@@ -20,7 +20,7 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
     // 校验 category 是否合法
     if !VALID_CATEGORIES.contains(&category) {
         usage!(
-            "j note <alias> <category> (可选: {})",
+            "j tag <alias> <category> (可选: {})",
             VALID_CATEGORIES.join(", ")
         );
         return;
@@ -53,13 +53,13 @@ pub fn handle_note(alias: &str, category: &str, config: &mut YamlConfig) {
     }
 }
 
-/// 处理 denote 命令: j denote <alias> <category>
+/// 处理 untag 命令: j untag <alias> <category>
 /// 解除别名的分类标记
-pub fn handle_denote(alias: &str, category: &str, config: &mut YamlConfig) {
+pub fn handle_untag(alias: &str, category: &str, config: &mut YamlConfig) {
     // 校验 category 是否合法
     if !VALID_CATEGORIES.contains(&category) {
         usage!(
-            "j denote <alias> <category> (可选: {})",
+            "j untag <alias> <category> (可选: {})",
             VALID_CATEGORIES.join(", ")
         );
         return;

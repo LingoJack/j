@@ -81,9 +81,9 @@ pub fn handle_contain(alias: &str, containers: Option<&str>, config: &YamlConfig
     }
 }
 
-/// 处理 change 命令: j change <part> <field> <value>
+/// 处理 config 命令: j config <part> <field> <value>
 /// 直接修改配置文件中的某个字段（如果字段不存在则新增）
-pub fn handle_change(part: &str, field: &str, value: &str, config: &mut YamlConfig) {
+pub fn handle_config(part: &str, field: &str, value: &str, config: &mut YamlConfig) {
     if config.get_section(part).is_none() {
         error!("✖️ 在配置文件中未找到该 section：{}", part);
         return;
@@ -222,7 +222,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
     script.push_str("                    ;;\n");
 
     // remove / rename 命令：补全别名
-    script.push_str("                rm|remove|rename|rn|note|nt|denote|dnt|contain|find)\n");
+    script.push_str("                rm|remove|rename|rn|tag|t|untag|ut|contain|find)\n");
     script.push_str("                    _describe 'alias' aliases\n");
     script.push_str("                    ;;\n");
 
@@ -255,7 +255,7 @@ fn generate_zsh_completion(config: &YamlConfig) {
     script.push_str("                    ;;\n");
 
     // change 命令：补全 section
-    script.push_str("                change|chg)\n");
+    script.push_str("                config|cfg)\n");
     script.push_str(&format!(
         "                    local -a sections=({})\n",
         sections_str
@@ -370,7 +370,7 @@ fn generate_bash_completion(config: &YamlConfig) {
     script.push_str("                _filedir\n");
     script.push_str("            fi\n");
     script.push_str("            ;;\n");
-    script.push_str("        rm|remove|rename|rn|note|nt|denote|dnt|contain|find)\n");
+    script.push_str("        rm|remove|rename|rn|tag|t|untag|ut|contain|find)\n");
     script.push_str("            COMPREPLY=( $(compgen -W \"$aliases\" -- \"$cur\") )\n");
     script.push_str("            ;;\n");
     script.push_str("        reportctl|rctl)\n");

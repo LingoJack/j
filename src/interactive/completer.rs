@@ -70,6 +70,10 @@ pub enum ArgHint {
     Fixed(Vec<&'static str>),
     /// Flag 补全：当前词以 `-` 开头时触发，可出现在任意参数位置
     Flags(Vec<&'static str>),
+    /// 动态补全：根据前面第 N 个 positional 参数作为 section 名，补全该 section 下的 key
+    DynamicSectionKeys {
+        section_arg_index: usize,
+    },
     Placeholder(&'static str),
     FilePath,
     None,
@@ -88,8 +92,8 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
             vec![ArgHint::Alias, ArgHint::Placeholder("<new_alias>")],
         ),
         (cmd::MODIFY, vec![ArgHint::Alias, ArgHint::FilePath]),
-        (cmd::NOTE, vec![ArgHint::Alias, ArgHint::Category]),
-        (cmd::DENOTE, vec![ArgHint::Alias, ArgHint::Category]),
+        (cmd::TAG, vec![ArgHint::Alias, ArgHint::Category]),
+        (cmd::UNTAG, vec![ArgHint::Alias, ArgHint::Category]),
         (
             cmd::LIST,
             vec![ArgHint::Fixed({
@@ -112,10 +116,12 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
             ],
         ),
         (
-            cmd::CHANGE,
+            cmd::CONFIG,
             vec![
                 ArgHint::Section,
-                ArgHint::Placeholder("<field>"),
+                ArgHint::DynamicSectionKeys {
+                    section_arg_index: 0,
+                },
                 ArgHint::Placeholder("<value>"),
             ],
         ),
@@ -161,7 +167,7 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
             ],
         ),
         (
-            cmd::CONCAT,
+            cmd::SCRIPT,
             vec![
                 ArgHint::Placeholder("<script_name>"),
                 ArgHint::Placeholder("<script_content>"),
@@ -294,6 +300,23 @@ impl Completer for CopilotCompleter {
                 }
                 let positional_index = (word_index - 1).saturating_sub(skip);
 
+                // 收集前面已输入的 positional 参数值（跳过 flag）
+                let mut positional_values: Vec<&str> = Vec::new();
+                {
+                    let mut j = 0;
+                    let preceding = &parts[1..word_index];
+                    while j < preceding.len() {
+                        if preceding[j] == "--session" {
+                            j += 2;
+                        } else if preceding[j].starts_with('-') {
+                            j += 1;
+                        } else {
+                            positional_values.push(preceding[j]);
+                            j += 1;
+                        }
+                    }
+                }
+
                 if positional_index < non_flag_args.len() {
                     let candidates = match non_flag_args[positional_index] {
                         ArgHint::Alias => self
@@ -331,6 +354,20 @@ impl Completer for CopilotCompleter {
                                 replacement: k,
                             })
                             .collect(),
+                        ArgHint::DynamicSectionKeys { section_arg_index } => {
+                            if let Some(section_name) = positional_values.get(*section_arg_index) {
+                                self.section_keys(section_name)
+                                    .into_iter()
+                                    .filter(|k| k.starts_with(current_word))
+                                    .map(|k| Pair {
+                                        display: k.clone(),
+                                        replacement: k,
+                                    })
+                                    .collect()
+                            } else {
+                                vec![]
+                            }
+                        }
                         ArgHint::Fixed(options) => options
                             .iter()
                             .filter(|o| !o.is_empty() && o.starts_with(current_word))
