@@ -3,20 +3,24 @@ use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-    mpsc,
-};
+use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== Plan Mode State ==========
 
+/// Plan mode 内部状态（受 Mutex 保护，保证原子性）
+struct PlanModeInner {
+    active: bool,
+    plan_file_path: Option<String>,
+}
+
 /// Plan Mode 全局状态（跨工具共享）
+///
+/// 使用单一 Mutex 保护 active + plan_file_path，避免以下并发问题：
+/// - enter() 的 TOCTOU 竞态（先检查 is_active 再进入）
+/// - exit() 不清理 plan_file_path
+/// - is_active() 与 get_plan_file_path() 之间状态不一致
 pub struct PlanModeState {
-    /// 是否处于 plan mode
-    pub active: AtomicBool,
-    /// plan 文件路径（EnterPlanMode 创建，ExitPlanMode 读取）
-    pub plan_file_path: Mutex<Option<String>>,
+    inner: Mutex<PlanModeInner>,
 }
 
 impl Default for PlanModeState {
@@ -28,28 +32,58 @@ impl Default for PlanModeState {
 impl PlanModeState {
     pub fn new() -> Self {
         Self {
-            active: AtomicBool::new(false),
-            plan_file_path: Mutex::new(None),
+            inner: Mutex::new(PlanModeInner {
+                active: false,
+                plan_file_path: None,
+            }),
         }
     }
 
+    /// 检查是否处于 plan mode
     pub fn is_active(&self) -> bool {
-        self.active.load(Ordering::Relaxed)
+        self.inner.lock().map(|g| g.active).unwrap_or(false)
     }
 
-    pub fn enter(&self, path: String) {
-        self.active.store(true, Ordering::Relaxed);
-        if let Ok(mut p) = self.plan_file_path.lock() {
-            *p = Some(path);
+    /// 进入 plan mode，同时设置 plan 文件路径
+    /// 返回 Ok(()) 表示成功进入，Err(msg) 表示已在 plan mode
+    pub fn enter(&self, path: String) -> Result<(), String> {
+        match self.inner.lock() {
+            Ok(mut guard) => {
+                if guard.active {
+                    return Err("Already in plan mode. Use ExitPlanMode to exit.".to_string());
+                }
+                guard.active = true;
+                guard.plan_file_path = Some(path);
+                Ok(())
+            }
+            Err(e) => Err(format!("Lock poisoned: {}", e)),
         }
     }
 
+    /// 退出 plan mode，同时清理 plan_file_path 和 plan 文件
     pub fn exit(&self) {
-        self.active.store(false, Ordering::Relaxed);
+        if let Ok(mut guard) = self.inner.lock() {
+            // 清理 plan 文件
+            if let Some(ref path) = guard.plan_file_path {
+                let _ = std::fs::remove_file(path);
+            }
+            guard.active = false;
+            guard.plan_file_path = None;
+        }
     }
 
+    /// 原子地检查是否 active 并获取 plan 文件路径
+    /// 返回 (is_active, plan_file_path)
+    pub fn get_state(&self) -> (bool, Option<String>) {
+        match self.inner.lock() {
+            Ok(guard) => (guard.active, guard.plan_file_path.clone()),
+            Err(_) => (false, None),
+        }
+    }
+
+    /// 获取 plan 文件路径（仅在 active 时有意义）
     pub fn get_plan_file_path(&self) -> Option<String> {
-        self.plan_file_path.lock().ok()?.clone()
+        self.inner.lock().ok()?.plan_file_path.clone()
     }
 }
 
@@ -122,14 +156,6 @@ impl Tool for EnterPlanModeTool {
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        if self.plan_state.is_active() {
-            return ToolResult {
-                output: "Already in plan mode. Use ExitPlanMode to exit.".to_string(),
-                is_error: false,
-                images: vec![],
-            };
-        }
-
         let params: EnterPlanModeParams =
             serde_json::from_str(arguments).unwrap_or(EnterPlanModeParams { description: None });
         let description = params
@@ -137,28 +163,34 @@ impl Tool for EnterPlanModeTool {
             .as_deref()
             .unwrap_or("implementation plan");
 
-        // 创建 plan 文件
+        // 创建 plan 文件（用 PID 隔离，避免多实例共享同一目录时互相覆盖）
         let plan_dir = crate::command::chat::permission::JcliConfig::ensure_config_dir()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(".jcli"));
         let _ = std::fs::create_dir_all(&plan_dir);
-        let plan_file = plan_dir.join("plan.md");
+        let plan_file = plan_dir.join(format!("plan-{}.md", std::process::id()));
         let plan_path = plan_file.display().to_string();
 
         // 写入初始模板
         let template = format!("# Plan: {}\n\n## Steps\n\n1. \n\n## Notes\n\n", description);
         let _ = std::fs::write(&plan_file, &template);
 
-        self.plan_state.enter(plan_path.clone());
-
-        ToolResult {
-            output: format!(
-                "Entered plan mode. Plan file created at: {}\n\
-                 In plan mode, only read-only tools are available.\n\
-                 Write your plan to the plan file, then use ExitPlanMode when ready for user approval.",
-                plan_path
-            ),
-            is_error: false,
-            images: vec![],
+        // 原子性地进入 plan mode（内部检查 is_active，避免 TOCTOU 竞态）
+        match self.plan_state.enter(plan_path.clone()) {
+            Ok(()) => ToolResult {
+                output: format!(
+                    "Entered plan mode. Plan file created at: {}\n\
+                     In plan mode, only read-only tools are available.\n\
+                     Write your plan to the plan file, then use ExitPlanMode when ready for user approval.",
+                    plan_path
+                ),
+                is_error: false,
+                images: vec![],
+            },
+            Err(msg) => ToolResult {
+                output: msg,
+                is_error: false,
+                images: vec![],
+            },
         }
     }
 

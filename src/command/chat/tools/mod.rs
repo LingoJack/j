@@ -199,11 +199,12 @@ impl ToolRegistry {
     /// 按名称执行工具，返回结果（可在任何线程调用，ToolRegistry: Send + Sync）
     /// 自动检查 plan mode：若 plan mode 激活且工具不在白名单中，返回错误
     pub fn execute(&self, name: &str, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
-        // Plan mode 检查
-        if self.plan_mode_state.is_active() && !plan::is_allowed_in_plan_mode(name) {
+        // Plan mode 检查（原子获取 active + plan_file_path，避免竞态）
+        let (is_active, plan_file_path) = self.plan_mode_state.get_state();
+        if is_active && !plan::is_allowed_in_plan_mode(name) {
             // 允许 Write/Edit 工具写入 plan 文件
             let is_plan_file_write = (name == "Write" || name == "Edit") && {
-                if let Some(plan_path) = self.plan_mode_state.get_plan_file_path() {
+                if let Some(ref plan_path) = plan_file_path {
                     // 从工具参数中提取目标路径
                     serde_json::from_str::<serde_json::Value>(arguments)
                         .ok()
