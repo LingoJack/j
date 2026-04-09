@@ -187,6 +187,10 @@ pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)
         (cmd::EXIT, vec![]),
         (cmd::UPDATE, vec![ArgHint::Fixed(vec!["--check"])]),
         (cmd::MD, vec![ArgHint::FilePath]),
+        (
+            cmd::HOTKEY,
+            vec![ArgHint::Fixed(vec!["start", "stop", "status"])],
+        ),
     ]
 }
 

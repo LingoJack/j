@@ -249,4 +249,15 @@ pub enum SubCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+
+    // ========== 全局热键 ==========
+    /// 全局热键守护进程管理（start/stop/status）
+    #[command(alias = "hk")]
+    Hotkey {
+        /// 操作: start / stop / status
+        action: String,
+        /// 内部标志：以守护进程模式运行（用户不应直接使用）
+        #[arg(long, hide = true)]
+        daemon: bool,
+    },
 }

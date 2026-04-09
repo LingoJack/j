@@ -143,6 +143,11 @@ command_handlers! {
     NotebookCmd { args: Vec<String> } => |self, config| {
         crate::command::notebook::handle_notebook(&self.args, config);
     },
+
+    // ========== 全局热键 ==========
+    HotkeyCmd { action: String, daemon: bool } => |self, _config| {
+        crate::command::hotkey::handle_hotkey(&self.action, self.daemon);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -216,6 +221,9 @@ impl SubCmd {
 
             // 笔记本
             SubCmd::Notebook { args } => Box::new(NotebookCmd { args }),
+
+            // 全局热键
+            SubCmd::Hotkey { action, daemon } => Box::new(HotkeyCmd { action, daemon }),
         }
     }
 }

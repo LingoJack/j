@@ -267,12 +267,15 @@ pub mod cmd {
     // 笔记本
     pub const NOTEBOOK: &[&str] = &["notebook", "nb"];
 
+    // 全局热键
+    pub const HOTKEY: &[&str] = &["hotkey", "hk"];
+
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, TAG, UNTAG, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
             SEARCH, TODO, CHAT, SCRIPT, TIME, LOG, CONFIG, CLEAR, VERSION, HELP, EXIT, COMPLETION,
-            AGENT, SYSTEM, UPDATE, MD, NOTEBOOK,
+            AGENT, SYSTEM, UPDATE, MD, NOTEBOOK, HOTKEY,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }
@@ -377,6 +380,9 @@ pub const REPORT_DIR: &str = "report";
 
 /// 笔记本目录名
 pub const NOTEBOOK_DIR: &str = "notebook";
+
+/// 热键守护进程 PID 文件名
+pub const HOTKEY_PID_FILE: &str = "hotkey.pid";
 
 /// agent 目录名
 pub const AGENT_DIR: &str = "agent";

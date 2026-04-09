@@ -3,6 +3,7 @@ pub mod category;
 pub mod chat;
 pub mod handler;
 pub mod help;
+pub mod hotkey;
 pub mod list;
 pub mod markdown;
 pub mod notebook;

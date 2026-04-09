@@ -263,6 +263,15 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::Matched(SubCmd::Notebook {
             args: rest.to_vec(),
         })
+    } else if is(cmd::HOTKEY) {
+        if rest.is_empty() {
+            crate::usage!("hotkey <start|stop|status>");
+            return ParseResult::Handled;
+        }
+        ParseResult::Matched(SubCmd::Hotkey {
+            action: rest[0].clone(),
+            daemon: rest.contains(&"--daemon".to_string()),
+        })
     } else {
         ParseResult::NotFound
     }
