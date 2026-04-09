@@ -27,8 +27,8 @@ j set vscode "/Applications/Visual Studio Code.app"
 j set github https://github.com
 
 # 标记分类（标记后支持组合打开）
-j note chrome browser
-j note vscode editor
+j tag chrome browser
+j tag vscode editor
 
 # 一键打开
 j chrome                  # 打开 Chrome
@@ -82,7 +82,7 @@ j
 │   ├── settings.json    # 日报配置（周数、日期）
 │   ├── todo.json        # 待办数据（JSON 格式）
 │   └── .git/            # git 仓库（配置远程仓库后生成）
-├── scripts/             # j concat 创建的脚本
+├── scripts/             # j script 创建的脚本
 ```
 
 ### 配置文件结构 (`config.yaml`)
@@ -115,8 +115,8 @@ j
 
 | 命令 | 说明 |
 |------|------|
-| `j note <alias> <category>` | 标记别名分类 |
-| `j denote <alias> <category>` | 解除别名分类 |
+| `j tag <alias> <category>` | 标记别名分类 |
+| `j untag <alias> <category>` | 解除别名分类 |
 
 可用分类: `browser`, `editor`, `vpn`, `outer_url`, `script`
 
@@ -162,7 +162,7 @@ j
 | `j search <N/all> <kw> -f` | 模糊搜索（大小写不敏感） |
 
 > 日报默认路径: `~/.jdata/report/week_report.md`
-> 自定义路径: `j change report week_report <path>`
+> 自定义路径: `j config report week_report <path>`
 > 配置远程仓库: `j reportctl set-url <repo_url>`
 
 ---
@@ -225,8 +225,8 @@ j
 
 | 命令 | 说明 |
 |------|------|
-| `j concat <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
-| `j concat <name>` | 脚本已存在时打开 TUI 编辑器修改脚本内容 |
+| `j script <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
+| `j script <name>` | 脚本已存在时打开 TUI 编辑器修改脚本内容 |
 | `j <script> [args...]` | 在当前终端执行脚本 |
 | `j <script> -w [args...]` | 在**新终端窗口**中执行脚本 |
 | `j time countdown <duration>` | 启动倒计时（支持 30s / 5m / 1h） |
@@ -259,7 +259,7 @@ open -a "$J_CHROME" https://example.com
 | 命令 | 说明 |
 |------|------|
 | `j log mode <verbose/concise>` | 设置日志模式 |
-| `j change <section> <field> <val>` | 直接修改配置字段 |
+| `j config <section> <field> <val>` | 直接修改配置字段 |
 | `j clear` | 清屏 |
 | `j version` | 版本信息 |
 | `j help` | 帮助信息 |
@@ -585,7 +585,7 @@ AI 对话支持工具调用，让 AI 能够执行实际操作。
 **浏览器模式说明**：
 - **Lite 模式**（默认）：基于 HTTP 请求 + HTML 解析的轻量级浏览器模拟，无需安装 Chrome。支持 tab 管理、页面交互元素识别（snapshot）、链接/表单提取等。
 - **CDP 模式**：需用 `cargo build --features browser_cdp` 编译。使用真实 Chrome/Chromium 浏览器，支持截图、点击、输入、JS 执行等完整浏览器控制。
-- **Headless 配置**：默认 headless 模式。可通过 `j change setting browser_headless false` 切换为有头模式。
+- **Headless 配置**：默认 headless 模式。可通过 `j config setting browser_headless false` 切换为有头模式。
 
 **浏览器工具 FAQ**：
 

@@ -50,11 +50,11 @@ command_handlers! {
     },
 
     // ========== 分类标记 ==========
-    NoteCmd { alias: String, category: String } => |self, config| {
-        crate::command::category::handle_note(&self.alias, &self.category, config);
+    TagCmd { alias: String, category: String } => |self, config| {
+        crate::command::category::handle_tag(&self.alias, &self.category, config);
     },
-    DenoteCmd { alias: String, category: String } => |self, config| {
-        crate::command::category::handle_denote(&self.alias, &self.category, config);
+    UntagCmd { alias: String, category: String } => |self, config| {
+        crate::command::category::handle_untag(&self.alias, &self.category, config);
     },
 
     // ========== 列表 & 查找 ==========
@@ -94,8 +94,8 @@ command_handlers! {
     },
 
     // ========== 脚本 ==========
-    ConcatCmd { name: String, content: Vec<String> } => |self, config| {
-        crate::command::script::handle_concat(&self.name, &self.content, config);
+    ScriptCmd { name: String, content: Vec<String> } => |self, config| {
+        crate::command::script::handle_script(&self.name, &self.content, config);
     },
 
     // ========== 计时器 ==========
@@ -107,8 +107,8 @@ command_handlers! {
     LogCmd { key: String, value: String } => |self, config| {
         crate::command::system::handle_log(&self.key, &self.value, config);
     },
-    ChangeCmd { part: String, field: String, value: String } => |self, config| {
-        crate::command::system::handle_change(&self.part, &self.field, &self.value, config);
+    ConfigCmd { part: String, field: String, value: String } => |self, config| {
+        crate::command::system::handle_config(&self.part, &self.field, &self.value, config);
     },
     ClearCmd {} => |self, _config| {
         crate::command::system::handle_clear();
@@ -138,6 +138,11 @@ command_handlers! {
         let file = self.file.join(" ");
         crate::command::markdown::handle_md(&file, config);
     },
+
+    // ========== 笔记本 ==========
+    NotebookCmd { args: Vec<String> } => |self, config| {
+        crate::command::notebook::handle_notebook(&self.args, config);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -151,8 +156,8 @@ impl SubCmd {
             SubCmd::Modify { alias, path } => Box::new(ModifyCmd { alias, path }),
 
             // 分类标记
-            SubCmd::Note { alias, category } => Box::new(NoteCmd { alias, category }),
-            SubCmd::Denote { alias, category } => Box::new(DenoteCmd { alias, category }),
+            SubCmd::Tag { alias, category } => Box::new(TagCmd { alias, category }),
+            SubCmd::Untag { alias, category } => Box::new(UntagCmd { alias, category }),
 
             // 列表 & 查找
             SubCmd::List { part } => Box::new(ListCmd { part }),
@@ -189,12 +194,12 @@ impl SubCmd {
             }),
 
             // 脚本 & 计时
-            SubCmd::Concat { name, content } => Box::new(ConcatCmd { name, content }),
+            SubCmd::Script { name, content } => Box::new(ScriptCmd { name, content }),
             SubCmd::Time { function, arg } => Box::new(TimeCmd { function, arg }),
 
             // 系统设置
             SubCmd::Log { key, value } => Box::new(LogCmd { key, value }),
-            SubCmd::Change { part, field, value } => Box::new(ChangeCmd { part, field, value }),
+            SubCmd::Config { part, field, value } => Box::new(ConfigCmd { part, field, value }),
             SubCmd::Clear => Box::new(ClearCmd {}),
 
             // 系统信息
@@ -208,6 +213,9 @@ impl SubCmd {
 
             // Markdown 编辑器
             SubCmd::Md { file } => Box::new(MdCmd { file }),
+
+            // 笔记本
+            SubCmd::Notebook { args } => Box::new(NotebookCmd { args }),
         }
     }
 }

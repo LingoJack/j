@@ -15,8 +15,8 @@ j set vscode "/Applications/Visual Studio Code.app"
 j set github https://github.com
 
 # 标记分类（标记后支持组合打开）
-j note chrome browser
-j note vscode editor
+j tag chrome browser
+j tag vscode editor
 
 # 一键打开
 j chrome                  # 打开 Chrome
@@ -48,8 +48,8 @@ j
 
 | 命令 | 说明 |
 |------|------|
-| `j note <alias> <category>` | 标记别名分类 |
-| `j denote <alias> <category>` | 解除别名分类 |
+| `j tag <alias> <category>` | 标记别名分类 |
+| `j untag <alias> <category>` | 解除别名分类 |
 
 可用分类: `browser`, `editor`, `vpn`, `outer_url`, `script`
 
@@ -93,7 +93,7 @@ j
 | `j search <N/all> <kw> -f` | 模糊搜索（大小写不敏感） |
 
 > 日报默认路径: `~/.jdata/report/week_report.md`
-> 自定义路径: `j change report week_report <path>`
+> 自定义路径: `j config report week_report <path>`
 > 配置远程仓库: `j reportctl set-url <repo_url>`
 
 ## 📋 待办备忘录
@@ -141,8 +141,8 @@ j
 
 | 命令 | 说明 |
 |------|------|
-| `j concat <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
-| `j concat <name>` | 脚本已存在时打开 TUI 编辑器修改脚本内容 |
+| `j script <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
+| `j script <name>` | 脚本已存在时打开 TUI 编辑器修改脚本内容 |
 | `j <script> [args...]` | 在当前终端执行脚本 |
 | `j <script> -w [args...]` | 在**新终端窗口**中执行脚本 |
 | `j time countdown <duration>` | 启动倒计时（支持 30s / 5m / 1h） |
@@ -170,7 +170,7 @@ open -a "$J_CHROME" https://example.com
 | 命令 | 说明 |
 |------|------|
 | `j log mode <verbose/concise>` | 设置日志模式 |
-| `j change <section> <field> <val>` | 直接修改配置字段 |
+| `j config <section> <field> <val>` | 直接修改配置字段 |
 | `j clear` | 清屏 |
 | `j version` | 版本信息 |
 | `j help` | 帮助信息 |

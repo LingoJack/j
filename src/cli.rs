@@ -56,8 +56,8 @@ pub enum SubCmd {
 
     // ========== 分类标记 ==========
     /// 标记别名为指定分类（browser/editor/vpn/outer_url/script）
-    #[command(alias = "nt")]
-    Note {
+    #[command(alias = "t")]
+    Tag {
         /// 别名
         alias: String,
         /// 分类: browser, editor, vpn, outer_url, script
@@ -65,8 +65,8 @@ pub enum SubCmd {
     },
 
     /// 解除别名的分类标记
-    #[command(alias = "dnt")]
-    Denote {
+    #[command(alias = "ut")]
+    Untag {
         /// 别名
         alias: String,
         /// 分类: browser, editor, vpn, outer_url, script
@@ -159,7 +159,8 @@ pub enum SubCmd {
 
     // ========== 脚本 ==========
     /// 创建脚本
-    Concat {
+    #[command(alias = "sc")]
+    Script {
         /// 脚本名称
         name: String,
         /// 脚本内容（可选，不提供则打开 TUI 编辑器）
@@ -186,8 +187,8 @@ pub enum SubCmd {
     },
 
     /// 直接修改配置文件中的某个字段
-    #[command(alias = "chg")]
-    Change {
+    #[command(alias = "cfg")]
+    Config {
         /// section 名称
         part: String,
         /// 字段名
@@ -238,5 +239,14 @@ pub enum SubCmd {
         /// 文件路径（支持 ~ 展开，不存在则新建；含空格的路径会自动拼接）
         #[arg(trailing_var_arg = true, num_args = 1..)]
         file: Vec<String>,
+    },
+
+    // ========== 笔记本 ==========
+    /// 本地笔记管理（存储于 .jcli/notebook/）
+    #[command(alias = "nb")]
+    Notebook {
+        /// 子命令或笔记标题（list/search/delete/open/rename 或笔记名）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }

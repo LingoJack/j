@@ -85,21 +85,21 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             alias: rest[0].clone(),
             path: rest[1..].to_vec(),
         })
-    } else if is(cmd::NOTE) {
+    } else if is(cmd::TAG) {
         if rest.len() < 2 {
-            crate::usage!("note <alias> <category>");
+            crate::usage!("tag <alias> <category>");
             return ParseResult::Handled;
         }
-        ParseResult::Matched(SubCmd::Note {
+        ParseResult::Matched(SubCmd::Tag {
             alias: rest[0].clone(),
             category: rest[1].clone(),
         })
-    } else if is(cmd::DENOTE) {
+    } else if is(cmd::UNTAG) {
         if rest.len() < 2 {
-            crate::usage!("denote <alias> <category>");
+            crate::usage!("untag <alias> <category>");
             return ParseResult::Handled;
         }
-        ParseResult::Matched(SubCmd::Denote {
+        ParseResult::Matched(SubCmd::Untag {
             alias: rest[0].clone(),
             category: rest[1].clone(),
         })
@@ -125,12 +125,12 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             key: rest[0].clone(),
             value: rest[1].clone(),
         })
-    } else if is(cmd::CHANGE) {
+    } else if is(cmd::CONFIG) {
         if rest.len() < 3 {
-            crate::usage!("change <part> <field> <value>");
+            crate::usage!("config <part> <field> <value>");
             return ParseResult::Handled;
         }
-        ParseResult::Matched(SubCmd::Change {
+        ParseResult::Matched(SubCmd::Config {
             part: rest[0].clone(),
             field: rest[1].clone(),
             value: rest[2].clone(),
@@ -212,12 +212,12 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             remote,
             port,
         })
-    } else if is(cmd::CONCAT) {
+    } else if is(cmd::SCRIPT) {
         if rest.is_empty() {
-            crate::usage!("concat <script_name> [\"<script_content>\"]");
+            crate::usage!("script <script_name> [\"<script_content>\"]");
             return ParseResult::Handled;
         }
-        ParseResult::Matched(SubCmd::Concat {
+        ParseResult::Matched(SubCmd::Script {
             name: rest[0].clone(),
             content: if rest.len() > 1 {
                 rest[1..].to_vec()
@@ -259,6 +259,10 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                 file: rest.to_vec(),
             })
         }
+    } else if is(cmd::NOTEBOOK) {
+        ParseResult::Matched(SubCmd::Notebook {
+            args: rest.to_vec(),
+        })
     } else {
         ParseResult::NotFound
     }
