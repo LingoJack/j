@@ -160,29 +160,45 @@ fn render_help(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
 /// 渲染列表区（含 inline 编辑）
 fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout::Rect) {
     let indices = app.filtered_indices();
-    // highlight_symbol " ❯ " 占 3 列，加上边框 2 列
+    // 指针占 3 列（" ❯ " 或 "   "），加上边框 2 列
     let list_inner_width = area.width.saturating_sub(2 + 3) as usize;
     let checkbox_w = display_width(" [x] ");
     let content_width = list_inner_width.saturating_sub(checkbox_w);
 
+    let selected = app.state.selected();
     let mut items: Vec<ListItem> = indices
         .iter()
-        .map(|&idx| {
+        .enumerate()
+        .map(|(i, &idx)| {
+            let is_selected = selected == Some(i);
             // 编辑模式下替换选中项为编辑行
             if app.mode == AppMode::Editing && app.edit_index == Some(idx) {
-                return build_editing_item(&app.input, app.cursor_pos, content_width, checkbox_w);
+                return build_editing_item(
+                    &app.input,
+                    app.cursor_pos,
+                    content_width,
+                    checkbox_w,
+                    is_selected,
+                );
             }
-            build_normal_item(&app.list.items[idx], list_inner_width, checkbox_w)
+            build_normal_item(
+                &app.list.items[idx],
+                list_inner_width,
+                checkbox_w,
+                is_selected,
+            )
         })
         .collect();
 
     // 添加模式：在列表末尾追加编辑行
     if app.mode == AppMode::Adding {
+        let is_selected = selected == Some(indices.len());
         items.push(build_editing_item(
             &app.input,
             app.cursor_pos,
             content_width,
             checkbox_w,
+            is_selected,
         ));
     }
 
@@ -201,9 +217,22 @@ fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout:
     } else {
         let list_widget = List::new(items)
             .block(list_block)
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-            .highlight_symbol(" ❯ ");
+            .highlight_style(Style::default().add_modifier(Modifier::BOLD));
         f.render_stateful_widget(list_widget, area, &mut app.state);
+    }
+}
+
+/// 指针 Span（选中时显示彩色 ❯，未选中显示等宽空格）
+fn pointer_span(selected: bool) -> Span<'static> {
+    if selected {
+        Span::styled(
+            " ❯ ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::raw("   ")
     }
 }
 
@@ -212,6 +241,7 @@ fn build_normal_item(
     item: &super::app::TodoItem,
     list_inner_width: usize,
     checkbox_w: usize,
+    selected: bool,
 ) -> ListItem<'static> {
     let checkbox = if item.done { "[x]" } else { "[ ]" };
     let checkbox_style = if item.done {
@@ -244,11 +274,13 @@ fn build_normal_item(
     for (i, line_text) in wrapped.iter().enumerate() {
         if i == 0 {
             item_lines.push(Line::from(vec![
+                pointer_span(selected),
                 Span::styled(checkbox_str.clone(), checkbox_style),
                 Span::styled(line_text.clone(), content_style),
             ]));
         } else {
             item_lines.push(Line::from(vec![
+                Span::raw("   "),
                 Span::raw(indent.clone()),
                 Span::styled(line_text.clone(), content_style),
             ]));
@@ -286,14 +318,19 @@ fn build_editing_item(
     cursor_pos: usize,
     content_width: usize,
     checkbox_w: usize,
+    selected: bool,
 ) -> ListItem<'static> {
     let indent = " ".repeat(checkbox_w);
     let cursor_lines = build_cursor_wrapped_lines(input, cursor_pos, content_width);
 
     let mut item_lines: Vec<Line> = Vec::new();
-    for line in cursor_lines {
-        let prefix = Span::raw(indent.clone());
-        let mut spans = vec![prefix];
+    for (i, line) in cursor_lines.into_iter().enumerate() {
+        let mut spans = if i == 0 {
+            vec![pointer_span(selected)]
+        } else {
+            vec![Span::raw("   ")]
+        };
+        spans.push(Span::raw(indent.clone()));
         spans.extend(line.spans);
         item_lines.push(Line::from(spans));
     }
