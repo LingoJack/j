@@ -120,6 +120,8 @@ pub enum Transition {
     Cancel,
     /// 需要重建折行缓存
     NeedRebuild,
+    /// 切换折行
+    ToggleWrap(bool),
 }
 
 /// Vim 引擎
@@ -326,14 +328,8 @@ impl Vim {
                 match trimmed {
                     "w" | "wq" | "x" => Transition::Submit,
                     "q" | "q!" => Transition::Cancel,
-                    "set wrap" => {
-                        // 这里需要通知编辑器启用折行
-                        Transition::Mode(Mode::Normal)
-                    }
-                    "set nowrap" => {
-                        // 这里需要通知编辑器禁用折行
-                        Transition::Mode(Mode::Normal)
-                    }
+                    "set wrap" => Transition::ToggleWrap(true),
+                    "set nowrap" => Transition::ToggleWrap(false),
                     _ => Transition::Mode(Mode::Normal),
                 }
             }

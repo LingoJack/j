@@ -8,11 +8,10 @@ use ratatui::{
     text::{Line, Span},
 };
 
+use super::theme::{EditorTheme, HighlightFn};
 use super::wrap_engine::VisualLine;
 use super::{search::SearchState, text_buffer::TextBuffer};
-use crate::command::chat::markdown::highlight::highlight_code_line;
-use crate::command::chat::theme::Theme;
-use crate::util::text::{display_width, wrap_text};
+use crate::util::text::{char_width, display_width, wrap_text};
 
 /// 表格对齐方式
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -109,11 +108,6 @@ impl CodeBlockCache {
         }
     }
 
-    /// 判断行是否在代码块内
-    fn is_in_block(&self, line_idx: usize) -> bool {
-        self.get_block_range(line_idx).is_some()
-    }
-
     /// 获取代码块语言
     fn get_language(&self, line_idx: usize) -> Option<&str> {
         if let Some((start, end)) = self.get_block_range(line_idx) {
@@ -129,20 +123,23 @@ impl CodeBlockCache {
 
 /// Markdown 渲染器
 pub struct MarkdownRenderer {
-    theme: Theme,
+    theme: EditorTheme,
     /// 水平滚动偏移
     horizontal_scroll: usize,
     /// 代码块缓存
     code_block_cache: CodeBlockCache,
+    /// 语法高亮函数
+    highlight_fn: HighlightFn,
 }
 
 impl MarkdownRenderer {
     /// 创建新的渲染器
-    pub fn new(theme: Theme) -> Self {
+    pub fn new(theme: EditorTheme, highlight_fn: HighlightFn) -> Self {
         Self {
             theme,
             horizontal_scroll: 0,
             code_block_cache: CodeBlockCache::new(),
+            highlight_fn,
         }
     }
 
@@ -337,7 +334,7 @@ impl MarkdownRenderer {
 
             // 普通续行
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            if !search.pattern.is_empty() && search.match_count() > 0 {
+            if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
             } else {
                 spans.push(Span::styled(
@@ -359,7 +356,7 @@ impl MarkdownRenderer {
             }
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            if !search.pattern.is_empty() && search.match_count() > 0 {
+            if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             } else {
                 spans.push(Span::styled(truncated, self.style(self.theme.text_normal)));
@@ -387,12 +384,12 @@ impl MarkdownRenderer {
         vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
     }
 
-    /// 将文本截断到指定显示宽度（考虑中文字符占两列）
+    /// 将文本截断到指定显示宽度（使用 unicode-width 精确计算）
     fn truncate_to_display_width(text: &str, max_width: usize) -> String {
         let mut result = String::new();
         let mut width = 0;
         for ch in text.chars() {
-            let ch_width = if ch.is_ascii() { 1 } else { 2 };
+            let ch_width = char_width(ch);
             if width + ch_width > max_width {
                 break;
             }
@@ -443,7 +440,7 @@ impl MarkdownRenderer {
         }
 
         // 搜索高亮
-        if !search.pattern.is_empty() && search.match_count() > 0 {
+        if search.is_searching() && search.match_count() > 0 {
             spans.extend(search.highlight_line(vl.logical_line, text, &self.theme, vl.start_col));
             return Line::from(spans).patch_style(Style::default().bg(line_num_bg));
         }
@@ -514,159 +511,39 @@ impl MarkdownRenderer {
     }
 
     /// 检测指定围栏行是否有配对的围栏
-    pub fn is_fence_line_paired(&self, fence_line: usize, lines: &[String]) -> bool {
-        self.find_complete_code_block(fence_line, lines).is_some()
-    }
-
-    /// 查找完整代码块
-    fn find_complete_code_block(
-        &self,
-        fence_line: usize,
-        lines: &[String],
-    ) -> Option<(usize, usize)> {
-        let mut in_block = false;
-        let mut block_start = 0;
-
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                if !in_block {
-                    in_block = true;
-                    block_start = i;
-                } else {
-                    if block_start == fence_line || i == fence_line {
-                        return Some((block_start, i));
-                    }
-                    in_block = false;
-                }
-            }
-        }
-        None
+    pub fn is_fence_line_paired(&self, fence_line: usize, _lines: &[String]) -> bool {
+        self.code_block_cache.get_block_range(fence_line).is_some()
     }
 
     /// 判断某行是否在完整的代码块内（不包括围栏行本身）
-    fn is_line_in_complete_code_block(&self, line_idx: usize, lines: &[String]) -> bool {
-        // 使用缓存
-        if self.code_block_cache.valid {
-            return self.code_block_cache.is_in_block(line_idx);
+    fn is_line_in_complete_code_block(&self, line_idx: usize, _lines: &[String]) -> bool {
+        if let Some((start, end)) = self.code_block_cache.get_block_range(line_idx) {
+            // 围栏行本身不算"在代码块内"
+            line_idx > start && line_idx < end
+        } else {
+            false
         }
-
-        // 回退到旧逻辑
-        let mut in_block = false;
-        let mut block_start = 0;
-
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                if !in_block {
-                    in_block = true;
-                    block_start = i;
-                } else {
-                    if block_start < line_idx && line_idx < i {
-                        return true;
-                    }
-                    in_block = false;
-                }
-            }
-        }
-        false
     }
 
     /// 获取代码块语言
-    fn get_code_block_language(&self, line_idx: usize, lines: &[String]) -> Option<String> {
-        // 使用缓存
-        if self.code_block_cache.valid {
-            return self
-                .code_block_cache
-                .get_language(line_idx)
-                .map(|s| s.to_string());
-        }
-
-        // 回退到旧逻辑
-        let mut in_block = false;
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if let Some(stripped) = trimmed.strip_prefix("```") {
-                if !in_block {
-                    let lang = stripped.trim();
-                    if i <= line_idx {
-                        in_block = true;
-                        for (j, block_line) in lines.iter().enumerate().skip(i + 1) {
-                            if Self::is_code_fence_line(block_line) {
-                                if line_idx < j {
-                                    return Some(lang.to_string());
-                                }
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    in_block = false;
-                }
-            }
-        }
-        None
+    fn get_code_block_language(&self, line_idx: usize, _lines: &[String]) -> Option<String> {
+        self.code_block_cache
+            .get_language(line_idx)
+            .map(|s| s.to_string())
     }
 
-    /// 查找代码块范围
-    fn find_code_block_range(&self, line_idx: usize, lines: &[String]) -> Option<(usize, usize)> {
-        // 优先使用缓存
-        if self.code_block_cache.valid {
-            return self.code_block_cache.get_block_range(line_idx);
-        }
-
-        let mut in_block = false;
-        let mut block_start = 0;
-
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                if !in_block {
-                    in_block = true;
-                    block_start = i;
-                } else {
-                    if block_start < line_idx && line_idx < i {
-                        return Some((block_start, i));
-                    }
-                    in_block = false;
-                }
-            }
-        }
-        None
+    /// 查找代码块范围（统一通过缓存）
+    fn find_code_block_range(&self, line_idx: usize, _lines: &[String]) -> Option<(usize, usize)> {
+        self.code_block_cache.get_block_range(line_idx)
     }
 
-    /// 查找围栏行对应的代码块范围
+    /// 查找围栏行对应的代码块范围（统一通过缓存）
     fn find_code_block_range_for_fence(
         &self,
         fence_line: usize,
-        lines: &[String],
+        _lines: &[String],
     ) -> Option<(usize, usize)> {
-        let mut in_block = false;
-        let mut block_start = 0;
-
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                if !in_block {
-                    in_block = true;
-                    block_start = i;
-                    if i == fence_line {
-                        for (j, end_line) in lines.iter().enumerate().skip(i + 1) {
-                            let t = end_line.trim_start();
-                            if t.starts_with("```") {
-                                return Some((block_start, j));
-                            }
-                        }
-                    }
-                } else {
-                    if i == fence_line {
-                        return Some((block_start, i));
-                    }
-                    in_block = false;
-                }
-            }
-        }
-        None
+        self.code_block_cache.get_block_range(fence_line)
     }
 
     /// 计算代码块内容的最大显示宽度
@@ -701,19 +578,11 @@ impl MarkdownRenderer {
         let line_num = format!("{:4} ", line_idx + 1);
         let trimmed = line.trim_start();
 
-        // 判断是开始围栏还是结束围栏
-        let is_start = {
-            let mut in_block = false;
-            for (i, l) in lines.iter().enumerate() {
-                if i >= line_idx {
-                    break;
-                }
-                if Self::is_code_fence_line(l) {
-                    in_block = !in_block;
-                }
-            }
-            !in_block
-        };
+        // 判断是开始围栏还是结束围栏（通过缓存查询）
+        let is_start = self
+            .code_block_cache
+            .get_block_range(line_idx)
+            .is_some_and(|(start, _)| start == line_idx);
 
         // 计算代码块内容的最大宽度
         let content_max_width = self
@@ -765,10 +634,8 @@ impl MarkdownRenderer {
     ) -> Line<'static> {
         let line_num = format!("{:4} ", line_idx + 1);
 
-        // 应用水平滚动
-        let chars: Vec<char> = line.chars().collect();
-        let visible_chars: Vec<char> = chars.iter().skip(self.horizontal_scroll).copied().collect();
-        let visible_line: String = visible_chars.iter().collect();
+        // 应用水平滚动（使用迭代器避免 Vec<char> 分配）
+        let visible_line: String = line.chars().skip(self.horizontal_scroll).collect();
 
         // 获取代码块语言
         let lang = self
@@ -776,7 +643,7 @@ impl MarkdownRenderer {
             .unwrap_or_default();
 
         // 应用语法高亮
-        let highlighted_spans = highlight_code_line(&visible_line, &lang, &self.theme);
+        let highlighted_spans = (self.highlight_fn)(&visible_line, &lang, &self.theme);
 
         // 计算当前行的显示宽度
         let content_width = display_width(&visible_line);
@@ -1142,10 +1009,8 @@ impl MarkdownRenderer {
     ) -> Line<'static> {
         let line_num = format!("{:4} ", line_idx + 1);
 
-        // 应用水平滚动
-        let chars: Vec<char> = line.chars().collect();
-        let visible_chars: Vec<char> = chars.iter().skip(self.horizontal_scroll).copied().collect();
-        let visible_line: String = visible_chars.iter().collect();
+        // 应用水平滚动（使用迭代器避免 Vec<char> 分配）
+        let visible_line: String = line.chars().skip(self.horizontal_scroll).collect();
 
         let trimmed = visible_line.trim_start();
         let indent_len = visible_line.len() - trimmed.len();
@@ -1278,10 +1143,8 @@ impl MarkdownRenderer {
                 .into_iter()
                 .map(|span| {
                     // 保留行内代码等特殊样式，只覆盖基础文字颜色
-                    let has_special_bg = span
-                        .style
-                        .bg
-                        .map_or(false, |bg| bg != self.theme.bg_primary);
+                    let has_special_bg =
+                        span.style.bg.is_some_and(|bg| bg != self.theme.bg_primary);
                     if has_special_bg {
                         span // 保留行内代码等自带背景的样式
                     } else {

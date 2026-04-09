@@ -5,7 +5,7 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
 
-use crate::command::chat::theme::Theme;
+use super::theme::EditorTheme;
 
 /// 搜索匹配
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ pub struct SearchMatch {
 #[derive(Debug, Clone, Default)]
 pub struct SearchState {
     /// 搜索模式
-    pub pattern: String,
+    pattern: String,
     /// 所有匹配
     matches: Vec<SearchMatch>,
     /// 按行分组的索引：line_idx -> (matches 中的起始位置, 数量)
@@ -35,6 +35,11 @@ impl SearchState {
     /// 创建新的搜索状态
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 是否正在搜索
+    pub fn is_searching(&self) -> bool {
+        !self.pattern.is_empty()
     }
 
     /// 执行搜索
@@ -111,7 +116,7 @@ impl SearchState {
         &self,
         line_idx: usize,
         line: &str,
-        theme: &Theme,
+        theme: &EditorTheme,
         char_offset: usize,
     ) -> Vec<Span<'static>> {
         let normal_style = Style::default().fg(theme.text_normal);
@@ -173,6 +178,43 @@ impl SearchState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::style::Color;
+
+    /// 测试用主题
+    fn test_theme() -> EditorTheme {
+        EditorTheme {
+            bg_primary: Color::Reset,
+            bg_input: Color::Reset,
+            code_bg: Color::DarkGray,
+            cursor_fg: Color::Black,
+            cursor_bg: Color::Cyan,
+            text_normal: Color::White,
+            text_dim: Color::DarkGray,
+            text_bold: Color::White,
+            md_h1: Color::Cyan,
+            md_h2: Color::Green,
+            md_h3: Color::Yellow,
+            md_h4: Color::Magenta,
+            md_link: Color::Blue,
+            md_list_bullet: Color::Yellow,
+            md_blockquote_bar: Color::Cyan,
+            md_blockquote_bg: Color::DarkGray,
+            md_blockquote_text: Color::Gray,
+            md_inline_code_fg: Color::Magenta,
+            md_inline_code_bg: Color::DarkGray,
+            code_default: Color::White,
+            code_keyword: Color::Magenta,
+            code_string: Color::Green,
+            code_comment: Color::DarkGray,
+            code_number: Color::Yellow,
+            code_type: Color::Yellow,
+            code_primitive: Color::Cyan,
+            code_macro: Color::LightCyan,
+            code_lifetime: Color::LightMagenta,
+            code_attribute: Color::LightBlue,
+            code_shell_var: Color::LightCyan,
+        }
+    }
 
     #[test]
     fn test_search() {
@@ -229,7 +271,7 @@ mod tests {
         search.search("hello", &lines);
         assert_eq!(search.match_count(), 2);
 
-        let theme = Theme::dark();
+        let theme = test_theme();
 
         // 模拟第二个视觉行片段 "d hello"，char_offset = 10
         let spans = search.highlight_line(0, "d hello", &theme, 10);
@@ -243,7 +285,7 @@ mod tests {
         let lines = vec!["测试中文搜索功能".to_string()];
         search.search("中文", &lines);
 
-        let theme = Theme::dark();
+        let theme = test_theme();
         // 传入完整行，不应 panic
         let spans = search.highlight_line(0, "测试中文搜索功能", &theme, 0);
         assert!(!spans.is_empty());

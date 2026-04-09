@@ -1,6 +1,7 @@
 //! 文本缓冲区
 //!
 //! 独立于任何 UI 库的文本存储和编辑操作。
+//! 所有编辑操作使用 `char_indices` 定位字节偏移，避免 `Vec<char>` 分配。
 
 /// 光标位置 (行号, 列号)
 pub type Cursor = (usize, usize);
@@ -86,6 +87,18 @@ impl TextBuffer {
             .unwrap_or(0)
     }
 
+    // ========== 辅助方法 ==========
+
+    /// 获取指定行中第 col 个字符的字节偏移（UTF-8 安全）
+    ///
+    /// 如果 col 超出行尾，返回行长度。
+    fn byte_offset_of(line: &str, col: usize) -> usize {
+        line.char_indices()
+            .nth(col)
+            .map(|(i, _)| i)
+            .unwrap_or(line.len())
+    }
+
     // ========== 光标移动 ==========
 
     /// 移动光标到行首
@@ -154,43 +167,55 @@ impl TextBuffer {
 
     /// 移动光标到单词开头（向前）
     pub fn move_cursor_word_forward(&mut self) {
-        let line = self.lines.get(self.cursor.0).cloned().unwrap_or_default();
-        let chars: Vec<char> = line.chars().collect();
-        let mut col = self.cursor.1;
+        let (row, col) = self.cursor;
+        if let Some(line) = self.lines.get(row) {
+            let total = line.chars().count();
+            let mut new_col = col;
 
-        // 跳过当前单词的非空白字符
-        while col < chars.len() && !chars[col].is_whitespace() {
-            col += 1;
-        }
-        // 跳过空白
-        while col < chars.len() && chars[col].is_whitespace() {
-            col += 1;
-        }
-
-        if col < chars.len() {
-            self.cursor.1 = col;
-        } else if self.cursor.0 < self.lines.len() - 1 {
-            // 移动到下一行
-            self.cursor.0 += 1;
-            self.cursor.1 = 0;
-            // 如果下一行是空白开头，继续查找
-            let next_line = self.lines.get(self.cursor.0).cloned().unwrap_or_default();
-            let next_chars: Vec<char> = next_line.chars().collect();
-            while self.cursor.1 < next_chars.len() && next_chars[self.cursor.1].is_whitespace() {
-                self.cursor.1 += 1;
+            // 跳过当前单词的非空白字符
+            for (i, ch) in line.chars().enumerate().skip(col) {
+                if ch.is_whitespace() {
+                    new_col = i;
+                    break;
+                }
+                new_col = i + 1;
             }
-        } else {
-            self.cursor.1 = chars.len();
+
+            // 跳过空白
+            for (i, ch) in line.chars().enumerate().skip(new_col) {
+                if !ch.is_whitespace() {
+                    new_col = i;
+                    break;
+                }
+                new_col = i + 1;
+            }
+
+            if new_col < total {
+                self.cursor.1 = new_col;
+            } else if row < self.lines.len() - 1 {
+                // 移动到下一行
+                self.cursor.0 += 1;
+                self.cursor.1 = 0;
+                // 如果下一行是空白开头，继续查找
+                if let Some(next_line) = self.lines.get(self.cursor.0) {
+                    for (i, ch) in next_line.chars().enumerate() {
+                        if !ch.is_whitespace() {
+                            self.cursor.1 = i;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                self.cursor.1 = total;
+            }
         }
     }
 
     /// 移动光标到单词开头（向后）
     pub fn move_cursor_word_back(&mut self) {
-        let line = self.lines.get(self.cursor.0).cloned().unwrap_or_default();
-        let chars: Vec<char> = line.chars().collect();
-
-        if self.cursor.1 == 0 {
-            if self.cursor.0 > 0 {
+        let (row, col) = self.cursor;
+        if col == 0 {
+            if row > 0 {
                 // 移动到上一行
                 self.cursor.0 -= 1;
                 self.cursor.1 = self
@@ -202,53 +227,69 @@ impl TextBuffer {
             return;
         }
 
-        let mut col = self.cursor.1;
+        if let Some(line) = self.lines.get(row) {
+            // 需要逆序遍历，使用 Vec<char> 是合理的（光标移动不是高频热路径）
+            let chars: Vec<char> = line.chars().collect();
+            let mut col = col;
 
-        // 如果在空白处，先跳过空白
-        while col > 0
-            && chars
-                .get(col - 1)
-                .map(|c| c.is_whitespace())
-                .unwrap_or(false)
-        {
-            col -= 1;
-        }
-        // 跳过单词字符
-        while col > 0
-            && chars
-                .get(col - 1)
-                .map(|c| !c.is_whitespace())
-                .unwrap_or(false)
-        {
-            col -= 1;
-        }
+            // 如果在空白处，先跳过空白
+            while col > 0
+                && chars
+                    .get(col - 1)
+                    .map(|c| c.is_whitespace())
+                    .unwrap_or(false)
+            {
+                col -= 1;
+            }
+            // 跳过单词字符
+            while col > 0
+                && chars
+                    .get(col - 1)
+                    .map(|c| !c.is_whitespace())
+                    .unwrap_or(false)
+            {
+                col -= 1;
+            }
 
-        self.cursor.1 = col;
+            self.cursor.1 = col;
+        }
     }
 
     /// 移动光标到单词末尾
     pub fn move_cursor_word_end(&mut self) {
-        let line = self.lines.get(self.cursor.0).cloned().unwrap_or_default();
-        let chars: Vec<char> = line.chars().collect();
-        let mut col = self.cursor.1;
+        let (row, col) = self.cursor;
+        if let Some(line) = self.lines.get(row) {
+            let total = line.chars().count();
+            let mut col = col;
 
-        // 如果在单词内，先移动到单词末尾
-        if col < chars.len() && !chars[col].is_whitespace() {
-            col += 1;
-        }
-        // 跳过空白
-        while col < chars.len() && chars[col].is_whitespace() {
-            col += 1;
-        }
-        // 移动到单词末尾
-        while col < chars.len() && !chars[col].is_whitespace() {
-            col += 1;
-        }
-        if col > 0 && col <= chars.len() {
-            col -= 1;
-        }
+            // 如果在单词内，先移动到单词末尾
+            let mut chars = line.chars().enumerate().skip(col);
+            if let Some((_, ch)) = chars.next()
+                && !ch.is_whitespace()
+            {
+                col += 1;
+            }
 
-        self.cursor.1 = col;
+            // 跳过空白
+            for (i, ch) in line.chars().enumerate().skip(col) {
+                if !ch.is_whitespace() {
+                    break;
+                }
+                col = i + 1;
+            }
+
+            // 移动到单词末尾
+            for (i, ch) in line.chars().enumerate().skip(col) {
+                if ch.is_whitespace() {
+                    break;
+                }
+                col = i + 1;
+            }
+
+            col = col.saturating_sub(1);
+
+            self.cursor.1 = col.min(total);
+        }
     }
 
     // ========== 文本编辑 ==========
@@ -257,12 +298,8 @@ impl TextBuffer {
     pub fn insert_char(&mut self, ch: char) {
         let (row, col) = self.cursor;
         if let Some(line) = self.lines.get_mut(row) {
-            let chars: Vec<char> = line.chars().collect();
-            let mut new_chars = Vec::with_capacity(chars.len() + 1);
-            new_chars.extend(chars.iter().take(col));
-            new_chars.push(ch);
-            new_chars.extend(chars.iter().skip(col));
-            *line = new_chars.into_iter().collect();
+            let byte_offset = Self::byte_offset_of(line, col);
+            line.insert(byte_offset, ch);
             self.cursor.1 = col + 1;
             self.modified = true;
         }
@@ -271,14 +308,9 @@ impl TextBuffer {
     /// 在当前光标位置插入字符串
     pub fn insert_str(&mut self, s: &str) {
         if !s.contains('\n') {
-            // 无换行符：批量插入，避免逐字符重建 Vec<char>
             let (row, col) = self.cursor;
             if let Some(line) = self.lines.get_mut(row) {
-                let byte_offset = line
-                    .char_indices()
-                    .nth(col)
-                    .map(|(i, _)| i)
-                    .unwrap_or(line.len());
+                let byte_offset = Self::byte_offset_of(line, col);
                 line.insert_str(byte_offset, s);
                 self.cursor.1 = col + s.chars().count();
                 self.modified = true;
@@ -298,9 +330,9 @@ impl TextBuffer {
     pub fn insert_newline(&mut self) {
         let (row, col) = self.cursor;
         if let Some(line) = self.lines.get(row) {
-            let chars: Vec<char> = line.chars().collect();
-            let before: String = chars.iter().take(col).collect();
-            let after: String = chars.iter().skip(col).collect();
+            let byte_offset = Self::byte_offset_of(line, col);
+            let before = line[..byte_offset].to_string();
+            let after = line[byte_offset..].to_string();
 
             self.lines[row] = before;
             self.lines.insert(row + 1, after);
@@ -313,12 +345,11 @@ impl TextBuffer {
     pub fn delete_char(&mut self) {
         let (row, col) = self.cursor;
         if let Some(line) = self.lines.get_mut(row) {
-            let chars: Vec<char> = line.chars().collect();
-            if col < chars.len() {
-                let mut new_chars: Vec<char> = Vec::with_capacity(chars.len() - 1);
-                new_chars.extend(chars.iter().take(col));
-                new_chars.extend(chars.iter().skip(col + 1));
-                *line = new_chars.into_iter().collect();
+            let chars_count = line.chars().count();
+            if col < chars_count {
+                let byte_start = Self::byte_offset_of(line, col);
+                let byte_end = Self::byte_offset_of(line, col + 1);
+                line.drain(byte_start..byte_end);
                 self.modified = true;
             } else if row < self.lines.len() - 1 {
                 // 合并下一行
@@ -364,8 +395,8 @@ impl TextBuffer {
     pub fn delete_line_by_end(&mut self) {
         let (row, col) = self.cursor;
         if let Some(line) = self.lines.get_mut(row) {
-            let chars: Vec<char> = line.chars().collect();
-            *line = chars.iter().take(col).collect();
+            let byte_offset = Self::byte_offset_of(line, col);
+            line.truncate(byte_offset);
             self.modified = true;
         }
     }
@@ -374,22 +405,29 @@ impl TextBuffer {
     pub fn delete_word(&mut self) {
         let (row, col) = self.cursor;
         if let Some(line) = self.lines.get(row) {
-            let chars: Vec<char> = line.chars().collect();
             let mut end = col;
 
             // 跳过空白
-            while end < chars.len() && chars[end].is_whitespace() {
+            for ch in line.chars().skip(col) {
+                if !ch.is_whitespace() {
+                    break;
+                }
                 end += 1;
             }
             // 跳过单词字符
-            while end < chars.len() && !chars[end].is_whitespace() {
+            for ch in line.chars().skip(end) {
+                if ch.is_whitespace() {
+                    break;
+                }
                 end += 1;
             }
 
-            if end > col {
-                let mut new_chars: Vec<char> = chars.iter().take(col).copied().collect();
-                new_chars.extend(chars.iter().skip(end).copied());
-                self.lines[row] = new_chars.into_iter().collect();
+            if end > col
+                && let Some(line) = self.lines.get_mut(row)
+            {
+                let byte_start = Self::byte_offset_of(line, col);
+                let byte_end = Self::byte_offset_of(line, end);
+                line.drain(byte_start..byte_end);
                 self.modified = true;
             }
         }
@@ -488,5 +526,75 @@ mod tests {
         assert_eq!(buf.cursor(), (0, 12));
         buf.move_cursor_word_back();
         assert_eq!(buf.cursor(), (0, 6));
+    }
+
+    #[test]
+    fn test_chinese_insert() {
+        let mut buf = TextBuffer::new();
+        buf.insert_char('你');
+        buf.insert_char('好');
+        buf.insert_char('世');
+        buf.insert_char('界');
+        assert_eq!(buf.to_string(), "你好世界");
+        assert_eq!(buf.cursor(), (0, 4));
+    }
+
+    #[test]
+    fn test_chinese_delete() {
+        let mut buf = TextBuffer::from_content("你好世界");
+        buf.set_cursor(0, 2);
+        buf.delete_char();
+        assert_eq!(buf.to_string(), "你好界");
+        assert_eq!(buf.cursor(), (0, 2));
+
+        buf.backspace();
+        assert_eq!(buf.to_string(), "你界");
+        assert_eq!(buf.cursor(), (0, 1));
+    }
+
+    #[test]
+    fn test_chinese_insert_mid() {
+        let mut buf = TextBuffer::from_content("你好世界");
+        buf.set_cursor(0, 2);
+        buf.insert_char('的');
+        assert_eq!(buf.to_string(), "你好的世界");
+    }
+
+    #[test]
+    fn test_chinese_newline() {
+        let mut buf = TextBuffer::from_content("你好世界");
+        buf.set_cursor(0, 2);
+        buf.insert_newline();
+        assert_eq!(buf.lines().len(), 2);
+        assert_eq!(buf.lines()[0], "你好");
+        assert_eq!(buf.lines()[1], "世界");
+        assert_eq!(buf.cursor(), (1, 0));
+    }
+
+    #[test]
+    fn test_chinese_delete_line_by_end() {
+        let mut buf = TextBuffer::from_content("你好世界");
+        buf.set_cursor(0, 2);
+        buf.delete_line_by_end();
+        assert_eq!(buf.to_string(), "你好");
+    }
+
+    #[test]
+    fn test_chinese_delete_word() {
+        let mut buf = TextBuffer::from_content("你好 世界 测试");
+        buf.set_cursor(0, 0);
+        buf.delete_word();
+        assert_eq!(buf.to_string(), " 世界 测试");
+    }
+
+    #[test]
+    fn test_chinese_word_movement() {
+        let mut buf = TextBuffer::from_content("你好 世界 测试");
+        buf.move_cursor_word_forward();
+        assert_eq!(buf.cursor(), (0, 3));
+        buf.move_cursor_word_forward();
+        assert_eq!(buf.cursor(), (0, 6));
+        buf.move_cursor_word_back();
+        assert_eq!(buf.cursor(), (0, 3));
     }
 }

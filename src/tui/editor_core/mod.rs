@@ -6,6 +6,7 @@ mod history;
 mod renderer;
 mod search;
 mod text_buffer;
+pub mod theme;
 mod vim;
 mod wrap_engine;
 
@@ -13,3 +14,4 @@ mod editor;
 pub use editor::{
     open_markdown_editor, open_markdown_editor_on_terminal, open_markdown_editor_with_content,
 };
+pub use theme::{EditorTheme, HighlightFn};

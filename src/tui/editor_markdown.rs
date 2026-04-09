@@ -5,17 +5,67 @@
 //! - 其他行显示渲染后的效果
 //! - 支持代码块围栏样式、表格渲染、语法高亮等
 //!
-//! 本模块是 editor_core 的薄封装，所有核心逻辑已迁移到 editor_core 中。
+//! 本模块是 editor_core 的薄封装，负责 Theme → EditorTheme 转换和高亮函数注入。
 
 use std::io;
 
+use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::command::chat::theme::Theme;
 
+use crate::tui::editor_core::{EditorTheme, HighlightFn};
 // 直接使用 editor_core 的公共 API
 use crate::tui::editor_core::{
     open_markdown_editor as core_open, open_markdown_editor_on_terminal as core_open_on_terminal,
     open_markdown_editor_with_content as core_open_with_content,
 };
+
+// ========== Theme 转换 ==========
+
+impl From<&Theme> for EditorTheme {
+    fn from(t: &Theme) -> Self {
+        EditorTheme {
+            bg_primary: t.bg_primary,
+            bg_input: t.bg_input,
+            code_bg: t.code_bg,
+            cursor_fg: t.cursor_fg,
+            cursor_bg: t.cursor_bg,
+            text_normal: t.text_normal,
+            text_dim: t.text_dim,
+            text_bold: t.text_bold,
+            md_h1: t.md_h1,
+            md_h2: t.md_h2,
+            md_h3: t.md_h3,
+            md_h4: t.md_h4,
+            md_link: t.md_link,
+            md_list_bullet: t.md_list_bullet,
+            md_blockquote_bar: t.md_blockquote_bar,
+            md_blockquote_bg: t.md_blockquote_bg,
+            md_blockquote_text: t.md_blockquote_text,
+            md_inline_code_fg: t.md_inline_code_fg,
+            md_inline_code_bg: t.md_inline_code_bg,
+            code_default: t.code_default,
+            code_keyword: t.code_keyword,
+            code_string: t.code_string,
+            code_comment: t.code_comment,
+            code_number: t.code_number,
+            code_type: t.code_type,
+            code_primitive: t.code_primitive,
+            code_macro: t.code_macro,
+            code_lifetime: t.code_lifetime,
+            code_attribute: t.code_attribute,
+            code_shell_var: t.code_shell_var,
+        }
+    }
+}
+
+/// 桥接高亮函数：将 EditorTheme 适配到 highlight_code_line
+fn bridge_highlight(
+    line: &str,
+    lang: &str,
+    theme: &EditorTheme,
+) -> Vec<ratatui::text::Span<'static>> {
+    highlight_code_line(line, lang, theme)
+}
 
 // ========== 公共 API ==========
 
@@ -26,7 +76,14 @@ pub fn open_markdown_editor_on_terminal(
     content: &str,
     theme: &Theme,
 ) -> io::Result<Option<String>> {
-    core_open_on_terminal(terminal, title, content, theme)
+    let editor_theme = EditorTheme::from(theme);
+    core_open_on_terminal(
+        terminal,
+        title,
+        content,
+        &editor_theme,
+        bridge_highlight as HighlightFn,
+    )
 }
 
 /// 打开 Markdown 编辑器（独立终端）
@@ -35,7 +92,13 @@ pub fn open_markdown_editor(
     content: &str,
     theme: &Theme,
 ) -> io::Result<Option<String>> {
-    core_open(title, content, theme)
+    let editor_theme = EditorTheme::from(theme);
+    core_open(
+        title,
+        content,
+        &editor_theme,
+        bridge_highlight as HighlightFn,
+    )
 }
 
 /// 使用指定内容打开编辑器（预填充行，NORMAL 模式启动）
@@ -44,12 +107,25 @@ pub fn open_markdown_editor_with_content(
     initial_lines: &[String],
     theme: &Theme,
 ) -> io::Result<Option<String>> {
-    core_open_with_content(title, initial_lines, theme)
+    let editor_theme = EditorTheme::from(theme);
+    core_open_with_content(
+        title,
+        initial_lines,
+        &editor_theme,
+        bridge_highlight as HighlightFn,
+    )
 }
 
 /// 打开脚本编辑器（使用 Dark 主题的便捷函数）
 ///
 /// 适用于脚本编辑等不需要外部传入主题的场景
 pub fn open_script_editor(title: &str, initial_lines: &[String]) -> io::Result<Option<String>> {
-    core_open_with_content(title, initial_lines, &Theme::dark())
+    let theme = Theme::dark();
+    let editor_theme = EditorTheme::from(&theme);
+    core_open_with_content(
+        title,
+        initial_lines,
+        &editor_theme,
+        bridge_highlight as HighlightFn,
+    )
 }

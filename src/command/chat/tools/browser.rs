@@ -1379,7 +1379,7 @@ fn exec_browser_cdp(args: &Value, action: &str) -> ToolResult {
     let headless = args
         .get("headless")
         .and_then(|v| v.as_bool())
-        .unwrap_or_else(|| read_headless_config());
+        .unwrap_or_else(read_headless_config);
 
     let rt = cdp::get_runtime();
     let result = rt.block_on(cdp::exec_browser_async(args, action, headless));

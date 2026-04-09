@@ -1,12 +1,13 @@
-use super::super::theme::Theme;
 use ratatui::{
     style::{Modifier, Style},
     text::Span,
 };
 
+use crate::tui::editor_core::EditorTheme;
+
 /// 简单的代码语法高亮（无需外部依赖）
 /// 根据语言类型对常见关键字、字符串、注释、数字进行着色
-pub fn highlight_code_line(line: &str, lang: &str, theme: &Theme) -> Vec<Span<'static>> {
+pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<Span<'static>> {
     let lang_lower = lang.to_lowercase();
     // Rust 使用多组词汇分别高亮
     // keywords: 控制流/定义关键字 → 紫色

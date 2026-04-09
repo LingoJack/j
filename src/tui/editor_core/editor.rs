@@ -7,6 +7,7 @@ use super::{
     renderer::MarkdownRenderer,
     search::SearchState,
     text_buffer::TextBuffer,
+    theme::{EditorTheme, HighlightFn},
     vim::{Input, Key, Mode, Transition, Vim},
     wrap_engine::WrapEngine,
 };
@@ -26,8 +27,6 @@ use ratatui::{
 };
 use std::io;
 
-use crate::command::chat::theme::Theme;
-
 /// 编辑器主结构
 pub struct MarkdownEditor {
     /// 文本缓冲区
@@ -41,7 +40,7 @@ pub struct MarkdownEditor {
     /// 渲染器
     renderer: MarkdownRenderer,
     /// 主题
-    theme: Theme,
+    theme: EditorTheme,
     /// 标题
     title: String,
     /// 视口垂直滚动偏移（视觉行级别）
@@ -54,7 +53,7 @@ pub struct MarkdownEditor {
 
 impl MarkdownEditor {
     /// 创建新的编辑器
-    pub fn new(title: &str, content: &str, theme: Theme) -> Self {
+    pub fn new(title: &str, content: &str, theme: EditorTheme, highlight_fn: HighlightFn) -> Self {
         let buffer = TextBuffer::from_content(content);
         let initial_mode = if content.is_empty() {
             Mode::Insert
@@ -68,7 +67,7 @@ impl MarkdownEditor {
         let mut wrap = WrapEngine::new();
         wrap.rebuild_cache(buffer.lines());
 
-        let renderer = MarkdownRenderer::new(theme.clone());
+        let renderer = MarkdownRenderer::new(theme.clone(), highlight_fn);
 
         let viewport_width: usize = 80; // 默认值，会在渲染时更新
         wrap.set_width(viewport_width.saturating_sub(6));
@@ -165,7 +164,7 @@ impl MarkdownEditor {
         }
 
         // 处理搜索跳转
-        if self.vim.mode() == &Mode::Normal && !self.search.pattern.is_empty() {
+        if self.vim.mode() == &Mode::Normal && self.search.is_searching() {
             if input.key == Key::Char('n') && !input.ctrl {
                 self.search_next();
                 return EditorAction::Continue;
@@ -220,6 +219,15 @@ impl MarkdownEditor {
                 self.handle_mode_input(input);
             }
             Transition::NeedRebuild => {
+                // Normal 模式下的破坏性操作（dd/x/dw/d$）需要 undo 点
+                if old_mode == Mode::Normal {
+                    self.vim
+                        .push_snapshot(Snapshot::new(self.buffer.snapshot()), self.buffer.cursor());
+                }
+                self.rebuild_wrap_cache();
+            }
+            Transition::ToggleWrap(enabled) => {
+                self.wrap.set_enabled(enabled);
                 self.rebuild_wrap_cache();
             }
         }
@@ -493,9 +501,10 @@ pub fn open_markdown_editor_on_terminal(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     title: &str,
     content: &str,
-    theme: &Theme,
+    theme: &EditorTheme,
+    highlight_fn: HighlightFn,
 ) -> io::Result<Option<String>> {
-    let mut editor = MarkdownEditor::new(title, content, theme.clone());
+    let mut editor = MarkdownEditor::new(title, content, theme.clone(), highlight_fn);
 
     loop {
         let size = terminal.size()?;
@@ -525,7 +534,8 @@ pub fn open_markdown_editor_on_terminal(
 pub fn open_markdown_editor(
     title: &str,
     content: &str,
-    theme: &Theme,
+    theme: &EditorTheme,
+    highlight_fn: HighlightFn,
 ) -> io::Result<Option<String>> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -534,7 +544,8 @@ pub fn open_markdown_editor(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = open_markdown_editor_on_terminal(&mut terminal, title, content, theme);
+    let result =
+        open_markdown_editor_on_terminal(&mut terminal, title, content, theme, highlight_fn);
 
     terminal::disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -546,8 +557,9 @@ pub fn open_markdown_editor(
 pub fn open_markdown_editor_with_content(
     title: &str,
     initial_lines: &[String],
-    theme: &Theme,
+    theme: &EditorTheme,
+    highlight_fn: HighlightFn,
 ) -> io::Result<Option<String>> {
     let content = initial_lines.join("\n");
-    open_markdown_editor(title, &content, theme)
+    open_markdown_editor(title, &content, theme, highlight_fn)
 }

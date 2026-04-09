@@ -1,5 +1,6 @@
 use super::super::theme::Theme;
 use super::highlight::highlight_code_line;
+use crate::tui::editor_core::EditorTheme;
 use crate::util::text::{display_width, wrap_text};
 use ratatui::{
     style::{Modifier, Style},
@@ -225,7 +226,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 for code_line in code_content_expanded.lines() {
                     let wrapped = wrap_text(code_line, code_inner_w);
                     for wl in wrapped {
-                        let highlighted = highlight_code_line(&wl, &code_block_lang, theme);
+                        let editor_theme = EditorTheme::from(theme);
+                        let highlighted = highlight_code_line(&wl, &code_block_lang, &editor_theme);
                         let text_w: usize =
                             highlighted.iter().map(|s| display_width(&s.content)).sum();
                         let fill = code_inner_w.saturating_sub(text_w);

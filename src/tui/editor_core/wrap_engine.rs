@@ -2,7 +2,7 @@
 //!
 //! 将逻辑行转换为视觉行，支持自动折行功能。
 
-use crate::util::text::display_width;
+use crate::util::text::{char_width, display_width};
 
 /// 视觉行：一个逻辑行可能拆分为多个视觉行
 #[derive(Debug, Clone, PartialEq)]
@@ -80,6 +80,14 @@ impl WrapEngine {
         self.enabled
     }
 
+    /// 设置是否启用折行
+    pub fn set_enabled(&mut self, enabled: bool) {
+        if self.enabled != enabled {
+            self.enabled = enabled;
+            self.dirty = true;
+        }
+    }
+
     /// 设置折行宽度
     pub fn set_width(&mut self, width: usize) {
         let width = width.max(10);
@@ -132,7 +140,7 @@ impl WrapEngine {
         let mut count: usize = 1;
         let mut current_width: usize = 0;
         for ch in &chars {
-            let ch_width = if ch.is_ascii() { 1 } else { 2 };
+            let ch_width = char_width(*ch);
             if current_width + ch_width > self.width && current_width > 0 {
                 count += 1;
                 current_width = 0;
@@ -177,7 +185,7 @@ impl WrapEngine {
         let mut col = 0;
 
         for ch in chars {
-            let ch_width = if ch.is_ascii() { 1 } else { 2 };
+            let ch_width = char_width(ch);
 
             if current_width + ch_width > self.width && !current.is_empty() {
                 result.push(VisualLine {
