@@ -1,9 +1,8 @@
 //! 本地笔记管理
 //!
-//! 笔记存储于项目级 `.jcli/notebook/` 目录下，每个笔记为独立的 `.md` 文件。
+//! 笔记存储于 ~/.jdata/notebook/ 目录下，每个笔记为独立的 `.md` 文件。
 //! 使用 Markdown 编辑器进行编辑。
 
-use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::config::YamlConfig;
 use crate::constants::{notebook_action, shell};
@@ -13,7 +12,7 @@ use chrono::{DateTime, Local};
 use colored::Colorize;
 use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 /// notebook 命令入口
@@ -58,25 +57,9 @@ pub fn handle_notebook(args: &[String], _config: &YamlConfig) {
 
 // ========== 内部函数 ==========
 
-/// 获取 notebook 目录路径，不存在则自动创建
-fn get_notebook_dir() -> Option<PathBuf> {
-    // 优先查找已有的 .jcli/ 目录
-    let jcli_dir = if let Some(dir) = JcliConfig::find_config_dir() {
-        dir
-    } else {
-        // 不存在则在 cwd 创建
-        let cwd = std::env::current_dir().ok()?;
-        cwd.join(".jcli")
-    };
-
-    let notebook_dir = jcli_dir.join("notebook");
-    if !notebook_dir.exists()
-        && let Err(e) = fs::create_dir_all(&notebook_dir)
-    {
-        error!("创建 notebook 目录失败: {}", e);
-        return None;
-    }
-    Some(notebook_dir)
+/// 获取 notebook 目录路径（~/.jdata/notebook/，自动创建）
+fn get_notebook_dir() -> std::path::PathBuf {
+    YamlConfig::notebook_dir()
 }
 
 /// 列出 notebook 目录下所有 .md 文件，按修改时间倒序
@@ -113,11 +96,7 @@ fn format_time(time: std::time::SystemTime) -> String {
 
 /// 无参数时：列出笔记并交互选择
 fn handle_select() {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let notes = list_notes(&dir);
     if notes.is_empty() {
         info!("📓 notebook 为空，使用 `j nb <标题>` 创建第一篇笔记");
@@ -181,11 +160,7 @@ fn handle_select() {
 
 /// 编辑/新建笔记
 fn handle_edit(title: &str) {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let file_path = dir.join(format!("{}.md", title));
     let (content, is_new) = if file_path.exists() {
         match fs::read_to_string(&file_path) {
@@ -224,11 +199,7 @@ fn handle_edit(title: &str) {
 
 /// 列出所有笔记
 fn handle_list() {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let notes = list_notes(&dir);
     if notes.is_empty() {
         info!("📓 notebook 为空");
@@ -243,11 +214,7 @@ fn handle_list() {
 
 /// 搜索笔记内容
 fn handle_search(keyword: &str) {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let notes = list_notes(&dir);
     if notes.is_empty() {
         info!("📓 notebook 为空");
@@ -285,11 +252,7 @@ fn handle_search(keyword: &str) {
 
 /// 删除笔记
 fn handle_delete(title: &str) {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let file_path = dir.join(format!("{}.md", title));
     if !file_path.exists() {
         // 尝试模糊匹配
@@ -331,11 +294,7 @@ fn handle_delete(title: &str) {
 
 /// 打开 notebook 目录
 fn handle_open() {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let path = dir.to_string_lossy().to_string();
     let os = std::env::consts::OS;
     let result = if os == shell::MACOS_OS {
@@ -355,11 +314,7 @@ fn handle_open() {
 
 /// 重命名笔记
 fn handle_rename(old_name: &str, new_name: &str) {
-    let dir = match get_notebook_dir() {
-        Some(d) => d,
-        None => return,
-    };
-
+    let dir = get_notebook_dir();
     let old_path = dir.join(format!("{}.md", old_name));
     let new_path = dir.join(format!("{}.md", new_name));
 

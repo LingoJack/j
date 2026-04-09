@@ -1,6 +1,0 @@
-# first
-
-```shell
-hello world
-```
-

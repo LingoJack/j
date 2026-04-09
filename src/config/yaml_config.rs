@@ -1,7 +1,7 @@
 use crate::constants::{
     ALIAS_EXISTS_SECTIONS, ALIAS_PATH_SECTIONS, ALL_SECTIONS, APP_NAME, AUTHOR, CONFIG_FILE,
-    DATA_DIR, DATA_PATH_ENV, DEFAULT_SEARCH_ENGINE, EMAIL, REPORT_DEFAULT_FILE, REPORT_DIR,
-    SCRIPTS_DIR, VERSION, config_key, section,
+    DATA_DIR, DATA_PATH_ENV, DEFAULT_SEARCH_ENGINE, EMAIL, NOTEBOOK_DIR, REPORT_DEFAULT_FILE,
+    REPORT_DIR, SCRIPTS_DIR, VERSION, config_key, section,
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -80,6 +80,13 @@ impl YamlConfig {
     /// 获取日报目录: ~/.jdata/report/
     pub fn report_dir() -> PathBuf {
         let dir = Self::data_dir().join(REPORT_DIR);
+        let _ = fs::create_dir_all(&dir);
+        dir
+    }
+
+    /// 获取笔记本目录: ~/.jdata/notebook/
+    pub fn notebook_dir() -> PathBuf {
+        let dir = Self::data_dir().join(NOTEBOOK_DIR);
         let _ = fs::create_dir_all(&dir);
         dir
     }

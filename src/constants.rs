@@ -375,6 +375,9 @@ pub const SCRIPTS_DIR: &str = "scripts";
 /// 日报目录名
 pub const REPORT_DIR: &str = "report";
 
+/// 笔记本目录名
+pub const NOTEBOOK_DIR: &str = "notebook";
+
 /// agent 目录名
 pub const AGENT_DIR: &str = "agent";
 
