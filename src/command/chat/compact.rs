@@ -9,6 +9,7 @@ use super::tools::skill::LoadSkillTool;
 use super::tools::task::TaskTool;
 use super::tools::todo::{TodoReadTool, TodoWriteTool};
 use crate::command::chat::tools::agent::AgentTool;
+use crate::command::chat::tools::agent_team::AgentTeamTool;
 use crate::command::chat::tools::plan::{EnterPlanModeTool, ExitPlanModeTool};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{
@@ -102,6 +103,7 @@ pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
         EnterPlanModeTool::NAME,
         ExitPlanModeTool::NAME,
         AgentTool::NAME,
+        AgentTeamTool::NAME,
         AskTool::NAME,
     ];
 

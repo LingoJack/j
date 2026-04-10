@@ -164,6 +164,17 @@ impl ChatApp {
             todo_manager: Arc::clone(&todo_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
         }));
+        tool_registry.register(Box::new(crate::command::chat::tools::agent_team::AgentTeamTool {
+            background_manager: Arc::clone(&background_manager),
+            provider: Arc::clone(&agent_provider),
+            system_prompt: Arc::clone(&agent_system_prompt),
+            jcli_config: Arc::new(JcliConfig::load()),
+            compact_config: agent_config.compact.clone(),
+            hook_manager: Arc::clone(&hook_manager),
+            task_manager: Arc::clone(&task_manager),
+            todo_manager: Arc::clone(&todo_manager),
+            disabled_tools: Arc::clone(&disabled_tools_arc),
+        }));
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
 

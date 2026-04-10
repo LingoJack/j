@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod agent_team;
 pub mod ask;
 pub mod background;
 mod browser;
@@ -16,7 +17,6 @@ pub mod todo;
 mod web_fetch;
 mod web_search;
 pub mod worktree;
-
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use schemars::JsonSchema;
 use serde::Deserialize;
