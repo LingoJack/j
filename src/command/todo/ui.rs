@@ -237,6 +237,10 @@ fn pointer_span(selected: bool) -> Span<'static> {
 }
 
 /// 构建普通列表项
+///
+/// 布局分三个独立 part：
+///   pointer+checkbox | content（在自身列宽内折行）| date（固定宽度右对齐，仅首行）
+/// 内容折行宽度 = list_inner_width - checkbox_w - date_col_w
 fn build_normal_item(
     item: &super::app::TodoItem,
     list_inner_width: usize,
@@ -261,52 +265,50 @@ fn build_normal_item(
     let date_str = item
         .created_at
         .get(..10)
-        .map(|d| format!("  ({})", d))
+        .map(|d| format!(" ({})", d))
         .unwrap_or_default();
     let date_display_width = display_width(&date_str);
 
-    // 所有行统一按完整内容宽度折行，日期不影响折行
-    let content_width = list_inner_width.saturating_sub(checkbox_w);
+    // 日期列宽度：至少留出日期的空间，没有日期则为 0
+    let date_col_w = if date_display_width > 0 {
+        date_display_width
+    } else {
+        0
+    };
+
+    // 内容在自身列宽内折行，不受日期影响
+    let content_width = list_inner_width
+        .saturating_sub(checkbox_w)
+        .saturating_sub(date_col_w);
     let wrapped = wrap_text(&item.content, content_width);
     let indent = " ".repeat(checkbox_w);
 
     let mut item_lines: Vec<Line> = Vec::new();
     for (i, line_text) in wrapped.iter().enumerate() {
-        if i == 0 {
-            item_lines.push(Line::from(vec![
+        let mut spans = if i == 0 {
+            vec![
                 pointer_span(selected),
                 Span::styled(checkbox_str.clone(), checkbox_style),
-                Span::styled(line_text.clone(), content_style),
-            ]));
+            ]
         } else {
-            item_lines.push(Line::from(vec![
-                Span::raw("   "),
-                Span::raw(indent.clone()),
-                Span::styled(line_text.clone(), content_style),
-            ]));
-        }
-    }
+            vec![Span::raw("   "), Span::raw(indent.clone())]
+        };
+        spans.push(Span::styled(line_text.clone(), content_style));
 
-    // 日期追加在最后一行末尾（放得下）或另起一行
-    let last_content_w = wrapped.last().map(|s| display_width(s)).unwrap_or(0);
-    let last_line_total = checkbox_w + last_content_w + date_display_width;
-
-    if last_line_total <= list_inner_width {
-        // 追加到最后一行
-        if let Some(last) = item_lines.last_mut() {
-            let padding_w =
-                list_inner_width.saturating_sub(checkbox_w + last_content_w + date_display_width);
-            last.spans.push(Span::raw(" ".repeat(padding_w)));
-            last.spans
-                .push(Span::styled(date_str, Style::default().fg(Color::DarkGray)));
+        if i == 0 && date_display_width > 0 {
+            // 首行：用 padding 把日期推到行最右侧
+            let line_content_w = checkbox_w + display_width(line_text);
+            let padding_w = list_inner_width
+                .saturating_sub(line_content_w)
+                .saturating_sub(date_display_width);
+            spans.push(Span::raw(" ".repeat(padding_w)));
+            spans.push(Span::styled(
+                date_str.clone(),
+                Style::default().fg(Color::DarkGray),
+            ));
         }
-    } else {
-        // 另起一行，右对齐
-        let padding_w = list_inner_width.saturating_sub(date_display_width);
-        item_lines.push(Line::from(vec![
-            Span::raw(" ".repeat(padding_w)),
-            Span::styled(date_str, Style::default().fg(Color::DarkGray)),
-        ]));
+
+        item_lines.push(Line::from(spans));
     }
 
     ListItem::new(item_lines)
