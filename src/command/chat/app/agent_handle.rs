@@ -3,7 +3,7 @@ use crate::command::chat::agent::run_agent_loop;
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
 use crate::command::chat::storage::ChatMessage;
 use async_openai::types::chat::ChatCompletionTools;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use tokio_util::sync::CancellationToken;
 
 // ========== Agent 生命周期句柄 ==========
@@ -23,7 +23,7 @@ impl AgentHandle {
         shared: AgentSharedState,
         api_messages: Vec<ChatMessage>,
         tools: Vec<ChatCompletionTools>,
-        system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send>,
+        system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
         let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();
         let (tool_result_tx, tool_result_rx) = mpsc::sync_channel::<ToolResultMsg>(16);
@@ -35,9 +35,6 @@ impl AgentHandle {
             let stream_tx_panic = stream_tx.clone();
 
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-                // 在后台线程里执行文件 IO（resolve_system_prompt），避免阻塞主线程
-                let system_prompt = system_prompt_fn();
-
                 let runtime = match tokio::runtime::Runtime::new() {
                     Ok(rt) => rt,
                     Err(e) => {
@@ -52,7 +49,7 @@ impl AgentHandle {
                     shared,
                     api_messages,
                     tools,
-                    system_prompt,
+                    system_prompt_fn,
                     stream_tx,
                     tool_result_rx,
                 ));

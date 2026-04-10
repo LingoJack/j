@@ -32,7 +32,7 @@ pub async fn run_agent_loop(
     shared: AgentSharedState,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ChatCompletionTools>,
-    mut system_prompt: Option<String>,
+    system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
 ) {
@@ -65,6 +65,9 @@ pub async fn run_agent_loop(
     };
 
     for _round in 0..max_tool_rounds {
+        // 每轮重新构建 system prompt（从磁盘读取最新配置）
+        let mut system_prompt = system_prompt_fn();
+
         // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
         drain_pending_user_messages(&mut messages, &pending_user_messages);
 
