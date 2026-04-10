@@ -1,6 +1,6 @@
 use super::super::storage::save_agent_config;
 use crate::command::chat::app::{Action, ChatApp, ConfigTab, CursorDirection};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// 配置模式按键处理（Tab 感知）
 pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
@@ -13,8 +13,32 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             }
             KeyCode::Enter => Action::ConfigEditSubmit,
             KeyCode::Backspace => Action::ConfigEditDelete,
-            KeyCode::Left => Action::ConfigEditMoveCursor(CursorDirection::Up),
-            KeyCode::Right => Action::ConfigEditMoveCursor(CursorDirection::Down),
+            KeyCode::Delete => Action::ConfigEditDeleteForward,
+            KeyCode::Left => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    Action::ConfigEditMoveHome
+                } else {
+                    Action::ConfigEditMoveCursor(CursorDirection::Up)
+                }
+            }
+            KeyCode::Right => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    Action::ConfigEditMoveEnd
+                } else {
+                    Action::ConfigEditMoveCursor(CursorDirection::Down)
+                }
+            }
+            KeyCode::Home => Action::ConfigEditMoveHome,
+            KeyCode::End => Action::ConfigEditMoveEnd,
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Action::ConfigEditMoveHome
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Action::ConfigEditMoveEnd
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Action::ConfigEditClearLine
+            }
             KeyCode::Char(c) => Action::ConfigEditChar(c),
             _ => return,
         };

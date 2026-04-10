@@ -5,11 +5,21 @@ use crate::command::chat::storage::ModelProvider;
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::task::TaskManager;
-use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
+};
+use crate::util::log::write_info_log;
+use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::collections::BTreeMap;
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+use std::thread;
 
 /// AgentTeam 参数：批量创建多个 teammate
 #[derive(Deserialize, JsonSchema)]
@@ -148,5 +158,184 @@ impl Tool for AgentTeamTool {
 
     fn requires_confirmation(&self) -> bool {
         false
+    }
+}
+
+// ========== Team Member Agent Loop ==========
+
+/// 团队成员代理循环：与主代理循环类似，但针对团队优化
+fn run_team_member_agent(
+    provider: ModelProvider,
+    system_prompt: Option<String>,
+    prompt: String,
+    tools: Vec<async_openai::types::chat::ChatCompletionTools>,
+    registry: Arc<ToolRegistry>,
+    jcli_config: Arc<JcliConfig>,
+    cancelled: &Arc<AtomicBool>,
+    member_name: &str,
+) -> String {
+    let max_rounds = 30;
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            return format!("Failed to create runtime: {}", e);
+        }
+    };
+
+    let client = crate::command::chat::api::create_openai_client(&provider);
+
+    let mut messages: Vec<crate::command::chat::storage::ChatMessage> =
+        vec![crate::command::chat::storage::ChatMessage {
+            role: "user".to_string(),
+            content: prompt,
+            tool_calls: None,
+            tool_call_id: None,
+            images: None,
+        }];
+
+    let mut final_text = String::new();
+
+    for round in 0..max_rounds {
+        if cancelled.load(Ordering::Relaxed) {
+            return format!("{}\n[Cancelled]", final_text);
+        }
+
+        write_info_log(
+            "AgentTeam",
+            &format!("{}: Round {}/{}", member_name, round + 1, max_rounds),
+        );
+
+        let request = match crate::command::chat::api::build_request_with_tools(
+            &provider,
+            &messages,
+            tools.clone(),
+            system_prompt.as_deref(),
+        ) {
+            Ok(req) => req,
+            Err(e) => {
+                return format!("Failed to build request: {}", e);
+            }
+        };
+
+        let response = rt.block_on(async {
+            let chat_client = client.chat();
+            chat_client.create(request).await
+        });
+
+        let response = match response {
+            Ok(r) => r,
+            Err(e) => {
+                return format!("API error: {}", e);
+            }
+        };
+
+        let choice = match response.choices.first() {
+            Some(c) => c,
+            None => {
+                return format!("{}\n[No response from API]", final_text);
+            }
+        };
+
+        let assistant_text = choice.message.content.clone().unwrap_or_default();
+        if !assistant_text.is_empty() {
+            final_text = assistant_text.clone();
+        }
+
+        // 检查是否有工具调用
+        let is_tool_calls = matches!(
+            choice.finish_reason,
+            Some(async_openai::types::chat::FinishReason::ToolCalls)
+        );
+
+        if !is_tool_calls || choice.message.tool_calls.is_none() {
+            break;
+        }
+
+        let tool_calls = choice.message.tool_calls.as_ref().unwrap();
+        let tool_items: Vec<crate::command::chat::storage::ToolCallItem> = tool_calls
+            .iter()
+            .filter_map(|tc| {
+                if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
+                    Some(crate::command::chat::storage::ToolCallItem {
+                        id: f.id.clone(),
+                        name: f.function.name.clone(),
+                        arguments: f.function.arguments.clone(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if tool_items.is_empty() {
+            break;
+        }
+
+        messages.push(crate::command::chat::storage::ChatMessage {
+            role: "assistant".to_string(),
+            content: assistant_text,
+            tool_calls: Some(tool_items.clone()),
+            tool_call_id: None,
+            images: None,
+        });
+
+        // 执行工具
+        for item in &tool_items {
+            if cancelled.load(Ordering::Relaxed) {
+                messages.push(crate::command::chat::storage::ChatMessage {
+                    role: "tool".to_string(),
+                    content: "[Cancelled]".to_string(),
+                    tool_calls: None,
+                    tool_call_id: Some(item.id.clone()),
+                    images: None,
+                });
+                continue;
+            }
+
+            // 权限检查
+            if jcli_config.is_denied(&item.name, &item.arguments) {
+                messages.push(crate::command::chat::storage::ChatMessage {
+                    role: "tool".to_string(),
+                    content: format!("Tool '{}' denied by permission rules.", item.name),
+                    tool_calls: None,
+                    tool_call_id: Some(item.id.clone()),
+                    images: None,
+                });
+                continue;
+            }
+
+            let tool_ref = registry.get(&item.name);
+            let requires_confirm = tool_ref.map(|t| t.requires_confirmation()).unwrap_or(false);
+
+            if requires_confirm && !jcli_config.is_allowed(&item.name, &item.arguments) {
+                messages.push(crate::command::chat::storage::ChatMessage {
+                    role: "tool".to_string(),
+                    content: format!(
+                        "Tool '{}' requires confirmation. Add a permission rule to allow it.",
+                        item.name
+                    ),
+                    tool_calls: None,
+                    tool_call_id: Some(item.id.clone()),
+                    images: None,
+                });
+                continue;
+            }
+
+            let result = registry.execute(&item.name, &item.arguments, cancelled);
+
+            messages.push(crate::command::chat::storage::ChatMessage {
+                role: "tool".to_string(),
+                content: result.output,
+                tool_calls: None,
+                tool_call_id: Some(item.id.clone()),
+                images: None,
+            });
+        }
+    }
+
+    if final_text.is_empty() {
+        "[No output]".to_string()
+    } else {
+        final_text
     }
 }

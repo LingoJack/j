@@ -168,16 +168,6 @@ impl ChatApp {
             todo_manager: Arc::clone(&todo_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
         }));
-
-        // Teammate 管理器（在 tool_registry Arc 化之前创建，因为 SendMessage/CreateTeammate/AgentTeam 需要它）
-        let shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
-        let pending_user_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
-        let teammate_manager = Arc::new(Mutex::new(TeammateManager::new(
-            Arc::clone(&pending_user_messages),
-            Arc::clone(&shared_agent_messages),
-        )));
-
-        // 注册 AgentTeam 工具（批量创建 teammate 的便捷封装）
         tool_registry.register(Box::new(
             crate::command::chat::tools::agent_team::AgentTeamTool {
                 background_manager: Arc::clone(&background_manager),
@@ -189,32 +179,8 @@ impl ChatApp {
                 task_manager: Arc::clone(&task_manager),
                 todo_manager: Arc::clone(&todo_manager),
                 disabled_tools: Arc::clone(&disabled_tools_arc),
-                teammate_manager: Arc::clone(&teammate_manager),
             },
         ));
-
-        // 注册 SendMessage 工具
-        tool_registry.register(Box::new(
-            crate::command::chat::tools::send_message::SendMessageTool {
-                teammate_manager: Arc::clone(&teammate_manager),
-            },
-        ));
-
-        // 注册 CreateTeammate 工具
-        tool_registry.register(Box::new(
-            crate::command::chat::tools::create_teammate::CreateTeammateTool {
-                teammate_manager: Arc::clone(&teammate_manager),
-                background_manager: Arc::clone(&background_manager),
-                provider: Arc::clone(&agent_provider),
-                system_prompt: Arc::clone(&agent_system_prompt),
-                jcli_config: Arc::new(JcliConfig::load()),
-                compact_config: agent_config.compact.clone(),
-                hook_manager: Arc::clone(&hook_manager),
-                task_manager: Arc::clone(&task_manager),
-                disabled_tools: Arc::clone(&disabled_tools_arc),
-            },
-        ));
-
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
 
@@ -1008,6 +974,30 @@ impl ChatApp {
                     self.ui.config_edit_cursor -= 1;
                 }
             }
+            Action::ConfigEditDeleteForward => {
+                let char_count = self.ui.config_edit_buf.chars().count();
+                if self.ui.config_edit_cursor < char_count {
+                    let idx = self
+                        .ui
+                        .config_edit_buf
+                        .char_indices()
+                        .nth(self.ui.config_edit_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.ui.config_edit_buf.len());
+                    let end_idx = self
+                        .ui
+                        .config_edit_buf
+                        .char_indices()
+                        .nth(self.ui.config_edit_cursor + 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.ui.config_edit_buf.len());
+                    self.ui.config_edit_buf = format!(
+                        "{}{}",
+                        &self.ui.config_edit_buf[..idx],
+                        &self.ui.config_edit_buf[end_idx..]
+                    );
+                }
+            }
             Action::ConfigEditMoveCursor(dir) => match dir {
                 CursorDirection::Up => {
                     self.ui.config_edit_cursor = self.ui.config_edit_cursor.saturating_sub(1);
@@ -1019,6 +1009,16 @@ impl ChatApp {
                     }
                 }
             },
+            Action::ConfigEditMoveHome => {
+                self.ui.config_edit_cursor = 0;
+            }
+            Action::ConfigEditMoveEnd => {
+                self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
+            }
+            Action::ConfigEditClearLine => {
+                self.ui.config_edit_buf.clear();
+                self.ui.config_edit_cursor = 0;
+            }
             Action::ConfigEditSubmit => {
                 use crate::command::chat::ui_helpers::{
                     config_field_set_global, config_field_set_model,
