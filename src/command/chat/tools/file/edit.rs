@@ -116,6 +116,23 @@ impl Tool for EditFileTool {
 
         let path = expand_tilde(&params.path);
 
+        // 文件编辑互斥锁（多 agent 模式下防止同时编辑同一文件）
+        let agent_name = crate::command::chat::teammate::current_agent_name();
+        let file_path = std::path::Path::new(&path);
+        let _lock_guard = match crate::command::chat::teammate::acquire_global_file_lock(
+            file_path,
+            &agent_name,
+        ) {
+            Ok(guard) => guard,
+            Err(holder) => {
+                return ToolResult {
+                    output: format!("文件 {} 正被 {} 编辑，请稍后重试", path, holder),
+                    is_error: true,
+                    images: vec![],
+                };
+            }
+        };
+
         // 读取文件
         let content = match std::fs::read_to_string(&path) {
             Ok(c) => c,

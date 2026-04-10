@@ -49,6 +49,23 @@ impl Tool for WriteFileTool {
 
         let path = expand_tilde(&params.path);
 
+        // 文件编辑互斥锁（多 agent 模式下防止同时写入同一文件）
+        let agent_name = crate::command::chat::teammate::current_agent_name();
+        let file_path_ref = std::path::Path::new(&path);
+        let _lock_guard = match crate::command::chat::teammate::acquire_global_file_lock(
+            file_path_ref,
+            &agent_name,
+        ) {
+            Ok(guard) => guard,
+            Err(holder) => {
+                return ToolResult {
+                    output: format!("文件 {} 正被 {} 编辑，请稍后重试", path, holder),
+                    is_error: true,
+                    images: vec![],
+                };
+            }
+        };
+
         // 自动创建父目录
         let file_path = std::path::Path::new(&path);
         if let Some(parent) = file_path.parent()
