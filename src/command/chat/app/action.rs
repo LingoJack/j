@@ -141,10 +141,18 @@ pub enum Action {
     ConfigEnter,
     /// 配置编辑模式：输入字符
     ConfigEditChar(char),
-    /// 配置编辑模式：删除字符
+    /// 配置编辑模式：删除字符（退格）
     ConfigEditDelete,
+    /// 配置编辑模式：删除光标后的字符（Delete键）
+    ConfigEditDeleteForward,
     /// 配置编辑模式：移动光标
     ConfigEditMoveCursor(CursorDirection),
+    /// 配置编辑模式：光标移到行首
+    ConfigEditMoveHome,
+    /// 配置编辑模式：光标移到行尾
+    ConfigEditMoveEnd,
+    /// 配置编辑模式：清空整行
+    ConfigEditClearLine,
     /// 配置编辑模式：提交编辑
     ConfigEditSubmit,
     /// 配置界面：添加新 Provider

@@ -969,6 +969,30 @@ impl ChatApp {
                     self.ui.config_edit_cursor -= 1;
                 }
             }
+            Action::ConfigEditDeleteForward => {
+                let char_count = self.ui.config_edit_buf.chars().count();
+                if self.ui.config_edit_cursor < char_count {
+                    let idx = self
+                        .ui
+                        .config_edit_buf
+                        .char_indices()
+                        .nth(self.ui.config_edit_cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.ui.config_edit_buf.len());
+                    let end_idx = self
+                        .ui
+                        .config_edit_buf
+                        .char_indices()
+                        .nth(self.ui.config_edit_cursor + 1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(self.ui.config_edit_buf.len());
+                    self.ui.config_edit_buf = format!(
+                        "{}{}",
+                        &self.ui.config_edit_buf[..idx],
+                        &self.ui.config_edit_buf[end_idx..]
+                    );
+                }
+            }
             Action::ConfigEditMoveCursor(dir) => match dir {
                 CursorDirection::Up => {
                     self.ui.config_edit_cursor = self.ui.config_edit_cursor.saturating_sub(1);
@@ -980,6 +1004,16 @@ impl ChatApp {
                     }
                 }
             },
+            Action::ConfigEditMoveHome => {
+                self.ui.config_edit_cursor = 0;
+            }
+            Action::ConfigEditMoveEnd => {
+                self.ui.config_edit_cursor = self.ui.config_edit_buf.chars().count();
+            }
+            Action::ConfigEditClearLine => {
+                self.ui.config_edit_buf.clear();
+                self.ui.config_edit_cursor = 0;
+            }
             Action::ConfigEditSubmit => {
                 use crate::command::chat::ui_helpers::{
                     config_field_set_global, config_field_set_model,

@@ -58,7 +58,7 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
             false
         }
         Event::Paste(text) => {
-            // 粘贴事件：逐字符插入到输入框（仅 Chat 模式且非 loading）
+            // 粘贴事件：逐字符插入到输入框
             if matches!(app.ui.mode, ChatMode::Chat) {
                 for c in text.chars() {
                     if c == '\n' || c == '\r' {
@@ -73,6 +73,14 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                         .unwrap_or(app.ui.input.len());
                     app.ui.input.insert(byte_idx, c);
                     app.ui.cursor_pos += 1;
+                }
+                *needs_redraw = true;
+            } else if matches!(app.ui.mode, ChatMode::Config) && app.ui.config_editing {
+                for c in text.chars() {
+                    if c == '\n' || c == '\r' {
+                        continue; // 忽略换行，配置字段为单行
+                    }
+                    app.update(Action::ConfigEditChar(c));
                 }
                 *needs_redraw = true;
             }
