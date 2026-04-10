@@ -1,23 +1,23 @@
+use crate::command::chat::compact::CompactConfig;
+use crate::command::chat::hook::HookManager;
+use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::ModelProvider;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::task::TaskManager;
 use crate::command::chat::tools::{
     Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
-use crate::command::chat::permission::JcliConfig;
-use crate::command::chat::hook::HookManager;
-use crate::command::chat::compact::CompactConfig;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc,
 };
-use std::collections::BTreeMap;
 use std::thread;
 
 /// Agent team 参数
@@ -324,15 +324,14 @@ fn run_team_member_agent(
 
     let client = crate::command::chat::api::create_openai_client(&provider);
 
-    let mut messages: Vec<crate::command::chat::storage::ChatMessage> = vec![
-        crate::command::chat::storage::ChatMessage {
+    let mut messages: Vec<crate::command::chat::storage::ChatMessage> =
+        vec![crate::command::chat::storage::ChatMessage {
             role: "user".to_string(),
             content: prompt,
             tool_calls: None,
             tool_call_id: None,
             images: None,
-        },
-    ];
+        }];
 
     let mut final_text = String::new();
 
@@ -341,7 +340,10 @@ fn run_team_member_agent(
             return format!("{}\n[Cancelled]", final_text);
         }
 
-        write_info_log("AgentTeam", &format!("{}: Round {}/{}", member_name, round + 1, max_rounds));
+        write_info_log(
+            "AgentTeam",
+            &format!("{}: Round {}/{}", member_name, round + 1, max_rounds),
+        );
 
         let request = match crate::command::chat::api::build_request_with_tools(
             &provider,
