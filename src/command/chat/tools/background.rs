@@ -17,6 +17,8 @@ pub(super) struct BgTask {
     /// 共享输出缓冲区，reader 线程实时写入，查询时可直接读取中间输出
     pub output_buffer: Arc<Mutex<String>>,
     pub result: Option<String>,
+    /// 任务启动时间，用于计算已运行时长
+    pub started_at: Instant,
 }
 
 /// 后台任务完成通知
@@ -76,6 +78,7 @@ impl BackgroundManager {
             status: "running".to_string(),
             output_buffer: Arc::clone(&output_buffer),
             result: None,
+            started_at: Instant::now(),
         };
 
         {
@@ -148,6 +151,30 @@ impl BackgroundManager {
             .get(task_id)
             .map(|t| t.status == "running")
             .unwrap_or(false)
+    }
+
+    /// 列出当前所有 status == "running" 的任务，用于注入 LLM 上下文
+    /// 返回 (task_id, command 摘要, 已运行秒数) 的列表，按 task_id 排序
+    pub fn list_running(&self) -> Vec<(String, String, u64)> {
+        let tasks = safe_lock(&self.tasks, "BackgroundManager::list_running");
+        let now = Instant::now();
+        let mut out: Vec<_> = tasks
+            .values()
+            .filter(|t| t.status == "running")
+            .map(|t| {
+                let elapsed = now.duration_since(t.started_at).as_secs();
+                // command 截断到 80 字符，避免污染上下文
+                let cmd_summary = if t.command.chars().count() > 80 {
+                    let truncated: String = t.command.chars().take(77).collect();
+                    format!("{}...", truncated)
+                } else {
+                    t.command.clone()
+                };
+                (t.task_id.clone(), cmd_summary, elapsed)
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
     }
 }
 
