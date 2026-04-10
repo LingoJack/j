@@ -1824,14 +1824,14 @@ impl ChatApp {
         let background_manager = Arc::clone(&self.background_manager);
         let compact_config = self.state.agent_config.compact.clone();
 
-        // 把 resolve_system_prompt 所需数据 clone 出来，在后台线程里执行文件 IO，避免阻塞主线程
+        // 把 resolve_system_prompt 所需数据 clone 出来，每轮调用时从磁盘读取最新配置
         let loaded_skills = self.state.loaded_skills.clone();
         let loaded_commands = self.state.loaded_commands.clone();
         let disabled_skills = self.state.agent_config.disabled_skills.clone();
         let disabled_commands = self.state.agent_config.disabled_commands.clone();
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
-        let system_prompt_fn: Box<dyn FnOnce() -> Option<String> + Send> = Box::new(move || {
+        let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
             use crate::command::chat::storage::{
                 load_memory, load_soul, load_style, load_system_prompt,
             };
