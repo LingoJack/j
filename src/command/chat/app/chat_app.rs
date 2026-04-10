@@ -19,6 +19,7 @@ use crate::command::chat::storage::{
     generate_session_id, list_sessions, load_agent_config, load_session, memory_path,
     save_agent_config, save_memory, save_soul, save_system_prompt, soul_path, system_prompt_path,
 };
+use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::theme::Theme;
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
@@ -76,6 +77,9 @@ pub struct ChatApp {
     pub shared_messages_read_cursor: usize,
     /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
     pub context_tokens: Arc<Mutex<usize>>,
+    /// Teammate 管理器（多 agent 协作）
+    #[allow(dead_code)]
+    pub teammate_manager: Arc<Mutex<TeammateManager>>,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -255,7 +259,7 @@ impl ChatApp {
                 loaded_skills,
                 loaded_commands,
                 queued_tasks,
-                pending_user_messages: Arc::new(Mutex::new(Vec::new())),
+                pending_user_messages: Arc::clone(&pending_user_messages),
             },
             tool_executor: ToolExecutor::new(),
             agent: None,
@@ -273,9 +277,10 @@ impl ChatApp {
             remote_connected: false,
             agent_tool_provider: agent_provider,
             agent_tool_system_prompt: agent_system_prompt,
-            shared_agent_messages: Arc::new(Mutex::new(Vec::new())),
+            shared_agent_messages,
             shared_messages_read_cursor: 0,
             context_tokens: Arc::new(Mutex::new(0)),
+            teammate_manager,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -1878,6 +1883,7 @@ impl ChatApp {
         let disabled_commands = self.state.agent_config.disabled_commands.clone();
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
+        let teammate_manager_for_prompt = Arc::clone(&self.teammate_manager);
         let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
             use crate::command::chat::storage::{
                 load_memory, load_soul, load_style, load_system_prompt,
@@ -1897,6 +1903,10 @@ impl ChatApp {
             let project_skill_dir = skill::project_skills_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
+            let teammates_summary = teammate_manager_for_prompt
+                .lock()
+                .map(|m| m.team_summary())
+                .unwrap_or_default();
             let resolved = template
                 .replace("{{.current_dir}}", &current_dir)
                 .replace("{{.skills}}", &skills_summary)
@@ -1906,7 +1916,8 @@ impl ChatApp {
                 .replace("{{.tools}}", &tools_summary)
                 .replace("{{.style}}", &style_text)
                 .replace("{{.memory}}", &memory_text)
-                .replace("{{.soul}}", &soul_text);
+                .replace("{{.soul}}", &soul_text)
+                .replace("{{.teammates}}", &teammates_summary);
             Some(resolved)
         });
 

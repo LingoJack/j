@@ -105,6 +105,9 @@ pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
         AgentTool::NAME,
         AgentTeamTool::NAME,
         AskTool::NAME,
+        // Teammate 工具结果不压缩（承载协作上下文）
+        crate::command::chat::tools::send_message::SendMessageTool::NAME,
+        crate::command::chat::tools::create_teammate::CreateTeammateTool::NAME,
     ];
 
     for &idx in to_compact {

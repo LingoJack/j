@@ -17,6 +17,8 @@ pub mod render_cache;
 pub mod sandbox;
 pub mod skill;
 pub mod storage;
+pub mod teammate;
+pub mod teammate_loop;
 pub mod theme;
 pub mod tools;
 pub mod ui;

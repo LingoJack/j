@@ -58,3 +58,5 @@ Use the LoadSkill tool to load the following skills into context:
 <response_language>
 请使用中文回复
 </response_language>
+
+{{.teammates}}

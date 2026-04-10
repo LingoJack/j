@@ -2,6 +2,7 @@ use crate::command::chat::compact::CompactConfig;
 use crate::command::chat::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::ModelProvider;
+use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::task::TaskManager;
 use crate::command::chat::tools::{
@@ -20,80 +21,28 @@ use std::sync::{
 };
 use std::thread;
 
-/// Agent team 参数
+/// AgentTeam 参数：批量创建多个 teammate
 #[derive(Deserialize, JsonSchema)]
 struct AgentTeamParams {
-    /// Array of prompts for each team member (each agent runs concurrently)
-    prompts: Vec<AgentTeamMember>,
-    /// Optional team coordinator prompt to aggregate results
-    #[serde(default)]
-    coordinator_prompt: Option<String>,
-    /// Optional timeout in seconds for the entire team (default: 300)
-    #[serde(default)]
-    timeout_secs: Option<u64>,
+    /// Array of teammate definitions to create
+    members: Vec<AgentTeamMember>,
 }
 
 /// Team member definition
 #[derive(Deserialize, JsonSchema)]
 struct AgentTeamMember {
-    /// Short name/role for this team member
+    /// Teammate name (e.g. "Frontend", "Backend")
     name: String,
-    /// Task prompt for this team member
+    /// Role description (e.g. "React frontend developer")
+    #[serde(default)]
+    role: Option<String>,
+    /// Initial task prompt for this teammate
     prompt: String,
-}
-
-// ========== AgentTeamState ==========
-
-/// Shared state for team coordination
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct TeamMemberResult {
-    pub name: String,
-    pub status: String, // "running", "completed", "failed", "timeout"
-    pub output: String,
-}
-
-pub struct AgentTeamState {
-    members: Mutex<BTreeMap<String, TeamMemberResult>>,
-}
-
-impl AgentTeamState {
-    pub fn new() -> Self {
-        Self {
-            members: Mutex::new(BTreeMap::new()),
-        }
-    }
-
-    pub fn set_result(&self, name: String, status: String, output: String) {
-        if let Ok(mut map) = self.members.lock() {
-            map.insert(
-                name.clone(),
-                TeamMemberResult {
-                    name,
-                    status,
-                    output,
-                },
-            );
-        }
-    }
-
-    pub fn get_all_results(&self) -> BTreeMap<String, TeamMemberResult> {
-        self.members
-            .lock()
-            .map(|guard| guard.clone())
-            .unwrap_or_default()
-    }
-}
-
-impl Default for AgentTeamState {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 // ========== AgentTeamTool ==========
 
-/// Agent Team 工具：协调多个子代理并行执行任务
+/// Agent Team 工具：批量创建多个 teammate（CreateTeammate 的便捷封装）
 #[allow(dead_code)]
 pub struct AgentTeamTool {
     pub background_manager: Arc<BackgroundManager>,
@@ -105,6 +54,7 @@ pub struct AgentTeamTool {
     pub task_manager: Arc<TaskManager>,
     pub todo_manager: Arc<crate::command::chat::tools::todo::TodoManager>,
     pub disabled_tools: Arc<Vec<String>>,
+    pub teammate_manager: Arc<Mutex<TeammateManager>>,
 }
 
 impl AgentTeamTool {
@@ -118,37 +68,29 @@ impl Tool for AgentTeamTool {
 
     fn description(&self) -> &str {
         r#"
-        Coordinate a team of sub-agents to work on multiple tasks in parallel.
-        Each team member is a sub-agent with its own prompt and runs concurrently.
-        Optionally, a coordinator agent can aggregate and synthesize the results.
+        Create multiple teammates at once for parallel collaboration.
+        This is a convenience wrapper around CreateTeammate — it creates several teammates
+        in one call, each with their own agent loop running independently.
+
+        All teammates communicate via SendMessage tool (broadcast with @mentions).
 
         Usage:
-        - prompts: Array of {name, prompt} objects. Each agent runs independently.
-        - coordinator_prompt: Optional prompt for a coordinator agent to review all results
-        - timeout_secs: Maximum time for the entire team (default 300s)
+        - members: Array of {name, role?, prompt} objects
 
-        Example structure:
+        Example:
         ```json
         {
-          "prompts": [
-            {"name": "Backend Researcher", "prompt": "Research..."},
-            {"name": "Frontend Researcher", "prompt": "Research..."}
-          ],
-          "coordinator_prompt": "Synthesize the research findings...",
-          "timeout_secs": 300
+          "members": [
+            {"name": "Frontend", "role": "React developer", "prompt": "Create a React Todo app..."},
+            {"name": "Backend", "role": "Express developer", "prompt": "Create an Express API..."}
+          ]
         }
         ```
 
         Best for:
+        - Full-stack development (Frontend + Backend + DevOps)
         - Multi-domain research tasks
-        - Parallel code analysis from different angles
-        - Distributed investigation across many files
-        - Testing different implementation approaches simultaneously
-
-        NOT ideal for:
-        - Tightly dependent tasks (use Agent instead)
-        - Single complex task (use Agent)
-        - Tasks needing frequent back-and-forth
+        - Any task that benefits from parallel work by specialized agents
         "#
     }
 
@@ -156,141 +98,59 @@ impl Tool for AgentTeamTool {
         schema_to_tool_params::<AgentTeamParams>()
     }
 
-    fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
         let params: AgentTeamParams = match parse_tool_args(arguments) {
             Ok(p) => p,
             Err(e) => return e,
         };
 
-        if params.prompts.is_empty() {
+        if params.members.is_empty() {
             return ToolResult {
-                output: "Team must have at least one member (empty prompts array)".to_string(),
+                output: "Team must have at least one member".to_string(),
                 is_error: true,
                 images: vec![],
             };
         }
 
-        if params.prompts.len() > 10 {
+        if params.members.len() > 10 {
             return ToolResult {
-                output: "Team size limited to 10 members (for safety)".to_string(),
+                output: "Team size limited to 10 members".to_string(),
                 is_error: true,
                 images: vec![],
             };
         }
 
-        let timeout = std::time::Duration::from_secs(params.timeout_secs.unwrap_or(300));
-        let state = Arc::new(AgentTeamState::new());
-        let mut handles = vec![];
+        // 为每个成员调用 CreateTeammate 的逻辑
+        let create_tool = crate::command::chat::tools::create_teammate::CreateTeammateTool {
+            teammate_manager: Arc::clone(&self.teammate_manager),
+            background_manager: Arc::clone(&self.background_manager),
+            provider: Arc::clone(&self.provider),
+            system_prompt: Arc::clone(&self.system_prompt),
+            jcli_config: Arc::clone(&self.jcli_config),
+            compact_config: self.compact_config.clone(),
+            hook_manager: Arc::clone(&self.hook_manager),
+            task_manager: Arc::clone(&self.task_manager),
+            disabled_tools: Arc::clone(&self.disabled_tools),
+        };
 
-        // 获取共享配置快照
-        let provider = safe_lock(&self.provider, "AgentTeamTool::provider").clone();
-        let system_prompt = safe_lock(&self.system_prompt, "AgentTeamTool::system_prompt").clone();
+        let mut results = Vec::new();
+        let cancelled = Arc::new(AtomicBool::new(false));
 
-        // 获取 sub_registry（排除 Agent 和 AgentTeam 防止递归）
-        let (ask_tx, _ask_rx) = mpsc::channel::<crate::command::chat::app::AskRequest>();
-        let sub_registry = ToolRegistry::new(
-            vec![], // 不传 skills
-            ask_tx,
-            Arc::clone(&self.background_manager),
-            Arc::clone(&self.task_manager),
-            Arc::clone(&self.hook_manager),
-        );
-        let sub_registry = Arc::new(sub_registry);
+        for member in &params.members {
+            let role = member.role.clone().unwrap_or_else(|| member.name.clone());
+            let args = serde_json::json!({
+                "name": member.name,
+                "role": role,
+                "prompt": member.prompt,
+            })
+            .to_string();
 
-        let mut disabled = self.disabled_tools.as_ref().clone();
-        disabled.push("Agent".to_string());
-        disabled.push("AgentTeam".to_string());
-        let tools = sub_registry.to_openai_tools_filtered(&disabled);
-
-        let jcli_config = Arc::clone(&self.jcli_config);
-
-        // 为每个团队成员 spawn 一个线程
-        for member in params.prompts {
-            let state_clone = Arc::clone(&state);
-            let provider_clone = provider.clone();
-            let system_prompt_clone = system_prompt.clone();
-            let registry_clone = Arc::clone(&sub_registry);
-            let tools_clone = tools.clone();
-            let jcli_config_clone = Arc::clone(&jcli_config);
-            let cancelled_clone = Arc::clone(cancelled);
-            let member_name = member.name.clone();
-            let member_prompt = member.prompt;
-
-            let handle = thread::spawn(move || {
-                if cancelled_clone.load(Ordering::Relaxed) {
-                    state_clone.set_result(
-                        member_name,
-                        "cancelled".to_string(),
-                        "[Team cancelled]".to_string(),
-                    );
-                    return;
-                }
-
-                write_info_log("AgentTeam", &format!("Starting member: {}", member_name));
-
-                let result = run_team_member_agent(
-                    provider_clone,
-                    system_prompt_clone,
-                    member_prompt,
-                    tools_clone,
-                    registry_clone,
-                    jcli_config_clone,
-                    &cancelled_clone,
-                    &member_name,
-                );
-
-                state_clone.set_result(member_name, "completed".to_string(), result);
-            });
-
-            handles.push(handle);
-        }
-
-        // 等待所有成员完成或超时
-        let start = std::time::Instant::now();
-        for handle in handles {
-            let remaining = timeout.saturating_sub(start.elapsed());
-            if remaining.as_secs() > 0 {
-                let _ = handle.join();
-            }
-        }
-
-        // 收集所有成员的结果
-        let member_results = state.get_all_results();
-        let mut team_output = String::new();
-
-        team_output.push_str("## Team Results\n\n");
-        for (name, result) in member_results.iter() {
-            team_output.push_str(&format!("### {}\n", name));
-            team_output.push_str(&format!("**Status:** {}\n", result.status));
-            team_output.push_str(&format!("**Output:**\n```\n{}\n```\n\n", result.output));
-        }
-
-        // 如果指定了 coordinator 提示，运行协调代理
-        if let Some(coord_prompt) = params.coordinator_prompt {
-            write_info_log("AgentTeam", "Running coordinator agent");
-
-            let coordinator_input = format!(
-                "{}\n\n## Team Member Results:\n{}",
-                coord_prompt, team_output
-            );
-
-            let coord_result = run_team_member_agent(
-                provider,
-                system_prompt,
-                coordinator_input,
-                tools,
-                sub_registry,
-                jcli_config,
-                cancelled,
-                "Coordinator",
-            );
-
-            team_output.push_str("## Coordinator Analysis\n\n");
-            team_output.push_str(&coord_result);
+            let result = create_tool.execute(&args, &cancelled);
+            results.push(format!("- {}: {}", member.name, result.output));
         }
 
         ToolResult {
-            output: team_output,
+            output: format!("## Team Created\n\n{}", results.join("\n")),
             is_error: false,
             images: vec![],
         }
