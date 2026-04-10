@@ -9,17 +9,13 @@ use crate::command::chat::tools::{
     Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
 use crate::util::log::write_info_log;
-use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
-    mpsc,
 };
-use std::thread;
 
 /// AgentTeam 参数：批量创建多个 teammate
 #[derive(Deserialize, JsonSchema)]
@@ -164,6 +160,7 @@ impl Tool for AgentTeamTool {
 // ========== Team Member Agent Loop ==========
 
 /// 团队成员代理循环：与主代理循环类似，但针对团队优化
+#[allow(dead_code, clippy::too_many_arguments)]
 fn run_team_member_agent(
     provider: ModelProvider,
     system_prompt: Option<String>,

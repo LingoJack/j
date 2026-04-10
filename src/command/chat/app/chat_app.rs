@@ -130,6 +130,13 @@ impl ChatApp {
         let loaded_commands = command::load_all_commands();
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let pending_user_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
+        let shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
+        let teammate_manager: Arc<Mutex<TeammateManager>> =
+            Arc::new(Mutex::new(TeammateManager::new(
+                Arc::clone(&pending_user_messages),
+                Arc::clone(&shared_agent_messages),
+            )));
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(crate::command::chat::tools::task::TaskManager::new());
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
@@ -179,6 +186,7 @@ impl ChatApp {
                 task_manager: Arc::clone(&task_manager),
                 todo_manager: Arc::clone(&todo_manager),
                 disabled_tools: Arc::clone(&disabled_tools_arc),
+                teammate_manager: Arc::clone(&teammate_manager),
             },
         ));
         let tool_registry = Arc::new(tool_registry);
