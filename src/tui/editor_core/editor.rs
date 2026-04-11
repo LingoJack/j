@@ -8,7 +8,7 @@ use super::{
     search::SearchState,
     text_buffer::TextBuffer,
     theme::{EditorTheme, HighlightFn},
-    vim::{Input, Key, Mode, Transition, Vim},
+    vim::{Input, Key, Mode, Transition, Vim, filter_commands, parse_command},
     wrap_engine::WrapEngine,
 };
 
@@ -23,7 +23,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 use std::io;
 
@@ -49,6 +49,8 @@ pub struct MarkdownEditor {
     viewport_height: usize,
     /// 视口宽度
     viewport_width: usize,
+    /// 命令面板选中项索引
+    cmd_popup_selected: usize,
 }
 
 impl MarkdownEditor {
@@ -83,6 +85,7 @@ impl MarkdownEditor {
             scroll_offset: 0,
             viewport_height: 20,
             viewport_width,
+            cmd_popup_selected: 0,
         }
     }
 
@@ -175,6 +178,34 @@ impl MarkdownEditor {
             }
         }
 
+        // 命令面板模式：拦截上下键移动选中项
+        if let Mode::CommandPanel(filter) = self.vim.mode() {
+            let filtered = filter_commands(filter);
+            match input.key {
+                Key::Up => {
+                    if !filtered.is_empty() {
+                        if self.cmd_popup_selected > 0 {
+                            self.cmd_popup_selected -= 1;
+                        } else {
+                            self.cmd_popup_selected = filtered.len() - 1;
+                        }
+                    }
+                    return EditorAction::Continue;
+                }
+                Key::Down => {
+                    if !filtered.is_empty() {
+                        if self.cmd_popup_selected < filtered.len() - 1 {
+                            self.cmd_popup_selected += 1;
+                        } else {
+                            self.cmd_popup_selected = 0;
+                        }
+                    }
+                    return EditorAction::Continue;
+                }
+                _ => {}
+            }
+        }
+
         // 折行感知的上下移动
         // j/k 只在 Normal 模式拦截，方向键在所有模式拦截
         if self.wrap.is_enabled() {
@@ -230,6 +261,9 @@ impl MarkdownEditor {
                 self.wrap.set_enabled(enabled);
                 self.rebuild_wrap_cache();
             }
+            Transition::ExecuteCommand(cmd) => {
+                return self.execute_command(&cmd);
+            }
         }
 
         EditorAction::Continue
@@ -263,6 +297,26 @@ impl MarkdownEditor {
                     _ => {}
                 }
                 self.vim.set_mode(Mode::Search(pattern));
+            }
+            Mode::CommandPanel(filter) => {
+                let mut filter = filter.clone();
+                match &input.key {
+                    Key::Char(c) => {
+                        filter.push(*c);
+                        self.cmd_popup_selected = 0;
+                    }
+                    Key::Backspace => {
+                        if !filter.is_empty() {
+                            filter.pop();
+                            self.cmd_popup_selected = 0;
+                        } else {
+                            self.vim.set_mode(Mode::Normal);
+                            return;
+                        }
+                    }
+                    _ => {}
+                }
+                self.vim.set_mode(Mode::CommandPanel(filter));
             }
             _ => {}
         }
@@ -299,6 +353,67 @@ impl MarkdownEditor {
         self.search.prev_match();
         if let Some(m) = self.search.current_match() {
             self.buffer.set_cursor(m.line, m.start);
+        }
+    }
+
+    /// 执行命令面板命令
+    fn execute_command(&mut self, cmd: &str) -> EditorAction {
+        let (name, arg) = parse_command(cmd);
+        match name {
+            "save" | "w" | "wq" | "x" => EditorAction::Submit(self.buffer.to_string()),
+            "quit" | "q" => EditorAction::Cancel,
+            "search" => {
+                self.vim.set_mode(Mode::Search(String::new()));
+                EditorAction::Continue
+            }
+            "wrap" => {
+                self.wrap.set_enabled(true);
+                self.rebuild_wrap_cache();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "nowrap" => {
+                self.wrap.set_enabled(false);
+                self.rebuild_wrap_cache();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "jump" => {
+                if let Ok(line_num) = arg.parse::<usize>()
+                    && line_num > 0
+                {
+                    self.buffer.set_cursor(line_num - 1, 0);
+                }
+                self.rebuild_wrap_cache();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "undo" => {
+                self.undo();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "redo" => {
+                self.redo();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "tohead" => {
+                self.buffer.move_cursor_top();
+                self.rebuild_wrap_cache();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "toend" => {
+                self.buffer.move_cursor_bottom();
+                self.rebuild_wrap_cache();
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            _ => {
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
         }
     }
 
@@ -436,11 +551,20 @@ impl MarkdownEditor {
         f.render_widget(Paragraph::new(status_bar).block(status_block), status_area);
 
         // 渲染命令/搜索栏
-        if matches!(self.vim.mode(), Mode::Command(_) | Mode::Search(_)) {
+        if matches!(
+            self.vim.mode(),
+            Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
+        ) {
             let cmd_bar = self.render_command_bar();
             let cmd_area = Rect::new(0, area.height - 2, area.width, 1);
             let cmd_block = Block::default().style(Style::default().bg(self.theme.bg_primary));
             f.render_widget(Paragraph::new(cmd_bar).block(cmd_block), cmd_area);
+        }
+
+        // 渲染命令面板弹窗
+        if let Mode::CommandPanel(filter) = self.vim.mode() {
+            let filter = filter.clone();
+            self.render_command_popup(f, &filter, area);
         }
     }
 
@@ -454,7 +578,7 @@ impl MarkdownEditor {
         } else {
             " NOWRAP "
         };
-        let hints = " Ctrl+S 保存 | Ctrl+Q 取消 | :wq 提交 ";
+        let hints = " Ctrl+S 保存 | Ctrl+Q 取消 | / 命令面板 ";
 
         let used_width = mode_str.len() + pos_str.len() + wrap_str.len() + hints.len();
         let separator = " ".repeat(width.saturating_sub(used_width));
@@ -487,8 +611,109 @@ impl MarkdownEditor {
                 Span::styled(pattern.clone(), Style::default().fg(self.theme.text_normal)),
                 Span::styled(" ", Style::default().fg(self.theme.text_normal)),
             ]),
+            Mode::CommandPanel(filter) => Line::from(vec![
+                Span::styled("/", Style::default().fg(Color::Magenta)),
+                Span::styled(filter.clone(), Style::default().fg(self.theme.text_normal)),
+                Span::styled(" ", Style::default().fg(self.theme.text_normal)),
+            ]),
             _ => Line::default(),
         }
+    }
+
+    /// 渲染命令面板弹窗
+    fn render_command_popup(&mut self, f: &mut Frame<'_>, filter: &str, area: Rect) {
+        let items = filter_commands(filter);
+        if items.is_empty() {
+            return;
+        }
+
+        let item_count = items.len();
+        let popup_height = (item_count as u16 + 2).min(area.height.saturating_sub(4));
+
+        // 计算宽度
+        let max_label_width = items
+            .iter()
+            .map(|cmd| {
+                2 + unicode_width::UnicodeWidthStr::width(cmd.name)
+                    + 3
+                    + unicode_width::UnicodeWidthStr::width(cmd.desc)
+            })
+            .max()
+            .unwrap_or(16)
+            .max(16);
+        let popup_width = (max_label_width as u16 + 2).min(area.width.saturating_sub(4));
+
+        // 位置：编辑区底部偏左
+        let x = area.x + 2;
+        let y = area
+            .bottom()
+            .saturating_sub(popup_height + 2) // 留出状态栏和命令栏
+            .max(area.y + 2);
+        let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+        // 标题
+        let title = if filter.is_empty() {
+            " 命令面板 ".to_string()
+        } else {
+            format!(" 命令面板 [{}] ", filter)
+        };
+
+        // 确保选中项在范围内
+        self.cmd_popup_selected = self.cmd_popup_selected.min(item_count.saturating_sub(1));
+
+        // 构建列表项
+        let list_items: Vec<ListItem> = items
+            .iter()
+            .enumerate()
+            .map(|(i, cmd)| {
+                let is_selected = i == self.cmd_popup_selected;
+                let name_style = if is_selected {
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                let desc_style = if is_selected {
+                    Style::default().fg(Color::Gray)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                let pointer = if is_selected { "❯ " } else { "  " };
+                ListItem::new(Line::from(vec![
+                    Span::styled(pointer.to_string(), name_style),
+                    Span::styled(format!("{:<10}", cmd.name), name_style),
+                    Span::styled(cmd.desc.to_string(), desc_style),
+                ]))
+            })
+            .collect();
+
+        let mut list_state = ListState::default();
+        list_state.select(Some(self.cmd_popup_selected));
+
+        let list = List::new(list_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .title(Span::styled(
+                        title,
+                        Style::default()
+                            .fg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .style(Style::default().bg(Color::Black)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Magenta)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            );
+
+        f.render_widget(Clear, popup_area);
+        f.render_stateful_widget(list, popup_area, &mut list_state);
     }
 }
 

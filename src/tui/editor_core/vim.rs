@@ -6,6 +6,57 @@ use super::history::{History, Snapshot};
 use super::text_buffer::TextBuffer;
 use std::fmt;
 
+/// 命令面板项
+#[derive(Debug, Clone)]
+pub struct CmdItem {
+    pub name: &'static str,
+    pub desc: &'static str,
+}
+
+/// 命令面板所有可用命令
+pub const COMMANDS: &[CmdItem] = &[
+    CmdItem {
+        name: "save",
+        desc: "保存/提交",
+    },
+    CmdItem {
+        name: "quit",
+        desc: "取消退出",
+    },
+    CmdItem {
+        name: "search",
+        desc: "搜索",
+    },
+    CmdItem {
+        name: "wrap",
+        desc: "开启折行",
+    },
+    CmdItem {
+        name: "nowrap",
+        desc: "关闭折行",
+    },
+    CmdItem {
+        name: "jump",
+        desc: "跳转到指定行 (如 /jump 10)",
+    },
+    CmdItem {
+        name: "undo",
+        desc: "撤销",
+    },
+    CmdItem {
+        name: "redo",
+        desc: "重做",
+    },
+    CmdItem {
+        name: "tohead",
+        desc: "跳到文件开头",
+    },
+    CmdItem {
+        name: "toend",
+        desc: "跳到文件末尾",
+    },
+];
+
 /// Vim 模式
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -15,6 +66,7 @@ pub enum Mode {
     Operator(char),
     Command(String),
     Search(String),
+    CommandPanel(String),
 }
 
 impl fmt::Display for Mode {
@@ -26,6 +78,7 @@ impl fmt::Display for Mode {
             Self::Operator(c) => write!(f, "OPERATOR({})", c),
             Self::Command(_) => write!(f, "COMMAND"),
             Self::Search(_) => write!(f, "SEARCH"),
+            Self::CommandPanel(_) => write!(f, "CMD"),
         }
     }
 }
@@ -41,6 +94,7 @@ impl Mode {
             Self::Operator(_) => Color::LightGreen,
             Self::Command(_) => Color::DarkGray,
             Self::Search(_) => Color::Magenta,
+            Self::CommandPanel(_) => Color::Magenta,
         }
     }
 }
@@ -122,6 +176,8 @@ pub enum Transition {
     NeedRebuild,
     /// 切换折行
     ToggleWrap(bool),
+    /// 执行命令面板命令（交给 editor 层处理）
+    ExecuteCommand(String),
 }
 
 /// Vim 引擎
@@ -163,6 +219,7 @@ impl Vim {
             Mode::Normal => self.handle_normal_mode(input, buffer),
             Mode::Command(cmd) => self.handle_command_mode(input, cmd.clone()),
             Mode::Search(pattern) => self.handle_search_mode(input, pattern.clone()),
+            Mode::CommandPanel(filter) => self.handle_command_panel_mode(input, filter.clone()),
             Mode::Visual => self.handle_visual_mode(input, buffer),
             Mode::Operator(c) => self.handle_operator_mode(input, *c, buffer),
         }
@@ -303,7 +360,7 @@ impl Vim {
                 Transition::Mode(Mode::Visual)
             }
             Key::Char(':') => Transition::Mode(Mode::Command(String::new())),
-            Key::Char('/') => Transition::Mode(Mode::Search(String::new())),
+            Key::Char('/') => Transition::Mode(Mode::CommandPanel(String::new())),
             Key::PageDown => {
                 for _ in 0..10 {
                     buffer.move_cursor_down();
@@ -341,6 +398,30 @@ impl Vim {
         match input.key {
             Key::Esc => Transition::Mode(Mode::Normal),
             Key::Enter => Transition::Mode(Mode::Normal),
+            _ => Transition::Nop,
+        }
+    }
+
+    fn handle_command_panel_mode(&mut self, input: &Input, filter: String) -> Transition {
+        match input.key {
+            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Enter => {
+                // 查找匹配的命令
+                let matched = filter_commands(&filter);
+                if let Some(cmd) = matched.first() {
+                    let cmd_name = cmd.name.to_string();
+                    // 需要带参数的命令（如 jump）保留 filter 中的参数部分
+                    let full_cmd = if cmd_name == "jump" {
+                        // filter 可能是 "jump 10" 或 "ju 10"
+                        filter.clone()
+                    } else {
+                        cmd_name
+                    };
+                    Transition::ExecuteCommand(full_cmd)
+                } else {
+                    Transition::Mode(Mode::Normal)
+                }
+            }
             _ => Transition::Nop,
         }
     }
@@ -477,5 +558,33 @@ impl Vim {
     /// 重做
     pub fn redo(&mut self) -> Option<Snapshot> {
         self.history.redo().cloned()
+    }
+}
+
+// ========== 命令面板辅助 ==========
+
+/// 根据筛选文本过滤命令列表
+pub fn filter_commands(filter: &str) -> Vec<&'static CmdItem> {
+    if filter.is_empty() {
+        COMMANDS.iter().collect()
+    } else {
+        let filter_lower = filter.to_lowercase();
+        COMMANDS
+            .iter()
+            .filter(|cmd| {
+                cmd.name.contains(&filter_lower)
+                    || cmd.name.starts_with(&filter_lower)
+                    || cmd.desc.contains(&filter_lower)
+            })
+            .collect()
+    }
+}
+
+/// 解析命令面板输入，提取命令名和参数
+pub fn parse_command(input: &str) -> (&str, &str) {
+    if let Some(space_pos) = input.find(' ') {
+        (&input[..space_pos], input[space_pos + 1..].trim())
+    } else {
+        (input, "")
     }
 }
