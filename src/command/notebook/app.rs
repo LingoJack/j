@@ -1,6 +1,5 @@
 use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::theme::{Theme, ThemeName};
-use crate::config::YamlConfig;
 use crate::constants::shell;
 use crate::error;
 use crate::info;
@@ -28,7 +27,37 @@ pub struct NoteItem {
 
 /// 获取 notebook 目录路径: ~/.jdata/notebook/
 pub fn notebook_dir() -> PathBuf {
-    YamlConfig::notebook_dir()
+    crate::config::YamlConfig::notebook_dir()
+}
+
+/// 获取配置文件路径: ~/.jdata/notebook/.config.json
+fn config_file_path() -> PathBuf {
+    notebook_dir().join(".config.json")
+}
+
+/// 持久化配置
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct NotebookConfig {
+    panel_ratio: Option<u16>,
+}
+
+/// 加载持久化配置
+fn load_config() -> NotebookConfig {
+    let path = config_file_path();
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// 保存持久化配置
+fn save_config(config: &NotebookConfig) {
+    let path = config_file_path();
+    if let Ok(json) = serde_json::to_string_pretty(config)
+        && let Err(e) = fs::write(&path, json)
+    {
+        error!("保存配置失败: {}", e);
+    }
 }
 
 /// 获取笔记文件路径
@@ -310,6 +339,7 @@ impl NotebookApp {
         if !notes.is_empty() {
             state.select(Some(0));
         }
+        let saved_config = load_config();
         let mut app = Self {
             notes,
             state,
@@ -325,7 +355,7 @@ impl NotebookApp {
             preview_width: 0,
             quit_input: String::new(),
             pending_edit_title: None,
-            panel_ratio: 30,
+            panel_ratio: saved_config.panel_ratio.unwrap_or(30),
             cmd_popup_selected: 0,
             cmd_popup_filter: String::new(),
         };
@@ -384,14 +414,14 @@ impl NotebookApp {
             .map(|idx| self.notes[idx].name.clone())
     }
 
-    /// 向下移动
+    /// 向下移动（不循环）
     pub fn move_down(&mut self) {
         let count = self.filtered_indices().len();
         if count == 0 {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => (i + 1) % count,
+            Some(i) => (i + 1).min(count - 1),
             None => 0,
         };
         self.state.select(Some(i));
@@ -399,14 +429,14 @@ impl NotebookApp {
         self.update_preview();
     }
 
-    /// 向上移动
+    /// 向上移动（不循环）
     pub fn move_up(&mut self) {
         let count = self.filtered_indices().len();
         if count == 0 {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => (i + count - 1) % count,
+            Some(i) => i.saturating_sub(1),
             None => 0,
         };
         self.state.select(Some(i));
@@ -545,6 +575,9 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
                 app.panel_ratio,
                 100 - app.panel_ratio
             ));
+            save_config(&NotebookConfig {
+                panel_ratio: Some(app.panel_ratio),
+            });
         }
         KeyCode::Char(']') => {
             app.panel_ratio = app.panel_ratio.saturating_add(5).min(60);
@@ -554,6 +587,9 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
                 app.panel_ratio,
                 100 - app.panel_ratio
             ));
+            save_config(&NotebookConfig {
+                panel_ratio: Some(app.panel_ratio),
+            });
         }
         KeyCode::Char('y') => {
             if let Some(name) = app.selected_name() {
@@ -893,6 +929,9 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                     app.panel_ratio = ratio;
                     app.preview_width = 0; // 强制重新渲染预览
                     app.message = Some(format!("面板比例已设为 {}:{}", ratio, 100 - ratio));
+                    save_config(&NotebookConfig {
+                        panel_ratio: Some(ratio),
+                    });
                 }
                 None => {
                     app.message = Some("格式错误，请输入如 20:80".to_string());

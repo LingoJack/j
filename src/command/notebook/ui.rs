@@ -307,8 +307,7 @@ fn render_preview(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::White))
-        .title(" 预览 ");
+        .border_style(Style::default().fg(Color::White));
 
     let content = if app.preview_lines.is_empty() {
         match &app.preview_content {
