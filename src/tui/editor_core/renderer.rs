@@ -202,9 +202,13 @@ impl MarkdownRenderer {
     ) -> Vec<Line<'static>> {
         let lines = buffer.lines();
         let logical_line = vl.logical_line;
-        let Some(line_content) = lines.get(logical_line) else {
+        let Some(raw_line_content) = lines.get(logical_line) else {
             return vec![Line::default()];
         };
+        // 将 tab 替换为空格，防止终端展开 tab 导致二次折行
+        let line_content = Self::normalize_tabs(raw_line_content);
+        // 视觉行文本同样需要标准化（tab → 空格）
+        let vl_text = Self::normalize_tabs(&vl.text);
 
         let is_continuation = vl.start_col > 0;
 
@@ -225,7 +229,7 @@ impl MarkdownRenderer {
 
         // ---- 光标行：显示源码 + 光标 ----
         // 代码块内的光标行使用 code_bg 背景以保持视觉一致性
-        let code_block_max_width = if !Self::is_code_fence_line(line_content)
+        let code_block_max_width = if !Self::is_code_fence_line(&line_content)
             && self.is_line_in_complete_code_block(logical_line, lines)
         {
             self.find_code_block_range(logical_line, lines)
@@ -238,6 +242,7 @@ impl MarkdownRenderer {
             // 判断是否是逻辑行的最后一个视觉行
             let is_last_vl = vl.end_col >= line_content.chars().count();
             return vec![self.render_cursor_visual_line(
+                vl_text,
                 vl,
                 &line_num_str,
                 line_num_style,
@@ -253,10 +258,10 @@ impl MarkdownRenderer {
         // 因为 Markdown 标记可能跨越折行边界，所以续行显示源码
         // 但代码块内的续行需要保持 code_bg 样式
         if is_continuation {
-            let text = &vl.text;
+            let text = &vl_text;
 
             // 检查续行是否在代码块内（非围栏行）
-            let in_code_block = !Self::is_code_fence_line(line_content)
+            let in_code_block = !Self::is_code_fence_line(&line_content)
                 && self.is_line_in_complete_code_block(logical_line, lines);
 
             if in_code_block {
@@ -291,7 +296,7 @@ impl MarkdownRenderer {
             }
 
             // 表格续行：保持表格边框样式
-            if Self::is_table_row(line_content) {
+            if Self::is_table_row(&line_content) {
                 let mut spans = vec![Span::styled(line_num_str, line_num_style)];
                 spans.push(Span::styled(
                     text.clone(),
@@ -341,12 +346,12 @@ impl MarkdownRenderer {
 
         // 非续行的非光标行：完整 Markdown 渲染
         // 截断到折行宽度，防止终端二次折行导致重复渲染
-        let truncated = Self::truncate_to_display_width(line_content, wrap_width);
+        let truncated = Self::truncate_to_display_width(&line_content, wrap_width);
 
         // 检查是否是代码块围栏行
-        if Self::is_code_fence_line(line_content) {
+        if Self::is_code_fence_line(&line_content) {
             if self.is_fence_line_paired(logical_line, lines) {
-                return vec![self.render_code_fence_line(line_content, logical_line, lines)];
+                return vec![self.render_code_fence_line(&line_content, logical_line, lines)];
             }
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
@@ -360,13 +365,13 @@ impl MarkdownRenderer {
 
         // 检查是否在完整的代码块内
         if self.is_line_in_complete_code_block(logical_line, lines) {
-            return vec![self.render_code_block_line(line_content, logical_line, lines)];
+            return vec![self.render_code_block_line(&line_content, logical_line, lines)];
         }
 
         // 检查是否在表格内
         if let Some(table_ctx) = self.find_table_context(logical_line, lines) {
             return self.render_table_rows(
-                line_content,
+                &line_content,
                 logical_line,
                 &table_ctx,
                 lines,
@@ -376,6 +381,15 @@ impl MarkdownRenderer {
 
         // 其他行：Markdown 渲染（标题、列表、引用等）
         vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
+    }
+
+    /// 将 tab 替换为空格（宽度为 1，与 char_width('\t') = 1 一致）
+    ///
+    /// 终端会将 tab 展开到下一个 tab stop（通常占 8 列），
+    /// 但 char_width 计算时 tab = 1，导致显示宽度与计算宽度不一致，
+    /// 引起终端二次折行和字符重复。替换为空格后两者保持一致。
+    fn normalize_tabs(text: &str) -> String {
+        text.replace('\t', " ")
     }
 
     /// 将文本截断到指定显示宽度（使用 unicode-width 精确计算）
@@ -397,6 +411,7 @@ impl MarkdownRenderer {
     #[allow(clippy::too_many_arguments)]
     fn render_cursor_visual_line(
         &self,
+        text: String,
         vl: &VisualLine,
         line_num_str: &str,
         line_num_style: Style,
@@ -405,7 +420,6 @@ impl MarkdownRenderer {
         code_block_max_width: Option<usize>,
         is_last_vl: bool,
     ) -> Line<'static> {
-        let text = &vl.text;
         let in_code_block = code_block_max_width.is_some();
 
         // 代码块内的光标行使用 code_bg 背景
@@ -434,9 +448,12 @@ impl MarkdownRenderer {
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
         }
 
+        // 计算显示宽度（在 text 被消费之前）
+        let text_display_width = display_width(&text);
+
         // 搜索高亮
         if search.is_searching() && search.match_count() > 0 {
-            spans.extend(search.highlight_line(vl.logical_line, text, &self.theme, vl.start_col));
+            spans.extend(search.highlight_line(vl.logical_line, &text, &self.theme, vl.start_col));
             return Line::from(spans).patch_style(Style::default().bg(line_num_bg));
         }
 
@@ -482,17 +499,16 @@ impl MarkdownRenderer {
                 }
             } else {
                 // 光标不在当前视觉行，正常渲染文本
-                spans.push(Span::styled(text.clone(), text_style));
+                spans.push(Span::styled(text, text_style));
             }
         } else {
             // 无光标信息（不应该发生，但作为 fallback）
-            spans.push(Span::styled(text.clone(), text_style));
+            spans.push(Span::styled(text, text_style));
         }
 
         // 代码块光标行：添加右边框 + 填充
         if let Some(max_width) = code_block_max_width {
-            let content_width = display_width(text);
-            let fill_width = max_width.saturating_sub(content_width);
+            let fill_width = max_width.saturating_sub(text_display_width);
             spans.push(Span::styled(
                 " ".repeat(fill_width),
                 Style::default().bg(self.theme.code_bg),
