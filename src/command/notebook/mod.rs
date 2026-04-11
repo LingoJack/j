@@ -10,7 +10,7 @@ use app::{
     handle_preview_mode, handle_ratio_input_mode, load_notes, note_file_path, notebook_dir,
 };
 use colored::Colorize;
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, MouseEvent, MouseEventKind};
 use crossterm::{
     event::{self, Event},
     execute,
@@ -69,13 +69,10 @@ pub fn handle_notebook(args: &[String]) {
             }
         }
         _ => {
-            // 判断是否为文件路径（含 . 或以 ~ 开头视为外部文件路径）
             let joined = args.join(" ");
             if is_file_path(&joined) {
-                // 文件路径模式：直接用编辑器打开（原 md 命令行为）
                 edit_file_with_editor(&joined);
             } else {
-                // 笔记标题模式：打开 notebook 目录下的笔记
                 edit_note_with_editor(&joined);
             }
         }
@@ -84,18 +81,15 @@ pub fn handle_notebook(args: &[String]) {
 
 /// 判断字符串是否为文件路径（而非 notebook 笔记标题）
 fn is_file_path(s: &str) -> bool {
-    // 以 ~ 开头或含 . 的视为外部文件路径
     if s.starts_with('~') || s.contains('.') {
         return true;
     }
-    // 含 / 的可能是 notebook 子目录路径，检查是否在 notebook_dir 下
     if s.contains('/') {
         let potential_note = note_file_path(s);
-        // 如果路径以 notebook_dir 为前缀，视为笔记路径
         if potential_note.starts_with(notebook_dir()) {
-            return false; // 笔记路径
+            return false;
         }
-        return true; // 其他路径
+        return true;
     }
     false
 }
@@ -294,7 +288,6 @@ fn handle_rename(old_name: &str, new_name: &str) {
         return;
     }
 
-    // 确保目标目录存在
     if let Some(parent) = new_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -333,7 +326,6 @@ fn handle_mv(source: &str, target: &str) {
         error!("目标笔记已存在: {}", target);
         return;
     }
-    // 确保目标目录存在
     if let Some(parent) = new_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -354,6 +346,7 @@ fn run_notebook_tui() {
     std::panic::set_hook(Box::new(move |info| {
         let _ = terminal::disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(io::stdout(), crossterm::event::DisableMouseCapture);
         default_hook(info);
     }));
 
@@ -370,6 +363,7 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, crossterm::event::EnableMouseCapture)?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -379,60 +373,113 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
-        if event::poll(std::time::Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-        {
-            // 用于记录编辑操作请求（需要在 TUI loop 中直接使用 terminal）
-            let mut edit_requested: Option<String> = None;
+        if event::poll(std::time::Duration::from_millis(100))? {
+            match event::read()? {
+                Event::Key(key) => {
+                    let mut edit_requested: Option<String> = None;
 
-            match app.mode {
-                AppMode::Normal => {
-                    if handle_normal_mode(&mut app, key) {
-                        break;
+                    match app.mode {
+                        AppMode::Normal => {
+                            if handle_normal_mode(&mut app, key) {
+                                break;
+                            }
+                            if (key.code == KeyCode::Enter || key.code == KeyCode::Char('e'))
+                                && app.mode == AppMode::Normal
+                                && let Some(name) = app.selected_name()
+                            {
+                                edit_requested = Some(name);
+                            }
+                        }
+                        AppMode::Preview => handle_preview_mode(&mut app, key),
+                        AppMode::Adding => {
+                            handle_input_mode(&mut app, key);
+                            if let Some(title) = app.pending_edit_title.take() {
+                                edit_requested = Some(title);
+                            }
+                        }
+                        AppMode::Renaming | AppMode::Search | AppMode::Mkdir | AppMode::Mv => {
+                            handle_input_mode(&mut app, key);
+                        }
+                        AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
+                        AppMode::Help => handle_help_mode(&mut app, key),
+                        AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),
+                        AppMode::RatioInput => handle_ratio_input_mode(&mut app, key),
                     }
-                    // Enter/e 触发编辑
-                    if (key.code == KeyCode::Enter || key.code == KeyCode::Char('e'))
-                        && app.mode == AppMode::Normal
-                        && let Some(name) = app.selected_name()
-                    {
-                        edit_requested = Some(name);
-                    }
-                }
-                AppMode::Preview => handle_preview_mode(&mut app, key),
-                AppMode::Adding => {
-                    handle_input_mode(&mut app, key);
-                    // Adding+Enter 后 mode 变为 Normal 且 pending_edit_title 有值
-                    if let Some(title) = app.pending_edit_title.take() {
-                        edit_requested = Some(title);
-                    }
-                }
-                AppMode::Renaming | AppMode::Search | AppMode::Mkdir | AppMode::Mv => {
-                    handle_input_mode(&mut app, key);
-                }
-                AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
-                AppMode::Help => handle_help_mode(&mut app, key),
-                AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),
-                AppMode::RatioInput => handle_ratio_input_mode(&mut app, key),
-            }
 
-            // 处理编辑请求：在同一 terminal 上打开编辑器
-            if let Some(title) = edit_requested {
-                let needs_reload = edit_note_on_terminal(&title, &mut terminal);
-                if needs_reload {
-                    app.reload();
-                } else {
-                    app.update_preview();
+                    if let Some(title) = edit_requested {
+                        let needs_reload = edit_note_on_terminal(&title, &mut terminal);
+                        if needs_reload {
+                            app.reload();
+                        } else {
+                            app.update_preview();
+                        }
+                        while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
+                            let _ = event::read();
+                        }
+                    }
                 }
-                // 清除编辑器残留的按键事件，避免误触发 TUI 操作
-                while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
-                    let _ = event::read();
+                Event::Mouse(mouse) => {
+                    handle_mouse_event(&mut app, mouse, terminal.get_frame().area());
                 }
+                _ => {}
             }
         }
     }
 
+    execute!(
+        terminal.backend_mut(),
+        crossterm::event::DisableMouseCapture
+    )?;
     terminal::disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
 
     Ok(())
+}
+
+/// 处理鼠标事件
+fn handle_mouse_event(app: &mut NotebookApp, mouse: MouseEvent, frame_area: ratatui::layout::Rect) {
+    // 只在 Normal/Preview 模式下处理滚轮
+    if !matches!(app.mode, AppMode::Normal | AppMode::Preview) {
+        return;
+    }
+
+    let scroll_delta = match mouse.kind {
+        MouseEventKind::ScrollUp => -1i16,
+        MouseEventKind::ScrollDown => 1i16,
+        _ => return,
+    };
+
+    // 计算布局区域，判断鼠标在左侧还是右侧面板
+    // 布局: 标题(3) | 主区域 | 状态栏(3) | 帮助栏(1)
+    let main_y_start = frame_area.y + 3;
+    let main_y_end = frame_area.y + frame_area.height.saturating_sub(4);
+
+    // 鼠标不在主区域内，忽略
+    if mouse.row < main_y_start || mouse.row >= main_y_end {
+        return;
+    }
+
+    // 左侧面板宽度占比
+    let list_width = frame_area.width * app.panel_ratio / 100;
+    let is_in_list = mouse.column < frame_area.x + list_width;
+
+    if is_in_list {
+        // 左侧面板：滚动切换选中项
+        match scroll_delta {
+            -1 => app.move_up(),
+            1 => app.move_down(),
+            _ => {}
+        }
+    } else {
+        // 右侧面板：滚动预览内容
+        match scroll_delta {
+            -1 => {
+                app.preview_scroll = app.preview_scroll.saturating_sub(3);
+            }
+            1 => {
+                app.preview_scroll = app.preview_scroll.saturating_add(3);
+            }
+            _ => {}
+        }
+    }
 }

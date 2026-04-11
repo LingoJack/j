@@ -34,11 +34,11 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     };
     let title = if dir_count > 0 {
         format!(
-            " 📓 笔记本{} — {} 篇笔记, {} 个文件夹 ",
+            " 笔记本{} — {} 篇笔记, {} 个文件夹 ",
             filter_suffix, total, dir_count
         )
     } else {
-        format!(" 📓 笔记本{} — 共 {} 篇 ", filter_suffix, total)
+        format!(" 笔记本{} — 共 {} 篇 ", filter_suffix, total)
     };
     let title_block = Paragraph::new(Line::from(vec![Span::styled(
         title,
@@ -122,17 +122,8 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                 return build_rename_item(&app.input, app.cursor_pos, inner_width, is_selected);
             }
 
-            let indent = "  ".repeat(entry.depth);
-            let pointer = if is_selected {
-                Span::styled(
-                    " ❯ ",
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                )
-            } else {
-                Span::raw("   ")
-            };
+            // 树形引导线（灰色细线）
+            let guide_style = Style::default().fg(Color::DarkGray);
 
             match &entry.kind {
                 FlatEntryKind::Dir {
@@ -141,7 +132,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                     file_count,
                     ..
                 } => {
-                    let icon = if *expanded { "▼" } else { "▶" };
+                    let toggle = if *expanded { "▾ " } else { "▸ " };
                     let dir_style = if is_selected {
                         Style::default()
                             .fg(Color::Cyan)
@@ -149,16 +140,13 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                     } else {
                         Style::default().fg(Color::Cyan)
                     };
-                    let count_str = format!("({})", file_count);
+                    let count_str = format!(" ({})", file_count);
+
                     ListItem::new(Line::from(vec![
-                        Span::raw(indent.clone()),
-                        pointer,
-                        Span::styled(format!("{} 📁 ", icon), dir_style),
+                        Span::styled(entry.guide.clone(), guide_style),
+                        Span::styled(toggle.to_string(), dir_style),
                         Span::styled(name.clone(), dir_style),
-                        Span::styled(
-                            format!(" {}", count_str),
-                            Style::default().fg(Color::DarkGray),
-                        ),
+                        Span::styled(count_str, Style::default().fg(Color::DarkGray)),
                     ]))
                 }
                 FlatEntryKind::File { note_index } => {
@@ -171,8 +159,8 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                         Style::default().fg(Color::White)
                     };
                     let time_str = format_time(note.mtime);
-                    let indent_width = entry.depth * 2;
-                    let name_display_width = inner_width.saturating_sub(3 + indent_width + 17); // pointer + indent + time
+                    let guide_width = unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
+                    let name_display_width = inner_width.saturating_sub(guide_width + 17); // guide + time
                     let display_name = note.display_name();
                     let name_text =
                         if display_name.chars().collect::<Vec<_>>().len() > name_display_width {
@@ -189,8 +177,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                         .saturating_sub(unicode_width::UnicodeWidthStr::width(name_text.as_str()));
 
                     ListItem::new(Line::from(vec![
-                        Span::raw(indent.clone()),
-                        pointer,
+                        Span::styled(entry.guide.clone(), guide_style),
                         Span::styled(name_text, name_style),
                         Span::raw(" ".repeat(padding)),
                         Span::styled(time_str, Style::default().fg(Color::DarkGray)),
@@ -384,8 +371,8 @@ fn render_preview_full(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect
     app.render_preview_with_width(inner_width);
 
     let title = match app.selected_name() {
-        Some(name) => format!(" 📖 {} ", name),
-        None => " 📖 预览 ".to_string(),
+        Some(name) => format!(" 预览: {} ", name),
+        None => " 预览 ".to_string(),
     };
 
     let block = Block::default()
@@ -421,7 +408,7 @@ fn render_preview_full(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect
 fn render_help(f: &mut ratatui::Frame, area: Rect) {
     let help_lines = vec![
         Line::from(Span::styled(
-            "  📖 快捷键帮助",
+            "  快捷键帮助",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -522,7 +509,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         AppMode::Adding => {
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " ✏️  新建笔记",
+                    " 新建笔记",
                     Style::default()
                         .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),
@@ -542,7 +529,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         AppMode::Renaming => {
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " ✏️  重命名",
+                    " 重命名",
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
@@ -562,7 +549,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         AppMode::Mkdir => {
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " 📁 新建目录",
+                    " 新建目录",
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
@@ -582,7 +569,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         AppMode::Mv => {
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " 📦 移动笔记",
+                    " 移动笔记",
                     Style::default()
                         .fg(Color::Magenta)
                         .add_modifier(Modifier::BOLD),
@@ -602,7 +589,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         AppMode::Search => {
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " 🔍 搜索",
+                    " 搜索",
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
@@ -621,7 +608,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         }
         AppMode::ConfirmDelete => {
             let msg = if let Some(name) = app.selected_name() {
-                format!(" 确认删除「{}」？(y 确认 / n 取消)", name)
+                format!(" 确认删除\"{}\"? (y/n)", name)
             } else {
                 " 没有选中的笔记".to_string()
             };
@@ -633,14 +620,14 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Red))
-                    .title(" ⚠️ 确认删除 "),
+                    .title(" 确认删除 "),
             );
             f.render_widget(confirm_widget, area);
         }
         AppMode::Preview => {
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " 📖 预览模式",
+                    " 预览模式",
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
@@ -665,7 +652,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             };
             let status = Paragraph::new(Line::from(vec![
                 Span::styled(
-                    " ⌨  命令面板",
+                    " 命令面板",
                     Style::default()
                         .fg(Color::Magenta)
                         .add_modifier(Modifier::BOLD),
@@ -686,7 +673,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
             let input_chars: Vec<char> = app.input.chars().collect();
             let mut spans = vec![Span::styled(
-                " ⚖  比例 ",
+                " 比例 ",
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
