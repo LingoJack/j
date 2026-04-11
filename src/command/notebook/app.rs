@@ -107,7 +107,7 @@ impl Default for ExpandedDirs {
 pub struct FlatEntry {
     /// 条目类型
     pub kind: FlatEntryKind,
-    /// 树形引导线，如 "│ ├─" 表示两层展开的祖先
+    /// 树形缩进，如 "    " 表示两层深度
     pub guide: String,
 }
 
@@ -564,7 +564,7 @@ impl NotebookApp {
             &dir_set,
             &self.expanded_dirs,
             "",
-            "",
+            0,
             &mut flat,
         );
         self.flat_entries = flat;
@@ -717,7 +717,7 @@ fn build_flat_entries_recursive(
     dir_set: &std::collections::BTreeSet<String>,
     expanded_dirs: &ExpandedDirs,
     prefix: &str,
-    guide_prefix: &str,
+    depth: usize,
     flat: &mut Vec<FlatEntry>,
 ) {
     // 1. 收集当前前缀下的直接子目录（已排序，BTreeSet 保证）
@@ -745,16 +745,8 @@ fn build_flat_entries_recursive(
         }
     }
 
-    // 总子项数（目录 + 文件），用于判断 is_last
-    let total_children = child_dirs.len() + child_files.len();
-    let mut child_idx = 0usize;
-
     // 3. 先渲染子目录，再渲染文件
     for dir_path in &child_dirs {
-        let is_last = child_idx == total_children - 1;
-        let branch = if is_last { "└─" } else { "├─" };
-        let guide = format!("{}{}", guide_prefix, branch);
-
         let name = dir_path.rsplit('/').next().unwrap_or(dir_path);
         let expanded = expanded_dirs.is_expanded(dir_path);
         let file_count = filtered_set
@@ -766,6 +758,7 @@ fn build_flat_entries_recursive(
             })
             .count();
 
+        let guide = "  ".repeat(depth);
         flat.push(FlatEntry {
             kind: FlatEntryKind::Dir {
                 dir_path: dir_path.clone(),
@@ -776,39 +769,26 @@ fn build_flat_entries_recursive(
             guide,
         });
 
-        child_idx += 1;
-
         // 如果展开，递归
         if expanded {
-            // 子级的 guide_prefix: 当前级如果有后续兄弟则用 "│ "，否则用 "  "
-            let child_prefix = if is_last {
-                format!("{}  ", guide_prefix)
-            } else {
-                format!("{}│ ", guide_prefix)
-            };
             build_flat_entries_recursive(
                 notes,
                 filtered_set,
                 dir_set,
                 expanded_dirs,
                 dir_path,
-                &child_prefix,
+                depth + 1,
                 flat,
             );
         }
     }
 
     for &idx in &child_files {
-        let is_last = child_idx == total_children - 1;
-        let branch = if is_last { "└─" } else { "├─" };
-        let guide = format!("{}{}", guide_prefix, branch);
-
+        let guide = "  ".repeat(depth);
         flat.push(FlatEntry {
             kind: FlatEntryKind::File { note_index: idx },
             guide,
         });
-
-        child_idx += 1;
     }
 }
 

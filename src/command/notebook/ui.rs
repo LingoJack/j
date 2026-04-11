@@ -1,4 +1,4 @@
-use super::app::{AppMode, FlatEntryKind, NotebookApp, format_time};
+use super::app::{AppMode, FlatEntryKind, NotebookApp};
 use crate::util::text::wrap_text;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -122,8 +122,8 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                 return build_rename_item(&app.input, app.cursor_pos, inner_width, is_selected);
             }
 
-            // 树形引导线（灰色细线）
-            let guide_style = Style::default().fg(Color::DarkGray);
+            // 缩进空格
+            let indent_style = Style::default().fg(Color::DarkGray);
 
             match &entry.kind {
                 FlatEntryKind::Dir {
@@ -132,23 +132,24 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                     file_count,
                     ..
                 } => {
-                    let toggle = if *expanded { "▾ " } else { "▸ " };
-                    let dir_style = Style::default().fg(Color::Cyan);
+                    let icon = if *expanded { "∨ " } else { "❯ " };
+                    let dir_style = Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD);
                     let count_str = format!(" ({})", file_count);
 
                     ListItem::new(Line::from(vec![
-                        Span::styled(entry.guide.clone(), guide_style),
-                        Span::styled(toggle.to_string(), dir_style),
+                        Span::styled(entry.guide.clone(), indent_style),
+                        Span::styled(icon.to_string(), dir_style),
                         Span::styled(name.clone(), dir_style),
                         Span::styled(count_str, Style::default().fg(Color::DarkGray)),
                     ]))
                 }
                 FlatEntryKind::File { note_index } => {
                     let note = &app.notes[*note_index];
-                    let name_style = Style::default().fg(Color::White);
-                    let time_str = format_time(note.mtime);
+                    let name_style = Style::default().fg(Color::Gray);
                     let guide_width = unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
-                    let name_display_width = inner_width.saturating_sub(guide_width + 17); // guide + time
+                    let name_display_width = inner_width.saturating_sub(guide_width + 2); // guide + "· "
                     let display_name = note.display_name();
                     let name_text =
                         if display_name.chars().collect::<Vec<_>>().len() > name_display_width {
@@ -161,14 +162,11 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                         } else {
                             display_name.to_string()
                         };
-                    let padding = name_display_width
-                        .saturating_sub(unicode_width::UnicodeWidthStr::width(name_text.as_str()));
 
                     ListItem::new(Line::from(vec![
-                        Span::styled(entry.guide.clone(), guide_style),
+                        Span::styled(entry.guide.clone(), indent_style),
+                        Span::styled("· ", Style::default().fg(Color::DarkGray)),
                         Span::styled(name_text, name_style),
-                        Span::raw(" ".repeat(padding)),
-                        Span::styled(time_str, Style::default().fg(Color::DarkGray)),
                     ]))
                 }
             }
