@@ -1,7 +1,6 @@
 pub mod app;
 pub mod ui;
 
-use crate::config::YamlConfig;
 use crate::constants::{notebook_action, shell};
 use crate::util::fuzzy;
 use crate::{error, info};
@@ -23,8 +22,8 @@ use std::io::{self, Write};
 use std::process::Command;
 use ui::draw_ui;
 
-/// notebook 命令入口
-pub fn handle_notebook(args: &[String], _config: &YamlConfig) {
+/// notebook/md 命令入口
+pub fn handle_notebook(args: &[String]) {
     if args.is_empty() {
         run_notebook_tui();
         return;
@@ -37,14 +36,14 @@ pub fn handle_notebook(args: &[String], _config: &YamlConfig) {
             if let Some(keyword) = args.get(1) {
                 handle_search(keyword);
             } else {
-                error!("用法: notebook search <关键词>");
+                error!("用法: md search <关键词>");
             }
         }
         f if f == notebook_action::DELETE => {
             if let Some(title) = args.get(1) {
                 handle_delete(title);
             } else {
-                error!("用法: notebook delete <笔记名>");
+                error!("用法: md delete <笔记名>");
             }
         }
         f if f == notebook_action::OPEN => handle_open(),
@@ -52,14 +51,91 @@ pub fn handle_notebook(args: &[String], _config: &YamlConfig) {
             if args.len() >= 3 {
                 handle_rename(&args[1], &args[2]);
             } else {
-                error!("用法: notebook rename <旧名称> <新名称>");
+                error!("用法: md rename <旧名称> <新名称>");
             }
         }
         _ => {
-            // 其余参数视为笔记标题，直接打开编辑器
-            let title = args.join(" ");
-            edit_note_with_editor(&title);
+            // 判断是否为文件路径（含 / . ~ 或以 / 开头）
+            let joined = args.join(" ");
+            if is_file_path(&joined) {
+                // 文件路径模式：直接用编辑器打开（原 md 命令行为）
+                edit_file_with_editor(&joined);
+            } else {
+                // 笔记标题模式：打开 notebook 目录下的笔记
+                edit_note_with_editor(&joined);
+            }
         }
+    }
+}
+
+/// 判断字符串是否为文件路径（而非 notebook 笔记标题）
+fn is_file_path(s: &str) -> bool {
+    s.contains('/') || s.contains('.') || s.starts_with('~')
+}
+
+/// 用 Markdown 编辑器编辑外部文件（原 md 命令逻辑）
+fn edit_file_with_editor(file_str: &str) {
+    let expanded = expand_tilde(file_str);
+    let path = std::path::PathBuf::from(&expanded);
+
+    let (content, is_new_file) = if path.exists() {
+        match std::fs::read_to_string(&path) {
+            Ok(c) => (c, false),
+            Err(e) => {
+                error!("读取文件失败: {} - {}", path.display(), e);
+                return;
+            }
+        }
+    } else {
+        (String::new(), true)
+    };
+
+    let theme = crate::command::chat::theme::Theme::from_name(
+        &crate::command::chat::theme::ThemeName::default(),
+    );
+
+    let title = if is_new_file {
+        format!("{} (新文件)", path.display())
+    } else {
+        path.display().to_string()
+    };
+
+    match crate::tui::editor_markdown::open_markdown_editor(&title, &content, &theme) {
+        Ok(Some(new_content)) => {
+            if new_content != content {
+                if let Some(parent) = path.parent()
+                    && !parent.exists()
+                    && let Err(e) = std::fs::create_dir_all(parent)
+                {
+                    error!("创建目录失败: {} - {}", parent.display(), e);
+                    return;
+                }
+
+                match std::fs::write(&path, &new_content) {
+                    Ok(()) => info!("文件已保存: {}", path.display()),
+                    Err(e) => error!("保存文件失败: {} - {}", path.display(), e),
+                }
+            } else {
+                info!("内容未变化，跳过保存");
+            }
+        }
+        Ok(None) => info!("已取消编辑"),
+        Err(e) => error!("编辑器启动失败: {}", e),
+    }
+}
+
+/// 展开 ~ 为 home 目录
+fn expand_tilde(path: &str) -> String {
+    if (path == "~" || path.starts_with("~/"))
+        && let Some(home) = dirs::home_dir()
+    {
+        if path == "~" {
+            home.display().to_string()
+        } else {
+            format!("{}{}", home.display(), &path[1..])
+        }
+    } else {
+        path.to_string()
     }
 }
 

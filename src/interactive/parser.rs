@@ -251,14 +251,9 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             interactive: true,
         })
     } else if is(cmd::MD) {
-        if rest.is_empty() {
-            eprintln!("错误: 必须提供文件路径，例如: md README.md");
-            ParseResult::Handled
-        } else {
-            ParseResult::Matched(SubCmd::Md {
-                file: rest.to_vec(),
-            })
-        }
+        ParseResult::Matched(SubCmd::Md {
+            args: rest.to_vec(),
+        })
     } else if is(cmd::NOTEBOOK) {
         ParseResult::Matched(SubCmd::Notebook {
             args: rest.to_vec(),

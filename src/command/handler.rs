@@ -133,15 +133,14 @@ command_handlers! {
         crate::command::update::handle_update(self.check, self.interactive);
     },
 
-    // ========== Markdown 编辑器 ==========
-    MdCmd { file: Vec<String> } => |self, config| {
-        let file = self.file.join(" ");
-        crate::command::markdown::handle_md(&file, config);
+    // ========== Markdown / 笔记本 ==========
+    MdCmd { args: Vec<String> } => |self, _config| {
+        crate::command::notebook::handle_notebook(&self.args);
     },
 
-    // ========== 笔记本 ==========
-    NotebookCmd { args: Vec<String> } => |self, config| {
-        crate::command::notebook::handle_notebook(&self.args, config);
+    // ========== 笔记本别名 ==========
+    NotebookCmd { args: Vec<String> } => |self, _config| {
+        crate::command::notebook::handle_notebook(&self.args);
     },
 }
 
@@ -212,7 +211,7 @@ impl SubCmd {
             SubCmd::Update { check, interactive } => Box::new(UpdateCmd { check, interactive }),
 
             // Markdown 编辑器
-            SubCmd::Md { file } => Box::new(MdCmd { file }),
+            SubCmd::Md { args } => Box::new(MdCmd { args }),
 
             // 笔记本
             SubCmd::Notebook { args } => Box::new(NotebookCmd { args }),

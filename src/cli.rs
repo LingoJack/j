@@ -232,20 +232,19 @@ pub enum SubCmd {
         interactive: bool,
     },
 
-    // ========== Markdown 编辑器 ==========
-    /// 用 Markdown 编辑器打开文件
+    // ========== Markdown / 笔记本 ==========
+    /// Markdown 笔记管理（无参数打开 TUI，传文件路径直接编辑，传子命令执行操作）
     #[command(alias = "markdown")]
     Md {
-        /// 文件路径（支持 ~ 展开，不存在则新建；含空格的路径会自动拼接）
-        #[arg(trailing_var_arg = true, num_args = 1..)]
-        file: Vec<String>,
+        /// 子命令(list/search/delete/open/rename)、笔记标题、或文件路径
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 
-    // ========== 笔记本 ==========
-    /// 本地笔记管理（存储于 .jcli/notebook/）
-    #[command(alias = "nb")]
+    /// notebook 的别名（等同 md）
+    #[command(alias = "nb", hide = true)]
     Notebook {
-        /// 子命令或笔记标题（list/search/delete/open/rename 或笔记名）
+        /// 子命令或笔记标题
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
