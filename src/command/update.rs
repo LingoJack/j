@@ -7,6 +7,37 @@ use crossterm::{
 };
 use std::io::{self, Write};
 
+/// 修复 macOS 上替换后的代码签名和隔离属性
+/// 未签名的二进制文件在 Apple Silicon 上会被内核 SIGKILL
+#[cfg(target_os = "macos")]
+fn fix_codesign_and_quarantine(bin_path: &std::path::Path) {
+    // 移除隔离属性（com.apple.quarantine）
+    let _ = std::process::Command::new("xattr")
+        .args(["-cr"])
+        .arg(bin_path)
+        .status();
+
+    // 使用 ad-hoc 签名重签
+    match std::process::Command::new("codesign")
+        .args(["--force", "-s", "-"])
+        .arg(bin_path)
+        .status()
+    {
+        Ok(s) if s.success() => {
+            // codesign 重新签名成功
+        }
+        _ => {
+            println!(
+                "{}",
+                format!("  警告: codesign 签名失败，新版本可能无法启动",).yellow()
+            );
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn fix_codesign_and_quarantine(_bin_path: &std::path::Path) {}
+
 /// 尝试获取 GitHub 认证 token
 /// 优先级: GITHUB_TOKEN 环境变量 > gh auth token
 fn get_github_auth_token() -> Option<String> {
@@ -230,6 +261,10 @@ fn perform_update_internal(target: &str, interactive: bool) {
     match binding.build() {
         Ok(updater) => match updater.update() {
             Ok(status) => {
+                // 修复 macOS 代码签名（替换后的二进制文件需要重签）
+                if let Ok(exe_path) = std::env::current_exe() {
+                    fix_codesign_and_quarantine(&exe_path);
+                }
                 println!(
                     "{} {}",
                     "更新成功！".green(),
@@ -479,6 +514,10 @@ fn handle_cargo_update(check_only: bool, interactive: bool) {
         Ok(mut child) => match child.wait() {
             Ok(status) if status.success() => {
                 println!();
+                // 修复 macOS 代码签名
+                if let Ok(exe_path) = std::env::current_exe() {
+                    fix_codesign_and_quarantine(&exe_path);
+                }
                 println!("{}", "更新成功！".green());
                 if interactive {
                     restart_self();
@@ -636,6 +675,8 @@ fn perform_update_curl(target: &str, interactive: bool) {
                 use std::os::unix::fs::PermissionsExt;
                 let _ = std::fs::set_permissions(&dst_bin, std::fs::Permissions::from_mode(0o755));
             }
+            // 修复 macOS 代码签名
+            fix_codesign_and_quarantine(&dst_bin);
             println!(
                 "{} {}",
                 "更新成功！".green(),
@@ -782,6 +823,8 @@ fn install_indicator_from_release(version: &str) {
                                 std::fs::Permissions::from_mode(0o755),
                             );
                         }
+                        // 修复 macOS 代码签名
+                        fix_codesign_and_quarantine(&dst);
                         println!("{}", "  j-indicator 已安装".green());
                     }
                     Err(e) => {
