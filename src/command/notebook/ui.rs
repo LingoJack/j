@@ -50,8 +50,8 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(40), // 笔记列表
-                Constraint::Percentage(60), // 预览区
+                Constraint::Percentage(30), // 笔记列表
+                Constraint::Percentage(70), // 预览区
             ])
             .split(chunks[1]);
 
@@ -294,49 +294,41 @@ fn build_rename_item(
 }
 
 /// 渲染右侧预览区
-fn render_preview(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
+fn render_preview(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
+    let inner_width = area.width.saturating_sub(2); // 减边框
+    app.render_preview_with_width(inner_width);
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::White))
         .title(" 预览 ");
 
-    let content = match &app.preview_content {
-        Some(content) if !content.is_empty() => {
-            let lines: Vec<Line> = content
-                .lines()
-                .map(|line| {
-                    Line::from(Span::styled(
-                        line.to_string(),
-                        Style::default().fg(Color::Gray),
-                    ))
-                })
-                .collect();
-            Paragraph::new(lines)
-                .block(block)
-                .wrap(Wrap { trim: false })
-        }
-        Some(_) => {
-            // 空文件
-            Paragraph::new(Line::from(Span::styled(
+    let content = if app.preview_lines.is_empty() {
+        match &app.preview_content {
+            Some(_) => Paragraph::new(Line::from(Span::styled(
                 "  (空笔记)",
                 Style::default().fg(Color::DarkGray),
             )))
-            .block(block)
-        }
-        None => {
-            // 无选中
-            Paragraph::new(Line::from(Span::styled(
+            .block(block),
+            None => Paragraph::new(Line::from(Span::styled(
                 "  选择笔记以预览内容",
                 Style::default().fg(Color::DarkGray),
             )))
-            .block(block)
+            .block(block),
         }
+    } else {
+        Paragraph::new(app.preview_lines.clone())
+            .block(block)
+            .wrap(Wrap { trim: false })
     };
     f.render_widget(content, area);
 }
 
 /// 渲染全屏预览
-fn render_preview_full(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
+fn render_preview_full(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
+    let inner_width = area.width.saturating_sub(2);
+    app.render_preview_with_width(inner_width);
+
     let title = match app.selected_name() {
         Some(name) => format!(" 📖 {} ", name),
         None => " 📖 预览 ".to_string(),
@@ -347,32 +339,28 @@ fn render_preview_full(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
         .border_style(Style::default().fg(Color::Cyan))
         .title(title);
 
-    let content = match &app.preview_content {
-        Some(content) if !content.is_empty() => {
-            let lines: Vec<Line> = content
-                .lines()
-                .skip(app.preview_scroll as usize)
-                .map(|line| Line::from(Span::raw(line.to_string())))
-                .collect();
-            if lines.is_empty() {
-                Paragraph::new(Line::from(Span::styled(
-                    "  (已到末尾)",
-                    Style::default().fg(Color::DarkGray),
-                )))
-                .block(block)
-            } else {
-                Paragraph::new(lines)
-                    .block(block)
-                    .wrap(Wrap { trim: false })
-            }
-        }
-        _ => Paragraph::new(Line::from(Span::styled(
+    if app.preview_lines.is_empty() {
+        let content = Paragraph::new(Line::from(Span::styled(
             "  (空)",
             Style::default().fg(Color::DarkGray),
         )))
-        .block(block),
-    };
-    f.render_widget(content, area);
+        .block(block);
+        f.render_widget(content, area);
+    } else {
+        let scroll = app.preview_scroll as usize;
+        let visible_lines: Vec<Line> = app.preview_lines.iter().skip(scroll).cloned().collect();
+        if visible_lines.is_empty() {
+            let content = Paragraph::new(Line::from(Span::styled(
+                "  (已到末尾)",
+                Style::default().fg(Color::DarkGray),
+            )))
+            .block(block);
+            f.render_widget(content, area);
+        } else {
+            let content = Paragraph::new(visible_lines).block(block);
+            f.render_widget(content, area);
+        }
+    }
 }
 
 /// 渲染帮助页

@@ -1,3 +1,4 @@
+use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::config::YamlConfig;
 use crate::constants::shell;
@@ -6,6 +7,7 @@ use crate::info;
 use crate::util::fuzzy;
 use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::fs;
 use std::path::PathBuf;
@@ -193,8 +195,12 @@ pub struct NotebookApp {
     pub rename_index: Option<usize>,
     /// 预览区滚动偏移
     pub preview_scroll: u16,
-    /// 当前预览内容缓存
+    /// 当前预览内容缓存（原始 Markdown）
     pub preview_content: Option<String>,
+    /// 预览渲染行缓存（Markdown 渲染后的 Lines）
+    pub preview_lines: Vec<Line<'static>>,
+    /// 预览区宽度缓存（用于判断是否需要重新渲染）
+    pub preview_width: u16,
     /// 强制退出输入缓冲
     pub quit_input: String,
     /// 新建笔记确认后，待打开编辑器的标题（TUI loop 消费）
@@ -243,6 +249,8 @@ impl NotebookApp {
             rename_index: None,
             preview_scroll: 0,
             preview_content: None,
+            preview_lines: Vec::new(),
+            preview_width: 0,
             quit_input: String::new(),
             pending_edit_title: None,
         };
@@ -336,6 +344,33 @@ impl NotebookApp {
         self.preview_content = self
             .selected_real_index()
             .and_then(|idx| read_note_content(&self.notes[idx].name));
+        self.render_preview_lines();
+    }
+
+    /// 渲染 Markdown 预览行（带宽度参数，供 UI 层调用）
+    pub fn render_preview_with_width(&mut self, width: u16) {
+        if width != self.preview_width {
+            self.preview_width = width;
+            self.render_preview_lines();
+        }
+    }
+
+    /// 内部渲染预览行
+    fn render_preview_lines(&mut self) {
+        let width = if self.preview_width > 0 {
+            self.preview_width as usize
+        } else {
+            80 // 默认宽度
+        };
+        match &self.preview_content {
+            Some(content) if !content.is_empty() => {
+                let theme = Theme::from_name(&ThemeName::default());
+                self.preview_lines = markdown_to_lines(content, width, &theme);
+            }
+            _ => {
+                self.preview_lines.clear();
+            }
+        }
     }
 
     /// 清除搜索过滤
