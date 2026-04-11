@@ -132,7 +132,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                     file_count,
                     ..
                 } => {
-                    let icon = if *expanded { "∨ " } else { "❯ " };
+                    let icon = if *expanded { "v " } else { "> " };
                     let dir_style = Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD);
