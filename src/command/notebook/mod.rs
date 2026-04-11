@@ -462,10 +462,10 @@ fn handle_mouse_event(app: &mut NotebookApp, mouse: MouseEvent, frame_area: rata
     // 滚轮统一滚动右侧预览区（左侧目录树仅通过上下键控制）
     match scroll_delta {
         -1 => {
-            app.preview_scroll = app.preview_scroll.saturating_sub(3);
+            app.preview_scroll = app.preview_scroll.saturating_sub(5);
         }
         1 => {
-            app.preview_scroll = app.preview_scroll.saturating_add(3);
+            app.preview_scroll = app.preview_scroll.saturating_add(5);
         }
         _ => {}
     }
