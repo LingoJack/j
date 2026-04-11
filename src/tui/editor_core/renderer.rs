@@ -1015,8 +1015,13 @@ impl MarkdownRenderer {
         let visible_line: String = line.chars().skip(self.horizontal_scroll).collect();
 
         let trimmed = visible_line.trim_start();
-        let indent_len = visible_line.len() - trimmed.len();
-        let indent = " ".repeat(indent_len);
+        let indent_chars = visible_line.chars().count() - trimmed.chars().count();
+        let indent_width: usize = visible_line
+            .chars()
+            .take(indent_chars)
+            .map(char_width)
+            .sum();
+        let indent = " ".repeat(indent_width);
 
         // 标题
         if let Some(stripped) = trimmed.strip_prefix("# ") {
@@ -1054,7 +1059,7 @@ impl MarkdownRenderer {
 
         // 水平线
         if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-            let width = max_width.saturating_sub(indent_len).min(40);
+            let width = max_width.saturating_sub(indent_width).min(40);
             return Line::from(vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),

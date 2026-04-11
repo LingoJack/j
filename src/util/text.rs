@@ -26,13 +26,21 @@ pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
 }
 
 /// 计算字符串的显示宽度（使用 unicode-width crate，比手动范围匹配更准确）
+/// 注意：unicode-width 将 tab 视为宽度 0，这里补充处理将其视为宽度 1
 pub fn display_width(s: &str) -> usize {
     use unicode_width::UnicodeWidthStr;
-    UnicodeWidthStr::width(s)
+    let base = UnicodeWidthStr::width(s);
+    // 统计 tab 数量，每个 tab 补偿 1 的宽度（unicode-width 视为 0）
+    let tab_count = s.chars().filter(|&c| c == '\t').count();
+    base + tab_count
 }
 
 /// 计算单个字符的显示宽度（使用 unicode-width crate）
+/// 注意：unicode-width 将 tab 视为宽度 0，这里补充处理将其视为宽度 1
 pub fn char_width(c: char) -> usize {
+    if c == '\t' {
+        return 1;
+    }
     use unicode_width::UnicodeWidthChar;
     UnicodeWidthChar::width(c).unwrap_or(0)
 }
