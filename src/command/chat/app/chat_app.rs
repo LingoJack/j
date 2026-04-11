@@ -22,7 +22,8 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::theme::Theme;
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::background::BackgroundManager;
+use crate::command::chat::tools::background::{self, BackgroundManager};
+use crate::command::chat::tools::task;
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
@@ -48,6 +49,8 @@ pub struct ChatApp {
     pub jcli_config: Arc<JcliConfig>,
     /// 后台任务管理器
     pub background_manager: Arc<BackgroundManager>,
+    /// Task 管理器
+    pub task_manager: Arc<crate::command::chat::tools::task::TaskManager>,
     /// Todo 管理器
     pub todo_manager: Arc<crate::command::chat::tools::todo::TodoManager>,
     /// ask 工具响应发送通道
@@ -274,6 +277,7 @@ impl ChatApp {
             tool_registry,
             jcli_config,
             background_manager,
+            task_manager,
             todo_manager,
             ask_response_tx: None,
             ask_request_rx: Some(ask_req_rx),
@@ -1884,22 +1888,22 @@ impl ChatApp {
         let background_manager = Arc::clone(&self.background_manager);
         let compact_config = self.state.agent_config.compact.clone();
 
-        // 把 resolve_system_prompt 所需数据 clone 出来，每轮调用时从磁盘读取最新配置
+        // 每轮重建 system_prompt：每轮调用 system_prompt_fn 从磁盘读取最新配置并替换占位符。
+        // 这是设计意图，确保运行时状态变更（如工具增删、teammates 状态、后台任务等）
+        // 能实时反映到 LLM 上下文中，而非使用过时的快照。
         let loaded_skills = self.state.loaded_skills.clone();
-        let loaded_commands = self.state.loaded_commands.clone();
         let disabled_skills = self.state.agent_config.disabled_skills.clone();
-        let disabled_commands = self.state.agent_config.disabled_commands.clone();
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
         let teammate_manager_for_prompt = Arc::clone(&self.teammate_manager);
+        let task_manager_for_prompt = Arc::clone(&self.task_manager);
+        let background_manager_for_prompt = Arc::clone(&self.background_manager);
         let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
             use crate::command::chat::storage::{
                 load_memory, load_soul, load_style, load_system_prompt,
             };
             let template = load_system_prompt()?;
             let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
-            let commands_summary =
-                command::build_commands_summary(&loaded_commands, &disabled_commands);
             let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
             let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
             let memory_text = load_memory().unwrap_or_default();
@@ -1915,17 +1919,21 @@ impl ChatApp {
                 .lock()
                 .map(|m| m.team_summary())
                 .unwrap_or_default();
+            let tasks_summary = task::build_tasks_summary(&task_manager_for_prompt);
+            let background_summary =
+                background::build_running_summary(&background_manager_for_prompt);
             let resolved = template
                 .replace("{{.current_dir}}", &current_dir)
                 .replace("{{.skills}}", &skills_summary)
                 .replace("{{.skill_dir}}", &skill_dir)
                 .replace("{{.project_skill_dir}}", &project_skill_dir)
-                .replace("{{.commands}}", &commands_summary)
                 .replace("{{.tools}}", &tools_summary)
                 .replace("{{.style}}", &style_text)
                 .replace("{{.memory}}", &memory_text)
                 .replace("{{.soul}}", &soul_text)
-                .replace("{{.teammates}}", &teammates_summary);
+                .replace("{{.teammates}}", &teammates_summary)
+                .replace("{{.tasks}}", &tasks_summary)
+                .replace("{{.background_tasks}}", &background_summary);
             Some(resolved)
         });
 

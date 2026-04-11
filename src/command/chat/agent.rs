@@ -87,42 +87,19 @@ pub async fn run_agent_loop(
         }
 
         // Drain 后台任务完成通知，注入为系统提醒
+        // 运行中的后台任务已通过 system prompt 的 {{.background_tasks}} 占位符注入，
+        // 此处只处理完成通知（事件驱动，不适合放在模板中）
         {
             let notifications = background_manager.drain_notifications();
             for notif in notifications {
                 let body = format!(
-                    "[Background task completed] task_id={}, command={}, status={}\nResult:\n{}",
+                    "<background_task_completed>\n<task_id>{}</task_id>\n<command>{}</command>\n<status>{}</status>\n<result>\n{}\n</result>\n</background_task_completed>",
                     notif.task_id, notif.command, notif.status, notif.result
                 );
                 push_system_reminder(&mut messages, body);
                 write_info_log(
                     "BackgroundNotification",
-                    &format!("注入后台任务通知: task_id={}", notif.task_id),
-                );
-            }
-        }
-
-        // 列出仍在运行的后台任务，让 LLM 知晓（仅在有任务时注入）
-        {
-            let running = background_manager.list_running();
-            if !running.is_empty() {
-                let mut body = String::from(
-                    "The following background tasks are still running. \
-Use TaskOutput to wait for or check their results when needed. \
-Do not re-spawn these commands.\n",
-                );
-                for (id, cmd, elapsed) in &running {
-                    body.push_str(&format!(
-                        "- {} (running {}): {}\n",
-                        id,
-                        format_elapsed(*elapsed),
-                        cmd
-                    ));
-                }
-                push_system_reminder(&mut messages, body);
-                write_info_log(
-                    "BackgroundRunningReminder",
-                    &format!("注入运行中后台任务提醒: {} 个", running.len()),
+                    &format!("注入后台任务完成通知: task_id={}", notif.task_id),
                 );
             }
         }
@@ -134,7 +111,7 @@ Do not re-spawn these commands.\n",
         {
             let todos_summary = todo_manager.format_todos_summary();
             let body = format!(
-                "It seems that you have an active todo list but haven't updated it in 15+ rounds. forget to update or ignore this reminder if you are processing the item work\n\nCurrent todo items:\n{}",
+                "<todo_reminder>\nYou have an active todo list but haven't updated it in 15+ rounds. Update it if progress has been made, or ignore this reminder if you are currently working on an item.\n<todos>\n{}\n</todos>\n</todo_reminder>",
                 todos_summary
             );
             push_system_reminder(&mut messages, body);
@@ -538,17 +515,6 @@ fn push_system_reminder(messages: &mut Vec<ChatMessage>, body: impl Into<String>
         tool_call_id: None,
         images: None,
     });
-}
-
-/// 把秒数格式化为 "Xs" / "XmYs" / "XhYm"，用于后台任务运行时长展示
-fn format_elapsed(secs: u64) -> String {
-    if secs < 60 {
-        format!("{}s", secs)
-    } else if secs < 3600 {
-        format!("{}m{}s", secs / 60, secs % 60)
-    } else {
-        format!("{}h{}m", secs / 3600, (secs % 3600) / 60)
-    }
 }
 
 /// 从待处理队列中 drain 用户在 agent loop 期间发送的新消息，追加到 messages

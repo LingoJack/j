@@ -811,6 +811,9 @@ fn resolve_oneshot_system_prompt(
         .replace("{{.tools}}", &tools_summary)
         .replace("{{.style}}", &style_text)
         .replace("{{.memory}}", &memory_text)
-        .replace("{{.soul}}", &soul_text);
+        .replace("{{.soul}}", &soul_text)
+        .replace("{{.tasks}}", "")
+        .replace("{{.background_tasks}}", "")
+        .replace("{{.teammates}}", "");
     Some(resolved)
 }

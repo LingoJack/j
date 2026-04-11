@@ -55,8 +55,10 @@ Use the LoadSkill tool to load the following skills into context:
 {{.skills}}
 </skill_system>
 
+{{.tasks}}
+{{.background_tasks}}
+{{.teammates}}
+
 <response_language>
 请使用中文回复
 </response_language>
-
-{{.teammates}}

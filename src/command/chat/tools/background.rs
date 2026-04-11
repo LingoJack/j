@@ -178,6 +178,39 @@ impl BackgroundManager {
     }
 }
 
+/// 构建运行中后台任务摘要，用于系统提示词的 {{.background_tasks}} 占位符
+pub fn build_running_summary(manager: &Arc<BackgroundManager>) -> String {
+    let running = manager.list_running();
+    if running.is_empty() {
+        return String::new();
+    }
+    let mut md = String::from(
+        "## Background Tasks\n\n\
+         The following background tasks are still running. \
+         Use TaskOutput to wait for or check their results when needed. \
+         Do not re-spawn these commands.\n",
+    );
+    for (id, cmd, elapsed) in &running {
+        md.push_str(&format!(
+            "- {} (running {}): {}\n",
+            id,
+            format_elapsed(*elapsed),
+            cmd
+        ));
+    }
+    md.trim_end().to_string()
+}
+
+fn format_elapsed(secs: u64) -> String {
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m{}s", secs / 60, secs % 60)
+    } else {
+        format!("{}h{}m", secs / 3600, (secs % 3600) / 60)
+    }
+}
+
 // ========== TaskOutputTool ==========
 
 /// TaskOutputTool 参数

@@ -121,25 +121,6 @@ pub fn load_all_commands() -> Vec<CustomCommand> {
     commands
 }
 
-/// 构建 commands 摘要（Markdown 格式），用于系统提示词
-pub fn build_commands_summary(commands: &[CustomCommand], disabled: &[String]) -> String {
-    let filtered: Vec<&CustomCommand> = commands
-        .iter()
-        .filter(|c| !disabled.iter().any(|d| d == &c.frontmatter.name))
-        .collect();
-    if filtered.is_empty() {
-        return "（暂无可用命令）".to_string();
-    }
-    let mut md = String::new();
-    for c in &filtered {
-        md.push_str(&format!(
-            "- {}: {}\n",
-            c.frontmatter.name, c.frontmatter.description
-        ));
-    }
-    md.trim_end().to_string()
-}
-
 /// 展开消息中的 @command:name 引用，替换为 command body
 pub fn expand_command_mentions(
     text: &str,
