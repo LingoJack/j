@@ -54,6 +54,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             KeyCode::Backspace => {
                 if !app.ui.slash_popup_filter.is_empty() {
                     app.ui.slash_popup_filter.pop();
+                    // 同步更新 input
+                    app.ui.input = format!("/{}", app.ui.slash_popup_filter);
+                    app.ui.cursor_pos = app.ui.input.chars().count();
                     app.ui.slash_popup_selected = 0;
                 } else {
                     // filter 为空时关闭弹窗并删除 /
@@ -70,6 +73,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     // fall through to normal char handling
                 } else {
                     app.ui.slash_popup_filter.push(c);
+                    // 同步更新 input，使输入框显示 "/filter"
+                    app.ui.input = format!("/{}", app.ui.slash_popup_filter);
+                    app.ui.cursor_pos = app.ui.input.chars().count();
                     app.ui.slash_popup_selected = 0;
                     return false;
                 }
