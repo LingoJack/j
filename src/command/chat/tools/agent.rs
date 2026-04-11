@@ -1,24 +1,21 @@
-use crate::command::chat::api::{build_request_with_tools, create_openai_client};
-use crate::command::chat::compact::CompactConfig;
-use crate::command::chat::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
-use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
-use crate::command::chat::tools::background::BackgroundManager;
-use crate::command::chat::tools::task::TaskManager;
-use crate::command::chat::tools::todo::TodoManager;
+use crate::command::chat::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::tools::agent_shared::{
+    AgentToolShared, call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
+    extract_tool_items,
+};
 use crate::command::chat::tools::{
     Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
-use crate::util::log::{write_error_log, write_info_log};
+use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{
-    Arc, Mutex,
+    Arc,
     atomic::{AtomicBool, Ordering},
-    mpsc,
 };
 
 /// AgentTool 参数
@@ -39,17 +36,7 @@ struct AgentParams {
 /// Agent 工具：启动子代理执行复杂多步任务
 #[allow(dead_code)]
 pub struct AgentTool {
-    pub background_manager: Arc<BackgroundManager>,
-    pub provider: Arc<Mutex<ModelProvider>>,
-    pub system_prompt: Arc<Mutex<Option<String>>>,
-    pub jcli_config: Arc<JcliConfig>,
-    pub compact_config: CompactConfig,
-    /// 构建子 registry 所需的共享组件
-    pub hook_manager: Arc<Mutex<HookManager>>,
-    pub task_manager: Arc<TaskManager>,
-    pub todo_manager: Arc<TodoManager>,
-    /// 禁用的工具列表
-    pub disabled_tools: Arc<Vec<String>>,
+    pub shared: AgentToolShared,
 }
 
 impl AgentTool {
@@ -99,34 +86,29 @@ impl Tool for AgentTool {
         let run_in_background = params.run_in_background;
 
         // 获取 provider 和 system prompt 的快照
-        let provider = safe_lock(&self.provider, "AgentTool::provider").clone();
-        let system_prompt = safe_lock(&self.system_prompt, "AgentTool::system_prompt").clone();
+        let provider = safe_lock(&self.shared.provider, "AgentTool::provider").clone();
+        let system_prompt =
+            safe_lock(&self.shared.system_prompt, "AgentTool::system_prompt").clone();
 
         // 构建子 registry（排除 "Agent" 工具防递归）
-        let (ask_tx, _ask_rx) = mpsc::channel::<crate::command::chat::app::AskRequest>();
-        let sub_registry = ToolRegistry::new(
-            vec![], // 不传 skills
-            ask_tx,
-            Arc::clone(&self.background_manager),
-            Arc::clone(&self.task_manager),
-            Arc::clone(&self.hook_manager),
-        );
+        let (sub_registry, _) = self.shared.build_sub_registry();
         let sub_registry = Arc::new(sub_registry);
 
-        // 构建工具定义列表（排除 Agent）
-        let mut disabled = self.disabled_tools.as_ref().clone();
+        let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push("Agent".to_string());
         let tools = sub_registry.to_openai_tools_filtered(&disabled);
 
-        let jcli_config = Arc::clone(&self.jcli_config);
+        let jcli_config = Arc::clone(&self.shared.jcli_config);
 
         if run_in_background {
             // 后台模式：注册任务并 spawn 线程
-            let (task_id, output_buffer) =
-                self.background_manager
-                    .spawn_command(&format!("Agent: {}", description), None, 0);
+            let (task_id, output_buffer) = self.shared.background_manager.spawn_command(
+                &format!("Agent: {}", description),
+                None,
+                0,
+            );
 
-            let bg_manager = Arc::clone(&self.background_manager);
+            let bg_manager = Arc::clone(&self.shared.background_manager);
             let task_id_clone = task_id.clone();
             let cancelled_clone = Arc::clone(cancelled);
 
@@ -204,14 +186,10 @@ fn run_headless_agent_loop(
 ) -> String {
     let max_rounds = 30; // 子代理最大轮数
 
-    let rt = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(e) => {
-            return format!("Failed to create async runtime: {}", e);
-        }
+    let (rt, client) = match create_runtime_and_client(&provider) {
+        Ok(pair) => pair,
+        Err(e) => return e,
     };
-
-    let client = create_openai_client(&provider);
 
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
         role: "user".to_string(),
@@ -230,38 +208,16 @@ fn run_headless_agent_loop(
 
         write_info_log("SubAgent", &format!("Round {}/{}", round + 1, max_rounds));
 
-        let request = match build_request_with_tools(
+        let choice = match call_llm_non_stream(
+            &rt,
+            &client,
             &provider,
             &messages,
-            tools.clone(),
+            &tools,
             system_prompt.as_deref(),
         ) {
-            Ok(req) => req,
-            Err(e) => {
-                return format!("Failed to build request: {}", e);
-            }
-        };
-
-        // 使用非流式请求（子代理无需流式输出）
-        let response = rt.block_on(async {
-            let chat_client = client.chat();
-            chat_client.create(request).await
-        });
-
-        let response = match response {
-            Ok(r) => r,
-            Err(e) => {
-                let err = format!("API request failed: {}", e);
-                write_error_log("SubAgent", &err);
-                return format!("{}\n{}", final_text, err);
-            }
-        };
-
-        let choice = match response.choices.first() {
-            Some(c) => c,
-            None => {
-                return format!("{}\n[No response from API]", final_text);
-            }
+            Ok(c) => c,
+            Err(e) => return format!("{}\n{}", final_text, e),
         };
 
         let assistant_text = choice.message.content.clone().unwrap_or_default();
@@ -277,26 +233,10 @@ fn run_headless_agent_loop(
         );
 
         if !is_tool_calls || choice.message.tool_calls.is_none() {
-            // 正常结束
             break;
         }
 
-        let tool_calls = choice.message.tool_calls.as_ref().unwrap();
-        let tool_items: Vec<ToolCallItem> = tool_calls
-            .iter()
-            .filter_map(|tc| {
-                if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
-                    Some(ToolCallItem {
-                        id: f.id.clone(),
-                        name: f.function.name.clone(),
-                        arguments: f.function.arguments.clone(),
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-
+        let tool_items = extract_tool_items(choice.message.tool_calls.as_ref().unwrap());
         if tool_items.is_empty() {
             break;
         }
@@ -312,83 +252,15 @@ fn run_headless_agent_loop(
 
         // 逐个执行工具
         for item in &tool_items {
-            if cancelled.load(Ordering::Relaxed) {
-                messages.push(ChatMessage {
-                    role: "tool".to_string(),
-                    content: "[Cancelled]".to_string(),
-                    tool_calls: None,
-                    tool_call_id: Some(item.id.clone()),
-                    images: None,
-                });
-                continue;
-            }
-
-            // 检查 deny 规则
-            if jcli_config.is_denied(&item.name, &item.arguments) {
-                write_info_log(
-                    "SubAgent",
-                    &format!("Tool denied by deny rule: {}", item.name),
-                );
-                messages.push(ChatMessage {
-                    role: "tool".to_string(),
-                    content: format!("Tool '{}' was denied by permission rules.", item.name),
-                    tool_calls: None,
-                    tool_call_id: Some(item.id.clone()),
-                    images: None,
-                });
-                continue;
-            }
-
-            // 需要确认的工具：检查 permission allow 列表
-            let tool_ref = registry.get(&item.name);
-            let requires_confirm = tool_ref.map(|t| t.requires_confirmation()).unwrap_or(false);
-
-            if requires_confirm && !jcli_config.is_allowed(&item.name, &item.arguments) {
-                write_info_log(
-                    "SubAgent",
-                    &format!(
-                        "Tool '{}' requires confirmation but not auto-allowed, denying in sub-agent",
-                        item.name
-                    ),
-                );
-                messages.push(ChatMessage {
-                    role: "tool".to_string(),
-                    content: format!(
-                        "Tool '{}' requires user confirmation which is not available in sub-agent mode. \
-                         Add a permission rule to allow this tool automatically.",
-                        item.name
-                    ),
-                    tool_calls: None,
-                    tool_call_id: Some(item.id.clone()),
-                    images: None,
-                });
-                continue;
-            }
-
-            write_info_log(
+            let result_msg = execute_tool_with_permission(
+                item,
+                &registry,
+                &jcli_config,
+                cancelled,
                 "SubAgent",
-                &format!("Executing tool: {} args: {}", item.name, item.arguments),
+                true,
             );
-
-            let result = registry.execute(&item.name, &item.arguments, cancelled);
-
-            write_info_log(
-                "SubAgent",
-                &format!(
-                    "Tool result: {} is_error={} len={}",
-                    item.name,
-                    result.is_error,
-                    result.output.len()
-                ),
-            );
-
-            messages.push(ChatMessage {
-                role: "tool".to_string(),
-                content: result.output,
-                tool_calls: None,
-                tool_call_id: Some(item.id.clone()),
-                images: None,
-            });
+            messages.push(result_msg);
         }
     }
 

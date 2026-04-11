@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod agent_shared;
 pub mod agent_team;
 pub mod ask;
 pub mod background;
