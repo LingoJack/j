@@ -167,28 +167,23 @@ impl ChatApp {
         let agent_provider: Arc<Mutex<ModelProvider>> = Arc::new(Mutex::new(default_provider));
         let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
-        tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
+
+        // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
+        let agent_tool_shared = crate::command::chat::tools::agent_shared::AgentToolShared {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
             system_prompt: Arc::clone(&agent_system_prompt),
             jcli_config: Arc::new(JcliConfig::load()),
-            compact_config: agent_config.compact.clone(),
             hook_manager: Arc::clone(&hook_manager),
             task_manager: Arc::clone(&task_manager),
-            todo_manager: Arc::clone(&todo_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
+        };
+        tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
+            shared: agent_tool_shared.clone(),
         }));
         tool_registry.register(Box::new(
             crate::command::chat::tools::agent_team::AgentTeamTool {
-                background_manager: Arc::clone(&background_manager),
-                provider: Arc::clone(&agent_provider),
-                system_prompt: Arc::clone(&agent_system_prompt),
-                jcli_config: Arc::new(JcliConfig::load()),
-                compact_config: agent_config.compact.clone(),
-                hook_manager: Arc::clone(&hook_manager),
-                task_manager: Arc::clone(&task_manager),
-                todo_manager: Arc::clone(&todo_manager),
-                disabled_tools: Arc::clone(&disabled_tools_arc),
+                shared: agent_tool_shared,
                 teammate_manager: Arc::clone(&teammate_manager),
             },
         ));

@@ -1,13 +1,7 @@
-use crate::command::chat::compact::CompactConfig;
-use crate::command::chat::hook::HookManager;
-use crate::command::chat::permission::JcliConfig;
-use crate::command::chat::storage::ModelProvider;
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, set_current_agent_name};
-use crate::command::chat::tools::background::BackgroundManager;
-use crate::command::chat::tools::task::TaskManager;
-use crate::command::chat::tools::{
-    Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::command::chat::tools::agent_shared::AgentToolShared;
+use crate::command::chat::tools::send_message::SendMessageTool;
+use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use schemars::JsonSchema;
@@ -16,7 +10,6 @@ use serde_json::Value;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
-    mpsc,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -34,15 +27,8 @@ struct CreateTeammateParams {
 /// CreateTeammate 工具：创建一个新的 teammate agent
 #[allow(dead_code)]
 pub struct CreateTeammateTool {
+    pub shared: AgentToolShared,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
-    pub background_manager: Arc<BackgroundManager>,
-    pub provider: Arc<Mutex<ModelProvider>>,
-    pub system_prompt: Arc<Mutex<Option<String>>>,
-    pub jcli_config: Arc<JcliConfig>,
-    pub compact_config: CompactConfig,
-    pub hook_manager: Arc<Mutex<HookManager>>,
-    pub task_manager: Arc<TaskManager>,
-    pub disabled_tools: Arc<Vec<String>>,
 }
 
 impl CreateTeammateTool {
@@ -124,35 +110,26 @@ impl Tool for CreateTeammateTool {
         let is_running = Arc::new(AtomicBool::new(true));
 
         // 获取 provider 快照
-        let provider = safe_lock(&self.provider, "CreateTeammate::provider").clone();
-        let system_prompt = safe_lock(&self.system_prompt, "CreateTeammate::system_prompt").clone();
+        let provider = safe_lock(&self.shared.provider, "CreateTeammate::provider").clone();
+        let system_prompt =
+            safe_lock(&self.shared.system_prompt, "CreateTeammate::system_prompt").clone();
 
-        // 构建子工具注册表（排除 CreateTeammate 和 AgentTeam 防递归）
-        let (ask_tx, _ask_rx) = mpsc::channel::<crate::command::chat::app::AskRequest>();
-        let sub_registry = ToolRegistry::new(
-            vec![],
-            ask_tx,
-            Arc::clone(&self.background_manager),
-            Arc::clone(&self.task_manager),
-            Arc::clone(&self.hook_manager),
-        );
+        // 构建子工具注册表
+        let (mut sub_registry, _) = self.shared.build_sub_registry();
 
         // 注册 SendMessage 工具到子注册表
-        let mut sub_registry = sub_registry;
-        sub_registry.register(Box::new(
-            crate::command::chat::tools::send_message::SendMessageTool {
-                teammate_manager: Arc::clone(&self.teammate_manager),
-            },
-        ));
+        sub_registry.register(Box::new(SendMessageTool {
+            teammate_manager: Arc::clone(&self.teammate_manager),
+        }));
         let sub_registry = Arc::new(sub_registry);
 
-        let mut disabled = self.disabled_tools.as_ref().clone();
+        let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push("CreateTeammate".to_string());
         disabled.push("AgentTeam".to_string());
         disabled.push("Agent".to_string());
         let tools = sub_registry.to_openai_tools_filtered(&disabled);
 
-        let jcli_config = Arc::clone(&self.jcli_config);
+        let jcli_config = Arc::clone(&self.shared.jcli_config);
         let teammate_manager = Arc::clone(&self.teammate_manager);
 
         // 构建 teammate 专用 system prompt
