@@ -76,7 +76,57 @@ pub fn format_time(time: std::time::SystemTime) -> String {
     dt.format("%Y-%m-%d %H:%M").to_string()
 }
 
-/// 用 Markdown 编辑器编辑笔记，返回是否有内容变化
+/// 用 Markdown 编辑器编辑笔记（在已有 terminal 上），返回是否有内容变化
+pub fn edit_note_on_terminal(
+    title: &str,
+    terminal: &mut ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::Stdout>>,
+) -> bool {
+    let file_path = note_file_path(title);
+    let (content, is_new) = if file_path.exists() {
+        match fs::read_to_string(&file_path) {
+            Ok(c) => (c, false),
+            Err(e) => {
+                error!("读取笔记失败: {}", e);
+                return false;
+            }
+        }
+    } else {
+        (String::new(), true)
+    };
+
+    let editor_title = if is_new {
+        format!("{} (新笔记)", title)
+    } else {
+        title.to_string()
+    };
+
+    let theme = Theme::from_name(&ThemeName::default());
+    match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
+        terminal,
+        &editor_title,
+        &content,
+        &theme,
+    ) {
+        Ok(Some(new_content)) => {
+            if new_content != content {
+                match fs::write(&file_path, &new_content) {
+                    Ok(()) => {
+                        info!("笔记已保存: {}", title);
+                        return true;
+                    }
+                    Err(e) => error!("保存笔记失败: {}", e),
+                }
+            } else {
+                info!("内容未变化，跳过保存");
+            }
+        }
+        Ok(None) => info!("已取消编辑"),
+        Err(e) => error!("编辑器启动失败: {}", e),
+    }
+    false
+}
+
+/// 用 Markdown 编辑器编辑笔记（独立终端），返回是否有内容变化
 pub fn edit_note_with_editor(title: &str) -> bool {
     let file_path = note_file_path(title);
     let (content, is_new) = if file_path.exists() {

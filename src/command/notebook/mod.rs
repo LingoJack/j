@@ -6,9 +6,9 @@ use crate::constants::{notebook_action, shell};
 use crate::util::fuzzy;
 use crate::{error, info};
 use app::{
-    AppMode, NotebookApp, edit_note_with_editor, handle_confirm_delete, handle_help_mode,
-    handle_input_mode, handle_normal_mode, handle_preview_mode, load_notes, note_file_path,
-    notebook_dir,
+    AppMode, NotebookApp, edit_note_on_terminal, edit_note_with_editor, handle_confirm_delete,
+    handle_help_mode, handle_input_mode, handle_normal_mode, handle_preview_mode, load_notes,
+    note_file_path, notebook_dir,
 };
 use colored::Colorize;
 use crossterm::event::KeyCode;
@@ -230,7 +230,7 @@ fn run_notebook_tui_internal() -> io::Result<()> {
         if event::poll(std::time::Duration::from_millis(100))?
             && let Event::Key(key) = event::read()?
         {
-            // 用于记录编辑操作请求（需要在 TUI loop 中暂停终端处理）
+            // 用于记录编辑操作请求（需要在 TUI loop 中直接使用 terminal）
             let mut edit_requested: Option<String> = None;
 
             match app.mode {
@@ -259,13 +259,17 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                 AppMode::Help => handle_help_mode(&mut app, key),
             }
 
-            // 处理编辑请求（需暂停/恢复终端）
+            // 处理编辑请求：在同一 terminal 上打开编辑器
             if let Some(title) = edit_requested {
-                let needs_reload = suspend_and_edit(&title);
+                let needs_reload = edit_note_on_terminal(&title, &mut terminal);
                 if needs_reload {
                     app.reload();
                 } else {
                     app.update_preview();
+                }
+                // 清除编辑器残留的按键事件，避免误触发 TUI 操作
+                while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
+                    let _ = event::read();
                 }
             }
         }
@@ -275,22 +279,4 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
 
     Ok(())
-}
-
-/// 暂停 TUI 并打开编辑器，返回是否有内容变化
-fn suspend_and_edit(title: &str) -> bool {
-    let _ = terminal::disable_raw_mode();
-    let _ = execute!(io::stdout(), LeaveAlternateScreen);
-
-    let changed = edit_note_with_editor(title);
-
-    let _ = terminal::enable_raw_mode();
-    let _ = execute!(io::stdout(), EnterAlternateScreen);
-
-    // 清除编辑器残留的按键事件（如 :wq 中的 q），避免误触发 TUI 退出
-    while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
-        let _ = event::read();
-    }
-
-    changed
 }
