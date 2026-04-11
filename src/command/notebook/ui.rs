@@ -1,4 +1,4 @@
-use super::app::{AppMode, NotebookApp, format_time};
+use super::app::{AppMode, FlatEntryKind, NotebookApp, format_time};
 use crate::util::text::wrap_text;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -23,11 +23,23 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
 
     // ========== 标题栏 ==========
     let total = app.notes.len();
+    let dir_count = app
+        .flat_entries
+        .iter()
+        .filter(|e| matches!(e.kind, FlatEntryKind::Dir { .. }))
+        .count();
     let filter_suffix = match &app.search_filter {
         Some(kw) => format!(" [搜索: {}]", kw),
         None => String::new(),
     };
-    let title = format!(" 📓 笔记本{} — 共 {} 篇 ", filter_suffix, total);
+    let title = if dir_count > 0 {
+        format!(
+            " 📓 笔记本{} — {} 篇笔记, {} 个文件夹 ",
+            filter_suffix, total, dir_count
+        )
+    } else {
+        format!(" 📓 笔记本{} — 共 {} 篇 ", filter_suffix, total)
+    };
     let title_block = Paragraph::new(Line::from(vec![Span::styled(
         title,
         Style::default()
@@ -70,7 +82,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | Enter/e 编辑 | a 新建 | d 删除 | r 重命名 | p 预览 | / 命令面板 | [ ] 调整比例 | y 复制 | o 打开目录 | s 刷新 | ? 帮助 | q 退出"
+            " n/↓ 下移 | N/↑ 上移 | Enter/e 编辑 | a 新建 | d 删除 | r 重命名 | Tab 展开/折叠 | p 预览 | / 命令面板 | [ ] 调整比例 | y 复制 | o 打开目录 | s 刷新 | ? 帮助 | q 退出"
         }
         AppMode::Preview => " ↑↓/jk 滚动 | n/N 切换笔记 | p/Esc 退出预览",
         AppMode::Adding => " Enter 确认新建 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
@@ -80,6 +92,8 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         AppMode::Help => " 按任意键返回",
         AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | 输入筛选 | Esc 取消",
         AppMode::RatioInput => " Enter 确认 | Esc 取消 | 格式: x:y (如 20:80)",
+        AppMode::Mkdir => " Enter 确认创建目录 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
+        AppMode::Mv => " Enter 确认移动 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(
         help_text,
@@ -88,25 +102,27 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     f.render_widget(help_widget, chunks[3]);
 }
 
-/// 渲染笔记列表
+/// 渲染笔记列表（树形结构）
 fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
-    let indices = app.filtered_indices();
     let inner_width = area.width.saturating_sub(2) as usize; // 减边框
-
     let selected = app.state.selected();
 
-    let mut items: Vec<ListItem> = indices
+    let mut items: Vec<ListItem> = app
+        .flat_entries
         .iter()
         .enumerate()
-        .map(|(i, &idx)| {
-            let note = &app.notes[idx];
+        .map(|(i, entry)| {
             let is_selected = selected == Some(i);
 
-            // 输入模式下的特殊渲染
-            if app.mode == AppMode::Renaming && app.rename_index == Some(idx) {
+            // 重命名模式：特殊渲染文件条目
+            if let FlatEntryKind::File { note_index } = &entry.kind
+                && app.mode == AppMode::Renaming
+                && app.rename_index == Some(*note_index)
+            {
                 return build_rename_item(&app.input, app.cursor_pos, inner_width, is_selected);
             }
 
+            let indent = "  ".repeat(entry.depth);
             let pointer = if is_selected {
                 Span::styled(
                     " ❯ ",
@@ -118,43 +134,75 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                 Span::raw("   ")
             };
 
-            let name_style = if is_selected {
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
+            match &entry.kind {
+                FlatEntryKind::Dir {
+                    name,
+                    expanded,
+                    file_count,
+                    ..
+                } => {
+                    let icon = if *expanded { "▼" } else { "▶" };
+                    let dir_style = if is_selected {
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Cyan)
+                    };
+                    let count_str = format!("({})", file_count);
+                    ListItem::new(Line::from(vec![
+                        Span::raw(indent.clone()),
+                        pointer,
+                        Span::styled(format!("{} 📁 ", icon), dir_style),
+                        Span::styled(name.clone(), dir_style),
+                        Span::styled(
+                            format!(" {}", count_str),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]))
+                }
+                FlatEntryKind::File { note_index } => {
+                    let note = &app.notes[*note_index];
+                    let name_style = if is_selected {
+                        Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+                    let time_str = format_time(note.mtime);
+                    let indent_width = entry.depth * 2;
+                    let name_display_width = inner_width.saturating_sub(3 + indent_width + 17); // pointer + indent + time
+                    let display_name = note.display_name();
+                    let name_text =
+                        if display_name.chars().collect::<Vec<_>>().len() > name_display_width {
+                            let mut s: String = display_name
+                                .chars()
+                                .take(name_display_width.saturating_sub(2))
+                                .collect();
+                            s.push_str("..");
+                            s
+                        } else {
+                            display_name.to_string()
+                        };
+                    let padding = name_display_width
+                        .saturating_sub(unicode_width::UnicodeWidthStr::width(name_text.as_str()));
 
-            let time_str = format_time(note.mtime);
-            let name_display_width = inner_width.saturating_sub(3 + 17); // pointer + time
-            let name_text = if note.name.chars().collect::<Vec<_>>().len() > name_display_width {
-                let mut s: String = note
-                    .name
-                    .chars()
-                    .take(name_display_width.saturating_sub(2))
-                    .collect();
-                s.push_str("..");
-                s
-            } else {
-                note.name.clone()
-            };
-
-            let padding = name_display_width
-                .saturating_sub(unicode_width::UnicodeWidthStr::width(name_text.as_str()));
-
-            ListItem::new(Line::from(vec![
-                pointer,
-                Span::styled(name_text, name_style),
-                Span::raw(" ".repeat(padding)),
-                Span::styled(time_str, Style::default().fg(Color::DarkGray)),
-            ]))
+                    ListItem::new(Line::from(vec![
+                        Span::raw(indent.clone()),
+                        pointer,
+                        Span::styled(name_text, name_style),
+                        Span::raw(" ".repeat(padding)),
+                        Span::styled(time_str, Style::default().fg(Color::DarkGray)),
+                    ]))
+                }
+            }
         })
         .collect();
 
     // 添加模式：在列表末尾追加输入行
     if app.mode == AppMode::Adding {
-        let is_selected = selected == Some(indices.len());
+        let is_selected = selected == Some(app.flat_entries.len());
         items.push(build_adding_item(
             &app.input,
             app.cursor_pos,
@@ -404,12 +452,24 @@ fn render_help(f: &mut ratatui::Frame, area: Rect) {
             Span::raw("重命名笔记"),
         ]),
         Line::from(vec![
+            Span::styled("  Tab          ", Style::default().fg(Color::Yellow)),
+            Span::raw("展开/折叠目录"),
+        ]),
+        Line::from(vec![
+            Span::styled("  / mkdir      ", Style::default().fg(Color::Yellow)),
+            Span::raw("新建目录"),
+        ]),
+        Line::from(vec![
+            Span::styled("  / mv         ", Style::default().fg(Color::Yellow)),
+            Span::raw("移动笔记到目录"),
+        ]),
+        Line::from(vec![
             Span::styled("  p            ", Style::default().fg(Color::Yellow)),
             Span::raw("全屏预览当前笔记"),
         ]),
         Line::from(vec![
             Span::styled("  /            ", Style::default().fg(Color::Yellow)),
-            Span::raw("打开命令面板（搜索/重命名/删除/比例/帮助）"),
+            Span::raw("打开命令面板"),
         ]),
         Line::from(vec![
             Span::styled("  [            ", Style::default().fg(Color::Yellow)),
@@ -496,6 +556,46 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Yellow)),
+            );
+            f.render_widget(status, area);
+        }
+        AppMode::Mkdir => {
+            let status = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " 📁 新建目录",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " — 输入目录名后按 Enter 创建",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
+            f.render_widget(status, area);
+        }
+        AppMode::Mv => {
+            let status = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " 📦 移动笔记",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " — 输入目标路径后按 Enter 确认",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta)),
             );
             f.render_widget(status, area);
         }

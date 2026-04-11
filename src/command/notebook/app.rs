@@ -1,6 +1,7 @@
 use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::theme::{Theme, ThemeName};
-use crate::constants::shell;
+use crate::config::YamlConfig;
+use crate::constants::{config_key, section, shell};
 use crate::error;
 use crate::info;
 use crate::util::fuzzy;
@@ -14,13 +15,25 @@ use std::process::Command;
 
 // ========== 数据结构 ==========
 
-/// 单条笔记信息
+/// 单条笔记信息（支持子目录路径）
 #[derive(Debug, Clone)]
 pub struct NoteItem {
-    /// 笔记名称（不含 .md 后缀）
-    pub name: String,
+    /// 笔记相对路径（不含 .md 后缀），如 "ideas/project" 或 "meeting-notes"
+    pub path: String,
     /// 修改时间
     pub mtime: std::time::SystemTime,
+}
+
+impl NoteItem {
+    /// 获取显示名称（路径最后一部分）
+    pub fn display_name(&self) -> &str {
+        self.path.rsplit('/').next().unwrap_or(&self.path)
+    }
+
+    /// 获取所在目录（相对路径），如 "ideas"，根目录返回 None
+    pub fn parent_dir(&self) -> Option<&str> {
+        self.path.rsplit_once('/').map(|(dir, _)| dir)
+    }
 }
 
 // ========== 文件路径 ==========
@@ -30,34 +43,89 @@ pub fn notebook_dir() -> PathBuf {
     crate::config::YamlConfig::notebook_dir()
 }
 
-/// 获取配置文件路径: ~/.jdata/notebook/.config.json
-fn config_file_path() -> PathBuf {
-    notebook_dir().join(".config.json")
+/// 从 YamlConfig setting section 加载面板比例
+fn load_panel_ratio() -> Option<u16> {
+    YamlConfig::load()
+        .get_property(section::SETTING, config_key::NOTEBOOK_PANEL_RATIO)
+        .and_then(|v| v.parse().ok())
 }
 
-/// 持久化配置
-#[derive(serde::Serialize, serde::Deserialize, Default)]
-struct NotebookConfig {
-    panel_ratio: Option<u16>,
+/// 保存面板比例到 YamlConfig setting section
+fn save_panel_ratio(ratio: u16) {
+    let mut config = YamlConfig::load();
+    config.set_property(
+        section::SETTING,
+        config_key::NOTEBOOK_PANEL_RATIO,
+        &ratio.to_string(),
+    );
 }
 
-/// 加载持久化配置
-fn load_config() -> NotebookConfig {
-    let path = config_file_path();
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+/// 从 YamlConfig setting section 加载展开目录列表
+fn load_expanded_dirs() -> ExpandedDirs {
+    YamlConfig::load()
+        .get_property(section::SETTING, config_key::NOTEBOOK_EXPANDED_DIRS)
+        .and_then(|v| serde_json::from_str(v).ok())
         .unwrap_or_default()
 }
 
-/// 保存持久化配置
-fn save_config(config: &NotebookConfig) {
-    let path = config_file_path();
-    if let Ok(json) = serde_json::to_string_pretty(config)
-        && let Err(e) = fs::write(&path, json)
-    {
-        error!("保存配置失败: {}", e);
+/// 保存展开目录列表到 YamlConfig setting section
+fn save_expanded_dirs(dirs: &ExpandedDirs) {
+    if let Ok(json) = serde_json::to_string(dirs) {
+        let mut config = YamlConfig::load();
+        config.set_property(section::SETTING, config_key::NOTEBOOK_EXPANDED_DIRS, &json);
     }
+}
+
+/// 目录展开状态（持久化到 YamlConfig setting section）
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExpandedDirs(pub std::collections::HashSet<String>);
+
+impl ExpandedDirs {
+    pub fn new() -> Self {
+        Self(std::collections::HashSet::new())
+    }
+    pub fn is_expanded(&self, dir_path: &str) -> bool {
+        self.0.contains(dir_path)
+    }
+    pub fn toggle(&mut self, dir_path: &str) {
+        if self.0.contains(dir_path) {
+            self.0.remove(dir_path);
+        } else {
+            self.0.insert(dir_path.to_string());
+        }
+    }
+}
+
+impl Default for ExpandedDirs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 扁平化列表项（用于 TUI 渲染和选择）
+#[derive(Debug, Clone)]
+pub struct FlatEntry {
+    /// 缩进层级（0=根目录）
+    pub depth: usize,
+    /// 条目类型
+    pub kind: FlatEntryKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum FlatEntryKind {
+    /// 文件条目，引用 notes 列表中的索引
+    File { note_index: usize },
+    /// 目录条目
+    Dir {
+        /// 目录相对路径，如 "ideas"
+        dir_path: String,
+        /// 目录显示名
+        name: String,
+        /// 是否展开
+        expanded: bool,
+        /// 目录下文件数量（包含子目录中的文件）
+        file_count: usize,
+    },
 }
 
 /// 获取笔记文件路径
@@ -67,30 +135,84 @@ pub fn note_file_path(name: &str) -> PathBuf {
 
 // ========== 数据读写 ==========
 
-/// 从磁盘加载笔记列表，按修改时间倒序
+/// 从磁盘加载笔记列表（递归子目录），按修改时间倒序
 pub fn load_notes() -> Vec<NoteItem> {
     let dir = notebook_dir();
     let mut notes = Vec::new();
-    if let Ok(entries) = fs::read_dir(&dir) {
+    walk_dir_for_notes(&dir, "", &mut notes);
+    notes.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    notes
+}
+
+fn walk_dir_for_notes(dir: &std::path::Path, prefix: &str, notes: &mut Vec<NoteItem>) {
+    if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "md") {
-                let name = path
+            if path.is_dir() {
+                // 跳过隐藏目录（以 . 开头）
+                let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
+                if dir_name.starts_with('.') {
+                    continue;
+                }
+                let sub_prefix = if prefix.is_empty() {
+                    dir_name.to_string()
+                } else {
+                    format!("{}/{}", prefix, dir_name)
+                };
+                walk_dir_for_notes(&path, &sub_prefix, notes);
+            } else if path.extension().is_some_and(|ext| ext == "md") {
+                let stem = path
                     .file_stem()
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
+                let note_path = if prefix.is_empty() {
+                    stem
+                } else {
+                    format!("{}/{}", prefix, stem)
+                };
                 let mtime = entry
                     .metadata()
                     .ok()
                     .and_then(|m| m.modified().ok())
                     .unwrap_or(std::time::UNIX_EPOCH);
-                notes.push(NoteItem { name, mtime });
+                notes.push(NoteItem {
+                    path: note_path,
+                    mtime,
+                });
             }
         }
     }
-    notes.sort_by(|a, b| b.mtime.cmp(&a.mtime));
-    notes
+}
+
+/// 列出 notebook 下的所有子目录（相对路径）
+pub fn list_dirs() -> Vec<String> {
+    let dir = notebook_dir();
+    let mut dirs = Vec::new();
+    walk_dir_for_dirs(&dir, "", &mut dirs);
+    dirs.sort();
+    dirs
+}
+
+fn walk_dir_for_dirs(dir: &std::path::Path, prefix: &str, dirs: &mut Vec<String>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
+                if dir_name.starts_with('.') {
+                    continue;
+                }
+                let dir_path = if prefix.is_empty() {
+                    dir_name.to_string()
+                } else {
+                    format!("{}/{}", prefix, dir_name)
+                };
+                dirs.push(dir_path.clone());
+                walk_dir_for_dirs(&path, &dir_path, dirs);
+            }
+        }
+    }
 }
 
 /// 读取笔记内容
@@ -259,6 +381,8 @@ const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
     ("search", "搜索"),
     ("rename", "重命名"),
     ("delete", "删除"),
+    ("mkdir", "新建目录"),
+    ("mv", "移动"),
     ("open", "打开目录"),
     ("ratio", "调整比例"),
     ("help", "帮助"),
@@ -302,6 +426,10 @@ pub struct NotebookApp {
     pub cmd_popup_selected: usize,
     /// 命令面板筛选文本
     pub cmd_popup_filter: String,
+    /// 展开的目录集合
+    pub expanded_dirs: ExpandedDirs,
+    /// 扁平化条目列表（由 build_flat_entries() 生成）
+    pub flat_entries: Vec<FlatEntry>,
 }
 
 #[derive(PartialEq, Clone)]
@@ -324,6 +452,10 @@ pub enum AppMode {
     CommandPopup,
     /// 比例输入模式（如 20:80）
     RatioInput,
+    /// 新建目录（输入目录名）
+    Mkdir,
+    /// 移动笔记（输入目标路径）
+    Mv,
 }
 
 impl Default for NotebookApp {
@@ -335,14 +467,10 @@ impl Default for NotebookApp {
 impl NotebookApp {
     pub fn new() -> Self {
         let notes = load_notes();
-        let mut state = ListState::default();
-        if !notes.is_empty() {
-            state.select(Some(0));
-        }
-        let saved_config = load_config();
+        let expanded_dirs = load_expanded_dirs();
         let mut app = Self {
             notes,
-            state,
+            state: ListState::default(),
             mode: AppMode::Normal,
             input: String::new(),
             cursor_pos: 0,
@@ -355,10 +483,16 @@ impl NotebookApp {
             preview_width: 0,
             quit_input: String::new(),
             pending_edit_title: None,
-            panel_ratio: saved_config.panel_ratio.unwrap_or(30),
+            panel_ratio: load_panel_ratio().unwrap_or(30),
             cmd_popup_selected: 0,
             cmd_popup_filter: String::new(),
+            expanded_dirs,
+            flat_entries: Vec::new(),
         };
+        app.build_flat_entries();
+        if !app.flat_entries.is_empty() {
+            app.state.select(Some(0));
+        }
         app.update_preview();
         app
     }
@@ -366,7 +500,8 @@ impl NotebookApp {
     /// 从磁盘刷新笔记列表
     pub fn reload(&mut self) {
         self.notes = load_notes();
-        let count = self.filtered_indices().len();
+        self.build_flat_entries();
+        let count = self.flat_entries.len();
         if count == 0 {
             self.state.select(None);
         } else if let Some(sel) = self.state.selected()
@@ -385,11 +520,11 @@ impl NotebookApp {
             .enumerate()
             .filter(|(_, item)| match &self.search_filter {
                 Some(keyword) => {
-                    if fuzzy::fuzzy_match(&item.name, keyword) {
+                    if fuzzy::fuzzy_match(&item.path, keyword) {
                         return true;
                     }
                     // 也搜索笔记内容
-                    if let Some(content) = read_note_content(&item.name) {
+                    if let Some(content) = read_note_content(&item.path) {
                         return fuzzy::fuzzy_match(&content, keyword);
                     }
                     false
@@ -400,23 +535,67 @@ impl NotebookApp {
             .collect()
     }
 
-    /// 获取当前选中项在原始列表中的真实索引
-    pub fn selected_real_index(&self) -> Option<usize> {
-        let indices = self.filtered_indices();
-        self.state
-            .selected()
-            .and_then(|sel| indices.get(sel).copied())
+    /// 构建扁平化条目列表（供 TUI 渲染）
+    pub fn build_flat_entries(&mut self) {
+        let filtered: Vec<usize> = self.filtered_indices();
+        let filtered_set: std::collections::HashSet<usize> = filtered.iter().copied().collect();
+
+        // 收集过滤后笔记涉及的所有目录
+        let mut dir_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for &idx in &filtered {
+            if let Some(parent) = self.notes[idx].parent_dir() {
+                // 添加所有祖先目录
+                let parts: Vec<&str> = parent.split('/').collect();
+                let mut acc = String::new();
+                for part in &parts {
+                    if !acc.is_empty() {
+                        acc.push('/');
+                    }
+                    acc.push_str(part);
+                    dir_set.insert(acc.clone());
+                }
+            }
+        }
+
+        let mut flat = Vec::new();
+        build_flat_entries_recursive(
+            &self.notes,
+            &filtered_set,
+            &dir_set,
+            &self.expanded_dirs,
+            "",
+            0,
+            &mut flat,
+        );
+        self.flat_entries = flat;
     }
 
-    /// 获取选中笔记名称
+    /// 获取当前选中的 flat entry
+    pub fn selected_entry(&self) -> Option<&FlatEntry> {
+        self.state.selected().and_then(|i| self.flat_entries.get(i))
+    }
+
+    /// 获取当前选中项在原始列表中的真实索引（仅文件条目）
+    pub fn selected_real_index(&self) -> Option<usize> {
+        self.state.selected().and_then(|i| {
+            self.flat_entries
+                .get(i)
+                .and_then(|entry| match &entry.kind {
+                    FlatEntryKind::File { note_index } => Some(*note_index),
+                    FlatEntryKind::Dir { .. } => None,
+                })
+        })
+    }
+
+    /// 获取选中笔记路径
     pub fn selected_name(&self) -> Option<String> {
         self.selected_real_index()
-            .map(|idx| self.notes[idx].name.clone())
+            .map(|idx| self.notes[idx].path.clone())
     }
 
     /// 向下移动（不循环）
     pub fn move_down(&mut self) {
-        let count = self.filtered_indices().len();
+        let count = self.flat_entries.len();
         if count == 0 {
             return;
         }
@@ -431,7 +610,7 @@ impl NotebookApp {
 
     /// 向上移动（不循环）
     pub fn move_up(&mut self) {
-        let count = self.filtered_indices().len();
+        let count = self.flat_entries.len();
         if count == 0 {
             return;
         }
@@ -446,9 +625,31 @@ impl NotebookApp {
 
     /// 更新预览内容缓存
     pub fn update_preview(&mut self) {
-        self.preview_content = self
-            .selected_real_index()
-            .and_then(|idx| read_note_content(&self.notes[idx].name));
+        match self.selected_entry() {
+            Some(FlatEntry {
+                kind: FlatEntryKind::File { note_index },
+                ..
+            }) => {
+                self.preview_content = read_note_content(&self.notes[*note_index].path);
+            }
+            Some(FlatEntry {
+                kind:
+                    FlatEntryKind::Dir {
+                        dir_path,
+                        file_count,
+                        ..
+                    },
+                ..
+            }) => {
+                self.preview_content = Some(format!(
+                    "📁 目录: {}\n包含 {} 篇笔记\n\n按 Tab 展开/折叠",
+                    dir_path, file_count
+                ));
+            }
+            None => {
+                self.preview_content = None;
+            }
+        }
         self.render_preview_lines();
     }
 
@@ -481,7 +682,8 @@ impl NotebookApp {
     /// 清除搜索过滤
     pub fn clear_search(&mut self) {
         self.search_filter = None;
-        let count = self.filtered_indices().len();
+        self.build_flat_entries();
+        let count = self.flat_entries.len();
         if count > 0 {
             self.state.select(Some(0));
         } else {
@@ -505,6 +707,90 @@ impl NotebookApp {
             })
             .map(|(i, (k, l))| (i, *k, *l))
             .collect()
+    }
+}
+
+/// 递归构建扁平化条目列表
+fn build_flat_entries_recursive(
+    notes: &[NoteItem],
+    filtered_set: &std::collections::HashSet<usize>,
+    dir_set: &std::collections::BTreeSet<String>,
+    expanded_dirs: &ExpandedDirs,
+    prefix: &str,
+    depth: usize,
+    flat: &mut Vec<FlatEntry>,
+) {
+    // 1. 收集当前前缀下的直接子目录（已排序，BTreeSet 保证）
+    let mut child_dirs: Vec<String> = Vec::new();
+    for dir_path in dir_set.iter() {
+        if prefix.is_empty() {
+            // 根目录下的子目录：dir_path 不含 '/'
+            if !dir_path.contains('/') {
+                child_dirs.push(dir_path.clone());
+            }
+        } else {
+            // prefix 下的子目录：以 prefix/ 开头且下一级无 '/'
+            if dir_path.starts_with(&format!("{}/", prefix)) {
+                let rest = &dir_path[prefix.len() + 1..];
+                if !rest.contains('/') {
+                    child_dirs.push(dir_path.clone());
+                }
+            }
+        }
+    }
+
+    // 2. 收集当前前缀下的直接笔记文件
+    let mut child_files: Vec<usize> = Vec::new();
+    for &idx in filtered_set {
+        let note = &notes[idx];
+        let parent = note.parent_dir().unwrap_or("");
+        if parent == prefix {
+            child_files.push(idx);
+        }
+    }
+
+    // 3. 先渲染子目录（排序），再渲染文件（保持 notes 的 mtime 排序）
+    for dir_path in &child_dirs {
+        let name = dir_path.rsplit('/').next().unwrap_or(dir_path);
+        let expanded = expanded_dirs.is_expanded(dir_path);
+        let file_count = filtered_set
+            .iter()
+            .filter(|&&idx| {
+                notes[idx]
+                    .parent_dir()
+                    .is_some_and(|p| p == *dir_path || p.starts_with(&format!("{}/", dir_path)))
+            })
+            .count();
+
+        flat.push(FlatEntry {
+            depth,
+            kind: FlatEntryKind::Dir {
+                dir_path: dir_path.clone(),
+                name: name.to_string(),
+                expanded,
+                file_count,
+            },
+        });
+
+        // 如果展开，递归
+        if expanded {
+            build_flat_entries_recursive(
+                notes,
+                filtered_set,
+                dir_set,
+                expanded_dirs,
+                dir_path,
+                depth + 1,
+                flat,
+            );
+        }
+    }
+
+    for &idx in &child_files {
+        flat.push(FlatEntry {
+            depth,
+            kind: FlatEntryKind::File { note_index: idx },
+        });
     }
 }
 
@@ -548,11 +834,26 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         }
         KeyCode::Char('r') => {
             if let Some(idx) = app.selected_real_index() {
-                app.input = app.notes[idx].name.clone();
+                app.input = app.notes[idx].path.clone();
                 app.cursor_pos = app.input.chars().count();
                 app.rename_index = Some(idx);
                 app.mode = AppMode::Renaming;
                 app.message = None;
+            }
+        }
+        KeyCode::Tab => {
+            if let Some(sel) = app.state.selected()
+                && sel < app.flat_entries.len()
+                && let FlatEntryKind::Dir { ref dir_path, .. } = app.flat_entries[sel].kind
+            {
+                app.expanded_dirs.toggle(dir_path);
+                save_expanded_dirs(&app.expanded_dirs);
+                app.build_flat_entries();
+                if sel >= app.flat_entries.len() {
+                    app.state
+                        .select(Some(app.flat_entries.len().saturating_sub(1)));
+                }
+                app.update_preview();
             }
         }
         KeyCode::Char('p') => {
@@ -569,15 +870,13 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         }
         KeyCode::Char('[') => {
             app.panel_ratio = app.panel_ratio.saturating_sub(5).max(15);
-            app.preview_width = 0; // 强制重新渲染预览
+            app.preview_width = 0;
             app.message = Some(format!(
                 "面板比例: {}:{}",
                 app.panel_ratio,
                 100 - app.panel_ratio
             ));
-            save_config(&NotebookConfig {
-                panel_ratio: Some(app.panel_ratio),
-            });
+            save_panel_ratio(app.panel_ratio);
         }
         KeyCode::Char(']') => {
             app.panel_ratio = app.panel_ratio.saturating_add(5).min(60);
@@ -587,9 +886,7 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
                 app.panel_ratio,
                 100 - app.panel_ratio
             ));
-            save_config(&NotebookConfig {
-                panel_ratio: Some(app.panel_ratio),
-            });
+            save_panel_ratio(app.panel_ratio);
         }
         KeyCode::Char('y') => {
             if let Some(name) = app.selected_name() {
@@ -673,7 +970,7 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                     if let Some(idx) = app.rename_index
                         && idx < app.notes.len()
                     {
-                        let old_name = &app.notes[idx].name;
+                        let old_name = &app.notes[idx].path;
                         if old_name == &new_name {
                             app.message = Some("名称未变化".to_string());
                             app.mode = AppMode::Normal;
@@ -687,8 +984,13 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                             app.message = Some(format!("目标笔记已存在: {}", new_name));
                             return;
                         }
+                        // 确保目标目录存在
+                        if let Some(parent) = new_path.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
                         match fs::rename(&old_path, &new_path) {
                             Ok(()) => {
+                                cleanup_empty_dirs();
                                 app.message =
                                     Some(format!("已重命名: {} → {}", old_name, new_name));
                                 app.reload();
@@ -701,6 +1003,81 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                     app.mode = AppMode::Normal;
                     app.input.clear();
                     app.rename_index = None;
+                }
+                AppMode::Mkdir => {
+                    let dir_name = app.input.trim().to_string();
+                    if dir_name.is_empty() {
+                        app.message = Some("目录名为空，已取消".to_string());
+                        app.mode = AppMode::Normal;
+                        app.input.clear();
+                        return;
+                    }
+                    let dir_path = notebook_dir().join(&dir_name);
+                    if dir_path.exists() {
+                        app.message = Some(format!("目录已存在: {}", dir_name));
+                        app.mode = AppMode::Normal;
+                        app.input.clear();
+                        return;
+                    }
+                    match fs::create_dir_all(&dir_path) {
+                        Ok(()) => {
+                            app.expanded_dirs.toggle(&dir_name);
+                            save_expanded_dirs(&app.expanded_dirs);
+                            app.message = Some(format!("已创建目录: {}", dir_name));
+                            app.reload();
+                        }
+                        Err(e) => {
+                            app.message = Some(format!("创建目录失败: {}", e));
+                        }
+                    }
+                    app.mode = AppMode::Normal;
+                    app.input.clear();
+                }
+                AppMode::Mv => {
+                    let target = app.input.trim().to_string();
+                    if target.is_empty() {
+                        app.message = Some("目标路径为空，已取消".to_string());
+                        app.mode = AppMode::Normal;
+                        app.input.clear();
+                        return;
+                    }
+                    let current_name = app.selected_name().unwrap_or_default();
+                    if current_name.is_empty() {
+                        app.message = Some("没有选中的笔记".to_string());
+                        app.mode = AppMode::Normal;
+                        app.input.clear();
+                        return;
+                    }
+                    let old_path = note_file_path(&current_name);
+                    let new_path = note_file_path(&target);
+                    if !old_path.exists() {
+                        app.message = Some(format!("源笔记不存在: {}", current_name));
+                        app.mode = AppMode::Normal;
+                        app.input.clear();
+                        return;
+                    }
+                    if new_path.exists() {
+                        app.message = Some(format!("目标笔记已存在: {}", target));
+                        app.mode = AppMode::Normal;
+                        app.input.clear();
+                        return;
+                    }
+                    // 确保目标目录存在
+                    if let Some(parent) = new_path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    match fs::rename(&old_path, &new_path) {
+                        Ok(()) => {
+                            cleanup_empty_dirs();
+                            app.message = Some(format!("已移动: {} → {}", current_name, target));
+                            app.reload();
+                        }
+                        Err(e) => {
+                            app.message = Some(format!("移动失败: {}", e));
+                        }
+                    }
+                    app.mode = AppMode::Normal;
+                    app.input.clear();
                 }
                 AppMode::Search => {
                     let keyword = app.input.trim().to_string();
@@ -805,10 +1182,11 @@ pub fn handle_confirm_delete(app: &mut NotebookApp, key: KeyEvent) {
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
             if let Some(idx) = app.selected_real_index() {
-                let name = &app.notes[idx].name;
+                let name = &app.notes[idx].path;
                 let path = note_file_path(name);
                 match fs::remove_file(&path) {
                     Ok(()) => {
+                        cleanup_empty_dirs();
                         app.message = Some(format!("已删除: {}", name));
                         app.reload();
                     }
@@ -863,7 +1241,7 @@ pub fn handle_command_popup_mode(app: &mut NotebookApp, key: KeyEvent) {
                     }
                     "rename" => {
                         if let Some(idx) = app.selected_real_index() {
-                            app.input = app.notes[idx].name.clone();
+                            app.input = app.notes[idx].path.clone();
                             app.cursor_pos = app.input.chars().count();
                             app.rename_index = Some(idx);
                             app.mode = AppMode::Renaming;
@@ -876,6 +1254,23 @@ pub fn handle_command_popup_mode(app: &mut NotebookApp, key: KeyEvent) {
                     "delete" => {
                         if app.selected_real_index().is_some() {
                             app.mode = AppMode::ConfirmDelete;
+                        } else {
+                            app.mode = AppMode::Normal;
+                            app.message = Some("没有选中的笔记".to_string());
+                        }
+                    }
+                    "mkdir" => {
+                        app.mode = AppMode::Mkdir;
+                        app.input.clear();
+                        app.cursor_pos = 0;
+                        app.message = None;
+                    }
+                    "mv" => {
+                        if let Some(name) = app.selected_name() {
+                            app.mode = AppMode::Mv;
+                            app.input = name;
+                            app.cursor_pos = app.input.chars().count();
+                            app.message = None;
                         } else {
                             app.mode = AppMode::Normal;
                             app.message = Some("没有选中的笔记".to_string());
@@ -929,9 +1324,7 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                     app.panel_ratio = ratio;
                     app.preview_width = 0; // 强制重新渲染预览
                     app.message = Some(format!("面板比例已设为 {}:{}", ratio, 100 - ratio));
-                    save_config(&NotebookConfig {
-                        panel_ratio: Some(ratio),
-                    });
+                    save_panel_ratio(ratio);
                 }
                 None => {
                     app.message = Some("格式错误，请输入如 20:80".to_string());
@@ -1028,6 +1421,29 @@ fn parse_ratio(input: &str) -> Option<u16> {
     }
     let pct = left * 100 / (left + right);
     Some(pct.clamp(15, 60))
+}
+
+/// 清理 notebook 下的空目录（递归，从深层到浅层）
+pub fn cleanup_empty_dirs() {
+    let dir = notebook_dir();
+    let all_dirs = list_dirs();
+    // 按路径深度倒序排列，先删除最深的空目录
+    let mut sorted_dirs: Vec<String> = all_dirs;
+    sorted_dirs.sort_by_key(|b| std::cmp::Reverse(b.matches('/').count()));
+    for dir_path in &sorted_dirs {
+        let full_path = dir.join(dir_path);
+        if full_path.is_dir() {
+            // 检查目录是否为空（只有子目录且子目录也已为空也算空）
+            if let Ok(entries) = fs::read_dir(&full_path) {
+                let has_content = entries
+                    .flatten()
+                    .any(|e| e.path().is_file() || e.path().is_dir());
+                if !has_content {
+                    let _ = fs::remove_dir(&full_path);
+                }
+            }
+        }
+    }
 }
 
 /// 帮助模式按键处理（按任意键返回）

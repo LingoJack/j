@@ -43,7 +43,7 @@ pub fn handle_notebook(args: &[String]) {
             if let Some(title) = args.get(1) {
                 handle_delete(title);
             } else {
-                error!("用法: md delete <笔记名>");
+                error!("用法: md delete <笔记路径>");
             }
         }
         f if f == notebook_action::OPEN => handle_open(),
@@ -51,11 +51,25 @@ pub fn handle_notebook(args: &[String]) {
             if args.len() >= 3 {
                 handle_rename(&args[1], &args[2]);
             } else {
-                error!("用法: md rename <旧名称> <新名称>");
+                error!("用法: md rename <旧路径> <新路径>");
+            }
+        }
+        f if f == notebook_action::MKDIR => {
+            if let Some(name) = args.get(1) {
+                handle_mkdir(name);
+            } else {
+                error!("用法: md mkdir <目录名>");
+            }
+        }
+        f if f == notebook_action::MV => {
+            if args.len() >= 3 {
+                handle_mv(&args[1], &args[2]);
+            } else {
+                error!("用法: md mv <源路径> <目标路径>");
             }
         }
         _ => {
-            // 判断是否为文件路径（含 / . ~ 或以 / 开头）
+            // 判断是否为文件路径（含 . 或以 ~ 开头视为外部文件路径）
             let joined = args.join(" ");
             if is_file_path(&joined) {
                 // 文件路径模式：直接用编辑器打开（原 md 命令行为）
@@ -70,7 +84,20 @@ pub fn handle_notebook(args: &[String]) {
 
 /// 判断字符串是否为文件路径（而非 notebook 笔记标题）
 fn is_file_path(s: &str) -> bool {
-    s.contains('/') || s.contains('.') || s.starts_with('~')
+    // 以 ~ 开头或含 . 的视为外部文件路径
+    if s.starts_with('~') || s.contains('.') {
+        return true;
+    }
+    // 含 / 的可能是 notebook 子目录路径，检查是否在 notebook_dir 下
+    if s.contains('/') {
+        let potential_note = note_file_path(s);
+        // 如果路径以 notebook_dir 为前缀，视为笔记路径
+        if potential_note.starts_with(notebook_dir()) {
+            return false; // 笔记路径
+        }
+        return true; // 其他路径
+    }
+    false
 }
 
 /// 用 Markdown 编辑器编辑外部文件（原 md 命令逻辑）
@@ -151,7 +178,7 @@ fn handle_list() {
 
     println!("{}", format!("📓 共 {} 篇笔记：", notes.len()).bold());
     for note in &notes {
-        println!("  {}  {}", note.name, app::format_time(note.mtime).dimmed());
+        println!("  {}  {}", note.path, app::format_time(note.mtime).dimmed());
     }
 }
 
@@ -165,15 +192,15 @@ fn handle_search(keyword: &str) {
 
     let mut found = false;
     for note in &notes {
-        let file_path = note_file_path(&note.name);
+        let file_path = note_file_path(&note.path);
         if let Ok(content) = fs::read_to_string(&file_path)
-            && (fuzzy::fuzzy_match(&content, keyword) || fuzzy::fuzzy_match(&note.name, keyword))
+            && (fuzzy::fuzzy_match(&content, keyword) || fuzzy::fuzzy_match(&note.path, keyword))
         {
             if !found {
                 println!("{}", format!("🔍 搜索 \"{}\" 的结果：", keyword).bold());
                 found = true;
             }
-            println!("\n  {}", note.name.cyan().bold());
+            println!("\n  {}", note.path.cyan().bold());
             for (line_num, line) in content.lines().enumerate() {
                 if fuzzy::fuzzy_match(line, keyword) {
                     println!(
@@ -198,18 +225,18 @@ fn handle_delete(title: &str) {
         let notes = load_notes();
         let matched: Vec<&str> = notes
             .iter()
-            .map(|n| n.name.as_str())
-            .filter(|name| fuzzy::fuzzy_match(name, title))
+            .map(|n| n.path.as_str())
+            .filter(|path| fuzzy::fuzzy_match(path, title))
             .collect();
 
         if matched.is_empty() {
             error!("未找到笔记: {}", title);
         } else {
             println!("未找到精确匹配，你是否要删除以下笔记？");
-            for name in &matched {
-                println!("  - {}", name);
+            for path in &matched {
+                println!("  - {}", path);
             }
-            info!("请使用精确名称: notebook delete <名称>");
+            info!("请使用精确路径: md delete <路径>");
         }
         return;
     }
@@ -222,7 +249,10 @@ fn handle_delete(title: &str) {
     }
     if input.trim().to_lowercase() == "y" {
         match fs::remove_file(&file_path) {
-            Ok(()) => info!("已删除笔记: {}", title),
+            Ok(()) => {
+                app::cleanup_empty_dirs();
+                info!("已删除笔记: {}", title);
+            }
             Err(e) => error!("删除失败: {}", e),
         }
     } else {
@@ -264,9 +294,55 @@ fn handle_rename(old_name: &str, new_name: &str) {
         return;
     }
 
+    // 确保目标目录存在
+    if let Some(parent) = new_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
     match fs::rename(&old_path, &new_path) {
-        Ok(()) => info!("已重命名: {} → {}", old_name, new_name),
+        Ok(()) => {
+            app::cleanup_empty_dirs();
+            info!("已重命名: {} → {}", old_name, new_name);
+        }
         Err(e) => error!("重命名失败: {}", e),
+    }
+}
+
+/// 创建目录
+fn handle_mkdir(name: &str) {
+    let dir_path = notebook_dir().join(name);
+    if dir_path.exists() {
+        error!("目录已存在: {}", name);
+        return;
+    }
+    match fs::create_dir_all(&dir_path) {
+        Ok(()) => info!("已创建目录: {}", name),
+        Err(e) => error!("创建目录失败: {}", e),
+    }
+}
+
+/// 移动笔记
+fn handle_mv(source: &str, target: &str) {
+    let old_path = note_file_path(source);
+    let new_path = note_file_path(target);
+    if !old_path.exists() {
+        error!("源笔记不存在: {}", source);
+        return;
+    }
+    if new_path.exists() {
+        error!("目标笔记已存在: {}", target);
+        return;
+    }
+    // 确保目标目录存在
+    if let Some(parent) = new_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::rename(&old_path, &new_path) {
+        Ok(()) => {
+            app::cleanup_empty_dirs();
+            info!("已移动: {} → {}", source, target);
+        }
+        Err(e) => error!("移动失败: {}", e),
     }
 }
 
@@ -330,7 +406,9 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                         edit_requested = Some(title);
                     }
                 }
-                AppMode::Renaming | AppMode::Search => handle_input_mode(&mut app, key),
+                AppMode::Renaming | AppMode::Search | AppMode::Mkdir | AppMode::Mv => {
+                    handle_input_mode(&mut app, key);
+                }
                 AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
                 AppMode::Help => handle_help_mode(&mut app, key),
                 AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),

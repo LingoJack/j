@@ -175,6 +175,8 @@ pub mod config_key {
     pub const GIT_REPO: &str = "git_repo";
     #[cfg_attr(not(feature = "browser_cdp"), allow(dead_code))]
     pub const BROWSER_HEADLESS: &str = "browser_headless";
+    pub const NOTEBOOK_PANEL_RATIO: &str = "notebook_panel_ratio";
+    pub const NOTEBOOK_EXPANDED_DIRS: &str = "notebook_expanded_dirs";
 }
 
 // ========== 搜索引擎 ==========
@@ -297,6 +299,8 @@ pub mod notebook_action {
     pub const DELETE: &str = "delete";
     pub const OPEN: &str = "open";
     pub const RENAME: &str = "rename";
+    pub const MKDIR: &str = "mkdir";
+    pub const MV: &str = "mv";
 }
 
 // ========== time 子命令 ==========
