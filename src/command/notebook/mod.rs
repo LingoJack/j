@@ -373,7 +373,7 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
-        if event::poll(std::time::Duration::from_millis(100))? {
+        if event::poll(std::time::Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(key) => {
                     let mut edit_requested: Option<String> = None;
@@ -420,6 +420,12 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                 }
                 Event::Mouse(mouse) => {
                     handle_mouse_event(&mut app, mouse, terminal.get_frame().area());
+                    // 批量消费排队的滚轮事件，避免渲染延迟
+                    while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
+                        if let Ok(Event::Mouse(m)) = event::read() {
+                            handle_mouse_event(&mut app, m, terminal.get_frame().area());
+                        }
+                    }
                 }
                 _ => {}
             }
