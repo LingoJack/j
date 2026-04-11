@@ -6,9 +6,9 @@ use crate::constants::{notebook_action, shell};
 use crate::util::fuzzy;
 use crate::{error, info};
 use app::{
-    AppMode, NotebookApp, edit_note_on_terminal, edit_note_with_editor, handle_confirm_delete,
-    handle_help_mode, handle_input_mode, handle_normal_mode, handle_preview_mode, load_notes,
-    note_file_path, notebook_dir,
+    AppMode, NotebookApp, edit_note_on_terminal, edit_note_with_editor, handle_command_popup_mode,
+    handle_confirm_delete, handle_help_mode, handle_input_mode, handle_normal_mode,
+    handle_preview_mode, handle_ratio_input_mode, load_notes, note_file_path, notebook_dir,
 };
 use colored::Colorize;
 use crossterm::event::KeyCode;
@@ -257,6 +257,8 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                 AppMode::Renaming | AppMode::Search => handle_input_mode(&mut app, key),
                 AppMode::ConfirmDelete => handle_confirm_delete(&mut app, key),
                 AppMode::Help => handle_help_mode(&mut app, key),
+                AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),
+                AppMode::RatioInput => handle_ratio_input_mode(&mut app, key),
             }
 
             // 处理编辑请求：在同一 terminal 上打开编辑器

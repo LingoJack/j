@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 /// 绘制 TUI 界面
@@ -50,13 +50,18 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(30), // 笔记列表
-                Constraint::Percentage(70), // 预览区
+                Constraint::Percentage(app.panel_ratio),       // 笔记列表
+                Constraint::Percentage(100 - app.panel_ratio), // 预览区
             ])
             .split(chunks[1]);
 
         render_list(f, app, main_chunks[0]);
         render_preview(f, app, main_chunks[1]);
+
+        // 命令面板弹窗（浮动在主区域上方）
+        if app.mode == AppMode::CommandPopup {
+            draw_command_popup(f, app, chunks[1]);
+        }
     }
 
     // ========== 状态栏 ==========
@@ -65,7 +70,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | Enter/e 编辑 | a 新建 | d 删除 | r 重命名 | p 预览 | / 搜索 | y 复制 | o 打开目录 | s 刷新 | ? 帮助 | q 退出"
+            " n/↓ 下移 | N/↑ 上移 | Enter/e 编辑 | a 新建 | d 删除 | r 重命名 | p 预览 | / 命令面板 | [ ] 调整比例 | y 复制 | o 打开目录 | s 刷新 | ? 帮助 | q 退出"
         }
         AppMode::Preview => " ↑↓/jk 滚动 | n/N 切换笔记 | p/Esc 退出预览",
         AppMode::Adding => " Enter 确认新建 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
@@ -73,6 +78,8 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
         AppMode::Search => " Enter 搜索 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
         AppMode::Help => " 按任意键返回",
+        AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | 输入筛选 | Esc 取消",
+        AppMode::RatioInput => " Enter 确认 | Esc 取消 | 格式: x:y (如 20:80)",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(
         help_text,
@@ -403,7 +410,15 @@ fn render_help(f: &mut ratatui::Frame, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled("  /            ", Style::default().fg(Color::Yellow)),
-            Span::raw("搜索笔记（标题+内容）"),
+            Span::raw("打开命令面板（搜索/重命名/删除/比例/帮助）"),
+        ]),
+        Line::from(vec![
+            Span::styled("  [            ", Style::default().fg(Color::Yellow)),
+            Span::raw("缩小左侧面板 (-5%)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ]            ", Style::default().fg(Color::Yellow)),
+            Span::raw("扩大左侧面板 (+5%)"),
         ]),
         Line::from(vec![
             Span::styled("  y            ", Style::default().fg(Color::Yellow)),
@@ -543,6 +558,61 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             );
             f.render_widget(status, area);
         }
+        AppMode::CommandPopup => {
+            let filter_display = if app.cmd_popup_filter.is_empty() {
+                String::new()
+            } else {
+                format!(" — 筛选: {}", app.cmd_popup_filter)
+            };
+            let status = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    " ⌨  命令面板",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{} — ↑↓ 选择 | Enter 确认 | Esc 取消", filter_display),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta)),
+            );
+            f.render_widget(status, area);
+        }
+        AppMode::RatioInput => {
+            let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+            let input_chars: Vec<char> = app.input.chars().collect();
+            let mut spans = vec![Span::styled(
+                " ⚖  比例 ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )];
+            for (i, ch) in input_chars.iter().enumerate() {
+                if i == app.cursor_pos {
+                    spans.push(Span::styled(ch.to_string(), cursor_style));
+                } else {
+                    spans.push(Span::raw(ch.to_string()));
+                }
+            }
+            if app.cursor_pos >= input_chars.len() {
+                spans.push(Span::styled(" ", cursor_style));
+            }
+            spans.push(Span::styled(
+                "  (如 20:80)",
+                Style::default().fg(Color::DarkGray),
+            ));
+            let status = Paragraph::new(Line::from(spans)).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            );
+            f.render_widget(status, area);
+        }
         _ => {
             // Normal / Help
             let msg = app.message.as_deref().unwrap_or("按 ? 查看完整帮助");
@@ -558,4 +628,80 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             f.render_widget(status_widget, area);
         }
     }
+}
+
+/// 绘制命令面板弹窗（浮动在主区域底部）
+fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: Rect) {
+    let items = app.filtered_cmd_items();
+    if items.is_empty() {
+        return;
+    }
+
+    let item_count = items.len();
+    let popup_height = (item_count as u16) + 2; // 内容 + 边框
+
+    // 计算宽度：基于最长标签
+    let max_label_width = items
+        .iter()
+        .map(|(_, _, label)| unicode_width::UnicodeWidthStr::width(*label))
+        .max()
+        .unwrap_or(10)
+        .max(12);
+    let popup_width = (max_label_width as u16 + 6) // padding + 边框
+        .min(main_area.width.saturating_sub(4));
+
+    // 位置：主区域底部偏左
+    let x = main_area.x + 2;
+    let y = main_area
+        .bottom()
+        .saturating_sub(popup_height)
+        .max(main_area.y);
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    // 标题
+    let title = if app.cmd_popup_filter.is_empty() {
+        " 命令面板 ".to_string()
+    } else {
+        format!(" 命令面板 [{}] ", app.cmd_popup_filter)
+    };
+
+    // 构建列表项
+    let list_items: Vec<ListItem> = items
+        .iter()
+        .map(|(_, _, label)| {
+            ListItem::new(Line::from(Span::styled(
+                format!("  {}", label),
+                Style::default().fg(Color::White),
+            )))
+        })
+        .collect();
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(
+        app.cmd_popup_selected.min(item_count.saturating_sub(1)),
+    ));
+
+    let list = List::new(list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Magenta))
+                .title(Span::styled(
+                    title,
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(Color::Black)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::Magenta)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    f.render_widget(Clear, popup_area);
+    f.render_stateful_widget(list, popup_area, &mut list_state);
 }

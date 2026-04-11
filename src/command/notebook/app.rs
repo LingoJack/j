@@ -223,6 +223,18 @@ pub fn open_in_finder() {
     }
 }
 
+// ========== 命令面板选项 ==========
+
+/// 命令面板选项列表 (key, 中文标签)
+const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
+    ("search", "搜索"),
+    ("rename", "重命名"),
+    ("delete", "删除"),
+    ("open", "打开目录"),
+    ("ratio", "调整比例"),
+    ("help", "帮助"),
+];
+
 // ========== TUI 应用状态 ==========
 
 /// TUI 应用状态
@@ -233,7 +245,7 @@ pub struct NotebookApp {
     pub state: ListState,
     /// 当前模式
     pub mode: AppMode,
-    /// 输入缓冲区（新建/重命名/搜索）
+    /// 输入缓冲区（新建/重命名/搜索/比例）
     pub input: String,
     /// 光标位置（字符索引）
     pub cursor_pos: usize,
@@ -255,6 +267,12 @@ pub struct NotebookApp {
     pub quit_input: String,
     /// 新建笔记确认后，待打开编辑器的标题（TUI loop 消费）
     pub pending_edit_title: Option<String>,
+    /// 左侧面板比例 (15-60, 默认 30)
+    pub panel_ratio: u16,
+    /// 命令面板选中索引
+    pub cmd_popup_selected: usize,
+    /// 命令面板筛选文本
+    pub cmd_popup_filter: String,
 }
 
 #[derive(PartialEq, Clone)]
@@ -273,6 +291,10 @@ pub enum AppMode {
     ConfirmDelete,
     /// 帮助页
     Help,
+    /// 命令面板（/ 弹窗）
+    CommandPopup,
+    /// 比例输入模式（如 20:80）
+    RatioInput,
 }
 
 impl Default for NotebookApp {
@@ -303,6 +325,9 @@ impl NotebookApp {
             preview_width: 0,
             quit_input: String::new(),
             pending_edit_title: None,
+            panel_ratio: 30,
+            cmd_popup_selected: 0,
+            cmd_popup_filter: String::new(),
         };
         app.update_preview();
         app
@@ -435,6 +460,22 @@ impl NotebookApp {
         self.update_preview();
         self.message = Some("已清除搜索过滤".to_string());
     }
+
+    /// 获取筛选后的命令面板选项
+    pub fn filtered_cmd_items(&self) -> Vec<(usize, &'static str, &'static str)> {
+        CMD_POPUP_ITEMS
+            .iter()
+            .enumerate()
+            .filter(|(_, (key, label))| {
+                if self.cmd_popup_filter.is_empty() {
+                    return true;
+                }
+                let f = self.cmd_popup_filter.to_lowercase();
+                key.to_lowercase().contains(&f) || label.contains(f.as_str())
+            })
+            .map(|(i, (k, l))| (i, *k, *l))
+            .collect()
+    }
 }
 
 // ========== 按键处理 ==========
@@ -491,10 +532,28 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
             }
         }
         KeyCode::Char('/') => {
-            app.mode = AppMode::Search;
-            app.input.clear();
-            app.cursor_pos = 0;
+            app.mode = AppMode::CommandPopup;
+            app.cmd_popup_filter.clear();
+            app.cmd_popup_selected = 0;
             app.message = None;
+        }
+        KeyCode::Char('[') => {
+            app.panel_ratio = app.panel_ratio.saturating_sub(5).max(15);
+            app.preview_width = 0; // 强制重新渲染预览
+            app.message = Some(format!(
+                "面板比例: {}:{}",
+                app.panel_ratio,
+                100 - app.panel_ratio
+            ));
+        }
+        KeyCode::Char(']') => {
+            app.panel_ratio = app.panel_ratio.saturating_add(5).min(60);
+            app.preview_width = 0;
+            app.message = Some(format!(
+                "面板比例: {}:{}",
+                app.panel_ratio,
+                100 - app.panel_ratio
+            ));
         }
         KeyCode::Char('y') => {
             if let Some(name) = app.selected_name() {
@@ -730,6 +789,206 @@ pub fn handle_confirm_delete(app: &mut NotebookApp, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+/// 命令面板按键处理
+pub fn handle_command_popup_mode(app: &mut NotebookApp, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            app.cmd_popup_filter.clear();
+            app.message = None;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            let count = app.filtered_cmd_items().len();
+            if count > 0 {
+                app.cmd_popup_selected = if app.cmd_popup_selected == 0 {
+                    count - 1
+                } else {
+                    app.cmd_popup_selected - 1
+                };
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            let count = app.filtered_cmd_items().len();
+            if count > 0 {
+                app.cmd_popup_selected = (app.cmd_popup_selected + 1) % count;
+            }
+        }
+        KeyCode::Enter => {
+            let items = app.filtered_cmd_items();
+            if let Some(&(_orig_idx, cmd_key, _label)) = items.get(app.cmd_popup_selected) {
+                match cmd_key {
+                    "search" => {
+                        app.mode = AppMode::Search;
+                        app.input.clear();
+                        app.cursor_pos = 0;
+                        app.message = None;
+                    }
+                    "rename" => {
+                        if let Some(idx) = app.selected_real_index() {
+                            app.input = app.notes[idx].name.clone();
+                            app.cursor_pos = app.input.chars().count();
+                            app.rename_index = Some(idx);
+                            app.mode = AppMode::Renaming;
+                            app.message = None;
+                        } else {
+                            app.mode = AppMode::Normal;
+                            app.message = Some("没有选中的笔记".to_string());
+                        }
+                    }
+                    "delete" => {
+                        if app.selected_real_index().is_some() {
+                            app.mode = AppMode::ConfirmDelete;
+                        } else {
+                            app.mode = AppMode::Normal;
+                            app.message = Some("没有选中的笔记".to_string());
+                        }
+                    }
+                    "open" => {
+                        open_in_finder();
+                        app.mode = AppMode::Normal;
+                        app.message = Some("已打开目录".to_string());
+                    }
+                    "ratio" => {
+                        app.mode = AppMode::RatioInput;
+                        app.input = format!("{}:{}", app.panel_ratio, 100 - app.panel_ratio);
+                        app.cursor_pos = app.input.chars().count();
+                        app.message = None;
+                    }
+                    "help" => {
+                        app.mode = AppMode::Help;
+                    }
+                    _ => {}
+                }
+            }
+            app.cmd_popup_filter.clear();
+            // 不重置 cmd_popup_selected，保留选项位置
+        }
+        KeyCode::Backspace => {
+            if app.cmd_popup_filter.is_empty() {
+                app.mode = AppMode::Normal;
+                app.message = None;
+            } else {
+                app.cmd_popup_filter.pop();
+                app.cmd_popup_selected = 0;
+            }
+        }
+        KeyCode::Char(c) => {
+            app.cmd_popup_filter.push(c);
+            app.cmd_popup_selected = 0;
+        }
+        _ => {}
+    }
+}
+
+/// 比例输入按键处理
+pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
+    let char_count = app.input.chars().count();
+
+    match key.code {
+        KeyCode::Enter => {
+            match parse_ratio(&app.input) {
+                Some(ratio) => {
+                    app.panel_ratio = ratio;
+                    app.preview_width = 0; // 强制重新渲染预览
+                    app.message = Some(format!("面板比例已设为 {}:{}", ratio, 100 - ratio));
+                }
+                None => {
+                    app.message = Some("格式错误，请输入如 20:80".to_string());
+                }
+            }
+            app.mode = AppMode::Normal;
+            app.input.clear();
+            app.cursor_pos = 0;
+        }
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            app.input.clear();
+            app.cursor_pos = 0;
+            app.message = Some("已取消".to_string());
+        }
+        KeyCode::Left => {
+            if app.cursor_pos > 0 {
+                app.cursor_pos -= 1;
+            }
+        }
+        KeyCode::Right => {
+            if app.cursor_pos < char_count {
+                app.cursor_pos += 1;
+            }
+        }
+        KeyCode::Home => {
+            app.cursor_pos = 0;
+        }
+        KeyCode::End => {
+            app.cursor_pos = char_count;
+        }
+        KeyCode::Backspace => {
+            if app.cursor_pos > 0 {
+                let start = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos - 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                let end = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.drain(start..end);
+                app.cursor_pos -= 1;
+            }
+        }
+        KeyCode::Delete => {
+            if app.cursor_pos < char_count {
+                let start = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                let end = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos + 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.drain(start..end);
+            }
+        }
+        KeyCode::Char(c) => {
+            // 只允许数字和冒号
+            if c.is_ascii_digit() || c == ':' {
+                let byte_idx = app
+                    .input
+                    .char_indices()
+                    .nth(app.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(app.input.len());
+                app.input.insert(byte_idx, c);
+                app.cursor_pos += 1;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 解析比例字符串 (如 "20:80") 为左侧面板百分比
+fn parse_ratio(input: &str) -> Option<u16> {
+    let parts: Vec<&str> = input.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let left: u16 = parts[0].parse().ok()?;
+    let right: u16 = parts[1].parse().ok()?;
+    if left == 0 || right == 0 {
+        return None;
+    }
+    let pct = left * 100 / (left + right);
+    Some(pct.clamp(15, 60))
 }
 
 /// 帮助模式按键处理（按任意键返回）
