@@ -640,14 +640,19 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
     let item_count = items.len();
     let popup_height = (item_count as u16) + 2; // 内容 + 边框
 
-    // 计算宽度：基于最长标签
+    // 计算宽度：基于最长 "key - 描述" 组合
     let max_label_width = items
         .iter()
-        .map(|(_, _, label)| unicode_width::UnicodeWidthStr::width(*label))
+        .map(|(_, key, label)| {
+            // "  key - 描述"
+            2 + unicode_width::UnicodeWidthStr::width(*key)
+                + 3
+                + unicode_width::UnicodeWidthStr::width(*label)
+        })
         .max()
-        .unwrap_or(10)
-        .max(12);
-    let popup_width = (max_label_width as u16 + 6) // padding + 边框
+        .unwrap_or(16)
+        .max(16);
+    let popup_width = (max_label_width as u16 + 2) // 边框
         .min(main_area.width.saturating_sub(4));
 
     // 位置：主区域底部偏左
@@ -665,14 +670,22 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
         format!(" 命令面板 [{}] ", app.cmd_popup_filter)
     };
 
-    // 构建列表项
+    // 构建列表项：英文 key (粗体) + 中文描述 (淡色)
     let list_items: Vec<ListItem> = items
         .iter()
-        .map(|(_, _, label)| {
-            ListItem::new(Line::from(Span::styled(
-                format!("  {}", label),
-                Style::default().fg(Color::White),
-            )))
+        .map(|(_, key, label)| {
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("  {}", key),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" - {}", label),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]))
         })
         .collect();
 
