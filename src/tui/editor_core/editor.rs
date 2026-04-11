@@ -336,8 +336,17 @@ impl MarkdownEditor {
             self.rebuild_wrap_cache();
         }
 
-        let (cursor_row, cursor_col) = self.buffer.cursor();
+        let (cursor_row, mut cursor_col) = self.buffer.cursor();
         let line_count = self.buffer.line_count();
+
+        // Vim Normal 模式下光标不能在行尾（最后一个字符之后），
+        // 需要限制到行内最后一个字符上，否则会渲染一个多余的空光标块
+        if *self.vim.mode() == Mode::Normal {
+            let line_len = self.buffer.current_line_len();
+            if line_len > 0 {
+                cursor_col = cursor_col.min(line_len - 1);
+            }
+        }
 
         // 确保代码块缓存有效（用于快速判断行是否在代码块内）
         self.renderer.ensure_cache_valid(self.buffer.lines());
