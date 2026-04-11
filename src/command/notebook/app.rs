@@ -121,8 +121,6 @@ pub enum FlatEntryKind {
         dir_path: String,
         /// 目录显示名
         name: String,
-        /// 是否展开
-        expanded: bool,
         /// 目录下文件数量（包含子目录中的文件）
         file_count: usize,
     },
@@ -763,7 +761,6 @@ fn build_flat_entries_recursive(
             kind: FlatEntryKind::Dir {
                 dir_path: dir_path.clone(),
                 name: name.to_string(),
-                expanded,
                 file_count,
             },
             guide,

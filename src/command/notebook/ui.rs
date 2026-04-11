@@ -127,12 +127,8 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
             match &entry.kind {
                 FlatEntryKind::Dir {
-                    name,
-                    expanded,
-                    file_count,
-                    ..
+                    name, file_count, ..
                 } => {
-                    let icon = if *expanded { "v " } else { "> " };
                     let dir_style = Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD);
@@ -140,7 +136,6 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
                     ListItem::new(Line::from(vec![
                         Span::styled(entry.guide.clone(), indent_style),
-                        Span::styled(icon.to_string(), dir_style),
                         Span::styled(name.clone(), dir_style),
                         Span::styled(count_str, Style::default().fg(Color::DarkGray)),
                     ]))
@@ -149,7 +144,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                     let note = &app.notes[*note_index];
                     let name_style = Style::default().fg(Color::Gray);
                     let guide_width = unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
-                    let name_display_width = inner_width.saturating_sub(guide_width + 2); // guide + "· "
+                    let name_display_width = inner_width.saturating_sub(guide_width);
                     let display_name = note.display_name();
                     let name_text =
                         if display_name.chars().collect::<Vec<_>>().len() > name_display_width {
@@ -165,7 +160,6 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
                     ListItem::new(Line::from(vec![
                         Span::styled(entry.guide.clone(), indent_style),
-                        Span::styled("· ", Style::default().fg(Color::DarkGray)),
                         Span::styled(name_text, name_style),
                     ]))
                 }
