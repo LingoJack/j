@@ -408,10 +408,27 @@ pub async fn run_agent_loop(
                                         &mut messages,
                                         &tool_ctx,
                                     ) {
-                                        Ok(compact_requested) => {
+                                        Ok(result) => {
                                             // ── Layer 3: compact tool 触发 ──
-                                            if compact_requested && compact_config.enabled {
+                                            if result.compact_requested && compact_config.enabled {
                                                 let _ = compact::auto_compact(&mut messages, &provider).await;
+                                            }
+                                            // ── Plan 被批准且清空上下文 ──
+                                            if let Some(ref plan_content) = result.plan_approved_clear_context {
+                                                write_info_log("agent_loop", "Clearing context after plan approval");
+                                                messages.clear();
+                                                if let Ok(mut shared) = shared_messages.lock() {
+                                                    shared.clear();
+                                                }
+                                                let plan_msg = ChatMessage {
+                                                    role: ROLE_USER.to_string(),
+                                                    content: format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
+                                                    tool_calls: None,
+                                                    tool_call_id: None,
+                                                    images: None,
+                                                };
+                                                messages.push(plan_msg.clone());
+                                                push_shared(&shared_messages, plan_msg);
                                             }
                                             continue;
                                         }
@@ -480,10 +497,30 @@ pub async fn run_agent_loop(
                 }
 
                 match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
-                    Ok(compact_requested) => {
+                    Ok(result) => {
                         // ── Layer 3: compact tool 触发 ──
-                        if compact_requested && compact_config.enabled {
+                        if result.compact_requested && compact_config.enabled {
                             let _ = compact::auto_compact(&mut messages, &provider).await;
+                        }
+                        // ── Plan 被批准且清空上下文 ──
+                        if let Some(ref plan_content) = result.plan_approved_clear_context {
+                            write_info_log("agent_loop", "Clearing context after plan approval");
+                            messages.clear();
+                            if let Ok(mut shared) = shared_messages.lock() {
+                                shared.clear();
+                            }
+                            let plan_msg = ChatMessage {
+                                role: ROLE_USER.to_string(),
+                                content: format!(
+                                    "以下计划已获批准，请按计划执行：\n\n{}",
+                                    plan_content
+                                ),
+                                tool_calls: None,
+                                tool_call_id: None,
+                                images: None,
+                            };
+                            messages.push(plan_msg.clone());
+                            push_shared(&shared_messages, plan_msg);
                         }
                         continue;
                     }
@@ -588,15 +625,22 @@ fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg])
     write_info_log("工具调用结果", &log_content);
 }
 
+/// process_tool_calls 的返回结果
+struct ToolCallResult {
+    compact_requested: bool,
+    /// Plan 被批准且用户选择清空上下文，值为 plan 文件内容
+    plan_approved_clear_context: Option<String>,
+}
+
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
-/// 返回 Ok(bool) 表示成功（应 continue 循环），bool 为 true 时表示有 compact tool 被调用
+/// 返回 Ok(ToolCallResult) 表示成功（应 continue 循环）
 /// Err(()) 表示 channel 断开（应 return）
 fn process_tool_calls(
     tool_items: Vec<ToolCallItem>,
     assistant_text: String,
     messages: &mut Vec<ChatMessage>,
     ctx: &ToolCallContext<'_>,
-) -> Result<bool, ()> {
+) -> Result<ToolCallResult, ()> {
     log_tool_request(&tool_items);
 
     if !assistant_text.is_empty() {
@@ -645,9 +689,22 @@ fn process_tool_calls(
     }
 
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+    let mut plan_clear_context: Option<String> = None;
     for _ in &tool_items {
         match ctx.tool_result_rx.recv() {
-            Ok(result) => tool_results.push(result),
+            Ok(result) => {
+                // 检测 ExitPlanMode 返回清空上下文信号
+                if result.result.starts_with("PLAN_CLEAR_CONTEXT:") {
+                    plan_clear_context = Some(
+                        result
+                            .result
+                            .strip_prefix("PLAN_CLEAR_CONTEXT:")
+                            .unwrap_or("")
+                            .to_string(),
+                    );
+                }
+                tool_results.push(result);
+            }
             Err(_) => return Err(()),
         }
     }
@@ -756,5 +813,9 @@ fn process_tool_calls(
     }
 
     drain_pending_user_messages(messages, ctx.pending_user_messages);
-    Ok(compact_requested)
+
+    Ok(ToolCallResult {
+        compact_requested,
+        plan_approved_clear_context: plan_clear_context,
+    })
 }
