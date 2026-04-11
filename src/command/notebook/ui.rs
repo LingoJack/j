@@ -133,13 +133,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                     ..
                 } => {
                     let toggle = if *expanded { "▾ " } else { "▸ " };
-                    let dir_style = if is_selected {
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::Cyan)
-                    };
+                    let dir_style = Style::default().fg(Color::Cyan);
                     let count_str = format!(" ({})", file_count);
 
                     ListItem::new(Line::from(vec![
@@ -151,13 +145,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                 }
                 FlatEntryKind::File { note_index } => {
                     let note = &app.notes[*note_index];
-                    let name_style = if is_selected {
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::White)
-                    };
+                    let name_style = Style::default().fg(Color::White);
                     let time_str = format_time(note.mtime);
                     let guide_width = unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
                     let name_display_width = inner_width.saturating_sub(guide_width + 17); // guide + time
@@ -211,9 +199,12 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
         .block(list_block);
         f.render_widget(empty_hint, area);
     } else {
-        let list_widget = List::new(items)
-            .block(list_block)
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+        let list_widget = List::new(items).block(list_block).highlight_style(
+            Style::default()
+                .bg(Color::Cyan)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        );
         f.render_stateful_widget(list_widget, area, &mut app.state);
     }
 }
@@ -361,6 +352,7 @@ fn render_preview(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
         Paragraph::new(app.preview_lines.clone())
             .block(block)
             .wrap(Wrap { trim: false })
+            .scroll((app.preview_scroll, 0))
     };
     f.render_widget(content, area);
 }

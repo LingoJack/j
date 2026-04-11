@@ -459,27 +459,14 @@ fn handle_mouse_event(app: &mut NotebookApp, mouse: MouseEvent, frame_area: rata
         return;
     }
 
-    // 左侧面板宽度占比
-    let list_width = frame_area.width * app.panel_ratio / 100;
-    let is_in_list = mouse.column < frame_area.x + list_width;
-
-    if is_in_list {
-        // 左侧面板：滚动切换选中项
-        match scroll_delta {
-            -1 => app.move_up(),
-            1 => app.move_down(),
-            _ => {}
+    // 滚轮统一滚动右侧预览区（左侧目录树仅通过上下键控制）
+    match scroll_delta {
+        -1 => {
+            app.preview_scroll = app.preview_scroll.saturating_sub(3);
         }
-    } else {
-        // 右侧面板：滚动预览内容
-        match scroll_delta {
-            -1 => {
-                app.preview_scroll = app.preview_scroll.saturating_sub(3);
-            }
-            1 => {
-                app.preview_scroll = app.preview_scroll.saturating_add(3);
-            }
-            _ => {}
+        1 => {
+            app.preview_scroll = app.preview_scroll.saturating_add(3);
         }
+        _ => {}
     }
 }
