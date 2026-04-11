@@ -178,15 +178,6 @@ impl MarkdownRenderer {
             .add_modifier(Modifier::BOLD)
     }
 
-    /// 创建带背景色和斜体的 Style
-    #[inline]
-    pub fn style_italic(&self, fg: Color) -> Style {
-        Style::default()
-            .fg(fg)
-            .bg(self.theme.bg_primary)
-            .add_modifier(Modifier::ITALIC)
-    }
-
     /// 创建代码块背景色的 Style
     #[inline]
     pub fn style_code(&self, fg: Color) -> Style {
@@ -244,6 +235,8 @@ impl MarkdownRenderer {
         };
 
         if is_cursor_line {
+            // 判断是否是逻辑行的最后一个视觉行
+            let is_last_vl = vl.end_col >= line_content.chars().count();
             return vec![self.render_cursor_visual_line(
                 vl,
                 &line_num_str,
@@ -251,6 +244,7 @@ impl MarkdownRenderer {
                 cursor_col,
                 search,
                 code_block_max_width,
+                is_last_vl,
             )];
         }
 
@@ -409,6 +403,7 @@ impl MarkdownRenderer {
         cursor_col: Option<usize>,
         search: &SearchState,
         code_block_max_width: Option<usize>,
+        is_last_vl: bool,
     ) -> Line<'static> {
         let text = &vl.text;
         let in_code_block = code_block_max_width.is_some();
@@ -448,7 +443,14 @@ impl MarkdownRenderer {
         // 处理光标位置
         if let Some(col) = cursor_col {
             // 判断光标是否在当前视觉行范围内
-            let cursor_in_this_vl = col >= vl.start_col && col <= vl.end_col.max(vl.start_col + 1);
+            // 当 col == vl.end_col 时：
+            //   - 如果是最后一个视觉行，光标在行尾，属于当前视觉行
+            //   - 如果不是最后一个视觉行，光标属于下一个视觉行（end_col == next start_col）
+            let cursor_in_this_vl = if col == vl.end_col {
+                is_last_vl
+            } else {
+                col >= vl.start_col && col < vl.end_col
+            };
 
             if cursor_in_this_vl {
                 // 光标在当前视觉行内
@@ -1279,10 +1281,14 @@ impl MarkdownRenderer {
             else if is_bold {
                 remaining = &remaining[2..];
                 if let Some(end) = remaining.find("**") {
-                    spans.push(Span::styled(
-                        remaining[..end].to_string(),
-                        self.style_bold(self.theme.text_normal),
-                    ));
+                    let inner = &remaining[..end];
+                    let inner_spans = self.render_inline(inner);
+                    for span in inner_spans {
+                        spans.push(Span::styled(
+                            span.content,
+                            span.style.add_modifier(Modifier::BOLD),
+                        ));
+                    }
                     remaining = &remaining[end + 2..];
                 } else {
                     spans.push(Span::styled(
@@ -1296,11 +1302,14 @@ impl MarkdownRenderer {
             else if is_strike {
                 remaining = &remaining[2..];
                 if let Some(end) = remaining.find("~~") {
-                    spans.push(Span::styled(
-                        remaining[..end].to_string(),
-                        self.style(self.theme.text_dim)
-                            .add_modifier(Modifier::CROSSED_OUT),
-                    ));
+                    let inner = &remaining[..end];
+                    let inner_spans = self.render_inline(inner);
+                    for span in inner_spans {
+                        spans.push(Span::styled(
+                            span.content,
+                            span.style.add_modifier(Modifier::CROSSED_OUT),
+                        ));
+                    }
                     remaining = &remaining[end + 2..];
                 } else {
                     spans.push(Span::styled(
@@ -1314,10 +1323,14 @@ impl MarkdownRenderer {
             else if is_italic {
                 remaining = &remaining[1..];
                 if let Some(end) = remaining.find('*') {
-                    spans.push(Span::styled(
-                        remaining[..end].to_string(),
-                        self.style_italic(self.theme.text_normal),
-                    ));
+                    let inner = &remaining[..end];
+                    let inner_spans = self.render_inline(inner);
+                    for span in inner_spans {
+                        spans.push(Span::styled(
+                            span.content,
+                            span.style.add_modifier(Modifier::ITALIC),
+                        ));
+                    }
                     remaining = &remaining[end + 1..];
                 } else {
                     spans.push(Span::styled(
