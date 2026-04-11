@@ -1,12 +1,5 @@
 # 原型设计阶段
 
-## 技术栈
-前端技术栈
-- React
-- Typescript
-- tailwindcss (v4)
-使用 `make init-frontend APP=<app_name>` 自动创建项目脚手架，并安装依赖
-
 ## 流程要求
 阅读需求文档 `docs/requirement.md` 内容，严格按照以下步骤开发：
 
