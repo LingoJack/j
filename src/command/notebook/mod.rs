@@ -287,5 +287,10 @@ fn suspend_and_edit(title: &str) -> bool {
     let _ = terminal::enable_raw_mode();
     let _ = execute!(io::stdout(), EnterAlternateScreen);
 
+    // 清除编辑器残留的按键事件（如 :wq 中的 q），避免误触发 TUI 退出
+    while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
+        let _ = event::read();
+    }
+
     changed
 }
