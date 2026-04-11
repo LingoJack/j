@@ -6,7 +6,7 @@
 
 使用 `TodoWrite` 跟踪以下待办依次执行：
 ### 计划阶段
-编写 `docs/frontend_design.md` 首先思考计划清楚以下内容
+进入 PLAN MODE，首先思考计划清楚以下内容
 - 确定项目结构
 - 列出页面组件
 - 定义状态管理方案
@@ -19,20 +19,10 @@
 - 确定图标系统
 - 确定组件库规范
 
-编写完成后，运行以下命令以打开前端设计文档供用户查看，并使用 `Ask` 工具收集反馈
-```bash
-j code docs/frontend_design.md
-```
-
-收集用户反馈后，修改 `docs/frontend_design.md` 并再次运行上述命令，直到用户确认该文档满足要求
+收集用户反馈后，运行上述命令，直到用户确认该文档满足要求
+输出最终版本到 `docs/frontend_design.md`
 
 ### 原型开发阶段
-
-创建 `frontend/` 目录，在目录下执行
-```bash
-make init-frontend APP=<app_name>
-```
-
 按照 `docs/frontend_design.md` 实现原型，接口返回的数据可以先 mock，注意必须是 mock 接口返回的数据
 
 运行以下命令检查前端项目构建
