@@ -284,7 +284,7 @@ impl Tool for ExitPlanModeTool {
         let (response_tx, response_rx) = mpsc::channel::<String>();
 
         let question_text = format!(
-            "Please review the implementation plan:\n\n{}\n\nDo you approve this plan?",
+            "请审阅以下实施计划：\n\n{}\n\n是否批准此计划？",
             plan_content
         );
 
@@ -294,12 +294,16 @@ impl Tool for ExitPlanModeTool {
                 header: "Plan Review".to_string(),
                 options: vec![
                     AskOption {
-                        label: "Approve".to_string(),
-                        description: "Approve the plan and proceed with implementation".to_string(),
+                        label: "同意".to_string(),
+                        description: "批准计划并开始实施".to_string(),
                     },
                     AskOption {
-                        label: "Reject".to_string(),
-                        description: "Reject the plan and stay in plan mode to revise".to_string(),
+                        label: "同意并清空上下文".to_string(),
+                        description: "批准计划，清空之前的探索上下文，只保留计划内容".to_string(),
+                    },
+                    AskOption {
+                        label: "拒绝".to_string(),
+                        description: "拒绝计划，继续留在 plan mode 修改".to_string(),
                     },
                 ],
                 multi_select: false,
@@ -318,9 +322,15 @@ impl Tool for ExitPlanModeTool {
         // 阻塞等待用户审批结果
         match response_rx.recv() {
             Ok(response) => {
-                // 解析用户选择
-                let approved = response.contains("Approve");
-                if approved {
+                if response.contains("同意并清空上下文") {
+                    self.plan_state.exit();
+                    // 用 PLAN_CLEAR_CONTEXT: 前缀传递计划内容，agent loop 检测到此信号后清空上下文
+                    ToolResult {
+                        output: format!("PLAN_CLEAR_CONTEXT:{}", plan_content),
+                        is_error: false,
+                        images: vec![],
+                    }
+                } else if response.contains("同意") {
                     self.plan_state.exit();
                     ToolResult {
                         output: "Plan approved! Exited plan mode. You can now proceed with implementation.".to_string(),
