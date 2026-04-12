@@ -10,9 +10,9 @@
 use std::io;
 
 use crate::command::chat::markdown::highlight::highlight_code_line;
-use crate::command::chat::theme::Theme;
+use crate::command::chat::theme::{Theme, ThemeName};
 
-use crate::tui::editor_core::{EditorTheme, HighlightFn};
+use crate::tui::editor_core::{EditorTheme, HighlightFn, ThemeGalleryItem};
 // 直接使用 editor_core 的公共 API
 use crate::tui::editor_core::{
     open_markdown_editor as core_open, open_markdown_editor_on_terminal as core_open_on_terminal,
@@ -67,6 +67,18 @@ fn bridge_highlight(
     highlight_code_line(line, lang, theme)
 }
 
+/// 构建主题画廊（所有内置主题 → EditorTheme）
+fn build_theme_gallery() -> Vec<ThemeGalleryItem> {
+    ThemeName::all()
+        .iter()
+        .map(|name| {
+            let theme = Theme::from_name(name);
+            let editor_theme = EditorTheme::from(&theme);
+            (name.display_name(), editor_theme)
+        })
+        .collect()
+}
+
 // ========== 公共 API ==========
 
 /// 打开 Markdown 编辑器（在已有终端上）
@@ -83,6 +95,7 @@ pub fn open_markdown_editor_on_terminal(
         content,
         &editor_theme,
         bridge_highlight as HighlightFn,
+        build_theme_gallery(),
     )
 }
 
@@ -98,6 +111,7 @@ pub fn open_markdown_editor(
         content,
         &editor_theme,
         bridge_highlight as HighlightFn,
+        build_theme_gallery(),
     )
 }
 
@@ -113,6 +127,7 @@ pub fn open_markdown_editor_with_content(
         initial_lines,
         &editor_theme,
         bridge_highlight as HighlightFn,
+        build_theme_gallery(),
     )
 }
 
@@ -127,5 +142,6 @@ pub fn open_script_editor(title: &str, initial_lines: &[String]) -> io::Result<O
         initial_lines,
         &editor_theme,
         bridge_highlight as HighlightFn,
+        build_theme_gallery(),
     )
 }

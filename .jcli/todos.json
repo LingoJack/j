@@ -16,7 +16,7 @@
   },
   {
     "id": "4",
-    "content": "编译验证",
+    "content": "修复 clippy 警告",
     "status": "completed"
   }
 ]

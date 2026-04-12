@@ -211,3 +211,15 @@ pub fn handle_select_model(app: &mut ChatApp, key: KeyEvent) {
     };
     app.update(action);
 }
+
+/// 主题选择模式按键处理
+pub fn handle_select_theme(app: &mut ChatApp, key: KeyEvent) {
+    let action = match key.code {
+        KeyCode::Esc => Action::ExitToChat,
+        KeyCode::Up | KeyCode::Char('k') => Action::ThemeSelectNavigate(CursorDirection::Up),
+        KeyCode::Down | KeyCode::Char('j') => Action::ThemeSelectNavigate(CursorDirection::Down),
+        KeyCode::Enter => Action::ThemeSelectConfirm,
+        _ => return,
+    };
+    app.update(action);
+}

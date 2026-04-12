@@ -26,6 +26,8 @@ pub struct UIState {
     pub browse_scroll_offset: u16,
     /// 模型选择列表状态
     pub model_list_state: ListState,
+    /// 主题选择列表状态
+    pub theme_list_state: ListState,
     /// Toast 通知消息 (内容, 是否错误, 创建时间)
     pub toast: Option<(String, bool, std::time::Instant)>,
     /// 消息渲染行缓存
@@ -204,6 +206,8 @@ pub enum ChatMode {
     ArchiveList,
     /// 工具调用确认模式（选项式交互区域）
     ToolConfirm,
+    /// 主题选择模式
+    SelectTheme,
 }
 
 /// 配置面板 Tab 分页枚举

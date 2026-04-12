@@ -55,6 +55,10 @@ pub const COMMANDS: &[CmdItem] = &[
         name: "toend",
         desc: "跳到文件末尾",
     },
+    CmdItem {
+        name: "theme",
+        desc: "切换主题",
+    },
 ];
 
 /// Vim 模式
@@ -67,6 +71,8 @@ pub enum Mode {
     Command(String),
     Search(String),
     CommandPanel(String),
+    /// 主题选择弹窗
+    ThemeSelect,
 }
 
 impl fmt::Display for Mode {
@@ -79,6 +85,7 @@ impl fmt::Display for Mode {
             Self::Command(_) => write!(f, "COMMAND"),
             Self::Search(_) => write!(f, "SEARCH"),
             Self::CommandPanel(_) => write!(f, "CMD"),
+            Self::ThemeSelect => write!(f, "THEME"),
         }
     }
 }
@@ -95,6 +102,7 @@ impl Mode {
             Self::Command(_) => Color::DarkGray,
             Self::Search(_) => Color::Magenta,
             Self::CommandPanel(_) => Color::Magenta,
+            Self::ThemeSelect => Color::Magenta,
         }
     }
 }
@@ -222,6 +230,7 @@ impl Vim {
             Mode::CommandPanel(filter) => self.handle_command_panel_mode(input, filter.clone()),
             Mode::Visual => self.handle_visual_mode(input, buffer),
             Mode::Operator(c) => self.handle_operator_mode(input, *c, buffer),
+            Mode::ThemeSelect => Transition::Nop, // handled by MarkdownEditor
         }
     }
 

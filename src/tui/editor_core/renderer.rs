@@ -148,6 +148,12 @@ impl MarkdownRenderer {
         self.code_block_cache.invalidate();
     }
 
+    /// 切换主题
+    pub fn set_theme(&mut self, theme: EditorTheme) {
+        self.theme = theme;
+        self.invalidate_cache();
+    }
+
     /// 确保代码块缓存有效
     pub fn ensure_cache_valid(&mut self, lines: &[String]) {
         if !self.code_block_cache.valid || self.code_block_cache.line_count != lines.len() {

@@ -179,6 +179,12 @@ pub enum Action {
     /// 模型选择模式：确认切换
     ModelSelectConfirm,
 
+    // ========== 主题选择 ==========
+    /// 主题选择模式：导航
+    ThemeSelectNavigate(CursorDirection),
+    /// 主题选择模式：确认切换
+    ThemeSelectConfirm,
+
     // ========== 归档管理 ==========
     /// 启动归档确认流程
     StartArchiveConfirm,

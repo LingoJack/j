@@ -9,7 +9,7 @@ use super::super::storage::{
 use super::super::ui::draw_chat_ui;
 use super::{
     handle_archive_confirm_mode, handle_archive_list_mode, handle_browse_mode, handle_chat_mode,
-    handle_config_mode, handle_select_model, handle_tool_confirm_mode,
+    handle_config_mode, handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
@@ -46,6 +46,7 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                     }
                 }
                 ChatMode::SelectModel => handle_select_model(app, key),
+                ChatMode::SelectTheme => handle_select_theme(app, key),
                 ChatMode::Browse => handle_browse_mode(app, key),
                 ChatMode::Help => {
                     app.update(Action::ExitToChat);

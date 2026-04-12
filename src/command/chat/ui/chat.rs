@@ -44,6 +44,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     match app.ui.mode {
         ChatMode::Help => draw_help(f, chunks[1], app),
         ChatMode::SelectModel => draw_model_selector(f, chunks[1], app),
+        ChatMode::SelectTheme => draw_theme_selector(f, chunks[1], app),
         ChatMode::Config => draw_config_screen(f, chunks[1], app),
         ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
         ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
@@ -889,6 +890,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             }
         }
         ChatMode::ToolConfirm => vec![("↑↓", "选择"), ("Enter", "确认"), ("Esc", "拒绝")],
+        ChatMode::SelectTheme => vec![("↑↓/jk", "选择"), ("Enter", "确认"), ("Esc", "返回")],
     };
 
     // 按终端宽度自适应：依次累加 hint，直到放不下为止
@@ -1020,6 +1022,64 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
     f.render_stateful_widget(list, area, &mut app.ui.model_list_state);
 }
 
+/// 绘制主题选择界面
+pub fn draw_theme_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
+    use super::super::theme::ThemeName;
+
+    let t = &app.ui.theme;
+    let all = ThemeName::all();
+    let items: Vec<ListItem> = all
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let is_active = *name == app.state.agent_config.theme;
+            let marker = if is_active {
+                format!("{} ", super::components::TOGGLE_ON)
+            } else {
+                format!("{} ", super::components::TOGGLE_OFF)
+            };
+            let is_selected = i == app.ui.theme_list_state.selected().unwrap_or(0);
+            let style = if is_selected {
+                Style::default()
+                    .fg(t.text_white)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_active {
+                Style::default()
+                    .fg(t.model_sel_active)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.model_sel_inactive)
+            };
+            let pointer = if is_selected {
+                super::components::POINTER_SELECTED
+            } else {
+                super::components::POINTER_EMPTY
+            };
+            let detail = format!("{}{}{}", pointer, marker, name.display_name());
+            ListItem::new(Line::from(Span::styled(detail, style)))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(t.model_sel_border))
+                .title(Span::styled(
+                    " 🎨 选择主题 ",
+                    Style::default()
+                        .fg(t.config_label_selected)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(t.bg_title)),
+        )
+        .highlight_style(Style::default())
+        .highlight_symbol("");
+
+    f.render_stateful_widget(list, area, &mut app.ui.theme_list_state);
+}
+
 /// 绘制帮助界面
 pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
@@ -1031,7 +1091,10 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ("↑ / ↓", "滚动对话记录"),
         ("← / →", "移动输入光标"),
         ("Home / End", "光标跳到行首/行尾"),
-        ("/", "斜杠命令（copy/log/browse/config/model/archive）"),
+        (
+            "/",
+            "斜杠命令（copy/log/browse/config/model/archive/theme）",
+        ),
         ("@", "引用（skill/file/command）"),
         ("Ctrl+O", "展开/折叠工具详情"),
         ("Esc / Ctrl+C", "退出对话"),

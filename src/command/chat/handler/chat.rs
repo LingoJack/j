@@ -4,6 +4,7 @@ use super::super::autocomplete::{
     get_filtered_skill_names, get_filtered_slash_commands, update_at_filter, update_command_filter,
     update_file_filter, update_skill_filter,
 };
+use super::super::theme::ThemeName;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -800,6 +801,15 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
         }
         SlashCommand::Clear => {
             app.update(Action::ClearSession);
+        }
+        SlashCommand::Theme => {
+            let all = ThemeName::all();
+            let current_idx = all
+                .iter()
+                .position(|t| *t == app.state.agent_config.theme)
+                .unwrap_or(0);
+            app.ui.theme_list_state.select(Some(current_idx));
+            app.update(Action::EnterMode(ChatMode::SelectTheme));
         }
     }
 }
