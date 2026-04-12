@@ -60,13 +60,9 @@ impl PlanModeState {
         }
     }
 
-    /// 退出 plan mode，同时清理 plan_file_path 和 plan 文件
+    /// 退出 plan mode，保留 plan 文件（不删除）
     pub fn exit(&self) {
         if let Ok(mut guard) = self.inner.lock() {
-            // 清理 plan 文件
-            if let Some(ref path) = guard.plan_file_path {
-                let _ = std::fs::remove_file(path);
-            }
             guard.active = false;
             guard.plan_file_path = None;
         }
@@ -113,10 +109,19 @@ pub fn is_allowed_in_plan_mode(tool_name: &str) -> bool {
 
 // ========== EnterPlanModeTool ==========
 
+/// 将描述文本转为安全的文件名（只保留字母数字、中文、下划线、短横线）
+fn sanitize_filename(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c > '\u{4e00}')
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
 /// EnterPlanMode 参数
 #[derive(Deserialize, JsonSchema)]
 struct EnterPlanModeParams {
-    /// Optional short description of what you plan to investigate
+    /// Short description used as the plan file name (e.g. "add-auth" becomes plan-add-auth.md)
     #[serde(default)]
     description: Option<String>,
 }
@@ -148,6 +153,10 @@ impl Tool for EnterPlanModeTool {
         - Unclear requirements that need exploration first
 
         Do NOT use for: single-line fixes, typos, or purely research/exploration tasks.
+
+        The `description` parameter is used as the plan file name (e.g. "add-auth" → plan-add-auth.md).
+        If a plan file with the same name already exists, you will be warned so you can choose a different name.
+        Plan files are preserved after exiting plan mode for future reference.
         "#
     }
 
@@ -161,27 +170,60 @@ impl Tool for EnterPlanModeTool {
         let description = params
             .description
             .as_deref()
-            .unwrap_or("implementation plan");
+            .unwrap_or("implementation-plan");
 
-        // 创建 plan 文件（用 PID 隔离，避免多实例共享同一目录时互相覆盖）
+        // 创建 plan 目录
         let plan_dir = crate::command::chat::permission::JcliConfig::ensure_config_dir()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(".jcli"));
-        let _ = std::fs::create_dir_all(&plan_dir);
-        let plan_file = plan_dir.join(format!("plan-{}.md", std::process::id()));
+        let plans_dir = plan_dir.join("plans");
+        let _ = std::fs::create_dir_all(&plans_dir);
+
+        // 基于描述生成文件名（如 plan-add-auth.md）
+        let safe_name = sanitize_filename(description);
+        let file_name = if safe_name.is_empty() {
+            format!("plan-{}.md", std::process::id())
+        } else {
+            format!("plan-{}.md", safe_name)
+        };
+        let plan_file = plans_dir.join(&file_name);
         let plan_path = plan_file.display().to_string();
+
+        // 检查同名文件是否已存在
+        let mut warning = String::new();
+        if plan_file.exists() {
+            match std::fs::read_to_string(&plan_file) {
+                Ok(existing) => {
+                    // 提取已有 plan 的第一行标题作为摘要
+                    let first_line = existing.lines().next().unwrap_or("");
+                    warning = format!(
+                        "⚠️ Plan file already exists: {} (content starts with: {})\n\
+                         The existing file will be overwritten. Consider using a different description to avoid this.\n\n",
+                        plan_path, first_line
+                    );
+                }
+                Err(_) => {
+                    warning = format!(
+                        "⚠️ Plan file already exists: {}\n\
+                         The existing file will be overwritten. Consider using a different description to avoid this.\n\n",
+                        plan_path
+                    );
+                }
+            }
+        }
 
         // 写入初始模板
         let template = format!("# Plan: {}\n\n## Steps\n\n1. \n\n## Notes\n\n", description);
         let _ = std::fs::write(&plan_file, &template);
 
-        // 原子性地进入 plan mode（内部检查 is_active，避免 TOCTOU 竞态）
+        // 原子性地进入 plan mode
         match self.plan_state.enter(plan_path.clone()) {
             Ok(()) => ToolResult {
                 output: format!(
-                    "Entered plan mode. Plan file created at: {}\n\
+                    "{}Entered plan mode. Plan file: {}\n\
                      In plan mode, only read-only tools are available.\n\
-                     Write your plan to the plan file, then use ExitPlanMode when ready for user approval.",
-                    plan_path
+                     Write your plan to the plan file, then use ExitPlanMode when ready for user approval.\n\
+                     Plan files are preserved after exit for future reference.",
+                    warning, plan_path
                 ),
                 is_error: false,
                 images: vec![],
@@ -323,17 +365,31 @@ impl Tool for ExitPlanModeTool {
         match response_rx.recv() {
             Ok(response) => {
                 if response.contains("同意并清空上下文") {
+                    let plan_file_path = self.plan_state.get_plan_file_path();
                     self.plan_state.exit();
+                    // plan 文件保留不删除，告知路径
+                    let preserved_msg = plan_file_path
+                        .as_deref()
+                        .map(|p| format!("\nPlan file preserved at: {}", p))
+                        .unwrap_or_default();
                     // 用 PLAN_CLEAR_CONTEXT: 前缀传递计划内容，agent loop 检测到此信号后清空上下文
                     ToolResult {
-                        output: format!("PLAN_CLEAR_CONTEXT:{}", plan_content),
+                        output: format!("PLAN_CLEAR_CONTEXT:{}{}", plan_content, preserved_msg),
                         is_error: false,
                         images: vec![],
                     }
                 } else if response.contains("同意") {
+                    let plan_file_path = self.plan_state.get_plan_file_path();
                     self.plan_state.exit();
+                    let preserved_msg = plan_file_path
+                        .as_deref()
+                        .map(|p| format!("\nPlan file preserved at: {}", p))
+                        .unwrap_or_default();
                     ToolResult {
-                        output: "Plan approved! Exited plan mode. You can now proceed with implementation.".to_string(),
+                        output: format!(
+                            "Plan approved! Exited plan mode. You can now proceed with implementation.{}",
+                            preserved_msg
+                        ),
                         is_error: false,
                         images: vec![],
                     }
