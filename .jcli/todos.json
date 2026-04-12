@@ -22,6 +22,21 @@
   {
     "id": "5",
     "content": "测试大文件打开性能",
-    "status": "in_progress"
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "在 autocomplete.rs 添加 Clear 变体",
+    "status": "completed"
+  },
+  {
+    "id": "7",
+    "content": "在 handler/chat.rs 添加 Clear 执行逻辑",
+    "status": "completed"
+  },
+  {
+    "id": "8",
+    "content": "编译验证",
+    "status": "completed"
   }
 ]

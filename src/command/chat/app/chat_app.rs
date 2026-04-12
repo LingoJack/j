@@ -2509,18 +2509,31 @@ impl ChatApp {
         self.last_persisted_len = self.state.session.messages.len();
     }
 
-    /// 清空对话
+    /// 清空对话（创建新会话）
     pub fn clear_session(&mut self) {
+        // 先持久化当前会话
+        self.persist_new_messages();
+        // 生成新会话 ID
+        let new_id = generate_session_id();
+        self.session_id = new_id.clone();
+        // 清空消息
         self.state.session.messages.clear();
+        self.last_persisted_len = 0;
         self.ui.scroll_offset = 0;
         self.ui.msg_lines_cache = None;
-        append_session_event(&self.session_id, &SessionEvent::Clear);
-        self.last_persisted_len = 0;
         // 重置上下文 token 计数
         if let Ok(mut ct) = self.context_tokens.lock() {
             *ct = 0;
         }
-        self.show_toast("对话已清空", false);
+        // 广播同步 + 切换通知
+        let sync = self.build_sync_outbound();
+        self.broadcast_ws(sync);
+        self.broadcast_ws(
+            crate::command::chat::remote::protocol::WsOutbound::SessionSwitched {
+                session_id: new_id,
+            },
+        );
+        self.show_toast("已创建新对话", false);
     }
 
     /// 切换模型

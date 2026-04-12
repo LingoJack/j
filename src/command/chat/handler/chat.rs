@@ -909,5 +909,8 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
                 app.update(Action::StartArchiveConfirm);
             }
         }
+        SlashCommand::Clear => {
+            app.update(Action::ClearSession);
+        }
     }
 }

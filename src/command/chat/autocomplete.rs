@@ -17,6 +17,8 @@ pub enum SlashCommand {
     Model,
     /// 归档对话
     Archive,
+    /// 清空当前对话
+    Clear,
 }
 
 impl SlashCommand {
@@ -29,6 +31,7 @@ impl SlashCommand {
             SlashCommand::Config => "/config".to_string(),
             SlashCommand::Model => "/model".to_string(),
             SlashCommand::Archive => "/archive".to_string(),
+            SlashCommand::Clear => "/clear".to_string(),
         }
     }
 
@@ -41,6 +44,7 @@ impl SlashCommand {
             SlashCommand::Config => "打开配置界面".to_string(),
             SlashCommand::Model => "切换模型".to_string(),
             SlashCommand::Archive => "归档当前对话".to_string(),
+            SlashCommand::Clear => "新建对话".to_string(),
         }
     }
 
@@ -53,6 +57,7 @@ impl SlashCommand {
             SlashCommand::Config,
             SlashCommand::Model,
             SlashCommand::Archive,
+            SlashCommand::Clear,
         ]
     }
 }
