@@ -147,14 +147,16 @@ pub fn open_markdown_editor_with_content(
     Ok(result)
 }
 
-/// 打开脚本编辑器（使用 Dark 主题的便捷函数）
+/// 打开脚本编辑器（读取用户保存的主题偏好）
 ///
 /// 适用于脚本编辑等不需要外部传入主题的场景
+/// 会从 agent_config 中加载用户上次的 theme 选择
 pub fn open_script_editor(
     title: &str,
     initial_lines: &[String],
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
-    let theme = Theme::dark();
+    let agent_config = crate::command::chat::storage::load_agent_config();
+    let theme = Theme::from_name(&agent_config.theme);
     let editor_theme = EditorTheme::from(&theme);
     let result = core_open_with_content(
         title,
