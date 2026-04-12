@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::OnceLock;
 
 use crate::assets::quotes_text;
@@ -10,10 +9,7 @@ static QUOTES: OnceLock<Vec<String>> = OnceLock::new();
 fn get_quotes() -> &'static Vec<String> {
     QUOTES.get_or_init(|| {
         let text = quotes_text();
-        match text {
-            Cow::Borrowed(s) => parse_lines(s),
-            Cow::Owned(ref s) => parse_lines(s),
-        }
+        parse_lines(text)
     })
 }
 

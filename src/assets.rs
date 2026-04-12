@@ -86,10 +86,11 @@ pub fn default_soul() -> Cow<'static, str> {
 ///
 /// 用途: Chat UI 欢迎框随机展示一句诗句
 /// 格式: 纯文本，每行一句
-pub fn quotes_text() -> Cow<'static, str> {
-    Assets::get("quotes.txt")
-        .map(|f| String::from_utf8_lossy(&f.data).into_owned().into())
-        .unwrap_or_else(|| Cow::Borrowed(""))
+///
+/// 使用 `include_str!` 而非 `include_dir!` 的 `Assets::get`，
+/// 因为 proc macro 增量编译缓存可能导致新增文件不被重新扫描。
+pub fn quotes_text() -> &'static str {
+    include_str!("../assets/quotes.txt")
 }
 
 /// 安装预设 skills 到用户数据目录
