@@ -30,7 +30,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // 标题栏（顶部分割线 + 内容行 + 底部留白）
+            Constraint::Length(2), // 标题栏（顶部分割线 + 内容行）
             Constraint::Min(5),    // 消息区
             Constraint::Length(5), // 输入区
             Constraint::Length(1), // 操作提示栏（始终可见）
@@ -191,10 +191,6 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let content_line =
         Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
-
-    // 第三行：底部留白（与对话记录保持间距）
-    let empty_line = Paragraph::new(Line::default()).style(Style::default().bg(t.bg_primary));
-    f.render_widget(empty_line, Rect::new(area.x, area.y + 2, area.width, 1));
 }
 
 /// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用

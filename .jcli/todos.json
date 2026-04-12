@@ -1,7 +1,7 @@
 [
   {
-    "id": "5",
-    "content": "修复 r 命令 bug：内容未在新行写入",
+    "id": "6",
+    "content": "减少标题栏高度，让对话记录区与状态栏更贴近",
     "status": "completed"
   }
 ]
