@@ -1,12 +1,22 @@
 [
   {
     "id": "1",
-    "content": "改造 draw_at_popup 函数，按照 / 弹窗的三段式结构（pointer + label + desc）和配色风格重写",
+    "content": "改造 draw_at_popup：保留 [type] 前缀 + 对齐 / 弹窗样式",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "编译验证改动无误",
+    "content": "改造 draw_skill_popup：对齐 / 弹窗样式（pointer + 三段式 + bg_primary）",
     "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "改造 draw_file_popup：对齐 / 弹窗样式（pointer + 三段式 + bg_primary）",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "编译验证所有改动",
+    "status": "in_progress"
   }
 ]

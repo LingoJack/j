@@ -140,7 +140,7 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         "─".repeat(area.width as usize),
         Style::default().fg(t.border_title),
     ))
-    .style(Style::default().bg(t.bg_title));
+    .style(Style::default().bg(t.bg_primary));
     f.render_widget(top_separator, Rect::new(area.x, area.y, area.width, 1));
 
     // 第二行：状态信息
@@ -189,11 +189,11 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     // 渲染内容行
     let content_line =
-        Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_title));
+        Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
 
     // 第三行：底部留白（与对话记录保持间距）
-    let empty_line = Paragraph::new(Line::default()).style(Style::default().bg(t.bg_title));
+    let empty_line = Paragraph::new(Line::default()).style(Style::default().bg(t.bg_primary));
     f.render_widget(empty_line, Rect::new(area.x, area.y + 2, area.width, 1));
 }
 
@@ -1232,14 +1232,14 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         .iter()
         .take(max_items)
         .map(|item| match item {
-            AtPopupItem::Category(s) => s.clone(),
-            AtPopupItem::Skill(s) => s.clone(),
-            AtPopupItem::Command(s) => s.clone(),
-            AtPopupItem::File(s) => s.clone(),
+            AtPopupItem::Category(s) => format!("[cat] {}", s),
+            AtPopupItem::Skill(s) => format!("[skill] {}", s),
+            AtPopupItem::Command(s) => format!("[cmd] {}", s),
+            AtPopupItem::File(s) => format!("[file] {}", s),
         })
         .collect();
 
-    // 三段式渲染：pointer + 名称(加粗) + 描述（与 / 弹窗风格一致）
+    // 三段式渲染：pointer + [type] 名称 + 描述（与 / 弹窗风格一致）
     let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
@@ -1248,18 +1248,35 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
 
-            let (name, name_color, desc) = match item {
-                AtPopupItem::Category(s) => (s.as_str(), t.text_dim, "category"),
-                AtPopupItem::Skill(s) => (s.as_str(), t.label_ai, "skill"),
-                AtPopupItem::Command(s) => (s.as_str(), t.text_system, "command"),
-                AtPopupItem::File(s) => (s.as_str(), t.label_user, "file"),
+            let (tag, tag_color, name, desc) = match item {
+                AtPopupItem::Category(s) => ("cat", t.text_dim, "", s.as_str()),
+                AtPopupItem::Skill(s) => ("skill", t.label_ai, s.as_str(), "技能"),
+                AtPopupItem::Command(s) => ("cmd", t.text_system, s.as_str(), "命令"),
+                AtPopupItem::File(s) => ("file", t.label_user, s.as_str(), "文件"),
+            };
+
+            let name_part = if name.is_empty() {
+                // Category: 显示分类标签本身作为主要名称
+                let cat_name = match item {
+                    AtPopupItem::Category(s) => s.as_str(),
+                    _ => "",
+                };
+                format!("{:<12}", cat_name.trim_end_matches(':'))
+            } else {
+                format!("{:<12}", name)
             };
 
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("{:<16}", name),
-                    Style::default().fg(name_color).add_modifier(Modifier::BOLD),
+                    format!("[{:<5}]", tag),
+                    Style::default().fg(tag_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    name_part,
+                    Style::default()
+                        .fg(t.text_white)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(desc.to_string(), Style::default().fg(t.text_dim)),
             ]))
@@ -1295,23 +1312,34 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         return;
     }
     let max_items = filtered.len().min(15);
-    let labels: Vec<String> = filtered
-        .iter()
-        .take(max_items)
-        .map(|n| format!("  {}  ", n))
-        .collect();
+    let selected = app
+        .ui
+        .file_popup_selected
+        .min(filtered.len().saturating_sub(1));
+
+    let labels: Vec<String> = filtered.iter().take(max_items).cloned().collect();
+
     let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
-        .map(|name| {
-            let style = if name.ends_with('/') {
-                Style::default().fg(Color::Cyan)
-            } else {
-                Style::default().fg(t.text_white)
-            };
-            ListItem::new(Line::from(Span::styled(format!("  {}  ", name), style)))
+        .enumerate()
+        .map(|(i, name)| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
+            let is_dir = name.ends_with('/');
+            let name_color = if is_dir { Color::Cyan } else { t.text_white };
+            let desc = if is_dir { "目录" } else { "文件" };
+            ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                Span::styled(
+                    format!("{:<24}", name),
+                    Style::default().fg(name_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(desc.to_string(), Style::default().fg(t.text_dim)),
+            ]))
         })
         .collect();
+
     let title = if app.ui.file_popup_filter.is_empty() {
         " Files ".to_string()
     } else {
@@ -1323,12 +1351,12 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         items,
         &labels,
         title,
-        Color::Cyan,
-        t.border_title,
-        t.bg_title,
-        t.model_sel_highlight_bg,
-        t.model_sel_highlight_fg,
-        app.ui.file_popup_selected,
+        t.md_h1,
+        t.md_h1,
+        t.bg_primary,
+        t.md_h1,
+        t.bg_primary,
+        selected,
     );
 }
 
@@ -1340,20 +1368,31 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         return;
     }
     let max_items = filtered.len().min(8);
-    let labels: Vec<String> = filtered
+    let selected = app
+        .ui
+        .skill_popup_selected
+        .min(filtered.len().saturating_sub(1));
+
+    let labels: Vec<String> = filtered.iter().take(max_items).map(|n| n.clone()).collect();
+
+    let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
-        .map(|n| format!("  {}  ", n))
-        .collect();
-    let items: Vec<ListItem<'static>> = labels
-        .iter()
-        .map(|label| {
-            ListItem::new(Line::from(Span::styled(
-                label.clone(),
-                Style::default().fg(t.label_ai),
-            )))
+        .enumerate()
+        .map(|(i, name)| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
+            ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                Span::styled(
+                    format!("{:<16}", name),
+                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("skill".to_string(), Style::default().fg(t.text_dim)),
+            ]))
         })
         .collect();
+
     let title = if app.ui.skill_popup_filter.is_empty() {
         " Skills ".to_string()
     } else {
@@ -1365,12 +1404,12 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         items,
         &labels,
         title,
-        t.label_ai,
-        t.border_title,
-        t.bg_title,
-        t.model_sel_highlight_bg,
-        t.model_sel_highlight_fg,
-        app.ui.skill_popup_selected,
+        t.md_h1,
+        t.md_h1,
+        t.bg_primary,
+        t.md_h1,
+        t.bg_primary,
+        selected,
     );
 }
 

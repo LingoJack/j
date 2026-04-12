@@ -47,7 +47,7 @@ fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
 ///   3. 可滚动列表：只有列表项跟随选中项滚动
 pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
-    let bg = t.bg_title;
+    let bg = t.bg_primary;
 
     let title = match app.ui.config_tab {
         ConfigTab::Model => " \u{2699}\u{fe0f} \u{6a21}\u{578b}\u{914d}\u{7f6e} ",
