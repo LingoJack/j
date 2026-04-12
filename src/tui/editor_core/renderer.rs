@@ -282,6 +282,7 @@ impl MarkdownRenderer {
                             .bg(self.theme.bg_primary),
                     ),
                     Span::styled("│", self.style_code(self.theme.text_dim)),
+                    Span::styled(" ", Style::default().bg(self.theme.code_bg)),
                 ];
                 // 续行用 code_bg 背景显示源码，不语法高亮（续行是折行片段）
                 spans.push(Span::styled(
@@ -301,6 +302,7 @@ impl MarkdownRenderer {
                     " ".repeat(fill_width),
                     Style::default().bg(self.theme.code_bg),
                 ));
+                spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
                 spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
                 return vec![Line::from(spans)];
             }
@@ -456,6 +458,7 @@ impl MarkdownRenderer {
         // 代码块光标行：添加左边框
         if in_code_block {
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
+            spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
         }
 
         // 计算显示宽度（在 text 被消费之前）
@@ -523,6 +526,7 @@ impl MarkdownRenderer {
                 " ".repeat(fill_width),
                 Style::default().bg(self.theme.code_bg),
             ));
+            spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
         }
 
@@ -618,7 +622,7 @@ impl MarkdownRenderer {
             .map(|(start, end)| self.calculate_code_block_max_width(start, end, lines))
             .unwrap_or(10);
 
-        let total_width = content_max_width + 2;
+        let total_width = content_max_width + 2 + 2; // +2 for left/right padding
 
         if is_start {
             // 开始围栏：┌─ lang ──────┐
@@ -702,6 +706,7 @@ impl MarkdownRenderer {
                     .bg(self.theme.bg_primary),
             ),
             Span::styled("│", self.style_code(self.theme.text_dim)),
+            Span::styled(" ", Style::default().bg(self.theme.code_bg)),
         ];
 
         for span in highlighted_spans {
@@ -715,6 +720,7 @@ impl MarkdownRenderer {
             " ".repeat(fill_width),
             Style::default().bg(self.theme.code_bg),
         ));
+        spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
         spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
 
         Line::from(spans)
