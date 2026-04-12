@@ -459,43 +459,65 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
     let pad: String = " ".repeat(left_pad);
 
     let border_style = Style::default().fg(theme.welcome_border);
-    // 诗句颜色：从精选色盘随机取一种
-    const QUOTE_PALETTE: &[(u8, u8, u8)] = &[
-        (212, 175, 55),  // 古金
-        (255, 183, 197), // 樱花粉
-        (100, 200, 160), // 青瓷绿
-        (135, 188, 235), // 霁蓝
-        (200, 130, 210), // 紫藤
-        (255, 160, 80),  // 琥珀橙
-        (180, 220, 120), // 嫩芽绿
-        (240, 120, 130), // 胭脂红
-        (100, 200, 220), // 湖水蓝
-        (230, 195, 140), // 黄沙
-        (160, 140, 210), // 暮霭紫
-        (180, 230, 190), // 月白绿
-        (255, 210, 100), // 杏黄
-        (140, 180, 230), // 远山蓝
-        (210, 150, 120), // 赭石
-        (170, 220, 200), // 碧玉
+    // 渐变色对：每对颜色之间有内在关联，平滑过渡
+    const GRADIENT_PAIRS: &[((u8, u8, u8), (u8, u8, u8))] = &[
+        ((212, 175, 55), (255, 230, 140)),  // 古金 → 淡金
+        ((240, 120, 130), (255, 190, 170)), // 胭脂 → 桃粉
+        ((100, 180, 220), (160, 230, 210)), // 霁蓝 → 碧玉
+        ((180, 90, 210), (220, 150, 230)),  // 紫藤 → 薰衣草
+        ((80, 180, 140), (160, 230, 180)),  // 青瓷 → 嫩绿
+        ((220, 130, 70), (255, 200, 120)),  // 赭橙 → 杏黄
+        ((100, 160, 230), (180, 200, 255)), // 远山蓝 → 月色
+        ((200, 100, 120), (240, 160, 140)), // 暮红 → 霞光
+        ((90, 200, 180), (150, 230, 220)),  // 湖水 → 冰蓝
+        ((160, 130, 210), (210, 180, 240)), // 暮霭 → 淡紫
+        ((230, 180, 80), (200, 150, 60)),   // 琥珀 → 深金
+        ((120, 200, 120), (180, 230, 160)), // 春芽 → 嫩黄绿
     ];
-    let (r, g, b) = QUOTE_PALETTE[quote_idx % QUOTE_PALETTE.len()];
-    let quote_style = Style::default().fg(ratatui::style::Color::Rgb(r, g, b));
 
     let quote = super::quotes::get_quote(quote_idx);
     // 按显示宽度截断诗句，不超过 inner
-    let mut quote_display = String::new();
+    let mut quote_chars: Vec<char> = Vec::new();
     let mut w = 0;
     for ch in quote.chars() {
         let cw = UnicodeWidthStr::width(ch.to_string().as_str());
         if w + cw > inner {
             break;
         }
-        quote_display.push(ch);
+        quote_chars.push(ch);
         w += cw;
     }
-    let text_display_width = UnicodeWidthStr::width(quote_display.as_str());
+    let text_display_width = w;
     let pl = (inner - text_display_width) / 2;
     let pr = inner - text_display_width - pl;
+
+    // 双色渐变：在选定的颜色对之间按字符位置线性插值
+    let (start_c, end_c) = GRADIENT_PAIRS[quote_idx % GRADIENT_PAIRS.len()];
+    let n = quote_chars.len().max(1);
+    let colored_spans: Vec<Span<'a>> = quote_chars
+        .iter()
+        .enumerate()
+        .map(|(i, ch)| {
+            let t = i as f32 / (n - 1).max(1) as f32;
+            let r = (start_c.0 as f32 + (end_c.0 as f32 - start_c.0 as f32) * t) as u8;
+            let g = (start_c.1 as f32 + (end_c.1 as f32 - start_c.1 as f32) * t) as u8;
+            let b = (start_c.2 as f32 + (end_c.2 as f32 - start_c.2 as f32) * t) as u8;
+            Span::styled(
+                ch.to_string(),
+                Style::default().fg(ratatui::style::Color::Rgb(r, g, b)),
+            )
+        })
+        .collect();
+
+    let mut quote_line_spans: Vec<Span<'a>> = vec![Span::styled(
+        format!("{pad}\u{2502}{}", " ".repeat(pl)),
+        border_style,
+    )];
+    quote_line_spans.extend(colored_spans);
+    quote_line_spans.push(Span::styled(
+        format!("{}\u{2502}", " ".repeat(pr)),
+        border_style,
+    ));
 
     vec![
         Line::from(""),
@@ -503,12 +525,8 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
         Line::from(Span::styled(format!("{pad}{h_bar_top}"), border_style)),
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        // 诗句行：居中显示，使用 unicode 显示宽度计算 padding
-        Line::from(vec![
-            Span::styled(format!("{pad}\u{2502}{}", " ".repeat(pl)), border_style),
-            Span::styled(quote_display, quote_style),
-            Span::styled(format!("{}\u{2502}", " ".repeat(pr)), border_style),
-        ]),
+        // 诗句行：逐字彩色居中显示
+        Line::from(quote_line_spans),
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
         Line::from(Span::styled(format!("{pad}{h_bar_bot}"), border_style)),
