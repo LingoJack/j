@@ -165,13 +165,18 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
             format!("📬 Message: {}", msg_count),
             Style::default().fg(t.title_count),
         ),
-        Span::styled(
+        Span::styled("  │  ", Style::default().fg(t.title_separator)),
+    ];
+
+    // Loading 状态（始终显示分隔符）
+    if !loading.is_empty() {
+        title_spans.push(Span::styled(
             loading,
             Style::default()
                 .fg(t.title_loading)
                 .add_modifier(Modifier::BOLD),
-        ),
-    ];
+        ));
+    }
 
     // 远程控制连接指示器
     if app.remote_connected {
@@ -1334,14 +1339,12 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
             let pointer = if is_selected { "❯ " } else { "  " };
             let is_dir = name.ends_with('/');
             let name_color = if is_dir { Color::Cyan } else { t.label_user };
-            let desc = if is_dir { "目录" } else { "文件" };
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("{:<16}", name),
+                    name.clone(),
                     Style::default().fg(name_color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(desc.to_string(), Style::default().fg(t.text_dim)),
             ]))
         })
         .collect();
