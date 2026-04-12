@@ -1332,20 +1332,58 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         return;
     }
     let max_items = filtered.len().min(8);
-    let labels: Vec<String> = filtered
+    let selected = app
+        .ui
+        .command_popup_selected
+        .min(filtered.len().saturating_sub(1));
+
+    // 构建带 description 的命令列表
+    let commands: Vec<(String, String)> = app
+        .state
+        .loaded_commands
         .iter()
+        .filter(|c| {
+            !app.state
+                .agent_config
+                .disabled_commands
+                .iter()
+                .any(|d| d == &c.frontmatter.name)
+        })
+        .filter(|c| {
+            let f = app.ui.command_popup_filter.to_lowercase();
+            f.is_empty() || c.frontmatter.name.to_lowercase().contains(&f)
+        })
         .take(max_items)
-        .map(|n| format!("  {}  ", n))
-        .collect();
-    let items: Vec<ListItem<'static>> = labels
-        .iter()
-        .map(|label| {
-            ListItem::new(Line::from(Span::styled(
-                label.clone(),
-                Style::default().fg(t.label_ai),
-            )))
+        .map(|c| {
+            (
+                c.frontmatter.name.clone(),
+                c.frontmatter.description.clone(),
+            )
         })
         .collect();
+
+    let labels: Vec<String> = commands
+        .iter()
+        .map(|(name, desc)| format!("  {}  - {}", name, desc))
+        .collect();
+
+    let items: Vec<ListItem<'static>> = commands
+        .iter()
+        .enumerate()
+        .map(|(i, (name, desc))| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
+            ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                Span::styled(
+                    format!("{:<12}", name),
+                    Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(desc.clone(), Style::default().fg(t.text_dim)),
+            ]))
+        })
+        .collect();
+
     let title = if app.ui.command_popup_filter.is_empty() {
         " Commands ".to_string()
     } else {
@@ -1362,7 +1400,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         t.bg_title,
         t.model_sel_highlight_bg,
         t.model_sel_highlight_fg,
-        app.ui.command_popup_selected,
+        selected,
     );
 }
 
@@ -1382,19 +1420,24 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         .map(|cmd| format!("{} - {}", cmd.display_label(), cmd.description()))
         .collect();
 
+    let selected = app
+        .ui
+        .slash_popup_selected
+        .min(filtered.len().saturating_sub(1));
     let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
-        .map(|cmd| {
+        .enumerate()
+        .map(|(i, cmd)| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
             ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    cmd.display_label(),
+                    format!("{:<10}", cmd.display_label()),
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!(" - {}", cmd.description()),
-                    Style::default().fg(t.text_dim),
-                ),
+                Span::styled(cmd.description(), Style::default().fg(t.text_dim)),
             ]))
         })
         .collect();

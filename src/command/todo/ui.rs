@@ -454,23 +454,26 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
     let dim_color = app.theme.text_dim;
 
     // 构建列表项
+    let selected = app.cmd_popup_selected.min(item_count.saturating_sub(1));
     let list_items: Vec<ListItem> = items
         .iter()
-        .map(|(_, key, label)| {
+        .enumerate()
+        .map(|(i, (_, key, label))| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
             ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(text_color)),
                 Span::styled(
-                    format!("  {}", key),
+                    format!("{:<8}", key),
                     Style::default().fg(text_color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" - {}", label), Style::default().fg(dim_color)),
+                Span::styled(label.to_string(), Style::default().fg(dim_color)),
             ]))
         })
         .collect();
 
     let mut list_state = ListState::default();
-    list_state.select(Some(
-        app.cmd_popup_selected.min(item_count.saturating_sub(1)),
-    ));
+    list_state.select(Some(selected));
 
     let list = List::new(list_items)
         .block(
@@ -489,7 +492,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
         .highlight_style(
             Style::default()
                 .bg(highlight_bg)
-                .fg(Color::Black)
+                .fg(popup_bg)
                 .add_modifier(Modifier::BOLD),
         );
 
