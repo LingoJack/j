@@ -213,31 +213,53 @@ impl MarkdownEditor {
             }
         }
 
-        // 命令面板模式：拦截上下键移动选中项
-        if let Mode::CommandPanel(filter) = self.vim.mode() {
-            let filtered = filter_commands(filter);
-            match input.key {
-                Key::Up => {
-                    if !filtered.is_empty() {
-                        if self.cmd_popup_selected > 0 {
-                            self.cmd_popup_selected -= 1;
-                        } else {
-                            self.cmd_popup_selected = filtered.len() - 1;
+        // 命令面板模式：拦截上下键和回车键
+        // 先克隆 filter 以释放 self.vim 的借用，避免后续调用 execute_command 时的借用冲突
+        {
+            let filter_clone = match self.vim.mode() {
+                Mode::CommandPanel(f) => Some(f.clone()),
+                _ => None,
+            };
+            if let Some(filter) = filter_clone {
+                let filtered = filter_commands(&filter);
+                match input.key {
+                    Key::Up => {
+                        if !filtered.is_empty() {
+                            if self.cmd_popup_selected > 0 {
+                                self.cmd_popup_selected -= 1;
+                            } else {
+                                self.cmd_popup_selected = filtered.len() - 1;
+                            }
                         }
+                        return EditorAction::Continue;
                     }
-                    return EditorAction::Continue;
-                }
-                Key::Down => {
-                    if !filtered.is_empty() {
-                        if self.cmd_popup_selected < filtered.len() - 1 {
-                            self.cmd_popup_selected += 1;
-                        } else {
-                            self.cmd_popup_selected = 0;
+                    Key::Down => {
+                        if !filtered.is_empty() {
+                            if self.cmd_popup_selected < filtered.len() - 1 {
+                                self.cmd_popup_selected += 1;
+                            } else {
+                                self.cmd_popup_selected = 0;
+                            }
                         }
+                        return EditorAction::Continue;
                     }
-                    return EditorAction::Continue;
+                    Key::Enter => {
+                        let selected = self
+                            .cmd_popup_selected
+                            .min(filtered.len().saturating_sub(1));
+                        if let Some(cmd) = filtered.get(selected) {
+                            let full_cmd = if cmd.name == "jump" {
+                                filter
+                            } else {
+                                cmd.name.to_string()
+                            };
+                            return self.execute_command(&full_cmd);
+                        }
+                        self.vim.set_mode(Mode::Normal);
+                        return EditorAction::Continue;
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
