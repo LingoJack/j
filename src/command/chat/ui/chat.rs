@@ -1105,7 +1105,7 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ("Home / End", "光标跳到行首/行尾"),
         (
             "/",
-            "斜杠命令（copy/log/browse/config/model/archive/theme）",
+            "斜杠命令（copy/log/browse/config/model/archive/theme/resume）",
         ),
         ("@", "引用（skill/file/command）"),
         ("Ctrl+O", "展开/折叠工具详情"),
@@ -1159,13 +1159,15 @@ fn draw_popup_list(
     highlight_bg: ratatui::style::Color,
     highlight_fg: ratatui::style::Color,
     selected: usize,
+    max_visible: usize,
 ) {
     if items.is_empty() {
         return;
     }
     let item_count = items.len();
-    let popup_height = (item_count as u16) + 2;
-    let max_popup_width = (input_area.width as usize * 3 / 4).max(16);
+    let visible_count = item_count.min(max_visible);
+    let popup_height = (visible_count as u16) + 2; // +2 for border
+    let max_popup_width = (input_area.width as usize).saturating_sub(2).max(16);
     let popup_width = item_labels
         .iter()
         .map(|n| display_width(n))
@@ -1308,6 +1310,7 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         t.md_h1,
         t.bg_primary,
         selected,
+        8,
     );
 }
 
@@ -1366,6 +1369,7 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         t.md_h1,
         t.bg_primary,
         selected,
+        8,
     );
 }
 
@@ -1422,6 +1426,7 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         t.md_h1,
         t.bg_primary,
         selected,
+        8,
     );
 }
 
@@ -1501,6 +1506,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         t.md_h1,
         t.bg_primary,
         selected,
+        8,
     );
 }
 
@@ -1513,11 +1519,10 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
     }
 
     // 构建显示项：命令 + 描述
-    let max_items = filtered.len().min(8);
+    // labels 用于计算弹窗宽度，需与实际渲染内容一致
     let labels: Vec<String> = filtered
         .iter()
-        .take(max_items)
-        .map(|cmd| format!("{} - {}", cmd.display_label(), cmd.description()))
+        .map(|cmd| format!("❯ {:<10} {}", cmd.display_label(), cmd.description()))
         .collect();
 
     let selected = app
@@ -1526,7 +1531,6 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         .min(filtered.len().saturating_sub(1));
     let items: Vec<ListItem<'static>> = filtered
         .iter()
-        .take(max_items)
         .enumerate()
         .map(|(i, cmd)| {
             let is_selected = i == selected;
@@ -1560,6 +1564,7 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         t.md_h1,
         t.bg_primary,
         selected,
+        8,
     );
 }
 

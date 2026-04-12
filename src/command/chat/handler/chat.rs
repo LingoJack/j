@@ -5,7 +5,7 @@ use super::super::autocomplete::{
     update_file_filter, update_skill_filter,
 };
 use super::super::theme::ThemeName;
-use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
+use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -814,6 +814,12 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
                 .unwrap_or(0);
             app.ui.theme_list_state.select(Some(current_idx));
             app.update(Action::EnterMode(ChatMode::SelectTheme));
+        }
+        SlashCommand::Resume => {
+            app.update(Action::LoadSessionList);
+            app.ui.config_tab = ConfigTab::Session;
+            app.ui.config_scroll_offset = 0;
+            app.update(Action::EnterMode(ChatMode::Config));
         }
     }
 }

@@ -21,6 +21,8 @@ pub enum SlashCommand {
     Clear,
     /// 切换主题
     Theme,
+    /// 恢复历史会话
+    Resume,
 }
 
 impl SlashCommand {
@@ -35,6 +37,7 @@ impl SlashCommand {
             SlashCommand::Archive => "/archive".to_string(),
             SlashCommand::Clear => "/clear".to_string(),
             SlashCommand::Theme => "/theme".to_string(),
+            SlashCommand::Resume => "/resume".to_string(),
         }
     }
 
@@ -49,6 +52,7 @@ impl SlashCommand {
             SlashCommand::Archive => "归档当前对话".to_string(),
             SlashCommand::Clear => "新建对话".to_string(),
             SlashCommand::Theme => "切换主题".to_string(),
+            SlashCommand::Resume => "恢复历史会话".to_string(),
         }
     }
 
@@ -63,6 +67,7 @@ impl SlashCommand {
             SlashCommand::Archive,
             SlashCommand::Clear,
             SlashCommand::Theme,
+            SlashCommand::Resume,
         ]
     }
 }

@@ -13,10 +13,16 @@ use std::path::PathBuf;
 
 /// 命令面板选项列表 (key, 中文标签)
 pub const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
-    ("filter", "切换过滤"),
+    ("toggle", "切换完成"),
+    ("edit", "编辑"),
     ("add", "添加"),
     ("delete", "删除"),
+    ("copy", "复制"),
+    ("filter", "切换过滤"),
+    ("moveup", "上移排序"),
+    ("movedown", "下移排序"),
     ("save", "保存"),
+    ("quit", "退出"),
     ("help", "帮助"),
 ];
 
@@ -686,8 +692,19 @@ pub fn handle_command_popup_mode(app: &mut TodoApp, key: KeyEvent) {
             let selected = app.cmd_popup_selected.min(items.len().saturating_sub(1));
             if let Some((_, key, _)) = items.get(selected) {
                 match *key {
-                    "filter" => {
-                        app.toggle_filter();
+                    "toggle" => {
+                        app.toggle_done();
+                        return; // toggle_done 会进入 ConfirmReport 模式
+                    }
+                    "edit" => {
+                        if let Some(real_idx) = app.selected_real_index() {
+                            app.input = app.list.items[real_idx].content.clone();
+                            app.cursor_pos = app.input.chars().count();
+                            app.edit_index = Some(real_idx);
+                            app.mode = AppMode::Editing;
+                            app.message = None;
+                        }
+                        return;
                     }
                     "add" => {
                         app.mode = AppMode::Adding;
@@ -706,8 +723,42 @@ pub fn handle_command_popup_mode(app: &mut TodoApp, key: KeyEvent) {
                         }
                         return;
                     }
+                    "copy" => {
+                        if let Some(real_idx) = app.selected_real_index() {
+                            let content = app.list.items[real_idx].content.clone();
+                            if copy_to_clipboard(&content) {
+                                app.message = Some(format!("📋 已复制到剪切板: {}", content));
+                            } else {
+                                app.message = Some("✖️ 复制到剪切板失败".to_string());
+                            }
+                        }
+                    }
+                    "filter" => {
+                        app.toggle_filter();
+                    }
+                    "moveup" => {
+                        app.move_item_up();
+                    }
+                    "movedown" => {
+                        app.move_item_down();
+                    }
                     "save" => {
                         app.save();
+                    }
+                    "quit" => {
+                        if app.is_dirty() {
+                            app.message = Some(
+                                "⚠️ 有未保存的修改！请先 s 保存，或输入 q! 强制退出（丢弃修改）"
+                                    .to_string(),
+                            );
+                            app.quit_input = "q".to_string();
+                        } else {
+                            // 返回 true 表示退出，但这里在子函数中无法直接返回 true
+                            // 设置一个特殊状态让主循环处理
+                            app.mode = AppMode::Normal;
+                            app.message = Some("按 q 或 Esc 退出".to_string());
+                        }
+                        return;
                     }
                     "help" => {
                         app.mode = AppMode::Help;

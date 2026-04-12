@@ -1,7 +1,7 @@
 [
   {
-    "id": "6",
-    "content": "减少标题栏高度，让对话记录区与状态栏更贴近",
+    "id": "1",
+    "content": "修复弹窗滚动支持 - 更新所有 draw_popup_list 调用点",
     "status": "completed"
   }
 ]
