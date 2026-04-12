@@ -1239,47 +1239,60 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         })
         .collect();
 
-    // 三段式渲染：pointer + [type] 名称 + 描述（与 / 弹窗风格一致）
+    // 与 / 弹窗风格一致：pointer + name + desc
     let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
         .enumerate()
         .map(|(i, item)| {
             let is_selected = i == selected;
-            let pointer = if is_selected { "❯ " } else { "  " };
 
-            let (tag, tag_color, name, desc) = match item {
-                AtPopupItem::Category(s) => ("cat", t.text_dim, "", s.as_str()),
-                AtPopupItem::Skill(s) => ("skill", t.label_ai, s.as_str(), "技能"),
-                AtPopupItem::Command(s) => ("cmd", t.text_system, s.as_str(), "命令"),
-                AtPopupItem::File(s) => ("file", t.label_user, s.as_str(), "文件"),
-            };
-
-            let name_part = if name.is_empty() {
-                // Category: 显示分类标签本身作为主要名称
-                let cat_name = match item {
-                    AtPopupItem::Category(s) => s.as_str(),
-                    _ => "",
-                };
-                format!("{:<12}", cat_name.trim_end_matches(':'))
-            } else {
-                format!("{:<12}", name)
-            };
-
-            ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
-                Span::styled(
-                    format!("[{:<5}]", tag),
-                    Style::default().fg(tag_color).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    name_part,
-                    Style::default()
-                        .fg(t.text_white)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(desc.to_string(), Style::default().fg(t.text_dim)),
-            ]))
+            match item {
+                AtPopupItem::Category(s) => {
+                    // 分类分隔行：显示为 "skill:" 风格的暗色标签
+                    ListItem::new(Line::from(vec![Span::styled(
+                        format!("  {s}"),
+                        Style::default().fg(t.text_dim),
+                    )]))
+                }
+                AtPopupItem::Skill(s) => {
+                    let pointer = if is_selected { "❯ " } else { "  " };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                        Span::styled(
+                            "[skill]   ".to_string(),
+                            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(s.as_str().to_string(), Style::default().fg(t.text_white)),
+                    ]))
+                }
+                AtPopupItem::Command(s) => {
+                    let pointer = if is_selected { "❯ " } else { "  " };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                        Span::styled(
+                            "[command] ".to_string(),
+                            Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(s.as_str().to_string(), Style::default().fg(t.text_white)),
+                    ]))
+                }
+                AtPopupItem::File(s) => {
+                    let pointer = if is_selected { "❯ " } else { "  " };
+                    let is_dir = s.ends_with('/');
+                    let name_color = if is_dir { Color::Cyan } else { t.text_white };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                        Span::styled(
+                            "[file]    ".to_string(),
+                            Style::default()
+                                .fg(t.label_user)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(s.as_str().to_string(), Style::default().fg(name_color)),
+                    ]))
+                }
+            }
         })
         .collect();
 
@@ -1327,12 +1340,12 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
             let is_dir = name.ends_with('/');
-            let name_color = if is_dir { Color::Cyan } else { t.text_white };
+            let name_color = if is_dir { Color::Cyan } else { t.label_user };
             let desc = if is_dir { "目录" } else { "文件" };
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("{:<24}", name),
+                    format!("{:<16}", name),
                     Style::default().fg(name_color).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(desc.to_string(), Style::default().fg(t.text_dim)),
@@ -1388,7 +1401,7 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
                     format!("{:<16}", name),
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled("skill".to_string(), Style::default().fg(t.text_dim)),
+                Span::styled("技能".to_string(), Style::default().fg(t.text_dim)),
             ]))
         })
         .collect();
@@ -1464,7 +1477,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("{:<12}", name),
+                    format!("{:<16}", name),
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(desc.clone(), Style::default().fg(t.text_dim)),
