@@ -277,7 +277,9 @@ impl MarkdownRenderer {
                 let mut spans = vec![
                     Span::styled(
                         line_num_str,
-                        Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .bg(self.theme.bg_primary),
                     ),
                     Span::styled("│", self.style_code(self.theme.text_dim)),
                 ];
@@ -430,13 +432,13 @@ impl MarkdownRenderer {
     ) -> Line<'static> {
         let in_code_block = code_block_max_width.is_some();
 
-        // 代码块内的光标行使用 code_bg 背景
+        // 代码块内的光标行：文本用 code_bg，行号保持 bg_input
         let (text_style, line_num_bg) = if in_code_block {
             (
                 Style::default()
                     .fg(self.theme.text_normal)
                     .bg(self.theme.code_bg),
-                self.theme.code_bg,
+                self.theme.bg_input,
             )
         } else {
             (
@@ -635,7 +637,9 @@ impl MarkdownRenderer {
             Line::from(vec![
                 Span::styled(
                     line_num,
-                    Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .bg(self.theme.bg_primary),
                 ),
                 Span::styled(left_part, self.style_code(self.theme.text_dim)),
                 Span::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)),
@@ -648,7 +652,9 @@ impl MarkdownRenderer {
             Line::from(vec![
                 Span::styled(
                     line_num,
-                    Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .bg(self.theme.bg_primary),
                 ),
                 Span::styled("└", self.style_code(self.theme.text_dim)),
                 Span::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)),
@@ -691,7 +697,9 @@ impl MarkdownRenderer {
         let mut spans = vec![
             Span::styled(
                 line_num,
-                Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .bg(self.theme.bg_primary),
             ),
             Span::styled("│", self.style_code(self.theme.text_dim)),
         ];
