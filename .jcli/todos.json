@@ -1,22 +1,7 @@
 [
   {
-    "id": "1",
-    "content": "改造 draw_at_popup：保留 [type] 前缀 + 对齐 / 弹窗样式",
+    "id": "5",
+    "content": "修复 r 命令 bug：内容未在新行写入",
     "status": "completed"
-  },
-  {
-    "id": "2",
-    "content": "改造 draw_skill_popup：对齐 / 弹窗样式（pointer + 三段式 + bg_primary）",
-    "status": "completed"
-  },
-  {
-    "id": "3",
-    "content": "改造 draw_file_popup：对齐 / 弹窗样式（pointer + 三段式 + bg_primary）",
-    "status": "completed"
-  },
-  {
-    "id": "4",
-    "content": "编译验证所有改动",
-    "status": "in_progress"
   }
 ]

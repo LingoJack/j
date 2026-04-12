@@ -595,9 +595,20 @@ fn parse_date(s: &str) -> Option<NaiveDate> {
 
 fn append_to_file(path: &Path, content: &str) {
     use std::fs::OpenOptions;
-    use std::io::Write;
-    match OpenOptions::new().create(true).append(true).open(path) {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    match OpenOptions::new().read(true).append(true).open(path) {
         Ok(mut f) => {
+            // 确保文件末尾有换行符，防止内容拼到上一行末尾
+            let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+            if len > 0 {
+                let _ = f.seek(SeekFrom::Start(len - 1));
+                let mut last_byte = [0u8; 1];
+                if f.read_exact(&mut last_byte).is_ok() && last_byte[0] != b'\n' {
+                    let _ = f.write_all(b"\n");
+                }
+                // seek 回末尾继续追加
+                let _ = f.seek(SeekFrom::End(0));
+            }
             if let Err(e) = f.write_all(content.as_bytes()) {
                 error!("✖️ 写入文件失败: {}", e);
             }
