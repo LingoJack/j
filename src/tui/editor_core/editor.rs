@@ -27,6 +27,9 @@ use ratatui::{
 };
 use std::io;
 
+/// 主题画廊项（名称 + 主题）
+pub type ThemeGalleryItem = (&'static str, EditorTheme);
+
 /// 编辑器主结构
 pub struct MarkdownEditor {
     /// 文本缓冲区
@@ -51,11 +54,25 @@ pub struct MarkdownEditor {
     viewport_width: usize,
     /// 命令面板选中项索引
     cmd_popup_selected: usize,
+    /// 主题画廊（名称 + 主题列表）
+    theme_gallery: Vec<ThemeGalleryItem>,
+    /// 当前主题在画廊中的索引
+    theme_index: usize,
+    /// 主题选择弹窗选中项索引
+    theme_popup_selected: usize,
+    /// 状态消息（短暂显示，下次按键清除）
+    status_message: Option<String>,
 }
 
 impl MarkdownEditor {
     /// 创建新的编辑器
-    pub fn new(title: &str, content: &str, theme: EditorTheme, highlight_fn: HighlightFn) -> Self {
+    pub fn new(
+        title: &str,
+        content: &str,
+        theme: EditorTheme,
+        highlight_fn: HighlightFn,
+        theme_gallery: Vec<ThemeGalleryItem>,
+    ) -> Self {
         let buffer = TextBuffer::from_content(content);
         let initial_mode = if content.is_empty() {
             Mode::Insert
@@ -74,6 +91,12 @@ impl MarkdownEditor {
         let viewport_width: usize = 80; // 默认值，会在渲染时更新
         wrap.set_width(viewport_width.saturating_sub(6));
 
+        // 查找当前主题在画廊中的索引
+        let theme_index = theme_gallery
+            .iter()
+            .position(|(_, t)| *t == theme)
+            .unwrap_or(0);
+
         Self {
             buffer,
             wrap,
@@ -86,6 +109,10 @@ impl MarkdownEditor {
             viewport_height: 20,
             viewport_width,
             cmd_popup_selected: 0,
+            theme_gallery,
+            theme_index,
+            theme_popup_selected: theme_index,
+            status_message: None,
         }
     }
 
@@ -146,6 +173,14 @@ impl MarkdownEditor {
 
     /// 处理输入
     pub fn handle_input(&mut self, input: &Input) -> EditorAction {
+        // 清除状态消息
+        self.status_message = None;
+
+        // 主题选择模式：拦截所有按键
+        if self.vim.mode() == &Mode::ThemeSelect {
+            return self.handle_theme_select(input);
+        }
+
         // 全局快捷键
         if input.ctrl && input.key == Key::Char('s') {
             return EditorAction::Submit(self.buffer.to_string());
@@ -410,11 +445,53 @@ impl MarkdownEditor {
                 self.vim.set_mode(Mode::Normal);
                 EditorAction::Continue
             }
+            "theme" => {
+                self.theme_popup_selected = self.theme_index;
+                self.vim.set_mode(Mode::ThemeSelect);
+                EditorAction::Continue
+            }
             _ => {
                 self.vim.set_mode(Mode::Normal);
                 EditorAction::Continue
             }
         }
+    }
+
+    /// 处理主题选择模式按键
+    fn handle_theme_select(&mut self, input: &Input) -> EditorAction {
+        let count = self.theme_gallery.len();
+        match input.key {
+            Key::Esc => {
+                self.vim.set_mode(Mode::Normal);
+            }
+            Key::Up => {
+                if self.theme_popup_selected > 0 {
+                    self.theme_popup_selected -= 1;
+                } else {
+                    self.theme_popup_selected = count - 1;
+                }
+            }
+            Key::Down => {
+                if self.theme_popup_selected < count - 1 {
+                    self.theme_popup_selected += 1;
+                } else {
+                    self.theme_popup_selected = 0;
+                }
+            }
+            Key::Enter => {
+                let idx = self.theme_popup_selected;
+                if idx < count {
+                    self.theme_index = idx;
+                    let (name, new_theme) = &self.theme_gallery[idx];
+                    self.theme = new_theme.clone();
+                    self.renderer.set_theme(new_theme.clone());
+                    self.status_message = Some(format!("主题: {}", name));
+                }
+                self.vim.set_mode(Mode::Normal);
+            }
+            _ => {}
+        }
+        EditorAction::Continue
     }
 
     /// 重建折行缓存
@@ -566,6 +643,11 @@ impl MarkdownEditor {
             let filter = filter.clone();
             self.render_command_popup(f, &filter, area);
         }
+
+        // 渲染主题选择弹窗
+        if self.vim.mode() == &Mode::ThemeSelect {
+            self.render_theme_popup(f, area);
+        }
     }
 
     /// 渲染状态栏
@@ -578,10 +660,22 @@ impl MarkdownEditor {
         } else {
             " NOWRAP "
         };
-        let hints = " Ctrl+S 保存 | Ctrl+Q 取消 | / 命令面板 ";
+        let hints: String = if let Some(ref msg) = self.status_message {
+            msg.clone()
+        } else {
+            " Ctrl+S 保存 | Ctrl+Q 取消 | / 命令面板 ".to_string()
+        };
 
         let used_width = mode_str.len() + pos_str.len() + wrap_str.len() + hints.len();
         let separator = " ".repeat(width.saturating_sub(used_width));
+
+        let hints_style = if self.status_message.is_some() {
+            Style::default()
+                .fg(self.theme.text_bold)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(self.theme.text_dim)
+        };
 
         Line::from(vec![
             Span::styled(
@@ -594,7 +688,7 @@ impl MarkdownEditor {
             Span::styled(pos_str, Style::default().fg(self.theme.text_dim)),
             Span::styled(wrap_str, Style::default().fg(self.theme.text_dim)),
             Span::styled(separator, Style::default().fg(self.theme.text_normal)),
-            Span::styled(hints, Style::default().fg(self.theme.text_dim)),
+            Span::styled(hints, hints_style),
         ])
     }
 
@@ -715,6 +809,81 @@ impl MarkdownEditor {
         f.render_widget(Clear, popup_area);
         f.render_stateful_widget(list, popup_area, &mut list_state);
     }
+
+    /// 渲染主题选择弹窗
+    fn render_theme_popup(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let item_count = self.theme_gallery.len();
+        if item_count == 0 {
+            return;
+        }
+
+        let popup_height = (item_count as u16 + 2).min(area.height.saturating_sub(4));
+        let popup_width = 28u16.min(area.width.saturating_sub(4));
+
+        // 位置：编辑区底部偏左
+        let x = area.x + 2;
+        let y = area
+            .bottom()
+            .saturating_sub(popup_height + 2)
+            .max(area.y + 2);
+        let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+        // 确保选中项在范围内
+        self.theme_popup_selected = self.theme_popup_selected.min(item_count.saturating_sub(1));
+
+        // 构建列表项
+        let list_items: Vec<ListItem> = self
+            .theme_gallery
+            .iter()
+            .enumerate()
+            .map(|(i, (name, _))| {
+                let is_selected = i == self.theme_popup_selected;
+                let is_current = i == self.theme_index;
+                let pointer = if is_selected { "❯ " } else { "  " };
+                let check = if is_current { " ●" } else { "" };
+                let name_style = if is_selected {
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD)
+                } else if is_current {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                ListItem::new(Line::from(vec![
+                    Span::styled(pointer.to_string(), name_style),
+                    Span::styled(format!("{}{}", name, check), name_style),
+                ]))
+            })
+            .collect();
+
+        let mut list_state = ListState::default();
+        list_state.select(Some(self.theme_popup_selected));
+
+        let list = List::new(list_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .title(Span::styled(
+                        " 选择主题 ",
+                        Style::default()
+                            .fg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .style(Style::default().bg(Color::Black)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Magenta)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            );
+
+        f.render_widget(Clear, popup_area);
+        f.render_stateful_widget(list, popup_area, &mut list_state);
+    }
 }
 
 /// 编辑器动作
@@ -737,8 +906,10 @@ pub fn open_markdown_editor_on_terminal(
     content: &str,
     theme: &EditorTheme,
     highlight_fn: HighlightFn,
+    theme_gallery: Vec<ThemeGalleryItem>,
 ) -> io::Result<Option<String>> {
-    let mut editor = MarkdownEditor::new(title, content, theme.clone(), highlight_fn);
+    let mut editor =
+        MarkdownEditor::new(title, content, theme.clone(), highlight_fn, theme_gallery);
 
     loop {
         let size = terminal.size()?;
@@ -770,6 +941,7 @@ pub fn open_markdown_editor(
     content: &str,
     theme: &EditorTheme,
     highlight_fn: HighlightFn,
+    theme_gallery: Vec<ThemeGalleryItem>,
 ) -> io::Result<Option<String>> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -778,8 +950,14 @@ pub fn open_markdown_editor(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result =
-        open_markdown_editor_on_terminal(&mut terminal, title, content, theme, highlight_fn);
+    let result = open_markdown_editor_on_terminal(
+        &mut terminal,
+        title,
+        content,
+        theme,
+        highlight_fn,
+        theme_gallery,
+    );
 
     terminal::disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -793,7 +971,8 @@ pub fn open_markdown_editor_with_content(
     initial_lines: &[String],
     theme: &EditorTheme,
     highlight_fn: HighlightFn,
+    theme_gallery: Vec<ThemeGalleryItem>,
 ) -> io::Result<Option<String>> {
     let content = initial_lines.join("\n");
-    open_markdown_editor(title, &content, theme, highlight_fn)
+    open_markdown_editor(title, &content, theme, highlight_fn, theme_gallery)
 }

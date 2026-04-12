@@ -20,7 +20,7 @@ use crate::command::chat::storage::{
     save_agent_config, save_memory, save_soul, save_system_prompt, soul_path, system_prompt_path,
 };
 use crate::command::chat::teammate::TeammateManager;
-use crate::command::chat::theme::Theme;
+use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::{self, BackgroundManager};
 use crate::command::chat::tools::task;
@@ -200,6 +200,7 @@ impl ChatApp {
                 browse_msg_index: 0,
                 browse_scroll_offset: 0,
                 model_list_state,
+                theme_list_state: ListState::default(),
                 toast: None,
                 msg_lines_cache: None,
                 cached_mention_ranges: None,
@@ -1248,6 +1249,47 @@ impl ChatApp {
             }
             Action::ModelSelectConfirm => {
                 self.switch_model();
+            }
+
+            // ========== 主题选择 ==========
+            Action::ThemeSelectNavigate(dir) => {
+                let count = ThemeName::all().len();
+                if count > 0 {
+                    match dir {
+                        CursorDirection::Up => {
+                            let i = self
+                                .ui
+                                .theme_list_state
+                                .selected()
+                                .map(|i| if i == 0 { count - 1 } else { i - 1 })
+                                .unwrap_or(0);
+                            self.ui.theme_list_state.select(Some(i));
+                        }
+                        CursorDirection::Down => {
+                            let i = self
+                                .ui
+                                .theme_list_state
+                                .selected()
+                                .map(|i| if i >= count - 1 { 0 } else { i + 1 })
+                                .unwrap_or(0);
+                            self.ui.theme_list_state.select(Some(i));
+                        }
+                    }
+                }
+            }
+            Action::ThemeSelectConfirm => {
+                if let Some(sel) = self.ui.theme_list_state.selected() {
+                    let all = ThemeName::all();
+                    if sel < all.len() {
+                        self.state.agent_config.theme = all[sel].clone();
+                        self.ui.theme = Theme::from_name(&all[sel]);
+                        self.ui.msg_lines_cache = None;
+                        let _ = save_agent_config(&self.state.agent_config);
+                        let name = all[sel].display_name();
+                        self.show_toast(format!("已切换主题: {}", name), false);
+                    }
+                }
+                self.ui.mode = ChatMode::Chat;
             }
 
             // ========== 归档管理 ==========

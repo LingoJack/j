@@ -6,7 +6,7 @@
 use ratatui::style::Color;
 
 /// 编辑器主题
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EditorTheme {
     // ===== 全局背景 =====
     pub bg_primary: Color,
