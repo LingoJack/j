@@ -230,7 +230,9 @@ impl MarkdownRenderer {
                 .bg(self.theme.bg_input)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::DarkGray).bg(self.theme.bg_input)
+            Style::default()
+                .fg(Color::DarkGray)
+                .bg(self.theme.bg_primary)
         };
 
         // ---- 光标行：显示源码 + 光标 ----
@@ -631,7 +633,10 @@ impl MarkdownRenderer {
             let dash_count = total_width.saturating_sub(left_width + 1).max(1);
 
             Line::from(vec![
-                Span::styled(line_num, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    line_num,
+                    Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                ),
                 Span::styled(left_part, self.style_code(self.theme.text_dim)),
                 Span::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)),
                 Span::styled("┐", self.style_code(self.theme.text_dim)),
@@ -641,7 +646,10 @@ impl MarkdownRenderer {
             let dash_count = total_width.saturating_sub(2).max(1);
 
             Line::from(vec![
-                Span::styled(line_num, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    line_num,
+                    Style::default().fg(Color::DarkGray).bg(self.theme.code_bg),
+                ),
                 Span::styled("└", self.style_code(self.theme.text_dim)),
                 Span::styled("─".repeat(dash_count), self.style_code(self.theme.text_dim)),
                 Span::styled("┘", self.style_code(self.theme.text_dim)),
@@ -915,6 +923,7 @@ impl MarkdownRenderer {
                 &col_widths,
                 border_style,
                 BorderKind::Top,
+                self.theme.bg_primary,
             ));
         }
 
@@ -926,7 +935,12 @@ impl MarkdownRenderer {
                 "     ".to_string()
             };
 
-            let mut spans = vec![Span::styled(num_str, Style::default().fg(Color::DarkGray))];
+            let mut spans = vec![Span::styled(
+                num_str,
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .bg(self.theme.bg_primary),
+            )];
             spans.push(Span::styled("│", border_style));
 
             for (i, cw) in col_widths.iter().enumerate() {
@@ -967,6 +981,7 @@ impl MarkdownRenderer {
                 &col_widths,
                 border_style,
                 BorderKind::Middle,
+                self.theme.bg_primary,
             ));
         }
 
@@ -977,6 +992,7 @@ impl MarkdownRenderer {
                 &col_widths,
                 border_style,
                 BorderKind::Middle,
+                self.theme.bg_primary,
             ));
         }
 
@@ -987,6 +1003,7 @@ impl MarkdownRenderer {
                 &col_widths,
                 border_style,
                 BorderKind::Bottom,
+                self.theme.bg_primary,
             ));
         }
 
@@ -999,6 +1016,7 @@ impl MarkdownRenderer {
         col_widths: &[usize],
         border_style: Style,
         kind: BorderKind,
+        line_num_bg: Color,
     ) -> Line<'static> {
         let (left, mid, right, fill) = match kind {
             BorderKind::Top => ("┌", "┬", "┐", "─"),
@@ -1008,7 +1026,7 @@ impl MarkdownRenderer {
 
         let mut spans = vec![Span::styled(
             line_num.to_string(),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Color::DarkGray).bg(line_num_bg),
         )];
         spans.push(Span::styled(left, border_style));
         for (i, cw) in col_widths.iter().enumerate() {
