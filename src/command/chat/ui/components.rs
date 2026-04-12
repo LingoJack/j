@@ -459,7 +459,27 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
     let pad: String = " ".repeat(left_pad);
 
     let border_style = Style::default().fg(theme.welcome_border);
-    let quote_style = Style::default().fg(theme.welcome_quote);
+    // 诗句颜色：从精选色盘随机取一种
+    const QUOTE_PALETTE: &[(u8, u8, u8)] = &[
+        (212, 175, 55),  // 古金
+        (255, 183, 197), // 樱花粉
+        (100, 200, 160), // 青瓷绿
+        (135, 188, 235), // 霁蓝
+        (200, 130, 210), // 紫藤
+        (255, 160, 80),  // 琥珀橙
+        (180, 220, 120), // 嫩芽绿
+        (240, 120, 130), // 胭脂红
+        (100, 200, 220), // 湖水蓝
+        (230, 195, 140), // 黄沙
+        (160, 140, 210), // 暮霭紫
+        (180, 230, 190), // 月白绿
+        (255, 210, 100), // 杏黄
+        (140, 180, 230), // 远山蓝
+        (210, 150, 120), // 赭石
+        (170, 220, 200), // 碧玉
+    ];
+    let (r, g, b) = QUOTE_PALETTE[quote_idx % QUOTE_PALETTE.len()];
+    let quote_style = Style::default().fg(ratatui::style::Color::Rgb(r, g, b));
 
     let quote = super::quotes::get_quote(quote_idx);
     // 按显示宽度截断诗句，不超过 inner
