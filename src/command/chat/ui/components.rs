@@ -438,7 +438,7 @@ pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
 // ── 欢迎框 ──────────────────────────────────────────
 
 /// 自适应居中欢迎框
-pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_index: usize) -> Vec<Line<'a>> {
+pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<'a>> {
     use unicode_width::UnicodeWidthStr;
 
     // 框体内部宽度：取终端内宽的一半，最少 30，最多 50
@@ -461,7 +461,7 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_index: usize) -> Vec<Lin
     let border_style = Style::default().fg(theme.welcome_border);
     let quote_style = Style::default().fg(theme.welcome_quote);
 
-    let quote = super::quotes::get_quote(quote_index);
+    let quote = super::quotes::get_quote(quote_idx);
     // 按显示宽度截断诗句，不超过 inner
     let mut quote_display = String::new();
     let mut w = 0;

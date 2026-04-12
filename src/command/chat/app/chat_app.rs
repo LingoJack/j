@@ -257,10 +257,13 @@ impl ChatApp {
                 session_list: Vec::new(),
                 session_list_index: 0,
                 session_restore_confirm: false,
-                welcome_quote_index: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos() as usize,
+                quote_idx: {
+                    let ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as usize;
+                    ms % crate::command::chat::ui::quotes::quotes_count()
+                },
             },
             state: ChatState {
                 agent_config,

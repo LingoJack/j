@@ -9,28 +9,24 @@ static QUOTES: OnceLock<Vec<String>> = OnceLock::new();
 fn get_quotes() -> &'static Vec<String> {
     QUOTES.get_or_init(|| {
         let text = quotes_text();
-        parse_lines(text)
+        text.lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
     })
 }
 
-fn parse_lines(text: &str) -> Vec<String> {
-    text.lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect()
+/// 返回诗句总数（用于外部随机取模）
+pub fn quotes_count() -> usize {
+    let q = get_quotes();
+    if q.is_empty() { 1 } else { q.len() }
 }
 
-/// 按索引取一句诗句（自动取模循环）
-pub fn get_quote(index: usize) -> &'static str {
+/// 按索引取一句诗句
+pub fn get_quote(idx: usize) -> &'static str {
     let quotes = get_quotes();
     if quotes.is_empty() {
         return "";
     }
-    &quotes[index % quotes.len()]
-}
-
-/// 诗句总数
-#[allow(dead_code)]
-pub fn quote_count() -> usize {
-    get_quotes().len()
+    &quotes[idx % quotes.len()]
 }

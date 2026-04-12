@@ -233,8 +233,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 空消息时显示欢迎界面
     if app.state.session.messages.is_empty() && !app.state.is_loading {
         let inner_width = area.width.saturating_sub(4);
-        let welcome_lines =
-            super::components::welcome_box(inner_width, t, app.ui.welcome_quote_index);
+        let welcome_lines = super::components::welcome_box(inner_width, t, app.ui.quote_idx);
         let empty = Paragraph::new(welcome_lines).block(block);
         f.render_widget(empty, area);
         return;
