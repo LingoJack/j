@@ -35,6 +35,9 @@ pub struct EditorTheme {
     pub md_inline_code_fg: Color,
     pub md_inline_code_bg: Color,
 
+    // ===== 标签 =====
+    pub label_ai: Color,
+
     // ===== 代码高亮 =====
     pub code_default: Color,
     pub code_keyword: Color,

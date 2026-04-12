@@ -213,6 +213,7 @@ mod tests {
             code_lifetime: Color::LightMagenta,
             code_attribute: Color::LightBlue,
             code_shell_var: Color::LightCyan,
+            label_ai: Color::Green,
         }
     }
 

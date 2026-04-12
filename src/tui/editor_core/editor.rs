@@ -789,17 +789,17 @@ impl MarkdownEditor {
         // 构建列表项
         let accent = self.theme.md_h1;
         let popup_bg = self.theme.bg_primary;
-        let text_color = self.theme.text_normal;
         let dim_color = self.theme.text_dim;
+        let label_ai = self.theme.label_ai;
         let list_items: Vec<ListItem> = items
             .iter()
             .enumerate()
             .map(|(i, cmd)| {
                 let is_selected = i == self.cmd_popup_selected;
                 let name_style = if is_selected {
-                    Style::default().fg(text_color).add_modifier(Modifier::BOLD)
+                    Style::default().fg(label_ai).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(text_color)
+                    Style::default().fg(label_ai)
                 };
                 let desc_style = if is_selected {
                     Style::default().fg(dim_color)

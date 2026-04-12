@@ -54,6 +54,7 @@ impl From<&Theme> for EditorTheme {
             code_lifetime: t.code_lifetime,
             code_attribute: t.code_attribute,
             code_shell_var: t.code_shell_var,
+            label_ai: t.label_ai,
         }
     }
 }

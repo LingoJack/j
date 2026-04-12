@@ -599,7 +599,10 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let inner_height = area.height.saturating_sub(2) as usize;
     let wrapped_lines = wrap_text(&full_visible, usable_width);
 
-    let before_len = before.chars().count();
+    // before 中包含 '\n'，但 wrap_text 会剥掉 '\n'，因此渲染循环里的 char_offset
+    // 不计 '\n'。需要减去 before 中的 '\n' 数，才能正确定位光标在 wrapped lines 里的位置。
+    let newlines_in_before = before.chars().filter(|&c| c == '\n').count();
+    let before_len = before.chars().count() - newlines_in_before;
     let cursor_len = cursor_ch.chars().count();
     let cursor_global_pos = before_len;
     let mut cursor_line_idx: usize = 0;
@@ -626,17 +629,19 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     };
 
     // 计算 @mention 高亮范围（缓存：仅 input 变化时重算）
+    // mention_ranges 需基于去除 '\n' 的文本计算，与渲染循环中不含 '\n' 的 global_idx 保持一致。
+    let input_text_no_nl: String = input_text.chars().filter(|&c| c != '\n').collect();
     let mention_ranges =
         if let Some((ref cached_input, ref cached_ranges)) = app.ui.cached_mention_ranges {
             if cached_input == &input_text {
                 cached_ranges.clone()
             } else {
-                let ranges = find_at_mention_ranges(&input_text);
+                let ranges = find_at_mention_ranges(&input_text_no_nl);
                 app.ui.cached_mention_ranges = Some((input_text.to_string(), ranges.clone()));
                 ranges
             }
         } else {
-            let ranges = find_at_mention_ranges(&input_text);
+            let ranges = find_at_mention_ranges(&input_text_no_nl);
             app.ui.cached_mention_ranges = Some((input_text.to_string(), ranges.clone()));
             ranges
         };
@@ -1395,11 +1400,11 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
         items,
         &labels,
         title,
-        t.label_ai,
-        t.border_title,
-        t.bg_title,
-        t.model_sel_highlight_bg,
-        t.model_sel_highlight_fg,
+        t.md_h1,
+        t.md_h1,
+        t.bg_primary,
+        t.md_h1,
+        t.bg_primary,
         selected,
     );
 }
@@ -1454,12 +1459,12 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         items,
         &labels,
         title,
-        t.label_ai,
-        t.border_title,
-        t.bg_title,
-        t.model_sel_highlight_bg,
-        t.model_sel_highlight_fg,
-        app.ui.slash_popup_selected,
+        t.md_h1,
+        t.md_h1,
+        t.bg_primary,
+        t.md_h1,
+        t.bg_primary,
+        selected,
     );
 }
 

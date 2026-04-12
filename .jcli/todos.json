@@ -1,22 +1,17 @@
 [
   {
     "id": "1",
-    "content": "从 CursorDirection 移除 Left/Right，handler 中直接处理左右键",
+    "content": "统一 Todo 命令面板的命令名颜色为 label_ai",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "修复 move_cursor_home 方法不存在",
+    "content": "验证并统一 Editor 命令面板的命令名颜色",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "修复 do_restore 借用冲突",
-    "status": "completed"
-  },
-  {
-    "id": "4",
-    "content": "修复 clippy 警告",
+    "content": "编译验证修改无误",
     "status": "completed"
   }
 ]

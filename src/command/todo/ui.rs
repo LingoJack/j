@@ -445,13 +445,15 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
         format!(" 命令面板 [{}] ", app.cmd_popup_filter)
     };
 
-    // 使用主题颜色
-    let highlight_bg = app.theme.config_tab_active_bg;
-    let popup_bg = app.theme.bg_panel;
-    let border_color = app.theme.border_config;
-    let title_color = app.theme.config_title;
+    // 使用主题颜色（与 editor 命令面板保持一致）
+    let accent = app.theme.md_h1;
+    let popup_bg = app.theme.bg_primary;
     let text_color = app.theme.text_normal;
     let dim_color = app.theme.text_dim;
+    let label_ai = app.theme.label_ai;
+    let highlight_bg = accent;
+    let border_color = accent;
+    let title_color = accent;
 
     // 构建列表项
     let selected = app.cmd_popup_selected.min(item_count.saturating_sub(1));
@@ -465,7 +467,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
                 Span::styled(pointer.to_string(), Style::default().fg(text_color)),
                 Span::styled(
                     format!("{:<8}", key),
-                    Style::default().fg(text_color).add_modifier(Modifier::BOLD),
+                    Style::default().fg(label_ai).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(label.to_string(), Style::default().fg(dim_color)),
             ]))
