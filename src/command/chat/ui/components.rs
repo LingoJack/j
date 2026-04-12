@@ -438,7 +438,9 @@ pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
 // ── 欢迎框 ──────────────────────────────────────────
 
 /// 自适应居中欢迎框
-pub fn welcome_box<'a>(width: u16, theme: &Theme) -> Vec<Line<'a>> {
+pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_index: usize) -> Vec<Line<'a>> {
+    use unicode_width::UnicodeWidthStr;
+
     // 框体内部宽度：取终端内宽的一半，最少 30，最多 50
     let inner = ((width as usize) / 2).clamp(30, 50);
     let box_w = inner + 2; // 包含左右边框字符
@@ -457,40 +459,37 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme) -> Vec<Line<'a>> {
     let pad: String = " ".repeat(left_pad);
 
     let border_style = Style::default().fg(theme.welcome_border);
-    let text_style = Style::default().fg(theme.welcome_text);
-    let hint_style = Style::default().fg(theme.welcome_hint);
+    let quote_style = Style::default().fg(theme.welcome_quote);
 
-    let greeting = "Hi! What can I help you?";
-    let hint = "Type a message, press Enter";
+    let quote = super::quotes::get_quote(quote_index);
+    // 按显示宽度截断诗句，不超过 inner
+    let mut quote_display = String::new();
+    let mut w = 0;
+    for ch in quote.chars() {
+        let cw = UnicodeWidthStr::width(ch.to_string().as_str());
+        if w + cw > inner {
+            break;
+        }
+        quote_display.push(ch);
+        w += cw;
+    }
+    let text_display_width = UnicodeWidthStr::width(quote_display.as_str());
+    let pl = (inner - text_display_width) / 2;
+    let pr = inner - text_display_width - pl;
 
     vec![
         Line::from(""),
         Line::from(""),
         Line::from(Span::styled(format!("{pad}{h_bar_top}"), border_style)),
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        // greeting 行：拆分为边框+文字+边框
-        {
-            let text_len = greeting.chars().count();
-            let pl = (inner - text_len) / 2;
-            let pr = inner - text_len - pl;
-            Line::from(vec![
-                Span::styled(format!("{pad}\u{2502}{}", " ".repeat(pl)), border_style),
-                Span::styled(greeting.to_string(), text_style),
-                Span::styled(format!("{}\u{2502}", " ".repeat(pr)), border_style),
-            ])
-        },
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        // hint 行：拆分为边框+文字+边框
-        {
-            let text_len = hint.chars().count();
-            let pl = (inner - text_len) / 2;
-            let pr = inner - text_len - pl;
-            Line::from(vec![
-                Span::styled(format!("{pad}\u{2502}{}", " ".repeat(pl)), border_style),
-                Span::styled(hint.to_string(), hint_style),
-                Span::styled(format!("{}\u{2502}", " ".repeat(pr)), border_style),
-            ])
-        },
+        // 诗句行：居中显示，使用 unicode 显示宽度计算 padding
+        Line::from(vec![
+            Span::styled(format!("{pad}\u{2502}{}", " ".repeat(pl)), border_style),
+            Span::styled(quote_display, quote_style),
+            Span::styled(format!("{}\u{2502}", " ".repeat(pr)), border_style),
+        ]),
+        Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
         Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
         Line::from(Span::styled(format!("{pad}{h_bar_bot}"), border_style)),
     ]

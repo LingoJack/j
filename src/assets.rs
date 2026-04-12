@@ -82,6 +82,16 @@ pub fn default_soul() -> Cow<'static, str> {
         .unwrap_or_else(|| Cow::Borrowed(""))
 }
 
+/// 诗句语录文本
+///
+/// 用途: Chat UI 欢迎框随机展示一句诗句
+/// 格式: 纯文本，每行一句
+pub fn quotes_text() -> Cow<'static, str> {
+    Assets::get("quotes.txt")
+        .map(|f| String::from_utf8_lossy(&f.data).into_owned().into())
+        .unwrap_or_else(|| Cow::Borrowed(""))
+}
+
 /// 安装预设 skills 到用户数据目录
 ///
 /// 遍历编译时嵌入的 `assets/skills/` 目录下的所有文件，

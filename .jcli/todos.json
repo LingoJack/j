@@ -1,7 +1,27 @@
 [
   {
     "id": "1",
-    "content": "修复弹窗滚动支持 - 更新所有 draw_popup_list 调用点",
+    "content": "UIState 新增 welcome_quote_index 字段，初始化时随机",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "welcome_box 接收 quote_index 参数，移除时间戳逻辑",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "修复 welcome_box 边框对齐问题",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "chat.rs 调用处传入 quote_index",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "编译验证",
     "status": "completed"
   }
 ]

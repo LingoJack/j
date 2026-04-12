@@ -2,6 +2,7 @@ pub mod archive;
 pub mod chat;
 pub mod components;
 pub mod config;
+pub mod quotes;
 
 #[allow(unused_imports)]
 pub use archive::{draw_archive_confirm, draw_archive_list};

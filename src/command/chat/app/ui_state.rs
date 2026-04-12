@@ -140,6 +140,8 @@ pub struct UIState {
     pub session_list_index: usize,
     /// 会话恢复确认模式（当前有消息时需要确认）
     pub session_restore_confirm: bool,
+    /// 欢迎框诗句索引（会话创建时随机一次）
+    pub welcome_quote_index: usize,
 }
 
 /// 消息渲染行缓存

@@ -114,4 +114,5 @@ allow:
 - Bash(sed -i:*)
 - Bash(find /Users/lingojack/dev_custom/j/src:*)
 - Bash(cargo run:*)
+- Bash(cat /Users/lingojack/dev_custom/j/Makefile:*)
 deny: []

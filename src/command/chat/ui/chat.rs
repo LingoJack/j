@@ -233,7 +233,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 空消息时显示欢迎界面
     if app.state.session.messages.is_empty() && !app.state.is_loading {
         let inner_width = area.width.saturating_sub(4);
-        let welcome_lines = super::components::welcome_box(inner_width, t);
+        let welcome_lines =
+            super::components::welcome_box(inner_width, t, app.ui.welcome_quote_index);
         let empty = Paragraph::new(welcome_lines).block(block);
         f.render_widget(empty, area);
         return;
@@ -548,45 +549,20 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 安全检查：cursor_pos 不能超过字符数
     let cursor_pos = app.ui.cursor_char_idx().min(chars.len());
 
-    let before_all: String = chars[..cursor_pos].iter().collect();
-    let before_width = display_width(&before_all);
+    let cursor_in_visible = cursor_pos.min(chars.len());
 
-    let scroll_offset_chars = if before_width >= usable_width {
-        let target_width = before_width.saturating_sub(usable_width / 2);
-        let mut w = 0;
-        let mut skip = 0;
-        for (i, &ch) in chars.iter().enumerate() {
-            if w >= target_width {
-                skip = i;
-                break;
-            }
-            w += char_width(ch);
-        }
-        skip
-    } else {
-        0
-    };
-
-    let visible_chars = &chars[scroll_offset_chars..];
-    let cursor_in_visible = cursor_pos
-        .saturating_sub(scroll_offset_chars)
-        .min(visible_chars.len());
-
-    let before: String = visible_chars[..cursor_in_visible].iter().collect();
+    let before: String = chars[..cursor_in_visible].iter().collect();
     // 当光标落在 '\n' 上时（如按左键移到行尾），用空格代替 '\n' 作为显示光标字符，
     // 同时把原来的 '\n' 保留到 after 里，避免 wrap_text 将光标空格渲染到下一行。
-    let (cursor_ch, after): (String, String) = if cursor_in_visible < visible_chars.len() {
-        let ch = visible_chars[cursor_in_visible];
+    let (cursor_ch, after): (String, String) = if cursor_in_visible < chars.len() {
+        let ch = chars[cursor_in_visible];
         if ch == '\n' {
             // 光标在换行符上：显示为行尾空格，'\n' 归入 after 保持换行效果
-            (
-                " ".to_string(),
-                visible_chars[cursor_in_visible..].iter().collect(),
-            )
+            (" ".to_string(), chars[cursor_in_visible..].iter().collect())
         } else {
             (
                 ch.to_string(),
-                visible_chars[cursor_in_visible + 1..].iter().collect(),
+                chars[cursor_in_visible + 1..].iter().collect(),
             )
         }
     } else {
@@ -607,7 +583,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         format!("{}{}{}", before, cursor_ch, after)
     };
     let inner_height = area.height.saturating_sub(2) as usize;
-    let wrapped_lines = wrap_text(&full_visible, usable_width);
+    // 折行宽度减去提示符宽度，避免第一行文字溢出到提示符区域
+    let wrap_width = usable_width.saturating_sub(prompt_width);
+    let wrapped_lines = wrap_text(&full_visible, wrap_width);
 
     // before 中包含 '\n'，但 wrap_text 会剥掉 '\n'，因此渲染循环里的 char_offset
     // 不计 '\n'。需要减去 before 中的 '\n' 数，才能正确定位光标在 wrapped lines 里的位置。
@@ -655,7 +633,6 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             app.ui.cached_mention_ranges = Some((input_text.to_string(), ranges.clone()));
             ranges
         };
-    // 转换为相对于 scroll_offset_chars 的偏移
     let mention_style = Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD);
 
     let mut display_lines: Vec<Line> = Vec::new();
@@ -672,9 +649,11 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     {
         let mut spans: Vec<Span> = Vec::new();
 
-        // 第一行添加提示符
+        // 第一行显示提示符，续行显示等宽空格缩进，保持内容列对齐
         if _line_idx == 0 && line_scroll == 0 {
             spans.push(Span::styled(prompt, prompt_style));
+        } else {
+            spans.push(Span::styled("   ", Style::default()));
         }
 
         let line_chars: Vec<char> = wl.chars().collect();
@@ -688,9 +667,8 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
         let mut seg_start = 0;
         for (ci, &ch) in line_chars.iter().enumerate() {
-            let global_idx = scroll_offset_chars + char_offset + ci;
-            let visible_idx = char_offset + ci;
-            let is_cursor = visible_idx >= before_len && visible_idx < before_len + cursor_len;
+            let global_idx = char_offset + ci;
+            let is_cursor = global_idx >= before_len && global_idx < before_len + cursor_len;
             let is_mention = mention_ranges
                 .iter()
                 .any(|&(s, e)| global_idx >= s && global_idx < e);
@@ -700,7 +678,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 if ci > seg_start {
                     let seg: String = line_chars[seg_start..ci].iter().collect();
                     // check if previous segment was in mention range
-                    let prev_global = scroll_offset_chars + char_offset + seg_start;
+                    let prev_global = char_offset + seg_start;
                     let prev_is_mention = mention_ranges
                         .iter()
                         .any(|&(s, e)| prev_global >= s && prev_global < e);
@@ -722,7 +700,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 seg_start = ci + 1;
             } else if ci > seg_start {
                 // check if we just transitioned from mention to non-mention
-                let prev_global = scroll_offset_chars + char_offset + (ci - 1);
+                let prev_global = char_offset + (ci - 1);
                 let prev_is_mention = mention_ranges
                     .iter()
                     .any(|&(s, e)| prev_global >= s && prev_global < e);
@@ -741,7 +719,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         }
         if seg_start < line_chars.len() {
             let seg: String = line_chars[seg_start..].iter().collect();
-            let seg_global = scroll_offset_chars + char_offset + seg_start;
+            let seg_global = char_offset + seg_start;
             let seg_is_mention = mention_ranges
                 .iter()
                 .any(|&(s, e)| seg_global >= s && seg_global < e);
@@ -789,13 +767,8 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     };
 
     let cursor_row_in_display = (cursor_line_idx - line_scroll) as u16;
-    // 提示符 " > " 只在第一可见行（cursor_row_in_display == 0）渲染，
-    // 其余行不加 prompt_width，否则光标 X 会偏右 3 列。
-    let cursor_x = if cursor_row_in_display == 0 {
-        area.x + prompt_width as u16 + cursor_col_in_line
-    } else {
-        area.x + cursor_col_in_line
-    };
+    // 所有行都有 prompt_width 宽的前缀（提示符或等宽空格），光标 X 统一偏移
+    let cursor_x = area.x + prompt_width as u16 + cursor_col_in_line;
     let cursor_y = area.y + cursor_row_in_display;
 
     if cursor_x < area.x + area.width && cursor_y < area.y + area.height {
