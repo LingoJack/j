@@ -572,23 +572,32 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .min(visible_chars.len());
 
     let before: String = visible_chars[..cursor_in_visible].iter().collect();
-    let cursor_ch = if cursor_in_visible < visible_chars.len() {
-        visible_chars[cursor_in_visible].to_string()
+    // 当光标落在 '\n' 上时（如按左键移到行尾），用空格代替 '\n' 作为显示光标字符，
+    // 同时把原来的 '\n' 保留到 after 里，避免 wrap_text 将光标空格渲染到下一行。
+    let (cursor_ch, after): (String, String) = if cursor_in_visible < visible_chars.len() {
+        let ch = visible_chars[cursor_in_visible];
+        if ch == '\n' {
+            // 光标在换行符上：显示为行尾空格，'\n' 归入 after 保持换行效果
+            (
+                " ".to_string(),
+                visible_chars[cursor_in_visible..].iter().collect(),
+            )
+        } else {
+            (
+                ch.to_string(),
+                visible_chars[cursor_in_visible + 1..].iter().collect(),
+            )
+        }
     } else {
-        " ".to_string()
-    };
-    let after: String = if cursor_in_visible < visible_chars.len() {
-        visible_chars[cursor_in_visible + 1..].iter().collect()
-    } else {
-        String::new()
+        (" ".to_string(), String::new())
     };
 
     // 占位符逻辑：输入为空时显示，根据加载状态显示不同提示
     let is_empty = chars.is_empty();
     let placeholder = if app.state.is_loading {
-        "补充消息，Enter 发送，Esc 打断，Shift+Enter 换行"
+        "补充消息，Enter 发送，Esc 打断，Shift/Alt+Enter 换行"
     } else {
-        "输入消息，Enter 发送，Esc 退出，Shift+Enter 换行"
+        "输入消息，Enter 发送，Esc 退出，Shift/Alt+Enter 换行"
     };
 
     let full_visible = if is_empty {
@@ -779,8 +788,13 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     };
 
     let cursor_row_in_display = (cursor_line_idx - line_scroll) as u16;
-    // 光标 x 位置 = 提示符宽度 + 光标在行中的位置
-    let cursor_x = area.x + prompt_width as u16 + cursor_col_in_line;
+    // 提示符 " > " 只在第一可见行（cursor_row_in_display == 0）渲染，
+    // 其余行不加 prompt_width，否则光标 X 会偏右 3 列。
+    let cursor_x = if cursor_row_in_display == 0 {
+        area.x + prompt_width as u16 + cursor_col_in_line
+    } else {
+        area.x + cursor_col_in_line
+    };
     let cursor_y = area.y + cursor_row_in_display;
 
     if cursor_x < area.x + area.width && cursor_y < area.y + area.height {
@@ -1092,7 +1106,7 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     let shortcuts: &[(&str, &str)] = &[
         ("Enter", "发送消息"),
-        ("Shift+Enter", "输入框内换行"),
+        ("Shift/Alt+Enter", "输入框内换行"),
         ("↑ / ↓", "滚动对话记录"),
         ("← / →", "移动输入光标"),
         ("Home / End", "光标跳到行首/行尾"),
@@ -1206,40 +1220,73 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
     if filtered.is_empty() {
         return;
     }
+
     let max_items = filtered.len().min(15);
+    let selected = app
+        .ui
+        .at_popup_selected
+        .min(filtered.len().saturating_sub(1));
+
+    // 构建显示标签和描述
     let labels: Vec<String> = filtered
         .iter()
         .take(max_items)
-        .map(|item| item.display_label())
+        .map(|item| {
+            let (tag, name) = match item {
+                AtPopupItem::Category(s) => ("cat", s.as_str()),
+                AtPopupItem::Skill(s) => ("skill", s.as_str()),
+                AtPopupItem::Command(s) => ("cmd", s.as_str()),
+                AtPopupItem::File(s) => ("file", s.as_str()),
+            };
+            format!("[{}] {} - @{}", tag, name, tag)
+        })
         .collect();
+
+    // 三段式渲染：pointer + [type] name + description（与 / 弹窗风格一致）
     let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
-        .map(|item| {
-            let color = match item {
-                AtPopupItem::Category(_) => t.label_ai,
-                AtPopupItem::Skill(_) => t.label_ai,
-                AtPopupItem::Command(_) => t.text_system,
-                AtPopupItem::File(_) => t.label_user,
+        .enumerate()
+        .map(|(i, item)| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
+
+            let (type_label, type_color, name) = match item {
+                AtPopupItem::Category(s) => ("cat", t.text_dim, s.as_str()),
+                AtPopupItem::Skill(s) => ("skill", t.label_ai, s.as_str()),
+                AtPopupItem::Command(s) => ("cmd", t.text_system, s.as_str()),
+                AtPopupItem::File(s) => ("file", t.label_user, s.as_str()),
             };
-            ListItem::new(Line::from(Span::styled(
-                item.display_label(),
-                Style::default().fg(color),
-            )))
+
+            ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
+                Span::styled(
+                    format!("[{:<5}]", type_label),
+                    Style::default().fg(type_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(name.to_string(), Style::default().fg(t.text_white)),
+            ]))
         })
         .collect();
+
+    let title = if app.ui.at_popup_filter.is_empty() {
+        " @ 补全 ".to_string()
+    } else {
+        format!(" @{} ", app.ui.at_popup_filter)
+    };
+
     draw_popup_list(
         f,
         input_area,
         items,
         &labels,
-        " @ 补全 ".to_string(),
-        t.label_ai,
-        t.border_title,
-        t.bg_title,
-        t.model_sel_highlight_bg,
-        t.model_sel_highlight_fg,
-        app.ui.at_popup_selected,
+        title,
+        t.md_h1,
+        t.md_h1,
+        t.bg_primary,
+        t.md_h1,
+        t.bg_primary,
+        selected,
     );
 }
 

@@ -15,7 +15,10 @@ use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
-    event::{self, Event, KeyEventKind, MouseEventKind},
+    event::{
+        self, Event, KeyEventKind, KeyboardEnhancementFlags, MouseEventKind,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -27,6 +30,7 @@ fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
     let _ = execute!(
         io::stdout(),
+        PopKeyboardEnhancementFlags,
         event::DisableBracketedPaste,
         event::DisableMouseCapture,
         LeaveAlternateScreen
@@ -59,13 +63,17 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
             false
         }
         Event::Paste(text) => {
-            // 粘贴事件：逐字符插入到输入框
+            // 粘贴事件：逐字符插入到输入框（保留换行）
             if matches!(app.ui.mode, ChatMode::Chat) {
                 for c in text.chars() {
-                    if c == '\n' || c == '\r' {
-                        continue; // 忽略换行，输入框为单行
+                    if c == '\r' {
+                        continue; // 忽略 \r，统一用 \n 换行
                     }
-                    app.ui.input_buffer.insert_char(c);
+                    if c == '\n' {
+                        app.ui.input_buffer.insert_newline();
+                    } else {
+                        app.ui.input_buffer.insert_char(c);
+                    }
                 }
                 *needs_redraw = true;
             } else if matches!(app.ui.mode, ChatMode::Config) && app.ui.config_editing {
@@ -176,6 +184,12 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         event::EnableMouseCapture,
         event::EnableBracketedPaste
     )?;
+    // 启用 kitty keyboard protocol，使终端能区分 Shift+Enter / Ctrl+Enter 等组合键。
+    // 不支持此协议的终端（如 Terminal.app）会忽略该指令，不会报错。
+    let _ = execute!(
+        stdout,
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    );
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -513,6 +527,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        PopKeyboardEnhancementFlags,
         event::DisableBracketedPaste,
         event::DisableMouseCapture,
         LeaveAlternateScreen

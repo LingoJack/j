@@ -517,8 +517,12 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         }
 
         KeyCode::Enter => {
-            // Shift+Enter：插入换行符
-            if key.modifiers.contains(KeyModifiers::SHIFT) {
+            // Shift+Enter 或 Alt+Enter：插入换行符
+            // Shift+Enter 需要 kitty keyboard protocol（kitty/WezTerm 等）
+            // Alt+Enter 在所有终端均可用，作为通用备选
+            if key.modifiers.contains(KeyModifiers::SHIFT)
+                || key.modifiers.contains(KeyModifiers::ALT)
+            {
                 app.ui.input_buffer.insert_newline();
             } else if app.state.is_loading {
                 // agent loop 期间：将用户消息追加到待处理队列

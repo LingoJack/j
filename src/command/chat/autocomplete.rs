@@ -96,16 +96,7 @@ pub enum AtPopupItem {
     File(String),
 }
 
-impl AtPopupItem {
-    pub fn display_label(&self) -> String {
-        match self {
-            AtPopupItem::Category(s) => format!("  @{}  ", s),
-            AtPopupItem::Skill(s) => format!("  [skill] {}  ", s),
-            AtPopupItem::Command(s) => format!("  [cmd] {}  ", s),
-            AtPopupItem::File(s) => format!("  [file] {}  ", s),
-        }
-    }
-}
+impl AtPopupItem {}
 
 pub fn update_at_filter(app: &mut ChatApp) {
     let chars: Vec<char> = app.ui.input_text().chars().collect();
