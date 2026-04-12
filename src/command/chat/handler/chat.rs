@@ -55,14 +55,15 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 if !app.ui.slash_popup_filter.is_empty() {
                     app.ui.slash_popup_filter.pop();
                     // 同步更新 input
-                    app.ui.input = format!("/{}", app.ui.slash_popup_filter);
-                    app.ui.cursor_pos = app.ui.input.chars().count();
+                    app.ui.set_input_text(
+                        &format!("/{}", app.ui.slash_popup_filter),
+                        app.ui.slash_popup_filter.len() + 1,
+                    );
                     app.ui.slash_popup_selected = 0;
                 } else {
                     // filter 为空时关闭弹窗并删除 /
                     app.ui.slash_popup_active = false;
-                    app.ui.input.clear();
-                    app.ui.cursor_pos = 0;
+                    app.ui.clear_input();
                 }
                 return false;
             }
@@ -74,8 +75,10 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 } else {
                     app.ui.slash_popup_filter.push(c);
                     // 同步更新 input，使输入框显示 "/filter"
-                    app.ui.input = format!("/{}", app.ui.slash_popup_filter);
-                    app.ui.cursor_pos = app.ui.input.chars().count();
+                    app.ui.set_input_text(
+                        &format!("/{}", app.ui.slash_popup_filter),
+                        app.ui.slash_popup_filter.len() + 1,
+                    );
                     app.ui.slash_popup_selected = 0;
                     return false;
                 }
@@ -114,18 +117,22 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     let item = filtered[sel].clone();
                     match item {
                         AtPopupItem::Category(ref name) if name == "skill:" => {
-                            let chars: Vec<char> = app.ui.input.chars().collect();
+                            let text = app.ui.input_text();
+                            let chars: Vec<char> = text.chars().collect();
+                            let cursor_pos = app.ui.cursor_char_idx();
                             let before: String =
                                 chars[..app.ui.at_popup_start_pos].iter().collect();
-                            let after: String = if app.ui.cursor_pos < chars.len() {
-                                chars[app.ui.cursor_pos..].iter().collect()
+                            let after: String = if cursor_pos < chars.len() {
+                                chars[cursor_pos..].iter().collect()
                             } else {
                                 String::new()
                             };
                             let replacement = "@skill:";
                             let new_cursor = before.chars().count() + replacement.chars().count();
-                            app.ui.input = format!("{}{}{}", before, replacement, after);
-                            app.ui.cursor_pos = new_cursor;
+                            app.ui.set_input_text(
+                                &format!("{}{}{}", before, replacement, after),
+                                new_cursor,
+                            );
                             app.ui.at_popup_active = false;
                             app.ui.skill_popup_active = true;
                             app.ui.skill_popup_start_pos = app.ui.at_popup_start_pos;
@@ -133,18 +140,22 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                             app.ui.skill_popup_selected = 0;
                         }
                         AtPopupItem::Category(ref name) if name == "command:" => {
-                            let chars: Vec<char> = app.ui.input.chars().collect();
+                            let text = app.ui.input_text();
+                            let chars: Vec<char> = text.chars().collect();
+                            let cursor_pos = app.ui.cursor_char_idx();
                             let before: String =
                                 chars[..app.ui.at_popup_start_pos].iter().collect();
-                            let after: String = if app.ui.cursor_pos < chars.len() {
-                                chars[app.ui.cursor_pos..].iter().collect()
+                            let after: String = if cursor_pos < chars.len() {
+                                chars[cursor_pos..].iter().collect()
                             } else {
                                 String::new()
                             };
                             let replacement = "@command:";
                             let new_cursor = before.chars().count() + replacement.chars().count();
-                            app.ui.input = format!("{}{}{}", before, replacement, after);
-                            app.ui.cursor_pos = new_cursor;
+                            app.ui.set_input_text(
+                                &format!("{}{}{}", before, replacement, after),
+                                new_cursor,
+                            );
                             app.ui.at_popup_active = false;
                             app.ui.command_popup_active = true;
                             app.ui.command_popup_start_pos = app.ui.at_popup_start_pos;
@@ -152,18 +163,22 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                             app.ui.command_popup_selected = 0;
                         }
                         AtPopupItem::Category(ref name) if name == "file:" => {
-                            let chars: Vec<char> = app.ui.input.chars().collect();
+                            let text = app.ui.input_text();
+                            let chars: Vec<char> = text.chars().collect();
+                            let cursor_pos = app.ui.cursor_char_idx();
                             let before: String =
                                 chars[..app.ui.at_popup_start_pos].iter().collect();
-                            let after: String = if app.ui.cursor_pos < chars.len() {
-                                chars[app.ui.cursor_pos..].iter().collect()
+                            let after: String = if cursor_pos < chars.len() {
+                                chars[cursor_pos..].iter().collect()
                             } else {
                                 String::new()
                             };
                             let replacement = "@file:";
                             let new_cursor = before.chars().count() + replacement.chars().count();
-                            app.ui.input = format!("{}{}{}", before, replacement, after);
-                            app.ui.cursor_pos = new_cursor;
+                            app.ui.set_input_text(
+                                &format!("{}{}{}", before, replacement, after),
+                                new_cursor,
+                            );
                             app.ui.at_popup_active = false;
                             app.ui.file_popup_active = true;
                             app.ui.file_popup_start_pos = app.ui.at_popup_start_pos;
@@ -194,26 +209,10 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             }
             KeyCode::Backspace => {
                 // 先执行删除，然后检查弹窗状态
-                if app.ui.cursor_pos > 0 {
-                    let start = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos - 1)
-                        .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    let end = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.drain(start..end);
-                    app.ui.cursor_pos -= 1;
-                }
+                app.ui.input_buffer.backspace();
+                let cursor_pos = app.ui.cursor_char_idx();
                 // 如果光标退回到 @ 之前，关闭弹窗
-                if app.ui.cursor_pos <= app.ui.at_popup_start_pos {
+                if cursor_pos <= app.ui.at_popup_start_pos {
                     app.ui.at_popup_active = false;
                 } else {
                     update_at_filter(app);
@@ -258,17 +257,21 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         // 目录：直接用 entry 作为新 filter（已包含完整路径）
                         app.ui.file_popup_filter = entry.clone();
                         // 更新 input 中的文本
-                        let chars: Vec<char> = app.ui.input.chars().collect();
+                        let text = app.ui.input_text();
+                        let chars: Vec<char> = text.chars().collect();
+                        let cursor_pos = app.ui.cursor_char_idx();
                         let before: String = chars[..app.ui.file_popup_start_pos].iter().collect();
-                        let after: String = if app.ui.cursor_pos < chars.len() {
-                            chars[app.ui.cursor_pos..].iter().collect()
+                        let after: String = if cursor_pos < chars.len() {
+                            chars[cursor_pos..].iter().collect()
                         } else {
                             String::new()
                         };
                         let replacement = format!("@file:{}", app.ui.file_popup_filter);
                         let new_cursor = before.chars().count() + replacement.chars().count();
-                        app.ui.input = format!("{}{}{}", before, replacement, after);
-                        app.ui.cursor_pos = new_cursor;
+                        app.ui.set_input_text(
+                            &format!("{}{}{}", before, replacement, after),
+                            new_cursor,
+                        );
                         app.ui.file_popup_selected = 0;
                     } else {
                         // 文件：entry 已包含完整相对路径，直接补全
@@ -286,27 +289,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 return false;
             }
             KeyCode::Backspace => {
-                if app.ui.cursor_pos > 0 {
-                    let start = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos - 1)
-                        .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    let end = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.drain(start..end);
-                    app.ui.cursor_pos -= 1;
-                }
+                app.ui.input_buffer.backspace();
+                let cursor_pos = app.ui.cursor_char_idx();
                 // @file: 占 6 个字符，起始位置 + 6 = 冒号之后
                 let prefix_end = app.ui.file_popup_start_pos + 6;
-                if app.ui.cursor_pos < prefix_end {
+                if cursor_pos < prefix_end {
                     app.ui.file_popup_active = false;
                 } else {
                     update_file_filter(app);
@@ -319,15 +306,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.ui.file_popup_active = false;
                     // fall through to normal char handling
                 } else {
-                    let byte_idx = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.insert(byte_idx, c);
-                    app.ui.cursor_pos += 1;
+                    app.ui.input_buffer.insert_char(c);
                     update_file_filter(app);
                     return false;
                 }
@@ -377,27 +356,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 return false;
             }
             KeyCode::Backspace => {
-                if app.ui.cursor_pos > 0 {
-                    let start = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos - 1)
-                        .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    let end = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.drain(start..end);
-                    app.ui.cursor_pos -= 1;
-                }
+                app.ui.input_buffer.backspace();
+                let cursor_pos = app.ui.cursor_char_idx();
                 // @skill: 占 7 个字符，起始位置 + 7 = 冒号之后
                 let prefix_end = app.ui.skill_popup_start_pos + 7;
-                if app.ui.cursor_pos < prefix_end {
+                if cursor_pos < prefix_end {
                     app.ui.skill_popup_active = false;
                 } else {
                     update_skill_filter(app);
@@ -410,15 +373,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.ui.skill_popup_active = false;
                     // fall through to normal char handling
                 } else {
-                    let byte_idx = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.insert(byte_idx, c);
-                    app.ui.cursor_pos += 1;
+                    app.ui.input_buffer.insert_char(c);
                     update_skill_filter(app);
                     return false;
                 }
@@ -468,27 +423,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 return false;
             }
             KeyCode::Backspace => {
-                if app.ui.cursor_pos > 0 {
-                    let start = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos - 1)
-                        .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    let end = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.drain(start..end);
-                    app.ui.cursor_pos -= 1;
-                }
+                app.ui.input_buffer.backspace();
+                let cursor_pos = app.ui.cursor_char_idx();
                 // @command: 占 9 个字符，起始位置 + 9 = 冒号之后
                 let prefix_end = app.ui.command_popup_start_pos + 9;
-                if app.ui.cursor_pos < prefix_end {
+                if cursor_pos < prefix_end {
                     app.ui.command_popup_active = false;
                 } else {
                     update_command_filter(app);
@@ -501,15 +440,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.ui.command_popup_active = false;
                     // fall through to normal char handling
                 } else {
-                    let byte_idx = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.insert(byte_idx, c);
-                    app.ui.cursor_pos += 1;
+                    app.ui.input_buffer.insert_char(c);
                     update_command_filter(app);
                     return false;
                 }
@@ -566,8 +497,6 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         return false;
     }
 
-    let char_count = app.ui.input.chars().count();
-
     match key.code {
         KeyCode::Esc => {
             if app.state.is_loading {
@@ -587,9 +516,12 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         }
 
         KeyCode::Enter => {
-            if app.state.is_loading {
+            // Shift+Enter：插入换行符
+            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                app.ui.input_buffer.insert_newline();
+            } else if app.state.is_loading {
                 // agent loop 期间：将用户消息追加到待处理队列
-                let text = app.ui.input.trim().to_string();
+                let text = app.ui.input_text().trim().to_string();
                 if !text.is_empty() {
                     app.state
                         .session
@@ -602,8 +534,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         );
                         pending.push(super::super::storage::ChatMessage::text("user", &text));
                     }
-                    app.ui.input.clear();
-                    app.ui.cursor_pos = 0;
+                    app.ui.clear_input();
                     app.ui.msg_lines_cache = None;
                     app.ui.auto_scroll = true;
                     app.ui.scroll_offset = u16::MAX;
@@ -621,65 +552,28 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
         // 光标移动
         KeyCode::Left => {
-            if app.ui.cursor_pos > 0 {
-                app.ui.cursor_pos -= 1;
-                check_and_activate_mention_popup(app);
-            }
+            app.ui.input_buffer.move_cursor_back();
+            check_and_activate_mention_popup(app);
         }
         KeyCode::Right => {
-            if app.ui.cursor_pos < char_count {
-                app.ui.cursor_pos += 1;
-                check_and_activate_mention_popup(app);
-            }
+            app.ui.input_buffer.move_cursor_forward();
+            check_and_activate_mention_popup(app);
         }
         KeyCode::Home => {
-            app.ui.cursor_pos = 0;
+            app.ui.input_buffer.move_cursor_head();
             close_all_popups(app);
         }
         KeyCode::End => {
-            app.ui.cursor_pos = char_count;
+            app.ui.input_buffer.move_cursor_end();
             close_all_popups(app);
         }
 
         // 删除
         KeyCode::Backspace => {
-            if app.ui.cursor_pos > 0 {
-                let start = app
-                    .ui
-                    .input
-                    .char_indices()
-                    .nth(app.ui.cursor_pos - 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                let end = app
-                    .ui
-                    .input
-                    .char_indices()
-                    .nth(app.ui.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.ui.input.len());
-                app.ui.input.drain(start..end);
-                app.ui.cursor_pos -= 1;
-            }
+            app.ui.input_buffer.backspace();
         }
         KeyCode::Delete => {
-            if app.ui.cursor_pos < char_count {
-                let start = app
-                    .ui
-                    .input
-                    .char_indices()
-                    .nth(app.ui.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.ui.input.len());
-                let end = app
-                    .ui
-                    .input
-                    .char_indices()
-                    .nth(app.ui.cursor_pos + 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.ui.input.len());
-                app.ui.input.drain(start..end);
-            }
+            app.ui.input_buffer.delete_char();
         }
 
         // F1 帮助
@@ -687,35 +581,30 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             app.update(Action::ShowHelp);
         }
         // 输入框为空时，? 也可唤起帮助
-        KeyCode::Char('?') if app.ui.input.is_empty() => {
+        KeyCode::Char('?') if app.ui.is_input_empty() => {
             app.update(Action::ShowHelp);
         }
         KeyCode::Char(c) => {
-            let byte_idx = app
-                .ui
-                .input
-                .char_indices()
-                .nth(app.ui.cursor_pos)
-                .map(|(i, _)| i)
-                .unwrap_or(app.ui.input.len());
-            app.ui.input.insert(byte_idx, c);
-            app.ui.cursor_pos += 1;
+            app.ui.input_buffer.insert_char(c);
+
+            let cursor_pos = app.ui.cursor_char_idx();
+            let input_text = app.ui.input_text();
 
             // / 斜杠命令弹窗触发逻辑（仅输入框为空时）
-            if c == '/' && app.ui.input == "/" {
+            if c == '/' && input_text == "/" {
                 app.ui.slash_popup_active = true;
                 app.ui.slash_popup_filter.clear();
                 app.ui.slash_popup_selected = 0;
             }
             // @ 补全弹窗触发逻辑
             else if c == '@' {
-                let valid = app.ui.cursor_pos <= 1 || {
-                    let chars: Vec<char> = app.ui.input.chars().collect();
-                    app.ui.cursor_pos >= 2 && chars[app.ui.cursor_pos - 2].is_whitespace()
+                let valid = cursor_pos <= 1 || {
+                    let chars: Vec<char> = input_text.chars().collect();
+                    cursor_pos >= 2 && chars[cursor_pos - 2].is_whitespace()
                 };
                 if valid {
                     app.ui.at_popup_active = true;
-                    app.ui.at_popup_start_pos = app.ui.cursor_pos - 1;
+                    app.ui.at_popup_start_pos = cursor_pos - 1;
                     app.ui.at_popup_filter.clear();
                     app.ui.at_popup_selected = 0;
                 }
@@ -751,8 +640,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
 /// 检测光标是否在某个 mention 范围内，若是则激活对应的补全弹窗
 fn check_and_activate_mention_popup(app: &mut ChatApp) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
-    let pos = app.ui.cursor_pos;
+    let text = app.ui.input_text();
+    let chars: Vec<char> = text.chars().collect();
+    let pos = app.ui.cursor_char_idx();
 
     // 从光标位置向前搜索 @ 符号
     let mut at_pos: Option<usize> = None;
@@ -859,8 +749,7 @@ fn close_all_popups(app: &mut ChatApp) {
 /// 执行斜杠命令
 fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
     // 清空输入框
-    app.ui.input.clear();
-    app.ui.cursor_pos = 0;
+    app.ui.clear_input();
 
     match cmd {
         SlashCommand::Copy => {

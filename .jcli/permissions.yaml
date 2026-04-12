@@ -112,4 +112,5 @@ allow:
 - Bash(cd /Users/lingojack/dev_custom/j/gui/src-tauri:*)
 - Bash(cargo test:*)
 - Bash(sed -i:*)
+- Bash(find /Users/lingojack/dev_custom/j/src:*)
 deny: []

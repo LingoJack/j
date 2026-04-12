@@ -1,4 +1,5 @@
 /// 按显示宽度对文本进行自动换行
+/// `\n` 字符会在该处断行（产生新的 wrapped line），`\n` 本身不出现在返回的行中
 pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     // 最小宽度保证至少能放下一个字符（中文字符宽度2），避免无限循环或不截断
     let max_width = max_width.max(2);
@@ -7,6 +8,13 @@ pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     let mut current_width = 0;
 
     for ch in text.chars() {
+        // 遇到 \n 时断行：push 当前行，开始新行
+        if ch == '\n' {
+            result.push(current_line.clone());
+            current_line.clear();
+            current_width = 0;
+            continue;
+        }
         let ch_width = char_width(ch);
         if current_width + ch_width > max_width && !current_line.is_empty() {
             result.push(current_line.clone());

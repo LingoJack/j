@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "id": "1",
+    "content": "从 CursorDirection 移除 Left/Right，handler 中直接处理左右键",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "修复 move_cursor_home 方法不存在",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "修复 do_restore 借用冲突",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "编译验证",
+    "status": "completed"
+  }
+]

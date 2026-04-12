@@ -15,6 +15,10 @@ pub enum ThemeName {
     Nord,
     #[serde(rename = "monokai")]
     Monokai,
+    #[serde(rename = "anthropic_light")]
+    AnthropicLight,
+    #[serde(rename = "anthropic_dark")]
+    AnthropicDark,
 }
 
 impl std::str::FromStr for ThemeName {
@@ -27,6 +31,8 @@ impl std::str::FromStr for ThemeName {
             "midnight" => Ok(ThemeName::Midnight),
             "nord" => Ok(ThemeName::Nord),
             "monokai" => Ok(ThemeName::Monokai),
+            "anthropic_light" => Ok(ThemeName::AnthropicLight),
+            "anthropic_dark" => Ok(ThemeName::AnthropicDark),
             _ => Ok(ThemeName::default()),
         }
     }
@@ -42,6 +48,8 @@ impl ThemeName {
             ThemeName::Midnight,
             ThemeName::Nord,
             ThemeName::Monokai,
+            ThemeName::AnthropicLight,
+            ThemeName::AnthropicDark,
         ]
     }
 
@@ -52,7 +60,9 @@ impl ThemeName {
             ThemeName::Light => ThemeName::Midnight,
             ThemeName::Midnight => ThemeName::Nord,
             ThemeName::Nord => ThemeName::Monokai,
-            ThemeName::Monokai => ThemeName::Dark,
+            ThemeName::Monokai => ThemeName::AnthropicLight,
+            ThemeName::AnthropicLight => ThemeName::AnthropicDark,
+            ThemeName::AnthropicDark => ThemeName::Dark,
         }
     }
 
@@ -64,6 +74,8 @@ impl ThemeName {
             ThemeName::Midnight => "Midnight（默认）",
             ThemeName::Nord => "Nord",
             ThemeName::Monokai => "Monokai",
+            ThemeName::AnthropicLight => "Anthropic Light（米白赭陶）",
+            ThemeName::AnthropicDark => "Anthropic Dark（深夜月蓝）",
         }
     }
 
@@ -80,6 +92,8 @@ impl ThemeName {
             ThemeName::Midnight => "midnight",
             ThemeName::Nord => "nord",
             ThemeName::Monokai => "monokai",
+            ThemeName::AnthropicLight => "anthropic_light",
+            ThemeName::AnthropicDark => "anthropic_dark",
         }
     }
 }
@@ -357,6 +371,8 @@ impl Theme {
             ThemeName::Midnight => Self::midnight(),
             ThemeName::Nord => Self::nord(),
             ThemeName::Monokai => Self::monokai(),
+            ThemeName::AnthropicLight => Self::anthropic_light(),
+            ThemeName::AnthropicDark => Self::anthropic_dark(),
         }
     }
 
@@ -1235,6 +1251,318 @@ impl Theme {
             diff_add: Color::Rgb(166, 226, 46), // monokai green
             diff_del: Color::Rgb(249, 38, 114), // monokai pink
             diff_header: Color::Rgb(102, 217, 239), // monokai cyan
+        }
+    }
+
+    /// Anthropic Light 主题（米白赭陶 — 仿 Anthropic 品牌暖色浅色调）
+    ///
+    /// 色板来源：~/.config/kitty/theme-anthropic-light.conf
+    ///   bg #faf6f1 · fg #1a1612 · accent #cc785c · green #4a7a50
+    ///   amber #a07830 · blue #4a70a0 · purple #7a5ea0 · teal #3a7870
+    pub fn anthropic_light() -> Self {
+        Self {
+            // 全局背景
+            bg_primary: Color::Rgb(250, 246, 241), // #faf6f1 米白
+            bg_title: Color::Rgb(237, 228, 216),   // #ede4d8 沙褐
+            bg_input: Color::Rgb(245, 240, 234),   // 暖白
+            bg_panel: Color::Rgb(240, 235, 228),   // 暖米
+
+            // 边框
+            border_title: Color::Rgb(204, 120, 92), // #cc785c 赭陶
+            border_message: Color::Rgb(221, 212, 200), // #ddd4c8 沙边
+            border_input: Color::Rgb(74, 122, 80),  // #4a7a50 绿
+            border_input_loading: Color::Rgb(160, 120, 48), // #a07830 琥珀
+            border_config: Color::Rgb(138, 126, 114), // #8a7e72 灰褐
+            separator: Color::Rgb(221, 212, 200),   // #ddd4c8
+
+            // 气泡
+            bubble_ai: Color::Rgb(245, 240, 234),
+            bubble_ai_selected: Color::Rgb(237, 228, 216),
+            bubble_user: Color::Rgb(232, 240, 248),
+            bubble_user_selected: Color::Rgb(213, 229, 245),
+
+            // 标签
+            label_ai: Color::Rgb(74, 122, 80),        // #4a7a50 绿
+            label_user: Color::Rgb(74, 112, 160),     // #4a70a0 蓝
+            label_selected: Color::Rgb(160, 120, 48), // #a07830 琥珀
+
+            // 文字
+            text_normal: Color::Rgb(26, 22, 18), // #1a1612 深棕黑
+            text_bold: Color::Rgb(26, 22, 18),
+            text_dim: Color::Rgb(107, 94, 82), // #6b5e52 褐灰
+            text_very_dim: Color::Rgb(138, 126, 114), // #8a7e72
+            text_white: Color::Rgb(250, 246, 241), // #faf6f1
+            text_system: Color::Rgb(138, 126, 114),
+
+            // 标题栏
+            title_icon: Color::Rgb(204, 120, 92), // #cc785c 赭陶
+            title_separator: Color::Rgb(221, 212, 200),
+            title_model: Color::Rgb(74, 122, 80), // 绿
+            title_count: Color::Rgb(107, 94, 82),
+            title_loading: Color::Rgb(160, 120, 48), // 琥珀
+
+            // 输入区
+            input_prompt: Color::Rgb(74, 122, 80),
+            input_prompt_loading: Color::Rgb(160, 120, 48),
+            cursor_fg: Color::Rgb(250, 246, 241),
+            cursor_bg: Color::Rgb(26, 22, 18),
+
+            // 提示栏
+            hint_key_fg: Color::Rgb(250, 246, 241),
+            hint_key_bg: Color::Rgb(107, 94, 82), // #6b5e52
+            hint_desc: Color::Rgb(107, 94, 82),
+            hint_separator: Color::Rgb(221, 212, 200),
+
+            // Toast
+            toast_success_border: Color::Rgb(74, 122, 80),
+            toast_success_bg: Color::Rgb(232, 245, 234),
+            toast_success_text: Color::Rgb(42, 90, 48),
+            toast_error_border: Color::Rgb(177, 64, 64), // #b14040
+            toast_error_bg: Color::Rgb(250, 234, 234),
+            toast_error_text: Color::Rgb(128, 32, 32),
+
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(160, 120, 48), // 琥珀
+            tool_confirm_bg: Color::Rgb(253, 248, 240),
+            tool_confirm_title: Color::Rgb(122, 88, 32),
+            tool_confirm_name: Color::Rgb(122, 94, 160), // #7a5ea0 紫
+            tool_confirm_text: Color::Rgb(26, 22, 18),
+            tool_confirm_label: Color::Rgb(107, 94, 82),
+            tool_confirm_hint: Color::Rgb(74, 62, 54),
+
+            // 欢迎界面
+            welcome_border: Color::Rgb(221, 212, 200),
+            welcome_text: Color::Rgb(74, 112, 160),
+            welcome_hint: Color::Rgb(138, 126, 114),
+
+            // 模型选择
+            model_sel_border: Color::Rgb(160, 120, 48),
+            model_sel_title: Color::Rgb(122, 88, 32),
+            model_sel_active: Color::Rgb(74, 122, 80),
+            model_sel_inactive: Color::Rgb(107, 94, 82),
+            model_sel_highlight_bg: Color::Rgb(237, 228, 216),
+            model_sel_highlight_fg: Color::Rgb(26, 22, 18),
+
+            // 配置界面
+            config_title: Color::Rgb(74, 112, 160),   // 蓝
+            config_section: Color::Rgb(74, 122, 80),  // 绿
+            config_pointer: Color::Rgb(204, 120, 92), // 赭陶
+            config_label_selected: Color::Rgb(122, 88, 32),
+            config_label: Color::Rgb(107, 94, 82),
+            config_value: Color::Rgb(58, 48, 40),
+            config_edit_bg: Color::Rgb(237, 228, 216),
+            config_tab_active_bg: Color::Rgb(204, 120, 92), // 赭陶
+            config_tab_active_fg: Color::Rgb(255, 255, 255),
+            config_tab_inactive: Color::Rgb(107, 94, 82),
+            config_hint_key: Color::Rgb(122, 88, 32),
+            config_hint_desc: Color::Rgb(107, 94, 82),
+            config_toggle_on: Color::Rgb(74, 122, 80),
+            config_toggle_off: Color::Rgb(177, 64, 64),
+            config_dim: Color::Rgb(138, 126, 114),
+            config_api_key: Color::Rgb(138, 126, 114),
+
+            // Markdown
+            md_h1: Color::Rgb(180, 101, 74), // #b4654a 赭红
+            md_h2: Color::Rgb(204, 120, 92), // #cc785c 赭陶
+            md_h3: Color::Rgb(74, 112, 160), // #4a70a0 蓝
+            md_h4: Color::Rgb(122, 94, 160), // #7a5ea0 紫
+            md_heading_sep: Color::Rgb(221, 212, 200),
+            md_inline_code_fg: Color::Rgb(160, 120, 48), // 琥珀
+            md_inline_code_bg: Color::Rgb(245, 238, 221),
+            md_list_bullet: Color::Rgb(204, 120, 92), // 赭陶
+            md_blockquote_bar: Color::Rgb(74, 112, 160),
+            md_blockquote_text: Color::Rgb(74, 62, 54),
+            md_blockquote_bg: Color::Rgb(238, 232, 224),
+            md_rule: Color::Rgb(221, 212, 200),
+            md_link: Color::Rgb(180, 101, 74), // #b4654a url色
+
+            // 代码块
+            code_border: Color::Rgb(221, 212, 200),
+            code_bg: Color::Rgb(245, 240, 232),
+            code_default: Color::Rgb(26, 22, 18),
+            code_keyword: Color::Rgb(122, 94, 160),   // 紫
+            code_string: Color::Rgb(74, 122, 80),     // 绿
+            code_comment: Color::Rgb(138, 126, 114),  // 灰褐
+            code_number: Color::Rgb(160, 120, 48),    // 琥珀
+            code_type: Color::Rgb(58, 120, 112),      // #3a7870 青绿
+            code_primitive: Color::Rgb(74, 112, 160), // 蓝
+            code_macro: Color::Rgb(180, 101, 74),     // 赭红
+            code_attribute: Color::Rgb(58, 120, 112),
+            code_lifetime: Color::Rgb(160, 120, 48),
+            code_shell_var: Color::Rgb(74, 112, 160),
+
+            // 表格
+            table_border: Color::Rgb(221, 212, 200),
+            table_header: Color::Rgb(204, 120, 92), // 赭陶
+            table_body: Color::Rgb(58, 48, 40),
+
+            // 帮助界面
+            help_title: Color::Rgb(204, 120, 92),
+            help_key: Color::Rgb(160, 120, 48),
+            help_desc: Color::Rgb(26, 22, 18),
+            help_path: Color::Rgb(138, 126, 114),
+            help_bg: Color::Rgb(250, 246, 241),
+
+            // Diff
+            diff_add: Color::Rgb(74, 122, 80),     // #4a7a50 绿
+            diff_del: Color::Rgb(177, 64, 64),     // #b14040 红
+            diff_header: Color::Rgb(74, 112, 160), // #4a70a0 蓝
+        }
+    }
+
+    /// Anthropic Dark 主题（深夜月蓝 — 基于 Tokyo Night Moon）
+    ///
+    /// 色板来源：~/.config/kitty/theme-anthropic-dark.conf (Tokyo Night Moon)
+    ///   bg #222436 · fg #c8d3f5 · blue #82aaff · green #c3e88d
+    ///   yellow #ffc777 · cyan #86e1fc · purple #c099ff · orange #ff966c
+    pub fn anthropic_dark() -> Self {
+        Self {
+            // 全局背景
+            bg_primary: Color::Rgb(34, 36, 54), // #222436
+            bg_title: Color::Rgb(30, 32, 48),   // #1e2030
+            bg_input: Color::Rgb(47, 51, 77),   // #2f334d
+            bg_panel: Color::Rgb(30, 32, 48),   // #1e2030
+
+            // 边框
+            border_title: Color::Rgb(130, 170, 255), // #82aaff 蓝
+            border_message: Color::Rgb(47, 51, 77),  // #2f334d
+            border_input: Color::Rgb(195, 232, 141), // #c3e88d 绿
+            border_input_loading: Color::Rgb(255, 199, 119), // #ffc777 黄
+            border_config: Color::Rgb(68, 74, 115),  // #444a73
+            separator: Color::Rgb(47, 51, 77),
+
+            // 气泡
+            bubble_ai: Color::Rgb(30, 32, 48),
+            bubble_ai_selected: Color::Rgb(45, 63, 118), // #2d3f76
+            bubble_user: Color::Rgb(45, 63, 118),
+            bubble_user_selected: Color::Rgb(58, 80, 144),
+
+            // 标签
+            label_ai: Color::Rgb(195, 232, 141),   // #c3e88d 绿
+            label_user: Color::Rgb(130, 170, 255), // #82aaff 蓝
+            label_selected: Color::Rgb(255, 199, 119), // #ffc777 黄
+
+            // 文字
+            text_normal: Color::Rgb(200, 211, 245), // #c8d3f5
+            text_bold: Color::Rgb(200, 211, 245),
+            text_dim: Color::Rgb(130, 139, 184),    // #828bb8
+            text_very_dim: Color::Rgb(68, 74, 115), // #444a73
+            text_white: Color::Rgb(200, 211, 245),
+            text_system: Color::Rgb(68, 74, 115),
+
+            // 标题栏
+            title_icon: Color::Rgb(130, 170, 255),
+            title_separator: Color::Rgb(47, 51, 77),
+            title_model: Color::Rgb(195, 232, 141),
+            title_count: Color::Rgb(130, 139, 184),
+            title_loading: Color::Rgb(255, 199, 119),
+
+            // 输入区
+            input_prompt: Color::Rgb(195, 232, 141),
+            input_prompt_loading: Color::Rgb(255, 199, 119),
+            cursor_fg: Color::Rgb(34, 36, 54),
+            cursor_bg: Color::Rgb(0, 170, 255), // #00aaff
+
+            // 提示栏
+            hint_key_fg: Color::Rgb(30, 32, 48),
+            hint_key_bg: Color::Rgb(130, 139, 184), // #828bb8
+            hint_desc: Color::Rgb(130, 139, 184),
+            hint_separator: Color::Rgb(47, 51, 77),
+
+            // Toast
+            toast_success_border: Color::Rgb(195, 232, 141),
+            toast_success_bg: Color::Rgb(26, 42, 32),
+            toast_success_text: Color::Rgb(195, 232, 141),
+            toast_error_border: Color::Rgb(255, 117, 127), // #ff757f
+            toast_error_bg: Color::Rgb(42, 26, 30),
+            toast_error_text: Color::Rgb(255, 117, 127),
+
+            // 工具确认区
+            tool_confirm_border: Color::Rgb(255, 199, 119), // 黄
+            tool_confirm_bg: Color::Rgb(35, 37, 56),
+            tool_confirm_title: Color::Rgb(255, 199, 119),
+            tool_confirm_name: Color::Rgb(192, 153, 255), // #c099ff 紫
+            tool_confirm_text: Color::Rgb(200, 211, 245),
+            tool_confirm_label: Color::Rgb(130, 139, 184),
+            tool_confirm_hint: Color::Rgb(130, 139, 184),
+
+            // 欢迎界面
+            welcome_border: Color::Rgb(68, 74, 115),
+            welcome_text: Color::Rgb(130, 170, 255),
+            welcome_hint: Color::Rgb(68, 74, 115),
+
+            // 模型选择
+            model_sel_border: Color::Rgb(255, 199, 119),
+            model_sel_title: Color::Rgb(255, 199, 119),
+            model_sel_active: Color::Rgb(195, 232, 141),
+            model_sel_inactive: Color::Rgb(130, 139, 184),
+            model_sel_highlight_bg: Color::Rgb(45, 63, 118),
+            model_sel_highlight_fg: Color::Rgb(200, 211, 245),
+
+            // 配置界面
+            config_title: Color::Rgb(130, 170, 255),
+            config_section: Color::Rgb(195, 232, 141),
+            config_pointer: Color::Rgb(255, 150, 108), // #ff966c 橙
+            config_label_selected: Color::Rgb(255, 199, 119),
+            config_label: Color::Rgb(130, 139, 184),
+            config_value: Color::Rgb(200, 211, 245),
+            config_edit_bg: Color::Rgb(45, 63, 118),
+            config_tab_active_bg: Color::Rgb(130, 170, 255),
+            config_tab_active_fg: Color::Rgb(30, 32, 48),
+            config_tab_inactive: Color::Rgb(130, 139, 184),
+            config_hint_key: Color::Rgb(255, 199, 119),
+            config_hint_desc: Color::Rgb(130, 139, 184),
+            config_toggle_on: Color::Rgb(195, 232, 141),
+            config_toggle_off: Color::Rgb(255, 117, 127),
+            config_dim: Color::Rgb(68, 74, 115),
+            config_api_key: Color::Rgb(68, 74, 115),
+
+            // Markdown
+            md_h1: Color::Rgb(130, 170, 255), // #82aaff 蓝
+            md_h2: Color::Rgb(79, 214, 190),  // #4fd6be 青
+            md_h3: Color::Rgb(192, 153, 255), // #c099ff 紫
+            md_h4: Color::Rgb(134, 225, 252), // #86e1fc 浅青
+            md_heading_sep: Color::Rgb(47, 51, 77),
+            md_inline_code_fg: Color::Rgb(255, 199, 119), // 黄
+            md_inline_code_bg: Color::Rgb(30, 32, 48),
+            md_list_bullet: Color::Rgb(130, 170, 255),
+            md_blockquote_bar: Color::Rgb(134, 225, 252),
+            md_blockquote_text: Color::Rgb(130, 139, 184),
+            md_blockquote_bg: Color::Rgb(30, 32, 48),
+            md_rule: Color::Rgb(47, 51, 77),
+            md_link: Color::Rgb(79, 214, 190), // #4fd6be url青
+
+            // 代码块
+            code_border: Color::Rgb(47, 51, 77),
+            code_bg: Color::Rgb(27, 29, 43), // #1b1d2b
+            code_default: Color::Rgb(200, 211, 245),
+            code_keyword: Color::Rgb(192, 153, 255),   // 紫
+            code_string: Color::Rgb(195, 232, 141),    // 绿
+            code_comment: Color::Rgb(68, 74, 115),     // 暗灰蓝
+            code_number: Color::Rgb(255, 150, 108),    // 橙
+            code_type: Color::Rgb(255, 199, 119),      // 黄
+            code_primitive: Color::Rgb(134, 225, 252), // 浅青
+            code_macro: Color::Rgb(130, 170, 255),     // 蓝
+            code_attribute: Color::Rgb(134, 225, 252),
+            code_lifetime: Color::Rgb(255, 199, 119),
+            code_shell_var: Color::Rgb(134, 225, 252),
+
+            // 表格
+            table_border: Color::Rgb(47, 51, 77),
+            table_header: Color::Rgb(130, 170, 255),
+            table_body: Color::Rgb(200, 211, 245),
+
+            // 帮助界面
+            help_title: Color::Rgb(130, 170, 255),
+            help_key: Color::Rgb(255, 199, 119),
+            help_desc: Color::Rgb(200, 211, 245),
+            help_path: Color::Rgb(68, 74, 115),
+            help_bg: Color::Rgb(30, 32, 48),
+
+            // Diff
+            diff_add: Color::Rgb(195, 232, 141),    // #c3e88d 绿
+            diff_del: Color::Rgb(255, 117, 127),    // #ff757f 红
+            diff_header: Color::Rgb(134, 225, 252), // #86e1fc 浅青
         }
     }
 }

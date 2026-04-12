@@ -540,10 +540,11 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let prompt_width: usize = 3; // " > " 或 " ~> " 都是 3 个显示宽度
 
     let usable_width = area.width.saturating_sub(2) as usize;
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let input_text = app.ui.input_text();
+    let chars: Vec<char> = input_text.chars().collect();
 
     // 安全检查：cursor_pos 不能超过字符数
-    let cursor_pos = app.ui.cursor_pos.min(chars.len());
+    let cursor_pos = app.ui.cursor_char_idx().min(chars.len());
 
     let before_all: String = chars[..cursor_pos].iter().collect();
     let before_width = display_width(&before_all);
@@ -584,9 +585,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 占位符逻辑：输入为空时显示，根据加载状态显示不同提示
     let is_empty = chars.is_empty();
     let placeholder = if app.state.is_loading {
-        "补充消息，按 Enter 发送，或 Esc 打断"
+        "补充消息，Enter 发送，Esc 打断，Shift+Enter 换行"
     } else {
-        "输入消息，按 Enter 发送，或 Esc 退出"
+        "输入消息，Enter 发送，Esc 退出，Shift+Enter 换行"
     };
 
     let full_visible = if is_empty {
@@ -626,16 +627,16 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 计算 @mention 高亮范围（缓存：仅 input 变化时重算）
     let mention_ranges =
         if let Some((ref cached_input, ref cached_ranges)) = app.ui.cached_mention_ranges {
-            if cached_input == &app.ui.input {
+            if cached_input == &input_text {
                 cached_ranges.clone()
             } else {
-                let ranges = find_at_mention_ranges(&app.ui.input);
-                app.ui.cached_mention_ranges = Some((app.ui.input.clone(), ranges.clone()));
+                let ranges = find_at_mention_ranges(&input_text);
+                app.ui.cached_mention_ranges = Some((input_text.to_string(), ranges.clone()));
                 ranges
             }
         } else {
-            let ranges = find_at_mention_ranges(&app.ui.input);
-            app.ui.cached_mention_ranges = Some((app.ui.input.clone(), ranges.clone()));
+            let ranges = find_at_mention_ranges(&input_text);
+            app.ui.cached_mention_ranges = Some((input_text.to_string(), ranges.clone()));
             ranges
         };
     // 转换为相对于 scroll_offset_chars 的偏移
@@ -1026,8 +1027,10 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     let shortcuts: &[(&str, &str)] = &[
         ("Enter", "发送消息"),
+        ("Shift+Enter", "输入框内换行"),
         ("↑ / ↓", "滚动对话记录"),
         ("← / →", "移动输入光标"),
+        ("Home / End", "光标跳到行首/行尾"),
         ("/", "斜杠命令（copy/log/browse/config/model/archive）"),
         ("@", "引用（skill/file/command）"),
         ("Ctrl+O", "展开/折叠工具详情"),

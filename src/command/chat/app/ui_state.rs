@@ -3,6 +3,7 @@ use crate::command::chat::archive::ChatArchive;
 use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::storage::SessionMeta;
 use crate::command::chat::theme::Theme;
+use crate::tui::editor_core::text_buffer::TextBuffer;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::sync::{Arc, Mutex};
@@ -11,10 +12,8 @@ use std::sync::{Arc, Mutex};
 
 /// UI 前端状态：所有与界面展示相关的字段
 pub struct UIState {
-    /// 输入缓冲区
-    pub input: String,
-    /// 光标位置（字符索引）
-    pub cursor_pos: usize,
+    /// 输入缓冲区（多行迷你编辑器）
+    pub input_buffer: TextBuffer,
     /// 当前模式
     pub mode: ChatMode,
     /// 消息列表滚动偏移
@@ -282,5 +281,66 @@ impl ConfigTab {
     /// 切换到上一个 Tab
     pub fn prev(&self) -> Self {
         ConfigTab::from_index((self.index() + Self::COUNT - 1) % Self::COUNT)
+    }
+}
+
+impl UIState {
+    /// 获取输入文本（用于发送、autocomplete 等）
+    pub fn input_text(&self) -> String {
+        self.input_buffer.to_string()
+    }
+
+    /// 获取扁平字符索引（用于 autocomplete 的 char slicing）
+    pub fn cursor_char_idx(&self) -> usize {
+        let (row, col) = self.input_buffer.cursor();
+        let mut idx = 0;
+        for i in 0..row {
+            idx += self
+                .input_buffer
+                .line(i)
+                .map(|l: &String| l.chars().count())
+                .unwrap_or(0);
+            idx += 1; // \n
+        }
+        idx += col;
+        idx
+    }
+
+    /// 从扁平字符索引设置光标（用于 autocomplete 替换后）
+    pub fn set_cursor_from_char_idx(&mut self, char_idx: usize) {
+        let mut remaining = char_idx;
+        let lines = self.input_buffer.lines();
+        for (row, line) in lines.iter().enumerate() {
+            let line_len: usize = line.chars().count();
+            if remaining <= line_len {
+                self.input_buffer.set_cursor(row, remaining);
+                return;
+            }
+            remaining -= line_len + 1; // +1 for \n
+        }
+        // 超出范围，放到最后
+        let last_row = lines.len().saturating_sub(1);
+        let last_col = lines[last_row].chars().count();
+        self.input_buffer.set_cursor(last_row, last_col);
+    }
+
+    /// 替换整个输入文本（用于 autocomplete 替换 @mention）
+    pub fn set_input_text(&mut self, text: &str, cursor_char_idx: usize) {
+        self.input_buffer = TextBuffer::from_content(text);
+        self.set_cursor_from_char_idx(cursor_char_idx);
+    }
+
+    /// 清空输入
+    pub fn clear_input(&mut self) {
+        self.input_buffer = TextBuffer::new();
+    }
+
+    /// 输入是否为空
+    pub fn is_input_empty(&self) -> bool {
+        self.input_buffer
+            .lines()
+            .iter()
+            .all(|l: &String| l.is_empty())
+            && self.input_buffer.line_count() <= 1
     }
 }

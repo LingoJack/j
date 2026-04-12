@@ -5,7 +5,7 @@
 mod history;
 mod renderer;
 mod search;
-mod text_buffer;
+pub mod text_buffer;
 pub mod theme;
 mod vim;
 mod wrap_engine;

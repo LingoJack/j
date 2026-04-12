@@ -29,7 +29,9 @@ fn fix_codesign_and_quarantine(bin_path: &std::path::Path) {
         _ => {
             println!(
                 "{}",
-                format!("  警告: codesign 签名失败，新版本可能无法启动",).yellow()
+                "  警告: codesign 签名失败，新版本可能无法启动"
+                    .to_string()
+                    .yellow()
             );
         }
     }

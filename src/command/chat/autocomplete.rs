@@ -103,10 +103,11 @@ impl AtPopupItem {
 }
 
 pub fn update_at_filter(app: &mut ChatApp) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     let start = app.ui.at_popup_start_pos + 1; // @ 之后
-    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
-        app.ui.at_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
+    if start <= cursor_pos && cursor_pos <= chars.len() {
+        app.ui.at_popup_filter = chars[start..cursor_pos].iter().collect();
     } else {
         app.ui.at_popup_filter.clear();
     }
@@ -364,25 +365,27 @@ pub fn complete_at_direct(app: &mut ChatApp, item: &AtPopupItem) {
         AtPopupItem::File(path) => format!("@file:{} ", path),
         AtPopupItem::Category(_) => return, // 分类不在此处处理
     };
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     let before: String = chars[..app.ui.at_popup_start_pos].iter().collect();
-    let after: String = if app.ui.cursor_pos < chars.len() {
-        chars[app.ui.cursor_pos..].iter().collect()
+    let after: String = if cursor_pos < chars.len() {
+        chars[cursor_pos..].iter().collect()
     } else {
         String::new()
     };
     let new_cursor = before.chars().count() + mention.chars().count();
-    app.ui.input = format!("{}{}{}", before, mention, after);
-    app.ui.cursor_pos = new_cursor;
+    app.ui
+        .set_input_text(&format!("{}{}{}", before, mention, after), new_cursor);
 }
 
 /// 更新技能补全弹窗的过滤文本
 pub fn update_skill_filter(app: &mut ChatApp) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     // @skill: 占 7 个字符, 过滤文本从 start_pos + 7 开始
     let start = app.ui.skill_popup_start_pos + 7;
-    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
-        app.ui.skill_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
+    if start <= cursor_pos && cursor_pos <= chars.len() {
+        app.ui.skill_popup_filter = chars[start..cursor_pos].iter().collect();
     } else {
         app.ui.skill_popup_filter.clear();
     }
@@ -409,26 +412,28 @@ pub fn get_filtered_skill_names(app: &ChatApp) -> Vec<String> {
 
 /// 替换 input 中 @skill:filter 为 @skill:完整名称 + 空格
 pub fn complete_skill_mention(app: &mut ChatApp, skill_name: &str) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     let before: String = chars[..app.ui.skill_popup_start_pos].iter().collect();
-    let after: String = if app.ui.cursor_pos < chars.len() {
-        chars[app.ui.cursor_pos..].iter().collect()
+    let after: String = if cursor_pos < chars.len() {
+        chars[cursor_pos..].iter().collect()
     } else {
         String::new()
     };
     let replacement = format!("@skill:{} ", skill_name);
     let new_cursor = before.chars().count() + replacement.chars().count();
-    app.ui.input = format!("{}{}{}", before, replacement, after);
-    app.ui.cursor_pos = new_cursor;
+    app.ui
+        .set_input_text(&format!("{}{}{}", before, replacement, after), new_cursor);
 }
 
 /// 更新文件补全弹窗的过滤文本
 pub fn update_file_filter(app: &mut ChatApp) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     // @file: 占 6 个字符 (@file:), 过滤文本从 start_pos + 6 开始
     let start = app.ui.file_popup_start_pos + 6;
-    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
-        app.ui.file_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
+    if start <= cursor_pos && cursor_pos <= chars.len() {
+        app.ui.file_popup_filter = chars[start..cursor_pos].iter().collect();
     } else {
         app.ui.file_popup_filter.clear();
     }
@@ -596,11 +601,12 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
 
 /// 更新命令补全弹窗的过滤文本
 pub fn update_command_filter(app: &mut ChatApp) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     // @command: 占 9 个字符, 过滤文本从 start_pos + 9 开始
     let start = app.ui.command_popup_start_pos + 9;
-    if start <= app.ui.cursor_pos && app.ui.cursor_pos <= chars.len() {
-        app.ui.command_popup_filter = chars[start..app.ui.cursor_pos].iter().collect();
+    if start <= cursor_pos && cursor_pos <= chars.len() {
+        app.ui.command_popup_filter = chars[start..cursor_pos].iter().collect();
     } else {
         app.ui.command_popup_filter.clear();
     }
@@ -627,30 +633,32 @@ pub fn get_filtered_command_names(app: &ChatApp) -> Vec<String> {
 
 /// 替换 input 中 @command:filter 为 @command:完整名称 + 空格
 pub fn complete_command_mention(app: &mut ChatApp, command_name: &str) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     let before: String = chars[..app.ui.command_popup_start_pos].iter().collect();
-    let after: String = if app.ui.cursor_pos < chars.len() {
-        chars[app.ui.cursor_pos..].iter().collect()
+    let after: String = if cursor_pos < chars.len() {
+        chars[cursor_pos..].iter().collect()
     } else {
         String::new()
     };
     let replacement = format!("@command:{} ", command_name);
     let new_cursor = before.chars().count() + replacement.chars().count();
-    app.ui.input = format!("{}{}{}", before, replacement, after);
-    app.ui.cursor_pos = new_cursor;
+    app.ui
+        .set_input_text(&format!("{}{}{}", before, replacement, after), new_cursor);
 }
 
 /// 替换 input 中 @file:filter 为 @file:完整路径 + 空格
 pub fn complete_file_mention(app: &mut ChatApp, file_path: &str) {
-    let chars: Vec<char> = app.ui.input.chars().collect();
+    let chars: Vec<char> = app.ui.input_text().chars().collect();
+    let cursor_pos = app.ui.cursor_char_idx();
     let before: String = chars[..app.ui.file_popup_start_pos].iter().collect();
-    let after: String = if app.ui.cursor_pos < chars.len() {
-        chars[app.ui.cursor_pos..].iter().collect()
+    let after: String = if cursor_pos < chars.len() {
+        chars[cursor_pos..].iter().collect()
     } else {
         String::new()
     };
     let replacement = format!("@file:{} ", file_path);
     let new_cursor = before.chars().count() + replacement.chars().count();
-    app.ui.input = format!("{}{}{}", before, replacement, after);
-    app.ui.cursor_pos = new_cursor;
+    app.ui
+        .set_input_text(&format!("{}{}{}", before, replacement, after), new_cursor);
 }

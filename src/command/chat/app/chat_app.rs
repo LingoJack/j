@@ -25,6 +25,7 @@ use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::{self, BackgroundManager};
 use crate::command::chat::tools::task;
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
+use crate::tui::editor_core::text_buffer::TextBuffer;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use ratatui::widgets::ListState;
@@ -192,8 +193,7 @@ impl ChatApp {
 
         let new_app = Self {
             ui: UIState {
-                input: String::new(),
-                cursor_pos: 0,
+                input_buffer: TextBuffer::new(),
                 mode: ChatMode::Chat,
                 scroll_offset: u16::MAX,
                 auto_scroll: true,
@@ -334,38 +334,26 @@ impl ChatApp {
             // ========== Chat 输入和文本编辑 ==========
             Action::SendMessage => self.send_message(),
             Action::InsertChar(ch) => {
-                if self.ui.input.len() < INPUT_BUFFER_MAX_LEN {
-                    self.ui.input.insert(self.ui.cursor_pos, ch);
-                    self.ui.cursor_pos += ch.len_utf8();
+                if self.ui.input_text().len() < INPUT_BUFFER_MAX_LEN {
+                    self.ui.input_buffer.insert_char(ch);
                 }
             }
             Action::DeleteChar => {
-                if self.ui.cursor_pos > 0 {
-                    let ch_len = self.ui.input[..self.ui.cursor_pos]
-                        .chars()
-                        .last()
-                        .map(|c| c.len_utf8())
-                        .unwrap_or(0);
-                    self.ui.cursor_pos = self.ui.cursor_pos.saturating_sub(ch_len);
-                    self.ui.input.remove(self.ui.cursor_pos);
-                }
+                self.ui.input_buffer.backspace();
             }
             Action::DeleteForward => {
-                if self.ui.cursor_pos < self.ui.input.len() {
-                    self.ui.input.remove(self.ui.cursor_pos);
-                }
+                self.ui.input_buffer.delete_char();
             }
             Action::MoveCursor(dir) => match dir {
                 CursorDirection::Up => {
-                    self.ui.cursor_pos = 0;
+                    self.ui.input_buffer.move_cursor_up();
                 }
                 CursorDirection::Down => {
-                    self.ui.cursor_pos = self.ui.input.len();
+                    self.ui.input_buffer.move_cursor_down();
                 }
             },
             Action::ClearInput => {
-                self.ui.input.clear();
-                self.ui.cursor_pos = 0;
+                self.ui.clear_input();
             }
 
             // ========== 弹窗交互 ==========
@@ -1735,7 +1723,7 @@ impl ChatApp {
 
     /// 发送消息（非阻塞，启动后台线程流式接收）
     pub fn send_message(&mut self) {
-        let text = self.ui.input.trim().to_string();
+        let text = self.ui.input_text().trim().to_string();
         if text.is_empty() {
             return;
         }
@@ -1744,8 +1732,7 @@ impl ChatApp {
         self.ui.at_popup_active = false;
         self.ui.file_popup_active = false;
         self.ui.skill_popup_active = false;
-        self.ui.input.clear();
-        self.ui.cursor_pos = 0;
+        self.ui.clear_input();
 
         self.send_message_internal(text);
     }
@@ -2599,17 +2586,22 @@ impl ChatApp {
     pub fn do_restore(&mut self) {
         use crate::command::chat::archive::restore_archive;
 
-        if let Some(archive) = self.ui.archives.get(self.ui.archive_list_index) {
-            match restore_archive(&archive.name) {
+        let archive_name = self
+            .ui
+            .archives
+            .get(self.ui.archive_list_index)
+            .map(|a| a.name.clone());
+
+        if let Some(archive_name) = archive_name {
+            match restore_archive(&archive_name) {
                 Ok(messages) => {
                     self.state.session.messages = messages.clone();
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
-                    self.ui.input.clear();
-                    self.ui.cursor_pos = 0;
+                    self.ui.clear_input();
                     append_session_event(&self.session_id, &SessionEvent::Restore { messages });
                     self.last_persisted_len = self.state.session.messages.len();
-                    self.show_toast(format!("已还原归档: {}", archive.name), false);
+                    self.show_toast(format!("已还原归档: {}", archive_name), false);
                 }
                 Err(e) => {
                     self.show_toast(e, true);

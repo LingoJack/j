@@ -64,15 +64,7 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
                     if c == '\n' || c == '\r' {
                         continue; // 忽略换行，输入框为单行
                     }
-                    let byte_idx = app
-                        .ui
-                        .input
-                        .char_indices()
-                        .nth(app.ui.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(app.ui.input.len());
-                    app.ui.input.insert(byte_idx, c);
-                    app.ui.cursor_pos += 1;
+                    app.ui.input_buffer.insert_char(c);
                 }
                 *needs_redraw = true;
             } else if matches!(app.ui.mode, ChatMode::Config) && app.ui.config_editing {
