@@ -946,11 +946,7 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         if x + toast_width <= area.width && y + toast_height <= area.height {
             let toast_area = Rect::new(x, y, toast_width, toast_height);
 
-            let clear = Block::default().style(Style::default().bg(if is_error {
-                t.toast_error_bg
-            } else {
-                t.toast_success_bg
-            }));
+            let clear = Block::default().style(Style::default().bg(t.bg_primary));
             f.render_widget(clear, toast_area);
 
             let (icon, border_color, text_color) = if is_error {
@@ -968,11 +964,7 @@ pub fn draw_toast(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::default().fg(border_color))
-                    .style(Style::default().bg(if is_error {
-                        t.toast_error_bg
-                    } else {
-                        t.toast_success_bg
-                    })),
+                    .style(Style::default().bg(t.bg_primary)),
             );
             f.render_widget(toast_widget, toast_area);
         }
