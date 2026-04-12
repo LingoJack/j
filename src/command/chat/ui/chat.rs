@@ -1172,13 +1172,14 @@ fn draw_popup_list(
     }
     let item_count = items.len();
     let popup_height = (item_count as u16) + 2;
+    let max_popup_width = (input_area.width as usize * 3 / 4).max(16);
     let popup_width = item_labels
         .iter()
         .map(|n| display_width(n))
         .max()
         .unwrap_or(20)
         .max(16)
-        .min(input_area.width.saturating_sub(4) as usize) as u16
+        .min(max_popup_width) as u16
         + 2;
 
     let x = input_area.x + 1;
@@ -1227,15 +1228,15 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         .at_popup_selected
         .min(filtered.len().saturating_sub(1));
 
-    // 构建显示标签（用于 popup 计算宽度等）
+    // 构建显示标签（与渲染内容等宽，用于 popup 宽度计算）
     let labels: Vec<String> = filtered
         .iter()
         .take(max_items)
         .map(|item| match item {
-            AtPopupItem::Category(s) => format!("[cat] {}", s),
-            AtPopupItem::Skill(s) => format!("[skill] {}", s),
-            AtPopupItem::Command(s) => format!("[cmd] {}", s),
-            AtPopupItem::File(s) => format!("[file] {}", s),
+            AtPopupItem::Category(s) => format!("  {}", s),
+            AtPopupItem::Skill(s) => format!("  [skill]   {}", s),
+            AtPopupItem::Command(s) => format!("  [command] {}", s),
+            AtPopupItem::File(s) => format!("  [file]    {}", s),
         })
         .collect();
 
@@ -1330,7 +1331,11 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
         .file_popup_selected
         .min(filtered.len().saturating_sub(1));
 
-    let labels: Vec<String> = filtered.iter().take(max_items).cloned().collect();
+    let labels: Vec<String> = filtered
+        .iter()
+        .take(max_items)
+        .map(|n| format!("  {}", n))
+        .collect();
 
     let items: Vec<ListItem<'static>> = filtered
         .iter()
@@ -1386,7 +1391,11 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         .skill_popup_selected
         .min(filtered.len().saturating_sub(1));
 
-    let labels: Vec<String> = filtered.iter().take(max_items).map(|n| n.clone()).collect();
+    let labels: Vec<String> = filtered
+        .iter()
+        .take(max_items)
+        .map(|n| format!("  {}", n))
+        .collect();
 
     let items: Vec<ListItem<'static>> = filtered
         .iter()
@@ -1398,10 +1407,9 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("{:<16}", name),
+                    name.clone(),
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled("技能".to_string(), Style::default().fg(t.text_dim)),
             ]))
         })
         .collect();
@@ -1465,7 +1473,7 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
 
     let labels: Vec<String> = commands
         .iter()
-        .map(|(name, desc)| format!("  {}  - {}", name, desc))
+        .map(|(name, desc)| format!("  {:<16}{}", name, desc))
         .collect();
 
     let items: Vec<ListItem<'static>> = commands
