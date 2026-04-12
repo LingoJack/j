@@ -1,6 +1,7 @@
 use super::types::{StreamMsg, ToolResultMsg};
 use crate::command::chat::agent::run_agent_loop;
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
+use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
 use async_openai::types::chat::ChatCompletionTools;
 use std::sync::{Arc, mpsc};
@@ -38,8 +39,8 @@ impl AgentHandle {
                 let runtime = match tokio::runtime::Runtime::new() {
                     Ok(rt) => rt,
                     Err(e) => {
-                        let _ =
-                            stream_tx.send(StreamMsg::Error(format!("创建异步运行时失败: {}", e)));
+                        let _ = stream_tx
+                            .send(StreamMsg::Error(ChatError::RuntimeFailed(e.to_string())));
                         return;
                     }
                 };
@@ -66,7 +67,7 @@ impl AgentHandle {
                 };
                 crate::util::log::write_error_log("AgentHandle::spawn", &panic_msg);
                 // 通知主线程，避免 loading 状态永久卡住
-                let _ = stream_tx_panic.send(StreamMsg::Error(panic_msg));
+                let _ = stream_tx_panic.send(StreamMsg::Error(ChatError::AgentPanic(panic_msg)));
             }
         });
 

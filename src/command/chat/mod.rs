@@ -7,6 +7,7 @@ pub mod autocomplete;
 pub mod command;
 pub mod compact;
 pub mod constants;
+pub mod error;
 pub mod handler;
 pub mod hook;
 pub mod input_thread;
@@ -24,6 +25,7 @@ pub mod tools;
 pub mod ui;
 pub mod ui_helpers;
 
+use crate::command::chat::error::ChatError;
 use crate::config::YamlConfig;
 use crate::{error, info};
 use handler::run_chat_tui;
@@ -203,7 +205,7 @@ pub fn handle_chat(
                 }
             }
             Err(e) => {
-                error!("\n✖️ {}", e);
+                error!("\n✖️ {}", e.display_message());
             }
         }
     }
@@ -535,7 +537,7 @@ fn run_oneshot_agent(
     for _round in 0..max_rounds {
         // ── 异步部分：API 流式调用 ──
         let ctrl_c_stream = Arc::clone(&ctrl_c);
-        let stream_result: Result<StreamResult, String> = rt.block_on(async {
+        let stream_result: Result<StreamResult, ChatError> = rt.block_on(async {
             let request = build_request_with_tools(
                 provider,
                 &messages,
@@ -547,7 +549,7 @@ fn run_oneshot_agent(
                 .chat()
                 .create_stream(request)
                 .await
-                .map_err(|e| format!("API 请求失败: {}", e))?;
+                .map_err(ChatError::from)?;
 
             let mut assistant_text = String::new();
             let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
@@ -619,7 +621,7 @@ fn run_oneshot_agent(
                             }
                         }
                     }
-                    Err(e) => return Err(format!("流式响应错误: {}", e)),
+                    Err(e) => return Err(ChatError::from(e)),
                 }
             }
 
@@ -651,7 +653,7 @@ fn run_oneshot_agent(
         let sr = match stream_result {
             Ok(sr) => sr,
             Err(e) => {
-                error!("\n{}", e);
+                error!("\n{}", e.display_message());
                 return;
             }
         };

@@ -1,3 +1,4 @@
+use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ToolCallItem;
 use std::sync::mpsc;
 
@@ -12,7 +13,7 @@ pub enum StreamMsg {
     /// 流式响应完成
     Done,
     /// 发生错误
-    Error(String),
+    Error(ChatError),
     /// 用户主动取消
     Cancelled,
 }

@@ -1,4 +1,5 @@
 use super::ui_state::ChatMode;
+use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ToolCallItem;
 
 /// Redux-like Action 枚举：所有用户输入和系统事件都转化为 Action
@@ -74,7 +75,7 @@ pub enum Action {
     /// 流式完成（正常结束）
     StreamDone,
     /// 流式错误
-    StreamError(String),
+    StreamError(ChatError),
     /// 流式被用户取消
     StreamCancelled,
 

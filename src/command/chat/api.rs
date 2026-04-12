@@ -1,3 +1,4 @@
+use super::error::ChatError;
 use super::storage::{ChatMessage, ModelProvider, ToolCallItem};
 use crate::command::chat::constants;
 use crate::util::log::{write_error_log, write_info_log};
@@ -127,7 +128,7 @@ pub fn build_request_with_tools(
     messages: &[ChatMessage],
     tools: Vec<ChatCompletionTools>,
     system_prompt: Option<&str>,
-) -> Result<CreateChatCompletionRequest, String> {
+) -> Result<CreateChatCompletionRequest, ChatError> {
     let mut openai_messages = Vec::new();
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
@@ -153,7 +154,7 @@ pub fn build_request_with_tools(
             provider.model, provider.api_base, messages.len(), tools_count, system_prompt
         );
         write_info_log("build_request_with_tools ERROR", &format!("{}\n{}", err_msg, params_info));
-        err_msg
+        ChatError::RequestBuild(e.to_string())
     })
 }
 
@@ -164,9 +165,10 @@ pub async fn call_openai_stream_async(
     messages: &[ChatMessage],
     system_prompt: Option<&str>,
     on_chunk: &mut dyn FnMut(&str),
-) -> Result<String, String> {
+) -> Result<String, ChatError> {
     let client = create_openai_client(provider);
     let mut openai_messages = Vec::new();
+
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
         if !trimmed.is_empty()
@@ -183,28 +185,14 @@ pub async fn call_openai_stream_async(
         .model(&provider.model)
         .messages(openai_messages)
         .build()
-        .map_err(|e| {
-            let err_msg = format!("构建请求失败: {}", e);
-            let params_info = format!(
-                "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  system_prompt: {:?}",
-                provider.model,
-                provider.api_base,
-                messages.len(),
-                system_prompt
-            );
-            write_info_log(
-                "call_openai_stream_async 构建请求 ERROR",
-                &format!("{}\n{}", err_msg, params_info),
-            );
-            err_msg
-        })?;
+        .map_err(|e| ChatError::RequestBuild(e.to_string()))?;
 
     // 在 request 被 move 之前，序列化完整的 request body 用于错误日志
     let request_body =
         serde_json::to_string(&request).unwrap_or_else(|e| format!("序列化request失败: {}", e));
 
     let mut stream = client.chat().create_stream(request).await.map_err(|e| {
-        let err_msg = format!("API 请求失败: {}", e);
+        let err_msg = ChatError::from(e);
         write_info_log(
             "call_openai_stream_async API请求 ERROR",
             &format!("{}\nrequest body:\n{}", err_msg, request_body),
@@ -225,17 +213,17 @@ pub async fn call_openai_stream_async(
                 }
             }
             Err(e) => {
-                let err_msg = format!("流式响应错误: {}", e);
+                let err = ChatError::from(e);
                 write_info_log(
                     "call_openai_stream_async 流式响应 ERROR",
                     &format!(
                         "{}\n已接收内容长度: {}\nrequest body:\n{}",
-                        err_msg,
+                        err,
                         full_content.len(),
                         request_body
                     ),
                 );
-                return Err(err_msg);
+                return Err(err);
             }
         }
     }
@@ -291,7 +279,7 @@ pub struct FallbackResult {
 pub async fn call_openai_non_stream_lenient(
     provider: &ModelProvider,
     request: &CreateChatCompletionRequest,
-) -> Result<FallbackResult, String> {
+) -> Result<FallbackResult, ChatError> {
     let url = format!(
         "{}/chat/completions",
         provider.api_base.trim_end_matches('/')
@@ -308,42 +296,31 @@ pub async fn call_openai_non_stream_lenient(
         .send()
         .await
         .map_err(|e| {
-            let err_msg = format!("API 请求失败(fallback lenient): {}", e);
+            let err = ChatError::from(e);
             write_error_log(
                 "call_openai_non_stream_lenient HTTP",
-                &format!("{}\nrequest body:\n{}", err_msg, request_body),
+                &format!("{}\nrequest body:\n{}", err, request_body),
             );
-            err_msg
+            err
         })?;
 
     let status = resp.status();
     let body = resp
         .text()
         .await
-        .map_err(|e| format!("读取响应 body 失败: {}", e))?;
+        .map_err(|e| ChatError::Other(format!("读取响应 body 失败: {}", e)))?;
 
     if !status.is_success() {
-        let err_msg = format!(
-            "API 返回错误 status={}, body: {}",
-            status,
-            &body[..body.len().min(500)]
-        );
+        let err = ChatError::from_http_status(status.as_u16(), sanitize_api_body(&body));
         write_error_log(
             "call_openai_non_stream_lenient HTTP status",
-            &format!("{}\nrequest body:\n{}", err_msg, request_body),
+            &format!("{}\nrequest body:\n{}", err, request_body),
         );
-        return Err(err_msg);
+        return Err(err);
     }
 
-    let parsed: LenientChatResponse = serde_json::from_str(&body).map_err(|e| {
-        let err_msg = format!(
-            "反序列化响应失败(lenient): {}, body: {}",
-            e,
-            &body[..body.len().min(500)]
-        );
-        write_error_log("call_openai_non_stream_lenient parse", &err_msg);
-        err_msg
-    })?;
+    let parsed: LenientChatResponse =
+        serde_json::from_str(&body).map_err(|e| ChatError::StreamDeserialize(format!("{}", e)))?;
 
     let choice = match parsed.choices.first() {
         Some(c) => c,
@@ -399,9 +376,9 @@ pub fn call_openai_stream(
     messages: &[ChatMessage],
     system_prompt: Option<&str>,
     on_chunk: &mut dyn FnMut(&str),
-) -> Result<String, String> {
+) -> Result<String, ChatError> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| {
-        let err_msg = format!("创建异步运行时失败: {}", e);
+        let err = ChatError::RuntimeFailed(e.to_string());
         let params_info = format!(
             "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  system_prompt: {:?}",
             provider.model,
@@ -411,9 +388,9 @@ pub fn call_openai_stream(
         );
         write_info_log(
             "call_openai_stream 创建runtime ERROR",
-            &format!("{}\n{}", err_msg, params_info),
+            &format!("{}\n{}", err, params_info),
         );
-        err_msg
+        err
     })?;
     rt.block_on(call_openai_stream_async(
         provider,
@@ -421,4 +398,22 @@ pub fn call_openai_stream(
         system_prompt,
         on_chunk,
     ))
+}
+
+/// 清理 API 响应 body 用于错误消息：剥离 HTML 标签，截断超长内容
+fn sanitize_api_body(body: &str) -> String {
+    let max_len = 500;
+    let truncated = &body[..body.len().min(max_len)];
+    // 剥离 HTML 标签
+    let mut result = String::with_capacity(truncated.len());
+    let mut in_tag = false;
+    for ch in truncated.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+    result.split_whitespace().collect::<Vec<_>>().join(" ")
 }

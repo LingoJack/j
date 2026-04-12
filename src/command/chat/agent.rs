@@ -2,6 +2,7 @@ use super::agent_config::{AgentLoopConfig, AgentSharedState};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::app::{StreamMsg, ToolResultMsg};
 use super::compact;
+use super::error::ChatError;
 use super::hook::{HookContext, HookEvent, HookManager};
 use super::storage::{ChatMessage, ToolCallItem};
 use crate::command::chat::constants::{
@@ -186,7 +187,7 @@ pub async fn run_agent_loop(
             };
             if let Some(result) = hook_manager.execute(HookEvent::PreLlmRequest, ctx) {
                 if result.abort {
-                    let _ = tx.send(StreamMsg::Error("LLM 请求被 hook 中止".to_string()));
+                    let _ = tx.send(StreamMsg::Error(ChatError::HookAborted));
                     return;
                 }
                 if let Some(new_msgs) = result.messages {
@@ -237,7 +238,7 @@ pub async fn run_agent_loop(
                 req
             }
             Err(e) => {
-                let _ = tx.send(StreamMsg::Error(format!("构建请求失败: {}", e)));
+                let _ = tx.send(StreamMsg::Error(e));
                 return;
             }
         };
@@ -250,9 +251,9 @@ pub async fn run_agent_loop(
                     s
                 }
                 Err(e) => {
-                    let error_msg = format!("API 请求失败: {}", e);
-                    write_error_log("Chat API 流式请求创建", &error_msg);
-                    let _ = tx.send(StreamMsg::Error(error_msg));
+                    let err = ChatError::from(e);
+                    write_error_log("Chat API 流式请求创建", &err.to_string());
+                    let _ = tx.send(StreamMsg::Error(err));
                     return;
                 }
             };
@@ -338,7 +339,7 @@ pub async fn run_agent_loop(
                                     break 'stream;
                                 }
                                 write_error_log("Chat API 流式响应", &error_str);
-                                let _ = tx.send(StreamMsg::Error(error_str));
+                                let _ = tx.send(StreamMsg::Error(ChatError::from(e)));
                                 return;
                             }
                             None => {
@@ -432,7 +433,10 @@ pub async fn run_agent_loop(
                                             }
                                             continue;
                                         }
-                                        Err(()) => return,
+                                        Err(e) => {
+                                            write_error_log("agent_loop", &format!("process_tool_calls failed: {}", e));
+                                            return;
+                                        }
                                     }
                                 }
                         // 普通文本回复（或非标准 finish_reason 如 network_error）
@@ -450,16 +454,15 @@ pub async fn run_agent_loop(
                             && !matches!(reason.as_str(), "stop" | "length" | "tool_calls" | "content_filter" | "function_call")
                             && fallback_result.content.as_deref().unwrap_or_default().is_empty()
                         {
-                                let error_msg = format!("API 返回异常: finish_reason={}", reason);
-                                write_error_log("Sprite API fallback 非流式", &error_msg);
+                                let error_msg = ChatError::AbnormalFinish(reason.clone());
+                                write_error_log("Sprite API fallback 非流式", &error_msg.to_string());
                                 let _ = tx.send(StreamMsg::Error(error_msg));
                                 return;
                         }
                     }
                     Err(e) => {
-                        let error_msg = format!("API 请求失败(fallback): {}", e);
-                        write_error_log("Sprite API fallback 非流式", &error_msg);
-                        let _ = tx.send(StreamMsg::Error(error_msg));
+                        write_error_log("Sprite API fallback 非流式", &e.to_string());
+                        let _ = tx.send(StreamMsg::Error(e));
                         return;
                     }
                 },
@@ -524,7 +527,10 @@ pub async fn run_agent_loop(
                         }
                         continue;
                     }
-                    Err(()) => return,
+                    Err(e) => {
+                        write_error_log("agent_loop", &format!("process_tool_calls failed: {}", e));
+                        return;
+                    }
                 }
             } else {
                 // 正常结束，但如果有用户增量消息则继续循环
@@ -634,13 +640,13 @@ struct ToolCallResult {
 
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
 /// 返回 Ok(ToolCallResult) 表示成功（应 continue 循环）
-/// Err(()) 表示 channel 断开（应 return）
+/// Err(ChatError) 表示 channel 断开或执行失败
 fn process_tool_calls(
     tool_items: Vec<ToolCallItem>,
     assistant_text: String,
     messages: &mut Vec<ChatMessage>,
     ctx: &ToolCallContext<'_>,
-) -> Result<ToolCallResult, ()> {
+) -> Result<ToolCallResult, ChatError> {
     log_tool_request(&tool_items);
 
     if !assistant_text.is_empty() {
@@ -685,7 +691,7 @@ fn process_tool_calls(
         .send(StreamMsg::ToolCallRequest(tool_items.clone()))
         .is_err()
     {
-        return Err(());
+        return Err(ChatError::Other("工具调用通道已断开".to_string()));
     }
 
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
@@ -705,7 +711,7 @@ fn process_tool_calls(
                 }
                 tool_results.push(result);
             }
-            Err(_) => return Err(()),
+            Err(_) => return Err(ChatError::Other("工具执行结果通道已断开".to_string())),
         }
     }
 

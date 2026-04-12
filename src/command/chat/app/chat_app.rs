@@ -479,13 +479,14 @@ impl ChatApp {
                 self.finish_loading(false, false);
             }
             Action::StreamError(ref e) => {
+                let msg = e.display_message();
                 self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
-                    message: format!("请求失败: {}", e),
+                    message: format!("请求失败: {}", msg),
                 });
                 self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                     state: "idle".to_string(),
                 });
-                self.show_toast(format!("请求失败: {}", e), true);
+                self.show_toast(format!("请求失败: {}", msg), true);
                 self.finish_loading(true, false);
             }
             Action::StreamCancelled => {
