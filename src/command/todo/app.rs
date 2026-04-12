@@ -9,6 +9,17 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+// ========== 命令面板 ==========
+
+/// 命令面板选项列表 (key, 中文标签)
+pub const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
+    ("filter", "切换过滤"),
+    ("add", "添加"),
+    ("delete", "删除"),
+    ("save", "保存"),
+    ("help", "帮助"),
+];
+
 // ========== 数据结构 ==========
 
 /// 单条待办事项
@@ -111,6 +122,12 @@ pub struct TodoApp {
     pub cursor_pos: usize,
     /// 待写入日报的内容（toggle done 后暂存）
     pub report_pending_content: Option<String>,
+    /// 命令面板筛选文本
+    pub cmd_popup_filter: String,
+    /// 命令面板选中索引
+    pub cmd_popup_selected: usize,
+    /// 当前主题
+    pub theme: crate::command::chat::theme::Theme,
 }
 
 #[derive(PartialEq, Clone)]
@@ -129,6 +146,8 @@ pub enum AppMode {
     ConfirmCancelInput,
     /// 显示帮助
     Help,
+    /// 命令面板
+    CommandPopup,
 }
 
 impl Default for TodoApp {
@@ -145,6 +164,8 @@ impl TodoApp {
         if !list.items.is_empty() {
             state.select(Some(0));
         }
+        let agent_config = crate::command::chat::storage::load_agent_config();
+        let theme = crate::command::chat::theme::Theme::from_name(&agent_config.theme);
         Self {
             list,
             snapshot,
@@ -157,7 +178,25 @@ impl TodoApp {
             quit_input: String::new(),
             cursor_pos: 0,
             report_pending_content: None,
+            cmd_popup_filter: String::new(),
+            cmd_popup_selected: 0,
+            theme,
         }
+    }
+
+    /// 模糊筛选命令面板选项，返回 (原索引, key, 标签)
+    pub fn filtered_cmd_items(&self) -> Vec<(usize, &'static str, &'static str)> {
+        let filter = self.cmd_popup_filter.to_lowercase();
+        CMD_POPUP_ITEMS
+            .iter()
+            .enumerate()
+            .filter(|(_, (key, label))| {
+                filter.is_empty()
+                    || key.contains(filter.as_str())
+                    || label.contains(filter.as_str())
+            })
+            .map(|(i, (key, label))| (i, *key, *label))
+            .collect()
     }
 
     /// 通过对比快照判断是否有未保存的修改
@@ -429,6 +468,11 @@ pub fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
         KeyCode::Char('?') => {
             app.mode = AppMode::Help;
         }
+        KeyCode::Char('/') => {
+            app.mode = AppMode::CommandPopup;
+            app.cmd_popup_filter.clear();
+            app.cmd_popup_selected = 0;
+        }
         _ => {}
     }
 
@@ -603,6 +647,82 @@ pub fn handle_confirm_cancel_input(app: &mut TodoApp, key: KeyEvent, prev_mode: 
             app.mode = prev_mode;
             app.message = None;
         }
+    }
+}
+
+/// 命令面板按键处理
+pub fn handle_command_popup_mode(app: &mut TodoApp, key: KeyEvent) {
+    let items = app.filtered_cmd_items();
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if !items.is_empty() {
+                if app.cmd_popup_selected > 0 {
+                    app.cmd_popup_selected -= 1;
+                } else {
+                    app.cmd_popup_selected = items.len() - 1;
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if !items.is_empty() {
+                if app.cmd_popup_selected < items.len() - 1 {
+                    app.cmd_popup_selected += 1;
+                } else {
+                    app.cmd_popup_selected = 0;
+                }
+            }
+        }
+        KeyCode::Backspace => {
+            if app.cmd_popup_filter.pop().is_none() {
+                app.mode = AppMode::Normal;
+            } else {
+                app.cmd_popup_selected = 0;
+            }
+        }
+        KeyCode::Enter => {
+            let selected = app.cmd_popup_selected.min(items.len().saturating_sub(1));
+            if let Some((_, key, _)) = items.get(selected) {
+                match *key {
+                    "filter" => {
+                        app.toggle_filter();
+                    }
+                    "add" => {
+                        app.mode = AppMode::Adding;
+                        app.input.clear();
+                        app.cursor_pos = 0;
+                        app.message = None;
+                        let count = app.filtered_indices().len();
+                        app.state.select(Some(count));
+                        return;
+                    }
+                    "delete" => {
+                        if app.selected_real_index().is_some() {
+                            app.mode = AppMode::ConfirmDelete;
+                        } else {
+                            app.mode = AppMode::Normal;
+                        }
+                        return;
+                    }
+                    "save" => {
+                        app.save();
+                    }
+                    "help" => {
+                        app.mode = AppMode::Help;
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Char(c) => {
+            app.cmd_popup_filter.push(c);
+            app.cmd_popup_selected = 0;
+        }
+        _ => {}
     }
 }
 

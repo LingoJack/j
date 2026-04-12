@@ -74,9 +74,18 @@ fn build_theme_gallery() -> Vec<ThemeGalleryItem> {
         .map(|name| {
             let theme = Theme::from_name(name);
             let editor_theme = EditorTheme::from(&theme);
-            (name.display_name(), editor_theme)
+            (name.display_name(), name.to_str(), editor_theme)
         })
         .collect()
+}
+
+/// 如果用户在编辑器中选择了主题，保存到 agent_config
+fn save_theme_if_selected(theme_id: Option<&'static str>) {
+    if let Some(id) = theme_id {
+        let mut config = crate::command::chat::storage::load_agent_config();
+        config.theme = ThemeName::parse(id);
+        crate::command::chat::storage::save_agent_config(&config);
+    }
 }
 
 // ========== 公共 API ==========
@@ -87,16 +96,18 @@ pub fn open_markdown_editor_on_terminal(
     title: &str,
     content: &str,
     theme: &Theme,
-) -> io::Result<Option<String>> {
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     let editor_theme = EditorTheme::from(theme);
-    core_open_on_terminal(
+    let result = core_open_on_terminal(
         terminal,
         title,
         content,
         &editor_theme,
         bridge_highlight as HighlightFn,
         build_theme_gallery(),
-    )
+    )?;
+    save_theme_if_selected(result.1);
+    Ok(result)
 }
 
 /// 打开 Markdown 编辑器（独立终端）
@@ -104,15 +115,17 @@ pub fn open_markdown_editor(
     title: &str,
     content: &str,
     theme: &Theme,
-) -> io::Result<Option<String>> {
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     let editor_theme = EditorTheme::from(theme);
-    core_open(
+    let result = core_open(
         title,
         content,
         &editor_theme,
         bridge_highlight as HighlightFn,
         build_theme_gallery(),
-    )
+    )?;
+    save_theme_if_selected(result.1);
+    Ok(result)
 }
 
 /// 使用指定内容打开编辑器（预填充行，NORMAL 模式启动）
@@ -120,28 +133,35 @@ pub fn open_markdown_editor_with_content(
     title: &str,
     initial_lines: &[String],
     theme: &Theme,
-) -> io::Result<Option<String>> {
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     let editor_theme = EditorTheme::from(theme);
-    core_open_with_content(
+    let result = core_open_with_content(
         title,
         initial_lines,
         &editor_theme,
         bridge_highlight as HighlightFn,
         build_theme_gallery(),
-    )
+    )?;
+    save_theme_if_selected(result.1);
+    Ok(result)
 }
 
 /// 打开脚本编辑器（使用 Dark 主题的便捷函数）
 ///
 /// 适用于脚本编辑等不需要外部传入主题的场景
-pub fn open_script_editor(title: &str, initial_lines: &[String]) -> io::Result<Option<String>> {
+pub fn open_script_editor(
+    title: &str,
+    initial_lines: &[String],
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     let theme = Theme::dark();
     let editor_theme = EditorTheme::from(&theme);
-    core_open_with_content(
+    let result = core_open_with_content(
         title,
         initial_lines,
         &editor_theme,
         bridge_highlight as HighlightFn,
         build_theme_gallery(),
-    )
+    )?;
+    save_theme_if_selected(result.1);
+    Ok(result)
 }

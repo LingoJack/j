@@ -142,7 +142,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                 }
                 FlatEntryKind::File { note_index } => {
                     let note = &app.notes[*note_index];
-                    let name_style = Style::default().fg(Color::Gray);
+                    let name_style = Style::default().fg(Color::Reset);
                     let guide_width = unicode_width::UnicodeWidthStr::width(entry.guide.as_str());
                     let name_display_width = inner_width.saturating_sub(guide_width);
                     let display_name = note.display_name();
@@ -180,7 +180,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
     let list_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::White))
+        .border_style(Style::default().fg(Color::DarkGray))
         .title(" 笔记列表 ");
 
     if items.is_empty() {
@@ -233,7 +233,7 @@ fn build_adding_item(
     }
 
     let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-    let text_style = Style::default().fg(Color::White);
+    let text_style = Style::default().fg(Color::Reset);
 
     let wrapped = wrap_text(input, content_width);
     let mut char_offset = 0;
@@ -325,7 +325,7 @@ fn render_preview(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::White));
+        .border_style(Style::default().fg(Color::DarkGray));
 
     let content = if app.preview_lines.is_empty() {
         match &app.preview_content {
@@ -741,20 +741,23 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
     };
 
     // 构建列表项：英文 key (粗体) + 中文描述 (淡色)
+    // 使用主题颜色
+    let highlight_bg = app.theme.config_tab_active_bg;
+    let popup_bg = app.theme.bg_panel;
+    let border_color = app.theme.border_config;
+    let title_color = app.theme.config_title;
+    let text_color = app.theme.text_normal;
+    let dim_color = app.theme.text_dim;
+
     let list_items: Vec<ListItem> = items
         .iter()
         .map(|(_, key, label)| {
             ListItem::new(Line::from(vec![
                 Span::styled(
                     format!("  {}", key),
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(text_color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!(" - {}", label),
-                    Style::default().fg(Color::DarkGray),
-                ),
+                Span::styled(format!(" - {}", label), Style::default().fg(dim_color)),
             ]))
         })
         .collect();
@@ -769,19 +772,19 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Magenta))
+                .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
                     title,
                     Style::default()
-                        .fg(Color::Magenta)
+                        .fg(title_color)
                         .add_modifier(Modifier::BOLD),
                 ))
-                .style(Style::default().bg(Color::Black)),
+                .style(Style::default().bg(popup_bg)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::Magenta)
-                .fg(Color::White)
+                .bg(highlight_bg)
+                .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
         );
 

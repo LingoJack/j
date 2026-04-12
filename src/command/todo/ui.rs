@@ -2,10 +2,10 @@ use super::app::{AppMode, TodoApp, display_width, truncate_to_width};
 use crate::constants::todo_filter;
 use crate::util::text::wrap_text;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
 /// 绘制 TUI 界面
@@ -55,13 +55,18 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         render_list(f, app, chunks[1]);
     }
 
+    // 命令面板弹窗（浮动在列表区上方）
+    if app.mode == AppMode::CommandPopup {
+        draw_command_popup(f, app, chunks[1]);
+    }
+
     // ========== 状态栏 ==========
     render_status_bar(f, app, chunks[2]);
 
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
         AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | y 复制 | f 过滤 | s 保存 | ? 帮助 | q 退出"
+            " n/↓ 下移 | N/↑ 上移 | 空格/回车 切换完成 | a 添加 | e 编辑 | d 删除 | y 复制 | f 过滤 | s 保存 | / 命令 | ? 帮助 | q 退出"
         }
         AppMode::Adding | AppMode::Editing => {
             " Enter 确认 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾"
@@ -70,6 +75,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         AppMode::ConfirmReport => " Enter/y 写入日报 | 其他键跳过",
         AppMode::ConfirmCancelInput => " Enter/y 保存 | n/Esc 放弃 | 其他键继续编辑",
         AppMode::Help => " 按任意键返回",
+        AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | 输入筛选 | Esc 取消",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(
         help_text,
@@ -145,6 +151,10 @@ fn render_help(f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
             Span::raw("强制退出（不保存）"),
         ]),
         Line::from(vec![
+            Span::styled("  /            ", Style::default().fg(Color::Yellow)),
+            Span::raw("命令面板"),
+        ]),
+        Line::from(vec![
             Span::styled("  ?            ", Style::default().fg(Color::Yellow)),
             Span::raw("显示此帮助"),
         ]),
@@ -204,7 +214,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout:
 
     let list_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::White))
+        .border_style(Style::default().fg(Color::DarkGray))
         .title(" 待办列表 ");
 
     if items.is_empty() {
@@ -255,10 +265,10 @@ fn build_normal_item(
     };
     let content_style = if item.done {
         Style::default()
-            .fg(Color::Gray)
+            .fg(Color::DarkGray)
             .add_modifier(Modifier::CROSSED_OUT)
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(Color::Reset)
     };
 
     let checkbox_str = format!(" {} ", checkbox);
@@ -343,7 +353,7 @@ fn build_editing_item(
 /// 将输入文本折行并在正确位置渲染光标
 fn build_cursor_wrapped_lines(input: &str, cursor_pos: usize, width: usize) -> Vec<Line<'static>> {
     let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-    let text_style = Style::default().fg(Color::White);
+    let text_style = Style::default().fg(Color::Reset);
 
     if input.is_empty() {
         return vec![Line::from(vec![
@@ -395,6 +405,96 @@ fn build_cursor_wrapped_lines(input: &str, cursor_pos: usize, width: usize) -> V
     }
 
     result
+}
+
+/// 绘制命令面板弹窗（浮动在列表区上方）
+pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: Rect) {
+    let items = app.filtered_cmd_items();
+    if items.is_empty() {
+        return;
+    }
+
+    let item_count = items.len();
+    let popup_height = (item_count as u16) + 2; // 内容 + 边框
+
+    // 计算宽度：基于最长 "key - 描述" 组合
+    let max_label_width = items
+        .iter()
+        .map(|(_, key, label)| {
+            2 + unicode_width::UnicodeWidthStr::width(*key)
+                + 3
+                + unicode_width::UnicodeWidthStr::width(*label)
+        })
+        .max()
+        .unwrap_or(16)
+        .max(16);
+    let popup_width = (max_label_width as u16 + 2).min(main_area.width.saturating_sub(4));
+
+    // 位置：主区域底部偏左
+    let x = main_area.x + 2;
+    let y = main_area
+        .bottom()
+        .saturating_sub(popup_height)
+        .max(main_area.y);
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    // 标题
+    let title = if app.cmd_popup_filter.is_empty() {
+        " 命令面板 ".to_string()
+    } else {
+        format!(" 命令面板 [{}] ", app.cmd_popup_filter)
+    };
+
+    // 使用主题颜色
+    let highlight_bg = app.theme.config_tab_active_bg;
+    let popup_bg = app.theme.bg_panel;
+    let border_color = app.theme.border_config;
+    let title_color = app.theme.config_title;
+    let text_color = app.theme.text_normal;
+    let dim_color = app.theme.text_dim;
+
+    // 构建列表项
+    let list_items: Vec<ListItem> = items
+        .iter()
+        .map(|(_, key, label)| {
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("  {}", key),
+                    Style::default().fg(text_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!(" - {}", label), Style::default().fg(dim_color)),
+            ]))
+        })
+        .collect();
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(
+        app.cmd_popup_selected.min(item_count.saturating_sub(1)),
+    ));
+
+    let list = List::new(list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(border_color))
+                .title(Span::styled(
+                    title,
+                    Style::default()
+                        .fg(title_color)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(popup_bg)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(highlight_bg)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    f.render_widget(Clear, popup_area);
+    f.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
 /// 渲染状态栏

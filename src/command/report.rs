@@ -1,4 +1,4 @@
-use crate::command::chat::theme::{Theme, ThemeName};
+use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{
     DEFAULT_CHECK_LINES, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, config_key, rmeta_action,
@@ -173,14 +173,14 @@ fn handle_report_tui(config: &mut YamlConfig) {
     initial_lines.push(date_prefix);
 
     // 打开带初始内容的编辑器（NORMAL 模式）
-    // 使用默认主题
-    let theme = Theme::from_name(&ThemeName::default());
+    // 使用用户配置的主题
+    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor_with_content(
         "编辑日报",
         &initial_lines,
         &theme,
     ) {
-        Ok(Some(text)) => {
+        Ok((Some(text), _)) => {
             // 用户提交了内容
             // 计算原始上下文有多少行（用于替换）
             let original_context_count = last_lines.len();
@@ -190,7 +190,7 @@ fn handle_report_tui(config: &mut YamlConfig) {
 
             info!("☑️ 日报已写入：{}", report_path);
         }
-        Ok(None) => {
+        Ok((None, _)) => {
             info!("已取消编辑");
             // 文件未做任何修改（新周标题也没有写入）
             // 配置文件中的 week_num/last_day 可能已更新，但下次进入时 now <= last_day 不会重复生成
@@ -632,14 +632,14 @@ fn handle_open_report(config: &YamlConfig) {
 
     let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
 
-    // 用 TUI 编辑器打开全文（NORMAL 模式）
-    let theme = Theme::from_name(&ThemeName::default());
+    // 用 TUI 编辑器打开全文（NORMAL 模式），使用用户配置主题
+    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor_with_content(
         "编辑日报文件",
         &lines,
         &theme,
     ) {
-        Ok(Some(text)) => {
+        Ok((Some(text), _)) => {
             // 用户提交了内容，整体回写文件
             let mut result = text;
             if !result.ends_with('\n') {
@@ -651,7 +651,7 @@ fn handle_open_report(config: &YamlConfig) {
             }
             info!("☑️ 日报文件已保存：{}", report_path);
         }
-        Ok(None) => {
+        Ok((None, _)) => {
             info!("已取消编辑，文件未修改");
         }
         Err(e) => {

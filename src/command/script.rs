@@ -45,7 +45,7 @@ pub fn handle_script(name: &str, content: &[String], config: &mut YamlConfig) {
             &format!("📝 编辑脚本: {}", name),
             &initial_lines,
         ) {
-            Ok(Some(new_content)) => {
+            Ok((Some(new_content), _)) => {
                 if new_content.trim().is_empty() {
                     error!("⚠️ 脚本内容为空，未保存修改");
                     return;
@@ -56,7 +56,7 @@ pub fn handle_script(name: &str, content: &[String], config: &mut YamlConfig) {
                     Err(e) => error!("💥 写入脚本文件失败: {}", e),
                 }
             }
-            Ok(None) => {
+            Ok((None, _)) => {
                 info!("已取消编辑脚本");
             }
             Err(e) => {
@@ -82,8 +82,8 @@ pub fn handle_script(name: &str, content: &[String], config: &mut YamlConfig) {
             &format!("📝 编写脚本: {}", name),
             &initial_lines,
         ) {
-            Ok(Some(text)) => text,
-            Ok(None) => {
+            Ok((Some(text), _)) => text,
+            Ok((None, _)) => {
                 info!("已取消创建脚本");
                 return;
             }

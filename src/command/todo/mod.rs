@@ -5,9 +5,9 @@ pub mod ui;
 use crate::config::YamlConfig;
 use crate::{error, info, usage};
 use app::{
-    AppMode, TodoApp, TodoItem, handle_confirm_cancel_input, handle_confirm_delete,
-    handle_confirm_report, handle_help_mode, handle_input_mode, handle_normal_mode, load_todo_list,
-    save_todo_list,
+    AppMode, TodoApp, TodoItem, handle_command_popup_mode, handle_confirm_cancel_input,
+    handle_confirm_delete, handle_confirm_report, handle_help_mode, handle_input_mode,
+    handle_normal_mode, load_todo_list, save_todo_list,
 };
 use chrono::Local;
 use constant::{
@@ -194,6 +194,7 @@ fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
                     handle_confirm_cancel_input(&mut app, key, prev);
                 }
                 AppMode::Help => handle_help_mode(&mut app, key),
+                AppMode::CommandPopup => handle_command_popup_mode(&mut app, key),
             }
         }
     }

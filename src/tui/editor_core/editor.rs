@@ -27,8 +27,8 @@ use ratatui::{
 };
 use std::io;
 
-/// 主题画廊项（名称 + 主题）
-pub type ThemeGalleryItem = (&'static str, EditorTheme);
+/// 主题画廊项（显示名称 + 主题ID + 主题）
+pub type ThemeGalleryItem = (&'static str, &'static str, EditorTheme);
 
 /// 编辑器主结构
 pub struct MarkdownEditor {
@@ -62,6 +62,8 @@ pub struct MarkdownEditor {
     theme_popup_selected: usize,
     /// 状态消息（短暂显示，下次按键清除）
     status_message: Option<String>,
+    /// 用户在主题画廊中选择的主题ID（退出时返回）
+    selected_theme_id: Option<&'static str>,
 }
 
 impl MarkdownEditor {
@@ -94,7 +96,7 @@ impl MarkdownEditor {
         // 查找当前主题在画廊中的索引
         let theme_index = theme_gallery
             .iter()
-            .position(|(_, t)| *t == theme)
+            .position(|(_, _, t)| *t == theme)
             .unwrap_or(0);
 
         Self {
@@ -113,7 +115,13 @@ impl MarkdownEditor {
             theme_index,
             theme_popup_selected: theme_index,
             status_message: None,
+            selected_theme_id: None,
         }
+    }
+
+    /// 获取用户选择的主题ID（退出时读取）
+    pub fn selected_theme_id(&self) -> Option<&'static str> {
+        self.selected_theme_id
     }
 
     /// 获取光标所在的视觉行
@@ -504,9 +512,10 @@ impl MarkdownEditor {
                 let idx = self.theme_popup_selected;
                 if idx < count {
                     self.theme_index = idx;
-                    let (name, new_theme) = &self.theme_gallery[idx];
+                    let (name, theme_id, new_theme) = &self.theme_gallery[idx];
                     self.theme = new_theme.clone();
                     self.renderer.set_theme(new_theme.clone());
+                    self.selected_theme_id = Some(theme_id);
                     self.status_message = Some(format!("主题: {}", name));
                 }
                 self.vim.set_mode(Mode::Normal);
@@ -778,22 +787,24 @@ impl MarkdownEditor {
         self.cmd_popup_selected = self.cmd_popup_selected.min(item_count.saturating_sub(1));
 
         // 构建列表项
+        let accent = self.theme.md_h1;
+        let popup_bg = self.theme.bg_primary;
+        let text_color = self.theme.text_normal;
+        let dim_color = self.theme.text_dim;
         let list_items: Vec<ListItem> = items
             .iter()
             .enumerate()
             .map(|(i, cmd)| {
                 let is_selected = i == self.cmd_popup_selected;
                 let name_style = if is_selected {
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD)
+                    Style::default().fg(text_color).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(text_color)
                 };
                 let desc_style = if is_selected {
-                    Style::default().fg(Color::Gray)
+                    Style::default().fg(dim_color)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(dim_color)
                 };
                 let pointer = if is_selected { "❯ " } else { "  " };
                 ListItem::new(Line::from(vec![
@@ -812,19 +823,17 @@ impl MarkdownEditor {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::Magenta))
+                    .border_style(Style::default().fg(accent))
                     .title(Span::styled(
                         title,
-                        Style::default()
-                            .fg(Color::Magenta)
-                            .add_modifier(Modifier::BOLD),
+                        Style::default().fg(accent).add_modifier(Modifier::BOLD),
                     ))
-                    .style(Style::default().bg(Color::Black)),
+                    .style(Style::default().bg(popup_bg)),
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::Magenta)
-                    .fg(Color::White)
+                    .bg(accent)
+                    .fg(popup_bg)
                     .add_modifier(Modifier::BOLD),
             );
 
@@ -854,23 +863,25 @@ impl MarkdownEditor {
         self.theme_popup_selected = self.theme_popup_selected.min(item_count.saturating_sub(1));
 
         // 构建列表项
+        let accent = self.theme.md_h1;
+        let popup_bg = self.theme.bg_primary;
+        let text_color = self.theme.text_normal;
+        let current_color = self.theme.md_link;
         let list_items: Vec<ListItem> = self
             .theme_gallery
             .iter()
             .enumerate()
-            .map(|(i, (name, _))| {
+            .map(|(i, (name, _, _))| {
                 let is_selected = i == self.theme_popup_selected;
                 let is_current = i == self.theme_index;
                 let pointer = if is_selected { "❯ " } else { "  " };
                 let check = if is_current { " ●" } else { "" };
                 let name_style = if is_selected {
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD)
+                    Style::default().fg(text_color).add_modifier(Modifier::BOLD)
                 } else if is_current {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(current_color)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(text_color)
                 };
                 ListItem::new(Line::from(vec![
                     Span::styled(pointer.to_string(), name_style),
@@ -887,19 +898,17 @@ impl MarkdownEditor {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::Magenta))
+                    .border_style(Style::default().fg(accent))
                     .title(Span::styled(
                         " 选择主题 ",
-                        Style::default()
-                            .fg(Color::Magenta)
-                            .add_modifier(Modifier::BOLD),
+                        Style::default().fg(accent).add_modifier(Modifier::BOLD),
                     ))
-                    .style(Style::default().bg(Color::Black)),
+                    .style(Style::default().bg(popup_bg)),
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::Magenta)
-                    .fg(Color::White)
+                    .bg(accent)
+                    .fg(popup_bg)
                     .add_modifier(Modifier::BOLD),
             );
 
@@ -929,7 +938,7 @@ pub fn open_markdown_editor_on_terminal(
     theme: &EditorTheme,
     highlight_fn: HighlightFn,
     theme_gallery: Vec<ThemeGalleryItem>,
-) -> io::Result<Option<String>> {
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     let mut editor =
         MarkdownEditor::new(title, content, theme.clone(), highlight_fn, theme_gallery);
 
@@ -948,8 +957,10 @@ pub fn open_markdown_editor_on_terminal(
                 let input = Input::from_keycode(key.code, key.modifiers);
 
                 match editor.handle_input(&input) {
-                    EditorAction::Submit(content) => return Ok(Some(content)),
-                    EditorAction::Cancel => return Ok(None),
+                    EditorAction::Submit(content) => {
+                        return Ok((Some(content), editor.selected_theme_id()));
+                    }
+                    EditorAction::Cancel => return Ok((None, editor.selected_theme_id())),
                     EditorAction::Continue => {}
                 }
             }
@@ -964,7 +975,7 @@ pub fn open_markdown_editor(
     theme: &EditorTheme,
     highlight_fn: HighlightFn,
     theme_gallery: Vec<ThemeGalleryItem>,
-) -> io::Result<Option<String>> {
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -994,7 +1005,7 @@ pub fn open_markdown_editor_with_content(
     theme: &EditorTheme,
     highlight_fn: HighlightFn,
     theme_gallery: Vec<ThemeGalleryItem>,
-) -> io::Result<Option<String>> {
+) -> io::Result<(Option<String>, Option<&'static str>)> {
     let content = initial_lines.join("\n");
     open_markdown_editor(title, &content, theme, highlight_fn, theme_gallery)
 }

@@ -1,5 +1,5 @@
 use crate::command::chat::markdown::markdown_to_lines;
-use crate::command::chat::theme::{Theme, ThemeName};
+use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{config_key, section, shell};
 use crate::error;
@@ -249,14 +249,14 @@ pub fn edit_note_on_terminal(
         title.to_string()
     };
 
-    let theme = Theme::from_name(&ThemeName::default());
+    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
         terminal,
         &editor_title,
         &content,
         &theme,
     ) {
-        Ok(Some(new_content)) => {
+        Ok((Some(new_content), _)) => {
             if new_content != content {
                 match fs::write(&file_path, &new_content) {
                     Ok(()) => {
@@ -269,7 +269,7 @@ pub fn edit_note_on_terminal(
                 info!("内容未变化，跳过保存");
             }
         }
-        Ok(None) => info!("已取消编辑"),
+        Ok((None, _)) => info!("已取消编辑"),
         Err(e) => error!("编辑器启动失败: {}", e),
     }
     false
@@ -296,9 +296,9 @@ pub fn edit_note_with_editor(title: &str) -> bool {
         title.to_string()
     };
 
-    let theme = Theme::from_name(&ThemeName::default());
+    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor(&editor_title, &content, &theme) {
-        Ok(Some(new_content)) => {
+        Ok((Some(new_content), _)) => {
             if new_content != content {
                 match fs::write(&file_path, &new_content) {
                     Ok(()) => {
@@ -311,7 +311,7 @@ pub fn edit_note_with_editor(title: &str) -> bool {
                 info!("内容未变化，跳过保存");
             }
         }
-        Ok(None) => info!("已取消编辑"),
+        Ok((None, _)) => info!("已取消编辑"),
         Err(e) => error!("编辑器启动失败: {}", e),
     }
     false
@@ -428,6 +428,8 @@ pub struct NotebookApp {
     pub expanded_dirs: ExpandedDirs,
     /// 扁平化条目列表（由 build_flat_entries() 生成）
     pub flat_entries: Vec<FlatEntry>,
+    /// 当前主题
+    pub theme: Theme,
 }
 
 #[derive(PartialEq, Clone)]
@@ -466,6 +468,8 @@ impl NotebookApp {
     pub fn new() -> Self {
         let notes = load_notes();
         let expanded_dirs = load_expanded_dirs();
+        let agent_config = crate::command::chat::storage::load_agent_config();
+        let theme = Theme::from_name(&agent_config.theme);
         let mut app = Self {
             notes,
             state: ListState::default(),
@@ -486,6 +490,7 @@ impl NotebookApp {
             cmd_popup_filter: String::new(),
             expanded_dirs,
             flat_entries: Vec::new(),
+            theme,
         };
         app.build_flat_entries();
         if !app.flat_entries.is_empty() {
@@ -668,8 +673,7 @@ impl NotebookApp {
         };
         match &self.preview_content {
             Some(content) if !content.is_empty() => {
-                let theme = Theme::from_name(&ThemeName::default());
-                self.preview_lines = markdown_to_lines(content, width, &theme);
+                self.preview_lines = markdown_to_lines(content, width, &self.theme.clone());
             }
             _ => {
                 self.preview_lines.clear();

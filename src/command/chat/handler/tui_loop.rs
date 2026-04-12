@@ -451,14 +451,14 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     &current_prompt,
                     &app.ui.theme,
                 ) {
-                    Ok(Some(new_text)) => {
+                    Ok((Some(new_text), _)) => {
                         if save_system_prompt(&new_text) {
                             app.update(Action::ShowToast("系统提示词已更新".to_string(), false));
                         } else {
                             app.update(Action::ShowToast("系统提示词保存失败".to_string(), true));
                         }
                     }
-                    Ok(None) => {}
+                    Ok((None, _)) => {}
                     Err(e) => {
                         app.update(Action::ShowToast(format!("编辑器错误: {}", e), true));
                     }
@@ -481,14 +481,14 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     &current_style,
                     &app.ui.theme,
                 ) {
-                    Ok(Some(new_text)) => {
+                    Ok((Some(new_text), _)) => {
                         if save_style(&new_text) {
                             app.update(Action::ShowToast("回复风格已更新".to_string(), false));
                         } else {
                             app.update(Action::ShowToast("回复风格保存失败".to_string(), true));
                         }
                     }
-                    Ok(None) => {}
+                    Ok((None, _)) => {}
                     Err(e) => {
                         app.update(Action::ShowToast(format!("编辑器错误: {}", e), true));
                     }

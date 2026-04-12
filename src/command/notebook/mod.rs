@@ -112,7 +112,7 @@ fn edit_file_with_editor(file_str: &str) {
     };
 
     let theme = crate::command::chat::theme::Theme::from_name(
-        &crate::command::chat::theme::ThemeName::default(),
+        &crate::command::chat::storage::load_agent_config().theme,
     );
 
     let title = if is_new_file {
@@ -122,7 +122,7 @@ fn edit_file_with_editor(file_str: &str) {
     };
 
     match crate::tui::editor_markdown::open_markdown_editor(&title, &content, &theme) {
-        Ok(Some(new_content)) => {
+        Ok((Some(new_content), _)) => {
             if new_content != content {
                 if let Some(parent) = path.parent()
                     && !parent.exists()
@@ -140,7 +140,7 @@ fn edit_file_with_editor(file_str: &str) {
                 info!("内容未变化，跳过保存");
             }
         }
-        Ok(None) => info!("已取消编辑"),
+        Ok((None, _)) => info!("已取消编辑"),
         Err(e) => error!("编辑器启动失败: {}", e),
     }
 }

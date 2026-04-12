@@ -113,4 +113,5 @@ allow:
 - Bash(cargo test:*)
 - Bash(sed -i:*)
 - Bash(find /Users/lingojack/dev_custom/j/src:*)
+- Bash(cargo run:*)
 deny: []
