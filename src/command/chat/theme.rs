@@ -1282,24 +1282,25 @@ impl Theme {
             bubble_user_selected: Color::Rgb(213, 229, 245),
 
             // 标签
-            label_ai: Color::Rgb(74, 122, 80),        // #4a7a50 绿
-            label_user: Color::Rgb(74, 112, 160),     // #4a70a0 蓝
-            label_selected: Color::Rgb(160, 120, 48), // #a07830 琥珀
+            label_ai: Color::Rgb(56, 104, 62),   // 深绿，提升对比度
+            label_user: Color::Rgb(45, 85, 150), // 深蓝，提升对比度
+            label_selected: Color::Rgb(138, 98, 26), // 深琥珀
 
             // 文字
             text_normal: Color::Rgb(26, 22, 18), // #1a1612 深棕黑
             text_bold: Color::Rgb(26, 22, 18),
             text_dim: Color::Rgb(107, 94, 82), // #6b5e52 褐灰
             text_very_dim: Color::Rgb(138, 126, 114), // #8a7e72
-            text_white: Color::Rgb(250, 246, 241), // #faf6f1
-            text_system: Color::Rgb(138, 126, 114),
+            // 浅色主题以深色充当"前景白"（同 Light 主题惯例），用于用户气泡文字、标题栏等
+            text_white: Color::Rgb(26, 22, 18),
+            text_system: Color::Rgb(118, 106, 94),
 
             // 标题栏
-            title_icon: Color::Rgb(204, 120, 92), // #cc785c 赭陶
+            title_icon: Color::Rgb(178, 78, 48), // 深赭陶（提升对比度）
             title_separator: Color::Rgb(221, 212, 200),
-            title_model: Color::Rgb(74, 122, 80), // 绿
-            title_count: Color::Rgb(107, 94, 82),
-            title_loading: Color::Rgb(160, 120, 48), // 琥珀
+            title_model: Color::Rgb(52, 102, 58), // 深绿（提升对比度）
+            title_count: Color::Rgb(88, 76, 66),
+            title_loading: Color::Rgb(146, 106, 34), // 深琥珀
 
             // 输入区
             input_prompt: Color::Rgb(74, 122, 80),
@@ -1331,82 +1332,82 @@ impl Theme {
             tool_confirm_hint: Color::Rgb(74, 62, 54),
 
             // 欢迎界面
-            welcome_border: Color::Rgb(221, 212, 200),
-            welcome_text: Color::Rgb(74, 112, 160),
-            welcome_hint: Color::Rgb(138, 126, 114),
+            welcome_border: Color::Rgb(208, 198, 186),
+            welcome_text: Color::Rgb(45, 85, 150),
+            welcome_hint: Color::Rgb(120, 108, 96),
 
-            // 模型选择
-            model_sel_border: Color::Rgb(160, 120, 48),
-            model_sel_title: Color::Rgb(122, 88, 32),
-            model_sel_active: Color::Rgb(74, 122, 80),
-            model_sel_inactive: Color::Rgb(107, 94, 82),
-            model_sel_highlight_bg: Color::Rgb(237, 228, 216),
+            // 模型选择（列表背景为 bg_title = #ede4d8）
+            model_sel_border: Color::Rgb(146, 106, 34),
+            model_sel_title: Color::Rgb(108, 76, 24),
+            model_sel_active: Color::Rgb(48, 100, 54), // 深绿，在沙褐背景上清晰
+            model_sel_inactive: Color::Rgb(82, 70, 60), // 较深褐，比 #6b5e52 更清晰
+            model_sel_highlight_bg: Color::Rgb(224, 214, 200),
             model_sel_highlight_fg: Color::Rgb(26, 22, 18),
 
-            // 配置界面
-            config_title: Color::Rgb(74, 112, 160),   // 蓝
-            config_section: Color::Rgb(74, 122, 80),  // 绿
-            config_pointer: Color::Rgb(204, 120, 92), // 赭陶
-            config_label_selected: Color::Rgb(122, 88, 32),
-            config_label: Color::Rgb(107, 94, 82),
-            config_value: Color::Rgb(58, 48, 40),
-            config_edit_bg: Color::Rgb(237, 228, 216),
-            config_tab_active_bg: Color::Rgb(204, 120, 92), // 赭陶
+            // 配置界面（背景为 bg_title = #ede4d8）
+            config_title: Color::Rgb(45, 85, 150),   // 深蓝
+            config_section: Color::Rgb(48, 100, 54), // 深绿
+            config_pointer: Color::Rgb(178, 82, 50), // 深赭陶
+            config_label_selected: Color::Rgb(108, 76, 24),
+            config_label: Color::Rgb(86, 74, 64), // 加深，提升可读性
+            config_value: Color::Rgb(48, 38, 30),
+            config_edit_bg: Color::Rgb(224, 214, 200),
+            config_tab_active_bg: Color::Rgb(178, 82, 50), // 深赭陶
             config_tab_active_fg: Color::Rgb(255, 255, 255),
-            config_tab_inactive: Color::Rgb(107, 94, 82),
-            config_hint_key: Color::Rgb(122, 88, 32),
-            config_hint_desc: Color::Rgb(107, 94, 82),
-            config_toggle_on: Color::Rgb(74, 122, 80),
-            config_toggle_off: Color::Rgb(177, 64, 64),
-            config_dim: Color::Rgb(138, 126, 114),
-            config_api_key: Color::Rgb(138, 126, 114),
+            config_tab_inactive: Color::Rgb(82, 70, 60),
+            config_hint_key: Color::Rgb(108, 76, 24),
+            config_hint_desc: Color::Rgb(86, 74, 64),
+            config_toggle_on: Color::Rgb(48, 100, 54),
+            config_toggle_off: Color::Rgb(160, 50, 50),
+            config_dim: Color::Rgb(130, 118, 106),
+            config_api_key: Color::Rgb(130, 118, 106),
 
-            // Markdown
-            md_h1: Color::Rgb(180, 101, 74), // #b4654a 赭红
-            md_h2: Color::Rgb(204, 120, 92), // #cc785c 赭陶
-            md_h3: Color::Rgb(74, 112, 160), // #4a70a0 蓝
-            md_h4: Color::Rgb(122, 94, 160), // #7a5ea0 紫
-            md_heading_sep: Color::Rgb(221, 212, 200),
-            md_inline_code_fg: Color::Rgb(160, 120, 48), // 琥珀
-            md_inline_code_bg: Color::Rgb(245, 238, 221),
-            md_list_bullet: Color::Rgb(204, 120, 92), // 赭陶
-            md_blockquote_bar: Color::Rgb(74, 112, 160),
-            md_blockquote_text: Color::Rgb(74, 62, 54),
-            md_blockquote_bg: Color::Rgb(238, 232, 224),
-            md_rule: Color::Rgb(221, 212, 200),
-            md_link: Color::Rgb(180, 101, 74), // #b4654a url色
+            // Markdown（渲染在 bg_primary #faf6f1 上）
+            md_h1: Color::Rgb(160, 74, 46), // 加深赭红，对比度 ≈ 4.5:1
+            md_h2: Color::Rgb(178, 92, 64), // 加深赭陶
+            md_h3: Color::Rgb(45, 85, 150), // 加深蓝
+            md_h4: Color::Rgb(98, 72, 138), // 加深紫
+            md_heading_sep: Color::Rgb(208, 198, 186),
+            md_inline_code_fg: Color::Rgb(140, 100, 30), // 加深琥珀
+            md_inline_code_bg: Color::Rgb(242, 234, 216),
+            md_list_bullet: Color::Rgb(178, 92, 64), // 加深赭陶
+            md_blockquote_bar: Color::Rgb(45, 85, 150),
+            md_blockquote_text: Color::Rgb(64, 52, 44),
+            md_blockquote_bg: Color::Rgb(234, 228, 220),
+            md_rule: Color::Rgb(208, 198, 186),
+            md_link: Color::Rgb(160, 74, 46), // 加深赭红
 
-            // 代码块
-            code_border: Color::Rgb(221, 212, 200),
-            code_bg: Color::Rgb(245, 240, 232),
+            // 代码块（渲染在 code_bg #f5f0e8 上，需要足够对比度）
+            code_border: Color::Rgb(208, 198, 186),
+            code_bg: Color::Rgb(242, 236, 224),
             code_default: Color::Rgb(26, 22, 18),
-            code_keyword: Color::Rgb(122, 94, 160),   // 紫
-            code_string: Color::Rgb(74, 122, 80),     // 绿
-            code_comment: Color::Rgb(138, 126, 114),  // 灰褐
-            code_number: Color::Rgb(160, 120, 48),    // 琥珀
-            code_type: Color::Rgb(58, 120, 112),      // #3a7870 青绿
-            code_primitive: Color::Rgb(74, 112, 160), // 蓝
-            code_macro: Color::Rgb(180, 101, 74),     // 赭红
-            code_attribute: Color::Rgb(58, 120, 112),
-            code_lifetime: Color::Rgb(160, 120, 48),
-            code_shell_var: Color::Rgb(74, 112, 160),
+            code_keyword: Color::Rgb(98, 72, 138),   // 深紫
+            code_string: Color::Rgb(48, 100, 54),    // 深绿
+            code_comment: Color::Rgb(130, 118, 106), // 灰褐（dim 用途，略浅可接受）
+            code_number: Color::Rgb(140, 100, 30),   // 深琥珀
+            code_type: Color::Rgb(38, 98, 92),       // 深青绿
+            code_primitive: Color::Rgb(45, 85, 150), // 深蓝
+            code_macro: Color::Rgb(160, 74, 46),     // 深赭红
+            code_attribute: Color::Rgb(38, 98, 92),
+            code_lifetime: Color::Rgb(140, 100, 30),
+            code_shell_var: Color::Rgb(45, 85, 150),
 
             // 表格
-            table_border: Color::Rgb(221, 212, 200),
-            table_header: Color::Rgb(204, 120, 92), // 赭陶
-            table_body: Color::Rgb(58, 48, 40),
+            table_border: Color::Rgb(208, 198, 186),
+            table_header: Color::Rgb(178, 92, 64), // 深赭陶
+            table_body: Color::Rgb(48, 38, 30),
 
-            // 帮助界面
-            help_title: Color::Rgb(204, 120, 92),
-            help_key: Color::Rgb(160, 120, 48),
+            // 帮助界面（背景 bg_primary）
+            help_title: Color::Rgb(178, 92, 64),
+            help_key: Color::Rgb(140, 100, 30),
             help_desc: Color::Rgb(26, 22, 18),
-            help_path: Color::Rgb(138, 126, 114),
+            help_path: Color::Rgb(120, 108, 96),
             help_bg: Color::Rgb(250, 246, 241),
 
             // Diff
-            diff_add: Color::Rgb(74, 122, 80),     // #4a7a50 绿
-            diff_del: Color::Rgb(177, 64, 64),     // #b14040 红
-            diff_header: Color::Rgb(74, 112, 160), // #4a70a0 蓝
+            diff_add: Color::Rgb(48, 100, 54),    // 深绿
+            diff_del: Color::Rgb(160, 50, 50),    // 深红
+            diff_header: Color::Rgb(45, 85, 150), // 深蓝
         }
     }
 
