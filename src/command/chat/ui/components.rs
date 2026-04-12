@@ -438,18 +438,19 @@ pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
 // ── 欢迎框 ──────────────────────────────────────────
 
 /// 自适应居中欢迎框
+///
+/// 设计：
+/// - 顶部边框嵌入 ◈ 装饰符，赋予框体"标题感"
+/// - 诗句在中文标点（，。！？；：）处自然换行，以对联形式呈现
+/// - 渐变色贯穿整句（跨行连续），首字到末字平滑流动
+/// - 内边距随行数自适应：单行保留两行呼吸空间，多行各留一行
 pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<'a>> {
     use unicode_width::UnicodeWidthStr;
 
     // 框体内部宽度：取终端内宽的一半，最少 30，最多 50
     let inner = ((width as usize) / 2).clamp(30, 50);
-    let box_w = inner + 2; // 包含左右边框字符
+    let box_w = inner + 2;
 
-    let h_bar_top: String = format!("\u{256d}{}\u{256e}", "\u{2500}".repeat(inner));
-    let h_bar_bot: String = format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(inner));
-    let empty_row: String = format!("\u{2502}{}\u{2502}", " ".repeat(inner));
-
-    // 总框宽度用于左侧缩进使其居中
     let total_w = width as usize;
     let left_pad = if total_w > box_w {
         (total_w - box_w) / 2
@@ -459,76 +460,146 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
     let pad: String = " ".repeat(left_pad);
 
     let border_style = Style::default().fg(theme.welcome_border);
-    // 渐变色对：每对颜色之间有内在关联，平滑过渡
-    const GRADIENT_PAIRS: &[((u8, u8, u8), (u8, u8, u8))] = &[
-        ((212, 175, 55), (255, 230, 140)),  // 古金 → 淡金
-        ((240, 120, 130), (255, 190, 170)), // 胭脂 → 桃粉
-        ((100, 180, 220), (160, 230, 210)), // 霁蓝 → 碧玉
-        ((180, 90, 210), (220, 150, 230)),  // 紫藤 → 薰衣草
-        ((80, 180, 140), (160, 230, 180)),  // 青瓷 → 嫩绿
-        ((220, 130, 70), (255, 200, 120)),  // 赭橙 → 杏黄
-        ((100, 160, 230), (180, 200, 255)), // 远山蓝 → 月色
-        ((200, 100, 120), (240, 160, 140)), // 暮红 → 霞光
-        ((90, 200, 180), (150, 230, 220)),  // 湖水 → 冰蓝
-        ((160, 130, 210), (210, 180, 240)), // 暮霭 → 淡紫
-        ((230, 180, 80), (200, 150, 60)),   // 琥珀 → 深金
-        ((120, 200, 120), (180, 230, 160)), // 春芽 → 嫩黄绿
+
+    // 三色渐变：起 → 中 → 终，颜色经过一个对比性的中间调
+    // 前半段 t∈[0,0.5] 走 start→mid，后半段 t∈[0.5,1] 走 mid→end
+    // 与二色线性相比，色彩有"起伏"弧度，视觉上不单调
+    #[rustfmt::skip]
+    const GRADIENT_TRIPLES: &[((u8,u8,u8),(u8,u8,u8),(u8,u8,u8))] = &[
+        ((212,175, 55),(220, 80, 90),(255,230,140)), // 古金 → 胭脂 → 淡金
+        ((240,120,130),(100,160,220),(255,190,170)), // 胭脂 → 霁蓝 → 桃粉
+        ((100,180,220),(150,210,120),(160,230,210)), // 霁蓝 → 嫩芽 → 碧玉
+        ((180, 90,210),(220,160, 60),(220,150,230)), // 紫藤 → 琥珀 → 薰衣草
+        (( 80,180,140),(210, 90,110),(160,230,180)), // 青瓷 → 暮红 → 嫩绿
+        ((220,130, 70),( 80,180,210),(255,200,120)), // 赭橙 → 湖蓝 → 杏黄
+        ((100,160,230),(200,120,200),(180,200,255)), // 远山蓝 → 紫霞 → 月色
+        ((200,100,120),( 80,200,170),(240,160,140)), // 暮红 → 碧水 → 霞光
+        (( 90,200,180),(210,160, 60),(150,230,220)), // 湖水 → 金橙 → 冰蓝
+        ((160,130,210),(120,200,140),(210,180,240)), // 暮霭 → 春草 → 淡紫
+        ((230,180, 80),( 80,150,220),(200,150, 60)), // 琥珀 → 远蓝 → 深金
+        ((120,200,120),(210, 90,130),(180,230,160)), // 春芽 → 胭脂 → 嫩黄绿
+        ((255,200,100),(100,190,230),(240,160,200)), // 杏黄 → 天青 → 藕荷
+        ((140,100,220),(200,180, 60),(180,130,240)), // 鸢尾 → 秋黄 → 幽紫
+        ((200,220,120),( 80,130,210),(220,240,160)), // 黄绿 → 深蓝 → 草绿
+        ((255,150,100),(120, 80,200),(255,200,150)), // 橙红 → 靛蓝 → 浅橙
     ];
 
+    let (start_c, mid_c, end_c) = GRADIENT_TRIPLES[quote_idx % GRADIENT_TRIPLES.len()];
+
+    // ── 顶部边框：嵌入 ◈ 装饰符 ──
+    // 形如：╭──── ◈ ────╮
+    let ornament = " ◈ ";
+    let orn_w = UnicodeWidthStr::width(ornament);
+    let bar_sides = inner.saturating_sub(orn_w);
+    let left_h = bar_sides / 2;
+    let right_h = bar_sides - left_h;
+    let h_bar_top = format!(
+        "\u{256d}{}{}{}\u{256e}",
+        "\u{2500}".repeat(left_h),
+        ornament,
+        "\u{2500}".repeat(right_h),
+    );
+    let h_bar_bot = format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(inner));
+    let empty_row = format!("\u{2502}{}\u{2502}", " ".repeat(inner));
+
+    // ── 诗句自然换行 ──
+    // 文字有效宽度：框内减去两侧各 1 格呼吸空间
+    let text_area = inner.saturating_sub(2);
     let quote = super::quotes::get_quote(quote_idx);
-    // 按显示宽度截断诗句，不超过 inner
-    let mut quote_chars: Vec<char> = Vec::new();
-    let mut w = 0;
+
+    // 在标点后断行（且已积累至少半行宽度），超宽时强制断行
+    let break_after = ['，', '。', '！', '？', '；', '：', ',', '.', '!', '?'];
+    let mut lines_chars: Vec<Vec<char>> = Vec::new();
+    let mut cur: Vec<char> = Vec::new();
+    let mut cur_w = 0usize;
+
     for ch in quote.chars() {
         let cw = UnicodeWidthStr::width(ch.to_string().as_str());
-        if w + cw > inner {
-            break;
+        // 超宽：先把当前行入列，再开新行
+        if cur_w + cw > text_area && !cur.is_empty() {
+            lines_chars.push(std::mem::take(&mut cur));
+            cur_w = 0;
         }
-        quote_chars.push(ch);
-        w += cw;
+        cur.push(ch);
+        cur_w += cw;
+        // 标点处自然断行（需已累积至半行以上，避免极短行）
+        if break_after.contains(&ch) && cur_w * 2 >= text_area {
+            lines_chars.push(std::mem::take(&mut cur));
+            cur_w = 0;
+        }
     }
-    let text_display_width = w;
-    let pl = (inner - text_display_width) / 2;
-    let pr = inner - text_display_width - pl;
+    if !cur.is_empty() {
+        lines_chars.push(cur);
+    }
 
-    // 双色渐变：在选定的颜色对之间按字符位置线性插值
-    let (start_c, end_c) = GRADIENT_PAIRS[quote_idx % GRADIENT_PAIRS.len()];
-    let n = quote_chars.len().max(1);
-    let colored_spans: Vec<Span<'a>> = quote_chars
-        .iter()
-        .enumerate()
-        .map(|(i, ch)| {
-            let t = i as f32 / (n - 1).max(1) as f32;
-            let r = (start_c.0 as f32 + (end_c.0 as f32 - start_c.0 as f32) * t) as u8;
-            let g = (start_c.1 as f32 + (end_c.1 as f32 - start_c.1 as f32) * t) as u8;
-            let b = (start_c.2 as f32 + (end_c.2 as f32 - start_c.2 as f32) * t) as u8;
-            Span::styled(
+    // ── 全局渐变：整句诗从首字到末字连续插值 ──
+    let total_chars: usize = lines_chars.iter().map(|l| l.len()).sum();
+    // 至少 2 以避免除零；单字时视为首尾同色
+    let total_n = total_chars.max(2);
+
+    let mut quote_lines: Vec<Line<'a>> = Vec::new();
+    let mut global_idx = 0usize;
+
+    for line_chars in &lines_chars {
+        let line_w: usize = line_chars
+            .iter()
+            .map(|c| UnicodeWidthStr::width(c.to_string().as_str()))
+            .sum();
+        // 居中：两侧留白至少 1 格
+        let pl = if inner > line_w + 2 {
+            (inner - line_w) / 2
+        } else {
+            1
+        };
+        let pr = inner.saturating_sub(line_w + pl);
+
+        let mut spans: Vec<Span<'a>> = vec![Span::styled(
+            format!("{}\u{2502}{}", pad, " ".repeat(pl)),
+            border_style,
+        )];
+
+        for (i, &ch) in line_chars.iter().enumerate() {
+            let gi = global_idx + i;
+            let t = gi as f32 / (total_n - 1) as f32;
+            let r = (start_c.0 as f32 * (1.0 - t) + end_c.0 as f32 * t).round() as u8;
+            let g = (start_c.1 as f32 * (1.0 - t) + end_c.1 as f32 * t).round() as u8;
+            let b = (start_c.2 as f32 * (1.0 - t) + end_c.2 as f32 * t).round() as u8;
+            spans.push(Span::styled(
                 ch.to_string(),
                 Style::default().fg(ratatui::style::Color::Rgb(r, g, b)),
-            )
-        })
-        .collect();
+            ));
+        }
 
-    let mut quote_line_spans: Vec<Span<'a>> = vec![Span::styled(
-        format!("{pad}\u{2502}{}", " ".repeat(pl)),
-        border_style,
-    )];
-    quote_line_spans.extend(colored_spans);
-    quote_line_spans.push(Span::styled(
-        format!("{}\u{2502}", " ".repeat(pr)),
-        border_style,
-    ));
+        spans.push(Span::styled(
+            format!("{}\u{2502}", " ".repeat(pr)),
+            border_style,
+        ));
 
-    vec![
+        quote_lines.push(Line::from(spans));
+        global_idx += line_chars.len();
+    }
+
+    // ── 内边距：单行留两行，多行各留一行 ──
+    let pad_rows = if lines_chars.len() == 1 { 2 } else { 1 };
+    let make_empty =
+        || -> Line<'a> { Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)) };
+
+    let mut result: Vec<Line<'a>> = vec![
         Line::from(""),
         Line::from(""),
         Line::from(Span::styled(format!("{pad}{h_bar_top}"), border_style)),
-        Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        // 诗句行：逐字彩色居中显示
-        Line::from(quote_line_spans),
-        Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
-        Line::from(Span::styled(format!("{pad}{h_bar_bot}"), border_style)),
-    ]
+    ];
+    for _ in 0..pad_rows {
+        result.push(make_empty());
+    }
+    result.extend(quote_lines);
+    for _ in 0..pad_rows {
+        result.push(make_empty());
+    }
+    result.push(Line::from(Span::styled(
+        format!("{pad}{h_bar_bot}"),
+        border_style,
+    )));
+
+    result
 }
