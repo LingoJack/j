@@ -1227,22 +1227,19 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         .at_popup_selected
         .min(filtered.len().saturating_sub(1));
 
-    // 构建显示标签和描述
+    // 构建显示标签（用于 popup 计算宽度等）
     let labels: Vec<String> = filtered
         .iter()
         .take(max_items)
-        .map(|item| {
-            let (tag, name) = match item {
-                AtPopupItem::Category(s) => ("cat", s.as_str()),
-                AtPopupItem::Skill(s) => ("skill", s.as_str()),
-                AtPopupItem::Command(s) => ("cmd", s.as_str()),
-                AtPopupItem::File(s) => ("file", s.as_str()),
-            };
-            format!("[{}] {} - @{}", tag, name, tag)
+        .map(|item| match item {
+            AtPopupItem::Category(s) => s.clone(),
+            AtPopupItem::Skill(s) => s.clone(),
+            AtPopupItem::Command(s) => s.clone(),
+            AtPopupItem::File(s) => s.clone(),
         })
         .collect();
 
-    // 三段式渲染：pointer + [type] name + description（与 / 弹窗风格一致）
+    // 三段式渲染：pointer + 名称(加粗) + 描述（与 / 弹窗风格一致）
     let items: Vec<ListItem<'static>> = filtered
         .iter()
         .take(max_items)
@@ -1251,20 +1248,20 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
 
-            let (type_label, type_color, name) = match item {
-                AtPopupItem::Category(s) => ("cat", t.text_dim, s.as_str()),
-                AtPopupItem::Skill(s) => ("skill", t.label_ai, s.as_str()),
-                AtPopupItem::Command(s) => ("cmd", t.text_system, s.as_str()),
-                AtPopupItem::File(s) => ("file", t.label_user, s.as_str()),
+            let (name, name_color, desc) = match item {
+                AtPopupItem::Category(s) => (s.as_str(), t.text_dim, "category"),
+                AtPopupItem::Skill(s) => (s.as_str(), t.label_ai, "skill"),
+                AtPopupItem::Command(s) => (s.as_str(), t.text_system, "command"),
+                AtPopupItem::File(s) => (s.as_str(), t.label_user, "file"),
             };
 
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("[{:<5}]", type_label),
-                    Style::default().fg(type_color).add_modifier(Modifier::BOLD),
+                    format!("{:<16}", name),
+                    Style::default().fg(name_color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(name.to_string(), Style::default().fg(t.text_white)),
+                Span::styled(desc.to_string(), Style::default().fg(t.text_dim)),
             ]))
         })
         .collect();
