@@ -801,11 +801,7 @@ impl MarkdownEditor {
                 } else {
                     Style::default().fg(label_ai)
                 };
-                let desc_style = if is_selected {
-                    Style::default().fg(dim_color)
-                } else {
-                    Style::default().fg(dim_color)
-                };
+                let desc_style = Style::default().fg(dim_color);
                 let pointer = if is_selected { "❯ " } else { "  " };
                 ListItem::new(Line::from(vec![
                     Span::styled(pointer.to_string(), name_style),

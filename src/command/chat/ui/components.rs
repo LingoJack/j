@@ -464,8 +464,9 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
     // 三色渐变：起 → 中 → 终，颜色经过一个对比性的中间调
     // 前半段 t∈[0,0.5] 走 start→mid，后半段 t∈[0.5,1] 走 mid→end
     // 与二色线性相比，色彩有"起伏"弧度，视觉上不单调
+    type RgbTriple = (u8, u8, u8);
     #[rustfmt::skip]
-    const GRADIENT_TRIPLES: &[((u8,u8,u8),(u8,u8,u8),(u8,u8,u8))] = &[
+    const GRADIENT_TRIPLES: &[(RgbTriple, RgbTriple, RgbTriple)] = &[
         ((212,175, 55),(220, 80, 90),(255,230,140)), // 古金 → 胭脂 → 淡金
         ((240,120,130),(100,160,220),(255,190,170)), // 胭脂 → 霁蓝 → 桃粉
         ((100,180,220),(150,210,120),(160,230,210)), // 霁蓝 → 嫩芽 → 碧玉
@@ -484,7 +485,7 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
         ((255,150,100),(120, 80,200),(255,200,150)), // 橙红 → 靛蓝 → 浅橙
     ];
 
-    let (start_c, mid_c, end_c) = GRADIENT_TRIPLES[quote_idx % GRADIENT_TRIPLES.len()];
+    let (start_c, _mid_c, end_c) = GRADIENT_TRIPLES[quote_idx % GRADIENT_TRIPLES.len()];
 
     // ── 顶部边框：嵌入 ◈ 装饰符 ──
     // 形如：╭──── ◈ ────╮
