@@ -37,7 +37,7 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
             " \u{1f504} \u{9009}\u{62e9}\u{6a21}\u{578b} ",
             t.model_sel_border,
             t.config_label_selected,
-            t.bg_title,
+            t.bg_primary,
         ))
         .highlight_style(Style::default())
         .highlight_symbol("");
@@ -69,7 +69,7 @@ pub fn draw_theme_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
             " 🎨 选择主题 ",
             t.model_sel_border,
             t.config_label_selected,
-            t.bg_title,
+            t.bg_primary,
         ))
         .highlight_style(Style::default())
         .highlight_symbol("");
