@@ -330,10 +330,18 @@ impl Tool for ExitPlanModeTool {
             plan_content
         );
 
+        // 从 plan 文件路径提取计划名（plan-xxx.md → xxx）
+        let plan_file_path = self.plan_state.get_plan_file_path().unwrap_or_default();
+        let plan_name = std::path::Path::new(&plan_file_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.strip_prefix("plan-"))
+            .unwrap_or("Plan");
+
         let ask_request = AskRequest {
             questions: vec![AskQuestion {
                 question: question_text,
-                header: "Plan Review".to_string(),
+                header: plan_name.to_string(),
                 options: vec![
                     AskOption {
                         label: "同意".to_string(),
