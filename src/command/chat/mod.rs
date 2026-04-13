@@ -632,10 +632,21 @@ fn run_oneshot_agent(
             let tool_items: Vec<ToolCallItem> = if is_tool_calls {
                 raw_tool_calls
                     .into_values()
-                    .map(|(id, name, arguments)| ToolCallItem {
-                        id,
-                        name,
-                        arguments,
+                    .map(|(id, name, arguments)| {
+                        // 某些 API 在流式 chunk 中不返回 tool_call id，
+                        // 导致 id 为空字符串；发送给 API 时会报 tool_call_id not found。
+                        // 此处为空 id 生成随机唯一 id。
+                        let id = if id.is_empty() {
+                            use rand::Rng;
+                            format!("call_{:016x}", rand::thread_rng().gen::<u64>())
+                        } else {
+                            id
+                        };
+                        ToolCallItem {
+                            id,
+                            name,
+                            arguments,
+                        }
                     })
                     .collect()
             } else {
