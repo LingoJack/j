@@ -199,6 +199,8 @@ impl ChatApp {
                 auto_scroll: true,
                 browse_msg_index: 0,
                 browse_scroll_offset: 0,
+                browse_filter: String::new(),
+                browse_role_filter: None,
                 model_list_state,
                 theme_list_state: ListState::default(),
                 toast: None,
@@ -761,10 +763,17 @@ impl ChatApp {
                         state: "tool_confirm".to_string(),
                     });
                 }
+                // 进入浏览模式时清除过滤状态
+                if mode == ChatMode::Browse {
+                    self.ui.browse_filter.clear();
+                    self.ui.browse_role_filter = None;
+                }
                 self.ui.mode = mode;
             }
             Action::ExitToChat => {
                 self.ui.mode = ChatMode::Chat;
+                self.ui.browse_filter.clear();
+                self.ui.browse_role_filter = None;
             }
             Action::Scroll(dir) => match dir {
                 CursorDirection::Up => self.scroll_up(),
@@ -783,26 +792,34 @@ impl ChatApp {
                 }
             },
             Action::BrowseNavigate(dir) => {
-                let msg_count = self.state.session.messages.len();
-                if msg_count == 0 {
+                let filtered = self.browse_filtered_indices();
+                if filtered.is_empty() {
                     self.ui.mode = ChatMode::Chat;
                     self.ui.msg_lines_cache = None;
                     return;
                 }
+                let current_in_filtered =
+                    filtered.iter().position(|&i| i == self.ui.browse_msg_index);
                 match dir {
                     CursorDirection::Up => {
-                        if self.ui.browse_msg_index > 0 {
-                            self.ui.browse_msg_index -= 1;
-                            self.ui.browse_scroll_offset = 0;
-                            self.ui.msg_lines_cache = None;
-                        }
+                        let new_idx = match current_in_filtered {
+                            Some(pos) if pos > 0 => filtered[pos - 1],
+                            Some(_) => filtered[filtered.len() - 1],
+                            None => *filtered.last().unwrap(),
+                        };
+                        self.ui.browse_msg_index = new_idx;
+                        self.ui.browse_scroll_offset = 0;
+                        self.ui.msg_lines_cache = None;
                     }
                     CursorDirection::Down => {
-                        if self.ui.browse_msg_index < msg_count - 1 {
-                            self.ui.browse_msg_index += 1;
-                            self.ui.browse_scroll_offset = 0;
-                            self.ui.msg_lines_cache = None;
-                        }
+                        let new_idx = match current_in_filtered {
+                            Some(pos) if pos < filtered.len() - 1 => filtered[pos + 1],
+                            Some(_) => filtered[0],
+                            None => filtered[0],
+                        };
+                        self.ui.browse_msg_index = new_idx;
+                        self.ui.browse_scroll_offset = 0;
+                        self.ui.msg_lines_cache = None;
                     }
                 }
             }
@@ -818,26 +835,51 @@ impl ChatApp {
                 use crate::command::chat::render_cache::copy_to_clipboard;
                 if let Some(msg) = self.state.session.messages.get(self.ui.browse_msg_index) {
                     let content = msg.content.clone();
+                    let filtered = self.browse_filtered_indices();
+                    let pos_in_filtered =
+                        filtered.iter().position(|&i| i == self.ui.browse_msg_index);
                     let role_label = if msg.role == ROLE_ASSISTANT {
-                        "Sprite"
+                        "AI"
                     } else if msg.role == ROLE_USER {
                         "用户"
                     } else {
                         "系统"
                     };
+                    let extra = if let Some(pos) = pos_in_filtered {
+                        format!(" ({}/{})", pos + 1, filtered.len())
+                    } else {
+                        String::new()
+                    };
                     if copy_to_clipboard(&content) {
-                        self.show_toast(
-                            format!(
-                                "已复制第 {} 条{}消息",
-                                self.ui.browse_msg_index + 1,
-                                role_label
-                            ),
-                            false,
-                        );
+                        self.show_toast(format!("已复制{}消息{}", role_label, extra), false);
                     } else {
                         self.show_toast("复制到剪切板失败", true);
                     }
                 }
+            }
+            Action::BrowseInputChar(c) => {
+                self.ui.browse_filter.push(c);
+                self.browse_jump_to_first_match();
+                self.ui.msg_lines_cache = None;
+            }
+            Action::BrowseDeleteChar => {
+                self.ui.browse_filter.pop();
+                self.browse_jump_to_first_match();
+                self.ui.msg_lines_cache = None;
+            }
+            Action::BrowseClearFilter => {
+                self.ui.browse_filter.clear();
+                self.ui.browse_role_filter = None;
+                self.ui.msg_lines_cache = None;
+            }
+            Action::BrowseToggleRole => {
+                self.ui.browse_role_filter = match &self.ui.browse_role_filter {
+                    None => Some("ai".to_string()),
+                    Some(r) if r == "ai" => Some("user".to_string()),
+                    _ => None,
+                };
+                self.browse_jump_to_first_match();
+                self.ui.msg_lines_cache = None;
             }
 
             // ========== 配置编辑 ==========
@@ -1656,6 +1698,48 @@ impl ChatApp {
         self.state.agent_config.theme = self.state.agent_config.theme.next();
         self.ui.theme = Theme::from_name(&self.state.agent_config.theme);
         self.ui.msg_lines_cache = None;
+    }
+
+    /// 返回浏览模式下符合当前过滤条件的消息索引列表
+    pub fn browse_filtered_indices(&self) -> Vec<usize> {
+        let filter_lower = self.ui.browse_filter.to_lowercase();
+        self.state
+            .session
+            .messages
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| {
+                match &self.ui.browse_role_filter {
+                    Some(r) if r == "ai" && m.role != ROLE_ASSISTANT => return false,
+                    Some(r) if r == "user" && m.role != ROLE_USER => return false,
+                    _ => {}
+                }
+                if !filter_lower.is_empty() {
+                    return m.content.to_lowercase().contains(&filter_lower);
+                }
+                true
+            })
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// 跳转到过滤列表中最近的消息
+    fn browse_jump_to_first_match(&mut self) {
+        let filtered = self.browse_filtered_indices();
+        if filtered.is_empty() {
+            return;
+        }
+        if filtered.contains(&self.ui.browse_msg_index) {
+            return;
+        }
+        let target = filtered
+            .iter()
+            .rev()
+            .find(|&&i| i <= self.ui.browse_msg_index)
+            .copied()
+            .unwrap_or(filtered[0]);
+        self.ui.browse_msg_index = target;
+        self.ui.browse_scroll_offset = 0;
     }
 
     /// 显示一条 toast 通知

@@ -11,13 +11,13 @@ use super::{
     handle_archive_confirm_mode, handle_archive_list_mode, handle_browse_mode, handle_chat_mode,
     handle_config_mode, handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
-use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
+use crate::command::chat::app::{Action, ChatApp, ChatMode};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
     event::{
-        self, Event, KeyEventKind, KeyboardEnhancementFlags, MouseEventKind,
-        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        self, Event, KeyEventKind, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+        PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
@@ -25,14 +25,13 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 
-/// 恢复终端状态：关闭鼠标追踪、离开备用屏幕、关闭 raw mode
+/// 恢复终端状态：离开备用屏幕、关闭 raw mode
 fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
     let _ = execute!(
         io::stdout(),
         PopKeyboardEnhancementFlags,
         event::DisableBracketedPaste,
-        event::DisableMouseCapture,
         LeaveAlternateScreen
     );
 }
@@ -91,19 +90,6 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
             *needs_redraw = true;
             false
         }
-        Event::Mouse(mouse) => match mouse.kind {
-            MouseEventKind::ScrollUp => {
-                app.update(Action::Scroll(CursorDirection::Up));
-                *needs_redraw = true;
-                false
-            }
-            MouseEventKind::ScrollDown => {
-                app.update(Action::Scroll(CursorDirection::Down));
-                *needs_redraw = true;
-                false
-            }
-            _ => false,
-        },
         _ => false,
     }
 }
@@ -178,12 +164,7 @@ fn migrate_legacy_session_if_needed() {
 pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        event::EnableMouseCapture,
-        event::EnableBracketedPaste
-    )?;
+    execute!(stdout, EnterAlternateScreen, event::EnableBracketedPaste)?;
     // 启用 kitty keyboard protocol，使终端能区分 Shift+Enter / Ctrl+Enter 等组合键。
     // 不支持此协议的终端（如 Terminal.app）会忽略该指令，不会报错。
     let _ = execute!(
@@ -529,7 +510,6 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         terminal.backend_mut(),
         PopKeyboardEnhancementFlags,
         event::DisableBracketedPaste,
-        event::DisableMouseCapture,
         LeaveAlternateScreen
     )?;
 

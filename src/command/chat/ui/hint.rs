@@ -32,7 +32,20 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ],
         ChatMode::SelectModel => vec![("↑↓/jk", "移动"), ("Enter", "确认"), ("Esc", "取消")],
         ChatMode::SelectTheme => vec![("↑↓/jk", "选择"), ("Enter", "确认"), ("Esc", "返回")],
-        ChatMode::Browse => vec![("↑↓", "选择消息"), ("y/Enter", "复制"), ("Esc", "返回")],
+        ChatMode::Browse => {
+            let mut hints = vec![
+                ("↑↓/jk", "跳转"),
+                ("Tab", "角色"),
+                ("y/Enter", "复制"),
+                ("PgUp/Dn", "微调"),
+            ];
+            if !app.ui.browse_filter.is_empty() || app.ui.browse_role_filter.is_some() {
+                hints.push(("Esc", "清除过滤"));
+            } else {
+                hints.push(("Esc", "返回"));
+            }
+            hints
+        }
         ChatMode::Help => vec![("任意键", "返回")],
         ChatMode::Config => config_hints(app),
         ChatMode::ArchiveConfirm => {

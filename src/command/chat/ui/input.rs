@@ -9,12 +9,18 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::command::chat::app::ChatApp;
+use crate::command::chat::app::{ChatApp, ChatMode};
 use crate::util::text::{char_width, wrap_text};
 
 /// 绘制输入框（支持多行、光标、@mention 高亮）
 pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
+
+    // 浏览模式：在输入区显示过滤状态
+    if app.ui.mode == ChatMode::Browse {
+        draw_browse_filter(f, area, app);
+        return;
+    }
 
     // 提示符逻辑
     let (prompt, prompt_style) = if app.state.is_loading {
@@ -348,4 +354,65 @@ fn build_line_segments(
     }
 
     spans
+}
+
+/// 浏览模式：在输入区显示过滤状态
+fn draw_browse_filter(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+    let t = &app.ui.theme;
+    let filtered = app.browse_filtered_indices();
+    let pos = filtered.iter().position(|&i| i == app.ui.browse_msg_index);
+
+    let mut spans: Vec<Span> = Vec::new();
+
+    let role_label = match &app.ui.browse_role_filter {
+        Some(r) if r == "ai" => "AI",
+        Some(r) if r == "user" => "用户",
+        _ => "全部",
+    };
+
+    spans.push(Span::styled(
+        " 浏览 ",
+        Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
+    ));
+
+    if let Some(p) = pos {
+        spans.push(Span::styled(
+            format!("{}{}/{} ", role_label, p + 1, filtered.len()),
+            Style::default().fg(t.text_white),
+        ));
+    } else if !filtered.is_empty() {
+        spans.push(Span::styled(
+            format!(
+                "{}{}/{} ",
+                role_label,
+                filtered.len(),
+                app.state.session.messages.len()
+            ),
+            Style::default().fg(t.text_dim),
+        ));
+    } else {
+        spans.push(Span::styled(
+            format!("{}无匹配 ", role_label),
+            Style::default().fg(t.toast_error_text),
+        ));
+    }
+
+    if !app.ui.browse_filter.is_empty() {
+        spans.push(Span::styled(
+            format!("过滤: {}", app.ui.browse_filter),
+            Style::default().fg(t.label_user),
+        ));
+        spans.push(Span::styled(
+            "█",
+            Style::default().fg(t.cursor_fg).bg(t.cursor_bg),
+        ));
+    } else {
+        spans.push(Span::styled(
+            "输入关键词过滤消息...",
+            Style::default().fg(t.text_dim),
+        ));
+    }
+
+    let widget = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_input));
+    f.render_widget(widget, area);
 }

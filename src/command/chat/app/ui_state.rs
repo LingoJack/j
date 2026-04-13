@@ -24,6 +24,10 @@ pub struct UIState {
     pub browse_msg_index: usize,
     /// 浏览模式下当前消息内部的滚动偏移
     pub browse_scroll_offset: u16,
+    /// 浏览模式关键词过滤
+    pub browse_filter: String,
+    /// 浏览模式角色过滤: None=全部, Some("ai"), Some("user")
+    pub browse_role_filter: Option<String>,
     /// 模型选择列表状态
     pub model_list_state: ListState,
     /// 主题选择列表状态

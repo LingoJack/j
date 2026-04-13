@@ -139,6 +139,14 @@ pub enum Action {
     BrowseFineScroll(CursorDirection),
     /// 消息浏览模式：复制选中消息到剪贴板
     BrowseCopyMessage,
+    /// 消息浏览模式：输入过滤字符
+    BrowseInputChar(char),
+    /// 消息浏览模式：删除过滤字符
+    BrowseDeleteChar,
+    /// 消息浏览模式：清空过滤（角色+关键词）
+    BrowseClearFilter,
+    /// 消息浏览模式：切换角色过滤（全部→AI→用户）
+    BrowseToggleRole,
 
     // ========== 配置编辑 ==========
     /// 配置界面：选择上一个/下一个字段
