@@ -55,6 +55,7 @@ Use the LoadSkill tool to load the following skills into context:
 {{.skills}}
 </skill_system>
 
+{{.session_state}}
 {{.tasks}}
 {{.background_tasks}}
 {{.teammates}}
