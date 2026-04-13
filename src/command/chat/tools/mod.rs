@@ -309,6 +309,48 @@ impl ToolRegistry {
     pub fn tool_names(&self) -> Vec<&str> {
         self.tools.iter().map(|t| t.name()).collect()
     }
+
+    /// 构建临时会话状态摘要，用于系统提示词的 {{.session_state}} 占位符
+    /// 汇总所有临时的、有状态的运行时信息（plan mode、worktree 等）
+    /// 无活跃状态时返回空字符串
+    pub fn build_session_state_summary(&self) -> String {
+        let mut parts = Vec::new();
+
+        // Plan Mode 状态
+        let (plan_active, plan_file) = self.plan_mode_state.get_state();
+        if plan_active {
+            let mut s = String::from("## Session State: PLAN MODE\n\n");
+            s.push_str("You are currently in **Plan Mode**. Only read-only tools are available.\n");
+            s.push_str(
+                "Write your plan to the plan file, then use ExitPlanMode for user approval.\n",
+            );
+            if let Some(ref path) = plan_file {
+                s.push_str(&format!("Plan file: `{}`\n", path));
+            }
+            parts.push(s);
+        }
+
+        // Worktree 状态
+        if let Some(session) = self.worktree_state.get_session() {
+            let mut s = String::from("## Session State: WORKTREE\n\n");
+            s.push_str("You are in an isolated git worktree.\n");
+            s.push_str(&format!("Branch: `{}`\n", session.branch));
+            s.push_str(&format!(
+                "Worktree path: `{}`\n",
+                session.worktree_path.display()
+            ));
+            s.push_str(&format!(
+                "Original cwd: `{}`\n",
+                session.original_cwd.display()
+            ));
+            parts.push(s);
+        }
+
+        if parts.is_empty() {
+            return String::new();
+        }
+        parts.join("\n")
+    }
 }
 
 // ========== Helper functions ==========

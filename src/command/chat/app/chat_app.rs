@@ -1971,6 +1971,7 @@ impl ChatApp {
             let tasks_summary = task::build_tasks_summary(&task_manager_for_prompt);
             let background_summary =
                 background::build_running_summary(&background_manager_for_prompt);
+            let session_state_summary = tool_registry.build_session_state_summary();
             let resolved = template
                 .replace("{{.current_dir}}", &current_dir)
                 .replace("{{.skills}}", &skills_summary)
@@ -1982,7 +1983,8 @@ impl ChatApp {
                 .replace("{{.soul}}", &soul_text)
                 .replace("{{.teammates}}", &teammates_summary)
                 .replace("{{.tasks}}", &tasks_summary)
-                .replace("{{.background_tasks}}", &background_summary);
+                .replace("{{.background_tasks}}", &background_summary)
+                .replace("{{.session_state}}", &session_state_summary);
             Some(resolved)
         });
 

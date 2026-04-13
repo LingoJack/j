@@ -805,6 +805,7 @@ fn resolve_oneshot_system_prompt(
     let project_skill_dir = skill::project_skills_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
+    let session_state_summary = tool_registry.build_session_state_summary();
     let resolved = template
         .replace("{{.current_dir}}", &current_dir)
         .replace("{{.skills}}", "")
@@ -814,6 +815,7 @@ fn resolve_oneshot_system_prompt(
         .replace("{{.style}}", &style_text)
         .replace("{{.memory}}", &memory_text)
         .replace("{{.soul}}", &soul_text)
+        .replace("{{.session_state}}", &session_state_summary)
         .replace("{{.tasks}}", "")
         .replace("{{.background_tasks}}", "")
         .replace("{{.teammates}}", "");
