@@ -130,6 +130,8 @@ pub struct MarkdownRenderer {
     code_block_cache: CodeBlockCache,
     /// 语法高亮函数
     highlight_fn: HighlightFn,
+    /// 是否显示行号
+    show_line_numbers: bool,
 }
 
 impl MarkdownRenderer {
@@ -140,6 +142,7 @@ impl MarkdownRenderer {
             horizontal_scroll: 0,
             code_block_cache: CodeBlockCache::new(),
             highlight_fn,
+            show_line_numbers: true,
         }
     }
 
@@ -152,6 +155,34 @@ impl MarkdownRenderer {
     pub fn set_theme(&mut self, theme: EditorTheme) {
         self.theme = theme;
         self.invalidate_cache();
+    }
+
+    /// 设置是否显示行号
+    pub fn set_show_line_numbers(&mut self, show: bool) {
+        self.show_line_numbers = show;
+    }
+
+    /// 获取是否显示行号
+    pub fn is_show_line_numbers(&self) -> bool {
+        self.show_line_numbers
+    }
+
+    /// 生成行号字符串
+    fn format_line_number(&self, line_idx: usize) -> String {
+        if self.show_line_numbers {
+            format!("{:4} ", line_idx + 1)
+        } else {
+            String::new()
+        }
+    }
+
+    /// 生成续行行号字符串（空格或空）
+    fn format_continuation_line_number(&self) -> String {
+        if self.show_line_numbers {
+            "     ".to_string()
+        } else {
+            String::new()
+        }
     }
 
     /// 确保代码块缓存有效
@@ -218,8 +249,10 @@ impl MarkdownRenderer {
 
         let is_continuation = vl.start_col > 0;
 
-        // 行号：续行显示空格，否则显示行号
-        let line_num_str = if is_continuation {
+        // 行号：续行显示空格，否则显示行号；若隐藏行号则为空
+        let line_num_str = if !self.show_line_numbers {
+            String::new()
+        } else if is_continuation {
             "     ".to_string()
         } else {
             format!("{:>4} ", logical_line + 1)
@@ -607,7 +640,7 @@ impl MarkdownRenderer {
         line_idx: usize,
         lines: &[String],
     ) -> Line<'static> {
-        let line_num = format!("{:4} ", line_idx + 1);
+        let line_num = self.format_line_number(line_idx);
         let trimmed = line.trim_start();
 
         // 判断是开始围栏还是结束围栏（通过缓存查询）
@@ -674,7 +707,7 @@ impl MarkdownRenderer {
         line_idx: usize,
         lines: &[String],
     ) -> Line<'static> {
-        let line_num = format!("{:4} ", line_idx + 1);
+        let line_num = self.format_line_number(line_idx);
 
         // 应用水平滚动（使用迭代器避免 Vec<char> 分配）
         let visible_line: String = line.chars().skip(self.horizontal_scroll).collect();
@@ -888,7 +921,7 @@ impl MarkdownRenderer {
         _lines: &[String],
         wrap_width: usize,
     ) -> Vec<Line<'static>> {
-        let line_num = format!("{:4} ", line_idx + 1);
+        let line_num = self.format_line_number(line_idx);
         let line_num_width = display_width(&line_num);
         let available_width = wrap_width.saturating_sub(line_num_width);
 
@@ -933,7 +966,7 @@ impl MarkdownRenderer {
         // 如果是表头行，先渲染顶部边框 ┌─┬─┐
         if is_header {
             result.push(Self::render_table_border(
-                &line_num,
+                &self.format_continuation_line_number(),
                 &col_widths,
                 border_style,
                 BorderKind::Top,
@@ -946,7 +979,7 @@ impl MarkdownRenderer {
             let num_str = if sub_row == 0 {
                 line_num.clone()
             } else {
-                "     ".to_string()
+                self.format_continuation_line_number()
             };
 
             let mut spans = vec![Span::styled(
@@ -991,7 +1024,7 @@ impl MarkdownRenderer {
         // 表头行后渲染分隔边框 ├─┼─┤
         if is_header {
             result.push(Self::render_table_border(
-                "     ",
+                &self.format_continuation_line_number(),
                 &col_widths,
                 border_style,
                 BorderKind::Middle,
@@ -1002,7 +1035,7 @@ impl MarkdownRenderer {
         // 非表头、非最后一行的数据行后渲染行间分割线 ├─┼─┤
         if !is_header && !is_last_data_row {
             result.push(Self::render_table_border(
-                "     ",
+                &self.format_continuation_line_number(),
                 &col_widths,
                 border_style,
                 BorderKind::Middle,
@@ -1013,7 +1046,7 @@ impl MarkdownRenderer {
         // 最后一行后渲染底部边框 └─┴─┘
         if is_last_data_row {
             result.push(Self::render_table_border(
-                "     ",
+                &self.format_continuation_line_number(),
                 &col_widths,
                 border_style,
                 BorderKind::Bottom,
@@ -1063,7 +1096,7 @@ impl MarkdownRenderer {
         line_idx: usize,
         max_width: usize,
     ) -> Line<'static> {
-        let line_num = format!("{:4} ", line_idx + 1);
+        let line_num = self.format_line_number(line_idx);
 
         // 应用水平滚动（使用迭代器避免 Vec<char> 分配）
         let visible_line: String = line.chars().skip(self.horizontal_scroll).collect();

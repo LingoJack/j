@@ -480,6 +480,16 @@ impl MarkdownEditor {
                 self.vim.set_mode(Mode::ThemeSelect);
                 EditorAction::Continue
             }
+            "line-number" => {
+                self.renderer.set_show_line_numbers(true);
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
+            "no-line-number" => {
+                self.renderer.set_show_line_numbers(false);
+                self.vim.set_mode(Mode::Normal);
+                EditorAction::Continue
+            }
             _ => {
                 self.vim.set_mode(Mode::Normal);
                 EditorAction::Continue
@@ -551,7 +561,12 @@ impl MarkdownEditor {
 
         self.viewport_height = content_height;
         self.viewport_width = content_width;
-        let wrap_width = content_width.saturating_sub(6); // 6 = 行号宽度
+        let line_num_width = if self.renderer.is_show_line_numbers() {
+            6
+        } else {
+            0
+        };
+        let wrap_width = content_width.saturating_sub(line_num_width);
         self.wrap.set_width(wrap_width);
 
         // 重建折行元数据（视觉行计数 + 前缀和）

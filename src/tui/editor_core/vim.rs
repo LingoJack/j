@@ -59,6 +59,14 @@ pub const COMMANDS: &[CmdItem] = &[
         name: "theme",
         desc: "切换主题",
     },
+    CmdItem {
+        name: "line-number",
+        desc: "显示行号",
+    },
+    CmdItem {
+        name: "no-line-number",
+        desc: "隐藏行号",
+    },
 ];
 
 /// Vim 模式

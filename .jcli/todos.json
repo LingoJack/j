@@ -1,62 +1,22 @@
 [
   {
     "id": "1",
-    "content": "P0: 抽取模型/主题选择器通用函数到 components.rs",
+    "content": "vim.rs: COMMANDS 添加 line-number 命令项",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "P1: 调色板数据移到 palette.rs",
+    "content": "renderer.rs: MarkdownRenderer 添加 show_line_numbers 字段 + 条件渲染",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "P1: 拆分 chat.rs - 创建 input.rs",
+    "content": "editor.rs: MarkdownEditor 添加 show_line_numbers + 命令执行 + wrap_width 调整",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "P1: 拆分 chat.rs - 创建 hint.rs",
-    "status": "completed"
-  },
-  {
-    "id": "5",
-    "content": "P1: 拆分 chat.rs - 创建 help.rs",
-    "status": "completed"
-  },
-  {
-    "id": "6",
-    "content": "P1: 拆分 chat.rs - 创建 selector.rs",
-    "status": "completed"
-  },
-  {
-    "id": "7",
-    "content": "P1: 更新 mod.rs 导出",
-    "status": "completed"
-  },
-  {
-    "id": "8",
-    "content": "P1: 修改 chat.rs 删除已移出函数",
-    "status": "completed"
-  },
-  {
-    "id": "9",
-    "content": "P2: 清理 unused_imports",
-    "status": "completed"
-  },
-  {
-    "id": "10",
-    "content": "编译测试验证",
-    "status": "completed"
-  },
-  {
-    "id": "11",
-    "content": "检查最终行数对比",
-    "status": "completed"
-  },
-  {
-    "id": "12",
-    "content": "合并 worktree 到 main",
+    "content": "编译验证",
     "status": "completed"
   }
 ]
