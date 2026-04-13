@@ -78,6 +78,13 @@ pub enum Action {
     StreamError(ChatError),
     /// 流式被用户取消
     StreamCancelled,
+    /// 正在重试（展示重试提示，不中断加载状态）
+    StreamRetrying {
+        attempt: u32,
+        max_attempts: u32,
+        delay_ms: u64,
+        error: String,
+    },
 
     // ========== 工具执行和确认 ==========
     /// 执行当前待处理工具（用户确认）

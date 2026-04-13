@@ -55,19 +55,6 @@ pub enum ChatError {
 }
 
 impl ChatError {
-    /// 是否可重试
-    #[allow(dead_code)]
-    pub fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            Self::ApiRateLimit { .. }
-                | Self::ApiServerError { .. }
-                | Self::NetworkTimeout(_)
-                | Self::NetworkError(_)
-                | Self::StreamInterrupted(_)
-        )
-    }
-
     /// 是否为认证错误
     #[allow(dead_code)]
     pub fn is_auth_error(&self) -> bool {
@@ -326,19 +313,5 @@ mod tests {
             retry_after_secs: Some(30),
         };
         assert_eq!(err.display_message(), "请求过于频繁，请在 30 秒后重试");
-    }
-
-    #[test]
-    fn test_is_retryable() {
-        assert!(
-            ChatError::ApiServerError {
-                status: 504,
-                message: String::new()
-            }
-            .is_retryable()
-        );
-        assert!(ChatError::NetworkTimeout("".into()).is_retryable());
-        assert!(!ChatError::ApiAuth("".into()).is_retryable());
-        assert!(!ChatError::HookAborted.is_retryable());
     }
 }

@@ -111,24 +111,28 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let ctx_str = format_context_tokens(estimated_tokens);
 
     let loading = if app.state.is_loading {
-        // 优先显示正在执行中的工具，其次显示等待确认的工具
-        let tool_info = app
-            .tool_executor
-            .active_tool_calls
-            .iter()
-            .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
-            .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name))
-            .or_else(|| {
-                app.tool_executor
-                    .active_tool_calls
-                    .iter()
-                    .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
-                    .map(|tc| format!(" 🔧 调用 {}...", tc.tool_name))
-            });
-        if let Some(info) = tool_info {
-            info
+        // 优先级：重试提示 > 工具执行 > 工具等待确认 > 默认思考中
+        if let Some(ref hint) = app.state.retry_hint {
+            format!(" {}", hint)
         } else {
-            " ⏳ 思考中...".to_string()
+            let tool_info = app
+                .tool_executor
+                .active_tool_calls
+                .iter()
+                .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
+                .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name))
+                .or_else(|| {
+                    app.tool_executor
+                        .active_tool_calls
+                        .iter()
+                        .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
+                        .map(|tc| format!(" 🔧 调用 {}...", tc.tool_name))
+                });
+            if let Some(info) = tool_info {
+                info
+            } else {
+                " ⏳ 思考中...".to_string()
+            }
         }
     } else {
         String::new()

@@ -14,6 +14,7 @@ use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
+use rand::Rng;
 use std::sync::{Arc, Mutex, mpsc};
 
 /// process_tool_calls 所需的通道和共享状态
@@ -65,7 +66,7 @@ pub async fn run_agent_loop(
         streaming_content: &streaming_content,
     };
 
-    for _round in 0..max_tool_rounds {
+    'round: for _round in 0..max_tool_rounds {
         // 每轮重新构建 system prompt（从磁盘读取最新配置）
         let mut system_prompt = system_prompt_fn();
 
@@ -243,8 +244,18 @@ pub async fn run_agent_loop(
             }
         };
 
-        {
-            write_info_log("agent_loop", "开始创建流式请求...");
+        // ── 指数退避重试循环：包裹整个流式请求+读取过程 ──
+        // api_attempt 从 1 开始，每次创建流或读流失败后自增并重试
+        let mut api_attempt: u32 = 0;
+
+        'api_retry: loop {
+            api_attempt += 1;
+
+            // ── 创建流式请求（可重试）──
+            write_info_log(
+                "agent_loop",
+                &format!("开始创建流式请求 (attempt={})...", api_attempt),
+            );
             let mut stream = match client.chat().create_stream(request.clone()).await {
                 Ok(s) => {
                     write_info_log("agent_loop", "流式请求创建成功");
@@ -253,17 +264,48 @@ pub async fn run_agent_loop(
                 Err(e) => {
                     let err = ChatError::from(e);
                     write_error_log("Chat API 流式请求创建", &err.to_string());
+                    if let Some(policy) = retry_policy_for(&err) {
+                        if api_attempt <= policy.max_attempts {
+                            let delay_ms =
+                                backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                            write_info_log(
+                                "agent_loop",
+                                &format!(
+                                    "流式创建失败，{}ms 后重试 ({}/{})",
+                                    delay_ms, api_attempt, policy.max_attempts
+                                ),
+                            );
+                            let _ = tx.send(StreamMsg::Retrying {
+                                attempt: api_attempt,
+                                max_attempts: policy.max_attempts,
+                                delay_ms,
+                                error: err.display_message(),
+                            });
+                            tokio::select! {
+                                _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                                    continue 'api_retry;
+                                }
+                                _ = cancel_token.cancelled() => {
+                                    let _ = tx.send(StreamMsg::Cancelled);
+                                    return;
+                                }
+                            }
+                        }
+                    }
                     let _ = tx.send(StreamMsg::Error(err));
                     return;
                 }
             };
 
+            // ── 读取流式响应 ──
             let mut finish_reason: Option<async_openai::types::chat::FinishReason> = None;
             let mut assistant_text = String::new();
             // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
             let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
                 std::collections::BTreeMap::new();
             let mut stream_had_deserialize_error = false;
+            // 流式读取中途遇到的可重试错误
+            let mut stream_retry_error: Option<ChatError> = None;
 
             let mut stream_chunk_count: u32 = 0;
 
@@ -338,8 +380,15 @@ pub async fn run_agent_loop(
                                     stream_had_deserialize_error = true;
                                     break 'stream;
                                 }
-                                write_error_log("Chat API 流式响应", &error_str);
-                                let _ = tx.send(StreamMsg::Error(ChatError::from(e)));
+                                let err = ChatError::from(e);
+                                // 可重试错误：记录后跳出流式循环，由外层决策是否重试
+                                if retry_policy_for(&err).is_some() {
+                                    stream_retry_error = Some(err);
+                                    break 'stream;
+                                }
+                                // 不可重试：直接报错退出
+                                write_error_log("Chat API 流式响应（不可重试）", &err.to_string());
+                                let _ = tx.send(StreamMsg::Error(err));
                                 return;
                             }
                             None => {
@@ -353,6 +402,46 @@ pub async fn run_agent_loop(
                         return;
                     }
                 }
+            }
+
+            // ── 处理流式读取中途的可重试错误 ──
+            if let Some(err) = stream_retry_error {
+                write_error_log("Chat API 流式响应（将重试）", &err.to_string());
+                if let Some(policy) = retry_policy_for(&err) {
+                    if api_attempt <= policy.max_attempts {
+                        // 清空已积累的部分内容，重新开始本轮请求
+                        {
+                            let mut sc = safe_lock(&streaming_content, "agent::stream_retry_clear");
+                            sc.clear();
+                        }
+                        let delay_ms = backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                        write_info_log(
+                            "agent_loop",
+                            &format!(
+                                "流式中断，{}ms 后重试 ({}/{})",
+                                delay_ms, api_attempt, policy.max_attempts
+                            ),
+                        );
+                        let _ = tx.send(StreamMsg::Retrying {
+                            attempt: api_attempt,
+                            max_attempts: policy.max_attempts,
+                            delay_ms,
+                            error: err.display_message(),
+                        });
+                        tokio::select! {
+                            _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                                continue 'api_retry;
+                            }
+                            _ = cancel_token.cancelled() => {
+                                let _ = tx.send(StreamMsg::Cancelled);
+                                return;
+                            }
+                        }
+                    }
+                }
+                // 重试次数耗尽
+                let _ = tx.send(StreamMsg::Error(err));
+                return;
             }
 
             // 记录流式回复日志
@@ -391,95 +480,143 @@ pub async fn run_agent_loop(
                     let mut sc = safe_lock(&streaming_content, "agent::fallback_clear");
                     sc.clear();
                 }
-                // 使用宽松反序列化的非流式调用（兼容非标准 finish_reason）
-                let create_fut = call_openai_non_stream_lenient(&provider, &request);
-                tokio::select! {
-                    result = create_fut => match result {
-                    Ok(fallback_result) => {
-                        if fallback_result.is_tool_calls
-                            && let Some(tool_items) = fallback_result.tool_calls {
-                                    if tool_items.is_empty() {
-                                        break;
-                                    }
-                                    let assistant_text =
-                                        fallback_result.content.clone().unwrap_or_default();
-                                    match process_tool_calls(
-                                        tool_items,
-                                        assistant_text,
-                                        &mut messages,
-                                        &tool_ctx,
-                                    ) {
-                                        Ok(result) => {
-                                            // ── Layer 3: compact tool 触发 ──
-                                            if result.compact_requested && compact_config.enabled {
-                                                let _ = compact::auto_compact(&mut messages, &provider).await;
-                                            }
-                                            // ── Plan 被批准且清空上下文 ──
-                                            if let Some(ref plan_content) = result.plan_approved_clear_context {
-                                                write_info_log("agent_loop", "Clearing context after plan approval");
-                                                messages.clear();
-                                                if let Ok(mut shared) = shared_messages.lock() {
-                                                    shared.clear();
-                                                }
-                                                let plan_msg = ChatMessage {
-                                                    role: ROLE_USER.to_string(),
-                                                    content: format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
-                                                    tool_calls: None,
-                                                    tool_call_id: None,
-                                                    images: None,
-                                                };
-                                                messages.push(plan_msg.clone());
-                                                push_shared(&shared_messages, plan_msg);
-                                            }
+                // 使用宽松反序列化的非流式调用（兼容非标准 finish_reason），同样支持重试
+                let fallback_result = loop {
+                    let create_fut = call_openai_non_stream_lenient(&provider, &request);
+                    let result = tokio::select! {
+                        result = create_fut => result,
+                        _ = cancel_token.cancelled() => {
+                            let _ = tx.send(StreamMsg::Cancelled);
+                            return;
+                        }
+                    };
+                    match result {
+                        Ok(r) => break r,
+                        Err(e) => {
+                            write_error_log("Sprite API fallback 非流式", &e.to_string());
+                            if let Some(policy) = retry_policy_for(&e) {
+                                if api_attempt <= policy.max_attempts {
+                                    let delay_ms = backoff_delay_ms(
+                                        api_attempt,
+                                        policy.base_ms,
+                                        policy.cap_ms,
+                                    );
+                                    write_info_log(
+                                        "agent_loop",
+                                        &format!(
+                                            "fallback 非流式失败，{}ms 后重试 ({}/{})",
+                                            delay_ms, api_attempt, policy.max_attempts
+                                        ),
+                                    );
+                                    let _ = tx.send(StreamMsg::Retrying {
+                                        attempt: api_attempt,
+                                        max_attempts: policy.max_attempts,
+                                        delay_ms,
+                                        error: e.display_message(),
+                                    });
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                                            api_attempt += 1;
                                             continue;
                                         }
-                                        Err(e) => {
-                                            write_error_log("agent_loop", &format!("process_tool_calls failed: {}", e));
+                                        _ = cancel_token.cancelled() => {
+                                            let _ = tx.send(StreamMsg::Cancelled);
                                             return;
                                         }
                                     }
                                 }
-                        // 普通文本回复（或非标准 finish_reason 如 network_error）
-                        if let Some(ref content) = fallback_result.content
-                            && !content.is_empty()
-                        {
-                                write_info_log("Sprite 回复", content);
-                                let mut sc = safe_lock(&streaming_content, "agent::fallback_content");
-                                sc.push_str(content);
-                                drop(sc);
-                                let _ = tx.send(StreamMsg::Chunk);
-                        }
-                        // 非标准 finish_reason 且无内容时，报告错误
-                        if let Some(ref reason) = fallback_result.finish_reason
-                            && !matches!(reason.as_str(), "stop" | "length" | "tool_calls" | "content_filter" | "function_call")
-                            && fallback_result.content.as_deref().unwrap_or_default().is_empty()
-                        {
-                                let error_msg = ChatError::AbnormalFinish(reason.clone());
-                                write_error_log("Sprite API fallback 非流式", &error_msg.to_string());
-                                let _ = tx.send(StreamMsg::Error(error_msg));
-                                return;
+                            }
+                            let _ = tx.send(StreamMsg::Error(e));
+                            return;
                         }
                     }
-                    Err(e) => {
-                        write_error_log("Sprite API fallback 非流式", &e.to_string());
-                        let _ = tx.send(StreamMsg::Error(e));
-                        return;
+                };
+
+                if fallback_result.is_tool_calls
+                    && let Some(tool_items) = fallback_result.tool_calls
+                {
+                    if tool_items.is_empty() {
+                        break 'round;
                     }
-                },
-                    _ = cancel_token.cancelled() => {
-                        let _ = tx.send(StreamMsg::Cancelled);
-                        return;
+                    let assistant_text = fallback_result.content.clone().unwrap_or_default();
+                    match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
+                        Ok(result) => {
+                            // ── Layer 3: compact tool 触发 ──
+                            if result.compact_requested && compact_config.enabled {
+                                let _ = compact::auto_compact(&mut messages, &provider).await;
+                            }
+                            // ── Plan 被批准且清空上下文 ──
+                            if let Some(ref plan_content) = result.plan_approved_clear_context {
+                                write_info_log(
+                                    "agent_loop",
+                                    "Clearing context after plan approval",
+                                );
+                                messages.clear();
+                                if let Ok(mut shared) = shared_messages.lock() {
+                                    shared.clear();
+                                }
+                                let plan_msg = ChatMessage {
+                                    role: ROLE_USER.to_string(),
+                                    content: format!(
+                                        "以下计划已获批准，请按计划执行：\n\n{}",
+                                        plan_content
+                                    ),
+                                    tool_calls: None,
+                                    tool_call_id: None,
+                                    images: None,
+                                };
+                                messages.push(plan_msg.clone());
+                                push_shared(&shared_messages, plan_msg);
+                            }
+                            continue 'round;
+                        }
+                        Err(e) => {
+                            write_error_log(
+                                "agent_loop",
+                                &format!("process_tool_calls failed: {}", e),
+                            );
+                            return;
+                        }
                     }
                 }
+
+                // 普通文本回复（或非标准 finish_reason 如 network_error）
+                if let Some(ref content) = fallback_result.content
+                    && !content.is_empty()
+                {
+                    write_info_log("Sprite 回复", content);
+                    let mut sc = safe_lock(&streaming_content, "agent::fallback_content");
+                    sc.push_str(content);
+                    drop(sc);
+                    let _ = tx.send(StreamMsg::Chunk);
+                }
+                // 非标准 finish_reason 且无内容时，报告错误
+                if let Some(ref reason) = fallback_result.finish_reason
+                    && !matches!(
+                        reason.as_str(),
+                        "stop" | "length" | "tool_calls" | "content_filter" | "function_call"
+                    )
+                    && fallback_result
+                        .content
+                        .as_deref()
+                        .unwrap_or_default()
+                        .is_empty()
+                {
+                    let error_msg = ChatError::AbnormalFinish(reason.clone());
+                    write_error_log("Sprite API fallback 非流式", &error_msg.to_string());
+                    let _ = tx.send(StreamMsg::Error(error_msg));
+                    return;
+                }
+
                 // fallback 非流式正常结束，但如果有用户增量消息则继续循环
                 if !safe_lock(&pending_user_messages, "agent::pending_check_fallback").is_empty() {
                     flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
-                    continue;
+                    continue 'round;
                 }
-                break;
+                break 'round;
             }
 
-            // 检查流式模式下的 tool_calls finish_reason
+            // ── 检查流式模式下的 tool_calls finish_reason ──
             let is_tool_calls = matches!(
                 finish_reason,
                 Some(async_openai::types::chat::FinishReason::ToolCalls)
@@ -496,7 +633,7 @@ pub async fn run_agent_loop(
                     .collect();
 
                 if tool_items.is_empty() {
-                    break;
+                    break 'round;
                 }
 
                 match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
@@ -525,7 +662,7 @@ pub async fn run_agent_loop(
                             messages.push(plan_msg.clone());
                             push_shared(&shared_messages, plan_msg);
                         }
-                        continue;
+                        continue 'round;
                     }
                     Err(e) => {
                         write_error_log("agent_loop", &format!("process_tool_calls failed: {}", e));
@@ -536,12 +673,18 @@ pub async fn run_agent_loop(
                 // 正常结束，但如果有用户增量消息则继续循环
                 if !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty() {
                     flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
-                    continue;
+                    continue 'round;
                 }
-                break;
+                break 'round;
             }
-        }
-    }
+
+            // 流式请求成功完成，退出重试循环
+            #[allow(unreachable_code)]
+            {
+                break 'api_retry;
+            }
+        } // end 'api_retry
+    } // end 'round
 
     let _ = tx.send(StreamMsg::Done);
 }
@@ -824,4 +967,95 @@ fn process_tool_calls(
         compact_requested,
         plan_approved_clear_context: plan_clear_context,
     })
+}
+
+// ==================== 指数退避重试 ====================
+
+/// 每种可重试错误的重试策略
+struct RetryPolicy {
+    /// 最大重试次数（不含首次请求）
+    max_attempts: u32,
+    /// 首次退避基础延迟（毫秒）
+    base_ms: u64,
+    /// 延迟上限（毫秒）
+    cap_ms: u64,
+}
+
+/// 根据错误类型确定重试策略
+///
+/// 策略设计原则：
+/// - 网络瞬断（超时/断连）：快速重试，基础 1s，最多 5 次
+/// - 5xx 服务端过载（503/504/529）：稍慢重试，基础 2s，最多 4 次
+/// - 5xx 服务端错误（500/502）：再慢一些，基础 3s，最多 3 次
+/// - 429 有 retry_after：精确等待（上限 120s），只重试 1 次
+/// - 429 无 retry_after：保守重试，基础 5s，最多 3 次
+/// - 非标准 finish_reason（如 network_error）：中等重试
+fn retry_policy_for(error: &ChatError) -> Option<RetryPolicy> {
+    match error {
+        ChatError::NetworkTimeout(_) | ChatError::StreamInterrupted(_) => Some(RetryPolicy {
+            max_attempts: 5,
+            base_ms: 1_000,
+            cap_ms: 30_000,
+        }),
+        ChatError::NetworkError(_) => Some(RetryPolicy {
+            max_attempts: 5,
+            base_ms: 2_000,
+            cap_ms: 30_000,
+        }),
+        ChatError::ApiServerError { status, .. } => match status {
+            503 | 504 | 529 => Some(RetryPolicy {
+                max_attempts: 4,
+                base_ms: 2_000,
+                cap_ms: 30_000,
+            }),
+            500 | 502 => Some(RetryPolicy {
+                max_attempts: 3,
+                base_ms: 3_000,
+                cap_ms: 30_000,
+            }),
+            _ => None,
+        },
+        ChatError::ApiRateLimit {
+            retry_after_secs: Some(secs),
+            ..
+        } => {
+            // 有明确的等待时间：等待指定时长（上限 120s），只重试一次
+            let wait = (*secs).min(120);
+            Some(RetryPolicy {
+                max_attempts: 1,
+                base_ms: wait * 1_000,
+                cap_ms: 120_000,
+            })
+        }
+        ChatError::ApiRateLimit {
+            retry_after_secs: None,
+            ..
+        } => Some(RetryPolicy {
+            max_attempts: 3,
+            base_ms: 5_000,
+            cap_ms: 60_000,
+        }),
+        ChatError::AbnormalFinish(reason)
+            if matches!(reason.as_str(), "network_error" | "timeout" | "overloaded") =>
+        {
+            Some(RetryPolicy {
+                max_attempts: 3,
+                base_ms: 2_000,
+                cap_ms: 20_000,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// 计算第 `attempt`（从 1 开始）次重试的退避延迟（毫秒）
+///
+/// 公式：`clamp(base * 2^(attempt-1), 0, cap) + jitter(0..20%)`
+fn backoff_delay_ms(attempt: u32, base_ms: u64, cap_ms: u64) -> u64 {
+    // 最多移位 10 次，避免溢出
+    let shift = (attempt - 1).min(10) as u64;
+    let exp = base_ms.saturating_mul(1u64 << shift).min(cap_ms);
+    // 加 0–20% 随机抖动，分散并发重试
+    let jitter = rand::thread_rng().gen_range(0..=(exp / 5));
+    exp + jitter
 }

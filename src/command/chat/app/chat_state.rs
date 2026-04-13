@@ -23,4 +23,6 @@ pub struct ChatState {
     pub queued_tasks: Arc<Mutex<Vec<String>>>,
     /// 用户在 agent loop 期间发送的待处理消息队列
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 重试提示（展示在状态栏，重试成功或结束后清空）
+    pub retry_hint: Option<String>,
 }

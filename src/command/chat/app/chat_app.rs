@@ -275,6 +275,7 @@ impl ChatApp {
                 loaded_commands,
                 queued_tasks,
                 pending_user_messages: Arc::clone(&pending_user_messages),
+                retry_hint: None,
             },
             tool_executor: ToolExecutor::new(),
             agent: None,
@@ -457,6 +458,7 @@ impl ChatApp {
                 // Will delegate to helper (existing poll_stream logic)
             }
             Action::StreamDone => {
+                self.state.retry_hint = None;
                 // 广播完整消息和状态到远程
                 if self.ws_bridge.is_some() {
                     if let Some(last_msg) = self.state.session.messages.last()
@@ -476,6 +478,7 @@ impl ChatApp {
                 self.finish_loading(false, false);
             }
             Action::StreamError(ref e) => {
+                self.state.retry_hint = None;
                 let msg = e.display_message();
                 self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
                     message: format!("请求失败: {}", msg),
@@ -487,10 +490,23 @@ impl ChatApp {
                 self.finish_loading(true, false);
             }
             Action::StreamCancelled => {
+                self.state.retry_hint = None;
                 self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
                     state: "idle".to_string(),
                 });
                 self.finish_loading(false, true);
+            }
+            Action::StreamRetrying {
+                attempt,
+                max_attempts,
+                delay_ms,
+                error,
+            } => {
+                let delay_s = (delay_ms + 999) / 1000; // 向上取整到秒
+                self.state.retry_hint = Some(format!(
+                    "⟳ 重试 {}/{} · {}s · {}",
+                    attempt, max_attempts, delay_s, error
+                ));
             }
 
             // ========== 工具执行 ==========
@@ -2285,6 +2301,20 @@ impl ChatApp {
                     StreamMsg::Cancelled => {
                         actions.push(Action::StreamCancelled);
                         break;
+                    }
+                    StreamMsg::Retrying {
+                        attempt,
+                        max_attempts,
+                        delay_ms,
+                        error,
+                    } => {
+                        actions.push(Action::StreamRetrying {
+                            attempt,
+                            max_attempts,
+                            delay_ms,
+                            error,
+                        });
+                        // 不 break，继续等待后续消息
                     }
                 }
             }

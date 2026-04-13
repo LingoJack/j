@@ -16,6 +16,17 @@ pub enum StreamMsg {
     Error(ChatError),
     /// 用户主动取消
     Cancelled,
+    /// 正在重试（网络波动等可恢复错误）
+    Retrying {
+        /// 当前第几次重试（从 1 开始）
+        attempt: u32,
+        /// 最大重试次数
+        max_attempts: u32,
+        /// 本次等待毫秒数
+        delay_ms: u64,
+        /// 原始错误简要描述
+        error: String,
+    },
 }
 
 /// 工具执行状态
