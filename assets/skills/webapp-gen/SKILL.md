@@ -9,10 +9,12 @@ description: 完整前后台 Web 应用生成技能包；1. 当用户需要快�
 
 技术栈: React + TypeScript (前端) | Go + Gorm + Gin + MySQL (后端)
 
-## 初始化项目，在工作目录执行
+## 初始化项目
+初始化项目，在工作目录执行
 ```bash
 git clone https://github.com/LingoJack/proj_template.git .
 ```
+
 会创建基于 react + ts + tailwindcss v4 + go 的项目脚手架
 目录结构如：
 ```bash
