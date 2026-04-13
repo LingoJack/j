@@ -160,7 +160,13 @@ impl TeammateManager {
             &format!(
                 "broadcast from={}: {}",
                 from,
-                &formatted[..formatted.len().min(100)]
+                &formatted[..{
+                    let mut b = formatted.len().min(100);
+                    while b > 0 && !formatted.is_char_boundary(b) {
+                        b -= 1;
+                    }
+                    b
+                }]
             ),
         );
 

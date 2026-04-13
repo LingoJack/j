@@ -174,7 +174,13 @@ impl Tool for CreateTeammateTool {
                 &format!(
                     "Teammate '{}' agent loop ended: {}",
                     teammate_name,
-                    &result[..result.len().min(200)]
+                    &result[..{
+                        let mut b = result.len().min(200);
+                        while b > 0 && !result.is_char_boundary(b) {
+                            b -= 1;
+                        }
+                        b
+                    }]
                 ),
             );
         });
@@ -206,7 +212,13 @@ impl Tool for CreateTeammateTool {
                 "Teammate '{}' ({}) created and started working on: {}",
                 params.name,
                 params.role,
-                &params.prompt[..params.prompt.len().min(100)]
+                &params.prompt[..{
+                    let mut b = params.prompt.len().min(100);
+                    while b > 0 && !params.prompt.is_char_boundary(b) {
+                        b -= 1;
+                    }
+                    b
+                }]
             ),
             is_error: false,
             images: vec![],
