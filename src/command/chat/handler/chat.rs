@@ -549,9 +549,35 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             }
         }
 
-        // 滚动消息
-        KeyCode::Up => app.update(Action::Scroll(CursorDirection::Up)),
-        KeyCode::Down => app.update(Action::Scroll(CursorDirection::Down)),
+        // Up/Down: 多行输入时移动光标，单行时滚动消息
+        KeyCode::Up => {
+            let line_count = app.ui.input_buffer.line_count();
+            let has_visual_wrap = if line_count == 1 && app.ui.input_wrap_width > 0 {
+                let (row, _) = app.ui.input_buffer.cursor();
+                app.ui.input_buffer.visual_line_count(row, app.ui.input_wrap_width) > 1
+            } else {
+                false
+            };
+            if line_count > 1 || has_visual_wrap {
+                app.ui.input_buffer.move_cursor_visual_up(app.ui.input_wrap_width);
+            } else {
+                app.update(Action::Scroll(CursorDirection::Up));
+            }
+        }
+        KeyCode::Down => {
+            let line_count = app.ui.input_buffer.line_count();
+            let has_visual_wrap = if line_count == 1 && app.ui.input_wrap_width > 0 {
+                let (row, _) = app.ui.input_buffer.cursor();
+                app.ui.input_buffer.visual_line_count(row, app.ui.input_wrap_width) > 1
+            } else {
+                false
+            };
+            if line_count > 1 || has_visual_wrap {
+                app.ui.input_buffer.move_cursor_visual_down(app.ui.input_wrap_width);
+            } else {
+                app.update(Action::Scroll(CursorDirection::Down));
+            }
+        }
         KeyCode::PageUp => app.update(Action::PageScroll(CursorDirection::Up)),
         KeyCode::PageDown => app.update(Action::PageScroll(CursorDirection::Down)),
 

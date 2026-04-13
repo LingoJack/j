@@ -264,6 +264,7 @@ impl ChatApp {
                         .as_millis() as usize;
                     ms % crate::command::chat::ui::quotes::quotes_count()
                 },
+                input_wrap_width: 0,
             },
             state: ChatState {
                 agent_config,

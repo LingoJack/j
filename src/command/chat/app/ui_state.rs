@@ -142,6 +142,8 @@ pub struct UIState {
     pub session_restore_confirm: bool,
     /// 欢迎界面诗句索引（每次进入 chat 时随机选定）
     pub quote_idx: usize,
+    /// 输入区视觉折行宽度（由 draw_input 每帧更新，handler 用于判断视觉折行）
+    pub input_wrap_width: usize,
 }
 
 /// 消息渲染行缓存

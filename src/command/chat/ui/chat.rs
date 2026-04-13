@@ -584,6 +584,8 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let inner_height = area.height.saturating_sub(2) as usize;
     // 折行宽度减去提示符宽度，避免第一行文字溢出到提示符区域
     let wrap_width = usable_width.saturating_sub(prompt_width);
+    // 缓存 wrap_width 供 handler 判断视觉折行
+    app.ui.input_wrap_width = wrap_width;
     let wrapped_lines = wrap_text(&full_visible, wrap_width);
 
     // before 中包含 '\n'，但 wrap_text 会剥掉 '\n'，因此渲染循环里的 char_offset
