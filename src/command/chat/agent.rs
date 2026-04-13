@@ -587,10 +587,25 @@ pub async fn run_agent_loop(
             if is_tool_calls && !raw_tool_calls.is_empty() {
                 let tool_items: Vec<ToolCallItem> = raw_tool_calls
                     .into_values()
-                    .map(|(id, name, arguments)| ToolCallItem {
-                        id,
-                        name,
-                        arguments,
+                    .map(|(id, name, arguments)| {
+                        // 某些 API 在流式 chunk 中不返回 tool_call id，
+                        // 导致 id 为空字符串；发送给 API 时会报 tool_call_id not found。
+                        // 此处为空 id 生成随机唯一 id。
+                        let id = if id.is_empty() {
+                            let rand_id =
+                                format!("call_{:016x}", rand::thread_rng().gen::<u64>());
+                            write_info_log(
+                                "agent_loop",
+                                &format!(
+                                    "tool_call id 为空（API 未在流式 chunk 中返回），已生成随机 id: {}",
+                                    rand_id
+                                ),
+                            );
+                            rand_id
+                        } else {
+                            id
+                        };
+                        ToolCallItem { id, name, arguments }
                     })
                     .collect();
 
