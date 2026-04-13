@@ -487,6 +487,77 @@ fn render_help(f: &mut ratatui::Frame, area: Rect) {
     f.render_widget(help_widget, area);
 }
 
+/// 在状态栏区域渲染输入框（带标签、文本、光标、占位符）
+#[allow(clippy::too_many_arguments)]
+fn render_input_status_bar(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    label: &str,
+    label_color: Color,
+    input: &str,
+    cursor_pos: usize,
+    placeholder: &str,
+    hint: &str,
+) {
+    let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+    let text_style = Style::default().fg(Color::Reset);
+    let placeholder_style = Style::default().fg(Color::DarkGray);
+    let hint_style = Style::default().fg(Color::DarkGray);
+
+    let _inner_width = area.width.saturating_sub(2) as usize; // 减边框
+    let label_display = format!(" {} ", label);
+    let label_width = unicode_width::UnicodeWidthStr::width(label_display.as_str());
+
+    let mut spans = vec![Span::styled(
+        label_display,
+        Style::default()
+            .fg(label_color)
+            .add_modifier(Modifier::BOLD),
+    )];
+
+    if input.is_empty() {
+        // 空输入：显示占位符 + 闪烁光标
+        spans.push(Span::styled(" ", cursor_style));
+        spans.push(Span::styled(placeholder.to_string(), placeholder_style));
+    } else {
+        // 有输入：逐字符渲染，光标位置高亮
+        let input_chars: Vec<char> = input.chars().collect();
+        for (i, ch) in input_chars.iter().enumerate() {
+            if i == cursor_pos {
+                spans.push(Span::styled(ch.to_string(), cursor_style));
+            } else {
+                spans.push(Span::styled(ch.to_string(), text_style));
+            }
+        }
+        if cursor_pos >= input_chars.len() {
+            spans.push(Span::styled(" ", cursor_style));
+        }
+    }
+
+    // 添加提示
+    spans.push(Span::styled(format!("  {}", hint), hint_style));
+
+    let status = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(label_color)),
+    );
+    f.render_widget(status, area);
+
+    // 设置终端光标位置
+    let cursor_x_offset = if input.is_empty() {
+        0
+    } else {
+        let chars_before_cursor: String = input.chars().take(cursor_pos).collect();
+        unicode_width::UnicodeWidthStr::width(chars_before_cursor.as_str())
+    };
+    let cursor_x = area.x + 1 + label_width as u16 + cursor_x_offset as u16;
+    let cursor_y = area.y + 1; // 3 行状态栏的中间行
+    if cursor_x < area.x + area.width.saturating_sub(1) && cursor_y < area.y + area.height {
+        f.set_cursor_position((cursor_x, cursor_y));
+    }
+}
+
 /// 渲染状态栏
 fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
     match &app.mode {
@@ -531,64 +602,40 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             f.render_widget(status, area);
         }
         AppMode::Mkdir => {
-            let status = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " 新建目录",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " — 输入目录名后按 Enter 创建",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
+            render_input_status_bar(
+                f,
+                area,
+                "新建目录",
+                Color::Cyan,
+                &app.input,
+                app.cursor_pos,
+                "输入目录名…",
+                "Enter 确认 | Esc 取消",
             );
-            f.render_widget(status, area);
         }
         AppMode::Mv => {
-            let status = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " 移动笔记",
-                    Style::default()
-                        .fg(Color::Magenta)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " — 输入目标路径后按 Enter 确认",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Magenta)),
+            render_input_status_bar(
+                f,
+                area,
+                "移动笔记",
+                Color::Magenta,
+                &app.input,
+                app.cursor_pos,
+                "输入目标路径…",
+                "Enter 确认 | Esc 取消",
             );
-            f.render_widget(status, area);
         }
         AppMode::Search => {
-            let status = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " 搜索",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " — 输入关键词后按 Enter 搜索",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
+            render_input_status_bar(
+                f,
+                area,
+                "搜索",
+                Color::Cyan,
+                &app.input,
+                app.cursor_pos,
+                "输入关键词…",
+                "Enter 搜索 | Esc 取消",
             );
-            f.render_widget(status, area);
         }
         AppMode::ConfirmDelete => {
             let msg = if let Some(name) = app.selected_name() {
@@ -629,59 +676,28 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             f.render_widget(status, area);
         }
         AppMode::CommandPopup => {
-            let filter_display = if app.cmd_popup_filter.is_empty() {
-                String::new()
-            } else {
-                format!(" — 筛选: {}", app.cmd_popup_filter)
-            };
-            let status = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " 命令面板",
-                    Style::default()
-                        .fg(Color::Magenta)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    format!("{} — ↑↓ 选择 | Enter 确认 | Esc 取消", filter_display),
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Magenta)),
+            render_input_status_bar(
+                f,
+                area,
+                "命令面板",
+                Color::Magenta,
+                &app.cmd_popup_filter,
+                app.cmd_popup_filter.chars().count(),
+                "输入筛选…",
+                "↑↓ 选择 | Enter 确认 | Esc 取消",
             );
-            f.render_widget(status, area);
         }
         AppMode::RatioInput => {
-            let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-            let input_chars: Vec<char> = app.input.chars().collect();
-            let mut spans = vec![Span::styled(
-                " 比例 ",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )];
-            for (i, ch) in input_chars.iter().enumerate() {
-                if i == app.cursor_pos {
-                    spans.push(Span::styled(ch.to_string(), cursor_style));
-                } else {
-                    spans.push(Span::raw(ch.to_string()));
-                }
-            }
-            if app.cursor_pos >= input_chars.len() {
-                spans.push(Span::styled(" ", cursor_style));
-            }
-            spans.push(Span::styled(
-                "  (如 20:80)",
-                Style::default().fg(Color::DarkGray),
-            ));
-            let status = Paragraph::new(Line::from(spans)).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
+            render_input_status_bar(
+                f,
+                area,
+                "比例",
+                Color::Yellow,
+                &app.input,
+                app.cursor_pos,
+                "20:80",
+                "如 20:80",
             );
-            f.render_widget(status, area);
         }
         _ => {
             // Normal / Help
