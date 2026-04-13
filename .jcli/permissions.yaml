@@ -115,4 +115,7 @@ allow:
 - Bash(find /Users/lingojack/dev_custom/j/src:*)
 - Bash(cargo run:*)
 - Bash(cat /Users/lingojack/dev_custom/j/Makefile:*)
+- EnterWorktree
+- Bash(cd /Users/lingojack/dev_custom/j/.jcli/worktrees/chat-ui-cursor:*)
+- Bash(git merge:*)
 deny: []

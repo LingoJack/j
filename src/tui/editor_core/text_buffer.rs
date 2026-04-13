@@ -162,9 +162,17 @@ impl TextBuffer {
 
         // 计算当前光标的视觉 X 偏移（显示宽度）
         let line = &self.lines[row];
-        let visual_x: usize = line.chars().take(col).map(|c| {
-            if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-        }).sum();
+        let visual_x: usize = line
+            .chars()
+            .take(col)
+            .map(|c| {
+                if c == '\t' {
+                    1
+                } else {
+                    UnicodeWidthChar::width(c).unwrap_or(1)
+                }
+            })
+            .sum();
 
         // 当前逻辑行折行后的视觉行
         let wrapped = wrap_single_line(line, wrap_width);
@@ -173,9 +181,16 @@ impl TextBuffer {
         let mut cumulative_width = 0usize;
         let mut current_visual_row = 0;
         for (vi, vl) in wrapped.iter().enumerate() {
-            let vl_display_width: usize = vl.chars().map(|c| {
-                if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-            }).sum();
+            let vl_display_width: usize = vl
+                .chars()
+                .map(|c| {
+                    if c == '\t' {
+                        1
+                    } else {
+                        UnicodeWidthChar::width(c).unwrap_or(1)
+                    }
+                })
+                .sum();
             if cumulative_width + vl_display_width > visual_x {
                 current_visual_row = vi;
                 break;
@@ -190,14 +205,28 @@ impl TextBuffer {
             // 找目标视觉行的起始显示宽度偏移
             let mut target_start_width = 0usize;
             for vi in 0..target_visual_row {
-                target_start_width += wrapped[vi].chars().map(|c| {
-                    if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-                }).sum::<usize>();
+                target_start_width += wrapped[vi]
+                    .chars()
+                    .map(|c| {
+                        if c == '\t' {
+                            1
+                        } else {
+                            UnicodeWidthChar::width(c).unwrap_or(1)
+                        }
+                    })
+                    .sum::<usize>();
             }
             // 目标视觉行的显示宽度
-            let target_vl_width: usize = wrapped[target_visual_row].chars().map(|c| {
-                if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-            }).sum::<usize>();
+            let target_vl_width: usize = wrapped[target_visual_row]
+                .chars()
+                .map(|c| {
+                    if c == '\t' {
+                        1
+                    } else {
+                        UnicodeWidthChar::width(c).unwrap_or(1)
+                    }
+                })
+                .sum::<usize>();
             // 保持视觉 X 偏移不变（但不超出目标视觉行宽度）
             let target_visual_x = visual_x.min(target_start_width + target_vl_width);
             // 反算逻辑列位置
@@ -212,13 +241,27 @@ impl TextBuffer {
             // 找最后一行的起始显示宽度偏移
             let mut last_start_width = 0usize;
             for vi in 0..last_vis_row {
-                last_start_width += prev_wrapped[vi].chars().map(|c| {
-                    if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-                }).sum::<usize>();
+                last_start_width += prev_wrapped[vi]
+                    .chars()
+                    .map(|c| {
+                        if c == '\t' {
+                            1
+                        } else {
+                            UnicodeWidthChar::width(c).unwrap_or(1)
+                        }
+                    })
+                    .sum::<usize>();
             }
-            let last_vl_width: usize = prev_wrapped[last_vis_row].chars().map(|c| {
-                if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-            }).sum::<usize>();
+            let last_vl_width: usize = prev_wrapped[last_vis_row]
+                .chars()
+                .map(|c| {
+                    if c == '\t' {
+                        1
+                    } else {
+                        UnicodeWidthChar::width(c).unwrap_or(1)
+                    }
+                })
+                .sum::<usize>();
             let target_visual_x = visual_x.min(last_start_width + last_vl_width);
             let new_col = map_visual_x_to_logical_col(prev_line, target_visual_x, wrap_width);
             self.cursor.1 = new_col.min(prev_line.chars().count());
@@ -233,9 +276,17 @@ impl TextBuffer {
 
         // 计算当前光标的视觉 X 偏移（显示宽度）
         let line = &self.lines[row];
-        let visual_x: usize = line.chars().take(col).map(|c| {
-            if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-        }).sum();
+        let visual_x: usize = line
+            .chars()
+            .take(col)
+            .map(|c| {
+                if c == '\t' {
+                    1
+                } else {
+                    UnicodeWidthChar::width(c).unwrap_or(1)
+                }
+            })
+            .sum();
 
         // 当前逻辑行折行后的视觉行
         let wrapped = wrap_single_line(line, wrap_width);
@@ -245,9 +296,16 @@ impl TextBuffer {
         let mut cumulative_width = 0usize;
         let mut current_visual_row = 0;
         for (vi, vl) in wrapped.iter().enumerate() {
-            let vl_display_width: usize = vl.chars().map(|c| {
-                if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-            }).sum();
+            let vl_display_width: usize = vl
+                .chars()
+                .map(|c| {
+                    if c == '\t' {
+                        1
+                    } else {
+                        UnicodeWidthChar::width(c).unwrap_or(1)
+                    }
+                })
+                .sum();
             if cumulative_width + vl_display_width > visual_x {
                 current_visual_row = vi;
                 break;
@@ -262,14 +320,28 @@ impl TextBuffer {
             // 找目标视觉行的起始显示宽度偏移
             let mut target_start_width = 0usize;
             for vi in 0..target_visual_row {
-                target_start_width += wrapped[vi].chars().map(|c| {
-                    if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-                }).sum::<usize>();
+                target_start_width += wrapped[vi]
+                    .chars()
+                    .map(|c| {
+                        if c == '\t' {
+                            1
+                        } else {
+                            UnicodeWidthChar::width(c).unwrap_or(1)
+                        }
+                    })
+                    .sum::<usize>();
             }
             // 目标视觉行的显示宽度
-            let target_vl_width: usize = wrapped[target_visual_row].chars().map(|c| {
-                if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-            }).sum::<usize>();
+            let target_vl_width: usize = wrapped[target_visual_row]
+                .chars()
+                .map(|c| {
+                    if c == '\t' {
+                        1
+                    } else {
+                        UnicodeWidthChar::width(c).unwrap_or(1)
+                    }
+                })
+                .sum::<usize>();
             // 保持视觉 X 偏移不变（但不超出目标视觉行宽度）
             let target_visual_x = visual_x.min(target_start_width + target_vl_width);
             // 反算逻辑列位置
@@ -281,9 +353,16 @@ impl TextBuffer {
             let next_line = &self.lines[row + 1];
             let next_wrapped = wrap_single_line(next_line, wrap_width);
             // 第一行的显示宽度
-            let first_vl_width: usize = next_wrapped[0].chars().map(|c| {
-                if c == '\t' { 1 } else { UnicodeWidthChar::width(c).unwrap_or(1) }
-            }).sum();
+            let first_vl_width: usize = next_wrapped[0]
+                .chars()
+                .map(|c| {
+                    if c == '\t' {
+                        1
+                    } else {
+                        UnicodeWidthChar::width(c).unwrap_or(1)
+                    }
+                })
+                .sum();
             let target_visual_x = visual_x.min(first_vl_width);
             let new_col = map_visual_x_to_logical_col(next_line, target_visual_x, wrap_width);
             self.cursor.1 = new_col.min(next_line.chars().count());
@@ -625,7 +704,11 @@ fn wrap_single_line(line: &str, max_width: usize) -> Vec<String> {
     let mut current_width = 0;
 
     for ch in line.chars() {
-        let ch_width = if ch == '\t' { 1 } else { UnicodeWidthChar::width(ch).unwrap_or(1) };
+        let ch_width = if ch == '\t' {
+            1
+        } else {
+            UnicodeWidthChar::width(ch).unwrap_or(1)
+        };
         if current_width + ch_width > max_width && !current_line.is_empty() {
             result.push(current_line.clone());
             current_line.clear();
@@ -650,7 +733,11 @@ fn map_visual_x_to_logical_col(line: &str, visual_x: usize, _wrap_width: usize) 
     let mut col = 0;
     let mut acc_width = 0;
     for ch in line.chars() {
-        let cw = if ch == '\t' { 1 } else { UnicodeWidthChar::width(ch).unwrap_or(1) };
+        let cw = if ch == '\t' {
+            1
+        } else {
+            UnicodeWidthChar::width(ch).unwrap_or(1)
+        };
         if acc_width + cw > visual_x {
             break;
         }

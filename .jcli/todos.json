@@ -1,17 +1,57 @@
 [
   {
-    "id": "analyze",
-    "content": "分析 chat-ui 目录代码结构",
+    "id": "1",
+    "content": "P0: 抽取模型/主题选择器通用函数到 components.rs",
     "status": "completed"
   },
   {
-    "id": "plan",
-    "content": "编写优化计划文档",
+    "id": "2",
+    "content": "P1: 调色板数据移到 palette.rs",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "P1: 拆分 chat.rs - 创建 input.rs",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "P1: 拆分 chat.rs - 创建 hint.rs",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "P1: 拆分 chat.rs - 创建 help.rs",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "P1: 拆分 chat.rs - 创建 selector.rs",
+    "status": "completed"
+  },
+  {
+    "id": "7",
+    "content": "P1: 更新 mod.rs 导出",
+    "status": "completed"
+  },
+  {
+    "id": "8",
+    "content": "P1: 修改 chat.rs 删除已移出函数",
     "status": "in_progress"
   },
   {
-    "id": "execute",
-    "content": "等待用户审批后执行优化",
+    "id": "9",
+    "content": "P2: 清理 unused_imports",
+    "status": "pending"
+  },
+  {
+    "id": "10",
+    "content": "P3: 时间工具函数迁移",
+    "status": "pending"
+  },
+  {
+    "id": "11",
+    "content": "编译测试验证",
     "status": "pending"
   }
 ]

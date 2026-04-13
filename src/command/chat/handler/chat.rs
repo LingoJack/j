@@ -554,12 +554,17 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             let line_count = app.ui.input_buffer.line_count();
             let has_visual_wrap = if line_count == 1 && app.ui.input_wrap_width > 0 {
                 let (row, _) = app.ui.input_buffer.cursor();
-                app.ui.input_buffer.visual_line_count(row, app.ui.input_wrap_width) > 1
+                app.ui
+                    .input_buffer
+                    .visual_line_count(row, app.ui.input_wrap_width)
+                    > 1
             } else {
                 false
             };
             if line_count > 1 || has_visual_wrap {
-                app.ui.input_buffer.move_cursor_visual_up(app.ui.input_wrap_width);
+                app.ui
+                    .input_buffer
+                    .move_cursor_visual_up(app.ui.input_wrap_width);
             } else {
                 app.update(Action::Scroll(CursorDirection::Up));
             }
@@ -568,12 +573,17 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             let line_count = app.ui.input_buffer.line_count();
             let has_visual_wrap = if line_count == 1 && app.ui.input_wrap_width > 0 {
                 let (row, _) = app.ui.input_buffer.cursor();
-                app.ui.input_buffer.visual_line_count(row, app.ui.input_wrap_width) > 1
+                app.ui
+                    .input_buffer
+                    .visual_line_count(row, app.ui.input_wrap_width)
+                    > 1
             } else {
                 false
             };
             if line_count > 1 || has_visual_wrap {
-                app.ui.input_buffer.move_cursor_visual_down(app.ui.input_wrap_width);
+                app.ui
+                    .input_buffer
+                    .move_cursor_visual_down(app.ui.input_wrap_width);
             } else {
                 app.update(Action::Scroll(CursorDirection::Down));
             }
