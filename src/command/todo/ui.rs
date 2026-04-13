@@ -75,7 +75,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut TodoApp) {
         AppMode::ConfirmReport => " Enter/y 写入日报 | 其他键跳过",
         AppMode::ConfirmCancelInput => " Enter/y 保存 | n/Esc 放弃 | 其他键继续编辑",
         AppMode::Help => " 按任意键返回",
-        AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | 输入筛选 | Esc 取消",
+        AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | Esc 取消",
     };
     let help_widget = Paragraph::new(Line::from(Span::styled(
         help_text,
@@ -502,6 +502,73 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
     f.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
+/// 在状态栏区域渲染输入框（带标签、文本、光标、占位符）
+#[allow(clippy::too_many_arguments)]
+fn render_input_status_bar(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    label: &str,
+    label_color: Color,
+    input: &str,
+    cursor_pos: usize,
+    placeholder: &str,
+    hint: &str,
+) {
+    let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+    let text_style = Style::default().fg(Color::Reset);
+    let placeholder_style = Style::default().fg(Color::DarkGray);
+    let hint_style = Style::default().fg(Color::DarkGray);
+
+    let label_display = format!(" {} ", label);
+    let label_width = unicode_width::UnicodeWidthStr::width(label_display.as_str());
+
+    let mut spans = vec![Span::styled(
+        label_display,
+        Style::default()
+            .fg(label_color)
+            .add_modifier(Modifier::BOLD),
+    )];
+
+    if input.is_empty() {
+        spans.push(Span::styled(" ", cursor_style));
+        spans.push(Span::styled(placeholder.to_string(), placeholder_style));
+    } else {
+        let input_chars: Vec<char> = input.chars().collect();
+        for (i, ch) in input_chars.iter().enumerate() {
+            if i == cursor_pos {
+                spans.push(Span::styled(ch.to_string(), cursor_style));
+            } else {
+                spans.push(Span::styled(ch.to_string(), text_style));
+            }
+        }
+        if cursor_pos >= input_chars.len() {
+            spans.push(Span::styled(" ", cursor_style));
+        }
+    }
+
+    spans.push(Span::styled(format!("  {}", hint), hint_style));
+
+    let status = Paragraph::new(Line::from(spans)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(label_color)),
+    );
+    f.render_widget(status, area);
+
+    // 设置终端光标位置
+    let cursor_x_offset = if input.is_empty() {
+        0
+    } else {
+        let chars_before_cursor: String = input.chars().take(cursor_pos).collect();
+        unicode_width::UnicodeWidthStr::width(chars_before_cursor.as_str())
+    };
+    let cursor_x = area.x + 1 + label_width as u16 + cursor_x_offset as u16;
+    let cursor_y = area.y + 1;
+    if cursor_x < area.x + area.width.saturating_sub(1) && cursor_y < area.y + area.height {
+        f.set_cursor_position((cursor_x, cursor_y));
+    }
+}
+
 /// 渲染状态栏
 fn render_status_bar(f: &mut ratatui::Frame, app: &TodoApp, area: ratatui::layout::Rect) {
     match &app.mode {
@@ -605,6 +672,18 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &TodoApp, area: ratatui::layou
                     .title(" ⚠️ 未保存的内容 "),
             );
             f.render_widget(confirm_widget, area);
+        }
+        AppMode::CommandPopup => {
+            render_input_status_bar(
+                f,
+                area,
+                "命令面板",
+                app.theme.md_h1,
+                &app.cmd_popup_filter,
+                app.cmd_popup_filter.chars().count(),
+                "输入筛选…",
+                "↑↓ 选择 | Enter 确认 | Esc 取消",
+            );
         }
         _ => {
             // Normal / Help
