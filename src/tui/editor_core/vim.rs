@@ -368,7 +368,7 @@ impl Vim {
                 self.visual_start = buffer.cursor();
                 Transition::Mode(Mode::Visual)
             }
-            Key::Char(':') => Transition::Mode(Mode::Command(String::new())),
+            Key::Char(':') | Key::Char('：') => Transition::Mode(Mode::Command(String::new())),
             Key::Char('/') => Transition::Mode(Mode::CommandPanel(String::new())),
             Key::PageDown => {
                 for _ in 0..10 {
