@@ -486,12 +486,8 @@ fn draw_tab_skills_list<'a>(
 /// Hooks tab（展示已注册的 hooks）
 fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
-    let hooks = if let Ok(manager) = app.hook_manager.lock() {
-        manager
-            .list_hooks()
-            .into_iter()
-            .map(|(event, def, source)| (event, def.clone(), source.to_string()))
-            .collect::<Vec<_>>()
+    let hooks: Vec<_> = if let Ok(manager) = app.hook_manager.lock() {
+        manager.list_hooks()
     } else {
         Vec::new()
     };
@@ -529,8 +525,11 @@ fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     )));
     lines.push(Line::from(""));
 
-    for (event, def, source) in &hooks {
-        let source_style = match source.as_str() {
+    for entry in &hooks {
+        let source_style = match entry.source {
+            "builtin" => Style::default()
+                .fg(ratatui::style::Color::Magenta)
+                .add_modifier(Modifier::BOLD),
             "user" => Style::default()
                 .fg(ratatui::style::Color::Green)
                 .add_modifier(Modifier::BOLD),
@@ -542,24 +541,26 @@ fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
                 .add_modifier(Modifier::BOLD),
         };
 
-        let cmd_display: String = if def.command.chars().count() > 40 {
-            let truncated: String = def.command.chars().take(40).collect();
+        let label_display: String = if entry.label.chars().count() > 40 {
+            let truncated: String = entry.label.chars().take(40).collect();
             format!("{truncated}...")
         } else {
-            def.command.clone()
+            entry.label.clone()
         };
 
+        let timeout_str = entry
+            .timeout
+            .map(|t| format!("  {}s", t))
+            .unwrap_or_default();
+
         lines.push(Line::from(vec![
-            Span::styled(format!("    [{:<7}]  ", source), source_style),
+            Span::styled(format!("    [{:<7}]  ", entry.source), source_style),
             Span::styled(
-                format!("{:<22}  ", event.as_str()),
+                format!("{:<22}  ", entry.event.as_str()),
                 Style::default().fg(t.config_label),
             ),
-            Span::styled(cmd_display, Style::default().fg(t.config_value)),
-            Span::styled(
-                format!("  {}s", def.timeout),
-                Style::default().fg(t.config_dim),
-            ),
+            Span::styled(label_display, Style::default().fg(t.config_value)),
+            Span::styled(timeout_str, Style::default().fg(t.config_dim)),
         ]));
     }
 }

@@ -9,7 +9,7 @@ use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
 use crate::command::chat::command;
 use crate::command::chat::constants::{INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
-use crate::command::chat::hook::{HookContext, HookEvent, HookManager};
+use crate::command::chat::hook::{HookContext, HookEvent, HookManager, HookResult};
 use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::sandbox::Sandbox;
@@ -22,8 +22,7 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::background::{self, BackgroundManager};
-use crate::command::chat::tools::task;
+use crate::command::chat::tools::background::BackgroundManager;
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::tui::editor_core::text_buffer::TextBuffer;
 use crate::util::log::write_info_log;
@@ -50,7 +49,8 @@ pub struct ChatApp {
     pub jcli_config: Arc<JcliConfig>,
     /// 后台任务管理器
     pub background_manager: Arc<BackgroundManager>,
-    /// Task 管理器
+    /// Task 管理器（由内置 hook 和工具通过 Arc 引用使用）
+    #[allow(dead_code)]
     pub task_manager: Arc<crate::command::chat::tools::task::TaskManager>,
     /// Todo 管理器
     pub todo_manager: Arc<crate::command::chat::tools::todo::TodoManager>,
@@ -190,6 +190,135 @@ impl ChatApp {
         ));
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
+
+        // ── 注册内置 hook ──
+        // 将状态占位符替换和事件驱动提醒从硬编码逻辑迁移到 hook 系统，
+        // 统一通过 PreLlmRequest hook 链执行（内置→用户→项目→session）
+        if let Ok(mut manager) = hook_manager.lock() {
+            // 内置 hook 1: tasks_status — 替换 system_prompt 中的 {{.tasks}} 占位符
+            let tasks_tm = Arc::clone(&task_manager);
+            manager.register_builtin(HookEvent::PreLlmRequest, "tasks_status", move |ctx| {
+                let summary = crate::command::chat::tools::task::build_tasks_summary(&tasks_tm);
+                if let Some(ref prompt) = ctx.system_prompt
+                    && prompt.contains("{{.tasks}}")
+                {
+                    return Some(HookResult {
+                        system_prompt: Some(prompt.replace("{{.tasks}}", &summary)),
+                        ..Default::default()
+                    });
+                }
+                None
+            });
+
+            // 内置 hook 2: background_status — 替换 {{.background_tasks}} 占位符 + 注入完成通知
+            let bg_mgr = Arc::clone(&background_manager);
+            manager.register_builtin(
+                HookEvent::PreLlmRequest,
+                "background_status",
+                move |ctx| {
+                    let running_summary =
+                        crate::command::chat::tools::background::build_running_summary(&bg_mgr);
+                    let notifications = bg_mgr.drain_notifications();
+
+                    let mut result = HookResult::default();
+
+                    // 替换运行中任务占位符
+                    if let Some(ref prompt) = ctx.system_prompt
+                        && prompt.contains("{{.background_tasks}}")
+                    {
+                        result.system_prompt =
+                            Some(prompt.replace("{{.background_tasks}}", &running_summary));
+                    }
+
+                    // 注入完成通知为 inject_messages
+                    if !notifications.is_empty() {
+                        let mut inject = Vec::new();
+                        for notif in notifications {
+                            let body = format!(
+                                "<background_task_completed>\n<task_id>{}</task_id>\n<command>{}</command>\n<status>{}</status>\n<result>\n{}\n</result>\n</background_task_completed>",
+                                notif.task_id, notif.command, notif.status, notif.result
+                            );
+                            inject.push(crate::command::chat::storage::ChatMessage {
+                                role: crate::command::chat::constants::ROLE_USER.to_string(),
+                                content: format!("<system-reminder>\n{}\n</system-reminder>", body),
+                                tool_calls: None,
+                                tool_call_id: None,
+                                images: None,
+                            });
+                        }
+                        result.inject_messages = Some(inject);
+                    }
+
+                    if result.system_prompt.is_some() || result.inject_messages.is_some() {
+                        Some(result)
+                    } else {
+                        None
+                    }
+                },
+            );
+
+            // 内置 hook 3: session_state — 替换 {{.session_state}} 占位符
+            let session_tr = Arc::clone(&tool_registry);
+            manager.register_builtin(HookEvent::PreLlmRequest, "session_state", move |ctx| {
+                let summary = session_tr.build_session_state_summary();
+                if let Some(ref prompt) = ctx.system_prompt
+                    && prompt.contains("{{.session_state}}")
+                {
+                    return Some(HookResult {
+                        system_prompt: Some(prompt.replace("{{.session_state}}", &summary)),
+                        ..Default::default()
+                    });
+                }
+                None
+            });
+
+            // 内置 hook 4: teammates_status — 替换 {{.teammates}} 占位符
+            let tm_mgr = Arc::clone(&teammate_manager);
+            manager.register_builtin(HookEvent::PreLlmRequest, "teammates_status", move |ctx| {
+                let summary = tm_mgr.lock().map(|m| m.team_summary()).unwrap_or_default();
+                if let Some(ref prompt) = ctx.system_prompt
+                    && prompt.contains("{{.teammates}}")
+                {
+                    return Some(HookResult {
+                        system_prompt: Some(prompt.replace("{{.teammates}}", &summary)),
+                        ..Default::default()
+                    });
+                }
+                None
+            });
+
+            // 内置 hook 5: todo_nag — 当 todo 列表活跃但长时间未更新时注入提醒
+            let todo_mgr = Arc::clone(&todo_manager);
+            manager.register_builtin(
+                HookEvent::PreLlmRequest,
+                "todo_nag",
+                move |_ctx| {
+                    if !todo_mgr.has_todos() {
+                        return None;
+                    }
+                    let turns = todo_mgr.turns_since_last_call();
+                    if turns < crate::command::chat::constants::TODO_NAG_INTERVAL_ROUNDS {
+                        return None;
+                    }
+                    let todos_summary = todo_mgr.format_todos_summary();
+                    let body = format!(
+                        "<todo_reminder>\nYou have an active todo list but haven't updated it in 15+ rounds. Update it if progress has been made, or ignore this reminder if you are currently working on an item.\n<todos>\n{}\n</todos>\n</todo_reminder>",
+                        todos_summary
+                    );
+                    let inject = vec![crate::command::chat::storage::ChatMessage {
+                        role: crate::command::chat::constants::ROLE_USER.to_string(),
+                        content: format!("<system-reminder>\n{}\n</system-reminder>", body),
+                        tool_calls: None,
+                        tool_call_id: None,
+                        images: None,
+                    }];
+                    Some(HookResult {
+                        inject_messages: Some(inject),
+                        ..Default::default()
+                    })
+                },
+            );
+        }
 
         let new_app = Self {
             ui: UIState {
@@ -504,7 +633,7 @@ impl ChatApp {
                 delay_ms,
                 error,
             } => {
-                let delay_s = (delay_ms + 999) / 1000; // 向上取整到秒
+                let delay_s = delay_ms.div_ceil(1000);
                 self.state.retry_hint = Some(format!(
                     "⟳ 重试 {}/{} · {}s · {}",
                     attempt, max_attempts, delay_s, error
@@ -2021,16 +2150,13 @@ impl ChatApp {
         let background_manager = Arc::clone(&self.background_manager);
         let compact_config = self.state.agent_config.compact.clone();
 
-        // 每轮重建 system_prompt：每轮调用 system_prompt_fn 从磁盘读取最新配置并替换占位符。
-        // 这是设计意图，确保运行时状态变更（如工具增删、teammates 状态、后台任务等）
-        // 能实时反映到 LLM 上下文中，而非使用过时的快照。
+        // 每轮重建 system_prompt：每轮调用 system_prompt_fn 从磁盘读取最新配置并替换基础占位符。
+        // 状态占位符（{{.tasks}}、{{.background_tasks}}、{{.session_state}}、{{.teammates}}）
+        // 由内置 PreLlmRequest hook 负责替换，确保统一走 hook 链。
         let loaded_skills = self.state.loaded_skills.clone();
         let disabled_skills = self.state.agent_config.disabled_skills.clone();
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
-        let teammate_manager_for_prompt = Arc::clone(&self.teammate_manager);
-        let task_manager_for_prompt = Arc::clone(&self.task_manager);
-        let background_manager_for_prompt = Arc::clone(&self.background_manager);
         let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
             use crate::command::chat::storage::{
                 load_memory, load_soul, load_style, load_system_prompt,
@@ -2048,14 +2174,6 @@ impl ChatApp {
             let project_skill_dir = skill::project_skills_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let teammates_summary = teammate_manager_for_prompt
-                .lock()
-                .map(|m| m.team_summary())
-                .unwrap_or_default();
-            let tasks_summary = task::build_tasks_summary(&task_manager_for_prompt);
-            let background_summary =
-                background::build_running_summary(&background_manager_for_prompt);
-            let session_state_summary = tool_registry.build_session_state_summary();
             let resolved = template
                 .replace("{{.current_dir}}", &current_dir)
                 .replace("{{.skills}}", &skills_summary)
@@ -2064,11 +2182,9 @@ impl ChatApp {
                 .replace("{{.tools}}", &tools_summary)
                 .replace("{{.style}}", &style_text)
                 .replace("{{.memory}}", &memory_text)
-                .replace("{{.soul}}", &soul_text)
-                .replace("{{.teammates}}", &teammates_summary)
-                .replace("{{.tasks}}", &tasks_summary)
-                .replace("{{.background_tasks}}", &background_summary)
-                .replace("{{.session_state}}", &session_state_summary);
+                .replace("{{.soul}}", &soul_text);
+            // 状态占位符（{{.tasks}}、{{.background_tasks}}、{{.session_state}}、{{.teammates}}）
+            // 不在此处替换，由内置 PreLlmRequest hook 链处理
             Some(resolved)
         });
 

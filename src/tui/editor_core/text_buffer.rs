@@ -204,8 +204,8 @@ impl TextBuffer {
             let target_visual_row = current_visual_row - 1;
             // 找目标视觉行的起始显示宽度偏移
             let mut target_start_width = 0usize;
-            for vi in 0..target_visual_row {
-                target_start_width += wrapped[vi]
+            for line in wrapped.iter().take(target_visual_row) {
+                target_start_width += line
                     .chars()
                     .map(|c| {
                         if c == '\t' {
@@ -240,8 +240,8 @@ impl TextBuffer {
             let last_vis_row = prev_wrapped.len() - 1;
             // 找最后一行的起始显示宽度偏移
             let mut last_start_width = 0usize;
-            for vi in 0..last_vis_row {
-                last_start_width += prev_wrapped[vi]
+            for line in prev_wrapped.iter().take(last_vis_row) {
+                last_start_width += line
                     .chars()
                     .map(|c| {
                         if c == '\t' {
@@ -319,8 +319,8 @@ impl TextBuffer {
             let target_visual_row = current_visual_row + 1;
             // 找目标视觉行的起始显示宽度偏移
             let mut target_start_width = 0usize;
-            for vi in 0..target_visual_row {
-                target_start_width += wrapped[vi]
+            for line in wrapped.iter().take(target_visual_row) {
+                target_start_width += line
                     .chars()
                     .map(|c| {
                         if c == '\t' {

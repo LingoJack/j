@@ -262,14 +262,18 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 }
 
                 let mut output = String::from("已注册的 hook:\n");
-                for (i, (event, def, source)) in hooks.iter().enumerate() {
+                for (i, entry) in hooks.iter().enumerate() {
+                    let timeout_str = entry
+                        .timeout
+                        .map(|t| format!("{}s", t))
+                        .unwrap_or_else(|| "-".to_string());
                     output.push_str(&format!(
-                        "  [{}] event={}, source={}, command={}, timeout={}s\n",
+                        "  [{}] event={}, source={}, label={}, timeout={}\n",
                         i,
-                        event.as_str(),
-                        source,
-                        def.command,
-                        def.timeout
+                        entry.event.as_str(),
+                        entry.source,
+                        entry.label,
+                        timeout_str
                     ));
                 }
                 ToolResult {

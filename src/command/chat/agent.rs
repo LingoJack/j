@@ -5,9 +5,7 @@ use super::compact;
 use super::error::ChatError;
 use super::hook::{HookContext, HookEvent, HookManager};
 use super::storage::{ChatMessage, ToolCallItem};
-use crate::command::chat::constants::{
-    ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER, TODO_NAG_INTERVAL_ROUNDS,
-};
+use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
 use crate::util::log::{write_error_log, write_info_log};
@@ -48,7 +46,7 @@ pub async fn run_agent_loop(
     let AgentSharedState {
         streaming_content,
         pending_user_messages,
-        background_manager,
+        background_manager: _,
         todo_manager,
         shared_messages,
         context_tokens,
@@ -88,40 +86,8 @@ pub async fn run_agent_loop(
             }
         }
 
-        // Drain 后台任务完成通知，注入为系统提醒
-        // 运行中的后台任务已通过 system prompt 的 {{.background_tasks}} 占位符注入，
-        // 此处只处理完成通知（事件驱动，不适合放在模板中）
-        {
-            let notifications = background_manager.drain_notifications();
-            for notif in notifications {
-                let body = format!(
-                    "<background_task_completed>\n<task_id>{}</task_id>\n<command>{}</command>\n<status>{}</status>\n<result>\n{}\n</result>\n</background_task_completed>",
-                    notif.task_id, notif.command, notif.status, notif.result
-                );
-                push_system_reminder(&mut messages, body);
-                write_info_log(
-                    "BackgroundNotification",
-                    &format!("注入后台任务完成通知: task_id={}", notif.task_id),
-                );
-            }
-        }
-
-        // 检查是否有待办事项
+        // 检查是否有待办事项（递增轮数计数器，供内置 todo_nag hook 判断）
         todo_manager.increment_turn();
-        if todo_manager.has_todos()
-            && todo_manager.turns_since_last_call() >= TODO_NAG_INTERVAL_ROUNDS
-        {
-            let todos_summary = todo_manager.format_todos_summary();
-            let body = format!(
-                "<todo_reminder>\nYou have an active todo list but haven't updated it in 15+ rounds. Update it if progress has been made, or ignore this reminder if you are currently working on an item.\n<todos>\n{}\n</todos>\n</todo_reminder>",
-                todos_summary
-            );
-            push_system_reminder(&mut messages, body);
-            write_info_log(
-                "TodoNagReminder",
-                &format!("Injected nag reminder with todos:\n{}", todos_summary),
-            );
-        }
 
         // 清空流式内容缓冲（每轮开始时）
         {
@@ -264,31 +230,30 @@ pub async fn run_agent_loop(
                 Err(e) => {
                     let err = ChatError::from(e);
                     write_error_log("Chat API 流式请求创建", &err.to_string());
-                    if let Some(policy) = retry_policy_for(&err) {
-                        if api_attempt <= policy.max_attempts {
-                            let delay_ms =
-                                backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
-                            write_info_log(
-                                "agent_loop",
-                                &format!(
-                                    "流式创建失败，{}ms 后重试 ({}/{})",
-                                    delay_ms, api_attempt, policy.max_attempts
-                                ),
-                            );
-                            let _ = tx.send(StreamMsg::Retrying {
-                                attempt: api_attempt,
-                                max_attempts: policy.max_attempts,
-                                delay_ms,
-                                error: err.display_message(),
-                            });
-                            tokio::select! {
-                                _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
-                                    continue 'api_retry;
-                                }
-                                _ = cancel_token.cancelled() => {
-                                    let _ = tx.send(StreamMsg::Cancelled);
-                                    return;
-                                }
+                    if let Some(policy) = retry_policy_for(&err)
+                        && api_attempt <= policy.max_attempts
+                    {
+                        let delay_ms = backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                        write_info_log(
+                            "agent_loop",
+                            &format!(
+                                "流式创建失败，{}ms 后重试 ({}/{})",
+                                delay_ms, api_attempt, policy.max_attempts
+                            ),
+                        );
+                        let _ = tx.send(StreamMsg::Retrying {
+                            attempt: api_attempt,
+                            max_attempts: policy.max_attempts,
+                            delay_ms,
+                            error: err.display_message(),
+                        });
+                        tokio::select! {
+                            _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                                continue 'api_retry;
+                            }
+                            _ = cancel_token.cancelled() => {
+                                let _ = tx.send(StreamMsg::Cancelled);
+                                return;
                             }
                         }
                     }
@@ -407,35 +372,35 @@ pub async fn run_agent_loop(
             // ── 处理流式读取中途的可重试错误 ──
             if let Some(err) = stream_retry_error {
                 write_error_log("Chat API 流式响应（将重试）", &err.to_string());
-                if let Some(policy) = retry_policy_for(&err) {
-                    if api_attempt <= policy.max_attempts {
-                        // 清空已积累的部分内容，重新开始本轮请求
-                        {
-                            let mut sc = safe_lock(&streaming_content, "agent::stream_retry_clear");
-                            sc.clear();
+                if let Some(policy) = retry_policy_for(&err)
+                    && api_attempt <= policy.max_attempts
+                {
+                    // 清空已积累的部分内容，重新开始本轮请求
+                    {
+                        let mut sc = safe_lock(&streaming_content, "agent::stream_retry_clear");
+                        sc.clear();
+                    }
+                    let delay_ms = backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                    write_info_log(
+                        "agent_loop",
+                        &format!(
+                            "流式中断，{}ms 后重试 ({}/{})",
+                            delay_ms, api_attempt, policy.max_attempts
+                        ),
+                    );
+                    let _ = tx.send(StreamMsg::Retrying {
+                        attempt: api_attempt,
+                        max_attempts: policy.max_attempts,
+                        delay_ms,
+                        error: err.display_message(),
+                    });
+                    tokio::select! {
+                        _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                            continue 'api_retry;
                         }
-                        let delay_ms = backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
-                        write_info_log(
-                            "agent_loop",
-                            &format!(
-                                "流式中断，{}ms 后重试 ({}/{})",
-                                delay_ms, api_attempt, policy.max_attempts
-                            ),
-                        );
-                        let _ = tx.send(StreamMsg::Retrying {
-                            attempt: api_attempt,
-                            max_attempts: policy.max_attempts,
-                            delay_ms,
-                            error: err.display_message(),
-                        });
-                        tokio::select! {
-                            _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
-                                continue 'api_retry;
-                            }
-                            _ = cancel_token.cancelled() => {
-                                let _ = tx.send(StreamMsg::Cancelled);
-                                return;
-                            }
+                        _ = cancel_token.cancelled() => {
+                            let _ = tx.send(StreamMsg::Cancelled);
+                            return;
                         }
                     }
                 }
@@ -494,35 +459,32 @@ pub async fn run_agent_loop(
                         Ok(r) => break r,
                         Err(e) => {
                             write_error_log("Sprite API fallback 非流式", &e.to_string());
-                            if let Some(policy) = retry_policy_for(&e) {
-                                if api_attempt <= policy.max_attempts {
-                                    let delay_ms = backoff_delay_ms(
-                                        api_attempt,
-                                        policy.base_ms,
-                                        policy.cap_ms,
-                                    );
-                                    write_info_log(
-                                        "agent_loop",
-                                        &format!(
-                                            "fallback 非流式失败，{}ms 后重试 ({}/{})",
-                                            delay_ms, api_attempt, policy.max_attempts
-                                        ),
-                                    );
-                                    let _ = tx.send(StreamMsg::Retrying {
-                                        attempt: api_attempt,
-                                        max_attempts: policy.max_attempts,
-                                        delay_ms,
-                                        error: e.display_message(),
-                                    });
-                                    tokio::select! {
-                                        _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
-                                            api_attempt += 1;
-                                            continue;
-                                        }
-                                        _ = cancel_token.cancelled() => {
-                                            let _ = tx.send(StreamMsg::Cancelled);
-                                            return;
-                                        }
+                            if let Some(policy) = retry_policy_for(&e)
+                                && api_attempt <= policy.max_attempts
+                            {
+                                let delay_ms =
+                                    backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                                write_info_log(
+                                    "agent_loop",
+                                    &format!(
+                                        "fallback 非流式失败，{}ms 后重试 ({}/{})",
+                                        delay_ms, api_attempt, policy.max_attempts
+                                    ),
+                                );
+                                let _ = tx.send(StreamMsg::Retrying {
+                                    attempt: api_attempt,
+                                    max_attempts: policy.max_attempts,
+                                    delay_ms,
+                                    error: e.display_message(),
+                                });
+                                tokio::select! {
+                                    _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                                        api_attempt += 1;
+                                        continue;
+                                    }
+                                    _ = cancel_token.cancelled() => {
+                                        let _ = tx.send(StreamMsg::Cancelled);
+                                        return;
                                     }
                                 }
                             }
@@ -687,20 +649,6 @@ pub async fn run_agent_loop(
     } // end 'round
 
     let _ = tx.send(StreamMsg::Done);
-}
-
-/// 在 agent loop 中注入"系统级提醒"消息
-/// 内容会被自动包在 <system-reminder>...</system-reminder> 中
-/// 统一使用 ROLE_USER —— `<system-reminder>` 标签本身就告诉 LLM "这是系统注入的事实"，
-/// 而 ROLE_USER 不需要 tool_call_id，跨 provider 兼容性最好
-fn push_system_reminder(messages: &mut Vec<ChatMessage>, body: impl Into<String>) {
-    messages.push(ChatMessage {
-        role: ROLE_USER.to_string(),
-        content: format!("<system-reminder>\n{}\n</system-reminder>", body.into()),
-        tool_calls: None,
-        tool_call_id: None,
-        images: None,
-    });
 }
 
 /// 从待处理队列中 drain 用户在 agent loop 期间发送的新消息，追加到 messages

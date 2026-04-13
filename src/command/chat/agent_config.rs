@@ -26,7 +26,8 @@ pub struct AgentSharedState {
     pub streaming_content: Arc<Mutex<String>>,
     /// 用户在 agent loop 期间追加的消息队列
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
-    /// 后台任务管理器
+    /// 后台任务管理器（由内置 PreLlmRequest hook 通过 Arc 引用使用）
+    #[allow(dead_code)]
     pub background_manager: Arc<BackgroundManager>,
     /// 待办管理器
     pub todo_manager: Arc<TodoManager>,

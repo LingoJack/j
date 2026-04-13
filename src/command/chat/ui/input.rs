@@ -161,13 +161,12 @@ fn compute_mention_ranges(
     input_text: &str,
     input_text_no_nl: &str,
 ) -> Vec<(usize, usize)> {
-    if let Some((ref cached_input, ref cached_ranges)) = app.ui.cached_mention_ranges {
-        if cached_input == input_text {
-            return cached_ranges.clone();
-        }
+    if let Some((ref cached_input, ref cached_ranges)) = app.ui.cached_mention_ranges
+        && cached_input == input_text
+    {
+        return cached_ranges.clone();
     }
-    let ranges = find_at_mention_ranges(input_text_no_nl);
-    ranges
+    find_at_mention_ranges(input_text_no_nl)
 }
 
 /// 查找输入文本中所有 @mention 的字符范围 (start_char_idx, end_char_idx)

@@ -87,7 +87,8 @@ impl HookEvent {
     }
 }
 
-/// Hook 定义：一条 shell 命令 + 超时秒数
+/// Hook 定义（YAML 兼容）：一条 shell 命令 + 超时秒数
+/// 仅用于从 YAML 文件反序列化，内部使用 HookKind
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookDef {
     pub command: String,
@@ -98,6 +99,77 @@ pub struct HookDef {
 fn default_timeout() -> u64 {
     10
 }
+
+// ========== HookKind 枚举 ==========
+
+/// Hook 种类：Shell 命令（子进程）或内置 Rust 闭包（进程内）
+#[derive(Clone)]
+pub enum HookKind {
+    /// Shell 命令，通过 `sh -c` 子进程执行（现有行为）
+    Shell(ShellHook),
+    /// 内置 Rust 闭包，进程内零开销执行
+    Builtin(BuiltinHook),
+}
+
+/// Shell hook：一条命令 + 超时
+#[derive(Debug, Clone)]
+pub struct ShellHook {
+    pub command: String,
+    pub timeout: u64,
+}
+
+impl From<HookDef> for ShellHook {
+    fn from(def: HookDef) -> Self {
+        ShellHook {
+            command: def.command,
+            timeout: def.timeout,
+        }
+    }
+}
+
+impl From<HookDef> for HookKind {
+    fn from(def: HookDef) -> Self {
+        HookKind::Shell(ShellHook::from(def))
+    }
+}
+
+/// 内置 hook 的处理函数类型
+pub type BuiltinHookFn = Arc<dyn Fn(&HookContext) -> Option<HookResult> + Send + Sync>;
+
+/// 内置 hook：一个命名的 Rust 闭包
+pub struct BuiltinHook {
+    /// 唯一名称，用于列出/调试（如 "tasks_status"、"todo_nag"）
+    pub name: String,
+    /// 实际执行的 Rust 闭包
+    pub handler: BuiltinHookFn,
+}
+
+impl Clone for BuiltinHook {
+    fn clone(&self) -> Self {
+        BuiltinHook {
+            name: self.name.clone(),
+            handler: Arc::clone(&self.handler),
+        }
+    }
+}
+
+impl std::fmt::Debug for HookKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HookKind::Shell(shell) => f
+                .debug_struct("HookKind::Shell")
+                .field("command", &shell.command)
+                .field("timeout", &shell.timeout)
+                .finish(),
+            HookKind::Builtin(builtin) => f
+                .debug_struct("HookKind::Builtin")
+                .field("name", &builtin.name)
+                .finish(),
+        }
+    }
+}
+
+// ========== HookContext & HookResult ==========
 
 /// Hook 执行上下文（通过 stdin JSON 传给脚本）
 ///
@@ -218,15 +290,32 @@ pub struct HookResult {
 
 // ========== HookManager ==========
 
-/// Hook 管理器：管理三级 hook（用户级、项目级、session 级）
+/// Hook 管理器：管理四级 hook（内置、用户级、项目级、session 级）
 ///
-/// 执行顺序：用户级 → 项目级 → Session 级，链式执行。
+/// 执行顺序：内置 → 用户级 → 项目级 → Session 级，链式执行。
 /// 前者的输出会更新到 context 中，影响后者的输入。任何 `abort` 立即中止整条链。
 #[derive(Debug, Clone, Default)]
 pub struct HookManager {
-    user_hooks: HashMap<HookEvent, Vec<HookDef>>,
-    project_hooks: HashMap<HookEvent, Vec<HookDef>>,
-    session_hooks: HashMap<HookEvent, Vec<HookDef>>,
+    builtin_hooks: HashMap<HookEvent, Vec<HookKind>>,
+    user_hooks: HashMap<HookEvent, Vec<HookKind>>,
+    project_hooks: HashMap<HookEvent, Vec<HookKind>>,
+    session_hooks: HashMap<HookEvent, Vec<HookKind>>,
+}
+
+/// 列出 hook 时的来源标记
+const HOOK_SOURCE_BUILTIN: &str = "builtin";
+const HOOK_SOURCE_USER: &str = "user";
+const HOOK_SOURCE_PROJECT: &str = "project";
+const HOOK_SOURCE_SESSION: &str = "session";
+
+/// 列出 hook 时的摘要信息
+pub struct HookEntry {
+    pub event: HookEvent,
+    pub source: &'static str,
+    /// Shell hook 的命令，或 Builtin hook 的名称
+    pub label: String,
+    /// Shell hook 的超时秒数
+    pub timeout: Option<u64>,
 }
 
 impl HookManager {
@@ -243,7 +332,11 @@ impl HookManager {
                         Ok(hooks_map) => {
                             for (event_name, defs) in hooks_map {
                                 if let Some(event) = HookEvent::parse(&event_name) {
-                                    manager.user_hooks.entry(event).or_default().extend(defs);
+                                    manager
+                                        .user_hooks
+                                        .entry(event)
+                                        .or_default()
+                                        .extend(defs.into_iter().map(HookKind::from));
                                 } else {
                                     write_error_log(
                                         "HookManager::load",
@@ -284,7 +377,7 @@ impl HookManager {
                                             .project_hooks
                                             .entry(event)
                                             .or_default()
-                                            .extend(defs);
+                                            .extend(defs.into_iter().map(HookKind::from));
                                     } else {
                                         write_error_log(
                                             "HookManager::load",
@@ -321,9 +414,31 @@ impl HookManager {
         manager
     }
 
+    /// 注册内置 hook（程序初始化时调用）
+    ///
+    /// 内置 hook 以 Rust 闭包形式在进程内执行，零开销。
+    /// 执行优先级最高（在内置级中按注册顺序执行，先于用户/项目/session 级）。
+    pub fn register_builtin(
+        &mut self,
+        event: HookEvent,
+        name: impl Into<String>,
+        handler: impl Fn(&HookContext) -> Option<HookResult> + Send + Sync + 'static,
+    ) {
+        self.builtin_hooks
+            .entry(event)
+            .or_default()
+            .push(HookKind::Builtin(BuiltinHook {
+                name: name.into(),
+                handler: Arc::new(handler),
+            }));
+    }
+
     /// 注册 session 级 hook（由 register_hook 工具调用）
     pub fn register_session_hook(&mut self, event: HookEvent, def: HookDef) {
-        self.session_hooks.entry(event).or_default().push(def);
+        self.session_hooks
+            .entry(event)
+            .or_default()
+            .push(HookKind::Shell(ShellHook::from(def)));
     }
 
     /// 移除 session 级 hook（按事件和索引）
@@ -337,33 +452,61 @@ impl HookManager {
         false
     }
 
-    /// 列出所有 hook（含来源标记 "user"/"project"/"session"）
-    pub fn list_hooks(&self) -> Vec<(HookEvent, &HookDef, &str)> {
+    /// 列出所有 hook（含来源标记和摘要信息）
+    pub fn list_hooks(&self) -> Vec<HookEntry> {
         let mut result = Vec::new();
         for event in HookEvent::all() {
+            if let Some(hooks) = self.builtin_hooks.get(event) {
+                for hook in hooks {
+                    result.push(HookEntry {
+                        event: *event,
+                        source: HOOK_SOURCE_BUILTIN,
+                        label: hook_label(hook),
+                        timeout: hook_timeout(hook),
+                    });
+                }
+            }
             if let Some(hooks) = self.user_hooks.get(event) {
                 for hook in hooks {
-                    result.push((*event, hook, "user"));
+                    result.push(HookEntry {
+                        event: *event,
+                        source: HOOK_SOURCE_USER,
+                        label: hook_label(hook),
+                        timeout: hook_timeout(hook),
+                    });
                 }
             }
             if let Some(hooks) = self.project_hooks.get(event) {
                 for hook in hooks {
-                    result.push((*event, hook, "project"));
+                    result.push(HookEntry {
+                        event: *event,
+                        source: HOOK_SOURCE_PROJECT,
+                        label: hook_label(hook),
+                        timeout: hook_timeout(hook),
+                    });
                 }
             }
             if let Some(hooks) = self.session_hooks.get(event) {
                 for hook in hooks {
-                    result.push((*event, hook, "session"));
+                    result.push(HookEntry {
+                        event: *event,
+                        source: HOOK_SOURCE_SESSION,
+                        label: hook_label(hook),
+                        timeout: hook_timeout(hook),
+                    });
                 }
             }
         }
         result
     }
 
-    /// 检查某个事件是否有任何 hook 注册（用户级/项目级/session 级）
+    /// 检查某个事件是否有任何 hook 注册（内置/用户级/项目级/session 级）
     /// 用于调用方在构建 HookContext 之前短路，避免不必要的 clone 和内存分配
     pub fn has_hooks_for(&self, event: HookEvent) -> bool {
-        self.user_hooks.get(&event).is_some_and(|h| !h.is_empty())
+        self.builtin_hooks
+            .get(&event)
+            .is_some_and(|h| !h.is_empty())
+            || self.user_hooks.get(&event).is_some_and(|h| !h.is_empty())
             || self
                 .project_hooks
                 .get(&event)
@@ -388,7 +531,7 @@ impl HookManager {
         });
     }
 
-    /// 链式执行所有 hook（用户→项目→session）
+    /// 链式执行所有 hook（内置→用户→项目→session）
     ///
     /// 返回 `Some(HookResult)` 如果有任何修改或 abort，否则 `None`。
     /// 链式执行中，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。
@@ -396,8 +539,12 @@ impl HookManager {
     /// **注意**：调用方应先用 `has_hooks_for()` 检查，再构建 HookContext 并调用此方法，
     /// 避免在没有 hook 注册时进行不必要的内存分配。
     pub fn execute(&self, event: HookEvent, mut context: HookContext) -> Option<HookResult> {
-        let mut all_hooks: Vec<&HookDef> = Vec::new();
+        let mut all_hooks: Vec<&HookKind> = Vec::new();
 
+        // 执行顺序：内置 → 用户 → 项目 → session
+        if let Some(hooks) = self.builtin_hooks.get(&event) {
+            all_hooks.extend(hooks.iter());
+        }
         if let Some(hooks) = self.user_hooks.get(&event) {
             all_hooks.extend(hooks.iter());
         }
@@ -425,12 +572,13 @@ impl HookManager {
         let mut final_result = HookResult::default();
 
         for hook in all_hooks {
-            match execute_single_hook(hook, &context) {
+            match execute_hook(hook, &context) {
                 Ok(result) => {
+                    let hook_label = hook_label(hook);
                     if result.abort {
                         write_info_log(
                             "HookManager::execute",
-                            &format!("Hook abort (cmd: {})", hook.command),
+                            &format!("Hook abort ({})", hook_label),
                         );
                         return Some(HookResult {
                             abort: true,
@@ -476,10 +624,12 @@ impl HookManager {
                     }
                 }
                 Err(e) => {
-                    // 非零退出 / 超时 → 视为 abort
+                    // Shell hook 非零退出 / 超时 → 视为 abort
+                    // Builtin hook 不应失败，但以防万一也统一处理
+                    let hook_label = hook_label(hook);
                     write_error_log(
                         "HookManager::execute",
-                        &format!("Hook 执行失败 (cmd: {}): {}", hook.command, e),
+                        &format!("Hook 执行失败 ({}): {}", hook_label, e),
                     );
                     return Some(HookResult {
                         abort: true,
@@ -497,7 +647,20 @@ impl HookManager {
     }
 }
 
-/// 执行单个 hook 脚本
+// ========== Hook 执行分派 ==========
+
+/// 执行单个 hook（分派到 Shell 或 Builtin）
+fn execute_hook(kind: &HookKind, context: &HookContext) -> Result<HookResult, String> {
+    match kind {
+        HookKind::Shell(shell) => execute_shell_hook(shell, context),
+        HookKind::Builtin(builtin) => match (builtin.handler)(context) {
+            Some(result) => Ok(result),
+            None => Ok(HookResult::default()),
+        },
+    }
+}
+
+/// 执行 Shell hook 脚本
 ///
 /// 协议：
 /// - 执行方式: `sh -c "<command>"`
@@ -508,7 +671,7 @@ impl HookManager {
 /// - exit 0: 成功
 /// - exit ≠0: 视为失败（调用方将其当作 abort）
 /// - 超时: kill 子进程，返回 Err
-fn execute_single_hook(hook: &HookDef, context: &HookContext) -> Result<HookResult, String> {
+fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookResult, String> {
     let context_json =
         serde_json::to_string(context).map_err(|e| format!("序列化 context 失败: {}", e))?;
 
@@ -556,7 +719,7 @@ fn execute_single_hook(hook: &HookDef, context: &HookContext) -> Result<HookResu
                     .map_err(|e| format!("解析 hook 输出 JSON 失败: {} (输出: {})", e, stdout))?;
 
                 write_info_log(
-                    "execute_single_hook",
+                    "execute_shell_hook",
                     &format!("Hook 完成 (cmd: {}), abort={}", hook.command, result.abort),
                 );
 
@@ -574,6 +737,24 @@ fn execute_single_hook(hook: &HookDef, context: &HookContext) -> Result<HookResu
                 return Err(format!("等待 hook 进程失败: {}", e));
             }
         }
+    }
+}
+
+// ========== 辅助函数 ==========
+
+/// 获取 hook 的显示标签（Shell 用命令，Builtin 用名称）
+fn hook_label(kind: &HookKind) -> String {
+    match kind {
+        HookKind::Shell(shell) => shell.command.clone(),
+        HookKind::Builtin(builtin) => format!("[builtin: {}]", builtin.name),
+    }
+}
+
+/// 获取 hook 的超时秒数（仅 Shell hook 有）
+fn hook_timeout(kind: &HookKind) -> Option<u64> {
+    match kind {
+        HookKind::Shell(shell) => Some(shell.timeout),
+        HookKind::Builtin(_) => None,
     }
 }
 
@@ -602,6 +783,22 @@ mod tests {
         let yaml = r#"command: "echo hello""#;
         let def: HookDef = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(def.timeout, 10);
+    }
+
+    #[test]
+    fn test_hook_def_to_hook_kind() {
+        let def = HookDef {
+            command: "echo test".to_string(),
+            timeout: 5,
+        };
+        let kind = HookKind::from(def);
+        match kind {
+            HookKind::Shell(shell) => {
+                assert_eq!(shell.command, "echo test");
+                assert_eq!(shell.timeout, 5);
+            }
+            HookKind::Builtin(_) => panic!("应该转换为 Shell 变体"),
+        }
     }
 
     #[test]
@@ -643,8 +840,8 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_single_hook_echo() {
-        let hook = HookDef {
+    fn test_execute_shell_hook_echo() {
+        let hook = ShellHook {
             command: r#"echo '{"user_input": "hooked"}'"#.to_string(),
             timeout: 5,
         };
@@ -653,37 +850,37 @@ mod tests {
             user_input: Some("original".to_string()),
             ..Default::default()
         };
-        let result = execute_single_hook(&hook, &ctx).unwrap();
+        let result = execute_shell_hook(&hook, &ctx).unwrap();
         assert_eq!(result.user_input.as_deref(), Some("hooked"));
         assert!(!result.abort);
     }
 
     #[test]
-    fn test_execute_single_hook_empty_output() {
-        let hook = HookDef {
+    fn test_execute_shell_hook_empty_output() {
+        let hook = ShellHook {
             command: "echo ''".to_string(),
             timeout: 5,
         };
         let ctx = HookContext::default();
-        let result = execute_single_hook(&hook, &ctx).unwrap();
+        let result = execute_shell_hook(&hook, &ctx).unwrap();
         assert!(!result.abort);
         assert!(result.user_input.is_none());
     }
 
     #[test]
-    fn test_execute_single_hook_nonzero_exit() {
-        let hook = HookDef {
+    fn test_execute_shell_hook_nonzero_exit() {
+        let hook = ShellHook {
             command: "exit 1".to_string(),
             timeout: 5,
         };
         let ctx = HookContext::default();
-        let result = execute_single_hook(&hook, &ctx);
+        let result = execute_shell_hook(&hook, &ctx);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_execute_single_hook_reads_stdin() {
-        let hook = HookDef {
+    fn test_execute_shell_hook_reads_stdin() {
+        let hook = ShellHook {
             command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_input": "got_input"}'"#.to_string(),
             timeout: 5,
         };
@@ -692,8 +889,46 @@ mod tests {
             user_input: Some("test".to_string()),
             ..Default::default()
         };
-        let result = execute_single_hook(&hook, &ctx).unwrap();
+        let result = execute_shell_hook(&hook, &ctx).unwrap();
         assert_eq!(result.user_input.as_deref(), Some("got_input"));
+    }
+
+    #[test]
+    fn test_execute_builtin_hook() {
+        let builtin = BuiltinHook {
+            name: "test_hook".to_string(),
+            handler: Arc::new(|ctx| {
+                if let Some(ref input) = ctx.user_input {
+                    Some(HookResult {
+                        user_input: Some(format!("[hooked] {}", input)),
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                }
+            }),
+        };
+        let kind = HookKind::Builtin(builtin);
+        let ctx = HookContext {
+            event: HookEvent::PreSendMessage,
+            user_input: Some("original".to_string()),
+            ..Default::default()
+        };
+        let result = execute_hook(&kind, &ctx).unwrap();
+        assert_eq!(result.user_input.as_deref(), Some("[hooked] original"));
+    }
+
+    #[test]
+    fn test_execute_builtin_hook_returns_none() {
+        let builtin = BuiltinHook {
+            name: "no_op".to_string(),
+            handler: Arc::new(|_| None),
+        };
+        let kind = HookKind::Builtin(builtin);
+        let ctx = HookContext::default();
+        let result = execute_hook(&kind, &ctx).unwrap();
+        assert!(!result.abort);
+        assert!(result.user_input.is_none());
     }
 
     #[test]
@@ -717,7 +952,7 @@ mod tests {
 
         let hooks = manager.list_hooks();
         assert_eq!(hooks.len(), 1);
-        assert_eq!(hooks[0].2, "session");
+        assert_eq!(hooks[0].source, "session");
 
         let result = manager
             .execute(
@@ -730,6 +965,74 @@ mod tests {
             )
             .unwrap();
         assert_eq!(result.user_input.as_deref(), Some("session_hooked"));
+    }
+
+    #[test]
+    fn test_hook_manager_builtin_hooks() {
+        let mut manager = HookManager::default();
+        manager.register_builtin(HookEvent::PreSendMessage, "test_builtin", |ctx| {
+            if let Some(ref input) = ctx.user_input {
+                Some(HookResult {
+                    user_input: Some(format!("[builtin] {}", input)),
+                    ..Default::default()
+                })
+            } else {
+                None
+            }
+        });
+
+        let hooks = manager.list_hooks();
+        assert_eq!(hooks.len(), 1);
+        assert_eq!(hooks[0].source, "builtin");
+        assert!(hooks[0].label.contains("test_builtin"));
+
+        let result = manager
+            .execute(
+                HookEvent::PreSendMessage,
+                HookContext {
+                    event: HookEvent::PreSendMessage,
+                    user_input: Some("hello".to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(result.user_input.as_deref(), Some("[builtin] hello"));
+    }
+
+    #[test]
+    fn test_hook_manager_builtin_before_session() {
+        // 内置 hook 应在 session hook 之前执行，session hook 应能覆盖内置 hook 的结果
+        let mut manager = HookManager::default();
+        manager.register_builtin(HookEvent::PreSendMessage, "prefix", |ctx| {
+            if let Some(ref input) = ctx.user_input {
+                Some(HookResult {
+                    user_input: Some(format!("[builtin] {}", input)),
+                    ..Default::default()
+                })
+            } else {
+                None
+            }
+        });
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: r#"echo '{"user_input": "session_overridden"}'"#.to_string(),
+                timeout: 5,
+            },
+        );
+
+        let result = manager
+            .execute(
+                HookEvent::PreSendMessage,
+                HookContext {
+                    event: HookEvent::PreSendMessage,
+                    user_input: Some("original".to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        // session hook 在 builtin 之后执行，覆盖了 builtin 的结果
+        assert_eq!(result.user_input.as_deref(), Some("session_overridden"));
     }
 
     #[test]
@@ -816,5 +1119,16 @@ mod tests {
 
         assert!(result.abort);
         assert!(result.user_input.is_none());
+    }
+
+    #[test]
+    fn test_builtin_hook_clone() {
+        let mut manager = HookManager::default();
+        manager.register_builtin(HookEvent::PreLlmRequest, "test_clone", |_| {
+            Some(HookResult::default())
+        });
+        // HookManager 的 Clone 依赖 BuiltinHook 的 Clone（通过 Arc）
+        let cloned = manager.clone();
+        assert_eq!(cloned.list_hooks().len(), 1);
     }
 }
