@@ -477,15 +477,15 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
         ((200,100,120),( 80,200,170),(240,160,140)), // 暮红 → 碧水 → 霞光
         (( 90,200,180),(210,160, 60),(150,230,220)), // 湖水 → 金橙 → 冰蓝
         ((160,130,210),(120,200,140),(210,180,240)), // 暮霭 → 春草 → 淡紫
-        ((230,180, 80),( 80,150,220),(200,150, 60)), // 琥珀 → 远蓝 → 深金
+        ((230,180, 80),( 80,150,220),(180,210,240)), // 琥珀 → 远蓝 → 月白
         ((120,200,120),(210, 90,130),(180,230,160)), // 春芽 → 胭脂 → 嫩黄绿
         ((255,200,100),(100,190,230),(240,160,200)), // 杏黄 → 天青 → 藕荷
         ((140,100,220),(200,180, 60),(180,130,240)), // 鸢尾 → 秋黄 → 幽紫
-        ((200,220,120),( 80,130,210),(220,240,160)), // 黄绿 → 深蓝 → 草绿
+        ((200,220,120),( 80,130,210),(140,230,200)), // 黄绿 → 深蓝 → 薄荷
         ((255,150,100),(120, 80,200),(255,200,150)), // 橙红 → 靛蓝 → 浅橙
     ];
 
-    let (start_c, _mid_c, end_c) = GRADIENT_TRIPLES[quote_idx % GRADIENT_TRIPLES.len()];
+    let (start_c, mid_c, end_c) = GRADIENT_TRIPLES[quote_idx % GRADIENT_TRIPLES.len()];
 
     // ── 顶部边框：嵌入 ◈ 装饰符 ──
     // 形如：╭──── ◈ ────╮
@@ -562,9 +562,15 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
         for (i, &ch) in line_chars.iter().enumerate() {
             let gi = global_idx + i;
             let t = gi as f32 / (total_n - 1) as f32;
-            let r = (start_c.0 as f32 * (1.0 - t) + end_c.0 as f32 * t).round() as u8;
-            let g = (start_c.1 as f32 * (1.0 - t) + end_c.1 as f32 * t).round() as u8;
-            let b = (start_c.2 as f32 * (1.0 - t) + end_c.2 as f32 * t).round() as u8;
+            // 三色分段插值：前半段 start→mid，后半段 mid→end
+            let (from, to, local_t) = if t <= 0.5 {
+                (start_c, mid_c, t * 2.0)
+            } else {
+                (mid_c, end_c, (t - 0.5) * 2.0)
+            };
+            let r = (from.0 as f32 * (1.0 - local_t) + to.0 as f32 * local_t).round() as u8;
+            let g = (from.1 as f32 * (1.0 - local_t) + to.1 as f32 * local_t).round() as u8;
+            let b = (from.2 as f32 * (1.0 - local_t) + to.2 as f32 * local_t).round() as u8;
             spans.push(Span::styled(
                 ch.to_string(),
                 Style::default().fg(ratatui::style::Color::Rgb(r, g, b)),

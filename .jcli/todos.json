@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "id": "1",
+    "content": "启用 mid_c 变量（第488行）",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "替换渐变插值逻辑为三色分段插值（第564-567行）",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "微调方案10和方案15的颜色值",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "编译验证修改正确性",
+    "status": "completed"
+  }
+]
