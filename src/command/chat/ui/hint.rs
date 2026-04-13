@@ -133,12 +133,7 @@ fn config_hints(app: &ChatApp) -> Vec<(&'static str, &'static str)> {
 }
 
 /// 渲染提示栏
-fn render_hint_bar(
-    f: &mut ratatui::Frame,
-    area: Rect,
-    t: &Theme,
-    hints: &[(&str, &str)],
-) {
+fn render_hint_bar(f: &mut ratatui::Frame, area: Rect, t: &Theme, hints: &[(&str, &str)]) {
     let avail_width = area.width as usize;
     let sep_w = display_width("  │  ");
     let mut spans: Vec<Span> = Vec::new();

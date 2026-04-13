@@ -13,7 +13,7 @@ use crate::command::chat::app::ChatApp;
 use crate::util::text::{char_width, wrap_text};
 
 /// 绘制输入框（支持多行、光标、@mention 高亮）
-pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
 
     // 提示符逻辑
@@ -40,7 +40,10 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         if ch == '\n' {
             (" ".to_string(), chars[cursor_in_visible..].iter().collect())
         } else {
-            (ch.to_string(), chars[cursor_in_visible + 1..].iter().collect())
+            (
+                ch.to_string(),
+                chars[cursor_in_visible + 1..].iter().collect(),
+            )
         }
     } else {
         (" ".to_string(), String::new())
@@ -135,7 +138,8 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     f.render_widget(input_widget, area);
 
     // 光标位置计算
-    let cursor_col_in_line = compute_cursor_col_in_line(&wrapped_lines, line_scroll, cursor_global_pos);
+    let cursor_col_in_line =
+        compute_cursor_col_in_line(&wrapped_lines, line_scroll, cursor_global_pos);
     let cursor_row_in_display = (cursor_line_idx - line_scroll) as u16;
     let cursor_x = area.x + prompt_width as u16 + cursor_col_in_line;
     let cursor_y = area.y + cursor_row_in_display;
@@ -280,14 +284,18 @@ fn build_line_segments(
     for (ci, &ch) in line_chars.iter().enumerate() {
         let global_idx = char_offset + ci;
         let is_cursor = global_idx >= before_len && global_idx < before_len + cursor_len;
-        let is_mention = mention_ranges.iter().any(|&(s, e)| global_idx >= s && global_idx < e);
+        let is_mention = mention_ranges
+            .iter()
+            .any(|&(s, e)| global_idx >= s && global_idx < e);
 
         if is_cursor || is_mention {
             // flush segment before this char
             if ci > seg_start {
                 let seg: String = line_chars[seg_start..ci].iter().collect();
                 let prev_global = char_offset + seg_start;
-                let prev_is_mention = mention_ranges.iter().any(|&(s, e)| prev_global >= s && prev_global < e);
+                let prev_is_mention = mention_ranges
+                    .iter()
+                    .any(|&(s, e)| prev_global >= s && prev_global < e);
                 let seg_style = if prev_is_mention {
                     mention_style
                 } else {
@@ -307,7 +315,9 @@ fn build_line_segments(
         } else if ci > seg_start {
             // check transition from mention to non-mention
             let prev_global = char_offset + (ci - 1);
-            let prev_is_mention = mention_ranges.iter().any(|&(s, e)| prev_global >= s && prev_global < e);
+            let prev_is_mention = mention_ranges
+                .iter()
+                .any(|&(s, e)| prev_global >= s && prev_global < e);
             let curr_is_mention = is_mention;
             if prev_is_mention != curr_is_mention {
                 let seg: String = line_chars[seg_start..ci].iter().collect();
@@ -326,7 +336,9 @@ fn build_line_segments(
     if seg_start < line_chars.len() {
         let seg: String = line_chars[seg_start..].iter().collect();
         let seg_global = char_offset + seg_start;
-        let seg_is_mention = mention_ranges.iter().any(|&(s, e)| seg_global >= s && seg_global < e);
+        let seg_is_mention = mention_ranges
+            .iter()
+            .any(|&(s, e)| seg_global >= s && seg_global < e);
         let seg_style = if seg_is_mention {
             mention_style
         } else {
