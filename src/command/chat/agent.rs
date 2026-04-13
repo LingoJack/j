@@ -593,7 +593,7 @@ pub async fn run_agent_loop(
                         // 此处为空 id 生成随机唯一 id。
                         let id = if id.is_empty() {
                             let rand_id =
-                                format!("call_{:016x}", rand::thread_rng().gen::<u64>());
+                                format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
                             write_info_log(
                                 "agent_loop",
                                 &format!(

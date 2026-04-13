@@ -638,7 +638,7 @@ fn run_oneshot_agent(
                         // 此处为空 id 生成随机唯一 id。
                         let id = if id.is_empty() {
                             use rand::Rng;
-                            format!("call_{:016x}", rand::thread_rng().gen::<u64>())
+                            format!("call_{:016x}", rand::thread_rng().r#gen::<u64>())
                         } else {
                             id
                         };

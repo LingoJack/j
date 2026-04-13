@@ -85,7 +85,7 @@ generate_option:
 ```
 
 要生成代码的sql放置于 `.model_infrax/schema.sql`
-修改配置中的 `output_path` 输出路径，或者手动复制生成的代码
+修改配置中的 `output_path` 输出路径以及要使用的框架 `use_framework` ，或者手动复制生成的代码
 生成代码的命令
 ```bash
 jen
