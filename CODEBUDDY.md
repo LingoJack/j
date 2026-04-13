@@ -52,7 +52,6 @@ Core features: alias management, daily reports with git sync, TUI todo system, f
 
 - **Edition**: 2024
 - **Minimum Rust**: 1.93.1
-- **Patched dependency**: `tui-textarea` 0.7.0 lives in `patches/tui-textarea-0.7.0/`
 - **Optional feature**: `browser_cdp` — enables Chromium automation via `chromiumoxide`
 
 ## Source Architecture
@@ -215,6 +214,5 @@ Three levels (user `~/.jdata/agent/hooks.yaml`, project `.jcli` hooks section, s
 
 - All Chinese UI text is used throughout (error messages, help text, log output) — maintain this convention
 - The `debug_log!` macro is used for verbose logging (controlled by `j log mode verbose/concise`)
-- The project uses a patched `tui-textarea` — changes to that dependency require modifying `patches/tui-textarea-0.7.0/`
 - No unit tests currently exist in `src/`; testing is done via CLI integration
 - The `.claude/settings.local.json` contains Claude Code tool permission rules — distinct from the `.jcli` runtime permissions

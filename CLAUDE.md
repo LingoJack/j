@@ -105,4 +105,4 @@ The AI chat is a full TUI application with tool-calling, streaming, and context 
 - **Config**: `YamlConfig` wraps `~/.jdata/config.yaml`. Agent config is separate JSON at `~/.jdata/agent/data/agent_config.json`.
 - **Data directory**: All user data lives under `~/.jdata/` (customizable via `J_DATA_PATH` env var).
 - **Optional feature**: `browser_cdp` feature flag enables Chrome DevTools Protocol support via `chromiumoxide` crate. Without it, browser tools use HTTP-based "Lite" mode.
-- **Patched dependency**: `tui-textarea` is patched locally (see `patches/tui-textarea-0.7.0/` and `[patch.crates-io]` in Cargo.toml).
+- **Optional feature**: `browser_cdp` — enables Chromium automation via `chromiumoxide`

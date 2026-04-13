@@ -70,7 +70,6 @@
 | 用户 hooks | `~/.jdata/agent/hooks/` |
 | 项目权限配置 | `.jcli/permissions.yaml`（从 cwd 向上查找）|
 | 项目 hooks | `.jcli/hooks/`（从 cwd 向上查找）|
-| patched 依赖 | `patches/tui-textarea-0.7.0/` |
 
 ## 调试技巧
 
