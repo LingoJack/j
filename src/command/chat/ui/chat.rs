@@ -1151,6 +1151,12 @@ fn draw_popup_list(
 
     let x = input_area.x + 1;
     let y = input_area.y.saturating_sub(popup_height);
+    // 确保弹窗不超出 input_area 右边界，避免 ratatui buffer 越界 panic
+    let avail_width = input_area.right().saturating_sub(x);
+    let popup_width = popup_width.min(avail_width);
+    if popup_width == 0 {
+        return;
+    }
     let popup_area = Rect::new(x, y, popup_width, popup_height);
 
     let mut list_state = ListState::default();
