@@ -61,6 +61,8 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     };
     let inner_height = area.height.saturating_sub(2) as usize;
     let wrap_width = usable_width.saturating_sub(prompt_width);
+    // 缓存 wrap_width 供 handler 判断视觉折行
+    app.ui.input_wrap_width = wrap_width;
     let wrapped_lines = wrap_text(&full_visible, wrap_width);
 
     // 计算光标在 wrapped lines 中的位置
