@@ -8,3 +8,4 @@ work-copilot-java/
 .DS_Store
 example/
 .jcli/worktrees/
+.claude/worktrees/
