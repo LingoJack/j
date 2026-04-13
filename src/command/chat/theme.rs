@@ -230,6 +230,8 @@ pub struct Theme {
     pub welcome_hint: Color,
     /// 欢迎框诗句颜色
     pub welcome_quote: Color,
+    /// 欢迎框渐变调色板索引（0-7），对应不同的渐变色组集合
+    pub welcome_palette: u8,
 
     // ===== 模型选择 =====
     /// 模型选择框边框
@@ -435,6 +437,7 @@ impl Theme {
             welcome_text: Color::Reset,
             welcome_hint: Color::DarkGray,
             welcome_quote: Color::DarkGray,
+            welcome_palette: 5, // Terminal: 灰调
             model_sel_border: Color::DarkGray,
             model_sel_title: Color::Reset,
             model_sel_active: Color::LightGreen,
@@ -579,6 +582,7 @@ impl Theme {
             welcome_text: Color::Rgb(120, 140, 180),
             welcome_hint: Color::Rgb(80, 90, 110),
             welcome_quote: Color::Rgb(140, 160, 200),
+            welcome_palette: 0, // Midnight: 古金胭脂
 
             // 模型选择
             model_sel_border: Color::Rgb(180, 160, 80),
@@ -731,6 +735,7 @@ impl Theme {
             welcome_text: Color::Rgb(120, 140, 180),
             welcome_hint: Color::Rgb(80, 80, 80),
             welcome_quote: Color::Rgb(140, 160, 200),
+            welcome_palette: 1, // Dark: 琥珀翡翠
 
             // 模型选择
             model_sel_border: Color::Rgb(180, 160, 80),
@@ -883,6 +888,7 @@ impl Theme {
             welcome_text: Color::Rgb(55, 80, 140),
             welcome_hint: Color::Rgb(130, 140, 160),
             welcome_quote: Color::Rgb(80, 110, 170),
+            welcome_palette: 2, // Light: 清新明快
 
             // 模型选择
             model_sel_border: Color::Rgb(180, 150, 70),
@@ -1035,6 +1041,7 @@ impl Theme {
             welcome_text: Color::Rgb(136, 192, 208), // nord8
             welcome_hint: Color::Rgb(100, 112, 130),
             welcome_quote: Color::Rgb(143, 188, 187), // nord7 青绿色
+            welcome_palette: 3,                       // Nord: 极地冰蓝
 
             // 模型选择
             model_sel_border: Color::Rgb(235, 203, 139), // nord13
@@ -1187,6 +1194,7 @@ impl Theme {
             welcome_text: Color::Rgb(102, 217, 239), // monokai cyan
             welcome_hint: Color::Rgb(100, 100, 90),
             welcome_quote: Color::Rgb(230, 219, 116), // monokai yellow
+            welcome_palette: 4,                       // Monokai: 霓虹高对比
 
             // 模型选择
             model_sel_border: Color::Rgb(230, 219, 116),
@@ -1344,6 +1352,7 @@ impl Theme {
             welcome_text: Color::Rgb(45, 85, 150),
             welcome_hint: Color::Rgb(120, 108, 96),
             welcome_quote: Color::Rgb(122, 94, 160), // #7a5ea0 紫
+            welcome_palette: 6,                      // Anthropic Light: 暖赭
 
             // 模型选择（列表背景为 bg_title = #ede4d8）
             model_sel_border: Color::Rgb(146, 106, 34),
@@ -1501,6 +1510,7 @@ impl Theme {
             welcome_text: Color::Rgb(130, 170, 255),
             welcome_hint: Color::Rgb(68, 74, 115),
             welcome_quote: Color::Rgb(192, 153, 255), // #c099ff 紫
+            welcome_palette: 7,                       // Anthropic Dark: 月蓝幽彩
 
             // 模型选择
             model_sel_border: Color::Rgb(255, 199, 119),

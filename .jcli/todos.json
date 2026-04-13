@@ -1,22 +1,27 @@
 [
   {
     "id": "1",
-    "content": "启用 mid_c 变量（第488行）",
+    "content": "设计新方案：为每个主题定义 16 组专属渐变色",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "替换渐变插值逻辑为三色分段插值（第564-567行）",
+    "content": "修改 Theme 结构体：用 welcome_palette u8 替代 3 个 Color 字段",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "微调方案10和方案15的颜色值",
+    "content": "在 components.rs 中定义 8 组调色板（每组 16 个渐变三元组）",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "编译验证修改正确性",
+    "content": "修改 welcome_box 使用 theme.welcome_palette 选择调色板",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "编译验证",
     "status": "completed"
   }
 ]
