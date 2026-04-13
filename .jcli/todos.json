@@ -37,21 +37,21 @@
   {
     "id": "8",
     "content": "P1: 修改 chat.rs 删除已移出函数",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "id": "9",
     "content": "P2: 清理 unused_imports",
-    "status": "pending"
+    "status": "completed"
   },
   {
     "id": "10",
-    "content": "P3: 时间工具函数迁移",
-    "status": "pending"
+    "content": "编译测试验证",
+    "status": "completed"
   },
   {
     "id": "11",
-    "content": "编译测试验证",
-    "status": "pending"
+    "content": "检查最终行数对比",
+    "status": "completed"
   }
 ]
