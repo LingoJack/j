@@ -31,6 +31,7 @@ fn restore_terminal() {
     let _ = execute!(
         io::stdout(),
         PopKeyboardEnhancementFlags,
+        event::DisableMouseCapture,
         event::DisableBracketedPaste,
         LeaveAlternateScreen
     );
@@ -549,6 +550,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     execute!(
         terminal.backend_mut(),
         PopKeyboardEnhancementFlags,
+        event::DisableMouseCapture,
         event::DisableBracketedPaste,
         LeaveAlternateScreen
     )?;
