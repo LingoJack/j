@@ -11,13 +11,13 @@ use super::{
     handle_archive_confirm_mode, handle_archive_list_mode, handle_browse_mode, handle_chat_mode,
     handle_config_mode, handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
-use crate::command::chat::app::{Action, ChatApp, ChatMode};
+use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
     event::{
-        self, Event, KeyEventKind, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
-        PushKeyboardEnhancementFlags,
+        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags, MouseEventKind,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
@@ -38,9 +38,27 @@ fn restore_terminal() {
 
 /// 将单个 crossterm Event 分发到对应的 handler / Action。
 /// 返回 true 表示应退出主循环。
-fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> bool {
+fn dispatch_event(
+    app: &mut ChatApp,
+    evt: Event,
+    needs_redraw: &mut bool,
+    mouse_capture_enabled: &mut bool,
+) -> bool {
     match evt {
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+            // Ctrl+M: 切换鼠标捕获（滚动模式/选择模式）
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('m') {
+                *mouse_capture_enabled = !*mouse_capture_enabled;
+                if *mouse_capture_enabled {
+                    let _ = execute!(io::stdout(), event::EnableMouseCapture);
+                    app.show_toast("鼠标: 滚轮滚动 (Shift+拖拽可选中)", false);
+                } else {
+                    let _ = execute!(io::stdout(), event::DisableMouseCapture);
+                    app.show_toast("鼠标: 自由选中 (Ctrl+M 切回滚轮)", false);
+                }
+                *needs_redraw = true;
+                return false;
+            }
             *needs_redraw = true;
             match app.ui.mode {
                 ChatMode::Chat => {
@@ -90,6 +108,19 @@ fn dispatch_event(app: &mut ChatApp, evt: Event, needs_redraw: &mut bool) -> boo
             *needs_redraw = true;
             false
         }
+        Event::Mouse(mouse) if *mouse_capture_enabled => match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                app.update(Action::Scroll(CursorDirection::Up));
+                *needs_redraw = true;
+                false
+            }
+            MouseEventKind::ScrollDown => {
+                app.update(Action::Scroll(CursorDirection::Down));
+                *needs_redraw = true;
+                false
+            }
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -164,13 +195,20 @@ fn migrate_legacy_session_if_needed() {
 pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, event::EnableBracketedPaste)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        event::EnableMouseCapture,
+        event::EnableBracketedPaste
+    )?;
     // 启用 kitty keyboard protocol，使终端能区分 Shift+Enter / Ctrl+Enter 等组合键。
     // 不支持此协议的终端（如 Terminal.app）会忽略该指令，不会报错。
     let _ = execute!(
         stdout,
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
     );
+
+    let mut mouse_capture_enabled = true;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -417,11 +455,13 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // 阻塞等待第一个事件（受 poll_timeout 限制）
         let first = input_thread.rx.recv_timeout(poll_timeout);
         if let Ok(evt) = first {
-            let mut should_quit = dispatch_event(&mut app, evt, &mut needs_redraw);
+            let mut should_quit =
+                dispatch_event(&mut app, evt, &mut needs_redraw, &mut mouse_capture_enabled);
             // 批量消费所有已缓冲的后续事件（非阻塞）
             if !should_quit {
                 while let Ok(evt) = input_thread.rx.try_recv() {
-                    if dispatch_event(&mut app, evt, &mut needs_redraw) {
+                    if dispatch_event(&mut app, evt, &mut needs_redraw, &mut mouse_capture_enabled)
+                    {
                         should_quit = true;
                         break;
                     }

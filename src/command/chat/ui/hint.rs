@@ -27,6 +27,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ChatMode::Chat => vec![
             ("@", "引用"),
             ("/", "命令"),
+            ("Ctrl+M", "选中模式"),
             ("Ctrl+O", "工具详情"),
             ("?/F1", "帮助"),
         ],
