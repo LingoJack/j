@@ -119,7 +119,9 @@ impl TodoManager {
 
     pub fn has_todos(&self) -> bool {
         let items = safe_lock(&self.items, "TodoManager::has_todos");
-        !items.is_empty()
+        items
+            .iter()
+            .any(|i| i.status == "pending" || i.status == "in_progress")
     }
 
     /// 格式化当前 todos 为可读字符串（供 nag reminder 使用）
