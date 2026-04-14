@@ -29,6 +29,11 @@ struct AgentParams {
     /// Set to true to run in background. Returns task_id immediately.
     #[serde(default)]
     run_in_background: bool,
+    /// If true, create an isolated git worktree for this sub-agent.
+    /// Recommended when running multiple parallel agents that may edit overlapping files.
+    /// The worktree is automatically cleaned up when the agent finishes.
+    #[serde(default)]
+    worktree: bool,
 }
 
 // ========== AgentTool ==========
@@ -84,6 +89,7 @@ impl Tool for AgentTool {
             .description
             .unwrap_or_else(|| "sub-agent task".to_string());
         let run_in_background = params.run_in_background;
+        let use_worktree = params.worktree;
 
         // 获取 provider 和 system prompt 的快照
         let provider = safe_lock(&self.shared.provider, "AgentTool::provider").clone();
@@ -100,6 +106,22 @@ impl Tool for AgentTool {
 
         let jcli_config = Arc::clone(&self.shared.jcli_config);
 
+        // worktree 隔离：提前创建（在调用线程中；失败则提前退出）
+        let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
+            match crate::command::chat::tools::worktree::create_agent_worktree(&description) {
+                Ok(info) => Some(info),
+                Err(e) => {
+                    return ToolResult {
+                        output: format!("创建 worktree 失败: {}", e),
+                        is_error: true,
+                        images: vec![],
+                    };
+                }
+            }
+        } else {
+            None
+        };
+
         if run_in_background {
             // 后台模式：注册任务并 spawn 线程
             let (task_id, output_buffer) = self.shared.background_manager.spawn_command(
@@ -113,6 +135,11 @@ impl Tool for AgentTool {
             let cancelled_clone = Arc::clone(cancelled);
 
             std::thread::spawn(move || {
+                // 设置 worktree CWD
+                if let Some((ref wt_path, _)) = worktree_info {
+                    crate::command::chat::teammate::set_thread_cwd(wt_path);
+                }
+
                 let result = run_headless_agent_loop(
                     provider,
                     system_prompt,
@@ -122,6 +149,11 @@ impl Tool for AgentTool {
                     jcli_config,
                     &cancelled_clone,
                 );
+
+                // 清理 worktree
+                if let Some((ref wt_path, ref branch)) = worktree_info {
+                    crate::command::chat::tools::worktree::remove_agent_worktree(wt_path, branch);
+                }
 
                 // 写入输出缓冲区
                 {
@@ -144,6 +176,12 @@ impl Tool for AgentTool {
             }
         } else {
             // 前台模式：阻塞执行
+            // 保存旧 CWD，执行完后恢复（前台 agent 在调用线程中运行）
+            let old_cwd = crate::command::chat::teammate::thread_cwd();
+            if let Some((ref wt_path, _)) = worktree_info {
+                crate::command::chat::teammate::set_thread_cwd(wt_path);
+            }
+
             let cancelled_clone = Arc::clone(cancelled);
             let result = run_headless_agent_loop(
                 provider,
@@ -154,6 +192,15 @@ impl Tool for AgentTool {
                 jcli_config,
                 &cancelled_clone,
             );
+
+            // 清理 worktree 并恢复 CWD
+            if let Some((ref wt_path, ref branch)) = worktree_info {
+                crate::command::chat::tools::worktree::remove_agent_worktree(wt_path, branch);
+            }
+            match old_cwd {
+                Some(p) => crate::command::chat::teammate::set_thread_cwd(&p),
+                None => crate::command::chat::teammate::clear_thread_cwd(),
+            }
 
             ToolResult {
                 output: result,

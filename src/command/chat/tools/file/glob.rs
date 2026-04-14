@@ -1,5 +1,5 @@
 use crate::command::chat::tools::{
-    Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params,
+    Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path, schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -65,12 +65,8 @@ impl Tool for GlobTool {
             .path
             .as_deref()
             .filter(|s| !s.is_empty())
-            .map(expand_tilde)
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|d| d.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| ".".to_string())
-            });
+            .map(resolve_path)
+            .unwrap_or_else(effective_cwd);
 
         let limit = params.limit.clamp(1, 1000);
 

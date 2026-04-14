@@ -369,6 +369,32 @@ pub fn expand_tilde(path: &str) -> String {
     }
 }
 
+/// 解析路径：先展开 ~，若路径为相对路径且当前线程有 worktree CWD，则相对于该 CWD 解析。
+/// 这是 worktree 隔离的核心：处于 worktree 的 agent/teammate 线程会通过 THREAD_CWD
+/// 把相对路径自动锚定到 worktree 目录，无需修改传入路径。
+pub fn resolve_path(path: &str) -> String {
+    let expanded = expand_tilde(path);
+    // 绝对路径直接返回
+    if std::path::Path::new(&expanded).is_absolute() {
+        return expanded;
+    }
+    // 相对路径：优先使用线程本地的 worktree CWD
+    if let Some(cwd) = crate::command::chat::teammate::thread_cwd() {
+        return cwd.join(&expanded).to_string_lossy().to_string();
+    }
+    expanded
+}
+
+/// 获取当前有效的工作目录：先取线程本地 worktree CWD，再 fallback 到进程 CWD
+pub fn effective_cwd() -> String {
+    if let Some(cwd) = crate::command::chat::teammate::thread_cwd() {
+        return cwd.to_string_lossy().to_string();
+    }
+    std::env::current_dir()
+        .map(|d| d.to_string_lossy().to_string())
+        .unwrap_or_else(|_| ".".to_string())
+}
+
 /// 将 JSON Schema 转为 Markdown 参数列表
 fn json_schema_to_xml_params(schema: &Value) -> String {
     let properties = match schema.get("properties").and_then(|p| p.as_object()) {

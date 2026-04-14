@@ -149,6 +149,71 @@ fn count_changes(worktree_path: &str, original_head: Option<&str>) -> (usize, us
     (changed_files, commits)
 }
 
+// ========== Agent Worktree Helpers ==========
+// 供 CreateTeammate / AgentTool 调用，自动为并行 agent 创建/删除 worktree
+
+/// 为 agent 创建专用 worktree。
+/// - `agent_name`: 用于生成目录名和分支名（会被 slug 化）
+/// - 返回 `(worktree_path, branch_name)`
+pub fn create_agent_worktree(agent_name: &str) -> Result<(PathBuf, String), String> {
+    let repo_root = git_root()?;
+
+    // slug 化：只保留字母数字、连字符、下划线
+    let slug: String = agent_name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = format!("agent-{}", slug);
+    let branch = format!("worktree-{}", slug);
+    let wt_path = repo_root.join(".jcli").join("worktrees").join(&slug);
+
+    // 如果 worktree 目录已存在，直接复用
+    if wt_path.exists() {
+        return Ok((wt_path, branch));
+    }
+
+    let worktrees_dir = repo_root.join(".jcli").join("worktrees");
+    std::fs::create_dir_all(&worktrees_dir)
+        .map_err(|e| format!("创建 worktrees 目录失败: {}", e))?;
+
+    let output = Command::new("git")
+        .current_dir(&repo_root)
+        .args([
+            "worktree",
+            "add",
+            "-B",
+            &branch,
+            &wt_path.to_string_lossy(),
+            "HEAD",
+        ])
+        .output()
+        .map_err(|e| format!("执行 git worktree add 失败: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("创建 worktree 失败: {}", stderr.trim()));
+    }
+
+    Ok((wt_path, branch))
+}
+
+/// 删除 agent worktree（最大努力，忽略错误）
+pub fn remove_agent_worktree(worktree_path: &PathBuf, branch: &str) {
+    let wt_str = worktree_path.to_string_lossy().to_string();
+    let _ = Command::new("git")
+        .args(["worktree", "remove", "--force", &wt_str])
+        .output();
+    // 等 git 释放内部锁
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let _ = Command::new("git").args(["branch", "-D", branch]).output();
+}
+
 // ========== EnterWorktreeTool ==========
 
 #[derive(Deserialize, JsonSchema)]

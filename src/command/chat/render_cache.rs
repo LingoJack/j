@@ -504,7 +504,41 @@ pub fn render_user_msg(
     }
 }
 
-/// 渲染 AI 助手消息
+/// 解析 teammate 消息的 `<AgentName>` 前缀。
+/// 返回 `Some((name, rest))` 其中 rest 已去除前导空格。
+/// 规则：内容以 `<` 开头，紧跟非空白非 `>` 字符，直到 `>`，后面是消息正文。
+fn parse_agent_prefix(content: &str) -> Option<(&str, &str)> {
+    if !content.starts_with('<') {
+        return None;
+    }
+    let end = content.find('>')?;
+    let name = &content[1..end];
+    if name.is_empty() || name.contains(char::is_whitespace) {
+        return None;
+    }
+    let rest = content[end + 1..].trim_start();
+    Some((name, rest))
+}
+
+/// 根据 agent 名字哈希出一个固定颜色（深色/浅色主题均有一定对比度）。
+fn agent_name_color(name: &str) -> Color {
+    const PALETTE: &[Color] = &[
+        Color::Rgb(255, 160, 100), // 橙
+        Color::Rgb(100, 200, 255), // 天蓝
+        Color::Rgb(255, 110, 180), // 粉红
+        Color::Rgb(160, 255, 110), // 草绿
+        Color::Rgb(200, 150, 255), // 薰衣草紫
+        Color::Rgb(255, 220, 80),  // 琥珀黄
+        Color::Rgb(80, 220, 200),  // 青绿
+        Color::Rgb(255, 140, 140), // 浅红
+    ];
+    let hash = name
+        .bytes()
+        .fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
+    PALETTE[hash as usize % PALETTE.len()]
+}
+
+/// 渲染 AI 助手消息（含 teammate 消息）
 pub fn render_assistant_msg(
     content: &str,
     is_selected: bool,
@@ -512,22 +546,38 @@ pub fn render_assistant_msg(
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
+    // 检测 teammate 消息：`<AgentName> 正文`
+    let (agent_name, bubble_content): (String, &str) =
+        if let Some((name, rest)) = parse_agent_prefix(content) {
+            (name.to_string(), rest)
+        } else {
+            ("Sprite".to_string(), content)
+        };
+
+    let is_teammate = agent_name != "Sprite";
+
     lines.push(Line::from(""));
-    let ai_label = if is_selected {
-        "  ▶ Sprite"
+
+    // 标签行：`  ▶ AgentName` 或 `  AgentName`
+    let label = if is_selected {
+        format!("  ▶ {}", agent_name)
     } else {
-        "  Sprite"
+        format!("  {}", agent_name)
+    };
+    let label_color = if is_selected {
+        theme.label_selected
+    } else if is_teammate {
+        agent_name_color(&agent_name)
+    } else {
+        theme.label_ai
     };
     lines.push(Line::from(Span::styled(
-        ai_label,
+        label,
         Style::default()
-            .fg(if is_selected {
-                theme.label_selected
-            } else {
-                theme.label_ai
-            })
+            .fg(label_color)
             .add_modifier(Modifier::BOLD),
     )));
+
     let bubble_bg = if is_selected {
         theme.bubble_ai_selected
     } else {
@@ -536,7 +586,7 @@ pub fn render_assistant_msg(
     let pad_left_w = 3usize;
     let pad_right_w = 3usize;
     let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
-    let md_lines = markdown_to_lines(content, md_content_w + 2, theme);
+    let md_lines = markdown_to_lines(bubble_content, md_content_w + 2, theme);
     let bubble_total_w = bubble_max_width;
     // 上边距
     lines.push(Line::from(vec![Span::styled(

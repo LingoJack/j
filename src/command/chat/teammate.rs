@@ -14,6 +14,8 @@ use tokio_util::sync::CancellationToken;
 thread_local! {
     /// 当前线程所属的 agent 名称（主 agent 为 "Main"，teammate 为其名称）
     static CURRENT_AGENT_NAME: RefCell<String> = RefCell::new("Main".to_string());
+    /// 当前线程的工作目录覆盖（worktree 模式下指向 worktree 路径）
+    static THREAD_CWD: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 /// 设置当前线程的 agent 名称（在 teammate agent loop 启动时调用）
@@ -26,6 +28,27 @@ pub fn set_current_agent_name(name: &str) {
 /// 获取当前线程的 agent 名称
 pub fn current_agent_name() -> String {
     CURRENT_AGENT_NAME.with(|cell| cell.borrow().clone())
+}
+
+// ========== Thread-local CWD (worktree 隔离) ==========
+
+/// 设置当前线程的工作目录（进入 worktree 时调用）
+pub fn set_thread_cwd(path: &std::path::Path) {
+    THREAD_CWD.with(|cell| {
+        *cell.borrow_mut() = Some(path.to_path_buf());
+    });
+}
+
+/// 获取当前线程的工作目录覆盖（None 表示未进入 worktree）
+pub fn thread_cwd() -> Option<PathBuf> {
+    THREAD_CWD.with(|cell| cell.borrow().clone())
+}
+
+/// 清除当前线程的工作目录覆盖
+pub fn clear_thread_cwd() {
+    THREAD_CWD.with(|cell| {
+        *cell.borrow_mut() = None;
+    });
 }
 
 // ========== 全局文件编辑锁 ==========

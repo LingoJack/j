@@ -1,5 +1,5 @@
 use crate::command::chat::tools::{
-    ImageData, Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params,
+    ImageData, Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -87,7 +87,7 @@ impl Tool for ReadFileTool {
             Err(e) => return e,
         };
 
-        let path = expand_tilde(&params.path);
+        let path = resolve_path(&params.path);
 
         // 图片文件：读取为 base64，返回图片数据
         if is_image_file(&path) {

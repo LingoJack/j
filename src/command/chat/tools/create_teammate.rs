@@ -22,6 +22,12 @@ struct CreateTeammateParams {
     role: String,
     /// Initial task prompt for this teammate
     prompt: String,
+    /// If true, create an isolated git worktree for this teammate.
+    /// Strongly recommended when multiple teammates may edit overlapping files.
+    /// Each teammate gets its own branch (worktree-agent-{name}) under .jcli/worktrees/.
+    /// The worktree is automatically cleaned up when the teammate finishes.
+    #[serde(default)]
+    worktree: bool,
 }
 
 /// CreateTeammate 工具：创建一个新的 teammate agent
@@ -103,6 +109,32 @@ impl Tool for CreateTeammateTool {
             }
         }
 
+        // 若请求 worktree 隔离，提前创建（在主线程中；失败则提前退出）
+        let worktree_info: Option<(std::path::PathBuf, String)> = if params.worktree {
+            match crate::command::chat::tools::worktree::create_agent_worktree(&params.name) {
+                Ok(info) => {
+                    write_info_log(
+                        "CreateTeammate",
+                        &format!(
+                            "Teammate '{}' worktree created: {}",
+                            params.name,
+                            info.0.display()
+                        ),
+                    );
+                    Some(info)
+                }
+                Err(e) => {
+                    return ToolResult {
+                        output: format!("创建 worktree 失败: {}", e),
+                        is_error: true,
+                        images: vec![],
+                    };
+                }
+            }
+        } else {
+            None
+        };
+
         // 准备 teammate 的资源
         let pending_user_messages = Arc::new(Mutex::new(Vec::new()));
         let streaming_content = Arc::new(Mutex::new(String::new()));
@@ -146,6 +178,19 @@ impl Tool for CreateTeammateTool {
             // 设置线程的 agent 身份
             set_current_agent_name(&teammate_name);
 
+            // 设置 worktree CWD（若有）
+            if let Some((ref wt_path, _)) = worktree_info {
+                crate::command::chat::teammate::set_thread_cwd(wt_path);
+                write_info_log(
+                    "CreateTeammate",
+                    &format!(
+                        "Teammate '{}' working in worktree: {}",
+                        teammate_name,
+                        wt_path.display()
+                    ),
+                );
+            }
+
             write_info_log(
                 "CreateTeammate",
                 &format!("Teammate '{}' agent loop starting", teammate_name),
@@ -166,6 +211,15 @@ impl Tool for CreateTeammateTool {
                     cancel_token: cancel_token_clone,
                 },
             );
+
+            // 清理 worktree
+            if let Some((ref wt_path, ref branch)) = worktree_info {
+                write_info_log(
+                    "CreateTeammate",
+                    &format!("Teammate '{}' cleaning up worktree", teammate_name),
+                );
+                crate::command::chat::tools::worktree::remove_agent_worktree(wt_path, branch);
+            }
 
             is_running_clone.store(false, Ordering::Relaxed);
 
@@ -207,11 +261,17 @@ impl Tool for CreateTeammateTool {
             }
         }
 
+        let worktree_note = if params.worktree {
+            " [worktree 隔离]"
+        } else {
+            ""
+        };
         ToolResult {
             output: format!(
-                "Teammate '{}' ({}) created and started working on: {}",
+                "Teammate '{}' ({}){} created and started working on: {}",
                 params.name,
                 params.role,
+                worktree_note,
                 &params.prompt[..{
                     let mut b = params.prompt.len().min(100);
                     while b > 0 && !params.prompt.is_char_boundary(b) {

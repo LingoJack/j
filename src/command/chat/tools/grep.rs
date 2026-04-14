@@ -1,4 +1,6 @@
-use super::{Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params};
+use super::{
+    Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path, schema_to_tool_params,
+};
 use ignore::WalkBuilder;
 use regex::RegexBuilder;
 use schemars::JsonSchema;
@@ -103,8 +105,8 @@ impl Tool for GrepTool {
             .path
             .as_deref()
             .filter(|s| !s.is_empty())
-            .map(expand_tilde)
-            .unwrap_or_else(|| ".".to_string());
+            .map(resolve_path)
+            .unwrap_or_else(effective_cwd);
         let search_path = Path::new(&search_path_str);
 
         // glob 过滤

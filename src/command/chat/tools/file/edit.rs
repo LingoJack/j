@@ -1,5 +1,5 @@
 use crate::command::chat::tools::{
-    Tool, ToolResult, expand_tilde, parse_tool_args, schema_to_tool_params,
+    Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -114,7 +114,7 @@ impl Tool for EditFileTool {
             Err(e) => return e,
         };
 
-        let path = expand_tilde(&params.path);
+        let path = resolve_path(&params.path);
 
         // 文件编辑互斥锁（多 agent 模式下防止同时编辑同一文件）
         let agent_name = crate::command::chat::teammate::current_agent_name();
@@ -191,7 +191,7 @@ impl Tool for EditFileTool {
 
     fn confirmation_message(&self, arguments: &str) -> String {
         if let Ok(params) = serde_json::from_str::<EditFileParams>(arguments) {
-            let path = expand_tilde(&params.path);
+            let path = resolve_path(&params.path);
             let first_line = params.old_string.lines().next().unwrap_or("");
             let has_more = params.old_string.lines().count() > 1;
             let preview = if has_more {

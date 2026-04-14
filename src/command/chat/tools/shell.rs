@@ -128,8 +128,11 @@ impl Tool for ShellTool {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // 设置工作目录
-        if let Some(ref dir) = params.cwd {
+        // 设置工作目录：优先用显式 cwd，其次用 thread-local worktree CWD
+        let effective_dir = params.cwd.clone().or_else(|| {
+            crate::command::chat::teammate::thread_cwd().map(|p| p.to_string_lossy().to_string())
+        });
+        if let Some(ref dir) = effective_dir {
             let path = std::path::Path::new(dir);
             if !path.is_dir() {
                 return ToolResult {
@@ -273,9 +276,15 @@ impl ShellTool {
         cwd: Option<String>,
         timeout_secs: u64,
     ) -> ToolResult {
+        // 显式 cwd 优先，其次取 thread-local worktree CWD（后台任务在新线程中运行，
+        // 所以要在这里捕获，而不是在新线程中重新读取）
+        let effective_cwd = cwd.clone().or_else(|| {
+            crate::command::chat::teammate::thread_cwd().map(|p| p.to_string_lossy().to_string())
+        });
+
         let (task_id, output_buffer) =
             self.manager
-                .spawn_command(&command, cwd.clone(), timeout_secs);
+                .spawn_command(&command, effective_cwd.clone(), timeout_secs);
         let manager = Arc::clone(&self.manager);
         let tid = task_id.clone();
         let cmd = command.clone();
@@ -288,7 +297,7 @@ impl ShellTool {
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
 
-            if let Some(ref dir) = cwd {
+            if let Some(ref dir) = effective_cwd {
                 let path = std::path::Path::new(dir);
                 if path.is_dir() {
                     child_cmd.current_dir(path);
