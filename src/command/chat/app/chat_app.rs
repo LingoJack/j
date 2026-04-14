@@ -2245,12 +2245,8 @@ impl ChatApp {
     pub fn poll_stream_actions(&mut self) -> Vec<Action> {
         let mut actions = Vec::new();
 
-        if self.agent.is_none() {
-            return actions;
-        }
-
         // ★ 从共享消息列表中检测新消息，增量追加到 session.messages
-        //   无条件执行，不受模式限制，确保任何模式下消息都能实时显示
+        //   无条件执行，不受 agent 状态限制，确保取消后也能显示 agent 已写入的消息
         {
             let shared = safe_lock(&self.shared_agent_messages, "poll::shared_msgs");
             let new_count = shared.len();
@@ -2264,6 +2260,10 @@ impl ChatApp {
                 self.ui.auto_scroll = true;
                 self.ui.scroll_offset = u16::MAX;
             }
+        }
+
+        if self.agent.is_none() {
+            return actions;
         }
 
         // 如果在 ToolConfirm 模式，仍然需要轮询工具执行结果（但暂停流式消息轮询）
@@ -2760,20 +2760,18 @@ impl ChatApp {
     /// 只取消工具执行，不终止 agent loop
     pub fn cancel_tools_only(&mut self) {
         self.tool_executor.cancel();
+        self.tool_executor.tools_executing_count = 0;
+        self.tool_executor.active_tool_calls.clear();
+        self.tool_executor.pending_tool_execution = false;
         self.show_toast("工具已取消", false);
     }
 
     /// 取消当前流式请求
+    ///
+    /// 立即执行 finish_loading() 清除加载状态，不等 agent 线程响应取消信号。
+    /// 这确保 Esc 按键后 UI 瞬间恢复可交互状态。
     pub fn cancel_stream(&mut self) {
-        if let Some(ref agent) = self.agent {
-            agent.cancel();
-        }
-        // drop tool_result_tx
-        self.tool_executor.tool_result_tx = None;
-        // 通知 ShellTool kill 正在执行的子进程
-        self.tool_executor
-            .tool_cancelled
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.finish_loading(false, true);
     }
 
     /// 将 session.messages 中尚未持久化的新消息追加到 JSONL

@@ -501,16 +501,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
             if app.state.is_loading {
-                if app.tool_executor.tools_executing_count > 0
-                    && !app
-                        .tool_executor
-                        .tool_cancelled
-                        .load(std::sync::atomic::Ordering::Relaxed)
-                {
-                    app.update(Action::CancelToolsOnly);
-                } else {
-                    app.update(Action::CancelStream);
-                }
+                app.update(Action::CancelStream);
             } else {
                 return true;
             }

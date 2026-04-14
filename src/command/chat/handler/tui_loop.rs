@@ -446,7 +446,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // ================================================================
         #[allow(clippy::if_same_then_else)]
         let poll_timeout = if app.state.is_loading {
-            std::time::Duration::from_millis(300)
+            std::time::Duration::from_millis(100)
         } else if app.ui.mode == ChatMode::ToolConfirm {
             std::time::Duration::from_millis(500)
         } else {
