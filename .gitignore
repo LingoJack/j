@@ -9,5 +9,6 @@ work-copilot-java/
 example/
 .jcli/worktrees/
 .claude/worktrees/
+.codebuddy/worktrees/
 .model_infrax/
 /target/jen
