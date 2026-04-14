@@ -92,6 +92,27 @@ pub fn handle_agent_perm_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     }
 }
 
+/// Teammate Plan 审批确认模式：Y/Enter 批准，N/Esc 拒绝
+pub fn handle_plan_approval_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            if let Some(req) = app.ui.pending_plan_approval.take() {
+                req.resolve(true);
+            }
+            app.ui.mode = ChatMode::Chat;
+            app.ui.msg_lines_cache = None;
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            if let Some(req) = app.ui.pending_plan_approval.take() {
+                req.resolve(false);
+            }
+            app.ui.mode = ChatMode::Chat;
+            app.ui.msg_lines_cache = None;
+        }
+        _ => {}
+    }
+}
+
 /// Ask 模式的结构化问答交互处理
 fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
     let total_questions = app.ui.tool_ask_questions.len();

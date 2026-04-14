@@ -107,6 +107,8 @@ pub struct ToolRegistry {
     pub worktree_state: Arc<worktree::WorktreeState>,
     /// 子 agent 权限请求队列（None 表示主 session 注册表，不走队列）
     pub permission_queue: Option<Arc<crate::command::chat::permission_queue::PermissionQueue>>,
+    /// Plan 审批请求队列（None 表示主 session 注册表；teammate 子注册表通过 Arc clone 共享）
+    pub plan_approval_queue: Option<Arc<plan::PlanApprovalQueue>>,
 }
 
 impl ToolRegistry {
@@ -121,12 +123,14 @@ impl ToolRegistry {
         let todo_manager = Arc::new(todo::TodoManager::new());
         let plan_mode_state = Arc::new(plan::PlanModeState::new());
         let worktree_state = Arc::new(worktree::WorktreeState::new());
+        let plan_approval_queue = Arc::new(plan::PlanApprovalQueue::new());
 
         let mut registry = Self {
             todo_manager: Arc::clone(&todo_manager),
             plan_mode_state: Arc::clone(&plan_mode_state),
             worktree_state: Arc::clone(&worktree_state),
             permission_queue: None,
+            plan_approval_queue: None,
             tools: vec![
                 Box::new(shell::ShellTool {
                     manager: Arc::clone(&background_manager),
@@ -170,6 +174,7 @@ impl ToolRegistry {
                 Box::new(plan::ExitPlanModeTool {
                     plan_state: Arc::clone(&plan_mode_state),
                     ask_tx,
+                    plan_approval_queue: Some(Arc::clone(&plan_approval_queue)),
                 }),
                 // Worktree 隔离工具
                 Box::new(worktree::EnterWorktreeTool {

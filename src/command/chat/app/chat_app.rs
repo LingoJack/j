@@ -86,6 +86,8 @@ pub struct ChatApp {
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
     /// 子 agent 权限请求队列（AgentToolShared 和 TUI 共享同一个 Arc）
     pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
+    /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
+    pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -181,6 +183,9 @@ impl ChatApp {
         // 子 agent 权限请求队列（TUI 和所有 agent 共享同一个 Arc）
         let permission_queue =
             Arc::new(crate::command::chat::permission_queue::PermissionQueue::new());
+        // Plan 审批请求队列（TUI 和所有 teammate 共享同一个 Arc）
+        let plan_approval_queue =
+            Arc::new(crate::command::chat::tools::plan::PlanApprovalQueue::new());
 
         // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
         let agent_tool_shared = crate::command::chat::tools::agent_shared::AgentToolShared {
@@ -192,6 +197,7 @@ impl ChatApp {
             task_manager: Arc::clone(&task_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
             permission_queue: Arc::clone(&permission_queue),
+            plan_approval_queue: Arc::clone(&plan_approval_queue),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
             shared: agent_tool_shared.clone(),
@@ -411,6 +417,7 @@ impl ChatApp {
                 },
                 input_wrap_width: 0,
                 pending_agent_perm: None,
+                pending_plan_approval: None,
             },
             state: ChatState {
                 agent_config,
@@ -445,6 +452,7 @@ impl ChatApp {
             context_tokens: Arc::new(Mutex::new(0)),
             teammate_manager,
             permission_queue,
+            plan_approval_queue,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -1749,10 +1757,18 @@ impl ChatApp {
                 self.cancel_stream();
                 // 取消所有挂起的子 agent 权限请求，防止线程永久阻塞
                 self.permission_queue.deny_all();
+                // 取消所有挂起的 Plan 审批请求
+                self.plan_approval_queue.deny_all();
                 if let Some(req) = self.ui.pending_agent_perm.take() {
                     req.resolve(false);
                 }
-                if self.ui.mode == ChatMode::AgentPermConfirm {
+                if let Some(req) = self.ui.pending_plan_approval.take() {
+                    req.resolve(false);
+                }
+                if matches!(
+                    self.ui.mode,
+                    ChatMode::AgentPermConfirm | ChatMode::PlanApprovalConfirm
+                ) {
                     self.ui.mode = ChatMode::Chat;
                 }
             }

@@ -74,6 +74,7 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         }
         ChatMode::ToolConfirm => vec![("↑↓", "选择"), ("Enter", "确认"), ("Esc", "拒绝")],
         ChatMode::AgentPermConfirm => vec![("Y/Enter", "允许"), ("N/Esc", "拒绝")],
+        ChatMode::PlanApprovalConfirm => vec![("Y/Enter", "批准"), ("N/Esc", "拒绝")],
     };
 
     render_hint_bar(f, area, t, &hints);

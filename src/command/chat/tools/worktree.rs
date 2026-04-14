@@ -204,7 +204,7 @@ pub fn create_agent_worktree(agent_name: &str) -> Result<(PathBuf, String), Stri
 }
 
 /// 删除 agent worktree（最大努力，忽略错误）
-pub fn remove_agent_worktree(worktree_path: &PathBuf, branch: &str) {
+pub fn remove_agent_worktree(worktree_path: &std::path::Path, branch: &str) {
     let wt_str = worktree_path.to_string_lossy().to_string();
     let _ = Command::new("git")
         .args(["worktree", "remove", "--force", &wt_str])

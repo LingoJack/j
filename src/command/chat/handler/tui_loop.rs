@@ -9,8 +9,8 @@ use super::super::storage::{
 use super::super::ui::draw_chat_ui;
 use super::{
     handle_agent_perm_confirm_mode, handle_archive_confirm_mode, handle_archive_list_mode,
-    handle_browse_mode, handle_chat_mode, handle_config_mode, handle_select_model,
-    handle_select_theme, handle_tool_confirm_mode,
+    handle_browse_mode, handle_chat_mode, handle_config_mode, handle_plan_approval_confirm_mode,
+    handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::error;
@@ -79,6 +79,7 @@ fn dispatch_event(
                 ChatMode::ArchiveList => handle_archive_list_mode(app, key),
                 ChatMode::ToolConfirm => handle_tool_confirm_mode(app, key),
                 ChatMode::AgentPermConfirm => handle_agent_perm_confirm_mode(app, key),
+                ChatMode::PlanApprovalConfirm => handle_plan_approval_confirm_mode(app, key),
             }
             false
         }
@@ -312,13 +313,25 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
         // Phase 2b: 轮询子 agent 权限请求队列
         // 只在没有当前待决请求且处于 Chat 模式时弹出（不打断 ToolConfirm 等交互）
-        if app.ui.pending_agent_perm.is_none() && matches!(app.ui.mode, ChatMode::Chat) {
-            if let Some(req) = app.permission_queue.pop_pending() {
-                app.ui.pending_agent_perm = Some(req);
-                app.ui.mode = ChatMode::AgentPermConfirm;
-                app.ui.msg_lines_cache = None;
-                needs_redraw = true;
-            }
+        if app.ui.pending_agent_perm.is_none()
+            && matches!(app.ui.mode, ChatMode::Chat)
+            && let Some(req) = app.permission_queue.pop_pending()
+        {
+            app.ui.pending_agent_perm = Some(req);
+            app.ui.mode = ChatMode::AgentPermConfirm;
+            app.ui.msg_lines_cache = None;
+            needs_redraw = true;
+        }
+
+        // Phase 2b2: 轮询 Teammate Plan 审批请求队列
+        if app.ui.pending_plan_approval.is_none()
+            && matches!(app.ui.mode, ChatMode::Chat)
+            && let Some(req) = app.plan_approval_queue.pop_pending()
+        {
+            app.ui.pending_plan_approval = Some(req);
+            app.ui.mode = ChatMode::PlanApprovalConfirm;
+            app.ui.msg_lines_cache = None;
+            needs_redraw = true;
         }
 
         // Phase 2c: 收集 WebSocket 远程消息

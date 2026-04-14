@@ -150,6 +150,8 @@ pub struct UIState {
     pub input_wrap_width: usize,
     /// 来自子 agent 的待决权限请求（Some 时进入 AgentPermConfirm 模式）
     pub pending_agent_perm: Option<Arc<crate::command::chat::permission_queue::PendingAgentPerm>>,
+    /// 来自 teammate 的待决 Plan 审批请求（Some 时进入 PlanApprovalConfirm 模式）
+    pub pending_plan_approval: Option<Arc<crate::command::chat::tools::plan::PendingPlanApproval>>,
 }
 
 /// 消息渲染行缓存
@@ -220,6 +222,8 @@ pub enum ChatMode {
     SelectTheme,
     /// 子 agent 权限请求确认模式（y 批准 / n 拒绝）
     AgentPermConfirm,
+    /// Teammate Plan 审批确认模式（y 批准 / n 拒绝）
+    PlanApprovalConfirm,
 }
 
 /// 配置面板 Tab 分页枚举

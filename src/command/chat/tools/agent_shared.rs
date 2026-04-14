@@ -30,6 +30,8 @@ pub struct AgentToolShared {
     pub disabled_tools: Arc<Vec<String>>,
     /// 子 agent 权限请求队列（与主 TUI 共享同一个实例）
     pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
+    /// Plan 审批请求队列（与主 TUI 共享同一个实例，teammate ExitPlanMode 走此队列）
+    pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
 }
 
 impl AgentToolShared {
@@ -48,6 +50,8 @@ impl AgentToolShared {
         );
         // 将权限队列传入子注册表，使子 agent 的阻塞式确认请求能到达主 TUI
         registry.permission_queue = Some(Arc::clone(&self.permission_queue));
+        // 将 Plan 审批队列传入子注册表，使 teammate 的 ExitPlanMode 能路由到主 TUI
+        registry.plan_approval_queue = Some(Arc::clone(&self.plan_approval_queue));
         (registry, ask_rx)
     }
 }

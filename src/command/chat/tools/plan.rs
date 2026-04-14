@@ -3,7 +3,101 @@ use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex, atomic::AtomicBool, mpsc};
+
+// ========== Plan Approval Queue (Teammate → TUI) ==========
+
+/// 单条待决 Plan 审批请求（共享给 TUI 和 teammate 线程）
+pub struct PendingPlanApproval {
+    /// 发起请求的 agent 名称（"Frontend"/"Backend" 等）
+    pub agent_name: String,
+    /// Plan 文件内容
+    pub plan_content: String,
+    /// Plan 名称（plan-xxx.md 的 xxx）
+    pub plan_name: String,
+    /// 决策通知（None=未决, Some(true)=批准, Some(false)=拒绝）
+    decision: Arc<(Mutex<Option<bool>>, Condvar)>,
+}
+
+impl PendingPlanApproval {
+    pub fn new(agent_name: String, plan_content: String, plan_name: String) -> Arc<Self> {
+        Arc::new(Self {
+            agent_name,
+            plan_content,
+            plan_name,
+            decision: Arc::new((Mutex::new(None), Condvar::new())),
+        })
+    }
+
+    /// Teammate 线程调用：阻塞等待决策，超时返回 false（拒绝）
+    pub fn wait_for_decision(&self, timeout_secs: u64) -> bool {
+        let (lock, cvar) = &*self.decision;
+        let guard = lock.lock().unwrap();
+        let (guard, _timed_out) = cvar
+            .wait_timeout_while(guard, std::time::Duration::from_secs(timeout_secs), |d| {
+                d.is_none()
+            })
+            .unwrap();
+        guard.unwrap_or(false)
+    }
+
+    /// TUI 线程调用：设置决策并唤醒等待的 teammate 线程
+    pub fn resolve(&self, approved: bool) {
+        let (lock, cvar) = &*self.decision;
+        let mut d = lock.lock().unwrap();
+        *d = Some(approved);
+        cvar.notify_one();
+    }
+
+    /// 是否已有决策（用于防止重复显示已处理的请求）
+    #[allow(dead_code)]
+    pub fn is_decided(&self) -> bool {
+        self.decision.0.lock().unwrap().is_some()
+    }
+}
+
+/// Plan 审批请求队列（主 TUI 和所有 teammate 线程共享同一个 Arc 实例）
+pub struct PlanApprovalQueue {
+    pending: Mutex<VecDeque<Arc<PendingPlanApproval>>>,
+}
+
+impl Default for PlanApprovalQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PlanApprovalQueue {
+    pub fn new() -> Self {
+        Self {
+            pending: Mutex::new(VecDeque::new()),
+        }
+    }
+
+    /// Teammate 线程调用：把请求加入队列并阻塞等待（最长 120 秒）
+    /// 返回 true 表示用户批准，false 表示拒绝或超时
+    pub fn request_blocking(&self, req: Arc<PendingPlanApproval>) -> bool {
+        {
+            let mut q = self.pending.lock().unwrap();
+            q.push_back(Arc::clone(&req));
+        }
+        req.wait_for_decision(120)
+    }
+
+    /// TUI 循环调用：取出下一个待决请求（非阻塞）
+    pub fn pop_pending(&self) -> Option<Arc<PendingPlanApproval>> {
+        self.pending.lock().unwrap().pop_front()
+    }
+
+    /// Session 取消时调用：拒绝所有挂起的请求，唤醒所有等待线程
+    pub fn deny_all(&self) {
+        let mut q = self.pending.lock().unwrap();
+        for req in q.drain(..) {
+            req.resolve(false);
+        }
+    }
+}
 
 // ========== Plan Mode State ==========
 
@@ -268,6 +362,8 @@ struct AllowedPrompt {
 pub struct ExitPlanModeTool {
     pub plan_state: Arc<PlanModeState>,
     pub ask_tx: mpsc::Sender<AskRequest>,
+    /// Plan 审批队列（teammate 通过此队列路由审批请求到主 TUI）
+    pub plan_approval_queue: Option<Arc<PlanApprovalQueue>>,
 }
 
 impl ExitPlanModeTool {
@@ -322,6 +418,68 @@ impl Tool for ExitPlanModeTool {
             }
         };
 
+        // 判断是否在 teammate 线程中（非 Main agent）
+        let agent_name = crate::command::chat::teammate::current_agent_name();
+        if agent_name != "Main" {
+            // Teammate 模式：通过 PlanApprovalQueue 路由到主 TUI
+            if let Some(ref queue) = self.plan_approval_queue {
+                // 从 plan 文件路径提取计划名
+                let plan_file_path = self.plan_state.get_plan_file_path().unwrap_or_default();
+                let plan_name = std::path::Path::new(&plan_file_path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| s.strip_prefix("plan-"))
+                    .unwrap_or("Plan")
+                    .to_string();
+
+                let req = PendingPlanApproval::new(agent_name, plan_content, plan_name);
+
+                let approved = queue.request_blocking(req);
+
+                if approved {
+                    let plan_file_path = self.plan_state.get_plan_file_path();
+                    self.plan_state.exit();
+                    let preserved_msg = plan_file_path
+                        .as_deref()
+                        .map(|p| format!("\nPlan file preserved at: {}", p))
+                        .unwrap_or_default();
+                    ToolResult {
+                        output: format!(
+                            "Plan approved! Exited plan mode. You can now proceed with implementation.{}",
+                            preserved_msg
+                        ),
+                        is_error: false,
+                        images: vec![],
+                    }
+                } else {
+                    ToolResult {
+                        output: "Plan was not approved. Still in plan mode. Please revise your plan and try ExitPlanMode again.".to_string(),
+                        is_error: false,
+                        images: vec![],
+                    }
+                }
+            } else {
+                // 无队列（不应该出现），回退错误
+                ToolResult {
+                    output: "Plan approval not available in sub-agent mode (no queue). Add permission rules to avoid plan mode in teammates.".to_string(),
+                    is_error: true,
+                    images: vec![],
+                }
+            }
+        } else {
+            // 主 agent 模式：走原有的 ask_tx 通道
+            self.execute_via_ask_tx(&plan_content)
+        }
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        false
+    }
+}
+
+impl ExitPlanModeTool {
+    /// 主 agent 通过 ask_tx 通道审批（原有逻辑）
+    fn execute_via_ask_tx(&self, plan_content: &str) -> ToolResult {
         // 通过 Ask 机制发送审批请求
         let (response_tx, response_rx) = mpsc::channel::<String>();
 
@@ -419,9 +577,5 @@ impl Tool for ExitPlanModeTool {
                 images: vec![],
             },
         }
-    }
-
-    fn requires_confirmation(&self) -> bool {
-        false
     }
 }

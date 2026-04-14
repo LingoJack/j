@@ -19,6 +19,7 @@ pub struct PendingAgentPerm {
     /// 工具名称（"Write"/"Edit"/"Bash"）
     pub tool_name: String,
     /// 工具调用的 JSON 参数
+    #[allow(dead_code)]
     pub arguments: String,
     /// 工具自身生成的人读确认提示
     pub confirm_msg: String,
@@ -61,6 +62,7 @@ impl PendingAgentPerm {
     }
 
     /// 是否已有决策（用于防止重复显示已处理的请求）
+    #[allow(dead_code)]
     pub fn is_decided(&self) -> bool {
         self.decision.0.lock().unwrap().is_some()
     }

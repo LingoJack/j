@@ -344,6 +344,11 @@ pub fn build_message_lines_incremental(
         render_agent_perm_confirm_area(app, bubble_max_width, &mut streaming_lines);
     }
 
+    // ========== Teammate Plan 审批确认区 ==========
+    if app.ui.mode == ChatMode::PlanApprovalConfirm {
+        render_plan_approval_confirm_area(app, bubble_max_width, &mut streaming_lines);
+    }
+
     // 末尾留白
     streaming_lines.push(Line::from(""));
 
@@ -1231,6 +1236,113 @@ fn render_agent_perm_confirm_area(
     lines.push(bordered_line(
         vec![Span::styled(
             " [Y/Enter] 允许   [N/Esc] 拒绝",
+            Style::default()
+                .fg(t.text_dim)
+                .add_modifier(Modifier::BOLD)
+                .bg(confirm_bg),
+        )],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // 底边框
+    lines.push(Line::from(Span::styled(
+        format!("  ╰{}╯", "─".repeat(bubble_max_width.saturating_sub(4))),
+        Style::default().fg(border_color),
+    )));
+}
+
+/// 渲染 Teammate Plan 审批确认区域
+fn render_plan_approval_confirm_area(
+    app: &ChatApp,
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+) {
+    let t = &app.ui.theme;
+    let confirm_bg = t.tool_confirm_bg;
+    let border_color = t.tool_confirm_border;
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    let req = match app.ui.pending_plan_approval.as_ref() {
+        Some(r) => r,
+        None => return,
+    };
+
+    // 顶边框
+    lines.push(Line::from(Span::styled(
+        format!("  ╭{}╮", "─".repeat(bubble_max_width.saturating_sub(4))),
+        Style::default().fg(border_color),
+    )));
+
+    // 标题行
+    let title = format!(" Plan 审批请求 [{}] ", req.agent_name);
+    lines.push(bordered_line(
+        vec![Span::styled(
+            title,
+            Style::default()
+                .fg(t.tool_confirm_title)
+                .add_modifier(Modifier::BOLD)
+                .bg(confirm_bg),
+        )],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // Plan 名称行
+    lines.push(bordered_line(
+        vec![Span::styled(
+            format!(" Plan: {}", req.plan_name),
+            Style::default()
+                .fg(t.tool_confirm_name)
+                .add_modifier(Modifier::BOLD)
+                .bg(confirm_bg),
+        )],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // Plan 内容（折行显示，最多 20 行）
+    let plan_lines: Vec<&str> = req.plan_content.lines().take(20).collect();
+    for line in &plan_lines {
+        for wrapped in wrap_text(line, content_w) {
+            lines.push(bordered_line(
+                vec![Span::styled(
+                    format!(" {}", wrapped),
+                    Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                )],
+                bubble_max_width,
+                border_color,
+                confirm_bg,
+            ));
+        }
+    }
+    if req.plan_content.lines().count() > 20 {
+        lines.push(bordered_line(
+            vec![Span::styled(
+                " ... (内容已截断)".to_string(),
+                Style::default().fg(t.text_dim).bg(confirm_bg),
+            )],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
+    }
+
+    // 空行间隔
+    lines.push(bordered_line(
+        vec![Span::styled(" ", Style::default().bg(confirm_bg))],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // Y/N 提示行
+    lines.push(bordered_line(
+        vec![Span::styled(
+            " [Y/Enter] 批准   [N/Esc] 拒绝",
             Style::default()
                 .fg(t.text_dim)
                 .add_modifier(Modifier::BOLD)
