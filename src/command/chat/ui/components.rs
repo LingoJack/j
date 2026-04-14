@@ -445,8 +445,8 @@ pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
 pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<'a>> {
     use unicode_width::UnicodeWidthStr;
 
-    // 框体内部宽度：取终端内宽的一半，最少 30，最多 50
-    let inner = ((width as usize) / 2).clamp(30, 50);
+    // 框体内部宽度：取终端内宽的一半，最少 30，最多 60
+    let inner = ((width as usize) / 2).clamp(30, 60);
     let box_w = inner + 2;
 
     let total_w = width as usize;
@@ -485,8 +485,10 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
     let text_area = inner.saturating_sub(2);
     let quote = super::quotes::get_quote(quote_idx);
 
-    // 在标点后断行（且已积累至少半行宽度），超宽时强制断行
-    let break_after = ['，', '。', '！', '？', '；', '：', ',', '.', '!', '?'];
+    // 中文标点：直接断行（不受宽度限制）
+    // 英文标点：需已累积至半行以上
+    let cn_break = ['，', '。', '！', '？', '；', '：'];
+    let en_break = [',', '.', '!', '?'];
     let mut lines_chars: Vec<Vec<char>> = Vec::new();
     let mut cur: Vec<char> = Vec::new();
     let mut cur_w = 0usize;
@@ -500,8 +502,12 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
         }
         cur.push(ch);
         cur_w += cw;
-        // 标点处自然断行（需已累积至半行以上，避免极短行）
-        if break_after.contains(&ch) && cur_w * 2 >= text_area {
+        // 中文标点：无条件断行
+        if cn_break.contains(&ch) {
+            lines_chars.push(std::mem::take(&mut cur));
+            cur_w = 0;
+        } else if en_break.contains(&ch) && cur_w * 2 >= text_area {
+            // 英文标点：保留原逻辑（需已累积至半行以上）
             lines_chars.push(std::mem::take(&mut cur));
             cur_w = 0;
         }
@@ -561,6 +567,19 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
 
         quote_lines.push(Line::from(spans));
         global_idx += line_chars.len();
+
+        // 多行诗：行间插入空行，让视觉更通透
+        if lines_chars.len() > 1 {
+            quote_lines.push(Line::from(Span::styled(
+                format!("{pad}{empty_row}"),
+                border_style,
+            )));
+        }
+    }
+
+    // 多行诗插入了行间空行，移除最后一个多余的
+    if lines_chars.len() > 1 && quote_lines.len() > 1 {
+        quote_lines.pop();
     }
 
     // ── 内边距：单行留两行，多行各留一行 ──
