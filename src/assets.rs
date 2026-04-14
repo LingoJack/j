@@ -134,6 +134,47 @@ pub fn install_default_skills(skills_dir: &std::path::Path) -> Result<(), std::i
     Ok(())
 }
 
+/// 安装预设 commands 到用户数据目录
+///
+/// 遍历编译时嵌入的 `assets/commands/` 目录下的所有文件，
+/// 将其写入 `~/.jdata/agent/commands/` 对应路径（仅当目标文件不存在时才写入，不覆盖用户修改）。
+pub fn install_default_commands(commands_dir: &std::path::Path) -> Result<(), std::io::Error> {
+    for filename in Assets::iter() {
+        let filename = filename.as_ref();
+
+        // 只处理 commands/ 前缀的文件
+        if !filename.starts_with("commands/") {
+            continue;
+        }
+
+        // 提取相对路径，如 "commands/review/COMMAND.md" → "review/COMMAND.md"
+        let rel_path = &filename["commands/".len()..];
+        if rel_path.is_empty() {
+            continue;
+        }
+
+        // commands 目录原封不动复制到用户数据目录
+        let dst_path = commands_dir.join(rel_path);
+        if dst_path.exists() {
+            continue;
+        }
+
+        let asset = Assets::get(filename).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("asset not found: {}", filename),
+            )
+        })?;
+
+        if let Some(parent) = dst_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::write(&dst_path, asset.data)?;
+    }
+    Ok(())
+}
+
 // ========== 预置脚本清单条目 ==========
 
 #[derive(Deserialize)]

@@ -122,6 +122,13 @@ impl ChatApp {
                 &format!("安装预设 skills 失败: {}", e),
             );
         }
+        // 安装预设 commands
+        if let Err(e) = crate::assets::install_default_commands(&command::commands_dir()) {
+            crate::util::log::write_error_log(
+                "[ChatApp::new]",
+                &format!("安装预设 commands 失败: {}", e),
+            );
+        }
 
         // 每次启动创建全新会话（session_id 由调用方生成）
         let session = ChatSession::default();
