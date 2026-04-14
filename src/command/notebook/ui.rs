@@ -756,32 +756,37 @@ fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: 
         format!(" 命令面板 [{}] ", app.cmd_popup_filter)
     };
 
-    // 构建列表项：英文 key (粗体) + 中文描述 (淡色)
-    // 使用主题颜色
-    let highlight_bg = app.theme.config_tab_active_bg;
-    let popup_bg = app.theme.bg_panel;
-    let border_color = app.theme.border_config;
-    let title_color = app.theme.config_title;
+    // 使用主题颜色（与 todo 命令面板保持一致）
+    let accent = app.theme.md_h1;
+    let popup_bg = app.theme.bg_primary;
     let text_color = app.theme.text_normal;
     let dim_color = app.theme.text_dim;
+    let label_ai = app.theme.label_ai;
+    let highlight_bg = accent;
+    let border_color = accent;
+    let title_color = accent;
 
+    // 构建列表项
+    let selected = app.cmd_popup_selected.min(item_count.saturating_sub(1));
     let list_items: Vec<ListItem> = items
         .iter()
-        .map(|(_, key, label)| {
+        .enumerate()
+        .map(|(i, (_, key, label))| {
+            let is_selected = i == selected;
+            let pointer = if is_selected { "❯ " } else { "  " };
             ListItem::new(Line::from(vec![
+                Span::styled(pointer.to_string(), Style::default().fg(text_color)),
                 Span::styled(
-                    format!("  {}", key),
-                    Style::default().fg(text_color).add_modifier(Modifier::BOLD),
+                    format!("{:<8}", key),
+                    Style::default().fg(label_ai).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" - {}", label), Style::default().fg(dim_color)),
+                Span::styled(label.to_string(), Style::default().fg(dim_color)),
             ]))
         })
         .collect();
 
     let mut list_state = ListState::default();
-    list_state.select(Some(
-        app.cmd_popup_selected.min(item_count.saturating_sub(1)),
-    ));
+    list_state.select(Some(selected));
 
     let list = List::new(list_items)
         .block(
