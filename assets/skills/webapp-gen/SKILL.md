@@ -18,33 +18,90 @@ git clone https://github.com/LingoJack/proj_template.git .
 会创建基于 react + ts + tailwindcss v4 + go 的项目脚手架
 目录结构如：
 ```bash
-➜  test_web_app git:(main) tree .
+➜  proj_template git:(main) tree . -I node_modules
 .
+├── Makefile
 ├── backend
-│   └── go.mod
-├── frontend
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── public
-│   │   ├── favicon.svg
-│   │   └── icons.svg
-│   ├── README.md
-│   ├── src
-│   │   ├── App.css
-│   │   ├── App.tsx
-│   │   ├── assets
-│   │   │   ├── hero.png
-│   │   │   ├── react.svg
-│   │   │   └── vite.svg
-│   │   ├── index.css
-│   │   └── main.tsx
-│   ├── tsconfig.app.json
-│   ├── tsconfig.json
-│   ├── tsconfig.node.json
-│   └── vite.config.ts
-└── Makefile
+│   ├── cmd
+│   │   └── server
+│   │       ├── main.go
+│   │       ├── wire.go
+│   │       └── wire_gen.go
+│   ├── config
+│   │   ├── config.go
+│   │   └── config.yaml
+│   ├── controller
+│   │   └── health.go
+│   ├── dao
+│   ├── go.mod
+│   ├── go.sum
+│   ├── middleware
+│   │   ├── auth.go
+│   │   ├── cors.go
+│   │   ├── logger.go
+│   │   ├── passthrough.go
+│   │   ├── recover.go
+│   │   └── request_id.go
+│   ├── model
+│   ├── pkg
+│   │   ├── database
+│   │   │   └── database.go
+│   │   ├── logger
+│   │   │   └── logger.go
+│   │   ├── response
+│   │   │   └── response.go
+│   │   └── validator
+│   │       └── validator.go
+│   ├── router
+│   │   └── router.go
+│   ├── service
+│   └── tool
+│       ├── aes.go
+│       ├── chinese_to_letter.go
+│       ├── concurrent.go
+│       ├── conf
+│       │   └── conf_loader.go
+│       ├── copy.go
+│       ├── cos.go
+│       ├── custom.go
+│       ├── encode.go
+│       ├── env.go
+│       ├── file.go
+│       ├── format.go
+│       ├── hash.go
+│       ├── id.go
+│       ├── ip.go
+│       ├── json_fix.go
+│       ├── json_schema.go
+│       ├── jwt.go
+│       ├── llm_json_extract.go
+│       ├── ptr.go
+│       ├── snowflask.go
+│       ├── str.go
+│       └── template_render.go
+├── docs
+└── frontend
+    ├── README.md
+    ├── eslint.config.js
+    ├── index.html
+    ├── package-lock.json
+    ├── package.json
+    ├── public
+    │   ├── favicon.svg
+    │   └── icons.svg
+    ├── src
+    │   ├── App.css
+    │   ├── App.tsx
+    │   ├── assets
+    │   │   ├── hero.png
+    │   │   ├── react.svg
+    │   │   └── vite.svg
+    │   ├── index.css
+    │   └── main.tsx
+    ├── tsconfig.app.json
+    ├── tsconfig.json
+    ├── tsconfig.node.json
+    └── vite.config.ts
 ```
   
 
