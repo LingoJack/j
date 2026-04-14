@@ -556,6 +556,10 @@ pub fn render_assistant_msg(
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
+    if content.is_empty() {
+        return;
+    }
+
     // 检测 teammate 消息：`<AgentName> 正文`
     let (agent_name, bubble_content): (String, &str) =
         if let Some((name, rest)) = parse_agent_prefix(content) {
