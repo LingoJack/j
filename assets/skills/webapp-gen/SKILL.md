@@ -15,93 +15,126 @@ description: 完整前后台 Web 应用生成技能包；1. 当用户需要快�
 mkdir <project_name> && cd <project_name> && git clone https://github.com/LingoJack/proj_template.git .
 ```
 
-会创建基于 react + ts + tailwindcss v4 + go 的项目脚手架
+会创建基于 react + ts + tailwindcss v4 + go 的项目脚示例项目
 目录结构如：
 ```bash
-➜  proj_template git:(main) tree . -I node_modules
+➜  proj_template git:(main) ✗ tree . -I node_modules
 .
-├── Makefile
 ├── backend
-│   ├── cmd
-│   │   └── server
-│   │       ├── main.go
-│   │       ├── wire.go
-│   │       └── wire_gen.go
-│   ├── config
-│   │   ├── config.go
-│   │   └── config.yaml
-│   ├── controller
-│   │   └── health.go
-│   ├── dao
-│   ├── go.mod
-│   ├── go.sum
-│   ├── middleware
-│   │   ├── auth.go
-│   │   ├── cors.go
-│   │   ├── logger.go
-│   │   ├── passthrough.go
-│   │   ├── recover.go
-│   │   └── request_id.go
-│   ├── model
-│   ├── pkg
-│   │   ├── database
-│   │   │   └── database.go
-│   │   ├── logger
-│   │   │   └── logger.go
-│   │   ├── response
-│   │   │   └── response.go
-│   │   └── validator
-│   │       └── validator.go
-│   ├── router
-│   │   └── router.go
-│   ├── service
-│   └── tool
-│       ├── aes.go
-│       ├── chinese_to_letter.go
-│       ├── concurrent.go
-│       ├── conf
-│       │   └── conf_loader.go
-│       ├── copy.go
-│       ├── cos.go
-│       ├── custom.go
-│       ├── encode.go
-│       ├── env.go
-│       ├── file.go
-│       ├── format.go
-│       ├── hash.go
-│       ├── id.go
-│       ├── ip.go
-│       ├── json_fix.go
-│       ├── json_schema.go
-│       ├── jwt.go
-│       ├── llm_json_extract.go
-│       ├── ptr.go
-│       ├── snowflask.go
-│       ├── str.go
-│       └── template_render.go
-├── docs
-└── frontend
-    ├── README.md
-    ├── eslint.config.js
-    ├── index.html
-    ├── package-lock.json
-    ├── package.json
-    ├── public
-    │   ├── favicon.svg
-    │   └── icons.svg
-    ├── src
-    │   ├── App.css
-    │   ├── App.tsx
-    │   ├── assets
-    │   │   ├── hero.png
-    │   │   ├── react.svg
-    │   │   └── vite.svg
-    │   ├── index.css
-    │   └── main.tsx
-    ├── tsconfig.app.json
-    ├── tsconfig.json
-    ├── tsconfig.node.json
-    └── vite.config.ts
+│   ├── cmd
+│   │   └── server
+│   │       ├── main.go
+│   │       ├── wire_gen.go
+│   │       └── wire.go
+│   ├── config
+│   │   ├── config.go
+│   │   └── config.yaml
+│   ├── controller
+│   │   ├── health_test.go
+│   │   ├── health.go
+│   │   └── post_controller.go
+│   ├── Dockerfile
+│   ├── docs
+│   │   └── docs.go
+│   ├── go.mod
+│   ├── go.sum
+│   ├── middleware
+│   │   ├── auth.go
+│   │   ├── cors.go
+│   │   ├── logger.go
+│   │   ├── passthrough.go
+│   │   ├── rate_limit.go
+│   │   ├── recover.go
+│   │   └── request_id.go
+│   ├── model
+│   │   └── post.go
+│   ├── pkg
+│   │   ├── database
+│   │   │   └── database.go
+│   │   ├── logger
+│   │   │   └── logger.go
+│   │   ├── response
+│   │   │   └── response.go
+│   │   └── validator
+│   │       └── validator.go
+│   ├── repository
+│   │   ├── post_repository_test.go
+│   │   └── post_repository.go
+│   ├── router
+│   │   └── router.go
+│   ├── service
+│   │   ├── post_service_test.go
+│   │   └── post_service.go
+│   └── tool
+│       ├── aes.go
+│       ├── chinese_to_letter.go
+│       ├── concurrent.go
+│       ├── conf
+│       │   └── conf_loader.go
+│       ├── copy.go
+│       ├── cos.go
+│       ├── custom.go
+│       ├── encode.go
+│       ├── env.go
+│       ├── file.go
+│       ├── format.go
+│       ├── hash.go
+│       ├── id.go
+│       ├── ip.go
+│       ├── json_fix.go
+│       ├── json_schema.go
+│       ├── jwt.go
+│       ├── llm_json_extract.go
+│       ├── ptr.go
+│       ├── snowflask.go
+│       ├── str.go
+│       └── template_render.go
+├── docker-compose.yml
+├── frontend
+│   ├── dist
+│   │   ├── assets
+│   │   │   ├── index-CiJpUzvu.css
+│   │   │   └── index-vvgvxU9P.js
+│   │   ├── favicon.svg
+│   │   ├── icons.svg
+│   │   └── index.html
+│   ├── Dockerfile
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── nginx.conf
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public
+│   │   ├── favicon.svg
+│   │   └── icons.svg
+│   ├── README.md
+│   ├── src
+│   │   ├── api
+│   │   │   ├── client.ts
+│   │   │   └── posts.ts
+│   │   ├── App.tsx
+│   │   ├── assets
+│   │   │   ├── hero.png
+│   │   │   ├── react.svg
+│   │   │   └── vite.svg
+│   │   ├── components
+│   │   │   └── Layout.tsx
+│   │   ├── hooks
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   ├── pages
+│   │   │   ├── Home.tsx
+│   │   │   └── Posts.tsx
+│   │   ├── stores
+│   │   │   └── postStore.ts
+│   │   └── types
+│   │       ├── api.ts
+│   │       └── post.ts
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+└── Makefile
 ```
   
 
