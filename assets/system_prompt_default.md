@@ -51,7 +51,12 @@ Always use the right tool for the job:
 
 <skill_system>
 Skill assets (scripts, references, etc.) are located at `{{.skill_dir}}/<skill_name>`.
-Use the LoadSkill tool to load the following skills into context:
+
+**IMPORTANT**: When a skill matches the user's request, this is a BLOCKING REQUIREMENT: invoke the LoadSkill tool BEFORE generating any other response about the task. NEVER mention a skill without actually calling the LoadSkill tool.
+
+After loading a skill, you MUST follow its instructions exactly as written. If the skill provides a step-by-step workflow, execute each step in order. Do not skip steps or improvise alternatives unless the skill explicitly allows it.
+
+Available skills:
 {{.skills}}
 </skill_system>
 

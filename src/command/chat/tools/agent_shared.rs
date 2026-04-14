@@ -47,6 +47,7 @@ impl AgentToolShared {
             Arc::clone(&self.background_manager),
             Arc::clone(&self.task_manager),
             Arc::clone(&self.hook_manager),
+            crate::command::chat::compact::new_invoked_skills_map(),
         );
         // 将权限队列传入子注册表，使子 agent 的阻塞式确认请求能到达主 TUI
         registry.permission_queue = Some(Arc::clone(&self.permission_queue));

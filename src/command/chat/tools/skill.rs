@@ -1,3 +1,4 @@
+use crate::command::chat::compact::{InvokedSkillsMap, record_skill_invocation};
 use crate::command::chat::skill::Skill;
 use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
@@ -19,6 +20,8 @@ struct LoadSkillParams {
 
 pub struct LoadSkillTool {
     pub skills: Vec<Skill>,
+    /// 已调用技能追踪（执行时记录，供 auto_compact 后恢复）
+    pub invoked_skills: InvokedSkillsMap,
 }
 
 impl LoadSkillTool {
@@ -62,6 +65,13 @@ impl Tool for LoadSkillTool {
             Some(skill) => {
                 let content = crate::command::chat::skill::resolve_skill_content(skill);
                 let resolved = content.replace("$ARGUMENTS", args_str);
+                // 记录技能调用（供 auto_compact 后恢复技能指令）
+                record_skill_invocation(
+                    &self.invoked_skills,
+                    skill.frontmatter.name.clone(),
+                    skill.dir_path.display().to_string(),
+                    resolved.clone(),
+                );
                 ToolResult {
                     output: resolved,
                     is_error: false,

@@ -250,6 +250,7 @@ fn run_oneshot_agent(
         background_manager,
         task_manager,
         hook_manager,
+        crate::command::chat::compact::new_invoked_skills_map(),
     );
 
     // 启动 Ask 请求处理线程：在终端交互式回答 AI 的提问

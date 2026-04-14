@@ -69,6 +69,12 @@ pub const COMPACT_TOKEN_THRESHOLD: usize = 256 * 800;
 /// Compact 保留最近消息数
 pub const COMPACT_KEEP_RECENT: usize = 10;
 
+/// Auto compact 后技能附件总 token 预算（~25K tokens）
+pub const COMPACT_SKILL_TOKEN_BUDGET: usize = 25_000;
+
+/// Auto compact 后单个技能的 token 预算（~5K tokens，保留头部使用说明）
+pub const COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET: usize = 5_000;
+
 // ========== 存储相关 ==========
 
 /// 消息预览最大长度

@@ -24,6 +24,8 @@ struct ToolCallContext<'a> {
     supports_vision: bool,
     shared_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     streaming_content: &'a Arc<Mutex<String>>,
+    #[allow(dead_code)]
+    invoked_skills: &'a compact::InvokedSkillsMap,
 }
 
 /// 后台 Agent 循环：支持多轮工具调用
@@ -50,6 +52,7 @@ pub async fn run_agent_loop(
         todo_manager,
         shared_messages,
         context_tokens,
+        invoked_skills,
     } = shared;
 
     let client = create_openai_client(&provider);
@@ -62,6 +65,7 @@ pub async fn run_agent_loop(
         supports_vision: provider.supports_vision,
         shared_messages: &shared_messages,
         streaming_content: &streaming_content,
+        invoked_skills: &invoked_skills,
     };
 
     'round: for _round in 0..max_tool_rounds {
@@ -80,7 +84,9 @@ pub async fn run_agent_loop(
                     "agent_loop",
                     "auto_compact triggered (token threshold exceeded)",
                 );
-                if let Err(e) = compact::auto_compact(&mut messages, &provider).await {
+                if let Err(e) =
+                    compact::auto_compact(&mut messages, &provider, &invoked_skills).await
+                {
                     write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
                 }
             }
@@ -505,7 +511,12 @@ pub async fn run_agent_loop(
                         Ok(result) => {
                             // ── Layer 3: compact tool 触发 ──
                             if result.compact_requested && compact_config.enabled {
-                                let _ = compact::auto_compact(&mut messages, &provider).await;
+                                let _ = compact::auto_compact(
+                                    &mut messages,
+                                    &provider,
+                                    &invoked_skills,
+                                )
+                                .await;
                             }
                             // ── Plan 被批准且清空上下文 ──
                             if let Some(ref plan_content) = result.plan_approved_clear_context {
@@ -617,7 +628,9 @@ pub async fn run_agent_loop(
                     Ok(result) => {
                         // ── Layer 3: compact tool 触发 ──
                         if result.compact_requested && compact_config.enabled {
-                            let _ = compact::auto_compact(&mut messages, &provider).await;
+                            let _ =
+                                compact::auto_compact(&mut messages, &provider, &invoked_skills)
+                                    .await;
                         }
                         // ── Plan 被批准且清空上下文 ──
                         if let Some(ref plan_content) = result.plan_approved_clear_context {

@@ -119,6 +119,7 @@ impl ToolRegistry {
         background_manager: Arc<background::BackgroundManager>,
         task_manager: Arc<task::TaskManager>,
         hook_manager: Arc<Mutex<crate::command::chat::hook::HookManager>>,
+        invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
     ) -> Self {
         let todo_manager = Arc::new(todo::TodoManager::new());
         let plan_mode_state = Arc::new(plan::PlanModeState::new());
@@ -188,7 +189,10 @@ impl ToolRegistry {
 
         // 如果有 skills，注册统一的 LoadSkillTool
         if !skills.is_empty() {
-            registry.register(Box::new(self::skill::LoadSkillTool { skills }));
+            registry.register(Box::new(self::skill::LoadSkillTool {
+                skills,
+                invoked_skills,
+            }));
         }
 
         registry

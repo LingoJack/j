@@ -1,7 +1,7 @@
 use super::api::create_openai_client;
 use super::constants::{
-    COMPACT_KEEP_RECENT, COMPACT_TOKEN_THRESHOLD, MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT,
-    ROLE_TOOL,
+    COMPACT_KEEP_RECENT, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET, COMPACT_SKILL_TOKEN_BUDGET,
+    COMPACT_TOKEN_THRESHOLD, MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT, ROLE_TOOL,
 };
 use super::storage::{ChatMessage, ModelProvider, agent_data_dir};
 use super::tools::ask::AskTool;
@@ -19,7 +19,110 @@ use async_openai::types::chat::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// ========== InvokedSkills 追踪 ==========
+
+/// 记录一次技能调用的完整信息（用于 auto_compact 后恢复）
+#[derive(Debug, Clone)]
+pub struct InvokedSkill {
+    /// 技能名称
+    pub name: String,
+    /// 技能目录路径
+    pub dir_path: String,
+    /// 完整的解析后内容（含 $ARGUMENTS 替换、references/scripts 列表）
+    pub content: String,
+    /// 调用时间戳（用于 LRU 排序，最近调用的优先保留）
+    pub invoked_at: u64,
+}
+
+/// 会话内已调用技能的共享状态（Agent 线程写入，auto_compact 读取）
+/// 使用 Arc<Mutex<HashMap>> 以便跨线程共享
+pub type InvokedSkillsMap = Arc<Mutex<HashMap<String, InvokedSkill>>>;
+
+/// 创建空的 InvokedSkillsMap
+pub fn new_invoked_skills_map() -> InvokedSkillsMap {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
+/// 记录一次技能调用（由 LoadSkill 工具执行后调用）
+pub fn record_skill_invocation(
+    map: &InvokedSkillsMap,
+    name: String,
+    dir_path: String,
+    content: String,
+) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if let Ok(mut skills) = map.lock() {
+        let log_name = name.clone();
+        skills.insert(
+            name.clone(),
+            InvokedSkill {
+                name,
+                dir_path,
+                content,
+                invoked_at: now,
+            },
+        );
+        write_info_log("invoked_skills", &format!("记录技能调用: {}", log_name));
+    }
+}
+
+/// 构建 auto_compact 后需恢复的技能附件内容
+/// 按最近调用时间排序，总预算 COMPACT_SKILL_TOKEN_BUDGET tokens，
+/// 每个技能截断到 COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET tokens
+pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String> {
+    let skills = map.lock().ok()?;
+    if skills.is_empty() {
+        return None;
+    }
+
+    // 按最近调用时间排序（新→旧）
+    let mut sorted: Vec<&InvokedSkill> = skills.values().collect();
+    sorted.sort_by(|a, b| b.invoked_at.cmp(&a.invoked_at));
+
+    let mut result =
+        String::from("Skills invoked in this session (preserved across compaction):\n\n");
+    let mut total_tokens = 0usize;
+    let per_skill_budget = COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET;
+    let total_budget = COMPACT_SKILL_TOKEN_BUDGET;
+
+    for skill in sorted {
+        let skill_tokens = skill.content.len() / 4; // 粗略估算
+        let available = if total_tokens + per_skill_budget > total_budget {
+            total_budget.saturating_sub(total_tokens)
+        } else {
+            per_skill_budget
+        };
+        if available == 0 {
+            break;
+        }
+
+        result.push_str(&format!("### Skill: {}\n", skill.name));
+        result.push_str(&format!("Path: {}\n", skill.dir_path));
+
+        if skill_tokens <= available {
+            result.push_str(&skill.content);
+            total_tokens += skill_tokens;
+        } else {
+            // 截断到 available tokens (~4 chars/token)，保留头部（通常包含最关键的使用说明）
+            let truncation_point = available * 4;
+            let truncated: String = skill.content.chars().take(truncation_point).collect();
+            result.push_str(&truncated);
+            result.push_str("\n\n[... skill content truncated for compaction ...]");
+            total_tokens += available;
+        }
+        result.push_str("\n\n---\n\n");
+    }
+
+    Some(result)
+}
+
+// ========== Compact 配置 ==========
 
 /// Context compact 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,23 +285,36 @@ fn save_transcript(messages: &[ChatMessage]) -> Option<String> {
 ///
 /// 需要调用 LLM（非流式，max_tokens=20000）。
 /// 失败时 graceful degradation：log 错误，返回 Err，调用方可继续用原消息。
+///
+/// `invoked_skills`: 会话内已调用技能的共享状态，auto_compact 后将技能指令作为附件重新注入，
+/// 确保模型在压缩后仍能遵循正在执行的技能/工作流。
 pub async fn auto_compact(
     messages: &mut Vec<ChatMessage>,
     provider: &ModelProvider,
+    invoked_skills: &InvokedSkillsMap,
 ) -> Result<(), String> {
     // 1. 保存 transcript
     let transcript_path = save_transcript(messages).unwrap_or_else(|| "(unsaved)".to_string());
 
-    // 2. 构建摘要请求
+    // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
     let conversation_text = serde_json::to_string(messages).unwrap_or_default();
     // 截断到 80000 chars
     let truncated: String = conversation_text.chars().take(80000).collect();
 
     let summary_prompt = format!(
-        "Summarize this conversation for continuity. Include: \
-         1) What was accomplished, 2) Current state, 3) Key decisions made. \
-         4) If a skill/workflow was actively being followed, preserve its key steps and current progress so the model can continue following it. \
-         Be concise but preserve critical details.\n\n{}",
+        "Summarize this conversation for continuity. Use this structured format:\n\
+         1) **Primary Request**: What the user originally asked for.\n\
+         2) **Key Concepts**: Important technical concepts, domain knowledge, or constraints discovered.\n\
+         3) **Files and Code**: Key files read or modified, with important code snippets or decisions.\n\
+         4) **Errors and Fixes**: Any errors encountered and how they were resolved.\n\
+         5) **Problem Solving**: Reasoning steps and approach taken.\n\
+         6) **Active Skills/Workflows**: If a skill or workflow was being followed, list its name, key steps, and current progress. Include direct quotes showing exactly where you left off.\n\
+         7) **Pending Tasks**: Things that still need to be done.\n\
+         8) **Current Work**: What was being worked on most recently. Include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off.\n\
+         9) **Next Step**: What should happen next to continue the work.\n\
+         \n\
+         Be concise but preserve critical details. Section 6 (Active Skills/Workflows) is especially important — preserve all skill instructions and progress so the model can continue following them without re-loading.\n\n\
+         {}",
         truncated
     );
 
@@ -234,20 +350,35 @@ pub async fn auto_compact(
     );
 
     // 4. 替换 messages 为 [summary_user_msg, understood_assistant_msg]
+    //    如果有已调用技能，将技能指令作为附件重新注入，确保压缩后仍可遵循
     messages.clear();
+    let mut summary_content = format!(
+        "[Conversation compressed. Transcript: {}]\n\n{}",
+        transcript_path, summary
+    );
+
+    // 注入已调用技能附件（结构化保留，类似 Claude Code 的 invoked_skills 机制）
+    if let Some(skills_attachment) = build_invoked_skills_attachment(invoked_skills) {
+        summary_content.push_str(&format!(
+            "\n\n<system-reminder>\n{}\n</system-reminder>",
+            skills_attachment
+        ));
+        write_info_log(
+            "auto_compact",
+            "已注入 invoked_skills 附件，确保压缩后技能指令可继续遵循",
+        );
+    }
+
     messages.push(ChatMessage {
         role: "user".to_string(),
-        content: format!(
-            "[Conversation compressed. Transcript: {}]\n\n{}",
-            transcript_path, summary
-        ),
+        content: summary_content,
         tool_calls: None,
         tool_call_id: None,
         images: None,
     });
     messages.push(ChatMessage {
         role: ROLE_ASSISTANT.to_string(),
-        content: "Understood. I have the context from the summary. Continuing.".to_string(),
+        content: "Understood. I have the context from the summary and any active skill instructions. Continuing to follow them.".to_string(),
         tool_calls: None,
         tool_call_id: None,
         images: None,

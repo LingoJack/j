@@ -88,6 +88,8 @@ pub struct ChatApp {
     pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
     pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
+    /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
+    pub invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -155,12 +157,14 @@ impl ChatApp {
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(crate::command::chat::tools::task::TaskManager::new());
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
+        let invoked_skills = crate::command::chat::compact::new_invoked_skills_map();
         let mut tool_registry = ToolRegistry::new(
             loaded_skills.clone(),
             ask_req_tx,
             Arc::clone(&background_manager),
             Arc::clone(&task_manager),
             Arc::clone(&hook_manager),
+            Arc::clone(&invoked_skills),
         );
         let todo_manager = Arc::clone(&tool_registry.todo_manager);
 
@@ -453,6 +457,7 @@ impl ChatApp {
             teammate_manager,
             permission_queue,
             plan_approval_queue,
+            invoked_skills,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -2258,6 +2263,7 @@ impl ChatApp {
             todo_manager,
             shared_messages: Arc::clone(&self.shared_agent_messages),
             context_tokens: Arc::clone(&self.context_tokens),
+            invoked_skills: Arc::clone(&self.invoked_skills),
         };
         let (handle, tool_result_tx) = AgentHandle::spawn(
             agent_config,
