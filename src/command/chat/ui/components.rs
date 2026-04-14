@@ -445,8 +445,8 @@ pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
 pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<'a>> {
     use unicode_width::UnicodeWidthStr;
 
-    // 框体内部宽度：取终端内宽的一半，最少 30，最多 60
-    let inner = ((width as usize) / 2).clamp(30, 60);
+    // 框体内部宽度：取终端内宽的一半，最少 30，最多 55
+    let inner = ((width as usize) / 2).clamp(30, 55);
     let box_w = inner + 2;
 
     let total_w = width as usize;
@@ -485,36 +485,49 @@ pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<
     let text_area = inner.saturating_sub(2);
     let quote = super::quotes::get_quote(quote_idx);
 
-    // 中文标点：直接断行（不受宽度限制）
-    // 英文标点：需已累积至半行以上
+    // ── 诗句换行逻辑 ──
+    // 先判断整句是否能放下：能放下则整行显示，否则按标点断行
+    let quote_width = quote
+        .chars()
+        .map(|c| UnicodeWidthStr::width(c.to_string().as_str()))
+        .sum::<usize>();
+
     let cn_break = ['，', '。', '！', '？', '；', '：'];
     let en_break = [',', '.', '!', '?'];
-    let mut lines_chars: Vec<Vec<char>> = Vec::new();
-    let mut cur: Vec<char> = Vec::new();
-    let mut cur_w = 0usize;
 
-    for ch in quote.chars() {
-        let cw = UnicodeWidthStr::width(ch.to_string().as_str());
-        // 超宽：先把当前行入列，再开新行
-        if cur_w + cw > text_area && !cur.is_empty() {
-            lines_chars.push(std::mem::take(&mut cur));
-            cur_w = 0;
+    // 能放下就不断行，直接返回单行
+    let lines_chars: Vec<Vec<char>> = if quote_width <= text_area {
+        vec![quote.chars().collect()]
+    } else {
+        // 放不下才按标点断行
+        let mut lines_chars: Vec<Vec<char>> = Vec::new();
+        let mut cur: Vec<char> = Vec::new();
+        let mut cur_w = 0usize;
+
+        for ch in quote.chars() {
+            let cw = UnicodeWidthStr::width(ch.to_string().as_str());
+            // 超宽：先把当前行入列，再开新行
+            if cur_w + cw > text_area && !cur.is_empty() {
+                lines_chars.push(std::mem::take(&mut cur));
+                cur_w = 0;
+            }
+            cur.push(ch);
+            cur_w += cw;
+            // 中文标点：无条件断行
+            if cn_break.contains(&ch) {
+                lines_chars.push(std::mem::take(&mut cur));
+                cur_w = 0;
+            } else if en_break.contains(&ch) && cur_w * 2 >= text_area {
+                // 英文标点：需已累积至半行以上
+                lines_chars.push(std::mem::take(&mut cur));
+                cur_w = 0;
+            }
         }
-        cur.push(ch);
-        cur_w += cw;
-        // 中文标点：无条件断行
-        if cn_break.contains(&ch) {
-            lines_chars.push(std::mem::take(&mut cur));
-            cur_w = 0;
-        } else if en_break.contains(&ch) && cur_w * 2 >= text_area {
-            // 英文标点：保留原逻辑（需已累积至半行以上）
-            lines_chars.push(std::mem::take(&mut cur));
-            cur_w = 0;
+        if !cur.is_empty() {
+            lines_chars.push(cur);
         }
-    }
-    if !cur.is_empty() {
-        lines_chars.push(cur);
-    }
+        lines_chars
+    };
 
     // ── 全局渐变：整句诗从首字到末字连续插值 ──
     let total_chars: usize = lines_chars.iter().map(|l| l.len()).sum();
