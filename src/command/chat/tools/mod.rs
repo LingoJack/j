@@ -50,6 +50,7 @@ pub fn parse_tool_args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<
         output: format!("参数解析失败: {}", e),
         is_error: true,
         images: vec![],
+        plan_decision: PlanDecision::None,
     })
 }
 
@@ -72,7 +73,12 @@ pub struct ToolResult {
     pub is_error: bool,
     /// 可选的图片数据（用于多模态模型，由 agent loop 决定是否注入）
     pub images: Vec<ImageData>,
+    /// Plan 审批决策（仅 ExitPlanMode 工具会设置非 None 值）
+    pub plan_decision: crate::command::chat::app::types::PlanDecision,
 }
+
+/// Re-export PlanDecision for convenience
+pub use crate::command::chat::app::types::PlanDecision;
 
 // ========== Tool trait ==========
 
@@ -263,6 +269,7 @@ impl ToolRegistry {
                     ),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         }
@@ -273,6 +280,7 @@ impl ToolRegistry {
                 output: format!("未知工具: {}", name),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

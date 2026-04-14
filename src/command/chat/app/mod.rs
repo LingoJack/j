@@ -3,7 +3,7 @@ mod agent_handle;
 mod chat_app;
 mod chat_state;
 mod tool_executor;
-mod types;
+pub mod types;
 mod ui_state;
 
 pub use action::*;

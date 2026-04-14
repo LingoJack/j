@@ -7,7 +7,7 @@ mod preview;
 mod screenshot;
 mod som;
 
-use crate::command::chat::tools::{ImageData, Tool, ToolResult, schema_to_tool_params};
+use crate::command::chat::tools::{    PlanDecision,ImageData, Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -349,12 +349,14 @@ end tell
                             base64: b64,
                             media_type: "image/png".to_string(),
                         }],
+                        plan_decision: PlanDecision::None,
                     }
                 }
                 Err(e) => ToolResult {
                     output: format!("截屏失败: {}", e),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 },
             }
         } else {
@@ -369,12 +371,14 @@ end tell
                             base64: b64,
                             media_type: "image/png".to_string(),
                         }],
+                        plan_decision: PlanDecision::None,
                     }
                 }
                 Err(e) => ToolResult {
                     output: format!("截屏失败: {}", e),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 },
             }
         }
@@ -414,6 +418,7 @@ end tell
                                     ),
                                     is_error: false,
                                     images: vec![],
+                                    plan_decision: PlanDecision::None,
                                 };
                             }
                             Err(_) => {
@@ -433,6 +438,7 @@ end tell
                                 ),
                                 is_error: false,
                                 images: vec![],
+                                plan_decision: PlanDecision::None,
                             };
                         }
                         Err(e) => {
@@ -440,6 +446,7 @@ end tell
                                 output: format!("{} 失败: {}", click_type, e),
                                 is_error: true,
                                 images: vec![],
+                                plan_decision: PlanDecision::None,
                             };
                         }
                     }
@@ -449,6 +456,7 @@ end tell
                         output: e,
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -462,6 +470,7 @@ end tell
                     output: e,
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -476,12 +485,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("{} 失败: {}", click_type, e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -494,6 +505,7 @@ end tell
                     output: "缺少 text 参数".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -511,12 +523,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("输入失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -529,6 +543,7 @@ end tell
                     output: "缺少 key 参数".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -540,12 +555,14 @@ end tell
                     output: format!("[按键完成] key: {}\n当前活跃窗口: {}", key, active_window),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("按键失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -562,6 +579,7 @@ end tell
                     output: "缺少 keys 数组参数".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -571,6 +589,7 @@ end tell
                 output: "key_combo 至少需要 2 个键".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -585,12 +604,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("组合键失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -616,12 +637,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("滚动失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -637,6 +660,7 @@ end tell
                         output: format!("起点解析失败: {}", e),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -650,6 +674,7 @@ end tell
                         output: "缺少 start_x/start_y 或 start_element 参数".to_string(),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -665,6 +690,7 @@ end tell
                         output: format!("终点解析失败: {}", e),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -678,6 +704,7 @@ end tell
                         output: "缺少 end_x/end_y 或 end_element 参数".to_string(),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -697,12 +724,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("拖拽失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -732,12 +761,14 @@ end tell
                     output,
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("获取无障碍树失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -750,6 +781,7 @@ end tell
                     output: "缺少 query 参数".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -768,12 +800,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("搜索元素失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -786,6 +820,7 @@ end tell
                     output: "缺少 app 参数".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -804,6 +839,7 @@ end tell
                         ),
                         is_error: false,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     }
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -811,6 +847,7 @@ end tell
                         output: format!("聚焦应用失败: {}", stderr.trim()),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     }
                 }
             }
@@ -818,6 +855,7 @@ end tell
                 output: format!("聚焦应用失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -833,12 +871,14 @@ end tell
                     ),
                     is_error: false,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
             None => ToolResult {
                 output: "获取光标位置失败".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -852,6 +892,7 @@ end tell
                     output: "缺少 action 参数".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -874,6 +915,7 @@ end tell
                 output: format!("未知 action: {}", action),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -990,6 +1032,7 @@ impl Tool for ComputerUseTool {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };

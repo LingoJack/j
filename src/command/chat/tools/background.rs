@@ -1,4 +1,4 @@
-use super::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use super::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -270,6 +270,7 @@ impl Tool for TaskOutputTool {
                 output: format!("后台任务 {} 不存在", params.task_id),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -297,6 +298,7 @@ impl Tool for TaskOutputTool {
                         output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
                         is_error: false,
                         images: vec![],
+                plan_decision: PlanDecision::None,
                     };
                 }
                 if Instant::now() >= deadline {
@@ -316,6 +318,7 @@ impl Tool for TaskOutputTool {
                         output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
                         is_error: false,
                         images: vec![],
+                plan_decision: PlanDecision::None,
                     };
                 }
                 std::thread::sleep(Duration::from_millis(50));
@@ -328,11 +331,13 @@ impl Tool for TaskOutputTool {
                 output: serde_json::to_string_pretty(&info).unwrap_or_default(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
             None => ToolResult {
                 output: format!("后台任务 {} 不存在", params.task_id),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

@@ -2,7 +2,7 @@ use crate::command::chat::constants::{
     WEB_REQUEST_TIMEOUT_SECS, WEB_SEARCH_DEFAULT_COUNT, WEB_SEARCH_HIGHLIGHTS_MAX_CHARS,
     WEB_SEARCH_MAX_COUNT,
 };
-use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -85,6 +85,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
                 output: "未设置 EXA_API_KEY 环境变量。请在 https://exa.ai/ 获取 API Key 并设置环境变量。".to_string(),
                 is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
     };
@@ -111,6 +112,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
                 output: format!("创建 HTTP 客户端失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
     };
@@ -129,6 +131,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
                 output: format!("Exa Search 请求失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
     };
@@ -140,6 +143,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
             output: format!("Exa Search API 错误 {}: {}", status.as_u16(), body),
             is_error: true,
             images: vec![],
+                plan_decision: PlanDecision::None,
         };
     }
 
@@ -150,6 +154,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
                 output: format!("解析 Exa Search 响应失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
     };
@@ -161,6 +166,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
                 output: "未找到搜索结果".to_string(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
     };
@@ -170,6 +176,7 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
             output: "未找到搜索结果".to_string(),
             is_error: false,
             images: vec![],
+                plan_decision: PlanDecision::None,
         };
     }
 
@@ -209,5 +216,6 @@ fn exec_search(params: &WebSearchParams) -> ToolResult {
         output,
         is_error: false,
         images: vec![],
+                plan_decision: PlanDecision::None,
     }
 }

@@ -1,5 +1,5 @@
 use crate::command::chat::teammate::TeammateManager;
-use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -68,6 +68,7 @@ impl Tool for SendMessageTool {
                 output: "Message cannot be empty".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -84,12 +85,14 @@ impl Tool for SendMessageTool {
                     output: format!("Message sent to {}", target_desc),
                     is_error: false,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 }
             }
             Err(_) => ToolResult {
                 output: "Failed to acquire teammate manager lock".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

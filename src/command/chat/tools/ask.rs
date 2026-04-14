@@ -1,5 +1,5 @@
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
-use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -95,6 +95,7 @@ impl Tool for AskTool {
                 output: "questions 数量必须为 1-4 个".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -105,6 +106,7 @@ impl Tool for AskTool {
                     output: format!("问题 '{}' 的选项数量必须为 2-4 个", q.question),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 };
             }
 
@@ -136,6 +138,7 @@ impl Tool for AskTool {
                 output: "无法发送提问请求（主线程可能已退出）".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -145,11 +148,13 @@ impl Tool for AskTool {
                 output: response,
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
             Err(_) => ToolResult {
                 output: "等待用户响应时连接断开".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

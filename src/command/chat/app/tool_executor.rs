@@ -1,4 +1,4 @@
-use super::types::{CompletedToolResult, ToolCallStatus, ToolExecStatus, ToolResultMsg};
+use super::types::{CompletedToolResult, PlanDecision, ToolCallStatus, ToolExecStatus, ToolResultMsg};
 use super::ui_state::ChatMode;
 use crate::command::chat::constants::TOOL_OUTPUT_SUMMARY_MAX_LEN;
 use crate::command::chat::permission::JcliConfig;
@@ -138,9 +138,9 @@ impl ToolExecutor {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     registry.execute(&tool_name, &arguments, &cancelled)
                 }));
-                let (output, is_error, images) = match result {
+                let (output, is_error, images, plan_decision) = match result {
                     Ok(exec_result) => {
-                        (exec_result.output, exec_result.is_error, exec_result.images)
+                        (exec_result.output, exec_result.is_error, exec_result.images, exec_result.plan_decision)
                     }
                     Err(panic_info) => {
                         let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
@@ -150,7 +150,7 @@ impl ToolExecutor {
                         } else {
                             "unknown panic".to_string()
                         };
-                        (format!("[Tool panic] {}", msg), true, vec![])
+                        (format!("[Tool panic] {}", msg), true, vec![], PlanDecision::None)
                     }
                 };
                 // 生成摘要供 UI 显示
@@ -188,6 +188,7 @@ impl ToolExecutor {
                         result: output,
                         is_error,
                         images,
+                        plan_decision,
                     });
                 }
             });
@@ -234,8 +235,8 @@ impl ToolExecutor {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 registry.execute(&tool_name, &arguments, &cancelled)
             }));
-            let (output, is_error, images) = match result {
-                Ok(exec_result) => (exec_result.output, exec_result.is_error, exec_result.images),
+            let (output, is_error, images, plan_decision) = match result {
+                Ok(exec_result) => (exec_result.output, exec_result.is_error, exec_result.images, exec_result.plan_decision),
                 Err(panic_info) => {
                     let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
                         s.to_string()
@@ -244,7 +245,7 @@ impl ToolExecutor {
                     } else {
                         "unknown panic".to_string()
                     };
-                    (format!("[Tool panic] {}", msg), true, vec![])
+                    (format!("[Tool panic] {}", msg), true, vec![], PlanDecision::None)
                 }
             };
             // 生成摘要供 UI 显示
@@ -272,6 +273,7 @@ impl ToolExecutor {
                     result: output,
                     is_error,
                     images,
+                    plan_decision,
                 });
             }
         });
@@ -301,6 +303,7 @@ impl ToolExecutor {
                 result: reject_msg,
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             });
         }
 

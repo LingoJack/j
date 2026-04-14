@@ -1,6 +1,6 @@
 use super::agent_config::{AgentLoopConfig, AgentSharedState};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
-use super::app::{StreamMsg, ToolResultMsg};
+use super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::compact;
 use super::error::ChatError;
 use super::hook::{HookContext, HookEvent, HookManager};
@@ -806,14 +806,8 @@ fn process_tool_calls(
         match ctx.tool_result_rx.recv() {
             Ok(result) => {
                 // 检测 ExitPlanMode 返回清空上下文信号
-                if result.result.starts_with("PLAN_CLEAR_CONTEXT:") {
-                    plan_clear_context = Some(
-                        result
-                            .result
-                            .strip_prefix("PLAN_CLEAR_CONTEXT:")
-                            .unwrap_or("")
-                            .to_string(),
-                    );
+                if result.plan_decision == PlanDecision::ApproveAndClearContext {
+                    plan_clear_context = Some(result.result.clone());
                 }
                 tool_results.push(result);
             }

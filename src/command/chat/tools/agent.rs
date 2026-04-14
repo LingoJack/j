@@ -4,7 +4,7 @@ use crate::command::chat::tools::agent_shared::{
     AgentToolShared, call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
     extract_tool_items,
 };
-use crate::command::chat::tools::{
+use crate::command::chat::tools::{    PlanDecision,
     Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
 use crate::util::log::write_info_log;
@@ -126,6 +126,7 @@ impl Tool for AgentTool {
                         output: format!("创建 worktree 失败: {}", e),
                         is_error: true,
                         images: vec![],
+                plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -184,6 +185,7 @@ impl Tool for AgentTool {
                 .to_string(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             }
         } else {
             // 前台模式：阻塞执行
@@ -217,6 +219,7 @@ impl Tool for AgentTool {
                 output: result,
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             }
         }
     }

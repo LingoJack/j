@@ -1,4 +1,4 @@
-use super::super::{Tool, ToolResult, schema_to_tool_params};
+use super::super::{PlanDecision, Tool, ToolResult, schema_to_tool_params};
 use super::todo_manager::TodoManager;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -37,12 +37,14 @@ impl Tool for TodoReadTool {
                 output: "No todo items found. Use TodoWrite to create new items.".to_string(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
         ToolResult {
             output: serde_json::to_string_pretty(&items).unwrap_or_default(),
             is_error: false,
             images: vec![],
+                plan_decision: PlanDecision::None,
         }
     }
 }

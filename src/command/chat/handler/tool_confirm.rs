@@ -92,19 +92,27 @@ pub fn handle_agent_perm_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     }
 }
 
-/// Teammate Plan 审批确认模式：Y/Enter 批准，N/Esc 拒绝
+/// Teammate Plan 审批确认模式：Y/Enter 批准，C 批准并清空上下文，N/Esc 拒绝
 pub fn handle_plan_approval_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
+    use crate::command::chat::app::types::PlanDecision;
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
             if let Some(req) = app.ui.pending_plan_approval.take() {
-                req.resolve(true);
+                req.resolve(PlanDecision::Approve);
+            }
+            app.ui.mode = ChatMode::Chat;
+            app.ui.msg_lines_cache = None;
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            if let Some(req) = app.ui.pending_plan_approval.take() {
+                req.resolve(PlanDecision::ApproveAndClearContext);
             }
             app.ui.mode = ChatMode::Chat;
             app.ui.msg_lines_cache = None;
         }
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
             if let Some(req) = app.ui.pending_plan_approval.take() {
-                req.resolve(false);
+                req.resolve(PlanDecision::Reject);
             }
             app.ui.mode = ChatMode::Chat;
             app.ui.msg_lines_cache = None;

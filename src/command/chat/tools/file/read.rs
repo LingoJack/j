@@ -1,4 +1,4 @@
-use crate::command::chat::tools::{
+use crate::command::chat::tools::{    PlanDecision,
     ImageData, Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
 };
 use schemars::JsonSchema;
@@ -115,12 +115,14 @@ impl Tool for ReadFileTool {
                     output: result,
                     is_error: false,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("读取文件失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -164,12 +166,14 @@ fn read_image_file(path: &str) -> ToolResult {
                     base64: b64,
                     media_type: media_type.to_string(),
                 }],
+                plan_decision: PlanDecision::None,
             }
         }
         Err(e) => ToolResult {
             output: format!("读取图片文件失败: {}", e),
             is_error: true,
             images: vec![],
+            plan_decision: PlanDecision::None,
         },
     }
 }

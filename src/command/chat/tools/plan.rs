@@ -1,3 +1,4 @@
+use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
 use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
@@ -16,8 +17,8 @@ pub struct PendingPlanApproval {
     pub plan_content: String,
     /// Plan 名称（plan-xxx.md 的 xxx）
     pub plan_name: String,
-    /// 决策通知（None=未决, Some(true)=批准, Some(false)=拒绝）
-    decision: Arc<(Mutex<Option<bool>>, Condvar)>,
+    /// 决策通知（None=未决, Some(PlanDecision)=已决）
+    decision: Arc<(Mutex<Option<PlanDecision>>, Condvar)>,
 }
 
 impl PendingPlanApproval {
@@ -30,23 +31,26 @@ impl PendingPlanApproval {
         })
     }
 
-    /// Teammate 线程调用：阻塞等待决策，超时返回 false（拒绝）
-    pub fn wait_for_decision(&self, timeout_secs: u64) -> bool {
+    /// Teammate 线程调用：阻塞等待决策，超时返回 Reject
+    pub fn wait_for_decision(&self, timeout_secs: u64) -> PlanDecision {
         let (lock, cvar) = &*self.decision;
         let guard = lock.lock().unwrap();
-        let (guard, _timed_out) = cvar
+        let (mut guard, _timed_out) = cvar
             .wait_timeout_while(guard, std::time::Duration::from_secs(timeout_secs), |d| {
                 d.is_none()
             })
             .unwrap();
-        guard.unwrap_or(false)
+        if guard.is_none() {
+            *guard = Some(PlanDecision::Reject);
+        }
+        guard.clone().unwrap_or(PlanDecision::Reject)
     }
 
     /// TUI 线程调用：设置决策并唤醒等待的 teammate 线程
-    pub fn resolve(&self, approved: bool) {
+    pub fn resolve(&self, decision: PlanDecision) {
         let (lock, cvar) = &*self.decision;
         let mut d = lock.lock().unwrap();
-        *d = Some(approved);
+        *d = Some(decision);
         cvar.notify_one();
     }
 
@@ -76,8 +80,8 @@ impl PlanApprovalQueue {
     }
 
     /// Teammate 线程调用：把请求加入队列并阻塞等待（最长 120 秒）
-    /// 返回 true 表示用户批准，false 表示拒绝或超时
-    pub fn request_blocking(&self, req: Arc<PendingPlanApproval>) -> bool {
+    /// 返回 PlanDecision 表示用户决策
+    pub fn request_blocking(&self, req: Arc<PendingPlanApproval>) -> PlanDecision {
         {
             let mut q = self.pending.lock().unwrap();
             q.push_back(Arc::clone(&req));
@@ -94,7 +98,7 @@ impl PlanApprovalQueue {
     pub fn deny_all(&self) {
         let mut q = self.pending.lock().unwrap();
         for req in q.drain(..) {
-            req.resolve(false);
+            req.resolve(PlanDecision::Reject);
         }
     }
 }
@@ -321,11 +325,13 @@ impl Tool for EnterPlanModeTool {
                 ),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
             Err(msg) => ToolResult {
                 output: msg,
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -394,6 +400,7 @@ impl Tool for ExitPlanModeTool {
                 output: "Not in plan mode. Use EnterPlanMode first.".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -406,6 +413,7 @@ impl Tool for ExitPlanModeTool {
                         output: format!("Failed to read plan file: {}", e),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     };
                 }
             },
@@ -414,6 +422,7 @@ impl Tool for ExitPlanModeTool {
                     output: "No plan file path set.".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -432,30 +441,51 @@ impl Tool for ExitPlanModeTool {
                     .unwrap_or("Plan")
                     .to_string();
 
-                let req = PendingPlanApproval::new(agent_name, plan_content, plan_name);
+                let req = PendingPlanApproval::new(agent_name, plan_content.clone(), plan_name);
+                let decision = queue.request_blocking(req);
 
-                let approved = queue.request_blocking(req);
-
-                if approved {
-                    let plan_file_path = self.plan_state.get_plan_file_path();
-                    self.plan_state.exit();
-                    let preserved_msg = plan_file_path
-                        .as_deref()
-                        .map(|p| format!("\nPlan file preserved at: {}", p))
-                        .unwrap_or_default();
-                    ToolResult {
-                        output: format!(
-                            "Plan approved! Exited plan mode. You can now proceed with implementation.{}",
-                            preserved_msg
-                        ),
-                        is_error: false,
-                        images: vec![],
+                match decision {
+                    PlanDecision::Approve => {
+                        let plan_file_path = self.plan_state.get_plan_file_path();
+                        self.plan_state.exit();
+                        let preserved_msg = plan_file_path
+                            .as_deref()
+                            .map(|p| format!("\nPlan file preserved at: {}", p))
+                            .unwrap_or_default();
+                        ToolResult {
+                            output: format!(
+                                "Plan approved! Exited plan mode. You can now proceed with implementation.{}",
+                                preserved_msg
+                            ),
+                            is_error: false,
+                            images: vec![],
+                            plan_decision: PlanDecision::Approve,
+                        }
                     }
-                } else {
-                    ToolResult {
-                        output: "Plan was not approved. Still in plan mode. Please revise your plan and try ExitPlanMode again.".to_string(),
-                        is_error: false,
-                        images: vec![],
+                    PlanDecision::ApproveAndClearContext => {
+                        let plan_file_path = self.plan_state.get_plan_file_path();
+                        self.plan_state.exit();
+                        let preserved_msg = plan_file_path
+                            .as_deref()
+                            .map(|p| format!("\nPlan file preserved at: {}", p))
+                            .unwrap_or_default();
+                        ToolResult {
+                            output: format!(
+                                "Plan approved with context clear! Exited plan mode.{}",
+                                preserved_msg
+                            ),
+                            is_error: false,
+                            images: vec![],
+                            plan_decision: PlanDecision::ApproveAndClearContext,
+                        }
+                    }
+                    PlanDecision::Reject | PlanDecision::None => {
+                        ToolResult {
+                            output: "Plan was not approved. Still in plan mode. Please revise your plan and try ExitPlanMode again.".to_string(),
+                            is_error: false,
+                            images: vec![],
+                            plan_decision: PlanDecision::Reject,
+                        }
                     }
                 }
             } else {
@@ -464,6 +494,7 @@ impl Tool for ExitPlanModeTool {
                     output: "Plan approval not available in sub-agent mode (no queue). Add permission rules to avoid plan mode in teammates.".to_string(),
                     is_error: true,
                     images: vec![],
+                    plan_decision: PlanDecision::None,
                 }
             }
         } else {
@@ -478,15 +509,12 @@ impl Tool for ExitPlanModeTool {
 }
 
 impl ExitPlanModeTool {
-    /// 主 agent 通过 ask_tx 通道审批（原有逻辑）
+    /// 主 agent 通过 ask_tx 通道审批
     fn execute_via_ask_tx(&self, plan_content: &str) -> ToolResult {
         // 通过 Ask 机制发送审批请求
         let (response_tx, response_rx) = mpsc::channel::<String>();
 
-        let question_text = format!(
-            "请审阅以下实施计划：\n\n{}\n\n是否批准此计划？",
-            plan_content
-        );
+        let question_text = format!("请审阅以下实施计划，选择操作：\n\n{}", plan_content);
 
         // 从 plan 文件路径提取计划名（plan-xxx.md → xxx）
         let plan_file_path = self.plan_state.get_plan_file_path().unwrap_or_default();
@@ -502,16 +530,16 @@ impl ExitPlanModeTool {
                 header: plan_name.to_string(),
                 options: vec![
                     AskOption {
-                        label: "同意".to_string(),
-                        description: "批准计划并开始实施".to_string(),
+                        label: "批准计划".to_string(),
+                        description: "批准此计划，保留当前上下文，开始实施".to_string(),
                     },
                     AskOption {
-                        label: "同意并清空上下文".to_string(),
-                        description: "批准计划，清空之前的探索上下文，只保留计划内容".to_string(),
+                        label: "批准并清空上下文".to_string(),
+                        description: "批准计划并清空探索过程中的对话上下文，仅保留计划内容继续实施".to_string(),
                     },
                     AskOption {
-                        label: "拒绝".to_string(),
-                        description: "拒绝计划，继续留在 plan mode 修改".to_string(),
+                        label: "驳回计划".to_string(),
+                        description: "拒绝此计划，留在 Plan Mode 中修改方案".to_string(),
                     },
                 ],
                 multi_select: false,
@@ -524,27 +552,30 @@ impl ExitPlanModeTool {
                 output: "Failed to send approval request (main thread may have exited)".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
         // 阻塞等待用户审批结果
         match response_rx.recv() {
             Ok(response) => {
-                if response.contains("同意并清空上下文") {
+                if response.contains("批准并清空上下文") {
                     let plan_file_path = self.plan_state.get_plan_file_path();
                     self.plan_state.exit();
-                    // plan 文件保留不删除，告知路径
                     let preserved_msg = plan_file_path
                         .as_deref()
                         .map(|p| format!("\nPlan file preserved at: {}", p))
                         .unwrap_or_default();
-                    // 用 PLAN_CLEAR_CONTEXT: 前缀传递计划内容，agent loop 检测到此信号后清空上下文
                     ToolResult {
-                        output: format!("PLAN_CLEAR_CONTEXT:{}{}", plan_content, preserved_msg),
+                        output: format!(
+                            "Plan approved with context clear! Exited plan mode.{}",
+                            preserved_msg
+                        ),
                         is_error: false,
                         images: vec![],
+                        plan_decision: PlanDecision::ApproveAndClearContext,
                     }
-                } else if response.contains("同意") {
+                } else if response.contains("批准") {
                     let plan_file_path = self.plan_state.get_plan_file_path();
                     self.plan_state.exit();
                     let preserved_msg = plan_file_path
@@ -558,6 +589,7 @@ impl ExitPlanModeTool {
                         ),
                         is_error: false,
                         images: vec![],
+                        plan_decision: PlanDecision::Approve,
                     }
                 } else {
                     // 保持 plan mode，让 agent 修改 plan
@@ -568,6 +600,7 @@ impl ExitPlanModeTool {
                         ),
                         is_error: false,
                         images: vec![],
+                        plan_decision: PlanDecision::Reject,
                     }
                 }
             }
@@ -575,6 +608,7 @@ impl ExitPlanModeTool {
                 output: "Connection lost while waiting for approval".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

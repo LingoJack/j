@@ -2,6 +2,22 @@ use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ToolCallItem;
 use std::sync::mpsc;
 
+// ========== Plan 审批决策类型 ==========
+
+/// Plan 审批决策结果
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum PlanDecision {
+    /// 无 Plan 决策（普通工具结果）
+    #[default]
+    None,
+    /// 批准计划，保留当前上下文
+    Approve,
+    /// 批准计划并清空探索上下文
+    ApproveAndClearContext,
+    /// 驳回计划，留在 Plan Mode 修改
+    Reject,
+}
+
 // ========== 消息类型（跨线程通信）==========
 
 /// 后台线程发送给 TUI 的消息类型
@@ -61,6 +77,8 @@ pub struct ToolResultMsg {
     pub is_error: bool,
     /// 工具返回的图片数据（用于多模态模型）
     pub images: Vec<crate::command::chat::tools::ImageData>,
+    /// Plan 审批决策（仅 ExitPlanMode 工具会设置非 None 值）
+    pub plan_decision: PlanDecision,
 }
 
 /// Worker 线程完成后写入共享状态，供 UI poll 更新显示
