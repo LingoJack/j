@@ -656,21 +656,28 @@ fn render_ask_questions(
         let total_q = app.ui.tool_ask_questions.len();
         let cur_idx = app.ui.tool_ask_current_idx;
 
-        // header 标签 + 进度
+        // header 标签 + 进度（过长时折行）
         let header_text = if total_q > 1 {
             format!("[{}/{}] {}", cur_idx + 1, total_q, cur_q.header)
         } else {
             cur_q.header.clone()
         };
-        lines.push(bordered_line(
-            vec![Span::styled(
-                format!(" {}", header_text),
-                Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
-            )],
-            bubble_max_width,
-            border_color,
-            confirm_bg,
-        ));
+        {
+            // " " 前缀占 1 列，右侧留 1 列 padding
+            let header_avail_w = content_w.saturating_sub(2).max(4);
+            let header_wrapped = wrap_text(&header_text, header_avail_w);
+            for hl in &header_wrapped {
+                lines.push(bordered_line(
+                    vec![Span::styled(
+                        format!(" {}", hl),
+                        Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                    )],
+                    bubble_max_width,
+                    border_color,
+                    confirm_bg,
+                ));
+            }
+        }
 
         // question 内容（Markdown 渲染）
         {
@@ -779,16 +786,38 @@ fn render_ask_questions(
                 Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
             };
 
-            lines.push(bordered_line(
-                vec![
-                    Span::styled(pointer_str, pointer_style),
-                    Span::styled(check_str, check_style),
-                    Span::styled(opt.label.clone(), label_style),
-                ],
-                bubble_max_width,
-                border_color,
-                confirm_bg,
-            ));
+            // label 折行：pointer + check 占去一段前缀，label 在剩余宽度内自动折行
+            {
+                let prefix_w = display_width(pointer_str) + display_width(check_str);
+                let label_avail_w = content_w.saturating_sub(prefix_w + 2).max(4);
+                let label_wrapped = wrap_text(&opt.label, label_avail_w);
+                let indent_str = " ".repeat(prefix_w);
+                for (li, label_line) in label_wrapped.iter().enumerate() {
+                    if li == 0 {
+                        lines.push(bordered_line(
+                            vec![
+                                Span::styled(pointer_str, pointer_style),
+                                Span::styled(check_str, check_style),
+                                Span::styled(label_line.clone(), label_style),
+                            ],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
+                    } else {
+                        // 续行缩进对齐 label 起始列
+                        lines.push(bordered_line(
+                            vec![
+                                Span::styled(indent_str.clone(), Style::default().bg(confirm_bg)),
+                                Span::styled(label_line.clone(), label_style),
+                            ],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
+                    }
+                }
+            }
 
             // description 行（缩进，灰色）
             if !opt.description.is_empty() {
