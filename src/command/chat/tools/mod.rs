@@ -105,6 +105,8 @@ pub struct ToolRegistry {
     /// Worktree 状态（跨工具共享）
     #[allow(dead_code)]
     pub worktree_state: Arc<worktree::WorktreeState>,
+    /// 子 agent 权限请求队列（None 表示主 session 注册表，不走队列）
+    pub permission_queue: Option<Arc<crate::command::chat::permission_queue::PermissionQueue>>,
 }
 
 impl ToolRegistry {
@@ -124,6 +126,7 @@ impl ToolRegistry {
             todo_manager: Arc::clone(&todo_manager),
             plan_mode_state: Arc::clone(&plan_mode_state),
             worktree_state: Arc::clone(&worktree_state),
+            permission_queue: None,
             tools: vec![
                 Box::new(shell::ShellTool {
                     manager: Arc::clone(&background_manager),

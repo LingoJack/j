@@ -1,4 +1,4 @@
-use crate::command::chat::app::{Action, AskAnswer, ChatApp, CursorDirection};
+use crate::command::chat::app::{Action, AskAnswer, ChatApp, ChatMode, CursorDirection};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// 统一交互区域按键处理：选项式（↑↓ 选择，Enter 确认，Esc 拒绝/退出）
@@ -69,6 +69,27 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     };
     app.update(action);
     app.ui.msg_lines_cache = None;
+}
+
+/// 子 Agent 权限请求确认模式：Y/Enter 批准，N/Esc 拒绝
+pub fn handle_agent_perm_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            if let Some(req) = app.ui.pending_agent_perm.take() {
+                req.resolve(true);
+            }
+            app.ui.mode = ChatMode::Chat;
+            app.ui.msg_lines_cache = None;
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            if let Some(req) = app.ui.pending_agent_perm.take() {
+                req.resolve(false);
+            }
+            app.ui.mode = ChatMode::Chat;
+            app.ui.msg_lines_cache = None;
+        }
+        _ => {}
+    }
 }
 
 /// Ask 模式的结构化问答交互处理

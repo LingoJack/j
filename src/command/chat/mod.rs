@@ -13,6 +13,7 @@ pub mod hook;
 pub mod input_thread;
 pub mod markdown;
 pub mod permission;
+pub mod permission_queue;
 pub mod remote;
 pub mod render_cache;
 pub mod sandbox;

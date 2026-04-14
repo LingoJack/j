@@ -28,21 +28,26 @@ pub struct AgentToolShared {
     pub hook_manager: Arc<Mutex<HookManager>>,
     pub task_manager: Arc<TaskManager>,
     pub disabled_tools: Arc<Vec<String>>,
+    /// 子 agent 权限请求队列（与主 TUI 共享同一个实例）
+    pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
 }
 
 impl AgentToolShared {
     /// 构建子工具注册表（不含 skills，标准 ask channel）
     ///
     /// 返回未 Arc 包装的 ToolRegistry，调用者可在包装前注册额外工具（如 SendMessage）。
+    /// 子注册表自动继承父 shared 的 permission_queue，使子 agent 权限请求能路由到主 TUI。
     pub fn build_sub_registry(&self) -> (ToolRegistry, mpsc::Receiver<AskRequest>) {
         let (ask_tx, ask_rx) = mpsc::channel::<AskRequest>();
-        let registry = ToolRegistry::new(
+        let mut registry = ToolRegistry::new(
             vec![], // 不传 skills
             ask_tx,
             Arc::clone(&self.background_manager),
             Arc::clone(&self.task_manager),
             Arc::clone(&self.hook_manager),
         );
+        // 将权限队列传入子注册表，使子 agent 的阻塞式确认请求能到达主 TUI
+        registry.permission_queue = Some(Arc::clone(&self.permission_queue));
         (registry, ask_rx)
     }
 }
@@ -155,26 +160,59 @@ pub fn execute_tool_with_permission(
     let requires_confirm = tool_ref.map(|t| t.requires_confirmation()).unwrap_or(false);
 
     if requires_confirm && !jcli_config.is_allowed(&item.name, &item.arguments) {
-        if verbose {
+        // 尝试通过权限队列请求用户实时确认
+        if let Some(queue) = registry.permission_queue.as_ref() {
+            let agent_name = crate::command::chat::teammate::current_agent_name();
+            let confirm_msg = tool_ref
+                .map(|t| t.confirmation_message(&item.arguments))
+                .unwrap_or_else(|| format!("调用工具 {}", item.name));
+            let req = crate::command::chat::permission_queue::PendingAgentPerm::new(
+                agent_name,
+                item.name.clone(),
+                item.arguments.clone(),
+                confirm_msg,
+            );
             write_info_log(
                 log_tag,
                 &format!(
-                    "Tool '{}' requires confirmation but not auto-allowed, denying",
+                    "Tool '{}' queued for user permission (60s timeout)",
                     item.name
                 ),
             );
+            let approved = queue.request_blocking(req);
+            if !approved {
+                write_info_log(log_tag, &format!("Tool '{}' denied by user", item.name));
+                return ChatMessage {
+                    role: "tool".to_string(),
+                    content: format!("Tool '{}' was denied by the user.", item.name),
+                    tool_calls: None,
+                    tool_call_id: Some(item.id.clone()),
+                    images: None,
+                };
+            }
+            // 用户批准 → 继续往下执行
+        } else {
+            if verbose {
+                write_info_log(
+                    log_tag,
+                    &format!(
+                        "Tool '{}' requires confirmation but not auto-allowed, denying",
+                        item.name
+                    ),
+                );
+            }
+            return ChatMessage {
+                role: "tool".to_string(),
+                content: format!(
+                    "Tool '{}' requires user confirmation which is not available in sub-agent mode. \
+                     Add a permission rule to allow this tool automatically.",
+                    item.name
+                ),
+                tool_calls: None,
+                tool_call_id: Some(item.id.clone()),
+                images: None,
+            };
         }
-        return ChatMessage {
-            role: "tool".to_string(),
-            content: format!(
-                "Tool '{}' requires user confirmation which is not available in sub-agent mode. \
-                 Add a permission rule to allow this tool automatically.",
-                item.name
-            ),
-            tool_calls: None,
-            tool_call_id: Some(item.id.clone()),
-            images: None,
-        };
     }
 
     if verbose {

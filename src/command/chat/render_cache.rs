@@ -339,6 +339,11 @@ pub fn build_message_lines_incremental(
         render_tool_confirm_area(app, bubble_max_width, &mut streaming_lines);
     }
 
+    // ========== 子 Agent 权限确认区 ==========
+    if app.ui.mode == ChatMode::AgentPermConfirm {
+        render_agent_perm_confirm_area(app, bubble_max_width, &mut streaming_lines);
+    }
+
     // 末尾留白
     streaming_lines.push(Line::from(""));
 
@@ -1150,6 +1155,99 @@ fn render_tool_confirm_content(
         }
     }
 }
+/// 渲染子 Agent 权限确认区域
+fn render_agent_perm_confirm_area(
+    app: &ChatApp,
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+) {
+    let t = &app.ui.theme;
+    let confirm_bg = t.tool_confirm_bg;
+    let border_color = t.tool_confirm_border;
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    let req = match app.ui.pending_agent_perm.as_ref() {
+        Some(r) => r,
+        None => return,
+    };
+
+    // 顶边框
+    lines.push(Line::from(Span::styled(
+        format!("  ╭{}╮", "─".repeat(bubble_max_width.saturating_sub(4))),
+        Style::default().fg(border_color),
+    )));
+
+    // 标题行
+    let title = format!(" 子 Agent 权限请求 [{}] ", req.agent_name);
+    lines.push(bordered_line(
+        vec![Span::styled(
+            title,
+            Style::default()
+                .fg(t.tool_confirm_title)
+                .add_modifier(Modifier::BOLD)
+                .bg(confirm_bg),
+        )],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // 工具名行
+    lines.push(bordered_line(
+        vec![Span::styled(
+            format!(" 工具: {}", req.tool_name),
+            Style::default()
+                .fg(t.tool_confirm_name)
+                .add_modifier(Modifier::BOLD)
+                .bg(confirm_bg),
+        )],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // 确认消息（折行显示）
+    for wrapped in wrap_text(&req.confirm_msg, content_w) {
+        lines.push(bordered_line(
+            vec![Span::styled(
+                format!(" {}", wrapped),
+                Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+            )],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
+    }
+
+    // 空行间隔
+    lines.push(bordered_line(
+        vec![Span::styled(" ", Style::default().bg(confirm_bg))],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // Y/N 提示行
+    lines.push(bordered_line(
+        vec![Span::styled(
+            " [Y/Enter] 允许   [N/Esc] 拒绝",
+            Style::default()
+                .fg(t.text_dim)
+                .add_modifier(Modifier::BOLD)
+                .bg(confirm_bg),
+        )],
+        bubble_max_width,
+        border_color,
+        confirm_bg,
+    ));
+
+    // 底边框
+    lines.push(Line::from(Span::styled(
+        format!("  ╰{}╯", "─".repeat(bubble_max_width.saturating_sub(4))),
+        Style::default().fg(border_color),
+    )));
+}
+
 pub fn render_tool_call_request_msg(
     tool_calls: &[super::storage::ToolCallItem],
     bubble_max_width: usize,

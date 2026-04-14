@@ -84,6 +84,8 @@ pub struct ChatApp {
     /// Teammate 管理器（多 agent 协作）
     #[allow(dead_code)]
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
+    /// 子 agent 权限请求队列（AgentToolShared 和 TUI 共享同一个 Arc）
+    pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -176,6 +178,10 @@ impl ChatApp {
         let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
 
+        // 子 agent 权限请求队列（TUI 和所有 agent 共享同一个 Arc）
+        let permission_queue =
+            Arc::new(crate::command::chat::permission_queue::PermissionQueue::new());
+
         // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
         let agent_tool_shared = crate::command::chat::tools::agent_shared::AgentToolShared {
             background_manager: Arc::clone(&background_manager),
@@ -185,6 +191,7 @@ impl ChatApp {
             hook_manager: Arc::clone(&hook_manager),
             task_manager: Arc::clone(&task_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
+            permission_queue: Arc::clone(&permission_queue),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
             shared: agent_tool_shared.clone(),
@@ -403,6 +410,7 @@ impl ChatApp {
                     ms % crate::command::chat::ui::quotes::quotes_count()
                 },
                 input_wrap_width: 0,
+                pending_agent_perm: None,
             },
             state: ChatState {
                 agent_config,
@@ -436,6 +444,7 @@ impl ChatApp {
             shared_messages_read_cursor: 0,
             context_tokens: Arc::new(Mutex::new(0)),
             teammate_manager,
+            permission_queue,
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
@@ -1738,6 +1747,14 @@ impl ChatApp {
             // ========== 流式控制 ==========
             Action::CancelStream => {
                 self.cancel_stream();
+                // 取消所有挂起的子 agent 权限请求，防止线程永久阻塞
+                self.permission_queue.deny_all();
+                if let Some(req) = self.ui.pending_agent_perm.take() {
+                    req.resolve(false);
+                }
+                if self.ui.mode == ChatMode::AgentPermConfirm {
+                    self.ui.mode = ChatMode::Chat;
+                }
             }
             Action::CancelToolsOnly => {
                 self.cancel_tools_only();

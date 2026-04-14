@@ -28,6 +28,10 @@ struct CreateTeammateParams {
     /// The worktree is automatically cleaned up when the teammate finishes.
     #[serde(default)]
     worktree: bool,
+    /// If true, the teammate inherits all tool permissions (allow_all=true).
+    /// Use this when you trust the teammate to run tools without confirmation prompts.
+    #[serde(default)]
+    inherit_permissions: bool,
 }
 
 /// CreateTeammate 工具：创建一个新的 teammate agent
@@ -161,7 +165,14 @@ impl Tool for CreateTeammateTool {
         disabled.push("Agent".to_string());
         let tools = sub_registry.to_openai_tools_filtered(&disabled);
 
-        let jcli_config = Arc::clone(&self.shared.jcli_config);
+        // inherit_permissions：复制 JcliConfig 并启用 allow_all
+        let jcli_config = if params.inherit_permissions {
+            let mut cfg = self.shared.jcli_config.as_ref().clone();
+            cfg.permissions.allow_all = true;
+            Arc::new(cfg)
+        } else {
+            Arc::clone(&self.shared.jcli_config)
+        };
         let teammate_manager = Arc::clone(&self.teammate_manager);
 
         // 构建 teammate 专用 system prompt

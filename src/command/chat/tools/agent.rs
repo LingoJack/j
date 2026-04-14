@@ -34,6 +34,10 @@ struct AgentParams {
     /// The worktree is automatically cleaned up when the agent finishes.
     #[serde(default)]
     worktree: bool,
+    /// If true, the sub-agent inherits all tool permissions (allow_all=true).
+    /// Use this when you trust the agent to run tools without confirmation prompts.
+    #[serde(default)]
+    inherit_permissions: bool,
 }
 
 // ========== AgentTool ==========
@@ -104,7 +108,14 @@ impl Tool for AgentTool {
         disabled.push("Agent".to_string());
         let tools = sub_registry.to_openai_tools_filtered(&disabled);
 
-        let jcli_config = Arc::clone(&self.shared.jcli_config);
+        // inherit_permissions：复制 JcliConfig 并启用 allow_all
+        let jcli_config = if params.inherit_permissions {
+            let mut cfg = self.shared.jcli_config.as_ref().clone();
+            cfg.permissions.allow_all = true;
+            Arc::new(cfg)
+        } else {
+            Arc::clone(&self.shared.jcli_config)
+        };
 
         // worktree 隔离：提前创建（在调用线程中；失败则提前退出）
         let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
