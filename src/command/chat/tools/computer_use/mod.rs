@@ -7,7 +7,9 @@ mod preview;
 mod screenshot;
 mod som;
 
-use crate::command::chat::tools::{    PlanDecision,ImageData, Tool, ToolResult, schema_to_tool_params};
+use crate::command::chat::tools::{
+    ImageData, PlanDecision, Tool, ToolResult, schema_to_tool_params,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};

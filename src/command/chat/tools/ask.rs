@@ -1,5 +1,7 @@
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -106,7 +108,7 @@ impl Tool for AskTool {
                     output: format!("问题 '{}' 的选项数量必须为 2-4 个", q.question),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
 

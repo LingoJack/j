@@ -131,7 +131,7 @@ impl TaskTool {
                     output: "title is required for action=create".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -167,7 +167,7 @@ impl TaskTool {
                     output: "taskId is required for action=get".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -225,7 +225,7 @@ impl TaskTool {
             output: serde_json::to_string_pretty(&summary).unwrap_or_default(),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 
@@ -237,7 +237,7 @@ impl TaskTool {
                     output: "taskId is required for action=update".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -255,7 +255,7 @@ impl TaskTool {
                         ),
                         is_error: false,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     }
                 } else {
                     ToolResult {
@@ -265,7 +265,7 @@ impl TaskTool {
                         ),
                         is_error: false,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     }
                 }
             }

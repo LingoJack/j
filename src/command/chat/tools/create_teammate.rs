@@ -1,7 +1,9 @@
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, set_current_agent_name};
 use crate::command::chat::tools::agent_shared::AgentToolShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use schemars::JsonSchema;
@@ -102,7 +104,7 @@ impl Tool for CreateTeammateTool {
                         output: "Failed to acquire teammate manager lock".to_string(),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
             };
@@ -111,7 +113,7 @@ impl Tool for CreateTeammateTool {
                     output: format!("Teammate '{}' already exists", params.name),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         }
@@ -135,7 +137,7 @@ impl Tool for CreateTeammateTool {
                         output: format!("创建 worktree 失败: {}", e),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -272,7 +274,7 @@ impl Tool for CreateTeammateTool {
                     output: "Failed to register teammate".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         }
@@ -298,7 +300,7 @@ impl Tool for CreateTeammateTool {
             ),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 

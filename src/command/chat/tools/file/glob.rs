@@ -1,5 +1,6 @@
-use crate::command::chat::tools::{    PlanDecision,
-    Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path, schema_to_tool_params,
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path,
+    schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -103,7 +104,7 @@ impl Tool for GlobTool {
                     output: format!("glob 模式无效: {}", e),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -166,7 +167,7 @@ impl Tool for GlobTool {
             output: result,
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 

@@ -1,7 +1,9 @@
 use crate::command::chat::constants::{
     WEB_REQUEST_TIMEOUT_SECS, WEB_RESPONSE_DEFAULT_MAX_CHARS, WEB_RESPONSE_MAX_BYTES,
 };
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use crate::util::html_extract;
 use schemars::JsonSchema;
 use scraper::Html;
@@ -87,7 +89,7 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
             output: "操作已取消".to_string(),
             is_error: true,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         };
     }
 
@@ -141,7 +143,7 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
             ),
             is_error: true,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         };
     }
 
@@ -163,7 +165,7 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
             ),
             is_error: true,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         };
     }
 
@@ -208,7 +210,7 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
         output: format!("[来源: {}]\n\n{}", params.url, truncated),
         is_error: false,
         images: vec![],
-                plan_decision: PlanDecision::None,
+        plan_decision: PlanDecision::None,
     }
 }
 

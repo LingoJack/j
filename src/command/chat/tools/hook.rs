@@ -1,5 +1,7 @@
 use crate::command::chat::hook::{HookDef, HookEvent, HookManager};
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -197,7 +199,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     output: "缺少 event 参数".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -209,7 +211,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     output: format!("未知事件: {}", event_str),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -221,7 +223,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     output: "缺少 command 参数".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -243,7 +245,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     ),
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
@@ -264,7 +266,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         output: "当前没有已注册的 hook".to_string(),
                         is_error: false,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
 
@@ -287,7 +289,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     output,
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
@@ -307,7 +309,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     output: "缺少 event 参数".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -319,7 +321,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                     output: format!("未知事件: {}", event_str),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -336,7 +338,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         ),
                         is_error: false,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     }
                 } else {
                     ToolResult {
@@ -346,7 +348,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         ),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     }
                 }
             }

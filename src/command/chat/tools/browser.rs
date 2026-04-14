@@ -3,7 +3,7 @@
 //! 启用 `browser_cdp` feature 时，使用 chromiumoxide 进行真实 CDP 浏览器控制。
 //! 未启用时，退化为基于 reqwest 的 Lite 模式（HTTP 抓取 + HTML 解析）。
 
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, schema_to_tool_params};
+use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -1348,7 +1348,7 @@ impl Tool for BrowserTool {
                     output: format!("参数解析失败: {}", e),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -1390,13 +1390,13 @@ fn exec_browser_cdp(args: &Value, action: &str) -> ToolResult {
             output,
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         },
         Err(err) => ToolResult {
             output: err,
             is_error: true,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         },
     }
 }
@@ -1471,13 +1471,13 @@ fn exec_browser_stub(args: &Value, action: &str) -> ToolResult {
             output,
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         },
         Err(err) => ToolResult {
             output: err,
             is_error: true,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         },
     }
 }

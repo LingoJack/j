@@ -1,4 +1,6 @@
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -273,7 +275,7 @@ impl Tool for EnterWorktreeTool {
                     output: e,
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -340,7 +342,7 @@ impl Tool for EnterWorktreeTool {
                     output: format!("创建 worktree 失败: {}", stderr.trim()),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
             Err(e) => {
@@ -348,7 +350,7 @@ impl Tool for EnterWorktreeTool {
                     output: format!("执行 git worktree add 失败: {}", e),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         }
@@ -379,7 +381,7 @@ impl Tool for EnterWorktreeTool {
             ),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 
@@ -442,7 +444,7 @@ impl Tool for ExitWorktreeTool {
                         .to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -457,7 +459,7 @@ impl Tool for ExitWorktreeTool {
                         output: format!("切换回原目录失败: {}", e),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
                 self.state.clear_session();
@@ -471,7 +473,7 @@ impl Tool for ExitWorktreeTool {
                     ),
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 }
             }
             "remove" => {
@@ -494,7 +496,7 @@ impl Tool for ExitWorktreeTool {
                         ),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
 
@@ -504,7 +506,7 @@ impl Tool for ExitWorktreeTool {
                         output: format!("切换回原目录失败: {}", e),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
 
@@ -567,7 +569,7 @@ impl Tool for ExitWorktreeTool {
                     output,
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 }
             }
             other => ToolResult {

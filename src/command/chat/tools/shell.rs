@@ -3,8 +3,9 @@ use super::background::BackgroundManager;
 use crate::command::chat::constants::{
     SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
 };
-use crate::command::chat::tools::{    PlanDecision,
-    Tool, check_blocking_command, is_dangerous_command, parse_tool_args, schema_to_tool_params,
+use crate::command::chat::tools::{
+    PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
+    schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -141,7 +142,7 @@ impl Tool for ShellTool {
                     output: format!("指定的工作目录不存在: {}", dir),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
             cmd.current_dir(path);
@@ -154,7 +155,7 @@ impl Tool for ShellTool {
                     output: format!("执行失败: {}", e),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -191,7 +192,7 @@ impl Tool for ShellTool {
                     output: "[已取消]".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
 
@@ -218,7 +219,7 @@ impl Tool for ShellTool {
                     },
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
 
@@ -230,7 +231,7 @@ impl Tool for ShellTool {
                         output: format!("等待进程失败: {}", e),
                         is_error: true,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
             }
@@ -250,7 +251,7 @@ impl Tool for ShellTool {
             },
             is_error,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 
@@ -417,7 +418,7 @@ impl ShellTool {
             .to_string(),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 }

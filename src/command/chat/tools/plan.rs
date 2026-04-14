@@ -535,7 +535,8 @@ impl ExitPlanModeTool {
                     },
                     AskOption {
                         label: "批准并清空上下文".to_string(),
-                        description: "批准计划并清空探索过程中的对话上下文，仅保留计划内容继续实施".to_string(),
+                        description: "批准计划并清空探索过程中的对话上下文，仅保留计划内容继续实施"
+                            .to_string(),
                     },
                     AskOption {
                         label: "驳回计划".to_string(),

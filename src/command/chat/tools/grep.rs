@@ -1,5 +1,6 @@
-use super::{PlanDecision, 
-    Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path, schema_to_tool_params,
+use super::{
+    PlanDecision, Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path,
+    schema_to_tool_params,
 };
 use ignore::WalkBuilder;
 use regex::RegexBuilder;
@@ -96,7 +97,7 @@ impl Tool for GrepTool {
                     output: format!("正则表达式无效: {}", e),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -154,7 +155,7 @@ impl Tool for GrepTool {
                     output: "[已取消]".to_string(),
                     is_error: true,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
 
@@ -258,7 +259,7 @@ impl Tool for GrepTool {
                     output: format!("未找到匹配 '{}' 的文件", params.pattern),
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
             let total = file_matches.len();
@@ -291,7 +292,7 @@ impl Tool for GrepTool {
                     output: format!("未找到匹配 '{}' 的内容", params.pattern),
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
             let mut output = format!("共 {} 处匹配:\n\n", total_count);
@@ -308,7 +309,7 @@ impl Tool for GrepTool {
                     output: format!("未找到匹配 '{}' 的内容", params.pattern),
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 };
             }
             let total = matches.len();

@@ -298,7 +298,7 @@ impl Tool for TaskOutputTool {
                         output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
                         is_error: false,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
                 if Instant::now() >= deadline {
@@ -318,7 +318,7 @@ impl Tool for TaskOutputTool {
                         output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
                         is_error: false,
                         images: vec![],
-                plan_decision: PlanDecision::None,
+                        plan_decision: PlanDecision::None,
                     };
                 }
                 std::thread::sleep(Duration::from_millis(50));

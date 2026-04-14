@@ -1,5 +1,5 @@
-use crate::command::chat::tools::{    PlanDecision,
-    ImageData, Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
+use crate::command::chat::tools::{
+    ImageData, PlanDecision, Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -115,7 +115,7 @@ impl Tool for ReadFileTool {
                     output: result,
                     is_error: false,
                     images: vec![],
-                plan_decision: PlanDecision::None,
+                    plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {

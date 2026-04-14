@@ -44,7 +44,7 @@ impl Tool for TodoReadTool {
             output: serde_json::to_string_pretty(&items).unwrap_or_default(),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 }

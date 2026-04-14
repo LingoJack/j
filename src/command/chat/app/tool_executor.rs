@@ -1,4 +1,6 @@
-use super::types::{CompletedToolResult, PlanDecision, ToolCallStatus, ToolExecStatus, ToolResultMsg};
+use super::types::{
+    CompletedToolResult, PlanDecision, ToolCallStatus, ToolExecStatus, ToolResultMsg,
+};
 use super::ui_state::ChatMode;
 use crate::command::chat::constants::TOOL_OUTPUT_SUMMARY_MAX_LEN;
 use crate::command::chat::permission::JcliConfig;
@@ -139,9 +141,12 @@ impl ToolExecutor {
                     registry.execute(&tool_name, &arguments, &cancelled)
                 }));
                 let (output, is_error, images, plan_decision) = match result {
-                    Ok(exec_result) => {
-                        (exec_result.output, exec_result.is_error, exec_result.images, exec_result.plan_decision)
-                    }
+                    Ok(exec_result) => (
+                        exec_result.output,
+                        exec_result.is_error,
+                        exec_result.images,
+                        exec_result.plan_decision,
+                    ),
                     Err(panic_info) => {
                         let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
                             s.to_string()
@@ -150,7 +155,12 @@ impl ToolExecutor {
                         } else {
                             "unknown panic".to_string()
                         };
-                        (format!("[Tool panic] {}", msg), true, vec![], PlanDecision::None)
+                        (
+                            format!("[Tool panic] {}", msg),
+                            true,
+                            vec![],
+                            PlanDecision::None,
+                        )
                     }
                 };
                 // 生成摘要供 UI 显示
@@ -236,7 +246,12 @@ impl ToolExecutor {
                 registry.execute(&tool_name, &arguments, &cancelled)
             }));
             let (output, is_error, images, plan_decision) = match result {
-                Ok(exec_result) => (exec_result.output, exec_result.is_error, exec_result.images, exec_result.plan_decision),
+                Ok(exec_result) => (
+                    exec_result.output,
+                    exec_result.is_error,
+                    exec_result.images,
+                    exec_result.plan_decision,
+                ),
                 Err(panic_info) => {
                     let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
                         s.to_string()
@@ -245,7 +260,12 @@ impl ToolExecutor {
                     } else {
                         "unknown panic".to_string()
                     };
-                    (format!("[Tool panic] {}", msg), true, vec![], PlanDecision::None)
+                    (
+                        format!("[Tool panic] {}", msg),
+                        true,
+                        vec![],
+                        PlanDecision::None,
+                    )
                 }
             };
             // 生成摘要供 UI 显示

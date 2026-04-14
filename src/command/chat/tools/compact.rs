@@ -1,4 +1,4 @@
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, schema_to_tool_params};
+use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -42,7 +42,7 @@ impl Tool for CompactTool {
             output: "Compression requested.".to_string(),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 

@@ -1,6 +1,8 @@
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::agent_shared::AgentToolShared;
-use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -125,7 +127,7 @@ impl Tool for AgentTeamTool {
             output: format!("## Team Created\n\n{}", results.join("\n")),
             is_error: false,
             images: vec![],
-                plan_decision: PlanDecision::None,
+            plan_decision: PlanDecision::None,
         }
     }
 
