@@ -1,4 +1,4 @@
-use super::super::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use super::super::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use super::task_manager::TaskManager;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -116,6 +116,7 @@ impl Tool for TaskTool {
                 ),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -130,6 +131,7 @@ impl TaskTool {
                     output: "title is required for action=create".to_string(),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -146,11 +148,13 @@ impl TaskTool {
                 output: serde_json::to_string_pretty(&task).unwrap_or_default(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
             Err(e) => ToolResult {
                 output: e.to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -163,6 +167,7 @@ impl TaskTool {
                     output: "taskId is required for action=get".to_string(),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -172,11 +177,13 @@ impl TaskTool {
                 output: serde_json::to_string_pretty(&task).unwrap_or_default(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
             Err(e) => ToolResult {
                 output: e,
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }
@@ -198,6 +205,7 @@ impl TaskTool {
                 },
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -217,6 +225,7 @@ impl TaskTool {
             output: serde_json::to_string_pretty(&summary).unwrap_or_default(),
             is_error: false,
             images: vec![],
+                plan_decision: PlanDecision::None,
         }
     }
 
@@ -228,6 +237,7 @@ impl TaskTool {
                     output: "taskId is required for action=update".to_string(),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -245,6 +255,7 @@ impl TaskTool {
                         ),
                         is_error: false,
                         images: vec![],
+                plan_decision: PlanDecision::None,
                     }
                 } else {
                     ToolResult {
@@ -254,6 +265,7 @@ impl TaskTool {
                         ),
                         is_error: false,
                         images: vec![],
+                plan_decision: PlanDecision::None,
                     }
                 }
             }
@@ -261,6 +273,7 @@ impl TaskTool {
                 output: e,
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

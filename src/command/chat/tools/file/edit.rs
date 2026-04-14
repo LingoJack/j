@@ -1,4 +1,4 @@
-use crate::command::chat::tools::{
+use crate::command::chat::tools::{    PlanDecision,
     Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
 };
 use schemars::JsonSchema;
@@ -129,6 +129,7 @@ impl Tool for EditFileTool {
                     output: format!("文件 {} 正被 {} 编辑，请稍后重试", path, holder),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -141,6 +142,7 @@ impl Tool for EditFileTool {
                     output: format!("读取文件失败: {}", e),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 };
             }
         };
@@ -152,6 +154,7 @@ impl Tool for EditFileTool {
                 output: "未找到匹配的字符串".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
         if count > 1 {
@@ -162,6 +165,7 @@ impl Tool for EditFileTool {
                 ),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -175,12 +179,14 @@ impl Tool for EditFileTool {
                     output,
                     is_error: false,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 }
             }
             Err(e) => ToolResult {
                 output: format!("写入文件失败: {}", e),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

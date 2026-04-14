@@ -1,6 +1,6 @@
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::agent_shared::AgentToolShared;
-use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -86,6 +86,7 @@ impl Tool for AgentTeamTool {
                 output: "Team must have at least one member".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -94,6 +95,7 @@ impl Tool for AgentTeamTool {
                 output: "Team size limited to 10 members".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -123,6 +125,7 @@ impl Tool for AgentTeamTool {
             output: format!("## Team Created\n\n{}", results.join("\n")),
             is_error: false,
             images: vec![],
+                plan_decision: PlanDecision::None,
         }
     }
 

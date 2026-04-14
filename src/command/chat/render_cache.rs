@@ -1346,7 +1346,7 @@ fn render_plan_approval_confirm_area(
     // Y/N 提示行
     lines.push(bordered_line(
         vec![Span::styled(
-            " [Y/Enter] 批准   [N/Esc] 拒绝",
+            " [Y/Enter] 批准   [C] 批准并清空   [N/Esc] 拒绝",
             Style::default()
                 .fg(t.text_dim)
                 .add_modifier(Modifier::BOLD)

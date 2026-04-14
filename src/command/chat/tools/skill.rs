@@ -1,6 +1,6 @@
 use crate::command::chat::compact::{InvokedSkillsMap, record_skill_invocation};
 use crate::command::chat::skill::Skill;
-use crate::command::chat::tools::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::tools::{    PlanDecision,Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -52,6 +52,7 @@ impl Tool for LoadSkillTool {
                 output: "参数缺少 name 字段".to_string(),
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             };
         }
 
@@ -76,6 +77,7 @@ impl Tool for LoadSkillTool {
                     output: resolved,
                     is_error: false,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 }
             }
             None => {
@@ -92,6 +94,7 @@ impl Tool for LoadSkillTool {
                     ),
                     is_error: true,
                     images: vec![],
+                plan_decision: PlanDecision::None,
                 }
             }
         }

@@ -1,4 +1,4 @@
-use super::super::{Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use super::super::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use super::entity::TodoItem;
 use super::todo_manager::TodoManager;
 use schemars::JsonSchema;
@@ -83,11 +83,13 @@ impl Tool for TodoWriteTool {
                 output: serde_json::to_string_pretty(&all_todos).unwrap_or_default(),
                 is_error: false,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
             Err(e) => ToolResult {
                 output: e,
                 is_error: true,
                 images: vec![],
+                plan_decision: PlanDecision::None,
             },
         }
     }

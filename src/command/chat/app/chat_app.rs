@@ -3,7 +3,7 @@ use super::agent_handle::AgentHandle;
 use super::chat_state::ChatState;
 use super::tool_executor::ToolExecutor;
 use super::types::{
-    AskAnswer, AskRequest, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
+    AskAnswer, AskRequest, PlanDecision, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
 };
 use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
@@ -1768,7 +1768,7 @@ impl ChatApp {
                     req.resolve(false);
                 }
                 if let Some(req) = self.ui.pending_plan_approval.take() {
-                    req.resolve(false);
+                    req.resolve(crate::command::chat::app::types::PlanDecision::Reject);
                 }
                 if matches!(
                     self.ui.mode,
@@ -2360,6 +2360,7 @@ impl ChatApp {
                         result: msg.clone(),
                         is_error: true,
                         images: vec![],
+                        plan_decision: PlanDecision::None,
                     });
                 }
             }
