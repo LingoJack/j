@@ -12,7 +12,7 @@ description: 完整前后台 Web 应用生成技能包；1. 当用户需要快�
 ## 初始化项目
 初始化项目，在工作目录执行
 ```bash
-git clone https://github.com/LingoJack/proj_template.git .
+mkdir <project_name> && cd <project_name> && git clone https://github.com/LingoJack/proj_template.git .
 ```
 
 会创建基于 react + ts + tailwindcss v4 + go 的项目脚手架
