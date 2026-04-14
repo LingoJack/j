@@ -2644,8 +2644,16 @@ impl ChatApp {
 
     /// 结束加载状态（流式完成或错误）
     fn finish_loading(&mut self, had_error: bool, was_cancelled: bool) {
-        self.agent = None;
+        // ★ 先取消 agent loop，确保 agent 线程能安全退出，
+        // 避免它在 tool_result_rx.recv() 上阻塞或继续写 channel
+        if let Some(ref agent) = self.agent {
+            agent.cancel();
+        }
+
+        // ★ 先 drop tool_result_tx，让 agent 线程的 tool_result_rx.recv() 返回 Err 并退出，
+        // 然后再 drop agent（包含 stream_rx 和 cancel_token）
         self.tool_executor.tool_result_tx = None;
+        self.agent = None;
         self.tool_executor.tools_executing_count = 0;
         self.state.is_loading = false;
         self.ui.last_rendered_streaming_len = 0;

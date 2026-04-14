@@ -94,8 +94,12 @@ impl AgentHandle {
                 Ok(msg) => msgs.push(msg),
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    // channel 断开，标记为完成
-                    msgs.push(StreamMsg::Done);
+                    // channel 断开意味着 agent 线程已退出（可能是 panic 或异常），
+                    // 不应伪造 StreamMsg::Done，否则会误报"回复完成"。
+                    // 发送 Error 让主循环走错误处理路径。
+                    msgs.push(StreamMsg::Error(ChatError::Other(
+                        "Agent 通道已断开（agent 线程异常退出）".to_string(),
+                    )));
                     break;
                 }
             }

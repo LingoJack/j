@@ -256,7 +256,7 @@ impl Tool for TaskOutputTool {
         schema_to_tool_params::<TaskOutputParams>()
     }
 
-    fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+    fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         let params: TaskOutputParams = match parse_tool_args(arguments) {
             Ok(p) => p,
             Err(e) => return e,
@@ -279,6 +279,25 @@ impl Tool for TaskOutputTool {
             loop {
                 if !self.manager.is_running(&params.task_id) {
                     break;
+                }
+                // ★ 检查取消信号：用户取消请求时应立即中断等待
+                if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+                    let info = self
+                        .manager
+                        .get_task_status(&params.task_id)
+                        .unwrap_or(json!({}));
+                    let mut obj = info.clone();
+                    if let Some(map) = obj.as_object_mut() {
+                        map.insert(
+                            "note".to_string(),
+                            json!("cancelled: request was cancelled while waiting for task output"),
+                        );
+                    }
+                    return ToolResult {
+                        output: serde_json::to_string_pretty(&obj).unwrap_or_default(),
+                        is_error: false,
+                        images: vec![],
+                    };
                 }
                 if Instant::now() >= deadline {
                     // 超时，返回当前状态
