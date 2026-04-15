@@ -311,6 +311,73 @@ pub fn find_latest_session_id() -> Option<String> {
     entries.into_iter().next().map(|(_, id)| id)
 }
 
+/// 修复历史消息中 tool_call_id 配对不完整的问题（旧格式兼容）。
+///
+/// 旧版本在序列化时可能遗漏了 role="tool" 消息的 tool_call_id 字段，
+/// 或将 assistant tool_calls[].id 存为空字符串。
+/// 此函数通过位置对应关系（assistant tool_calls 与后续 tool results 一一对应）
+/// 修复这些配对，使消息序列满足 OpenAI API 要求。
+fn repair_tool_call_ids(messages: &mut Vec<ChatMessage>) {
+    use rand::Rng;
+    let mut i = 0;
+    while i < messages.len() {
+        let has_tool_calls = messages[i].role == "assistant"
+            && messages[i]
+                .tool_calls
+                .as_ref()
+                .is_some_and(|tc| !tc.is_empty());
+        if !has_tool_calls {
+            i += 1;
+            continue;
+        }
+        let call_count = messages[i].tool_calls.as_ref().map_or(0, |tc| tc.len());
+
+        // 收集紧跟在后面的 role="tool" 消息索引
+        let result_start = i + 1;
+        let mut result_end = result_start;
+        while result_end < messages.len() && messages[result_end].role == "tool" {
+            result_end += 1;
+        }
+        let result_count = result_end - result_start;
+
+        // 只在数量完全匹配时做位置对应修复（数量不匹配交由 sanitize_messages 处理）
+        if result_count == call_count {
+            for k in 0..call_count {
+                let result_idx = result_start + k;
+                let call_id = messages[i].tool_calls.as_ref().unwrap()[k].id.clone();
+                let result_id = messages[result_idx]
+                    .tool_call_id
+                    .clone()
+                    .unwrap_or_default();
+
+                match (call_id.is_empty(), result_id.is_empty()) {
+                    (true, true) => {
+                        // 两端都没有 ID → 生成随机 ID，保证双方一致
+                        let new_id = format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
+                        messages[i].tool_calls.as_mut().unwrap()[k].id = new_id.clone();
+                        messages[result_idx].tool_call_id = Some(new_id);
+                    }
+                    (true, false) => {
+                        // assistant 侧缺 ID，以 result 侧为准
+                        messages[i].tool_calls.as_mut().unwrap()[k].id = result_id;
+                    }
+                    (false, true) => {
+                        // result 侧缺 ID，以 assistant 侧为准
+                        messages[result_idx].tool_call_id = Some(call_id);
+                    }
+                    (false, false) if call_id != result_id => {
+                        // ID 不一致（异常情况），以 assistant 侧为准
+                        messages[result_idx].tool_call_id = Some(call_id);
+                    }
+                    _ => {} // 两端 ID 一致，无需处理
+                }
+            }
+        }
+
+        i = result_end; // 跳过已处理的 tool result 消息
+    }
+}
+
 /// 从 JSONL 文件 replay 出 ChatSession（供 resume 等功能使用）
 pub fn load_session(session_id: &str) -> ChatSession {
     let path = session_file_path(session_id);
@@ -338,6 +405,8 @@ pub fn load_session(session_id: &str) -> ChatSession {
             }
         }
     }
+    // 修复旧格式中 tool_call_id 配对不完整的消息
+    repair_tool_call_ids(&mut messages);
     ChatSession { messages }
 }
 
