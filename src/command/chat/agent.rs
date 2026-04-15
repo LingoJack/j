@@ -320,6 +320,8 @@ pub async fn run_agent_loop(
             let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
                 std::collections::BTreeMap::new();
             let mut stream_had_deserialize_error = false;
+            // 流式读取中途遇到 tool_call_id 不一致的请求错误
+            let mut stream_tool_id_error = false;
             // 流式读取中途遇到的可重试错误
             let mut stream_retry_error: Option<ChatError> = None;
 
@@ -397,6 +399,16 @@ pub async fn run_agent_loop(
                                     break 'stream;
                                 }
                                 let err = ChatError::from(e);
+                                // 检测 tool_call_id 不一致错误（API 返回 "tool_call_id ... not found"）
+                                // 这通常是消息历史损坏导致的，通过压缩上下文并重试可恢复
+                                if matches!(&err, ChatError::ApiBadRequest(msg) if msg.contains("tool_call_id")) {
+                                    write_error_log(
+                                        "Chat API 流式响应",
+                                        &format!("检测到 tool_call_id 不一致错误，将压缩上下文后重试: {}", err),
+                                    );
+                                    stream_tool_id_error = true;
+                                    break 'stream;
+                                }
                                 // 可重试错误：记录后跳出流式循环，由外层决策是否重试
                                 if retry_policy_for(&err).is_some() {
                                     stream_retry_error = Some(err);
@@ -417,6 +429,43 @@ pub async fn run_agent_loop(
                         let _ = tx.send(StreamMsg::Cancelled);
                         return;
                     }
+                }
+            }
+
+            // ── 处理 tool_call_id 不一致错误：压缩上下文后重试本轮 ──
+            if stream_tool_id_error {
+                write_info_log(
+                    "agent_loop",
+                    "tool_call_id 不一致错误：将执行 auto_compact 压缩上下文后重试",
+                );
+                // 清空已积累的部分内容
+                {
+                    let mut sc = safe_lock(&streaming_content, "agent::tool_id_error_clear");
+                    sc.clear();
+                }
+                // 通过 auto_compact 重建干净的上下文（摘要 + 全新消息结构，无孤立引用）
+                if compact_config.enabled {
+                    if let Err(e) =
+                        compact::auto_compact(&mut messages, &provider, &invoked_skills).await
+                    {
+                        write_error_log(
+                            "agent_loop",
+                            &format!("tool_call_id 恢复时 auto_compact 失败: {}", e),
+                        );
+                        let _ = tx.send(StreamMsg::Error(ChatError::Other(format!(
+                            "消息历史损坏且自动修复失败: {}",
+                            e
+                        ))));
+                        return;
+                    }
+                    continue 'round;
+                } else {
+                    // compact 未启用，无法恢复
+                    let _ = tx.send(StreamMsg::Error(ChatError::Other(
+                        "消息历史中 tool_call_id 不一致，且 compact 未启用，无法自动恢复"
+                            .to_string(),
+                    )));
+                    return;
                 }
             }
 

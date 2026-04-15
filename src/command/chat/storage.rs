@@ -317,7 +317,7 @@ pub fn find_latest_session_id() -> Option<String> {
 /// 或将 assistant tool_calls[].id 存为空字符串。
 /// 此函数通过位置对应关系（assistant tool_calls 与后续 tool results 一一对应）
 /// 修复这些配对，使消息序列满足 OpenAI API 要求。
-fn repair_tool_call_ids(messages: &mut Vec<ChatMessage>) {
+fn repair_tool_call_ids(messages: &mut [ChatMessage]) {
     use rand::Rng;
     let mut i = 0;
     while i < messages.len() {

@@ -181,28 +181,28 @@ fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
                     return None;
                 }
             }
-            if msg.role == ROLE_ASSISTANT {
-                if let Some(ref tcs) = msg.tool_calls {
-                    // 仅保留：id 非空 且 已有对应 tool result 的条目
-                    let clean: Vec<_> = tcs
-                        .iter()
-                        .filter(|tc| !tc.id.is_empty() && result_ids.contains(&tc.id))
-                        .cloned()
-                        .collect();
-                    if clean.len() != tcs.len() {
-                        let dropped = tcs.len() - clean.len();
-                        write_error_log(
-                            "sanitize_messages",
-                            &format!(
-                                "assistant tool_calls 中 {} 个条目无对应 tool result，已移除",
-                                dropped
-                            ),
-                        );
-                        removed += dropped;
-                        let mut fixed = msg.clone();
-                        fixed.tool_calls = if clean.is_empty() { None } else { Some(clean) };
-                        return Some(fixed);
-                    }
+            if msg.role == ROLE_ASSISTANT
+                && let Some(ref tcs) = msg.tool_calls
+            {
+                // 仅保留：id 非空 且 已有对应 tool result 的条目
+                let clean: Vec<_> = tcs
+                    .iter()
+                    .filter(|tc| !tc.id.is_empty() && result_ids.contains(&tc.id))
+                    .cloned()
+                    .collect();
+                if clean.len() != tcs.len() {
+                    let dropped = tcs.len() - clean.len();
+                    write_error_log(
+                        "sanitize_messages",
+                        &format!(
+                            "assistant tool_calls 中 {} 个条目无对应 tool result，已移除",
+                            dropped
+                        ),
+                    );
+                    removed += dropped;
+                    let mut fixed = msg.clone();
+                    fixed.tool_calls = if clean.is_empty() { None } else { Some(clean) };
+                    return Some(fixed);
                 }
             }
             Some(msg.clone())
@@ -216,6 +216,97 @@ fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         );
     }
     result
+}
+
+/// 后置验证：确保转换后的 OpenAI 消息中 tool_call_id 双向一致。
+/// 移除孤立的 tool result 消息（其 tool_call_id 在任何 assistant tool_calls 中无对应项），
+/// 以及移除 assistant 消息中无对应 tool result 的 tool_call 条目。
+fn sanitize_openai_messages(messages: &mut Vec<ChatCompletionRequestMessage>) {
+    // 1. 收集所有 assistant 消息中的 tool_call id
+    let assistant_tc_ids: std::collections::HashSet<String> = messages
+        .iter()
+        .filter_map(|m| {
+            if let ChatCompletionRequestMessage::Assistant(a) = m {
+                Some(a)
+            } else {
+                None
+            }
+        })
+        .flat_map(|a| {
+            a.tool_calls.iter().flatten().filter_map(|tc| match tc {
+                ChatCompletionMessageToolCalls::Function(f) => Some(f.id.clone()),
+                _ => None,
+            })
+        })
+        .filter(|id| !id.is_empty())
+        .collect();
+
+    // 2. 收集所有 tool result 消息中的 tool_call_id
+    let tool_result_ids: std::collections::HashSet<String> = messages
+        .iter()
+        .filter_map(|m| {
+            if let ChatCompletionRequestMessage::Tool(t) = m {
+                Some(t.tool_call_id.clone())
+            } else {
+                None
+            }
+        })
+        .filter(|id| !id.is_empty())
+        .collect();
+
+    let original_len = messages.len();
+
+    // 3. 移除孤立的 tool result（tool_call_id 不在 assistant tool_calls 中）
+    messages.retain(|m| {
+        if let ChatCompletionRequestMessage::Tool(t) = m
+            && !assistant_tc_ids.contains(&t.tool_call_id)
+        {
+            write_error_log(
+                "sanitize_openai_messages",
+                &format!(
+                    "移除孤立 tool result (tool_call_id={})：在 assistant tool_calls 中无对应项",
+                    t.tool_call_id
+                ),
+            );
+            return false;
+        }
+        true
+    });
+
+    // 4. 清理 assistant 消息中无对应 tool result 的 tool_call 条目
+    for msg in messages.iter_mut() {
+        if let ChatCompletionRequestMessage::Assistant(a) = msg
+            && let Some(ref mut tcs) = a.tool_calls
+        {
+            let before = tcs.len();
+            tcs.retain(|tc| match tc {
+                ChatCompletionMessageToolCalls::Function(f) => {
+                    f.id.is_empty() || tool_result_ids.contains(&f.id)
+                }
+                _ => true,
+            });
+            if tcs.len() != before {
+                write_error_log(
+                    "sanitize_openai_messages",
+                    &format!(
+                        "assistant tool_calls 中 {} 个条目无对应 tool result，已移除",
+                        before - tcs.len()
+                    ),
+                );
+            }
+            if tcs.is_empty() {
+                a.tool_calls = None;
+            }
+        }
+    }
+
+    let removed = original_len - messages.len();
+    if removed > 0 {
+        write_info_log(
+            "sanitize_openai_messages",
+            &format!("后置验证：共移除 {} 条孤立消息", removed),
+        );
+    }
 }
 
 /// 构建带工具定义的请求
@@ -238,6 +329,12 @@ pub fn build_request_with_tools(
         }
     }
     openai_messages.extend(to_openai_messages(&sanitized));
+
+    // ── 后置验证：确保转换后的消息中 tool_call_id 双向一致 ──
+    // to_openai_messages 可能通过 .build().ok() 静默丢弃某些消息，
+    // 导致 assistant tool_calls ↔ tool result 不再配对，API 报 "tool_call_id not found"。
+    sanitize_openai_messages(&mut openai_messages);
+
     let mut builder = CreateChatCompletionRequestArgs::default();
     builder.model(&provider.model).messages(openai_messages);
     let tools_count = tools.len();
