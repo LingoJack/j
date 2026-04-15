@@ -197,6 +197,7 @@ api 设计
 
 运行以下命令检查前端项目构建
 ```bash
+npx tsc --noEmit 2>& 1
 make check-frontend
 ```
 
