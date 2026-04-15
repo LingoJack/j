@@ -138,6 +138,8 @@ pub struct UIState {
     pub expand_tools: bool,
     /// 配置/工具/技能列表界面的垂直滚动偏移
     pub config_scroll_offset: u16,
+    /// 配置面板 Provider 子标签水平滚动偏移（可见窗口起始索引）
+    pub config_provider_scroll_offset: usize,
     /// 配置面板当前 Tab
     pub config_tab: ConfigTab,
     /// 会话列表（缓存）
