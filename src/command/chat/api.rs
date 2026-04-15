@@ -110,6 +110,14 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
             }
             ROLE_TOOL => {
                 let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
+                // tool_call_id 为空会导致 API 报 "tool_call_id is not found"，直接跳过
+                if tool_call_id.is_empty() {
+                    write_error_log(
+                        "to_openai_messages",
+                        "跳过 tool_call_id 为空的 tool 消息（旧历史或异常消息），避免 API 报错",
+                    );
+                    return None;
+                }
                 ChatCompletionRequestToolMessageArgs::default()
                     .content(msg.content.as_str())
                     .tool_call_id(tool_call_id)
@@ -122,6 +130,94 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
         .collect()
 }
 
+/// 预处理消息数组，保证 assistant tool_calls ↔ tool result 双向配对完整，
+/// 避免 API 报 "tool_call_id not found" 或 "missing tool result" 错误。
+///
+/// 处理逻辑（两步）：
+/// Step 1 — 从 tool result 侧收集有效 id：
+///   收集所有 role="tool" 且 tool_call_id 非空的 id，构成 "已有结果集"。
+/// Step 2 — 双向清理：
+///   - assistant 消息：将 tool_calls 中没有对应 result 的条目或 id 为空的条目删掉；
+///     若 tool_calls 全部被清空，置为 None（保留消息的文本 content）。
+///   - tool 消息：tool_call_id 为空或在任何 assistant tool_calls 中无对应 id 的，跳过。
+fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+    // Step 1：收集所有有效 tool result id（非空）
+    let result_ids: std::collections::HashSet<String> = messages
+        .iter()
+        .filter(|m| m.role == ROLE_TOOL)
+        .filter_map(|m| m.tool_call_id.clone())
+        .filter(|id| !id.is_empty())
+        .collect();
+
+    // 收集所有 assistant 消息中合法（id 非空）的 tool_call id
+    let assistant_ids: std::collections::HashSet<String> = messages
+        .iter()
+        .filter(|m| m.role == ROLE_ASSISTANT)
+        .flat_map(|m| {
+            m.tool_calls
+                .iter()
+                .flatten()
+                .filter(|tc| !tc.id.is_empty())
+                .map(|tc| tc.id.clone())
+        })
+        .collect();
+
+    let mut removed = 0usize;
+    let result: Vec<ChatMessage> = messages
+        .iter()
+        .filter_map(|msg| {
+            if msg.role == ROLE_TOOL {
+                let id = msg.tool_call_id.as_deref().unwrap_or("");
+                // 孤立 tool result：id 为空，或在 assistant tool_calls 中无对应项
+                if id.is_empty() || !assistant_ids.contains(id) {
+                    write_error_log(
+                        "sanitize_messages",
+                        &format!(
+                            "移除孤立 tool result tool_call_id={:?}（在 assistant tool_calls 中无对应项）",
+                            msg.tool_call_id
+                        ),
+                    );
+                    removed += 1;
+                    return None;
+                }
+            }
+            if msg.role == ROLE_ASSISTANT {
+                if let Some(ref tcs) = msg.tool_calls {
+                    // 仅保留：id 非空 且 已有对应 tool result 的条目
+                    let clean: Vec<_> = tcs
+                        .iter()
+                        .filter(|tc| !tc.id.is_empty() && result_ids.contains(&tc.id))
+                        .cloned()
+                        .collect();
+                    if clean.len() != tcs.len() {
+                        let dropped = tcs.len() - clean.len();
+                        write_error_log(
+                            "sanitize_messages",
+                            &format!(
+                                "assistant tool_calls 中 {} 个条目无对应 tool result，已移除",
+                                dropped
+                            ),
+                        );
+                        removed += dropped;
+                        let mut fixed = msg.clone();
+                        fixed.tool_calls = if clean.is_empty() { None } else { Some(clean) };
+                        return Some(fixed);
+                    }
+                }
+            }
+            Some(msg.clone())
+        })
+        .collect();
+
+    if removed > 0 {
+        write_info_log(
+            "sanitize_messages",
+            &format!("共清理 {} 个孤立/无效 tool_call 相关条目", removed),
+        );
+    }
+    result
+}
+
 /// 构建带工具定义的请求
 pub fn build_request_with_tools(
     provider: &ModelProvider,
@@ -129,6 +225,7 @@ pub fn build_request_with_tools(
     tools: Vec<ChatCompletionTools>,
     system_prompt: Option<&str>,
 ) -> Result<CreateChatCompletionRequest, ChatError> {
+    let sanitized = sanitize_messages(messages);
     let mut openai_messages = Vec::new();
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
@@ -140,7 +237,7 @@ pub fn build_request_with_tools(
             openai_messages.push(ChatCompletionRequestMessage::System(msg));
         }
     }
-    openai_messages.extend(to_openai_messages(messages));
+    openai_messages.extend(to_openai_messages(&sanitized));
     let mut builder = CreateChatCompletionRequestArgs::default();
     builder.model(&provider.model).messages(openai_messages);
     let tools_count = tools.len();
@@ -151,7 +248,7 @@ pub fn build_request_with_tools(
         let err_msg = format!("构建请求失败: {}", e);
         let params_info = format!(
             "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  tools数量: {}\n  system_prompt: {:?}",
-            provider.model, provider.api_base, messages.len(), tools_count, system_prompt
+            provider.model, provider.api_base, sanitized.len(), tools_count, system_prompt
         );
         write_info_log("build_request_with_tools ERROR", &format!("{}\n{}", err_msg, params_info));
         ChatError::RequestBuild(e.to_string())
