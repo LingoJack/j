@@ -68,12 +68,57 @@ pub async fn run_agent_loop(
         invoked_skills: &invoked_skills,
     };
 
+    write_info_log(
+        "agent_loop",
+        &format!(
+            "agent loop 启动: max_tool_rounds={}, model={}, tools_count={}",
+            max_tool_rounds,
+            provider.model,
+            tools.len()
+        ),
+    );
+    if !tools.is_empty() {
+        let tool_names: Vec<&str> = tools
+            .iter()
+            .filter_map(|t| {
+                if let async_openai::types::chat::ChatCompletionTools::Function(f) = t {
+                    Some(f.function.name.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        write_info_log(
+            "agent_loop",
+            &format!("可用工具列表: [{}]", tool_names.join(", ")),
+        );
+    } else {
+        write_info_log("agent_loop", "警告: tools 列表为空，LLM 将无法调用任何工具");
+    }
+
+    let mut last_round: usize = 0;
     'round: for _round in 0..max_tool_rounds {
+        last_round = _round;
+        write_info_log(
+            "agent_loop",
+            &format!(
+                "========== 第 {} 轮开始 (max={}) ==========",
+                _round, max_tool_rounds
+            ),
+        );
+
         // 每轮重新构建 system prompt（从磁盘读取最新配置）
         let mut system_prompt = system_prompt_fn();
 
         // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
+        let pending_count_before = safe_lock(&pending_user_messages, "agent::pending_count").len();
         drain_pending_user_messages(&mut messages, &pending_user_messages);
+        if pending_count_before > 0 {
+            write_info_log(
+                "agent_loop",
+                &format!("drain 了 {} 条用户增量消息", pending_count_before),
+            );
+        }
 
         // ── Layer 1: micro_compact（替换旧 tool results）──
         // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
@@ -436,6 +481,13 @@ pub async fn run_agent_loop(
             // 常见场景：某些 API 对多模态+流式组合返回空 choices，需要非流式重试。
             let stream_empty =
                 finish_reason.is_none() && assistant_text.is_empty() && raw_tool_calls.is_empty();
+            write_info_log(
+                "agent_loop",
+                &format!(
+                    "流式结果分析: stream_empty={}, stream_had_deserialize_error={}, stream_chunk_count={}",
+                    stream_empty, stream_had_deserialize_error, stream_chunk_count
+                ),
+            );
             if stream_had_deserialize_error || stream_empty {
                 if stream_empty {
                     write_info_log(
@@ -500,10 +552,25 @@ pub async fn run_agent_loop(
                     }
                 };
 
+                write_info_log(
+                    "agent_loop",
+                    &format!(
+                        "fallback 非流式结果: is_tool_calls={}, has_content={}, finish_reason={:?}",
+                        fallback_result.is_tool_calls,
+                        fallback_result
+                            .content
+                            .as_ref()
+                            .map(|c| c.len())
+                            .unwrap_or(0),
+                        fallback_result.finish_reason
+                    ),
+                );
+
                 if fallback_result.is_tool_calls
                     && let Some(tool_items) = fallback_result.tool_calls
                 {
                     if tool_items.is_empty() {
+                        write_info_log("agent_loop", "fallback tool_calls 为空列表，break 'round");
                         break 'round;
                     }
                     let assistant_text = fallback_result.content.clone().unwrap_or_default();
@@ -582,10 +649,18 @@ pub async fn run_agent_loop(
                 }
 
                 // fallback 非流式正常结束，但如果有用户增量消息则继续循环
-                if !safe_lock(&pending_user_messages, "agent::pending_check_fallback").is_empty() {
+                let has_pending =
+                    !safe_lock(&pending_user_messages, "agent::pending_check_fallback").is_empty();
+                write_info_log(
+                    "agent_loop",
+                    &format!("fallback 正常结束，pending_user_messages={}", has_pending),
+                );
+                if has_pending {
                     flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
+                    write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
+                write_info_log("agent_loop", "无用户增量消息，break 'round (fallback 路径)");
                 break 'round;
             }
 
@@ -595,6 +670,13 @@ pub async fn run_agent_loop(
             // 但 chunk 中确实包含 tool_calls 数据。此时如果只看 finish_reason 会直接
             // break 'round，导致工具调用被丢弃，agent 提前结束。
             let has_tool_calls = !raw_tool_calls.is_empty();
+            write_info_log(
+                "agent_loop",
+                &format!(
+                    "流式路径决策: has_tool_calls={}, finish_reason={:?}",
+                    has_tool_calls, finish_reason
+                ),
+            );
 
             if has_tool_calls {
                 // 日志：检测 finish_reason 与实际 tool_calls 是否一致
@@ -638,9 +720,22 @@ pub async fn run_agent_loop(
                     .collect();
 
                 if tool_items.is_empty() {
+                    write_info_log("agent_loop", "流式 tool_items 转换后为空，break 'round");
                     break 'round;
                 }
 
+                write_info_log(
+                    "agent_loop",
+                    &format!(
+                        "开始处理 {} 个工具调用: [{}]",
+                        tool_items.len(),
+                        tool_items
+                            .iter()
+                            .map(|t| t.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                );
                 match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
                     Ok(result) => {
                         // ── Layer 3: compact tool 触发 ──
@@ -678,10 +773,30 @@ pub async fn run_agent_loop(
                 }
             } else {
                 // 正常结束，但如果有用户增量消息则继续循环
-                if !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty() {
+                let has_pending =
+                    !safe_lock(&pending_user_messages, "agent::pending_check_stream").is_empty();
+                write_info_log(
+                    "agent_loop",
+                    &format!(
+                        "LLM 未调用工具 (finish_reason={:?}, text_len={})，pending_user_messages={}",
+                        finish_reason,
+                        assistant_text.len(),
+                        has_pending
+                    ),
+                );
+                if has_pending {
                     flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
+                    write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
+                write_info_log(
+                    "agent_loop",
+                    &format!(
+                        "break 'round: LLM 返回 Stop 且无工具调用，无待处理消息 (round={}, text_len={})",
+                        _round,
+                        assistant_text.len()
+                    ),
+                );
                 break 'round;
             }
 
@@ -693,6 +808,13 @@ pub async fn run_agent_loop(
         } // end 'api_retry
     } // end 'round
 
+    write_info_log(
+        "agent_loop",
+        &format!(
+            "agent loop 结束，发送 Done (共执行 {} 轮后退出 'round)",
+            last_round + 1
+        ),
+    );
     let _ = tx.send(StreamMsg::Done);
 }
 
