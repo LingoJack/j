@@ -415,6 +415,7 @@ impl ChatApp {
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
                 expand_tools: false,
                 config_scroll_offset: 0,
+                config_provider_scroll_offset: 0,
                 config_tab: ConfigTab::Model,
                 session_list: Vec::new(),
                 session_list_index: 0,
