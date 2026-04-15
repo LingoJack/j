@@ -11,6 +11,7 @@
 //! | `DEFAULT_SYSTEM_PROMPT` | 文本 | `assets/system_prompt_default.md` | 默认系统提示词模板 |
 //! | `DEFAULT_MEMORY` | 文本 | `assets/memory_default.md` | 默认记忆占位文件 |
 //! | `DEFAULT_SOUL` | 文本 | `assets/soul_default.md` | 默认灵魂占位文件 |
+//! | `DEFAULT_AGENT_MD` | 文本 | `assets/agent_md_default.md` | 默认 AGENT.md 模板 |
 
 use crate::config::YamlConfig;
 use crate::constants::section;
@@ -78,6 +79,16 @@ pub fn default_memory() -> Cow<'static, str> {
 /// 格式: Markdown
 pub fn default_soul() -> Cow<'static, str> {
     Assets::get("soul_default.md")
+        .map(|f| String::from_utf8_lossy(&f.data).into_owned().into())
+        .unwrap_or_else(|| Cow::Borrowed(""))
+}
+
+/// 默认 AGENT.md 模板
+///
+/// 用途: 首次运行时写入 `~/.jdata/agent/AGENT.md`
+/// 格式: Markdown
+pub fn default_agent_md() -> Cow<'static, str> {
+    Assets::get("agent_md_default.md")
         .map(|f| String::from_utf8_lossy(&f.data).into_owned().into())
         .unwrap_or_else(|| Cow::Borrowed(""))
 }

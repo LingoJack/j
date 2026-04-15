@@ -1,3 +1,4 @@
+use super::agent_md;
 use super::app::ChatApp;
 use super::storage::{load_style, load_system_prompt, save_style, save_system_prompt};
 use super::theme::ThemeName;
@@ -114,6 +115,7 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
     };
     match *field_name {
         "system_prompt" => "系统提示词",
+        "agent_md" => "AGENT.md",
         "style" => "回复风格",
         "max_history_messages" => "历史消息数",
         "theme" => "主题风格",
@@ -130,6 +132,7 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
     };
     match *field_name {
         "system_prompt" => load_system_prompt().unwrap_or_default(),
+        "agent_md" => std::fs::read_to_string(agent_md::agent_md_path()).unwrap_or_default(),
         "style" => load_style().unwrap_or_default(),
         "max_history_messages" => app.state.agent_config.max_history_messages.to_string(),
         "theme" => app.state.agent_config.theme.display_name().to_string(),
@@ -158,6 +161,7 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
     };
     match *field_name {
         "system_prompt" => load_system_prompt().unwrap_or_default(),
+        "agent_md" => std::fs::read_to_string(agent_md::agent_md_path()).unwrap_or_default(),
         "style" => load_style().unwrap_or_default(),
         "theme" => app.state.agent_config.theme.to_str().to_string(),
         "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
@@ -180,6 +184,12 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
     match *field_name {
         "system_prompt" => {
             save_system_prompt(value);
+        }
+        "agent_md" => {
+            if let Some(parent) = agent_md::agent_md_path().parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(agent_md::agent_md_path(), value);
         }
         "style" => {
             save_style(value);
