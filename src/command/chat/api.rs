@@ -438,10 +438,27 @@ pub async fn call_openai_non_stream_lenient(
 
     let tool_items = choice.message.tool_calls.as_ref().map(|tcs| {
         tcs.iter()
-            .map(|tc| ToolCallItem {
-                id: tc.id.clone(),
-                name: tc.function.name.clone(),
-                arguments: tc.function.arguments.clone(),
+            .map(|tc| {
+                // 与流式路径保持一致：API 未返回 id 时生成随机 id，避免下一轮报 tool_call_id not found
+                let id = if tc.id.is_empty() {
+                    use rand::Rng;
+                    let rand_id = format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
+                    write_info_log(
+                        "call_openai_non_stream_lenient",
+                        &format!(
+                            "tool_call id 为空，已生成随机 id: {} (tool: {})",
+                            rand_id, tc.function.name
+                        ),
+                    );
+                    rand_id
+                } else {
+                    tc.id.clone()
+                };
+                ToolCallItem {
+                    id,
+                    name: tc.function.name.clone(),
+                    arguments: tc.function.arguments.clone(),
+                }
             })
             .collect()
     });
