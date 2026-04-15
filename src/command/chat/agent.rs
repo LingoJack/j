@@ -589,13 +589,30 @@ pub async fn run_agent_loop(
                 break 'round;
             }
 
-            // ── 检查流式模式下的 tool_calls finish_reason ──
-            let is_tool_calls = matches!(
-                finish_reason,
-                Some(async_openai::types::chat::FinishReason::ToolCalls)
-            );
+            // ── 检查流式模式下是否有 tool_calls ──
+            // 优先检查 raw_tool_calls 是否非空，而非仅依赖 finish_reason。
+            // 某些 API（非 OpenAI）流式返回的 finish_reason 不是 ToolCodes 枚举值，
+            // 但 chunk 中确实包含 tool_calls 数据。此时如果只看 finish_reason 会直接
+            // break 'round，导致工具调用被丢弃，agent 提前结束。
+            let has_tool_calls = !raw_tool_calls.is_empty();
 
-            if is_tool_calls && !raw_tool_calls.is_empty() {
+            if has_tool_calls {
+                // 日志：检测 finish_reason 与实际 tool_calls 是否一致
+                let finish_is_tool_calls = matches!(
+                    finish_reason,
+                    Some(async_openai::types::chat::FinishReason::ToolCalls)
+                );
+                if !finish_is_tool_calls {
+                    write_info_log(
+                        "agent_loop",
+                        &format!(
+                            "finish_reason={:?} 不是 ToolCalls 但 raw_tool_calls 非空({})，仍处理工具调用",
+                            finish_reason,
+                            raw_tool_calls.len()
+                        ),
+                    );
+                }
+
                 let tool_items: Vec<ToolCallItem> = raw_tool_calls
                     .into_values()
                     .map(|(id, name, arguments)| {
