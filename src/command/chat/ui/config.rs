@@ -338,7 +338,7 @@ fn draw_tab_global_lines<'a>(
         } else if *field == "theme" {
             let theme_name = app.state.agent_config.theme.display_name();
             theme_field_row(label, theme_name, is_selected, "Enter \u{5207}\u{6362}", t)
-        } else if *field == "system_prompt" || *field == "style" {
+        } else if *field == "system_prompt" || *field == "agent_md" || *field == "style" {
             preview_field_row(label, &value, is_selected, "Enter \u{7f16}\u{8f91}", t)
         } else {
             text_field_row(

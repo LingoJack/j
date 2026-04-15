@@ -531,6 +531,43 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 needs_redraw = true;
             }
 
+            if app.ui.pending_agent_md_edit {
+                app.ui.pending_agent_md_edit = false;
+                input_thread.pause();
+                input_thread.drain();
+                let current_agent_md =
+                    std::fs::read_to_string(crate::command::chat::agent_md::agent_md_path())
+                        .unwrap_or_default();
+                match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
+                    &mut terminal,
+                    "编辑项目指令 (AGENT.md)",
+                    &current_agent_md,
+                    &app.ui.theme,
+                ) {
+                    Ok((Some(new_text), _)) => {
+                        let path = crate::command::chat::agent_md::agent_md_path();
+                        if let Some(parent) = path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        match std::fs::write(&path, &new_text) {
+                            Ok(_) => {
+                                app.update(Action::ShowToast("项目指令已更新".to_string(), false));
+                            }
+                            Err(_) => {
+                                app.update(Action::ShowToast("项目指令保存失败".to_string(), true));
+                            }
+                        }
+                    }
+                    Ok((None, _)) => {}
+                    Err(e) => {
+                        app.update(Action::ShowToast(format!("编辑器错误: {}", e), true));
+                    }
+                }
+                input_thread.drain();
+                input_thread.resume();
+                needs_redraw = true;
+            }
+
             if app.ui.pending_style_edit {
                 app.ui.pending_style_edit = false;
                 // 暂停输入线程，编辑器需要独占 stdin

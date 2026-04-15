@@ -65,6 +65,8 @@ Available skills:
 {{.background_tasks}}
 {{.teammates}}
 
+{{.agent_md}}
+
 <response_language>
 请使用中文回复
 </response_language>

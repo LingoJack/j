@@ -43,6 +43,7 @@ pub const CONFIG_GLOBAL_FIELDS: &[&str] = &[
 /// 全局配置字段（Tab 分页版，去掉 tools_enabled 和 skills_enabled）
 pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "system_prompt",
+    "agent_md",
     "style",
     "max_history_messages",
     "theme",

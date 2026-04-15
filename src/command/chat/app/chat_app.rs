@@ -121,6 +121,12 @@ impl ChatApp {
         if !soul_path().exists() {
             let _ = save_soul(&crate::assets::default_soul());
         }
+        if !crate::command::chat::agent_md::agent_md_path().exists() {
+            let _ = std::fs::write(
+                crate::command::chat::agent_md::agent_md_path(),
+                crate::assets::default_agent_md().as_ref(),
+            );
+        }
         // 安装预设 skills
         if let Err(e) = crate::assets::install_default_skills(&skill::skills_dir()) {
             crate::util::log::write_error_log(
@@ -404,6 +410,7 @@ impl ChatApp {
                 tool_ask_selections: Vec::new(),
                 tool_ask_cursor: 0,
                 pending_system_prompt_edit: false,
+                pending_agent_md_edit: false,
                 pending_style_edit: false,
                 image_cache: Arc::new(Mutex::new(ImageCache::new())),
                 expand_tools: false,
@@ -1134,6 +1141,10 @@ impl ChatApp {
                             }
                             if field == "system_prompt" {
                                 self.ui.pending_system_prompt_edit = true;
+                                return;
+                            }
+                            if field == "agent_md" {
+                                self.ui.pending_agent_md_edit = true;
                                 return;
                             }
                             if field == "style" {
@@ -2203,6 +2214,7 @@ impl ChatApp {
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
         let tool_registry = Arc::clone(&self.tool_registry);
         let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
+            use crate::command::chat::agent_md;
             use crate::command::chat::storage::{
                 load_memory, load_soul, load_style, load_system_prompt,
             };
@@ -2212,6 +2224,7 @@ impl ChatApp {
             let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
             let memory_text = load_memory().unwrap_or_default();
             let soul_text = load_soul().unwrap_or_default();
+            let agent_md_text = agent_md::load_agent_md();
             let current_dir = std::env::current_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string());
@@ -2227,7 +2240,8 @@ impl ChatApp {
                 .replace("{{.tools}}", &tools_summary)
                 .replace("{{.style}}", &style_text)
                 .replace("{{.memory}}", &memory_text)
-                .replace("{{.soul}}", &soul_text);
+                .replace("{{.soul}}", &soul_text)
+                .replace("{{.agent_md}}", &agent_md_text);
             // 状态占位符（{{.tasks}}、{{.background_tasks}}、{{.session_state}}、{{.teammates}}）
             // 不在此处替换，由内置 PreLlmRequest hook 链处理
             Some(resolved)

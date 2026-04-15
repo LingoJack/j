@@ -414,6 +414,49 @@ EOF
 
 > Skill 目录支持 `references/` 子目录存放参考文件，会自动附加到上下文
 
+## 📄 AGENT.md 项目指令
+
+AGENT.md 是项目级指令系统，让 AI 在每次对话中自动加载项目约定，确保长上下文中始终遵循项目规范。
+
+**创建方式**：
+
+```bash
+# 项目级（提交到 git，团队共享）
+cat > AGENT.md << 'EOF'
+# 项目约定
+
+- 使用 Rust 2024 edition
+- 所有公共 API 必须有文档注释
+- 错误处理使用 thiserror 而非 anyhow
+- 提交信息格式: type(scope): description
+EOF
+
+# 项目级（.jcli 目录下，与权限配置同目录）
+cat > .jcli/AGENT.md << 'EOF'
+# 额外约定
+...
+EOF
+
+# 个人级（不提交到 git）
+cat > AGENT.local.md << 'EOF'
+# 个人偏好
+...
+EOF'
+```
+
+**加载优先级**（后者覆盖前者）：
+
+| 优先级 | 文件 | 说明 |
+|--------|------|------|
+| 最低 | `~/.jdata/agent/AGENT.md` | 用户级，所有项目生效 |
+| ↓ | `AGENT.md`（从 git root 到 CWD） | 项目级，提交到 git |
+| ↓ | `.jcli/AGENT.md`（从 git root 到 CWD） | 项目级，与权限配置同目录 |
+| ↓ | `AGENT.local.md`（从 git root 到 CWD） | 个人级，不提交 git |
+| 最高 | `.jcli/AGENT.local.md`（从 git root 到 CWD） | 个人级，不提交 git |
+
+> 每个文件上限 200 行 / 25KB。项目级指令自动带有 OVERRIDE 强制力，优先于默认行为。
+> 在对话配置界面（Ctrl+E）中选择 "AGENT.md" 字段可编辑用户级指令。
+
 ## 🪝 AI Hook
 
 Hook 允许在关键操作节点注入自定义脚本，支持三级配置：

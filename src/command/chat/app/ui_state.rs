@@ -128,6 +128,8 @@ pub struct UIState {
     pub tool_ask_cursor: usize,
     /// 配置界面：是否有待处理的 system_prompt 编辑
     pub pending_system_prompt_edit: bool,
+    /// 配置界面：是否有待处理的 agent_md 编辑
+    pub pending_agent_md_edit: bool,
     /// 配置界面：是否有待处理的 style 编辑
     pub pending_style_edit: bool,
     /// 图片缓存（渲染终端图片）

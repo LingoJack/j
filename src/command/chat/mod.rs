@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod agent_config;
+pub mod agent_md;
 pub mod api;
 pub mod app;
 pub mod archive;
@@ -811,6 +812,7 @@ fn resolve_oneshot_system_prompt(
     let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
     let memory_text = load_memory().unwrap_or_default();
     let soul_text = load_soul().unwrap_or_default();
+    let agent_md_text = agent_md::load_agent_md();
     let current_dir = std::env::current_dir()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| ".".to_string());
@@ -828,6 +830,7 @@ fn resolve_oneshot_system_prompt(
         .replace("{{.style}}", &style_text)
         .replace("{{.memory}}", &memory_text)
         .replace("{{.soul}}", &soul_text)
+        .replace("{{.agent_md}}", &agent_md_text)
         .replace("{{.session_state}}", &session_state_summary)
         .replace("{{.tasks}}", "")
         .replace("{{.background_tasks}}", "")
