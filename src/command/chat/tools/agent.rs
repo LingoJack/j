@@ -156,6 +156,8 @@ impl Tool for AgentTool {
             let task_id_clone = task_id.clone();
             let cancelled_clone = Arc::clone(cancelled);
 
+            let description_clone = description.clone();
+            let shared_messages_clone = Arc::clone(&self.shared.shared_messages);
             std::thread::spawn(move || {
                 // 设置 worktree CWD
                 if let Some((ref wt_path, _)) = worktree_info {
@@ -171,6 +173,8 @@ impl Tool for AgentTool {
                     jcli_config,
                     &cancelled_clone,
                     Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
+                    &description_clone,
+                    &shared_messages_clone,
                 );
 
                 snap_running.store(false, Ordering::Relaxed);
@@ -225,6 +229,8 @@ impl Tool for AgentTool {
                 jcli_config,
                 &cancelled_clone,
                 Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
+                &description,
+                &self.shared.shared_messages,
             );
 
             snap_running.store(false, Ordering::Relaxed);
@@ -269,7 +275,15 @@ fn run_headless_agent_loop(
     jcli_config: Arc<JcliConfig>,
     cancelled: &Arc<AtomicBool>,
     snapshot: Option<SubAgentSnapshotRefs>,
+    description: &str,
+    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {
+    let agent_tag = format!("Agent: {}", description);
+    let push_ui = |msg: ChatMessage| {
+        if let Ok(mut shared) = shared_messages.lock() {
+            shared.push(msg);
+        }
+    };
     let max_rounds = 30; // 子代理最大轮数
 
     let (rt, client) = match create_runtime_and_client(&provider) {
@@ -326,6 +340,11 @@ fn run_headless_agent_loop(
         if !assistant_text.is_empty() {
             final_text = assistant_text.clone();
             write_info_log("SubAgent", &format!("Reply: {}", &final_text));
+            // UI 状态行：显示 sub-agent 的文字回复
+            push_ui(ChatMessage::text(
+                "assistant",
+                format!("<{}> {}", agent_tag, &assistant_text),
+            ));
         }
 
         // 检查是否有工具调用
@@ -341,6 +360,14 @@ fn run_headless_agent_loop(
         let tool_items = extract_tool_items(choice.message.tool_calls.as_ref().unwrap());
         if tool_items.is_empty() {
             break;
+        }
+
+        // UI 状态行：显示 sub-agent 的工具调用名（不含参数/结果）
+        for item in &tool_items {
+            push_ui(ChatMessage::text(
+                "assistant",
+                format!("<{}> [调用工具 {}]", agent_tag, item.name),
+            ));
         }
 
         // 将 assistant 消息（含 tool_calls）加入历史
@@ -368,6 +395,12 @@ fn run_headless_agent_loop(
         // 本轮工具结果写入后同步快照
         sync_messages(&messages);
     }
+
+    // UI 状态行：sub-agent 结束
+    push_ui(ChatMessage::text(
+        "assistant",
+        format!("<{}> [已完成]", agent_tag),
+    ));
 
     if final_text.is_empty() {
         "[Sub-agent completed with no text output]".to_string()

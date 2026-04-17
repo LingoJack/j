@@ -124,6 +124,8 @@ pub struct AgentToolShared {
     pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
     /// 子 agent 运行时快照追踪器（供 /dump 读取）
     pub sub_agent_tracker: Arc<SubAgentTracker>,
+    /// 主 TUI 的 shared_agent_messages（子 agent 的 UI 状态行推送到这里）
+    pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
 }
 
 impl AgentToolShared {

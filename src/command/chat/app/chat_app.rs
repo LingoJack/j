@@ -244,6 +244,7 @@ impl ChatApp {
             permission_queue: Arc::clone(&permission_queue),
             plan_approval_queue: Arc::clone(&plan_approval_queue),
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
+            shared_messages: Arc::clone(&shared_agent_messages),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
             shared: agent_tool_shared.clone(),
