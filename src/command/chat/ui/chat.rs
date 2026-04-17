@@ -7,6 +7,7 @@ use super::super::handler::{
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
+use super::super::teammate::TeammateStatus;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use crate::util::safe_lock;
@@ -26,13 +27,21 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 
+    // 动态标题栏高度：有 teammate 时多一行
+    let has_teammates = app
+        .teammate_manager
+        .lock()
+        .map(|m| !m.teammates.is_empty())
+        .unwrap_or(false);
+    let title_height = if has_teammates { 3 } else { 2 };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2), // 标题栏（顶部分割线 + 内容行）
-            Constraint::Min(5),    // 消息区
-            Constraint::Length(5), // 输入区
-            Constraint::Length(1), // 操作提示栏（始终可见）
+            Constraint::Length(title_height), // 标题栏（顶部分割线 + 内容行 + 可选 teammate 行）
+            Constraint::Min(5),               // 消息区
+            Constraint::Length(5),            // 输入区
+            Constraint::Length(1),            // 操作提示栏（始终可见）
         ])
         .split(size);
 
@@ -199,6 +208,80 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
     let content_line =
         Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
+
+    // ========== 第三行：Teammate 状态（仅在 area.height >= 3 时渲染）==========
+    if area.height >= 3 {
+        let snapshots = app
+            .teammate_manager
+            .lock()
+            .map(|m| m.teammate_snapshots())
+            .unwrap_or_default();
+
+        if !snapshots.is_empty() {
+            let mut tm_spans: Vec<Span> = vec![Span::styled(
+                " Teammates: ",
+                Style::default().fg(t.text_dim).add_modifier(Modifier::BOLD),
+            )];
+
+            let max_width = area.width as usize;
+            let mut current_width: usize = 13; // " Teammates: " 约 13 字符宽
+
+            for (i, snap) in snapshots.iter().enumerate() {
+                if i > 0 {
+                    // 检查分隔符是否还能放得下
+                    if current_width + 3 > max_width {
+                        tm_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
+                        break;
+                    }
+                    tm_spans.push(Span::styled(" │ ", Style::default().fg(t.title_separator)));
+                    current_width += 3;
+                }
+
+                // 状态颜色
+                let status_color = match &snap.status {
+                    TeammateStatus::Working => t.title_loading,
+                    TeammateStatus::WaitingForMessage => t.config_dim,
+                    TeammateStatus::Completed => t.config_toggle_on,
+                    TeammateStatus::Cancelled => t.text_dim,
+                    TeammateStatus::Error(_) => t.config_toggle_off,
+                    TeammateStatus::Initializing => t.config_dim,
+                };
+
+                // 构建状态文字
+                let status_text = if snap.status == TeammateStatus::Working {
+                    if let Some(ref tool) = snap.current_tool {
+                        format!("{} {}: {}", snap.status.icon(), snap.status.label(), tool)
+                    } else {
+                        format!("{} {}", snap.status.icon(), snap.status.label())
+                    }
+                } else {
+                    format!("{} {}", snap.status.icon(), snap.status.label())
+                };
+
+                // 格式: "Name [● 工作中: Read]"
+                let entry_width = snap.name.len() + 2 + status_text.len() + 1; // name + " [" + status + "]"
+                if current_width + entry_width > max_width {
+                    tm_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
+                    break;
+                }
+
+                tm_spans.push(Span::styled(
+                    snap.name.clone(),
+                    Style::default()
+                        .fg(t.text_white)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                tm_spans.push(Span::styled(" [", Style::default().fg(t.text_dim)));
+                tm_spans.push(Span::styled(status_text, Style::default().fg(status_color)));
+                tm_spans.push(Span::styled("]", Style::default().fg(t.text_dim)));
+                current_width += entry_width;
+            }
+
+            let tm_line =
+                Paragraph::new(Line::from(tm_spans)).style(Style::default().bg(t.bg_primary));
+            f.render_widget(tm_line, Rect::new(area.x, area.y + 2, area.width, 1));
+        }
+    }
 }
 
 /// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用

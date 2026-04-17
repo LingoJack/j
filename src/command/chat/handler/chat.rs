@@ -851,6 +851,13 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
         SlashCommand::Dump => {
             dump_current_request(app);
         }
+        SlashCommand::Teammate => {
+            app.ui.config_tab = ConfigTab::Teammates;
+            app.ui.teammate_list_index = 0;
+            app.ui.config_field_idx = 0;
+            app.ui.config_scroll_offset = 0;
+            app.update(Action::EnterMode(ChatMode::Config));
+        }
     }
 }
 

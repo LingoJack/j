@@ -7,6 +7,7 @@ use super::components::{
     selectable_row, separator_line, tab_bar, text_field_row, toggle_list_item, toggle_row,
 };
 use crate::command::chat::app::{ChatApp, ConfigTab};
+use crate::command::chat::teammate::TeammateStatus;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -26,6 +27,7 @@ fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
         ConfigTab::Skills,
         ConfigTab::Hooks,
         ConfigTab::Commands,
+        ConfigTab::Teammates,
         ConfigTab::Archive,
     ];
     let tabs: Vec<(&str, bool)> = all_tabs
@@ -62,6 +64,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Hooks => " \u{1fa9d} Hooks ",
         ConfigTab::Commands => " \u{1f4cb} \u{81ea}\u{5b9a}\u{4e49}\u{547d}\u{4ee4} ",
         ConfigTab::Session => " \u{1f4ac} \u{4f1a}\u{8bdd}\u{7ba1}\u{7406} ",
+        ConfigTab::Teammates => " Teammates ",
         ConfigTab::Archive => " \u{1f4e6} \u{5f52}\u{6863}\u{7ba1}\u{7406} ",
     };
 
@@ -94,6 +97,10 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Commands => {
             draw_tab_commands_header(&mut tab_header_lines, app);
             draw_tab_commands_list(&mut list_lines, &mut field_line_indices, app);
+        }
+        ConfigTab::Teammates => {
+            draw_tab_teammates_header(&mut tab_header_lines, app);
+            draw_tab_teammates_list(&mut list_lines, &mut field_line_indices, app);
         }
         ConfigTab::Session => {
             draw_tab_session_header(&mut tab_header_lines, app);
@@ -182,6 +189,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     let selected_idx = match app.ui.config_tab {
         ConfigTab::Session => app.ui.session_list_index,
         ConfigTab::Archive => app.ui.archive_list_index,
+        ConfigTab::Teammates => app.ui.teammate_list_index,
         _ => app.ui.config_field_idx,
     };
     if let Some(&selected_line) = field_line_indices.get(selected_idx) {
@@ -860,6 +868,180 @@ fn draw_tab_commands_list<'a>(
             Some(cmd.source.label()),
             t,
         ));
+        lines.push(Line::from(""));
+    }
+}
+
+/// Teammates tab 固定头部（团队摘要）
+fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
+    let t = &app.ui.theme;
+
+    let snapshots = app
+        .teammate_manager
+        .lock()
+        .map(|m| m.teammate_snapshots())
+        .unwrap_or_default();
+
+    if snapshots.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  (暂无 Teammate)",
+            Style::default().fg(t.config_dim),
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  Teammate 由 AI 通过 CreateTeammate 工具创建",
+            Style::default().fg(t.config_dim),
+        )));
+        return;
+    }
+
+    let working = snapshots
+        .iter()
+        .filter(|s| s.status == TeammateStatus::Working || s.status == TeammateStatus::Initializing)
+        .count();
+    let waiting = snapshots
+        .iter()
+        .filter(|s| s.status == TeammateStatus::WaitingForMessage)
+        .count();
+    let completed = snapshots
+        .iter()
+        .filter(|s| s.status == TeammateStatus::Completed)
+        .count();
+    let errored = snapshots
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.status,
+                TeammateStatus::Error(_) | TeammateStatus::Cancelled
+            )
+        })
+        .count();
+
+    let mut summary_spans = vec![Span::styled(
+        format!("  Teammates: {} 个  ", snapshots.len()),
+        Style::default()
+            .fg(t.config_label)
+            .add_modifier(Modifier::BOLD),
+    )];
+
+    if working > 0 {
+        summary_spans.push(Span::styled(
+            format!("● {} 工作中", working),
+            Style::default().fg(t.title_loading),
+        ));
+        summary_spans.push(Span::styled("  ", Style::default()));
+    }
+    if waiting > 0 {
+        summary_spans.push(Span::styled(
+            format!("○ {} 等待中", waiting),
+            Style::default().fg(t.config_dim),
+        ));
+        summary_spans.push(Span::styled("  ", Style::default()));
+    }
+    if completed > 0 {
+        summary_spans.push(Span::styled(
+            format!("✓ {} 已完成", completed),
+            Style::default().fg(t.config_toggle_on),
+        ));
+        summary_spans.push(Span::styled("  ", Style::default()));
+    }
+    if errored > 0 {
+        summary_spans.push(Span::styled(
+            format!("✗ {} 错误", errored),
+            Style::default().fg(t.config_toggle_off),
+        ));
+    }
+
+    lines.push(Line::from(summary_spans));
+    lines.push(Line::from(Span::styled(
+        "  (s 停止, Enter 详情)",
+        Style::default().fg(t.config_dim),
+    )));
+    lines.push(Line::from(""));
+}
+
+/// Teammates tab 可滚动列表
+fn draw_tab_teammates_list<'a>(
+    lines: &mut Vec<Line<'a>>,
+    field_line_indices: &mut Vec<usize>,
+    app: &ChatApp,
+) {
+    let t = &app.ui.theme;
+
+    let snapshots = app
+        .teammate_manager
+        .lock()
+        .map(|m| m.teammate_snapshots())
+        .unwrap_or_default();
+
+    for (i, snap) in snapshots.iter().enumerate() {
+        field_line_indices.push(lines.len());
+        let is_selected = i == app.ui.teammate_list_index;
+
+        let pointer = if is_selected { "❯ " } else { "  " };
+
+        // 状态颜色和符号
+        let status_color = match &snap.status {
+            TeammateStatus::Working => t.title_loading,
+            TeammateStatus::WaitingForMessage => t.config_dim,
+            TeammateStatus::Completed => t.config_toggle_on,
+            TeammateStatus::Cancelled => t.text_dim,
+            TeammateStatus::Error(_) => t.config_toggle_off,
+            TeammateStatus::Initializing => t.config_dim,
+        };
+
+        let status_text = if snap.status == TeammateStatus::Working {
+            if let Some(ref tool) = snap.current_tool {
+                format!("{} {}: {}", snap.status.icon(), snap.status.label(), tool)
+            } else {
+                format!("{} {}", snap.status.icon(), snap.status.label())
+            }
+        } else {
+            format!("{} {}", snap.status.icon(), snap.status.label())
+        };
+
+        // 截断角色描述
+        let role_display: String = if snap.role.chars().count() > 20 {
+            let truncated: String = snap.role.chars().take(20).collect();
+            format!("{truncated}…")
+        } else {
+            snap.role.clone()
+        };
+
+        let pointer_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.text_normal)
+        };
+
+        let name_style = if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(t.text_white)
+                .add_modifier(Modifier::BOLD)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(pointer.to_string(), pointer_style),
+            Span::styled(format!("{:<12}", snap.name), name_style),
+            Span::styled(
+                format!("{:<22}", role_display),
+                Style::default().fg(t.config_dim),
+            ),
+            Span::styled(
+                format!("{:<16}", status_text),
+                Style::default().fg(status_color),
+            ),
+            Span::styled(
+                format!("{} 次调用", snap.tool_calls_count),
+                Style::default().fg(t.text_dim),
+            ),
+        ]));
         lines.push(Line::from(""));
     }
 }

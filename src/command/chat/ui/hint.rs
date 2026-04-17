@@ -120,6 +120,13 @@ fn config_hints(app: &ChatApp) -> Vec<(&'static str, &'static str)> {
             ("Esc", "保存返回"),
         ],
         Hooks | Commands => vec![("←→", "切换标签"), ("Esc", "保存返回")],
+        Teammates => vec![
+            ("←→", "切换标签"),
+            ("↑↓", "选择"),
+            ("s", "停止"),
+            ("Enter", "详情"),
+            ("Esc", "保存返回"),
+        ],
         Archive => {
             if app.ui.restore_confirm_needed {
                 vec![("y/Enter", "确认还原"), ("Esc", "取消")]
