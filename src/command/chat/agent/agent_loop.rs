@@ -123,7 +123,11 @@ pub async fn run_agent_loop(
         // ── Layer 1: micro_compact（替换旧 tool results）──
         // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
         if compact_config.enabled {
-            compact::micro_compact(&mut messages, compact_config.keep_recent);
+            compact::micro_compact(
+                &mut messages,
+                compact_config.keep_recent,
+                &compact_config.micro_compact_exempt_tools,
+            );
             if compact::estimate_tokens(&messages) > compact_config.token_threshold {
                 write_info_log(
                     "agent_loop",

@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "id": "t1",
+    "content": "在 CompactConfig 中添加 micro_compact_exempt_tools 字段",
+    "status": "completed"
+  },
+  {
+    "id": "t2",
+    "content": "更新 micro_compact 函数签名，接收豁免工具列表参数",
+    "status": "completed"
+  },
+  {
+    "id": "t3",
+    "content": "更新 agent_loop 中 micro_compact 的调用",
+    "status": "completed"
+  },
+  {
+    "id": "t4",
+    "content": "更新配置 UI 支持显示/编辑豁免工具列表",
+    "status": "in_progress"
+  }
+]

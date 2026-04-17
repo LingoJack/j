@@ -136,6 +136,9 @@ pub struct CompactConfig {
     /// micro_compact 保留最近几个 tool result 不替换
     #[serde(default = "default_keep_recent")]
     pub keep_recent: usize,
+    /// micro_compact 中不压缩的工具名称列表（用户可扩展，与内置 EXEMPT_TOOLS 合并）
+    #[serde(default)]
+    pub micro_compact_exempt_tools: Vec<String>,
 }
 
 fn default_compact_enabled() -> bool {
@@ -156,6 +159,7 @@ impl Default for CompactConfig {
             enabled: default_compact_enabled(),
             token_threshold: default_token_threshold(),
             keep_recent: default_keep_recent(),
+            micro_compact_exempt_tools: Vec::new(),
         }
     }
 }
@@ -169,7 +173,11 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 ///
 /// 纯内存操作，零 API 成本。
 /// 将较早的 role="tool" 消息中内容长度 > MICRO_COMPACT_BYTES_THRESHOLD 的替换为 "[Previous: used {tool_name}]"
-pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
+pub fn micro_compact(
+    messages: &mut [ChatMessage],
+    keep_recent: usize,
+    extra_exempt_tools: &[String],
+) {
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
     let mut tool_name_map: HashMap<String, String> = HashMap::new();
     for msg in messages.iter() {
@@ -221,7 +229,9 @@ pub fn micro_compact(messages: &mut [ChatMessage], keep_recent: usize) {
                 .get(&tool_call_id)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
-            if EXEMPT_TOOLS.iter().any(|&t| t == tool_name) {
+            if EXEMPT_TOOLS.iter().any(|&t| t == tool_name)
+                || extra_exempt_tools.iter().any(|t| t == &tool_name)
+            {
                 continue;
             }
             messages[idx].content = format!("[Previous: used {}]", tool_name);
