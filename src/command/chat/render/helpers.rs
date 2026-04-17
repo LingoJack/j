@@ -117,7 +117,8 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "system_prompt" => "系统提示词",
         "agent_md" => "AGENT.md",
         "style" => "回复风格",
-        "max_history_messages" => "历史消息数",
+        "max_history_messages" => "历史消息数(0=无限)",
+        "max_context_tokens" => "消息窗口Token(K)",
         "theme" => "主题风格",
         "max_tool_rounds" => "工具轮数上限",
         "tool_confirm_timeout" => "确认超时(秒)",
@@ -134,7 +135,22 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
         "system_prompt" => load_system_prompt().unwrap_or_default(),
         "agent_md" => std::fs::read_to_string(agent_md::agent_md_path()).unwrap_or_default(),
         "style" => load_style().unwrap_or_default(),
-        "max_history_messages" => app.state.agent_config.max_history_messages.to_string(),
+        "max_history_messages" => {
+            let v = app.state.agent_config.max_history_messages;
+            if v == 0 {
+                "无限制".into()
+            } else {
+                v.to_string()
+            }
+        }
+        "max_context_tokens" => {
+            let v = app.state.agent_config.max_context_tokens;
+            if v == 0 {
+                "无限制".into()
+            } else {
+                format!("{}K", v)
+            }
+        }
         "theme" => app.state.agent_config.theme.display_name().to_string(),
         "max_tool_rounds" => app.state.agent_config.max_tool_rounds.to_string(),
         "tool_confirm_timeout" => {
@@ -173,6 +189,8 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
                 "false".into()
             }
         }
+        "max_history_messages" => app.state.agent_config.max_history_messages.to_string(),
+        "max_context_tokens" => app.state.agent_config.max_context_tokens.to_string(),
         _ => String::new(),
     }
 }
@@ -197,6 +215,11 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
         "max_history_messages" => {
             if let Ok(num) = value.trim().parse::<usize>() {
                 app.state.agent_config.max_history_messages = num;
+            }
+        }
+        "max_context_tokens" => {
+            if let Ok(num) = value.trim().parse::<usize>() {
+                app.state.agent_config.max_context_tokens = num;
             }
         }
         "theme" => {

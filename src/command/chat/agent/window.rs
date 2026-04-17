@@ -284,21 +284,33 @@ fn create_placeholder(unit: &MessageUnit, messages: &[ChatMessage]) -> ChatMessa
 ///
 /// # 参数
 /// - `messages`: 原始消息列表
-/// - `max_history_messages`: 消息条数上限
-/// - `max_context_tokens`: token 预算上限
+/// - `max_history_messages`: 消息条数上限（0 = 不限制）
+/// - `max_context_tokens_k`: token 预算上限，单位 K（0 = 不限制，100 = 100K tokens）
 pub fn select_messages(
     messages: &[ChatMessage],
     max_history_messages: usize,
-    max_context_tokens: usize,
+    max_context_tokens_k: usize,
 ) -> Vec<ChatMessage> {
+    // 0 = 不限制
+    let max_msgs = if max_history_messages == 0 {
+        usize::MAX
+    } else {
+        max_history_messages
+    };
+    let max_tokens = if max_context_tokens_k == 0 {
+        usize::MAX
+    } else {
+        max_context_tokens_k * 1000 // K → 实际 token 数
+    };
+
     // 不超预算时直接返回
     let total_tokens = estimate_tokens_simple(messages);
-    if messages.len() <= max_history_messages && total_tokens <= max_context_tokens {
+    if messages.len() <= max_msgs && total_tokens <= max_tokens {
         return messages.to_vec();
     }
 
     let units = parse_message_units(messages);
-    let selection = select_units(&units, messages, max_history_messages, max_context_tokens);
+    let selection = select_units(&units, messages, max_msgs, max_tokens);
 
     // 按原始顺序重组消息
     let mut result = Vec::new();
@@ -430,7 +442,7 @@ mod tests {
     #[test]
     fn test_no_truncation_needed() {
         let msgs = vec![user_msg("hello"), assistant_msg("hi")];
-        let result = select_messages(&msgs, 100, 100_000);
+        let result = select_messages(&msgs, 100, 0); // 0 = 不限制
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].role, ROLE_USER);
         assert_eq!(result[1].role, ROLE_ASSISTANT);
@@ -448,8 +460,8 @@ mod tests {
             assistant_msg("here's the answer"),
         ];
 
-        // 设置极小预算，迫使丢弃
-        let result = select_messages(&msgs, 100, 200);
+        // 设置极小预算，迫使丢弃 (1K tokens)
+        let result = select_messages(&msgs, 100, 1);
 
         // User 和 AssistantText 应该保留，ToolGroup 应该被占位符替换
         assert!(result.iter().any(|m| m.role == ROLE_USER));
@@ -468,7 +480,7 @@ mod tests {
             assistant_msg("ok2"),
         ];
 
-        let result = select_messages(&msgs, 100, 100_000);
+        let result = select_messages(&msgs, 100, 0); // 0 = 不限制
 
         // 时间顺序保持
         let user_positions: Vec<usize> = result
@@ -489,8 +501,8 @@ mod tests {
             tool_result_msg("call_1", &"y".repeat(2000)),
         ];
 
-        // 极小 token 预算迫使 ToolGroup 丢弃
-        let result = select_messages(&msgs, 100, 10);
+        // 极小 token 预算迫使 ToolGroup 丢弃 (1K tokens)
+        let result = select_messages(&msgs, 100, 1);
 
         let placeholder = result.iter().find(|m| m.content.contains("tool calls"));
         assert!(placeholder.is_some());

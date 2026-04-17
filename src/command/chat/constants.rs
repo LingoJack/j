@@ -55,8 +55,8 @@ pub const TODO_NAG_INTERVAL_ROUNDS: u32 = 15;
 /// 默认历史消息数量限制
 pub const DEFAULT_MAX_HISTORY_MESSAGES: usize = 100;
 
-/// 默认上下文 token 预算
-pub const DEFAULT_MAX_CONTEXT_TOKENS: usize = 100_000;
+/// 默认上下文 token 预算（0 = 不限制，否则单位为 K tokens，如 100 = 100K tokens）
+pub const DEFAULT_MAX_CONTEXT_TOKENS: usize = 0;
 
 /// 默认工具调用最大轮数
 pub const DEFAULT_MAX_TOOL_ROUNDS: usize = 1000;
