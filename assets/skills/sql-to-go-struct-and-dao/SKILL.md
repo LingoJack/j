@@ -1,92 +1,60 @@
 ---
 name: sql-to-go-struct-and-dao
-description: 根据 sql 语句自动生成 go 的结构体和 DAO 层代码，基于 gorm 框架
+description: 用 jen (github.com/LingoJack/model_infrax) 把 MySQL 建表 SQL 生成一整套 Go 代码（PO/entity、查询 DTO、视图 VO、DAO），支持 itea-go 与 gorm 两种框架。触发场景：用户提供 CREATE TABLE 语句要生成 Go model/DAO；用户说"根据这张表生成结构体/DAO/CRUD"；用户想搭建 gorm 项目的数据访问层；`.model_infrax/` 目录存在或被提及。不要用在非 MySQL、非 gorm 体系的场景。
 ---
 
-安装 jen (如无)
+# 工作流
+
+## 1. 安装 jen（幂等）
+
 ```bash
-go install github.com/LingoJack/model_infrax/cmd/jen@latest
+command -v jen >/dev/null || go install github.com/LingoJack/model_infrax/cmd/jen@latest
 ```
 
-在需要的目录执行 `jen init` 初始化项目，会自动创建 `.model_infrax/` 目录及其相关配置
-目录结构如：
+## 2. 初始化配置
+
+在**项目根目录**执行：
+
 ```bash
-➜  j git:(main) ✗ tree .model_infrax 
-.model_infrax
-├── config.yml
-└── schema.sql
+jen init
 ```
 
-生成使用方法详情请见
+生成 `.model_infrax/{config.yml, schema.sql}`。如果已存在会询问是否覆盖。
+
+## 3. 写 SQL + 改配置
+
+1. 把 `CREATE TABLE ...` 贴到 `.model_infrax/schema.sql`
+2. 打开 `.model_infrax/config.yml`，**必须确认**：
+   - `output_path` — 输出目录，相对项目根。默认 `target/jen`，几乎总要改成项目真实代码目录（如 `internal/gen`），不然生成完还要搬
+   - `use_framework` — `itea-go`（依赖腾讯内网 `git.woa.com/...` 的 `igorm.BaseDao`）或 `gorm`（纯 gorm）
+   - `package` — 5 个子包路径，必须和 `output_path` 下真实目录层级一致，否则跨包 import 会断
+
+字段全量说明与人工处理清单见 [references/config.md](references/config.md)。
+
+## 4. 生成
+
 ```bash
-> jen -h
-Model Infrax v2.0.1 — Go 代码生成器 CLI
-
-用法:
-  jen init          初始化 .model_infrax 配置目录（已有配置会询问是否覆盖）
-  jen               加载 .model_infrax/config.yml 生成代码
-  jen -c <path>     指定配置文件路径生成代码
-  jen -v            显示版本信息
-  jen -h            显示帮助信息
-
-快速上手:
-  1. jen init                            初始化配置
-  2. 编辑 .model_infrax/schema.sql       编写建表语句
-  3. jen                                 生成代码到 target/jen/
-
-更多信息:
-  https://github.com/LingoJack/model_infrax
+jen                # 读 .model_infrax/config.yml
+jen -c <path>      # 或指定配置
 ```
 
-配置文件例如：
-```yaml
-generate_config:
-  # 生成模式: database(从数据库解析) 或 statement(从SQL文件解析)
-  generate_mode: statement
-  
-  # database 模式配置
-  # database_name: test_db
-  # host: localhost
-  # port: 3306
-  # username: root
-  # password: 123456
+## 5. 产物结构
 
-  # statement 模式配置（相对于项目根目录）
-  sql_file_path: .model_infrax/schema.sql
-  
-  # 通用配置
-  all_tables: true
-  table_names:
-    - t_example
+以表 `t_example` 为例，`<output_path>/` 下得到：
 
-generate_option:
-  # 输出路径（相对于项目根目录）
-  output_path: target/jen
-
-  # 是否将所有模型放在一个文件中
-  all_model_in_one_file: false
-
-  # 所有模型放在一个文件中的文件名
-  all_model_in_one_file_name: model.go
-
-  # 只为有索引的字段生成 infrax 方法
-  crud_only_idx: false
-
-  # go 的 package 映射
-  package:
-    po: model/entity
-    dto: model/query
-    vo: model/view
-    dao: dao
-    tool: tool
-
-  # 使用框架, 可选: itea-go, gorm
-  use_framework: itea-go
+```
+model/entity/t_example.go      # PO + Builder + Jsonify
+model/query/t_example_dto.go   # 查询 DTO + Builder
+model/view/t_example_vo.go     # VO
+dao/t_example_dao.go           # CRUD + 事务 + 原生 SQL
+tool/*.go                      # 一整套通用工具（整个项目只需一份）
 ```
 
-要生成代码的sql放置于 `.model_infrax/schema.sql`
-修改配置中的 `output_path` 输出路径以及要使用的框架 `use_framework` ，或者手动复制生成的代码
-生成代码的命令
-```bash
-jen
-```
+调用方式、DTO 字段约定（Fuzzy/List/Start/End/OrderBy/Page）、零值覆盖语义、事务写法见 [references/generated-code.md](references/generated-code.md)。**修改数据时零值语义易错，首次使用务必读这个文件。**
+
+# 生成后必做检查（否则跑不起来）
+
+1. DAO 里 `func (dao *XxxDao) Database() string` 默认返回 `"@database_name"`，改成真实逻辑库名
+2. `use_framework: itea-go` 时确认能拉到 `git.woa.com/tencent-cloud-platform/go-module/itea-gorm`；拉不到就切 `gorm`
+3. 跑一遍 `go build ./...` 验证 import 路径（`output_path` + `package` 配对是否正确）
+4. 若项目已有 `tool/` 工具包，跟生成的 `tool/` 去重
