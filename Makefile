@@ -3,7 +3,8 @@ SHELL := /bin/bash
 # ============================================
 # 变量定义
 # ============================================
-BIN_PATH := /usr/local/bin/j
+CARGO_BIN_DIR := $(shell echo $${CARGO_HOME:-$$HOME/.cargo}/bin)
+BIN_PATH := $(CARGO_BIN_DIR)/j
 TARGET_DIR := target/release
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -110,23 +111,24 @@ release: ## 构建发布版本（release）
 # ============================================
 # 安装相关
 # ============================================
-install: release build-indicator build-ax ## 安装到系统
+install: release build-indicator build-ax ## 安装到系统（cargo bin 目录）
 	@echo "📦 安装到系统..."
+	@mkdir -p $(CARGO_BIN_DIR)
 	@rm -f $(BIN_PATH)
 	@cp $(TARGET_DIR)/j $(BIN_PATH)
 	@chmod +x $(BIN_PATH)
 	@codesign --force --sign - $(BIN_PATH) 2>/dev/null || true
 	@if [ -f $(TARGET_DIR)/j-indicator ]; then \
-		rm -f /usr/local/bin/j-indicator; \
-		cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator && chmod +x /usr/local/bin/j-indicator && codesign --force --sign - /usr/local/bin/j-indicator 2>/dev/null; \
-		echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"; \
+		rm -f $(CARGO_BIN_DIR)/j-indicator; \
+		cp $(TARGET_DIR)/j-indicator $(CARGO_BIN_DIR)/j-indicator && chmod +x $(CARGO_BIN_DIR)/j-indicator && codesign --force --sign - $(CARGO_BIN_DIR)/j-indicator 2>/dev/null; \
+		echo "☑️ j-indicator 已安装到 $(CARGO_BIN_DIR)/j-indicator"; \
 	else \
 		echo "⚠️ j-indicator 未构建，跳过安装"; \
 	fi
 	@if [ -f $(TARGET_DIR)/j-ax ]; then \
-		rm -f /usr/local/bin/j-ax; \
-		cp $(TARGET_DIR)/j-ax /usr/local/bin/j-ax && chmod +x /usr/local/bin/j-ax && codesign --force --sign - /usr/local/bin/j-ax 2>/dev/null; \
-		echo "☑️ j-ax 已安装到 /usr/local/bin/j-ax"; \
+		rm -f $(CARGO_BIN_DIR)/j-ax; \
+		cp $(TARGET_DIR)/j-ax $(CARGO_BIN_DIR)/j-ax && chmod +x $(CARGO_BIN_DIR)/j-ax && codesign --force --sign - $(CARGO_BIN_DIR)/j-ax 2>/dev/null; \
+		echo "☑️ j-ax 已安装到 $(CARGO_BIN_DIR)/j-ax"; \
 	else \
 		echo "⚠️ j-ax 未构建，跳过安装"; \
 	fi
