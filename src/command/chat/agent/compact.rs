@@ -169,6 +169,22 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
     serde_json::to_string(messages).unwrap_or_default().len() / 4
 }
 
+/// 内置豁免工具列表（不可配置，始终不压缩这些工具的返回结果）
+pub const BUILTIN_EXEMPT_TOOLS: &[&str] = &[
+    LoadSkillTool::NAME,
+    TaskTool::NAME,
+    TodoWriteTool::NAME,
+    TodoReadTool::NAME,
+    EnterPlanModeTool::NAME,
+    ExitPlanModeTool::NAME,
+    AgentTool::NAME,
+    AgentTeamTool::NAME,
+    AskTool::NAME,
+    // Teammate 工具结果不压缩（承载协作上下文）
+    crate::command::chat::tools::send_message::SendMessageTool::NAME,
+    crate::command::chat::tools::create_teammate::CreateTeammateTool::NAME,
+];
+
 /// Layer 1: micro_compact - 替换旧 tool result 为占位符，保留最近 keep_recent 个
 ///
 /// 纯内存操作，零 API 成本。
@@ -205,21 +221,6 @@ pub fn micro_compact(
     // 3. 除最近 keep_recent 个外，content.len() > MICRO_COMPACT_BYTES_THRESHOLD 的替换为占位符
     let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
-    // 不压缩的 tool 名称（如 LoadSkill 的结果承载完整工作流指令）
-    const EXEMPT_TOOLS: &[&str] = &[
-        LoadSkillTool::NAME,
-        TaskTool::NAME,
-        TodoWriteTool::NAME,
-        TodoReadTool::NAME,
-        EnterPlanModeTool::NAME,
-        ExitPlanModeTool::NAME,
-        AgentTool::NAME,
-        AgentTeamTool::NAME,
-        AskTool::NAME,
-        // Teammate 工具结果不压缩（承载协作上下文）
-        crate::command::chat::tools::send_message::SendMessageTool::NAME,
-        crate::command::chat::tools::create_teammate::CreateTeammateTool::NAME,
-    ];
 
     for &idx in to_compact {
         let msg = &messages[idx];
@@ -229,7 +230,7 @@ pub fn micro_compact(
                 .get(&tool_call_id)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
-            if EXEMPT_TOOLS.iter().any(|&t| t == tool_name)
+            if BUILTIN_EXEMPT_TOOLS.iter().any(|&t| t == tool_name)
                 || extra_exempt_tools.iter().any(|t| t == &tool_name)
             {
                 continue;

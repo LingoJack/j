@@ -51,6 +51,9 @@ pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "tool_confirm_timeout",
     "theme",
     "auto_restore_session",
+    "compact_enabled",
+    "compact_keep_recent",
+    "compact_exempt_tools",
 ];
 
 /// Toast 通知显示时长（秒）

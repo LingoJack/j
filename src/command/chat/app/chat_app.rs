@@ -1180,6 +1180,17 @@ impl ChatApp {
                                 self.show_toast(format!("自动恢复会话已{}", status), false);
                                 return;
                             }
+                            if field == "compact_enabled" {
+                                self.state.agent_config.compact.enabled =
+                                    !self.state.agent_config.compact.enabled;
+                                let status = if self.state.agent_config.compact.enabled {
+                                    "开启"
+                                } else {
+                                    "关闭"
+                                };
+                                self.show_toast(format!("上下文压缩已{}", status), false);
+                                return;
+                            }
                             if field == "theme" {
                                 self.switch_theme();
                                 return;

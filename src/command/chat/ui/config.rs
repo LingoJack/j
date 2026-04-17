@@ -519,6 +519,7 @@ fn draw_tab_global_lines<'a>(
         (3, 2), // max_history_messages, max_context_tokens
         (5, 2), // max_tool_rounds, tool_confirm_timeout
         (7, 2), // theme, auto_restore_session
+        (9, 3), // compact_enabled, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
@@ -551,6 +552,16 @@ fn draw_tab_global_lines<'a>(
 
             let line = if *field_name == "auto_restore_session" {
                 let toggle_on = app.state.agent_config.auto_restore_session;
+                global_toggle_row(
+                    label,
+                    toggle_on,
+                    desc,
+                    is_selected,
+                    "Enter \u{5207}\u{6362}",
+                    t,
+                )
+            } else if *field_name == "compact_enabled" {
+                let toggle_on = app.state.agent_config.compact.enabled;
                 global_toggle_row(
                     label,
                     toggle_on,

@@ -123,6 +123,9 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "max_tool_rounds" => "工具轮数上限",
         "tool_confirm_timeout" => "确认超时",
         "auto_restore_session" => "自动恢复会话",
+        "compact_enabled" => "上下文压缩",
+        "compact_keep_recent" => "保留最近轮数",
+        "compact_exempt_tools" => "豁免压缩工具",
         _ => field_name,
     }
 }
@@ -142,6 +145,9 @@ pub fn config_field_desc_global(idx: usize) -> &'static str {
         "max_tool_rounds" => "单次对话中工具调用最大轮数",
         "tool_confirm_timeout" => "工具确认等待秒数，0=关闭自动确认",
         "auto_restore_session" => "启动时自动恢复上次会话",
+        "compact_enabled" => "开启后自动压缩过长的上下文",
+        "compact_keep_recent" => "micro_compact 保留最近几个工具结果不替换",
+        "compact_exempt_tools" => "不压缩的工具名称(逗号分隔，如 Read,Grep,Glob)",
         _ => "",
     }
 }
@@ -186,6 +192,26 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
                 "关闭".into()
             }
         }
+        "compact_enabled" => {
+            if app.state.agent_config.compact.enabled {
+                "开启".into()
+            } else {
+                "关闭".into()
+            }
+        }
+        "compact_keep_recent" => app.state.agent_config.compact.keep_recent.to_string(),
+        "compact_exempt_tools" => {
+            // 合并内置 + 用户自定义，一起展示
+            let mut all: Vec<&str> =
+                crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.to_vec();
+            let user_extra = &app.state.agent_config.compact.micro_compact_exempt_tools;
+            for t in user_extra {
+                if !all.contains(&t.as_str()) {
+                    all.push(t);
+                }
+            }
+            all.join(",")
+        }
         _ => String::new(),
     }
 }
@@ -207,6 +233,26 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
             } else {
                 "false".into()
             }
+        }
+        "compact_enabled" => {
+            if app.state.agent_config.compact.enabled {
+                "true".into()
+            } else {
+                "false".into()
+            }
+        }
+        "compact_keep_recent" => app.state.agent_config.compact.keep_recent.to_string(),
+        "compact_exempt_tools" => {
+            // 合并内置 + 用户自定义，编辑时展示完整列表
+            let mut all: Vec<&str> =
+                crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.to_vec();
+            let user_extra = &app.state.agent_config.compact.micro_compact_exempt_tools;
+            for t in user_extra {
+                if !all.contains(&t.as_str()) {
+                    all.push(t);
+                }
+            }
+            all.join(",")
         }
         "max_history_messages" => app.state.agent_config.max_history_messages.to_string(),
         "max_context_tokens" => app.state.agent_config.max_context_tokens.to_string(),
@@ -261,6 +307,27 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
                 value.trim().to_lowercase().as_str(),
                 "true" | "1" | "开启" | "on" | "yes"
             );
+        }
+        "compact_enabled" => {
+            app.state.agent_config.compact.enabled = matches!(
+                value.trim().to_lowercase().as_str(),
+                "true" | "1" | "开启" | "on" | "yes"
+            );
+        }
+        "compact_keep_recent" => {
+            if let Ok(num) = value.trim().parse::<usize>() {
+                app.state.agent_config.compact.keep_recent = num;
+            }
+        }
+        "compact_exempt_tools" => {
+            // 保存时剥离内置工具，只保留用户额外新增的部分
+            let builtin: Vec<&str> =
+                crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.to_vec();
+            app.state.agent_config.compact.micro_compact_exempt_tools = value
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && !builtin.contains(&s.as_str()))
+                .collect();
         }
         _ => {}
     }

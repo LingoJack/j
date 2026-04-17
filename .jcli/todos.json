@@ -1,22 +1,22 @@
 [
   {
-    "id": "t1",
-    "content": "在 CompactConfig 中添加 micro_compact_exempt_tools 字段",
+    "id": "t5",
+    "content": "在 CONFIG_GLOBAL_FIELDS_TAB 中添加 compact 相关字段",
     "status": "completed"
   },
   {
-    "id": "t2",
-    "content": "更新 micro_compact 函数签名，接收豁免工具列表参数",
+    "id": "t6",
+    "content": "在 helpers.rs 中添加 compact 字段的 label/desc/value/raw_value/set 函数分支",
     "status": "completed"
   },
   {
-    "id": "t3",
-    "content": "更新 agent_loop 中 micro_compact 的调用",
+    "id": "t7",
+    "content": "在 config.rs 的 draw_tab_global_content 中添加 compact.enabled 的 toggle 渲染",
     "status": "completed"
   },
   {
-    "id": "t4",
-    "content": "更新配置 UI 支持显示/编辑豁免工具列表",
-    "status": "in_progress"
+    "id": "t8",
+    "content": "在 chat_app.rs 的 Action::ConfigEnter 中添加 compact toggle 处理",
+    "status": "completed"
   }
 ]
