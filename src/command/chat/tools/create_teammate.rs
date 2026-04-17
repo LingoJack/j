@@ -150,6 +150,8 @@ impl Tool for CreateTeammateTool {
         let streaming_content = Arc::new(Mutex::new(String::new()));
         let cancel_token = CancellationToken::new();
         let is_running = Arc::new(AtomicBool::new(true));
+        let system_prompt_snapshot = Arc::new(Mutex::new(String::new()));
+        let messages_snapshot = Arc::new(Mutex::new(Vec::new()));
 
         // 获取 provider 快照
         let provider = safe_lock(&self.shared.provider, "CreateTeammate::provider").clone();
@@ -190,6 +192,8 @@ impl Tool for CreateTeammateTool {
         let pending_clone = Arc::clone(&pending_user_messages);
         let is_running_clone = Arc::clone(&is_running);
         let cancel_token_clone = cancel_token.clone();
+        let sp_snapshot_clone = Arc::clone(&system_prompt_snapshot);
+        let msgs_snapshot_clone = Arc::clone(&messages_snapshot);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份
@@ -226,6 +230,8 @@ impl Tool for CreateTeammateTool {
                     teammate_manager,
                     pending_user_messages: pending_clone,
                     cancel_token: cancel_token_clone,
+                    system_prompt_snapshot: sp_snapshot_clone,
+                    messages_snapshot: msgs_snapshot_clone,
                 },
             );
 
@@ -265,6 +271,8 @@ impl Tool for CreateTeammateTool {
             cancel_token,
             is_running,
             thread_handle: Some(thread_handle),
+            system_prompt_snapshot,
+            messages_snapshot,
         };
 
         match self.teammate_manager.lock() {

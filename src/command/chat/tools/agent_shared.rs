@@ -9,9 +9,99 @@ use crate::command::chat::tools::task::TaskManager;
 use crate::util::log::write_info_log;
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc,
 };
+
+// ========== SubAgentTracker ==========
+
+/// 一个正在运行（或刚结束）的子 Agent 的快照
+pub struct SubAgentSnapshot {
+    pub id: String,
+    pub description: String,
+    pub mode: &'static str, // "foreground" | "background"
+    pub is_running: Arc<AtomicBool>,
+    pub system_prompt: Arc<Mutex<String>>,
+    pub messages: Arc<Mutex<Vec<ChatMessage>>>,
+}
+
+/// 管理所有运行中的子 Agent 快照，供 /dump 读取
+pub struct SubAgentTracker {
+    agents: Mutex<Vec<SubAgentSnapshot>>,
+    counter: AtomicU64,
+}
+
+/// 一次 register 返回的 handle：(id, is_running, system_prompt 共享, messages 共享)
+pub type SubAgentRegistration = (
+    String,
+    Arc<AtomicBool>,
+    Arc<Mutex<String>>,
+    Arc<Mutex<Vec<ChatMessage>>>,
+);
+
+/// 单次 snapshot 元素：(id, description, mode, system_prompt, messages)
+pub type RunningSubAgentDump = (String, String, &'static str, String, Vec<ChatMessage>);
+
+impl SubAgentTracker {
+    pub fn new() -> Self {
+        Self {
+            agents: Mutex::new(Vec::new()),
+            counter: AtomicU64::new(1),
+        }
+    }
+
+    /// 注册一个子 Agent；返回生成的 id 与快照的 Arc 字段，供 loop 写入
+    pub fn register(&self, description: &str, mode: &'static str) -> SubAgentRegistration {
+        let id = format!("sub_{:04}", self.counter.fetch_add(1, Ordering::Relaxed));
+        let is_running = Arc::new(AtomicBool::new(true));
+        let system_prompt = Arc::new(Mutex::new(String::new()));
+        let messages = Arc::new(Mutex::new(Vec::new()));
+        if let Ok(mut list) = self.agents.lock() {
+            list.push(SubAgentSnapshot {
+                id: id.clone(),
+                description: description.to_string(),
+                mode,
+                is_running: Arc::clone(&is_running),
+                system_prompt: Arc::clone(&system_prompt),
+                messages: Arc::clone(&messages),
+            });
+        }
+        (id, is_running, system_prompt, messages)
+    }
+
+    /// 采集当前所有仍在运行的子 Agent 的完整快照（供 /dump 使用）
+    pub fn snapshot_running(&self) -> Vec<RunningSubAgentDump> {
+        let list = match self.agents.lock() {
+            Ok(l) => l,
+            Err(_) => return Vec::new(),
+        };
+        list.iter()
+            .filter(|s| s.is_running.load(Ordering::Relaxed))
+            .map(|s| {
+                let sp = s
+                    .system_prompt
+                    .lock()
+                    .map(|x| x.clone())
+                    .unwrap_or_default();
+                let msgs = s.messages.lock().map(|x| x.clone()).unwrap_or_default();
+                (s.id.clone(), s.description.clone(), s.mode, sp, msgs)
+            })
+            .collect()
+    }
+
+    /// 清理已结束的子 Agent（可在 register 时调用，防止列表无限增长）
+    pub fn gc_finished(&self) {
+        if let Ok(mut list) = self.agents.lock() {
+            list.retain(|s| s.is_running.load(Ordering::Relaxed));
+        }
+    }
+}
+
+impl Default for SubAgentTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 // ========== AgentToolShared ==========
 
@@ -32,6 +122,8 @@ pub struct AgentToolShared {
     pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
     /// Plan 审批请求队列（与主 TUI 共享同一个实例，teammate ExitPlanMode 走此队列）
     pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
+    /// 子 agent 运行时快照追踪器（供 /dump 读取）
+    pub sub_agent_tracker: Arc<SubAgentTracker>,
 }
 
 impl AgentToolShared {

@@ -23,6 +23,8 @@ pub enum SlashCommand {
     Theme,
     /// 恢复历史会话
     Resume,
+    /// 导出真实传给 AI 的 system prompt 和 messages
+    Dump,
 }
 
 impl SlashCommand {
@@ -38,6 +40,7 @@ impl SlashCommand {
             SlashCommand::Clear => "/clear".to_string(),
             SlashCommand::Theme => "/theme".to_string(),
             SlashCommand::Resume => "/resume".to_string(),
+            SlashCommand::Dump => "/dump".to_string(),
         }
     }
 
@@ -53,6 +56,7 @@ impl SlashCommand {
             SlashCommand::Clear => "新建对话".to_string(),
             SlashCommand::Theme => "切换主题".to_string(),
             SlashCommand::Resume => "恢复历史会话".to_string(),
+            SlashCommand::Dump => "导出真实传给 AI 的 system prompt 和 messages".to_string(),
         }
     }
 
@@ -68,6 +72,7 @@ impl SlashCommand {
             SlashCommand::Clear,
             SlashCommand::Theme,
             SlashCommand::Resume,
+            SlashCommand::Dump,
         ]
     }
 }

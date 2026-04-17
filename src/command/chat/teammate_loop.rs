@@ -27,6 +27,10 @@ pub struct TeammateLoopConfig {
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
     pub cancel_token: CancellationToken,
+    /// 供 /dump 读取的 system prompt 快照
+    pub system_prompt_snapshot: Arc<Mutex<String>>,
+    /// 供 /dump 读取的 messages 快照
+    pub messages_snapshot: Arc<Mutex<Vec<ChatMessage>>>,
 }
 
 /// Teammate 专用的 agent loop
@@ -50,6 +54,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         teammate_manager,
         pending_user_messages,
         cancel_token,
+        system_prompt_snapshot,
+        messages_snapshot,
     } = config;
 
     let max_rounds = 200; // 足够大，实际由 cancel_token 控制生命周期
@@ -68,6 +74,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         &teammate_manager,
     );
 
+    // 写入 system prompt 快照（供 /dump 读取）
+    if let Ok(mut sp) = system_prompt_snapshot.lock() {
+        *sp = system_prompt.clone();
+    }
+
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
         role: "user".to_string(),
         content: initial_prompt,
@@ -75,6 +86,14 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         tool_call_id: None,
         images: None,
     }];
+
+    // 辅助闭包：将当前 messages clone 到共享快照
+    let sync_messages = |msgs: &Vec<ChatMessage>| {
+        if let Ok(mut snap) = messages_snapshot.lock() {
+            *snap = msgs.clone();
+        }
+    };
+    sync_messages(&messages);
 
     let mut final_text = String::new();
     let mut idle_rounds = 0;
@@ -95,6 +114,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         if had_new_messages {
             idle_rounds = 0;
         }
+
+        // 同步 messages 快照（供 /dump 读取）
+        sync_messages(&messages);
 
         write_info_log(
             "TeammateLoop",
@@ -234,6 +256,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             );
             messages.push(result_msg);
         }
+
+        // 本轮工具结果写入后同步快照
+        sync_messages(&messages);
     }
 
     // 通知团队：teammate 已完成

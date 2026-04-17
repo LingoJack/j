@@ -848,5 +848,147 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
             app.ui.config_scroll_offset = 0;
             app.update(Action::EnterMode(ChatMode::Config));
         }
+        SlashCommand::Dump => {
+            dump_current_request(app);
+        }
     }
+}
+
+/// 将真实传给 AI 的 system prompt + messages 写入
+/// ~/.jdata/agent/dumps/dump_<ts>/ 目录，分文件存放。
+/// 同时导出所有当前注册的 Teammate 的 system prompt + messages。
+fn dump_current_request(app: &mut ChatApp) {
+    use crate::command::chat::storage::agent_data_dir;
+
+    let system_prompt = app.build_current_system_prompt();
+    let messages = app.build_api_messages();
+
+    let timestamp = chrono::Local::now().format("%Y_%m_%d_%H_%M_%S").to_string();
+    let dump_dir = agent_data_dir()
+        .join("dumps")
+        .join(format!("dump_{}", timestamp));
+    if let Err(e) = std::fs::create_dir_all(&dump_dir) {
+        app.update(Action::ShowToast(
+            format!("创建 dump 目录失败: {}", e),
+            true,
+        ));
+        return;
+    }
+
+    if let Err(e) = write_agent_dump(&dump_dir, system_prompt.as_deref(), &messages) {
+        app.update(Action::ShowToast(e, true));
+        return;
+    }
+
+    // 导出 teammates
+    let teammate_count = dump_teammates(app, &dump_dir);
+    // 导出运行中的子 Agent
+    let sub_agent_count = dump_sub_agents(app, &dump_dir);
+
+    let mut toast = format!("已导出到 {}", dump_dir.display());
+    if teammate_count > 0 || sub_agent_count > 0 {
+        toast.push_str(&format!(
+            "（含 {} 个 teammate, {} 个 sub-agent）",
+            teammate_count, sub_agent_count
+        ));
+    }
+    app.update(Action::ShowToast(toast, false));
+}
+
+/// 写入单个 agent 的 system_prompt.md + messages.json 到指定目录
+fn write_agent_dump(
+    dir: &std::path::Path,
+    system_prompt: Option<&str>,
+    messages: &[crate::command::chat::storage::ChatMessage],
+) -> Result<(), String> {
+    let sp_content = system_prompt
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "（未设置 system prompt）".to_string());
+    std::fs::write(dir.join("system_prompt.md"), sp_content)
+        .map_err(|e| format!("写入 {}/system_prompt.md 失败: {}", dir.display(), e))?;
+
+    let msgs_content = serde_json::to_string_pretty(messages)
+        .map_err(|e| format!("序列化 messages 失败: {}", e))?;
+    std::fs::write(dir.join("messages.json"), msgs_content)
+        .map_err(|e| format!("写入 {}/messages.json 失败: {}", dir.display(), e))?;
+    Ok(())
+}
+
+/// 将所有 teammate 写入 dump_dir/teammates/<name>/，返回成功导出的数量
+fn dump_teammates(app: &ChatApp, dump_dir: &std::path::Path) -> usize {
+    let manager = match app.teammate_manager.lock() {
+        Ok(m) => m,
+        Err(_) => return 0,
+    };
+    if manager.teammates.is_empty() {
+        return 0;
+    }
+    let teammates_root = dump_dir.join("teammates");
+    if std::fs::create_dir_all(&teammates_root).is_err() {
+        return 0;
+    }
+
+    let mut count = 0;
+    for (name, handle) in &manager.teammates {
+        let safe_name = sanitize_dir_name(name);
+        let tm_dir = teammates_root.join(&safe_name);
+        if std::fs::create_dir_all(&tm_dir).is_err() {
+            continue;
+        }
+        let sp_snapshot = handle
+            .system_prompt_snapshot
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_default();
+        let msgs_snapshot = handle
+            .messages_snapshot
+            .lock()
+            .map(|m| m.clone())
+            .unwrap_or_default();
+        if write_agent_dump(&tm_dir, Some(&sp_snapshot), &msgs_snapshot).is_ok() {
+            count += 1;
+        }
+    }
+    count
+}
+
+/// 将正在运行的子 Agent 写入 dump_dir/sub_agents/<id>/，返回成功导出的数量
+fn dump_sub_agents(app: &ChatApp, dump_dir: &std::path::Path) -> usize {
+    let snapshots = app.sub_agent_tracker.snapshot_running();
+    if snapshots.is_empty() {
+        return 0;
+    }
+    let sub_root = dump_dir.join("sub_agents");
+    if std::fs::create_dir_all(&sub_root).is_err() {
+        return 0;
+    }
+    let mut count = 0;
+    for (id, description, mode, sp, msgs) in snapshots {
+        let safe_id = sanitize_dir_name(&id);
+        let agent_dir = sub_root.join(&safe_id);
+        if std::fs::create_dir_all(&agent_dir).is_err() {
+            continue;
+        }
+        let meta = format!("id: {}\nmode: {}\ndescription: {}\n", id, mode, description);
+        if std::fs::write(agent_dir.join("meta.txt"), meta).is_err() {
+            continue;
+        }
+        if write_agent_dump(&agent_dir, Some(&sp), &msgs).is_ok() {
+            count += 1;
+        }
+    }
+    count
+}
+
+/// 将不适合做目录名的字符替换为 `_`
+fn sanitize_dir_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }

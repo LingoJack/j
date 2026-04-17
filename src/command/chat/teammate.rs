@@ -103,6 +103,10 @@ pub struct TeammateHandle {
     pub is_running: Arc<AtomicBool>,
     /// agent loop 线程句柄
     pub thread_handle: Option<std::thread::JoinHandle<()>>,
+    /// Teammate 当前 system prompt 快照（由 agent loop 在启动时写入，供 /dump 读取）
+    pub system_prompt_snapshot: Arc<Mutex<String>>,
+    /// Teammate 当前 messages 快照（由 agent loop 每轮同步，供 /dump 读取）
+    pub messages_snapshot: Arc<Mutex<Vec<ChatMessage>>>,
 }
 
 #[allow(dead_code)]

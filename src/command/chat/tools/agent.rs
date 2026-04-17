@@ -14,9 +14,12 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
+
+/// 子 Agent 运行时快照（系统提示 + 消息列表），供 /dump 读取。
+type SubAgentSnapshotRefs = (Arc<Mutex<String>>, Arc<Mutex<Vec<ChatMessage>>>);
 
 /// AgentTool 参数
 #[derive(Deserialize, JsonSchema)]
@@ -142,6 +145,13 @@ impl Tool for AgentTool {
                 0,
             );
 
+            // 注册到子 Agent tracker 供 /dump 读取
+            self.shared.sub_agent_tracker.gc_finished();
+            let (_snap_id, snap_running, snap_system_prompt, snap_messages) = self
+                .shared
+                .sub_agent_tracker
+                .register(&description, "background");
+
             let bg_manager = Arc::clone(&self.shared.background_manager);
             let task_id_clone = task_id.clone();
             let cancelled_clone = Arc::clone(cancelled);
@@ -160,7 +170,10 @@ impl Tool for AgentTool {
                     sub_registry,
                     jcli_config,
                     &cancelled_clone,
+                    Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
                 );
+
+                snap_running.store(false, Ordering::Relaxed);
 
                 // 清理 worktree
                 if let Some((ref wt_path, ref branch)) = worktree_info {
@@ -195,6 +208,13 @@ impl Tool for AgentTool {
                 crate::command::chat::teammate::set_thread_cwd(wt_path);
             }
 
+            // 注册到子 Agent tracker 供 /dump 读取
+            self.shared.sub_agent_tracker.gc_finished();
+            let (_snap_id, snap_running, snap_system_prompt, snap_messages) = self
+                .shared
+                .sub_agent_tracker
+                .register(&description, "foreground");
+
             let cancelled_clone = Arc::clone(cancelled);
             let result = run_headless_agent_loop(
                 provider,
@@ -204,7 +224,10 @@ impl Tool for AgentTool {
                 sub_registry,
                 jcli_config,
                 &cancelled_clone,
+                Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
             );
+
+            snap_running.store(false, Ordering::Relaxed);
 
             // 清理 worktree 并恢复 CWD
             if let Some((ref wt_path, ref branch)) = worktree_info {
@@ -236,6 +259,7 @@ impl Tool for AgentTool {
 /// - 不发送 StreamMsg（无 UI 交互）
 /// - 需要确认的工具通过 permission 检查：允许则执行，否则返回 "Tool denied"
 /// - 返回最终的 assistant 文本
+#[allow(clippy::too_many_arguments)]
 fn run_headless_agent_loop(
     provider: ModelProvider,
     system_prompt: Option<String>,
@@ -244,6 +268,7 @@ fn run_headless_agent_loop(
     registry: Arc<ToolRegistry>,
     jcli_config: Arc<JcliConfig>,
     cancelled: &Arc<AtomicBool>,
+    snapshot: Option<SubAgentSnapshotRefs>,
 ) -> String {
     let max_rounds = 30; // 子代理最大轮数
 
@@ -252,6 +277,13 @@ fn run_headless_agent_loop(
         Err(e) => return e,
     };
 
+    // 写入 system prompt 快照（供 /dump 读取）
+    if let Some((ref sp_snap, _)) = snapshot
+        && let Ok(mut sp) = sp_snap.lock()
+    {
+        *sp = system_prompt.clone().unwrap_or_default();
+    }
+
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
         role: "user".to_string(),
         content: prompt,
@@ -259,6 +291,15 @@ fn run_headless_agent_loop(
         tool_call_id: None,
         images: None,
     }];
+
+    let sync_messages = |msgs: &Vec<ChatMessage>| {
+        if let Some((_, ref msgs_snap)) = snapshot
+            && let Ok(mut snap) = msgs_snap.lock()
+        {
+            *snap = msgs.clone();
+        }
+    };
+    sync_messages(&messages);
 
     let mut final_text = String::new();
 
@@ -323,6 +364,9 @@ fn run_headless_agent_loop(
             );
             messages.push(result_msg);
         }
+
+        // 本轮工具结果写入后同步快照
+        sync_messages(&messages);
     }
 
     if final_text.is_empty() {

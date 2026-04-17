@@ -84,6 +84,8 @@ pub struct ChatApp {
     /// Teammate 管理器（多 agent 协作）
     #[allow(dead_code)]
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
+    /// 子 Agent（AgentTool）运行快照追踪器（供 /dump 读取）
+    pub sub_agent_tracker: Arc<crate::command::chat::tools::agent_shared::SubAgentTracker>,
     /// 子 agent 权限请求队列（AgentToolShared 和 TUI 共享同一个 Arc）
     pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
@@ -196,6 +198,9 @@ impl ChatApp {
         // Plan 审批请求队列（TUI 和所有 teammate 共享同一个 Arc）
         let plan_approval_queue =
             Arc::new(crate::command::chat::tools::plan::PlanApprovalQueue::new());
+        // 子 Agent 快照追踪器（/dump 从中读取正在运行的子 Agent）
+        let sub_agent_tracker =
+            Arc::new(crate::command::chat::tools::agent_shared::SubAgentTracker::new());
 
         // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
         let agent_tool_shared = crate::command::chat::tools::agent_shared::AgentToolShared {
@@ -208,6 +213,7 @@ impl ChatApp {
             disabled_tools: Arc::clone(&disabled_tools_arc),
             permission_queue: Arc::clone(&permission_queue),
             plan_approval_queue: Arc::clone(&plan_approval_queue),
+            sub_agent_tracker: Arc::clone(&sub_agent_tracker),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
             shared: agent_tool_shared.clone(),
@@ -463,6 +469,7 @@ impl ChatApp {
             shared_messages_read_cursor: 0,
             context_tokens: Arc::new(Mutex::new(0)),
             teammate_manager,
+            sub_agent_tracker,
             permission_queue,
             plan_approval_queue,
             invoked_skills,
@@ -2040,6 +2047,46 @@ impl ChatApp {
     }
 
     /// 构建发送给 API 的消息列表（安全裁剪：不从 tool pair 中间截断）
+    /// 构造当前真实传给 AI 的 system prompt（与 send_message 的 system_prompt_fn 逻辑一致）。
+    /// 注意：状态占位符（{{.tasks}}、{{.background_tasks}}、{{.session_state}}、{{.teammates}}）
+    /// 由内置 PreLlmRequest hook 在请求发出时替换，此处不作处理，返回值中仍保留这些占位符。
+    pub fn build_current_system_prompt(&self) -> Option<String> {
+        use crate::command::chat::agent_md;
+        use crate::command::chat::storage::{
+            load_memory, load_soul, load_style, load_system_prompt,
+        };
+        let template = load_system_prompt()?;
+        let skills_summary = skill::build_skills_summary(
+            &self.state.loaded_skills,
+            &self.state.agent_config.disabled_skills,
+        );
+        let tools_summary = self
+            .tool_registry
+            .build_tools_summary(&self.state.agent_config.disabled_tools);
+        let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
+        let memory_text = load_memory().unwrap_or_default();
+        let soul_text = load_soul().unwrap_or_default();
+        let agent_md_text = agent_md::load_agent_md();
+        let current_dir = std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| ".".to_string());
+        let skill_dir = skills_dir().to_string_lossy().to_string();
+        let project_skill_dir = skill::project_skills_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let resolved = template
+            .replace("{{.current_dir}}", &current_dir)
+            .replace("{{.skills}}", &skills_summary)
+            .replace("{{.skill_dir}}", &skill_dir)
+            .replace("{{.project_skill_dir}}", &project_skill_dir)
+            .replace("{{.tools}}", &tools_summary)
+            .replace("{{.style}}", &style_text)
+            .replace("{{.memory}}", &memory_text)
+            .replace("{{.soul}}", &soul_text)
+            .replace("{{.agent_md}}", &agent_md_text);
+        Some(resolved)
+    }
+
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
         let max_history = self.state.agent_config.max_history_messages;
         let msgs = &self.state.session.messages;
