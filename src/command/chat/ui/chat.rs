@@ -337,13 +337,20 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     if app.ui.mode != ChatMode::Browse {
         if app.ui.mode == ChatMode::ToolConfirm {
-            if app.ui.auto_scroll || app.ui.scroll_offset == u16::MAX {
-                app.ui.scroll_offset = max_scroll;
-                app.ui.auto_scroll = true;
-            } else if app.ui.scroll_offset > max_scroll {
+            if app.ui.auto_scroll
+                || app.ui.scroll_offset == u16::MAX
+                || app.ui.scroll_offset > max_scroll
+            {
                 app.ui.scroll_offset = max_scroll;
             }
-        } else if app.ui.scroll_offset == u16::MAX || app.ui.scroll_offset > max_scroll {
+        } else if app.ui.scroll_offset == u16::MAX {
+            // scroll_offset == u16::MAX 是定位标记（由 send_message/StreamChunk 等设置），
+            // 表示"应滚动到底部"，clamp 到 max_scroll 并保持 auto_scroll
+            app.ui.scroll_offset = max_scroll;
+            app.ui.auto_scroll = true;
+        } else if app.ui.scroll_offset >= max_scroll {
+            // 用户已位于底部（手动滚下 或 内容缩减使 offset 到达底部）
+            // 恢复 auto_scroll：用户在底部时，新消息应自动跟踪
             app.ui.scroll_offset = max_scroll;
             app.ui.auto_scroll = true;
         }

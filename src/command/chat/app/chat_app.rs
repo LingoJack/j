@@ -2411,9 +2411,11 @@ impl ChatApp {
                 }
                 self.shared_messages_read_cursor = new_count;
                 self.ui.msg_lines_cache = None;
-                // 新消息到达时自动滚动到底部（包括 tool result）
-                self.ui.auto_scroll = true;
-                self.ui.scroll_offset = u16::MAX;
+                // 仅在 agent 主动流式传输且用户未手动上滚时自动滚动到底部
+                // 后台 teammate 消息不应强制滚动，否则用户无法上滚查看历史
+                if self.ui.auto_scroll && self.state.is_loading {
+                    self.ui.scroll_offset = u16::MAX;
+                }
             }
         }
 
