@@ -1004,9 +1004,23 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
 
     // 构建显示项：命令 + 描述
     // labels 用于计算弹窗宽度，需与实际渲染内容一致
+    // 动态计算标签列宽度，取最长 display_label + 2 格间距
+    let label_width: usize = filtered
+        .iter()
+        .map(|cmd| display_width(&cmd.display_label()))
+        .max()
+        .unwrap_or(10)
+        + 2;
     let labels: Vec<String> = filtered
         .iter()
-        .map(|cmd| format!("❯ {:<10} {}", cmd.display_label(), cmd.description()))
+        .map(|cmd| {
+            format!(
+                "❯ {:<width$} {}",
+                cmd.display_label(),
+                cmd.description(),
+                width = label_width
+            )
+        })
         .collect();
 
     let selected = app
@@ -1019,10 +1033,16 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         .map(|(i, cmd)| {
             let is_selected = i == selected;
             let pointer = if is_selected { "❯ " } else { "  " };
+            let padded_label = {
+                let label = cmd.display_label();
+                let label_dw = display_width(&label);
+                let padding = label_width.saturating_sub(label_dw);
+                format!("{}{}", label, " ".repeat(padding))
+            };
             ListItem::new(Line::from(vec![
                 Span::styled(pointer.to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
-                    format!("{:<10}", cmd.display_label()),
+                    padded_label,
                     Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(cmd.description(), Style::default().fg(t.text_dim)),

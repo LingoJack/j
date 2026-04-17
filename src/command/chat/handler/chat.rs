@@ -849,7 +849,10 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
             app.update(Action::EnterMode(ChatMode::Config));
         }
         SlashCommand::Dump => {
-            dump_current_request(app);
+            dump_current_request(app, false);
+        }
+        SlashCommand::DumpProcessed => {
+            dump_current_request(app, true);
         }
         SlashCommand::Teammate => {
             app.ui.config_tab = ConfigTab::Teammates;
@@ -864,22 +867,90 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
 /// 将真实传给 AI 的 system prompt + messages 写入
 /// ~/.jdata/agent/dumps/dump_<ts>/ 目录，分文件存放。
 /// 同时导出所有当前注册的 Teammate 的 system prompt + messages。
-fn dump_current_request(app: &mut ChatApp) {
+///
+/// `processed=true` 时，对 messages 应用与 agent loop 一致的处理管线：
+/// rolling window → micro_compact → PreLlmRequest hooks → sanitize，
+/// 产出与最终发给 LLM 一致的数据。
+fn dump_current_request(app: &mut ChatApp, processed: bool) {
     use crate::command::chat::storage::agent_data_dir;
 
-    let system_prompt = app.build_current_system_prompt();
-    let messages = app.build_api_messages();
+    let mut system_prompt = app.build_current_system_prompt();
+    let mut messages = app.build_api_messages();
+
+    if processed {
+        // Layer 1: micro_compact（替换旧 tool results）
+        {
+            use crate::command::chat::agent::compact;
+            let compact_config = &app.state.agent_config.compact;
+            if compact_config.enabled {
+                compact::micro_compact(
+                    &mut messages,
+                    compact_config.keep_recent,
+                    &compact_config.micro_compact_exempt_tools,
+                );
+            }
+        }
+        // Layer 2: PreLlmRequest hook 链（内置→用户→项目→session）
+        // 这会执行 tasks_status、background_status、session_state、
+        // teammates_status、todo_nag 等内置 hook，以及用户自定义 hook。
+        // 注意：background_status 的 drain_notifications 是有副作用的，
+        // 这里为 dump 目的执行一次是合理的（等同于真实请求前的状态快照）。
+        {
+            use crate::command::chat::infra::hook::{HookContext, HookEvent};
+            let hook_manager = app.hook_manager.lock();
+            if let Ok(mgr) = hook_manager
+                && mgr.has_hooks_for(HookEvent::PreLlmRequest)
+            {
+                let model_name = app.active_model_name();
+                let ctx = HookContext {
+                    event: HookEvent::PreLlmRequest,
+                    messages: Some(messages.clone()),
+                    system_prompt: system_prompt.clone(),
+                    model: Some(model_name),
+                    cwd: std::env::current_dir()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| ".".to_string()),
+                    ..Default::default()
+                };
+                if let Some(result) = mgr.execute(HookEvent::PreLlmRequest, ctx) {
+                    if let Some(new_msgs) = result.messages {
+                        messages = new_msgs;
+                    }
+                    if let Some(new_prompt) = result.system_prompt {
+                        system_prompt = Some(new_prompt);
+                    }
+                    if let Some(inject) = result.inject_messages {
+                        messages.extend(inject);
+                    }
+                }
+            }
+        }
+        // Layer 3: sanitize（移除孤立 tool_call / tool result）
+        {
+            use crate::command::chat::agent::api::sanitize_messages;
+            messages = sanitize_messages(&messages);
+        }
+    }
 
     let timestamp = chrono::Local::now().format("%Y_%m_%d_%H_%M_%S").to_string();
+    let subdir = if processed { "processed" } else { "dump" };
     let dump_dir = agent_data_dir()
         .join("dumps")
-        .join(format!("dump_{}", timestamp));
+        .join(format!("{}_{}", subdir, timestamp));
     if let Err(e) = std::fs::create_dir_all(&dump_dir) {
         app.update(Action::ShowToast(
             format!("创建 dump 目录失败: {}", e),
             true,
         ));
         return;
+    }
+
+    // 写入处理管线说明
+    if processed {
+        let pipeline_info = "处理管线: rolling window (select_messages) → micro_compact → PreLlmRequest hooks → sanitize_messages\n\
+             注意: auto_compact 需要 API 调用，未在此处执行。\n\
+             PreLlmRequest hooks 已执行（含内置 hooks: tasks_status, background_status, session_state, teammates_status, todo_nag）。\n";
+        let _ = std::fs::write(dump_dir.join("pipeline.txt"), pipeline_info);
     }
 
     if let Err(e) = write_agent_dump(&dump_dir, system_prompt.as_deref(), &messages) {
@@ -892,7 +963,11 @@ fn dump_current_request(app: &mut ChatApp) {
     // 导出运行中的子 Agent
     let sub_agent_count = dump_sub_agents(app, &dump_dir);
 
-    let mut toast = format!("已导出到 {}", dump_dir.display());
+    let mut toast = if processed {
+        format!("已导出 processed 数据到 {}", dump_dir.display())
+    } else {
+        format!("已导出到 {}", dump_dir.display())
+    };
     if teammate_count > 0 || sub_agent_count > 0 {
         toast.push_str(&format!(
             "（含 {} 个 teammate, {} 个 sub-agent）",

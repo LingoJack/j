@@ -140,7 +140,7 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
 ///   - assistant 消息：将 tool_calls 中没有对应 result 的条目或 id 为空的条目删掉；
 ///     若 tool_calls 全部被清空，置为 None（保留消息的文本 content）。
 ///   - tool 消息：tool_call_id 为空或在任何 assistant tool_calls 中无对应 id 的，跳过。
-fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     // Step 1：收集所有有效 tool result id（非空）
     let result_ids: std::collections::HashSet<String> = messages
         .iter()
