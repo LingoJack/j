@@ -110,17 +110,21 @@ release: ## 构建发布版本（release）
 # ============================================
 # 安装相关
 # ============================================
-install: release ## 安装到系统
+install: release build-indicator build-ax ## 安装到系统
 	@echo "📦 安装到系统..."
 	@cp $(TARGET_DIR)/j $(BIN_PATH)
 	@chmod +x $(BIN_PATH)
-	@cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator
-	@chmod +x /usr/local/bin/j-indicator
-	@cp $(TARGET_DIR)/j-ax /usr/local/bin/j-ax
-	@chmod +x /usr/local/bin/j-ax
+	@if [ -f $(TARGET_DIR)/j-indicator ]; then \
+		cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator && chmod +x /usr/local/bin/j-indicator && echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"; \
+	else \
+		echo "⚠️ j-indicator 未构建，跳过安装"; \
+	fi
+	@if [ -f $(TARGET_DIR)/j-ax ]; then \
+		cp $(TARGET_DIR)/j-ax /usr/local/bin/j-ax && chmod +x /usr/local/bin/j-ax && echo "☑️ j-ax 已安装到 /usr/local/bin/j-ax"; \
+	else \
+		echo "⚠️ j-ax 未构建，跳过安装"; \
+	fi
 	@echo "☑️ j 已安装到 $(BIN_PATH)"
-	@echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"
-	@echo "☑️ j-ax 已安装到 /usr/local/bin/j-ax"
 	@echo "   版本: $(VERSION)"
 
 uninstall: ## 卸载

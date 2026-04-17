@@ -118,4 +118,12 @@ allow:
 - EnterWorktree
 - Bash(cd /Users/lingojack/dev_custom/j/.jcli/worktrees/chat-ui-cursor:*)
 - Bash(git merge:*)
+- Bash(sudo make:*)
+- Bash(git diff:*)
+- Bash(sudo chown:*)
+- Bash(xattr -l:*)
+- Bash(j 2>&1;:*)
+- Bash(/Users/lingojack/dev_custom/j/target/release/j -v:*)
+- Bash(codesign -dvvv:*)
+- Bash(# 检查:*)
 deny: []
