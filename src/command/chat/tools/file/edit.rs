@@ -85,9 +85,13 @@ struct EditFileParams {
 /// 编辑文件的工具（基于字符串替换）
 pub struct EditFileTool;
 
+impl EditFileTool {
+    pub const NAME: &'static str = "Edit";
+}
+
 impl Tool for EditFileTool {
     fn name(&self) -> &str {
-        "Edit"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

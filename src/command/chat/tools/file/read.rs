@@ -56,9 +56,13 @@ struct ReadFileParams {
 /// 读取文件的工具
 pub struct ReadFileTool;
 
+impl ReadFileTool {
+    pub const NAME: &'static str = "Read";
+}
+
 impl Tool for ReadFileTool {
     fn name(&self) -> &str {
-        "Read"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

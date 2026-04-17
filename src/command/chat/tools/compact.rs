@@ -19,9 +19,13 @@ struct CompactParams {
 /// compact tool 被调用后触发 auto_compact。
 pub struct CompactTool;
 
+impl CompactTool {
+    pub const NAME: &'static str = "Compact";
+}
+
 impl Tool for CompactTool {
     fn name(&self) -> &str {
-        "Compact"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

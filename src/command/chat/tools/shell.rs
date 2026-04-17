@@ -44,9 +44,13 @@ pub struct ShellTool {
     pub manager: Arc<BackgroundManager>,
 }
 
+impl ShellTool {
+    pub const NAME: &'static str = "Bash";
+}
+
 impl Tool for ShellTool {
     fn name(&self) -> &str {
-        "Bash"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

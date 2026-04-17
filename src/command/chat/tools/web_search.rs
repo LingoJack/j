@@ -40,9 +40,13 @@ fn default_search_type() -> String {
 /// Exa Search API 搜索工具
 pub struct WebSearchTool;
 
+impl WebSearchTool {
+    pub const NAME: &'static str = "WebSearch";
+}
+
 impl Tool for WebSearchTool {
     fn name(&self) -> &str {
-        "WebSearch"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

@@ -36,9 +36,13 @@ pub struct RegisterHookTool {
     pub hook_manager: Arc<Mutex<HookManager>>,
 }
 
+impl RegisterHookTool {
+    pub const NAME: &'static str = "RegisterHook";
+}
+
 impl Tool for RegisterHookTool {
     fn name(&self) -> &str {
-        "RegisterHook"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

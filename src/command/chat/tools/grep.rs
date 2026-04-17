@@ -50,9 +50,13 @@ fn default_output_mode() -> String {
 
 pub struct GrepTool;
 
+impl GrepTool {
+    pub const NAME: &'static str = "Grep";
+}
+
 impl Tool for GrepTool {
     fn name(&self) -> &str {
-        "Grep"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

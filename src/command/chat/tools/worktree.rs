@@ -229,9 +229,13 @@ pub struct EnterWorktreeTool {
     pub state: Arc<WorktreeState>,
 }
 
+impl EnterWorktreeTool {
+    pub const NAME: &'static str = "EnterWorktree";
+}
+
 impl Tool for EnterWorktreeTool {
     fn name(&self) -> &str {
-        "EnterWorktree"
+        Self::NAME
     }
 
     fn description(&self) -> &str {
@@ -413,9 +417,13 @@ pub struct ExitWorktreeTool {
     pub state: Arc<WorktreeState>,
 }
 
+impl ExitWorktreeTool {
+    pub const NAME: &'static str = "ExitWorktree";
+}
+
 impl Tool for ExitWorktreeTool {
     fn name(&self) -> &str {
-        "ExitWorktree"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

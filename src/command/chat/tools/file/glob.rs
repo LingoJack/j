@@ -34,9 +34,13 @@ fn default_limit() -> usize {
 
 pub struct GlobTool;
 
+impl GlobTool {
+    pub const NAME: &'static str = "Glob";
+}
+
 impl Tool for GlobTool {
     fn name(&self) -> &str {
-        "Glob"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

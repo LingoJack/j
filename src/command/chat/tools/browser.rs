@@ -1311,9 +1311,13 @@ struct BrowserParams {
 
 pub struct BrowserTool;
 
+impl BrowserTool {
+    pub const NAME: &'static str = "Browser";
+}
+
 impl Tool for BrowserTool {
     fn name(&self) -> &str {
-        "Browser"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

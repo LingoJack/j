@@ -81,6 +81,8 @@ pub struct ComputerUseTool {
 }
 
 impl ComputerUseTool {
+    pub const NAME: &'static str = "ComputerUse";
+
     pub fn new() -> Self {
         Self {
             som_state: Arc::new(Mutex::new(None)),
@@ -935,7 +937,7 @@ fn ax_role_to_applescript(role: &str) -> &str {
 
 impl Tool for ComputerUseTool {
     fn name(&self) -> &str {
-        "ComputerUse"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

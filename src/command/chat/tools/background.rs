@@ -239,9 +239,13 @@ pub struct TaskOutputTool {
     pub manager: Arc<BackgroundManager>,
 }
 
+impl TaskOutputTool {
+    pub const NAME: &'static str = "TaskOutput";
+}
+
 impl Tool for TaskOutputTool {
     fn name(&self) -> &str {
-        "TaskOutput"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

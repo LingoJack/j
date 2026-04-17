@@ -5,6 +5,8 @@ use crate::command::chat::constants::{
 use crate::command::chat::theme::Theme;
 use ratatui::style::Color;
 
+use super::tool_names;
+
 /// 工具类型分类
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolCategory {
@@ -28,16 +30,14 @@ impl ToolCategory {
     /// 根据工具名称判断分类
     pub fn from_name(name: &str) -> Self {
         match name {
-            "Read" | "Write" | "Edit" | "Glob" | "FileRead" | "FileWrite" | "FileEdit" => {
+            tool_names::READ | tool_names::WRITE | tool_names::EDIT | tool_names::GLOB => {
                 Self::File
             }
-            "Grep" | "GrepTool" => Self::Search,
-            "Bash" | "Task" | "TaskOutput" | "TaskCreate" | "TaskUpdate" | "TaskGet" => {
-                Self::Execute
-            }
-            "WebFetch" | "WebSearch" | "WebBrowser" => Self::Network,
-            "EnterPlanMode" | "ExitPlanMode" => Self::Plan,
-            "Agent" => Self::Agent,
+            tool_names::GREP => Self::Search,
+            tool_names::BASH | tool_names::TASK | tool_names::TASK_OUTPUT => Self::Execute,
+            tool_names::WEB_FETCH | tool_names::WEB_SEARCH | tool_names::BROWSER => Self::Network,
+            tool_names::ENTER_PLAN_MODE | tool_names::EXIT_PLAN_MODE => Self::Plan,
+            tool_names::AGENT => Self::Agent,
             _ => Self::Other,
         }
     }
@@ -173,11 +173,11 @@ pub fn get_result_summary_for_tool(
 
     // 工具特性化摘要
     match tool_name {
-        "Read" | "FileRead" => get_read_summary(content, tool_args),
-        "Bash" => get_bash_summary(content, tool_args),
-        "TodoWrite" => get_todo_write_summary(content, tool_args),
-        "TodoRead" => get_todo_read_summary(content),
-        "Task" | "TaskCreate" | "TaskGet" | "TaskUpdate" => get_task_summary(content, tool_args),
+        tool_names::READ => get_read_summary(content, tool_args),
+        tool_names::BASH => get_bash_summary(content, tool_args),
+        tool_names::TODO_WRITE => get_todo_write_summary(content, tool_args),
+        tool_names::TODO_READ => get_todo_read_summary(content),
+        tool_names::TASK => get_task_summary(content, tool_args),
         _ => get_generic_summary(content),
     }
 }

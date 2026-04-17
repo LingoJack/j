@@ -45,9 +45,13 @@ fn default_max_chars() -> usize {
 /// HTTP 抓取网页工具
 pub struct WebFetchTool;
 
+impl WebFetchTool {
+    pub const NAME: &'static str = "WebFetch";
+}
+
 impl Tool for WebFetchTool {
     fn name(&self) -> &str {
-        "WebFetch"
+        Self::NAME
     }
 
     fn description(&self) -> &str {

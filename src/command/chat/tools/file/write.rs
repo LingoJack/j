@@ -18,9 +18,13 @@ struct WriteFileParams {
 /// 写入文件的工具
 pub struct WriteFileTool;
 
+impl WriteFileTool {
+    pub const NAME: &'static str = "Write";
+}
+
 impl Tool for WriteFileTool {
     fn name(&self) -> &str {
-        "Write"
+        Self::NAME
     }
 
     fn description(&self) -> &str {
