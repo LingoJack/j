@@ -238,17 +238,21 @@ make check-frontend
 实现后台接口以及逻辑
 
 **MySQL 依赖准备**（首次接触数据库前必须执行）：
-项目根目录下模板已自带 `docker-compose.yml`，内含 mysql 8.0 服务（库名 `appdb`，用户 `appuser/apppassword`，暴露 3306，含 healthcheck）。只需起 mysql 这一个服务，backend 仍在本地 `go run` 跑：
+项目根目录下模板已自带 `docker-compose.yml`，内含 mysql 8.0 服务（库名 `appdb`，用户 `appuser/apppassword`，root 密码 `rootpassword`，暴露 3306，含 healthcheck）。只需起 mysql 这一个服务，backend 仍在本地 `go run` 跑：
+
 ```bash
-podman compose up -d mysql
-# 等 health 变 healthy（~10s）
-podman compose ps
+make podman-mysql-up   # 等 healthy 后返回
 ```
-backend 本地运行时读取 `backend/config/config.yaml`，确认其 DSN 指向 `127.0.0.1:3306/appdb`（与 compose 暴露端口一致）。如模板默认 DSN 不匹配，修改 config.yaml 而不是 compose。
 
-跑后端测试前同理：`podman compose up -d mysql` 再 `make test-backend`。
+**重要**：模板 `backend/config/config.yaml` 默认 DSN 是占位值 `user:pass@tcp(localhost:3306)/appdb`，与 compose 里 mysql 服务的实际账号不一致，**backend 本地跑会连接失败**。第一次起后端前必须把 DSN 改成：
+```
+appuser:apppassword@tcp(127.0.0.1:3306)/appdb?charset=utf8mb4&parseTime=True&loc=Local
+```
+（注意是本地 `127.0.0.1`，不是 compose 内网的 `mysql`。compose 内 backend 服务用的 DSN 由 `docker-compose.yml` 的环境变量覆盖，不影响 config.yaml。）
 
-容器残留清理：`podman compose down`（保留卷）或 `podman compose down -v`（连数据一起删）。
+跑后端测试前同理：`make podman-mysql-up` 再 `make test-backend`。
+
+清理：`make podman-down`（保留数据卷）或 `make podman-clean`（连数据一起删）。
 
 
 ### 前端开发阶段
@@ -259,16 +263,22 @@ backend 本地运行时读取 `backend/config/config.yaml`，确认其 DSN 指�
 
 前后端功能全部完成后，做最终的全栈容器化验收。目标：一条命令起整个项目，证明部署链路通。
 
+先把开发阶段的 mysql 单容器停掉（避免端口冲突）：
 ```bash
-podman compose up -d --build
-podman compose ps            # 三个服务都应 running，mysql 应 healthy
-podman compose logs -f backend   # 观察启动日志，确认 DB 连接成功、路由注册完成
+make podman-down
+```
+
+再起全栈：
+```bash
+make podman-up        # podman compose up -d --build
+make podman-ps        # 三个服务都应 running，mysql 应 healthy
+make podman-logs      # 跟随查看日志，确认 backend DB 连接成功、路由注册完成（Ctrl+C 退出）
 ```
 
 验收检查清单：
 - `mysql` / `backend` / `frontend` 三个容器都 running
 - 浏览器访问 `http://localhost:5173` 前端可打开
 - 前端调用的后端接口（走 `http://localhost:8080` 或 nginx 反代）返回正常数据
-- `podman compose down && podman compose up -d` 能复现一致行为（数据卷持久化生效）
+- `make podman-down && make podman-up` 能复现一致行为（数据卷持久化生效）
 
-停止：`podman compose down`。彻底清理（含 mysql 数据卷）：`podman compose down -v`。
+停止：`make podman-down`。彻底清理（含 mysql 数据卷）：`make podman-clean`。
