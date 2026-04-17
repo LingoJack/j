@@ -516,10 +516,8 @@ fn handle_cargo_update(check_only: bool, interactive: bool) {
         Ok(mut child) => match child.wait() {
             Ok(status) if status.success() => {
                 println!();
-                // 修复 macOS 代码签名
-                if let Ok(exe_path) = std::env::current_exe() {
-                    fix_codesign_and_quarantine(&exe_path);
-                }
+                // cargo 构建的二进制由链接器自动 ad-hoc 签名，无需再次 codesign
+                // 再签反而会触发 "internal error in Code Signing subsystem"
                 println!("{}", "更新成功！".green());
                 if interactive {
                     restart_self();
