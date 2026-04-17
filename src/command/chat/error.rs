@@ -221,6 +221,7 @@ impl ChatError {
                     || msg_lower.contains("overloaded")
                     || msg_lower.contains("too busy")
                     || msg_lower.contains("速率限制")
+                    || msg_lower.contains("网络错误")
                 {
                     ChatError::ApiRateLimit {
                         message: api_err.message,
