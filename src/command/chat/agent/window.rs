@@ -335,14 +335,11 @@ pub fn select_messages(
             }
         } else {
             // 丢弃：ToolGroup 用占位符替换，其他类型直接跳过
-            match unit {
-                MessageUnit::ToolGroup { .. } => {
-                    result.push(create_placeholder(unit, messages));
-                }
-                // User / AssistantText 理论上不会被丢弃（优先级最高），
-                // 但如果预算极度紧张，跳过即可
-                _ => {}
+            if let MessageUnit::ToolGroup { .. } = unit {
+                result.push(create_placeholder(unit, messages));
             }
+            // User / AssistantText 理论上不会被丢弃（优先级最高），
+            // 但如果预算极度紧张，跳过即可
         }
     }
 

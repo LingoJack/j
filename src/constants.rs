@@ -47,9 +47,9 @@ pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "style",
     "max_history_messages",
     "max_context_tokens",
-    "theme",
     "max_tool_rounds",
     "tool_confirm_timeout",
+    "theme",
     "auto_restore_session",
 ];
 

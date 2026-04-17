@@ -117,13 +117,32 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "system_prompt" => "系统提示词",
         "agent_md" => "AGENT.md",
         "style" => "回复风格",
-        "max_history_messages" => "历史消息数(0=无限)",
-        "max_context_tokens" => "消息窗口Token(K)",
+        "max_history_messages" => "历史消息数",
+        "max_context_tokens" => "窗口Token",
         "theme" => "主题风格",
         "max_tool_rounds" => "工具轮数上限",
-        "tool_confirm_timeout" => "确认超时(秒)",
+        "tool_confirm_timeout" => "确认超时",
         "auto_restore_session" => "自动恢复会话",
         _ => field_name,
+    }
+}
+
+/// 全局配置字段的简要说明（显示在字段值下方）
+pub fn config_field_desc_global(idx: usize) -> &'static str {
+    let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(idx) else {
+        return "";
+    };
+    match *field_name {
+        "system_prompt" => "AI 的基础角色与行为指令",
+        "agent_md" => "项目级上下文文件，自动注入到提示词",
+        "style" => "AI 回复的语言风格与格式偏好",
+        "max_history_messages" => "发送给 AI 的最大消息条数，0=无限",
+        "max_context_tokens" => "消息窗口的 Token 上限(K)，0=无限",
+        "theme" => "终端配色方案",
+        "max_tool_rounds" => "单次对话中工具调用最大轮数",
+        "tool_confirm_timeout" => "工具确认等待秒数，0=关闭自动确认",
+        "auto_restore_session" => "启动时自动恢复上次会话",
+        _ => "",
     }
 }
 

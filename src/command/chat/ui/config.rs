@@ -1,10 +1,10 @@
 use super::super::ui_helpers::{
-    config_field_label_global, config_field_label_model, config_field_value_global,
-    config_field_value_model,
+    config_field_desc_global, config_field_label_global, config_field_label_model,
+    config_field_value_global, config_field_value_model,
 };
 use super::components::{
-    preview_field_row, secret_field_row, selectable_row, separator_line, tab_bar, text_field_row,
-    theme_field_row, toggle_list_item, toggle_row,
+    global_preview_row, global_text_row, global_theme_row, global_toggle_row, secret_field_row,
+    selectable_row, separator_line, tab_bar, text_field_row, toggle_list_item, toggle_row,
 };
 use crate::command::chat::app::{ChatApp, ConfigTab};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
@@ -494,7 +494,7 @@ fn draw_tab_model_list<'a>(
     }
 }
 
-/// Global tab 内容
+/// Global tab 内容（三列布局: label | value | desc，--- 分隔分组）
 fn draw_tab_global_lines<'a>(
     lines: &mut Vec<Line<'a>>,
     field_line_indices: &mut Vec<usize>,
@@ -502,36 +502,91 @@ fn draw_tab_global_lines<'a>(
 ) {
     let t = &app.ui.theme;
 
-    for (i, field) in CONFIG_GLOBAL_FIELDS_TAB.iter().enumerate() {
-        field_line_indices.push(lines.len());
-        let is_selected = app.ui.config_field_idx == i;
-        let label = config_field_label_global(i);
-        let value = if app.ui.config_editing && is_selected {
-            app.ui.config_edit_buf.clone()
-        } else {
-            config_field_value_global(app, i)
-        };
+    // 顶部留白
+    lines.push(Line::from(""));
 
-        let line = if *field == "auto_restore_session" {
-            let toggle_on = app.state.agent_config.auto_restore_session;
-            toggle_row(label, toggle_on, is_selected, "Enter \u{5207}\u{6362}", t)
-        } else if *field == "theme" {
-            let theme_name = app.state.agent_config.theme.display_name();
-            theme_field_row(label, theme_name, is_selected, "Enter \u{5207}\u{6362}", t)
-        } else if *field == "system_prompt" || *field == "agent_md" || *field == "style" {
-            preview_field_row(label, &value, is_selected, "Enter \u{7f16}\u{8f91}", t)
-        } else {
-            text_field_row(
-                label,
-                &value,
-                is_selected,
-                app.ui.config_editing,
-                app.ui.config_edit_cursor,
-                t,
-            )
-        };
-        lines.push(line);
-        lines.push(Line::from(""));
+    // 分组定义: (字段起始索引, 包含字段数)
+    let groups: &[(usize, usize)] = &[
+        (0, 3), // system_prompt, agent_md, style
+        (3, 2), // max_history_messages, max_context_tokens
+        (5, 2), // max_tool_rounds, tool_confirm_timeout
+        (7, 2), // theme, auto_restore_session
+    ];
+
+    for (gi, &(start, count)) in groups.iter().enumerate() {
+        // --- 分隔线 + 空行（首组不画）
+        if gi > 0 {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "  ────────────────────────────────────",
+                Style::default().fg(t.separator),
+            )));
+            lines.push(Line::from(""));
+        }
+
+        for i in start..start + count {
+            let field = CONFIG_GLOBAL_FIELDS_TAB.get(i);
+            if field.is_none() {
+                continue;
+            }
+            let field_name = field.unwrap();
+
+            field_line_indices.push(lines.len());
+            let is_selected = app.ui.config_field_idx == i;
+            let label = config_field_label_global(i);
+            let value = if app.ui.config_editing && is_selected {
+                app.ui.config_edit_buf.clone()
+            } else {
+                config_field_value_global(app, i)
+            };
+            let desc = config_field_desc_global(i);
+
+            let line = if *field_name == "auto_restore_session" {
+                let toggle_on = app.state.agent_config.auto_restore_session;
+                global_toggle_row(
+                    label,
+                    toggle_on,
+                    desc,
+                    is_selected,
+                    "Enter \u{5207}\u{6362}",
+                    t,
+                )
+            } else if *field_name == "theme" {
+                let theme_name = app.state.agent_config.theme.display_name();
+                global_theme_row(
+                    label,
+                    theme_name,
+                    desc,
+                    is_selected,
+                    "Enter \u{5207}\u{6362}",
+                    t,
+                )
+            } else if *field_name == "system_prompt"
+                || *field_name == "agent_md"
+                || *field_name == "style"
+            {
+                global_preview_row(
+                    label,
+                    &value,
+                    desc,
+                    is_selected,
+                    "Enter \u{7f16}\u{8f91}",
+                    t,
+                )
+            } else {
+                global_text_row(
+                    label,
+                    &value,
+                    desc,
+                    is_selected,
+                    app.ui.config_editing,
+                    app.ui.config_edit_cursor,
+                    t,
+                )
+            };
+            lines.push(line);
+            lines.push(Line::from(""));
+        }
     }
 }
 

@@ -12,7 +12,7 @@ pub const TOGGLE_ON: &str = "\u{25cf}";
 pub const TOGGLE_OFF: &str = "\u{25cb}";
 pub const SEPARATOR_V: &str = "\u{2502}";
 pub const INDENT: &str = "  ";
-pub const LABEL_WIDTH: usize = 10;
+pub const LABEL_WIDTH: usize = 16; // 显示宽度（CJK 字符占 2 列）
 
 // ── 分隔线 ────────────────────────────────────────────
 
@@ -49,8 +49,9 @@ pub fn pointer_span<'a>(selected: bool, theme: &Theme) -> Span<'a> {
     }
 }
 
-/// 标签 span（固定宽度，左对齐）
+/// 标签 span（固定显示宽度，左对齐，CJK 感知）
 pub fn label_span<'a>(text: &str, width: usize, selected: bool, theme: &Theme) -> Span<'a> {
+    use unicode_width::UnicodeWidthStr;
     let style = if selected {
         Style::default()
             .fg(theme.config_label_selected)
@@ -58,7 +59,13 @@ pub fn label_span<'a>(text: &str, width: usize, selected: bool, theme: &Theme) -
     } else {
         Style::default().fg(theme.config_label)
     };
-    Span::styled(format!("{:<width$}", text, width = width), style)
+    let display_w = UnicodeWidthStr::width(text);
+    let padding = if display_w < width {
+        " ".repeat(width - display_w)
+    } else {
+        String::new()
+    };
+    Span::styled(format!("{text}{padding}"), style)
 }
 
 /// 值的样式（普通/选中/编辑中）
@@ -237,22 +244,109 @@ pub fn secret_field_row<'a>(
     }
 }
 
-// ── 长文本预览字段行 ─────────────────────────────────
+// ── 说明列 span ──────────────────────────────────────
 
-/// 长文本预览行（system_prompt / style）
-pub fn preview_field_row<'a>(
+/// 说明文字 span（固定显示宽度，超长截断加 "..."，CJK 感知）
+fn desc_span<'a>(text: &str, max_width: usize, theme: &Theme) -> Span<'a> {
+    use unicode_width::UnicodeWidthStr;
+    if text.is_empty() {
+        return Span::styled(String::new(), Style::default());
+    }
+    let display_w = UnicodeWidthStr::width(text);
+    if display_w <= max_width {
+        let padding = " ".repeat(max_width - display_w);
+        Span::styled(
+            format!("  {text}{padding}"),
+            Style::default().fg(theme.config_dim),
+        )
+    } else {
+        // 逐字符累加，直到超宽，然后加 "..."
+        let mut w = 0;
+        let end = max_width.saturating_sub(3); // 留 3 给 "..."
+        let truncated: String = text
+            .chars()
+            .take_while(|c| {
+                let cw = UnicodeWidthStr::width(c.to_string().as_str());
+                if w + cw > end {
+                    false
+                } else {
+                    w += cw;
+                    true
+                }
+            })
+            .collect();
+        let padding = " ".repeat(max_width - w - 3);
+        Span::styled(
+            format!("  {truncated}...{padding}"),
+            Style::default().fg(theme.config_dim),
+        )
+    }
+}
+
+// ── Global tab 三列布局行 ────────────────────────────
+
+/// Global tab 可编辑文本行（三列: label | value | desc）
+pub fn global_text_row<'a>(
     label: &str,
-    raw: &str,
+    value: &str,
+    desc: &str,
+    selected: bool,
+    editing: bool,
+    cursor: usize,
+    theme: &Theme,
+) -> Line<'a> {
+    let vs = value_style(selected, editing, theme);
+    if editing && selected {
+        let mut spans = vec![
+            pointer_span(selected, theme),
+            label_span(label, LABEL_WIDTH, selected, theme),
+            Span::styled("  ", Style::default()),
+        ];
+        spans.extend(cursor_spans(value, cursor, vs, theme));
+        Line::from(spans)
+    } else {
+        let display_value = if value.is_empty() {
+            "(\u{7a7a})".to_string()
+        } else {
+            value.to_string()
+        };
+        Line::from(vec![
+            pointer_span(selected, theme),
+            label_span(label, LABEL_WIDTH, selected, theme),
+            Span::styled("  ", Style::default()),
+            Span::styled(display_value, vs),
+            desc_span(desc, 30, theme),
+        ])
+    }
+}
+
+/// Global tab 开关行（三列: label | toggle | desc）
+pub fn global_toggle_row<'a>(
+    label: &str,
+    is_on: bool,
+    desc: &str,
     selected: bool,
     hint: &str,
     theme: &Theme,
 ) -> Line<'a> {
-    let vs = value_style(selected, false, theme);
+    let toggle_style = if is_on {
+        Style::default()
+            .fg(theme.config_toggle_on)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.config_toggle_off)
+    };
+    let toggle_text = if is_on {
+        format!("{TOGGLE_ON} \u{5f00}\u{542f}")
+    } else {
+        format!("{TOGGLE_OFF} \u{5173}\u{95ed}")
+    };
     Line::from(vec![
         pointer_span(selected, theme),
         label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
-        Span::styled(render_preview_value(raw), vs),
+        Span::styled(toggle_text, toggle_style),
+        desc_span(desc, 30, theme),
         Span::styled(
             if selected {
                 format!("  ({hint})")
@@ -264,12 +358,38 @@ pub fn preview_field_row<'a>(
     ])
 }
 
-// ── 主题选择字段行 ───────────────────────────────────
+/// Global tab 预览行（三列: label | preview | desc）
+pub fn global_preview_row<'a>(
+    label: &str,
+    raw: &str,
+    desc: &str,
+    selected: bool,
+    hint: &str,
+    theme: &Theme,
+) -> Line<'a> {
+    let vs = value_style(selected, false, theme);
+    Line::from(vec![
+        pointer_span(selected, theme),
+        label_span(label, LABEL_WIDTH, selected, theme),
+        Span::styled("  ", Style::default()),
+        Span::styled(render_preview_value(raw), vs),
+        desc_span(desc, 30, theme),
+        Span::styled(
+            if selected {
+                format!("  ({hint})")
+            } else {
+                String::new()
+            },
+            Style::default().fg(theme.config_dim),
+        ),
+    ])
+}
 
-/// 主题选择行
-pub fn theme_field_row<'a>(
+/// Global tab 主题行（三列: label | theme | desc）
+pub fn global_theme_row<'a>(
     label: &str,
     name: &str,
+    desc: &str,
     selected: bool,
     hint: &str,
     theme: &Theme,
@@ -284,6 +404,7 @@ pub fn theme_field_row<'a>(
                 .fg(theme.config_toggle_on)
                 .add_modifier(Modifier::BOLD),
         ),
+        desc_span(desc, 30, theme),
         Span::styled(
             if selected {
                 format!("  ({hint})")
