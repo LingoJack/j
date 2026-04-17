@@ -45,7 +45,7 @@ impl SlashCommand {
             SlashCommand::Theme => "/theme".to_string(),
             SlashCommand::Resume => "/resume".to_string(),
             SlashCommand::Dump => "/dump".to_string(),
-            SlashCommand::DumpProcessed => "/dump processed".to_string(),
+            SlashCommand::DumpProcessed => "/dump-processed".to_string(),
             SlashCommand::Teammate => "/teammate".to_string(),
         }
     }
