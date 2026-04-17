@@ -112,15 +112,21 @@ release: ## 构建发布版本（release）
 # ============================================
 install: release build-indicator build-ax ## 安装到系统
 	@echo "📦 安装到系统..."
+	@rm -f $(BIN_PATH)
 	@cp $(TARGET_DIR)/j $(BIN_PATH)
 	@chmod +x $(BIN_PATH)
+	@codesign --force --sign - $(BIN_PATH) 2>/dev/null || true
 	@if [ -f $(TARGET_DIR)/j-indicator ]; then \
-		cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator && chmod +x /usr/local/bin/j-indicator && echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"; \
+		rm -f /usr/local/bin/j-indicator; \
+		cp $(TARGET_DIR)/j-indicator /usr/local/bin/j-indicator && chmod +x /usr/local/bin/j-indicator && codesign --force --sign - /usr/local/bin/j-indicator 2>/dev/null; \
+		echo "☑️ j-indicator 已安装到 /usr/local/bin/j-indicator"; \
 	else \
 		echo "⚠️ j-indicator 未构建，跳过安装"; \
 	fi
 	@if [ -f $(TARGET_DIR)/j-ax ]; then \
-		cp $(TARGET_DIR)/j-ax /usr/local/bin/j-ax && chmod +x /usr/local/bin/j-ax && echo "☑️ j-ax 已安装到 /usr/local/bin/j-ax"; \
+		rm -f /usr/local/bin/j-ax; \
+		cp $(TARGET_DIR)/j-ax /usr/local/bin/j-ax && chmod +x /usr/local/bin/j-ax && codesign --force --sign - /usr/local/bin/j-ax 2>/dev/null; \
+		echo "☑️ j-ax 已安装到 /usr/local/bin/j-ax"; \
 	else \
 		echo "⚠️ j-ax 未构建，跳过安装"; \
 	fi
