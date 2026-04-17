@@ -9,11 +9,18 @@ description: 完整前后台 Web 应用生成技能包；1. 当用户需要快�
 
 技术栈: React + TypeScript (前端) | Go + Gorm + Gin + MySQL (后端)
 
-## 初始化项目
-初始化项目，在工作目录执行
-```bash
-mkdir <project_name> && cd <project_name> && git clone https://github.com/LingoJack/proj_template.git .
-```
+## STEP 0：初始化项目（强制前置，必须在一切之前执行）
+
+**在创建任何任务、写任何文档之前**，先完成本步骤。后续所有步骤（`docs/requirement.md`、`docs/frontend_design.md`、前后端编码）都依赖这一步生成的目录结构，跳过会直接失败。
+
+执行流程：
+1. 从用户一句话需求中提炼英文 kebab-case 项目名（例如"做个博客系统" → `blog-system`）。如无法确定，用 `Ask` 工具向用户确认项目名后再继续。
+2. 在当前工作目录执行：
+   ```bash
+   mkdir <project_name> && cd <project_name> && git clone https://github.com/LingoJack/proj_template.git .
+   ```
+3. 验证初始化成功：确认当前目录下存在 `backend/`、`frontend/`、`Makefile`。若不存在，必须停下来排查，不得继续后续步骤。
+4. **后续所有工作都在 `<project_name>/` 目录内进行**（包括写 `docs/*.md`）。
 
 会创建基于 react + ts + tailwindcss v4 + go 的项目脚示例项目
 目录结构如：
@@ -140,9 +147,11 @@ mkdir <project_name> && cd <project_name> && git clone https://github.com/LingoJ
 
 ## 初始化工作流
 
-**重要**：使用 <Task> (action='create') 工具创建以下任务
+**重要**：先完成上面的 **STEP 0 项目初始化**，再使用 <Task> (action='create') 工具创建以下任务。**任务清单的第一项必须是"项目初始化"**，缺失就是流程错误。
+
 预期工作流为：
 ```
+项目初始化（git clone 模板，见 STEP 0，必须第一项）
 需求分析
 api 设计
 前端设计
@@ -153,6 +162,8 @@ api 设计
 后端编码实现
 前端编码实现
 ```
+
+> 开始任何写文件动作前，先 `pwd` 或 `ls` 确认当前已在 `<project_name>/` 目录下，且存在 `backend/`、`frontend/`。否则回到 STEP 0。
 
 ### 需求分析阶段
 

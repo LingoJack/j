@@ -10,10 +10,9 @@ use std::sync::{Arc, atomic::AtomicBool, mpsc};
 /// 选项参数
 #[derive(Deserialize, JsonSchema)]
 struct AskOptionParam {
-    /// Option display text (1-5 words)
-    #[serde(default)]
+    /// Option display label shown to user (1-5 words). REQUIRED. Example: "确认无误"
     label: String,
-    /// Option description
+    /// Short explanation of what this option means. Example: "继续进入下一阶段"
     #[serde(default)]
     description: String,
 }
@@ -21,11 +20,11 @@ struct AskOptionParam {
 /// 问题参数
 #[derive(Deserialize, JsonSchema)]
 struct AskQuestionParam {
-    /// Full question text
+    /// Full question text shown to user
     question: String,
-    /// Short tag (max 12 chars), e.g. 'Auth method'
+    /// Short tag (max 12 chars) as column header, e.g. '需求确认'
     header: String,
-    /// List of options (2-4)
+    /// List of 2-4 option OBJECTS. Each element MUST be {"label": "...", "description": "..."}, NOT a plain string.
     options: Vec<AskOptionParam>,
     /// Whether to allow multiple selections (default false)
     #[serde(default)]
@@ -65,9 +64,27 @@ impl Tool for AskTool {
         - Presenting multiple approaches for the user to decide
         - Showing intermediate results and requesting feedback
 
-        Format:
-        Each question contains header (short tag), question (full text), options (list), and multi_select (boolean).
-        Users can select a preset option or provide free-text input.
+        IMPORTANT — Input format:
+        - `questions` is an array of question OBJECTS (NOT strings).
+        - Each question object has: `question` (full text), `header` (short tag ≤12 chars), `options` (array of OPTION OBJECTS), `multi_select` (bool, optional).
+        - Each option object has: `label` (1-5 words shown to user) and `description` (short explanation). DO NOT pass options as plain strings.
+
+        Concrete example (copy this structure exactly):
+        ```json
+        {
+          "questions": [
+            {
+              "question": "需求文档是否符合预期？",
+              "header": "需求确认",
+              "options": [
+                {"label": "确认无误", "description": "继续进入 API 设计和前端开发阶段"},
+                {"label": "需要调整", "description": "我会指出需要修改的部分"}
+              ],
+              "multi_select": false
+            }
+          ]
+        }
+        ```
 
         Response format:
         Returns JSON:
