@@ -37,12 +37,51 @@ pub trait Tool: Send + Sync {
 pub fn schema_to_tool_params<T: JsonSchema>() -> Value {
     let root = schemars::schema_for!(T);
     let mut v = serde_json::to_value(root).unwrap_or_default();
+
+    // Extract definitions before cleanup, then inline all $ref references
+    let definitions = v
+        .as_object()
+        .and_then(|o| o.get("definitions").cloned())
+        .and_then(|d| d.as_object().cloned());
+
+    if let Some(defs) = definitions {
+        inline_refs(&mut v, &defs);
+    }
+
     if let Some(obj) = v.as_object_mut() {
         obj.remove("$schema");
         obj.remove("title");
         obj.remove("definitions");
     }
     v
+}
+
+/// Recursively replace all `{"$ref": "#/definitions/X"}` with the inlined definition
+fn inline_refs(value: &mut Value, definitions: &serde_json::Map<String, Value>) {
+    match value {
+        Value::Object(map) => {
+            // If this object is a $ref, replace it entirely with the inlined definition
+            if let Some(ref_path) = map.get("$ref").and_then(|r| r.as_str())
+                && let Some(key) = ref_path.strip_prefix("#/definitions/")
+                && let Some(def) = definitions.get(key)
+            {
+                *value = def.clone();
+                // The inlined definition may itself contain $refs, so recurse
+                inline_refs(value, definitions);
+                return;
+            }
+            // Otherwise recurse into all values
+            for v in map.values_mut() {
+                inline_refs(v, definitions);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                inline_refs(v, definitions);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub fn parse_tool_args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<T, ToolResult> {
