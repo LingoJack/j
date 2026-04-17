@@ -173,9 +173,25 @@ fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout:
     // 指针占 3 列（" ❯ " 或 "   "），加上边框 2 列
     let list_inner_width = area.width.saturating_sub(2 + 3) as usize;
     let checkbox_w = display_width(" [x] ");
-    let content_width = list_inner_width.saturating_sub(checkbox_w);
 
     let selected = app.state.selected();
+
+    // 计算最大日期列宽度，确保编辑区折行不会跨到日期区域
+    let max_date_col_w = app
+        .list
+        .items
+        .iter()
+        .map(|item| {
+            let date_str = item
+                .created_at
+                .get(..10)
+                .map(|d| format!(" ({})", d))
+                .unwrap_or_default();
+            display_width(&date_str)
+        })
+        .max()
+        .unwrap_or(0);
+
     let mut items: Vec<ListItem> = indices
         .iter()
         .enumerate()
@@ -183,10 +199,13 @@ fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout:
             let is_selected = selected == Some(i);
             // 编辑模式下替换选中项为编辑行
             if app.mode == AppMode::Editing && app.edit_index == Some(idx) {
+                let edit_content_width = list_inner_width
+                    .saturating_sub(checkbox_w)
+                    .saturating_sub(max_date_col_w);
                 return build_editing_item(
                     &app.input,
                     app.cursor_pos,
-                    content_width,
+                    edit_content_width,
                     checkbox_w,
                     is_selected,
                 );
@@ -203,10 +222,13 @@ fn render_list(f: &mut ratatui::Frame, app: &mut TodoApp, area: ratatui::layout:
     // 添加模式：在列表末尾追加编辑行
     if app.mode == AppMode::Adding {
         let is_selected = selected == Some(indices.len());
+        let add_content_width = list_inner_width
+            .saturating_sub(checkbox_w)
+            .saturating_sub(max_date_col_w);
         items.push(build_editing_item(
             &app.input,
             app.cursor_pos,
-            content_width,
+            add_content_width,
             checkbox_w,
             is_selected,
         ));
