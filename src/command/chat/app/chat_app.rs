@@ -94,6 +94,36 @@ pub struct ChatApp {
     pub invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
 }
 
+/// system prompt 静态占位符替换共享逻辑：
+/// 由 `send_message_internal` 的 `system_prompt_fn` 闭包和 `build_current_system_prompt`
+/// 共同使用，确保两处静态占位符列表保持一致。
+/// 不处理状态占位符（.tasks/.background_tasks/.session_state/.teammates），
+/// 那些在真实请求里由内置 PreLlmRequest hook 替换。
+#[allow(clippy::too_many_arguments)]
+fn apply_static_placeholders(
+    template: &str,
+    skills_summary: &str,
+    tools_summary: &str,
+    style_text: &str,
+    memory_text: &str,
+    soul_text: &str,
+    agent_md_text: &str,
+    current_dir: &str,
+    skill_dir: &str,
+    project_skill_dir: &str,
+) -> String {
+    template
+        .replace("{{.current_dir}}", current_dir)
+        .replace("{{.skills}}", skills_summary)
+        .replace("{{.skill_dir}}", skill_dir)
+        .replace("{{.project_skill_dir}}", project_skill_dir)
+        .replace("{{.tools}}", tools_summary)
+        .replace("{{.style}}", style_text)
+        .replace("{{.memory}}", memory_text)
+        .replace("{{.soul}}", soul_text)
+        .replace("{{.agent_md}}", agent_md_text)
+}
+
 /// 所有字段数 = provider 字段 + 全局字段
 /// 根据当前 tab 计算字段总数
 pub fn config_tab_field_count(app: &ChatApp) -> usize {
@@ -2047,9 +2077,11 @@ impl ChatApp {
     }
 
     /// 构建发送给 API 的消息列表（安全裁剪：不从 tool pair 中间截断）
-    /// 构造当前真实传给 AI 的 system prompt（与 send_message 的 system_prompt_fn 逻辑一致）。
-    /// 注意：状态占位符（{{.tasks}}、{{.background_tasks}}、{{.session_state}}、{{.teammates}}）
-    /// 由内置 PreLlmRequest hook 在请求发出时替换，此处不作处理，返回值中仍保留这些占位符。
+    /// 构造当前真实传给 AI 的 system prompt。
+    /// 与 send_message 的 system_prompt_fn + 内置 PreLlmRequest hook 合起来的效果一致：
+    /// 同时替换静态占位符（.tools/.skills/.memory/…）和状态占位符
+    /// (.tasks/.background_tasks/.session_state/.teammates)。
+    /// 不会触发任何 hook 的副作用（例如 drain background 通知）。
     pub fn build_current_system_prompt(&self) -> Option<String> {
         use crate::command::chat::agent_md;
         use crate::command::chat::storage::{
@@ -2074,16 +2106,37 @@ impl ChatApp {
         let project_skill_dir = skill::project_skills_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
-        let resolved = template
-            .replace("{{.current_dir}}", &current_dir)
-            .replace("{{.skills}}", &skills_summary)
-            .replace("{{.skill_dir}}", &skill_dir)
-            .replace("{{.project_skill_dir}}", &project_skill_dir)
-            .replace("{{.tools}}", &tools_summary)
-            .replace("{{.style}}", &style_text)
-            .replace("{{.memory}}", &memory_text)
-            .replace("{{.soul}}", &soul_text)
-            .replace("{{.agent_md}}", &agent_md_text);
+
+        // 状态占位符的当前快照（对应内置 PreLlmRequest hooks 的行为，
+        // 但只读取不修改，避免副作用）
+        let tasks_summary =
+            crate::command::chat::tools::task::build_tasks_summary(&self.task_manager);
+        let background_summary = crate::command::chat::tools::background::build_running_summary(
+            &self.background_manager,
+        );
+        let session_state_summary = self.tool_registry.build_session_state_summary();
+        let teammates_summary = self
+            .teammate_manager
+            .lock()
+            .map(|m| m.team_summary())
+            .unwrap_or_default();
+
+        let resolved = apply_static_placeholders(
+            &template,
+            &skills_summary,
+            &tools_summary,
+            &style_text,
+            &memory_text,
+            &soul_text,
+            &agent_md_text,
+            &current_dir,
+            &skill_dir,
+            &project_skill_dir,
+        )
+        .replace("{{.tasks}}", &tasks_summary)
+        .replace("{{.background_tasks}}", &background_summary)
+        .replace("{{.session_state}}", &session_state_summary)
+        .replace("{{.teammates}}", &teammates_summary);
         Some(resolved)
     }
 
@@ -2280,19 +2333,21 @@ impl ChatApp {
             let project_skill_dir = skill::project_skills_dir()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let resolved = template
-                .replace("{{.current_dir}}", &current_dir)
-                .replace("{{.skills}}", &skills_summary)
-                .replace("{{.skill_dir}}", &skill_dir)
-                .replace("{{.project_skill_dir}}", &project_skill_dir)
-                .replace("{{.tools}}", &tools_summary)
-                .replace("{{.style}}", &style_text)
-                .replace("{{.memory}}", &memory_text)
-                .replace("{{.soul}}", &soul_text)
-                .replace("{{.agent_md}}", &agent_md_text);
+            // 静态占位符通过共享 helper 替换，与 build_current_system_prompt 保持一致。
             // 状态占位符（{{.tasks}}、{{.background_tasks}}、{{.session_state}}、{{.teammates}}）
             // 不在此处替换，由内置 PreLlmRequest hook 链处理
-            Some(resolved)
+            Some(apply_static_placeholders(
+                &template,
+                &skills_summary,
+                &tools_summary,
+                &style_text,
+                &memory_text,
+                &soul_text,
+                &agent_md_text,
+                &current_dir,
+                &skill_dir,
+                &project_skill_dir,
+            ))
         });
 
         // Clone hook_manager for agent thread
