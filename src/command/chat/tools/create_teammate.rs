@@ -1,4 +1,6 @@
-use crate::command::chat::teammate::{TeammateHandle, TeammateManager, set_current_agent_name};
+use crate::command::chat::teammate::{
+    TeammateHandle, TeammateManager, TeammateStatus, set_current_agent_name,
+};
 use crate::command::chat::tools::agent_shared::AgentToolShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
 use crate::command::chat::tools::{
@@ -11,7 +13,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -152,6 +154,9 @@ impl Tool for CreateTeammateTool {
         let is_running = Arc::new(AtomicBool::new(true));
         let system_prompt_snapshot = Arc::new(Mutex::new(String::new()));
         let messages_snapshot = Arc::new(Mutex::new(Vec::new()));
+        let status = Arc::new(Mutex::new(TeammateStatus::Initializing));
+        let tool_calls_count = Arc::new(AtomicUsize::new(0));
+        let current_tool: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
         // 获取 provider 快照
         let provider = safe_lock(&self.shared.provider, "CreateTeammate::provider").clone();
@@ -194,6 +199,9 @@ impl Tool for CreateTeammateTool {
         let cancel_token_clone = cancel_token.clone();
         let sp_snapshot_clone = Arc::clone(&system_prompt_snapshot);
         let msgs_snapshot_clone = Arc::clone(&messages_snapshot);
+        let status_clone = Arc::clone(&status);
+        let tool_calls_count_clone = Arc::clone(&tool_calls_count);
+        let current_tool_clone = Arc::clone(&current_tool);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份
@@ -232,6 +240,9 @@ impl Tool for CreateTeammateTool {
                     cancel_token: cancel_token_clone,
                     system_prompt_snapshot: sp_snapshot_clone,
                     messages_snapshot: msgs_snapshot_clone,
+                    status: status_clone,
+                    tool_calls_count: tool_calls_count_clone,
+                    current_tool: current_tool_clone,
                 },
             );
 
@@ -273,6 +284,9 @@ impl Tool for CreateTeammateTool {
             thread_handle: Some(thread_handle),
             system_prompt_snapshot,
             messages_snapshot,
+            status,
+            tool_calls_count,
+            current_tool,
         };
 
         match self.teammate_manager.lock() {

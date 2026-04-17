@@ -119,7 +119,9 @@
       "Bash(sudo -n rm -f /usr/local/bin/j)",
       "Bash(sudo -n cp target/release/j /usr/local/bin/j)",
       "Bash(codesign -dv /usr/local/bin/j)",
-      "Bash(/usr/local/bin/j --help)"
+      "Bash(/usr/local/bin/j --help)",
+      "Bash(du -h TEAMMATE_*.md CRITICAL_*.md FIX_*.patch DOCUMENTATION_MANIFEST.txt)",
+      "Bash(sort -k2)"
     ]
   },
   "language": "zh-CN",

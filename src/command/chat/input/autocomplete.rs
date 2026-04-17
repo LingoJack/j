@@ -25,6 +25,8 @@ pub enum SlashCommand {
     Resume,
     /// 导出真实传给 AI 的 system prompt 和 messages
     Dump,
+    /// Teammate 面板
+    Teammate,
 }
 
 impl SlashCommand {
@@ -41,6 +43,7 @@ impl SlashCommand {
             SlashCommand::Theme => "/theme".to_string(),
             SlashCommand::Resume => "/resume".to_string(),
             SlashCommand::Dump => "/dump".to_string(),
+            SlashCommand::Teammate => "/teammate".to_string(),
         }
     }
 
@@ -57,6 +60,7 @@ impl SlashCommand {
             SlashCommand::Theme => "切换主题".to_string(),
             SlashCommand::Resume => "恢复历史会话".to_string(),
             SlashCommand::Dump => "导出真实传给 AI 的 system prompt 和 messages".to_string(),
+            SlashCommand::Teammate => "Teammate 面板".to_string(),
         }
     }
 
@@ -73,6 +77,7 @@ impl SlashCommand {
             SlashCommand::Theme,
             SlashCommand::Resume,
             SlashCommand::Dump,
+            SlashCommand::Teammate,
         ]
     }
 }

@@ -1,6 +1,6 @@
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
-use crate::command::chat::teammate::TeammateManager;
+use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::agent_shared::{
     call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
@@ -10,7 +10,7 @@ use crate::util::log::write_info_log;
 use async_openai::types::chat::ChatCompletionTools;
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -31,6 +31,12 @@ pub struct TeammateLoopConfig {
     pub system_prompt_snapshot: Arc<Mutex<String>>,
     /// 供 /dump 读取的 messages 快照
     pub messages_snapshot: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 细粒度运行状态（与 TeammateHandle 共享）
+    pub status: Arc<Mutex<TeammateStatus>>,
+    /// 累计工具调用次数（与 TeammateHandle 共享）
+    pub tool_calls_count: Arc<AtomicUsize>,
+    /// 当前正在执行的工具名（与 TeammateHandle 共享）
+    pub current_tool: Arc<Mutex<Option<String>>>,
 }
 
 /// Teammate 专用的 agent loop
@@ -56,7 +62,19 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         cancel_token,
         system_prompt_snapshot,
         messages_snapshot,
+        status,
+        tool_calls_count,
+        current_tool,
     } = config;
+
+    // 辅助闭包：更新状态
+    let set_status = |new_status: TeammateStatus| {
+        if let Ok(mut s) = status.lock() {
+            *s = new_status;
+        }
+    };
+
+    set_status(TeammateStatus::Initializing);
 
     let max_rounds = 200; // 足够大，实际由 cancel_token 控制生命周期
     let max_consecutive_idle = 120; // 连续空闲 120 次（约 2 分钟）后退出
@@ -104,6 +122,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     for round in 0..max_rounds {
         // 检查取消
         if cancel_token.is_cancelled() || cancelled.load(Ordering::Relaxed) {
+            set_status(TeammateStatus::Cancelled);
             return format!("{}\n[Teammate '{}' cancelled]", final_text, name);
         }
 
@@ -130,6 +149,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             ),
         );
 
+        // 更新状态为 Working（即将调用 LLM）
+        set_status(TeammateStatus::Working);
+
         let choice = match call_llm_non_stream(
             &rt,
             &client,
@@ -139,7 +161,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             Some(&system_prompt),
         ) {
             Ok(c) => c,
-            Err(e) => return format!("{}\n{}", final_text, e),
+            Err(e) => {
+                set_status(TeammateStatus::Error(e.clone()));
+                return format!("{}\n{}", final_text, e);
+            }
         };
 
         let assistant_text = choice.message.content.clone().unwrap_or_default();
@@ -164,6 +189,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
         if !is_tool_calls || choice.message.tool_calls.is_none() {
             // 无工具调用 — 进入轮询等待模式
+            set_status(TeammateStatus::WaitingForMessage);
+
             let has_pending = pending_user_messages
                 .lock()
                 .map(|p| !p.is_empty())
@@ -186,6 +213,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             // 等待 1 秒后再检查（可被 cancel_token 中断）
             for _ in 0..10 {
                 if cancel_token.is_cancelled() {
+                    set_status(TeammateStatus::Cancelled);
                     return format!("{}\n[Teammate '{}' cancelled]", final_text, name);
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -246,6 +274,12 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 continue;
             }
 
+            // 更新当前工具名
+            if let Ok(mut ct) = current_tool.lock() {
+                *ct = Some(item.name.clone());
+            }
+            tool_calls_count.fetch_add(1, Ordering::Relaxed);
+
             let result_msg = execute_tool_with_permission(
                 item,
                 &registry,
@@ -255,6 +289,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 false,
             );
             messages.push(result_msg);
+
+            // 清除当前工具名
+            if let Ok(mut ct) = current_tool.lock() {
+                *ct = None;
+            }
         }
 
         // 本轮工具结果写入后同步快照
@@ -262,6 +301,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     }
 
     // 通知团队：teammate 已完成
+    set_status(TeammateStatus::Completed);
     if let Ok(manager) = teammate_manager.lock()
         && let Ok(mut shared) = manager.shared_messages.lock()
     {

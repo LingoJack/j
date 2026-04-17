@@ -5,9 +5,69 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex, OnceLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use tokio_util::sync::CancellationToken;
+
+// ========== Teammate 状态枚举 ==========
+
+/// Teammate 的细粒度运行状态
+#[derive(Clone, Debug, PartialEq)]
+pub enum TeammateStatus {
+    /// 刚创建，尚未开始
+    Initializing,
+    /// 正在调用 LLM 或执行工具
+    Working,
+    /// 空闲轮询等待新消息
+    WaitingForMessage,
+    /// 正常完成
+    Completed,
+    /// 被取消
+    Cancelled,
+    /// 出错
+    Error(String),
+}
+
+impl TeammateStatus {
+    /// 状态符号（极简风格）
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Initializing => "◐",
+            Self::Working => "●",
+            Self::WaitingForMessage => "○",
+            Self::Completed => "✓",
+            Self::Cancelled => "✗",
+            Self::Error(_) => "✗",
+        }
+    }
+
+    /// 状态文字
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Initializing => "初始化",
+            Self::Working => "工作中",
+            Self::WaitingForMessage => "等待中",
+            Self::Completed => "已完成",
+            Self::Cancelled => "已取消",
+            Self::Error(_) => "错误",
+        }
+    }
+
+    /// 是否为终态（不会再变化）
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Cancelled | Self::Error(_))
+    }
+}
+
+/// Teammate 状态快照（供 UI 渲染用，无锁）
+#[derive(Clone, Debug)]
+pub struct TeammateSnapshot {
+    pub name: String,
+    pub role: String,
+    pub status: TeammateStatus,
+    pub current_tool: Option<String>,
+    pub tool_calls_count: usize,
+}
 
 // ========== Thread-local Agent Identity ==========
 
@@ -107,6 +167,12 @@ pub struct TeammateHandle {
     pub system_prompt_snapshot: Arc<Mutex<String>>,
     /// Teammate 当前 messages 快照（由 agent loop 每轮同步，供 /dump 读取）
     pub messages_snapshot: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 细粒度运行状态
+    pub status: Arc<Mutex<TeammateStatus>>,
+    /// 累计工具调用次数
+    pub tool_calls_count: Arc<AtomicUsize>,
+    /// 当前正在执行的工具名（None 表示未在执行工具）
+    pub current_tool: Arc<Mutex<Option<String>>>,
 }
 
 #[allow(dead_code)]
@@ -232,11 +298,17 @@ impl TeammateManager {
         let mut summary = String::from("## Teammates\n\n当前团队成员:\n");
         summary.push_str("- Main (主协调者)\n");
         for (name, handle) in &self.teammates {
-            let status = if handle.running() {
-                "工作中"
-            } else {
-                "空闲"
-            };
+            let status = handle
+                .status
+                .lock()
+                .map(|s| format!("{} {}", s.icon(), s.label()))
+                .unwrap_or_else(|_| {
+                    if handle.running() {
+                        "● 工作中".to_string()
+                    } else {
+                        "○ 空闲".to_string()
+                    }
+                });
             summary.push_str(&format!("- {} ({}) [{}]\n", name, handle.role, status));
         }
         summary.push_str(
@@ -250,6 +322,29 @@ impl TeammateManager {
         let mut names = vec!["Main".to_string()];
         names.extend(self.teammates.keys().cloned());
         names
+    }
+
+    /// 获取所有 teammate 的状态快照（供 UI 渲染用，无锁拷贝）
+    pub fn teammate_snapshots(&self) -> Vec<TeammateSnapshot> {
+        self.teammates
+            .iter()
+            .map(|(name, handle)| {
+                let status = handle
+                    .status
+                    .lock()
+                    .map(|s| s.clone())
+                    .unwrap_or(TeammateStatus::Initializing);
+                let current_tool = handle.current_tool.lock().ok().and_then(|t| t.clone());
+                let tool_calls_count = handle.tool_calls_count.load(Ordering::Relaxed);
+                TeammateSnapshot {
+                    name: name.clone(),
+                    role: handle.role.clone(),
+                    status,
+                    current_tool,
+                    tool_calls_count,
+                }
+            })
+            .collect()
     }
 
     /// 停止指定 teammate

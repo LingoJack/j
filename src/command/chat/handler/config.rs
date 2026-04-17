@@ -115,6 +115,80 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
             _ => return,
         },
+        ConfigTab::Teammates => match key.code {
+            KeyCode::Esc => Action::SaveConfig,
+            KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
+            KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.ui.teammate_list_index > 0 {
+                    app.ui.teammate_list_index -= 1;
+                }
+                return;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let count = app
+                    .teammate_manager
+                    .lock()
+                    .map(|m| m.teammates.len())
+                    .unwrap_or(0);
+                if count > 0 && app.ui.teammate_list_index < count - 1 {
+                    app.ui.teammate_list_index += 1;
+                }
+                return;
+            }
+            KeyCode::Char('s') => {
+                // 停止选中的 teammate
+                let snapshots = app
+                    .teammate_manager
+                    .lock()
+                    .map(|m| m.teammate_snapshots())
+                    .unwrap_or_default();
+                if let Some(snap) = snapshots.get(app.ui.teammate_list_index) {
+                    if !snap.status.is_terminal() {
+                        if let Ok(mut manager) = app.teammate_manager.lock() {
+                            manager.stop_teammate(&snap.name);
+                        }
+                        Action::ShowToast(format!("已停止 Teammate: {}", snap.name), false)
+                    } else {
+                        Action::ShowToast(
+                            format!("{} 已处于终态 ({})", snap.name, snap.status.label()),
+                            true,
+                        )
+                    }
+                } else {
+                    return;
+                }
+            }
+            KeyCode::Enter => {
+                // 显示详情 Toast
+                let snapshots = app
+                    .teammate_manager
+                    .lock()
+                    .map(|m| m.teammate_snapshots())
+                    .unwrap_or_default();
+                if let Some(snap) = snapshots.get(app.ui.teammate_list_index) {
+                    let tool_info = snap
+                        .current_tool
+                        .as_deref()
+                        .map(|t| format!(", 当前工具: {}", t))
+                        .unwrap_or_default();
+                    Action::ShowToast(
+                        format!(
+                            "{} ({}) — {} {}{}",
+                            snap.name,
+                            snap.role,
+                            snap.status.icon(),
+                            snap.status.label(),
+                            tool_info,
+                        ),
+                        false,
+                    )
+                } else {
+                    return;
+                }
+            }
+            _ => return,
+        },
         ConfigTab::Archive => {
             if app.ui.restore_confirm_needed {
                 // 确认还原模式

@@ -136,6 +136,11 @@ pub fn config_tab_field_count(app: &ChatApp) -> usize {
         ConfigTab::Commands => app.state.loaded_commands.len(),
         ConfigTab::Hooks => 0,
         ConfigTab::Session => app.ui.session_list.len(),
+        ConfigTab::Teammates => app
+            .teammate_manager
+            .lock()
+            .map(|m| m.teammates.len())
+            .unwrap_or(0),
         ConfigTab::Archive => app.ui.archives.len(),
     }
 }
@@ -457,6 +462,7 @@ impl ChatApp {
                 session_list: Vec::new(),
                 session_list_index: 0,
                 session_restore_confirm: false,
+                teammate_list_index: 0,
                 quote_idx: {
                     let ms = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)

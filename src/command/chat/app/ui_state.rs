@@ -148,6 +148,8 @@ pub struct UIState {
     pub session_list_index: usize,
     /// 会话恢复确认模式（当前有消息时需要确认）
     pub session_restore_confirm: bool,
+    /// Teammate Dashboard 中选中的 teammate 索引
+    pub teammate_list_index: usize,
     /// 欢迎界面诗句索引（每次进入 chat 时随机选定）
     pub quote_idx: usize,
     /// 输入区视觉折行宽度（由 draw_input 每帧更新，handler 用于判断视觉折行）
@@ -245,6 +247,8 @@ pub enum ConfigTab {
     Hooks,
     /// 自定义命令（占位）
     Commands,
+    /// Teammate 状态面板
+    Teammates,
     /// 会话管理
     Session,
     /// 归档管理
@@ -262,6 +266,7 @@ impl ConfigTab {
             ConfigTab::Skills => "Skills",
             ConfigTab::Hooks => "Hooks",
             ConfigTab::Commands => "Commands",
+            ConfigTab::Teammates => "Teammates",
             ConfigTab::Archive => "归档",
         }
     }
@@ -276,7 +281,8 @@ impl ConfigTab {
             ConfigTab::Skills => 4,
             ConfigTab::Hooks => 5,
             ConfigTab::Commands => 6,
-            ConfigTab::Archive => 7,
+            ConfigTab::Teammates => 7,
+            ConfigTab::Archive => 8,
         }
     }
 
@@ -290,12 +296,13 @@ impl ConfigTab {
             4 => ConfigTab::Skills,
             5 => ConfigTab::Hooks,
             6 => ConfigTab::Commands,
+            7 => ConfigTab::Teammates,
             _ => ConfigTab::Archive,
         }
     }
 
     /// Tab 总数
-    pub const COUNT: usize = 8;
+    pub const COUNT: usize = 9;
 
     /// 切换到下一个 Tab
     pub fn next(&self) -> Self {
