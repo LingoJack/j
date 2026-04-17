@@ -1202,6 +1202,20 @@ fn retry_policy_for(error: &ChatError) -> Option<RetryPolicy> {
                 cap_ms: 20_000,
             })
         }
+        // 兜底：Other 中包含过载/访问量过大关键词（部分 API 错误未被正确分类时）
+        ChatError::Other(msg)
+            if msg.contains("访问量过大")
+                || msg.contains("过载")
+                || msg.contains("overloaded")
+                || msg.contains("too busy")
+                || msg.contains("1305") =>
+        {
+            Some(RetryPolicy {
+                max_attempts: 3,
+                base_ms: 3_000,
+                cap_ms: 30_000,
+            })
+        }
         _ => None,
     }
 }
