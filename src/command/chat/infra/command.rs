@@ -50,7 +50,7 @@ pub fn commands_dir() -> PathBuf {
 
 /// 返回项目级 commands 目录: .jcli/commands/（如果存在）
 pub fn project_commands_dir() -> Option<PathBuf> {
-    use super::permission::JcliConfig;
+    use super::super::permission::JcliConfig;
     let config_dir = JcliConfig::find_config_dir()?;
     let dir = config_dir.join("commands");
     if dir.is_dir() { Some(dir) } else { None }

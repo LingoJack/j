@@ -1,5 +1,5 @@
-use super::permission::JcliConfig;
-use super::storage::ChatMessage;
+use super::super::permission::JcliConfig;
+use super::super::storage::ChatMessage;
 use crate::util::log::{write_error_log, write_info_log};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -324,7 +324,7 @@ impl HookManager {
         let mut manager = HookManager::default();
 
         // 加载用户级 hooks：~/.jdata/agent/hooks.yaml
-        let user_hooks_path = super::storage::hooks_config_path();
+        let user_hooks_path = super::super::storage::hooks_config_path();
         if user_hooks_path.is_file() {
             match std::fs::read_to_string(&user_hooks_path) {
                 Ok(content) => {

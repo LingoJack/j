@@ -1,31 +1,46 @@
 pub mod agent;
-pub mod agent_config;
 pub mod agent_md;
-pub mod api;
 pub mod app;
-pub mod archive;
-pub mod autocomplete;
-pub mod command;
-pub mod compact;
 pub mod constants;
 pub mod error;
 pub mod handler;
-pub mod hook;
-pub mod input_thread;
+pub mod infra;
+pub mod input;
 pub mod markdown;
 pub mod oneshot;
 pub mod permission;
-pub mod permission_queue;
 pub mod remote;
-pub mod render_cache;
-pub mod sandbox;
-pub mod skill;
+pub mod render;
 pub mod storage;
 pub mod teammate;
-pub mod teammate_loop;
-pub mod theme;
 pub mod tools;
 pub mod ui;
-pub mod ui_helpers;
 
 pub use oneshot::handle_chat;
+
+// Re-exports from agent/ subdirectory (backward compat)
+pub use agent::api;
+pub use agent::compact;
+pub use agent::config as agent_config;
+
+// Re-exports from teammate/ subdirectory (backward compat)
+pub use teammate::teammate_loop;
+
+// Re-exports from permission/ subdirectory (backward compat)
+pub use permission::queue as permission_queue;
+
+// Re-exports from infra/ subdirectory (backward compat)
+pub use infra::archive;
+pub use infra::command;
+pub use infra::hook;
+pub use infra::sandbox;
+pub use infra::skill;
+
+// Re-exports from render/ subdirectory (backward compat)
+pub use render::cache as render_cache;
+pub use render::helpers as ui_helpers;
+pub use render::theme;
+
+// Re-exports from input/ subdirectory (backward compat)
+pub use input::autocomplete;
+pub use input::input_thread;

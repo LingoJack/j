@@ -1,5 +1,5 @@
-use super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
-use super::markdown::markdown_to_lines;
+use super::super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
+use super::super::markdown::markdown_to_lines;
 use super::theme::Theme;
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use crate::util::safe_lock;
@@ -1005,7 +1005,7 @@ fn render_ask_questions(
 /// 渲染工具确认模式的内容和选项
 fn render_tool_confirm_content(
     app: &ChatApp,
-    tc: &super::app::ToolCallStatus,
+    tc: &super::super::app::ToolCallStatus,
     bubble_max_width: usize,
     content_w: usize,
     lines: &mut Vec<Line<'static>>,
@@ -1365,13 +1365,13 @@ fn render_plan_approval_confirm_area(
 }
 
 pub fn render_tool_call_request_msg(
-    tool_calls: &[super::storage::ToolCallItem],
+    tool_calls: &[super::super::storage::ToolCallItem],
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
     expand: bool,
 ) {
-    use super::tools::classification::{ToolCategory, ToolStatus};
+    use super::super::tools::classification::{ToolCategory, ToolStatus};
 
     let content_w = bubble_max_width.saturating_sub(6);
 
@@ -1481,7 +1481,7 @@ fn render_json_params_enhanced(
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
-    use super::tools::classification::format_json_value;
+    use super::super::tools::classification::format_json_value;
 
     if let Some(obj) = json.as_object() {
         for (key, value) in obj {
@@ -1526,7 +1526,9 @@ pub fn render_tool_result_msg(
     theme: &Theme,
     expand: bool,
 ) {
-    use super::tools::classification::{ToolCategory, ToolStatus, get_result_summary_for_tool};
+    use super::super::tools::classification::{
+        ToolCategory, ToolStatus, get_result_summary_for_tool,
+    };
 
     // 与前一条消息（tool_call）之间留一行间距
     lines.push(Line::from(""));

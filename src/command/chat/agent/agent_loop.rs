@@ -1,10 +1,10 @@
-use super::agent_config::{AgentLoopConfig, AgentSharedState};
+use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
+use super::super::error::ChatError;
+use super::super::hook::{HookContext, HookEvent, HookManager};
+use super::super::storage::{ChatMessage, ToolCallItem};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
-use super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::compact;
-use super::error::ChatError;
-use super::hook::{HookContext, HookEvent, HookManager};
-use super::storage::{ChatMessage, ToolCallItem};
+use super::config::{AgentLoopConfig, AgentSharedState};
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
@@ -1084,7 +1084,7 @@ fn process_tool_calls(
                     images: Some(
                         result_images
                             .into_iter()
-                            .map(|img| super::storage::ImageData {
+                            .map(|img| super::super::storage::ImageData {
                                 base64: img.base64,
                                 media_type: img.media_type,
                             })

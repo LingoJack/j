@@ -56,7 +56,7 @@ pub fn skills_dir() -> PathBuf {
 
 /// 返回项目级 skills 目录: .jcli/skills/（如果存在）
 pub fn project_skills_dir() -> Option<PathBuf> {
-    use super::permission::JcliConfig;
+    use super::super::permission::JcliConfig;
     let config_dir = JcliConfig::find_config_dir()?;
     let dir = config_dir.join("skills");
     if dir.is_dir() { Some(dir) } else { None }

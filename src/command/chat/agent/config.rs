@@ -1,8 +1,8 @@
+use super::super::hook::HookManager;
+use super::super::storage::{ChatMessage, ModelProvider};
+use super::super::tools::background::BackgroundManager;
+use super::super::tools::todo::TodoManager;
 use super::compact::{CompactConfig, InvokedSkillsMap};
-use super::hook::HookManager;
-use super::storage::{ChatMessage, ModelProvider};
-use super::tools::background::BackgroundManager;
-use super::tools::todo::TodoManager;
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 
