@@ -126,4 +126,7 @@ allow:
 - Bash(/Users/lingojack/dev_custom/j/target/release/j -v:*)
 - Bash(codesign -dvvv:*)
 - Bash(# 检查:*)
+- Bash(cat ~/.jdata/agent/skills/j-cli/SKILL.md:*)
+- Bash(cat ~/.jdata/agent/skills/skill-creator/SKILL.md:*)
+- Bash(cat ~/.jdata/agent/skills/webapp-gen/SKILL.md:*)
 deny: []
