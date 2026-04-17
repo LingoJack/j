@@ -262,6 +262,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 active_index: 0,
                 system_prompt: None,
                 max_history_messages: 20,
+                max_context_tokens: 100_000,
                 theme: ThemeName::default(),
                 tools_enabled: false,
                 max_tool_rounds: 10,

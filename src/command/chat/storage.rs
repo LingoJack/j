@@ -1,6 +1,7 @@
 use super::compact::CompactConfig;
 use super::constants::{
-    DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS, MESSAGE_PREVIEW_MAX_LEN,
+    DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS,
+    MESSAGE_PREVIEW_MAX_LEN,
 };
 use super::theme::ThemeName;
 use crate::config::YamlConfig;
@@ -44,6 +45,9 @@ pub struct AgentConfig {
     /// 发送给 API 的历史消息数量限制（默认 20 条，避免 token 消耗过大）
     #[serde(default = "default_max_history_messages")]
     pub max_history_messages: usize,
+    /// 上下文 token 预算（优先级选择时的 token 上限，默认 100K）
+    #[serde(default = "default_max_context_tokens")]
+    pub max_context_tokens: usize,
     /// 主题名称（dark / light / midnight）
     #[serde(default)]
     pub theme: ThemeName,
@@ -78,6 +82,10 @@ pub struct AgentConfig {
 
 fn default_max_history_messages() -> usize {
     DEFAULT_MAX_HISTORY_MESSAGES
+}
+
+fn default_max_context_tokens() -> usize {
+    DEFAULT_MAX_CONTEXT_TOKENS
 }
 
 /// 默认工具调用最大轮数

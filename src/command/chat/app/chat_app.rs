@@ -8,7 +8,7 @@ use super::types::{
 use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
 use crate::command::chat::command;
-use crate::command::chat::constants::{INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::constants::{INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_USER};
 use crate::command::chat::hook::{HookContext, HookEvent, HookManager, HookResult};
 use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::JcliConfig;
@@ -2142,20 +2142,11 @@ impl ChatApp {
     }
 
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
-        let max_history = self.state.agent_config.max_history_messages;
-        let msgs = &self.state.session.messages;
-        if msgs.len() <= max_history {
-            return msgs.clone();
-        }
-        let mut start = msgs.len() - max_history;
-        // 向前退到安全位置：不从 tool pair 中间截断
-        while start > 0
-            && (msgs[start].role == ROLE_TOOL
-                || (msgs[start].role == ROLE_ASSISTANT && msgs[start].tool_calls.is_some()))
-        {
-            start -= 1;
-        }
-        msgs[start..].to_vec()
+        crate::command::chat::agent::window::select_messages(
+            &self.state.session.messages,
+            self.state.agent_config.max_history_messages,
+            self.state.agent_config.max_context_tokens,
+        )
     }
 
     /// 发送消息（非阻塞，启动后台线程流式接收）

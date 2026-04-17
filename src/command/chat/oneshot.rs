@@ -116,13 +116,12 @@ pub fn handle_chat(
             interrupted2.store(true, Ordering::Relaxed);
         });
 
-        // 发送给 API 时截取历史窗口
-        let history_limit = agent_config.max_history_messages;
-        let send_messages = if messages.len() > history_limit {
-            messages[messages.len() - history_limit..].to_vec()
-        } else {
-            messages.clone()
-        };
+        // 发送给 API 时使用优先级消息窗口选择
+        let send_messages = crate::command::chat::agent::window::select_messages(
+            &messages,
+            agent_config.max_history_messages,
+            agent_config.max_context_tokens,
+        );
 
         match crate::command::chat::api::call_openai_stream(
             provider,
