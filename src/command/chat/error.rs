@@ -200,6 +200,11 @@ impl ChatError {
                 ChatError::ApiAuth(api_err.message.clone())
             }
             Some("invalid_request_error") => ChatError::ApiBadRequest(api_err.message.clone()),
+            // code 1305：上游模型访问量过大（第三方 OpenAI 兼容 API）
+            Some("1305") => ChatError::ApiRateLimit {
+                message: api_err.message.clone(),
+                retry_after_secs: None,
+            },
             _ => {
                 // code 不明确时，尝试从 message 中推断
                 let msg_lower = api_err.message.to_lowercase();
@@ -210,6 +215,11 @@ impl ChatError {
                     ChatError::ApiAuth(api_err.message)
                 } else if msg_lower.contains("rate limit")
                     || msg_lower.contains("too many requests")
+                    || msg_lower.contains("访问量过大")
+                    || msg_lower.contains("请稍后再试")
+                    || msg_lower.contains("过载")
+                    || msg_lower.contains("overloaded")
+                    || msg_lower.contains("too busy")
                 {
                     ChatError::ApiRateLimit {
                         message: api_err.message,
