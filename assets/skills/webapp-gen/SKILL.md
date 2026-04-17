@@ -161,7 +161,15 @@ api 设计
 开始后端设计
 后端编码实现
 前端编码实现
+容器化启动与验收（podman compose，最终一项）
 ```
+
+### 容器化原则
+
+- **编码期本地化**：前后端开发、原型反馈、单测都在本地跑（`make run-frontend` / `make run-backend`），避免每次改代码都 rebuild 镜像拖慢迭代。
+- **依赖服务容器化**：后端编码/测试阶段需要 MySQL 时，只起 mysql 一个服务（见"后端编码实现"节），backend 仍在宿主机跑。
+- **最终全栈容器化**：所有功能完成后，用 `podman compose up -d --build` 跑完整链路做验收（见"容器化启动与验收"节）。
+- **容器运行时统一用 podman**：模板的 `docker-compose.yml` 是标准 compose v3 格式，`podman compose` 原生兼容。Makefile 里的 `docker-up` 目标基于 `docker compose`，本 skill 一律改走 `podman compose` 命令（不要执行 `make docker-up`）。
 
 > 开始任何写文件动作前，先 `pwd` 或 `ls` 确认当前已在 `<project_name>/` 目录下，且存在 `backend/`、`frontend/`。否则回到 STEP 0。
 
@@ -229,6 +237,38 @@ make check-frontend
 ### 后台开发阶段
 实现后台接口以及逻辑
 
+**MySQL 依赖准备**（首次接触数据库前必须执行）：
+项目根目录下模板已自带 `docker-compose.yml`，内含 mysql 8.0 服务（库名 `appdb`，用户 `appuser/apppassword`，暴露 3306，含 healthcheck）。只需起 mysql 这一个服务，backend 仍在本地 `go run` 跑：
+```bash
+podman compose up -d mysql
+# 等 health 变 healthy（~10s）
+podman compose ps
+```
+backend 本地运行时读取 `backend/config/config.yaml`，确认其 DSN 指向 `127.0.0.1:3306/appdb`（与 compose 暴露端口一致）。如模板默认 DSN 不匹配，修改 config.yaml 而不是 compose。
+
+跑后端测试前同理：`podman compose up -d mysql` 再 `make test-backend`。
+
+容器残留清理：`podman compose down`（保留卷）或 `podman compose down -v`（连数据一起删）。
+
 
 ### 前端开发阶段
 原型修改，替换为调用实际的后台接口
+
+
+### 容器化启动与验收阶段
+
+前后端功能全部完成后，做最终的全栈容器化验收。目标：一条命令起整个项目，证明部署链路通。
+
+```bash
+podman compose up -d --build
+podman compose ps            # 三个服务都应 running，mysql 应 healthy
+podman compose logs -f backend   # 观察启动日志，确认 DB 连接成功、路由注册完成
+```
+
+验收检查清单：
+- `mysql` / `backend` / `frontend` 三个容器都 running
+- 浏览器访问 `http://localhost:5173` 前端可打开
+- 前端调用的后端接口（走 `http://localhost:8080` 或 nginx 反代）返回正常数据
+- `podman compose down && podman compose up -d` 能复现一致行为（数据卷持久化生效）
+
+停止：`podman compose down`。彻底清理（含 mysql 数据卷）：`podman compose down -v`。
