@@ -473,6 +473,8 @@ impl ChatApp {
                 input_wrap_width: 0,
                 pending_agent_perm: None,
                 pending_plan_approval: None,
+                compact_exempt_sublist: false,
+                compact_exempt_idx: 0,
             },
             state: ChatState {
                 agent_config,
@@ -1203,6 +1205,12 @@ impl ChatApp {
                                 self.ui.pending_agent_md_edit = true;
                                 return;
                             }
+                            if field == "compact_exempt_tools" {
+                                self.ui.compact_exempt_sublist = true;
+                                self.ui.compact_exempt_idx = 0;
+                                self.ui.config_scroll_offset = 0;
+                                return;
+                            }
                             if field == "style" {
                                 self.ui.pending_style_edit = true;
                                 return;
@@ -1497,6 +1505,18 @@ impl ChatApp {
                         .map(|c| c.frontmatter.name.clone())
                         .collect();
                     self.show_toast("已禁用全部命令", false);
+                }
+            }
+            Action::CompactExemptToggle => {
+                let tool_names = self.tool_registry.tool_names();
+                if let Some(name) = tool_names.get(self.ui.compact_exempt_idx) {
+                    let name_str = name.to_string();
+                    let exempt = &mut self.state.agent_config.compact.micro_compact_exempt_tools;
+                    if let Some(pos) = exempt.iter().position(|t| t == &name_str) {
+                        exempt.remove(pos);
+                    } else {
+                        exempt.push(name_str);
+                    }
                 }
             }
 

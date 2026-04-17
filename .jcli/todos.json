@@ -1,22 +1,32 @@
 [
   {
-    "id": "t5",
-    "content": "在 CONFIG_GLOBAL_FIELDS_TAB 中添加 compact 相关字段",
+    "id": "1",
+    "content": "UIState 添加 compact_exempt_sublist 和 compact_exempt_selected 字段",
     "status": "completed"
   },
   {
-    "id": "t6",
-    "content": "在 helpers.rs 中添加 compact 字段的 label/desc/value/raw_value/set 函数分支",
+    "id": "2",
+    "content": "helpers.rs 改 compact_exempt_tools value 为 (n/m) 格式",
     "status": "completed"
   },
   {
-    "id": "t7",
-    "content": "在 config.rs 的 draw_tab_global_content 中添加 compact.enabled 的 toggle 渲染",
+    "id": "3",
+    "content": "config.rs: draw_tab_global_lines 添加 sublist 模式渲染",
     "status": "completed"
   },
   {
-    "id": "t8",
-    "content": "在 chat_app.rs 的 Action::ConfigEnter 中添加 compact toggle 处理",
+    "id": "4",
+    "content": "config.rs: 添加 draw_compact_exempt_sublist 函数",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "chat_app.rs: ConfigEnter 处理 compact_exempt_tools 进入/导航/toggle/退出 sublist",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "构建验证",
     "status": "completed"
   }
 ]

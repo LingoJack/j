@@ -201,16 +201,12 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
         }
         "compact_keep_recent" => app.state.agent_config.compact.keep_recent.to_string(),
         "compact_exempt_tools" => {
-            // 合并内置 + 用户自定义，一起展示
-            let mut all: Vec<&str> =
-                crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.to_vec();
+            // (已豁免数/工具总数) 格式展示
+            let builtin = crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.len();
             let user_extra = &app.state.agent_config.compact.micro_compact_exempt_tools;
-            for t in user_extra {
-                if !all.contains(&t.as_str()) {
-                    all.push(t);
-                }
-            }
-            all.join(",")
+            let exempt_count = builtin + user_extra.len();
+            let total = app.tool_registry.tool_names().len();
+            format!("({}/{})", exempt_count, total)
         }
         _ => String::new(),
     }

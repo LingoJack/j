@@ -61,15 +61,46 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Char('s') => Action::ConfigSetActiveProvider,
             _ => return,
         },
-        ConfigTab::Global => match key.code {
-            KeyCode::Esc => Action::SaveConfig,
-            KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
-            KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
-            KeyCode::Up | KeyCode::Char('k') => Action::ConfigNavigate(CursorDirection::Up),
-            KeyCode::Down | KeyCode::Char('j') => Action::ConfigNavigate(CursorDirection::Down),
-            KeyCode::Enter => Action::ConfigEnter,
-            _ => return,
-        },
+        ConfigTab::Global => {
+            // compact_exempt_tools 子列表模式
+            if app.ui.compact_exempt_sublist {
+                match key.code {
+                    KeyCode::Esc => {
+                        app.ui.compact_exempt_sublist = false;
+                        app.ui.config_scroll_offset = 0;
+                        save_agent_config(&app.state.agent_config);
+                        return;
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if app.ui.compact_exempt_idx > 0 {
+                            app.ui.compact_exempt_idx -= 1;
+                        }
+                        return;
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        let total = app.tool_registry.tool_names().len();
+                        if total > 0 && app.ui.compact_exempt_idx < total - 1 {
+                            app.ui.compact_exempt_idx += 1;
+                        }
+                        return;
+                    }
+                    KeyCode::Enter | KeyCode::Char(' ') => {
+                        app.update(Action::CompactExemptToggle);
+                        return;
+                    }
+                    _ => return,
+                }
+            }
+            match key.code {
+                KeyCode::Esc => Action::SaveConfig,
+                KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
+                KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+                KeyCode::Up | KeyCode::Char('k') => Action::ConfigNavigate(CursorDirection::Up),
+                KeyCode::Down | KeyCode::Char('j') => Action::ConfigNavigate(CursorDirection::Down),
+                KeyCode::Enter => Action::ConfigEnter,
+                _ => return,
+            }
+        }
         ConfigTab::Tools => match key.code {
             KeyCode::Esc => {
                 save_agent_config(&app.state.agent_config);

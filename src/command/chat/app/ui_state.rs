@@ -158,6 +158,10 @@ pub struct UIState {
     pub pending_agent_perm: Option<Arc<crate::command::chat::permission_queue::PendingAgentPerm>>,
     /// 来自 teammate 的待决 Plan 审批请求（Some 时进入 PlanApprovalConfirm 模式）
     pub pending_plan_approval: Option<Arc<crate::command::chat::tools::plan::PendingPlanApproval>>,
+    /// 是否在 Global tab 的"豁免压缩工具"子列表中
+    pub compact_exempt_sublist: bool,
+    /// 豁免压缩工具子列表选中索引
+    pub compact_exempt_idx: usize,
 }
 
 /// 消息渲染行缓存

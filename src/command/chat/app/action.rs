@@ -187,6 +187,8 @@ pub enum Action {
     ToggleMenuEnableAll,
     /// 工具/Skill 开关：全部禁用
     ToggleMenuDisableAll,
+    /// 豁免压缩工具子列表：切换工具豁免状态
+    CompactExemptToggle,
 
     // ========== 模型选择 ==========
     /// 模型选择模式：导航

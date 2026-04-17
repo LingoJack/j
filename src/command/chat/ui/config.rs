@@ -190,6 +190,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Session => app.ui.session_list_index,
         ConfigTab::Archive => app.ui.archive_list_index,
         ConfigTab::Teammates => app.ui.teammate_list_index,
+        ConfigTab::Global if app.ui.compact_exempt_sublist => app.ui.compact_exempt_idx,
         _ => app.ui.config_field_idx,
     };
     if let Some(&selected_line) = field_line_indices.get(selected_idx) {
@@ -510,6 +511,43 @@ fn draw_tab_global_lines<'a>(
 ) {
     let t = &app.ui.theme;
 
+    // compact_exempt_tools 子列表模式
+    if app.ui.compact_exempt_sublist {
+        // 标题行 (lines[0]) + 空行 (lines[1])
+        lines.push(Line::from(vec![
+            Span::styled(
+                "  豁免压缩工具  ",
+                Style::default().fg(t.config_label_selected),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                "Enter/空格 切换 | Esc 返回",
+                Style::default().fg(t.config_dim),
+            ),
+        ]));
+        lines.push(Line::from(""));
+
+        use crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS;
+        let tool_names = app.tool_registry.tool_names();
+        let exempt = &app.state.agent_config.compact.micro_compact_exempt_tools;
+
+        for (i, name) in tool_names.iter().enumerate() {
+            let is_builtin = BUILTIN_EXEMPT_TOOLS.contains(&name.as_ref());
+            let is_exempt = is_builtin || exempt.iter().any(|t| t == name);
+            let selected = i == app.ui.compact_exempt_idx;
+
+            let label = if is_builtin {
+                format!("{} (内置)", name)
+            } else {
+                name.to_string()
+            };
+
+            field_line_indices.push(lines.len());
+            lines.push(toggle_list_item(&label, is_exempt, selected, None, None, t));
+        }
+        return;
+    }
+
     // 顶部留白
     lines.push(Line::from(""));
 
@@ -610,6 +648,7 @@ fn draw_tab_global_lines<'a>(
 }
 
 /// Tools tab 固定头部（总开关）
+
 fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
