@@ -8,6 +8,7 @@ use super::components::{
 };
 use crate::command::chat::app::{ChatApp, ConfigTab};
 use crate::command::chat::teammate::TeammateStatus;
+use crate::command::chat::tools::agent_shared::SubAgentStatus;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -922,7 +923,7 @@ fn draw_tab_commands_list<'a>(
     }
 }
 
-/// Teammates tab 固定头部（团队摘要）
+/// Teammates tab 固定头部（团队摘要 + SubAgents 摘要）
 fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
 
@@ -931,80 +932,146 @@ fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
         .lock()
         .map(|m| m.teammate_snapshots())
         .unwrap_or_default();
+    let sub_snaps = app.sub_agent_tracker.display_snapshots();
 
-    if snapshots.is_empty() {
+    if snapshots.is_empty() && sub_snaps.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  (暂无 Teammate)",
+            "  (暂无 Teammate / SubAgent)",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  Teammate 由 AI 通过 CreateTeammate 工具创建",
+            "  Teammate 由 AI 通过 CreateTeammate 工具创建，SubAgent 由 Agent 工具触发",
             Style::default().fg(t.config_dim),
         )));
         return;
     }
 
-    let working = snapshots
-        .iter()
-        .filter(|s| s.status == TeammateStatus::Working || s.status == TeammateStatus::Initializing)
-        .count();
-    let waiting = snapshots
-        .iter()
-        .filter(|s| s.status == TeammateStatus::WaitingForMessage)
-        .count();
-    let completed = snapshots
-        .iter()
-        .filter(|s| s.status == TeammateStatus::Completed)
-        .count();
-    let errored = snapshots
-        .iter()
-        .filter(|s| {
-            matches!(
-                s.status,
-                TeammateStatus::Error(_) | TeammateStatus::Cancelled
-            )
-        })
-        .count();
+    // Teammate 汇总行
+    if !snapshots.is_empty() {
+        let working = snapshots
+            .iter()
+            .filter(|s| {
+                s.status == TeammateStatus::Working || s.status == TeammateStatus::Initializing
+            })
+            .count();
+        let waiting = snapshots
+            .iter()
+            .filter(|s| s.status == TeammateStatus::WaitingForMessage)
+            .count();
+        let completed = snapshots
+            .iter()
+            .filter(|s| s.status == TeammateStatus::Completed)
+            .count();
+        let errored = snapshots
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.status,
+                    TeammateStatus::Error(_) | TeammateStatus::Cancelled
+                )
+            })
+            .count();
 
-    let mut summary_spans = vec![Span::styled(
-        format!("  Teammates: {} 个  ", snapshots.len()),
-        Style::default()
-            .fg(t.config_label)
-            .add_modifier(Modifier::BOLD),
-    )];
+        let mut summary_spans = vec![Span::styled(
+            format!("  Teammates: {} 个  ", snapshots.len()),
+            Style::default()
+                .fg(t.config_label)
+                .add_modifier(Modifier::BOLD),
+        )];
 
-    if working > 0 {
-        summary_spans.push(Span::styled(
-            format!("● {} 工作中", working),
-            Style::default().fg(t.title_loading),
-        ));
-        summary_spans.push(Span::styled("  ", Style::default()));
-    }
-    if waiting > 0 {
-        summary_spans.push(Span::styled(
-            format!("○ {} 等待中", waiting),
-            Style::default().fg(t.config_dim),
-        ));
-        summary_spans.push(Span::styled("  ", Style::default()));
-    }
-    if completed > 0 {
-        summary_spans.push(Span::styled(
-            format!("✓ {} 已完成", completed),
-            Style::default().fg(t.config_toggle_on),
-        ));
-        summary_spans.push(Span::styled("  ", Style::default()));
-    }
-    if errored > 0 {
-        summary_spans.push(Span::styled(
-            format!("✗ {} 错误", errored),
-            Style::default().fg(t.config_toggle_off),
-        ));
+        if working > 0 {
+            summary_spans.push(Span::styled(
+                format!("● {} 工作中", working),
+                Style::default().fg(t.title_loading),
+            ));
+            summary_spans.push(Span::styled("  ", Style::default()));
+        }
+        if waiting > 0 {
+            summary_spans.push(Span::styled(
+                format!("○ {} 等待中", waiting),
+                Style::default().fg(t.config_dim),
+            ));
+            summary_spans.push(Span::styled("  ", Style::default()));
+        }
+        if completed > 0 {
+            summary_spans.push(Span::styled(
+                format!("✓ {} 已完成", completed),
+                Style::default().fg(t.config_toggle_on),
+            ));
+            summary_spans.push(Span::styled("  ", Style::default()));
+        }
+        if errored > 0 {
+            summary_spans.push(Span::styled(
+                format!("✗ {} 错误", errored),
+                Style::default().fg(t.config_toggle_off),
+            ));
+        }
+        lines.push(Line::from(summary_spans));
     }
 
-    lines.push(Line::from(summary_spans));
+    // SubAgent 汇总行
+    if !sub_snaps.is_empty() {
+        let working = sub_snaps
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.status,
+                    SubAgentStatus::Working | SubAgentStatus::Initializing
+                )
+            })
+            .count();
+        let completed = sub_snaps
+            .iter()
+            .filter(|s| s.status == SubAgentStatus::Completed)
+            .count();
+        let errored = sub_snaps
+            .iter()
+            .filter(|s| matches!(s.status, SubAgentStatus::Error(_)))
+            .count();
+        let cancelled = sub_snaps
+            .iter()
+            .filter(|s| s.status == SubAgentStatus::Cancelled)
+            .count();
+
+        let mut summary_spans = vec![Span::styled(
+            format!("  SubAgents: {} 个  ", sub_snaps.len()),
+            Style::default()
+                .fg(t.config_label)
+                .add_modifier(Modifier::BOLD),
+        )];
+        if working > 0 {
+            summary_spans.push(Span::styled(
+                format!("● {} 工作中", working),
+                Style::default().fg(t.title_loading),
+            ));
+            summary_spans.push(Span::styled("  ", Style::default()));
+        }
+        if completed > 0 {
+            summary_spans.push(Span::styled(
+                format!("✓ {} 已完成", completed),
+                Style::default().fg(t.config_toggle_on),
+            ));
+            summary_spans.push(Span::styled("  ", Style::default()));
+        }
+        if cancelled > 0 {
+            summary_spans.push(Span::styled(
+                format!("✗ {} 已取消", cancelled),
+                Style::default().fg(t.text_dim),
+            ));
+            summary_spans.push(Span::styled("  ", Style::default()));
+        }
+        if errored > 0 {
+            summary_spans.push(Span::styled(
+                format!("✗ {} 错误", errored),
+                Style::default().fg(t.config_toggle_off),
+            ));
+        }
+        lines.push(Line::from(summary_spans));
+    }
+
     lines.push(Line::from(Span::styled(
-        "  (s 停止, Enter 详情)",
+        "  (s 停止 Teammate, Enter 详情；SubAgent 只读)",
         Style::default().fg(t.config_dim),
     )));
     lines.push(Line::from(""));
@@ -1093,6 +1160,89 @@ fn draw_tab_teammates_list<'a>(
             ),
         ]));
         lines.push(Line::from(""));
+    }
+
+    // ── SubAgents 只读分组 ──
+    let sub_snaps = app.sub_agent_tracker.display_snapshots();
+    if !sub_snaps.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  ── SubAgents (只读) ──",
+            Style::default()
+                .fg(t.config_label)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+
+        for snap in sub_snaps.iter() {
+            let status_color = match &snap.status {
+                SubAgentStatus::Working => t.title_loading,
+                SubAgentStatus::Completed => t.config_toggle_on,
+                SubAgentStatus::Cancelled => t.text_dim,
+                SubAgentStatus::Error(_) => t.config_toggle_off,
+                SubAgentStatus::Initializing => t.config_dim,
+            };
+
+            let status_text = match &snap.status {
+                SubAgentStatus::Working => {
+                    if let Some(ref tool) = snap.current_tool {
+                        format!(
+                            "{} 工作中 R{} · {}",
+                            snap.status.icon(),
+                            snap.current_round,
+                            tool
+                        )
+                    } else {
+                        format!("{} 工作中 R{}", snap.status.icon(), snap.current_round)
+                    }
+                }
+                SubAgentStatus::Error(msg) => {
+                    let short: String = msg.chars().take(28).collect();
+                    let suffix = if msg.chars().count() > 28 { "…" } else { "" };
+                    format!("{} 错误: {}{}", snap.status.icon(), short, suffix)
+                }
+                _ => format!("{} {}", snap.status.icon(), snap.status.label()),
+            };
+
+            let desc_display: String = if snap.description.chars().count() > 22 {
+                let truncated: String = snap.description.chars().take(22).collect();
+                format!("{truncated}…")
+            } else {
+                snap.description.clone()
+            };
+
+            // 时长（秒）显示
+            let elapsed = if snap.elapsed_secs < 60 {
+                format!("{}s", snap.elapsed_secs)
+            } else {
+                format!("{}m{}s", snap.elapsed_secs / 60, snap.elapsed_secs % 60)
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled("  ".to_string(), Style::default().fg(t.text_normal)),
+                Span::styled(
+                    format!("{:<12}", snap.id),
+                    Style::default()
+                        .fg(t.text_white)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{:<24}", desc_display),
+                    Style::default().fg(t.config_dim),
+                ),
+                Span::styled(
+                    format!("{:<32}", status_text),
+                    Style::default().fg(status_color),
+                ),
+                Span::styled(
+                    format!(
+                        "{} · {} 次调用 · {}",
+                        snap.mode, snap.tool_calls_count, elapsed
+                    ),
+                    Style::default().fg(t.text_dim),
+                ),
+            ]));
+            lines.push(Line::from(""));
+        }
     }
 }
 
