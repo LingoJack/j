@@ -20,19 +20,23 @@ const MAX_CHAIN_DURATION_SECS: u64 = 30;
 ///
 /// 各事件的触发时机及可读/可写字段：
 ///
+/// stop / skip 语义（统一规则）：
+/// - `stop`：中止当前步骤及其所属子管线（不发送/不请求/不结束/不保存/中止 compact）
+/// - `skip`：跳过当前步骤，同级步骤继续（仅 PreToolExecution：跳过该工具，其他工具继续）
+///
 /// | 事件                          | 触发时机           | 可读字段                              | 可写字段（HookResult 中返回即生效）        |
 /// |-------------------------------|--------------------|-----------------------------------------|----------------------------------------------|
-/// | `PreSendMessage`              | 用户消息入队前     | `user_input`, `messages`               | `user_input`（修改发送内容）, `abort`, `retry_feedback` |
+/// | `PreSendMessage`              | 用户消息入队前     | `user_input`, `messages`               | `user_input`（修改发送内容）, `action=stop`, `retry_feedback` |
 /// | `PostSendMessage`             | 用户消息入队后     | `user_input`, `messages`               | 仅通知，返回值被忽略                         |
-/// | `PreLlmRequest`               | LLM API 请求前     | `messages`, `system_prompt`, `model`   | `messages`, `system_prompt`, `inject_messages`, `additional_context`, `abort`, `retry_feedback` |
-/// | `PostLlmResponse`             | LLM 回复完成后     | `assistant_output`, `messages`, `model` | `assistant_output`（修改最终回复）, `abort`, `retry_feedback`, `system_message` |
-/// | `PreToolExecution`            | 工具执行前         | `tool_name`, `tool_arguments`          | `tool_arguments`（修改参数）, `abort`        |
+/// | `PreLlmRequest`               | LLM API 请求前     | `messages`, `system_prompt`, `model`   | `messages`, `system_prompt`, `inject_messages`, `additional_context`, `action=stop`, `retry_feedback` |
+/// | `PostLlmResponse`             | LLM 回复完成后     | `assistant_output`, `messages`, `model` | `assistant_output`（修改最终回复）, `action=stop`, `retry_feedback`, `system_message` |
+/// | `PreToolExecution`            | 工具执行前         | `tool_name`, `tool_arguments`          | `tool_arguments`（修改参数）, `action=skip`  |
 /// | `PostToolExecution`           | 工具执行后         | `tool_name`, `tool_result`             | `tool_result`（修改结果）                    |
 /// | `PostToolExecutionFailure`    | 工具执行失败后     | `tool_name`, `tool_error`              | `tool_error`（修改错误信息）, `additional_context` |
-/// | `Stop`                        | LLM 即将结束回复   | `user_input`（回复文本）, `messages`, `system_prompt`, `model` | `retry_feedback`（带反馈重试）, `additional_context`, `abort` |
-/// | `PreMicroCompact`             | micro_compact 前   | `messages`, `model`                   | `abort`                                      |
+/// | `Stop`                        | LLM 即将结束回复   | `user_input`（回复文本）, `messages`, `system_prompt`, `model` | `retry_feedback`（带反馈重试）, `additional_context`, `action=stop` |
+/// | `PreMicroCompact`             | micro_compact 前   | `messages`, `model`                   | `action=stop`                               |
 /// | `PostMicroCompact`            | micro_compact 后   | `messages`                             | `messages`（修改压缩结果）                    |
-/// | `PreAutoCompact`              | auto_compact 前    | `messages`, `system_prompt`, `model`   | `additional_context`, `abort`                |
+/// | `PreAutoCompact`              | auto_compact 前    | `messages`, `system_prompt`, `model`   | `additional_context`, `action=stop`         |
 /// | `PostAutoCompact`             | auto_compact 后    | `messages`                             | `messages`（修改压缩结果）                    |
 /// | `SessionStart`                | 会话启动时         | `messages`                             | 仅通知，返回值被忽略                         |
 /// | `SessionEnd`                  | 会话退出时         | `messages`                             | 仅通知，返回值被忽略                         |
@@ -386,7 +390,16 @@ impl Default for HookContext {
 /// - `retry_feedback`：Pre*/Stop/PostLlmResponse 中生效，中止并带反馈重试（注入为 user message 重新请求 LLM）
 /// - `additional_context`：PreLlmRequest / Stop / PreAutoCompact 中生效，追加文本到 system_prompt 末尾
 /// - `system_message`：所有事件中生效，展示给用户的提示消息
-/// - `abort`：Pre*/Stop/PostLlmResponse 事件中生效，为 true 时中止当前操作
+/// - `action`：`"stop"` 中止当前步骤及其所属子管线；`"skip"` 跳过当前步骤（同级继续）。旧字段 `abort=true` 等价于 `action="stop"`
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookAction {
+    /// 中止当前步骤及其所属子管线
+    Stop,
+    /// 跳过当前步骤，同级步骤继续
+    Skip,
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct HookResult {
     /// 替换消息列表（PreLlmRequest）
@@ -422,9 +435,31 @@ pub struct HookResult {
     /// 展示给用户的系统消息（所有事件：UI 上以 toast/提示形式显示）
     #[serde(default)]
     pub system_message: Option<String>,
-    /// 中止当前操作（Pre*/Stop/PostLlmResponse 事件中有效）
+    /// 控制流动作：`stop` = 中止当前步骤及其所属子管线，`skip` = 跳过当前步骤（同级继续）
     #[serde(default)]
-    pub abort: bool,
+    pub action: Option<HookAction>,
+    /// 向后兼容：旧脚本返回 `abort: true` 等价于 `action: "stop"`
+    /// 向后兼容：旧脚本返回 `abort: true` 等价于 `action: "stop"`（内部字段，请勿使用）
+    #[doc(hidden)]
+    #[serde(default, rename = "abort")]
+    pub _legacy_abort: bool,
+}
+
+impl HookResult {
+    /// 是否请求 stop（中止当前步骤及其所属子管线）
+    pub fn is_stop(&self) -> bool {
+        self.action == Some(HookAction::Stop) || self._legacy_abort
+    }
+
+    /// 是否请求 skip（跳过当前步骤，同级继续）
+    pub fn is_skip(&self) -> bool {
+        self.action == Some(HookAction::Skip)
+    }
+
+    /// 是否请求 stop 或 skip（任何控制流中断）
+    pub fn is_halt(&self) -> bool {
+        self.is_stop() || self.is_skip()
+    }
 }
 
 // ========== HookManager ==========
@@ -447,7 +482,7 @@ pub struct HookMetrics {
 /// Hook 管理器：管理四级 hook（内置、用户级、项目级、session 级）
 ///
 /// 执行顺序：内置 → 用户级 → 项目级 → Session 级，链式执行。
-/// 前者的输出会更新到 context 中，影响后者的输入。任何 `abort` 立即中止整条链。
+/// 前者的输出会更新到 context 中，影响后者的输入。任何 `stop` 或 `skip` 立即中止整条链。
 #[derive(Debug, Default)]
 pub struct HookManager {
     builtin_hooks: HashMap<HookEvent, Vec<HookKind>>,
@@ -752,7 +787,7 @@ impl HookManager {
 
     /// 链式执行所有 hook（内置→用户→项目→session）
     ///
-    /// 返回 `Some(HookResult)` 如果有任何修改或 abort，否则 `None`。
+    /// 返回 `Some(HookResult)` 如果有任何修改或 stop/skip，否则 `None`。
     /// 链式执行中，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。
     ///
     /// **注意**：调用方应先用 `has_hooks_for()` 检查，再构建 HookContext 并调用此方法，
@@ -828,10 +863,18 @@ impl HookManager {
                         m.total_duration_ms += elapsed_ms;
                     }
 
-                    if result.abort {
-                        write_info_log("HookManager::execute", &format!("Hook abort ({})", label));
+                    if result.is_halt() {
+                        let action_str = if result.is_stop() { "stop" } else { "skip" };
+                        write_info_log(
+                            "HookManager::execute",
+                            &format!("Hook {} ({})", action_str, label),
+                        );
                         return Some(HookResult {
-                            abort: true,
+                            action: Some(if result.is_stop() {
+                                HookAction::Stop
+                            } else {
+                                HookAction::Skip
+                            }),
                             retry_feedback: result.retry_feedback.take(),
                             system_message: result.system_message.take(),
                             ..Default::default()
@@ -909,7 +952,7 @@ impl HookManager {
                     match hook_on_error_strategy(hook) {
                         OnError::Abort => {
                             return Some(HookResult {
-                                abort: true,
+                                action: Some(HookAction::Stop),
                                 ..Default::default()
                             });
                         }
@@ -1018,7 +1061,10 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
 
             write_info_log(
                 "execute_shell_hook",
-                &format!("Hook 完成 (cmd: {}), abort={}", hook.command, result.abort),
+                &format!(
+                    "Hook 完成 (cmd: {}), action={:?}",
+                    hook.command, result.action
+                ),
             );
 
             Ok(result)
@@ -1130,16 +1176,33 @@ mod tests {
     #[test]
     fn test_hook_result_empty_json() {
         let result: HookResult = serde_json::from_str("{}").unwrap();
-        assert!(!result.abort);
+        assert!(!result.is_halt());
         assert!(result.messages.is_none());
         assert!(result.user_input.is_none());
     }
 
     #[test]
     fn test_hook_result_with_abort() {
+        // 旧字段 abort=true 等价于 action=stop
         let json = r#"{"abort": true}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
-        assert!(result.abort);
+        assert!(result.is_stop());
+    }
+
+    #[test]
+    fn test_hook_result_with_action_stop() {
+        let json = r#"{"action": "stop"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert!(result.is_stop());
+        assert!(!result.is_skip());
+    }
+
+    #[test]
+    fn test_hook_result_with_action_skip() {
+        let json = r#"{"action": "skip"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert!(result.is_skip());
+        assert!(!result.is_stop());
     }
 
     #[test]
@@ -1180,7 +1243,7 @@ mod tests {
         };
         let result = execute_shell_hook(&hook, &ctx).unwrap();
         assert_eq!(result.user_input.as_deref(), Some("hooked"));
-        assert!(!result.abort);
+        assert!(!result.is_halt());
     }
 
     #[test]
@@ -1193,7 +1256,7 @@ mod tests {
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx).unwrap();
-        assert!(!result.abort);
+        assert!(!result.is_halt());
         assert!(result.user_input.is_none());
     }
 
@@ -1261,7 +1324,7 @@ mod tests {
         let kind = HookKind::Builtin(builtin);
         let ctx = HookContext::default();
         let result = execute_hook(&kind, &ctx).unwrap();
-        assert!(!result.abort);
+        assert!(!result.is_halt());
         assert!(result.user_input.is_none());
     }
 
@@ -1465,7 +1528,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(result.abort);
+        assert!(result.is_halt());
         assert!(result.user_input.is_none());
     }
 
@@ -1516,7 +1579,7 @@ mod tests {
             .unwrap();
 
         // 第二个 hook 应正常执行
-        assert!(!result.abort);
+        assert!(!result.is_halt());
         assert_eq!(result.user_input.as_deref(), Some("survived"));
     }
 
@@ -1554,7 +1617,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(result.abort);
+        assert!(result.is_halt());
         assert!(result.user_input.is_none());
     }
 
@@ -1694,9 +1757,19 @@ on_error: abort"#;
 
     #[test]
     fn test_hook_result_retry_feedback() {
+        // 旧字段 abort=true + retry_feedback（向后兼容）
         let json = r#"{"abort": true, "retry_feedback": "请修正敏感信息"}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
-        assert!(result.abort);
+        assert!(result.is_stop());
+        assert_eq!(result.retry_feedback.as_deref(), Some("请修正敏感信息"));
+    }
+
+    #[test]
+    fn test_hook_result_action_stop_with_retry_feedback() {
+        // 新字段 action=stop + retry_feedback
+        let json = r#"{"action": "stop", "retry_feedback": "请修正敏感信息"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert!(result.is_stop());
         assert_eq!(result.retry_feedback.as_deref(), Some("请修正敏感信息"));
     }
 

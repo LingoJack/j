@@ -125,9 +125,11 @@ pub async fn run_agent_loop(
 
         // ── Layer 1: micro_compact（替换旧 tool results）──
         // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
+        // abort 语义统一：abort PreMicroCompact = 中止整个 compact 子管线（包括 auto_compact）
         if compact_config.enabled {
-            // ★ PreMicroCompact hook：micro_compact 前可中止
-            let mut micro_aborted = false;
+            let mut compact_aborted = false;
+
+            // ★ PreMicroCompact hook
             if hook_manager.has_hooks_for(HookEvent::PreMicroCompact) {
                 let ctx = HookContext {
                     event: HookEvent::PreMicroCompact,
@@ -137,21 +139,24 @@ pub async fn run_agent_loop(
                     ..Default::default()
                 };
                 if let Some(result) = hook_manager.execute(HookEvent::PreMicroCompact, ctx)
-                    && result.abort
+                    && result.is_stop()
                 {
-                    write_info_log("PreMicroCompact hook", "micro_compact 被 hook 中止");
-                    micro_aborted = true;
+                    write_info_log(
+                        "PreMicroCompact hook",
+                        "compact 子管线被 hook 中止（跳过 micro + auto）",
+                    );
+                    compact_aborted = true;
                 }
             }
 
-            if !micro_aborted {
+            if !compact_aborted {
                 compact::micro_compact(
                     &mut messages,
                     compact_config.keep_recent,
                     &compact_config.micro_compact_exempt_tools,
                 );
 
-                // ★ PostMicroCompact hook：micro_compact 后可检查/修改结果
+                // ★ PostMicroCompact hook
                 if hook_manager.has_hooks_for(HookEvent::PostMicroCompact) {
                     let ctx = HookContext {
                         event: HookEvent::PostMicroCompact,
@@ -165,62 +170,61 @@ pub async fn run_agent_loop(
                         messages = new_msgs;
                     }
                 }
-            }
 
-            if compact::estimate_tokens(&messages) > compact_config.token_threshold {
-                write_info_log(
-                    "agent_loop",
-                    "auto_compact triggered (token threshold exceeded)",
-                );
+                if compact::estimate_tokens(&messages) > compact_config.token_threshold {
+                    write_info_log(
+                        "agent_loop",
+                        "auto_compact triggered (token threshold exceeded)",
+                    );
 
-                // ★ PreAutoCompact hook：auto_compact 前可注入保护指令或中止压缩
-                let mut protected_context: Option<String> = None;
-                let mut auto_aborted = false;
-                if hook_manager.has_hooks_for(HookEvent::PreAutoCompact) {
-                    let ctx = HookContext {
-                        event: HookEvent::PreAutoCompact,
-                        messages: Some(messages.clone()),
-                        system_prompt: system_prompt.clone(),
-                        model: Some(provider.model.clone()),
-                        session_id: Some(session_id.clone()),
-                        ..Default::default()
-                    };
-                    if let Some(result) = hook_manager.execute(HookEvent::PreAutoCompact, ctx) {
-                        if result.abort {
-                            write_info_log("PreAutoCompact hook", "auto_compact 被 hook 中止");
-                            auto_aborted = true;
-                        }
-                        if let Some(ac) = result.additional_context {
-                            protected_context = Some(ac);
+                    // ★ PreAutoCompact hook
+                    let mut protected_context: Option<String> = None;
+                    if hook_manager.has_hooks_for(HookEvent::PreAutoCompact) {
+                        let ctx = HookContext {
+                            event: HookEvent::PreAutoCompact,
+                            messages: Some(messages.clone()),
+                            system_prompt: system_prompt.clone(),
+                            model: Some(provider.model.clone()),
+                            session_id: Some(session_id.clone()),
+                            ..Default::default()
+                        };
+                        if let Some(result) = hook_manager.execute(HookEvent::PreAutoCompact, ctx) {
+                            if result.is_stop() {
+                                write_info_log("PreAutoCompact hook", "auto_compact 被 hook 中止");
+                                compact_aborted = true;
+                            }
+                            if let Some(ac) = result.additional_context {
+                                protected_context = Some(ac);
+                            }
                         }
                     }
-                }
 
-                if !auto_aborted {
-                    if let Err(e) = compact::auto_compact(
-                        &mut messages,
-                        &provider,
-                        &invoked_skills,
-                        &session_id,
-                        protected_context.as_deref(),
-                    )
-                    .await
-                    {
-                        write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
-                    } else {
-                        // ★ PostAutoCompact hook：auto_compact 后可检查/修改摘要质量
-                        if hook_manager.has_hooks_for(HookEvent::PostAutoCompact) {
-                            let ctx = HookContext {
-                                event: HookEvent::PostAutoCompact,
-                                messages: Some(messages.clone()),
-                                session_id: Some(session_id.clone()),
-                                ..Default::default()
-                            };
-                            if let Some(result) =
-                                hook_manager.execute(HookEvent::PostAutoCompact, ctx)
-                                && let Some(new_msgs) = result.messages
-                            {
-                                messages = new_msgs;
+                    if !compact_aborted {
+                        if let Err(e) = compact::auto_compact(
+                            &mut messages,
+                            &provider,
+                            &invoked_skills,
+                            &session_id,
+                            protected_context.as_deref(),
+                        )
+                        .await
+                        {
+                            write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
+                        } else {
+                            // ★ PostAutoCompact hook
+                            if hook_manager.has_hooks_for(HookEvent::PostAutoCompact) {
+                                let ctx = HookContext {
+                                    event: HookEvent::PostAutoCompact,
+                                    messages: Some(messages.clone()),
+                                    session_id: Some(session_id.clone()),
+                                    ..Default::default()
+                                };
+                                if let Some(result) =
+                                    hook_manager.execute(HookEvent::PostAutoCompact, ctx)
+                                    && let Some(new_msgs) = result.messages
+                                {
+                                    messages = new_msgs;
+                                }
                             }
                         }
                     }
@@ -296,7 +300,7 @@ pub async fn run_agent_loop(
                 ..Default::default()
             };
             if let Some(result) = hook_manager.execute(HookEvent::PreLlmRequest, ctx) {
-                if result.abort {
+                if result.is_stop() {
                     let _ = tx.send(StreamMsg::Error(ChatError::HookAborted));
                     return;
                 }
@@ -958,16 +962,16 @@ pub async fn run_agent_loop(
                     };
                     if let Some(result) = hook_manager.execute(HookEvent::Stop, stop_ctx) {
                         // 注入额外上下文（追加到 system_prompt）
-                        if let Some(ctx_text) = result.additional_context {
+                        if let Some(ref ctx_text) = result.additional_context {
                             let current = system_prompt.unwrap_or_default();
                             system_prompt = Some(format!("{}\n\n{}", current, ctx_text));
                         }
                         // retry_feedback → 注入为 user message，LLM 带反馈继续
-                        if let Some(feedback) = result.retry_feedback {
+                        if let Some(ref feedback) = result.retry_feedback {
                             write_info_log("Stop hook", &format!("纠查官反馈: {}", feedback));
                             let feedback_msg = ChatMessage {
                                 role: ROLE_USER.to_string(),
-                                content: feedback,
+                                content: feedback.clone(),
                                 tool_calls: None,
                                 tool_call_id: None,
                                 images: None,
@@ -976,8 +980,8 @@ pub async fn run_agent_loop(
                             push_shared(&shared_messages, feedback_msg);
                             continue 'round;
                         }
-                        // abort → 直接中止
-                        if result.abort {
+                        // stop → 直接中止
+                        if result.is_stop() {
                             let _ = tx.send(StreamMsg::Error(ChatError::HookAborted));
                             return;
                         }

@@ -2236,7 +2236,7 @@ impl ChatApp {
             }
         };
         let text = if let Some(result) = hook_result {
-            if result.abort {
+            if result.is_stop() {
                 self.show_toast("消息发送被 hook 拦截", true);
                 return;
             }
@@ -2656,18 +2656,18 @@ impl ChatApp {
                                         && let Some(result) =
                                             manager.execute(HookEvent::PreToolExecution, ctx)
                                     {
-                                        if result.abort {
+                                        if result.is_skip() {
                                             self.tool_executor.active_tool_calls.push(
                                                 ToolCallStatus {
                                                     tool_call_id: tc.id.clone(),
                                                     tool_name: tc.name.clone(),
                                                     arguments: tc.arguments.clone(),
                                                     confirm_message: format!(
-                                                        "🚫 {} 被 hook 拦截",
+                                                        "🚫 {} 被 hook 跳过",
                                                         tc.name
                                                     ),
                                                     status: ToolExecStatus::Failed(
-                                                        "该工具调用被 hook 拦截".to_string(),
+                                                        "该工具调用被 hook 跳过".to_string(),
                                                     ),
                                                 },
                                             );
@@ -2959,11 +2959,11 @@ impl ChatApp {
                 };
                 if let Some(result) = hook_result {
                     // 展示系统消息给用户
-                    if let Some(sys_msg) = result.system_message {
-                        self.show_toast(&sys_msg, false);
+                    if let Some(ref sys_msg) = result.system_message {
+                        self.show_toast(sys_msg, false);
                     }
-                    // abort 支持（配合 retry_feedback 重新发送）
-                    if result.abort {
+                    // stop 支持（配合 retry_feedback 重新发送）
+                    if result.is_stop() {
                         safe_lock(
                             &self.state.streaming_content,
                             "finish_loading::hook_aborted",

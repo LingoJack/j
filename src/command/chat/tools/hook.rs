@@ -166,22 +166,34 @@ impl RegisterHookTool {
   "tool_result": "修改后的工具结果",
   "tool_error": "修改后的错误信息",
   "inject_messages": [{"role":"user","content":"注入消息"}],
+  "action": "stop",
   "retry_feedback": "审查反馈：请修正XX问题",
   "additional_context": "追加到 system_prompt 的额外上下文",
-  "system_message": "展示给用户的提示消息",
-  "abort": false
+  "system_message": "展示给用户的提示消息"
 }
 ```
 
 ## 关键字段说明
-- `retry_feedback`：与 abort 配合使用。在 stop/pre_send_message/post_llm_response 中，abort+retry_feedback 会中止当前操作并将反馈注入为新消息，LLM 带反馈重新生成。这是实现"宪法 AI/纠查官"的核心机制。
+- `action`：控制流动作，字符串 `"stop"` 或 `"skip"`。旧字段 `abort: true` 等价于 `action: "stop"`（向后兼容）。
+  - `"stop"`：中止当前步骤及其所属子管线
+  - `"skip"`：跳过当前步骤，同级步骤继续（仅 `pre_tool_execution` 中使用）
+- `retry_feedback`：与 stop 配合使用。在 stop/pre_send_message/post_llm_response 中，stop+retry_feedback 会中止当前操作并将反馈注入为新消息，LLM 带反馈重新生成。这是实现"宪法 AI/纠查官"的核心机制。
 - `additional_context`：追加文本到 system_prompt 末尾，不占消息位。适用于注入规则、约束等。
 - `system_message`：在 UI 上以 toast/提示形式展示给用户，不影响 LLM 输入。
 
+## action 语义
+- `pre_send_message` / `pre_llm_request` / `stop` / `post_llm_response`：`action=stop` 中止当前操作（不发送/不请求/不结束/不保存）
+- `pre_tool_execution`：`action=skip` 跳过该工具调用（其他工具继续执行）
+- `pre_micro_compact`：`action=stop` 中止整个 compact 子管线（跳过 micro_compact + auto_compact）
+- `pre_auto_compact`：`action=stop` 中止 auto_compact（micro_compact 已执行，LLM 请求仍会发出）
+
 ## 压缩 Hook 说明
-两层压缩各有独立的 Pre/Post hook，执行顺序：
+两层压缩各有独立的 Pre/Post hook，构成一个 compact 子管线：
 1. `pre_micro_compact` → micro_compact → `post_micro_compact`
 2. `pre_auto_compact` → auto_compact → `post_auto_compact`
+
+stop `pre_micro_compact` 会中止整个子管线（auto_compact 也不会执行）。
+stop `pre_auto_compact` 仅跳过 auto_compact，micro_compact 已执行完毕。
 
 micro_compact 仅替换旧 tool result 为占位符（零 API 成本），auto_compact 用 LLM 生成摘要（需 API 调用）。
 
@@ -195,14 +207,14 @@ msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).ge
 echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
 ```
 
-### 示例 2：拦截危险命令（pre_tool_execution）
+### 示例 2：跳过危险命令（pre_tool_execution）
 ```bash
 #!/bin/bash
 input=$(cat)
 tool=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_name',''))")
 args=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_arguments',''))")
 if [ "$tool" = "Bash" ] && echo "$args" | grep -q "rm -rf"; then
-  echo '{"abort": true}'
+  echo '{"action": "skip"}'
 else
   echo '{}'
 fi
@@ -214,7 +226,7 @@ fi
 input=$(cat)
 reply=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_input',''))")
 if echo "$reply" | grep -qiE 'password|secret|api.key'; then
-  echo '{"abort": true, "retry_feedback": "回复包含敏感信息，请重新组织回答避免泄露密码/密钥"}'
+  echo '{"action": "stop", "retry_feedback": "回复包含敏感信息，请重新组织回答避免泄露密码/密钥"}'
 else
   echo '{}'
 fi
@@ -236,7 +248,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
 - 先用 Write/Bash 工具创建脚本文件，再用本工具注册
 - 脚本必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
 - timeout 默认 10 秒，超时后脚本被 kill
-- on_error 默认 "skip"（记录日志继续），设为 "abort" 则脚本失败时中止整条 hook 链
+- on_error 默认 "skip"（记录日志继续），设为 "abort" 则脚本失败时 action=stop 中止整条 hook 链
 - 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑配置文件
 - 移除 hook 时，使用 list 输出中的 session_idx 作为 index 参数"#
                 .to_string(),
