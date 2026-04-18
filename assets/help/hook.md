@@ -1,5 +1,5 @@
 ---
-name: AI Hook
+name: Hook
 order: 7
 ---
 

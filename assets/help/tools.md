@@ -1,5 +1,5 @@
 ---
-name: AI 工具
+name: 工具 & 权限
 order: 6
 ---
 

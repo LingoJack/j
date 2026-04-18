@@ -1,5 +1,5 @@
 ---
-name: Skill & 命令 & 项目指令
+name: Skill & 命令
 order: 8
 ---
 
