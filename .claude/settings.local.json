@@ -121,7 +121,8 @@
       "Bash(codesign -dv /usr/local/bin/j)",
       "Bash(/usr/local/bin/j --help)",
       "Bash(du -h TEAMMATE_*.md CRITICAL_*.md FIX_*.patch DOCUMENTATION_MANIFEST.txt)",
-      "Bash(sort -k2)"
+      "Bash(sort -k2)",
+      "Bash(split -l 600 /tmp/hook_system_analysis.md /tmp/hook_analysis_part_)"
     ]
   },
   "language": "zh-CN",

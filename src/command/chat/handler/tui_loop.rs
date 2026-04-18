@@ -2,10 +2,7 @@ use super::super::input_thread::InputThread;
 use super::super::remote;
 use super::super::remote::bridge::WsBridge;
 use super::super::remote::protocol::{WsInbound, WsOutbound};
-use super::super::storage::{
-    ChatSession, legacy_chat_history_path, load_style, load_system_prompt, save_style,
-    save_system_prompt,
-};
+use super::super::storage::{load_style, load_system_prompt, save_style, save_system_prompt};
 use super::super::ui::draw_chat_ui;
 use super::{
     handle_agent_perm_confirm_mode, handle_archive_confirm_mode, handle_archive_list_mode,
@@ -170,32 +167,6 @@ fn generate_session_id() -> String {
     super::super::storage::generate_session_id()
 }
 
-/// 一次性迁移旧 chat_history.json → 归档，保留历史对话
-fn migrate_legacy_session_if_needed() {
-    let old_path = legacy_chat_history_path();
-    if !old_path.exists() {
-        return;
-    }
-    let migrated = (|| {
-        let content = std::fs::read_to_string(&old_path).ok()?;
-        let session: ChatSession = serde_json::from_str(&content).ok()?;
-        if session.messages.is_empty() {
-            return None;
-        }
-        let name = format!("migrated-{}", chrono::Local::now().format("%Y-%m-%d"));
-        super::super::archive::create_archive(&name, session.messages).ok()?;
-        Some(name)
-    })();
-    // 无论迁移是否成功，删除旧文件避免重复迁移
-    let _ = std::fs::remove_file(&old_path);
-    if let Some(name) = migrated {
-        crate::util::log::write_info_log(
-            "migrate_legacy_session",
-            &format!("旧对话历史已迁移为归档: {}", name),
-        );
-    }
-}
-
 pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -216,17 +187,6 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
-    // 一次性迁移旧格式
-    migrate_legacy_session_if_needed();
-    // 迁移扁平 sessions/<id>.jsonl → sessions/<id>/transcript.jsonl
-    let (migrated, errors) = super::super::storage::migrate_flat_sessions_to_nested();
-    if migrated > 0 || errors > 0 {
-        crate::util::log::write_info_log(
-            "session_migrate",
-            &format!("迁移 {} 个 session 到新布局 (errors={})", migrated, errors),
-        );
-    }
 
     let session_id = generate_session_id();
     let mut app = ChatApp::new(session_id);

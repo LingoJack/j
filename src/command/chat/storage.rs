@@ -204,9 +204,7 @@ pub fn session_file_path(session_id: &str) -> PathBuf {
 
 /// Session 目录布局抽象。
 ///
-/// 新布局：`sessions/<id>/transcript.jsonl`。
-/// 老扁平布局 `sessions/<id>.jsonl` 仍可通过 [`SessionPaths::legacy_flat`] 读取，
-/// 迁移完成后应当不存在。
+/// 布局：`sessions/<id>/transcript.jsonl`。
 pub struct SessionPaths {
     id: String,
     dir: PathBuf,
@@ -235,27 +233,6 @@ impl SessionPaths {
         self.dir.join("transcript.jsonl")
     }
 
-    /// 老扁平路径：`sessions/<id>.jsonl`（仅用于读 fallback + 迁移检测）
-    pub fn legacy_flat(&self) -> PathBuf {
-        sessions_dir().join(format!("{}.jsonl", self.id))
-    }
-
-    /// 读取时实际应使用的 transcript 文件：
-    /// - 新布局存在 → 新
-    /// - 否则老扁平存在 → 老
-    /// - 都不存在 → 新（作为后续写入目标）
-    pub fn resolve_for_read(&self) -> PathBuf {
-        let new_path = self.transcript();
-        if new_path.exists() {
-            return new_path;
-        }
-        let legacy = self.legacy_flat();
-        if legacy.exists() {
-            return legacy;
-        }
-        new_path
-    }
-
     /// 元数据文件：`sessions/<id>/session.json`
     pub fn meta_file(&self) -> PathBuf {
         self.dir.join("session.json")
@@ -274,11 +251,6 @@ impl SessionPaths {
 /// 获取 agent 配置文件路径
 pub fn agent_config_path() -> PathBuf {
     agent_data_dir().join("agent_config.json")
-}
-
-/// 已废弃：旧的单文件对话历史路径（仅用于迁移检测）
-pub fn legacy_chat_history_path() -> PathBuf {
-    agent_data_dir().join("chat_history.json")
 }
 
 /// 获取系统提示词文件路径
@@ -355,8 +327,6 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
 
 /// 追加一个事件到 session JSONL 文件（append-only，POSIX 下原子安全）
 ///
-/// 写入永远走新布局 `sessions/<id>/transcript.jsonl`。若老扁平文件仍存在
-/// （迁移中断等异常情况），这里不追加到老文件，避免分叉。
 /// 同时增量更新 `session.json` 元数据。
 pub fn append_session_event(session_id: &str, event: &SessionEvent) -> bool {
     let paths = SessionPaths::new(session_id);
@@ -421,9 +391,6 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
 }
 
 /// 查找最近修改的 session ID（用于 --continue）
-///
-/// 同时枚举新布局（`sessions/<id>/transcript.jsonl`）和老扁平布局
-/// （`sessions/<id>.jsonl`），按各自的 mtime 排序。
 pub fn find_latest_session_id() -> Option<String> {
     let dir = sessions_dir();
     let mut entries: Vec<(std::time::SystemTime, String)> = Vec::new();
@@ -433,107 +400,26 @@ pub fn find_latest_session_id() -> Option<String> {
     };
     for entry in read_dir.flatten() {
         let path = entry.path();
-        let file_type = match entry.file_type() {
-            Ok(ft) => ft,
-            Err(_) => continue,
+        if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+            continue;
+        }
+        let Some(id) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
         };
-        if file_type.is_dir() {
-            // 新布局：<id>/transcript.jsonl 的 mtime 代表会话的最后活动
-            let Some(id) = path.file_name().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            let transcript = path.join("transcript.jsonl");
-            if let Ok(meta) = transcript.metadata()
-                && let Ok(modified) = meta.modified()
-            {
-                entries.push((modified, id.to_string()));
-            }
-        } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            // 老扁平布局
-            if let (Ok(meta), Some(stem)) =
-                (path.metadata(), path.file_stem().and_then(|s| s.to_str()))
-                && let Ok(modified) = meta.modified()
-            {
-                entries.push((modified, stem.to_string()));
-            }
+        let transcript = path.join("transcript.jsonl");
+        if let Ok(meta) = transcript.metadata()
+            && let Ok(modified) = meta.modified()
+        {
+            entries.push((modified, id.to_string()));
         }
     }
     entries.sort_by(|a, b| b.0.cmp(&a.0));
     entries.into_iter().next().map(|(_, id)| id)
 }
 
-/// 修复历史消息中 tool_call_id 配对不完整的问题（旧格式兼容）。
-///
-/// 旧版本在序列化时可能遗漏了 role="tool" 消息的 tool_call_id 字段，
-/// 或将 assistant tool_calls[].id 存为空字符串。
-/// 此函数通过位置对应关系（assistant tool_calls 与后续 tool results 一一对应）
-/// 修复这些配对，使消息序列满足 OpenAI API 要求。
-fn repair_tool_call_ids(messages: &mut [ChatMessage]) {
-    use rand::Rng;
-    let mut i = 0;
-    while i < messages.len() {
-        let has_tool_calls = messages[i].role == "assistant"
-            && messages[i]
-                .tool_calls
-                .as_ref()
-                .is_some_and(|tc| !tc.is_empty());
-        if !has_tool_calls {
-            i += 1;
-            continue;
-        }
-        let call_count = messages[i].tool_calls.as_ref().map_or(0, |tc| tc.len());
-
-        // 收集紧跟在后面的 role="tool" 消息索引
-        let result_start = i + 1;
-        let mut result_end = result_start;
-        while result_end < messages.len() && messages[result_end].role == "tool" {
-            result_end += 1;
-        }
-        let result_count = result_end - result_start;
-
-        // 只在数量完全匹配时做位置对应修复（数量不匹配交由 sanitize_messages 处理）
-        if result_count == call_count {
-            for k in 0..call_count {
-                let result_idx = result_start + k;
-                let call_id = messages[i].tool_calls.as_ref().unwrap()[k].id.clone();
-                let result_id = messages[result_idx]
-                    .tool_call_id
-                    .clone()
-                    .unwrap_or_default();
-
-                match (call_id.is_empty(), result_id.is_empty()) {
-                    (true, true) => {
-                        // 两端都没有 ID → 生成随机 ID，保证双方一致
-                        let new_id = format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
-                        messages[i].tool_calls.as_mut().unwrap()[k].id = new_id.clone();
-                        messages[result_idx].tool_call_id = Some(new_id);
-                    }
-                    (true, false) => {
-                        // assistant 侧缺 ID，以 result 侧为准
-                        messages[i].tool_calls.as_mut().unwrap()[k].id = result_id;
-                    }
-                    (false, true) => {
-                        // result 侧缺 ID，以 assistant 侧为准
-                        messages[result_idx].tool_call_id = Some(call_id);
-                    }
-                    (false, false) if call_id != result_id => {
-                        // ID 不一致（异常情况），以 assistant 侧为准
-                        messages[result_idx].tool_call_id = Some(call_id);
-                    }
-                    _ => {} // 两端 ID 一致，无需处理
-                }
-            }
-        }
-
-        i = result_end; // 跳过已处理的 tool result 消息
-    }
-}
-
 /// 从 JSONL 文件 replay 出 ChatSession（供 resume 等功能使用）
-///
-/// 新布局优先；不存在则回退到老扁平文件（迁移未完成场景）。
 pub fn load_session(session_id: &str) -> ChatSession {
-    let path = SessionPaths::new(session_id).resolve_for_read();
+    let path = SessionPaths::new(session_id).transcript();
     if !path.exists() {
         return ChatSession::default();
     }
@@ -558,8 +444,6 @@ pub fn load_session(session_id: &str) -> ChatSession {
             }
         }
     }
-    // 修复旧格式中 tool_call_id 配对不完整的消息
-    repair_tool_call_ids(&mut messages);
     ChatSession { messages }
 }
 
@@ -792,7 +676,7 @@ pub fn save_session_meta_file(meta: &SessionMetaFile) -> bool {
 /// 从 transcript.jsonl 逐行扫描生成元数据（懒生成 / 迁移用）
 fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFile> {
     let paths = SessionPaths::new(session_id);
-    let transcript = paths.resolve_for_read();
+    let transcript = paths.transcript();
     let content = fs::read_to_string(&transcript).ok()?;
 
     let mut message_count: usize = 0;
@@ -849,7 +733,6 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
 ///
 /// 优先读 `session.json` 元数据文件（O(1)），不存在时 fallback 到逐行扫描
 /// `transcript.jsonl` 并懒生成 `session.json`。
-/// 同时兼容老扁平布局 `sessions/<id>.jsonl`。
 pub fn list_sessions() -> Vec<SessionMeta> {
     let dir = sessions_dir();
     let read_dir = match fs::read_dir(&dir) {
@@ -857,34 +740,17 @@ pub fn list_sessions() -> Vec<SessionMeta> {
         Err(_) => return Vec::new(),
     };
 
-    // 先收集 id 列表，去重以新布局为先
     let mut ids: Vec<String> = Vec::new();
-    let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut legacy_ids: Vec<String> = Vec::new();
     for entry in read_dir.flatten() {
         let path = entry.path();
-        let file_type = match entry.file_type() {
-            Ok(ft) => ft,
-            Err(_) => continue,
-        };
-        if file_type.is_dir() {
-            let Some(id) = path.file_name().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            let transcript = path.join("transcript.jsonl");
-            if transcript.exists() {
-                seen_ids.insert(id.to_string());
-                ids.push(id.to_string());
-            }
-        } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl")
-            && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
-        {
-            legacy_ids.push(stem.to_string());
+        if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+            continue;
         }
-    }
-    for id in legacy_ids {
-        if !seen_ids.contains(&id) {
-            ids.push(id);
+        let Some(id) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if path.join("transcript.jsonl").exists() {
+            ids.push(id.to_string());
         }
     }
 
@@ -900,7 +766,7 @@ pub fn list_sessions() -> Vec<SessionMeta> {
                     Some(meta_file.title)
                 },
                 message_count: meta_file.message_count,
-                first_message_preview: None, // session.json 中不存 preview，title 已替代
+                first_message_preview: None,
                 updated_at: meta_file.updated_at,
             });
             continue;
@@ -914,7 +780,6 @@ pub fn list_sessions() -> Vec<SessionMeta> {
                 Some(derived.title.clone())
             };
             let preview_for_ui = title.clone();
-            // 懒写入 session.json（失败不阻断）
             let _ = save_session_meta_file(&derived);
             sessions.push(SessionMeta {
                 id: derived.id,
@@ -939,86 +804,17 @@ pub fn generate_session_id() -> String {
     format!("{:x}-{:x}", ts, pid)
 }
 
-/// 删除指定 session（新布局整目录 + 顺手清理残留老扁平文件）
+/// 删除指定 session 目录
 pub fn delete_session(session_id: &str) -> bool {
     let paths = SessionPaths::new(session_id);
-    let mut ok = true;
-
     let dir = paths.dir().to_path_buf();
     if dir.exists()
         && let Err(e) = fs::remove_dir_all(&dir)
     {
         error!("✖️ 删除 session 目录失败: {}", e);
-        ok = false;
+        return false;
     }
-
-    let legacy = paths.legacy_flat();
-    if legacy.exists()
-        && let Err(e) = fs::remove_file(&legacy)
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        error!("✖️ 删除老 session 文件失败: {}", e);
-        ok = false;
-    }
-
-    ok
-}
-
-/// 一次性迁移：`sessions/<id>.jsonl` → `sessions/<id>/transcript.jsonl`。
-///
-/// 幂等：已存在新 transcript 时跳过并清理残留老文件；失败只 log 不 panic。
-/// 返回 (迁移数, 错误数)。
-pub fn migrate_flat_sessions_to_nested() -> (usize, usize) {
-    let dir = sessions_dir();
-    let read_dir = match fs::read_dir(&dir) {
-        Ok(rd) => rd,
-        Err(_) => return (0, 0),
-    };
-    let mut migrated = 0usize;
-    let mut errors = 0usize;
-    for entry in read_dir.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        let paths = SessionPaths::new(stem);
-
-        // 幂等：新 transcript 已存在 → 把残留的老文件删掉就好
-        if paths.transcript().exists() {
-            let _ = fs::remove_file(&path);
-            continue;
-        }
-
-        if let Err(e) = paths.ensure_dir() {
-            error!("✖️ 迁移 session {} 失败（mkdir）: {}", stem, e);
-            errors += 1;
-            continue;
-        }
-
-        // 同分区下 rename 是原子的；跨分区走 copy + remove 兜底
-        match fs::rename(&path, paths.transcript()) {
-            Ok(_) => {
-                migrated += 1;
-            }
-            Err(rename_err) => match fs::copy(&path, paths.transcript()) {
-                Ok(_) => {
-                    let _ = fs::remove_file(&path);
-                    migrated += 1;
-                }
-                Err(copy_err) => {
-                    error!(
-                        "✖️ 迁移 session {} 失败: rename={}, copy={}",
-                        stem, rename_err, copy_err
-                    );
-                    errors += 1;
-                }
-            },
-        }
-    }
-    (migrated, errors)
+    true
 }
 
 #[cfg(test)]
@@ -1082,80 +878,12 @@ mod tests {
         assert_eq!(paths.id(), "abc");
         assert_eq!(paths.dir().file_name().unwrap(), "abc");
         assert_eq!(paths.transcript().file_name().unwrap(), "transcript.jsonl");
-        assert_eq!(paths.legacy_flat().file_name().unwrap(), "abc.jsonl");
+        assert_eq!(paths.meta_file().file_name().unwrap(), "session.json");
         assert!(paths.transcript().parent().unwrap().ends_with("abc"));
     }
 
     #[test]
-    fn resolve_for_read_prefers_new_then_legacy() {
-        let _tmp = TempDataDir::new();
-        let paths = SessionPaths::new("session1");
-
-        // 两者都不存在 → 返回新路径
-        assert_eq!(paths.resolve_for_read(), paths.transcript());
-
-        // 只有老扁平文件 → 返回老路径
-        fs::write(paths.legacy_flat(), b"").unwrap();
-        assert_eq!(paths.resolve_for_read(), paths.legacy_flat());
-
-        // 新布局出现 → 优先返回新路径
-        paths.ensure_dir().unwrap();
-        fs::write(paths.transcript(), b"").unwrap();
-        assert_eq!(paths.resolve_for_read(), paths.transcript());
-    }
-
-    #[test]
-    fn migrate_is_idempotent_and_preserves_content() {
-        let _tmp = TempDataDir::new();
-        let dir = sessions_dir();
-        let legacy = dir.join("mig-id.jsonl");
-        let msg = ChatMessage::text("user", "你好".to_string());
-        let line = serde_json::to_string(&SessionEvent::Msg(msg)).unwrap();
-        fs::write(&legacy, format!("{}\n", line)).unwrap();
-
-        let (migrated, errors) = migrate_flat_sessions_to_nested();
-        assert_eq!((migrated, errors), (1, 0));
-        assert!(!legacy.exists());
-        let paths = SessionPaths::new("mig-id");
-        assert!(paths.transcript().exists());
-
-        // 第二次跑是 no-op
-        let (m2, e2) = migrate_flat_sessions_to_nested();
-        assert_eq!((m2, e2), (0, 0));
-
-        // load_session 能完整恢复
-        let session = load_session("mig-id");
-        assert_eq!(session.messages.len(), 1);
-        assert_eq!(session.messages[0].content, "你好");
-    }
-
-    #[test]
-    fn list_sessions_merges_new_and_legacy() {
-        let _tmp = TempDataDir::new();
-        let dir = sessions_dir();
-
-        // 老扁平 session
-        let legacy = dir.join("old.jsonl");
-        let msg_a = ChatMessage::text("user", "老的消息".to_string());
-        let line_a = serde_json::to_string(&SessionEvent::Msg(msg_a)).unwrap();
-        fs::write(&legacy, format!("{}\n", line_a)).unwrap();
-
-        // 新布局 session（手工构造，绕过 append_session_event 以保证测试独立）
-        let new_paths = SessionPaths::new("new");
-        new_paths.ensure_dir().unwrap();
-        let msg_b = ChatMessage::text("user", "新的消息".to_string());
-        let line_b = serde_json::to_string(&SessionEvent::Msg(msg_b)).unwrap();
-        fs::write(new_paths.transcript(), format!("{}\n", line_b)).unwrap();
-
-        let metas = list_sessions();
-        let ids: std::collections::HashSet<String> = metas.iter().map(|m| m.id.clone()).collect();
-        assert!(ids.contains("old"));
-        assert!(ids.contains("new"));
-        assert_eq!(metas.len(), 2);
-    }
-
-    #[test]
-    fn append_event_writes_to_new_layout_only() {
+    fn append_event_writes_to_new_layout() {
         let _tmp = TempDataDir::new();
         let paths = SessionPaths::new("append-id");
 
@@ -1163,22 +891,45 @@ mod tests {
         assert!(append_session_event("append-id", &SessionEvent::Msg(msg)));
 
         assert!(paths.transcript().exists());
-        assert!(!paths.legacy_flat().exists());
     }
 
     #[test]
-    fn delete_session_removes_both_layouts() {
+    fn load_session_round_trip() {
+        let _tmp = TempDataDir::new();
+
+        let msg = ChatMessage::text("user", "round trip test");
+        assert!(append_session_event("rt-id", &SessionEvent::Msg(msg)));
+
+        let session = load_session("rt-id");
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].content, "round trip test");
+    }
+
+    #[test]
+    fn list_sessions_finds_sessions() {
+        let _tmp = TempDataDir::new();
+
+        let paths = SessionPaths::new("ls-test");
+        paths.ensure_dir().unwrap();
+        let msg = ChatMessage::text("user", "list test");
+        let line = serde_json::to_string(&SessionEvent::Msg(msg)).unwrap();
+        fs::write(paths.transcript(), format!("{}\n", line)).unwrap();
+
+        let metas = list_sessions();
+        assert_eq!(metas.len(), 1);
+        assert_eq!(metas[0].id, "ls-test");
+    }
+
+    #[test]
+    fn delete_session_removes_dir() {
         let _tmp = TempDataDir::new();
         let paths = SessionPaths::new("del-id");
 
-        // 同时放新旧两份残留
         paths.ensure_dir().unwrap();
         fs::write(paths.transcript(), b"").unwrap();
-        fs::write(paths.legacy_flat(), b"").unwrap();
 
         assert!(delete_session("del-id"));
         assert!(!paths.dir().exists());
-        assert!(!paths.legacy_flat().exists());
     }
 
     #[test]

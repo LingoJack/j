@@ -2,7 +2,7 @@ use crate::command::chat::error::ChatError;
 use crate::command::chat::handler::run_chat_tui;
 use crate::command::chat::storage::{
     ChatMessage, SessionEvent, append_session_event, load_agent_config, load_session,
-    load_system_prompt, migrate_flat_sessions_to_nested,
+    load_system_prompt,
 };
 use crate::config::YamlConfig;
 use crate::{error, info};
@@ -32,15 +32,6 @@ pub fn handle_chat(
     port: u16,
     _config: &YamlConfig,
 ) {
-    // 迁移扁平 session 文件到目录布局（幂等；TUI/oneshot 都跑一次）
-    let (migrated, errors) = migrate_flat_sessions_to_nested();
-    if migrated > 0 || errors > 0 {
-        crate::util::log::write_info_log(
-            "session_migrate",
-            &format!("迁移 {} 个 session 到新布局 (errors={})", migrated, errors),
-        );
-    }
-
     let agent_config = load_agent_config();
 
     // --remote 始终进入 TUI 模式（远程控制需要 TUI 事件循环）
