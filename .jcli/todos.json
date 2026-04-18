@@ -1,17 +1,47 @@
 [
   {
     "id": "1",
-    "content": "检查不必要的 .clone() 调用",
+    "content": "检查规则1: 命名规范 (PascalCase/snake_case/SCREAMING_SNAKE_CASE)",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "检查 Vec::new() vs Vec::with_capacity()",
+    "content": "检查规则2: 内存与性能 (.clone() 滥用/切片优先/with_capacity)",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "检查 pub 函数中 String 参数 vs &str 参数",
+    "content": "检查规则3: 错误处理 (unwrap()/expect() 滥用)",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "检查规则4: 类型设计 (impl 位置/derive/可见性)",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "检查规则5: 模式匹配 (_ => 滥用/组合子使用)",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "检查规则6: 模块组织 (mod.rs/长路径/utils)",
+    "status": "completed"
+  },
+  {
+    "id": "7",
+    "content": "检查规则7: 函数与逻辑 (参数过多/魔法值/单一职责)",
+    "status": "completed"
+  },
+  {
+    "id": "8",
+    "content": "检查规则8: 文档与安全 (pub 缺文档/unsafe 缺 SAFETY)",
+    "status": "completed"
+  },
+  {
+    "id": "9",
+    "content": "汇总报告",
     "status": "completed"
   }
 ]
