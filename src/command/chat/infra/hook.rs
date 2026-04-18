@@ -887,32 +887,32 @@ impl HookManager {
                     // 合并结果到 context（链式传递）
                     if let Some(ref msgs) = result.messages {
                         context.messages = Some(msgs.clone());
-                        final_result.messages = Some(msgs.clone());
+                        final_result.messages = context.messages.clone();
                         had_modification = true;
                     }
                     if let Some(ref sp) = result.system_prompt {
                         context.system_prompt = Some(sp.clone());
-                        final_result.system_prompt = Some(sp.clone());
+                        final_result.system_prompt = context.system_prompt.clone();
                         had_modification = true;
                     }
                     if let Some(ref ui) = result.user_input {
                         context.user_input = Some(ui.clone());
-                        final_result.user_input = Some(ui.clone());
+                        final_result.user_input = context.user_input.clone();
                         had_modification = true;
                     }
                     if let Some(ref ao) = result.assistant_output {
                         context.assistant_output = Some(ao.clone());
-                        final_result.assistant_output = Some(ao.clone());
+                        final_result.assistant_output = context.assistant_output.clone();
                         had_modification = true;
                     }
                     if let Some(ref ta) = result.tool_arguments {
                         context.tool_arguments = Some(ta.clone());
-                        final_result.tool_arguments = Some(ta.clone());
+                        final_result.tool_arguments = context.tool_arguments.clone();
                         had_modification = true;
                     }
                     if let Some(ref tr) = result.tool_result {
                         context.tool_result = Some(tr.clone());
-                        final_result.tool_result = Some(tr.clone());
+                        final_result.tool_result = context.tool_result.clone();
                         had_modification = true;
                     }
                     if let Some(ref inject) = result.inject_messages {

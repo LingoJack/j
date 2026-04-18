@@ -435,6 +435,7 @@ pub mod todo_filter {
         match filter {
             UNDONE => "未完成",
             DONE => "已完成",
+            ALL => "全部",
             _ => "全部",
         }
     }

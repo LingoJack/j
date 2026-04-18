@@ -7,6 +7,12 @@ use core_graphics::geometry::CGPoint;
 
 // FFI for scroll wheel events (not exposed by core-graphics 0.24)
 #[link(name = "CoreGraphics", kind = "framework")]
+// SAFETY: These are system framework functions from CoreGraphics on macOS.
+// - CGEventCreateScrollWheelEvent: Creates a scroll wheel event; safe when source is
+//   a valid CGEventSource or null. We pass the result to CGEventPost and CFRelease.
+// - CGEventPost: Posts an event to the event stream; safe with valid tap location and event.
+// - CFRelease: Releases a Core Foundation object; safe when called with a valid CF object
+//   that hasn't already been released.
 unsafe extern "C" {
     fn CGEventCreateScrollWheelEvent(
         source: *const std::ffi::c_void,
