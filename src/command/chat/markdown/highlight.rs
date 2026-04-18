@@ -5,6 +5,23 @@ use ratatui::{
 
 use crate::tui::editor_core::EditorTheme;
 
+/// 语法高亮样式集合
+pub struct SyntaxStyles {
+    pub default_style: Style,
+    pub kw_style: Style,
+    pub num_style: Style,
+    pub type_style: Style,
+    pub primitive_style: Style,
+    pub macro_style: Style,
+}
+
+/// 语法关键字字典
+pub struct SyntaxDicts<'a> {
+    pub keywords: &'a [&'a str],
+    pub primitive_types: &'a [&'a str],
+    pub go_type_names: &'a [&'a str],
+}
+
 /// 简单的代码语法高亮（无需外部依赖）
 /// 根据语言类型对常见关键字、字符串、注释、数字进行着色
 pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<Span<'static>> {
@@ -604,6 +621,20 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
     let primitive_style = Style::default().fg(theme.code_primitive);
     let macro_style = Style::default().fg(theme.code_macro);
 
+    let dicts = SyntaxDicts {
+        keywords,
+        primitive_types,
+        go_type_names,
+    };
+    let styles = SyntaxStyles {
+        default_style: code_style,
+        kw_style,
+        num_style,
+        type_style,
+        primitive_style,
+        macro_style,
+    };
+
     let trimmed = line.trim_start();
 
     // 注释行
@@ -620,19 +651,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
         // 双引号字符串（支持 \ 转义）
         if ch == '"' {
             if !buf.is_empty() {
-                spans.extend(colorize_tokens(
-                    &buf,
-                    keywords,
-                    primitive_types,
-                    go_type_names,
-                    code_style,
-                    kw_style,
-                    num_style,
-                    type_style,
-                    primitive_style,
-                    macro_style,
-                    &lang_lower,
-                ));
+                spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                 buf.clear();
             }
             let mut s = String::new();
@@ -660,19 +679,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
         // 反引号字符串（不支持转义，遇到配对反引号结束）
         if ch == '`' {
             if !buf.is_empty() {
-                spans.extend(colorize_tokens(
-                    &buf,
-                    keywords,
-                    primitive_types,
-                    go_type_names,
-                    code_style,
-                    kw_style,
-                    num_style,
-                    type_style,
-                    primitive_style,
-                    macro_style,
-                    &lang_lower,
-                ));
+                spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                 buf.clear();
             }
             let mut s = String::new();
@@ -691,19 +698,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
         // Rust 生命周期参数 ('a, 'static 等) vs 字符字面量 ('x')
         if ch == '\'' && matches!(lang_lower.as_str(), "rust" | "rs") {
             if !buf.is_empty() {
-                spans.extend(colorize_tokens(
-                    &buf,
-                    keywords,
-                    primitive_types,
-                    go_type_names,
-                    code_style,
-                    kw_style,
-                    num_style,
-                    type_style,
-                    primitive_style,
-                    macro_style,
-                    &lang_lower,
-                ));
+                spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                 buf.clear();
             }
             let mut s = String::new();
@@ -734,19 +729,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
         // 其他语言的字符串（包含单引号）
         if ch == '\'' && !matches!(lang_lower.as_str(), "rust" | "rs") {
             if !buf.is_empty() {
-                spans.extend(colorize_tokens(
-                    &buf,
-                    keywords,
-                    primitive_types,
-                    go_type_names,
-                    code_style,
-                    kw_style,
-                    num_style,
-                    type_style,
-                    primitive_style,
-                    macro_style,
-                    &lang_lower,
-                ));
+                spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                 buf.clear();
             }
             let mut s = String::new();
@@ -778,19 +761,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
                 && next == '['
             {
                 if !buf.is_empty() {
-                    spans.extend(colorize_tokens(
-                        &buf,
-                        keywords,
-                        primitive_types,
-                        go_type_names,
-                        code_style,
-                        kw_style,
-                        num_style,
-                        type_style,
-                        primitive_style,
-                        macro_style,
-                        &lang_lower,
-                    ));
+                    spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                     buf.clear();
                 }
                 let mut attr = String::new();
@@ -822,19 +793,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
             )
         {
             if !buf.is_empty() {
-                spans.extend(colorize_tokens(
-                    &buf,
-                    keywords,
-                    primitive_types,
-                    go_type_names,
-                    code_style,
-                    kw_style,
-                    num_style,
-                    type_style,
-                    primitive_style,
-                    macro_style,
-                    &lang_lower,
-                ));
+                spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                 buf.clear();
             }
             let var_style = Style::default().fg(theme.code_shell_var);
@@ -894,19 +853,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
             let rest: String = chars.clone().collect();
             if rest.starts_with(comment_prefix) {
                 if !buf.is_empty() {
-                    spans.extend(colorize_tokens(
-                        &buf,
-                        keywords,
-                        primitive_types,
-                        go_type_names,
-                        code_style,
-                        kw_style,
-                        num_style,
-                        type_style,
-                        primitive_style,
-                        macro_style,
-                        &lang_lower,
-                    ));
+                    spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
                     buf.clear();
                 }
                 while chars.peek().is_some() {
@@ -921,19 +868,7 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
     }
 
     if !buf.is_empty() {
-        spans.extend(colorize_tokens(
-            &buf,
-            keywords,
-            primitive_types,
-            go_type_names,
-            code_style,
-            kw_style,
-            num_style,
-            type_style,
-            primitive_style,
-            macro_style,
-            &lang_lower,
-        ));
+        spans.extend(colorize_tokens(&buf, &dicts, &styles, &lang_lower));
     }
 
     if spans.is_empty() {
@@ -944,18 +879,10 @@ pub fn highlight_code_line(line: &str, lang: &str, theme: &EditorTheme) -> Vec<S
 }
 
 /// 将文本按照 word boundary 拆分并对关键字、数字、类型名、原始类型着色
-#[allow(clippy::too_many_arguments)]
 pub fn colorize_tokens(
     text: &str,
-    keywords: &[&str],
-    primitive_types: &[&str],
-    go_type_names: &[&str],
-    default_style: Style,
-    kw_style: Style,
-    num_style: Style,
-    type_style: Style,
-    primitive_style: Style,
-    macro_style: Style,
+    dicts: &SyntaxDicts<'_>,
+    styles: &SyntaxStyles,
     lang: &str,
 ) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
@@ -966,7 +893,7 @@ pub fn colorize_tokens(
     while let Some(ch) = chars.next() {
         if ch.is_alphanumeric() || ch == '_' {
             if !current_non_word.is_empty() {
-                spans.push(Span::styled(current_non_word.clone(), default_style));
+                spans.push(Span::styled(current_non_word.clone(), styles.default_style));
                 current_non_word.clear();
             }
             current_word.push(ch);
@@ -978,25 +905,14 @@ pub fn colorize_tokens(
                     .map(|&c| c == '(' || c == '{' || c == '[' || c.is_whitespace())
                     .unwrap_or(true);
                 if is_macro {
-                    spans.push(Span::styled(current_word.clone(), macro_style));
+                    spans.push(Span::styled(current_word.clone(), styles.macro_style));
                     current_word.clear();
-                    spans.push(Span::styled("!".to_string(), macro_style));
+                    spans.push(Span::styled("!".to_string(), styles.macro_style));
                     continue;
                 }
             }
             if !current_word.is_empty() {
-                let style = classify_word(
-                    &current_word,
-                    keywords,
-                    primitive_types,
-                    go_type_names,
-                    kw_style,
-                    primitive_style,
-                    num_style,
-                    type_style,
-                    default_style,
-                    lang,
-                );
+                let style = classify_word(&current_word, dicts, styles, lang);
                 spans.push(Span::styled(current_word.clone(), style));
                 current_word.clear();
             }
@@ -1006,21 +922,10 @@ pub fn colorize_tokens(
 
     // 刷新剩余
     if !current_non_word.is_empty() {
-        spans.push(Span::styled(current_non_word, default_style));
+        spans.push(Span::styled(current_non_word, styles.default_style));
     }
     if !current_word.is_empty() {
-        let style = classify_word(
-            &current_word,
-            keywords,
-            primitive_types,
-            go_type_names,
-            kw_style,
-            primitive_style,
-            num_style,
-            type_style,
-            default_style,
-            lang,
-        );
+        let style = classify_word(&current_word, dicts, styles, lang);
         spans.push(Span::styled(current_word, style));
     }
 
@@ -1028,35 +933,28 @@ pub fn colorize_tokens(
 }
 
 /// 根据语言规则判断一个 word 应该使用哪种颜色样式
-#[allow(clippy::too_many_arguments)]
 pub fn classify_word(
     word: &str,
-    keywords: &[&str],
-    primitive_types: &[&str],
-    go_type_names: &[&str],
-    kw_style: Style,
-    primitive_style: Style,
-    num_style: Style,
-    type_style: Style,
-    default_style: Style,
+    dicts: &SyntaxDicts<'_>,
+    styles: &SyntaxStyles,
     lang: &str,
 ) -> Style {
-    if keywords.contains(&word) {
-        kw_style
-    } else if primitive_types.contains(&word) {
-        primitive_style
+    if dicts.keywords.contains(&word) {
+        styles.kw_style
+    } else if dicts.primitive_types.contains(&word) {
+        styles.primitive_style
     } else if word
         .chars()
         .next()
         .map(|c| c.is_ascii_digit())
         .unwrap_or(false)
     {
-        num_style
+        styles.num_style
     } else if matches!(lang, "go" | "golang") {
-        if go_type_names.contains(&word) {
-            type_style
+        if dicts.go_type_names.contains(&word) {
+            styles.type_style
         } else {
-            default_style
+            styles.default_style
         }
     } else if word
         .chars()
@@ -1064,8 +962,8 @@ pub fn classify_word(
         .map(|c| c.is_uppercase())
         .unwrap_or(false)
     {
-        type_style
+        styles.type_style
     } else {
-        default_style
+        styles.default_style
     }
 }

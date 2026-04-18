@@ -182,7 +182,7 @@ end tell
 
     fn resolve_coordinates(&self, v: &Value) -> Result<(f64, f64), String> {
         if let Some(element) = v.get("element").and_then(|e| e.as_u64()) {
-            let state = self.som_state.lock().unwrap();
+            let state = self.som_state.lock().unwrap_or_else(|e| e.into_inner());
             match state.as_ref() {
                 None => {
                     return Err("没有 SoM 索引，请先执行 screenshot action".to_string());
@@ -217,7 +217,7 @@ end tell
     }
 
     fn get_som_entry(&self, element: u64) -> Result<(SomEntry, Option<String>), String> {
-        let state = self.som_state.lock().unwrap();
+        let state = self.som_state.lock().unwrap_or_else(|e| e.into_inner());
         match state.as_ref() {
             None => Err("没有 SoM 索引，请先执行 screenshot action".to_string()),
             Some(som) => {
@@ -285,7 +285,7 @@ end tell
                     output
                         .push_str("\n\n使用 click/doubleclick/rightclick 指定 element=N 来交互。");
 
-                    let mut state = self.som_state.lock().unwrap();
+                    let mut state = self.som_state.lock().unwrap_or_else(|e| e.into_inner());
                     *state = Some(SomState {
                         entries,
                         timestamp: Instant::now(),

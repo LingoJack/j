@@ -1,3 +1,4 @@
+/// 展开 ~ 为 HOME 目录路径：`~` → HOME，`~/foo` → HOME/foo，其他不变
 pub fn expand_tilde(path: &str) -> String {
     if path == "~" {
         std::env::var("HOME").unwrap_or_else(|_| "~".to_string())

@@ -320,7 +320,7 @@ impl ShellTool {
             let mut child = match child_cmd.spawn() {
                 Ok(c) => c,
                 Err(e) => {
-                    let mut buf = output_buffer.lock().unwrap();
+                    let mut buf = output_buffer.lock().unwrap_or_else(|e| e.into_inner());
                     *buf = format!("启动失败: {}", e);
                     drop(buf);
                     manager.complete_task(&tid, "error", format!("启动失败: {}", e));
@@ -369,7 +369,10 @@ impl ShellTool {
                     let _ = stdout_thread.join();
                     let _ = stderr_thread.join();
 
-                    let output = output_buffer.lock().unwrap().clone();
+                    let output = output_buffer
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .clone();
                     let timeout_msg = format!("[超时] 命令执行超过 {}s 已自动终止。", timeout_secs);
                     let result = if output.is_empty() {
                         timeout_msg
@@ -384,7 +387,7 @@ impl ShellTool {
                     Ok(Some(status)) => break status,
                     Ok(None) => std::thread::sleep(Duration::from_millis(SHELL_POLL_INTERVAL_MS)),
                     Err(e) => {
-                        let mut buf = output_buffer.lock().unwrap();
+                        let mut buf = output_buffer.lock().unwrap_or_else(|e| e.into_inner());
                         *buf = format!("等待进程失败: {}", e);
                         drop(buf);
                         manager.complete_task(&tid, "error", format!("等待进程失败: {}", e));
@@ -397,7 +400,10 @@ impl ShellTool {
             let _ = stdout_thread.join();
             let _ = stderr_thread.join();
 
-            let output = output_buffer.lock().unwrap().clone();
+            let output = output_buffer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             let result = if output.is_empty() {
                 "(无输出)".to_string()
             } else {

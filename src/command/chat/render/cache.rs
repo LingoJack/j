@@ -1042,11 +1042,11 @@ fn render_tool_confirm_content(
         ]));
     }
 
-    // 确认信息行（折行显示，最多 10 行）
+    // 确认信息行（折行显示，最多 CONFIRM_MSG_MAX_LINES 行）
     {
         let max_msg_w = content_w.saturating_sub(2);
         let wrapped = wrap_text(&tc.confirm_message, max_msg_w);
-        let max_lines = 10;
+        let max_lines = crate::command::chat::constants::CONFIRM_MSG_MAX_LINES;
         let show_lines = wrapped.len().min(max_lines);
         for (i, line_text) in wrapped.iter().enumerate().take(show_lines) {
             let display_text = if i == max_lines - 1 && wrapped.len() > max_lines {
@@ -1421,7 +1421,7 @@ pub fn render_tool_call_request_msg(
         } else {
             // 折叠模式：图标 + 工具名 + 参数预览
             let total_len = tc.arguments.chars().count();
-            let truncated = total_len > 60;
+            let truncated = total_len > crate::command::chat::constants::TOOL_ARG_PREVIEW_MAX_CHARS;
 
             // 检测 JSON 开括号类型，用于截断时添加闭合括号
             let closing_bracket = if truncated {
@@ -1586,7 +1586,10 @@ pub fn render_tool_result_msg(
             ),
         ]));
 
-        let error_lines: Vec<&str> = clean.lines().take(20).collect();
+        let error_lines: Vec<&str> = clean
+            .lines()
+            .take(crate::command::chat::constants::ERROR_RESULT_MAX_LINES)
+            .collect();
         for line in error_lines {
             for wrapped in wrap_text(line, content_w) {
                 lines.push(Line::from(Span::styled(
@@ -1617,7 +1620,10 @@ pub fn render_tool_result_msg(
         render_todo_result(content, content_w, lines, theme);
     } else {
         // 正常结果
-        let all_lines: Vec<&str> = clean.lines().take(100).collect();
+        let all_lines: Vec<&str> = clean
+            .lines()
+            .take(crate::command::chat::constants::NORMAL_RESULT_MAX_LINES)
+            .collect();
         for line in all_lines {
             for wrapped in wrap_text(line, content_w) {
                 lines.push(Line::from(Span::styled(
@@ -1693,7 +1699,7 @@ fn render_agent_result_nested(
 ) {
     let all_lines: Vec<&str> = content.lines().collect();
     let total = all_lines.len();
-    let max_display = 30;
+    let max_display = crate::command::chat::constants::AGENT_RESULT_MAX_LINES;
     let display_lines = &all_lines[..total.min(max_display)];
 
     for (i, line) in display_lines.iter().enumerate() {
@@ -1756,7 +1762,10 @@ fn render_bash_result(
     }
 
     // 输出内容（灰色）
-    let output_lines: Vec<&str> = content.lines().take(100).collect();
+    let output_lines: Vec<&str> = content
+        .lines()
+        .take(crate::command::chat::constants::BASH_OUTPUT_MAX_LINES)
+        .collect();
     for line in &output_lines {
         for wrapped in wrap_text(line, content_w) {
             lines.push(Line::from(Span::styled(
@@ -1877,14 +1886,15 @@ fn thinking_pulse_color(theme: &Theme) -> Color {
         .unwrap_or_default()
         .as_millis();
 
-    // 周期 1.5s = 1500ms，正弦波映射到 [0.0, 1.0]
-    let phase = (millis % 1500) as f64 / 1500.0;
+    // 周期由 THINKING_PULSE_PERIOD_MS 定义，正弦波映射到 [0.0, 1.0]
+    let period = crate::command::chat::constants::THINKING_PULSE_PERIOD_MS as f64;
+    let phase = (millis % period as u128) as f64 / period;
     let t = (phase * std::f64::consts::TAU).sin() * 0.5 + 0.5; // 0.0 ~ 1.0
 
     // 从 label_ai 颜色提取 RGB 分量
     if let Color::Rgb(r, g, b) = theme.label_ai {
-        // 在 30% 亮度 ~ 100% 亮度之间脉冲
-        let min_factor = 0.3;
+        // 在 THINKING_PULSE_MIN_FACTOR ~ 100% 亮度之间脉冲
+        let min_factor = crate::command::chat::constants::THINKING_PULSE_MIN_FACTOR;
         let factor = min_factor + (1.0 - min_factor) * t;
         let pr = (r as f64 * factor).round().min(255.0) as u8;
         let pg = (g as f64 * factor).round().min(255.0) as u8;

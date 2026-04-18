@@ -1,3 +1,4 @@
+/// 检查命令是否属于危险操作（rm -rf /、mkfs、dd 等），用于 Shell 安全审核
 pub fn is_dangerous_command(cmd: &str) -> bool {
     let cmd_lower = cmd.to_lowercase();
     let tokens = shell_words(&cmd_lower);
@@ -68,6 +69,7 @@ pub fn is_dangerous_command(cmd: &str) -> bool {
     false
 }
 
+/// 检查命令是否为阻塞式交互命令（vim、top、less 等），返回匹配到的命令名
 pub fn check_blocking_command(cmd: &str) -> Option<&'static str> {
     let cmd_trimmed = cmd.trim();
     let segments = split_command_segments(cmd_trimmed);
@@ -341,6 +343,7 @@ fn split_at_pipe(segment: &str) -> &str {
     segment.trim()
 }
 
+/// 类 sh 单词拆分：处理单引号、双引号和反斜杠转义，返回拆分后的参数列表
 pub fn shell_words(input: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current = String::new();

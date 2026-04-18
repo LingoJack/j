@@ -21,6 +21,18 @@ use std::sync::{
 /// 子 Agent 运行时快照（系统提示 + 消息列表），供 /dump 读取。
 type SubAgentSnapshotRefs = (Arc<Mutex<String>>, Arc<Mutex<Vec<ChatMessage>>>);
 
+/// 无 UI 子代理循环的参数集合
+struct HeadlessAgentParams {
+    provider: ModelProvider,
+    system_prompt: Option<String>,
+    prompt: String,
+    tools: Vec<ChatCompletionTools>,
+    registry: Arc<ToolRegistry>,
+    jcli_config: Arc<JcliConfig>,
+    snapshot: Option<SubAgentSnapshotRefs>,
+    description: String,
+}
+
 /// AgentTool 参数
 #[derive(Deserialize, JsonSchema)]
 struct AgentParams {
@@ -165,15 +177,20 @@ impl Tool for AgentTool {
                 }
 
                 let result = run_headless_agent_loop(
-                    provider,
-                    system_prompt,
-                    prompt,
-                    tools,
-                    sub_registry,
-                    jcli_config,
+                    HeadlessAgentParams {
+                        provider,
+                        system_prompt,
+                        prompt,
+                        tools,
+                        registry: sub_registry,
+                        jcli_config,
+                        snapshot: Some((
+                            Arc::clone(&snap_system_prompt),
+                            Arc::clone(&snap_messages),
+                        )),
+                        description: description_clone.clone(),
+                    },
                     &cancelled_clone,
-                    Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
-                    &description_clone,
                     &shared_messages_clone,
                 );
 
@@ -221,15 +238,17 @@ impl Tool for AgentTool {
 
             let cancelled_clone = Arc::clone(cancelled);
             let result = run_headless_agent_loop(
-                provider,
-                system_prompt,
-                prompt,
-                tools,
-                sub_registry,
-                jcli_config,
+                HeadlessAgentParams {
+                    provider,
+                    system_prompt,
+                    prompt,
+                    tools,
+                    registry: sub_registry,
+                    jcli_config,
+                    snapshot: Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
+                    description,
+                },
                 &cancelled_clone,
-                Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
-                &description,
                 &self.shared.shared_messages,
             );
 
@@ -265,20 +284,12 @@ impl Tool for AgentTool {
 /// - 不发送 StreamMsg（无 UI 交互）
 /// - 需要确认的工具通过 permission 检查：允许则执行，否则返回 "Tool denied"
 /// - 返回最终的 assistant 文本
-#[allow(clippy::too_many_arguments)]
 fn run_headless_agent_loop(
-    provider: ModelProvider,
-    system_prompt: Option<String>,
-    prompt: String,
-    tools: Vec<ChatCompletionTools>,
-    registry: Arc<ToolRegistry>,
-    jcli_config: Arc<JcliConfig>,
+    params: HeadlessAgentParams,
     cancelled: &Arc<AtomicBool>,
-    snapshot: Option<SubAgentSnapshotRefs>,
-    description: &str,
     shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {
-    let agent_tag = format!("Agent: {}", description);
+    let agent_tag = format!("Agent: {}", params.description);
     let push_ui = |msg: ChatMessage| {
         if let Ok(mut shared) = shared_messages.lock() {
             shared.push(msg);
@@ -286,28 +297,28 @@ fn run_headless_agent_loop(
     };
     let max_rounds = 30; // 子代理最大轮数
 
-    let (rt, client) = match create_runtime_and_client(&provider) {
+    let (rt, client) = match create_runtime_and_client(&params.provider) {
         Ok(pair) => pair,
         Err(e) => return e,
     };
 
     // 写入 system prompt 快照（供 /dump 读取）
-    if let Some((ref sp_snap, _)) = snapshot
+    if let Some((ref sp_snap, _)) = params.snapshot
         && let Ok(mut sp) = sp_snap.lock()
     {
-        *sp = system_prompt.clone().unwrap_or_default();
+        *sp = params.system_prompt.clone().unwrap_or_default();
     }
 
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
         role: "user".to_string(),
-        content: prompt,
+        content: params.prompt,
         tool_calls: None,
         tool_call_id: None,
         images: None,
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
-        if let Some((_, ref msgs_snap)) = snapshot
+        if let Some((_, ref msgs_snap)) = params.snapshot
             && let Ok(mut snap) = msgs_snap.lock()
         {
             *snap = msgs.clone();
@@ -327,10 +338,10 @@ fn run_headless_agent_loop(
         let choice = match call_llm_non_stream(
             &rt,
             &client,
-            &provider,
+            &params.provider,
             &messages,
-            &tools,
-            system_prompt.as_deref(),
+            &params.tools,
+            params.system_prompt.as_deref(),
         ) {
             Ok(c) => c,
             Err(e) => return format!("{}\n{}", final_text, e),
@@ -357,7 +368,13 @@ fn run_headless_agent_loop(
             break;
         }
 
-        let tool_items = extract_tool_items(choice.message.tool_calls.as_ref().unwrap());
+        let tool_items = extract_tool_items(
+            choice
+                .message
+                .tool_calls
+                .as_ref()
+                .expect("tool_calls checked non-None above"),
+        );
         if tool_items.is_empty() {
             break;
         }
@@ -383,8 +400,8 @@ fn run_headless_agent_loop(
         for item in &tool_items {
             let result_msg = execute_tool_with_permission(
                 item,
-                &registry,
-                &jcli_config,
+                &params.registry,
+                &params.jcli_config,
                 cancelled,
                 "SubAgent",
                 true,

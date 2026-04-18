@@ -524,56 +524,59 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, app: &mut TodoApp, main_area: 
     f.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
-/// 在状态栏区域渲染输入框（带标签、文本、光标、占位符）
-#[allow(clippy::too_many_arguments)]
-fn render_input_status_bar(
-    f: &mut ratatui::Frame,
-    area: Rect,
-    label: &str,
+/// 状态栏输入框渲染参数
+struct InputStatusBarParams<'a> {
+    label: &'a str,
     label_color: Color,
-    input: &str,
+    input: &'a str,
     cursor_pos: usize,
-    placeholder: &str,
-    hint: &str,
-) {
+    placeholder: &'a str,
+    hint: &'a str,
+}
+
+/// 在状态栏区域渲染输入框（带标签、文本、光标、占位符）
+fn render_input_status_bar(f: &mut ratatui::Frame, area: Rect, params: &InputStatusBarParams<'_>) {
     let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
     let text_style = Style::default().fg(Color::Reset);
     let placeholder_style = Style::default().fg(Color::DarkGray);
     let hint_style = Style::default().fg(Color::DarkGray);
 
-    let label_display = format!(" {} ", label);
+    let label_display = format!(" {} ", params.label);
     let label_width = unicode_width::UnicodeWidthStr::width(label_display.as_str());
 
     let mut spans = vec![Span::styled(
         label_display,
         Style::default()
-            .fg(label_color)
+            .fg(params.label_color)
             .add_modifier(Modifier::BOLD),
     )];
 
-    if input.is_empty() {
+    if params.input.is_empty() {
         spans.push(Span::styled(" ", cursor_style));
-        spans.push(Span::styled(placeholder.to_string(), placeholder_style));
+        spans.push(Span::styled(
+            params.placeholder.to_string(),
+            placeholder_style,
+        ));
     } else {
-        let input_chars: Vec<char> = input.chars().collect();
+        let input_chars: Vec<char> = params.input.chars().collect();
         for (i, ch) in input_chars.iter().enumerate() {
-            if i == cursor_pos {
+            if i == params.cursor_pos {
                 spans.push(Span::styled(ch.to_string(), cursor_style));
             } else {
                 spans.push(Span::styled(ch.to_string(), text_style));
             }
         }
-        if cursor_pos >= input_chars.len() {
+        if params.cursor_pos >= input_chars.len() {
             spans.push(Span::styled(" ", cursor_style));
         }
     }
 
-    spans.push(Span::styled(format!("  {}", hint), hint_style));
+    spans.push(Span::styled(format!("  {}", params.hint), hint_style));
 
     let status = Paragraph::new(Line::from(spans)).block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(label_color)),
+            .border_style(Style::default().fg(params.label_color)),
     );
     f.render_widget(status, area);
 
@@ -699,12 +702,14 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &TodoApp, area: ratatui::layou
             render_input_status_bar(
                 f,
                 area,
-                "命令面板",
-                app.theme.md_h1,
-                &app.cmd_popup_filter,
-                app.cmd_popup_filter.chars().count(),
-                "输入筛选…",
-                "↑↓ 选择 | Enter 确认 | Esc 取消",
+                &InputStatusBarParams {
+                    label: "命令面板",
+                    label_color: app.theme.md_h1,
+                    input: &app.cmd_popup_filter,
+                    cursor_pos: app.cmd_popup_filter.chars().count(),
+                    placeholder: "输入筛选…",
+                    hint: "↑↓ 选择 | Enter 确认 | Esc 取消",
+                },
             );
         }
         _ => {

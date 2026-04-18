@@ -43,7 +43,11 @@ async fn bind_with_reuse(port: u16) -> io::Result<tokio::net::TcpListener> {
     socket.set_reuseaddr(true)?;
     #[cfg(target_os = "macos")]
     socket.set_reuseport(true)?;
-    socket.bind(format!("0.0.0.0:{}", port).parse().unwrap())?;
+    socket.bind(
+        format!("0.0.0.0:{}", port)
+            .parse()
+            .expect("SocketAddr 格式由 format! 保证合法"),
+    )?;
     socket.listen(128)
 }
 

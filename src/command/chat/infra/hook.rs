@@ -84,6 +84,7 @@ impl std::str::FromStr for HookEvent {
 }
 
 impl HookEvent {
+    /// 返回 Hook 事件的字符串标识（如 "pre_send_message"）
     pub fn as_str(&self) -> &'static str {
         match self {
             HookEvent::PreSendMessage => "pre_send_message",
@@ -103,6 +104,7 @@ impl HookEvent {
         }
     }
 
+    /// 返回所有 HookEvent 枚举值的静态切片，用于遍历/校验
     pub fn all() -> &'static [HookEvent] {
         &[
             HookEvent::PreSendMessage,
@@ -400,6 +402,7 @@ pub enum HookAction {
     Skip,
 }
 
+/// Hook 执行结果：允许替换消息列表、系统提示词、用户输入、工具参数等
 #[derive(Debug, Deserialize, Default)]
 pub struct HookResult {
     /// 替换消息列表（PreLlmRequest）

@@ -268,7 +268,8 @@ fn match_regex(pattern: &str, input: &str) -> bool {
         .entry(regex_str.to_string())
         .or_insert_with(|| match Regex::new(regex_str) {
             Ok(r) => r,
-            Err(_) => Regex::new("^$").unwrap(), // 编译失败则永不匹配
+            // 永不匹配的兜底正则：编译失败说明正则语法错误，此静态模式不可能失败
+            Err(_) => Regex::new("^$").expect("静态正则 ^$ 不可能编译失败"),
         });
 
     re.is_match(input)

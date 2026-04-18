@@ -34,12 +34,12 @@ impl PendingPlanApproval {
     /// Teammate 线程调用：阻塞等待决策，超时返回 Reject
     pub fn wait_for_decision(&self, timeout_secs: u64) -> PlanDecision {
         let (lock, cvar) = &*self.decision;
-        let guard = lock.lock().unwrap();
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
         let (mut guard, _timed_out) = cvar
             .wait_timeout_while(guard, std::time::Duration::from_secs(timeout_secs), |d| {
                 d.is_none()
             })
-            .unwrap();
+            .unwrap_or_else(|e| e.into_inner());
         if guard.is_none() {
             *guard = Some(PlanDecision::Reject);
         }
@@ -49,7 +49,7 @@ impl PendingPlanApproval {
     /// TUI 线程调用：设置决策并唤醒等待的 teammate 线程
     pub fn resolve(&self, decision: PlanDecision) {
         let (lock, cvar) = &*self.decision;
-        let mut d = lock.lock().unwrap();
+        let mut d = lock.lock().unwrap_or_else(|e| e.into_inner());
         *d = Some(decision);
         cvar.notify_one();
     }
@@ -57,7 +57,11 @@ impl PendingPlanApproval {
     /// 是否已有决策（用于防止重复显示已处理的请求）
     #[allow(dead_code)]
     pub fn is_decided(&self) -> bool {
-        self.decision.0.lock().unwrap().is_some()
+        self.decision
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
     }
 }
 
@@ -83,7 +87,7 @@ impl PlanApprovalQueue {
     /// 返回 PlanDecision 表示用户决策
     pub fn request_blocking(&self, req: Arc<PendingPlanApproval>) -> PlanDecision {
         {
-            let mut q = self.pending.lock().unwrap();
+            let mut q = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             q.push_back(Arc::clone(&req));
         }
         req.wait_for_decision(120)
@@ -91,12 +95,15 @@ impl PlanApprovalQueue {
 
     /// TUI 循环调用：取出下一个待决请求（非阻塞）
     pub fn pop_pending(&self) -> Option<Arc<PendingPlanApproval>> {
-        self.pending.lock().unwrap().pop_front()
+        self.pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front()
     }
 
     /// Session 取消时调用：拒绝所有挂起的请求，唤醒所有等待线程
     pub fn deny_all(&self) {
-        let mut q = self.pending.lock().unwrap();
+        let mut q = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         for req in q.drain(..) {
             req.resolve(PlanDecision::Reject);
         }

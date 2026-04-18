@@ -121,6 +121,16 @@ impl CodeBlockCache {
     }
 }
 
+/// 光标视觉行渲染所需的上下文参数
+struct CursorLineContext<'a> {
+    line_num_str: &'a str,
+    line_num_style: Style,
+    cursor_col: Option<usize>,
+    search: &'a SearchState,
+    code_block_max_width: Option<usize>,
+    is_last_vl: bool,
+}
+
 /// Markdown 渲染器
 pub struct MarkdownRenderer {
     theme: EditorTheme,
@@ -285,12 +295,14 @@ impl MarkdownRenderer {
             return vec![self.render_cursor_visual_line(
                 vl_text,
                 vl,
-                &line_num_str,
-                line_num_style,
-                cursor_col,
-                search,
-                code_block_max_width,
-                is_last_vl,
+                &CursorLineContext {
+                    line_num_str: &line_num_str,
+                    line_num_style,
+                    cursor_col,
+                    search,
+                    code_block_max_width,
+                    is_last_vl,
+                },
             )];
         }
 
@@ -453,19 +465,13 @@ impl MarkdownRenderer {
     }
 
     /// 渲染光标行的视觉行（源码 + 光标高亮）
-    #[allow(clippy::too_many_arguments)]
     fn render_cursor_visual_line(
         &self,
         text: String,
         vl: &VisualLine,
-        line_num_str: &str,
-        line_num_style: Style,
-        cursor_col: Option<usize>,
-        search: &SearchState,
-        code_block_max_width: Option<usize>,
-        is_last_vl: bool,
+        ctx: &CursorLineContext<'_>,
     ) -> Line<'static> {
-        let in_code_block = code_block_max_width.is_some();
+        let in_code_block = ctx.code_block_max_width.is_some();
 
         // 代码块内的光标行：文本用 code_bg，行号保持 bg_input
         let (text_style, line_num_bg) = if in_code_block {
@@ -482,9 +488,9 @@ impl MarkdownRenderer {
             )
         };
 
-        let effective_line_num_style = line_num_style.bg(line_num_bg);
+        let effective_line_num_style = ctx.line_num_style.bg(line_num_bg);
         let mut spans = vec![Span::styled(
-            line_num_str.to_string(),
+            ctx.line_num_str.to_string(),
             effective_line_num_style,
         )];
 
@@ -498,19 +504,24 @@ impl MarkdownRenderer {
         let text_display_width = display_width(&text);
 
         // 搜索高亮
-        if search.is_searching() && search.match_count() > 0 {
-            spans.extend(search.highlight_line(vl.logical_line, &text, &self.theme, vl.start_col));
+        if ctx.search.is_searching() && ctx.search.match_count() > 0 {
+            spans.extend(ctx.search.highlight_line(
+                vl.logical_line,
+                &text,
+                &self.theme,
+                vl.start_col,
+            ));
             return Line::from(spans).patch_style(Style::default().bg(line_num_bg));
         }
 
         // 处理光标位置
-        if let Some(col) = cursor_col {
+        if let Some(col) = ctx.cursor_col {
             // 判断光标是否在当前视觉行范围内
             // 当 col == vl.end_col 时：
             //   - 如果是最后一个视觉行，光标在行尾，属于当前视觉行
             //   - 如果不是最后一个视觉行，光标属于下一个视觉行（end_col == next start_col）
             let cursor_in_this_vl = if col == vl.end_col {
-                is_last_vl
+                ctx.is_last_vl
             } else {
                 col >= vl.start_col && col < vl.end_col
             };
@@ -553,7 +564,7 @@ impl MarkdownRenderer {
         }
 
         // 代码块光标行：添加右边框 + 填充
-        if let Some(max_width) = code_block_max_width {
+        if let Some(max_width) = ctx.code_block_max_width {
             let fill_width = max_width.saturating_sub(text_display_width);
             spans.push(Span::styled(
                 " ".repeat(fill_width),

@@ -27,6 +27,7 @@ impl CopilotCompleter {
         }
     }
 
+    /// 刷新补全器的配置快照（配置变更后调用）
     pub fn refresh(&mut self, config: &YamlConfig) {
         self.config = config.clone();
     }
@@ -427,11 +428,13 @@ impl Completer for CopilotCompleter {
 
 // ========== Hinter ==========
 
+/// 基于 rustyline HistoryHinter 的命令历史提示器
 pub struct CopilotHinter {
     history_hinter: HistoryHinter,
 }
 
 impl CopilotHinter {
+    /// 创建历史提示器
     pub fn new() -> Self {
         Self {
             history_hinter: HistoryHinter::new(),
@@ -449,6 +452,7 @@ impl Hinter for CopilotHinter {
 
 // ========== Highlighter ==========
 
+/// 命令行高亮器：将补全提示显示为灰色
 pub struct CopilotHighlighter;
 
 impl Highlighter for CopilotHighlighter {
@@ -463,6 +467,7 @@ impl Highlighter for CopilotHighlighter {
 
 // ========== 组合 Helper ==========
 
+/// REPL 辅助组件集合：补全器 + 历史提示器 + 高亮器
 pub struct CopilotHelper {
     pub completer: CopilotCompleter,
     hinter: CopilotHinter,
@@ -470,6 +475,7 @@ pub struct CopilotHelper {
 }
 
 impl CopilotHelper {
+    /// 基于当前配置创建 Helper 组件集合
     pub fn new(config: &YamlConfig) -> Self {
         Self {
             completer: CopilotCompleter::new(config),
@@ -478,6 +484,7 @@ impl CopilotHelper {
         }
     }
 
+    /// 刷新补全器的配置快照（配置变更后调用）
     pub fn refresh(&mut self, config: &YamlConfig) {
         self.completer.refresh(config);
     }

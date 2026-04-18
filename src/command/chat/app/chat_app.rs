@@ -94,34 +94,35 @@ pub struct ChatApp {
     pub invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
 }
 
+/// 静态占位符替换所需的文本片段
+struct StaticPlaceholderValues<'a> {
+    skills_summary: &'a str,
+    tools_summary: &'a str,
+    style_text: &'a str,
+    memory_text: &'a str,
+    soul_text: &'a str,
+    agent_md_text: &'a str,
+    current_dir: &'a str,
+    skill_dir: &'a str,
+    project_skill_dir: &'a str,
+}
+
 /// system prompt 静态占位符替换共享逻辑：
 /// 由 `send_message_internal` 的 `system_prompt_fn` 闭包和 `build_current_system_prompt`
 /// 共同使用，确保两处静态占位符列表保持一致。
 /// 不处理状态占位符（.tasks/.background_tasks/.session_state/.teammates），
 /// 那些在真实请求里由内置 PreLlmRequest hook 替换。
-#[allow(clippy::too_many_arguments)]
-fn apply_static_placeholders(
-    template: &str,
-    skills_summary: &str,
-    tools_summary: &str,
-    style_text: &str,
-    memory_text: &str,
-    soul_text: &str,
-    agent_md_text: &str,
-    current_dir: &str,
-    skill_dir: &str,
-    project_skill_dir: &str,
-) -> String {
+fn apply_static_placeholders(template: &str, values: &StaticPlaceholderValues<'_>) -> String {
     template
-        .replace("{{.current_dir}}", current_dir)
-        .replace("{{.skills}}", skills_summary)
-        .replace("{{.skill_dir}}", skill_dir)
-        .replace("{{.project_skill_dir}}", project_skill_dir)
-        .replace("{{.tools}}", tools_summary)
-        .replace("{{.style}}", style_text)
-        .replace("{{.memory}}", memory_text)
-        .replace("{{.soul}}", soul_text)
-        .replace("{{.agent_md}}", agent_md_text)
+        .replace("{{.current_dir}}", values.current_dir)
+        .replace("{{.skills}}", values.skills_summary)
+        .replace("{{.skill_dir}}", values.skill_dir)
+        .replace("{{.project_skill_dir}}", values.project_skill_dir)
+        .replace("{{.tools}}", values.tools_summary)
+        .replace("{{.style}}", values.style_text)
+        .replace("{{.memory}}", values.memory_text)
+        .replace("{{.soul}}", values.soul_text)
+        .replace("{{.agent_md}}", values.agent_md_text)
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -901,7 +902,9 @@ impl ChatApp {
                     }
                 }
                 CursorDirection::Down => {
-                    if self.ui.tool_interact_selected < 3 {
+                    if self.ui.tool_interact_selected
+                        < crate::command::chat::constants::TOOL_INTERACT_MAX_OPTIONS
+                    {
                         self.ui.tool_interact_selected += 1;
                     }
                 }
@@ -994,12 +997,12 @@ impl ChatApp {
             },
             Action::PageScroll(dir) => match dir {
                 CursorDirection::Up => {
-                    for _ in 0..10 {
+                    for _ in 0..crate::command::chat::constants::PAGE_SCROLL_LINES {
                         self.scroll_up();
                     }
                 }
                 CursorDirection::Down => {
-                    for _ in 0..10 {
+                    for _ in 0..crate::command::chat::constants::PAGE_SCROLL_LINES {
                         self.scroll_down();
                     }
                 }
@@ -1018,7 +1021,7 @@ impl ChatApp {
                         let new_idx = match current_in_filtered {
                             Some(pos) if pos > 0 => filtered[pos - 1],
                             Some(_) => filtered[filtered.len() - 1],
-                            None => *filtered.last().unwrap(),
+                            None => *filtered.last().expect("browse mode 下 filtered 不应为空"),
                         };
                         self.ui.browse_msg_index = new_idx;
                         self.ui.browse_scroll_offset = 0;
@@ -1038,10 +1041,16 @@ impl ChatApp {
             }
             Action::BrowseFineScroll(dir) => match dir {
                 CursorDirection::Up => {
-                    self.ui.browse_scroll_offset = self.ui.browse_scroll_offset.saturating_sub(3);
+                    self.ui.browse_scroll_offset = self
+                        .ui
+                        .browse_scroll_offset
+                        .saturating_sub(crate::command::chat::constants::FINE_SCROLL_LINES);
                 }
                 CursorDirection::Down => {
-                    self.ui.browse_scroll_offset = self.ui.browse_scroll_offset.saturating_add(3);
+                    self.ui.browse_scroll_offset = self
+                        .ui
+                        .browse_scroll_offset
+                        .saturating_add(crate::command::chat::constants::FINE_SCROLL_LINES);
                 }
             },
             Action::BrowseCopyMessage => {
@@ -2162,15 +2171,17 @@ impl ChatApp {
 
         let resolved = apply_static_placeholders(
             &template,
-            &skills_summary,
-            &tools_summary,
-            &style_text,
-            &memory_text,
-            &soul_text,
-            &agent_md_text,
-            &current_dir,
-            &skill_dir,
-            &project_skill_dir,
+            &StaticPlaceholderValues {
+                skills_summary: &skills_summary,
+                tools_summary: &tools_summary,
+                style_text: &style_text,
+                memory_text: &memory_text,
+                soul_text: &soul_text,
+                agent_md_text: &agent_md_text,
+                current_dir: &current_dir,
+                skill_dir: &skill_dir,
+                project_skill_dir: &project_skill_dir,
+            },
         )
         .replace("{{.tasks}}", &tasks_summary)
         .replace("{{.background_tasks}}", &background_summary)
@@ -2373,15 +2384,17 @@ impl ChatApp {
             // 不在此处替换，由内置 PreLlmRequest hook 链处理
             Some(apply_static_placeholders(
                 &template,
-                &skills_summary,
-                &tools_summary,
-                &style_text,
-                &memory_text,
-                &soul_text,
-                &agent_md_text,
-                &current_dir,
-                &skill_dir,
-                &project_skill_dir,
+                &StaticPlaceholderValues {
+                    skills_summary: &skills_summary,
+                    tools_summary: &tools_summary,
+                    style_text: &style_text,
+                    memory_text: &memory_text,
+                    soul_text: &soul_text,
+                    agent_md_text: &agent_md_text,
+                    current_dir: &current_dir,
+                    skill_dir: &skill_dir,
+                    project_skill_dir: &project_skill_dir,
+                },
             ))
         });
 

@@ -105,3 +105,43 @@ pub const CLASSIFY_SIZE_THRESHOLD_BYTES: usize = 1024;
 
 /// 分类文件大小阈值（字符）
 pub const CLASSIFY_SIZE_THRESHOLD_CHARS: usize = 100;
+
+// ========== 渲染相关 ==========
+
+/// API 错误 body 截断最大长度（字符数）
+pub const API_ERROR_BODY_MAX_LEN: usize = 500;
+
+/// 确认消息最大显示行数
+pub const CONFIRM_MSG_MAX_LINES: usize = 10;
+
+/// 工具参数预览最大字符数
+pub const TOOL_ARG_PREVIEW_MAX_CHARS: usize = 60;
+
+/// 错误结果最大显示行数
+pub const ERROR_RESULT_MAX_LINES: usize = 20;
+
+/// 正常结果最大显示行数
+pub const NORMAL_RESULT_MAX_LINES: usize = 100;
+
+/// Agent 结果最大显示行数
+pub const AGENT_RESULT_MAX_LINES: usize = 30;
+
+/// Bash 输出最大显示行数
+pub const BASH_OUTPUT_MAX_LINES: usize = 100;
+
+/// 思考脉冲周期（毫秒）
+pub const THINKING_PULSE_PERIOD_MS: u64 = 1500;
+
+/// 思考脉冲最低亮度因子
+pub const THINKING_PULSE_MIN_FACTOR: f64 = 0.3;
+
+// ========== UI 交互相关 ==========
+
+/// 分页滚动行数
+pub const PAGE_SCROLL_LINES: usize = 10;
+
+/// 精细滚动行数
+pub const FINE_SCROLL_LINES: u16 = 3;
+
+/// 工具交互选项上限
+pub const TOOL_INTERACT_MAX_OPTIONS: usize = 3;

@@ -18,6 +18,16 @@ const PONG_TIMEOUT_SECS: u64 = 30;
 /// ECDH 密钥协商超时（秒）
 const KEY_EXCHANGE_TIMEOUT_SECS: u64 = 10;
 
+/// WebSocket 连接共享状态（通道 + 连接标志 + kick 信号）
+struct WsConnectionState {
+    inbound_tx: mpsc::Sender<WsInbound>,
+    outbound_tx: broadcast::Sender<WsOutbound>,
+    client_connected: Arc<AtomicBool>,
+    client_notify: Arc<Notify>,
+    kick_tx: watch::Sender<u64>,
+    kick_rx: watch::Receiver<u64>,
+}
+
 /// 启动 HTTP + WS 服务器
 ///
 /// - `GET /` → 返回嵌入的 remote.html
@@ -40,28 +50,18 @@ pub async fn run_server(
         };
 
         let token = token.clone();
-        let inbound_tx = inbound_tx.clone();
-        let outbound_tx = outbound_tx.clone();
-        let client_connected = Arc::clone(&client_connected);
-        let client_notify = Arc::clone(&client_notify);
-        let kick_tx = kick_tx.clone();
-        let kick_rx = kick_rx.clone();
         let expected_origin = expected_origin.clone();
+        let ws_state = WsConnectionState {
+            inbound_tx: inbound_tx.clone(),
+            outbound_tx: outbound_tx.clone(),
+            client_connected: Arc::clone(&client_connected),
+            client_notify: Arc::clone(&client_notify),
+            kick_tx: kick_tx.clone(),
+            kick_rx: kick_rx.clone(),
+        };
 
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(
-                stream,
-                &token,
-                inbound_tx,
-                outbound_tx,
-                client_connected,
-                client_notify,
-                kick_tx,
-                kick_rx,
-                &expected_origin,
-            )
-            .await
-            {
+            if let Err(e) = handle_connection(stream, &token, ws_state, &expected_origin).await {
                 crate::util::log::write_error_log(
                     "[remote::server]",
                     &format!("连接处理错误: {}", e),
@@ -88,16 +88,10 @@ fn extract_header<'a>(request: &'a str, header_name: &str) -> Option<&'a str> {
     None
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn handle_connection(
     stream: TcpStream,
     token: &str,
-    inbound_tx: mpsc::Sender<WsInbound>,
-    outbound_tx: broadcast::Sender<WsOutbound>,
-    client_connected: Arc<AtomicBool>,
-    client_notify: Arc<Notify>,
-    kick_tx: watch::Sender<u64>,
-    kick_rx: watch::Receiver<u64>,
+    mut ws_state: WsConnectionState,
     expected_origin: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 先 peek 请求头判断是 HTTP 还是 WS 升级
@@ -140,14 +134,14 @@ async fn handle_connection(
 
         // 踢掉旧连接：发送新的 kick 信号，旧的 handle_websocket 会检测到并退出
         let new_ver = {
-            let cur = *kick_tx.borrow();
+            let cur = *ws_state.kick_tx.borrow();
             cur.wrapping_add(1)
         };
-        let _ = kick_tx.send(new_ver);
+        let _ = ws_state.kick_tx.send(new_ver);
 
         // 等待旧连接释放（最多 2 秒）
         for _ in 0..20 {
-            if !client_connected.load(Ordering::Relaxed) {
+            if !ws_state.client_connected.load(Ordering::Relaxed) {
                 break;
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -155,19 +149,19 @@ async fn handle_connection(
 
         // WebSocket 升级
         let ws_stream = tokio_tungstenite::accept_async(stream).await?;
-        client_connected.store(true, Ordering::Relaxed);
-        client_notify.notify_one();
+        ws_state.client_connected.store(true, Ordering::Relaxed);
+        ws_state.client_notify.notify_one();
 
         handle_websocket(
             ws_stream,
-            inbound_tx,
-            outbound_tx,
-            &client_connected,
-            kick_rx,
+            ws_state.inbound_tx,
+            ws_state.outbound_tx,
+            &ws_state.client_connected,
+            ws_state.kick_rx,
         )
         .await;
 
-        client_connected.store(false, Ordering::Relaxed);
+        ws_state.client_connected.store(false, Ordering::Relaxed);
         return Ok(());
     }
 

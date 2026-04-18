@@ -46,17 +46,17 @@ impl PendingAgentPerm {
     /// 子 agent 线程调用：阻塞等待决策，超时返回 false（拒绝）
     pub fn wait_for_decision(&self, timeout_secs: u64) -> bool {
         let (lock, cvar) = &*self.decision;
-        let guard = lock.lock().unwrap();
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
         let (guard, _timed_out) = cvar
             .wait_timeout_while(guard, Duration::from_secs(timeout_secs), |d| d.is_none())
-            .unwrap();
+            .unwrap_or_else(|e| e.into_inner());
         guard.unwrap_or(false)
     }
 
     /// TUI 线程调用：设置决策并唤醒等待的 agent 线程
     pub fn resolve(&self, approved: bool) {
         let (lock, cvar) = &*self.decision;
-        let mut d = lock.lock().unwrap();
+        let mut d = lock.lock().unwrap_or_else(|e| e.into_inner());
         *d = Some(approved);
         cvar.notify_one();
     }
@@ -64,7 +64,11 @@ impl PendingAgentPerm {
     /// 是否已有决策（用于防止重复显示已处理的请求）
     #[allow(dead_code)]
     pub fn is_decided(&self) -> bool {
-        self.decision.0.lock().unwrap().is_some()
+        self.decision
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
     }
 }
 
@@ -90,7 +94,7 @@ impl PermissionQueue {
     /// 返回 true 表示用户批准，false 表示拒绝或超时。
     pub fn request_blocking(&self, req: Arc<PendingAgentPerm>) -> bool {
         {
-            let mut q = self.pending.lock().unwrap();
+            let mut q = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             q.push_back(Arc::clone(&req));
         }
         req.wait_for_decision(60)
@@ -98,12 +102,15 @@ impl PermissionQueue {
 
     /// TUI 循环调用：取出下一个待决请求（非阻塞）
     pub fn pop_pending(&self) -> Option<Arc<PendingAgentPerm>> {
-        self.pending.lock().unwrap().pop_front()
+        self.pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front()
     }
 
     /// session 取消时调用：拒绝所有挂起的请求，唤醒所有等待线程
     pub fn deny_all(&self) {
-        let mut q = self.pending.lock().unwrap();
+        let mut q = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         for req in q.drain(..) {
             req.resolve(false);
         }

@@ -154,6 +154,7 @@ fn perform_update(interactive: bool) {
     };
 
     // 检查是否已经有 root 权限
+    // SAFETY: libc::getuid() 是只读系统调用，无副作用，线程安全
     #[cfg(unix)]
     let is_root = unsafe { libc::getuid() == 0 };
 

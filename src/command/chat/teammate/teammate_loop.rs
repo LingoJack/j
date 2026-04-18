@@ -231,7 +231,13 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // 处理工具调用
-        let tool_items = extract_tool_items(choice.message.tool_calls.as_ref().unwrap());
+        let tool_items = extract_tool_items(
+            choice
+                .message
+                .tool_calls
+                .as_ref()
+                .expect("tool_calls checked non-None above"),
+        );
         if tool_items.is_empty() {
             break;
         }

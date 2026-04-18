@@ -1052,14 +1052,13 @@ fn flush_streaming_as_message(
     if !sc.is_empty() {
         let text_msg = ChatMessage {
             role: ROLE_ASSISTANT.to_string(),
-            content: sc.clone(),
+            content: std::mem::take(&mut *sc),
             tool_calls: None,
             tool_call_id: None,
             images: None,
         };
         messages.push(text_msg.clone());
         push_shared(shared_messages, text_msg);
-        sc.clear();
     }
 }
 

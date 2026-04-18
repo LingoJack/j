@@ -623,19 +623,23 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 }
 
+/// 弹窗样式参数
+struct PopupStyle {
+    title_color: ratatui::style::Color,
+    border_color: ratatui::style::Color,
+    bg_color: ratatui::style::Color,
+    highlight_bg: ratatui::style::Color,
+    highlight_fg: ratatui::style::Color,
+}
+
 /// 通用浮动弹窗列表渲染（输入区上方）
-#[allow(clippy::too_many_arguments)]
 fn draw_popup_list(
     f: &mut ratatui::Frame,
     input_area: Rect,
     items: Vec<ListItem<'static>>,
     item_labels: &[String],
     title: String,
-    title_color: ratatui::style::Color,
-    border_color: ratatui::style::Color,
-    bg_color: ratatui::style::Color,
-    highlight_bg: ratatui::style::Color,
-    highlight_fg: ratatui::style::Color,
+    style: &PopupStyle,
     selected: usize,
     max_visible: usize,
 ) {
@@ -673,19 +677,19 @@ fn draw_popup_list(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(border_color))
+                .border_style(Style::default().fg(style.border_color))
                 .title(Span::styled(
                     title,
                     Style::default()
-                        .fg(title_color)
+                        .fg(style.title_color)
                         .add_modifier(Modifier::BOLD),
                 ))
-                .style(Style::default().bg(bg_color)),
+                .style(Style::default().bg(style.bg_color)),
         )
         .highlight_style(
             Style::default()
-                .bg(highlight_bg)
-                .fg(highlight_fg)
+                .bg(style.highlight_bg)
+                .fg(style.highlight_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -782,17 +786,20 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         format!(" @{} ", app.ui.at_popup_filter)
     };
 
+    let popup_style = PopupStyle {
+        title_color: t.md_h1,
+        border_color: t.md_h1,
+        bg_color: t.bg_primary,
+        highlight_bg: t.md_h1,
+        highlight_fg: t.bg_primary,
+    };
     draw_popup_list(
         f,
         input_area,
         items,
         &labels,
         title,
-        t.md_h1,
-        t.md_h1,
-        t.bg_primary,
-        t.md_h1,
-        t.bg_primary,
+        &popup_style,
         selected,
         8,
     );
@@ -841,17 +848,20 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
     } else {
         format!(" {} ", app.ui.file_popup_filter)
     };
+    let popup_style = PopupStyle {
+        title_color: t.md_h1,
+        border_color: t.md_h1,
+        bg_color: t.bg_primary,
+        highlight_bg: t.md_h1,
+        highlight_fg: t.bg_primary,
+    };
     draw_popup_list(
         f,
         input_area,
         items,
         &labels,
         title,
-        t.md_h1,
-        t.md_h1,
-        t.bg_primary,
-        t.md_h1,
-        t.bg_primary,
+        &popup_style,
         selected,
         8,
     );
@@ -898,17 +908,20 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
     } else {
         format!(" {} ", app.ui.skill_popup_filter)
     };
+    let popup_style = PopupStyle {
+        title_color: t.md_h1,
+        border_color: t.md_h1,
+        bg_color: t.bg_primary,
+        highlight_bg: t.md_h1,
+        highlight_fg: t.bg_primary,
+    };
     draw_popup_list(
         f,
         input_area,
         items,
         &labels,
         title,
-        t.md_h1,
-        t.md_h1,
-        t.bg_primary,
-        t.md_h1,
-        t.bg_primary,
+        &popup_style,
         selected,
         8,
     );
@@ -978,17 +991,20 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
     } else {
         format!(" {} ", app.ui.command_popup_filter)
     };
+    let popup_style = PopupStyle {
+        title_color: t.md_h1,
+        border_color: t.md_h1,
+        bg_color: t.bg_primary,
+        highlight_bg: t.md_h1,
+        highlight_fg: t.bg_primary,
+    };
     draw_popup_list(
         f,
         input_area,
         items,
         &labels,
         title,
-        t.md_h1,
-        t.md_h1,
-        t.bg_primary,
-        t.md_h1,
-        t.bg_primary,
+        &popup_style,
         selected,
         8,
     );

@@ -52,7 +52,11 @@ pub fn key_combo(keys: &[String]) -> Result<(), AicError> {
             flags |= resolve_modifier(k)?;
         } else {
             // Non-modifier before the last position — treat last as main key
-            main_key = Some(keys.last().unwrap().as_str());
+            main_key = Some(
+                keys.last()
+                    .expect("keys is non-empty: we are iterating over it")
+                    .as_str(),
+            );
             // All others before it that are modifiers already handled
             break;
         }

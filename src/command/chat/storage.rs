@@ -861,6 +861,8 @@ mod tests {
 
     impl Drop for TempDataDir {
         fn drop(&mut self) {
+            // SAFETY: 测试用 Drop，仅在测试串行执行期间恢复 J_DATA_PATH 环境变量；
+            // 测试加锁保证此刻无其他线程读写该 env
             unsafe {
                 match &self.prev {
                     Some(v) => std::env::set_var("J_DATA_PATH", v),

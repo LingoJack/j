@@ -576,6 +576,7 @@ fn draw_tab_global_lines<'a>(
             if field.is_none() {
                 continue;
             }
+            // SAFETY: is_none() 已在上方判断并 continue，此处 field 必为 Some
             let field_name = field.unwrap();
 
             field_line_indices.push(lines.len());

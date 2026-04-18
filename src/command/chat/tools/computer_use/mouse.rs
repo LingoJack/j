@@ -132,7 +132,8 @@ pub fn scroll(dx: i32, dy: i32, at: Option<(f64, f64)>) -> Result<(), AicError> 
         thread::sleep(Duration::from_millis(10));
     }
 
-    // kCGScrollEventUnitLine = 0, kCGEventTapLocationHID = 0
+    // SAFETY: CGEventCreateScrollWheelEvent / CGEventPost / CFRelease 均为 macOS CoreGraphics
+    // 线程安全 C API，传入参数均为值类型或已验证的非空指针
     unsafe {
         let event = CGEventCreateScrollWheelEvent(
             std::ptr::null(),

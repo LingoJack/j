@@ -613,7 +613,7 @@ pub fn call_openai_stream(
 
 /// 清理 API 响应 body 用于错误消息：剥离 HTML 标签，截断超长内容
 fn sanitize_api_body(body: &str) -> String {
-    let max_len = 500;
+    let max_len = crate::command::chat::constants::API_ERROR_BODY_MAX_LEN;
     let truncated = &body[..body.len().min(max_len)];
     // 剥离 HTML 标签
     let mut result = String::with_capacity(truncated.len());
