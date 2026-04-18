@@ -1,6 +1,8 @@
 use super::super::permission::JcliConfig;
 use super::super::storage::ChatMessage;
 use crate::util::log::{write_error_log, write_info_log};
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
@@ -87,13 +89,27 @@ impl HookEvent {
     }
 }
 
-/// Hook 定义（YAML 兼容）：一条 shell 命令 + 超时秒数
+/// Shell hook 失败时的处理策略
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum OnError {
+    /// 记录错误日志后继续执行后续 hook（默认）
+    #[default]
+    Skip,
+    /// 立即中止整条 hook 链
+    Abort,
+}
+
+/// Hook 定义（YAML 兼容）：一条 shell 命令 + 超时秒数 + 失败策略
 /// 仅用于从 YAML 文件反序列化，内部使用 HookKind
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookDef {
     pub command: String,
     #[serde(default = "default_timeout")]
     pub timeout: u64,
+    /// 脚本失败时的处理策略（默认 skip）
+    #[serde(default)]
+    pub on_error: OnError,
 }
 
 fn default_timeout() -> u64 {
@@ -111,11 +127,12 @@ pub enum HookKind {
     Builtin(BuiltinHook),
 }
 
-/// Shell hook：一条命令 + 超时
+/// Shell hook：一条命令 + 超时 + 失败策略
 #[derive(Debug, Clone)]
 pub struct ShellHook {
     pub command: String,
     pub timeout: u64,
+    pub on_error: OnError,
 }
 
 impl From<HookDef> for ShellHook {
@@ -123,6 +140,7 @@ impl From<HookDef> for ShellHook {
         ShellHook {
             command: def.command,
             timeout: def.timeout,
+            on_error: def.on_error,
         }
     }
 }
@@ -160,6 +178,7 @@ impl std::fmt::Debug for HookKind {
                 .debug_struct("HookKind::Shell")
                 .field("command", &shell.command)
                 .field("timeout", &shell.timeout)
+                .field("on_error", &shell.on_error)
                 .finish(),
             HookKind::Builtin(builtin) => f
                 .debug_struct("HookKind::Builtin")
@@ -283,9 +302,6 @@ pub struct HookResult {
     /// 中止当前操作（Pre* 事件中有效）
     #[serde(default)]
     pub abort: bool,
-    // MVP 保留字段，暂不支持
-    #[serde(default)]
-    pub _switch_model: Option<String>,
 }
 
 // ========== HookManager ==========
@@ -316,6 +332,10 @@ pub struct HookEntry {
     pub label: String,
     /// Shell hook 的超时秒数
     pub timeout: Option<u64>,
+    /// Shell hook 的失败策略
+    pub on_error: Option<OnError>,
+    /// Session hook 在该 event 下的局部索引（仅 session 来源有值，用于 remove 操作）
+    pub session_index: Option<usize>,
 }
 
 impl HookManager {
@@ -463,6 +483,8 @@ impl HookManager {
                         source: HOOK_SOURCE_BUILTIN,
                         label: hook_label(hook),
                         timeout: hook_timeout(hook),
+                        on_error: hook_on_error(hook),
+                        session_index: None,
                     });
                 }
             }
@@ -473,6 +495,8 @@ impl HookManager {
                         source: HOOK_SOURCE_USER,
                         label: hook_label(hook),
                         timeout: hook_timeout(hook),
+                        on_error: hook_on_error(hook),
+                        session_index: None,
                     });
                 }
             }
@@ -483,16 +507,20 @@ impl HookManager {
                         source: HOOK_SOURCE_PROJECT,
                         label: hook_label(hook),
                         timeout: hook_timeout(hook),
+                        on_error: hook_on_error(hook),
+                        session_index: None,
                     });
                 }
             }
             if let Some(hooks) = self.session_hooks.get(event) {
-                for hook in hooks {
+                for (idx, hook) in hooks.iter().enumerate() {
                     result.push(HookEntry {
                         event: *event,
                         source: HOOK_SOURCE_SESSION,
                         label: hook_label(hook),
                         timeout: hook_timeout(hook),
+                        on_error: hook_on_error(hook),
+                        session_index: Some(idx),
                     });
                 }
             }
@@ -624,17 +652,25 @@ impl HookManager {
                     }
                 }
                 Err(e) => {
-                    // Shell hook 非零退出 / 超时 → 视为 abort
-                    // Builtin hook 不应失败，但以防万一也统一处理
+                    // Shell hook 非零退出 / 超时 → 按 on_error 策略处理
+                    // Builtin hook 失败一律 abort（内置 hook 失败是真正的错误）
                     let hook_label = hook_label(hook);
                     write_error_log(
                         "HookManager::execute",
                         &format!("Hook 执行失败 ({}): {}", hook_label, e),
                     );
-                    return Some(HookResult {
-                        abort: true,
-                        ..Default::default()
-                    });
+                    match hook_on_error_strategy(hook) {
+                        OnError::Abort => {
+                            return Some(HookResult {
+                                abort: true,
+                                ..Default::default()
+                            });
+                        }
+                        OnError::Skip => {
+                            // 记录日志后继续执行后续 hook
+                            continue;
+                        }
+                    }
                 }
             }
         }
@@ -669,7 +705,7 @@ fn execute_hook(kind: &HookKind, context: &HookContext) -> Result<HookResult, St
 /// - stdin: HookContext JSON
 /// - stdout: HookResult JSON（可为空字符串/空 JSON `{}`，表示无修改）
 /// - exit 0: 成功
-/// - exit ≠0: 视为失败（调用方将其当作 abort）
+/// - exit ≠0: 视为失败（调用方按 on_error 策略处理）
 /// - 超时: kill 子进程，返回 Err
 fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookResult, String> {
     let context_json =
@@ -689,53 +725,62 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
         .spawn()
         .map_err(|e| format!("启动 hook 进程失败: {}", e))?;
 
-    // 写入 stdin
+    // 保存 PID 用于超时 kill
+    let pid = child.id();
+
+    // 写入 stdin 后关闭（drop stdin handle）
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(context_json.as_bytes());
     }
 
-    // 等待完成（带超时）
+    // 子线程中 wait_with_output（阻塞等待进程退出 + 一次性读取 stdout/stderr）
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+
     let timeout = std::time::Duration::from_secs(hook.timeout);
-    let start = std::time::Instant::now();
-
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if !status.success() {
-                    return Err(format!("Hook 退出码: {:?}", status.code()));
-                }
-
-                let output = child
-                    .wait_with_output()
-                    .map_err(|e| format!("读取输出失败: {}", e))?;
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stdout = stdout.trim();
-
-                if stdout.is_empty() || stdout == "{}" {
-                    return Ok(HookResult::default());
-                }
-
-                let result: HookResult = serde_json::from_str(stdout)
-                    .map_err(|e| format!("解析 hook 输出 JSON 失败: {} (输出: {})", e, stdout))?;
-
+    match rx.recv_timeout(timeout) {
+        Ok(Ok(output)) => {
+            // 捕获 stderr 并记录日志
+            let stderr_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if !stderr_str.is_empty() {
                 write_info_log(
                     "execute_shell_hook",
-                    &format!("Hook 完成 (cmd: {}), abort={}", hook.command, result.abort),
+                    &format!("Hook stderr ({}): {}", hook.command, stderr_str),
                 );
+            }
 
-                return Ok(result);
-            }
-            Ok(None) => {
-                // 进程还在运行
-                if start.elapsed() > timeout {
-                    let _ = child.kill();
-                    return Err(format!("Hook 超时 ({}s): {}", hook.timeout, hook.command));
+            if !output.status.success() {
+                let mut err = format!("Hook 退出码: {:?}", output.status.code());
+                if !stderr_str.is_empty() {
+                    err.push_str(&format!(", stderr: {}", stderr_str));
                 }
-                std::thread::sleep(std::time::Duration::from_millis(50));
+                return Err(err);
             }
-            Err(e) => {
-                return Err(format!("等待 hook 进程失败: {}", e));
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stdout = stdout.trim();
+
+            if stdout.is_empty() || stdout == "{}" {
+                return Ok(HookResult::default());
             }
+
+            let result: HookResult = serde_json::from_str(stdout)
+                .map_err(|e| format!("解析 hook 输出 JSON 失败: {} (输出: {})", e, stdout))?;
+
+            write_info_log(
+                "execute_shell_hook",
+                &format!("Hook 完成 (cmd: {}), abort={}", hook.command, result.abort),
+            );
+
+            Ok(result)
+        }
+        Ok(Err(e)) => Err(format!("等待 hook 进程失败: {}", e)),
+        Err(_) => {
+            // 超时：通过 PID 发送 SIGKILL 终止进程
+            let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
+            Err(format!("Hook 超时 ({}s): {}", hook.timeout, hook.command))
         }
     }
 }
@@ -755,6 +800,22 @@ fn hook_timeout(kind: &HookKind) -> Option<u64> {
     match kind {
         HookKind::Shell(shell) => Some(shell.timeout),
         HookKind::Builtin(_) => None,
+    }
+}
+
+/// 获取 hook 的失败策略（用于 list 展示，Shell 返回配置值，Builtin 为 None）
+fn hook_on_error(kind: &HookKind) -> Option<OnError> {
+    match kind {
+        HookKind::Shell(shell) => Some(shell.on_error),
+        HookKind::Builtin(_) => None,
+    }
+}
+
+/// 获取 hook 执行失败时的实际策略（Shell 按配置，Builtin 一律 Abort）
+fn hook_on_error_strategy(kind: &HookKind) -> OnError {
+    match kind {
+        HookKind::Shell(shell) => shell.on_error,
+        HookKind::Builtin(_) => OnError::Abort,
     }
 }
 
@@ -790,6 +851,7 @@ mod tests {
         let def = HookDef {
             command: "echo test".to_string(),
             timeout: 5,
+            on_error: OnError::Skip,
         };
         let kind = HookKind::from(def);
         match kind {
@@ -844,6 +906,7 @@ mod tests {
         let hook = ShellHook {
             command: r#"echo '{"user_input": "hooked"}'"#.to_string(),
             timeout: 5,
+            on_error: OnError::Skip,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -860,6 +923,7 @@ mod tests {
         let hook = ShellHook {
             command: "echo ''".to_string(),
             timeout: 5,
+            on_error: OnError::Skip,
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx).unwrap();
@@ -872,6 +936,7 @@ mod tests {
         let hook = ShellHook {
             command: "exit 1".to_string(),
             timeout: 5,
+            on_error: OnError::Skip,
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx);
@@ -883,6 +948,7 @@ mod tests {
         let hook = ShellHook {
             command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_input": "got_input"}'"#.to_string(),
             timeout: 5,
+            on_error: OnError::Skip,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -947,6 +1013,7 @@ mod tests {
             HookDef {
                 command: r#"echo '{"user_input": "session_hooked"}'"#.to_string(),
                 timeout: 5,
+                on_error: OnError::Skip,
             },
         );
 
@@ -1018,6 +1085,7 @@ mod tests {
             HookDef {
                 command: r#"echo '{"user_input": "session_overridden"}'"#.to_string(),
                 timeout: 5,
+                on_error: OnError::Skip,
             },
         );
 
@@ -1043,6 +1111,7 @@ mod tests {
             HookDef {
                 command: "echo test".to_string(),
                 timeout: 5,
+                on_error: OnError::Skip,
             },
         );
         assert_eq!(manager.list_hooks().len(), 1);
@@ -1063,6 +1132,7 @@ mod tests {
             HookDef {
                 command: r#"echo '{"user_input": "first"}'"#.to_string(),
                 timeout: 5,
+                on_error: OnError::Skip,
             },
         );
         manager.register_session_hook(
@@ -1070,6 +1140,7 @@ mod tests {
             HookDef {
                 command: r#"echo '{"user_input": "second"}'"#.to_string(),
                 timeout: 5,
+                on_error: OnError::Skip,
             },
         );
 
@@ -1095,8 +1166,9 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "exit 1".to_string(), // 非零退出 → abort
+                command: "exit 1".to_string(), // 非零退出 + on_error=abort → 中止链
                 timeout: 5,
+                on_error: OnError::Abort,
             },
         );
         manager.register_session_hook(
@@ -1104,6 +1176,7 @@ mod tests {
             HookDef {
                 command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
                 timeout: 5,
+                on_error: OnError::Skip,
             },
         );
 
@@ -1130,5 +1203,192 @@ mod tests {
         // HookManager 的 Clone 依赖 BuiltinHook 的 Clone（通过 Arc）
         let cloned = manager.clone();
         assert_eq!(cloned.list_hooks().len(), 1);
+    }
+
+    #[test]
+    fn test_on_error_skip_continues_chain() {
+        // on_error=skip 时，第一个 hook 失败不影响后续 hook 执行
+        let mut manager = HookManager::default();
+
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: "exit 1".to_string(), // 失败
+                timeout: 5,
+                on_error: OnError::Skip, // 但 skip → 继续
+            },
+        );
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: r#"echo '{"user_input": "survived"}'"#.to_string(),
+                timeout: 5,
+                on_error: OnError::Skip,
+            },
+        );
+
+        let result = manager
+            .execute(
+                HookEvent::PreSendMessage,
+                HookContext {
+                    event: HookEvent::PreSendMessage,
+                    user_input: Some("original".to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        // 第二个 hook 应正常执行
+        assert!(!result.abort);
+        assert_eq!(result.user_input.as_deref(), Some("survived"));
+    }
+
+    #[test]
+    fn test_on_error_abort_stops_chain() {
+        // on_error=abort 时，失败的 hook 中止整条链
+        let mut manager = HookManager::default();
+
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: "exit 1".to_string(),
+                timeout: 5,
+                on_error: OnError::Abort,
+            },
+        );
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
+                timeout: 5,
+                on_error: OnError::Skip,
+            },
+        );
+
+        let result = manager
+            .execute(
+                HookEvent::PreSendMessage,
+                HookContext {
+                    event: HookEvent::PreSendMessage,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert!(result.abort);
+        assert!(result.user_input.is_none());
+    }
+
+    #[test]
+    fn test_on_error_default_is_skip() {
+        // HookDef 不设 on_error 时，YAML 反序列化应默认为 skip
+        let yaml = r#"command: "exit 1"
+timeout: 5"#;
+        let def: HookDef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(def.on_error, OnError::Skip);
+    }
+
+    #[test]
+    fn test_on_error_yaml_parsing() {
+        // 验证 on_error 字段能正确从 YAML 反序列化
+        let yaml_skip = r#"command: "echo test"
+on_error: skip"#;
+        let def: HookDef = serde_yaml::from_str(yaml_skip).unwrap();
+        assert_eq!(def.on_error, OnError::Skip);
+
+        let yaml_abort = r#"command: "echo test"
+on_error: abort"#;
+        let def: HookDef = serde_yaml::from_str(yaml_abort).unwrap();
+        assert_eq!(def.on_error, OnError::Abort);
+    }
+
+    #[test]
+    fn test_shell_hook_stderr_captured() {
+        // 验证 stderr 输出不会导致死锁，且进程正常完成
+        let hook = ShellHook {
+            command: r#"echo '{"user_input": "ok"}'; echo "debug info" >&2"#.to_string(),
+            timeout: 5,
+            on_error: OnError::Skip,
+        };
+        let ctx = HookContext {
+            event: HookEvent::PreSendMessage,
+            user_input: Some("test".to_string()),
+            ..Default::default()
+        };
+        let result = execute_shell_hook(&hook, &ctx).unwrap();
+        assert_eq!(result.user_input.as_deref(), Some("ok"));
+    }
+
+    #[test]
+    fn test_shell_hook_stderr_in_error() {
+        // 验证失败时 stderr 内容包含在错误信息中
+        let hook = ShellHook {
+            command: r#"echo "something went wrong" >&2; exit 1"#.to_string(),
+            timeout: 5,
+            on_error: OnError::Skip,
+        };
+        let ctx = HookContext::default();
+        let result = execute_shell_hook(&hook, &ctx);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("stderr:"), "错误信息应包含 stderr: {}", err);
+        assert!(
+            err.contains("something went wrong"),
+            "错误信息应包含 stderr 内容: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_hook_entry_session_index() {
+        // 验证 list_hooks 为 session hook 返回正确的局部索引
+        let mut manager = HookManager::default();
+
+        // 注册 builtin hook（不应有 session_index）
+        manager.register_builtin(HookEvent::PreSendMessage, "test", |_| None);
+
+        // 注册两个 session hook
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: "echo first".to_string(),
+                timeout: 5,
+                on_error: OnError::Skip,
+            },
+        );
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                command: "echo second".to_string(),
+                timeout: 5,
+                on_error: OnError::Abort,
+            },
+        );
+
+        let hooks = manager.list_hooks();
+        assert_eq!(hooks.len(), 3);
+
+        // builtin hook 无 session_index
+        assert_eq!(hooks[0].source, "builtin");
+        assert!(hooks[0].session_index.is_none());
+        assert!(hooks[0].on_error.is_none());
+
+        // 第一个 session hook
+        assert_eq!(hooks[1].source, "session");
+        assert_eq!(hooks[1].session_index, Some(0));
+        assert_eq!(hooks[1].on_error, Some(OnError::Skip));
+
+        // 第二个 session hook
+        assert_eq!(hooks[2].source, "session");
+        assert_eq!(hooks[2].session_index, Some(1));
+        assert_eq!(hooks[2].on_error, Some(OnError::Abort));
+    }
+
+    #[test]
+    fn test_switch_model_field_removed() {
+        // 验证旧脚本返回 _switch_model 字段时不会报错（serde 静默忽略未知字段）
+        let json = r#"{"user_input": "test", "_switch_model": "gpt-4"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.user_input.as_deref(), Some("test"));
     }
 }

@@ -29,7 +29,10 @@ RegisterHook action="list"
 # 注册 hook
 RegisterHook event="pre_send_message" command="echo '{\"user_input\": \"[modified]\"}'" timeout=10
 
-# 移除 hook
+# 注册 hook（失败时中止链）
+RegisterHook event="pre_tool_execution" command="./guard.sh" on_error="abort"
+
+# 移除 hook（使用 list 中的 session_idx）
 RegisterHook action="remove" event="pre_send_message" index=0
 ```
 
@@ -55,6 +58,7 @@ pre_tool_execution:
         echo '{}'
       fi
     timeout: 10
+    on_error: abort  # 此 hook 失败时中止操作（默认为 skip）
 ```
 
 ## 脚本协议
@@ -74,7 +78,7 @@ pre_tool_execution:
 | stdin | HookContext JSON |
 | stdout | HookResult JSON（空或 `{}` 表示无修改） |
 | exit 0 | 成功 |
-| exit 非 0 | 视为 abort |
+| exit 非 0 | 按 `on_error` 策略处理（默认 `skip`：记录日志继续；`abort`：中止链） |
 
 ### stdin HookContext 示例
 
@@ -158,4 +162,6 @@ Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
 - 先用 Write/Bash 工具创建脚本文件，再用 RegisterHook 注册
 - 脚本必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
 - timeout 默认 10 秒，超时后脚本被 kill
+- `on_error` 默认 `skip`（记录日志继续），设为 `abort` 则脚本失败时中止整条 hook 链
 - 只有 session 级 hook 可通过工具管理；用户级/项目级需手动编辑配置文件
+- 移除 hook 时，使用 `list` 输出中的 `session_idx` 作为 `index` 参数

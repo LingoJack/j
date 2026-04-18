@@ -1,4 +1,4 @@
-use crate::command::chat::hook::{HookDef, HookEvent, HookManager};
+use crate::command::chat::hook::{HookDef, HookEvent, HookManager, OnError};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -22,9 +22,12 @@ struct RegisterHookParams {
     /// Timeout in seconds (default 10)
     #[serde(default)]
     timeout: Option<u64>,
-    /// Index of the hook to remove (required for remove)
+    /// Index of the session hook to remove (required for remove). Use session_idx from list output.
     #[serde(default)]
     index: Option<usize>,
+    /// Error handling strategy: "skip" (default, log and continue) or "abort" (stop hook chain)
+    #[serde(default)]
+    on_error: Option<String>,
 }
 
 fn default_action() -> String {
@@ -88,7 +91,11 @@ impl Tool for RegisterHookTool {
                 _ => {
                     let event = params.event.as_deref().unwrap_or("?");
                     let command = params.command.as_deref().unwrap_or("?");
-                    format!("Register hook: event={}, command={}", event, command)
+                    let on_error = params.on_error.as_deref().unwrap_or("skip");
+                    format!(
+                        "Register hook: event={}, command={}, on_error={}",
+                        event, command, on_error
+                    )
                 }
             }
         } else {
@@ -121,7 +128,8 @@ impl RegisterHookTool {
 - 环境变量：JCLI_HOOK_EVENT（事件名）、JCLI_CWD（当前目录）
 - stdin：HookContext JSON
 - stdout：HookResult JSON（只返回要修改的字段，空/`{}` 表示无修改）
-- exit 0 = 成功，非零 = abort
+- exit 0 = 成功，非零 = 失败（按 on_error 策略处理：skip=记录日志继续，abort=中止整条链）
+- on_error 默认 "skip"：脚本失败时不中断操作，仅记录错误日志
 
 ## stdin HookContext JSON 结构
 ```json
@@ -187,7 +195,9 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
 - 先用 Write/Bash 工具创建脚本文件，再用本工具注册
 - 脚本必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
 - timeout 默认 10 秒，超时后脚本被 kill
-- 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑配置文件"#
+- on_error 默认 "skip"（记录日志继续），设为 "abort" 则脚本失败时中止整条 hook 链
+- 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑配置文件
+- 移除 hook 时，使用 list 输出中的 session_idx 作为 index 参数"#
                 .to_string(),
             is_error: false,
                     images: vec![],
@@ -234,9 +244,20 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
 
         let timeout = params.timeout.unwrap_or(10);
 
+        let on_error = match params.on_error.as_deref() {
+            Some("abort") => OnError::Abort,
+            _ => OnError::Skip, // 默认 skip
+        };
+
+        let on_error_str = match on_error {
+            OnError::Skip => "skip",
+            OnError::Abort => "abort",
+        };
+
         let hook_def = HookDef {
             command: command.clone(),
             timeout,
+            on_error,
         };
 
         match self.hook_manager.lock() {
@@ -244,8 +265,8 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                 manager.register_session_hook(event, hook_def);
                 ToolResult {
                     output: format!(
-                        "已注册 session hook: event={}, command={}, timeout={}s",
-                        event_str, command, timeout
+                        "已注册 session hook: event={}, command={}, timeout={}s, on_error={}",
+                        event_str, command, timeout, on_error_str
                     ),
                     is_error: false,
                     images: vec![],
@@ -280,13 +301,26 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         .timeout
                         .map(|t| format!("{}s", t))
                         .unwrap_or_else(|| "-".to_string());
+                    let on_error_str = entry
+                        .on_error
+                        .map(|e| match e {
+                            OnError::Skip => "skip",
+                            OnError::Abort => "abort",
+                        })
+                        .unwrap_or("-");
+                    let session_idx_str = entry
+                        .session_index
+                        .map(|idx| format!(", session_idx={}", idx))
+                        .unwrap_or_default();
                     output.push_str(&format!(
-                        "  [{}] event={}, source={}, label={}, timeout={}\n",
+                        "  [{}] event={}, source={}{}, label={}, timeout={}, on_error={}\n",
                         i,
                         entry.event.as_str(),
                         entry.source,
+                        session_idx_str,
                         entry.label,
-                        timeout_str
+                        timeout_str,
+                        on_error_str,
                     ));
                 }
                 ToolResult {

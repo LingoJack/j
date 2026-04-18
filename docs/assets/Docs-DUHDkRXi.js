@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-C1Mmnm2p.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CovCmUJ0.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -373,7 +373,10 @@ RegisterHook action="list"
 # Register a hook
 RegisterHook event="pre_send_message" command="echo '{\\"user_input\\": \\"[modified]\\"}'" timeout=10
 
-# Remove a hook
+# Register a hook (abort on failure)
+RegisterHook event="pre_tool_execution" command="./guard.sh" on_error="abort"
+
+# Remove a hook (use session_idx from list output)
 RegisterHook action="remove" event="pre_send_message" index=0
 \`\`\`
 
@@ -399,6 +402,7 @@ pre_tool_execution:
         echo '{}'
       fi
     timeout: 10
+    on_error: abort  # Abort the chain if this hook fails (default: skip)
 \`\`\`
 
 ## Script Protocol
@@ -418,7 +422,7 @@ pre_tool_execution:
 | stdin | HookContext JSON |
 | stdout | HookResult JSON (empty or \`{}\` means no modification) |
 | exit 0 | Success |
-| exit non-zero | Treated as abort |
+| exit non-zero | Handled per \`on_error\` strategy (default \`skip\`: log and continue; \`abort\`: stop chain) |
 
 ### stdin HookContext Example
 
@@ -502,7 +506,9 @@ During chain execution, the previous hook's output updates the context for the n
 - Create script files with Write/Bash tools first, then register with RegisterHook
 - Scripts must read from stdin (at least \`cat > /dev/null\`) to avoid SIGPIPE
 - Default timeout is 10 seconds; scripts are killed on timeout
+- \`on_error\` defaults to \`skip\` (log and continue); set to \`abort\` to stop the hook chain on failure
 - Only session-level hooks can be managed via tool; user/project levels require manual config editing
+- When removing hooks, use the \`session_idx\` from list output as the \`index\` parameter
 `,S=e({default:()=>C}),C=`## One-click Install (Recommended)
 
 \`\`\`bash
@@ -1901,7 +1907,10 @@ RegisterHook action="list"
 # 注册 hook
 RegisterHook event="pre_send_message" command="echo '{\\"user_input\\": \\"[modified]\\"}'" timeout=10
 
-# 移除 hook
+# 注册 hook（失败时中止链）
+RegisterHook event="pre_tool_execution" command="./guard.sh" on_error="abort"
+
+# 移除 hook（使用 list 中的 session_idx）
 RegisterHook action="remove" event="pre_send_message" index=0
 \`\`\`
 
@@ -1927,6 +1936,7 @@ pre_tool_execution:
         echo '{}'
       fi
     timeout: 10
+    on_error: abort  # 此 hook 失败时中止操作（默认为 skip）
 \`\`\`
 
 ## 脚本协议
@@ -1946,7 +1956,7 @@ pre_tool_execution:
 | stdin | HookContext JSON |
 | stdout | HookResult JSON（空或 \`{}\` 表示无修改） |
 | exit 0 | 成功 |
-| exit 非 0 | 视为 abort |
+| exit 非 0 | 按 \`on_error\` 策略处理（默认 \`skip\`：记录日志继续；\`abort\`：中止链） |
 
 ### stdin HookContext 示例
 
@@ -2030,7 +2040,9 @@ Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
 - 先用 Write/Bash 工具创建脚本文件，再用 RegisterHook 注册
 - 脚本必须从 stdin 读取（至少 \`cat > /dev/null\`），否则可能 SIGPIPE
 - timeout 默认 10 秒，超时后脚本被 kill
+- \`on_error\` 默认 \`skip\`（记录日志继续），设为 \`abort\` 则脚本失败时中止整条 hook 链
 - 只有 session 级 hook 可通过工具管理；用户级/项目级需手动编辑配置文件
+- 移除 hook 时，使用 \`list\` 输出中的 \`session_idx\` 作为 \`index\` 参数
 `,pe=e({default:()=>me}),me=`## 一键安装（推荐）
 
 \`\`\`bash

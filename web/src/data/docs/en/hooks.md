@@ -29,7 +29,10 @@ RegisterHook action="list"
 # Register a hook
 RegisterHook event="pre_send_message" command="echo '{\"user_input\": \"[modified]\"}'" timeout=10
 
-# Remove a hook
+# Register a hook (abort on failure)
+RegisterHook event="pre_tool_execution" command="./guard.sh" on_error="abort"
+
+# Remove a hook (use session_idx from list output)
 RegisterHook action="remove" event="pre_send_message" index=0
 ```
 
@@ -55,6 +58,7 @@ pre_tool_execution:
         echo '{}'
       fi
     timeout: 10
+    on_error: abort  # Abort the chain if this hook fails (default: skip)
 ```
 
 ## Script Protocol
@@ -74,7 +78,7 @@ pre_tool_execution:
 | stdin | HookContext JSON |
 | stdout | HookResult JSON (empty or `{}` means no modification) |
 | exit 0 | Success |
-| exit non-zero | Treated as abort |
+| exit non-zero | Handled per `on_error` strategy (default `skip`: log and continue; `abort`: stop chain) |
 
 ### stdin HookContext Example
 
@@ -158,4 +162,6 @@ During chain execution, the previous hook's output updates the context for the n
 - Create script files with Write/Bash tools first, then register with RegisterHook
 - Scripts must read from stdin (at least `cat > /dev/null`) to avoid SIGPIPE
 - Default timeout is 10 seconds; scripts are killed on timeout
+- `on_error` defaults to `skip` (log and continue); set to `abort` to stop the hook chain on failure
 - Only session-level hooks can be managed via tool; user/project levels require manual config editing
+- When removing hooks, use the `session_idx` from list output as the `index` parameter
