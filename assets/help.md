@@ -1,10 +1,10 @@
-# work-copilot (j) — 快捷命令行工具 🚀
+# work-copilot (j) — 快捷命令行工具
 
 > 一条命令打开一切，高效管理日常工作流
 
 ---
 
-## 🚀 快速上手
+## 快速上手
 
 ```bash
 # 注册应用别名
@@ -35,7 +35,7 @@ j
 
 ---
 
-## 📦 别名管理
+## 别名管理
 
 | 命令 | 说明 |
 |------|------|
@@ -44,7 +44,7 @@ j
 | `j rename <alias> <new>` | 重命名别名（同步更新所有分类引用） |
 | `j mf <alias> <new_path>` | 修改别名指向的路径 |
 
-## 🏷️ 分类标记
+## 分类标记
 
 | 命令 | 说明 |
 |------|------|
@@ -56,7 +56,7 @@ j
 > 标记为 browser 后可以用 `j <browser> <url>` 打开链接或搜索
 > 标记为 editor 后可以用 `j <editor> <file>` 打开文件
 
-## 📋 列表 & 查找
+## 列表 & 查找
 
 | 命令 | 说明 |
 |------|------|
@@ -66,7 +66,7 @@ j
 | `j contain <alias>` | 在所有分类中查找别名 |
 | `j contain <alias> <sections>` | 在指定分类中查找（逗号分隔） |
 
-## 🚀 打开
+## 打开
 
 | 命令 | 说明 |
 |------|------|
@@ -77,7 +77,7 @@ j
 
 > **智能识别**：CLI 可执行文件在当前终端执行（支持管道），GUI 应用(.app)用系统打开
 
-## 📝 日报系统
+## 日报系统
 
 | 命令 | 说明 |
 |------|------|
@@ -96,7 +96,7 @@ j
 > 自定义路径: `j config report week_report <path>`
 > 配置远程仓库: `j reportctl set-url <repo_url>`
 
-## 📋 待办备忘录
+## 待办备忘录
 
 | 命令 | 说明 |
 |------|------|
@@ -137,7 +137,7 @@ j
 
 > 数据存储路径: `~/.jdata/report/todo.json`
 
-## 📜 脚本 & ⏳ 倒计时
+## 脚本 & 倒计时
 
 | 命令 | 说明 |
 |------|------|
@@ -155,8 +155,8 @@ j
 
 ```bash
 #!/bin/bash
-# 已注册: chrome → /Applications/Google Chrome.app
-# 已注册: my-tool → /usr/local/bin/my-tool
+# 已注册: chrome -> /Applications/Google Chrome.app
+# 已注册: my-tool -> /usr/local/bin/my-tool
 
 open -a "$J_CHROME" https://example.com
 "$J_MY_TOOL" --version
@@ -165,31 +165,70 @@ open -a "$J_CHROME" https://example.com
 > 覆盖 section: `path`、`inner_url`、`outer_url`、`script`
 > 路径含空格时，脚本中必须用双引号包裹变量：`"$J_CHROME"` 而非 `$J_CHROME`
 
-## ⚙️ 系统设置
+## Markdown 笔记本
+
+| 命令 | 说明 |
+|------|------|
+| `j md` / `j notebook` | 进入 TUI 笔记管理界面（全屏交互） |
+| `j nb` | 同上（别名） |
+| `j md <title>` | 打开指定笔记（不存在则新建） |
+| `j md list` | 列出所有笔记 |
+| `j md search <keyword>` | 搜索笔记（标题+内容） |
+| `j md delete <title>` | 删除笔记 |
+| `j md open <title>` | 在系统文件管理器中打开笔记所在目录 |
+| `j md rename <old> <new>` | 重命名笔记 |
+| `j md mkdir <dir>` | 创建子目录 |
+| `j md mv <src> <dest>` | 移动笔记到新路径 |
+
+### TUI 界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `↓` / `j` / `n` | 向下移动 |
+| `↑` / `k` / `N` | 向上移动 |
+| `Enter` / `e` | 编辑选中笔记（打开内置 Markdown 编辑器） |
+| `a` | 新建笔记（输入标题后打开编辑器） |
+| `d` | 删除笔记（需确认） |
+| `r` | 重命名笔记 |
+| `p` | 全屏预览模式 |
+| `/` | 打开命令面板（搜索/重命名/删除/新建目录/移动/调整比例/帮助） |
+| `s` | 刷新笔记列表 |
+| `y` | 复制笔记名到剪切板 |
+| `o` | 在系统文件管理器中打开笔记目录 |
+| `[` / `]` | 缩小/放大左侧面板比例（每次 5%） |
+| `Tab` | 展开/折叠目录 |
+| `Esc` | 退出（有搜索过滤时先清除过滤） |
+| `?` | 查看帮助 |
+
+> 笔记存储路径: `~/.jdata/notebook/`，支持子目录组织
+> 使用内置 Markdown 编辑器编辑，支持语法高亮和实时预览
+
+## 系统设置
 
 | 命令 | 说明 |
 |------|------|
 | `j log mode <verbose/concise>` | 设置日志模式 |
 | `j config <section> <field> <val>` | 直接修改配置字段 |
 | `j clear` | 清屏 |
-| `j version` | 版本信息 |
-| `j help` | 帮助信息 |
-| `j exit` | 退出（交互模式，或按 `Ctrl+Q` / `Ctrl+D`） |
-| `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash） |
-| `j update` | 更新到最新版本（自动检测安装来源） |
+| `j version` / `j v` | 版本信息 |
+| `j help` / `j h` | 帮助信息 |
+| `j exit` / `j q` / `j quit` | 退出（交互模式，或按 `Ctrl+Q` / `Ctrl+D`） |
+| `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash/fish） |
+| `j update` / `j up` | 更新到最新版本（自动检测安装来源） |
 | `j update --check` | 仅检查是否有新版本 |
+| `j system` / `j ps` | 查看系统信息 |
 
 ---
 
-## 🤖 AI 对话
+## AI 对话
 
 | 命令 | 说明 |
 |------|------|
 | `j chat` / `j ai` | 进入 TUI 对话界面（全屏交互） |
-| `j chat 你好` / `j ai 你好` | 进入对话并发送首条消息 |
+| `j chat 你好` / `j ai 你好` | 快速发送消息并打印回复（oneshot 模式） |
 | `j ai --remote` | 启用远程控制模式（手机扫码控制） |
 | `j ai --remote --port 8080` | 指定远程控制端口（默认 9390） |
-| `j ai -c` | 延续上一个会话 |
+| `j ai -c` | 延续上一个会话（oneshot 模式） |
 | `j ai --session <id>` | 指定会话 ID 继续 |
 
 ### 远程控制模式
@@ -208,7 +247,7 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 ### 配置
 
-首次运行 `j chat` 时，若尚未配置模型提供方，会自动进入内置配置界面完成初始配置。已有配置后，也可随时在对话界面中按 **Ctrl+E** 重新编辑。
+首次运行 `j chat` 时，若尚未配置模型提供方，会自动进入内置配置界面完成初始配置。已有配置后，也可随时在对话界面中按 **Ctrl+E** 或输入 `/config` 重新编辑。
 
 配置文件路径: `~/.jdata/agent/data/agent_config.json`（也可手动编辑）
 
@@ -231,11 +270,11 @@ j ai -c --remote           # 延续会话 + 远程控制
 }
 ```
 
-> 支持配置多个模型提供方，可在对话中通过 `Ctrl+T` 切换
+> 支持配置多个模型提供方，可在对话中切换
 
 ### 配置界面
 
-按 `Ctrl+E` 进入可视化配置界面，可编辑模型提供方和全局设置：
+按 `Ctrl+E` 或输入 `/config` 进入可视化配置界面，可编辑模型提供方、会话管理和全局设置：
 
 | 按键 | 功能 |
 |------|------|
@@ -250,10 +289,11 @@ j ai -c --remote           # 延续会话 + 远程控制
 | `Esc` | 保存配置并返回对话 |
 
 > `stream_mode` 和 `theme` 字段直接按 `Enter` 切换，无需手动输入
+> 配置界面包含多个 Tab 页：Provider 编辑、会话管理（Session）、Teammate 管理
 
 ### 主题风格
 
-支持以下主题（在配置界面中选中 `theme` 字段按 `Enter` 循环切换）：
+支持以下主题（输入 `/theme` 切换或在配置界面中修改）：
 
 | 主题 | 说明 |
 |------|------|
@@ -269,23 +309,56 @@ j ai -c --remote           # 延续会话 + 远程控制
 | 按键 | 功能 |
 |------|------|
 | `Enter` | 发送消息 |
-| `↑` / `↓` | 滚动对话记录 |
-| `PageUp` / `PageDown` | 快速滚动（10行） |
+| `Shift+Enter` / `Alt+Enter` | 插入换行符（多行输入） |
+| `↑` / `↓` | 滚动对话记录（多行输入时移动光标） |
+| `PageUp` / `PageDown` | 快速滚动 |
 | `←` / `→` | 移动输入光标 |
 | `Home` / `End` | 跳到输入行首/行尾 |
-| `Ctrl+T` | 切换模型提供方 |
-| `Ctrl+L` | 归档当前对话（保存并清空） |
-| `Ctrl+R` | 还原归档对话 |
+| `Backspace` / `Delete` | 删除字符 |
 | `Ctrl+Y` | 复制最后一条 AI 回复 |
 | `Ctrl+B` | 进入消息浏览模式 |
-| `Ctrl+S` | 切换流式/整体输出 |
-| `Ctrl+E` | 打开配置界面（可视化编辑模型配置） |
-| `?` | 显示帮助 |
-| `Esc` / `Ctrl+C` | 退出对话 |
+| `Ctrl+G` | 打开日志窗口 |
+| `Ctrl+O` | 切换工具详情展开/折叠 |
+| `Ctrl+E` | 打开配置界面 |
+| `F1` / `?`（输入框为空时） | 显示帮助 |
+| `Esc` | 取消当前流式输出 / 退出对话 |
+| `Ctrl+C` | 强制退出对话 |
+
+### 斜杠命令（/ 命令）
+
+在输入框中输入 `/` 即可唤起斜杠命令弹窗，支持模糊过滤：
+
+| 命令 | 说明 |
+|------|------|
+| `/copy` | 复制最后一条 AI 回复 |
+| `/log` | 打开日志窗口 |
+| `/browse` | 浏览历史消息 |
+| `/config` | 打开配置界面 |
+| `/model` | 切换模型 |
+| `/archive` | 归档当前对话 |
+| `/clear` | 新建对话（清空当前会话） |
+| `/theme` | 切换主题 |
+| `/resume` | 恢复历史会话 |
+| `/dump` | 导出真实传给 AI 的 system prompt 和 messages |
+| `/dump-processed` | 导出经处理管线后的最终请求数据 |
+| `/teammate` | 打开 Teammate 面板 |
+
+### @ 补全系统
+
+在输入框中输入 `@` 唤起补全弹窗，支持多种引用类型：
+
+| 输入 | 补全类型 | 说明 |
+|------|----------|------|
+| `@` | 混合列表 | 弹出分类入口（skill:、command:、file:）及匹配项 |
+| `@skill:` | 技能补全 | 从已安装技能中搜索并补全 |
+| `@command:` | 命令补全 | 从内置命令中搜索并补全 |
+| `@file:` | 文件补全 | 从当前工作目录搜索文件路径，支持目录导航 |
+
+> 补全弹窗操作：`↑↓` 选择、`Tab`/`Enter` 确认、`Esc` 取消、`Backspace` 回退、`空格` 关闭弹窗
 
 ### 消息浏览模式
 
-按 `Ctrl+B` 进入浏览模式，可选中任意历史消息并复制到剪切板：
+按 `Ctrl+B` 或输入 `/browse` 进入浏览模式，可选中任意历史消息并复制到剪切板：
 
 | 按键 | 功能 |
 |------|------|
@@ -300,41 +373,67 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 对话支持归档和还原，方便保存有价值的对话历史：
 
-**归档对话（Ctrl+L）**：
-- 按下 `Ctrl+L` 后，当前对话会被保存到归档
-- 默认归档名称格式：`archive-YYYY-MM-DD`（如 `archive-2026-02-25`）
+**归档对话（/archive）**：
+- 输入 `/archive` 后确认，当前对话会被保存到归档
+- 默认归档名称格式：`archive-YYYY-MM-DD`
 - 如果同名归档已存在，自动添加后缀（如 `archive-2026-02-25(1)`）
 - 归档后当前会话自动清空
 
-**还原归档（Ctrl+R）**：
-- 按下 `Ctrl+R` 进入归档列表
-- 使用 `↑` / `↓` 或 `j` / `k` 选择归档
-- 按 `Enter` 还原选中的归档
-- 按 `d` 删除选中的归档
-- 按 `Esc` 取消返回
+**恢复会话（/resume）**：
+- 输入 `/resume` 进入会话列表
+- 使用 `↑` / `↓` 或 `j` / `k` 选择历史会话
+- 按 `Enter` 恢复选中的会话
 
-**归档存储位置**：`~/.j/chat/archives/`
+### Teammate 系统
+
+Teammate 是多个并行运行的子 Agent，每个有独立的 system prompt 和消息历史。可通过 `/teammate` 或配置界面（Ctrl+E → Teammates Tab）管理。
+
+- **创建 Teammate**：在 Teammates 面板中新增，指定名称、角色和初始任务
+- **通信方式**：Teammate 之间通过 `@mentions` 广播消息
+- **使用场景**：全栈开发（前端 + 后端 + 运维）、多领域并行研究、多角色协作
+
+### Agent 工具（高级）
+
+AI 对话内置以下高级工具，支持复杂的多步骤任务：
+
+| 工具 | 功能 |
+|------|------|
+| `Agent` | 启动子 Agent 自主处理多步骤任务（独立上下文） |
+| `AgentTeam` | 批量创建多个 Teammate 并行协作 |
+| `Task` | 管理任务（create/get/list/update），支持依赖关系 |
+| `TodoWrite` | 创建和管理结构化待办列表（跨多轮对话） |
+| `TodoRead` | 读取当前待办列表 |
+| `EnterPlanMode` / `ExitPlanMode` | 进入/退出计划模式（只读探索后设计实现方案） |
+| `EnterWorktree` / `ExitWorktree` | 创建/退出隔离的 git worktree（避免多会话编辑冲突） |
+| `Compact` | 触发对话压缩以释放上下文窗口 |
+| `LoadSkill` | 加载指定技能到上下文 |
+| `RegisterHook` | 注册/管理 session 级 hook |
+
+> Agent/AgentTeam 启动的子 Agent 拥有独立的上下文窗口，避免干扰主对话
 
 ### 功能特性
 
 - **Markdown 渲染**：AI 回复支持标题、加粗、斜体、行内代码、代码块（语法高亮）、列表、表格、引用块
 - **代码高亮**：支持 Rust、Python、JavaScript/TypeScript、Go、Java、Bash/Shell、C/C++、SQL、Ruby 等语言
-- **流式/整体输出**：默认流式逐字输出，可通过 `Ctrl+S` 切换为等待完整回复后再显示
-- **对话持久化**：对话自动保存到 `~/.jdata/agent/data/chat_session.json`，重启后恢复
-- **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时切换
+- **流式/整体输出**：默认流式逐字输出，可在配置界面切换
+- **对话持久化**：对话自动保存到 `~/.jdata/agent/data/sessions/`，重启后恢复
+- **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时通过 `/model` 切换
 - **工具调用**：支持 Function Calling，AI 可执行 shell 命令和读取文件（危险命令需确认）
-- **Context Compact**：三层对话压缩机制，自动管理上下文窗口
+- **Context Compact**：三层对话压缩机制（rolling window + micro_compact + auto_compact），自动管理上下文窗口
+- **多行输入**：支持 `Shift+Enter` / `Alt+Enter` 插入换行符，多行输入时方向键移动光标
+- **@ 引用系统**：支持引用技能（`@skill:`）、命令（`@command:`）、文件（`@file:`）到对话中
+- **斜杠命令**：输入 `/` 弹出命令面板，快速执行操作
 
-## 🛠️ AI 工具 & 权限
+## AI 工具 & 权限
 
 ### 内置工具
 
 | 工具名 | 功能 | 需确认 |
 |--------|------|--------|
-| `Bash` | 执行 shell 命令；`run_in_background: true` 时后台执行并返回 task_id | ✅ |
-| `Read` | 读取本地文件（支持行号范围） | |
-| `Write` | 写入文件（自动创建目录） | ✅ |
-| `Edit` | 编辑文件（精确字符串替换） | ✅ |
+| `Bash` | 执行 shell 命令；`run_in_background: true` 时后台执行并返回 task_id | Yes |
+| `Read` | 读取本地文件（支持行号范围，可读取图片） | |
+| `Write` | 写入文件（自动创建目录） | Yes |
+| `Edit` | 编辑文件（精确字符串替换） | Yes |
 | `Glob` | 按模式匹配搜索文件名 | |
 | `Grep` | 正则搜索文件内容 | |
 | `Ask` | 向用户提结构化选择题 | |
@@ -345,13 +444,19 @@ j ai -c --remote           # 延续会话 + 远程控制
 | `LoadSkill` | 加载指定技能到上下文 | |
 | `Compact` | 触发对话压缩以释放上下文窗口 | |
 | `Task` | 管理任务（create/get/list/update）；`action` 字段区分操作 | |
-| `RegisterHook` | 注册/管理 session 级 hook | ✅ |
+| `RegisterHook` | 注册/管理 session 级 hook | Yes |
+| `Agent` | 启动子 Agent 自主处理多步骤任务 | |
+| `AgentTeam` | 批量创建多个 Teammate 并行协作 | |
+| `TodoWrite` | 创建/更新结构化待办列表 | |
+| `TodoRead` | 读取当前待办列表 | |
+| `EnterPlanMode` / `ExitPlanMode` | 进入/退出计划模式 | |
+| `EnterWorktree` / `ExitWorktree` | 创建/退出 git worktree | |
 
-**`web_fetch` 参数**：`url`（必需）、`extract_mode`（markdown/text）、`max_chars`、`authorization`、`headers`
+**`WebFetch` 参数**：`url`（必需）、`extract_mode`（markdown/text）、`max_chars`、`authorization`、`headers`
 
-**`web_search` 参数**：`query`（必需）、`count`（默认5）、`country`（默认CN）、`search_lang`、`freshness`（pd/pw/pm/py）
+**`WebSearch` 参数**：`query`（必需）、`count`（默认5）、`type`（auto/keyword/neural）
 
-**`browser` action**：`start` `stop` `status` `tabs` `open` `navigate` `screenshot`(CDP) `snapshot` `content` `close` `click`(CDP) `type`(CDP) `press`(CDP) `evaluate`(CDP)
+**`Browser` action**：`start` `stop` `status` `tabs` `open` `navigate` `screenshot`(CDP) `snapshot` `content` `close` `click`(CDP) `type`(CDP) `press`(CDP) `evaluate`(CDP)
 
 > **Lite 模式**（默认）：基于 HTTP 请求，无需安装 Chrome。**CDP 模式**：需 `--features browser_cdp` 编译，支持截图、点击、输入、JS 执行。
 
@@ -385,7 +490,7 @@ deny:
 
 > `deny` 优先于 `allow`。无 `.jcli/` 目录时保持默认行为（需确认的工具弹确认框）
 
-## 🧩 Skill 技能系统
+## Skill 技能系统
 
 在 `~/.jdata/agent/skills/` 下创建 skill 目录，AI 通过 `load_skill` 工具按需加载技能。
 
@@ -408,13 +513,14 @@ EOF
 
 | 操作 | 说明 |
 |------|------|
-| 输入 `@` | 弹出技能选择列表（支持过滤） |
+| 输入 `@` | 弹出混合选择列表（含 skill: 分类入口） |
+| `@skill:` | 直接弹出技能选择列表（支持过滤） |
 | `↑↓` 选择 + `Tab/Enter` | 补全技能名称 |
-| `@skill 参数` + 发送 | AI 从 skills 摘要识别后调用 `load_skill` |
+| AI 自动调用 `load_skill` | 从 skills 摘要识别后自动加载 |
 
 > Skill 目录支持 `references/` 子目录存放参考文件，会自动附加到上下文
 
-## 📄 AGENT.md 项目指令
+## AGENT.md 项目指令
 
 AGENT.md 是项目级指令系统，让 AI 在每次对话中自动加载项目约定，确保长上下文中始终遵循项目规范。
 
@@ -441,7 +547,7 @@ EOF
 cat > AGENT.local.md << 'EOF'
 # 个人偏好
 ...
-EOF'
+EOF
 ```
 
 **加载优先级**（后者覆盖前者）：
@@ -457,7 +563,7 @@ EOF'
 > 每个文件上限 200 行 / 25KB。项目级指令自动带有 OVERRIDE 强制力，优先于默认行为。
 > 在对话配置界面（Ctrl+E）中选择 "AGENT.md" 字段可编辑用户级指令。
 
-## 🪝 AI Hook
+## AI Hook
 
 Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
 
@@ -465,7 +571,7 @@ Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
 2. **项目级**：`.jcli/hooks.yaml` — 项目目录下生效
 3. **Session 级**：通过 `register_hook` 工具由 AI 动态注册 — 仅当前会话
 
-**执行顺序**：用户级 → 项目级 → Session 级，链式执行。任何 `abort` 立即中止。
+**执行顺序**：用户级 -> 项目级 -> Session 级，链式执行。任何 `abort` 立即中止。
 
 **可用事件**：
 
@@ -495,7 +601,7 @@ session_start:
 
 ---
 
-## 🔄 安装 & 更新
+## 安装 & 更新
 
 ### 一键安装（推荐）
 ```bash
@@ -514,7 +620,7 @@ j update               # 自动检测安装来源并更新
 j update --check       # 仅检查是否有新版本
 ```
 
-## 🗑️ 卸载
+## 卸载
 
 ```bash
 # 使用安装脚本卸载（推荐）
@@ -531,7 +637,7 @@ rm -rf ~/.jdata
 
 ---
 
-## 💡 使用技巧
+## 使用技巧
 
 - 不带参数运行 `j` 进入**交互模式**，支持 Tab 补全和历史建议
 - 交互模式下按 `Ctrl+Q` 快速退出（等同于 `exit` 命令或 `Ctrl+D`）
@@ -542,3 +648,6 @@ rm -rf ~/.jdata
 - CLI 工具（如 rg、fzf）注册后可直接在终端执行并支持管道
 - 脚本需要后台运行时，使用 `-w` 标志在新窗口中执行（如 `j deploy -w`）
 - 启用 shell Tab 补全：`eval "$(j completion zsh)"` 加入 `.zshrc`
+- AI 对话中输入 `/` 唤起斜杠命令面板，快速执行常用操作
+- AI 对话中输入 `@` 唤起补全弹窗，引用技能、命令或文件
+- 使用 `j md` 管理笔记，支持子目录、Markdown 编辑和实时预览
