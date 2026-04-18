@@ -1,77 +1,12 @@
 [
   {
     "id": "1",
-    "content": "读取 ui_state.rs - ChatMode, ConfigTab 枚举定义",
+    "content": "重命名文件去掉序号前缀",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "读取 action.rs - Action 枚举",
+    "content": "重写 hook.md 内容，串联 hook 事件的先后顺序",
     "status": "completed"
-  },
-  {
-    "id": "3",
-    "content": "读取 handler/chat.rs - Chat 模式按键处理",
-    "status": "completed"
-  },
-  {
-    "id": "4",
-    "content": "读取 handler/config.rs - 配置界面按键处理",
-    "status": "completed"
-  },
-  {
-    "id": "5",
-    "content": "读取 handler/browse.rs - 浏览模式",
-    "status": "completed"
-  },
-  {
-    "id": "6",
-    "content": "读取 handler/archive.rs - 归档模式",
-    "status": "completed"
-  },
-  {
-    "id": "7",
-    "content": "读取 handler/tool_confirm.rs - 工具确认模式",
-    "status": "completed"
-  },
-  {
-    "id": "8",
-    "content": "读取 handler/tui_loop.rs - TUI 主循环",
-    "status": "completed"
-  },
-  {
-    "id": "9",
-    "content": "读取 autocomplete.rs - 斜杠命令定义",
-    "status": "in_progress"
-  },
-  {
-    "id": "10",
-    "content": "读取 oneshot.rs - oneshot 模式 CLI 参数",
-    "status": "pending"
-  },
-  {
-    "id": "11",
-    "content": "读取 theme 相关文件 - 所有主题名称",
-    "status": "pending"
-  },
-  {
-    "id": "12",
-    "content": "读取 compact.rs - 压缩机制",
-    "status": "pending"
-  },
-  {
-    "id": "13",
-    "content": "读取 tools/definition.rs - 工具定义",
-    "status": "pending"
-  },
-  {
-    "id": "14",
-    "content": "读取 handler.rs - 入口",
-    "status": "completed"
-  },
-  {
-    "id": "15",
-    "content": "汇总整理结构化输出",
-    "status": "pending"
   }
 ]
