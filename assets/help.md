@@ -82,6 +82,7 @@ j
 | 命令 | 说明 |
 |------|------|
 | `j report <content>` | 写入日报（自动追加日期前缀） |
+| `j report` | 打开内置编辑器写日报（带最近几行上下文） |
 | `j reportctl new [date]` | 开启新的一周（周数+1） |
 | `j reportctl sync [date]` | 同步周数和日期 |
 | `j reportctl push [msg]` | 推送周报到远程 git 仓库 |
@@ -89,6 +90,7 @@ j
 | `j reportctl set-url [url]` | 设置/查看 git 仓库地址 |
 | `j reportctl open` | 用内置 TUI 编辑器打开日报文件全文编辑 |
 | `j check [N]` | 查看日报最近 N 行（默认 10） |
+| `j check open` | 直接打开日报全文编辑 |
 | `j search <N/all> <kw>` | 在日报中搜索关键字 |
 | `j search <N/all> <kw> -f` | 模糊搜索（大小写不敏感） |
 
@@ -142,10 +144,10 @@ j
 | 命令 | 说明 |
 |------|------|
 | `j script <name> "<content>"` | 创建脚本并注册为别名（保存到 `~/.jdata/scripts/`） |
-| `j script <name>` | 脚本已存在时打开 TUI 编辑器修改脚本内容 |
+| `j script <name>` | 打开 TUI 编辑器创建或编辑脚本 |
 | `j <script> [args...]` | 在当前终端执行脚本 |
 | `j <script> -w [args...]` | 在**新终端窗口**中执行脚本 |
-| `j time countdown <duration>` | 启动倒计时（支持 30s / 5m / 1h） |
+| `j time countdown <duration>` | 启动倒计时（支持 `30s` / `5m` / `1h`，不带单位默认按分钟） |
 
 > `-w` 或 `--new-window` 标志可让脚本在新终端窗口中执行，用于需要后台运行的场景
 
@@ -438,6 +440,7 @@ AI 对话内置以下高级工具，支持复杂的多步骤任务：
 | `Compact` | 触发对话压缩以释放上下文窗口 |
 | `LoadSkill` | 加载指定技能到上下文 |
 | `RegisterHook` | 注册/管理 session 级 hook |
+| `ComputerUse` | 控制 macOS 桌面：截屏、点击、输入、滚动、查 Accessibility 树 |
 
 > Agent/AgentTeam 启动的子 Agent 拥有独立的上下文窗口，避免干扰主对话
 
@@ -470,6 +473,7 @@ AI 对话内置以下高级工具，支持复杂的多步骤任务：
 | `WebFetch` | 获取网页内容并转为 Markdown/纯文本 | |
 | `WebSearch` | 使用 Exa Search API 搜索网络 | |
 | `Browser` | 浏览器自动化（CDP + Lite fallback） | |
+| `ComputerUse` | 控制 macOS 桌面（截图、点击、输入、滚动、AX 查询） | Yes |
 | `TaskOutput` | 查询后台任务输出（`Bash run_in_background` 产生的任务），支持阻塞等待 | |
 | `LoadSkill` | 加载指定技能到上下文 | |
 | `Compact` | 触发对话压缩以释放上下文窗口 | |
@@ -480,13 +484,15 @@ AI 对话内置以下高级工具，支持复杂的多步骤任务：
 | `TodoWrite` | 创建/更新结构化待办列表 | |
 | `TodoRead` | 读取当前待办列表 | |
 | `EnterPlanMode` / `ExitPlanMode` | 进入/退出计划模式 | |
-| `EnterWorktree` / `ExitWorktree` | 创建/退出 git worktree | |
+| `EnterWorktree` / `ExitWorktree` | 创建/退出 git worktree | Yes |
 
 **`WebFetch` 参数**：`url`（必需）、`extract_mode`（markdown/text）、`max_chars`、`authorization`、`headers`
 
 **`WebSearch` 参数**：`query`（必需）、`count`（默认5）、`type`（auto/keyword/neural）
 
 **`Browser` action**：`start` `stop` `status` `tabs` `open` `navigate` `screenshot`(CDP) `snapshot` `content` `close` `click`(CDP) `type`(CDP) `press`(CDP) `evaluate`(CDP)
+
+**`ComputerUse` action**：`screenshot` `click` `doubleclick` `rightclick` `type` `key` `key_combo` `scroll` `drag` `ax_tree` `find_element` `focus_app` `cursor_position`
 
 > **Lite 模式**（默认）：基于 HTTP 请求，无需安装 Chrome。**CDP 模式**：需 `--features browser_cdp` 编译，支持截图、点击、输入、JS 执行。
 
@@ -522,7 +528,12 @@ deny:
 
 ## Skill 技能系统
 
-在 `~/.jdata/agent/skills/` 下创建 skill 目录，AI 通过 `load_skill` 工具按需加载技能。
+Skill 支持两级目录：
+
+- 用户级：`~/.jdata/agent/skills/`
+- 项目级：`.jcli/skills/`（同名时覆盖用户级）
+
+AI 通过 `load_skill` 工具按需加载技能。
 
 **创建 Skill**：
 
@@ -549,6 +560,33 @@ EOF
 | AI 自动调用 `load_skill` | 从 skills 摘要识别后自动加载 |
 
 > Skill 目录支持 `references/` 子目录存放参考文件，会自动附加到上下文
+
+## Commands 自定义命令
+
+除了 Skill，还支持自定义命令模板：
+
+- 用户级：`~/.jdata/agent/commands/`
+- 项目级：`.jcli/commands/`（同名时覆盖用户级）
+
+**创建方式**：
+
+```bash
+mkdir -p ~/.jdata/agent/commands/review
+cat > ~/.jdata/agent/commands/review/COMMAND.md << 'EOF'
+---
+name: review
+description: 代码审查模板
+---
+
+请以 code review 模式检查当前改动，优先找 bug、回归风险和遗漏测试。
+EOF
+```
+
+**使用方式**：
+
+- 在对话中输入 `@command:` 唤起补全
+- 选择后会把命令正文展开到输入内容中
+- 配置界面的 `Commands` Tab 可启用/禁用命令
 
 ## AGENT.md 项目指令
 

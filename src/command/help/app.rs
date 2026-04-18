@@ -36,7 +36,7 @@ const TAB_DEFS: &[TabDef] = &[
     },
     TabDef {
         name: "Hook & Skill",
-        heading_keywords: &["AI Hook", "Skill"],
+        heading_keywords: &["AGENT.md", "AI Hook", "Skill", "Commands"],
     },
     TabDef {
         name: "安装 & 技巧",
