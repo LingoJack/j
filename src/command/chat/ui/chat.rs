@@ -623,8 +623,11 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 }
 
-/// 弹窗样式参数
-struct PopupStyle {
+/// 弹窗配置参数（样式 + 行为）
+struct PopupConfig {
+    title: String,
+    selected: usize,
+    max_visible: usize,
     title_color: ratatui::style::Color,
     border_color: ratatui::style::Color,
     bg_color: ratatui::style::Color,
@@ -638,16 +641,13 @@ fn draw_popup_list(
     input_area: Rect,
     items: Vec<ListItem<'static>>,
     item_labels: &[String],
-    title: String,
-    style: &PopupStyle,
-    selected: usize,
-    max_visible: usize,
+    cfg: &PopupConfig,
 ) {
     if items.is_empty() {
         return;
     }
     let item_count = items.len();
-    let visible_count = item_count.min(max_visible);
+    let visible_count = item_count.min(cfg.max_visible);
     let popup_height = (visible_count as u16) + 2; // +2 for border
     let max_popup_width = (input_area.width as usize).saturating_sub(2).max(16);
     let popup_width = item_labels
@@ -670,26 +670,26 @@ fn draw_popup_list(
     let popup_area = Rect::new(x, y, popup_width, popup_height);
 
     let mut list_state = ListState::default();
-    list_state.select(Some(selected.min(item_count.saturating_sub(1))));
+    list_state.select(Some(cfg.selected.min(item_count.saturating_sub(1))));
 
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(style.border_color))
+                .border_style(Style::default().fg(cfg.border_color))
                 .title(Span::styled(
-                    title,
+                    &cfg.title,
                     Style::default()
-                        .fg(style.title_color)
+                        .fg(cfg.title_color)
                         .add_modifier(Modifier::BOLD),
                 ))
-                .style(Style::default().bg(style.bg_color)),
+                .style(Style::default().bg(cfg.bg_color)),
         )
         .highlight_style(
             Style::default()
-                .bg(style.highlight_bg)
-                .fg(style.highlight_fg)
+                .bg(cfg.highlight_bg)
+                .fg(cfg.highlight_fg)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -786,23 +786,17 @@ pub fn draw_at_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
         format!(" @{} ", app.ui.at_popup_filter)
     };
 
-    let popup_style = PopupStyle {
+    let cfg = PopupConfig {
+        title,
+        selected,
+        max_visible: 8,
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
         highlight_bg: t.md_h1,
         highlight_fg: t.bg_primary,
     };
-    draw_popup_list(
-        f,
-        input_area,
-        items,
-        &labels,
-        title,
-        &popup_style,
-        selected,
-        8,
-    );
+    draw_popup_list(f, input_area, items, &labels, &cfg);
 }
 
 /// 绘制文件补全弹窗（输入区域上方浮动）
@@ -848,23 +842,17 @@ pub fn draw_file_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) 
     } else {
         format!(" {} ", app.ui.file_popup_filter)
     };
-    let popup_style = PopupStyle {
+    let cfg = PopupConfig {
+        title,
+        selected,
+        max_visible: 8,
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
         highlight_bg: t.md_h1,
         highlight_fg: t.bg_primary,
     };
-    draw_popup_list(
-        f,
-        input_area,
-        items,
-        &labels,
-        title,
-        &popup_style,
-        selected,
-        8,
-    );
+    draw_popup_list(f, input_area, items, &labels, &cfg);
 }
 
 /// 绘制技能补全弹窗（输入区域上方浮动）
@@ -908,23 +896,17 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
     } else {
         format!(" {} ", app.ui.skill_popup_filter)
     };
-    let popup_style = PopupStyle {
+    let cfg = PopupConfig {
+        title,
+        selected,
+        max_visible: 8,
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
         highlight_bg: t.md_h1,
         highlight_fg: t.bg_primary,
     };
-    draw_popup_list(
-        f,
-        input_area,
-        items,
-        &labels,
-        title,
-        &popup_style,
-        selected,
-        8,
-    );
+    draw_popup_list(f, input_area, items, &labels, &cfg);
 }
 
 pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
@@ -991,23 +973,17 @@ pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatAp
     } else {
         format!(" {} ", app.ui.command_popup_filter)
     };
-    let popup_style = PopupStyle {
+    let cfg = PopupConfig {
+        title,
+        selected,
+        max_visible: 8,
         title_color: t.md_h1,
         border_color: t.md_h1,
         bg_color: t.bg_primary,
         highlight_bg: t.md_h1,
         highlight_fg: t.bg_primary,
     };
-    draw_popup_list(
-        f,
-        input_area,
-        items,
-        &labels,
-        title,
-        &popup_style,
-        selected,
-        8,
-    );
+    draw_popup_list(f, input_area, items, &labels, &cfg);
 }
 
 /// 绘制 / 斜杠命令弹窗（输入区域上方浮动）
@@ -1077,14 +1053,16 @@ pub fn draw_slash_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
         input_area,
         items,
         &labels,
-        title,
-        t.md_h1,
-        t.md_h1,
-        t.bg_primary,
-        t.md_h1,
-        t.bg_primary,
-        selected,
-        8,
+        &PopupConfig {
+            title,
+            selected,
+            max_visible: 8,
+            title_color: t.md_h1,
+            border_color: t.md_h1,
+            bg_color: t.bg_primary,
+            highlight_bg: t.md_h1,
+            highlight_fg: t.bg_primary,
+        },
     );
 }
 

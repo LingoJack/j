@@ -91,7 +91,7 @@ fn extract_header<'a>(request: &'a str, header_name: &str) -> Option<&'a str> {
 async fn handle_connection(
     stream: TcpStream,
     token: &str,
-    mut ws_state: WsConnectionState,
+    ws_state: WsConnectionState,
     expected_origin: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 先 peek 请求头判断是 HTTP 还是 WS 升级

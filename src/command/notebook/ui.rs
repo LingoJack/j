@@ -608,36 +608,42 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             render_input_status_bar(
                 f,
                 area,
-                "新建目录",
-                Color::Cyan,
-                &app.input,
-                app.cursor_pos,
-                "输入目录名…",
-                "Enter 确认 | Esc 取消",
+                &InputStatusBarParams {
+                    label: "新建目录",
+                    label_color: Color::Cyan,
+                    input: &app.input,
+                    cursor_pos: app.cursor_pos,
+                    placeholder: "输入目录名…",
+                    hint: "Enter 确认 | Esc 取消",
+                },
             );
         }
         AppMode::Mv => {
             render_input_status_bar(
                 f,
                 area,
-                "移动笔记",
-                Color::Magenta,
-                &app.input,
-                app.cursor_pos,
-                "输入目标路径…",
-                "Enter 确认 | Esc 取消",
+                &InputStatusBarParams {
+                    label: "移动笔记",
+                    label_color: Color::Magenta,
+                    input: &app.input,
+                    cursor_pos: app.cursor_pos,
+                    placeholder: "输入目标路径…",
+                    hint: "Enter 确认 | Esc 取消",
+                },
             );
         }
         AppMode::Search => {
             render_input_status_bar(
                 f,
                 area,
-                "搜索",
-                Color::Cyan,
-                &app.input,
-                app.cursor_pos,
-                "输入关键词…",
-                "Enter 搜索 | Esc 取消",
+                &InputStatusBarParams {
+                    label: "搜索",
+                    label_color: Color::Cyan,
+                    input: &app.input,
+                    cursor_pos: app.cursor_pos,
+                    placeholder: "输入关键词…",
+                    hint: "Enter 搜索 | Esc 取消",
+                },
             );
         }
         AppMode::ConfirmDelete => {
@@ -682,24 +688,28 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             render_input_status_bar(
                 f,
                 area,
-                "命令面板",
-                Color::Magenta,
-                &app.cmd_popup_filter,
-                app.cmd_popup_filter.chars().count(),
-                "输入筛选…",
-                "↑↓ 选择 | Enter 确认 | Esc 取消",
+                &InputStatusBarParams {
+                    label: "命令面板",
+                    label_color: Color::Magenta,
+                    input: &app.cmd_popup_filter,
+                    cursor_pos: app.cmd_popup_filter.chars().count(),
+                    placeholder: "输入筛选…",
+                    hint: "↑↓ 选择 | Enter 确认 | Esc 取消",
+                },
             );
         }
         AppMode::RatioInput => {
             render_input_status_bar(
                 f,
                 area,
-                "比例",
-                Color::Yellow,
-                &app.input,
-                app.cursor_pos,
-                "20:80",
-                "如 20:80",
+                &InputStatusBarParams {
+                    label: "比例",
+                    label_color: Color::Yellow,
+                    input: &app.input,
+                    cursor_pos: app.cursor_pos,
+                    placeholder: "20:80",
+                    hint: "如 20:80",
+                },
             );
         }
         _ => {

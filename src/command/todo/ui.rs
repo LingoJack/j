@@ -581,10 +581,10 @@ fn render_input_status_bar(f: &mut ratatui::Frame, area: Rect, params: &InputSta
     f.render_widget(status, area);
 
     // 设置终端光标位置
-    let cursor_x_offset = if input.is_empty() {
+    let cursor_x_offset = if params.input.is_empty() {
         0
     } else {
-        let chars_before_cursor: String = input.chars().take(cursor_pos).collect();
+        let chars_before_cursor: String = params.input.chars().take(params.cursor_pos).collect();
         unicode_width::UnicodeWidthStr::width(chars_before_cursor.as_str())
     };
     let cursor_x = area.x + 1 + label_width as u16 + cursor_x_offset as u16;

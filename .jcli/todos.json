@@ -1,57 +1,32 @@
 [
   {
-    "id": "1",
-    "content": "检查 mod.rs 模式（规范6：弃用 mod.rs）",
+    "id": "fix1",
+    "content": "修复 todo/ui.rs:584",
     "status": "completed"
   },
   {
-    "id": "2",
-    "content": "检查 unwrap()/expect() 滥用（规范3：错误处理）",
+    "id": "fix2",
+    "content": "修复 chat/ui/chat.rs:1075 — draw_popup_list 调用处参数未更新",
     "status": "completed"
   },
   {
-    "id": "3",
-    "content": "检查 utils 模块（规范6：去 utils 化）",
+    "id": "fix3",
+    "content": "修复 notebook/ui.rs 调用处参数",
     "status": "completed"
   },
   {
-    "id": "4",
-    "content": "检查 pub 成员文档注释（规范8：文档）",
+    "id": "fix4",
+    "content": "修复 server.rs:94 mut ws_state",
     "status": "completed"
   },
   {
-    "id": "5",
-    "content": "检查命名规范（规范1：PascalCase/snake_case）",
-    "status": "completed"
+    "id": "fix5",
+    "content": "验证 cargo clippy 通过",
+    "status": "pending"
   },
   {
-    "id": "6",
-    "content": "检查 .clone() 滥用（规范2：内存与性能）",
-    "status": "completed"
-  },
-  {
-    "id": "7",
-    "content": "检查函数参数过多（规范7：单一职责）",
-    "status": "completed"
-  },
-  {
-    "id": "8",
-    "content": "检查 clippy 告警（规范1）",
-    "status": "completed"
-  },
-  {
-    "id": "9",
-    "content": "检查魔法值（规范7：魔法值提取）",
-    "status": "completed"
-  },
-  {
-    "id": "11",
-    "content": "检查 unsafe 使用（规范8）",
-    "status": "completed"
-  },
-  {
-    "id": "10",
-    "content": "汇总报告",
-    "status": "completed"
+    "id": "fix6",
+    "content": "修复 draw_popup_list too_many_arguments warning",
+    "status": "in_progress"
   }
 ]
