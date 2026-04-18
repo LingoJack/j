@@ -947,9 +947,12 @@ fn dump_current_request(app: &mut ChatApp, processed: bool) {
 
     // 写入处理管线说明
     if processed {
-        let pipeline_info = "处理管线: rolling window (select_messages) → micro_compact → PreLlmRequest hooks → sanitize_messages\n\
-             注意: auto_compact 需要 API 调用，未在此处执行。\n\
-             PreLlmRequest hooks 已执行（含内置 hooks: tasks_status, background_status, session_state, teammates_status, todo_nag）。\n";
+        let pipeline_info = "处理管线: window.select_messages (三阶段: 时间保底 → 豁免保底 → 比例配额+溢出) → micro_compact → PreLlmRequest hooks → sanitize_messages\n\
+             - window: 最近 keep_recent*2 个 unit 无条件保留；含豁免工具 (LoadSkill/Task/Todo/Ask/...) 的 ToolGroup 优先保留；剩余预算按 User:AsstText:ToolGroup = 35:25:40 分配，tier 间有溢出。\n\
+             - micro_compact: 将旧 tool result (>800 chars) 替换为 [Previous: used X]，最近 keep_recent 个保留原样，豁免工具不压缩。\n\
+             - PreLlmRequest hooks 已执行（含内置 hooks: tasks_status, background_status, session_state, teammates_status, todo_nag）。\n\
+             - sanitize_messages: 移除孤立的 tool_call / tool result。\n\
+             注意: auto_compact (LLM 摘要) 需要 API 调用，未在此处执行。\n";
         let _ = std::fs::write(dump_dir.join("pipeline.txt"), pipeline_info);
     }
 
