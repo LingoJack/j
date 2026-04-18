@@ -724,7 +724,8 @@ pub async fn run_agent_loop(
                         write_info_log("agent_loop", "fallback tool_calls 为空列表，break 'round");
                         break 'round;
                     }
-                    let assistant_text = fallback_result.content.clone().unwrap_or_default();
+                    let assistant_text: String =
+                        fallback_result.content.clone().unwrap_or_default();
                     match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
                         Ok(result) => {
                             // ── Layer 3: compact tool 触发 ──
@@ -744,6 +745,7 @@ pub async fn run_agent_loop(
                                     "agent_loop",
                                     "Clearing context after plan approval",
                                 );
+                                // TODO 这里怎么能直接这样粗暴清空.... 你要有优先级去保留，起码用户消息是要保留的，参考 micro_compact 的处理
                                 messages.clear();
                                 if let Ok(mut shared) = shared_messages.lock() {
                                     shared.clear();
