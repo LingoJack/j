@@ -2,7 +2,7 @@ use super::super::constants::{
     COMPACT_KEEP_RECENT, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET, COMPACT_SKILL_TOKEN_BUDGET,
     COMPACT_TOKEN_THRESHOLD, MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT, ROLE_TOOL,
 };
-use super::super::storage::{ChatMessage, ModelProvider, agent_data_dir};
+use super::super::storage::{ChatMessage, ModelProvider, SessionPaths};
 use super::super::tools::ask::AskTool;
 use super::super::tools::skill::LoadSkillTool;
 use super::super::tools::task::TaskTool;
@@ -254,13 +254,14 @@ pub fn micro_compact(
     }
 }
 
-/// 保存完整 transcript 到 .transcripts/ 目录
-fn save_transcript(messages: &[ChatMessage]) -> Option<String> {
-    let transcript_dir = agent_data_dir().join("transcripts");
+/// 保存完整 transcript 到 `sessions/<id>/.transcripts/` 目录
+fn save_transcript(messages: &[ChatMessage], session_id: &str) -> Option<String> {
+    let paths = SessionPaths::new(session_id);
+    let transcript_dir = paths.transcripts_dir();
     if let Err(e) = fs::create_dir_all(&transcript_dir) {
         write_error_log(
             "save_transcript",
-            &format!("创建 transcripts 目录失败: {}", e),
+            &format!("创建 .transcripts 目录失败: {}", e),
         );
         return None;
     }
@@ -306,9 +307,11 @@ pub async fn auto_compact(
     messages: &mut Vec<ChatMessage>,
     provider: &ModelProvider,
     invoked_skills: &InvokedSkillsMap,
+    session_id: &str,
 ) -> Result<(), String> {
-    // 1. 保存 transcript
-    let transcript_path = save_transcript(messages).unwrap_or_else(|| "(unsaved)".to_string());
+    // 1. 保存 transcript 到 session 级 .transcripts/ 目录
+    let transcript_path =
+        save_transcript(messages, session_id).unwrap_or_else(|| "(unsaved)".to_string());
 
     // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
     let conversation_text = serde_json::to_string(messages).unwrap_or_default();

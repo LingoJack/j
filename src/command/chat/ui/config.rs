@@ -532,7 +532,7 @@ fn draw_tab_global_lines<'a>(
         let exempt = &app.state.agent_config.compact.micro_compact_exempt_tools;
 
         for (i, name) in tool_names.iter().enumerate() {
-            let is_builtin = BUILTIN_EXEMPT_TOOLS.contains(&name.as_ref());
+            let is_builtin = BUILTIN_EXEMPT_TOOLS.contains(name);
             let is_exempt = is_builtin || exempt.iter().any(|t| t == name);
             let selected = i == app.ui.compact_exempt_idx;
 
@@ -648,7 +648,6 @@ fn draw_tab_global_lines<'a>(
 }
 
 /// Tools tab 固定头部（总开关）
-
 fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
@@ -1276,8 +1275,9 @@ fn draw_tab_session_list<'a>(
         field_line_indices.push(lines.len());
         let is_selected = i == app.ui.session_list_index;
         let preview = session
-            .first_message_preview
+            .title
             .as_deref()
+            .or(session.first_message_preview.as_deref())
             .unwrap_or("(\u{7a7a}\u{4f1a}\u{8bdd})");
         let preview_truncated: String = preview.chars().take(40).collect();
         let time_str = format_timestamp(session.updated_at);

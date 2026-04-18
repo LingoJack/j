@@ -37,4 +37,6 @@ pub struct AgentSharedState {
     pub context_tokens: Arc<Mutex<usize>>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
     pub invoked_skills: InvokedSkillsMap,
+    /// 当前会话 ID（用于 auto_compact 写入 session 级 .transcripts/）
+    pub session_id: String,
 }

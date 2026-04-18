@@ -2413,6 +2413,7 @@ impl ChatApp {
             shared_messages: Arc::clone(&self.shared_agent_messages),
             context_tokens: Arc::clone(&self.context_tokens),
             invoked_skills: Arc::clone(&self.invoked_skills),
+            session_id: self.session_id.clone(),
         };
         let (handle, tool_result_tx) = AgentHandle::spawn(
             agent_config,

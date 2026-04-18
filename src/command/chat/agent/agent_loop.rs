@@ -53,6 +53,7 @@ pub async fn run_agent_loop(
         shared_messages,
         context_tokens,
         invoked_skills,
+        session_id,
     } = shared;
 
     let client = create_openai_client(&provider);
@@ -134,7 +135,8 @@ pub async fn run_agent_loop(
                     "auto_compact triggered (token threshold exceeded)",
                 );
                 if let Err(e) =
-                    compact::auto_compact(&mut messages, &provider, &invoked_skills).await
+                    compact::auto_compact(&mut messages, &provider, &invoked_skills, &session_id)
+                        .await
                 {
                     write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
                 }
@@ -449,8 +451,13 @@ pub async fn run_agent_loop(
                 }
                 // 通过 auto_compact 重建干净的上下文（摘要 + 全新消息结构，无孤立引用）
                 if compact_config.enabled {
-                    if let Err(e) =
-                        compact::auto_compact(&mut messages, &provider, &invoked_skills).await
+                    if let Err(e) = compact::auto_compact(
+                        &mut messages,
+                        &provider,
+                        &invoked_skills,
+                        &session_id,
+                    )
+                    .await
                     {
                         write_error_log(
                             "agent_loop",
@@ -635,6 +642,7 @@ pub async fn run_agent_loop(
                                     &mut messages,
                                     &provider,
                                     &invoked_skills,
+                                    &session_id,
                                 )
                                 .await;
                             }
@@ -793,9 +801,13 @@ pub async fn run_agent_loop(
                     Ok(result) => {
                         // ── Layer 3: compact tool 触发 ──
                         if result.compact_requested && compact_config.enabled {
-                            let _ =
-                                compact::auto_compact(&mut messages, &provider, &invoked_skills)
-                                    .await;
+                            let _ = compact::auto_compact(
+                                &mut messages,
+                                &provider,
+                                &invoked_skills,
+                                &session_id,
+                            )
+                            .await;
                         }
                         // ── Plan 被批准且清空上下文 ──
                         if let Some(ref plan_content) = result.plan_approved_clear_context {

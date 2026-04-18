@@ -221,6 +221,7 @@ impl SessionPaths {
         }
     }
 
+    #[allow(dead_code)]
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -253,6 +254,16 @@ impl SessionPaths {
             return legacy;
         }
         new_path
+    }
+
+    /// 元数据文件：`sessions/<id>/session.json`
+    pub fn meta_file(&self) -> PathBuf {
+        self.dir.join("session.json")
+    }
+
+    /// compact 快照目录：`sessions/<id>/.transcripts/`
+    pub fn transcripts_dir(&self) -> PathBuf {
+        self.dir.join(".transcripts")
     }
 
     pub fn ensure_dir(&self) -> std::io::Result<()> {
@@ -346,19 +357,67 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
 ///
 /// 写入永远走新布局 `sessions/<id>/transcript.jsonl`。若老扁平文件仍存在
 /// （迁移中断等异常情况），这里不追加到老文件，避免分叉。
+/// 同时增量更新 `session.json` 元数据。
 pub fn append_session_event(session_id: &str, event: &SessionEvent) -> bool {
     let paths = SessionPaths::new(session_id);
     if paths.ensure_dir().is_err() {
         return false;
     }
     let path = paths.transcript();
-    match serde_json::to_string(event) {
+    let ok = match serde_json::to_string(event) {
         Ok(line) => match fs::OpenOptions::new().create(true).append(true).open(&path) {
             Ok(mut file) => writeln!(file, "{}", line).is_ok(),
             Err(_) => false,
         },
         Err(_) => false,
+    };
+    if ok {
+        update_session_meta_on_event(session_id, event);
     }
+    ok
+}
+
+/// 增量更新 session.json 元数据（追加事件后调用）
+fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut meta = load_session_meta_file(session_id).unwrap_or_else(|| SessionMetaFile {
+        id: session_id.to_string(),
+        title: String::new(),
+        message_count: 0,
+        created_at: now,
+        updated_at: now,
+        model: None,
+    });
+    meta.updated_at = now;
+    match event {
+        SessionEvent::Msg(msg) => {
+            meta.message_count += 1;
+            if meta.title.is_empty() && msg.role == "user" && !msg.content.is_empty() {
+                meta.title = msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect();
+            }
+        }
+        SessionEvent::Clear => {
+            meta.message_count = 0;
+        }
+        SessionEvent::Restore { messages } => {
+            meta.message_count = messages.len();
+            if meta.title.is_empty()
+                && let Some(first_user) = messages
+                    .iter()
+                    .find(|m| m.role == "user" && !m.content.is_empty())
+            {
+                meta.title = first_user
+                    .content
+                    .chars()
+                    .take(MESSAGE_PREVIEW_MAX_LEN)
+                    .collect();
+            }
+        }
+    }
+    let _ = save_session_meta_file(&meta);
 }
 
 /// 查找最近修改的 session ID（用于 --continue）
@@ -680,19 +739,117 @@ pub fn save_soul(content: &str) -> bool {
 
 // ========== 会话元数据 ==========
 
+/// session.json 元数据文件内容（持久化到 `sessions/<id>/session.json`）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionMetaFile {
+    /// 会话 ID
+    pub id: String,
+    /// 会话标题（首条 user 消息截断）
+    #[serde(default)]
+    pub title: String,
+    /// 消息计数
+    pub message_count: usize,
+    /// 创建时间戳（epoch seconds）
+    pub created_at: u64,
+    /// 最后更新时间戳（epoch seconds）
+    pub updated_at: u64,
+    /// 使用的模型名称
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
 /// 会话元数据（用于会话列表展示）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionMeta {
     pub id: String,
+    /// 会话标题（从 session.json 读取）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub message_count: usize,
     pub first_message_preview: Option<String>,
     pub updated_at: u64,
 }
 
+/// 加载 session.json 元数据（不存在返回 None）
+pub fn load_session_meta_file(session_id: &str) -> Option<SessionMetaFile> {
+    let path = SessionPaths::new(session_id).meta_file();
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+/// 保存 session.json 元数据
+pub fn save_session_meta_file(meta: &SessionMetaFile) -> bool {
+    let paths = SessionPaths::new(&meta.id);
+    if paths.ensure_dir().is_err() {
+        return false;
+    }
+    match serde_json::to_string_pretty(meta) {
+        Ok(json) => fs::write(paths.meta_file(), json).is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// 从 transcript.jsonl 逐行扫描生成元数据（懒生成 / 迁移用）
+fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFile> {
+    let paths = SessionPaths::new(session_id);
+    let transcript = paths.resolve_for_read();
+    let content = fs::read_to_string(&transcript).ok()?;
+
+    let mut message_count: usize = 0;
+    let mut first_user_preview: Option<String> = None;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(event) = serde_json::from_str::<SessionEvent>(line) {
+            match event {
+                SessionEvent::Msg(ref msg) => {
+                    message_count += 1;
+                    if first_user_preview.is_none() && msg.role == "user" && !msg.content.is_empty()
+                    {
+                        first_user_preview =
+                            Some(msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
+                    }
+                }
+                SessionEvent::Clear => {
+                    message_count = 0;
+                    first_user_preview = None;
+                }
+                SessionEvent::Restore { ref messages } => {
+                    message_count = messages.len();
+                    first_user_preview = messages
+                        .iter()
+                        .find(|m| m.role == "user" && !m.content.is_empty())
+                        .map(|m| m.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
+                }
+            }
+        }
+    }
+
+    let updated_at = transcript
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    Some(SessionMetaFile {
+        id: session_id.to_string(),
+        title: first_user_preview.clone().unwrap_or_default(),
+        message_count,
+        created_at: updated_at, // 无法回溯精确创建时间，用 mtime 近似
+        updated_at,
+        model: None,
+    })
+}
+
 /// 列出所有会话的元数据，按更新时间倒序
 ///
-/// 混合枚举：新布局 `sessions/<id>/transcript.jsonl` 和老扁平 `sessions/<id>.jsonl`。
-/// 同一 id 若同时存在（迁移未完成），以新布局为准（`resolve_for_read` 已保证）。
+/// 优先读 `session.json` 元数据文件（O(1)），不存在时 fallback 到逐行扫描
+/// `transcript.jsonl` 并懒生成 `session.json`。
+/// 同时兼容老扁平布局 `sessions/<id>.jsonl`。
 pub fn list_sessions() -> Vec<SessionMeta> {
     let dir = sessions_dir();
     let read_dir = match fs::read_dir(&dir) {
@@ -700,10 +857,10 @@ pub fn list_sessions() -> Vec<SessionMeta> {
         Err(_) => return Vec::new(),
     };
 
-    // 先收集 (id, transcript_path) 列表，去重以新布局为先
-    let mut entries: Vec<(String, PathBuf)> = Vec::new();
+    // 先收集 id 列表，去重以新布局为先
+    let mut ids: Vec<String> = Vec::new();
     let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut legacy_entries: Vec<(String, PathBuf)> = Vec::new();
+    let mut legacy_ids: Vec<String> = Vec::new();
     for entry in read_dir.flatten() {
         let path = entry.path();
         let file_type = match entry.file_type() {
@@ -717,76 +874,56 @@ pub fn list_sessions() -> Vec<SessionMeta> {
             let transcript = path.join("transcript.jsonl");
             if transcript.exists() {
                 seen_ids.insert(id.to_string());
-                entries.push((id.to_string(), transcript));
+                ids.push(id.to_string());
             }
         } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl")
             && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
         {
-            legacy_entries.push((stem.to_string(), path));
+            legacy_ids.push(stem.to_string());
         }
     }
-    for (id, path) in legacy_entries {
+    for id in legacy_ids {
         if !seen_ids.contains(&id) {
-            entries.push((id, path));
+            ids.push(id);
         }
     }
 
     let mut sessions: Vec<SessionMeta> = Vec::new();
-    for (id, path) in entries {
-        let updated_at = path
-            .metadata()
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-
-        let content = match fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(_) => continue, // 损坏的文件跳过
-        };
-
-        let mut message_count: usize = 0;
-        let mut first_user_preview: Option<String> = None;
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            if let Ok(event) = serde_json::from_str::<SessionEvent>(line) {
-                match event {
-                    SessionEvent::Msg(ref msg) => {
-                        message_count += 1;
-                        if first_user_preview.is_none()
-                            && msg.role == "user"
-                            && !msg.content.is_empty()
-                        {
-                            let preview: String =
-                                msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect();
-                            first_user_preview = Some(preview);
-                        }
-                    }
-                    SessionEvent::Clear => {
-                        message_count = 0;
-                        first_user_preview = None;
-                    }
-                    SessionEvent::Restore { ref messages } => {
-                        message_count = messages.len();
-                        first_user_preview = messages
-                            .iter()
-                            .find(|m| m.role == "user" && !m.content.is_empty())
-                            .map(|m| m.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
-                    }
-                }
-            }
+    for id in ids {
+        // 优先读 session.json
+        if let Some(meta_file) = load_session_meta_file(&id) {
+            sessions.push(SessionMeta {
+                id: meta_file.id,
+                title: if meta_file.title.is_empty() {
+                    None
+                } else {
+                    Some(meta_file.title)
+                },
+                message_count: meta_file.message_count,
+                first_message_preview: None, // session.json 中不存 preview，title 已替代
+                updated_at: meta_file.updated_at,
+            });
+            continue;
         }
 
-        sessions.push(SessionMeta {
-            id,
-            message_count,
-            first_message_preview: first_user_preview,
-            updated_at,
-        });
+        // fallback：逐行扫描 transcript 并懒生成 session.json
+        if let Some(derived) = derive_session_meta_from_transcript(&id) {
+            let title = if derived.title.is_empty() {
+                None
+            } else {
+                Some(derived.title.clone())
+            };
+            let preview_for_ui = title.clone();
+            // 懒写入 session.json（失败不阻断）
+            let _ = save_session_meta_file(&derived);
+            sessions.push(SessionMeta {
+                id: derived.id,
+                title,
+                message_count: derived.message_count,
+                first_message_preview: preview_for_ui,
+                updated_at: derived.updated_at,
+            });
+        }
     }
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     sessions
@@ -1042,5 +1179,86 @@ mod tests {
         assert!(delete_session("del-id"));
         assert!(!paths.dir().exists());
         assert!(!paths.legacy_flat().exists());
+    }
+
+    #[test]
+    fn session_meta_file_round_trip() {
+        let _tmp = TempDataDir::new();
+        let meta = SessionMetaFile {
+            id: "meta-test".to_string(),
+            title: "你好世界".to_string(),
+            message_count: 5,
+            created_at: 1000,
+            updated_at: 2000,
+            model: Some("gpt-4o".to_string()),
+        };
+        assert!(save_session_meta_file(&meta));
+        let loaded = load_session_meta_file("meta-test").expect("should load");
+        assert_eq!(loaded.id, "meta-test");
+        assert_eq!(loaded.title, "你好世界");
+        assert_eq!(loaded.message_count, 5);
+        assert_eq!(loaded.created_at, 1000);
+        assert_eq!(loaded.updated_at, 2000);
+        assert_eq!(loaded.model.as_deref(), Some("gpt-4o"));
+    }
+
+    #[test]
+    fn append_event_updates_meta() {
+        let _tmp = TempDataDir::new();
+        let msg1 = ChatMessage::text("user", "hello world");
+        assert!(append_session_event("meta-upd", &SessionEvent::Msg(msg1)));
+
+        let meta = load_session_meta_file("meta-upd").expect("meta should exist");
+        assert_eq!(meta.id, "meta-upd");
+        assert_eq!(meta.message_count, 1);
+        assert_eq!(meta.title, "hello world");
+        assert!(meta.updated_at > 0);
+
+        // 追加第二条消息
+        let msg2 = ChatMessage::text("assistant", "hi there");
+        assert!(append_session_event("meta-upd", &SessionEvent::Msg(msg2)));
+
+        let meta2 = load_session_meta_file("meta-upd").expect("meta should exist");
+        assert_eq!(meta2.message_count, 2);
+        // title 不变（已有首条 user 消息）
+        assert_eq!(meta2.title, "hello world");
+
+        // Clear 事件重置 message_count
+        assert!(append_session_event("meta-upd", &SessionEvent::Clear));
+        let meta3 = load_session_meta_file("meta-upd").expect("meta should exist");
+        assert_eq!(meta3.message_count, 0);
+    }
+
+    #[test]
+    fn list_sessions_lazy_generates_meta() {
+        let _tmp = TempDataDir::new();
+
+        // 手工构造一个只有 transcript.jsonl 没有 session.json 的 session
+        let paths = SessionPaths::new("lazy-gen");
+        paths.ensure_dir().unwrap();
+        let msg = ChatMessage::text("user", "lazy generation test");
+        let line = serde_json::to_string(&SessionEvent::Msg(msg)).unwrap();
+        fs::write(paths.transcript(), format!("{}\n", line)).unwrap();
+
+        // session.json 不存在
+        assert!(!paths.meta_file().exists());
+
+        // list_sessions 应该懒生成 session.json
+        let sessions = list_sessions();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "lazy-gen");
+        assert_eq!(sessions[0].message_count, 1);
+        assert_eq!(sessions[0].title.as_deref(), Some("lazy generation test"));
+
+        // session.json 现在应该存在了
+        assert!(paths.meta_file().exists());
+    }
+
+    #[test]
+    fn session_paths_transcripts_dir() {
+        let _tmp = TempDataDir::new();
+        let paths = SessionPaths::new("tx-test");
+        assert!(paths.transcripts_dir().ends_with(".transcripts"));
+        assert_eq!(paths.transcripts_dir().parent().unwrap(), paths.dir());
     }
 }
