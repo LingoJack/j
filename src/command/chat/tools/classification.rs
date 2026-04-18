@@ -178,6 +178,7 @@ pub fn get_result_summary_for_tool(
         tool_names::TODO_WRITE => get_todo_write_summary(content, tool_args),
         tool_names::TODO_READ => get_todo_read_summary(content),
         tool_names::TASK => get_task_summary(content, tool_args),
+        tool_names::AGENT => get_agent_summary(content, tool_args),
         _ => get_generic_summary(content),
     }
 }
@@ -344,6 +345,35 @@ fn get_task_summary(content: &str, tool_args: Option<&str>) -> String {
 }
 
 /// 通用摘要（原有逻辑）
+/// Agent 工具摘要：提取 description + 首行输出
+fn get_agent_summary(content: &str, tool_args: Option<&str>) -> String {
+    let lines = content.lines().count();
+    let desc = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("description")
+                .and_then(|d| d.as_str().map(|s| s.to_string()))
+        });
+
+    // 首行非空内容作为摘要
+    let first_line = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+
+    if let Some(d) = desc {
+        let max_d: String = d.chars().take(20).collect();
+        if first_line.is_empty() {
+            max_d
+        } else {
+            let max_f: String = first_line.chars().take(40).collect();
+            format!("{}: {}", max_d, max_f)
+        }
+    } else if first_line.is_empty() {
+        format!("{} 行", lines)
+    } else {
+        let max_f: String = first_line.chars().take(50).collect();
+        max_f
+    }
+}
+
 fn get_generic_summary(content: &str) -> String {
     let lines = content.lines().count();
     let chars = content.chars().count();

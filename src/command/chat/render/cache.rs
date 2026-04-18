@@ -1616,8 +1616,8 @@ pub fn render_tool_result_msg(
         // Diff 块特殊渲染
         render_diff_content(&clean, content_w, lines, theme);
     } else if tool_name == "Agent" {
-        // Agent 结果嵌套显示
-        render_agent_result_nested(&clean, content_w, lines, theme);
+        // Agent 结果边框显示
+        render_agent_result_nested(&clean, bubble_max_width, lines, theme);
     } else if tool_name == "Bash" {
         // Bash 结果：命令行高亮 + 输出
         render_bash_result(&clean, tool_args, content_w, lines, theme);
@@ -1696,7 +1696,7 @@ fn render_diff_content(
 /// 渲染 Agent 工具结果（嵌套缩进显示）
 fn render_agent_result_nested(
     content: &str,
-    content_w: usize,
+    bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
@@ -1705,28 +1705,48 @@ fn render_agent_result_nested(
     let max_display = AGENT_RESULT_MAX_LINES;
     let display_lines = &all_lines[..total.min(max_display)];
 
-    for (i, line) in display_lines.iter().enumerate() {
-        let prefix = if i == display_lines.len() - 1 && total <= max_display {
-            "  └─ "
-        } else {
-            "  ├─ "
-        };
-        let available_w = content_w.saturating_sub(5);
-        for (j, wrapped) in wrap_text(line, available_w).iter().enumerate() {
-            let p = if j == 0 { prefix } else { "  │  " };
-            lines.push(Line::from(Span::styled(
-                format!("    {}{}", p, wrapped),
-                Style::default().fg(theme.text_dim),
-            )));
+    let border_color = theme.text_dim;
+    // bordered_line: 左 "  │ " (4) + 右 " │" (2) = 6 开销
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    // 顶边框
+    let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
+    lines.push(Line::from(Span::styled(
+        top_border,
+        Style::default().fg(border_color),
+    )));
+
+    // 内容行
+    for line in display_lines.iter() {
+        for wrapped in wrap_text(line, content_w) {
+            lines.push(bordered_line(
+                vec![Span::styled(wrapped, Style::default().fg(theme.text_dim))],
+                bubble_max_width,
+                border_color,
+                Color::default(),
+            ));
         }
     }
 
+    // 截断提示
     if total > max_display {
-        lines.push(Line::from(Span::styled(
-            format!("    ... (共 {} 行)", total),
-            Style::default().fg(theme.text_dim),
-        )));
+        lines.push(bordered_line(
+            vec![Span::styled(
+                format!("... (共 {} 行)", total),
+                Style::default().fg(theme.text_dim),
+            )],
+            bubble_max_width,
+            border_color,
+            Color::default(),
+        ));
     }
+
+    // 底边框
+    let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
+    lines.push(Line::from(Span::styled(
+        bottom_border,
+        Style::default().fg(border_color),
+    )));
 }
 
 /// 渲染 Bash 工具结果（命令行高亮 + 输出）
