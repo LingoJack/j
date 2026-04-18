@@ -1,12 +1,27 @@
 [
   {
     "id": "1",
-    "content": "重命名文件去掉序号前缀",
+    "content": "新建 note.md 文件，从 script.md 提取笔记本内容",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "重写 hook.md 内容，串联 hook 事件的先后顺序",
+    "content": "精简 script.md 为纯脚本内容，移除笔记本和系统设置",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "整合系统设置到 install.md，更名为「安装 & 设置」",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "精简 chat.md，移除 Teammate 详细内容和 Agent 工具列表（保留引用）",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "整合 Teammate 和 Agent 工具详细内容到 tools.md（消除重复）",
     "status": "completed"
   }
 ]

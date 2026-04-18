@@ -1,6 +1,6 @@
 ---
 name: AI 对话
-order: 5
+order: 6
 ---
 
 ## AI 对话
@@ -188,100 +188,7 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 Teammate 是持久运行的子 Agent，拥有独立的上下文和消息历史，可通过 `/teammate` 或配置界面（Ctrl+E → Teammates Tab）查看和管理。
 
-**三种 Agent 执行模式**：
-
-| 类型 | 工具 | 生命周期 | 最大轮次 | 消息通信 | 适用场景 |
-|------|------|----------|----------|----------|----------|
-| **Sub-Agent** | `Agent` | 任务完成后退出 | 30 | 无（返回结果给主对话） | 单次多步骤任务 |
-| **Teammate** | `CreateTeammate` | 持久运行，空闲轮询等待消息 | 200 | `SendMessage` 广播 + `@mention` 唤醒 | 多角色长期协作 |
-| **AgentTeam** | `AgentTeam` | 批量创建 Teammate | 200（每个） | 同 Teammate | 并行启动多角色 |
-
-**Sub-Agent（`Agent` 工具）**：
-
-- 启动无头 Agent 循环（无 TUI），独立上下文执行任务
-- 两种模式：前台（阻塞等待完成）和后台（`run_in_background: true`，立即返回 `task_id`）
-- 后台任务可通过 `TaskOutput` 工具查询输出
-- 子 Agent 工具表排除 `Agent`（防止递归）
-- 可选 `worktree: true` 在隔离的 git worktree 中执行
-- 可选 `inherit_permissions: true` 继承全部权限（跳过确认）
-
-**Teammate（`CreateTeammate` 工具）**：
-
-- 创建方式：通常由 AI 通过 `CreateTeammate` 或 `AgentTeam` 工具创建
-- 额外工具：`SendMessage`（广播通信）+ `WorkDone`（标记完成并退出）
-- **阻塞限制**：不能使用 `Agent`、`AgentTeam`、`CreateTeammate`（防止递归创建）
-- 空闲轮询：无工具调用时进入等待状态，`@mention` 或主 Agent 消息唤醒
-- 120 轮连续空闲自动退出（约 2 分钟）
-- 通过 `CancellationToken` 支持手动停止
-
-**AgentTeam（`AgentTeam` 工具）**：
-
-- 便捷工具，一次创建 1-10 个 Teammate
-- 参数为 `members` 数组，每个成员包含 `name`、`role`（可选）、`prompt`
-
-**消息通信（`SendMessage` 工具）**：
-
-- 广播机制：消息发送给所有 Agent（主 Agent + 所有 Teammate）
-- **唤醒语义**：
-  - `@Target` 定向唤醒：仅被 `@` 的 Teammate 被唤醒
-  - 主 Agent 发送的消息唤醒所有 Teammate
-  - 旁听消息：其他 Teammate 之间的对话会进入收件箱但不唤醒，避免无限循环
-- 消息格式：`<FromAgent> @Target 消息内容`
-
-**WorkDone 工具**：
-
-- Teammate 调用后标记工作完成，循环立即退出
-- 广播完成消息给所有 Agent
-
-**全局文件锁**：
-
-- 多 Agent 并发编辑同一文件时，通过全局文件锁（`acquire_global_file_lock`）自动排队，防止写入冲突
-
-**任务管理（`Task` 工具）**：
-
-共享任务系统，所有 Agent 均可操作，持久化到 `.jcli/tasks/`：
-
-| 操作 | 参数 | 说明 |
-|------|------|------|
-| `action: "create"` | `title`（必需）、`description`、`blockedBy`、`taskDocPaths` | 创建待办任务 |
-| `action: "get"` | `taskId` | 获取任务详情 |
-| `action: "list"` | `ready: true`（可选，仅显示无阻塞的待办任务） | 列出所有任务 |
-| `action: "update"` | `taskId` + `status`/`title`/`description`/`owner`/`addBlockedBy` | 更新任务 |
-
-- 任务状态：`pending` → `in_progress` → `completed`（或 `deleted`）
-- `blockedBy`：任务依赖 DAG，前置任务完成后自动清理引用
-- `owner`：负责该任务的 Agent 名称
-- 任务 ID 自增，持久化为 `.jcli/tasks/task_{id}.json`
-
-**配置界面 Teammates Tab**：
-
-- `Enter`：查看 Teammate 状态
-- `s`：停止选中的 Teammate
-
-**Teammate 使用场景**：
-
-- 全栈开发（前端 + 后端 + 运维）
-- 多领域并行研究
-- 代码审查 + 实现同步
-- 大型重构（按模块分工）
-
-### Agent 工具（高级）
-
-AI 对话内置以下高级工具，支持复杂的多步骤任务：
-
-| 工具 | 功能 |
-|------|------|
-| `Agent` | 启动子 Agent 自主处理多步骤任务（独立上下文） |
-| `AgentTeam` | 批量创建多个 Teammate 并行协作 |
-| `Task` | 管理任务（create/get/list/update），支持依赖关系 |
-| `TodoWrite` | 创建和管理结构化待办列表（跨多轮对话） |
-| `TodoRead` | 读取当前待办列表 |
-| `EnterPlanMode` / `ExitPlanMode` | 进入/退出计划模式（只读探索后设计实现方案） |
-| `EnterWorktree` / `ExitWorktree` | 创建/退出隔离的 git worktree（避免多会话编辑冲突） |
-| `Compact` | 触发对话压缩以释放上下文窗口 |
-| `LoadSkill` | 加载指定技能到上下文 |
-| `RegisterHook` | 注册/管理 session 级 hook |
-| `ComputerUse` | 控制 macOS 桌面：截屏、点击、输入、滚动、查 Accessibility 树 |
+支持三种 Agent 执行模式：**Sub-Agent**（单次任务）、**Teammate**（持久协作）、**AgentTeam**（批量创建），详见「工具 & 权限」Tab。
 
 > Agent/AgentTeam 启动的子 Agent 拥有独立的上下文窗口，避免干扰主对话
 

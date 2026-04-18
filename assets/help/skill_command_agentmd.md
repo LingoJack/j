@@ -1,6 +1,6 @@
 ---
 name: Skill & 命令
-order: 8
+order: 9
 ---
 
 ## Skill 技能系统

@@ -1,6 +1,6 @@
 ---
-name: 安装
-order: 9
+name: 安装 & 设置
+order: 10
 ---
 
 ## 安装 & 更新
@@ -36,6 +36,30 @@ rm -rf ~/.jdata
 ```
 
 > 卸载命令只会删除二进制文件，用户数据（`~/.jdata/`）会保留。
+
+## 系统设置
+
+| 命令 | 说明 |
+|------|------|
+| `j log mode <verbose/concise>` | 设置日志模式 |
+| `j config <section> <field> <val>` | 直接修改配置字段 |
+| `j clear` | 清屏 |
+| `j version` / `j v` | 版本信息 |
+| `j help` / `j h` | 打开多标签帮助 TUI |
+| `j exit` / `j q` / `j quit` | 退出（交互模式，或按 `Ctrl+Q` / `Ctrl+D`） |
+| `j completion [shell]` | 生成 shell 补全脚本（支持 `zsh` / `bash`，默认 `zsh`） |
+
+### 帮助界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `←` / `→` / `h` / `l` | 切换帮助 Tab |
+| `Tab` / `Shift+Tab` | 切换到下一个 / 上一个 Tab |
+| `1`-`0` | 直接跳到指定 Tab |
+| `↑` / `↓` / `j` / `k` | 滚动内容 |
+| `PageUp` / `PageDown` | 快速滚动 |
+| `Home` / `End` | 跳到顶部 / 底部 |
+| `q` / `Esc` / `Ctrl+C` | 退出帮助 |
 
 ## 使用技巧
 

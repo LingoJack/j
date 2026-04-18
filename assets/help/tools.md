@@ -1,6 +1,6 @@
 ---
 name: 工具 & 权限
-order: 6
+order: 7
 ---
 
 ## AI 工具 & 权限
@@ -40,7 +40,15 @@ order: 6
 
 **`ComputerUse` action**：`screenshot` `click` `doubleclick` `rightclick` `type` `key` `key_combo` `scroll` `drag` `ax_tree` `find_element` `focus_app` `cursor_position`
 
-### Agent 子 Agent
+### Agent 执行模式总览
+
+| 类型 | 工具 | 生命周期 | 最大轮次 | 消息通信 | 适用场景 |
+|------|------|----------|----------|----------|----------|
+| **Sub-Agent** | `Agent` | 任务完成后退出 | 30 | 无（返回结果给主对话） | 单次多步骤任务 |
+| **Teammate** | `CreateTeammate` | 持久运行，空闲轮询等待消息 | 200 | `SendMessage` 广播 + `@mention` 唤醒 | 多角色长期协作 |
+| **AgentTeam** | `AgentTeam` | 批量创建 Teammate | 200（每个） | 同 Teammate | 并行启动多角色 |
+
+### Sub-Agent（`Agent` 工具）
 
 启动独立子 Agent 自主执行复杂多步骤任务，完成后返回结果文本。
 
@@ -60,6 +68,18 @@ order: 6
 - 子 Agent 内部不可再启动 Agent（防止递归）
 - 后台模式适合耗时任务，前台模式会阻塞直到完成
 - worktree 模式下子 Agent 在独立分支工作，完成后自动清理
+
+### Teammate（`CreateTeammate` 工具）
+
+持久运行的子 Agent，拥有独立上下文和消息历史，支持多角色协作。
+
+**特点**：
+- 创建方式：由 AI 通过 `CreateTeammate` 或 `AgentTeam` 工具创建
+- 额外工具：`SendMessage`（广播通信）+ `WorkDone`（标记完成并退出）
+- **阻塞限制**：不能使用 `Agent`、`AgentTeam`、`CreateTeammate`（防止递归创建）
+- 空闲轮询：无工具调用时进入等待状态，`@mention` 或主 Agent 消息唤醒
+- 120 轮连续空闲自动退出（约 2 分钟）
+- 通过 `CancellationToken` 支持手动停止
 
 ### AgentTeam 团队协作
 
@@ -86,13 +106,52 @@ order: 6
 - Teammate 内部不可再创建 Teammate 或启动 Agent（防止递归）
 - 每个 member 也可设置 `worktree` 和 `inherit_permissions`（由 AI 动态传入）
 
-> **Agent vs AgentTeam**：Agent 是单个隔离子任务，无通信能力；AgentTeam 是多成员协作，成员间可互相发消息协调。
+### 消息通信（`SendMessage` 工具）
+
+- 广播机制：消息发送给所有 Agent（主 Agent + 所有 Teammate）
+- **唤醒语义**：
+  - `@Target` 定向唤醒：仅被 `@` 的 Teammate 被唤醒
+  - 主 Agent 发送的消息唤醒所有 Teammate
+  - 旁听消息：其他 Teammate 之间的对话会进入收件箱但不唤醒，避免无限循环
+- 消息格式：`<FromAgent> @Target 消息内容`
+
+### WorkDone 工具
+
+- Teammate 调用后标记工作完成，循环立即退出
+- 广播完成消息给所有 Agent
+
+### 全局文件锁
+
+- 多 Agent 并发编辑同一文件时，通过全局文件锁（`acquire_global_file_lock`）自动排队，防止写入冲突
+
+### 任务管理（`Task` 工具）
+
+共享任务系统，所有 Agent 均可操作，持久化到 `.jcli/tasks/`：
+
+| 操作 | 参数 | 说明 |
+|------|------|------|
+| `action: "create"` | `title`（必需）、`description`、`blockedBy`、`taskDocPaths` | 创建待办任务 |
+| `action: "get"` | `taskId` | 获取任务详情 |
+| `action: "list"` | `ready: true`（可选，仅显示无阻塞的待办任务） | 列出所有任务 |
+| `action: "update"` | `taskId` + `status`/`title`/`description`/`owner`/`addBlockedBy` | 更新任务 |
+
+- 任务状态：`pending` → `in_progress` → `completed`（或 `deleted`）
+- `blockedBy`：任务依赖 DAG，前置任务完成后自动清理引用
+- `owner`：负责该任务的 Agent 名称
+- 任务 ID 自增，持久化为 `.jcli/tasks/task_{id}.json`
 
 ### EnterPlanMode / ExitPlanMode
 
 进入计划模式后，只允许使用只读工具（Read、Glob、Grep、WebFetch 等），写操作被阻止。通过 `ExitPlanMode` 提交计划，等待用户审批后方可执行。
 
 > **Lite 模式**（默认）：基于 HTTP 请求，无需安装 Chrome。**CDP 模式**：需 `--features browser_cdp` 编译，支持截图、点击、输入、JS 执行。
+
+### Teammate 使用场景
+
+- 全栈开发（前端 + 后端 + 运维）
+- 多领域并行研究
+- 代码审查 + 实现同步
+- 大型重构（按模块分工）
 
 ### 工具确认快捷键
 
