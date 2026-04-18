@@ -595,13 +595,14 @@ EOF
 
 ## AI Hook
 
-Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
+Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分，支持三级来源：
 
 1. **用户级**：`~/.jdata/agent/hooks.yaml` — 全局生效
 2. **项目级**：`.jcli/hooks.yaml` — 项目目录下生效
 3. **Session 级**：通过 `register_hook` 工具由 AI 动态注册 — 仅当前会话
 
-**执行顺序**：用户级 -> 项目级 -> Session 级，链式执行。任何 `abort` 立即中止。
+> 运行时实际还存在**内置 hook**，执行顺序是：内置 -> 用户级 -> 项目级 -> Session 级。
+> 同一事件按链式执行，前一个 hook 的输出会成为后一个 hook 的输入。
 
 **可用事件**：
 
@@ -613,6 +614,12 @@ Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
 | `post_llm_response` | LLM 回复完成后 |
 | `pre_tool_execution` | 工具执行前 |
 | `post_tool_execution` | 工具执行后 |
+| `post_tool_execution_failure` | 工具执行失败后 |
+| `stop` | LLM 即将结束回复时 |
+| `pre_micro_compact` | `micro_compact` 前 |
+| `post_micro_compact` | `micro_compact` 后 |
+| `pre_auto_compact` | `auto_compact` 前 |
+| `post_auto_compact` | `auto_compact` 后 |
 | `session_start` | 会话启动时 |
 | `session_end` | 会话退出时 |
 
@@ -621,11 +628,31 @@ Hook 允许在关键操作节点注入自定义脚本，支持三级配置：
 pre_send_message:
   - command: "python3 ~/.jdata/agent/hooks/inject_time.py"
     timeout: 5
+    on_error: skip
 session_start:
   - command: "echo '{\"inject_messages\": [{\"role\": \"user\", \"content\": \"当前用户: jack\"}]}'"
+pre_tool_execution:
+  - type: llm
+    prompt: |
+      审查工具调用是否安全：工具={{tool_name}} 参数={{tool_arguments}}
+      如果不安全，返回 {"action":"skip"}，否则返回 {}
+    filter:
+      tool_matcher: "Bash|Shell"
 ```
 
-**脚本协议**：stdin 接收 HookContext JSON，stdout 输出 HookResult JSON（可为空）。exit 0 成功，非零视为 abort。默认超时 10 秒。
+**支持类型**：
+
+- `bash`：默认类型，通过 `sh -c` 执行 `command`
+- `llm`：通过 `prompt` 模板调用当前 provider，要求返回 HookResult JSON
+
+**脚本协议**：
+
+- stdin 接收 `HookContext` JSON，stdout 输出 `HookResult` JSON；空字符串或 `{}` 表示无修改
+- `bash` hook 默认超时 10 秒，`llm` hook 默认超时 30 秒
+- 失败策略由 `on_error` 控制：`skip` 为记录错误并继续，`abort` 为中止当前 hook 链
+- `action` 才是正常控制流字段：`stop` 中止当前步骤/子管线，`skip` 跳过当前步骤（主要用于 `pre_tool_execution`）
+- 可用过滤器：`tool_name`、`tool_matcher`、`model_prefix`
+- 整条 hook 链有 30 秒总超时，超时后剩余 hook 不再执行
 
 > 详细的 HookContext/HookResult 字段说明见项目 README
 
