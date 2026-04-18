@@ -219,6 +219,14 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // 一次性迁移旧格式
     migrate_legacy_session_if_needed();
+    // 迁移扁平 sessions/<id>.jsonl → sessions/<id>/transcript.jsonl
+    let (migrated, errors) = super::super::storage::migrate_flat_sessions_to_nested();
+    if migrated > 0 || errors > 0 {
+        crate::util::log::write_info_log(
+            "session_migrate",
+            &format!("迁移 {} 个 session 到新布局 (errors={})", migrated, errors),
+        );
+    }
 
     let session_id = generate_session_id();
     let mut app = ChatApp::new(session_id);
