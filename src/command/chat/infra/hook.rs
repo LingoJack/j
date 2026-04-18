@@ -595,7 +595,7 @@ impl HookResult {
 /// - `Retry`：执行失败但还有重试机会
 /// - `Err`：执行失败（重试耗尽或不可重试）
 #[derive(Debug)]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::large_enum_variant)]
 enum HookOutcome {
     Success(HookResult),
     Retry {
@@ -1364,7 +1364,7 @@ fn execute_llm_hook(
     let rt =
         tokio::runtime::Runtime::new().map_err(|e| format!("创建 tokio runtime 失败: {}", e))?;
 
-    let result = rt.block_on(async {
+    rt.block_on(async {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(timeout_secs))
             .build()
@@ -1436,9 +1436,7 @@ fn execute_llm_hook(
         );
 
         Ok(hook_result)
-    });
-
-    result
+    })
 }
 
 /// 执行 Shell hook 脚本
