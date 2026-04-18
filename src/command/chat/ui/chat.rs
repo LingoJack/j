@@ -8,6 +8,7 @@ use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
 use super::super::teammate::TeammateStatus;
+use super::super::tools::agent_shared::SubAgentStatus;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use crate::util::safe_lock;
@@ -27,13 +28,14 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 
-    // 动态标题栏高度：有 teammate 时多一行
+    // 动态标题栏高度：顶部分割线(1) + 状态行(1) + 可选 teammate 行 + 可选 subagent 行
     let has_teammates = app
         .teammate_manager
         .lock()
         .map(|m| !m.teammates.is_empty())
         .unwrap_or(false);
-    let title_height = if has_teammates { 3 } else { 2 };
+    let has_subagents = !app.sub_agent_tracker.display_snapshots().is_empty();
+    let title_height = 2 + (has_teammates as u16) + (has_subagents as u16);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -209,7 +211,11 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
 
-    // ========== 第三行：Teammate 状态（仅在 area.height >= 3 时渲染）==========
+    // ========== 第三/四行：Teammate + SubAgent 状态 ==========
+    let mut next_row = area.y + 2;
+    let max_width = area.width as usize;
+
+    // Teammate 行
     if area.height >= 3 {
         let snapshots = app
             .teammate_manager
@@ -222,13 +228,10 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 " Teammates: ",
                 Style::default().fg(t.text_dim).add_modifier(Modifier::BOLD),
             )];
-
-            let max_width = area.width as usize;
-            let mut current_width: usize = 13; // " Teammates: " 约 13 字符宽
+            let mut current_width: usize = 13;
 
             for (i, snap) in snapshots.iter().enumerate() {
                 if i > 0 {
-                    // 检查分隔符是否还能放得下
                     if current_width + 3 > max_width {
                         tm_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
                         break;
@@ -237,7 +240,6 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                     current_width += 3;
                 }
 
-                // 状态颜色
                 let status_color = match &snap.status {
                     TeammateStatus::Working => t.title_loading,
                     TeammateStatus::WaitingForMessage => t.config_dim,
@@ -247,7 +249,6 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                     TeammateStatus::Initializing => t.config_dim,
                 };
 
-                // 构建状态文字
                 let status_text = if snap.status == TeammateStatus::Working {
                     if let Some(ref tool) = snap.current_tool {
                         format!("{} {}: {}", snap.status.icon(), snap.status.label(), tool)
@@ -258,8 +259,7 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                     format!("{} {}", snap.status.icon(), snap.status.label())
                 };
 
-                // 格式: "Name [● 工作中: Read]"
-                let entry_width = snap.name.len() + 2 + status_text.len() + 1; // name + " [" + status + "]"
+                let entry_width = snap.name.len() + 2 + status_text.len() + 1;
                 if current_width + entry_width > max_width {
                     tm_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
                     break;
@@ -279,8 +279,107 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
             let tm_line =
                 Paragraph::new(Line::from(tm_spans)).style(Style::default().bg(t.bg_primary));
-            f.render_widget(tm_line, Rect::new(area.x, area.y + 2, area.width, 1));
+            f.render_widget(tm_line, Rect::new(area.x, next_row, area.width, 1));
+            next_row += 1;
         }
+    }
+
+    // SubAgent 行（仅在 area 还有剩余行时渲染）
+    if next_row < area.y + area.height {
+        let sub_snaps = app.sub_agent_tracker.display_snapshots();
+        if !sub_snaps.is_empty() {
+            let mut sa_spans: Vec<Span> = vec![Span::styled(
+                " SubAgents: ",
+                Style::default().fg(t.text_dim).add_modifier(Modifier::BOLD),
+            )];
+            let mut current_width: usize = 13;
+
+            for (i, snap) in sub_snaps.iter().enumerate() {
+                if i > 0 {
+                    if current_width + 3 > max_width {
+                        sa_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
+                        break;
+                    }
+                    sa_spans.push(Span::styled(" │ ", Style::default().fg(t.title_separator)));
+                    current_width += 3;
+                }
+
+                let status_color = match &snap.status {
+                    SubAgentStatus::Working => t.title_loading,
+                    SubAgentStatus::Completed => t.config_toggle_on,
+                    SubAgentStatus::Cancelled => t.text_dim,
+                    SubAgentStatus::Error(_) => t.config_toggle_off,
+                    SubAgentStatus::Initializing => t.config_dim,
+                };
+
+                // 名字：description 做紧凑显示（≤20 字节）
+                let name = short_subagent_label(&snap.description);
+
+                // 状态文字：Working 显示当前工具/轮次；终态显示 icon+label；Error 显示截断错误
+                let status_text = match &snap.status {
+                    SubAgentStatus::Working => {
+                        if let Some(ref tool) = snap.current_tool {
+                            format!("{} R{} {}", snap.status.icon(), snap.current_round, tool)
+                        } else {
+                            format!(
+                                "{} R{}/t{}",
+                                snap.status.icon(),
+                                snap.current_round,
+                                snap.tool_calls_count
+                            )
+                        }
+                    }
+                    SubAgentStatus::Error(msg) => {
+                        let short = truncate_str(msg, 20);
+                        format!("{} {}", snap.status.icon(), short)
+                    }
+                    SubAgentStatus::Completed => {
+                        format!(
+                            "{} {} t{}",
+                            snap.status.icon(),
+                            snap.status.label(),
+                            snap.tool_calls_count
+                        )
+                    }
+                    _ => format!("{} {}", snap.status.icon(), snap.status.label()),
+                };
+
+                let entry_width = name.chars().count() + 2 + status_text.chars().count() + 1;
+                if current_width + entry_width > max_width {
+                    sa_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
+                    break;
+                }
+
+                sa_spans.push(Span::styled(
+                    name,
+                    Style::default()
+                        .fg(t.text_white)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                sa_spans.push(Span::styled(" [", Style::default().fg(t.text_dim)));
+                sa_spans.push(Span::styled(status_text, Style::default().fg(status_color)));
+                sa_spans.push(Span::styled("]", Style::default().fg(t.text_dim)));
+                current_width += entry_width;
+            }
+
+            let sa_line =
+                Paragraph::new(Line::from(sa_spans)).style(Style::default().bg(t.bg_primary));
+            f.render_widget(sa_line, Rect::new(area.x, next_row, area.width, 1));
+        }
+    }
+}
+
+/// 将 subagent description 转为紧凑标签（<=20 字符，空白转 _）
+fn short_subagent_label(description: &str) -> String {
+    let cleaned: String = description
+        .chars()
+        .map(|c| if c.is_whitespace() { '_' } else { c })
+        .collect();
+    if cleaned.chars().count() <= 20 {
+        cleaned
+    } else {
+        let s: String = cleaned.chars().take(20).collect();
+        format!("{}…", s)
     }
 }
 

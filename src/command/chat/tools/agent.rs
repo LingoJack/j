@@ -2,8 +2,8 @@ use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::teammate::{clear_thread_cwd, set_thread_cwd, thread_cwd};
 use crate::command::chat::tools::agent_shared::{
-    AgentToolShared, call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
-    extract_tool_items,
+    AgentToolShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
+    create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
 };
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
@@ -17,11 +17,43 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-/// 子 Agent 运行时快照（系统提示 + 消息列表），供 /dump 读取。
-type SubAgentSnapshotRefs = (Arc<Mutex<String>>, Arc<Mutex<Vec<ChatMessage>>>);
+/// 子 Agent 运行时快照引用集合，供 loop 同步状态/系统提示/消息列表。
+struct SubAgentSnapshotRefs {
+    system_prompt: Arc<Mutex<String>>,
+    messages: Arc<Mutex<Vec<ChatMessage>>>,
+    status: Arc<Mutex<SubAgentStatus>>,
+    current_tool: Arc<Mutex<Option<String>>>,
+    tool_calls_count: Arc<AtomicUsize>,
+    current_round: Arc<AtomicUsize>,
+}
+
+impl SubAgentSnapshotRefs {
+    fn from_handle(handle: &SubAgentHandle) -> Self {
+        Self {
+            system_prompt: Arc::clone(&handle.system_prompt),
+            messages: Arc::clone(&handle.messages),
+            status: Arc::clone(&handle.status),
+            current_tool: Arc::clone(&handle.current_tool),
+            tool_calls_count: Arc::clone(&handle.tool_calls_count),
+            current_round: Arc::clone(&handle.current_round),
+        }
+    }
+
+    fn set_status(&self, status: SubAgentStatus) {
+        if let Ok(mut s) = self.status.lock() {
+            *s = status;
+        }
+    }
+
+    fn set_current_tool(&self, name: Option<String>) {
+        if let Ok(mut t) = self.current_tool.lock() {
+            *t = name;
+        }
+    }
+}
 
 /// 无 UI 子代理循环的参数集合
 struct HeadlessAgentParams {
@@ -33,6 +65,21 @@ struct HeadlessAgentParams {
     jcli_config: Arc<JcliConfig>,
     snapshot: Option<SubAgentSnapshotRefs>,
     description: String,
+}
+
+/// 将任意描述转为适合作为 <前缀> 显示的名字（去空白，限长度）
+fn sanitize_agent_name(description: &str) -> String {
+    let cleaned: String = description
+        .chars()
+        .map(|c| if c.is_whitespace() { '_' } else { c })
+        .collect();
+    // 控制显示长度，避免前缀挤占正文
+    if cleaned.chars().count() <= 24 {
+        cleaned
+    } else {
+        let truncated: String = cleaned.chars().take(24).collect();
+        format!("{}…", truncated)
+    }
 }
 
 /// AgentTool 参数
@@ -159,12 +206,14 @@ impl Tool for AgentTool {
                 0,
             );
 
-            // 注册到子 Agent tracker 供 /dump 读取
+            // 注册到子 Agent tracker 供 /dump + UI dashboard 读取
             self.shared.sub_agent_tracker.gc_finished();
-            let (_snap_id, snap_running, snap_system_prompt, snap_messages) = self
+            let handle = self
                 .shared
                 .sub_agent_tracker
                 .register(&description, "background");
+            let snap_running = Arc::clone(&handle.is_running);
+            let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
 
             let bg_manager = Arc::clone(&self.shared.background_manager);
             let task_id_clone = task_id.clone();
@@ -186,10 +235,7 @@ impl Tool for AgentTool {
                         tools,
                         registry: sub_registry,
                         jcli_config,
-                        snapshot: Some((
-                            Arc::clone(&snap_system_prompt),
-                            Arc::clone(&snap_messages),
-                        )),
+                        snapshot: Some(snapshot_refs),
                         description: description_clone.clone(),
                     },
                     &cancelled_clone,
@@ -231,12 +277,14 @@ impl Tool for AgentTool {
                 set_thread_cwd(wt_path);
             }
 
-            // 注册到子 Agent tracker 供 /dump 读取
+            // 注册到子 Agent tracker 供 /dump + UI dashboard 读取
             self.shared.sub_agent_tracker.gc_finished();
-            let (_snap_id, snap_running, snap_system_prompt, snap_messages) = self
+            let handle = self
                 .shared
                 .sub_agent_tracker
                 .register(&description, "foreground");
+            let snap_running = Arc::clone(&handle.is_running);
+            let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
 
             let cancelled_clone = Arc::clone(cancelled);
             let result = run_headless_agent_loop(
@@ -247,7 +295,7 @@ impl Tool for AgentTool {
                     tools,
                     registry: sub_registry,
                     jcli_config,
-                    snapshot: Some((Arc::clone(&snap_system_prompt), Arc::clone(&snap_messages))),
+                    snapshot: Some(snapshot_refs),
                     description,
                 },
                 &cancelled_clone,
@@ -291,7 +339,7 @@ fn run_headless_agent_loop(
     cancelled: &Arc<AtomicBool>,
     shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {
-    let agent_tag = format!("Agent: {}", params.description);
+    let agent_name = sanitize_agent_name(&params.description);
     let push_ui = |msg: ChatMessage| {
         if let Ok(mut shared) = shared_messages.lock() {
             shared.push(msg);
@@ -299,14 +347,24 @@ fn run_headless_agent_loop(
     };
     let max_rounds = 30; // 子代理最大轮数
 
+    // 进入 Working 状态
+    if let Some(ref refs) = params.snapshot {
+        refs.set_status(SubAgentStatus::Working);
+    }
+
     let (rt, client) = match create_runtime_and_client(&params.provider) {
         Ok(pair) => pair,
-        Err(e) => return e,
+        Err(e) => {
+            if let Some(ref refs) = params.snapshot {
+                refs.set_status(SubAgentStatus::Error(e.clone()));
+            }
+            return e;
+        }
     };
 
     // 写入 system prompt 快照（供 /dump 读取）
-    if let Some((ref sp_snap, _)) = params.snapshot
-        && let Ok(mut sp) = sp_snap.lock()
+    if let Some(ref refs) = params.snapshot
+        && let Ok(mut sp) = refs.system_prompt.lock()
     {
         *sp = params.system_prompt.clone().unwrap_or_default();
     }
@@ -320,8 +378,8 @@ fn run_headless_agent_loop(
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
-        if let Some((_, ref msgs_snap)) = params.snapshot
-            && let Ok(mut snap) = msgs_snap.lock()
+        if let Some(ref refs) = params.snapshot
+            && let Ok(mut snap) = refs.messages.lock()
         {
             *snap = msgs.clone();
         }
@@ -332,7 +390,15 @@ fn run_headless_agent_loop(
 
     for round in 0..max_rounds {
         if cancelled.load(Ordering::Relaxed) {
+            if let Some(ref refs) = params.snapshot {
+                refs.set_status(SubAgentStatus::Cancelled);
+                refs.set_current_tool(None);
+            }
             return format!("{}\n[Sub-agent cancelled]", final_text);
+        }
+
+        if let Some(ref refs) = params.snapshot {
+            refs.current_round.store(round + 1, Ordering::Relaxed);
         }
 
         write_info_log("SubAgent", &format!("Round {}/{}", round + 1, max_rounds));
@@ -346,17 +412,23 @@ fn run_headless_agent_loop(
             params.system_prompt.as_deref(),
         ) {
             Ok(c) => c,
-            Err(e) => return format!("{}\n{}", final_text, e),
+            Err(e) => {
+                if let Some(ref refs) = params.snapshot {
+                    refs.set_status(SubAgentStatus::Error(e.clone()));
+                    refs.set_current_tool(None);
+                }
+                return format!("{}\n{}", final_text, e);
+            }
         };
 
         let assistant_text = choice.message.content.clone().unwrap_or_default();
         if !assistant_text.is_empty() {
             final_text = assistant_text.clone();
             write_info_log("SubAgent", &format!("Reply: {}", &final_text));
-            // UI 状态行：显示 sub-agent 的文字回复
+            // UI 状态行：显示 sub-agent 的文字回复（前缀为 agent_name，无空白以便 parse）
             push_ui(ChatMessage::text(
                 "assistant",
-                format!("<{}> {}", agent_tag, &assistant_text),
+                format!("<{}> {}", agent_name, &assistant_text),
             ));
         }
 
@@ -381,7 +453,7 @@ fn run_headless_agent_loop(
         for item in &tool_items {
             push_ui(ChatMessage::text(
                 "assistant",
-                format!("<{}> [调用工具 {}]", agent_tag, item.name),
+                format!("<{}> [调用工具 {}]", agent_name, item.name),
             ));
         }
 
@@ -396,6 +468,10 @@ fn run_headless_agent_loop(
 
         // 逐个执行工具
         for item in &tool_items {
+            if let Some(ref refs) = params.snapshot {
+                refs.set_current_tool(Some(item.name.clone()));
+                refs.tool_calls_count.fetch_add(1, Ordering::Relaxed);
+            }
             let result_msg = execute_tool_with_permission(
                 item,
                 &params.registry,
@@ -406,6 +482,9 @@ fn run_headless_agent_loop(
             );
             messages.push(result_msg);
         }
+        if let Some(ref refs) = params.snapshot {
+            refs.set_current_tool(None);
+        }
 
         // 本轮工具结果写入后同步快照
         sync_messages(&messages);
@@ -414,8 +493,13 @@ fn run_headless_agent_loop(
     // UI 状态行：sub-agent 结束
     push_ui(ChatMessage::text(
         "assistant",
-        format!("<{}> [已完成]", agent_tag),
+        format!("<{}> [已完成]", agent_name),
     ));
+
+    if let Some(ref refs) = params.snapshot {
+        refs.set_status(SubAgentStatus::Completed);
+        refs.set_current_tool(None);
+    }
 
     if final_text.is_empty() {
         "[Sub-agent completed with no text output]".to_string()

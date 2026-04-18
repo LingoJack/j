@@ -15,14 +15,56 @@ use crate::util::log::write_info_log;
 use rand::Rng;
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     mpsc,
 };
+use std::time::Instant;
 
 // ========== SubAgentTracker ==========
 
+/// 子 Agent 细粒度运行状态
+#[derive(Clone, Debug, PartialEq)]
+pub enum SubAgentStatus {
+    /// 刚注册，尚未进入循环
+    Initializing,
+    /// 正在调用 LLM 或执行工具
+    Working,
+    /// 正常完成
+    Completed,
+    /// 用户取消或父 agent 取消
+    Cancelled,
+    /// 出错（LLM 失败、工具异常等）
+    Error(String),
+}
+
+impl SubAgentStatus {
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Initializing => "◐",
+            Self::Working => "●",
+            Self::Completed => "✓",
+            Self::Cancelled => "✗",
+            Self::Error(_) => "✗",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Initializing => "初始化",
+            Self::Working => "工作中",
+            Self::Completed => "已完成",
+            Self::Cancelled => "已取消",
+            Self::Error(_) => "错误",
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Cancelled | Self::Error(_))
+    }
+}
+
 /// 一个正在运行（或刚结束）的子 Agent 的快照
-#[derive(Debug)]
 pub struct SubAgentSnapshot {
     pub id: String,
     pub description: String,
@@ -30,6 +72,30 @@ pub struct SubAgentSnapshot {
     pub is_running: Arc<AtomicBool>,
     pub system_prompt: Arc<Mutex<String>>,
     pub messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 细粒度状态
+    pub status: Arc<Mutex<SubAgentStatus>>,
+    /// 当前正在执行的工具名
+    pub current_tool: Arc<Mutex<Option<String>>>,
+    /// 累计工具调用次数
+    pub tool_calls_count: Arc<AtomicUsize>,
+    /// 当前轮次（1-based）
+    pub current_round: Arc<AtomicUsize>,
+    /// 启动时刻（用于计算运行时长）
+    pub started_at: Instant,
+}
+
+/// 子 Agent UI 展示快照（克隆无锁，给 UI 渲染用）
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct SubAgentDisplay {
+    pub id: String,
+    pub description: String,
+    pub mode: &'static str,
+    pub status: SubAgentStatus,
+    pub current_tool: Option<String>,
+    pub tool_calls_count: usize,
+    pub current_round: usize,
+    pub elapsed_secs: u64,
 }
 
 /// 管理所有运行中的子 Agent 快照，供 /dump 读取
@@ -38,16 +104,21 @@ pub struct SubAgentTracker {
     counter: AtomicU64,
 }
 
-/// 一次 register 返回的 handle：(id, is_running, system_prompt 共享, messages 共享)
-pub type SubAgentRegistration = (
-    String,
-    Arc<AtomicBool>,
-    Arc<Mutex<String>>,
-    Arc<Mutex<Vec<ChatMessage>>>,
-);
-
 /// 单次 snapshot 元素：(id, description, mode, system_prompt, messages)
 pub type RunningSubAgentDump = (String, String, &'static str, String, Vec<ChatMessage>);
+
+/// register 返回的 handle 集合，供 loop 写入状态
+#[allow(dead_code)]
+pub struct SubAgentHandle {
+    pub id: String,
+    pub is_running: Arc<AtomicBool>,
+    pub system_prompt: Arc<Mutex<String>>,
+    pub messages: Arc<Mutex<Vec<ChatMessage>>>,
+    pub status: Arc<Mutex<SubAgentStatus>>,
+    pub current_tool: Arc<Mutex<Option<String>>>,
+    pub tool_calls_count: Arc<AtomicUsize>,
+    pub current_round: Arc<AtomicUsize>,
+}
 
 impl SubAgentTracker {
     pub fn new() -> Self {
@@ -57,12 +128,16 @@ impl SubAgentTracker {
         }
     }
 
-    /// 注册一个子 Agent；返回生成的 id 与快照的 Arc 字段，供 loop 写入
-    pub fn register(&self, description: &str, mode: &'static str) -> SubAgentRegistration {
+    /// 注册一个子 Agent；返回 Handle 集合，供 loop 写入状态
+    pub fn register(&self, description: &str, mode: &'static str) -> SubAgentHandle {
         let id = format!("sub_{:04}", self.counter.fetch_add(1, Ordering::Relaxed));
         let is_running = Arc::new(AtomicBool::new(true));
         let system_prompt = Arc::new(Mutex::new(String::new()));
         let messages = Arc::new(Mutex::new(Vec::new()));
+        let status = Arc::new(Mutex::new(SubAgentStatus::Initializing));
+        let current_tool = Arc::new(Mutex::new(None));
+        let tool_calls_count = Arc::new(AtomicUsize::new(0));
+        let current_round = Arc::new(AtomicUsize::new(0));
         if let Ok(mut list) = self.agents.lock() {
             list.push(SubAgentSnapshot {
                 id: id.clone(),
@@ -71,9 +146,23 @@ impl SubAgentTracker {
                 is_running: Arc::clone(&is_running),
                 system_prompt: Arc::clone(&system_prompt),
                 messages: Arc::clone(&messages),
+                status: Arc::clone(&status),
+                current_tool: Arc::clone(&current_tool),
+                tool_calls_count: Arc::clone(&tool_calls_count),
+                current_round: Arc::clone(&current_round),
+                started_at: Instant::now(),
             });
         }
-        (id, is_running, system_prompt, messages)
+        SubAgentHandle {
+            id,
+            is_running,
+            system_prompt,
+            messages,
+            status,
+            current_tool,
+            tool_calls_count,
+            current_round,
+        }
     }
 
     /// 采集当前所有仍在运行的子 Agent 的完整快照（供 /dump 使用）
@@ -96,10 +185,50 @@ impl SubAgentTracker {
             .collect()
     }
 
+    /// 采集所有子 Agent（含刚完成的）的 UI 展示快照
+    pub fn display_snapshots(&self) -> Vec<SubAgentDisplay> {
+        let list = match self.agents.lock() {
+            Ok(l) => l,
+            Err(_) => return Vec::new(),
+        };
+        list.iter()
+            .map(|s| {
+                let status = s
+                    .status
+                    .lock()
+                    .map(|x| x.clone())
+                    .unwrap_or(SubAgentStatus::Working);
+                let current_tool = s.current_tool.lock().ok().and_then(|t| t.clone());
+                SubAgentDisplay {
+                    id: s.id.clone(),
+                    description: s.description.clone(),
+                    mode: s.mode,
+                    status,
+                    current_tool,
+                    tool_calls_count: s.tool_calls_count.load(Ordering::Relaxed),
+                    current_round: s.current_round.load(Ordering::Relaxed),
+                    elapsed_secs: s.started_at.elapsed().as_secs(),
+                }
+            })
+            .collect()
+    }
+
     /// 清理已结束的子 Agent（可在 register 时调用，防止列表无限增长）
+    ///
+    /// 保留完成/错误状态超过 30 秒后清理，给 UI 显示终态的时间。
     pub fn gc_finished(&self) {
         if let Ok(mut list) = self.agents.lock() {
-            list.retain(|s| s.is_running.load(Ordering::Relaxed));
+            list.retain(|s| {
+                if s.is_running.load(Ordering::Relaxed) {
+                    return true;
+                }
+                // 非运行中：保留 30 秒后清理
+                s.started_at.elapsed().as_secs() < 30
+                    || matches!(
+                        s.status.lock().map(|x| x.clone()),
+                        Ok(SubAgentStatus::Working) | Ok(SubAgentStatus::Initializing)
+                    )
+            });
         }
     }
 }
