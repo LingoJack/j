@@ -28,14 +28,15 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 
-    // 动态标题栏高度：顶部分割线(1) + 状态行(1) + 可选 teammate 行 + 可选 subagent 行
+    // 动态标题栏高度：顶部分割线(1) + 状态行(1) + 可选 teammate 行 + 可选 subagent 行 + 可选底部留白(1)
     let has_teammates = app
         .teammate_manager
         .lock()
         .map(|m| !m.teammates.is_empty())
         .unwrap_or(false);
     let has_subagents = !app.sub_agent_tracker.display_snapshots().is_empty();
-    let title_height = 2 + (has_teammates as u16) + (has_subagents as u16);
+    let status_padding = (has_teammates || has_subagents) as u16;
+    let title_height = 2 + (has_teammates as u16) + (has_subagents as u16) + status_padding;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
