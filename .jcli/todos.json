@@ -1,32 +1,27 @@
 [
   {
     "id": "1",
-    "content": "UIState 添加 compact_exempt_sublist 和 compact_exempt_selected 字段",
+    "content": "检查1: 命名规范 - static/const 是否为 SCREAMING_SNAKE_CASE",
     "status": "completed"
   },
   {
     "id": "2",
-    "content": "helpers.rs 改 compact_exempt_tools value 为 (n/m) 格式",
+    "content": "检查1: 命名规范 - struct/enum/trait 是否为 PascalCase",
     "status": "completed"
   },
   {
     "id": "3",
-    "content": "config.rs: draw_tab_global_lines 添加 sublist 模式渲染",
+    "content": "检查1: 命名规范 - 函数名是否为 snake_case",
     "status": "completed"
   },
   {
     "id": "4",
-    "content": "config.rs: 添加 draw_compact_exempt_sublist 函数",
+    "content": "检查1: 命名规范 - 变量名是否符合规范",
     "status": "completed"
   },
   {
     "id": "5",
-    "content": "chat_app.rs: ConfigEnter 处理 compact_exempt_tools 进入/导航/toggle/退出 sublist",
-    "status": "completed"
-  },
-  {
-    "id": "6",
-    "content": "构建验证",
+    "content": "检查2: 魔法值检查 - 5个指定文件中的硬编码数字和字符串",
     "status": "completed"
   }
 ]
