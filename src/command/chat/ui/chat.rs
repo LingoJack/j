@@ -28,15 +28,15 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let bg = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg, size);
 
-    // 动态标题栏高度：顶部分割线(1) + 状态行(1) + 可选 teammate 行 + 可选 subagent 行 + 可选底部留白(1)
+    // 动态标题栏高度：顶部分割线(1) + 状态行(1) + 可选分割线(1) + 可选 teammate 行 + 可选 subagent 行
     let has_teammates = app
         .teammate_manager
         .lock()
         .map(|m| !m.teammates.is_empty())
         .unwrap_or(false);
     let has_subagents = !app.sub_agent_tracker.display_snapshots().is_empty();
-    let status_padding = (has_teammates || has_subagents) as u16;
-    let title_height = 2 + (has_teammates as u16) + (has_subagents as u16) + status_padding;
+    let status_separator = (has_teammates || has_subagents) as u16; // 状态行与 teammate/subagent 之间的分割线
+    let title_height = 2 + status_separator + (has_teammates as u16) + (has_subagents as u16);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -49,7 +49,7 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         .split(size);
 
     // ========== 标题栏 ==========
-    draw_title_bar(f, chunks[0], app);
+    draw_title_bar(f, chunks[0], app, has_teammates, has_subagents);
 
     // ========== 消息区 ==========
     match app.ui.mode {
@@ -107,7 +107,13 @@ fn format_context_tokens(tokens: usize) -> String {
 }
 
 /// 绘制标题栏
-pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
+pub fn draw_title_bar(
+    f: &mut ratatui::Frame,
+    area: Rect,
+    app: &ChatApp,
+    has_teammates: bool,
+    has_subagents: bool,
+) {
     let t = &app.ui.theme;
     let msg_count = app.state.session.messages.len();
 
@@ -212,12 +218,23 @@ pub fn draw_title_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         Paragraph::new(Line::from(title_spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(content_line, Rect::new(area.x, area.y + 1, area.width, 1));
 
-    // ========== 第三/四行：Teammate + SubAgent 状态 ==========
+    // ========== 分割线 + Teammate + SubAgent 状态 ==========
     let mut next_row = area.y + 2;
-    let max_width = area.width as usize;
+
+    // 状态行与 teammate/subagent 之间的分割线
+    if has_teammates || has_subagents {
+        let separator = Paragraph::new(Line::styled(
+            "─".repeat(area.width as usize),
+            Style::default().fg(t.border_title),
+        ))
+        .style(Style::default().bg(t.bg_primary));
+        f.render_widget(separator, Rect::new(area.x, next_row, area.width, 1));
+        next_row += 1;
+    }
 
     // Teammate 行
-    if area.height >= 3 {
+    let max_width = area.width as usize;
+    if next_row < area.y + area.height && has_teammates {
         let snapshots = app
             .teammate_manager
             .lock()
