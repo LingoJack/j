@@ -239,6 +239,12 @@ impl ChatApp {
             });
         let agent_provider: Arc<Mutex<ModelProvider>> = Arc::new(Mutex::new(default_provider));
         let agent_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+        // 注入 LLM provider 到 HookManager（LLM hook 执行时使用）
+        if let Ok(mut mgr) = hook_manager.lock() {
+            mgr.set_provider(Arc::clone(&agent_provider));
+        }
+
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
 
         // 子 agent 权限请求队列（TUI 和所有 agent 共享同一个 Arc）

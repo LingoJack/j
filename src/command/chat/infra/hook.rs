@@ -1,5 +1,5 @@
 use super::super::permission::JcliConfig;
-use super::super::storage::ChatMessage;
+use super::super::storage::{ChatMessage, ModelProvider};
 use crate::util::log::{write_error_log, write_info_log};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
@@ -196,14 +196,67 @@ impl HookFilter {
     }
 }
 
-/// Hook 定义（YAML 兼容）：一条 shell 命令 + 超时秒数 + 失败策略
-/// 仅用于从 YAML 文件反序列化，内部使用 HookKind
+/// Hook 类型（YAML `type` 字段）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum HookType {
+    /// Shell 命令 hook（默认，通过 `sh -c` 子进程执行）
+    #[default]
+    Bash,
+    /// LLM hook（通过 prompt 模板调用 LLM，返回 HookResult JSON）
+    Llm,
+}
+
+impl std::fmt::Display for HookType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HookType::Bash => write!(f, "bash"),
+            HookType::Llm => write!(f, "llm"),
+        }
+    }
+}
+
+/// Hook 定义（YAML 兼容）：支持 bash 和 llm 两种类型
+///
+/// YAML 示例（bash）：
+/// ```yaml
+/// - command: "echo '{\"user_input\": \"hooked\"}'"
+///   timeout: 10
+///   on_error: skip
+/// ```
+///
+/// YAML 示例（llm）：
+/// ```yaml
+/// - type: llm
+///   prompt: |
+///     检查以下用户输入是否包含敏感信息：
+///     {{user_input}}
+///     如果包含，返回 action=stop + retry_feedback。
+///   timeout: 30
+///   retry: 1
+///   on_error: skip
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookDef {
-    pub command: String,
+    /// Hook 类型：bash（默认）或 llm
+    #[serde(default)]
+    pub r#type: HookType,
+    /// Shell 命令（type=bash 时必填，通过 `sh -c` 执行）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// LLM prompt 模板（type=llm 时必填，支持 {{variable}} 模板变量）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    /// LLM 模型名覆盖（type=llm 时可选，空则使用当前活跃 provider 的模型）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// 超时秒数（bash 默认 10，llm 默认 30）
     #[serde(default = "default_timeout")]
     pub timeout: u64,
-    /// 脚本失败时的处理策略（默认 skip）
+    /// 重试次数（仅 Err 路径生效，默认 0 即不重试）
+    #[serde(default)]
+    pub retry: u32,
+    /// 脚本/LLM 失败时的处理策略（默认 skip）
     #[serde(default)]
     pub on_error: OnError,
     /// 条件过滤：仅当条件匹配时执行（默认无过滤）
@@ -215,13 +268,19 @@ fn default_timeout() -> u64 {
     10
 }
 
+fn default_llm_timeout() -> u64 {
+    30
+}
+
 // ========== HookKind 枚举 ==========
 
-/// Hook 种类：Shell 命令（子进程）或内置 Rust 闭包（进程内）
+/// Hook 种类：Shell 命令（子进程）、LLM（prompt 模板调 LLM）、内置 Rust 闭包（进程内）
 #[derive(Clone)]
 pub enum HookKind {
     /// Shell 命令，通过 `sh -c` 子进程执行（现有行为）
     Shell(ShellHook),
+    /// LLM hook，通过 prompt 模板调用 LLM API，返回 HookResult JSON
+    Llm(LlmHook),
     /// 内置 Rust 闭包，进程内零开销执行
     Builtin(BuiltinHook),
 }
@@ -231,24 +290,80 @@ pub enum HookKind {
 pub struct ShellHook {
     pub command: String,
     pub timeout: u64,
+    pub retry: u32,
     pub on_error: OnError,
     pub filter: HookFilter,
 }
 
-impl From<HookDef> for ShellHook {
-    fn from(def: HookDef) -> Self {
-        ShellHook {
-            command: def.command,
-            timeout: def.timeout,
-            on_error: def.on_error,
-            filter: def.filter,
+/// LLM hook：prompt 模板 + 模型覆盖 + 超时 + 重试 + 失败策略 + 条件过滤
+#[derive(Debug, Clone)]
+pub struct LlmHook {
+    /// Prompt 模板，支持 {{variable}} 模板变量
+    pub prompt: String,
+    /// 模型名覆盖（空则使用当前活跃 provider 的模型）
+    pub model: Option<String>,
+    /// 超时秒数
+    pub timeout: u64,
+    /// 重试次数（仅 Err 路径生效）
+    pub retry: u32,
+    /// 失败策略
+    pub on_error: OnError,
+    /// 条件过滤
+    pub filter: HookFilter,
+}
+
+impl HookDef {
+    /// 转换为 HookKind（根据 type 字段分派）
+    pub fn into_hook_kind(self) -> Result<HookKind, String> {
+        match self.r#type {
+            HookType::Bash => {
+                let command = self.command.unwrap_or_default();
+                if command.is_empty() {
+                    return Err("bash hook 缺少 command 字段".to_string());
+                }
+                Ok(HookKind::Shell(ShellHook {
+                    command,
+                    timeout: self.timeout,
+                    retry: self.retry,
+                    on_error: self.on_error,
+                    filter: self.filter,
+                }))
+            }
+            HookType::Llm => {
+                let prompt = self.prompt.unwrap_or_default();
+                if prompt.is_empty() {
+                    return Err("llm hook 缺少 prompt 字段".to_string());
+                }
+                Ok(HookKind::Llm(LlmHook {
+                    prompt,
+                    model: self.model,
+                    timeout: if self.timeout == default_timeout() {
+                        default_llm_timeout()
+                    } else {
+                        self.timeout
+                    },
+                    retry: if self.retry == 0 { 1 } else { self.retry },
+                    on_error: self.on_error,
+                    filter: self.filter,
+                }))
+            }
         }
     }
 }
 
 impl From<HookDef> for HookKind {
     fn from(def: HookDef) -> Self {
-        HookKind::Shell(ShellHook::from(def))
+        def.into_hook_kind().unwrap_or_else(|e| {
+            write_error_log("HookDef::into_hook_kind", &e);
+            // 回退到空 Shell hook（不会执行有效操作，但不会 panic）
+            HookKind::Shell(ShellHook {
+                command: String::new(),
+                timeout: 0,
+                retry: 0,
+                on_error: OnError::Skip,
+                filter: HookFilter::default(),
+            })
+        })
     }
 }
 
@@ -280,6 +395,13 @@ impl std::fmt::Debug for HookKind {
                 .field("command", &shell.command)
                 .field("timeout", &shell.timeout)
                 .field("on_error", &shell.on_error)
+                .finish(),
+            HookKind::Llm(llm) => f
+                .debug_struct("HookKind::Llm")
+                .field("prompt", &llm.prompt.len())
+                .field("model", &llm.model)
+                .field("timeout", &llm.timeout)
+                .field("retry", &llm.retry)
                 .finish(),
             HookKind::Builtin(builtin) => f
                 .debug_struct("HookKind::Builtin")
@@ -465,6 +587,25 @@ impl HookResult {
     }
 }
 
+// ========== HookOutcome（三态结果）==========
+
+/// Hook 执行的三态结果
+///
+/// - `Success`：执行成功，可能包含修改
+/// - `Retry`：执行失败但还有重试机会
+/// - `Err`：执行失败（重试耗尽或不可重试）
+#[derive(Debug)]
+#[allow(dead_code)]
+enum HookOutcome {
+    Success(HookResult),
+    Retry {
+        error: String,
+        #[allow(dead_code)]
+        attempts_left: u32,
+    },
+    Err(String),
+}
+
 // ========== HookManager ==========
 
 /// 单个 hook 的执行统计
@@ -494,6 +635,8 @@ pub struct HookManager {
     session_hooks: HashMap<HookEvent, Vec<HookKind>>,
     /// 按 hook label 记录的执行指标（内部可变，execute 不需要 &mut self）
     metrics: Mutex<HashMap<String, HookMetrics>>,
+    /// 当前活跃的 LLM provider（LLM hook 执行时使用）
+    provider: Option<Arc<Mutex<ModelProvider>>>,
 }
 
 impl Clone for HookManager {
@@ -504,6 +647,7 @@ impl Clone for HookManager {
             project_hooks: self.project_hooks.clone(),
             session_hooks: self.session_hooks.clone(),
             metrics: Mutex::new(self.metrics.lock().map(|m| m.clone()).unwrap_or_default()),
+            provider: self.provider.clone(),
         }
     }
 }
@@ -518,15 +662,17 @@ const HOOK_SOURCE_SESSION: &str = "session";
 pub struct HookEntry {
     pub event: HookEvent,
     pub source: &'static str,
-    /// Shell hook 的命令，或 Builtin hook 的名称
+    /// Hook 类型标签（bash / llm / builtin）
+    pub hook_type: &'static str,
+    /// Shell hook 的命令，LLM hook 的 prompt 摘要，或 Builtin hook 的名称
     pub label: String,
-    /// Shell hook 的超时秒数
+    /// Hook 的超时秒数
     pub timeout: Option<u64>,
-    /// Shell hook 的失败策略
+    /// Hook 的失败策略
     pub on_error: Option<OnError>,
     /// Session hook 在该 event 下的局部索引（仅 session 来源有值，用于 remove 操作）
     pub session_index: Option<usize>,
-    /// 条件过滤（仅 Shell hook 有）
+    /// 条件过滤
     pub filter: Option<HookFilter>,
     /// 执行指标
     pub metrics: Option<HookMetrics>,
@@ -649,10 +795,25 @@ impl HookManager {
 
     /// 注册 session 级 hook（由 register_hook 工具调用）
     pub fn register_session_hook(&mut self, event: HookEvent, def: HookDef) {
-        self.session_hooks
-            .entry(event)
-            .or_default()
-            .push(HookKind::Shell(ShellHook::from(def)));
+        match def.into_hook_kind() {
+            Ok(kind) => {
+                self.session_hooks.entry(event).or_default().push(kind);
+            }
+            Err(e) => {
+                write_error_log("HookManager::register_session_hook", &e);
+            }
+        }
+    }
+
+    /// 注册 session 级 hook（直接传入 HookKind）
+    #[allow(dead_code)]
+    pub fn register_session_hook_kind(&mut self, event: HookEvent, kind: HookKind) {
+        self.session_hooks.entry(event).or_default().push(kind);
+    }
+
+    /// 注入 LLM provider（用于 LLM hook 执行）
+    pub fn set_provider(&mut self, provider: Arc<Mutex<ModelProvider>>) {
+        self.provider = Some(provider);
     }
 
     /// 移除 session 级 hook（按事件和索引）
@@ -681,6 +842,7 @@ impl HookManager {
             HookEntry {
                 event,
                 source,
+                hook_type: hook_type_str(hook),
                 timeout: hook_timeout(hook),
                 on_error: hook_on_error(hook),
                 filter: hook_filter(hook).cloned(),
@@ -742,12 +904,13 @@ impl HookManager {
     ///
     /// 重新读取 `~/.jdata/agent/hooks.yaml` 和 `.jcli/hooks.yaml`，
     /// 替换当前的 user_hooks 和 project_hooks（builtin 和 session 级不受影响）。
-    /// 指标数据保留不清零。
+    /// 指标数据和 provider 保留不清零。
     #[allow(dead_code)]
     pub fn reload(&mut self) {
         let fresh = HookManager::load();
         self.user_hooks = fresh.user_hooks;
         self.project_hooks = fresh.project_hooks;
+        // provider 和 metrics 保留
         write_info_log("HookManager::reload", "已重新加载用户级和项目级 hooks");
     }
 
@@ -855,102 +1018,187 @@ impl HookManager {
                 continue;
             }
 
-            let hook_start = std::time::Instant::now();
-            match execute_hook(hook, &context) {
-                Ok(mut result) => {
-                    let elapsed_ms = hook_start.elapsed().as_millis() as u64;
-                    if let Ok(mut metrics) = self.metrics.lock() {
-                        let m = metrics.entry(label.clone()).or_default();
-                        m.executions += 1;
-                        m.successes += 1;
-                        m.total_duration_ms += elapsed_ms;
-                    }
+            let max_attempts = 1 + hook_retry_count(hook); // 1 + retry
+            let mut last_outcome = None;
 
-                    if result.is_halt() {
-                        let action_str = if result.is_stop() { "stop" } else { "skip" };
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook {} ({})", action_str, label),
-                        );
-                        return Some(HookResult {
-                            action: Some(if result.is_stop() {
-                                HookAction::Stop
-                            } else {
-                                HookAction::Skip
-                            }),
-                            retry_feedback: result.retry_feedback.take(),
-                            system_message: result.system_message.take(),
-                            ..Default::default()
-                        });
-                    }
-
-                    // 合并结果到 context（链式传递）
-                    if let Some(ref msgs) = result.messages {
-                        context.messages = Some(msgs.clone());
-                        final_result.messages = context.messages.clone();
-                        had_modification = true;
-                    }
-                    if let Some(ref sp) = result.system_prompt {
-                        context.system_prompt = Some(sp.clone());
-                        final_result.system_prompt = context.system_prompt.clone();
-                        had_modification = true;
-                    }
-                    if let Some(ref ui) = result.user_input {
-                        context.user_input = Some(ui.clone());
-                        final_result.user_input = context.user_input.clone();
-                        had_modification = true;
-                    }
-                    if let Some(ref ao) = result.assistant_output {
-                        context.assistant_output = Some(ao.clone());
-                        final_result.assistant_output = context.assistant_output.clone();
-                        had_modification = true;
-                    }
-                    if let Some(ref ta) = result.tool_arguments {
-                        context.tool_arguments = Some(ta.clone());
-                        final_result.tool_arguments = context.tool_arguments.clone();
-                        had_modification = true;
-                    }
-                    if let Some(ref tr) = result.tool_result {
-                        context.tool_result = Some(tr.clone());
-                        final_result.tool_result = context.tool_result.clone();
-                        had_modification = true;
-                    }
-                    if let Some(ref inject) = result.inject_messages {
-                        let existing = final_result.inject_messages.get_or_insert_with(Vec::new);
-                        existing.extend(inject.clone());
-                        had_modification = true;
-                    }
-                    if let Some(ref rf) = result.retry_feedback {
-                        final_result.retry_feedback = Some(rf.clone());
-                        had_modification = true;
-                    }
-                    if let Some(ref ac) = result.additional_context {
-                        final_result.additional_context = Some(ac.clone());
-                        had_modification = true;
-                    }
-                    if let Some(ref sm) = result.system_message {
-                        final_result.system_message = Some(sm.clone());
-                        had_modification = true;
-                    }
-                    if let Some(ref te) = result.tool_error {
-                        final_result.tool_error = Some(te.clone());
-                        had_modification = true;
-                    }
-                }
-                Err(e) => {
-                    let elapsed_ms = hook_start.elapsed().as_millis() as u64;
-                    if let Ok(mut metrics) = self.metrics.lock() {
-                        let m = metrics.entry(label.clone()).or_default();
-                        m.executions += 1;
-                        m.failures += 1;
-                        m.total_duration_ms += elapsed_ms;
-                    }
-
-                    // Shell hook 非零退出 / 超时 → 按 on_error 策略处理
-                    // Builtin hook 失败一律 abort（内置 hook 失败是真正的错误）
+            for attempt in 0..max_attempts {
+                // 链总超时检查（每次重试前也检查）
+                if chain_start.elapsed() > chain_timeout {
                     write_error_log(
                         "HookManager::execute",
-                        &format!("Hook 执行失败 ({}): {}", label, e),
+                        &format!(
+                            "Hook 链总超时，中止 {} 的重试 (事件: {})",
+                            label,
+                            event.as_str()
+                        ),
+                    );
+                    last_outcome = Some(HookOutcome::Err(format!(
+                        "链总超时，第 {} 次尝试中止",
+                        attempt + 1
+                    )));
+                    break;
+                }
+
+                let hook_start = std::time::Instant::now();
+                let result = execute_hook_with_provider(hook, &context, &self.provider);
+
+                let elapsed_ms = hook_start.elapsed().as_millis() as u64;
+
+                match result {
+                    Ok(hook_result) => {
+                        if let Ok(mut metrics) = self.metrics.lock() {
+                            let m = metrics.entry(label.clone()).or_default();
+                            m.executions += 1;
+                            m.successes += 1;
+                            m.total_duration_ms += elapsed_ms;
+                        }
+
+                        if hook_result.is_halt() {
+                            let action_str = if hook_result.is_stop() {
+                                "stop"
+                            } else {
+                                "skip"
+                            };
+                            write_info_log(
+                                "HookManager::execute",
+                                &format!("Hook {} ({})", action_str, label),
+                            );
+                            return Some(HookResult {
+                                action: Some(if hook_result.is_stop() {
+                                    HookAction::Stop
+                                } else {
+                                    HookAction::Skip
+                                }),
+                                retry_feedback: hook_result.retry_feedback.clone(),
+                                system_message: hook_result.system_message.clone(),
+                                ..Default::default()
+                            });
+                        }
+
+                        // 合并结果到 context（链式传递）
+                        if let Some(ref msgs) = hook_result.messages {
+                            context.messages = Some(msgs.clone());
+                            final_result.messages = context.messages.clone();
+                            had_modification = true;
+                        }
+                        if let Some(ref sp) = hook_result.system_prompt {
+                            context.system_prompt = Some(sp.clone());
+                            final_result.system_prompt = context.system_prompt.clone();
+                            had_modification = true;
+                        }
+                        if let Some(ref ui) = hook_result.user_input {
+                            context.user_input = Some(ui.clone());
+                            final_result.user_input = context.user_input.clone();
+                            had_modification = true;
+                        }
+                        if let Some(ref ao) = hook_result.assistant_output {
+                            context.assistant_output = Some(ao.clone());
+                            final_result.assistant_output = context.assistant_output.clone();
+                            had_modification = true;
+                        }
+                        if let Some(ref ta) = hook_result.tool_arguments {
+                            context.tool_arguments = Some(ta.clone());
+                            final_result.tool_arguments = context.tool_arguments.clone();
+                            had_modification = true;
+                        }
+                        if let Some(ref tr) = hook_result.tool_result {
+                            context.tool_result = Some(tr.clone());
+                            final_result.tool_result = context.tool_result.clone();
+                            had_modification = true;
+                        }
+                        if let Some(ref inject) = hook_result.inject_messages {
+                            let existing =
+                                final_result.inject_messages.get_or_insert_with(Vec::new);
+                            existing.extend(inject.clone());
+                            had_modification = true;
+                        }
+                        if let Some(ref rf) = hook_result.retry_feedback {
+                            final_result.retry_feedback = Some(rf.clone());
+                            had_modification = true;
+                        }
+                        if let Some(ref ac) = hook_result.additional_context {
+                            final_result.additional_context = Some(ac.clone());
+                            had_modification = true;
+                        }
+                        if let Some(ref sm) = hook_result.system_message {
+                            final_result.system_message = Some(sm.clone());
+                            had_modification = true;
+                        }
+                        if let Some(ref te) = hook_result.tool_error {
+                            final_result.tool_error = Some(te.clone());
+                            had_modification = true;
+                        }
+
+                        last_outcome = Some(HookOutcome::Success(hook_result));
+                        break; // 成功，跳出重试循环
+                    }
+                    Err(e) => {
+                        if let Ok(mut metrics) = self.metrics.lock() {
+                            let m = metrics.entry(label.clone()).or_default();
+                            m.executions += 1;
+                            m.failures += 1;
+                            m.total_duration_ms += elapsed_ms;
+                        }
+
+                        let attempts_left = max_attempts - attempt - 1;
+                        if attempts_left > 0 {
+                            write_info_log(
+                                "HookManager::execute",
+                                &format!(
+                                    "Hook 执行失败 ({}), 第 {}/{} 次尝试, 剩余重试 {}: {}",
+                                    label,
+                                    attempt + 1,
+                                    max_attempts,
+                                    attempts_left,
+                                    e
+                                ),
+                            );
+                            last_outcome = Some(HookOutcome::Retry {
+                                error: e,
+                                attempts_left,
+                            });
+                            // 继续下一次重试
+                        } else {
+                            write_error_log(
+                                "HookManager::execute",
+                                &format!("Hook 执行失败 ({}), 重试耗尽: {}", label, e),
+                            );
+                            last_outcome = Some(HookOutcome::Err(e));
+                            break; // 重试耗尽，跳出
+                        }
+                    }
+                }
+            }
+
+            // 处理最终 outcome
+            match last_outcome {
+                Some(HookOutcome::Success(_)) => {
+                    // 已在上面处理过，继续下一个 hook
+                }
+                Some(HookOutcome::Retry { error, .. }) => {
+                    // 理论上不应该到这里（重试循环应该已经处理），但防御性处理
+                    write_error_log(
+                        "HookManager::execute",
+                        &format!("Hook 重试未完成 ({}): {}", label, error),
+                    );
+                    // 按 on_error 策略处理
+                    match hook_on_error_strategy(hook) {
+                        OnError::Abort => {
+                            return Some(HookResult {
+                                action: Some(HookAction::Stop),
+                                ..Default::default()
+                            });
+                        }
+                        OnError::Skip => {
+                            continue;
+                        }
+                    }
+                }
+                Some(HookOutcome::Err(e)) => {
+                    // 重试耗尽后的失败，按 on_error 策略处理
+                    write_error_log(
+                        "HookManager::execute",
+                        &format!("Hook 最终失败 ({}): {}", label, e),
                     );
                     match hook_on_error_strategy(hook) {
                         OnError::Abort => {
@@ -960,10 +1208,13 @@ impl HookManager {
                             });
                         }
                         OnError::Skip => {
-                            // 记录日志后继续执行后续 hook
                             continue;
                         }
                     }
+                }
+                None => {
+                    // 不应该发生
+                    continue;
                 }
             }
         }
@@ -978,15 +1229,216 @@ impl HookManager {
 
 // ========== Hook 执行分派 ==========
 
-/// 执行单个 hook（分派到 Shell 或 Builtin）
-fn execute_hook(kind: &HookKind, context: &HookContext) -> Result<HookResult, String> {
+/// 执行单个 hook（分派到 Shell / LLM / Builtin），不处理重试
+fn execute_hook_with_provider(
+    kind: &HookKind,
+    context: &HookContext,
+    provider: &Option<Arc<Mutex<ModelProvider>>>,
+) -> Result<HookResult, String> {
     match kind {
         HookKind::Shell(shell) => execute_shell_hook(shell, context),
+        HookKind::Llm(llm) => execute_llm_hook(llm, context, provider),
         HookKind::Builtin(builtin) => match (builtin.handler)(context) {
             Some(result) => Ok(result),
             None => Ok(HookResult::default()),
         },
     }
+}
+
+/// LLM hook 的 JSON 格式指令（拼接到 prompt 末尾）
+const LLM_HOOK_FORMAT_INSTRUCTION: &str = r#"
+
+---
+You are a hook function. You MUST respond with ONLY a valid JSON object matching this schema (no markdown, no explanation outside JSON):
+{
+  "user_input": "string (optional, replace user message)",
+  "assistant_output": "string (optional, replace assistant output)",
+  "messages": [{"role":"user","content":"..."}] (optional, replace message list),
+  "system_prompt": "string (optional, replace system prompt)",
+  "tool_arguments": "string (optional, replace tool arguments JSON)",
+  "tool_result": "string (optional, replace tool result)",
+  "tool_error": "string (optional, replace tool error)",
+  "inject_messages": [{"role":"user","content":"..."}] (optional, append messages),
+  "action": "stop" or "skip" (optional, stop=abort pipeline, skip=skip current step),
+  "retry_feedback": "string (optional, feedback to retry with)",
+  "additional_context": "string (optional, append to system_prompt)",
+  "system_message": "string (optional, show toast to user)"
+}
+Return {} if no modification needed."#;
+
+/// 模板变量替换
+fn render_prompt_template(template: &str, context: &HookContext) -> String {
+    let mut result = template.to_string();
+    result = result.replace("{{event}}", context.event.as_str());
+    result = result.replace("{{cwd}}", &context.cwd);
+    result = result.replace(
+        "{{user_input}}",
+        context.user_input.as_deref().unwrap_or(""),
+    );
+    result = result.replace(
+        "{{assistant_output}}",
+        context.assistant_output.as_deref().unwrap_or(""),
+    );
+    result = result.replace("{{tool_name}}", context.tool_name.as_deref().unwrap_or(""));
+    result = result.replace(
+        "{{tool_arguments}}",
+        context.tool_arguments.as_deref().unwrap_or(""),
+    );
+    result = result.replace(
+        "{{tool_result}}",
+        context.tool_result.as_deref().unwrap_or(""),
+    );
+    result = result.replace("{{model}}", context.model.as_deref().unwrap_or(""));
+    result
+}
+
+/// 从 LLM 输出文本中提取 JSON（找第一个 { 到最后一个 } 之间的内容）
+fn extract_json_from_llm_output(text: &str) -> Option<&str> {
+    let start = text.find('{')?;
+    // 从末尾找最后一个 }
+    let end = text.rfind('}')?;
+    if end > start {
+        Some(&text[start..=end])
+    } else {
+        None
+    }
+}
+
+/// 执行 LLM hook
+///
+/// 协议：
+/// - 将 prompt 模板渲染后 + JSON 格式指令拼接为完整 prompt
+/// - 使用当前活跃 provider（或 LlmHook.model 覆盖）调用 LLM API（非流式）
+/// - 解析 LLM 输出为 HookResult JSON
+/// - JSON 解析失败 → Err → 触发重试
+fn execute_llm_hook(
+    hook: &LlmHook,
+    context: &HookContext,
+    provider_opt: &Option<Arc<Mutex<ModelProvider>>>,
+) -> Result<HookResult, String> {
+    let provider_arc = provider_opt
+        .as_ref()
+        .ok_or("LLM hook 无法执行：未注入 provider")?;
+
+    let provider = provider_arc
+        .lock()
+        .map_err(|e| format!("获取 provider 锁失败: {}", e))?
+        .clone();
+
+    // 如果 LlmHook 指定了 model，覆盖 provider 的 model
+    let provider = if let Some(ref model) = hook.model {
+        let mut p = provider;
+        p.model = model.clone();
+        p
+    } else {
+        provider
+    };
+
+    // 渲染 prompt 模板 + 拼接格式指令
+    let rendered = render_prompt_template(&hook.prompt, context);
+    let full_prompt = format!("{}{}", rendered, LLM_HOOK_FORMAT_INSTRUCTION);
+
+    // 构造 API 请求消息
+    let system_msg = "You are a hook function. Respond ONLY with the JSON object as instructed.";
+    let user_msg = full_prompt.as_str();
+
+    // 使用 reqwest 发送非流式请求（复用 api.rs 中的逻辑模式）
+    let url = format!(
+        "{}/chat/completions",
+        provider.api_base.trim_end_matches('/')
+    );
+    let request_body = serde_json::json!({
+        "model": provider.model,
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg}
+        ],
+        "temperature": 0.0,
+        "max_tokens": 2048,
+    });
+    let request_str = serde_json::to_string(&request_body)
+        .map_err(|e| format!("序列化 LLM hook 请求失败: {}", e))?;
+
+    // 在新 tokio runtime 中阻塞执行
+    let timeout_secs = hook.timeout;
+    let rt =
+        tokio::runtime::Runtime::new().map_err(|e| format!("创建 tokio runtime 失败: {}", e))?;
+
+    let result = rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .build()
+            .map_err(|e| format!("创建 HTTP client 失败: {}", e))?;
+
+        let resp = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", provider.api_key))
+            .body(request_str)
+            .send()
+            .await
+            .map_err(|e| format!("LLM hook 请求失败: {}", e))?;
+
+        let status = resp.status();
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("读取 LLM hook 响应失败: {}", e))?;
+
+        if !status.is_success() {
+            return Err(format!(
+                "LLM hook API 错误: HTTP {} (body: {})",
+                status,
+                &body[..body.len().min(500)]
+            ));
+        }
+
+        // 解析 OpenAI 兼容响应
+        let parsed: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| format!("解析 LLM hook 响应 JSON 失败: {}", e))?;
+
+        let content = parsed["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .trim();
+
+        if content.is_empty() || content == "{}" {
+            return Ok(HookResult::default());
+        }
+
+        // 从 LLM 输出中提取 JSON
+        let json_str = match extract_json_from_llm_output(content) {
+            Some(s) => s,
+            None => {
+                return Err(format!(
+                    "LLM hook 输出中未找到 JSON (输出: {})",
+                    &content[..content.len().min(500)]
+                ));
+            }
+        };
+
+        let hook_result: HookResult = serde_json::from_str(json_str).map_err(|e| {
+            format!(
+                "解析 LLM hook JSON 失败: {} (提取的 JSON: {})",
+                e,
+                &json_str[..json_str.len().min(500)]
+            )
+        })?;
+
+        write_info_log(
+            "execute_llm_hook",
+            &format!(
+                "LLM hook 完成 (prompt_len={}, model={}), action={:?}",
+                hook.prompt.len(),
+                provider.model,
+                hook_result.action
+            ),
+        );
+
+        Ok(hook_result)
+    });
+
+    result
 }
 
 /// 执行 Shell hook 脚本
@@ -1083,42 +1535,77 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
 
 // ========== 辅助函数 ==========
 
-/// 获取 hook 的显示标签（Shell 用命令，Builtin 用名称）
+/// 获取 hook 的显示标签（Shell 用命令，LLM 用 prompt 摘要，Builtin 用名称）
 fn hook_label(kind: &HookKind) -> String {
     match kind {
         HookKind::Shell(shell) => shell.command.clone(),
+        HookKind::Llm(llm) => {
+            // 取 prompt 前一行或前 80 字符作为标签
+            let first_line = llm
+                .prompt
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or(&llm.prompt);
+            if first_line.len() > 80 {
+                format!("[llm: {}...]", &first_line[..80])
+            } else {
+                format!("[llm: {}]", first_line)
+            }
+        }
         HookKind::Builtin(builtin) => format!("[builtin: {}]", builtin.name),
     }
 }
 
-/// 获取 hook 的超时秒数（仅 Shell hook 有）
+/// 获取 hook 类型字符串
+fn hook_type_str(kind: &HookKind) -> &'static str {
+    match kind {
+        HookKind::Shell(_) => "bash",
+        HookKind::Llm(_) => "llm",
+        HookKind::Builtin(_) => "builtin",
+    }
+}
+
+/// 获取 hook 的超时秒数
 fn hook_timeout(kind: &HookKind) -> Option<u64> {
     match kind {
         HookKind::Shell(shell) => Some(shell.timeout),
+        HookKind::Llm(llm) => Some(llm.timeout),
         HookKind::Builtin(_) => None,
     }
 }
 
-/// 获取 hook 的失败策略（用于 list 展示，Shell 返回配置值，Builtin 为 None）
+/// 获取 hook 的重试次数
+fn hook_retry_count(kind: &HookKind) -> u32 {
+    match kind {
+        HookKind::Shell(shell) => shell.retry,
+        HookKind::Llm(llm) => llm.retry,
+        HookKind::Builtin(_) => 0,
+    }
+}
+
+/// 获取 hook 的失败策略（用于 list 展示）
 fn hook_on_error(kind: &HookKind) -> Option<OnError> {
     match kind {
         HookKind::Shell(shell) => Some(shell.on_error),
+        HookKind::Llm(llm) => Some(llm.on_error),
         HookKind::Builtin(_) => None,
     }
 }
 
-/// 获取 hook 执行失败时的实际策略（Shell 按配置，Builtin 一律 Abort）
+/// 获取 hook 执行失败时的实际策略（Shell/LLM 按配置，Builtin 一律 Abort）
 fn hook_on_error_strategy(kind: &HookKind) -> OnError {
     match kind {
         HookKind::Shell(shell) => shell.on_error,
+        HookKind::Llm(llm) => llm.on_error,
         HookKind::Builtin(_) => OnError::Abort,
     }
 }
 
-/// 获取 hook 的条件过滤器（仅 Shell hook 有）
+/// 获取 hook 的条件过滤器
 fn hook_filter(kind: &HookKind) -> Option<&HookFilter> {
     match kind {
         HookKind::Shell(shell) if !shell.filter.is_empty() => Some(&shell.filter),
+        HookKind::Llm(llm) if !llm.filter.is_empty() => Some(&llm.filter),
         _ => None,
     }
 }
@@ -1127,6 +1614,7 @@ fn hook_filter(kind: &HookKind) -> Option<&HookFilter> {
 fn hook_should_execute(kind: &HookKind, context: &HookContext) -> bool {
     match kind {
         HookKind::Shell(shell) => shell.filter.matches(context),
+        HookKind::Llm(llm) => llm.filter.matches(context),
         HookKind::Builtin(_) => true,
     }
 }
@@ -1156,13 +1644,18 @@ mod tests {
         let yaml = r#"command: "echo hello""#;
         let def: HookDef = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(def.timeout, 10);
+        assert_eq!(def.r#type, HookType::Bash);
     }
 
     #[test]
-    fn test_hook_def_to_hook_kind() {
+    fn test_hook_def_to_hook_kind_bash() {
         let def = HookDef {
-            command: "echo test".to_string(),
+            r#type: HookType::Bash,
+            command: Some("echo test".to_string()),
+            prompt: None,
+            model: None,
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
         };
@@ -1172,8 +1665,70 @@ mod tests {
                 assert_eq!(shell.command, "echo test");
                 assert_eq!(shell.timeout, 5);
             }
-            HookKind::Builtin(_) => panic!("应该转换为 Shell 变体"),
+            _ => panic!("应该转换为 Shell 变体"),
         }
+    }
+
+    #[test]
+    fn test_hook_def_to_hook_kind_llm() {
+        let def = HookDef {
+            r#type: HookType::Llm,
+            command: None,
+            prompt: Some("检查敏感信息: {{user_input}}".to_string()),
+            model: Some("gpt-4o".to_string()),
+            timeout: 10, // 使用默认 timeout → 应被替换为 30
+            retry: 2,
+            on_error: OnError::Skip,
+            filter: HookFilter::default(),
+        };
+        let kind = def.into_hook_kind().unwrap();
+        match kind {
+            HookKind::Llm(llm) => {
+                assert_eq!(llm.prompt, "检查敏感信息: {{user_input}}");
+                assert_eq!(llm.model.as_deref(), Some("gpt-4o"));
+                assert_eq!(llm.timeout, 30); // 默认 timeout 被替换为 llm 默认值
+                assert_eq!(llm.retry, 2);
+            }
+            _ => panic!("应该转换为 Llm 变体"),
+        }
+    }
+
+    #[test]
+    fn test_hook_def_llm_explicit_timeout() {
+        let def = HookDef {
+            r#type: HookType::Llm,
+            command: None,
+            prompt: Some("test prompt".to_string()),
+            model: None,
+            timeout: 60,
+            retry: 0,
+            on_error: OnError::Skip,
+            filter: HookFilter::default(),
+        };
+        let kind = def.into_hook_kind().unwrap();
+        match kind {
+            HookKind::Llm(llm) => {
+                assert_eq!(llm.timeout, 60); // 显式设置的超时保留
+            }
+            _ => panic!("应该转换为 Llm 变体"),
+        }
+    }
+
+    #[test]
+    fn test_hook_def_yaml_with_type() {
+        let yaml = r#"
+type: llm
+prompt: "检查敏感信息"
+model: gpt-4o
+timeout: 30
+retry: 2
+"#;
+        let def: HookDef = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(def.r#type, HookType::Llm);
+        assert_eq!(def.prompt.as_deref(), Some("检查敏感信息"));
+        assert_eq!(def.model.as_deref(), Some("gpt-4o"));
+        assert_eq!(def.timeout, 30);
+        assert_eq!(def.retry, 2);
     }
 
     #[test]
@@ -1236,6 +1791,7 @@ mod tests {
         let hook = ShellHook {
             command: r#"echo '{"user_input": "hooked"}'"#.to_string(),
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
         };
@@ -1254,6 +1810,7 @@ mod tests {
         let hook = ShellHook {
             command: "echo ''".to_string(),
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
         };
@@ -1268,6 +1825,7 @@ mod tests {
         let hook = ShellHook {
             command: "exit 1".to_string(),
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
         };
@@ -1281,8 +1839,9 @@ mod tests {
         let hook = ShellHook {
             command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_input": "got_input"}'"#.to_string(),
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
-        filter: HookFilter::default(),
+            filter: HookFilter::default(),
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -1314,7 +1873,7 @@ mod tests {
             user_input: Some("original".to_string()),
             ..Default::default()
         };
-        let result = execute_hook(&kind, &ctx).unwrap();
+        let result = execute_hook_with_provider(&kind, &ctx, &None).unwrap();
         assert_eq!(result.user_input.as_deref(), Some("[hooked] original"));
     }
 
@@ -1326,7 +1885,7 @@ mod tests {
         };
         let kind = HookKind::Builtin(builtin);
         let ctx = HookContext::default();
-        let result = execute_hook(&kind, &ctx).unwrap();
+        let result = execute_hook_with_provider(&kind, &ctx, &None).unwrap();
         assert!(!result.is_halt());
         assert!(result.user_input.is_none());
     }
@@ -1345,8 +1904,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "session_hooked"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "session_hooked"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1418,8 +1981,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "session_overridden"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "session_overridden"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1445,8 +2012,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "echo test".to_string(),
+                r#type: HookType::Bash,
+                command: Some("echo test".to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1467,8 +2038,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "first"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "first"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1476,8 +2051,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "second"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "second"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1505,8 +2084,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "exit 1".to_string(), // 非零退出 + on_error=abort → 中止链
+                r#type: HookType::Bash,
+                command: Some("exit 1".to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Abort,
                 filter: HookFilter::default(),
             },
@@ -1514,8 +2097,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "should_not_reach"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1554,17 +2141,25 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "exit 1".to_string(), // 失败
+                r#type: HookType::Bash,
+                command: Some("exit 1".to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
-                on_error: OnError::Skip, // 但 skip → 继续
+                retry: 0,
+                on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
         );
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "survived"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "survived"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1594,8 +2189,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "exit 1".to_string(),
+                r#type: HookType::Bash,
+                command: Some("exit 1".to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Abort,
                 filter: HookFilter::default(),
             },
@@ -1603,8 +2202,12 @@ mod tests {
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
+                r#type: HookType::Bash,
+                command: Some(r#"echo '{"user_input": "should_not_reach"}'"#.to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1653,6 +2256,7 @@ on_error: abort"#;
         let hook = ShellHook {
             command: r#"echo '{"user_input": "ok"}'; echo "debug info" >&2"#.to_string(),
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
         };
@@ -1671,6 +2275,7 @@ on_error: abort"#;
         let hook = ShellHook {
             command: r#"echo "something went wrong" >&2; exit 1"#.to_string(),
             timeout: 5,
+            retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
         };
@@ -1698,8 +2303,12 @@ on_error: abort"#;
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "echo first".to_string(),
+                r#type: HookType::Bash,
+                command: Some("echo first".to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
             },
@@ -1707,8 +2316,12 @@ on_error: abort"#;
         manager.register_session_hook(
             HookEvent::PreSendMessage,
             HookDef {
-                command: "echo second".to_string(),
+                r#type: HookType::Bash,
+                command: Some("echo second".to_string()),
+                prompt: None,
+                model: None,
                 timeout: 5,
+                retry: 0,
                 on_error: OnError::Abort,
                 filter: HookFilter::default(),
             },
@@ -1877,5 +2490,160 @@ on_error: abort"#;
         let filter: HookFilter = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(filter.tool_matcher.as_deref(), Some("Bash|Shell"));
         assert!(filter.tool_name.is_none());
+    }
+
+    #[test]
+    fn test_render_prompt_template() {
+        let template = "事件: {{event}}, 输入: {{user_input}}, 工具: {{tool_name}}";
+        let ctx = HookContext {
+            event: HookEvent::PreSendMessage,
+            user_input: Some("hello".to_string()),
+            tool_name: Some("Bash".to_string()),
+            ..Default::default()
+        };
+        let rendered = render_prompt_template(template, &ctx);
+        assert!(rendered.contains("pre_send_message"));
+        assert!(rendered.contains("hello"));
+        assert!(rendered.contains("Bash"));
+    }
+
+    #[test]
+    fn test_render_prompt_template_empty_fields() {
+        let template = "输入: {{user_input}}, 输出: {{assistant_output}}";
+        let ctx = HookContext::default();
+        let rendered = render_prompt_template(template, &ctx);
+        assert_eq!(rendered, "输入: , 输出: ");
+    }
+
+    #[test]
+    fn test_extract_json_from_llm_output() {
+        // 纯 JSON
+        assert_eq!(
+            extract_json_from_llm_output(r#"{"user_input": "test"}"#),
+            Some(r#"{"user_input": "test"}"#)
+        );
+
+        // JSON 包裹在 markdown 中
+        assert_eq!(
+            extract_json_from_llm_output("```json\n{\"user_input\": \"test\"}\n```"),
+            Some(r#"{"user_input": "test"}"#)
+        );
+
+        // JSON 前有文本
+        assert_eq!(
+            extract_json_from_llm_output("Here is the result: {\"action\": \"stop\"}"),
+            Some(r#"{"action": "stop"}"#)
+        );
+
+        // 无 JSON
+        assert_eq!(extract_json_from_llm_output("no json here"), None);
+    }
+
+    #[test]
+    fn test_hook_type_yaml_parsing() {
+        let yaml_bash = r#"command: "echo hello""#;
+        let def: HookDef = serde_yaml::from_str(yaml_bash).unwrap();
+        assert_eq!(def.r#type, HookType::Bash);
+
+        let yaml_llm = r#"
+type: llm
+prompt: "check this""#;
+        let def: HookDef = serde_yaml::from_str(yaml_llm).unwrap();
+        assert_eq!(def.r#type, HookType::Llm);
+        assert_eq!(def.prompt.as_deref(), Some("check this"));
+    }
+
+    #[test]
+    fn test_hook_def_bash_missing_command() {
+        let def = HookDef {
+            r#type: HookType::Bash,
+            command: None,
+            prompt: None,
+            model: None,
+            timeout: 5,
+            retry: 0,
+            on_error: OnError::Skip,
+            filter: HookFilter::default(),
+        };
+        assert!(def.into_hook_kind().is_err());
+    }
+
+    #[test]
+    fn test_hook_def_llm_missing_prompt() {
+        let def = HookDef {
+            r#type: HookType::Llm,
+            command: None,
+            prompt: None,
+            model: None,
+            timeout: 5,
+            retry: 0,
+            on_error: OnError::Skip,
+            filter: HookFilter::default(),
+        };
+        assert!(def.into_hook_kind().is_err());
+    }
+
+    #[test]
+    fn test_hook_type_display() {
+        assert_eq!(format!("{}", HookType::Bash), "bash");
+        assert_eq!(format!("{}", HookType::Llm), "llm");
+    }
+
+    #[test]
+    fn test_hook_entry_hook_type() {
+        let mut manager = HookManager::default();
+
+        // builtin hook → hook_type = "builtin"
+        manager.register_builtin(HookEvent::PreSendMessage, "test", |_| None);
+
+        // bash session hook → hook_type = "bash"
+        manager.register_session_hook(
+            HookEvent::PreSendMessage,
+            HookDef {
+                r#type: HookType::Bash,
+                command: Some("echo test".to_string()),
+                prompt: None,
+                model: None,
+                timeout: 5,
+                retry: 0,
+                on_error: OnError::Skip,
+                filter: HookFilter::default(),
+            },
+        );
+
+        // llm session hook → hook_type = "llm"
+        manager.register_session_hook_kind(
+            HookEvent::PreSendMessage,
+            HookKind::Llm(LlmHook {
+                prompt: "check content".to_string(),
+                model: None,
+                timeout: 30,
+                retry: 1,
+                on_error: OnError::Skip,
+                filter: HookFilter::default(),
+            }),
+        );
+
+        let hooks = manager.list_hooks();
+        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks[0].hook_type, "builtin");
+        assert_eq!(hooks[1].hook_type, "bash");
+        assert_eq!(hooks[2].hook_type, "llm");
+    }
+
+    #[test]
+    fn test_llm_hook_no_provider_returns_err() {
+        let hook = LlmHook {
+            prompt: "test".to_string(),
+            model: None,
+            timeout: 5,
+            retry: 0,
+            on_error: OnError::Skip,
+            filter: HookFilter::default(),
+        };
+        let ctx = HookContext::default();
+        let result = execute_llm_hook(&hook, &ctx, &None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("未注入 provider"));
     }
 }

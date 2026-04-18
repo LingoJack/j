@@ -1,4 +1,4 @@
-use crate::command::chat::hook::{HookDef, HookEvent, HookFilter, HookManager, OnError};
+use crate::command::chat::hook::{HookDef, HookEvent, HookFilter, HookManager, HookType, OnError};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -16,12 +16,24 @@ struct RegisterHookParams {
     /// Hook event name (required for register/remove)
     #[serde(default)]
     event: Option<String>,
-    /// Shell command to execute (required for register)
+    /// Hook type: "bash" (default) or "llm"
+    #[serde(default)]
+    r#type: Option<String>,
+    /// Shell command to execute (required for type=bash)
     #[serde(default)]
     command: Option<String>,
-    /// Timeout in seconds (default 10)
+    /// LLM prompt template (required for type=llm, supports {{variable}} template vars)
+    #[serde(default)]
+    prompt: Option<String>,
+    /// LLM model name override (optional for type=llm)
+    #[serde(default)]
+    model: Option<String>,
+    /// Timeout in seconds (default 10 for bash, 30 for llm)
     #[serde(default)]
     timeout: Option<u64>,
+    /// Retry count on error (default 0 for bash, 1 for llm; only applies to Err path)
+    #[serde(default)]
+    retry: Option<u32>,
     /// Index of the session hook to remove (required for remove). Use session_idx from list output.
     #[serde(default)]
     index: Option<usize>,
@@ -52,7 +64,8 @@ impl Tool for RegisterHookTool {
     fn description(&self) -> &str {
         r#"
         Register, list, remove session-level hooks, or view the full protocol documentation.
-        Actions: register (requires event+command), list, remove (requires event+index), help (view stdin/stdout JSON schema and script examples).
+        Actions: register (requires event+command or event+prompt), list, remove (requires event+index), help (view stdin/stdout JSON schema and script examples).
+        Supports two hook types: "bash" (shell command, default) and "llm" (LLM prompt template).
         Call action="help" first to learn the script protocol before registering hooks.
         "#
     }
@@ -91,11 +104,22 @@ impl Tool for RegisterHookTool {
                 }
                 _ => {
                     let event = params.event.as_deref().unwrap_or("?");
-                    let command = params.command.as_deref().unwrap_or("?");
+                    let hook_type = params.r#type.as_deref().unwrap_or("bash");
+                    let desc = if hook_type == "llm" {
+                        let prompt_preview = params
+                            .prompt
+                            .as_deref()
+                            .map(|p| if p.len() > 60 { &p[..60] } else { p })
+                            .unwrap_or("?");
+                        format!("type=llm, prompt={}", prompt_preview)
+                    } else {
+                        let cmd = params.command.as_deref().unwrap_or("?");
+                        format!("type=bash, command={}", cmd)
+                    };
                     let on_error = params.on_error.as_deref().unwrap_or("skip");
                     format!(
-                        "Register hook: event={}, command={}, on_error={}",
-                        event, command, on_error
+                        "Register hook: event={}, {}, on_error={}",
+                        event, desc, on_error
                     )
                 }
             }
@@ -110,26 +134,39 @@ impl RegisterHookTool {
         ToolResult {
             output: r#"# Hook 完整协议文档
 
+## Hook 类型
+
+### bash（默认）
+通过 `sh -c` 子进程执行 Shell 命令。
+- 参数：`command`（必填）、`timeout`（默认 10s）、`on_error`、`retry`（默认 0）
+
+### llm
+通过 prompt 模板调用 LLM，LLM 返回 HookResult JSON。
+- 参数：`prompt`（必填，支持 `{{variable}}` 模板变量）、`model`（可选，覆盖当前模型）、`timeout`（默认 30s）、`retry`（默认 1）、`on_error`
+- LLM 输出必须为合法 HookResult JSON，系统会自动提取 JSON 并解析
+- 解析失败或网络错误 → Err → 按 retry 重试 → 重试耗尽按 on_error 处理
+- 可用模板变量：`{{event}}`、`{{user_input}}`、`{{assistant_output}}`、`{{tool_name}}`、`{{tool_arguments}}`、`{{tool_result}}`、`{{model}}`、`{{cwd}}`
+
 ## 可用事件及其可读/可写字段
 
-| event                         | 触发时机       | stdin 可读字段                                  | stdout 可写字段                                                        |
+| event                         | 触发时机       | 可读字段                                        | 可写字段                                                        |
 |-------------------------------|----------------|-------------------------------------------------|------------------------------------------------------------------------|
-| pre_send_message              | 用户消息发送前 | user_input, messages                            | user_input, abort, retry_feedback                                      |
+| pre_send_message              | 用户消息发送前 | user_input, messages                            | user_input, action=stop, retry_feedback                                |
 | post_send_message             | 用户消息发送后 | user_input, messages                            | （仅通知，返回值忽略）                                                 |
-| pre_llm_request               | LLM 请求前     | messages, system_prompt, model                  | messages, system_prompt, inject_messages, additional_context, abort    |
-| post_llm_response             | LLM 回复后     | assistant_output, messages, model               | assistant_output, abort, retry_feedback, system_message                |
-| pre_tool_execution            | 工具执行前     | tool_name, tool_arguments                       | tool_arguments, abort                                                  |
+| pre_llm_request               | LLM 请求前     | messages, system_prompt, model                  | messages, system_prompt, inject_messages, additional_context, action=stop, retry_feedback |
+| post_llm_response             | LLM 回复后     | assistant_output, messages, model               | assistant_output, action=stop, retry_feedback, system_message          |
+| pre_tool_execution            | 工具执行前     | tool_name, tool_arguments                       | tool_arguments, action=skip                                            |
 | post_tool_execution           | 工具执行后     | tool_name, tool_result                          | tool_result                                                            |
 | post_tool_execution_failure   | 工具执行失败后 | tool_name, tool_error                           | tool_error, additional_context                                         |
-| stop                          | LLM 即将结束   | user_input(回复), messages, system_prompt, model | retry_feedback, additional_context, abort                              |
-| pre_micro_compact             | micro_compact前| messages, model                                 | abort                                                                  |
+| stop                          | LLM 即将结束   | user_input(回复), messages, system_prompt, model | retry_feedback, additional_context, action=stop                        |
+| pre_micro_compact             | micro_compact前| messages, model                                 | action=stop                                                            |
 | post_micro_compact            | micro_compact后| messages                                        | messages                                                               |
-| pre_auto_compact              | auto_compact前 | messages, system_prompt, model                  | additional_context, abort                                              |
+| pre_auto_compact              | auto_compact前 | messages, system_prompt, model                  | additional_context, action=stop                                        |
 | post_auto_compact             | auto_compact后 | messages                                        | messages                                                               |
 | session_start                 | 会话开始       | messages                                        | （仅通知）                                                             |
 | session_end                   | 会话退出       | messages                                        | （仅通知）                                                             |
 
-## 脚本协议
+## Bash Hook 脚本协议
 - 执行方式：`sh -c "<command>"`
 - 工作目录：用户当前目录
 - 环境变量：JCLI_HOOK_EVENT（事件名）、JCLI_CWD（当前目录）
@@ -137,26 +174,16 @@ impl RegisterHookTool {
 - stdout：HookResult JSON（只返回要修改的字段，空/`{}` 表示无修改）
 - exit 0 = 成功，非零 = 失败（按 on_error 策略处理：skip=记录日志继续，abort=中止整条链）
 - on_error 默认 "skip"：脚本失败时不中断操作，仅记录错误日志
+- retry 默认 0：失败后不重试；设置 >0 则重试指定次数（受链总超时 30s 约束）
 
-## stdin HookContext JSON 结构
-```json
-{
-  "event": "pre_send_message",
-  "cwd": "/path/to/project",
-  "user_input": "用户输入文本",
-  "messages": [{"role": "user", "content": "..."}],
-  "system_prompt": "系统提示词",
-  "model": "gpt-4o",
-  "assistant_output": "AI 回复文本",
-  "tool_name": "Bash",
-  "tool_arguments": "{\"command\": \"ls\"}",
-  "tool_result": "工具执行结果",
-  "tool_error": "工具错误信息"
-}
-```
-各字段按事件类型选择性出现，未填充的不会出现在 JSON 中。
+## LLM Hook 协议
+- 系统自动在 prompt 末尾追加 JSON 格式指令，LLM 需返回 HookResult JSON
+- 使用当前活跃 provider 的 API（或通过 model 参数覆盖模型名）
+- JSON 提取逻辑：从 LLM 输出中找第一个 `{` 到最后一个 `}` 之间的内容
+- 解析失败 → 视为 Err → 按 retry 重试
+- retry 默认 1：LLM 返回非法 JSON 或网络失败时重试
 
-## stdout HookResult JSON 结构
+## HookResult JSON 结构
 ```json
 {
   "user_input": "修改后的用户消息",
@@ -175,7 +202,7 @@ impl RegisterHookTool {
 ```
 
 ## 关键字段说明
-- `action`：控制流动作，字符串 `"stop"` 或 `"skip"`。旧字段 `abort: true` 等价于 `action: "stop"`（向后兼容）。
+- `action`：控制流动作，字符串 `"stop"` 或 `"skip"`。旧字段 `abort: true` 等价于 `action: "stop"`。
   - `"stop"`：中止当前步骤及其所属子管线
   - `"skip"`：跳过当前步骤，同级步骤继续（仅 `pre_tool_execution` 中使用）
 - `retry_feedback`：与 stop 配合使用。在 stop/pre_send_message/post_llm_response 中，stop+retry_feedback 会中止当前操作并将反馈注入为新消息，LLM 带反馈重新生成。这是实现"宪法 AI/纠查官"的核心机制。
@@ -183,24 +210,46 @@ impl RegisterHookTool {
 - `system_message`：在 UI 上以 toast/提示形式展示给用户，不影响 LLM 输入。
 
 ## action 语义
-- `pre_send_message` / `pre_llm_request` / `stop` / `post_llm_response`：`action=stop` 中止当前操作（不发送/不请求/不结束/不保存）
+- `pre_send_message` / `pre_llm_request` / `stop` / `post_llm_response`：`action=stop` 中止当前操作
 - `pre_tool_execution`：`action=skip` 跳过该工具调用（其他工具继续执行）
-- `pre_micro_compact`：`action=stop` 中止整个 compact 子管线（跳过 micro_compact + auto_compact）
-- `pre_auto_compact`：`action=stop` 中止 auto_compact（micro_compact 已执行，LLM 请求仍会发出）
+- `pre_micro_compact`：`action=stop` 中止整个 compact 子管线
+- `pre_auto_compact`：`action=stop` 中止 auto_compact
 
 ## 压缩 Hook 说明
 两层压缩各有独立的 Pre/Post hook，构成一个 compact 子管线：
 1. `pre_micro_compact` → micro_compact → `post_micro_compact`
 2. `pre_auto_compact` → auto_compact → `post_auto_compact`
 
-stop `pre_micro_compact` 会中止整个子管线（auto_compact 也不会执行）。
-stop `pre_auto_compact` 仅跳过 auto_compact，micro_compact 已执行完毕。
+## 示例
 
-micro_compact 仅替换旧 tool result 为占位符（零 API 成本），auto_compact 用 LLM 生成摘要（需 API 调用）。
+### 示例 1：LLM 纠查官（推荐，type=llm）
+```yaml
+# ~/.jdata/agent/hooks.yaml
+post_llm_response:
+  - type: llm
+    prompt: |
+      检查以下 AI 回复是否包含敏感信息（密码、密钥、token）：
+      {{assistant_output}}
+      如果包含敏感信息，返回 action=stop + retry_feedback 说明问题。
+      如果没有问题，返回空 JSON {}。
+    timeout: 30
+    retry: 1
+    on_error: skip
+```
 
-## 脚本示例
+### 示例 2：LLM 消息审查（pre_send_message）
+```yaml
+pre_send_message:
+  - type: llm
+    prompt: |
+      审查用户消息是否合规：{{user_input}}
+      如有违规返回 action=stop 和 retry_feedback。
+    model: gpt-4o-mini
+    timeout: 15
+    retry: 1
+```
 
-### 示例 1：给用户消息加时间戳（pre_send_message）
+### 示例 3：Bash 脚本 - 给消息加时间戳（pre_send_message）
 ```bash
 #!/bin/bash
 input=$(cat)
@@ -208,7 +257,7 @@ msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).ge
 echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
 ```
 
-### 示例 2：跳过危险命令（pre_tool_execution）
+### 示例 4：Bash 脚本 - 跳过危险命令（pre_tool_execution）
 ```bash
 #!/bin/bash
 input=$(cat)
@@ -221,36 +270,25 @@ else
 fi
 ```
 
-### 示例 3：宪法 AI 纠查官（stop）
-```bash
-#!/bin/bash
-input=$(cat)
-reply=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_input',''))")
-if echo "$reply" | grep -qiE 'password|secret|api.key'; then
-  echo '{"action": "stop", "retry_feedback": "回复包含敏感信息，请重新组织回答避免泄露密码/密钥"}'
-else
-  echo '{}'
-fi
-```
-
-### 示例 4：压缩保护（pre_auto_compact）
-```bash
-#!/bin/bash
-echo '{"additional_context": "压缩时必须保留所有宪法规则和关键约束，不可丢弃。"}'
-```
-
-### 示例 5：纯通知（post_send_message / session_end）
-```bash
-#!/bin/bash
-cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
+### 示例 5：YAML 配置 - 带过滤器的工具审查
+```yaml
+pre_tool_execution:
+  - type: llm
+    prompt: |
+      审查工具调用是否安全：工具={{tool_name}}, 参数={{tool_arguments}}
+      如果不安全，返回 action=skip。
+    filter:
+      tool_matcher: "Bash|Shell"
+    timeout: 15
+    retry: 1
 ```
 
 ## 注意事项
-- 先用 Write/Bash 工具创建脚本文件，再用本工具注册
-- 脚本必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
-- timeout 默认 10 秒，超时后脚本被 kill
-- on_error 默认 "skip"（记录日志继续），设为 "abort" 则脚本失败时 action=stop 中止整条 hook 链
-- 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑配置文件
+- LLM hook 使用当前活跃的 provider API（可通过 model 参数覆盖模型名）
+- bash hook 必须从 stdin 读取（至少 `cat > /dev/null`），否则可能 SIGPIPE
+- retry 只对 Err 路径生效（超时、非零退出、LLM JSON 解析失败、网络失败）
+- 重试受链总超时（30s）约束
+- 只有 session 级 hook 可通过本工具管理；用户级/项目级需手动编辑 YAML 配置文件
 - 移除 hook 时，使用 list 输出中的 session_idx 作为 index 参数"#
                 .to_string(),
             is_error: false,
@@ -284,19 +322,45 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             }
         };
 
-        let command = match params.command.as_deref() {
-            Some(c) => c.to_string(),
-            None => {
-                return ToolResult {
-                    output: "缺少 command 参数".to_string(),
-                    is_error: true,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                };
-            }
+        // 解析 hook 类型
+        let hook_type = match params.r#type.as_deref() {
+            Some("llm") => HookType::Llm,
+            _ => HookType::Bash, // 默认 bash
         };
 
-        let timeout = params.timeout.unwrap_or(10);
+        // 校验必填字段
+        match hook_type {
+            HookType::Bash => {
+                if params.command.is_none() {
+                    return ToolResult {
+                        output: "bash hook 缺少 command 参数".to_string(),
+                        is_error: true,
+                        images: vec![],
+                        plan_decision: PlanDecision::None,
+                    };
+                }
+            }
+            HookType::Llm => {
+                if params.prompt.is_none() {
+                    return ToolResult {
+                        output: "llm hook 缺少 prompt 参数".to_string(),
+                        is_error: true,
+                        images: vec![],
+                        plan_decision: PlanDecision::None,
+                    };
+                }
+            }
+        }
+
+        let timeout = params.timeout.unwrap_or(match hook_type {
+            HookType::Bash => 10,
+            HookType::Llm => 30,
+        });
+
+        let retry = params.retry.unwrap_or(match hook_type {
+            HookType::Bash => 0,
+            HookType::Llm => 1,
+        });
 
         let on_error = match params.on_error.as_deref() {
             Some("abort") => OnError::Abort,
@@ -309,8 +373,12 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
         };
 
         let hook_def = HookDef {
-            command: command.clone(),
+            r#type: hook_type,
+            command: params.command.clone(),
+            prompt: params.prompt.clone(),
+            model: params.model.clone(),
             timeout,
+            retry,
             on_error,
             filter: HookFilter::default(),
         };
@@ -318,10 +386,24 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
         match self.hook_manager.lock() {
             Ok(mut manager) => {
                 manager.register_session_hook(event, hook_def);
+                let type_str = format!("{}", hook_type);
+                let detail = match hook_type {
+                    HookType::Bash => {
+                        format!("command={}", params.command.as_deref().unwrap_or("?"))
+                    }
+                    HookType::Llm => {
+                        let prompt_preview = params
+                            .prompt
+                            .as_deref()
+                            .map(|p| if p.len() > 60 { &p[..60] } else { p })
+                            .unwrap_or("?");
+                        format!("prompt={}", prompt_preview)
+                    }
+                };
                 ToolResult {
                     output: format!(
-                        "已注册 session hook: event={}, command={}, timeout={}s, on_error={}",
-                        event_str, command, timeout, on_error_str
+                        "已注册 session hook: event={}, type={}, {}, timeout={}s, retry={}, on_error={}",
+                        event_str, type_str, detail, timeout, retry, on_error_str
                     ),
                     is_error: false,
                     images: vec![],
@@ -400,10 +482,11 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         })
                         .unwrap_or_default();
                     output.push_str(&format!(
-                        "  [{}] event={}, source={}{}, label={}, timeout={}, on_error={}{}{}\n",
+                        "  [{}] event={}, source={}, type={}{}, label={}, timeout={}, on_error={}{}{}\n",
                         i,
                         entry.event.as_str(),
                         entry.source,
+                        entry.hook_type,
                         session_idx_str,
                         entry.label,
                         timeout_str,
