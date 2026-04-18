@@ -121,7 +121,7 @@ j
 | `f` | 过滤切换（全部 / 未完成 / 已完成） |
 | `J` / `K` | 调整待办顺序（下移 / 上移） |
 | `s` | 手动保存 |
-| `Alt+↑` / `Alt+↓` | 预览区滚动（长待办内容时可用） |
+| `/` | 打开命令面板（toggle/edit/add/delete/copy/filter/move/save/quit/help） |
 | `?` | 查看完整帮助 |
 | `q` | 退出（有未保存修改时需先保存或用 `q!` 强制退出） |
 
@@ -172,10 +172,11 @@ open -a "$J_CHROME" https://example.com
 | `j md` / `j notebook` | 进入 TUI 笔记管理界面（全屏交互） |
 | `j nb` | 同上（别名） |
 | `j md <title>` | 打开指定笔记（不存在则新建） |
+| `j md <file-path>` | 直接编辑任意 Markdown/文本文件（支持 `~/`、相对路径、绝对路径） |
 | `j md list` | 列出所有笔记 |
 | `j md search <keyword>` | 搜索笔记（标题+内容） |
 | `j md delete <title>` | 删除笔记 |
-| `j md open <title>` | 在系统文件管理器中打开笔记所在目录 |
+| `j md open` | 在系统文件管理器中打开 notebook 根目录 |
 | `j md rename <old> <new>` | 重命名笔记 |
 | `j md mkdir <dir>` | 创建子目录 |
 | `j md mv <src> <dest>` | 移动笔记到新路径 |
@@ -201,7 +202,8 @@ open -a "$J_CHROME" https://example.com
 | `?` | 查看帮助 |
 
 > 笔记存储路径: `~/.jdata/notebook/`，支持子目录组织
-> 使用内置 Markdown 编辑器编辑，支持语法高亮和实时预览
+> 支持对 notebook 内笔记和外部文件统一使用内置 Markdown 编辑器
+> 命令面板可执行 `search`、`rename`、`delete`、`mkdir`、`mv`、`open`、`ratio`、`help`
 
 ## 系统设置
 
@@ -211,12 +213,23 @@ open -a "$J_CHROME" https://example.com
 | `j config <section> <field> <val>` | 直接修改配置字段 |
 | `j clear` | 清屏 |
 | `j version` / `j v` | 版本信息 |
-| `j help` / `j h` | 帮助信息 |
+| `j help` / `j h` | 打开多标签帮助 TUI |
 | `j exit` / `j q` / `j quit` | 退出（交互模式，或按 `Ctrl+Q` / `Ctrl+D`） |
-| `j completion [shell]` | 生成 shell 补全脚本（支持 zsh/bash/fish） |
+| `j completion [shell]` | 生成 shell 补全脚本（支持 `zsh` / `bash`，默认 `zsh`） |
 | `j update` / `j up` | 更新到最新版本（自动检测安装来源） |
 | `j update --check` | 仅检查是否有新版本 |
-| `j system` / `j ps` | 查看系统信息 |
+
+### 帮助界面快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `←` / `→` / `h` / `l` | 切换帮助 Tab |
+| `Tab` / `Shift+Tab` | 切换到下一个 / 上一个 Tab |
+| `1`-`0` | 直接跳到指定 Tab |
+| `↑` / `↓` / `j` / `k` | 滚动内容 |
+| `PageUp` / `PageDown` | 快速滚动 |
+| `Home` / `End` | 跳到顶部 / 底部 |
+| `q` / `Esc` / `Ctrl+C` | 退出帮助 |
 
 ---
 
@@ -258,15 +271,18 @@ j ai -c --remote           # 延续会话 + 远程控制
       "name": "GPT-4o",
       "api_base": "https://api.openai.com/v1",
       "api_key": "sk-your-api-key",
-      "model": "gpt-4o"
+      "model": "gpt-4o",
+      "supports_vision": true
     }
   ],
   "active_index": 0,
-  "system_prompt": "你是一个有用的助手。",
-  "stream_mode": true,
   "max_history_messages": 20,
-  "theme": "dark",
-  "tools_enabled": true
+  "max_context_tokens": 100000,
+  "theme": "midnight",
+  "tools_enabled": true,
+  "max_tool_rounds": 10,
+  "tool_confirm_timeout": 0,
+  "auto_restore_session": false
 }
 ```
 
@@ -274,22 +290,31 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 ### 配置界面
 
-按 `Ctrl+E` 或输入 `/config` 进入可视化配置界面，可编辑模型提供方、会话管理和全局设置：
+按 `Ctrl+E` 或输入 `/config` 进入可视化配置界面。当前界面包含 `Model`、`Session`、`Global`、`Tools`、`Skills`、`Hooks`、`Commands`、`Teammates`、`Archive` 九个 Tab，不同 Tab 的按键略有不同。
 
 | 按键 | 功能 |
 |------|------|
-| `↑` / `k` | 向上移动光标 |
-| `↓` / `j` | 向下移动光标 |
-| `Tab` / `→` | 切换到下一个 Provider |
-| `Shift+Tab` / `←` | 切换到上一个 Provider |
-| `Enter` | 进入编辑模式（修改当前字段） |
-| `a` | 新增 Provider |
-| `d` | 删除当前 Provider |
-| `s` | 将当前 Provider 设为活跃模型 |
+| `←` / `→` | 切换 Tab |
+| `↑` / `↓` / `j` / `k` | 在当前列表中移动 |
+| `Enter` | 编辑字段 / 执行当前项动作 |
 | `Esc` | 保存配置并返回对话 |
 
-> `stream_mode` 和 `theme` 字段直接按 `Enter` 切换，无需手动输入
-> 配置界面包含多个 Tab 页：Provider 编辑、会话管理（Session）、Teammate 管理
+**Model Tab**：
+- `Tab` / `Shift+Tab`：切换 Provider
+- `a`：新增 Provider
+- `d`：删除当前 Provider
+- `s`：将当前 Provider 设为活跃模型
+
+**Tools / Skills Tab**：
+- `Enter` / `空格`：启用或禁用当前项
+- `a`：全部启用
+- `d`：全部禁用
+- `t`：仅 Tools Tab 可切换总开关
+
+**Session / Archive / Teammates Tab**：
+- `Session`：`Enter` 恢复，`d` 删除，`n` 新建
+- `Archive`：`Enter` 还原，`d` 删除
+- `Teammates`：`Enter` 查看状态，`s` 停止选中 teammate
 
 ### 主题风格
 
@@ -297,12 +322,13 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 | 主题 | 说明 |
 |------|------|
-| `dark` | 深色主题（默认） |
+| `midnight` | Midnight（默认） |
+| `dark` | 深色主题 |
 | `light` | 浅色主题 |
-| `dracula` | Dracula 配色 |
-| `gruvbox` | Gruvbox 配色 |
-| `monokai` | Monokai 配色 |
 | `nord` | Nord 配色 |
+| `monokai` | Monokai 配色 |
+| `anthropic_light` | Anthropic Light |
+| `anthropic_dark` | Anthropic Dark |
 
 ### 对话界面快捷键
 
@@ -318,6 +344,7 @@ j ai -c --remote           # 延续会话 + 远程控制
 | `Ctrl+Y` | 复制最后一条 AI 回复 |
 | `Ctrl+B` | 进入消息浏览模式 |
 | `Ctrl+G` | 打开日志窗口 |
+| `Ctrl+M` | 切换鼠标模式（滚动 / 自由选中） |
 | `Ctrl+O` | 切换工具详情展开/折叠 |
 | `Ctrl+E` | 打开配置界面 |
 | `F1` / `?`（输入框为空时） | 显示帮助 |
@@ -364,10 +391,13 @@ j ai -c --remote           # 延续会话 + 远程控制
 |------|------|
 | `↑` / `k` | 选中上一条消息 |
 | `↓` / `j` | 选中下一条消息 |
-| `A` | 消息内容向上滚动 1 行（细粒度） |
-| `D` | 消息内容向下滚动 1 行（细粒度） |
+| `PageUp` | 当前消息内容向上微调滚动 |
+| `PageDown` | 当前消息内容向下微调滚动 |
+| `Tab` | 切换角色过滤（全部 / AI / 用户） |
 | `y` / `Enter` | 复制选中消息到剪切板 |
-| `Esc` | 返回对话模式 |
+| 直接输入字符 | 按关键词过滤消息 |
+| `Backspace` | 删除过滤字符 |
+| `Esc` | 有过滤时先清除过滤；无过滤时返回对话模式 |
 
 ### 归档对话功能
 
@@ -386,10 +416,10 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 ### Teammate 系统
 
-Teammate 是多个并行运行的子 Agent，每个有独立的 system prompt 和消息历史。可通过 `/teammate` 或配置界面（Ctrl+E → Teammates Tab）管理。
+Teammate 是多个并行运行的子 Agent，每个有独立的 system prompt 和消息历史。可通过 `/teammate` 或配置界面（Ctrl+E → Teammates Tab）查看和管理当前团队状态。
 
-- **创建 Teammate**：在 Teammates 面板中新增，指定名称、角色和初始任务
-- **通信方式**：Teammate 之间通过 `@mentions` 广播消息
+- **创建方式**：通常由 AI 通过 `AgentTeam` / `CreateTeammate` 工具创建
+- **通信方式**：Teammate 之间通过 `SendMessage` 和 `@mentions` 协作
 - **使用场景**：全栈开发（前端 + 后端 + 运维）、多领域并行研究、多角色协作
 
 ### Agent 工具（高级）
@@ -415,7 +445,7 @@ AI 对话内置以下高级工具，支持复杂的多步骤任务：
 
 - **Markdown 渲染**：AI 回复支持标题、加粗、斜体、行内代码、代码块（语法高亮）、列表、表格、引用块
 - **代码高亮**：支持 Rust、Python、JavaScript/TypeScript、Go、Java、Bash/Shell、C/C++、SQL、Ruby 等语言
-- **流式/整体输出**：默认流式逐字输出，可在配置界面切换
+- **流式渲染**：TUI 会在生成过程中持续刷新回复内容和工具状态
 - **对话持久化**：对话自动保存到 `~/.jdata/agent/data/sessions/`，重启后恢复
 - **多模型支持**：可配置多个 LLM 提供方（OpenAI、DeepSeek 等），运行时通过 `/model` 切换
 - **工具调用**：支持 Function Calling，AI 可执行 shell 命令和读取文件（危险命令需确认）
