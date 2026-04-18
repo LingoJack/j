@@ -26,6 +26,7 @@ struct ToolCallContext<'a> {
     streaming_content: &'a Arc<Mutex<String>>,
     #[allow(dead_code)]
     invoked_skills: &'a compact::InvokedSkillsMap,
+    session_id: &'a str,
 }
 
 /// 后台 Agent 循环：支持多轮工具调用
@@ -67,6 +68,7 @@ pub async fn run_agent_loop(
         shared_messages: &shared_messages,
         streaming_content: &streaming_content,
         invoked_skills: &invoked_skills,
+        session_id: &session_id,
     };
 
     write_info_log(
@@ -204,6 +206,7 @@ pub async fn run_agent_loop(
                 messages: Some(messages.clone()),
                 system_prompt: system_prompt.clone(),
                 model: Some(provider.model.clone()),
+                session_id: Some(session_id.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string()),
@@ -1054,6 +1057,7 @@ fn process_tool_calls(
                 event: HookEvent::PostToolExecution,
                 tool_name: tool_name.clone(),
                 tool_result: Some(result_content.clone()),
+                session_id: Some(ctx.session_id.to_string()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string()),

@@ -59,6 +59,9 @@ pre_tool_execution:
       fi
     timeout: 10
     on_error: abort  # 此 hook 失败时中止操作（默认为 skip）
+    filter:          # 条件过滤（可选）
+      tool_name: Bash        # 仅对 Bash 工具生效
+      # model_prefix: gpt-4  # 仅对 gpt-4 系列模型生效
 ```
 
 ## 脚本协议
@@ -86,6 +89,7 @@ pre_tool_execution:
 {
   "event": "pre_send_message",
   "cwd": "/path/to/project",
+  "session_id": "20260418_143022_abc",
   "user_input": "用户输入文本",
   "messages": [{"role": "user", "content": "..."}],
   "system_prompt": "系统提示词",

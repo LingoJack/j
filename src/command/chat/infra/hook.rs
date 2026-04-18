@@ -9,6 +9,11 @@ use std::io::Write;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+// ========== 常量 ==========
+
+/// Hook 链总超时（秒）：整条链执行超过此时间后，中止未执行的 hook
+const MAX_CHAIN_DURATION_SECS: u64 = 30;
+
 // ========== 数据结构 ==========
 
 /// Hook 事件类型
@@ -100,6 +105,46 @@ pub enum OnError {
     Abort,
 }
 
+/// Hook 条件过滤：仅当条件匹配时才执行该 hook
+///
+/// 所有字段为可选，未设置的字段不参与过滤（即视为匹配）。
+/// 多个字段同时设置时取 AND 关系。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HookFilter {
+    /// 工具名过滤（精确匹配，仅对 PreToolExecution / PostToolExecution 生效）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    /// 模型名前缀过滤（如 "gpt-4" 匹配 "gpt-4o"、"gpt-4-turbo"）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_prefix: Option<String>,
+}
+
+impl HookFilter {
+    /// 是否为空过滤器（无任何条件，始终匹配）
+    pub fn is_empty(&self) -> bool {
+        self.tool_name.is_none() && self.model_prefix.is_none()
+    }
+
+    /// 根据 HookContext 判断是否匹配
+    pub fn matches(&self, context: &HookContext) -> bool {
+        if let Some(ref expected_tool) = self.tool_name {
+            match &context.tool_name {
+                Some(actual) if actual == expected_tool => {}
+                Some(_) => return false,
+                None => return false, // 事件中没有 tool_name，条件不满足
+            }
+        }
+        if let Some(ref prefix) = self.model_prefix {
+            match &context.model {
+                Some(actual) if actual.starts_with(prefix.as_str()) => {}
+                Some(_) => return false,
+                None => return false,
+            }
+        }
+        true
+    }
+}
+
 /// Hook 定义（YAML 兼容）：一条 shell 命令 + 超时秒数 + 失败策略
 /// 仅用于从 YAML 文件反序列化，内部使用 HookKind
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +155,9 @@ pub struct HookDef {
     /// 脚本失败时的处理策略（默认 skip）
     #[serde(default)]
     pub on_error: OnError,
+    /// 条件过滤：仅当条件匹配时执行（默认无过滤）
+    #[serde(default, skip_serializing_if = "HookFilter::is_empty")]
+    pub filter: HookFilter,
 }
 
 fn default_timeout() -> u64 {
@@ -127,12 +175,13 @@ pub enum HookKind {
     Builtin(BuiltinHook),
 }
 
-/// Shell hook：一条命令 + 超时 + 失败策略
+/// Shell hook：一条命令 + 超时 + 失败策略 + 条件过滤
 #[derive(Debug, Clone)]
 pub struct ShellHook {
     pub command: String,
     pub timeout: u64,
     pub on_error: OnError,
+    pub filter: HookFilter,
 }
 
 impl From<HookDef> for ShellHook {
@@ -141,6 +190,7 @@ impl From<HookDef> for ShellHook {
             command: def.command,
             timeout: def.timeout,
             on_error: def.on_error,
+            filter: def.filter,
         }
     }
 }
@@ -239,6 +289,11 @@ pub struct HookContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_result: Option<String>,
 
+    /// 当前会话 ID
+    /// - 可读事件：所有事件
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+
     /// 当前工作目录
     pub cwd: String,
 }
@@ -255,6 +310,7 @@ impl Default for HookContext {
             tool_name: None,
             tool_arguments: None,
             tool_result: None,
+            session_id: None,
             cwd: std::env::current_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string()),
@@ -306,16 +362,45 @@ pub struct HookResult {
 
 // ========== HookManager ==========
 
+/// 单个 hook 的执行统计
+#[derive(Debug, Clone, Default)]
+pub struct HookMetrics {
+    /// 执行次数
+    pub executions: u64,
+    /// 成功次数
+    pub successes: u64,
+    /// 失败次数（含超时）
+    pub failures: u64,
+    /// 跳过次数（filter 不匹配）
+    pub skipped: u64,
+    /// 累计耗时（毫秒）
+    pub total_duration_ms: u64,
+}
+
 /// Hook 管理器：管理四级 hook（内置、用户级、项目级、session 级）
 ///
 /// 执行顺序：内置 → 用户级 → 项目级 → Session 级，链式执行。
 /// 前者的输出会更新到 context 中，影响后者的输入。任何 `abort` 立即中止整条链。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct HookManager {
     builtin_hooks: HashMap<HookEvent, Vec<HookKind>>,
     user_hooks: HashMap<HookEvent, Vec<HookKind>>,
     project_hooks: HashMap<HookEvent, Vec<HookKind>>,
     session_hooks: HashMap<HookEvent, Vec<HookKind>>,
+    /// 按 hook label 记录的执行指标（内部可变，execute 不需要 &mut self）
+    metrics: Mutex<HashMap<String, HookMetrics>>,
+}
+
+impl Clone for HookManager {
+    fn clone(&self) -> Self {
+        HookManager {
+            builtin_hooks: self.builtin_hooks.clone(),
+            user_hooks: self.user_hooks.clone(),
+            project_hooks: self.project_hooks.clone(),
+            session_hooks: self.session_hooks.clone(),
+            metrics: Mutex::new(self.metrics.lock().map(|m| m.clone()).unwrap_or_default()),
+        }
+    }
 }
 
 /// 列出 hook 时的来源标记
@@ -336,6 +421,10 @@ pub struct HookEntry {
     pub on_error: Option<OnError>,
     /// Session hook 在该 event 下的局部索引（仅 session 来源有值，用于 remove 操作）
     pub session_index: Option<usize>,
+    /// 条件过滤（仅 Shell hook 有）
+    pub filter: Option<HookFilter>,
+    /// 执行指标
+    pub metrics: Option<HookMetrics>,
 }
 
 impl HookManager {
@@ -475,57 +564,92 @@ impl HookManager {
     /// 列出所有 hook（含来源标记和摘要信息）
     pub fn list_hooks(&self) -> Vec<HookEntry> {
         let mut result = Vec::new();
+        let metrics_map = self.metrics.lock().ok();
+        let empty_metrics = HashMap::new();
+        let metrics_ref = metrics_map.as_deref().unwrap_or(&empty_metrics);
+        let make_entry = |event: HookEvent,
+                          source: &'static str,
+                          hook: &HookKind,
+                          session_index: Option<usize>,
+                          metrics: &HashMap<String, HookMetrics>| {
+            let label = hook_label(hook);
+            HookEntry {
+                event,
+                source,
+                timeout: hook_timeout(hook),
+                on_error: hook_on_error(hook),
+                filter: hook_filter(hook).cloned(),
+                metrics: metrics.get(&label).cloned(),
+                session_index,
+                label,
+            }
+        };
         for event in HookEvent::all() {
             if let Some(hooks) = self.builtin_hooks.get(event) {
                 for hook in hooks {
-                    result.push(HookEntry {
-                        event: *event,
-                        source: HOOK_SOURCE_BUILTIN,
-                        label: hook_label(hook),
-                        timeout: hook_timeout(hook),
-                        on_error: hook_on_error(hook),
-                        session_index: None,
-                    });
+                    result.push(make_entry(
+                        *event,
+                        HOOK_SOURCE_BUILTIN,
+                        hook,
+                        None,
+                        metrics_ref,
+                    ));
                 }
             }
             if let Some(hooks) = self.user_hooks.get(event) {
                 for hook in hooks {
-                    result.push(HookEntry {
-                        event: *event,
-                        source: HOOK_SOURCE_USER,
-                        label: hook_label(hook),
-                        timeout: hook_timeout(hook),
-                        on_error: hook_on_error(hook),
-                        session_index: None,
-                    });
+                    result.push(make_entry(
+                        *event,
+                        HOOK_SOURCE_USER,
+                        hook,
+                        None,
+                        metrics_ref,
+                    ));
                 }
             }
             if let Some(hooks) = self.project_hooks.get(event) {
                 for hook in hooks {
-                    result.push(HookEntry {
-                        event: *event,
-                        source: HOOK_SOURCE_PROJECT,
-                        label: hook_label(hook),
-                        timeout: hook_timeout(hook),
-                        on_error: hook_on_error(hook),
-                        session_index: None,
-                    });
+                    result.push(make_entry(
+                        *event,
+                        HOOK_SOURCE_PROJECT,
+                        hook,
+                        None,
+                        metrics_ref,
+                    ));
                 }
             }
             if let Some(hooks) = self.session_hooks.get(event) {
                 for (idx, hook) in hooks.iter().enumerate() {
-                    result.push(HookEntry {
-                        event: *event,
-                        source: HOOK_SOURCE_SESSION,
-                        label: hook_label(hook),
-                        timeout: hook_timeout(hook),
-                        on_error: hook_on_error(hook),
-                        session_index: Some(idx),
-                    });
+                    result.push(make_entry(
+                        *event,
+                        HOOK_SOURCE_SESSION,
+                        hook,
+                        Some(idx),
+                        metrics_ref,
+                    ));
                 }
             }
         }
         result
+    }
+
+    /// 热重载用户级和项目级 hook 配置
+    ///
+    /// 重新读取 `~/.jdata/agent/hooks.yaml` 和 `.jcli/hooks.yaml`，
+    /// 替换当前的 user_hooks 和 project_hooks（builtin 和 session 级不受影响）。
+    /// 指标数据保留不清零。
+    #[allow(dead_code)]
+    pub fn reload(&mut self) {
+        let fresh = HookManager::load();
+        self.user_hooks = fresh.user_hooks;
+        self.project_hooks = fresh.project_hooks;
+        write_info_log("HookManager::reload", "已重新加载用户级和项目级 hooks");
+    }
+
+    /// 获取所有 hook 的执行指标快照（按 label）
+    #[allow(dead_code)]
+    pub fn get_metrics(&self) -> HashMap<String, HookMetrics> {
+        self.metrics.lock().map(|m| m.clone()).unwrap_or_default()
     }
 
     /// 检查某个事件是否有任何 hook 注册（内置/用户级/项目级/session 级）
@@ -598,16 +722,47 @@ impl HookManager {
 
         let mut had_modification = false;
         let mut final_result = HookResult::default();
+        let chain_start = std::time::Instant::now();
+        let chain_timeout = std::time::Duration::from_secs(MAX_CHAIN_DURATION_SECS);
 
         for hook in all_hooks {
+            // 链总超时检查
+            if chain_start.elapsed() > chain_timeout {
+                write_error_log(
+                    "HookManager::execute",
+                    &format!(
+                        "Hook 链总超时 ({}s)，中止剩余 hook (事件: {})",
+                        MAX_CHAIN_DURATION_SECS,
+                        event.as_str()
+                    ),
+                );
+                break;
+            }
+
+            let label = hook_label(hook);
+
+            // 条件过滤检查
+            if !hook_should_execute(hook, &context) {
+                if let Ok(mut metrics) = self.metrics.lock() {
+                    let m = metrics.entry(label).or_default();
+                    m.skipped += 1;
+                }
+                continue;
+            }
+
+            let hook_start = std::time::Instant::now();
             match execute_hook(hook, &context) {
                 Ok(result) => {
-                    let hook_label = hook_label(hook);
+                    let elapsed_ms = hook_start.elapsed().as_millis() as u64;
+                    if let Ok(mut metrics) = self.metrics.lock() {
+                        let m = metrics.entry(label.clone()).or_default();
+                        m.executions += 1;
+                        m.successes += 1;
+                        m.total_duration_ms += elapsed_ms;
+                    }
+
                     if result.abort {
-                        write_info_log(
-                            "HookManager::execute",
-                            &format!("Hook abort ({})", hook_label),
-                        );
+                        write_info_log("HookManager::execute", &format!("Hook abort ({})", label));
                         return Some(HookResult {
                             abort: true,
                             ..Default::default()
@@ -652,12 +807,19 @@ impl HookManager {
                     }
                 }
                 Err(e) => {
+                    let elapsed_ms = hook_start.elapsed().as_millis() as u64;
+                    if let Ok(mut metrics) = self.metrics.lock() {
+                        let m = metrics.entry(label.clone()).or_default();
+                        m.executions += 1;
+                        m.failures += 1;
+                        m.total_duration_ms += elapsed_ms;
+                    }
+
                     // Shell hook 非零退出 / 超时 → 按 on_error 策略处理
                     // Builtin hook 失败一律 abort（内置 hook 失败是真正的错误）
-                    let hook_label = hook_label(hook);
                     write_error_log(
                         "HookManager::execute",
-                        &format!("Hook 执行失败 ({}): {}", hook_label, e),
+                        &format!("Hook 执行失败 ({}): {}", label, e),
                     );
                     match hook_on_error_strategy(hook) {
                         OnError::Abort => {
@@ -819,6 +981,22 @@ fn hook_on_error_strategy(kind: &HookKind) -> OnError {
     }
 }
 
+/// 获取 hook 的条件过滤器（仅 Shell hook 有）
+fn hook_filter(kind: &HookKind) -> Option<&HookFilter> {
+    match kind {
+        HookKind::Shell(shell) if !shell.filter.is_empty() => Some(&shell.filter),
+        _ => None,
+    }
+}
+
+/// 检查 hook 是否应在当前 context 下执行（无 filter 或 filter 匹配时返回 true）
+fn hook_should_execute(kind: &HookKind, context: &HookContext) -> bool {
+    match kind {
+        HookKind::Shell(shell) => shell.filter.matches(context),
+        HookKind::Builtin(_) => true,
+    }
+}
+
 // ========== 单元测试 ==========
 
 #[cfg(test)]
@@ -852,6 +1030,7 @@ mod tests {
             command: "echo test".to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+            filter: HookFilter::default(),
         };
         let kind = HookKind::from(def);
         match kind {
@@ -907,6 +1086,7 @@ mod tests {
             command: r#"echo '{"user_input": "hooked"}'"#.to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+            filter: HookFilter::default(),
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -924,6 +1104,7 @@ mod tests {
             command: "echo ''".to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+            filter: HookFilter::default(),
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx).unwrap();
@@ -937,6 +1118,7 @@ mod tests {
             command: "exit 1".to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+            filter: HookFilter::default(),
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx);
@@ -949,6 +1131,7 @@ mod tests {
             command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_input": "got_input"}'"#.to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+        filter: HookFilter::default(),
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -1014,6 +1197,7 @@ mod tests {
                 command: r#"echo '{"user_input": "session_hooked"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
 
@@ -1086,6 +1270,7 @@ mod tests {
                 command: r#"echo '{"user_input": "session_overridden"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
 
@@ -1112,6 +1297,7 @@ mod tests {
                 command: "echo test".to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
         assert_eq!(manager.list_hooks().len(), 1);
@@ -1133,6 +1319,7 @@ mod tests {
                 command: r#"echo '{"user_input": "first"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
         manager.register_session_hook(
@@ -1141,6 +1328,7 @@ mod tests {
                 command: r#"echo '{"user_input": "second"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
 
@@ -1169,6 +1357,7 @@ mod tests {
                 command: "exit 1".to_string(), // 非零退出 + on_error=abort → 中止链
                 timeout: 5,
                 on_error: OnError::Abort,
+                filter: HookFilter::default(),
             },
         );
         manager.register_session_hook(
@@ -1177,6 +1366,7 @@ mod tests {
                 command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
 
@@ -1216,6 +1406,7 @@ mod tests {
                 command: "exit 1".to_string(), // 失败
                 timeout: 5,
                 on_error: OnError::Skip, // 但 skip → 继续
+                filter: HookFilter::default(),
             },
         );
         manager.register_session_hook(
@@ -1224,6 +1415,7 @@ mod tests {
                 command: r#"echo '{"user_input": "survived"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
 
@@ -1254,6 +1446,7 @@ mod tests {
                 command: "exit 1".to_string(),
                 timeout: 5,
                 on_error: OnError::Abort,
+                filter: HookFilter::default(),
             },
         );
         manager.register_session_hook(
@@ -1262,6 +1455,7 @@ mod tests {
                 command: r#"echo '{"user_input": "should_not_reach"}'"#.to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
 
@@ -1309,6 +1503,7 @@ on_error: abort"#;
             command: r#"echo '{"user_input": "ok"}'; echo "debug info" >&2"#.to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+            filter: HookFilter::default(),
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -1326,6 +1521,7 @@ on_error: abort"#;
             command: r#"echo "something went wrong" >&2; exit 1"#.to_string(),
             timeout: 5,
             on_error: OnError::Skip,
+            filter: HookFilter::default(),
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx);
@@ -1354,6 +1550,7 @@ on_error: abort"#;
                 command: "echo first".to_string(),
                 timeout: 5,
                 on_error: OnError::Skip,
+                filter: HookFilter::default(),
             },
         );
         manager.register_session_hook(
@@ -1362,6 +1559,7 @@ on_error: abort"#;
                 command: "echo second".to_string(),
                 timeout: 5,
                 on_error: OnError::Abort,
+                filter: HookFilter::default(),
             },
         );
 

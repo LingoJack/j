@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CovCmUJ0.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CyIWy8bh.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -403,6 +403,9 @@ pre_tool_execution:
       fi
     timeout: 10
     on_error: abort  # Abort the chain if this hook fails (default: skip)
+    filter:          # Conditional filter (optional)
+      tool_name: Bash        # Only run for Bash tool
+      # model_prefix: gpt-4  # Only run for gpt-4 model family
 \`\`\`
 
 ## Script Protocol
@@ -430,6 +433,7 @@ pre_tool_execution:
 {
   "event": "pre_send_message",
   "cwd": "/path/to/project",
+  "session_id": "20260418_143022_abc",
   "user_input": "User input text",
   "messages": [{"role": "user", "content": "..."}],
   "system_prompt": "System prompt",
@@ -1937,6 +1941,9 @@ pre_tool_execution:
       fi
     timeout: 10
     on_error: abort  # 此 hook 失败时中止操作（默认为 skip）
+    filter:          # 条件过滤（可选）
+      tool_name: Bash        # 仅对 Bash 工具生效
+      # model_prefix: gpt-4  # 仅对 gpt-4 系列模型生效
 \`\`\`
 
 ## 脚本协议
@@ -1964,6 +1971,7 @@ pre_tool_execution:
 {
   "event": "pre_send_message",
   "cwd": "/path/to/project",
+  "session_id": "20260418_143022_abc",
   "user_input": "用户输入文本",
   "messages": [{"role": "user", "content": "..."}],
   "system_prompt": "系统提示词",

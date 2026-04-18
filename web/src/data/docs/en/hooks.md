@@ -59,6 +59,9 @@ pre_tool_execution:
       fi
     timeout: 10
     on_error: abort  # Abort the chain if this hook fails (default: skip)
+    filter:          # Conditional filter (optional)
+      tool_name: Bash        # Only run for Bash tool
+      # model_prefix: gpt-4  # Only run for gpt-4 model family
 ```
 
 ## Script Protocol
@@ -86,6 +89,7 @@ pre_tool_execution:
 {
   "event": "pre_send_message",
   "cwd": "/path/to/project",
+  "session_id": "20260418_143022_abc",
   "user_input": "User input text",
   "messages": [{"role": "user", "content": "..."}],
   "system_prompt": "System prompt",

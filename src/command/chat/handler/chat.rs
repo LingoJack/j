@@ -907,6 +907,7 @@ fn dump_current_request(app: &mut ChatApp, processed: bool) {
                     messages: Some(messages.clone()),
                     system_prompt: system_prompt.clone(),
                     model: Some(model_name),
+                    session_id: Some(app.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
                         .unwrap_or_else(|_| ".".to_string()),

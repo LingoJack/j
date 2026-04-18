@@ -599,6 +599,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             let ctx = HookContext {
                 event: HookEvent::SessionEnd,
                 messages: Some(app.state.session.messages.clone()),
+                session_id: Some(app.session_id.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string()),

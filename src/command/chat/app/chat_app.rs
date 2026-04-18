@@ -525,6 +525,7 @@ impl ChatApp {
                 let ctx = HookContext {
                     event: HookEvent::SessionStart,
                     messages: Some(new_app.state.session.messages.clone()),
+                    session_id: Some(new_app.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
                         .unwrap_or_else(|_| ".".to_string()),
@@ -2219,6 +2220,7 @@ impl ChatApp {
                     event: HookEvent::PreSendMessage,
                     user_input: Some(text.clone()),
                     messages: Some(self.state.session.messages.clone()),
+                    session_id: Some(self.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
                         .unwrap_or_else(|_| ".".to_string()),
@@ -2271,6 +2273,7 @@ impl ChatApp {
                     event: HookEvent::PostSendMessage,
                     user_input: Some(text.clone()),
                     messages: Some(self.state.session.messages.clone()),
+                    session_id: Some(self.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
                         .unwrap_or_else(|_| ".".to_string()),
@@ -2610,6 +2613,7 @@ impl ChatApp {
                                         event: HookEvent::PreToolExecution,
                                         tool_name: Some(tc.name.clone()),
                                         tool_arguments: Some(tc.arguments.clone()),
+                                        session_id: Some(self.session_id.clone()),
                                         cwd: std::env::current_dir()
                                             .map(|p| p.display().to_string())
                                             .unwrap_or_else(|_| ".".to_string()),
@@ -2904,6 +2908,8 @@ impl ChatApp {
                             event: HookEvent::PostLlmResponse,
                             assistant_output: Some(content.clone()),
                             messages: Some(self.state.session.messages.clone()),
+                            model: self.active_provider().map(|p| p.model.clone()),
+                            session_id: Some(self.session_id.clone()),
                             cwd: std::env::current_dir()
                                 .map(|p| p.display().to_string())
                                 .unwrap_or_else(|_| ".".to_string()),

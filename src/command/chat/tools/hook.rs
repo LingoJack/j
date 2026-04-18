@@ -1,4 +1,4 @@
-use crate::command::chat::hook::{HookDef, HookEvent, HookManager, OnError};
+use crate::command::chat::hook::{HookDef, HookEvent, HookFilter, HookManager, OnError};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -258,6 +258,7 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
             command: command.clone(),
             timeout,
             on_error,
+            filter: HookFilter::default(),
         };
 
         match self.hook_manager.lock() {
@@ -312,8 +313,40 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         .session_index
                         .map(|idx| format!(", session_idx={}", idx))
                         .unwrap_or_default();
+                    let filter_str = entry
+                        .filter
+                        .as_ref()
+                        .map(|f| {
+                            let mut parts = Vec::new();
+                            if let Some(ref t) = f.tool_name {
+                                parts.push(format!("tool={}", t));
+                            }
+                            if let Some(ref m) = f.model_prefix {
+                                parts.push(format!("model={}*", m));
+                            }
+                            if parts.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", filter=[{}]", parts.join(","))
+                            }
+                        })
+                        .unwrap_or_default();
+                    let metrics_str = entry
+                        .metrics
+                        .as_ref()
+                        .map(|m| {
+                            format!(
+                                ", runs={}/ok={}/fail={}/skip={}/{}ms",
+                                m.executions,
+                                m.successes,
+                                m.failures,
+                                m.skipped,
+                                m.total_duration_ms
+                            )
+                        })
+                        .unwrap_or_default();
                     output.push_str(&format!(
-                        "  [{}] event={}, source={}{}, label={}, timeout={}, on_error={}\n",
+                        "  [{}] event={}, source={}{}, label={}, timeout={}, on_error={}{}{}\n",
                         i,
                         entry.event.as_str(),
                         entry.source,
@@ -321,6 +354,8 @@ cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE
                         entry.label,
                         timeout_str,
                         on_error_str,
+                        filter_str,
+                        metrics_str,
                     ));
                 }
                 ToolResult {
