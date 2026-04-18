@@ -20,6 +20,7 @@ pub mod task;
 pub mod todo;
 mod web_fetch;
 mod web_search;
+pub mod work_done;
 pub mod worktree;
 
 pub use crate::util::path_utils::{effective_cwd, expand_tilde, resolve_path};
@@ -57,4 +58,5 @@ pub mod tool_names {
     pub const AGENT_TEAM: &str = super::agent_team::AgentTeamTool::NAME;
     pub const CREATE_TEAMMATE: &str = super::create_teammate::CreateTeammateTool::NAME;
     pub const SEND_MESSAGE: &str = super::send_message::SendMessageTool::NAME;
+    pub const WORK_DONE: &str = super::work_done::WorkDoneTool::NAME;
 }

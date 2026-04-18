@@ -174,6 +174,11 @@ pub struct TeammateHandle {
     pub tool_calls_count: Arc<AtomicUsize>,
     /// 当前正在执行的工具名（None 表示未在执行工具）
     pub current_tool: Arc<Mutex<Option<String>>>,
+    /// 唤醒标志：仅当广播消息 @自己 或来自 Main 时 set。
+    /// teammate_loop 在 WaitingForMessage 时只响应 wake_flag=true，否则消息仅作为旁听累积到上下文。
+    pub wake_flag: Arc<AtomicBool>,
+    /// WorkDone 终态标志：WorkDone 工具调用后 set，teammate_loop 读到后立即进入 Completed。
+    pub work_done: Arc<AtomicBool>,
 }
 
 #[allow(dead_code)]
@@ -273,12 +278,18 @@ impl TeammateManager {
         }
 
         // 注入到所有其他 teammate 的 pending
+        // 唤醒语义：仅当 from == "Main" 或 @{teammate_name} 时 set wake_flag
+        // 其他广播消息仍进入 pending（作为上下文旁听），但不会唤醒 Waiting 中的 teammate
         for (name, handle) in &self.teammates {
             if name == from {
                 continue; // 不给自己发
             }
             if let Ok(mut pending) = handle.pending_user_messages.lock() {
                 pending.push(ChatMessage::text("user", &formatted));
+            }
+            let should_wake = from == "Main" || at_target == Some(name.as_str());
+            if should_wake {
+                handle.wake_flag.store(true, Ordering::Relaxed);
             }
         }
 

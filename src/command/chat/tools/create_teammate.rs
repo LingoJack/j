@@ -4,6 +4,7 @@ use crate::command::chat::teammate::{
 use crate::command::chat::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::tools::agent_shared::AgentToolShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
+use crate::command::chat::tools::work_done::WorkDoneTool;
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
@@ -159,6 +160,8 @@ impl Tool for CreateTeammateTool {
         let status = Arc::new(Mutex::new(TeammateStatus::Initializing));
         let tool_calls_count = Arc::new(AtomicUsize::new(0));
         let current_tool: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let wake_flag = Arc::new(AtomicBool::new(false));
+        let work_done = Arc::new(AtomicBool::new(false));
 
         // 获取 provider 快照
         let provider = safe_lock(&self.shared.provider, "CreateTeammate::provider").clone();
@@ -170,6 +173,11 @@ impl Tool for CreateTeammateTool {
 
         // 注册 SendMessage 工具到子注册表
         sub_registry.register(Box::new(SendMessageTool {
+            teammate_manager: Arc::clone(&self.teammate_manager),
+        }));
+        // 注册 WorkDone 工具（与本 teammate 的 work_done 标志绑定）
+        sub_registry.register(Box::new(WorkDoneTool {
+            work_done: Arc::clone(&work_done),
             teammate_manager: Arc::clone(&self.teammate_manager),
         }));
         let sub_registry = Arc::new(sub_registry);
@@ -204,6 +212,8 @@ impl Tool for CreateTeammateTool {
         let status_clone = Arc::clone(&status);
         let tool_calls_count_clone = Arc::clone(&tool_calls_count);
         let current_tool_clone = Arc::clone(&current_tool);
+        let wake_flag_clone = Arc::clone(&wake_flag);
+        let work_done_clone = Arc::clone(&work_done);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份
@@ -244,6 +254,8 @@ impl Tool for CreateTeammateTool {
                 status: status_clone,
                 tool_calls_count: tool_calls_count_clone,
                 current_tool: current_tool_clone,
+                wake_flag: wake_flag_clone,
+                work_done: work_done_clone,
             });
 
             // 清理 worktree
@@ -287,6 +299,8 @@ impl Tool for CreateTeammateTool {
             status,
             tool_calls_count,
             current_tool,
+            wake_flag,
+            work_done,
         };
 
         match self.teammate_manager.lock() {

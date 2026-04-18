@@ -37,6 +37,10 @@ pub struct TeammateLoopConfig {
     pub tool_calls_count: Arc<AtomicUsize>,
     /// 当前正在执行的工具名（与 TeammateHandle 共享）
     pub current_tool: Arc<Mutex<Option<String>>>,
+    /// 唤醒标志（与 TeammateHandle 共享）：仅 @self 或 from==Main 的广播会 set 它
+    pub wake_flag: Arc<AtomicBool>,
+    /// WorkDone 终态标志（与 TeammateHandle 共享）：WorkDone 工具调用后 set，loop 看到后退出
+    pub work_done: Arc<AtomicBool>,
 }
 
 /// Teammate 专用的 agent loop
@@ -65,6 +69,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         status,
         tool_calls_count,
         current_tool,
+        wake_flag,
+        work_done,
     } = config;
 
     // 辅助闭包：更新状态
@@ -126,13 +132,19 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             return format!("{}\n[Teammate '{}' cancelled]", final_text, name);
         }
 
-        // Drain 来自广播的消息
-        let had_new_messages = drain_broadcast_messages(&mut messages, &pending_user_messages);
-
-        // 如果之前是空闲状态但收到了新消息，重置空闲计数
-        if had_new_messages {
-            idle_rounds = 0;
+        // WorkDone 终态检查：teammate 明确声明完成工作后立即退出
+        if work_done.load(Ordering::Relaxed) {
+            write_info_log(
+                "TeammateLoop",
+                &format!("{}: WorkDone flag set, exiting", name),
+            );
+            break;
         }
+
+        // Drain 来自广播的消息（包括旁听消息，保留上下文）
+        // 注意：idle_rounds 的管理下放到 WaitingForMessage 分支，
+        // 本处不再根据 had_new_messages 重置，避免"任何消息都触发 LLM"。
+        let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
 
         // 同步 messages 快照（供 /dump 读取）
         sync_messages(&messages);
@@ -140,12 +152,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         write_info_log(
             "TeammateLoop",
             &format!(
-                "{}: Round {}/{}, messages={}, new_broadcast={}",
+                "{}: Round {}/{}, messages={}",
                 name,
                 round + 1,
                 max_rounds,
                 messages.len(),
-                had_new_messages,
             ),
         );
 
@@ -191,12 +202,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             // 无工具调用 — 进入轮询等待模式
             set_status(TeammateStatus::WaitingForMessage);
 
-            let has_pending = pending_user_messages
-                .lock()
-                .map(|p| !p.is_empty())
-                .unwrap_or(false);
+            // 先把已到达的旁听消息 drain 到 messages（保留上下文，但不自动唤醒）
+            let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
 
-            if has_pending {
+            // 唤醒判断：仅当收到 @self 或来自 Main 的广播，wake_flag 才为 true
+            if wake_flag.swap(false, Ordering::Relaxed) {
                 idle_rounds = 0;
                 continue;
             }
@@ -216,13 +226,15 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     set_status(TeammateStatus::Cancelled);
                     return format!("{}\n[Teammate '{}' cancelled]", final_text, name);
                 }
+                if work_done.load(Ordering::Relaxed) {
+                    break;
+                }
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
-                let new_pending = pending_user_messages
-                    .lock()
-                    .map(|p| !p.is_empty())
-                    .unwrap_or(false);
-                if new_pending {
+                // 在轮询期间也 drain 旁听消息到 messages（仅累积上下文）
+                let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+
+                if wake_flag.swap(false, Ordering::Relaxed) {
                     idle_rounds = 0;
                     break;
                 }
@@ -303,7 +315,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
     // 通知团队：teammate 已完成
     set_status(TeammateStatus::Completed);
-    if let Ok(manager) = teammate_manager.lock()
+    // WorkDone 工具自己已广播过 [已完成工作]，避免重复；其他路径（idle 超时等）补一次
+    if !work_done.load(Ordering::Relaxed)
+        && let Ok(manager) = teammate_manager.lock()
         && let Ok(mut shared) = manager.shared_messages.lock()
     {
         shared.push(ChatMessage::text(
@@ -342,11 +356,19 @@ fn build_teammate_system_prompt(
         ## Communication\n\
         - 使用 `SendMessage` 工具与其他 agent 通信\n\
         - 收到的广播消息以 `<AgentName>` 前缀出现在对话中\n\
-        - 用 `@AgentName` 指定消息接收者（消息仍广播给所有人）\n\
-        - 完成任务后，用 SendMessage 通知 @Main\n\n\
+        - 用 `@AgentName` 指定消息接收者（消息仍广播给所有人，但只有 @目标 会被真正「唤醒」）\n\n\
+        ## Message Wake Semantics（重要）\n\
+        聊天室里你会看到三类消息，处理方式不同：\n\
+        - **@你自己 的消息** 或 **来自 @Main 的消息**：会唤醒你去思考和回复\n\
+        - **你不是接收者的其他 agent 间广播**：仅作为上下文出现在对话里（旁听），**不要**主动回复，否则会造成无限循环\n\
+        - 旁听消息只是让你了解团队动态；除非其中包含你必须处理的信息，否则继续等待\n\n\
+        ## Completing Your Work（重要）\n\
+        - 任务做完后：先用 SendMessage 告知 @Main 结果摘要，然后调用 `WorkDone` 工具彻底退出\n\
+        - `WorkDone` 调用后你将不再响应任何消息，团队会看到你「已完成」\n\
+        - 如果任务还可能需要你配合，**不要**调用 WorkDone，保持空闲等待即可\n\n\
         ## Rules\n\
         - 专注于你的角色职责，不要越界做其他角色的工作\n\
-        - 如果需要其他 agent 的配合，通过 SendMessage 沟通\n\
+        - 如果需要其他 agent 的配合，通过 SendMessage @对方 沟通\n\
         - 如果遇到文件编辑冲突（被其他 agent 锁定），等待后重试\n",
         base, name, role, name, team_summary
     )
