@@ -1,5 +1,6 @@
 use crate::command::chat::api::{build_request_with_tools, create_openai_client};
 use crate::command::chat::app::AskRequest;
+use crate::command::chat::error::ChatError;
 use crate::command::chat::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
@@ -7,6 +8,7 @@ use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::task::TaskManager;
 use crate::util::log::write_info_log;
+use rand::Rng;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -174,9 +176,13 @@ pub fn create_runtime_and_client(
     Ok((rt, client))
 }
 
-/// 非流式调用 LLM
+/// 非流式调用 LLM（含指数退避重试）
 ///
 /// 返回第一个 choice 的 message；出错时返回 Err(error_text)。
+/// 对瞬时错误（网络超时、5xx、429）自动重试，策略比主 agent 更保守：
+/// - 最多 2 次重试（主 agent 最多 5 次）
+/// - 退避上限 15s（主 agent 30s）
+/// - 仍失败则直接返回错误文本
 pub fn call_llm_non_stream(
     rt: &tokio::runtime::Runtime,
     client: &async_openai::Client<async_openai::config::OpenAIConfig>,
@@ -188,15 +194,119 @@ pub fn call_llm_non_stream(
     let request = build_request_with_tools(provider, messages, tools.to_vec(), system_prompt)
         .map_err(|e| format!("Failed to build request: {}", e))?;
 
-    let response = rt
-        .block_on(async { client.chat().create(request).await })
-        .map_err(|e| format!("API request failed: {}", e))?;
+    let mut attempt: u32 = 0;
+    loop {
+        attempt += 1;
+        match rt.block_on(async { client.chat().create(request.clone()).await }) {
+            Ok(response) => {
+                return response
+                    .choices
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| "[No response from API]".to_string());
+            }
+            Err(e) => {
+                let chat_err = ChatError::from(e);
+                if let Some(policy) = headless_retry_policy(&chat_err)
+                    && attempt <= policy.max_attempts
+                {
+                    let delay_ms = backoff_delay_ms(attempt, policy.base_ms, policy.cap_ms);
+                    write_info_log(
+                        "SubAgentLLM",
+                        &format!(
+                            "API 请求失败，{}ms 后重试 ({}/{})",
+                            delay_ms, attempt, policy.max_attempts
+                        ),
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                    continue;
+                }
+                // 不可重试或已耗尽重试次数
+                return Err(chat_err.display_message());
+            }
+        }
+    }
+}
 
-    response
-        .choices
-        .into_iter()
-        .next()
-        .ok_or_else(|| "[No response from API]".to_string())
+// ========== Headless 重试策略 ==========
+
+/// 子 agent / teammate 的重试策略（比主 agent 更保守）
+struct HeadlessRetryPolicy {
+    /// 最大重试次数（不含首次请求）
+    max_attempts: u32,
+    /// 首次退避基础延迟（毫秒）
+    base_ms: u64,
+    /// 延迟上限（毫秒）
+    cap_ms: u64,
+}
+
+/// 根据错误类型确定重试策略
+///
+/// 策略设计原则（比主 agent 弱一档）：
+/// - 网络瞬断（超时/断连）：基础 2s，最多 2 次
+/// - 5xx 服务端过载（503/504/529）：基础 3s，最多 2 次
+/// - 5xx 服务端错误（500/502）：基础 3s，最多 1 次
+/// - 429：基础 5s，最多 2 次
+/// - 消息中含过载关键词：基础 3s，最多 2 次
+fn headless_retry_policy(error: &ChatError) -> Option<HeadlessRetryPolicy> {
+    match error {
+        ChatError::NetworkTimeout(_) | ChatError::NetworkError(_) => Some(HeadlessRetryPolicy {
+            max_attempts: 2,
+            base_ms: 2_000,
+            cap_ms: 15_000,
+        }),
+        ChatError::ApiServerError { status, .. } => match status {
+            503 | 504 | 529 => Some(HeadlessRetryPolicy {
+                max_attempts: 2,
+                base_ms: 3_000,
+                cap_ms: 15_000,
+            }),
+            500 | 502 => Some(HeadlessRetryPolicy {
+                max_attempts: 1,
+                base_ms: 3_000,
+                cap_ms: 15_000,
+            }),
+            _ => None,
+        },
+        ChatError::ApiRateLimit { .. } => Some(HeadlessRetryPolicy {
+            max_attempts: 2,
+            base_ms: 5_000,
+            cap_ms: 30_000,
+        }),
+        ChatError::AbnormalFinish(reason)
+            if matches!(reason.as_str(), "network_error" | "timeout" | "overloaded") =>
+        {
+            Some(HeadlessRetryPolicy {
+                max_attempts: 2,
+                base_ms: 2_000,
+                cap_ms: 15_000,
+            })
+        }
+        ChatError::Other(msg)
+            if msg.contains("访问量过大")
+                || msg.contains("过载")
+                || msg.contains("overloaded")
+                || msg.contains("too busy")
+                || msg.contains("1305") =>
+        {
+            Some(HeadlessRetryPolicy {
+                max_attempts: 2,
+                base_ms: 3_000,
+                cap_ms: 15_000,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// 计算第 `attempt`（从 1 开始）次重试的退避延迟（毫秒）
+///
+/// 公式：`clamp(base * 2^(attempt-1), 0, cap) + jitter(0..20%)`
+fn backoff_delay_ms(attempt: u32, base_ms: u64, cap_ms: u64) -> u64 {
+    let shift = (attempt - 1).min(10) as u64;
+    let exp = base_ms.saturating_mul(1u64 << shift).min(cap_ms);
+    let jitter = rand::thread_rng().gen_range(0..=(exp / 5));
+    exp + jitter
 }
 
 /// 从 LLM response 的 tool_calls 中提取 ToolCallItem 列表
