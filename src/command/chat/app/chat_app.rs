@@ -2179,10 +2179,13 @@ impl ChatApp {
     }
 
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
+        let compact = &self.state.agent_config.compact;
         crate::command::chat::agent::window::select_messages(
             &self.state.session.messages,
             self.state.agent_config.max_history_messages,
             self.state.agent_config.max_context_tokens,
+            compact.keep_recent,
+            &compact.micro_compact_exempt_tools,
         )
     }
 

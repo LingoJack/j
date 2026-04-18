@@ -185,6 +185,11 @@ pub const BUILTIN_EXEMPT_TOOLS: &[&str] = &[
     crate::command::chat::tools::create_teammate::CreateTeammateTool::NAME,
 ];
 
+/// 判断工具名是否应被豁免（合并内置 + 用户扩展清单）
+pub fn is_exempt_tool(tool_name: &str, extra_exempt_tools: &[String]) -> bool {
+    BUILTIN_EXEMPT_TOOLS.contains(&tool_name) || extra_exempt_tools.iter().any(|t| t == tool_name)
+}
+
 /// Layer 1: micro_compact - 替换旧 tool result 为占位符，保留最近 keep_recent 个
 ///
 /// 纯内存操作，零 API 成本。
@@ -230,9 +235,7 @@ pub fn micro_compact(
                 .get(&tool_call_id)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
-            if BUILTIN_EXEMPT_TOOLS.iter().any(|&t| t == tool_name)
-                || extra_exempt_tools.iter().any(|t| t == &tool_name)
-            {
+            if is_exempt_tool(&tool_name, extra_exempt_tools) {
                 continue;
             }
             messages[idx].content = format!("[Previous: used {}]", tool_name);

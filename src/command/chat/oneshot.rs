@@ -116,11 +116,13 @@ pub fn handle_chat(
             interrupted2.store(true, Ordering::Relaxed);
         });
 
-        // 发送给 API 时使用优先级消息窗口选择
+        // 发送给 API 时使用优先级消息窗口选择（与 CompactConfig 对齐）
         let send_messages = crate::command::chat::agent::window::select_messages(
             &messages,
             agent_config.max_history_messages,
             agent_config.max_context_tokens,
+            agent_config.compact.keep_recent,
+            &agent_config.compact.micro_compact_exempt_tools,
         );
 
         match crate::command::chat::api::call_openai_stream(

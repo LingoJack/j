@@ -78,6 +78,15 @@ pub const COMPACT_SKILL_TOKEN_BUDGET: usize = 25_000;
 /// Auto compact 后单个技能的 token 预算（~5K tokens，保留头部使用说明）
 pub const COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET: usize = 5_000;
 
+/// Window 时间保底系数：最近 keep_recent * 此系数 个 unit 无条件保留
+pub const WINDOW_KEEP_RECENT_MULTIPLIER: usize = 2;
+
+/// Window 各优先级 tier 的预算配额比例（User / AssistantText / ToolGroup）
+/// 三者之和应为 1.0；System 无配额（始终保留）
+pub const WINDOW_QUOTA_USER: f32 = 0.35;
+pub const WINDOW_QUOTA_ASST_TEXT: f32 = 0.25;
+pub const WINDOW_QUOTA_TOOL_GROUP: f32 = 0.40;
+
 // ========== 存储相关 ==========
 
 /// 消息预览最大长度

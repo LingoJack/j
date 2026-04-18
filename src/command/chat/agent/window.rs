@@ -1,16 +1,19 @@
-//! 优先级消息窗口选择
+//! 优先级消息窗口选择（三阶段 + 比例配额 + 溢出）
 //!
-//! 核心原则：**优先级决定丢弃顺序，时间顺序决定输出顺序。**
+//! 核心原则：
+//! 1. **时间保底**：最近 K 个 unit 无条件保留（K 与 micro_compact.keep_recent 对齐）
+//! 2. **豁免保底**：属于 EXEMPT_TOOLS 的 ToolGroup 优先保留（技能/任务上下文）
+//! 3. **比例配额**：剩余预算按比例分配给 User / AssistantText / ToolGroup，
+//!    而不是层层堆叠；某 tier 配额用不完时按时间倒序溢出到未保留 unit
 //!
-//! 当上下文窗口预算不足时，按优先级丢弃消息：
-//! - P1 (最高): User 消息 — 尽量保留
-//! - P2: Assistant 纯文字回复 — 其次保留
-//! - P3 (最低): ToolGroup (assistant+tool_calls + tool results) — 最先丢弃
-//!
-//! 丢弃的 ToolGroup 用占位符替换（类似 micro_compact），保持对话时间顺序连贯。
+//! 输出顺序始终保持原始时间顺序；丢弃的 ToolGroup 用统一占位符替换。
 
-use super::super::constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
+use super::super::constants::{
+    ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER, WINDOW_KEEP_RECENT_MULTIPLIER,
+    WINDOW_QUOTA_ASST_TEXT, WINDOW_QUOTA_TOOL_GROUP, WINDOW_QUOTA_USER,
+};
 use super::super::storage::ChatMessage;
+use super::compact::is_exempt_tool;
 use crate::util::log::write_info_log;
 
 // ========== MessageUnit 定义 ==========
@@ -67,31 +70,41 @@ impl MessageUnit {
         }
     }
 
-    /// 估算该单元的 token 数
+    /// 估算该单元的 token 数（用 chars 计数 + /3，兼顾中文场景）
     fn estimate_tokens(&self, messages: &[ChatMessage]) -> usize {
         let total_chars: usize = match self {
-            MessageUnit::System { idx } => messages[*idx].content.len(),
-            MessageUnit::User { idx } => messages[*idx].content.len(),
-            MessageUnit::AssistantText { idx } => messages[*idx].content.len(),
+            MessageUnit::System { idx }
+            | MessageUnit::User { idx }
+            | MessageUnit::AssistantText { idx } => messages[*idx].content.chars().count(),
             MessageUnit::ToolGroup {
                 assistant_idx,
                 tool_result_indices,
             } => {
-                let mut chars = messages[*assistant_idx].content.len();
+                let mut chars = messages[*assistant_idx].content.chars().count();
                 for &ri in tool_result_indices {
-                    chars += messages[ri].content.len();
+                    chars += messages[ri].content.chars().count();
                 }
-                // tool_calls 的 name + arguments 也占 token
                 if let Some(ref tcs) = messages[*assistant_idx].tool_calls {
                     for tc in tcs {
-                        chars += tc.name.len() + tc.arguments.len();
+                        chars += tc.name.chars().count() + tc.arguments.chars().count();
                     }
                 }
                 chars
             }
         };
-        // ~4 chars per token
-        total_chars / 4
+        total_chars / 3
+    }
+
+    /// ToolGroup 是否包含豁免工具（任一 tool_call 命中豁免清单即返回 true）
+    fn has_exempt_tool(&self, messages: &[ChatMessage], exempt_tools: &[String]) -> bool {
+        match self {
+            MessageUnit::ToolGroup { assistant_idx, .. } => messages[*assistant_idx]
+                .tool_calls
+                .as_ref()
+                .map(|tcs| tcs.iter().any(|tc| is_exempt_tool(&tc.name, exempt_tools)))
+                .unwrap_or(false),
+            _ => false,
+        }
     }
 }
 
@@ -163,66 +176,133 @@ struct SelectionResult {
     retained: Vec<bool>,
 }
 
-/// 按优先级和预算选择消息单元
+/// 三阶段预算选择：时间保底 → 豁免保底 → 比例配额（+ 溢出）
+///
+/// - `keep_recent`: micro_compact 的同名参数；最近 `keep_recent * WINDOW_KEEP_RECENT_MULTIPLIER`
+///   个 unit 无条件保留，确保最新 turn 完整闭环
+/// - `exempt_tools`: 与 micro_compact 共享的豁免工具清单；含豁免工具的 ToolGroup 在 Stage 2 优先保留
 fn select_units(
     units: &[MessageUnit],
     messages: &[ChatMessage],
     max_history_messages: usize,
     max_context_tokens: usize,
+    keep_recent: usize,
+    exempt_tools: &[String],
 ) -> SelectionResult {
     let mut retained = vec![false; units.len()];
-    let mut used_msg_count = 0usize;
-    let mut used_tokens = 0usize;
+    let mut used_msgs = 0usize;
+    let mut used_toks = 0usize;
 
-    // 按优先级分层，每层内按时间倒序（新的优先保留）
-    // 构建按优先级分组的索引列表
-    let mut tiers: Vec<Vec<usize>> = vec![Vec::new(); 4]; // 0=System, 1=User, 2=AssistantText, 3=ToolGroup
-    for (i, unit) in units.iter().enumerate() {
-        tiers[unit.priority() as usize].push(i);
-    }
-
-    // Tier 0: System — 始终保留
-    for &idx in &tiers[0] {
-        retained[idx] = true;
-        used_msg_count += units[idx].msg_count();
-        used_tokens += units[idx].estimate_tokens(messages);
-    }
-
-    // Tier 1-3: 按优先级从高到低，每层内从新到旧
-    for tier in &tiers[1..] {
-        // 每层内按 first_idx 倒序排列（新的先选）
-        let mut sorted: Vec<usize> = tier.clone();
-        sorted.sort_by(|&a, &b| units[b].first_idx().cmp(&units[a].first_idx()));
-
-        for &idx in &sorted {
+    // 记账 + 预算检查的闭包式辅助（rust 中改为函数避免借用问题）
+    let try_retain =
+        |idx: usize, retained: &mut [bool], used_msgs: &mut usize, used_toks: &mut usize| -> bool {
+            if retained[idx] {
+                return false;
+            }
             let unit = &units[idx];
-            let msg_count = unit.msg_count();
-            let tokens = unit.estimate_tokens(messages);
-
-            // 检查双重预算
-            if used_msg_count + msg_count > max_history_messages {
-                continue;
+            let m = unit.msg_count();
+            let t = unit.estimate_tokens(messages);
+            if *used_msgs + m > max_history_messages || *used_toks + t > max_context_tokens {
+                return false;
             }
-            if used_tokens + tokens > max_context_tokens {
-                continue;
-            }
-
             retained[idx] = true;
-            used_msg_count += msg_count;
-            used_tokens += tokens;
+            *used_msgs += m;
+            *used_toks += t;
+            true
+        };
+
+    // ── System：始终保留（不计配额）──
+    for (i, unit) in units.iter().enumerate() {
+        if matches!(unit, MessageUnit::System { .. }) {
+            // System 即使超预算也保留（通常极少极短）
+            retained[i] = true;
+            used_msgs += unit.msg_count();
+            used_toks += unit.estimate_tokens(messages);
         }
     }
 
-    // 安全兜底：至少保留一个 User unit（如果有的话）
+    // ── Stage 1: 时间保底 ── 最近 K 个非 System unit 无条件保留
+    let keep_k = keep_recent.saturating_mul(WINDOW_KEEP_RECENT_MULTIPLIER);
+    let mut stage1_taken = 0usize;
+    for i in (0..units.len()).rev() {
+        if stage1_taken >= keep_k {
+            break;
+        }
+        if matches!(units[i], MessageUnit::System { .. }) {
+            continue;
+        }
+        if try_retain(i, &mut retained, &mut used_msgs, &mut used_toks) {
+            stage1_taken += 1;
+        } else {
+            // 预算耗尽即停（最新的装不下，更老的也别试了）
+            break;
+        }
+    }
+
+    // ── Stage 2: 豁免保底 ── 含豁免工具的 ToolGroup 按时间倒序保留
+    for i in (0..units.len()).rev() {
+        if retained[i] {
+            continue;
+        }
+        if units[i].has_exempt_tool(messages, exempt_tools) {
+            try_retain(i, &mut retained, &mut used_msgs, &mut used_toks);
+        }
+    }
+
+    // ── Stage 3: 比例配额 ── 剩余预算按比例分给三个 tier，tier 内按时间倒序
+    let remaining_msgs = max_history_messages.saturating_sub(used_msgs);
+    let remaining_toks = max_context_tokens.saturating_sub(used_toks);
+
+    let quotas: [(u8, f32); 3] = [
+        (1, WINDOW_QUOTA_USER),       // User
+        (2, WINDOW_QUOTA_ASST_TEXT),  // AssistantText
+        (3, WINDOW_QUOTA_TOOL_GROUP), // ToolGroup
+    ];
+
+    for (tier_prio, ratio) in quotas {
+        // tier 子预算（向下取整；溢出阶段会吸收未用完部分）
+        let sub_msgs_cap = ((remaining_msgs as f32) * ratio) as usize;
+        let sub_toks_cap = ((remaining_toks as f32) * ratio) as usize;
+        let tier_start_msgs = used_msgs;
+        let tier_start_toks = used_toks;
+
+        // 该 tier 未保留的 unit，按时间倒序
+        let mut candidates: Vec<usize> = (0..units.len())
+            .filter(|&i| !retained[i] && units[i].priority() == tier_prio)
+            .collect();
+        candidates.sort_by(|&a, &b| units[b].first_idx().cmp(&units[a].first_idx()));
+
+        for idx in candidates {
+            let unit = &units[idx];
+            let m = unit.msg_count();
+            let t = unit.estimate_tokens(messages);
+            // 子预算 + 全局预算双检查
+            if used_msgs - tier_start_msgs + m > sub_msgs_cap {
+                continue;
+            }
+            if used_toks - tier_start_toks + t > sub_toks_cap {
+                continue;
+            }
+            try_retain(idx, &mut retained, &mut used_msgs, &mut used_toks);
+        }
+    }
+
+    // ── Stage 4: 溢出 ── 剩余预算按时间倒序贪心填充未保留 unit（任意 tier）
+    for i in (0..units.len()).rev() {
+        try_retain(i, &mut retained, &mut used_msgs, &mut used_toks);
+    }
+
+    // ── 兜底 ── 至少保留最新 User unit
     let has_user_retained = units
         .iter()
         .enumerate()
         .any(|(i, u)| matches!(u, MessageUnit::User { .. }) && retained[i]);
-    if !has_user_retained {
-        // 找最新的 User unit，强制保留
-        if let Some(&last_user_idx) = tiers[1].last() {
-            retained[last_user_idx] = true;
-        }
+    if !has_user_retained
+        && let Some(last_user_idx) = (0..units.len())
+            .rev()
+            .find(|&i| matches!(units[i], MessageUnit::User { .. }))
+    {
+        retained[last_user_idx] = true;
     }
 
     SelectionResult { retained }
@@ -230,68 +310,54 @@ fn select_units(
 
 // ========== 占位符替换 ==========
 
-/// 为被丢弃的 ToolGroup 创建占位符消息
-fn create_placeholder(unit: &MessageUnit, messages: &[ChatMessage]) -> ChatMessage {
+/// 提取 ToolGroup 的工具名称列表（用于占位符）
+fn tool_names_of(unit: &MessageUnit, messages: &[ChatMessage]) -> Vec<String> {
     match unit {
-        MessageUnit::ToolGroup {
-            assistant_idx,
-            tool_result_indices,
-        } => {
-            // 从 assistant 的 tool_calls 中提取工具名称
-            let tool_names: Vec<String> = messages[*assistant_idx]
-                .tool_calls
-                .as_ref()
-                .map(|tcs| tcs.iter().map(|tc| tc.name.clone()).collect())
-                .unwrap_or_default();
+        MessageUnit::ToolGroup { assistant_idx, .. } => messages[*assistant_idx]
+            .tool_calls
+            .as_ref()
+            .map(|tcs| tcs.iter().map(|tc| tc.name.clone()).collect())
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
 
-            let count = if tool_result_indices.is_empty() {
-                tool_names.len()
-            } else {
-                tool_result_indices.len()
-            };
-
-            let content = if tool_names.is_empty() {
-                format!("[{} tool calls]", count)
-            } else {
-                format!("[{} tool calls: {}]", count, tool_names.join(", "))
-            };
-
-            ChatMessage {
-                role: ROLE_ASSISTANT.to_string(),
-                content,
-                tool_calls: None,
-                tool_call_id: None,
-                images: None,
-            }
-        }
-        // 非 ToolGroup 不应该走到这里，但做防御处理
-        _ => ChatMessage {
-            role: ROLE_ASSISTANT.to_string(),
-            content: "[message dropped]".to_string(),
-            tool_calls: None,
-            tool_call_id: None,
-            images: None,
-        },
+/// 合并一批被丢弃的 ToolGroup 名称为单条占位符 assistant 消息
+/// 与 micro_compact 的占位符风格对齐：`[Previous: used X, Y, Z]`
+fn merged_placeholder(names: &[String]) -> ChatMessage {
+    let content = if names.is_empty() {
+        "[Previous tool calls dropped]".to_string()
+    } else {
+        format!("[Previous: used {}]", names.join(", "))
+    };
+    ChatMessage {
+        role: ROLE_ASSISTANT.to_string(),
+        content,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
     }
 }
 
 // ========== 公开接口 ==========
 
-/// 优先级消息窗口选择
-///
-/// 按优先级选择消息（User > AssistantText > ToolGroup），在预算内保留尽可能多的高优先级消息。
-/// 被丢弃的 ToolGroup 用占位符替换，保持对话时间顺序连贯。
+/// 优先级消息窗口选择（三阶段 + 比例配额 + 溢出 + 占位符合并）
 ///
 /// # 参数
 /// - `messages`: 原始消息列表
 /// - `max_history_messages`: 消息条数上限（0 = 不限制）
 /// - `max_context_tokens_k`: token 预算上限，单位 K（0 = 不限制，100 = 100K tokens）
+/// - `keep_recent`: 与 `CompactConfig.keep_recent` 对齐；最近 `keep_recent * WINDOW_KEEP_RECENT_MULTIPLIER`
+///   个非 System unit 在 Stage 1 无条件保留
+/// - `exempt_tools`: 来自 `CompactConfig.micro_compact_exempt_tools`；含豁免工具的 ToolGroup
+///   在 Stage 2 优先保留，保护 skill/task 等承载关键上下文的调用
 pub fn select_messages(
     messages: &[ChatMessage],
     max_history_messages: usize,
     max_context_tokens_k: usize,
+    keep_recent: usize,
+    exempt_tools: &[String],
 ) -> Vec<ChatMessage> {
-    // 0 = 不限制
     let max_msgs = if max_history_messages == 0 {
         usize::MAX
     } else {
@@ -300,23 +366,38 @@ pub fn select_messages(
     let max_tokens = if max_context_tokens_k == 0 {
         usize::MAX
     } else {
-        max_context_tokens_k * 1000 // K → 实际 token 数
+        max_context_tokens_k * 1000
     };
 
-    // 不超预算时直接返回
     let total_tokens = estimate_tokens_simple(messages);
     if messages.len() <= max_msgs && total_tokens <= max_tokens {
         return messages.to_vec();
     }
 
     let units = parse_message_units(messages);
-    let selection = select_units(&units, messages, max_msgs, max_tokens);
+    let selection = select_units(
+        &units,
+        messages,
+        max_msgs,
+        max_tokens,
+        keep_recent,
+        exempt_tools,
+    );
 
-    // 按原始顺序重组消息
+    // 按原始顺序重组消息；被丢弃的相邻 ToolGroup 合并为单个占位符
     let mut result = Vec::new();
+    let mut pending_dropped_names: Vec<String> = Vec::new();
+
+    let flush_pending = |pending: &mut Vec<String>, out: &mut Vec<ChatMessage>| {
+        if !pending.is_empty() {
+            out.push(merged_placeholder(pending));
+            pending.clear();
+        }
+    };
+
     for (i, unit) in units.iter().enumerate() {
         if selection.retained[i] {
-            // 保留：原样输出
+            flush_pending(&mut pending_dropped_names, &mut result);
             match unit {
                 MessageUnit::System { idx }
                 | MessageUnit::User { idx }
@@ -333,31 +414,26 @@ pub fn select_messages(
                     }
                 }
             }
-        } else {
-            // 丢弃：ToolGroup 用占位符替换，其他类型直接跳过
-            if let MessageUnit::ToolGroup { .. } = unit {
-                result.push(create_placeholder(unit, messages));
-            }
-            // User / AssistantText 理论上不会被丢弃（优先级最高），
-            // 但如果预算极度紧张，跳过即可
+        } else if matches!(unit, MessageUnit::ToolGroup { .. }) {
+            // 累积相邻被丢弃的 ToolGroup，后续一次性输出合并占位符
+            pending_dropped_names.extend(tool_names_of(unit, messages));
         }
+        // User / AssistantText 被丢弃时直接跳过（兜底保证最新 User 一定保留）
     }
+    flush_pending(&mut pending_dropped_names, &mut result);
 
-    let dropped_count = units
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !selection.retained[*i])
-        .count();
+    let dropped_count = selection.retained.iter().filter(|&&r| !r).count();
     if dropped_count > 0 {
         write_info_log(
             "window_select",
             &format!(
-                "优先级选择: 保留 {}/{} 消息单元, 丢弃 {} (tokens: {}→{})",
+                "三阶段窗口选择: 保留 {}/{} 单元, 丢弃 {} (tokens: {}→{}, keep_recent={})",
                 units.len() - dropped_count,
                 units.len(),
                 dropped_count,
                 total_tokens,
                 estimate_tokens_simple(&result),
+                keep_recent,
             ),
         );
     }
@@ -365,21 +441,21 @@ pub fn select_messages(
     result
 }
 
-/// 简易 token 估算（用于整体判断）
+/// 简易 token 估算（用于整体判断；与 MessageUnit::estimate_tokens 保持相同系数）
 fn estimate_tokens_simple(messages: &[ChatMessage]) -> usize {
     let total_chars: usize = messages
         .iter()
         .map(|m| {
-            let mut chars = m.content.len();
+            let mut chars = m.content.chars().count();
             if let Some(ref tcs) = m.tool_calls {
                 for tc in tcs {
-                    chars += tc.name.len() + tc.arguments.len();
+                    chars += tc.name.chars().count() + tc.arguments.chars().count();
                 }
             }
             chars
         })
         .sum();
-    total_chars / 4
+    total_chars / 3
 }
 
 #[cfg(test)]
@@ -439,7 +515,7 @@ mod tests {
     #[test]
     fn test_no_truncation_needed() {
         let msgs = vec![user_msg("hello"), assistant_msg("hi")];
-        let result = select_messages(&msgs, 100, 0); // 0 = 不限制
+        let result = select_messages(&msgs, 100, 0, 10, &[]); // 0 = 不限制
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].role, ROLE_USER);
         assert_eq!(result[1].role, ROLE_ASSISTANT);
@@ -457,13 +533,13 @@ mod tests {
             assistant_msg("here's the answer"),
         ];
 
-        // 设置极小预算，迫使丢弃 (1K tokens)
-        let result = select_messages(&msgs, 100, 1);
+        // 设置极小预算 + keep_recent=0（禁用 Stage 1 保底），迫使丢弃
+        let result = select_messages(&msgs, 100, 1, 0, &[]);
 
-        // User 和 AssistantText 应该保留，ToolGroup 应该被占位符替换
+        // User 应该保留，ToolGroup 应该被占位符替换
         assert!(result.iter().any(|m| m.role == ROLE_USER));
-        assert!(result.iter().any(|m| m.role == ROLE_TOOL) == false); // tool result 被丢弃
-        assert!(result.iter().any(|m| m.content.contains("tool calls"))); // 占位符
+        assert!(!result.iter().any(|m| m.role == ROLE_TOOL)); // tool result 被丢弃
+        assert!(result.iter().any(|m| m.content.contains("Previous: used"))); // 占位符
     }
 
     #[test]
@@ -477,7 +553,7 @@ mod tests {
             assistant_msg("ok2"),
         ];
 
-        let result = select_messages(&msgs, 100, 0); // 0 = 不限制
+        let result = select_messages(&msgs, 100, 0, 10, &[]); // 0 = 不限制
 
         // 时间顺序保持
         let user_positions: Vec<usize> = result
@@ -498,14 +574,65 @@ mod tests {
             tool_result_msg("call_1", &"y".repeat(2000)),
         ];
 
-        // 极小 token 预算迫使 ToolGroup 丢弃 (1K tokens)
-        let result = select_messages(&msgs, 100, 1);
+        // 极小 token 预算 + keep_recent=0 迫使 ToolGroup 丢弃
+        let result = select_messages(&msgs, 100, 1, 0, &[]);
 
-        let placeholder = result.iter().find(|m| m.content.contains("tool calls"));
+        let placeholder = result.iter().find(|m| m.content.contains("Previous: used"));
         assert!(placeholder.is_some());
         let p = placeholder.unwrap();
         assert!(p.content.contains("Shell"));
         assert!(p.content.contains("Read"));
         assert!(p.tool_calls.is_none());
+    }
+
+    #[test]
+    fn test_exempt_tool_group_protected() {
+        // 豁免工具 ToolGroup 即使在极紧预算下也应保留
+        let msgs = vec![
+            user_msg("load a skill"),
+            tool_call_msg(&["LoadSkill"]),
+            tool_result_msg("call_0", &"skill content ".repeat(500)),
+            user_msg("q1"),
+            assistant_msg("a1"),
+            user_msg("q2"),
+            assistant_msg("a2"),
+            user_msg("q3"),
+            assistant_msg("a3"),
+        ];
+
+        // 预算足够容纳豁免的 skill 内容（~2K chars → ~700 tokens），keep_recent=0 禁用时间保底
+        let result = select_messages(&msgs, 100, 5, 0, &[]);
+
+        // 豁免 ToolGroup 的 tool result 应该保留，不会变占位符
+        assert!(
+            result.iter().any(|m| m.role == ROLE_TOOL),
+            "exempt tool result 应该被保留"
+        );
+    }
+
+    #[test]
+    fn test_stage1_time_fallback_keeps_recent_tool_group() {
+        // 即使早期有很多 User 消息，最近的 ToolGroup 也应该被 Stage 1 保底保留
+        let mut msgs = Vec::new();
+        for i in 0..20 {
+            msgs.push(user_msg(&format!("old user {}", i).repeat(50)));
+        }
+        msgs.push(tool_call_msg(&["Shell"]));
+        msgs.push(tool_result_msg("call_0", "recent shell output"));
+        msgs.push(user_msg("latest"));
+
+        // keep_recent=2 → Stage 1 保留最近 4 个 unit（覆盖 ToolGroup + latest User）
+        let result = select_messages(&msgs, 100, 2, 2, &[]);
+
+        assert!(
+            result.iter().any(|m| m.role == ROLE_TOOL),
+            "最近的 tool result 应该被时间保底保留"
+        );
+        assert!(
+            result
+                .iter()
+                .any(|m| m.role == ROLE_USER && m.content == "latest"),
+            "最新 User 必须保留"
+        );
     }
 }
