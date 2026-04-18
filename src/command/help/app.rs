@@ -1,99 +1,7 @@
-use crate::assets::help_text;
+use crate::assets::{self, HelpTab};
 use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::theme::{Theme, ThemeName};
 use ratatui::text::Line;
-
-/// Tab 定义：名称 + 匹配的 ## 标题关键词列表
-struct TabDef {
-    name: &'static str,
-    heading_keywords: &'static [&'static str],
-}
-
-const TAB_DEFS: &[TabDef] = &[
-    TabDef {
-        name: "快速上手",
-        heading_keywords: &["快速上手"],
-    },
-    TabDef {
-        name: "别名 & 打开",
-        heading_keywords: &["别名管理", "分类标记", "列表", "打开"],
-    },
-    TabDef {
-        name: "日报 & 待办",
-        heading_keywords: &["日报系统", "待办备忘录"],
-    },
-    TabDef {
-        name: "脚本 & 系统",
-        heading_keywords: &["脚本", "系统设置"],
-    },
-    TabDef {
-        name: "AI 对话",
-        heading_keywords: &["AI 对话", "Teammate", "Agent 工具"],
-    },
-    TabDef {
-        name: "AI 工具",
-        heading_keywords: &["AI 工具"],
-    },
-    TabDef {
-        name: "Hook & Skill",
-        heading_keywords: &["AGENT.md", "AI Hook", "Skill", "Commands"],
-    },
-    TabDef {
-        name: "安装 & 技巧",
-        heading_keywords: &["安装", "卸载", "使用技巧"],
-    },
-];
-
-/// 按 `## ` 标题行将 HELP_TEXT 分割到各 Tab
-fn split_help_into_tabs() -> Vec<String> {
-    // 先按 ## 标题切分所有 section
-    let mut sections: Vec<(String, String)> = Vec::new(); // (标题行文本, 内容)
-    let mut current_heading = String::new();
-    let mut current_content = String::new();
-
-    for line in help_text().lines() {
-        if line.starts_with("## ") {
-            // 保存上一个 section
-            if !current_heading.is_empty() {
-                sections.push((current_heading.clone(), current_content.clone()));
-            }
-            current_heading = line.to_string();
-            current_content = String::new();
-            current_content.push_str(line);
-            current_content.push('\n');
-        } else {
-            current_content.push_str(line);
-            current_content.push('\n');
-        }
-    }
-    if !current_heading.is_empty() {
-        sections.push((current_heading, current_content));
-    }
-
-    // 将 sections 分配到各 tab
-    let mut tab_contents: Vec<String> = vec![String::new(); TAB_DEFS.len()];
-
-    for (heading, content) in &sections {
-        let mut matched = false;
-        for (tab_idx, tab_def) in TAB_DEFS.iter().enumerate() {
-            for kw in tab_def.heading_keywords {
-                if heading.contains(kw) {
-                    if !tab_contents[tab_idx].is_empty() {
-                        tab_contents[tab_idx].push_str("\n---\n\n");
-                    }
-                    tab_contents[tab_idx].push_str(content);
-                    matched = true;
-                    break;
-                }
-            }
-            if matched {
-                break;
-            }
-        }
-    }
-
-    tab_contents
-}
 
 /// 每个 Tab 的缓存数据
 struct TabCache {
@@ -105,7 +13,7 @@ struct TabCache {
 pub struct HelpApp {
     pub active_tab: usize,
     pub tab_count: usize,
-    tab_names: Vec<&'static str>,
+    tab_names: Vec<String>,
     tab_raw_contents: Vec<String>,
     tab_caches: Vec<Option<TabCache>>,
     tab_scrolls: Vec<usize>,
@@ -122,9 +30,10 @@ impl Default for HelpApp {
 
 impl HelpApp {
     pub fn new() -> Self {
-        let tab_raw_contents = split_help_into_tabs();
-        let count = TAB_DEFS.len();
-        let tab_names: Vec<&'static str> = TAB_DEFS.iter().map(|t| t.name).collect();
+        let tabs: Vec<HelpTab> = assets::load_help_tabs();
+        let count = tabs.len();
+        let tab_names: Vec<String> = tabs.iter().map(|t| t.name.clone()).collect();
+        let tab_raw_contents: Vec<String> = tabs.into_iter().map(|t| t.content).collect();
         Self {
             active_tab: 0,
             tab_count: count,
@@ -138,7 +47,7 @@ impl HelpApp {
     }
 
     pub fn tab_name(&self, idx: usize) -> &str {
-        self.tab_names.get(idx).copied().unwrap_or("?")
+        self.tab_names.get(idx).map(|s| s.as_str()).unwrap_or("?")
     }
 
     pub fn theme(&self) -> &Theme {
