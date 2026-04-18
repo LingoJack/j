@@ -7,22 +7,35 @@ use super::types::{
 };
 use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
+use crate::command::chat::agent_md;
+use crate::command::chat::archive;
 use crate::command::chat::command;
-use crate::command::chat::constants::{INPUT_BUFFER_MAX_LEN, ROLE_ASSISTANT, ROLE_USER};
+use crate::command::chat::constants::{
+    FINE_SCROLL_LINES, INPUT_BUFFER_MAX_LEN, PAGE_SCROLL_LINES, ROLE_ASSISTANT, ROLE_USER,
+    TODO_NAG_INTERVAL_ROUNDS, TOOL_INTERACT_MAX_OPTIONS,
+};
 use crate::command::chat::hook::{HookContext, HookEvent, HookManager, HookResult};
 use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::JcliConfig;
+use crate::command::chat::permission_queue::PermissionQueue;
+use crate::command::chat::remote::protocol::{
+    AskOptionInfo, AskQuestionInfo, ToolConfirmInfo, WsOutbound,
+};
 use crate::command::chat::sandbox::Sandbox;
 use crate::command::chat::skill::{self, skills_dir};
 use crate::command::chat::storage::{
     ChatMessage, ChatSession, ModelProvider, SessionEvent, append_session_event, delete_session,
     generate_session_id, list_sessions, load_agent_config, load_session, memory_path,
-    save_agent_config, save_memory, save_soul, save_system_prompt, soul_path, system_prompt_path,
+    save_agent_config, save_memory, save_soul, save_system_prompt, session_file_path, soul_path,
+    system_prompt_path,
 };
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::background::BackgroundManager;
+use crate::command::chat::tools::agent_shared::{AgentToolShared, SubAgentTracker};
+use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
+use crate::command::chat::tools::plan::PlanApprovalQueue;
+use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::tui::editor_core::text_buffer::TextBuffer;
 use crate::util::log::write_info_log;
@@ -51,7 +64,7 @@ pub struct ChatApp {
     pub background_manager: Arc<BackgroundManager>,
     /// Task 管理器（由内置 hook 和工具通过 Arc 引用使用）
     #[allow(dead_code)]
-    pub task_manager: Arc<crate::command::chat::tools::task::TaskManager>,
+    pub task_manager: Arc<TaskManager>,
     /// Todo 管理器
     pub todo_manager: Arc<crate::command::chat::tools::todo::TodoManager>,
     /// ask 工具响应发送通道
@@ -85,11 +98,11 @@ pub struct ChatApp {
     #[allow(dead_code)]
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
     /// 子 Agent（AgentTool）运行快照追踪器（供 /dump 读取）
-    pub sub_agent_tracker: Arc<crate::command::chat::tools::agent_shared::SubAgentTracker>,
+    pub sub_agent_tracker: Arc<SubAgentTracker>,
     /// 子 agent 权限请求队列（AgentToolShared 和 TUI 共享同一个 Arc）
-    pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
+    pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
-    pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
+    pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
     pub invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
 }
@@ -159,9 +172,9 @@ impl ChatApp {
         if !soul_path().exists() {
             let _ = save_soul(&crate::assets::default_soul());
         }
-        if !crate::command::chat::agent_md::agent_md_path().exists() {
+        if !agent_md::agent_md_path().exists() {
             let _ = std::fs::write(
-                crate::command::chat::agent_md::agent_md_path(),
+                agent_md::agent_md_path(),
                 crate::assets::default_agent_md().as_ref(),
             );
         }
@@ -199,7 +212,7 @@ impl ChatApp {
                 Arc::clone(&shared_agent_messages),
             )));
         let background_manager = Arc::new(BackgroundManager::new());
-        let task_manager = Arc::new(crate::command::chat::tools::task::TaskManager::new());
+        let task_manager = Arc::new(TaskManager::new());
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
         let invoked_skills = crate::command::chat::compact::new_invoked_skills_map();
         let mut tool_registry = ToolRegistry::new(
@@ -229,17 +242,14 @@ impl ChatApp {
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
 
         // 子 agent 权限请求队列（TUI 和所有 agent 共享同一个 Arc）
-        let permission_queue =
-            Arc::new(crate::command::chat::permission_queue::PermissionQueue::new());
+        let permission_queue = Arc::new(PermissionQueue::new());
         // Plan 审批请求队列（TUI 和所有 teammate 共享同一个 Arc）
-        let plan_approval_queue =
-            Arc::new(crate::command::chat::tools::plan::PlanApprovalQueue::new());
+        let plan_approval_queue = Arc::new(PlanApprovalQueue::new());
         // 子 Agent 快照追踪器（/dump 从中读取正在运行的子 Agent）
-        let sub_agent_tracker =
-            Arc::new(crate::command::chat::tools::agent_shared::SubAgentTracker::new());
+        let sub_agent_tracker = Arc::new(SubAgentTracker::new());
 
         // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
-        let agent_tool_shared = crate::command::chat::tools::agent_shared::AgentToolShared {
+        let agent_tool_shared = AgentToolShared {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
             system_prompt: Arc::clone(&agent_system_prompt),
@@ -271,7 +281,7 @@ impl ChatApp {
             // 内置 hook 1: tasks_status — 替换 system_prompt 中的 {{.tasks}} 占位符
             let tasks_tm = Arc::clone(&task_manager);
             manager.register_builtin(HookEvent::PreLlmRequest, "tasks_status", move |ctx| {
-                let summary = crate::command::chat::tools::task::build_tasks_summary(&tasks_tm);
+                let summary = build_tasks_summary(&tasks_tm);
                 if let Some(ref prompt) = ctx.system_prompt
                     && prompt.contains("{{.tasks}}")
                 {
@@ -290,7 +300,7 @@ impl ChatApp {
                 "background_status",
                 move |ctx| {
                     let running_summary =
-                        crate::command::chat::tools::background::build_running_summary(&bg_mgr);
+                        build_running_summary(&bg_mgr);
                     let notifications = bg_mgr.drain_notifications();
 
                     let mut result = HookResult::default();
@@ -311,8 +321,8 @@ impl ChatApp {
                                 "<background_task_completed>\n<task_id>{}</task_id>\n<command>{}</command>\n<status>{}</status>\n<result>\n{}\n</result>\n</background_task_completed>",
                                 notif.task_id, notif.command, notif.status, notif.result
                             );
-                            inject.push(crate::command::chat::storage::ChatMessage {
-                                role: crate::command::chat::constants::ROLE_USER.to_string(),
+                            inject.push(ChatMessage {
+                                role: ROLE_USER.to_string(),
                                 content: format!("<system-reminder>\n{}\n</system-reminder>", body),
                                 tool_calls: None,
                                 tool_call_id: None,
@@ -370,7 +380,7 @@ impl ChatApp {
                         return None;
                     }
                     let turns = todo_mgr.turns_since_last_call();
-                    if turns < crate::command::chat::constants::TODO_NAG_INTERVAL_ROUNDS {
+                    if turns < TODO_NAG_INTERVAL_ROUNDS {
                         return None;
                     }
                     let todos_summary = todo_mgr.format_todos_summary();
@@ -378,8 +388,8 @@ impl ChatApp {
                         "<todo_reminder>\nYou have an active todo list but haven't updated it in 15+ rounds. Update it if progress has been made, or ignore this reminder if you are currently working on an item.\n<todos>\n{}\n</todos>\n</todo_reminder>",
                         todos_summary
                     );
-                    let inject = vec![crate::command::chat::storage::ChatMessage {
-                        role: crate::command::chat::constants::ROLE_USER.to_string(),
+                    let inject = vec![ChatMessage {
+                        role: ROLE_USER.to_string(),
                         content: format!("<system-reminder>\n{}\n</system-reminder>", body),
                         tool_calls: None,
                         tool_call_id: None,
@@ -665,9 +675,7 @@ impl ChatApp {
                     let content =
                         safe_lock(&self.state.streaming_content, "ws_stream_chunk").clone();
                     // 只发最新增量（简单实现：发整段，客户端会替换）
-                    self.broadcast_ws(
-                        crate::command::chat::remote::protocol::WsOutbound::StreamChunk { content },
-                    );
+                    self.broadcast_ws(WsOutbound::StreamChunk { content });
                 }
             }
             Action::ToolCallRequest(_tool_calls) => {
@@ -680,14 +688,12 @@ impl ChatApp {
                     if let Some(last_msg) = self.state.session.messages.last()
                         && last_msg.role == "assistant"
                     {
-                        self.broadcast_ws(
-                            crate::command::chat::remote::protocol::WsOutbound::Message {
-                                role: "assistant".to_string(),
-                                content: last_msg.content.clone(),
-                            },
-                        );
+                        self.broadcast_ws(WsOutbound::Message {
+                            role: "assistant".to_string(),
+                            content: last_msg.content.clone(),
+                        });
                     }
-                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
+                    self.broadcast_ws(WsOutbound::Status {
                         state: "idle".to_string(),
                     });
                 }
@@ -696,10 +702,10 @@ impl ChatApp {
             Action::StreamError(ref e) => {
                 self.state.retry_hint = None;
                 let msg = e.display_message();
-                self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
+                self.broadcast_ws(WsOutbound::Error {
                     message: format!("请求失败: {}", msg),
                 });
-                self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
+                self.broadcast_ws(WsOutbound::Status {
                     state: "idle".to_string(),
                 });
                 self.show_toast(format!("请求失败: {}", msg), true);
@@ -707,7 +713,7 @@ impl ChatApp {
             }
             Action::StreamCancelled => {
                 self.state.retry_hint = None;
-                self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
+                self.broadcast_ws(WsOutbound::Status {
                     state: "idle".to_string(),
                 });
                 self.finish_loading(false, true);
@@ -902,9 +908,7 @@ impl ChatApp {
                     }
                 }
                 CursorDirection::Down => {
-                    if self.ui.tool_interact_selected
-                        < crate::command::chat::constants::TOOL_INTERACT_MAX_OPTIONS
-                    {
+                    if self.ui.tool_interact_selected < TOOL_INTERACT_MAX_OPTIONS {
                         self.ui.tool_interact_selected += 1;
                     }
                 }
@@ -956,26 +960,22 @@ impl ChatApp {
             Action::EnterMode(mode) => {
                 // 广播工具确认请求到远程
                 if mode == ChatMode::ToolConfirm && self.ws_bridge.is_some() {
-                    let tools: Vec<crate::command::chat::remote::protocol::ToolConfirmInfo> = self
+                    let tools: Vec<ToolConfirmInfo> = self
                         .tool_executor
                         .active_tool_calls
                         .iter()
                         .filter(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
-                        .map(
-                            |tc| crate::command::chat::remote::protocol::ToolConfirmInfo {
-                                id: tc.tool_call_id.clone(),
-                                name: tc.tool_name.clone(),
-                                arguments: tc.arguments.clone(),
-                                confirm_message: tc.confirm_message.clone(),
-                            },
-                        )
+                        .map(|tc| ToolConfirmInfo {
+                            id: tc.tool_call_id.clone(),
+                            name: tc.tool_name.clone(),
+                            arguments: tc.arguments.clone(),
+                            confirm_message: tc.confirm_message.clone(),
+                        })
                         .collect();
                     if !tools.is_empty() {
-                        self.broadcast_ws(
-                            crate::command::chat::remote::protocol::WsOutbound::ToolConfirmRequest { tools },
-                        );
+                        self.broadcast_ws(WsOutbound::ToolConfirmRequest { tools });
                     }
-                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
+                    self.broadcast_ws(WsOutbound::Status {
                         state: "tool_confirm".to_string(),
                     });
                 }
@@ -997,12 +997,12 @@ impl ChatApp {
             },
             Action::PageScroll(dir) => match dir {
                 CursorDirection::Up => {
-                    for _ in 0..crate::command::chat::constants::PAGE_SCROLL_LINES {
+                    for _ in 0..PAGE_SCROLL_LINES {
                         self.scroll_up();
                     }
                 }
                 CursorDirection::Down => {
-                    for _ in 0..crate::command::chat::constants::PAGE_SCROLL_LINES {
+                    for _ in 0..PAGE_SCROLL_LINES {
                         self.scroll_down();
                     }
                 }
@@ -1044,13 +1044,13 @@ impl ChatApp {
                     self.ui.browse_scroll_offset = self
                         .ui
                         .browse_scroll_offset
-                        .saturating_sub(crate::command::chat::constants::FINE_SCROLL_LINES);
+                        .saturating_sub(FINE_SCROLL_LINES);
                 }
                 CursorDirection::Down => {
                     self.ui.browse_scroll_offset = self
                         .ui
                         .browse_scroll_offset
-                        .saturating_add(crate::command::chat::constants::FINE_SCROLL_LINES);
+                        .saturating_add(FINE_SCROLL_LINES);
                 }
             },
             Action::BrowseCopyMessage => {
@@ -1404,7 +1404,7 @@ impl ChatApp {
                 }
                 // 切换到 Archive tab 时自动加载归档列表
                 if self.ui.config_tab == ConfigTab::Archive {
-                    use crate::command::chat::archive::list_archives;
+                    use archive::list_archives;
                     self.ui.archives = list_archives();
                     self.ui.archive_list_index = 0;
                     self.ui.restore_confirm_needed = false;
@@ -1650,28 +1650,24 @@ impl ChatApp {
 
             Action::ListSessions => {
                 let sessions = list_sessions();
-                self.broadcast_ws(
-                    crate::command::chat::remote::protocol::WsOutbound::SessionList { sessions },
-                );
+                self.broadcast_ws(WsOutbound::SessionList { sessions });
             }
             Action::SwitchSession { session_id } => {
                 if self.state.is_loading {
-                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(WsOutbound::Error {
                         message: "AI 正在回复中，无法切换会话".to_string(),
                     });
                 } else if self.ui.mode == ChatMode::ToolConfirm {
-                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(WsOutbound::Error {
                         message: "等待工具确认中，无法切换会话".to_string(),
                     });
                 } else {
                     // 检查目标文件是否存在
-                    let target_path = crate::command::chat::storage::session_file_path(&session_id);
+                    let target_path = session_file_path(&session_id);
                     if !target_path.exists() {
-                        self.broadcast_ws(
-                            crate::command::chat::remote::protocol::WsOutbound::Error {
-                                message: "会话不存在".to_string(),
-                            },
-                        );
+                        self.broadcast_ws(WsOutbound::Error {
+                            message: "会话不存在".to_string(),
+                        });
                     } else {
                         // 保存当前会话
                         self.persist_new_messages();
@@ -1688,21 +1684,17 @@ impl ChatApp {
                         // 广播同步 + 切换通知
                         let sync = self.build_sync_outbound();
                         self.broadcast_ws(sync);
-                        self.broadcast_ws(
-                            crate::command::chat::remote::protocol::WsOutbound::SessionSwitched {
-                                session_id,
-                            },
-                        );
+                        self.broadcast_ws(WsOutbound::SessionSwitched { session_id });
                     }
                 }
             }
             Action::NewSession => {
                 if self.state.is_loading {
-                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(WsOutbound::Error {
                         message: "AI 正在回复中，无法新建会话".to_string(),
                     });
                 } else if self.ui.mode == ChatMode::ToolConfirm {
-                    self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Error {
+                    self.broadcast_ws(WsOutbound::Error {
                         message: "等待工具确认中，无法新建会话".to_string(),
                     });
                 } else {
@@ -1721,11 +1713,7 @@ impl ChatApp {
                     // 广播同步 + 切换通知
                     let sync = self.build_sync_outbound();
                     self.broadcast_ws(sync);
-                    self.broadcast_ws(
-                        crate::command::chat::remote::protocol::WsOutbound::SessionSwitched {
-                            session_id: new_id,
-                        },
-                    );
+                    self.broadcast_ws(WsOutbound::SessionSwitched { session_id: new_id });
                 }
             }
 
@@ -2019,15 +2007,15 @@ impl ChatApp {
     }
 
     /// 广播 WebSocket 消息给远程客户端
-    pub fn broadcast_ws(&self, msg: crate::command::chat::remote::protocol::WsOutbound) {
+    pub fn broadcast_ws(&self, msg: WsOutbound) {
         if let Some(ref ws) = self.ws_bridge {
             ws.broadcast(msg);
         }
     }
 
     /// 构建全量同步消息（复用于 Sync / SwitchSession / NewSession）
-    pub fn build_sync_outbound(&self) -> crate::command::chat::remote::protocol::WsOutbound {
-        use crate::command::chat::remote::protocol::{SyncMessage, SyncToolCall, WsOutbound};
+    pub fn build_sync_outbound(&self) -> WsOutbound {
+        use crate::command::chat::remote::protocol::{SyncMessage, SyncToolCall};
         let messages: Vec<SyncMessage> = self
             .state
             .session
@@ -2157,11 +2145,8 @@ impl ChatApp {
 
         // 状态占位符的当前快照（对应内置 PreLlmRequest hooks 的行为，
         // 但只读取不修改，避免副作用）
-        let tasks_summary =
-            crate::command::chat::tools::task::build_tasks_summary(&self.task_manager);
-        let background_summary = crate::command::chat::tools::background::build_running_summary(
-            &self.background_manager,
-        );
+        let tasks_summary = build_tasks_summary(&self.task_manager);
+        let background_summary = build_running_summary(&self.background_manager);
         let session_state_summary = self.tool_registry.build_session_state_summary();
         let teammates_summary = self
             .teammate_manager
@@ -2484,13 +2469,11 @@ impl ChatApp {
         if self.ui.mode == ChatMode::ToolConfirm {
             let completed = self.tool_executor.poll_results();
             for (name, output, is_error) in completed {
-                self.broadcast_ws(
-                    crate::command::chat::remote::protocol::WsOutbound::ToolResult {
-                        name,
-                        output,
-                        is_error,
-                    },
-                );
+                self.broadcast_ws(WsOutbound::ToolResult {
+                    name,
+                    output,
+                    is_error,
+                });
             }
             // 轮询 ask 请求
             if let Some(ref rx) = self.ask_request_rx
@@ -2509,12 +2492,10 @@ impl ChatApp {
             // 广播工具开始执行到远程客户端
             if self.ws_bridge.is_some() {
                 for tc in &self.tool_executor.active_tool_calls {
-                    self.broadcast_ws(
-                        crate::command::chat::remote::protocol::WsOutbound::ToolCall {
-                            name: tc.tool_name.clone(),
-                            arguments: tc.arguments.clone(),
-                        },
-                    );
+                    self.broadcast_ws(WsOutbound::ToolCall {
+                        name: tc.tool_name.clone(),
+                        arguments: tc.arguments.clone(),
+                    });
                 }
             }
 
@@ -2614,13 +2595,11 @@ impl ChatApp {
         // 轮询后台工具执行结果
         let completed = self.tool_executor.poll_results();
         for (name, output, is_error) in completed {
-            self.broadcast_ws(
-                crate::command::chat::remote::protocol::WsOutbound::ToolResult {
-                    name,
-                    output,
-                    is_error,
-                },
-            );
+            self.broadcast_ws(WsOutbound::ToolResult {
+                name,
+                output,
+                is_error,
+            });
         }
 
         // 轮询 ask 工具请求
@@ -2778,29 +2757,25 @@ impl ChatApp {
     fn init_ask_mode(&mut self, ask_req: AskRequest) {
         // 广播 Ask 请求到远程客户端
         if self.ws_bridge.is_some() {
-            let questions: Vec<crate::command::chat::remote::protocol::AskQuestionInfo> = ask_req
+            let questions: Vec<AskQuestionInfo> = ask_req
                 .questions
                 .iter()
-                .map(
-                    |q| crate::command::chat::remote::protocol::AskQuestionInfo {
-                        question: q.question.clone(),
-                        header: q.header.clone(),
-                        options: q
-                            .options
-                            .iter()
-                            .map(|o| crate::command::chat::remote::protocol::AskOptionInfo {
-                                label: o.label.clone(),
-                                description: o.description.clone(),
-                            })
-                            .collect(),
-                        multi_select: q.multi_select,
-                    },
-                )
+                .map(|q| AskQuestionInfo {
+                    question: q.question.clone(),
+                    header: q.header.clone(),
+                    options: q
+                        .options
+                        .iter()
+                        .map(|o| AskOptionInfo {
+                            label: o.label.clone(),
+                            description: o.description.clone(),
+                        })
+                        .collect(),
+                    multi_select: q.multi_select,
+                })
                 .collect();
-            self.broadcast_ws(
-                crate::command::chat::remote::protocol::WsOutbound::AskRequest { questions },
-            );
-            self.broadcast_ws(crate::command::chat::remote::protocol::WsOutbound::Status {
+            self.broadcast_ws(WsOutbound::AskRequest { questions });
+            self.broadcast_ws(WsOutbound::Status {
                 state: "ask".to_string(),
             });
         }
@@ -3080,11 +3055,7 @@ impl ChatApp {
         // 广播同步 + 切换通知
         let sync = self.build_sync_outbound();
         self.broadcast_ws(sync);
-        self.broadcast_ws(
-            crate::command::chat::remote::protocol::WsOutbound::SessionSwitched {
-                session_id: new_id,
-            },
-        );
+        self.broadcast_ws(WsOutbound::SessionSwitched { session_id: new_id });
         self.show_toast("已创建新对话", false);
     }
 
@@ -3114,7 +3085,7 @@ impl ChatApp {
 
     /// 开始归档确认流程
     pub fn start_archive_confirm(&mut self) {
-        use crate::command::chat::archive::generate_default_archive_name;
+        use archive::generate_default_archive_name;
         self.ui.archive_default_name = generate_default_archive_name();
         self.ui.archive_custom_name = String::new();
         self.ui.archive_editing_name = false;
@@ -3124,7 +3095,7 @@ impl ChatApp {
 
     /// 开始还原流程（加载归档列表）
     pub fn start_archive_list(&mut self) {
-        use crate::command::chat::archive::list_archives;
+        use archive::list_archives;
         self.ui.archives = list_archives();
         self.ui.archive_list_index = 0;
         self.ui.restore_confirm_needed = false;
@@ -3133,7 +3104,7 @@ impl ChatApp {
 
     /// 执行归档
     pub fn do_archive(&mut self, name: &str) {
-        use crate::command::chat::archive::create_archive;
+        use archive::create_archive;
 
         match create_archive(name, self.state.session.messages.clone()) {
             Ok(_) => {
@@ -3149,7 +3120,7 @@ impl ChatApp {
 
     /// 执行还原归档
     pub fn do_restore(&mut self) {
-        use crate::command::chat::archive::restore_archive;
+        use archive::restore_archive;
 
         let archive_name = self
             .ui
@@ -3178,13 +3149,13 @@ impl ChatApp {
 
     /// 删除选中的归档
     pub fn do_delete_archive(&mut self) {
-        use crate::command::chat::archive::delete_archive;
+        use archive::delete_archive;
 
         if let Some(archive) = self.ui.archives.get(self.ui.archive_list_index) {
             match delete_archive(&archive.name) {
                 Ok(_) => {
                     self.show_toast(format!("归档已删除: {}", archive.name), false);
-                    self.ui.archives = crate::command::chat::archive::list_archives();
+                    self.ui.archives = archive::list_archives();
                     if self.ui.archive_list_index >= self.ui.archives.len()
                         && self.ui.archive_list_index > 0
                     {

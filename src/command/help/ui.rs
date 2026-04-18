@@ -1,4 +1,5 @@
 use super::app::HelpApp;
+use crate::command::chat::theme::Theme;
 use crate::util::text::display_width;
 use ratatui::{
     Frame,
@@ -31,12 +32,7 @@ pub fn draw_help_ui(frame: &mut Frame, help_app: &mut HelpApp) {
 }
 
 /// 绘制 Tab 栏（可滚动，放不下时显示 ◀ ▶）
-fn draw_tab_bar(
-    frame: &mut Frame,
-    help_app: &HelpApp,
-    area: Rect,
-    theme: &crate::command::chat::theme::Theme,
-) {
+fn draw_tab_bar(frame: &mut Frame, help_app: &HelpApp, area: Rect, theme: &Theme) {
     let total_width = area.width as usize;
 
     // 预计算每个 tab 的标签文本和宽度（含两侧间距）
@@ -150,12 +146,7 @@ fn draw_tab_bar(
 }
 
 /// 绘制标题栏
-fn draw_title_bar(
-    frame: &mut Frame,
-    help_app: &HelpApp,
-    area: Rect,
-    theme: &crate::command::chat::theme::Theme,
-) {
+fn draw_title_bar(frame: &mut Frame, help_app: &HelpApp, area: Rect, theme: &Theme) {
     let title_text = format!("  📖 j help — {}", help_app.tab_name(help_app.active_tab));
     let page_info = format!("{}/{}  ", help_app.active_tab + 1, help_app.tab_count);
 
@@ -200,12 +191,7 @@ fn draw_title_bar(
 }
 
 /// 绘制内容区（带滚动）
-fn draw_content(
-    f: &mut Frame,
-    app: &mut HelpApp,
-    area: Rect,
-    _theme: &crate::command::chat::theme::Theme,
-) {
+fn draw_content(f: &mut Frame, app: &mut HelpApp, area: Rect, _theme: &Theme) {
     let content_width = area.width.saturating_sub(4) as usize; // 左右各留 2 字符
     let visible_height = area.height as usize;
 
@@ -234,7 +220,7 @@ fn draw_content(
 }
 
 /// 绘制底部提示栏
-fn draw_hint_bar(f: &mut Frame, area: Rect, theme: &crate::command::chat::theme::Theme) {
+fn draw_hint_bar(f: &mut Frame, area: Rect, theme: &Theme) {
     let hints: &[(&str, &str)] = &[
         ("←→", "切换"),
         ("1-0", "跳转"),

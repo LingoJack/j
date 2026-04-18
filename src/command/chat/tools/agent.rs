@@ -1,9 +1,11 @@
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::teammate::{clear_thread_cwd, set_thread_cwd, thread_cwd};
 use crate::command::chat::tools::agent_shared::{
     AgentToolShared, call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
     extract_tool_items,
 };
+use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -134,7 +136,7 @@ impl Tool for AgentTool {
 
         // worktree 隔离：提前创建（在调用线程中；失败则提前退出）
         let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
-            match crate::command::chat::tools::worktree::create_agent_worktree(&description) {
+            match create_agent_worktree(&description) {
                 Ok(info) => Some(info),
                 Err(e) => {
                     return ToolResult {
@@ -173,7 +175,7 @@ impl Tool for AgentTool {
             std::thread::spawn(move || {
                 // 设置 worktree CWD
                 if let Some((ref wt_path, _)) = worktree_info {
-                    crate::command::chat::teammate::set_thread_cwd(wt_path);
+                    set_thread_cwd(wt_path);
                 }
 
                 let result = run_headless_agent_loop(
@@ -198,7 +200,7 @@ impl Tool for AgentTool {
 
                 // 清理 worktree
                 if let Some((ref wt_path, ref branch)) = worktree_info {
-                    crate::command::chat::tools::worktree::remove_agent_worktree(wt_path, branch);
+                    remove_agent_worktree(wt_path, branch);
                 }
 
                 // 写入输出缓冲区
@@ -224,9 +226,9 @@ impl Tool for AgentTool {
         } else {
             // 前台模式：阻塞执行
             // 保存旧 CWD，执行完后恢复（前台 agent 在调用线程中运行）
-            let old_cwd = crate::command::chat::teammate::thread_cwd();
+            let old_cwd = thread_cwd();
             if let Some((ref wt_path, _)) = worktree_info {
-                crate::command::chat::teammate::set_thread_cwd(wt_path);
+                set_thread_cwd(wt_path);
             }
 
             // 注册到子 Agent tracker 供 /dump 读取
@@ -256,11 +258,11 @@ impl Tool for AgentTool {
 
             // 清理 worktree 并恢复 CWD
             if let Some((ref wt_path, ref branch)) = worktree_info {
-                crate::command::chat::tools::worktree::remove_agent_worktree(wt_path, branch);
+                remove_agent_worktree(wt_path, branch);
             }
             match old_cwd {
-                Some(p) => crate::command::chat::teammate::set_thread_cwd(&p),
-                None => crate::command::chat::teammate::clear_thread_cwd(),
+                Some(p) => set_thread_cwd(&p),
+                None => clear_thread_cwd(),
             }
 
             ToolResult {
