@@ -100,7 +100,7 @@ impl ThemeName {
 
 /// 主题配色方案
 /// 将所有 UI 颜色归类为语义化字段，方便统一管理
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub struct Theme {
     // ===== 全局背景 =====

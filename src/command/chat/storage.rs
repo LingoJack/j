@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ========== 数据结构 ==========
 
 /// 单个模型提供方配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelProvider {
     /// 显示名称（如 "GPT-4o", "DeepSeek-V3"）
     pub name: String,

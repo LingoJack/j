@@ -10,6 +10,7 @@ use tokio_util::sync::CancellationToken;
 // ========== Agent 生命周期句柄 ==========
 
 /// Agent 生命周期管理：封装 stream channel、取消令牌等
+#[derive(Debug)]
 pub struct AgentHandle {
     /// 用于接收后台流式回复的 channel
     pub stream_rx: mpsc::Receiver<StreamMsg>,

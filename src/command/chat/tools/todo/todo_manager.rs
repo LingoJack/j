@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Todo 管理器：轻量级方向跟踪，单文件持久化
+#[derive(Debug)]
 pub struct TodoManager {
     items: Mutex<Vec<TodoItem>>,
     file_path: PathBuf,

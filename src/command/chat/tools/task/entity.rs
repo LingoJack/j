@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// 持久化任务数据结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentTask {
     pub task_id: u64,
     pub title: String,

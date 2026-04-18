@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+// NOTE: Cannot derive Debug - contains Condvar which does not implement Debug
 /// 单条待决权限请求（共享给 TUI 和 agent 线程）
 pub struct PendingAgentPerm {
     /// 发起请求的 agent 名称（"Backend"/"SubAgent:xxx"）

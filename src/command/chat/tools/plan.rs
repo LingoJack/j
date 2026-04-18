@@ -9,6 +9,7 @@ use std::sync::{Arc, Condvar, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== Plan Approval Queue (Teammate → TUI) ==========
 
+// NOTE: Cannot derive Debug - contains Condvar which does not implement Debug
 /// 单条待决 Plan 审批请求（共享给 TUI 和 teammate 线程）
 pub struct PendingPlanApproval {
     /// 发起请求的 agent 名称（"Frontend"/"Backend" 等）

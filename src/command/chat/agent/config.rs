@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 /// Agent loop 的静态配置（不含每次请求独有的消息/通道）
+#[derive(Debug)]
 pub struct AgentLoopConfig {
     /// 模型提供商配置
     pub provider: ModelProvider,
@@ -21,6 +22,7 @@ pub struct AgentLoopConfig {
 }
 
 /// Agent loop 的共享状态（Arc 引用，跨线程共享）
+#[derive(Debug)]
 pub struct AgentSharedState {
     /// 流式内容缓冲区（agent 写入，UI 读取）
     pub streaming_content: Arc<Mutex<String>>,

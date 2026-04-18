@@ -199,6 +199,7 @@ pub struct MsgLinesCache {
 }
 
 /// 单条消息的渲染缓存
+#[derive(Debug)]
 pub struct PerMsgCache {
     /// 消息内容长度（用于检测变化）
     pub content_len: usize,

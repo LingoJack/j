@@ -16,6 +16,7 @@ use std::borrow::Cow;
 // ========== 补全器定义 ==========
 
 /// 自定义补全器：根据上下文提供命令、别名、分类等补全
+#[derive(Debug)]
 pub struct CopilotCompleter {
     pub config: YamlConfig,
 }
@@ -432,6 +433,12 @@ impl Completer for CopilotCompleter {
 /// 基于 rustyline HistoryHinter 的命令历史提示器
 pub struct CopilotHinter {
     history_hinter: HistoryHinter,
+}
+
+impl Default for CopilotHinter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CopilotHinter {

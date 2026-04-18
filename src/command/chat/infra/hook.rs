@@ -468,7 +468,7 @@ impl HookResult {
 // ========== HookManager ==========
 
 /// 单个 hook 的执行统计
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct HookMetrics {
     /// 执行次数
     pub executions: u64,

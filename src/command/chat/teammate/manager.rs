@@ -146,6 +146,7 @@ pub fn acquire_global_file_lock(
 
 // ========== TeammateHandle ==========
 
+// NOTE: Cannot derive Debug - contains JoinHandle<()> and CancellationToken which do not implement Debug
 /// 单个 Teammate 的句柄（持有其 agent loop 的引用和通道）
 #[allow(dead_code)]
 pub struct TeammateHandle {
@@ -208,6 +209,7 @@ impl Drop for FileLockGuard {
 
 // ========== TeammateManager ==========
 
+// NOTE: Cannot derive Debug - contains TeammateHandle which has JoinHandle and CancellationToken
 /// Teammate 管理器：管理所有 teammate 实例、消息广播
 #[allow(dead_code)]
 pub struct TeammateManager {

@@ -16,6 +16,7 @@ use std::sync::{
 // ========== SubAgentTracker ==========
 
 /// 一个正在运行（或刚结束）的子 Agent 的快照
+#[derive(Debug)]
 pub struct SubAgentSnapshot {
     pub id: String,
     pub description: String,
@@ -105,6 +106,8 @@ impl Default for SubAgentTracker {
 
 // ========== AgentToolShared ==========
 
+// NOTE: Cannot derive Debug - contains PermissionQueue, PlanApprovalQueue, SubAgentTracker
+//       which do not implement Debug, and multiple Arc<Mutex<Option<T>>> fields
 /// Agent 工具共享字段（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
 ///
 /// 所有字段均为 Arc 引用，Clone 开销极小。

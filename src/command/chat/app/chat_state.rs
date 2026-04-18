@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 // ========== 后端状态 ==========
 
 /// Chat 后端数据状态：对话、配置、模型相关
+#[derive(Debug)]
 pub struct ChatState {
     /// Agent 配置
     pub agent_config: AgentConfig,

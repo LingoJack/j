@@ -1,62 +1,27 @@
 [
   {
-    "id": "fix1",
-    "content": "修复 todo/ui.rs:584",
+    "id": "m1",
+    "content": "迁移 18 个 mod.rs 为 name.rs 模式",
     "status": "completed"
   },
   {
-    "id": "fix2",
-    "content": "修复 chat/ui/chat.rs:1075 — draw_popup_list 调用处参数未更新",
+    "id": "d1",
+    "content": "为核心结构体添加 Debug 派生 (~22个)",
     "status": "completed"
   },
   {
-    "id": "fix3",
-    "content": "修复 notebook/ui.rs 调用处参数",
+    "id": "d2",
+    "content": "补充 Default 实现 (Sandbox/ImageCache/CopilotHinter)",
     "status": "completed"
   },
   {
-    "id": "fix4",
-    "content": "修复 server.rs:94 mut ws_state",
+    "id": "d3",
+    "content": "补充 PartialEq 派生 (8个纯数据结构体)",
     "status": "completed"
   },
   {
-    "id": "fix6",
-    "content": "修复 draw_popup_list 4个调用处使用 PopupConfig",
-    "status": "completed"
-  },
-  {
-    "id": "agentA",
-    "content": "Agent A: 错误处理修复 — 28处 unwrap + 3处 unsafe 缺 SAFETY 注释",
-    "status": "completed"
-  },
-  {
-    "id": "agentB",
-    "content": "Agent B: 文档注释修复 — 15个 pub 成员缺 /// 注释",
-    "status": "completed"
-  },
-  {
-    "id": "agentC",
-    "content": "Agent C: 魔法值提取为 const",
-    "status": "completed"
-  },
-  {
-    "id": "fix5",
-    "content": "验证 cargo clippy 通过",
-    "status": "completed"
-  },
-  {
-    "id": "clone",
-    "content": "clone 优化 (规范2) — Agent D 已分析，大部分 clone 为必要",
-    "status": "completed"
-  },
-  {
-    "id": "modrs",
-    "content": "mod.rs 迁移 (规范6) — 8个文件全部迁移完成",
-    "status": "completed"
-  },
-  {
-    "id": "funcParams",
-    "content": "函数参数重构 — 已全部通过 clippy too_many_arguments",
+    "id": "v1",
+    "content": "cargo fmt + clippy 验证",
     "status": "completed"
   }
 ]

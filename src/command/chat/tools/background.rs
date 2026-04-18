@@ -22,6 +22,7 @@ pub(super) struct BgTask {
 }
 
 /// 后台任务完成通知
+#[derive(Debug)]
 pub struct BgNotification {
     pub task_id: String,
     pub command: String,
@@ -36,6 +37,19 @@ pub struct BackgroundManager {
     pub(super) tasks: Mutex<HashMap<String, BgTask>>,
     notifications: Mutex<Vec<BgNotification>>,
     next_id: Mutex<u64>,
+}
+
+impl std::fmt::Debug for BackgroundManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tasks_count = self.tasks.lock().map_or(0, |t| t.len());
+        let notif_count = self.notifications.lock().map_or(0, |n| n.len());
+        let next_id = self.next_id.lock().map_or(0, |id| *id);
+        f.debug_struct("BackgroundManager")
+            .field("tasks_count", &tasks_count)
+            .field("notifications_count", &notif_count)
+            .field("next_id", &next_id)
+            .finish()
+    }
 }
 
 impl Default for BackgroundManager {

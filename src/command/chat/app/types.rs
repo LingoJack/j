@@ -46,6 +46,7 @@ pub enum StreamMsg {
 }
 
 /// 工具执行状态
+#[derive(Debug)]
 pub enum ToolExecStatus {
     /// 等待用户确认
     PendingConfirm,
@@ -89,14 +90,14 @@ pub struct CompletedToolResult {
 }
 
 /// ask 工具选项
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AskOption {
     pub label: String,
     pub description: String,
 }
 
 /// ask 工具单个问题
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AskQuestion {
     pub question: String,
     pub header: String,
