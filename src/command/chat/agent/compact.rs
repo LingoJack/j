@@ -308,6 +308,7 @@ pub async fn auto_compact(
     provider: &ModelProvider,
     invoked_skills: &InvokedSkillsMap,
     session_id: &str,
+    protected_context: Option<&str>,
 ) -> Result<(), String> {
     // 1. 保存 transcript 到 session 级 .transcripts/ 目录
     let transcript_path =
@@ -334,6 +335,16 @@ pub async fn auto_compact(
          {}",
         truncated
     );
+
+    // 追加保护指令（来自 PreCompact hook 的 additional_context）
+    let summary_prompt = if let Some(protected) = protected_context {
+        format!(
+            "{}\n\n[Protected Context — MUST preserve in full]:\n{}",
+            summary_prompt, protected
+        )
+    } else {
+        summary_prompt
+    };
 
     let user_msg = ChatCompletionRequestUserMessageArgs::default()
         .content(summary_prompt.as_str())

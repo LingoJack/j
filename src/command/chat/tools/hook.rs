@@ -111,16 +111,20 @@ impl RegisterHookTool {
 
 ## 可用事件及其可读/可写字段
 
-| event               | 触发时机       | stdin 可读字段                    | stdout 可写字段                                    |
-|---------------------|----------------|-----------------------------------|----------------------------------------------------|
-| pre_send_message    | 用户消息发送前 | user_input, messages              | user_input, abort                                  |
-| post_send_message   | 用户消息发送后 | user_input, messages              | （仅通知，返回值忽略）                             |
-| pre_llm_request     | LLM 请求前     | messages, system_prompt, model    | messages, system_prompt, inject_messages, abort     |
-| post_llm_response   | LLM 回复后     | assistant_output, messages        | assistant_output                                   |
-| pre_tool_execution  | 工具执行前     | tool_name, tool_arguments         | tool_arguments, abort                              |
-| post_tool_execution | 工具执行后     | tool_name, tool_result            | tool_result                                        |
-| session_start       | 会话开始       | messages                          | （仅通知）                                         |
-| session_end         | 会话退出       | messages                          | （仅通知）                                         |
+| event                         | 触发时机       | stdin 可读字段                                  | stdout 可写字段                                                        |
+|-------------------------------|----------------|-------------------------------------------------|------------------------------------------------------------------------|
+| pre_send_message              | 用户消息发送前 | user_input, messages                            | user_input, abort, retry_feedback                                      |
+| post_send_message             | 用户消息发送后 | user_input, messages                            | （仅通知，返回值忽略）                                                 |
+| pre_llm_request               | LLM 请求前     | messages, system_prompt, model                  | messages, system_prompt, inject_messages, additional_context, abort    |
+| post_llm_response             | LLM 回复后     | assistant_output, messages, model               | assistant_output, abort, retry_feedback, system_message                |
+| pre_tool_execution            | 工具执行前     | tool_name, tool_arguments                       | tool_arguments, abort                                                  |
+| post_tool_execution           | 工具执行后     | tool_name, tool_result                          | tool_result                                                            |
+| post_tool_execution_failure   | 工具执行失败后 | tool_name, tool_error                           | tool_error, additional_context                                         |
+| stop                          | LLM 即将结束   | user_input(回复), messages, system_prompt, model | retry_feedback, additional_context, abort                              |
+| pre_compact                   | 上下文压缩前   | messages, system_prompt, model, compact_trigger | additional_context, abort                                              |
+| post_compact                  | 上下文压缩后   | messages, compact_trigger                       | messages                                                               |
+| session_start                 | 会话开始       | messages                                        | （仅通知）                                                             |
+| session_end                   | 会话退出       | messages                                        | （仅通知）                                                             |
 
 ## 脚本协议
 - 执行方式：`sh -c "<command>"`
@@ -143,7 +147,9 @@ impl RegisterHookTool {
   "assistant_output": "AI 回复文本",
   "tool_name": "Bash",
   "tool_arguments": "{\"command\": \"ls\"}",
-  "tool_result": "工具执行结果"
+  "tool_result": "工具执行结果",
+  "tool_error": "工具错误信息",
+  "compact_trigger": "auto"
 }
 ```
 各字段按事件类型选择性出现，未填充的不会出现在 JSON 中。
@@ -157,10 +163,19 @@ impl RegisterHookTool {
   "system_prompt": "修改后的提示词",
   "tool_arguments": "修改后的工具参数",
   "tool_result": "修改后的工具结果",
+  "tool_error": "修改后的错误信息",
   "inject_messages": [{"role":"user","content":"注入消息"}],
+  "retry_feedback": "审查反馈：请修正XX问题",
+  "additional_context": "追加到 system_prompt 的额外上下文",
+  "system_message": "展示给用户的提示消息",
   "abort": false
 }
 ```
+
+## 关键字段说明
+- `retry_feedback`：与 abort 配合使用。在 stop/pre_send_message/post_llm_response 中，abort+retry_feedback 会中止当前操作并将反馈注入为新消息，LLM 带反馈重新生成。这是实现"宪法 AI/纠查官"的核心机制。
+- `additional_context`：追加文本到 system_prompt 末尾，不占消息位。适用于注入规则、约束等。
+- `system_message`：在 UI 上以 toast/提示形式展示给用户，不影响 LLM 输入。
 
 ## 脚本示例
 
@@ -185,7 +200,25 @@ else
 fi
 ```
 
-### 示例 3：纯通知（post_send_message / session_end）
+### 示例 3：宪法 AI 纠查官（stop）
+```bash
+#!/bin/bash
+input=$(cat)
+reply=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_input',''))")
+if echo "$reply" | grep -qiE 'password|secret|api.key'; then
+  echo '{"abort": true, "retry_feedback": "回复包含敏感信息，请重新组织回答避免泄露密码/密钥"}'
+else
+  echo '{}'
+fi
+```
+
+### 示例 4：压缩保护（pre_compact）
+```bash
+#!/bin/bash
+echo '{"additional_context": "压缩时必须保留所有宪法规则和关键约束，不可丢弃。"}'
+```
+
+### 示例 5：纯通知（post_send_message / session_end）
 ```bash
 #!/bin/bash
 cat > /dev/null  # 必须读 stdin，否则可能 SIGPIPE

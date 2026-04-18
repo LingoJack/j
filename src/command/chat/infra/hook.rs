@@ -20,16 +20,20 @@ const MAX_CHAIN_DURATION_SECS: u64 = 30;
 ///
 /// 各事件的触发时机及可读/可写字段：
 ///
-/// | 事件                  | 触发时机           | 可读字段                              | 可写字段（HookResult 中返回即生效）        |
-/// |-----------------------|--------------------|-----------------------------------------|----------------------------------------------|
-/// | `PreSendMessage`      | 用户消息入队前     | `user_input`, `messages`               | `user_input`（修改发送内容）, `abort`        |
-/// | `PostSendMessage`     | 用户消息入队后     | `user_input`, `messages`               | 仅通知，返回值被忽略                         |
-/// | `PreLlmRequest`       | LLM API 请求前     | `messages`, `system_prompt`, `model`   | `messages`, `system_prompt`, `inject_messages`, `abort` |
-/// | `PostLlmResponse`     | LLM 回复完成后     | `assistant_output`, `messages`         | `assistant_output`（修改最终回复）           |
-/// | `PreToolExecution`    | 工具执行前         | `tool_name`, `tool_arguments`          | `tool_arguments`（修改参数）, `abort`        |
-/// | `PostToolExecution`   | 工具执行后         | `tool_name`, `tool_result`             | `tool_result`（修改结果）                    |
-/// | `SessionStart`        | 会话启动时         | `messages`                             | 仅通知，返回值被忽略                         |
-/// | `SessionEnd`          | 会话退出时         | `messages`                             | 仅通知，返回值被忽略                         |
+/// | 事件                          | 触发时机           | 可读字段                              | 可写字段（HookResult 中返回即生效）        |
+/// |-------------------------------|--------------------|-----------------------------------------|----------------------------------------------|
+/// | `PreSendMessage`              | 用户消息入队前     | `user_input`, `messages`               | `user_input`（修改发送内容）, `abort`, `retry_feedback` |
+/// | `PostSendMessage`             | 用户消息入队后     | `user_input`, `messages`               | 仅通知，返回值被忽略                         |
+/// | `PreLlmRequest`               | LLM API 请求前     | `messages`, `system_prompt`, `model`   | `messages`, `system_prompt`, `inject_messages`, `additional_context`, `abort`, `retry_feedback` |
+/// | `PostLlmResponse`             | LLM 回复完成后     | `assistant_output`, `messages`, `model` | `assistant_output`（修改最终回复）, `abort`, `retry_feedback`, `system_message` |
+/// | `PreToolExecution`            | 工具执行前         | `tool_name`, `tool_arguments`          | `tool_arguments`（修改参数）, `abort`        |
+/// | `PostToolExecution`           | 工具执行后         | `tool_name`, `tool_result`             | `tool_result`（修改结果）                    |
+/// | `PostToolExecutionFailure`    | 工具执行失败后     | `tool_name`, `tool_error`              | `tool_error`（修改错误信息）, `additional_context` |
+/// | `Stop`                        | LLM 即将结束回复   | `user_input`（回复文本）, `messages`, `system_prompt`, `model` | `retry_feedback`（带反馈重试）, `additional_context`, `abort` |
+/// | `PreCompact`                  | 上下文压缩前       | `messages`, `system_prompt`, `model`, `compact_trigger` | `additional_context`, `abort` |
+/// | `PostCompact`                 | 上下文压缩后       | `messages`, `compact_trigger`          | `messages`（修改压缩结果）                    |
+/// | `SessionStart`                | 会话启动时         | `messages`                             | 仅通知，返回值被忽略                         |
+/// | `SessionEnd`                  | 会话退出时         | `messages`                             | 仅通知，返回值被忽略                         |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookEvent {
@@ -39,6 +43,10 @@ pub enum HookEvent {
     PostLlmResponse,
     PreToolExecution,
     PostToolExecution,
+    PostToolExecutionFailure,
+    Stop,
+    PreCompact,
+    PostCompact,
     SessionStart,
     SessionEnd,
 }
@@ -54,6 +62,10 @@ impl std::str::FromStr for HookEvent {
             "post_llm_response" => Ok(HookEvent::PostLlmResponse),
             "pre_tool_execution" => Ok(HookEvent::PreToolExecution),
             "post_tool_execution" => Ok(HookEvent::PostToolExecution),
+            "post_tool_execution_failure" => Ok(HookEvent::PostToolExecutionFailure),
+            "stop" => Ok(HookEvent::Stop),
+            "pre_compact" => Ok(HookEvent::PreCompact),
+            "post_compact" => Ok(HookEvent::PostCompact),
             "session_start" => Ok(HookEvent::SessionStart),
             "session_end" => Ok(HookEvent::SessionEnd),
             _ => Err(()),
@@ -70,6 +82,10 @@ impl HookEvent {
             HookEvent::PostLlmResponse => "post_llm_response",
             HookEvent::PreToolExecution => "pre_tool_execution",
             HookEvent::PostToolExecution => "post_tool_execution",
+            HookEvent::PostToolExecutionFailure => "post_tool_execution_failure",
+            HookEvent::Stop => "stop",
+            HookEvent::PreCompact => "pre_compact",
+            HookEvent::PostCompact => "post_compact",
             HookEvent::SessionStart => "session_start",
             HookEvent::SessionEnd => "session_end",
         }
@@ -83,6 +99,10 @@ impl HookEvent {
             HookEvent::PostLlmResponse,
             HookEvent::PreToolExecution,
             HookEvent::PostToolExecution,
+            HookEvent::PostToolExecutionFailure,
+            HookEvent::Stop,
+            HookEvent::PreCompact,
+            HookEvent::PostCompact,
             HookEvent::SessionStart,
             HookEvent::SessionEnd,
         ]
@@ -111,9 +131,13 @@ pub enum OnError {
 /// 多个字段同时设置时取 AND 关系。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HookFilter {
-    /// 工具名过滤（精确匹配，仅对 PreToolExecution / PostToolExecution 生效）
+    /// 工具名过滤（精确匹配，仅对工具相关事件生效）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
+    /// 工具名模式匹配（管道分隔，如 "Write|Edit|Bash"，仅对工具相关事件生效）
+    /// 优先级低于 tool_name：当 tool_name 设置时忽略此字段
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_matcher: Option<String>,
     /// 模型名前缀过滤（如 "gpt-4" 匹配 "gpt-4o"、"gpt-4-turbo"）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_prefix: Option<String>,
@@ -122,16 +146,27 @@ pub struct HookFilter {
 impl HookFilter {
     /// 是否为空过滤器（无任何条件，始终匹配）
     pub fn is_empty(&self) -> bool {
-        self.tool_name.is_none() && self.model_prefix.is_none()
+        self.tool_name.is_none() && self.tool_matcher.is_none() && self.model_prefix.is_none()
     }
 
     /// 根据 HookContext 判断是否匹配
     pub fn matches(&self, context: &HookContext) -> bool {
+        // 精确匹配 tool_name（优先级最高）
         if let Some(ref expected_tool) = self.tool_name {
             match &context.tool_name {
                 Some(actual) if actual == expected_tool => {}
                 Some(_) => return false,
-                None => return false, // 事件中没有 tool_name，条件不满足
+                None => return false,
+            }
+        } else if let Some(ref pattern) = self.tool_matcher {
+            // 管道分隔模式匹配（如 "Write|Edit|Bash"）
+            let actual = match &context.tool_name {
+                Some(a) => a,
+                None => return false,
+            };
+            let matched = pattern.split('|').any(|p| p.trim() == actual);
+            if !matched {
+                return false;
             }
         }
         if let Some(ref prefix) = self.model_prefix {
@@ -289,6 +324,16 @@ pub struct HookContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_result: Option<String>,
 
+    /// 工具执行失败原因
+    /// - 可读事件：PostToolExecutionFailure（可通过 HookResult 修改）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_error: Option<String>,
+
+    /// 上下文压缩触发方式（auto / manual / micro）
+    /// - 可读事件：PreCompact, PostCompact
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compact_trigger: Option<String>,
+
     /// 当前会话 ID
     /// - 可读事件：所有事件
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -310,6 +355,8 @@ impl Default for HookContext {
             tool_name: None,
             tool_arguments: None,
             tool_result: None,
+            tool_error: None,
+            compact_trigger: None,
             session_id: None,
             cwd: std::env::current_dir()
                 .map(|p| p.display().to_string())
@@ -326,12 +373,16 @@ impl Default for HookContext {
 /// 各字段的生效场景：
 /// - `user_input`：仅 PreSendMessage 中生效，替换用户即将发送的消息
 /// - `assistant_output`：仅 PostLlmResponse 中生效，替换 AI 最终展示的回复
-/// - `messages`：仅 PreLlmRequest 中生效，替换发给 LLM 的消息列表
+/// - `messages`：仅 PreLlmRequest / PostCompact 中生效，替换消息列表
 /// - `system_prompt`：仅 PreLlmRequest 中生效，替换系统提示词
 /// - `tool_arguments`：仅 PreToolExecution 中生效，替换工具调用参数
 /// - `tool_result`：仅 PostToolExecution 中生效，替换工具返回结果
+/// - `tool_error`：仅 PostToolExecutionFailure 中生效，替换工具错误信息
 /// - `inject_messages`：仅 PreLlmRequest 中生效，追加到消息列表末尾
-/// - `abort`：Pre* 事件中生效，为 true 时中止当前操作
+/// - `retry_feedback`：Pre*/Stop/PostLlmResponse 中生效，中止并带反馈重试（注入为 user message 重新请求 LLM）
+/// - `additional_context`：PreLlmRequest / Stop / PreCompact 中生效，追加文本到 system_prompt 末尾
+/// - `system_message`：所有事件中生效，展示给用户的提示消息
+/// - `abort`：Pre*/Stop/PostLlmResponse 事件中生效，为 true 时中止当前操作
 #[derive(Debug, Deserialize, Default)]
 pub struct HookResult {
     /// 替换消息列表（PreLlmRequest）
@@ -352,10 +403,22 @@ pub struct HookResult {
     /// 替换工具执行结果（PostToolExecution）
     #[serde(default)]
     pub tool_result: Option<String>,
+    /// 替换工具执行失败原因（PostToolExecutionFailure）
+    #[serde(default)]
+    pub tool_error: Option<String>,
     /// 追加消息到消息列表末尾（PreLlmRequest）
     #[serde(default)]
     pub inject_messages: Option<Vec<ChatMessage>>,
-    /// 中止当前操作（Pre* 事件中有效）
+    /// 审查反馈（Pre*/Stop/PostLlmResponse）：中止时附带反馈文本，触发 LLM 带反馈重试
+    #[serde(default)]
+    pub retry_feedback: Option<String>,
+    /// 注入到模型上下文的额外信息（PreLlmRequest/Stop/PreCompact）：纯文本追加到 system_prompt 末尾
+    #[serde(default)]
+    pub additional_context: Option<String>,
+    /// 展示给用户的系统消息（所有事件：UI 上以 toast/提示形式显示）
+    #[serde(default)]
+    pub system_message: Option<String>,
+    /// 中止当前操作（Pre*/Stop/PostLlmResponse 事件中有效）
     #[serde(default)]
     pub abort: bool,
 }
@@ -752,7 +815,7 @@ impl HookManager {
 
             let hook_start = std::time::Instant::now();
             match execute_hook(hook, &context) {
-                Ok(result) => {
+                Ok(mut result) => {
                     let elapsed_ms = hook_start.elapsed().as_millis() as u64;
                     if let Ok(mut metrics) = self.metrics.lock() {
                         let m = metrics.entry(label.clone()).or_default();
@@ -765,6 +828,8 @@ impl HookManager {
                         write_info_log("HookManager::execute", &format!("Hook abort ({})", label));
                         return Some(HookResult {
                             abort: true,
+                            retry_feedback: result.retry_feedback.take(),
+                            system_message: result.system_message.take(),
                             ..Default::default()
                         });
                     }
@@ -803,6 +868,22 @@ impl HookManager {
                     if let Some(ref inject) = result.inject_messages {
                         let existing = final_result.inject_messages.get_or_insert_with(Vec::new);
                         existing.extend(inject.clone());
+                        had_modification = true;
+                    }
+                    if let Some(ref rf) = result.retry_feedback {
+                        final_result.retry_feedback = Some(rf.clone());
+                        had_modification = true;
+                    }
+                    if let Some(ref ac) = result.additional_context {
+                        final_result.additional_context = Some(ac.clone());
+                        had_modification = true;
+                    }
+                    if let Some(ref sm) = result.system_message {
+                        final_result.system_message = Some(sm.clone());
+                        had_modification = true;
+                    }
+                    if let Some(ref te) = result.tool_error {
+                        final_result.tool_error = Some(te.clone());
                         had_modification = true;
                     }
                 }
@@ -1588,5 +1669,133 @@ on_error: abort"#;
         let json = r#"{"user_input": "test", "_switch_model": "gpt-4"}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
         assert_eq!(result.user_input.as_deref(), Some("test"));
+    }
+
+    #[test]
+    fn test_new_hook_events_roundtrip() {
+        // 验证新增的 4 个事件能正确序列化/反序列化
+        for event in [
+            HookEvent::Stop,
+            HookEvent::PreCompact,
+            HookEvent::PostCompact,
+            HookEvent::PostToolExecutionFailure,
+        ] {
+            let s = event.as_str();
+            let parsed = HookEvent::parse(s).unwrap();
+            assert_eq!(event, parsed);
+        }
+    }
+
+    #[test]
+    fn test_hook_result_retry_feedback() {
+        let json = r#"{"abort": true, "retry_feedback": "请修正敏感信息"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert!(result.abort);
+        assert_eq!(result.retry_feedback.as_deref(), Some("请修正敏感信息"));
+    }
+
+    #[test]
+    fn test_hook_result_additional_context() {
+        let json = r#"{"additional_context": "必须保留宪法规则"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.additional_context.as_deref(),
+            Some("必须保留宪法规则")
+        );
+    }
+
+    #[test]
+    fn test_hook_result_system_message() {
+        let json = r#"{"system_message": "纠查官已审查"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.system_message.as_deref(), Some("纠查官已审查"));
+    }
+
+    #[test]
+    fn test_hook_result_tool_error() {
+        let json = r#"{"tool_error": "权限不足"}"#;
+        let result: HookResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.tool_error.as_deref(), Some("权限不足"));
+    }
+
+    #[test]
+    fn test_hook_context_new_fields() {
+        let ctx = HookContext {
+            event: HookEvent::PreCompact,
+            compact_trigger: Some("auto".to_string()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&ctx).unwrap();
+        assert!(json.contains("pre_compact"));
+        assert!(json.contains("auto"));
+        assert!(json.contains("compact_trigger"));
+        // skip_serializing_if 应跳过 None 字段
+        assert!(!json.contains("tool_error"));
+    }
+
+    #[test]
+    fn test_hook_filter_tool_matcher() {
+        let filter = HookFilter {
+            tool_name: None,
+            tool_matcher: Some("Bash|Shell".to_string()),
+            model_prefix: None,
+        };
+        assert!(!filter.is_empty());
+
+        // 匹配 Bash
+        let ctx = HookContext {
+            event: HookEvent::PreToolExecution,
+            tool_name: Some("Bash".to_string()),
+            ..Default::default()
+        };
+        assert!(filter.matches(&ctx));
+
+        // 匹配 Shell
+        let ctx = HookContext {
+            event: HookEvent::PreToolExecution,
+            tool_name: Some("Shell".to_string()),
+            ..Default::default()
+        };
+        assert!(filter.matches(&ctx));
+
+        // 不匹配 Write
+        let ctx = HookContext {
+            event: HookEvent::PreToolExecution,
+            tool_name: Some("Write".to_string()),
+            ..Default::default()
+        };
+        assert!(!filter.matches(&ctx));
+
+        // 上下文中没有 tool_name → 不匹配
+        let ctx = HookContext {
+            event: HookEvent::PreToolExecution,
+            ..Default::default()
+        };
+        assert!(!filter.matches(&ctx));
+    }
+
+    #[test]
+    fn test_hook_filter_tool_name_priority_over_matcher() {
+        // tool_name 精确匹配优先于 tool_matcher
+        let filter = HookFilter {
+            tool_name: Some("Bash".to_string()),
+            tool_matcher: Some("Write|Edit".to_string()),
+            model_prefix: None,
+        };
+        let ctx = HookContext {
+            event: HookEvent::PreToolExecution,
+            tool_name: Some("Write".to_string()),
+            ..Default::default()
+        };
+        // tool_name 要求精确匹配 "Bash"，不匹配 "Write"
+        assert!(!filter.matches(&ctx));
+    }
+
+    #[test]
+    fn test_hook_filter_tool_matcher_yaml() {
+        let yaml = r#"tool_matcher: "Bash|Shell""#;
+        let filter: HookFilter = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(filter.tool_matcher.as_deref(), Some("Bash|Shell"));
+        assert!(filter.tool_name.is_none());
     }
 }

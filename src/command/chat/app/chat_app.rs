@@ -2505,14 +2505,47 @@ impl ChatApp {
                 }
             }
 
-            // 处理被 .jcli/ deny 拒绝的工具
-            for tc in &self.tool_executor.active_tool_calls {
+            // 处理被 .jcli/ deny 拒绝的工具（或执行失败的工具）
+            for tc in &mut self.tool_executor.active_tool_calls {
                 if let ToolExecStatus::Failed(ref msg) = tc.status
                     && let Some(ref tx) = self.tool_executor.tool_result_tx
                 {
+                    // ★ PostToolExecutionFailure hook：可修改错误信息或注入上下文
+                    let final_msg = {
+                        let has_hooks = self
+                            .hook_manager
+                            .lock()
+                            .map(|m| m.has_hooks_for(HookEvent::PostToolExecutionFailure))
+                            .unwrap_or(false);
+                        if has_hooks {
+                            let ctx = HookContext {
+                                event: HookEvent::PostToolExecutionFailure,
+                                tool_name: Some(tc.tool_name.clone()),
+                                tool_error: Some(msg.clone()),
+                                session_id: Some(self.session_id.clone()),
+                                cwd: std::env::current_dir()
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_else(|_| ".".to_string()),
+                                ..Default::default()
+                            };
+                            if let Ok(manager) = self.hook_manager.lock() {
+                                if let Some(result) =
+                                    manager.execute(HookEvent::PostToolExecutionFailure, ctx)
+                                {
+                                    result.tool_error.unwrap_or_else(|| msg.clone())
+                                } else {
+                                    msg.clone()
+                                }
+                            } else {
+                                msg.clone()
+                            }
+                        } else {
+                            msg.clone()
+                        }
+                    };
                     let _ = tx.send(ToolResultMsg {
                         tool_call_id: tc.tool_call_id.clone(),
-                        result: msg.clone(),
+                        result: final_msg,
                         is_error: true,
                         images: vec![],
                         plan_decision: PlanDecision::None,
@@ -2896,8 +2929,8 @@ impl ChatApp {
                 sc.clone()
             };
             if !content.is_empty() {
-                // ★ PostLlmResponse hook（同步，需要返回值来修改 content）
-                {
+                // ★ PostLlmResponse hook（同步，需要返回值来修改 content / abort / retry）
+                let hook_result = {
                     let has_hooks = self
                         .hook_manager
                         .lock()
@@ -2915,12 +2948,38 @@ impl ChatApp {
                                 .unwrap_or_else(|_| ".".to_string()),
                             ..Default::default()
                         };
-                        if let Ok(manager) = self.hook_manager.lock()
-                            && let Some(result) = manager.execute(HookEvent::PostLlmResponse, ctx)
-                            && let Some(new_msg) = result.assistant_output
-                        {
-                            content = new_msg;
+                        if let Ok(manager) = self.hook_manager.lock() {
+                            manager.execute(HookEvent::PostLlmResponse, ctx)
+                        } else {
+                            None
                         }
+                    } else {
+                        None
+                    }
+                };
+                if let Some(result) = hook_result {
+                    // 展示系统消息给用户
+                    if let Some(sys_msg) = result.system_message {
+                        self.show_toast(&sys_msg, false);
+                    }
+                    // abort 支持（配合 retry_feedback 重新发送）
+                    if result.abort {
+                        safe_lock(
+                            &self.state.streaming_content,
+                            "finish_loading::hook_aborted",
+                        )
+                        .clear();
+                        if let Some(feedback) = result.retry_feedback {
+                            self.show_toast(format!("纠查官拦截: {}", feedback), true);
+                            self.send_message_internal(feedback);
+                        } else {
+                            self.show_toast("回复被 hook 拦截", true);
+                        }
+                        return;
+                    }
+                    // 修改 assistant_output
+                    if let Some(new_msg) = result.assistant_output {
+                        content = new_msg;
                     }
                 }
 

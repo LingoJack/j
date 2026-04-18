@@ -136,11 +136,59 @@ pub async fn run_agent_loop(
                     "agent_loop",
                     "auto_compact triggered (token threshold exceeded)",
                 );
-                if let Err(e) =
-                    compact::auto_compact(&mut messages, &provider, &invoked_skills, &session_id)
-                        .await
-                {
-                    write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
+
+                // ★ PreCompact hook：压缩前可注入保护指令或中止压缩
+                let mut protected_context: Option<String> = None;
+                let mut compact_aborted = false;
+                if hook_manager.has_hooks_for(HookEvent::PreCompact) {
+                    let ctx = HookContext {
+                        event: HookEvent::PreCompact,
+                        messages: Some(messages.clone()),
+                        system_prompt: system_prompt.clone(),
+                        model: Some(provider.model.clone()),
+                        session_id: Some(session_id.clone()),
+                        compact_trigger: Some("auto".to_string()),
+                        ..Default::default()
+                    };
+                    if let Some(result) = hook_manager.execute(HookEvent::PreCompact, ctx) {
+                        if result.abort {
+                            write_info_log("PreCompact hook", "压缩被 hook 中止");
+                            compact_aborted = true;
+                        }
+                        if let Some(ac) = result.additional_context {
+                            protected_context = Some(ac);
+                        }
+                    }
+                }
+
+                if !compact_aborted {
+                    if let Err(e) = compact::auto_compact(
+                        &mut messages,
+                        &provider,
+                        &invoked_skills,
+                        &session_id,
+                        protected_context.as_deref(),
+                    )
+                    .await
+                    {
+                        write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
+                    } else {
+                        // ★ PostCompact hook：压缩后可检查/修改摘要质量
+                        if hook_manager.has_hooks_for(HookEvent::PostCompact) {
+                            let ctx = HookContext {
+                                event: HookEvent::PostCompact,
+                                messages: Some(messages.clone()),
+                                session_id: Some(session_id.clone()),
+                                compact_trigger: Some("auto".to_string()),
+                                ..Default::default()
+                            };
+                            if let Some(result) = hook_manager.execute(HookEvent::PostCompact, ctx)
+                                && let Some(new_msgs) = result.messages
+                            {
+                                messages = new_msgs;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -459,6 +507,7 @@ pub async fn run_agent_loop(
                         &provider,
                         &invoked_skills,
                         &session_id,
+                        None,
                     )
                     .await
                     {
@@ -646,6 +695,7 @@ pub async fn run_agent_loop(
                                     &provider,
                                     &invoked_skills,
                                     &session_id,
+                                    None,
                                 )
                                 .await;
                             }
@@ -809,6 +859,7 @@ pub async fn run_agent_loop(
                                 &provider,
                                 &invoked_skills,
                                 &session_id,
+                                None,
                             )
                             .await;
                         }
@@ -857,6 +908,47 @@ pub async fn run_agent_loop(
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
+
+                // ★ Stop hook：LLM 即将结束回复（无工具调用且无待处理消息），纠查官可阻止并注入反馈
+                if hook_manager.has_hooks_for(HookEvent::Stop) {
+                    flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
+                    let stop_ctx = HookContext {
+                        event: HookEvent::Stop,
+                        messages: Some(messages.clone()),
+                        system_prompt: system_prompt.clone(),
+                        model: Some(provider.model.clone()),
+                        user_input: Some(assistant_text.clone()),
+                        session_id: Some(session_id.clone()),
+                        ..Default::default()
+                    };
+                    if let Some(result) = hook_manager.execute(HookEvent::Stop, stop_ctx) {
+                        // 注入额外上下文（追加到 system_prompt）
+                        if let Some(ctx_text) = result.additional_context {
+                            let current = system_prompt.unwrap_or_default();
+                            system_prompt = Some(format!("{}\n\n{}", current, ctx_text));
+                        }
+                        // retry_feedback → 注入为 user message，LLM 带反馈继续
+                        if let Some(feedback) = result.retry_feedback {
+                            write_info_log("Stop hook", &format!("纠查官反馈: {}", feedback));
+                            let feedback_msg = ChatMessage {
+                                role: ROLE_USER.to_string(),
+                                content: feedback,
+                                tool_calls: None,
+                                tool_call_id: None,
+                                images: None,
+                            };
+                            messages.push(feedback_msg.clone());
+                            push_shared(&shared_messages, feedback_msg);
+                            continue 'round;
+                        }
+                        // abort → 直接中止
+                        if result.abort {
+                            let _ = tx.send(StreamMsg::Error(ChatError::HookAborted));
+                            return;
+                        }
+                    }
+                }
+
                 write_info_log(
                     "agent_loop",
                     &format!(
