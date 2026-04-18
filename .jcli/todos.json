@@ -1,27 +1,17 @@
 [
   {
-    "id": "m1",
-    "content": "迁移 18 个 mod.rs 为 name.rs 模式",
+    "id": "1",
+    "content": "检查不必要的 .clone() 调用",
     "status": "completed"
   },
   {
-    "id": "d1",
-    "content": "为核心结构体添加 Debug 派生 (~22个)",
+    "id": "2",
+    "content": "检查 Vec::new() vs Vec::with_capacity()",
     "status": "completed"
   },
   {
-    "id": "d2",
-    "content": "补充 Default 实现 (Sandbox/ImageCache/CopilotHinter)",
-    "status": "completed"
-  },
-  {
-    "id": "d3",
-    "content": "补充 PartialEq 派生 (8个纯数据结构体)",
-    "status": "completed"
-  },
-  {
-    "id": "v1",
-    "content": "cargo fmt + clippy 验证",
+    "id": "3",
+    "content": "检查 pub 函数中 String 参数 vs &str 参数",
     "status": "completed"
   }
 ]
