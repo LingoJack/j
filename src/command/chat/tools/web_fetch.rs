@@ -43,6 +43,7 @@ fn default_max_chars() -> usize {
 // ==================== WebFetchTool ====================
 
 /// HTTP 抓取网页工具
+#[derive(Debug)]
 pub struct WebFetchTool;
 
 impl WebFetchTool {

@@ -35,6 +35,7 @@ fn default_action() -> String {
 }
 
 /// register_hook 工具：让 LLM 动态注册/管理 session 级 hook
+#[derive(Debug)]
 pub struct RegisterHookTool {
     pub hook_manager: Arc<Mutex<HookManager>>,
 }

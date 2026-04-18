@@ -2056,7 +2056,7 @@ impl ChatApp {
     ///
     /// 如果当前正在 loading（agent loop 运行中），消息追加到待处理队列，
     /// 与 TUI 本地模式下 Enter 的行为一致。
-    pub fn inject_remote_message(&mut self, content: String) {
+    pub fn inject_remote_message(&mut self, content: &str) {
         let text = content.trim().to_string();
         if text.is_empty() {
             return;

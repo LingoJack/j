@@ -249,6 +249,7 @@ fn default_timeout_ms() -> u64 {
 }
 
 /// 查询后台任务输出的工具（替代 CheckBackgroundTool）
+#[derive(Debug)]
 pub struct TaskOutputTool {
     pub manager: Arc<BackgroundManager>,
 }

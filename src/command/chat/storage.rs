@@ -205,6 +205,7 @@ pub fn session_file_path(session_id: &str) -> PathBuf {
 /// Session 目录布局抽象。
 ///
 /// 布局：`sessions/<id>/transcript.jsonl`。
+#[derive(Debug)]
 pub struct SessionPaths {
     id: String,
     dir: PathBuf,

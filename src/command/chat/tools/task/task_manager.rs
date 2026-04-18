@@ -9,6 +9,7 @@ use std::sync::Mutex;
 // ========== TaskManager ==========
 
 /// 任务管理器，负责 CRUD 操作和持久化
+#[derive(Debug)]
 pub struct TaskManager {
     tasks_dir: PathBuf,
     write_lock: Mutex<()>,

@@ -317,7 +317,7 @@ pub fn build_request_with_tools(
     system_prompt: Option<&str>,
 ) -> Result<CreateChatCompletionRequest, ChatError> {
     let sanitized = sanitize_messages(messages);
-    let mut openai_messages = Vec::new();
+    let mut openai_messages = Vec::with_capacity(sanitized.len());
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
         if !trimmed.is_empty()
@@ -361,7 +361,7 @@ pub async fn call_openai_stream_async(
     on_chunk: &mut dyn FnMut(&str),
 ) -> Result<String, ChatError> {
     let client = create_openai_client(provider);
-    let mut openai_messages = Vec::new();
+    let mut openai_messages = Vec::with_capacity(messages.len());
 
     if let Some(sys) = system_prompt {
         let trimmed = sys.trim();
@@ -462,6 +462,7 @@ pub struct LenientChatResponse {
 }
 
 /// fallback 非流式调用结果
+#[derive(Debug)]
 pub struct FallbackResult {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCallItem>>,

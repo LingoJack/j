@@ -266,7 +266,7 @@ impl MarkdownEditor {
                         self.vim.set_mode(Mode::Normal);
                         return EditorAction::Continue;
                     }
-                    _ => {}
+                    _ => {} // 忽略其他按键（如功能键、组合键等）
                 }
             }
         }
@@ -344,7 +344,7 @@ impl MarkdownEditor {
                     Key::Backspace => {
                         cmd.pop();
                     }
-                    _ => {}
+                    _ => {} // 忽略其他按键（如功能键、组合键等）
                 }
                 self.vim.set_mode(Mode::Command(cmd));
             }
@@ -359,7 +359,7 @@ impl MarkdownEditor {
                         pattern.pop();
                         self.search.search(&pattern, self.buffer.lines());
                     }
-                    _ => {}
+                    _ => {} // 忽略其他按键（如功能键、组合键等）
                 }
                 self.vim.set_mode(Mode::Search(pattern));
             }
@@ -379,7 +379,7 @@ impl MarkdownEditor {
                             return;
                         }
                     }
-                    _ => {}
+                    _ => {} // 忽略其他按键（如功能键、组合键等）
                 }
                 self.vim.set_mode(Mode::CommandPanel(filter));
             }

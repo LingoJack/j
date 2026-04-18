@@ -62,6 +62,7 @@ pub enum ToolExecStatus {
 }
 
 /// 工具调用执行状态（运行时，不序列化）
+#[derive(Debug)]
 pub struct ToolCallStatus {
     pub tool_call_id: String,
     pub tool_name: String,
@@ -71,6 +72,7 @@ pub struct ToolCallStatus {
 }
 
 /// 主线程 → 后台线程的工具结果消息
+#[derive(Debug)]
 pub struct ToolResultMsg {
     pub tool_call_id: String,
     pub result: String,
@@ -83,6 +85,7 @@ pub struct ToolResultMsg {
 }
 
 /// Worker 线程完成后写入共享状态，供 UI poll 更新显示
+#[derive(Debug)]
 pub struct CompletedToolResult {
     pub tool_call_id: String,
     pub summary: String,
@@ -115,6 +118,7 @@ pub enum AskAnswer {
 }
 
 /// ask 工具 → 主线程的请求消息
+#[derive(Debug)]
 pub struct AskRequest {
     pub questions: Vec<AskQuestion>,
     pub response_tx: mpsc::Sender<String>,

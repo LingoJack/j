@@ -81,9 +81,10 @@ pub fn build_message_lines_incremental(
 
     let t = &app.ui.theme;
     let is_browse_mode = app.ui.mode == ChatMode::Browse;
+    let msg_count = app.state.session.messages.len();
     let mut current_line_offset: usize = 0;
-    let mut msg_start_lines: Vec<(usize, usize)> = Vec::new();
-    let mut per_msg_cache: Vec<PerMsgCache> = Vec::new();
+    let mut msg_start_lines: Vec<(usize, usize)> = Vec::with_capacity(msg_count);
+    let mut per_msg_cache: Vec<PerMsgCache> = Vec::with_capacity(msg_count);
 
     let expand = app.ui.expand_tools;
 
@@ -94,7 +95,6 @@ pub fn build_message_lines_incremental(
 
     // ===== P0 优化：直接引用 session.messages，避免克隆全部内容 =====
     // 缓存命中时零拷贝复用，只在缓存未命中时才访问消息内容
-    let msg_count = app.state.session.messages.len();
     for idx in 0..msg_count {
         let m = &app.state.session.messages[idx];
         let is_selected = is_browse_mode && idx == app.ui.browse_msg_index;

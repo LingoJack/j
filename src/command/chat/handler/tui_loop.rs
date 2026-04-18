@@ -1,3 +1,4 @@
+use super::super::agent_md;
 use super::super::input_thread::InputThread;
 use super::super::remote;
 use super::super::remote::bridge::WsBridge;
@@ -322,7 +323,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 needs_redraw = true;
                 match msg {
                     WsInbound::SendMessage { content } => {
-                        app.inject_remote_message(content);
+                        app.inject_remote_message(&content);
                     }
                     WsInbound::ToolConfirm { action, reason } => match action.as_str() {
                         "allow" => app.update(Action::ExecutePendingTool),
@@ -509,8 +510,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 input_thread.pause();
                 input_thread.drain();
                 let current_agent_md =
-                    std::fs::read_to_string(crate::command::chat::agent_md::agent_md_path())
-                        .unwrap_or_default();
+                    std::fs::read_to_string(agent_md::agent_md_path()).unwrap_or_default();
                 match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
                     &mut terminal,
                     "编辑项目指令 (AGENT.md)",
@@ -518,7 +518,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     &app.ui.theme,
                 ) {
                     Ok((Some(new_text), _)) => {
-                        let path = crate::command::chat::agent_md::agent_md_path();
+                        let path = agent_md::agent_md_path();
                         if let Some(parent) = path.parent() {
                             let _ = std::fs::create_dir_all(parent);
                         }

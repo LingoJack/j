@@ -2,6 +2,7 @@
 //!
 //! 提取自 chat.rs，处理用户输入框的渲染、折行、光标位置计算和 @mention 高亮。
 
+use crate::command::chat::theme::Theme;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -281,7 +282,7 @@ fn build_line_segments(
     cursor_len: usize,
     mention_ranges: &[(usize, usize)],
     mention_style: Style,
-    t: &crate::command::chat::theme::Theme,
+    t: &Theme,
 ) -> Vec<Span<'static>> {
     let mut spans: Vec<Span> = Vec::new();
     let mut seg_start = 0;

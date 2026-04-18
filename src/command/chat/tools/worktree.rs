@@ -24,6 +24,7 @@ pub struct WorktreeSession {
 }
 
 /// 跨工具共享的 worktree 状态
+#[derive(Debug)]
 pub struct WorktreeState {
     session: Mutex<Option<WorktreeSession>>,
 }
@@ -225,6 +226,7 @@ struct EnterWorktreeParams {
     name: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct EnterWorktreeTool {
     pub state: Arc<WorktreeState>,
 }
@@ -413,6 +415,7 @@ struct ExitWorktreeParams {
     discard_changes: bool,
 }
 
+#[derive(Debug)]
 pub struct ExitWorktreeTool {
     pub state: Arc<WorktreeState>,
 }

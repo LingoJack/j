@@ -68,6 +68,7 @@ struct SomEntry {
     center_y: f64,
 }
 
+#[derive(Debug)]
 struct SomState {
     entries: Vec<SomEntry>,
     timestamp: Instant,
@@ -76,6 +77,7 @@ struct SomState {
 
 const SOM_STALE_SECONDS: u64 = 30;
 
+#[derive(Debug)]
 pub struct ComputerUseTool {
     som_state: Arc<Mutex<Option<SomState>>>,
 }

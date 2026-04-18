@@ -1,3 +1,4 @@
+use super::super::agent::compact::BUILTIN_EXEMPT_TOOLS;
 use super::super::agent_md;
 use super::super::app::ChatApp;
 use super::super::storage::{load_style, load_system_prompt, save_style, save_system_prompt};
@@ -202,7 +203,7 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
         "compact_keep_recent" => app.state.agent_config.compact.keep_recent.to_string(),
         "compact_exempt_tools" => {
             // (已豁免数/工具总数) 格式展示
-            let builtin = crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.len();
+            let builtin = BUILTIN_EXEMPT_TOOLS.len();
             let user_extra = &app.state.agent_config.compact.micro_compact_exempt_tools;
             let exempt_count = builtin + user_extra.len();
             let total = app.tool_registry.tool_names().len();
@@ -240,8 +241,7 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
         "compact_keep_recent" => app.state.agent_config.compact.keep_recent.to_string(),
         "compact_exempt_tools" => {
             // 合并内置 + 用户自定义，编辑时展示完整列表
-            let mut all: Vec<&str> =
-                crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.to_vec();
+            let mut all: Vec<&str> = BUILTIN_EXEMPT_TOOLS.to_vec();
             let user_extra = &app.state.agent_config.compact.micro_compact_exempt_tools;
             for t in user_extra {
                 if !all.contains(&t.as_str()) {
@@ -317,8 +317,7 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
         }
         "compact_exempt_tools" => {
             // 保存时剥离内置工具，只保留用户额外新增的部分
-            let builtin: Vec<&str> =
-                crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS.to_vec();
+            let builtin: Vec<&str> = BUILTIN_EXEMPT_TOOLS.to_vec();
             app.state.agent_config.compact.micro_compact_exempt_tools = value
                 .split(',')
                 .map(|s| s.trim().to_string())

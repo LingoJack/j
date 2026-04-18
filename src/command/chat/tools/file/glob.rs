@@ -32,6 +32,7 @@ fn default_limit() -> usize {
     100
 }
 
+#[derive(Debug)]
 pub struct GlobTool;
 
 impl GlobTool {

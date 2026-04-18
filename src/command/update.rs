@@ -364,7 +364,7 @@ fn select_features() -> Vec<String> {
                     // 取消：不选择任何 feature，直接跳到确认
                     break;
                 }
-                _ => {}
+                _ => {} // 忽略其他按键
             }
             let _ = draw_feature_menu(&mut stdout, &selected, cursor_pos, is_first_draw);
         }

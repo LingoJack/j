@@ -3,6 +3,7 @@ use super::background::BackgroundManager;
 use crate::command::chat::constants::{
     SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
 };
+use crate::command::chat::teammate::thread_cwd;
 use crate::command::chat::tools::{
     PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
     schema_to_tool_params,
@@ -40,6 +41,7 @@ struct ShellParams {
 // ========== ShellTool ==========
 
 /// 执行 shell 命令的工具
+#[derive(Debug)]
 pub struct ShellTool {
     pub manager: Arc<BackgroundManager>,
 }
@@ -136,9 +138,10 @@ impl Tool for ShellTool {
             .stderr(std::process::Stdio::piped());
 
         // 设置工作目录：优先用显式 cwd，其次用 thread-local worktree CWD
-        let effective_dir = params.cwd.clone().or_else(|| {
-            crate::command::chat::teammate::thread_cwd().map(|p| p.to_string_lossy().to_string())
-        });
+        let effective_dir = params
+            .cwd
+            .clone()
+            .or_else(|| thread_cwd().map(|p| p.to_string_lossy().to_string()));
         if let Some(ref dir) = effective_dir {
             let path = std::path::Path::new(dir);
             if !path.is_dir() {
@@ -291,9 +294,9 @@ impl ShellTool {
     ) -> ToolResult {
         // 显式 cwd 优先，其次取 thread-local worktree CWD（后台任务在新线程中运行，
         // 所以要在这里捕获，而不是在新线程中重新读取）
-        let effective_cwd = cwd.clone().or_else(|| {
-            crate::command::chat::teammate::thread_cwd().map(|p| p.to_string_lossy().to_string())
-        });
+        let effective_cwd = cwd
+            .clone()
+            .or_else(|| thread_cwd().map(|p| p.to_string_lossy().to_string()));
 
         let (task_id, output_buffer) =
             self.manager

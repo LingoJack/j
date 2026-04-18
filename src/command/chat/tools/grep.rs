@@ -48,6 +48,7 @@ fn default_output_mode() -> String {
     "content".to_string()
 }
 
+#[derive(Debug)]
 pub struct GrepTool;
 
 impl GrepTool {

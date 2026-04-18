@@ -1,3 +1,4 @@
+use crate::command::chat::storage::load_agent_config;
 use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{
@@ -174,7 +175,7 @@ fn handle_report_tui(config: &mut YamlConfig) {
 
     // 打开带初始内容的编辑器（NORMAL 模式）
     // 使用用户配置的主题
-    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
+    let theme = Theme::from_name(&load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor_with_content(
         "编辑日报",
         &initial_lines,
@@ -644,7 +645,7 @@ fn handle_open_report(config: &YamlConfig) {
     let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
 
     // 用 TUI 编辑器打开全文（NORMAL 模式），使用用户配置主题
-    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
+    let theme = Theme::from_name(&load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor_with_content(
         "编辑日报文件",
         &lines,

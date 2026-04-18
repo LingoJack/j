@@ -42,6 +42,7 @@ struct TaskParams {
     add_blocked_by: Option<Vec<u64>>,
 }
 
+#[derive(Debug)]
 pub struct TaskTool {
     pub manager: Arc<TaskManager>,
 }

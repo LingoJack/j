@@ -1,8 +1,10 @@
 use crate::command::chat::teammate::{
-    TeammateHandle, TeammateManager, TeammateStatus, set_current_agent_name,
+    TeammateHandle, TeammateManager, TeammateStatus, set_current_agent_name, set_thread_cwd,
 };
+use crate::command::chat::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::tools::agent_shared::AgentToolShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
+use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -122,7 +124,7 @@ impl Tool for CreateTeammateTool {
 
         // 若请求 worktree 隔离，提前创建（在主线程中；失败则提前退出）
         let worktree_info: Option<(std::path::PathBuf, String)> = if params.worktree {
-            match crate::command::chat::tools::worktree::create_agent_worktree(&params.name) {
+            match create_agent_worktree(&params.name) {
                 Ok(info) => {
                     write_info_log(
                         "CreateTeammate",
@@ -209,7 +211,7 @@ impl Tool for CreateTeammateTool {
 
             // 设置 worktree CWD（若有）
             if let Some((ref wt_path, _)) = worktree_info {
-                crate::command::chat::teammate::set_thread_cwd(wt_path);
+                set_thread_cwd(wt_path);
                 write_info_log(
                     "CreateTeammate",
                     &format!(
@@ -225,26 +227,24 @@ impl Tool for CreateTeammateTool {
                 &format!("Teammate '{}' agent loop starting", teammate_name),
             );
 
-            let result = crate::command::chat::teammate_loop::run_teammate_loop(
-                crate::command::chat::teammate_loop::TeammateLoopConfig {
-                    name: teammate_name.clone(),
-                    role: teammate_role,
-                    initial_prompt,
-                    provider,
-                    base_system_prompt: system_prompt,
-                    tools,
-                    registry: sub_registry,
-                    jcli_config,
-                    teammate_manager,
-                    pending_user_messages: pending_clone,
-                    cancel_token: cancel_token_clone,
-                    system_prompt_snapshot: sp_snapshot_clone,
-                    messages_snapshot: msgs_snapshot_clone,
-                    status: status_clone,
-                    tool_calls_count: tool_calls_count_clone,
-                    current_tool: current_tool_clone,
-                },
-            );
+            let result = run_teammate_loop(TeammateLoopConfig {
+                name: teammate_name.clone(),
+                role: teammate_role,
+                initial_prompt,
+                provider,
+                base_system_prompt: system_prompt,
+                tools,
+                registry: sub_registry,
+                jcli_config,
+                teammate_manager,
+                pending_user_messages: pending_clone,
+                cancel_token: cancel_token_clone,
+                system_prompt_snapshot: sp_snapshot_clone,
+                messages_snapshot: msgs_snapshot_clone,
+                status: status_clone,
+                tool_calls_count: tool_calls_count_clone,
+                current_tool: current_tool_clone,
+            });
 
             // 清理 worktree
             if let Some((ref wt_path, ref branch)) = worktree_info {
@@ -252,7 +252,7 @@ impl Tool for CreateTeammateTool {
                     "CreateTeammate",
                     &format!("Teammate '{}' cleaning up worktree", teammate_name),
                 );
-                crate::command::chat::tools::worktree::remove_agent_worktree(wt_path, branch);
+                remove_agent_worktree(wt_path, branch);
             }
 
             is_running_clone.store(false, Ordering::Relaxed);

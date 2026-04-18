@@ -33,6 +33,7 @@ struct TodoWriteParams {
     merge: bool,
 }
 
+#[derive(Debug)]
 pub struct TodoWriteTool {
     pub manager: Arc<TodoManager>,
 }

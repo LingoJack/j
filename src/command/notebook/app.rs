@@ -1,4 +1,5 @@
 use crate::command::chat::markdown::markdown_to_lines;
+use crate::command::chat::storage::load_agent_config;
 use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{config_key, section, shell};
@@ -249,7 +250,7 @@ pub fn edit_note_on_terminal(
         title.to_string()
     };
 
-    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
+    let theme = Theme::from_name(&load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
         terminal,
         &editor_title,
@@ -296,7 +297,7 @@ pub fn edit_note_with_editor(title: &str) -> bool {
         title.to_string()
     };
 
-    let theme = Theme::from_name(&crate::command::chat::storage::load_agent_config().theme);
+    let theme = Theme::from_name(&load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor(&editor_title, &content, &theme) {
         Ok((Some(new_content), _)) => {
             if new_content != content {
@@ -468,7 +469,7 @@ impl NotebookApp {
     pub fn new() -> Self {
         let notes = load_notes();
         let expanded_dirs = load_expanded_dirs();
-        let agent_config = crate::command::chat::storage::load_agent_config();
+        let agent_config = load_agent_config();
         let theme = Theme::from_name(&agent_config.theme);
         let mut app = Self {
             notes,

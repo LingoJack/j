@@ -40,6 +40,7 @@ struct AskParams {
 
 // ========== AskTool ==========
 
+#[derive(Debug)]
 pub struct AskTool {
     /// 发送 ask 请求到主线程
     pub ask_tx: mpsc::Sender<AskRequest>,

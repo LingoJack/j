@@ -7,6 +7,7 @@
 //!
 //! 本模块是 editor_core 的薄封装，负责 Theme → EditorTheme 转换和高亮函数注入。
 
+use crate::command::chat::storage::{load_agent_config, save_agent_config};
 use std::io;
 
 use crate::command::chat::markdown::highlight::highlight_code_line;
@@ -83,9 +84,9 @@ fn build_theme_gallery() -> Vec<ThemeGalleryItem> {
 /// 如果用户在编辑器中选择了主题，保存到 agent_config
 fn save_theme_if_selected(theme_id: Option<&'static str>) {
     if let Some(id) = theme_id {
-        let mut config = crate::command::chat::storage::load_agent_config();
+        let mut config = load_agent_config();
         config.theme = ThemeName::parse(id);
-        crate::command::chat::storage::save_agent_config(&config);
+        save_agent_config(&config);
     }
 }
 
@@ -155,7 +156,7 @@ pub fn open_script_editor(
     title: &str,
     initial_lines: &[String],
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
-    let agent_config = crate::command::chat::storage::load_agent_config();
+    let agent_config = load_agent_config();
     let theme = Theme::from_name(&agent_config.theme);
     let editor_theme = EditorTheme::from(&theme);
     let result = core_open_with_content(

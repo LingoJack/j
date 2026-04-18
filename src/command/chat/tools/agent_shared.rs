@@ -1,11 +1,15 @@
 use crate::command::chat::api::{build_request_with_tools, create_openai_client};
 use crate::command::chat::app::AskRequest;
+use crate::command::chat::compact::new_invoked_skills_map;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
+use crate::command::chat::permission_queue::{PendingAgentPerm, PermissionQueue};
 use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
+use crate::command::chat::teammate::current_agent_name;
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
+use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::TaskManager;
 use crate::util::log::write_info_log;
 use rand::Rng;
@@ -124,9 +128,9 @@ pub struct AgentToolShared {
     pub task_manager: Arc<TaskManager>,
     pub disabled_tools: Arc<Vec<String>>,
     /// 子 agent 权限请求队列（与主 TUI 共享同一个实例）
-    pub permission_queue: Arc<crate::command::chat::permission_queue::PermissionQueue>,
+    pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（与主 TUI 共享同一个实例，teammate ExitPlanMode 走此队列）
-    pub plan_approval_queue: Arc<crate::command::chat::tools::plan::PlanApprovalQueue>,
+    pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 子 agent 运行时快照追踪器（供 /dump 读取）
     pub sub_agent_tracker: Arc<SubAgentTracker>,
     /// 主 TUI 的 shared_agent_messages（子 agent 的 UI 状态行推送到这里）
@@ -146,7 +150,7 @@ impl AgentToolShared {
             Arc::clone(&self.background_manager),
             Arc::clone(&self.task_manager),
             Arc::clone(&self.hook_manager),
-            crate::command::chat::compact::new_invoked_skills_map(),
+            new_invoked_skills_map(),
         );
         // 将权限队列传入子注册表，使子 agent 的阻塞式确认请求能到达主 TUI
         registry.permission_queue = Some(Arc::clone(&self.permission_queue));
@@ -374,11 +378,11 @@ pub fn execute_tool_with_permission(
     if requires_confirm && !jcli_config.is_allowed(&item.name, &item.arguments) {
         // 尝试通过权限队列请求用户实时确认
         if let Some(queue) = registry.permission_queue.as_ref() {
-            let agent_name = crate::command::chat::teammate::current_agent_name();
+            let agent_name = current_agent_name();
             let confirm_msg = tool_ref
                 .map(|t| t.confirmation_message(&item.arguments))
                 .unwrap_or_else(|| format!("调用工具 {}", item.name));
-            let req = crate::command::chat::permission_queue::PendingAgentPerm::new(
+            let req = PendingAgentPerm::new(
                 agent_name,
                 item.name.clone(),
                 item.arguments.clone(),

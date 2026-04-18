@@ -1,3 +1,5 @@
+use crate::command::chat::storage::load_agent_config;
+use crate::command::chat::theme::Theme;
 use crate::command::report;
 use crate::config::YamlConfig;
 use crate::constants::todo_filter;
@@ -133,7 +135,7 @@ pub struct TodoApp {
     /// 命令面板选中索引
     pub cmd_popup_selected: usize,
     /// 当前主题
-    pub theme: crate::command::chat::theme::Theme,
+    pub theme: Theme,
 }
 
 #[derive(PartialEq, Clone)]
@@ -170,8 +172,8 @@ impl TodoApp {
         if !list.items.is_empty() {
             state.select(Some(0));
         }
-        let agent_config = crate::command::chat::storage::load_agent_config();
-        let theme = crate::command::chat::theme::Theme::from_name(&agent_config.theme);
+        let agent_config = load_agent_config();
+        let theme = Theme::from_name(&agent_config.theme);
         Self {
             list,
             snapshot,

@@ -114,6 +114,7 @@ impl PlanApprovalQueue {
 // ========== Plan Mode State ==========
 
 /// Plan mode 内部状态（受 Mutex 保护，保证原子性）
+#[derive(Debug)]
 struct PlanModeInner {
     active: bool,
     plan_file_path: Option<String>,
@@ -125,6 +126,7 @@ struct PlanModeInner {
 /// - enter() 的 TOCTOU 竞态（先检查 is_active 再进入）
 /// - exit() 不清理 plan_file_path
 /// - is_active() 与 get_plan_file_path() 之间状态不一致
+#[derive(Debug)]
 pub struct PlanModeState {
     inner: Mutex<PlanModeInner>,
 }
@@ -152,7 +154,8 @@ impl PlanModeState {
 
     /// 进入 plan mode，同时设置 plan 文件路径
     /// 返回 Ok(()) 表示成功进入，Err(msg) 表示已在 plan mode
-    pub fn enter(&self, path: String) -> Result<(), String> {
+    pub fn enter(&self, path: impl Into<String>) -> Result<(), String> {
+        let path = path.into();
         match self.inner.lock() {
             Ok(mut guard) => {
                 if guard.active {
@@ -232,6 +235,7 @@ struct EnterPlanModeParams {
     description: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct EnterPlanModeTool {
     pub plan_state: Arc<PlanModeState>,
 }

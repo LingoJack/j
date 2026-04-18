@@ -38,6 +38,7 @@ fn default_search_type() -> String {
 // ==================== WebSearchTool ====================
 
 /// Exa Search API 搜索工具
+#[derive(Debug)]
 pub struct WebSearchTool;
 
 impl WebSearchTool {

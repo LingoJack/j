@@ -1,3 +1,8 @@
+use crate::command::chat::app::AskRequest;
+use crate::command::chat::compact::InvokedSkillsMap;
+use crate::command::chat::hook::HookManager;
+use crate::command::chat::permission_queue::PermissionQueue;
+use crate::command::chat::skill::Skill;
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -14,6 +19,7 @@ pub struct ImageData {
     pub media_type: String,
 }
 
+#[derive(Debug)]
 pub struct ToolResult {
     pub output: String,
     pub is_error: bool,
@@ -101,18 +107,18 @@ pub struct ToolRegistry {
     pub plan_mode_state: Arc<super::plan::PlanModeState>,
     #[allow(dead_code)]
     pub worktree_state: Arc<super::worktree::WorktreeState>,
-    pub permission_queue: Option<Arc<crate::command::chat::permission_queue::PermissionQueue>>,
+    pub permission_queue: Option<Arc<PermissionQueue>>,
     pub plan_approval_queue: Option<Arc<super::plan::PlanApprovalQueue>>,
 }
 
 impl ToolRegistry {
     pub fn new(
-        skills: Vec<crate::command::chat::skill::Skill>,
-        ask_tx: mpsc::Sender<crate::command::chat::app::AskRequest>,
+        skills: Vec<Skill>,
+        ask_tx: mpsc::Sender<AskRequest>,
         background_manager: Arc<super::background::BackgroundManager>,
         task_manager: Arc<super::task::TaskManager>,
-        hook_manager: Arc<Mutex<crate::command::chat::hook::HookManager>>,
-        invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
+        hook_manager: Arc<Mutex<HookManager>>,
+        invoked_skills: InvokedSkillsMap,
     ) -> Self {
         let todo_manager = Arc::new(super::todo::TodoManager::new());
         let plan_mode_state = Arc::new(super::plan::PlanModeState::new());

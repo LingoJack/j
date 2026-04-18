@@ -1309,6 +1309,7 @@ struct BrowserParams {
     headless: Option<bool>,
 }
 
+#[derive(Debug)]
 pub struct BrowserTool;
 
 impl BrowserTool {

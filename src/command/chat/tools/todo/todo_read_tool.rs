@@ -9,6 +9,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 #[derive(Deserialize, JsonSchema)]
 struct TodoReadParams {}
 
+#[derive(Debug)]
 pub struct TodoReadTool {
     pub manager: Arc<TodoManager>,
 }

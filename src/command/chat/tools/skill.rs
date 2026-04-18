@@ -20,6 +20,7 @@ struct LoadSkillParams {
 
 // ========== LoadSkillTool ==========
 
+#[derive(Debug)]
 pub struct LoadSkillTool {
     pub skills: Vec<Skill>,
     /// 已调用技能追踪（执行时记录，供 auto_compact 后恢复）

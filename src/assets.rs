@@ -23,7 +23,7 @@ use std::fs;
 /// 编译时嵌入资源统一管理
 ///
 /// 所有 assets 目录下的文件都会被嵌入到二进制中
-#[derive(RustEmbed)]
+#[derive(Debug, RustEmbed)]
 #[folder = "assets/"]
 #[exclude = "remote/node_modules/*"]
 #[exclude = "remote/dist/*"]

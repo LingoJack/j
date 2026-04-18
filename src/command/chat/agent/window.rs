@@ -112,7 +112,7 @@ impl MessageUnit {
 
 /// 将消息序列解析为 MessageUnit 列表
 fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
-    let mut units = Vec::new();
+    let mut units = Vec::with_capacity(messages.len());
     let mut i = 0;
 
     while i < messages.len() {

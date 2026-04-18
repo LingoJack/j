@@ -88,7 +88,7 @@ fn number_width(num: usize, scale: u32) -> u32 {
 
 // --- SoM index entry for JSON output ---
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct SomIndexEntry {
     pub index: usize,
     pub role: String,

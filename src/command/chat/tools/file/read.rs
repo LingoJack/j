@@ -54,6 +54,7 @@ struct ReadFileParams {
 }
 
 /// 读取文件的工具
+#[derive(Debug)]
 pub struct ReadFileTool;
 
 impl ReadFileTool {

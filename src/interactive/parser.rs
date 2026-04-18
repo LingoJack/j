@@ -1,3 +1,6 @@
+/// 默认远程连接端口
+const DEFAULT_REMOTE_PORT: u16 = 9390;
+
 use crate::cli::SubCmd;
 use crate::command;
 use crate::config::YamlConfig;
@@ -172,7 +175,7 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         let mut cont = false;
         let mut session: Option<String> = None;
         let mut remote = false;
-        let mut port: u16 = 9390;
+        let mut port: u16 = DEFAULT_REMOTE_PORT;
         let mut content: Vec<String> = Vec::new();
         let mut i = 0;
         while i < rest.len() {
@@ -195,7 +198,7 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                 "--port" => {
                     i += 1;
                     if i < rest.len() {
-                        port = rest[i].parse().unwrap_or(9390);
+                        port = rest[i].parse().unwrap_or(DEFAULT_REMOTE_PORT);
                         i += 1;
                     }
                 }

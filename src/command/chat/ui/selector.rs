@@ -2,6 +2,7 @@
 //!
 //! 提取自 chat.rs，使用通用选择器构建逻辑消除代码重复。
 
+use crate::command::chat::theme::Theme;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -80,12 +81,7 @@ pub fn draw_theme_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
 /// 通用选择器列表项构建
 ///
 /// 根据 `is_active` 显示开关标记，根据 `is_selected` 显示指针和高亮样式。
-fn selector_item<'a>(
-    is_active: bool,
-    is_selected: bool,
-    label: &str,
-    t: &crate::command::chat::theme::Theme,
-) -> ListItem<'a> {
+fn selector_item<'a>(is_active: bool, is_selected: bool, label: &str, t: &Theme) -> ListItem<'a> {
     let marker = if is_active {
         format!("{} ", TOGGLE_ON)
     } else {

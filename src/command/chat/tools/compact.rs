@@ -15,8 +15,7 @@ struct CompactParams {
 
 /// CompactTool: 让模型可以主动触发对话压缩（Layer 3）
 ///
-/// 实际压缩不在 tool execute 中发生，而是 agent loop 检测到
-/// compact tool 被调用后触发 auto_compact。
+#[derive(Debug)]
 pub struct CompactTool;
 
 impl CompactTool {

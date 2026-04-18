@@ -1,4 +1,4 @@
-use crate::command::chat::teammate::TeammateManager;
+use crate::command::chat::teammate::{TeammateManager, current_agent_name};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -74,7 +74,7 @@ impl Tool for SendMessageTool {
             };
         }
 
-        let from = crate::command::chat::teammate::current_agent_name();
+        let from = current_agent_name();
         let to = params.to.as_deref().map(|s| s.trim_start_matches('@'));
 
         match self.teammate_manager.lock() {

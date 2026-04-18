@@ -1,9 +1,23 @@
+use crate::command::chat::agent::window::select_messages;
+use crate::command::chat::agent_md::load_agent_md;
+use crate::command::chat::api::{
+    build_request_with_tools, call_openai_stream, create_openai_client,
+};
+use crate::command::chat::app::AskRequest;
+use crate::command::chat::compact::new_invoked_skills_map;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::handler::run_chat_tui;
+use crate::command::chat::hook::HookManager;
+use crate::command::chat::permission::{JcliConfig, generate_allow_rule};
+use crate::command::chat::skill::{project_skills_dir, skills_dir};
 use crate::command::chat::storage::{
-    ChatMessage, SessionEvent, append_session_event, load_agent_config, load_session,
+    AgentConfig, ChatMessage, ModelProvider, SessionEvent, ToolCallItem, append_session_event,
+    find_latest_session_id, load_agent_config, load_memory, load_session, load_soul, load_style,
     load_system_prompt,
 };
+use crate::command::chat::tools::ToolRegistry;
+use crate::command::chat::tools::background::BackgroundManager;
+use crate::command::chat::tools::task::TaskManager;
 use crate::config::YamlConfig;
 use crate::{error, info};
 use std::io::{self, Write};
@@ -61,8 +75,7 @@ pub fn handle_chat(
     let session_id = if let Some(id) = session_id_opt {
         id.to_string()
     } else if cont {
-        crate::command::chat::storage::find_latest_session_id()
-            .unwrap_or_else(generate_oneshot_session_id)
+        find_latest_session_id().unwrap_or_else(generate_oneshot_session_id)
     } else {
         generate_oneshot_session_id()
     };
@@ -117,7 +130,7 @@ pub fn handle_chat(
         });
 
         // 发送给 API 时使用优先级消息窗口选择（与 CompactConfig 对齐）
-        let send_messages = crate::command::chat::agent::window::select_messages(
+        let send_messages = select_messages(
             &messages,
             agent_config.max_history_messages,
             agent_config.max_context_tokens,
@@ -125,7 +138,7 @@ pub fn handle_chat(
             &agent_config.compact.micro_compact_exempt_tools,
         );
 
-        match crate::command::chat::api::call_openai_stream(
+        match call_openai_stream(
             provider,
             &send_messages,
             load_system_prompt().as_deref(),
@@ -185,17 +198,12 @@ pub fn handle_chat(
 }
 
 fn run_oneshot_agent(
-    provider: &crate::command::chat::storage::ModelProvider,
-    agent_config: &crate::command::chat::storage::AgentConfig,
+    provider: &ModelProvider,
+    agent_config: &AgentConfig,
     message: String,
     prior_messages: Vec<ChatMessage>,
     session_id: &str,
 ) {
-    use crate::command::chat::api::{build_request_with_tools, create_openai_client};
-    use crate::command::chat::permission::JcliConfig;
-    use crate::command::chat::storage::ToolCallItem;
-    use crate::command::chat::tools::background::BackgroundManager;
-    use crate::command::chat::tools::task::TaskManager;
     use colored::Colorize;
     use crossterm::event::{self, Event, KeyCode};
     use crossterm::{cursor, execute, terminal};
@@ -211,19 +219,17 @@ fn run_oneshot_agent(
     };
 
     // 构建工具注册表
-    let (ask_tx, ask_rx) = std::sync::mpsc::channel::<crate::command::chat::app::AskRequest>();
+    let (ask_tx, ask_rx) = std::sync::mpsc::channel::<AskRequest>();
     let background_manager = Arc::new(BackgroundManager::new());
     let task_manager = Arc::new(TaskManager::new());
-    let hook_manager = Arc::new(Mutex::new(
-        crate::command::chat::hook::HookManager::default(),
-    ));
-    let tool_registry = crate::command::chat::tools::ToolRegistry::new(
+    let hook_manager = Arc::new(Mutex::new(HookManager::default()));
+    let tool_registry = ToolRegistry::new(
         vec![],
         ask_tx,
         background_manager,
         task_manager,
         hook_manager,
-        crate::command::chat::compact::new_invoked_skills_map(),
+        new_invoked_skills_map(),
     );
 
     // 启动 Ask 请求处理线程：在终端交互式回答 AI 的提问
@@ -724,10 +730,7 @@ fn run_oneshot_agent(
 
             if needs_confirm {
                 let tool_desc = format!("{}  {}", "🔧", confirm_msg.yellow());
-                let allow_rule = crate::command::chat::permission::generate_allow_rule(
-                    &item.name,
-                    &item.arguments,
-                );
+                let allow_rule = generate_allow_rule(&item.name, &item.arguments);
                 let options = ["允许执行", "拒绝", &format!("始终允许 ({})", allow_rule)];
                 let choice = interactive_confirm(&tool_desc, &options, 0);
                 match choice {
@@ -776,24 +779,20 @@ fn run_oneshot_agent(
 }
 
 fn resolve_oneshot_system_prompt(
-    tool_registry: &crate::command::chat::tools::ToolRegistry,
+    tool_registry: &ToolRegistry,
     disabled_tools: &[String],
 ) -> Option<String> {
-    use crate::command::chat::storage::{load_memory, load_soul, load_style};
-
     let template = load_system_prompt()?;
     let tools_summary = tool_registry.build_tools_summary(disabled_tools);
     let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
     let memory_text = load_memory().unwrap_or_default();
     let soul_text = load_soul().unwrap_or_default();
-    let agent_md_text = crate::command::chat::agent_md::load_agent_md();
+    let agent_md_text = load_agent_md();
     let current_dir = std::env::current_dir()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| ".".to_string());
-    let skill_dir = crate::command::chat::skill::skills_dir()
-        .to_string_lossy()
-        .to_string();
-    let project_skill_dir = crate::command::chat::skill::project_skills_dir()
+    let skill_dir = skills_dir().to_string_lossy().to_string();
+    let project_skill_dir = project_skills_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
     let session_state_summary = tool_registry.build_session_state_summary();

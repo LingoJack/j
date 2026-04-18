@@ -1,8 +1,10 @@
 use super::types::{AskAnswer, AskQuestion};
 use crate::command::chat::archive::ChatArchive;
 use crate::command::chat::markdown::image_cache::ImageCache;
+use crate::command::chat::permission_queue::PendingAgentPerm;
 use crate::command::chat::storage::SessionMeta;
 use crate::command::chat::theme::Theme;
+use crate::command::chat::tools::plan::PendingPlanApproval;
 use crate::tui::editor_core::text_buffer::TextBuffer;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
@@ -155,9 +157,9 @@ pub struct UIState {
     /// 输入区视觉折行宽度（由 draw_input 每帧更新，handler 用于判断视觉折行）
     pub input_wrap_width: usize,
     /// 来自子 agent 的待决权限请求（Some 时进入 AgentPermConfirm 模式）
-    pub pending_agent_perm: Option<Arc<crate::command::chat::permission_queue::PendingAgentPerm>>,
+    pub pending_agent_perm: Option<Arc<PendingAgentPerm>>,
     /// 来自 teammate 的待决 Plan 审批请求（Some 时进入 PlanApprovalConfirm 模式）
-    pub pending_plan_approval: Option<Arc<crate::command::chat::tools::plan::PendingPlanApproval>>,
+    pub pending_plan_approval: Option<Arc<PendingPlanApproval>>,
     /// 是否在 Global tab 的"豁免压缩工具"子列表中
     pub compact_exempt_sublist: bool,
     /// 豁免压缩工具子列表选中索引
