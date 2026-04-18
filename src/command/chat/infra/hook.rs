@@ -30,8 +30,10 @@ const MAX_CHAIN_DURATION_SECS: u64 = 30;
 /// | `PostToolExecution`           | 工具执行后         | `tool_name`, `tool_result`             | `tool_result`（修改结果）                    |
 /// | `PostToolExecutionFailure`    | 工具执行失败后     | `tool_name`, `tool_error`              | `tool_error`（修改错误信息）, `additional_context` |
 /// | `Stop`                        | LLM 即将结束回复   | `user_input`（回复文本）, `messages`, `system_prompt`, `model` | `retry_feedback`（带反馈重试）, `additional_context`, `abort` |
-/// | `PreCompact`                  | 上下文压缩前       | `messages`, `system_prompt`, `model`, `compact_trigger` | `additional_context`, `abort` |
-/// | `PostCompact`                 | 上下文压缩后       | `messages`, `compact_trigger`          | `messages`（修改压缩结果）                    |
+/// | `PreMicroCompact`             | micro_compact 前   | `messages`, `model`                   | `abort`                                      |
+/// | `PostMicroCompact`            | micro_compact 后   | `messages`                             | `messages`（修改压缩结果）                    |
+/// | `PreAutoCompact`              | auto_compact 前    | `messages`, `system_prompt`, `model`   | `additional_context`, `abort`                |
+/// | `PostAutoCompact`             | auto_compact 后    | `messages`                             | `messages`（修改压缩结果）                    |
 /// | `SessionStart`                | 会话启动时         | `messages`                             | 仅通知，返回值被忽略                         |
 /// | `SessionEnd`                  | 会话退出时         | `messages`                             | 仅通知，返回值被忽略                         |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -45,8 +47,10 @@ pub enum HookEvent {
     PostToolExecution,
     PostToolExecutionFailure,
     Stop,
-    PreCompact,
-    PostCompact,
+    PreMicroCompact,
+    PostMicroCompact,
+    PreAutoCompact,
+    PostAutoCompact,
     SessionStart,
     SessionEnd,
 }
@@ -64,8 +68,10 @@ impl std::str::FromStr for HookEvent {
             "post_tool_execution" => Ok(HookEvent::PostToolExecution),
             "post_tool_execution_failure" => Ok(HookEvent::PostToolExecutionFailure),
             "stop" => Ok(HookEvent::Stop),
-            "pre_compact" => Ok(HookEvent::PreCompact),
-            "post_compact" => Ok(HookEvent::PostCompact),
+            "pre_micro_compact" => Ok(HookEvent::PreMicroCompact),
+            "post_micro_compact" => Ok(HookEvent::PostMicroCompact),
+            "pre_auto_compact" => Ok(HookEvent::PreAutoCompact),
+            "post_auto_compact" => Ok(HookEvent::PostAutoCompact),
             "session_start" => Ok(HookEvent::SessionStart),
             "session_end" => Ok(HookEvent::SessionEnd),
             _ => Err(()),
@@ -84,8 +90,10 @@ impl HookEvent {
             HookEvent::PostToolExecution => "post_tool_execution",
             HookEvent::PostToolExecutionFailure => "post_tool_execution_failure",
             HookEvent::Stop => "stop",
-            HookEvent::PreCompact => "pre_compact",
-            HookEvent::PostCompact => "post_compact",
+            HookEvent::PreMicroCompact => "pre_micro_compact",
+            HookEvent::PostMicroCompact => "post_micro_compact",
+            HookEvent::PreAutoCompact => "pre_auto_compact",
+            HookEvent::PostAutoCompact => "post_auto_compact",
             HookEvent::SessionStart => "session_start",
             HookEvent::SessionEnd => "session_end",
         }
@@ -101,8 +109,10 @@ impl HookEvent {
             HookEvent::PostToolExecution,
             HookEvent::PostToolExecutionFailure,
             HookEvent::Stop,
-            HookEvent::PreCompact,
-            HookEvent::PostCompact,
+            HookEvent::PreMicroCompact,
+            HookEvent::PostMicroCompact,
+            HookEvent::PreAutoCompact,
+            HookEvent::PostAutoCompact,
             HookEvent::SessionStart,
             HookEvent::SessionEnd,
         ]
@@ -329,11 +339,6 @@ pub struct HookContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_error: Option<String>,
 
-    /// 上下文压缩触发方式（auto / manual / micro）
-    /// - 可读事件：PreCompact, PostCompact
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub compact_trigger: Option<String>,
-
     /// 当前会话 ID
     /// - 可读事件：所有事件
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -356,7 +361,6 @@ impl Default for HookContext {
             tool_arguments: None,
             tool_result: None,
             tool_error: None,
-            compact_trigger: None,
             session_id: None,
             cwd: std::env::current_dir()
                 .map(|p| p.display().to_string())
@@ -373,14 +377,14 @@ impl Default for HookContext {
 /// 各字段的生效场景：
 /// - `user_input`：仅 PreSendMessage 中生效，替换用户即将发送的消息
 /// - `assistant_output`：仅 PostLlmResponse 中生效，替换 AI 最终展示的回复
-/// - `messages`：仅 PreLlmRequest / PostCompact 中生效，替换消息列表
+/// - `messages`：仅 PreLlmRequest / PostMicroCompact / PostAutoCompact 中生效，替换消息列表
 /// - `system_prompt`：仅 PreLlmRequest 中生效，替换系统提示词
 /// - `tool_arguments`：仅 PreToolExecution 中生效，替换工具调用参数
 /// - `tool_result`：仅 PostToolExecution 中生效，替换工具返回结果
 /// - `tool_error`：仅 PostToolExecutionFailure 中生效，替换工具错误信息
 /// - `inject_messages`：仅 PreLlmRequest 中生效，追加到消息列表末尾
 /// - `retry_feedback`：Pre*/Stop/PostLlmResponse 中生效，中止并带反馈重试（注入为 user message 重新请求 LLM）
-/// - `additional_context`：PreLlmRequest / Stop / PreCompact 中生效，追加文本到 system_prompt 末尾
+/// - `additional_context`：PreLlmRequest / Stop / PreAutoCompact 中生效，追加文本到 system_prompt 末尾
 /// - `system_message`：所有事件中生效，展示给用户的提示消息
 /// - `abort`：Pre*/Stop/PostLlmResponse 事件中生效，为 true 时中止当前操作
 #[derive(Debug, Deserialize, Default)]
@@ -412,7 +416,7 @@ pub struct HookResult {
     /// 审查反馈（Pre*/Stop/PostLlmResponse）：中止时附带反馈文本，触发 LLM 带反馈重试
     #[serde(default)]
     pub retry_feedback: Option<String>,
-    /// 注入到模型上下文的额外信息（PreLlmRequest/Stop/PreCompact）：纯文本追加到 system_prompt 末尾
+    /// 注入到模型上下文的额外信息（PreLlmRequest/Stop/PreAutoCompact）：纯文本追加到 system_prompt 末尾
     #[serde(default)]
     pub additional_context: Option<String>,
     /// 展示给用户的系统消息（所有事件：UI 上以 toast/提示形式显示）
@@ -1673,11 +1677,13 @@ on_error: abort"#;
 
     #[test]
     fn test_new_hook_events_roundtrip() {
-        // 验证新增的 4 个事件能正确序列化/反序列化
+        // 验证新增的事件能正确序列化/反序列化
         for event in [
             HookEvent::Stop,
-            HookEvent::PreCompact,
-            HookEvent::PostCompact,
+            HookEvent::PreMicroCompact,
+            HookEvent::PostMicroCompact,
+            HookEvent::PreAutoCompact,
+            HookEvent::PostAutoCompact,
             HookEvent::PostToolExecutionFailure,
         ] {
             let s = event.as_str();
@@ -1721,14 +1727,12 @@ on_error: abort"#;
     #[test]
     fn test_hook_context_new_fields() {
         let ctx = HookContext {
-            event: HookEvent::PreCompact,
-            compact_trigger: Some("auto".to_string()),
+            event: HookEvent::PreAutoCompact,
+            tool_error: None,
             ..Default::default()
         };
         let json = serde_json::to_string(&ctx).unwrap();
-        assert!(json.contains("pre_compact"));
-        assert!(json.contains("auto"));
-        assert!(json.contains("compact_trigger"));
+        assert!(json.contains("pre_auto_compact"));
         // skip_serializing_if 应跳过 None 字段
         assert!(!json.contains("tool_error"));
     }

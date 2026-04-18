@@ -126,34 +126,69 @@ pub async fn run_agent_loop(
         // ── Layer 1: micro_compact（替换旧 tool results）──
         // ── Layer 2: if tokens > threshold → auto_compact（LLM 摘要）──
         if compact_config.enabled {
-            compact::micro_compact(
-                &mut messages,
-                compact_config.keep_recent,
-                &compact_config.micro_compact_exempt_tools,
-            );
+            // ★ PreMicroCompact hook：micro_compact 前可中止
+            let mut micro_aborted = false;
+            if hook_manager.has_hooks_for(HookEvent::PreMicroCompact) {
+                let ctx = HookContext {
+                    event: HookEvent::PreMicroCompact,
+                    messages: Some(messages.clone()),
+                    model: Some(provider.model.clone()),
+                    session_id: Some(session_id.clone()),
+                    ..Default::default()
+                };
+                if let Some(result) = hook_manager.execute(HookEvent::PreMicroCompact, ctx)
+                    && result.abort
+                {
+                    write_info_log("PreMicroCompact hook", "micro_compact 被 hook 中止");
+                    micro_aborted = true;
+                }
+            }
+
+            if !micro_aborted {
+                compact::micro_compact(
+                    &mut messages,
+                    compact_config.keep_recent,
+                    &compact_config.micro_compact_exempt_tools,
+                );
+
+                // ★ PostMicroCompact hook：micro_compact 后可检查/修改结果
+                if hook_manager.has_hooks_for(HookEvent::PostMicroCompact) {
+                    let ctx = HookContext {
+                        event: HookEvent::PostMicroCompact,
+                        messages: Some(messages.clone()),
+                        session_id: Some(session_id.clone()),
+                        ..Default::default()
+                    };
+                    if let Some(result) = hook_manager.execute(HookEvent::PostMicroCompact, ctx)
+                        && let Some(new_msgs) = result.messages
+                    {
+                        messages = new_msgs;
+                    }
+                }
+            }
+
             if compact::estimate_tokens(&messages) > compact_config.token_threshold {
                 write_info_log(
                     "agent_loop",
                     "auto_compact triggered (token threshold exceeded)",
                 );
 
-                // ★ PreCompact hook：压缩前可注入保护指令或中止压缩
+                // ★ PreAutoCompact hook：auto_compact 前可注入保护指令或中止压缩
                 let mut protected_context: Option<String> = None;
-                let mut compact_aborted = false;
-                if hook_manager.has_hooks_for(HookEvent::PreCompact) {
+                let mut auto_aborted = false;
+                if hook_manager.has_hooks_for(HookEvent::PreAutoCompact) {
                     let ctx = HookContext {
-                        event: HookEvent::PreCompact,
+                        event: HookEvent::PreAutoCompact,
                         messages: Some(messages.clone()),
                         system_prompt: system_prompt.clone(),
                         model: Some(provider.model.clone()),
                         session_id: Some(session_id.clone()),
-                        compact_trigger: Some("auto".to_string()),
                         ..Default::default()
                     };
-                    if let Some(result) = hook_manager.execute(HookEvent::PreCompact, ctx) {
+                    if let Some(result) = hook_manager.execute(HookEvent::PreAutoCompact, ctx) {
                         if result.abort {
-                            write_info_log("PreCompact hook", "压缩被 hook 中止");
-                            compact_aborted = true;
+                            write_info_log("PreAutoCompact hook", "auto_compact 被 hook 中止");
+                            auto_aborted = true;
                         }
                         if let Some(ac) = result.additional_context {
                             protected_context = Some(ac);
@@ -161,7 +196,7 @@ pub async fn run_agent_loop(
                     }
                 }
 
-                if !compact_aborted {
+                if !auto_aborted {
                     if let Err(e) = compact::auto_compact(
                         &mut messages,
                         &provider,
@@ -173,16 +208,16 @@ pub async fn run_agent_loop(
                     {
                         write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
                     } else {
-                        // ★ PostCompact hook：压缩后可检查/修改摘要质量
-                        if hook_manager.has_hooks_for(HookEvent::PostCompact) {
+                        // ★ PostAutoCompact hook：auto_compact 后可检查/修改摘要质量
+                        if hook_manager.has_hooks_for(HookEvent::PostAutoCompact) {
                             let ctx = HookContext {
-                                event: HookEvent::PostCompact,
+                                event: HookEvent::PostAutoCompact,
                                 messages: Some(messages.clone()),
                                 session_id: Some(session_id.clone()),
-                                compact_trigger: Some("auto".to_string()),
                                 ..Default::default()
                             };
-                            if let Some(result) = hook_manager.execute(HookEvent::PostCompact, ctx)
+                            if let Some(result) =
+                                hook_manager.execute(HookEvent::PostAutoCompact, ctx)
                                 && let Some(new_msgs) = result.messages
                             {
                                 messages = new_msgs;

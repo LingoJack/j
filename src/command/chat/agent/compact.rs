@@ -336,7 +336,7 @@ pub async fn auto_compact(
         truncated
     );
 
-    // 追加保护指令（来自 PreCompact hook 的 additional_context）
+    // 追加保护指令（来自 PreAutoCompact hook 的 additional_context）
     let summary_prompt = if let Some(protected) = protected_context {
         format!(
             "{}\n\n[Protected Context — MUST preserve in full]:\n{}",

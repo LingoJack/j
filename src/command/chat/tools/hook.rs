@@ -121,8 +121,10 @@ impl RegisterHookTool {
 | post_tool_execution           | 工具执行后     | tool_name, tool_result                          | tool_result                                                            |
 | post_tool_execution_failure   | 工具执行失败后 | tool_name, tool_error                           | tool_error, additional_context                                         |
 | stop                          | LLM 即将结束   | user_input(回复), messages, system_prompt, model | retry_feedback, additional_context, abort                              |
-| pre_compact                   | 上下文压缩前   | messages, system_prompt, model, compact_trigger | additional_context, abort                                              |
-| post_compact                  | 上下文压缩后   | messages, compact_trigger                       | messages                                                               |
+| pre_micro_compact             | micro_compact前| messages, model                                 | abort                                                                  |
+| post_micro_compact            | micro_compact后| messages                                        | messages                                                               |
+| pre_auto_compact              | auto_compact前 | messages, system_prompt, model                  | additional_context, abort                                              |
+| post_auto_compact             | auto_compact后 | messages                                        | messages                                                               |
 | session_start                 | 会话开始       | messages                                        | （仅通知）                                                             |
 | session_end                   | 会话退出       | messages                                        | （仅通知）                                                             |
 
@@ -148,8 +150,7 @@ impl RegisterHookTool {
   "tool_name": "Bash",
   "tool_arguments": "{\"command\": \"ls\"}",
   "tool_result": "工具执行结果",
-  "tool_error": "工具错误信息",
-  "compact_trigger": "auto"
+  "tool_error": "工具错误信息"
 }
 ```
 各字段按事件类型选择性出现，未填充的不会出现在 JSON 中。
@@ -176,6 +177,13 @@ impl RegisterHookTool {
 - `retry_feedback`：与 abort 配合使用。在 stop/pre_send_message/post_llm_response 中，abort+retry_feedback 会中止当前操作并将反馈注入为新消息，LLM 带反馈重新生成。这是实现"宪法 AI/纠查官"的核心机制。
 - `additional_context`：追加文本到 system_prompt 末尾，不占消息位。适用于注入规则、约束等。
 - `system_message`：在 UI 上以 toast/提示形式展示给用户，不影响 LLM 输入。
+
+## 压缩 Hook 说明
+两层压缩各有独立的 Pre/Post hook，执行顺序：
+1. `pre_micro_compact` → micro_compact → `post_micro_compact`
+2. `pre_auto_compact` → auto_compact → `post_auto_compact`
+
+micro_compact 仅替换旧 tool result 为占位符（零 API 成本），auto_compact 用 LLM 生成摘要（需 API 调用）。
 
 ## 脚本示例
 
@@ -212,7 +220,7 @@ else
 fi
 ```
 
-### 示例 4：压缩保护（pre_compact）
+### 示例 4：压缩保护（pre_auto_compact）
 ```bash
 #!/bin/bash
 echo '{"additional_context": "压缩时必须保留所有宪法规则和关键约束，不可丢弃。"}'
