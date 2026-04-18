@@ -28,7 +28,7 @@ const TAB_DEFS: &[TabDef] = &[
     },
     TabDef {
         name: "AI 对话",
-        heading_keywords: &["AI 对话"],
+        heading_keywords: &["AI 对话", "Teammate", "Agent 工具"],
     },
     TabDef {
         name: "AI 工具",

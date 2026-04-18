@@ -418,11 +418,84 @@ j ai -c --remote           # 延续会话 + 远程控制
 
 ### Teammate 系统
 
-Teammate 是多个并行运行的子 Agent，每个有独立的 system prompt 和消息历史。可通过 `/teammate` 或配置界面（Ctrl+E → Teammates Tab）查看和管理当前团队状态。
+Teammate 是持久运行的子 Agent，拥有独立的上下文和消息历史，可通过 `/teammate` 或配置界面（Ctrl+E → Teammates Tab）查看和管理。
 
-- **创建方式**：通常由 AI 通过 `AgentTeam` / `CreateTeammate` 工具创建
-- **通信方式**：Teammate 之间通过 `SendMessage` 和 `@mentions` 协作
-- **使用场景**：全栈开发（前端 + 后端 + 运维）、多领域并行研究、多角色协作
+**三种 Agent 执行模式**：
+
+| 类型 | 工具 | 生命周期 | 最大轮次 | 消息通信 | 适用场景 |
+|------|------|----------|----------|----------|----------|
+| **Sub-Agent** | `Agent` | 任务完成后退出 | 30 | 无（返回结果给主对话） | 单次多步骤任务 |
+| **Teammate** | `CreateTeammate` | 持久运行，空闲轮询等待消息 | 200 | `SendMessage` 广播 + `@mention` 唤醒 | 多角色长期协作 |
+| **AgentTeam** | `AgentTeam` | 批量创建 Teammate | 200（每个） | 同 Teammate | 并行启动多角色 |
+
+**Sub-Agent（`Agent` 工具）**：
+
+- 启动无头 Agent 循环（无 TUI），独立上下文执行任务
+- 两种模式：前台（阻塞等待完成）和后台（`run_in_background: true`，立即返回 `task_id`）
+- 后台任务可通过 `TaskOutput` 工具查询输出
+- 子 Agent 工具表排除 `Agent`（防止递归）
+- 可选 `worktree: true` 在隔离的 git worktree 中执行
+- 可选 `inherit_permissions: true` 继承全部权限（跳过确认）
+
+**Teammate（`CreateTeammate` 工具）**：
+
+- 创建方式：通常由 AI 通过 `CreateTeammate` 或 `AgentTeam` 工具创建
+- 额外工具：`SendMessage`（广播通信）+ `WorkDone`（标记完成并退出）
+- **阻塞限制**：不能使用 `Agent`、`AgentTeam`、`CreateTeammate`（防止递归创建）
+- 空闲轮询：无工具调用时进入等待状态，`@mention` 或主 Agent 消息唤醒
+- 120 轮连续空闲自动退出（约 2 分钟）
+- 通过 `CancellationToken` 支持手动停止
+
+**AgentTeam（`AgentTeam` 工具）**：
+
+- 便捷工具，一次创建 1-10 个 Teammate
+- 参数为 `members` 数组，每个成员包含 `name`、`role`（可选）、`prompt`
+
+**消息通信（`SendMessage` 工具）**：
+
+- 广播机制：消息发送给所有 Agent（主 Agent + 所有 Teammate）
+- **唤醒语义**：
+  - `@Target` 定向唤醒：仅被 `@` 的 Teammate 被唤醒
+  - 主 Agent 发送的消息唤醒所有 Teammate
+  - 旁听消息：其他 Teammate 之间的对话会进入收件箱但不唤醒，避免无限循环
+- 消息格式：`<FromAgent> @Target 消息内容`
+
+**WorkDone 工具**：
+
+- Teammate 调用后标记工作完成，循环立即退出
+- 广播完成消息给所有 Agent
+
+**全局文件锁**：
+
+- 多 Agent 并发编辑同一文件时，通过全局文件锁（`acquire_global_file_lock`）自动排队，防止写入冲突
+
+**任务管理（`Task` 工具）**：
+
+共享任务系统，所有 Agent 均可操作，持久化到 `.jcli/tasks/`：
+
+| 操作 | 参数 | 说明 |
+|------|------|------|
+| `action: "create"` | `title`（必需）、`description`、`blockedBy`、`taskDocPaths` | 创建待办任务 |
+| `action: "get"` | `taskId` | 获取任务详情 |
+| `action: "list"` | `ready: true`（可选，仅显示无阻塞的待办任务） | 列出所有任务 |
+| `action: "update"` | `taskId` + `status`/`title`/`description`/`owner`/`addBlockedBy` | 更新任务 |
+
+- 任务状态：`pending` → `in_progress` → `completed`（或 `deleted`）
+- `blockedBy`：任务依赖 DAG，前置任务完成后自动清理引用
+- `owner`：负责该任务的 Agent 名称
+- 任务 ID 自增，持久化为 `.jcli/tasks/task_{id}.json`
+
+**配置界面 Teammates Tab**：
+
+- `Enter`：查看 Teammate 状态
+- `s`：停止选中的 Teammate
+
+**Teammate 使用场景**：
+
+- 全栈开发（前端 + 后端 + 运维）
+- 多领域并行研究
+- 代码审查 + 实现同步
+- 大型重构（按模块分工）
 
 ### Agent 工具（高级）
 
@@ -688,11 +761,93 @@ pre_tool_execution:
 - stdin 接收 `HookContext` JSON，stdout 输出 `HookResult` JSON；空字符串或 `{}` 表示无修改
 - `bash` hook 默认超时 10 秒，`llm` hook 默认超时 30 秒
 - 失败策略由 `on_error` 控制：`skip` 为记录错误并继续，`abort` 为中止当前 hook 链
-- `action` 才是正常控制流字段：`stop` 中止当前步骤/子管线，`skip` 跳过当前步骤（主要用于 `pre_tool_execution`）
-- 可用过滤器：`tool_name`、`tool_matcher`、`model_prefix`
+- `action` 控制流字段：`stop` 中止当前步骤及其所属子管线，`skip` 跳过当前步骤（同级继续，主要用于 `pre_tool_execution`）
+- 旧字段 `abort: true` 向后兼容，等价于 `action: "stop"`
 - 整条 hook 链有 30 秒总超时，超时后剩余 hook 不再执行
 
-> 详细的 HookContext/HookResult 字段说明见项目 README
+**HookContext 字段（stdin JSON）**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `event` | string | 当前触发的事件类型（如 `"pre_send_message"`） |
+| `messages` | array | 当前对话消息列表（部分事件可读） |
+| `system_prompt` | string | 当前系统提示词 |
+| `model` | string | 当前使用的模型名称 |
+| `user_input` | string | 本轮用户输入文本 |
+| `assistant_output` | string | 本轮 AI 回复文本 |
+| `tool_name` | string | 当前工具调用的工具名 |
+| `tool_arguments` | string | 当前工具调用的参数 JSON |
+| `tool_result` | string | 工具执行结果 |
+| `tool_error` | string | 工具执行失败原因 |
+| `session_id` | string | 当前会话 ID |
+| `cwd` | string | 当前工作目录 |
+
+> 各字段按事件类型有选择性地填充，未填充的字段序列化时省略
+
+**HookResult 字段（stdout JSON）**：
+
+| 字段 | 生效事件 | 说明 |
+|------|----------|------|
+| `user_input` | PreSendMessage | 替换用户即将发送的消息 |
+| `assistant_output` | PostLlmResponse | 替换 AI 最终展示的回复 |
+| `messages` | PreLlmRequest, PostMicroCompact, PostAutoCompact | 替换消息列表 |
+| `system_prompt` | PreLlmRequest | 替换系统提示词 |
+| `tool_arguments` | PreToolExecution | 替换工具调用参数 |
+| `tool_result` | PostToolExecution | 替换工具返回结果 |
+| `tool_error` | PostToolExecutionFailure | 替换工具错误信息 |
+| `inject_messages` | PreLlmRequest | 追加消息到消息列表末尾 |
+| `retry_feedback` | Pre*/Stop/PostLlmResponse | 中止并带反馈重试（注入为 user message 重新请求 LLM） |
+| `additional_context` | PreLlmRequest, Stop, PreAutoCompact | 纯文本追加到 system_prompt 末尾 |
+| `system_message` | 所有事件 | 展示给用户的提示消息（toast） |
+| `action` | 大部分事件 | `"stop"` 中止当前步骤及其子管线；`"skip"` 跳过当前步骤（同级继续） |
+
+**各事件可读/可写字段一览**：
+
+| 事件 | 可读字段 | 可写字段 |
+|------|----------|----------|
+| `pre_send_message` | `user_input`, `messages` | `user_input`, `action=stop`, `retry_feedback` |
+| `post_send_message` | `user_input`, `messages` | 仅通知，返回值被忽略 |
+| `pre_llm_request` | `messages`, `system_prompt`, `model` | `messages`, `system_prompt`, `inject_messages`, `additional_context`, `action=stop`, `retry_feedback` |
+| `post_llm_response` | `assistant_output`, `messages`, `model` | `assistant_output`, `action=stop`, `retry_feedback`, `system_message` |
+| `pre_tool_execution` | `tool_name`, `tool_arguments` | `tool_arguments`, `action=skip` |
+| `post_tool_execution` | `tool_name`, `tool_result` | `tool_result` |
+| `post_tool_execution_failure` | `tool_name`, `tool_error` | `tool_error`, `additional_context` |
+| `stop` | `user_input`, `messages`, `system_prompt`, `model` | `retry_feedback`, `additional_context`, `action=stop` |
+| `pre_micro_compact` | `messages`, `model` | `action=stop` |
+| `post_micro_compact` | `messages` | `messages` |
+| `pre_auto_compact` | `messages`, `system_prompt`, `model` | `additional_context`, `action=stop` |
+| `post_auto_compact` | `messages` | `messages` |
+| `session_start` | `messages` | 仅通知，返回值被忽略 |
+| `session_end` | `messages` | 仅通知，返回值被忽略 |
+
+**HookFilter 条件过滤**：
+
+所有字段可选，未设置不参与过滤；多字段同时设置取 AND 关系：
+
+| 字段 | 说明 |
+|------|------|
+| `tool_name` | 工具名精确匹配（仅工具相关事件） |
+| `tool_matcher` | 工具名模式匹配，管道分隔（如 `"Write\\|Edit\\|Bash"`），优先级低于 `tool_name` |
+| `model_prefix` | 模型名前缀过滤（如 `"gpt-4"` 匹配 `"gpt-4o"`） |
+
+**LLM Hook**：
+
+- `type: llm` 的 hook 通过 `prompt` 模板调用当前 LLM，要求返回 HookResult JSON
+- `prompt` 支持 `{{variable}}` 模板变量：`{{event}}`、`{{user_input}}`、`{{assistant_output}}`、`{{tool_name}}`、`{{tool_arguments}}`、`{{tool_result}}`、`{{model}}`、`{{cwd}}`
+- 可选 `model` 字段覆盖当前活跃模型
+- 默认超时 30 秒，默认重试 1 次
+- 自动拼接 JSON 格式指令到 prompt 末尾，LLM 只需返回 JSON 对象
+
+**Shell Hook 环境变量**：
+
+| 环境变量 | 说明 |
+|----------|------|
+| `JCLI_HOOK_EVENT` | 当前事件名（如 `"pre_send_message"`） |
+| `JCLI_CWD` | 当前工作目录 |
+
+**Hook 执行指标**：
+
+每个 hook 自动记录执行次数、成功次数、失败次数、跳过次数、累计耗时，可在配置界面 Hooks Tab 中查看
 
 ---
 
