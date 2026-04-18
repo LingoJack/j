@@ -1435,10 +1435,11 @@ pub fn render_tool_call_request_msg(
             };
 
             // 如果需要闭合括号，预留 4 字符给 "...}" 或 "...]"
+            let max_preview = crate::command::chat::constants::TOOL_ARG_PREVIEW_MAX_CHARS;
             let preview_len = if closing_bracket.is_some() {
-                60 - 4
+                max_preview - 4
             } else {
-                60
+                max_preview
             };
 
             let args_preview: String = tc.arguments.chars().take(preview_len).collect();
@@ -1600,9 +1601,13 @@ pub fn render_tool_result_msg(
         }
 
         let total_lines = clean.lines().count();
-        if total_lines > 20 {
+        let max_err_lines = crate::command::chat::constants::ERROR_RESULT_MAX_LINES;
+        if total_lines > max_err_lines {
             lines.push(Line::from(Span::styled(
-                format!("    ... (共 {} 行，显示前 20 行)", total_lines),
+                format!(
+                    "    ... (共 {} 行，显示前 {} 行)",
+                    total_lines, max_err_lines
+                ),
                 Style::default().fg(theme.text_dim),
             )));
         }

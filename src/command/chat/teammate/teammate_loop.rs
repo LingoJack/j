@@ -230,14 +230,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             continue;
         }
 
-        // 处理工具调用
-        let tool_items = extract_tool_items(
-            choice
-                .message
-                .tool_calls
-                .as_ref()
-                .expect("tool_calls checked non-None above"),
-        );
+        // 上面已检查 tool_calls.is_none() 会 continue，此处逻辑必定为 Some
+        let tool_calls = choice.message.tool_calls.as_ref().unwrap();
+        let tool_items = extract_tool_items(tool_calls);
         if tool_items.is_empty() {
             break;
         }

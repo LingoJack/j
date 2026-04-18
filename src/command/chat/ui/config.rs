@@ -576,8 +576,8 @@ fn draw_tab_global_lines<'a>(
             if field.is_none() {
                 continue;
             }
-            // SAFETY: is_none() 已在上方判断并 continue，此处 field 必为 Some
-            let field_name = field.unwrap();
+            // is_none() 已在上方判断并 continue，此处 field 必为 Some
+            let field_name = field.expect("checked is_none() above with continue");
 
             field_line_indices.push(lines.len());
             let is_selected = app.ui.config_field_idx == i;

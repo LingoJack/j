@@ -20,13 +20,43 @@
     "status": "completed"
   },
   {
+    "id": "fix6",
+    "content": "修复 draw_popup_list 4个调用处使用 PopupConfig",
+    "status": "completed"
+  },
+  {
+    "id": "agentA",
+    "content": "Agent A: 错误处理修复 — 28处 unwrap + 3处 unsafe 缺 SAFETY 注释",
+    "status": "completed"
+  },
+  {
+    "id": "agentB",
+    "content": "Agent B: 文档注释修复 — 15个 pub 成员缺 /// 注释",
+    "status": "completed"
+  },
+  {
+    "id": "agentC",
+    "content": "Agent C: 魔法值提取为 const",
+    "status": "completed"
+  },
+  {
     "id": "fix5",
     "content": "验证 cargo clippy 通过",
+    "status": "completed"
+  },
+  {
+    "id": "clone",
+    "content": "clone 优化 (规范2) + mod.rs 迁移 (规范6)",
     "status": "pending"
   },
   {
-    "id": "fix6",
-    "content": "修复 draw_popup_list too_many_arguments warning",
+    "id": "modrs",
+    "content": "mod.rs 迁移 (规范6 低优先级)",
     "status": "in_progress"
+  },
+  {
+    "id": "funcParams",
+    "content": "函数参数重构 — 已全部通过 clippy too_many_arguments",
+    "status": "completed"
   }
 ]

@@ -306,8 +306,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // Phase 2c: 收集 WebSocket 远程消息
         if app.ws_bridge.is_some() {
             // 取出 ws_bridge 来避免借用冲突
-            // SAFETY: is_some() 已在上方判断，take() 必返回 Some
-            let mut ws = app.ws_bridge.take().unwrap();
+            // is_some() 已在上方判断，take() 必返回 Some
+            let mut ws = app
+                .ws_bridge
+                .take()
+                .expect("ws_bridge checked is_some() above");
             let mut ws_actions: Vec<(WsInbound,)> = Vec::new();
             while let Some(msg) = ws.try_recv() {
                 ws_actions.push((msg,));

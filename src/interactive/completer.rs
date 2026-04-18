@@ -21,6 +21,7 @@ pub struct CopilotCompleter {
 }
 
 impl CopilotCompleter {
+    /// 基于给定配置创建补全器实例
     pub fn new(config: &YamlConfig) -> Self {
         Self {
             config: config.clone(),
