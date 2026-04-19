@@ -558,7 +558,7 @@ fn draw_tab_global_lines<'a>(
         (3, 2), // max_history_messages, max_context_tokens
         (5, 2), // max_tool_rounds, tool_confirm_timeout
         (7, 2), // theme, auto_restore_session
-        (9, 3), // compact_enabled, compact_keep_recent, compact_exempt_tools
+        (9, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {

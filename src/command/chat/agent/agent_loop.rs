@@ -167,7 +167,8 @@ pub async fn run_main_agent_loop(
                     }
                 }
 
-                if compact::estimate_tokens(&messages) > compact_config.token_threshold {
+                if compact::estimate_tokens(&messages) > compact_config.effective_token_threshold()
+                {
                     write_info_log(
                         "agent_loop",
                         "auto_compact triggered (token threshold exceeded)",

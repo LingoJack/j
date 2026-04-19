@@ -174,6 +174,17 @@ impl Default for CompactConfig {
     }
 }
 
+impl CompactConfig {
+    /// 返回有效的压缩阈值；若用户未设置（=0）则使用编译期默认值。
+    pub fn effective_token_threshold(&self) -> usize {
+        if self.token_threshold == 0 {
+            COMPACT_TOKEN_THRESHOLD
+        } else {
+            self.token_threshold
+        }
+    }
+}
+
 /// 粗略估算 messages 的 token 数（~4 chars per token）
 pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
     serde_json::to_string(messages).unwrap_or_default().len() / 4
