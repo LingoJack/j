@@ -626,61 +626,68 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         lines.push(Line::from(top_spans));
 
                         for (row_idx, row) in table_rows.iter().enumerate() {
-                            let mut row_spans: Vec<Span> = Vec::new();
-                            row_spans.push(Span::styled("│", border_style));
-                            for (i, cw) in col_widths.iter().enumerate() {
-                                let cell_text = row.get(i).map(|s| s.as_str()).unwrap_or("");
-                                let cell_w = display_width(cell_text);
-                                let text = if cell_w > *cw {
-                                    let mut t = String::new();
-                                    let mut w = 0;
-                                    for ch in cell_text.chars() {
-                                        use crate::util::text::char_width;
-                                        let chw = char_width(ch);
-                                        if w + chw > *cw {
-                                            break;
-                                        }
-                                        t.push(ch);
-                                        w += chw;
-                                    }
-                                    let fill = cw.saturating_sub(w);
-                                    format!(" {}{} ", t, " ".repeat(fill))
-                                } else {
-                                    let fill = cw.saturating_sub(cell_w);
+                            // 对每个单元格进行折行
+                            let wrapped_cells: Vec<Vec<String>> = col_widths
+                                .iter()
+                                .enumerate()
+                                .map(|(i, cw)| {
+                                    let cell_text = row.get(i).map(|s| s.as_str()).unwrap_or("");
+                                    wrap_text(cell_text, *cw)
+                                })
+                                .collect();
+
+                            // 计算最大折行行数
+                            let max_rows = wrapped_cells.iter().map(|r| r.len()).max().unwrap_or(1);
+
+                            // 渲染每个折行子行
+                            for sub_row in 0..max_rows {
+                                let mut row_spans: Vec<Span> = Vec::new();
+                                row_spans.push(Span::styled("│", border_style));
+                                for (i, cw) in col_widths.iter().enumerate() {
+                                    let cell_line = wrapped_cells
+                                        .get(i)
+                                        .and_then(|lines| lines.get(sub_row))
+                                        .map(|s| s.as_str())
+                                        .unwrap_or("");
+                                    let cell_line_w = display_width(cell_line);
+                                    let fill = cw.saturating_sub(cell_line_w);
                                     let align = table_alignments
                                         .get(i)
                                         .copied()
                                         .unwrap_or(pulldown_cmark::Alignment::None);
-                                    match align {
+                                    let formatted = match align {
                                         pulldown_cmark::Alignment::Center => {
                                             let left = fill / 2;
                                             let right = fill - left;
                                             format!(
                                                 " {}{}{} ",
                                                 " ".repeat(left),
-                                                cell_text,
+                                                cell_line,
                                                 " ".repeat(right)
                                             )
                                         }
                                         pulldown_cmark::Alignment::Right => {
-                                            format!(" {}{} ", " ".repeat(fill), cell_text)
+                                            format!(" {}{} ", " ".repeat(fill), cell_line)
                                         }
-                                        _ => format!(" {}{} ", cell_text, " ".repeat(fill)),
-                                    }
-                                };
-                                let style = if row_idx == 0 {
-                                    header_style
-                                } else {
-                                    table_style
-                                };
-                                row_spans.push(Span::styled(text, style));
-                                row_spans.push(Span::styled("│", border_style));
+                                        _ => {
+                                            format!(" {}{} ", cell_line, " ".repeat(fill))
+                                        }
+                                    };
+                                    let style = if row_idx == 0 {
+                                        header_style
+                                    } else {
+                                        table_style
+                                    };
+                                    row_spans.push(Span::styled(formatted, style));
+                                    row_spans.push(Span::styled("│", border_style));
+                                }
+                                if table_right_pad > 0 {
+                                    row_spans.push(Span::raw(" ".repeat(table_right_pad)));
+                                }
+                                lines.push(Line::from(row_spans));
                             }
-                            if table_right_pad > 0 {
-                                row_spans.push(Span::raw(" ".repeat(table_right_pad)));
-                            }
-                            lines.push(Line::from(row_spans));
 
+                            // 行间分隔线（非最后一行时渲染 ├─┼─┤）
                             if row_idx < table_rows.len() - 1 {
                                 let mut sep = String::from("├");
                                 for (i, cw) in col_widths.iter().enumerate() {
