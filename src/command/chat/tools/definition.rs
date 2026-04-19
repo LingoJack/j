@@ -119,8 +119,9 @@ impl ToolRegistry {
         task_manager: Arc<super::task::TaskManager>,
         hook_manager: Arc<Mutex<HookManager>>,
         invoked_skills: InvokedSkillsMap,
+        session_id: &str,
     ) -> Self {
-        let todo_manager = Arc::new(super::todo::TodoManager::new());
+        let todo_manager = Arc::new(super::todo::TodoManager::new_with_session(session_id));
         let plan_mode_state = Arc::new(super::plan::PlanModeState::new());
         let worktree_state = Arc::new(super::worktree::WorktreeState::new());
         let plan_approval_queue = Arc::new(super::plan::PlanApprovalQueue::new());

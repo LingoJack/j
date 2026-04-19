@@ -24,15 +24,19 @@ use crate::command::chat::remote::protocol::{
 use crate::command::chat::sandbox::Sandbox;
 use crate::command::chat::skill::{self, skills_dir};
 use crate::command::chat::storage::{
-    ChatMessage, ChatSession, ModelProvider, SessionEvent, append_session_event, delete_session,
-    generate_session_id, list_sessions, load_agent_config, load_session, memory_path,
-    save_agent_config, save_memory, save_soul, save_system_prompt, session_file_path, soul_path,
-    system_prompt_path,
+    ChatMessage, ChatSession, ModelProvider, PlanStatePersist, SandboxStatePersist, SessionEvent,
+    SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, delete_session,
+    generate_session_id, list_sessions, load_agent_config, load_hooks_state, load_plan_state,
+    load_sandbox_state, load_session, load_skills_state, load_tasks_state, load_teammates_state,
+    load_todos_state, memory_path, save_agent_config, save_hooks_state, save_memory,
+    save_plan_state, save_sandbox_state, save_skills_state, save_soul, save_subagents_state,
+    save_system_prompt, save_tasks_state, save_teammates_state, save_todos_state,
+    session_file_path, soul_path, system_prompt_path,
 };
-use crate::command::chat::teammate::TeammateManager;
+use crate::command::chat::teammate::{TeammateManager, TeammateStatusPersist};
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::agent_shared::{AgentToolShared, SubAgentTracker};
+use crate::command::chat::tools::agent_shared::{AgentToolShared, SubAgentStatus, SubAgentTracker};
 use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
 use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
@@ -41,7 +45,7 @@ use crate::tui::editor_core::text_buffer::TextBuffer;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use ratatui::widgets::ListState;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex, atomic::Ordering, mpsc};
 use tokio_util::sync::CancellationToken;
 
 // ========== 主应用结构体 ==========
@@ -212,7 +216,7 @@ impl ChatApp {
                 Arc::clone(&shared_agent_messages),
             )));
         let background_manager = Arc::new(BackgroundManager::new());
-        let task_manager = Arc::new(TaskManager::new());
+        let task_manager = Arc::new(TaskManager::new_with_session(&session_id));
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
         let invoked_skills = crate::command::chat::compact::new_invoked_skills_map();
         let mut tool_registry = ToolRegistry::new(
@@ -222,6 +226,7 @@ impl ChatApp {
             Arc::clone(&task_manager),
             Arc::clone(&hook_manager),
             Arc::clone(&invoked_skills),
+            &session_id,
         );
         let todo_manager = Arc::clone(&tool_registry.todo_manager);
 
@@ -1675,13 +1680,18 @@ impl ChatApp {
                             message: "会话不存在".to_string(),
                         });
                     } else {
-                        // 保存当前会话
+                        // 保存当前会话（消息 + 状态）
                         self.persist_new_messages();
+                        self.save_session_state();
+                        // 清除运行时状态
+                        self.clear_runtime_state();
                         // 加载目标会话
                         let session = load_session(&session_id);
                         self.session_id = session_id.clone();
                         self.last_persisted_len = session.messages.len();
                         self.state.session = session;
+                        // 恢复目标会话的状态
+                        self.restore_session_state();
                         self.ui.scroll_offset = 0;
                         self.ui.msg_lines_cache = None;
                         if let Ok(mut ct) = self.context_tokens.lock() {
@@ -1704,8 +1714,11 @@ impl ChatApp {
                         message: "等待工具确认中，无法新建会话".to_string(),
                     });
                 } else {
-                    // 保存当前会话
+                    // 保存当前会话（消息 + 状态）
                     self.persist_new_messages();
+                    self.save_session_state();
+                    // 清除运行时状态
+                    self.clear_runtime_state();
                     // 生成新会话
                     let new_id = generate_session_id();
                     self.session_id = new_id.clone();
@@ -1755,13 +1768,18 @@ impl ChatApp {
                 let idx = self.ui.session_list_index;
                 if let Some(meta) = self.ui.session_list.get(idx) {
                     let target_id = meta.id.clone();
-                    // 保存当前会话
+                    // 保存当前会话（消息 + 状态）
                     self.persist_new_messages();
+                    self.save_session_state();
+                    // 清除运行时状态
+                    self.clear_runtime_state();
                     // 加载目标会话
                     let session = load_session(&target_id);
                     self.last_persisted_len = session.messages.len();
                     self.session_id = target_id;
                     self.state.session = session;
+                    // 恢复目标会话的状态
+                    self.restore_session_state();
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.session_restore_confirm = false;
@@ -1793,8 +1811,10 @@ impl ChatApp {
                 }
             }
             Action::NewSessionFromList => {
-                // 保存当前会话
+                // 保存当前会话（消息 + 状态）
                 self.persist_new_messages();
+                self.save_session_state();
+                self.clear_runtime_state();
                 // 生成新会话
                 let new_id = generate_session_id();
                 self.session_id = new_id;
@@ -1807,6 +1827,34 @@ impl ChatApp {
                 }
                 self.ui.mode = ChatMode::Chat;
                 self.show_toast("已新建会话".to_string(), false);
+            }
+
+            Action::RespawnTeammate { name } => {
+                // 从 recovered_teammates 取出保存的 prompt/role，重新创建 teammate
+                let snapshot = if let Ok(mgr) = self.teammate_manager.lock() {
+                    mgr.get_recovered_teammate(&name)
+                } else {
+                    None
+                };
+                if let Some(_snapshot) = snapshot {
+                    // 使用 CreateTeammate 工具的参数格式创建 teammate
+                    // 这里简单实现：将 prompt 信息注入 pending_user_messages
+                    if let Ok(mut mgr) = self.teammate_manager.lock() {
+                        mgr.remove_recovered_teammate(&name);
+                    }
+                    // TODO: 完整的 RespawnTeammate 需要调用 CreateTeammateTool 的逻辑
+                    // 当前简化实现：提示用户手动重新创建
+                    self.show_toast(
+                        format!("Teammate '{}' 的上下文已恢复，请通过 AI 重新创建", name),
+                        false,
+                    );
+                } else {
+                    self.show_toast(format!("未找到 teammate '{}'", name), true);
+                }
+            }
+
+            Action::SessionStateRestored => {
+                self.show_toast("会话状态已恢复".to_string(), false);
             }
 
             Action::StartArchiveList => {
@@ -3042,10 +3090,265 @@ impl ChatApp {
         self.last_persisted_len = self.state.session.messages.len();
     }
 
+    /// 保存当前 session 的所有状态到磁盘（teammates/tasks/todos/plan/skills/hooks/sandbox）
+    pub fn save_session_state(&self) {
+        let sid = &self.session_id;
+
+        // 1. Teammates
+        if let Ok(mgr) = self.teammate_manager.lock() {
+            let mut final_snapshots: Vec<TeammateSnapshotPersist> = Vec::new();
+            let recovered = mgr.recovered_teammates_snapshot();
+
+            for (name, handle) in &mgr.teammates {
+                let status = handle
+                    .status
+                    .lock()
+                    .map(|s| s.clone().into())
+                    .unwrap_or(TeammateStatusPersist::Cancelled);
+                let system_prompt = handle
+                    .system_prompt_snapshot
+                    .lock()
+                    .map(|s| s.clone())
+                    .unwrap_or_default();
+                let messages = handle
+                    .messages_snapshot
+                    .lock()
+                    .map(|m| m.clone())
+                    .unwrap_or_default();
+                let pending = handle
+                    .pending_user_messages
+                    .lock()
+                    .map(|m| m.clone())
+                    .unwrap_or_default();
+                let current_tool = handle.current_tool.lock().ok().and_then(|t| t.clone());
+                // 运行中的 teammate 保存时标记为 Cancelled
+                let final_status = if handle.running()
+                    && !matches!(
+                        status,
+                        TeammateStatusPersist::Completed
+                            | TeammateStatusPersist::Cancelled
+                            | TeammateStatusPersist::Error(_)
+                    ) {
+                    TeammateStatusPersist::Cancelled
+                } else {
+                    status
+                };
+                // 从 recovered 取 prompt 信息
+                let (prompt, worktree, worktree_branch, inherit_permissions) = recovered
+                    .get(name)
+                    .map(|r| {
+                        (
+                            r.prompt.clone(),
+                            r.worktree,
+                            r.worktree_branch.clone(),
+                            r.inherit_permissions,
+                        )
+                    })
+                    .unwrap_or_default();
+                final_snapshots.push(TeammateSnapshotPersist {
+                    name: name.clone(),
+                    role: handle.role.clone(),
+                    prompt,
+                    worktree,
+                    worktree_branch,
+                    inherit_permissions,
+                    status: final_status,
+                    system_prompt_snapshot: system_prompt,
+                    messages_snapshot: messages,
+                    pending_user_messages: pending,
+                    tool_calls_count: handle.tool_calls_count.load(Ordering::Relaxed),
+                    current_tool,
+                    work_done: handle.work_done.load(Ordering::Relaxed),
+                });
+            }
+
+            // 添加不在活跃 teammates 中的 recovered
+            for (name, r) in recovered {
+                if !final_snapshots.iter().any(|s| s.name == name) {
+                    final_snapshots.push(r);
+                }
+            }
+
+            save_teammates_state(sid, &final_snapshots);
+        }
+
+        // 2. SubAgents
+        let subagent_snapshots: Vec<SubAgentSnapshotPersist> = self
+            .sub_agent_tracker
+            .display_snapshots()
+            .into_iter()
+            .map(|s| {
+                let status_str = match s.status {
+                    SubAgentStatus::Initializing => "initializing",
+                    SubAgentStatus::Working => "working",
+                    SubAgentStatus::Completed => "completed",
+                    SubAgentStatus::Cancelled => "cancelled",
+                    SubAgentStatus::Error(_) => "error",
+                };
+                SubAgentSnapshotPersist {
+                    id: s.id,
+                    description: s.description,
+                    mode: s.mode.to_string(),
+                    status: status_str.to_string(),
+                    current_tool: s.current_tool,
+                    tool_calls_count: s.tool_calls_count,
+                    current_round: s.current_round,
+                    started_at_epoch: 0, // Instant 不可序列化，用 0 占位
+                }
+            })
+            .collect();
+        save_subagents_state(sid, &subagent_snapshots);
+
+        // 3. Tasks
+        save_tasks_state(sid, &self.task_manager.list_tasks());
+
+        // 4. Todos
+        save_todos_state(sid, &self.todo_manager.list_todos());
+
+        // 5. Plan
+        {
+            let plan_state = &self.tool_registry.plan_mode_state;
+            let (active, plan_file_path) = plan_state.get_state();
+            let plan_content = plan_file_path
+                .as_ref()
+                .and_then(|p| std::fs::read_to_string(p).ok());
+            save_plan_state(
+                sid,
+                &PlanStatePersist {
+                    active,
+                    plan_file_path,
+                    plan_content,
+                },
+            );
+        }
+
+        // 6. InvokedSkills
+        if let Ok(skills) = self.invoked_skills.lock() {
+            save_skills_state(sid, &skills.clone());
+        }
+
+        // 7. Session Hooks
+        if let Ok(mgr) = self.hook_manager.lock() {
+            let snapshot = mgr.session_hooks_snapshot();
+            save_hooks_state(sid, &snapshot);
+        }
+
+        // 8. Sandbox
+        save_sandbox_state(
+            sid,
+            &SandboxStatePersist {
+                extra_safe_dirs: self.sandbox.extra_safe_dirs(),
+            },
+        );
+    }
+
+    /// 从磁盘恢复当前 session_id 的所有状态
+    pub fn restore_session_state(&mut self) {
+        let sid = &self.session_id;
+
+        // 1. InvokedSkills
+        if let Some(skills) = load_skills_state(sid)
+            && let Ok(mut map) = self.invoked_skills.lock()
+        {
+            *map = skills;
+        }
+
+        // 2. Tasks — 直接加载到 TaskManager
+        if let Some(tasks) = load_tasks_state(sid) {
+            self.task_manager.replace_all(tasks);
+        }
+
+        // 3. Todos — 直接加载到 TodoManager
+        if let Some(todos) = load_todos_state(sid) {
+            self.todo_manager.replace_all(todos);
+        }
+
+        // 4. Plan
+        if let Some(plan) = load_plan_state(sid) {
+            let plan_state = &self.tool_registry.plan_mode_state;
+            if plan.active
+                && let Some(ref path) = plan.plan_file_path
+            {
+                // 如果有保存的 plan_content 且原文件不存在，先写回
+                if !std::path::Path::new(path).exists()
+                    && let Some(ref content) = plan.plan_content
+                {
+                    if let Some(parent) = std::path::Path::new(path).parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::write(path, content);
+                }
+                let _ = plan_state.enter(path);
+            }
+        }
+
+        // 5. Session Hooks
+        if let Some(hooks) = load_hooks_state(sid)
+            && let Ok(mut mgr) = self.hook_manager.lock()
+        {
+            mgr.restore_session_hooks(&hooks);
+        }
+
+        // 6. Sandbox
+        if let Some(sandbox) = load_sandbox_state(sid) {
+            self.sandbox
+                .restore_extra_safe_dirs(sandbox.extra_safe_dirs);
+        }
+
+        // 7. Teammates — 恢复到 recovered_teammates（不重新 spawn 线程）
+        if let Some(teammates) = load_teammates_state(sid)
+            && let Ok(mut mgr) = self.teammate_manager.lock()
+        {
+            mgr.set_recovered_teammates(teammates);
+        }
+
+        // 8. SubAgents — 仅加载历史记录（无运行时恢复）
+        // SubAgent 运行状态仅用于 UI 展示历史，不需要恢复
+    }
+
+    /// 清除运行时状态（session 切换前调用）
+    pub fn clear_runtime_state(&mut self) {
+        // 1. 停止所有 teammates
+        if let Ok(mut mgr) = self.teammate_manager.lock() {
+            mgr.stop_all();
+            mgr.cleanup_finished();
+            mgr.clear_recovered_teammates();
+        }
+
+        // 2. 拒绝所有权限请求
+        self.permission_queue.deny_all();
+        self.plan_approval_queue.deny_all();
+
+        // 3. 清空 tasks
+        self.task_manager.replace_all(Vec::new());
+
+        // 4. 清空 todos
+        self.todo_manager.replace_all(Vec::new());
+
+        // 5. 退出 plan mode
+        self.tool_registry.plan_mode_state.exit();
+
+        // 6. 清空 invoked skills
+        if let Ok(mut skills) = self.invoked_skills.lock() {
+            skills.clear();
+        }
+
+        // 7. 清空 session hooks
+        if let Ok(mut mgr) = self.hook_manager.lock() {
+            mgr.clear_session_hooks();
+        }
+
+        // 8. 重置 sandbox 额外目录
+        self.sandbox = Sandbox::new();
+    }
+
     /// 清空对话（创建新会话）
     pub fn clear_session(&mut self) {
-        // 先持久化当前会话
+        // 先持久化当前会话（消息 + 状态）
         self.persist_new_messages();
+        self.save_session_state();
+        // 清除运行时状态
+        self.clear_runtime_state();
         // 生成新会话 ID
         let new_id = generate_session_id();
         self.session_id = new_id.clone();

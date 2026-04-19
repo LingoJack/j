@@ -1,5 +1,6 @@
-use crate::command::chat::storage::ChatMessage;
+use crate::command::chat::storage::{ChatMessage, TeammateSnapshotPersist};
 use crate::util::log::write_info_log;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -26,6 +27,43 @@ pub enum TeammateStatus {
     Cancelled,
     /// 出错
     Error(String),
+}
+
+/// Teammate 状态的可序列化版本（用于 session 持久化）
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum TeammateStatusPersist {
+    Initializing,
+    Working,
+    WaitingForMessage,
+    Completed,
+    Cancelled,
+    Error(String),
+}
+
+impl From<TeammateStatus> for TeammateStatusPersist {
+    fn from(status: TeammateStatus) -> Self {
+        match status {
+            TeammateStatus::Initializing => Self::Initializing,
+            TeammateStatus::Working => Self::Working,
+            TeammateStatus::WaitingForMessage => Self::WaitingForMessage,
+            TeammateStatus::Completed => Self::Completed,
+            TeammateStatus::Cancelled => Self::Cancelled,
+            TeammateStatus::Error(e) => Self::Error(e),
+        }
+    }
+}
+
+impl From<TeammateStatusPersist> for TeammateStatus {
+    fn from(status: TeammateStatusPersist) -> Self {
+        match status {
+            TeammateStatusPersist::Initializing => Self::Initializing,
+            TeammateStatusPersist::Working => Self::Working,
+            TeammateStatusPersist::WaitingForMessage => Self::WaitingForMessage,
+            TeammateStatusPersist::Completed => Self::Completed,
+            TeammateStatusPersist::Cancelled => Self::Cancelled,
+            TeammateStatusPersist::Error(e) => Self::Error(e),
+        }
+    }
 }
 
 impl TeammateStatus {
@@ -224,6 +262,8 @@ pub struct TeammateManager {
     pub main_pending: Arc<Mutex<Vec<ChatMessage>>>,
     /// 主 agent 的 shared_messages（teammate 消息也要写入以在 TUI 显示）
     pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 从 session 恢复的 teammate 快照（只读展示，无活跃线程）
+    recovered_teammates: HashMap<String, TeammateSnapshotPersist>,
 }
 
 #[allow(dead_code)]
@@ -237,6 +277,7 @@ impl TeammateManager {
             teammates: HashMap::new(),
             main_pending,
             shared_messages,
+            recovered_teammates: HashMap::new(),
         }
     }
 
@@ -304,7 +345,7 @@ impl TeammateManager {
 
     /// 获取团队成员摘要（供 system prompt 使用）
     pub fn team_summary(&self) -> String {
-        if self.teammates.is_empty() {
+        if self.teammates.is_empty() && self.recovered_teammates.is_empty() {
             return String::new();
         }
 
@@ -323,6 +364,16 @@ impl TeammateManager {
                     }
                 });
             summary.push_str(&format!("- {} ({}) [{}]\n", name, handle.role, status));
+        }
+        // 展示从 session 恢复的 teammate（只读历史）
+        for (name, snapshot) in &self.recovered_teammates {
+            let status: TeammateStatus = snapshot.status.clone().into();
+            summary.push_str(&format!(
+                "- {} ({}) [{} 🔄session-recovery]\n",
+                name,
+                snapshot.role,
+                status.label()
+            ));
         }
         summary.push_str(
             "\n使用 SendMessage 工具向其他 agent 发送消息。可以用 @AgentName 指定目标。\n",
@@ -417,6 +468,45 @@ impl Default for TeammateManager {
             teammates: HashMap::new(),
             main_pending: Arc::new(Mutex::new(Vec::new())),
             shared_messages: Arc::new(Mutex::new(Vec::new())),
+            recovered_teammates: HashMap::new(),
         }
+    }
+}
+
+// ========== Recovered Teammates 方法 ==========
+
+impl TeammateManager {
+    /// 设置从 session 恢复的 teammate 快照
+    pub fn set_recovered_teammates(&mut self, teammates: Vec<TeammateSnapshotPersist>) {
+        self.recovered_teammates = teammates.into_iter().map(|t| (t.name.clone(), t)).collect();
+    }
+
+    /// 清除所有 recovered teammates
+    pub fn clear_recovered_teammates(&mut self) {
+        self.recovered_teammates.clear();
+    }
+
+    /// 获取 recovered teammates 的快照引用（用于 save 时合并 prompt 信息）
+    pub fn recovered_teammates_snapshot(&self) -> HashMap<String, TeammateSnapshotPersist> {
+        self.recovered_teammates.clone()
+    }
+
+    /// 获取 recovered teammate 的名称和角色列表（用于 UI 展示）
+    #[allow(dead_code)]
+    pub fn recovered_teammates_list(&self) -> Vec<(String, String, TeammateStatusPersist)> {
+        self.recovered_teammates
+            .iter()
+            .map(|(name, t)| (name.clone(), t.role.clone(), t.status.clone()))
+            .collect()
+    }
+
+    /// 获取指定名称的 recovered teammate（用于 RespawnTeammate）
+    pub fn get_recovered_teammate(&self, name: &str) -> Option<TeammateSnapshotPersist> {
+        self.recovered_teammates.get(name).cloned()
+    }
+
+    /// 移除一个 recovered teammate（respawn 成功后）
+    pub fn remove_recovered_teammate(&mut self, name: &str) {
+        self.recovered_teammates.remove(name);
     }
 }

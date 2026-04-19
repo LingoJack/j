@@ -805,6 +805,65 @@ impl HookManager {
         }
     }
 
+    /// 获取所有 session 级 hook 的可序列化快照（用于 session 持久化）
+    /// 只保存 Shell 和 Llm 类型（Builtin 不可序列化）
+    pub fn session_hooks_snapshot(&self) -> Vec<super::super::storage::SessionHookPersist> {
+        let mut result = Vec::new();
+        for (event, hooks) in &self.session_hooks {
+            for kind in hooks {
+                match kind {
+                    HookKind::Shell(sh) => {
+                        result.push(super::super::storage::SessionHookPersist {
+                            event: *event,
+                            definition: HookDef {
+                                r#type: HookType::Bash,
+                                command: Some(sh.command.clone()),
+                                prompt: None,
+                                model: None,
+                                timeout: sh.timeout,
+                                retry: sh.retry,
+                                on_error: sh.on_error,
+                                filter: sh.filter.clone(),
+                            },
+                        });
+                    }
+                    HookKind::Llm(lh) => {
+                        result.push(super::super::storage::SessionHookPersist {
+                            event: *event,
+                            definition: HookDef {
+                                r#type: HookType::Llm,
+                                command: None,
+                                prompt: Some(lh.prompt.clone()),
+                                model: lh.model.clone(),
+                                timeout: lh.timeout,
+                                retry: lh.retry,
+                                on_error: lh.on_error,
+                                filter: lh.filter.clone(),
+                            },
+                        });
+                    }
+                    HookKind::Builtin(_) => {
+                        // 内置 hook 不可序列化，跳过
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// 清除所有 session 级 hook（session 切换时使用）
+    pub fn clear_session_hooks(&mut self) {
+        self.session_hooks.clear();
+    }
+
+    /// 从持久化快照恢复 session 级 hook
+    pub fn restore_session_hooks(&mut self, hooks: &[super::super::storage::SessionHookPersist]) {
+        self.session_hooks.clear();
+        for hook in hooks {
+            self.register_session_hook(hook.event, hook.definition.clone());
+        }
+    }
+
     /// 注册 session 级 hook（直接传入 HookKind）
     #[allow(dead_code)]
     pub fn register_session_hook_kind(&mut self, event: HookEvent, kind: HookKind) {

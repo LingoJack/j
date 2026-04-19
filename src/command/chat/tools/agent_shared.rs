@@ -280,6 +280,7 @@ impl AgentToolShared {
             Arc::clone(&self.task_manager),
             Arc::clone(&self.hook_manager),
             new_invoked_skills_map(),
+            "_sub_agent_", // 子 agent 不需要独立 session 存储
         );
         // 将权限队列传入子注册表，使子 agent 的阻塞式确认请求能到达主 TUI
         registry.permission_queue = Some(Arc::clone(&self.permission_queue));

@@ -41,6 +41,25 @@ impl Sandbox {
         }
     }
 
+    /// 获取除 cwd 以外的额外安全目录（用于 session 持久化）
+    /// 第一个目录是 cwd，后续是 add_safe_dir 添加的
+    pub fn extra_safe_dirs(&self) -> Vec<PathBuf> {
+        if self.safe_dirs.len() <= 1 {
+            Vec::new()
+        } else {
+            self.safe_dirs[1..].to_vec()
+        }
+    }
+
+    /// 恢复额外安全目录（session 恢复时使用）
+    pub fn restore_extra_safe_dirs(&mut self, dirs: Vec<PathBuf>) {
+        for dir in dirs {
+            if !self.safe_dirs.contains(&dir) {
+                self.safe_dirs.push(dir);
+            }
+        }
+    }
+
     /// 检查工具调用是否涉及沙箱外路径
     ///
     /// 返回 true 表示操作在沙箱外（需要用户确认）

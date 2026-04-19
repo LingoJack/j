@@ -25,7 +25,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ========== InvokedSkills 追踪 ==========
 
 /// 记录一次技能调用的完整信息（用于 auto_compact 后恢复）
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InvokedSkill {
     /// 技能名称
     pub name: String,

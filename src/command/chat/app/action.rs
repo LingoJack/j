@@ -238,6 +238,12 @@ pub enum Action {
     /// 新建空 session（从 session 列表中）
     NewSessionFromList,
 
+    // ========== Session 状态恢复 ==========
+    /// 重新创建已保存的 teammate（从 session 恢复）
+    RespawnTeammate { name: String },
+    /// Session 状态已恢复（内部，用于 UI 通知）
+    SessionStateRestored,
+
     /// 启动还原流程（加载归档列表）
     StartArchiveList,
     /// 归档列表：导航

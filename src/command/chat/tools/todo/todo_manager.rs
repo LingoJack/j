@@ -56,6 +56,22 @@ impl TodoManager {
         }
     }
 
+    /// 创建 session 级 TodoManager（存储到 sessions/{id}/todos.json）
+    pub fn new_with_session(session_id: &str) -> Self {
+        let paths = crate::command::chat::storage::SessionPaths::new(session_id);
+        let _ = paths.ensure_dir();
+        let file_path = paths.todos_file();
+
+        // 从 session 级文件加载已有数据
+        let items = crate::command::chat::storage::load_todos_state(session_id).unwrap_or_default();
+
+        Self {
+            items: Mutex::new(items),
+            file_path,
+            turns_without_call: AtomicU32::new(0),
+        }
+    }
+
     /// 写入 todos。merge=false 替换全部；merge=true 按 id 合并更新。
     /// 返回写入后的完整列表。
     pub fn write_todos(
@@ -190,5 +206,17 @@ impl TodoManager {
         let data = serde_json::to_string_pretty(items)
             .map_err(|e| format!("Failed to serialize todos: {}", e))?;
         fs::write(&self.file_path, data).map_err(|e| format!("Failed to write todos: {}", e))
+    }
+
+    /// 替换所有 todos（session 恢复时使用）
+    pub fn replace_all(&self, new_items: Vec<TodoItem>) {
+        let mut items = safe_lock(&self.items, "TodoManager::replace_all");
+        *items = new_items;
+        // 重置 nag 计数器
+        self.turns_without_call.store(0, Ordering::Relaxed);
+        // 持久化
+        if let Err(e) = self.save(&items) {
+            crate::util::log::write_error_log("TodoManager::replace_all", &e);
+        }
     }
 }

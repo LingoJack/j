@@ -207,6 +207,8 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             app.session_id = latest_id;
             app.last_persisted_len = session.messages.len();
             app.state.session = session;
+            // 恢复 session 状态（tasks/todos/skills/hooks/teammates 等）
+            app.restore_session_state();
             app.ui.scroll_offset = u16::MAX; // 滚动到底部
             app.ui.msg_lines_cache = None;
         }
@@ -575,6 +577,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // 停止输入线程
     input_thread.shutdown();
+
+    // ★ 保存会话状态（非空会话才保存）
+    if !app.state.session.messages.is_empty() {
+        app.save_session_state();
+    }
 
     // ★ 空会话不保存：删除无消息的 session 文件
     if app.state.session.messages.is_empty() {

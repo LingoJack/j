@@ -40,6 +40,23 @@ impl TaskManager {
         }
     }
 
+    /// 创建 session 级 TaskManager（存储到 sessions/{id}/tasks.json）
+    pub fn new_with_session(session_id: &str) -> Self {
+        let sessions_dir = crate::command::chat::storage::sessions_dir();
+        let session_dir = sessions_dir.join(session_id);
+        let tasks_dir = session_dir.join("tasks_session");
+        let _ = fs::create_dir_all(&tasks_dir);
+        let mgr = Self {
+            tasks_dir,
+            write_lock: Mutex::new(()),
+        };
+        // 如果有 session 级 tasks.json，从中加载
+        if let Some(tasks) = crate::command::chat::storage::load_tasks_state(session_id) {
+            mgr.replace_all(tasks);
+        }
+        mgr
+    }
+
     /// 生成下一个任务 ID（基于已有文件的最大 ID + 1）
     fn next_id(&self) -> u64 {
         let mut max_id: u64 = 0;
@@ -186,6 +203,24 @@ impl TaskManager {
                 task.blocked_by.retain(|&id| id != completed_id);
                 let _ = self.save_task(&task);
             }
+        }
+    }
+
+    /// 替换所有任务（session 恢复时使用）
+    pub fn replace_all(&self, new_tasks: Vec<AgentTask>) {
+        let _lock = safe_lock(&self.write_lock, "TaskManager::replace_all");
+        // 删除所有现有任务文件
+        if let Ok(entries) = fs::read_dir(&self.tasks_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|e| e == "json") {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+        // 写入新任务
+        for task in new_tasks {
+            let _ = self.save_task(&task);
         }
     }
 }

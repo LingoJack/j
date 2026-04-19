@@ -221,7 +221,7 @@ fn run_oneshot_agent(
     // 构建工具注册表
     let (ask_tx, ask_rx) = std::sync::mpsc::channel::<AskRequest>();
     let background_manager = Arc::new(BackgroundManager::new());
-    let task_manager = Arc::new(TaskManager::new());
+    let task_manager = Arc::new(TaskManager::new_with_session(session_id));
     let hook_manager = Arc::new(Mutex::new(HookManager::default()));
     let tool_registry = ToolRegistry::new(
         vec![],
@@ -230,6 +230,7 @@ fn run_oneshot_agent(
         task_manager,
         hook_manager,
         new_invoked_skills_map(),
+        session_id,
     );
 
     // 启动 Ask 请求处理线程：在终端交互式回答 AI 的提问
