@@ -231,7 +231,7 @@ impl Tool for AgentTool {
             let cancelled_clone = Arc::clone(cancelled);
 
             let description_clone = description.clone();
-            let shared_messages_clone = Arc::clone(&self.shared.shared_messages);
+            let ui_display_clone = Arc::clone(&self.shared.ui_messages);
             let transcript_path = subagent_transcript_path.clone();
             std::thread::spawn(move || {
                 // 设置 worktree CWD
@@ -252,7 +252,7 @@ impl Tool for AgentTool {
                         transcript_path: Some(transcript_path),
                     },
                     &cancelled_clone,
-                    &shared_messages_clone,
+                    &ui_display_clone,
                 );
 
                 snap_running.store(false, Ordering::Relaxed);
@@ -315,7 +315,7 @@ impl Tool for AgentTool {
                     transcript_path: Some(subagent_transcript_path),
                 },
                 &cancelled_clone,
-                &self.shared.shared_messages,
+                &self.shared.ui_messages,
             );
 
             snap_running.store(false, Ordering::Relaxed);
@@ -353,11 +353,11 @@ impl Tool for AgentTool {
 fn run_headless_agent_loop(
     params: HeadlessAgentParams,
     cancelled: &Arc<AtomicBool>,
-    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    ui_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {
     let agent_name = sanitize_agent_name(&params.description);
     let push_ui = |msg: ChatMessage| {
-        if let Ok(mut shared) = shared_messages.lock() {
+        if let Ok(mut shared) = ui_messages.lock() {
             shared.push(msg);
         }
     };

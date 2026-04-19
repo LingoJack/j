@@ -273,8 +273,8 @@ pub struct AgentToolShared {
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 子 agent 运行时快照追踪器（供 /dump 读取）
     pub sub_agent_tracker: Arc<SubAgentTracker>,
-    /// 主 TUI 的 shared_agent_messages（子 agent 的 UI 状态行推送到这里）
-    pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// Agent/Teammate → UI 显示通道（子 agent 的 UI 状态行推送到这里）
+    pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 当前 session id（session 切换时由 chat_app 更新，teammate/subagent 用来定位自己的 transcript 路径）
     pub session_id: Arc<Mutex<String>>,
 }

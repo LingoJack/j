@@ -212,7 +212,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             final_text = assistant_text.clone();
             // 将 teammate 的文字回复通过广播显示在聊天室
             if let Ok(manager) = teammate_manager.lock()
-                && let Ok(mut shared) = manager.shared_messages.lock()
+                && let Ok(mut shared) = manager.ui_messages.lock()
             {
                 shared.push(ChatMessage::text(
                     "assistant",
@@ -345,7 +345,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
         // 在 TUI 中显示 teammate 的工具调用（SendMessage 不显示，因为 broadcast 会单独显示消息内容）
         if let Ok(manager) = teammate_manager.lock()
-            && let Ok(mut shared) = manager.shared_messages.lock()
+            && let Ok(mut shared) = manager.ui_messages.lock()
         {
             for item in &tool_items {
                 if item.name != "SendMessage" {
@@ -407,7 +407,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     // WorkDone 工具自己已广播过 [已完成工作]，避免重复；其他路径（idle 超时等）补一次
     if !work_done.load(Ordering::Relaxed)
         && let Ok(manager) = teammate_manager.lock()
-        && let Ok(mut shared) = manager.shared_messages.lock()
+        && let Ok(mut shared) = manager.ui_messages.lock()
     {
         shared.push(ChatMessage::text(
             "assistant",

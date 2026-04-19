@@ -22,7 +22,7 @@ struct ToolCallContext<'a> {
     pending_user_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     hook_manager: &'a HookManager,
     supports_vision: bool,
-    shared_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
+    ui_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     streaming_content: &'a Arc<Mutex<String>>,
     #[allow(dead_code)]
     invoked_skills: &'a compact::InvokedSkillsMap,
@@ -51,7 +51,7 @@ pub async fn run_agent_loop(
         pending_user_messages,
         background_manager: _,
         todo_manager,
-        shared_messages,
+        ui_messages,
         context_tokens,
         invoked_skills,
         session_id,
@@ -65,7 +65,7 @@ pub async fn run_agent_loop(
         pending_user_messages: &pending_user_messages,
         hook_manager: &hook_manager,
         supports_vision: provider.supports_vision,
-        shared_messages: &shared_messages,
+        ui_messages: &ui_messages,
         streaming_content: &streaming_content,
         invoked_skills: &invoked_skills,
         session_id: &session_id,
@@ -747,7 +747,7 @@ pub async fn run_agent_loop(
                                 );
                                 // TODO 这里怎么能直接这样粗暴清空.... 你要有优先级去保留，起码用户消息是要保留的，参考 micro_compact 的处理
                                 messages.clear();
-                                if let Ok(mut shared) = shared_messages.lock() {
+                                if let Ok(mut shared) = ui_messages.lock() {
                                     shared.clear();
                                 }
                                 let plan_msg = ChatMessage {
@@ -761,7 +761,7 @@ pub async fn run_agent_loop(
                                     images: None,
                                 };
                                 messages.push(plan_msg.clone());
-                                push_shared(&shared_messages, plan_msg);
+                                push_ui(&ui_messages, plan_msg);
                             }
                             continue 'round;
                         }
@@ -811,7 +811,7 @@ pub async fn run_agent_loop(
                     &format!("fallback 正常结束，pending_user_messages={}", has_pending),
                 );
                 if has_pending {
-                    flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
+                    flush_streaming_as_message(&streaming_content, &mut messages, &ui_messages);
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
@@ -908,7 +908,7 @@ pub async fn run_agent_loop(
                         if let Some(ref plan_content) = result.plan_approved_clear_context {
                             write_info_log("agent_loop", "Clearing context after plan approval");
                             messages.clear();
-                            if let Ok(mut shared) = shared_messages.lock() {
+                            if let Ok(mut shared) = ui_messages.lock() {
                                 shared.clear();
                             }
                             let plan_msg = ChatMessage {
@@ -922,7 +922,7 @@ pub async fn run_agent_loop(
                                 images: None,
                             };
                             messages.push(plan_msg.clone());
-                            push_shared(&shared_messages, plan_msg);
+                            push_ui(&ui_messages, plan_msg);
                         }
                         continue 'round;
                     }
@@ -945,14 +945,14 @@ pub async fn run_agent_loop(
                     ),
                 );
                 if has_pending {
-                    flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
+                    flush_streaming_as_message(&streaming_content, &mut messages, &ui_messages);
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
 
                 // ★ Stop hook：LLM 即将结束回复（无工具调用且无待处理消息），纠查官可阻止并注入反馈
                 if hook_manager.has_hooks_for(HookEvent::Stop) {
-                    flush_streaming_as_message(&streaming_content, &mut messages, &shared_messages);
+                    flush_streaming_as_message(&streaming_content, &mut messages, &ui_messages);
                     let stop_ctx = HookContext {
                         event: HookEvent::Stop,
                         messages: Some(messages.clone()),
@@ -979,7 +979,7 @@ pub async fn run_agent_loop(
                                 images: None,
                             };
                             messages.push(feedback_msg.clone());
-                            push_shared(&shared_messages, feedback_msg);
+                            push_ui(&ui_messages, feedback_msg);
                             continue 'round;
                         }
                         // stop → 直接中止
@@ -1037,7 +1037,7 @@ fn drain_pending_user_messages(
 }
 
 /// 向共享消息列表中追加一条消息（agent 线程写入，UI 线程读取）
-fn push_shared(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
+fn push_ui(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
     if let Ok(mut msgs) = shared.lock() {
         msgs.push(msg);
     }
@@ -1048,7 +1048,7 @@ fn push_shared(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
 fn flush_streaming_as_message(
     streaming_content: &Arc<Mutex<String>>,
     messages: &mut Vec<ChatMessage>,
-    shared_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    ui_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) {
     let mut sc = safe_lock(streaming_content, "agent::flush_streaming");
     if !sc.is_empty() {
@@ -1060,7 +1060,7 @@ fn flush_streaming_as_message(
             images: None,
         };
         messages.push(text_msg.clone());
-        push_shared(shared_messages, text_msg);
+        push_ui(ui_messages, text_msg);
     }
 }
 
@@ -1127,7 +1127,7 @@ fn process_tool_calls(
             images: None,
         };
         messages.push(text_msg.clone());
-        push_shared(ctx.shared_messages, text_msg);
+        push_ui(ctx.ui_messages, text_msg);
         // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
         if let Ok(mut sc) = ctx.streaming_content.lock() {
             sc.clear();
@@ -1142,7 +1142,7 @@ fn process_tool_calls(
         images: None,
     };
     messages.push(tool_call_msg.clone());
-    push_shared(ctx.shared_messages, tool_call_msg);
+    push_ui(ctx.ui_messages, tool_call_msg);
 
     if ctx
         .tx
@@ -1212,7 +1212,7 @@ fn process_tool_calls(
             images: None,
         };
         messages.push(tool_msg.clone());
-        push_shared(ctx.shared_messages, tool_msg);
+        push_ui(ctx.ui_messages, tool_msg);
 
         // 如果模型支持视觉且工具返回了图片，先收集，稍后统一注入
         if !result_images.is_empty() {
@@ -1266,7 +1266,7 @@ fn process_tool_calls(
             ),
         );
         for img_msg in deferred_image_msgs {
-            // 只加入 LLM 上下文，不推送到 shared_messages（避免 UI 渲染这条内部消息）
+            // 只加入 LLM 上下文，不推送到 ui_messages（避免 UI 渲染这条内部消息）
             messages.push(img_msg);
         }
     }

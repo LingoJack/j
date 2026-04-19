@@ -67,9 +67,9 @@ impl Tool for WorkDoneTool {
 
         let from = current_agent_name();
 
-        // 通知团队（写入 shared_messages 以在 TUI 显示）
+        // 通知团队（写入 ui_messages 以在 TUI 显示）
         if let Ok(manager) = self.teammate_manager.lock()
-            && let Ok(mut shared) = manager.shared_messages.lock()
+            && let Ok(mut shared) = manager.ui_messages.lock()
         {
             let text = match params.summary.as_deref() {
                 Some(s) if !s.trim().is_empty() => {

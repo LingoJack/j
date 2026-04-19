@@ -95,10 +95,10 @@ pub struct ChatApp {
     /// AgentTool 的 system_prompt 共享引用（每次发送请求前更新）
     #[allow(dead_code)]
     pub agent_tool_system_prompt: Arc<Mutex<Option<String>>>,
-    /// Agent 与 UI 共享的消息列表（agent 线程 push，UI 线程 poll len 变化）
-    pub shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
+    pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// UI 侧已读取到的位置（用于增量检测）
-    pub shared_messages_read_cursor: usize,
+    pub ui_messages_cursor: usize,
     /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
     pub context_tokens: Arc<Mutex<usize>>,
     /// Teammate 管理器（多 agent 协作）
@@ -212,12 +212,10 @@ impl ChatApp {
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let pending_user_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
-        let shared_agent_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
-        let teammate_manager: Arc<Mutex<TeammateManager>> =
-            Arc::new(Mutex::new(TeammateManager::new(
-                Arc::clone(&pending_user_messages),
-                Arc::clone(&shared_agent_messages),
-            )));
+        let ui_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
+        let teammate_manager: Arc<Mutex<TeammateManager>> = Arc::new(Mutex::new(
+            TeammateManager::new(Arc::clone(&pending_user_messages), Arc::clone(&ui_messages)),
+        ));
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(TaskManager::new_with_session(&session_id));
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
@@ -277,7 +275,7 @@ impl ChatApp {
             permission_queue: Arc::clone(&permission_queue),
             plan_approval_queue: Arc::clone(&plan_approval_queue),
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
-            shared_messages: Arc::clone(&shared_agent_messages),
+            ui_messages: Arc::clone(&ui_messages),
             session_id: Arc::clone(&shared_session_id),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
@@ -534,8 +532,8 @@ impl ChatApp {
             remote_connected: false,
             agent_tool_provider: agent_provider,
             agent_tool_system_prompt: agent_system_prompt,
-            shared_agent_messages,
-            shared_messages_read_cursor: 0,
+            ui_messages,
+            ui_messages_cursor: 0,
             context_tokens: Arc::new(Mutex::new(0)),
             teammate_manager,
             sub_agent_tracker,
@@ -2467,10 +2465,10 @@ impl ChatApp {
 
         // 重置共享消息状态
         {
-            let mut shared = safe_lock(&self.shared_agent_messages, "start_agent::clear_shared");
+            let mut shared = safe_lock(&self.ui_messages, "start_agent::clear_shared");
             shared.clear();
         }
-        self.shared_messages_read_cursor = 0;
+        self.ui_messages_cursor = 0;
 
         // 启动 agent handle
         let agent_config = AgentLoopConfig {
@@ -2485,7 +2483,7 @@ impl ChatApp {
             pending_user_messages,
             background_manager,
             todo_manager,
-            shared_messages: Arc::clone(&self.shared_agent_messages),
+            ui_messages: Arc::clone(&self.ui_messages),
             context_tokens: Arc::clone(&self.context_tokens),
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),
@@ -2519,13 +2517,13 @@ impl ChatApp {
         // ★ 从共享消息列表中检测新消息，增量追加到 session.messages
         //   无条件执行，不受 agent 状态限制，确保取消后也能显示 agent 已写入的消息
         {
-            let shared = safe_lock(&self.shared_agent_messages, "poll::shared_msgs");
+            let shared = safe_lock(&self.ui_messages, "poll::shared_msgs");
             let new_count = shared.len();
-            if new_count > self.shared_messages_read_cursor {
-                for msg in &shared[self.shared_messages_read_cursor..] {
+            if new_count > self.ui_messages_cursor {
+                for msg in &shared[self.ui_messages_cursor..] {
                     self.state.session.messages.push(msg.clone());
                 }
-                self.shared_messages_read_cursor = new_count;
+                self.ui_messages_cursor = new_count;
                 self.ui.msg_lines_cache = None;
                 // 仅在 agent 主动流式传输且用户未手动上滚时自动滚动到底部
                 // 后台 teammate 消息不应强制滚动，否则用户无法上滚查看历史
