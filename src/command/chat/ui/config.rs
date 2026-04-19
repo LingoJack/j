@@ -8,7 +8,7 @@ use super::components::{
 };
 use crate::command::chat::app::{ChatApp, ConfigTab};
 use crate::command::chat::teammate::TeammateStatus;
-use crate::command::chat::tools::agent_shared::SubAgentStatus;
+use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},

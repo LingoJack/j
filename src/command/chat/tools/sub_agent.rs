@@ -4,7 +4,7 @@ use crate::command::chat::agent::thread_identity::{
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
-use crate::command::chat::tools::agent_shared::{
+use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
 };

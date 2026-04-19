@@ -8,7 +8,7 @@ use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
 use super::super::teammate::TeammateStatus;
-use super::super::tools::agent_shared::SubAgentStatus;
+use super::super::tools::derived_shared::SubAgentStatus;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use crate::util::safe_lock;

@@ -62,7 +62,7 @@ impl PendingAgentPerm {
     /// 权限请求标题：按 agent 类型区分显示
     pub fn title(&self) -> String {
         match &self.agent_type {
-            AgentType::Main => format!(" 权限请求 [Main] "),
+            AgentType::Main => " 权限请求 [Main] ".to_string(),
             AgentType::Teammate => format!(" 权限请求 [{}] ", self.name),
             AgentType::SubAgent => format!(" SubAgent 权限请求 [{}] ", self.name),
         }

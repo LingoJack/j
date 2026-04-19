@@ -37,10 +37,10 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::{TeammateManager, TeammateStatusPersist};
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::agent_shared::{
+use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
+use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentStatus, SubAgentTracker,
 };
-use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
 use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};

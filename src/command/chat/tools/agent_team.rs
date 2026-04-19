@@ -1,5 +1,5 @@
 use crate::command::chat::teammate::TeammateManager;
-use crate::command::chat::tools::agent_shared::DerivedAgentShared;
+use crate::command::chat::tools::derived_shared::DerivedAgentShared;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };

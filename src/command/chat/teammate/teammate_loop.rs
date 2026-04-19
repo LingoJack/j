@@ -4,7 +4,7 @@ use crate::command::chat::storage::{
 };
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::agent_shared::{
+use crate::command::chat::tools::derived_shared::{
     call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
     extract_tool_items,
 };

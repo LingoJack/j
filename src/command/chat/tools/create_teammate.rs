@@ -4,7 +4,7 @@ use crate::command::chat::agent::thread_identity::{
 use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
 use crate::command::chat::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
-use crate::command::chat::tools::agent_shared::DerivedAgentShared;
+use crate::command::chat::tools::derived_shared::DerivedAgentShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
 use crate::command::chat::tools::work_done::WorkDoneTool;
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};

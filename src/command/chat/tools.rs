@@ -1,4 +1,3 @@
-pub mod agent_shared;
 pub mod agent_team;
 pub mod ask;
 pub mod background;
@@ -8,6 +7,7 @@ pub mod compact;
 mod computer_use;
 pub mod create_teammate;
 pub mod definition;
+pub mod derived_shared;
 mod file;
 mod grep;
 pub mod hook;
