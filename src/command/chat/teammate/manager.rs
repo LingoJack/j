@@ -212,8 +212,9 @@ pub struct TeammateHandle {
     pub tool_calls_count: Arc<AtomicUsize>,
     /// 当前正在执行的工具名（None 表示未在执行工具）
     pub current_tool: Arc<Mutex<Option<String>>>,
-    /// 唤醒标志：仅当广播消息 @自己 或来自 Main 时 set。
-    /// teammate_loop 在 WaitingForMessage 时只响应 wake_flag=true，否则消息仅作为旁听累积到上下文。
+    /// 唤醒标志：@自己 或来自 Main 时 set。
+    /// 未 WorkDone 时，任何 pending 消息都会唤醒 teammate；
+    /// WorkDone 后，只有 @self 才能重新激活（清除 work_done）。
     pub wake_flag: Arc<AtomicBool>,
     /// WorkDone 终态标志：WorkDone 工具调用后 set，teammate_loop 读到后立即进入 Completed。
     pub work_done: Arc<AtomicBool>,
@@ -319,8 +320,8 @@ impl TeammateManager {
         }
 
         // 注入到所有其他 teammate 的 pending
-        // 唤醒语义：仅当 from == "Main" 或 @{teammate_name} 时 set wake_flag
-        // 其他广播消息仍进入 pending（作为上下文旁听），但不会唤醒 Waiting 中的 teammate
+        // 唤醒语义：@self 或 from==Main 时 set wake_flag（用于 WorkDone 后重新激活判断）
+        // 非 WorkDone 状态下，pending 有消息就唤醒，不依赖 wake_flag
         for (name, handle) in &self.teammates {
             if name == from {
                 continue; // 不给自己发

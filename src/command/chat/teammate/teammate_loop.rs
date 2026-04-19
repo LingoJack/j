@@ -42,7 +42,8 @@ pub struct TeammateLoopConfig {
     pub tool_calls_count: Arc<AtomicUsize>,
     /// 当前正在执行的工具名（与 TeammateHandle 共享）
     pub current_tool: Arc<Mutex<Option<String>>>,
-    /// 唤醒标志（与 TeammateHandle 共享）：仅 @self 或 from==Main 的广播会 set 它
+    /// 唤醒标志（与 TeammateHandle 共享）：@self 或 from==Main 的广播会 set 它
+    /// WorkDone 后仅此标志能触发重新激活（清除 work_done），未 WorkDone 时任何消息都唤醒
     pub wake_flag: Arc<AtomicBool>,
     /// WorkDone 终态标志（与 TeammateHandle 共享）：WorkDone 工具调用后 set，loop 看到后退出
     pub work_done: Arc<AtomicBool>,
@@ -237,11 +238,30 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 append_messages(&messages[prev_len..]);
             }
 
-            // 唤醒判断：仅当收到 @self 或来自 Main 的广播，wake_flag 才为 true
-            if wake_flag.swap(false, Ordering::Relaxed) {
-                idle_rounds = 0;
-                continue;
+            // 唤醒判断：有 pending 消息就唤醒（除非已 WorkDone 且未被 @）
+            // work_done=true 时，只有 @self 才能重新激活（清除 work_done 继续工作）
+            let has_new = messages.len() > prev_len;
+            if has_new {
+                if work_done.load(Ordering::Relaxed) {
+                    // WorkDone 后只有 @self 才能重新激活
+                    if wake_flag.swap(false, Ordering::Relaxed) {
+                        work_done.store(false, Ordering::Relaxed);
+                        write_info_log(
+                            "TeammateLoop",
+                            &format!("{}: re-activated after WorkDone by @mention", name),
+                        );
+                        idle_rounds = 0;
+                        continue;
+                    }
+                    // WorkDone 且未被 @，忽略消息
+                } else {
+                    // 未 WorkDone，任何消息都唤醒
+                    let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理 wake_flag
+                    idle_rounds = 0;
+                    continue;
+                }
             }
+            let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理残留 wake_flag
 
             idle_rounds += 1;
             if idle_rounds >= max_consecutive_idle {
@@ -263,17 +283,30 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
-                // 在轮询期间也 drain 旁听消息到 messages（仅累积上下文）
+                // 在轮询期间也 drain 消息到 messages
                 let prev_len = messages.len();
                 let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
                 if messages.len() > prev_len {
                     append_messages(&messages[prev_len..]);
-                }
 
-                if wake_flag.swap(false, Ordering::Relaxed) {
-                    idle_rounds = 0;
-                    break;
+                    // 有新消息：未 WorkDone 就唤醒，WorkDone 后只有 @self 才重新激活
+                    if work_done.load(Ordering::Relaxed) {
+                        if wake_flag.swap(false, Ordering::Relaxed) {
+                            work_done.store(false, Ordering::Relaxed);
+                            write_info_log(
+                                "TeammateLoop",
+                                &format!("{}: re-activated after WorkDone by @mention", name),
+                            );
+                            idle_rounds = 0;
+                            break;
+                        }
+                    } else {
+                        let _ = wake_flag.swap(false, Ordering::Relaxed);
+                        idle_rounds = 0;
+                        break;
+                    }
                 }
+                let _ = wake_flag.swap(false, Ordering::Relaxed);
             }
             continue;
         }
@@ -404,14 +437,15 @@ fn build_teammate_system_prompt(
         - 使用 `SendMessage` 工具与其他 agent 通信\n\
         - 收到的广播消息以 `<AgentName>` 前缀出现在对话中\n\
         - 用 `@AgentName` 指定消息接收者（消息仍广播给所有人，但只有 @目标 会被真正「唤醒」）\n\n\
-        ## Message Wake Semantics（重要）\n\
-        聊天室里你会看到三类消息，处理方式不同：\n\
-        - **@你自己 的消息** 或 **来自 @Main 的消息**：会唤醒你去思考和回复\n\
-        - **你不是接收者的其他 agent 间广播**：仅作为上下文出现在对话里（旁听），**不要**主动回复，否则会造成无限循环\n\
-        - 旁听消息只是让你了解团队动态；除非其中包含你必须处理的信息，否则继续等待\n\n\
+        ## Message Wake Semantics（重要）
+        聊天室里你会看到三类消息，处理方式不同：
+        - **@你自己 的消息** 或 **来自 @Main 的消息**：会立即唤醒你去思考和回复
+        - **你不是接收者的其他 agent 间广播**：也会唤醒你（保持上下文感知），但**不要**主动回复无关消息，否则会造成无限循环
+        - 旁听消息只是让你了解团队动态；除非其中包含你必须处理的信息，否则简单确认后继续工作\n\n\
         ## Completing Your Work（重要）\n\
-        - 任务做完后：先用 SendMessage 告知 @Main 结果摘要，然后调用 `WorkDone` 工具彻底退出\n\
-        - `WorkDone` 调用后你将不再响应任何消息，团队会看到你「已完成」\n\
+        - 任务做完后：先用 SendMessage 告知 @Main 结果摘要，然后调用 `WorkDone` 工具退出\n\
+        - `WorkDone` 调用后你将进入完成状态，普通消息不再唤醒你\n\
+        - **但如果有人 @你**，你会被重新激活（WorkDone 被撤销），可以继续工作\n\
         - 如果任务还可能需要你配合，**不要**调用 WorkDone，保持空闲等待即可\n\n\
         ## Rules\n\
         - 专注于你的角色职责，不要越界做其他角色的工作\n\

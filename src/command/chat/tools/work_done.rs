@@ -42,11 +42,11 @@ impl Tool for WorkDoneTool {
         Declare that you have finished your assigned work and exit the chat loop.
 
         Call this when your role's task is complete and you don't need to do anything else.
-        Once called, you will no longer respond to any further messages in the chatroom —
-        the team will see you as finished.
+        Once called, you will stop responding to general messages — the team will see you as finished.
 
         IMPORTANT:
         - Before calling WorkDone, send a SendMessage to @Main summarizing your results.
+        - If another agent @mentions you after WorkDone, you will be re-activated and can continue working.
         - If another agent might still need you, DO NOT call WorkDone — just stay idle and wait.
         - Do not call WorkDone just because the conversation is quiet; only call when your role's task is objectively done.
 
