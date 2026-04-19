@@ -482,8 +482,10 @@ fn run_headless_agent_loop(
             break;
         }
 
-        // 上面已检查 tool_calls.is_none() 会 break，此处逻辑必定为 Some
-        let tool_calls = choice.message.tool_calls.as_ref().unwrap();
+        // 上面已检查 tool_calls.is_none() 会 break，此处用 let else 确保安全
+        let Some(tool_calls) = choice.message.tool_calls.as_ref() else {
+            break;
+        };
         let tool_items = extract_tool_items(tool_calls);
         if tool_items.is_empty() {
             break;

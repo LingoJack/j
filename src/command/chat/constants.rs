@@ -145,3 +145,40 @@ pub const FINE_SCROLL_LINES: u16 = 3;
 
 /// 工具交互选项上限
 pub const TOOL_INTERACT_MAX_OPTIONS: usize = 3;
+
+// ========== Hook 相关 ==========
+
+/// Shell hook 默认超时（秒）
+pub const HOOK_DEFAULT_TIMEOUT_SECS: u64 = 10;
+
+/// LLM hook 默认超时（秒）
+pub const HOOK_DEFAULT_LLM_TIMEOUT_SECS: u64 = 30;
+
+/// LLM hook 最大生成 token 数
+pub const HOOK_LLM_MAX_TOKENS: u64 = 2048;
+
+// ========== 后台任务相关 ==========
+
+/// 后台任务默认超时（毫秒）
+pub const BG_TASK_DEFAULT_TIMEOUT_MS: u64 = 30_000;
+
+/// 后台任务最大超时（毫秒，10 分钟）
+pub const BG_TASK_MAX_TIMEOUT_MS: u64 = 600_000;
+
+/// 后台任务命令显示截断长度
+pub const BG_TASK_CMD_DISPLAY_MAX_CHARS: usize = 77;
+
+// ========== Glob 工具 ==========
+
+/// Glob 默认返回数量限制
+pub const GLOB_DEFAULT_LIMIT: usize = 100;
+
+// ========== Computer Use 工具 ==========
+
+/// 拖拽操作默认持续时间（毫秒）
+pub const DRAG_DEFAULT_DURATION_MS: u64 = 500;
+
+// ========== Compact 截断 ==========
+
+/// Compact 截断字符数（80K 字符）
+pub const COMPACT_TRUNCATE_MAX_CHARS: usize = 80_000;

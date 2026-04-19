@@ -1,3 +1,4 @@
+use crate::command::chat::constants::GLOB_DEFAULT_LIMIT;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, effective_cwd, parse_tool_args, resolve_path,
     schema_to_tool_params,
@@ -29,7 +30,7 @@ struct GlobParams {
 }
 
 fn default_limit() -> usize {
-    100
+    GLOB_DEFAULT_LIMIT
 }
 
 #[derive(Debug)]

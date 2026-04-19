@@ -1,6 +1,7 @@
 use super::super::constants::{
     COMPACT_KEEP_RECENT, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET, COMPACT_SKILL_TOKEN_BUDGET,
-    COMPACT_TOKEN_THRESHOLD, MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT, ROLE_TOOL,
+    COMPACT_TOKEN_THRESHOLD, COMPACT_TRUNCATE_MAX_CHARS, MICRO_COMPACT_BYTES_THRESHOLD,
+    ROLE_ASSISTANT, ROLE_TOOL,
 };
 use super::super::storage::{ChatMessage, ModelProvider, SessionPaths};
 use super::super::tools::ask::AskTool;
@@ -317,7 +318,10 @@ pub async fn auto_compact(
     // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
     let conversation_text = serde_json::to_string(messages).unwrap_or_default();
     // 截断到 80000 chars
-    let truncated: String = conversation_text.chars().take(80000).collect();
+    let truncated: String = conversation_text
+        .chars()
+        .take(COMPACT_TRUNCATE_MAX_CHARS)
+        .collect();
 
     let summary_prompt = format!(
         "Summarize this conversation for continuity. Use this structured format:\n\

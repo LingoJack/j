@@ -2,8 +2,8 @@ use crate::command::chat::storage::load_agent_config;
 use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{
-    DEFAULT_CHECK_LINES, REPORT_DATE_FORMAT, REPORT_SIMPLE_DATE_FORMAT, config_key, rmeta_action,
-    search_flag, section,
+    DEFAULT_CHECK_LINES, REPORT_DATE_FORMAT, REPORT_READ_BUFFER_SIZE, REPORT_SIMPLE_DATE_FORMAT,
+    config_key, rmeta_action, search_flag, section,
 };
 use crate::util::fuzzy;
 use crate::{error, info, usage};
@@ -1164,7 +1164,7 @@ pub fn handle_search(
 /// 从文件尾部读取最后 N 行（高效实现，不需要读取整个文件）
 fn read_last_n_lines(path: &Path, n: usize) -> Vec<String> {
     let mut lines = Vec::new();
-    let buffer_size: usize = 16384; // 16KB
+    let buffer_size: usize = REPORT_READ_BUFFER_SIZE; // 16KB
 
     let mut file = match fs::File::open(path) {
         Ok(f) => f,

@@ -1,5 +1,8 @@
 use super::super::permission::JcliConfig;
 use super::super::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::constants::{
+    HOOK_DEFAULT_LLM_TIMEOUT_SECS, HOOK_DEFAULT_TIMEOUT_SECS, HOOK_LLM_MAX_TOKENS,
+};
 use crate::util::log::{write_error_log, write_info_log};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
@@ -265,11 +268,11 @@ pub struct HookDef {
 }
 
 fn default_timeout() -> u64 {
-    10
+    HOOK_DEFAULT_TIMEOUT_SECS
 }
 
 fn default_llm_timeout() -> u64 {
-    30
+    HOOK_DEFAULT_LLM_TIMEOUT_SECS
 }
 
 // ========== HookKind 枚举 ==========
@@ -1413,7 +1416,7 @@ fn execute_llm_hook(
             {"role": "user", "content": user_msg}
         ],
         "temperature": 0.0,
-        "max_tokens": 2048,
+        "max_tokens": HOOK_LLM_MAX_TOKENS,
     });
     let request_str = serde_json::to_string(&request_body)
         .map_err(|e| format!("序列化 LLM hook 请求失败: {}", e))?;

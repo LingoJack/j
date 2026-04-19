@@ -1,3 +1,4 @@
+use crate::command::chat::constants::DRAG_DEFAULT_DURATION_MS;
 use crate::command::chat::tools::{
     ImageData, PlanDecision, Tool, ToolResult, schema_to_tool_params,
 };
@@ -649,7 +650,10 @@ end tell
 
         show_click_indicator(sx, sy, Some("Drag\u{2197}"));
 
-        let duration_ms = v.get("duration_ms").and_then(|d| d.as_u64()).unwrap_or(500);
+        let duration_ms = v
+            .get("duration_ms")
+            .and_then(|d| d.as_u64())
+            .unwrap_or(DRAG_DEFAULT_DURATION_MS);
 
         match super::mouse::drag(sx, sy, ex, ey, duration_ms) {
             Ok(_) => {

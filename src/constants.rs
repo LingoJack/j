@@ -443,3 +443,8 @@ pub mod todo_filter {
     /// 默认过滤模式（未完成）
     pub const DEFAULT: usize = UNDONE;
 }
+
+// ========== 报告相关 ==========
+
+/// 报告文件尾部读取缓冲区大小（16KB）
+pub const REPORT_READ_BUFFER_SIZE: usize = 16384;

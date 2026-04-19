@@ -1,4 +1,7 @@
 use super::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
+use crate::command::chat::constants::{
+    BG_TASK_CMD_DISPLAY_MAX_CHARS, BG_TASK_DEFAULT_TIMEOUT_MS, BG_TASK_MAX_TIMEOUT_MS,
+};
 use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -179,7 +182,11 @@ impl BackgroundManager {
                 let elapsed = now.duration_since(t.started_at).as_secs();
                 // command 截断到 80 字符，避免污染上下文
                 let cmd_summary = if t.command.chars().count() > 80 {
-                    let truncated: String = t.command.chars().take(77).collect();
+                    let truncated: String = t
+                        .command
+                        .chars()
+                        .take(BG_TASK_CMD_DISPLAY_MAX_CHARS)
+                        .collect();
                     format!("{}...", truncated)
                 } else {
                     t.command.clone()
@@ -245,7 +252,7 @@ fn default_block() -> bool {
 }
 
 fn default_timeout_ms() -> u64 {
-    30_000
+    BG_TASK_DEFAULT_TIMEOUT_MS
 }
 
 /// 查询后台任务输出的工具（替代 CheckBackgroundTool）
@@ -281,7 +288,7 @@ impl Tool for TaskOutputTool {
             Err(e) => return e,
         };
 
-        let timeout_ms = params.timeout.min(600_000);
+        let timeout_ms = params.timeout.min(BG_TASK_MAX_TIMEOUT_MS);
 
         // 若任务不存在，直接报错
         if self.manager.get_task_status(&params.task_id).is_none() {
