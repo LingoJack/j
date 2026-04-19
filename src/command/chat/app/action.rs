@@ -85,6 +85,8 @@ pub enum Action {
         delay_ms: u64,
         error: String,
     },
+    /// 上下文正在压缩（auto_compact 执行中）
+    StreamCompacting,
 
     // ========== 工具执行和确认 ==========
     /// 执行当前待处理工具（用户确认）

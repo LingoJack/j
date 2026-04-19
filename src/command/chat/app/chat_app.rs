@@ -642,6 +642,7 @@ impl ChatApp {
 
             // ========== 流式生命周期 ==========
             Action::StreamChunk => {
+                self.state.retry_hint = None;
                 if self.ui.auto_scroll {
                     self.ui.scroll_offset = u16::MAX;
                 }
@@ -704,6 +705,9 @@ impl ChatApp {
                     "⟳ 重试 {}/{} · {}s · {}",
                     attempt, max_attempts, delay_s, error
                 ));
+            }
+            Action::StreamCompacting => {
+                self.state.retry_hint = Some("📦 压缩上下文中...".to_string());
             }
 
             // ========== 工具执行 ==========

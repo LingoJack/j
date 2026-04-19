@@ -196,7 +196,8 @@ pub async fn run_main_agent_loop(
                     }
 
                     if !compact_aborted {
-                        if let Err(e) = compact::auto_compact(
+                        let _ = tx.send(StreamMsg::Compacting);
+                        match compact::auto_compact(
                             &mut messages,
                             &provider,
                             &invoked_skills,
@@ -205,21 +206,27 @@ pub async fn run_main_agent_loop(
                         )
                         .await
                         {
-                            write_error_log("agent_loop", &format!("auto_compact failed: {}", e));
-                        } else {
-                            // ★ PostAutoCompact hook
-                            if hook_manager.has_hooks_for(HookEvent::PostAutoCompact) {
-                                let ctx = HookContext {
-                                    event: HookEvent::PostAutoCompact,
-                                    messages: Some(messages.clone()),
-                                    session_id: Some(session_id.clone()),
-                                    ..Default::default()
-                                };
-                                if let Some(result) =
-                                    hook_manager.execute(HookEvent::PostAutoCompact, ctx)
-                                    && let Some(new_msgs) = result.messages
-                                {
-                                    messages = new_msgs;
+                            Err(e) => {
+                                write_error_log(
+                                    "agent_loop",
+                                    &format!("auto_compact failed: {}", e),
+                                );
+                            }
+                            Ok(_result) => {
+                                // ★ PostAutoCompact hook
+                                if hook_manager.has_hooks_for(HookEvent::PostAutoCompact) {
+                                    let ctx = HookContext {
+                                        event: HookEvent::PostAutoCompact,
+                                        messages: Some(messages.clone()),
+                                        session_id: Some(session_id.clone()),
+                                        ..Default::default()
+                                    };
+                                    if let Some(result) =
+                                        hook_manager.execute(HookEvent::PostAutoCompact, ctx)
+                                        && let Some(new_msgs) = result.messages
+                                    {
+                                        messages = new_msgs;
+                                    }
                                 }
                             }
                         }
@@ -539,6 +546,7 @@ pub async fn run_main_agent_loop(
                 }
                 // 通过 auto_compact 重建干净的上下文（摘要 + 全新消息结构，无孤立引用）
                 if compact_config.enabled {
+                    let _ = tx.send(StreamMsg::Compacting);
                     if let Err(e) = compact::auto_compact(
                         &mut messages,
                         &provider,
@@ -730,6 +738,7 @@ pub async fn run_main_agent_loop(
                         Ok(result) => {
                             // ── Layer 3: compact tool 触发 ──
                             if result.compact_requested && compact_config.enabled {
+                                let _ = tx.send(StreamMsg::Compacting);
                                 let _ = compact::auto_compact(
                                     &mut messages,
                                     &provider,
@@ -745,10 +754,16 @@ pub async fn run_main_agent_loop(
                                     "agent_loop",
                                     "Clearing context after plan approval",
                                 );
-                                // TODO 这里怎么能直接这样粗暴清空.... 你要有优先级去保留，起码用户消息是要保留的，参考 micro_compact 的处理
+                                // 保留所有历史 user 消息（用户的真实意图/追问是实施依据），
+                                // 仅清除 assistant 探索过程与 tool 结果
+                                let preserved_users = compact::extract_user_messages(&messages);
                                 messages.clear();
                                 if let Ok(mut shared) = ui_messages.lock() {
                                     shared.clear();
+                                }
+                                for user_msg in preserved_users {
+                                    messages.push(user_msg.clone());
+                                    push_ui(&ui_messages, user_msg);
                                 }
                                 let plan_msg = ChatMessage {
                                     role: ROLE_USER.to_string(),
@@ -895,6 +910,7 @@ pub async fn run_main_agent_loop(
                     Ok(result) => {
                         // ── Layer 3: compact tool 触发 ──
                         if result.compact_requested && compact_config.enabled {
+                            let _ = tx.send(StreamMsg::Compacting);
                             let _ = compact::auto_compact(
                                 &mut messages,
                                 &provider,
@@ -907,9 +923,16 @@ pub async fn run_main_agent_loop(
                         // ── Plan 被批准且清空上下文 ──
                         if let Some(ref plan_content) = result.plan_with_context_clear {
                             write_info_log("agent_loop", "Clearing context after plan approval");
+                            // 保留所有历史 user 消息（用户的真实意图/追问是实施依据），
+                            // 仅清除 assistant 探索过程与 tool 结果
+                            let preserved_users = compact::extract_user_messages(&messages);
                             messages.clear();
                             if let Ok(mut shared) = ui_messages.lock() {
                                 shared.clear();
+                            }
+                            for user_msg in preserved_users {
+                                messages.push(user_msg.clone());
+                                push_ui(&ui_messages, user_msg);
                             }
                             let plan_msg = ChatMessage {
                                 role: ROLE_USER.to_string(),

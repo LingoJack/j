@@ -43,6 +43,8 @@ pub enum StreamMsg {
         /// 原始错误简要描述
         error: String,
     },
+    /// 上下文正在压缩（auto_compact 执行中）
+    Compacting,
 }
 
 /// 工具执行状态

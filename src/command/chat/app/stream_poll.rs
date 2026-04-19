@@ -317,6 +317,9 @@ impl ChatApp {
                             error,
                         });
                     }
+                    StreamMsg::Compacting => {
+                        actions.push(Action::StreamCompacting);
+                    }
                 }
             }
         }
