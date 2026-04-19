@@ -69,8 +69,11 @@ pub const MICRO_COMPACT_BYTES_THRESHOLD: usize = 800;
 /// Compact token 阈值（256 * 800）
 pub const COMPACT_TOKEN_THRESHOLD: usize = 256 * 800;
 
-/// Compact 保留最近消息数
+/// Compact 保留最近消息数（micro_compact 保留的 tool result 数量）
 pub const COMPACT_KEEP_RECENT: usize = 10;
+
+/// Auto compact 后保留最近几条 user 消息原文（不限于未回复的）
+pub const COMPACT_KEEP_RECENT_USER_MESSAGES: usize = 5;
 
 /// Auto compact 后技能附件总 token 预算（~25K tokens）
 pub const COMPACT_SKILL_TOKEN_BUDGET: usize = 25_000;

@@ -18,6 +18,47 @@ use futures::StreamExt;
 use rand::Rng;
 use std::sync::{Arc, mpsc};
 
+/// auto_compact 成功后，向 messages 和 ui_messages 注入 Compact 工具调用 + 结果消息，
+/// 等同于 LLM 手动调用 CompactTool 的效果。
+fn push_compact_tool_messages(
+    messages: &mut Vec<ChatMessage>,
+    ui_messages: &Arc<std::sync::Mutex<Vec<ChatMessage>>>,
+    compact_result: &compact::CompactResult,
+) {
+    let tool_call_id = format!("compact_auto_{}", compact_result.messages_before);
+
+    // 1. assistant tool_call 消息（与 LLM 调用 CompactTool 时一致）
+    let tool_call_item = ToolCallItem {
+        id: tool_call_id.clone(),
+        name: "Compact".to_string(),
+        arguments: r#"{"reason":"auto_compact"}"#.to_string(),
+    };
+    let tool_call_msg = ChatMessage {
+        role: ROLE_ASSISTANT.to_string(),
+        content: String::new(),
+        tool_calls: Some(vec![tool_call_item]),
+        tool_call_id: None,
+        images: None,
+    };
+    messages.push(tool_call_msg.clone());
+    push_ui(ui_messages, tool_call_msg);
+
+    // 2. tool result 消息
+    let result_content = format!(
+        "📦 上下文已压缩 ({} 条消息 → 摘要, transcript: {})",
+        compact_result.messages_before, compact_result.transcript_path,
+    );
+    let tool_msg = ChatMessage {
+        role: ROLE_TOOL.to_string(),
+        content: result_content,
+        tool_calls: None,
+        tool_call_id: Some(tool_call_id),
+        images: None,
+    };
+    messages.push(tool_msg.clone());
+    push_ui(ui_messages, tool_msg);
+}
+
 /// 流式响应中逐步聚合的工具调用片段（按 chunk index 聚合 id/name/arguments）
 struct StreamingToolCallPart {
     call_id: String,
@@ -214,6 +255,7 @@ pub async fn run_main_agent_loop(
                                 );
                             }
                             Ok(result) => {
+                                push_compact_tool_messages(&mut messages, &ui_messages, &result);
                                 sync_ui_after_compact(&ui_messages, &messages);
                                 let _ = tx.send(StreamMsg::Compacted {
                                     messages_before: result.messages_before,
@@ -574,6 +616,7 @@ pub async fn run_main_agent_loop(
                             return;
                         }
                         Ok(result) => {
+                            push_compact_tool_messages(&mut messages, &ui_messages, &result);
                             sync_ui_after_compact(&ui_messages, &messages);
                             let _ = tx.send(StreamMsg::Compacted {
                                 messages_before: result.messages_before,
@@ -762,6 +805,11 @@ pub async fn run_main_agent_loop(
                                 )
                                 .await
                                 {
+                                    push_compact_tool_messages(
+                                        &mut messages,
+                                        &ui_messages,
+                                        &compact_result,
+                                    );
                                     sync_ui_after_compact(&ui_messages, &messages);
                                     let _ = tx.send(StreamMsg::Compacted {
                                         messages_before: compact_result.messages_before,
@@ -940,6 +988,11 @@ pub async fn run_main_agent_loop(
                             )
                             .await
                             {
+                                push_compact_tool_messages(
+                                    &mut messages,
+                                    &ui_messages,
+                                    &compact_result,
+                                );
                                 sync_ui_after_compact(&ui_messages, &messages);
                                 let _ = tx.send(StreamMsg::Compacted {
                                     messages_before: compact_result.messages_before,

@@ -22,6 +22,8 @@ pub enum ToolCategory {
     Plan,
     /// 代理类 (Agent)
     Agent,
+    /// 压缩类 (Compact)
+    Compact,
     /// 其他类
     Other,
 }
@@ -38,6 +40,7 @@ impl ToolCategory {
             tool_names::WEB_FETCH | tool_names::WEB_SEARCH | tool_names::BROWSER => Self::Network,
             tool_names::ENTER_PLAN_MODE | tool_names::EXIT_PLAN_MODE => Self::Plan,
             tool_names::AGENT => Self::Agent,
+            "Compact" => Self::Compact,
             _ => Self::Other,
         }
     }
@@ -51,6 +54,7 @@ impl ToolCategory {
             Self::Network => "🌐",
             Self::Plan => "📋",
             Self::Agent => "🤖",
+            Self::Compact => "📦",
             Self::Other => "🔧",
         }
     }
@@ -64,6 +68,7 @@ impl ToolCategory {
             Self::Network => theme.config_title,  // 青色系
             Self::Plan => theme.label_ai,         // 绿色系
             Self::Agent => theme.title_loading,   // 黄/橙色系
+            Self::Compact => theme.config_title,  // 青色系
             Self::Other => theme.text_dim,        // 灰色
         }
     }
@@ -179,6 +184,7 @@ pub fn get_result_summary_for_tool(
         tool_names::TODO_READ => get_todo_read_summary(content),
         tool_names::TASK => get_task_summary(content, tool_args),
         tool_names::AGENT => get_agent_summary(content, tool_args),
+        "Compact" => get_compact_summary(content),
         _ => get_generic_summary(content),
     }
 }
@@ -372,6 +378,20 @@ fn get_agent_summary(content: &str, tool_args: Option<&str>) -> String {
         let max_f: String = first_line.chars().take(50).collect();
         max_f
     }
+}
+
+/// Compact 工具摘要：提取压缩信息
+fn get_compact_summary(content: &str) -> String {
+    // 内容格式: "📦 上下文已压缩 (N 条消息 → 摘要, transcript: path)"
+    // 直接取第一行作为摘要
+    content
+        .lines()
+        .next()
+        .map(|l| {
+            let chars: String = l.chars().take(60).collect();
+            chars
+        })
+        .unwrap_or_else(|| "压缩完成".to_string())
 }
 
 fn get_generic_summary(content: &str) -> String {

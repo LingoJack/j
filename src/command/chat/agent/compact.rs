@@ -1,7 +1,7 @@
 use super::super::constants::{
-    COMPACT_KEEP_RECENT, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET, COMPACT_SKILL_TOKEN_BUDGET,
-    COMPACT_TOKEN_THRESHOLD, COMPACT_TRUNCATE_MAX_CHARS, MICRO_COMPACT_BYTES_THRESHOLD,
-    ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER,
+    COMPACT_KEEP_RECENT, COMPACT_KEEP_RECENT_USER_MESSAGES, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET,
+    COMPACT_SKILL_TOKEN_BUDGET, COMPACT_TOKEN_THRESHOLD, COMPACT_TRUNCATE_MAX_CHARS,
+    MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER,
 };
 use super::super::storage::{ChatMessage, ModelProvider, SessionPaths};
 use super::super::tools::ask::AskTool;
@@ -130,6 +130,8 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
 pub struct CompactResult {
     /// 压缩前的消息数量
     pub messages_before: usize,
+    /// 保存的 transcript 文件路径
+    pub transcript_path: String,
 }
 
 // ========== Compact 配置 ==========
@@ -200,21 +202,22 @@ pub fn extract_user_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         .collect()
 }
 
-/// 提取末尾"未被 assistant 完整响应"的 user 消息（保留原始顺序）。
-/// 从末尾向前扫描，遇到 assistant/tool 消息即停止；中间的 user 消息视为待响应。
-/// 用于 auto_compact 场景：压缩后必须保留用户刚发出、尚未被回答的问题，否则 LLM 会丢失任务。
-pub fn extract_trailing_unanswered_user(messages: &[ChatMessage]) -> Vec<ChatMessage> {
-    let mut trailing: Vec<ChatMessage> = Vec::new();
+/// 提取最近 N 条 user 消息原文（不限于未被回复的）。
+/// 从末尾向前扫描，取最后 `count` 条 role=user 的消息，保留原始顺序。
+/// 用于 auto_compact 场景：压缩后必须保留用户最近的消息原文，
+/// 否则 LLM 只能看到摘要而丢失用户的精确措辞和当前任务意图。
+pub fn extract_recent_user_messages(messages: &[ChatMessage], count: usize) -> Vec<ChatMessage> {
+    let mut recent: Vec<ChatMessage> = Vec::new();
     for m in messages.iter().rev() {
-        if m.role == ROLE_ASSISTANT || m.role == ROLE_TOOL {
-            break;
-        }
         if m.role == ROLE_USER {
-            trailing.push(m.clone());
+            recent.push(m.clone());
+            if recent.len() >= count {
+                break;
+            }
         }
     }
-    trailing.reverse();
-    trailing
+    recent.reverse();
+    recent
 }
 
 /// 内置豁免工具列表（不可配置，始终不压缩这些工具的返回结果）
@@ -431,10 +434,9 @@ pub async fn auto_compact(
         &format!("摘要完成，长度: {} chars", summary.len()),
     );
 
-    // 4. 替换 messages 为 [summary_user_msg, understood_assistant_msg, ...trailing_user]
-    //    如果有已调用技能，将技能指令作为附件重新注入，确保压缩后仍可遵循
-    //    同时保留"未被 assistant 响应"的末尾 user 消息，避免丢失用户刚发出的问题
-    let trailing_user = extract_trailing_unanswered_user(messages);
+    // 4. 替换 messages 为 [summary_user_msg, understood_assistant_msg, ...recent_user_msgs]
+    //    保留最近 N 条 user 消息原文，确保 LLM 下一轮能看到用户的精确措辞和当前任务
+    let recent_user = extract_recent_user_messages(messages, COMPACT_KEEP_RECENT_USER_MESSAGES);
     messages.clear();
     let mut summary_content = format!(
         "[Conversation compressed. Transcript: {}]\n\n{}",
@@ -468,28 +470,22 @@ pub async fn auto_compact(
         images: None,
     });
 
-    // 追加未被响应的末尾 user 消息，确保 LLM 下一轮能看到待处理的问题
-    if !trailing_user.is_empty() {
+    // 追加最近 N 条 user 消息原文，确保 LLM 能看到用户的精确措辞
+    if !recent_user.is_empty() {
         write_info_log(
             "auto_compact",
             &format!(
-                "保留 {} 条未被响应的末尾 user 消息，避免压缩丢失用户当前意图",
-                trailing_user.len()
+                "保留最近 {} 条 user 消息原文，确保压缩后任务意图不丢失",
+                recent_user.len()
             ),
         );
-        for msg in trailing_user {
+        for msg in recent_user {
             messages.push(msg);
         }
     }
 
-    // UI 提示：在消息区显示系统消息
-    messages.push(ChatMessage {
-        role: "system".to_string(),
-        content: format!("📦 上下文已压缩 (transcript: {})", transcript_path),
-        tool_calls: None,
-        tool_call_id: None,
-        images: None,
-    });
-
-    Ok(CompactResult { messages_before })
+    Ok(CompactResult {
+        messages_before,
+        transcript_path,
+    })
 }
