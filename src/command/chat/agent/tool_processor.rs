@@ -55,11 +55,15 @@ pub(super) fn push_ui(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
     }
 }
 
-/// auto_compact 后同步 ui_messages：清空旧消息，重新推送压缩后的消息列表
-pub(super) fn sync_ui_after_compact(
-    shared: &Arc<Mutex<Vec<ChatMessage>>>,
-    new_messages: &[ChatMessage],
-) {
+/// auto_compact 后清空 ui_messages（旧消息已过时，由后续 push_ui 重建）
+pub(super) fn clear_ui_messages(shared: &Arc<Mutex<Vec<ChatMessage>>>) {
+    if let Ok(mut msgs) = shared.lock() {
+        msgs.clear();
+    }
+}
+
+/// 全量同步 ui_messages（仅用于 PostAutoCompact hook 修改了 messages 的罕见场景）
+pub(super) fn sync_ui_full(shared: &Arc<Mutex<Vec<ChatMessage>>>, new_messages: &[ChatMessage]) {
     if let Ok(mut msgs) = shared.lock() {
         msgs.clear();
         msgs.extend_from_slice(new_messages);

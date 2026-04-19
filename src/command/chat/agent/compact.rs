@@ -126,12 +126,16 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
 // ========== Compact 结果 ==========
 
 /// auto_compact 执行结果
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct CompactResult {
     /// 压缩前的消息数量
     pub messages_before: usize,
     /// 保存的 transcript 文件路径
     pub transcript_path: String,
+    /// LLM 生成的摘要文本（供 tool result 显示）
+    pub summary: String,
+    /// 保留的最近 user 消息原文（供 UI 显示）
+    pub recent_user_messages: Vec<ChatMessage>,
 }
 
 // ========== Compact 配置 ==========
@@ -471,6 +475,7 @@ pub async fn auto_compact(
     });
 
     // 追加最近 N 条 user 消息原文，确保 LLM 能看到用户的精确措辞
+    let recent_user_clone = recent_user.clone();
     if !recent_user.is_empty() {
         write_info_log(
             "auto_compact",
@@ -487,5 +492,7 @@ pub async fn auto_compact(
     Ok(CompactResult {
         messages_before,
         transcript_path,
+        summary,
+        recent_user_messages: recent_user_clone,
     })
 }

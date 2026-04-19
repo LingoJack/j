@@ -7,8 +7,8 @@ use super::compact;
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
-    ToolCallContext, drain_pending_user_messages, flush_streaming_as_message, process_tool_calls,
-    push_ui, sync_ui_after_compact,
+    ToolCallContext, clear_ui_messages, drain_pending_user_messages, flush_streaming_as_message,
+    process_tool_calls, push_ui, sync_ui_full,
 };
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::util::log::{write_error_log, write_info_log};
@@ -43,10 +43,10 @@ fn push_compact_tool_messages(
     messages.push(tool_call_msg.clone());
     push_ui(ui_messages, tool_call_msg);
 
-    // 2. tool result 消息
+    // 2. tool result 消息：包含摘要内容，UI 以边框形式展示
     let result_content = format!(
-        "📦 上下文已压缩 ({} 条消息 → 摘要, transcript: {})",
-        compact_result.messages_before, compact_result.transcript_path,
+        "📦 上下文已压缩 ({} 条消息 → 摘要, transcript: {})\n\n{}",
+        compact_result.messages_before, compact_result.transcript_path, compact_result.summary,
     );
     let tool_msg = ChatMessage {
         role: ROLE_TOOL.to_string(),
@@ -57,6 +57,11 @@ fn push_compact_tool_messages(
     };
     messages.push(tool_msg.clone());
     push_ui(ui_messages, tool_msg);
+
+    // 3. 推送保留的最近 user 消息到 UI（这些已存在于 messages 中）
+    for msg in &compact_result.recent_user_messages {
+        push_ui(ui_messages, msg.clone());
+    }
 }
 
 /// 流式响应中逐步聚合的工具调用片段（按 chunk index 聚合 id/name/arguments）
@@ -255,8 +260,8 @@ pub async fn run_main_agent_loop(
                                 );
                             }
                             Ok(result) => {
+                                clear_ui_messages(&ui_messages);
                                 push_compact_tool_messages(&mut messages, &ui_messages, &result);
-                                sync_ui_after_compact(&ui_messages, &messages);
                                 let _ = tx.send(StreamMsg::Compacted {
                                     messages_before: result.messages_before,
                                 });
@@ -273,7 +278,8 @@ pub async fn run_main_agent_loop(
                                         && let Some(new_msgs) = hook_result.messages
                                     {
                                         messages = new_msgs;
-                                        sync_ui_after_compact(&ui_messages, &messages);
+                                        // hook 可能修改了消息，重新全量同步
+                                        sync_ui_full(&ui_messages, &messages);
                                     }
                                 }
                             }
@@ -616,8 +622,8 @@ pub async fn run_main_agent_loop(
                             return;
                         }
                         Ok(result) => {
+                            clear_ui_messages(&ui_messages);
                             push_compact_tool_messages(&mut messages, &ui_messages, &result);
-                            sync_ui_after_compact(&ui_messages, &messages);
                             let _ = tx.send(StreamMsg::Compacted {
                                 messages_before: result.messages_before,
                             });
@@ -805,12 +811,12 @@ pub async fn run_main_agent_loop(
                                 )
                                 .await
                                 {
+                                    clear_ui_messages(&ui_messages);
                                     push_compact_tool_messages(
                                         &mut messages,
                                         &ui_messages,
                                         &compact_result,
                                     );
-                                    sync_ui_after_compact(&ui_messages, &messages);
                                     let _ = tx.send(StreamMsg::Compacted {
                                         messages_before: compact_result.messages_before,
                                     });
@@ -988,12 +994,12 @@ pub async fn run_main_agent_loop(
                             )
                             .await
                             {
+                                clear_ui_messages(&ui_messages);
                                 push_compact_tool_messages(
                                     &mut messages,
                                     &ui_messages,
                                     &compact_result,
                                 );
-                                sync_ui_after_compact(&ui_messages, &messages);
                                 let _ = tx.send(StreamMsg::Compacted {
                                     messages_before: compact_result.messages_before,
                                 });
