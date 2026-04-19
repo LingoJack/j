@@ -1,15 +1,15 @@
-use crate::command::chat::agent::window::select_messages;
-use crate::command::chat::agent_md::load_agent_md;
-use crate::command::chat::api::{
+use crate::command::chat::agent::api::{
     build_request_with_tools, call_openai_stream, create_openai_client,
 };
+use crate::command::chat::agent::compact::new_invoked_skills_map;
+use crate::command::chat::agent::window::select_messages;
+use crate::command::chat::agent_md::load_agent_md;
 use crate::command::chat::app::AskRequest;
-use crate::command::chat::compact::new_invoked_skills_map;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::handler::run_chat_tui;
-use crate::command::chat::hook::HookManager;
+use crate::command::chat::infra::hook::HookManager;
+use crate::command::chat::infra::skill::{project_skills_dir, skills_dir};
 use crate::command::chat::permission::{JcliConfig, generate_allow_rule};
-use crate::command::chat::skill::{project_skills_dir, skills_dir};
 use crate::command::chat::storage::{
     AgentConfig, ChatMessage, ModelProvider, SessionEvent, ToolCallItem, append_session_event,
     find_latest_session_id, load_agent_config, load_memory, load_session, load_soul, load_style,

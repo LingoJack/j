@@ -1,4 +1,4 @@
-use crate::command::chat::theme::Theme;
+use crate::command::chat::render::theme::Theme;
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},

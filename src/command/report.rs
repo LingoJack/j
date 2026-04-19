@@ -1,5 +1,5 @@
+use crate::command::chat::render::theme::Theme;
 use crate::command::chat::storage::load_agent_config;
-use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{
     DEFAULT_CHECK_LINES, REPORT_DATE_FORMAT, REPORT_READ_BUFFER_SIZE, REPORT_SIMPLE_DATE_FORMAT,

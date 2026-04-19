@@ -1,8 +1,8 @@
+use crate::command::chat::agent::compact::InvokedSkillsMap;
 use crate::command::chat::app::AskRequest;
-use crate::command::chat::compact::InvokedSkillsMap;
-use crate::command::chat::hook::HookManager;
-use crate::command::chat::permission_queue::PermissionQueue;
-use crate::command::chat::skill::Skill;
+use crate::command::chat::infra::hook::HookManager;
+use crate::command::chat::infra::skill::Skill;
+use crate::command::chat::permission::queue::PermissionQueue;
 use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
 use schemars::JsonSchema;
 use serde::Deserialize;

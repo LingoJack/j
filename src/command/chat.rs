@@ -18,29 +18,12 @@ pub mod ui;
 
 pub use oneshot::handle_chat;
 
-// Re-exports from agent/ subdirectory (backward compat)
-pub use agent::api;
+// Re-exports needed by super::super:: relative paths within chat submodules
 pub use agent::compact;
-pub use agent::config as agent_config;
-
-// Re-exports from teammate/ subdirectory (backward compat)
-pub use teammate::teammate_loop;
-
-// Re-exports from permission/ subdirectory (backward compat)
-pub use permission::queue as permission_queue;
-
-// Re-exports from infra/ subdirectory (backward compat)
 pub use infra::archive;
-pub use infra::command;
 pub use infra::hook;
-pub use infra::sandbox;
-pub use infra::skill;
-
-// Re-exports from render/ subdirectory (backward compat)
+pub use input::autocomplete;
+pub use input::input_thread;
 pub use render::cache as render_cache;
 pub use render::helpers as ui_helpers;
 pub use render::theme;
-
-// Re-exports from input/ subdirectory (backward compat)
-pub use input::autocomplete;
-pub use input::input_thread;

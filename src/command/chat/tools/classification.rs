@@ -2,7 +2,7 @@ use crate::command::chat::constants::{
     CLASSIFY_SIZE_THRESHOLD_BYTES, CLASSIFY_SIZE_THRESHOLD_CHARS, CLASSIFY_TITLE_TRUNCATE_LEN,
     CLASSIFY_TRUNCATE_LEN,
 };
-use crate::command::chat::theme::Theme;
+use crate::command::chat::render::theme::Theme;
 use ratatui::style::Color;
 
 use super::tool_names;

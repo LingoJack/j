@@ -1,6 +1,6 @@
 use crate::assets::{self, HelpTab};
 use crate::command::chat::markdown::markdown_to_lines;
-use crate::command::chat::theme::{Theme, ThemeName};
+use crate::command::chat::render::theme::{Theme, ThemeName};
 use ratatui::text::Line;
 
 /// 每个 Tab 的缓存数据

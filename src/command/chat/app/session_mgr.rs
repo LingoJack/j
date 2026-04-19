@@ -1,6 +1,6 @@
 use super::chat_app::ChatApp;
+use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::remote::protocol::WsOutbound;
-use crate::command::chat::sandbox::Sandbox;
 use crate::command::chat::storage::{
     ChatMessage, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
     SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, generate_session_id,

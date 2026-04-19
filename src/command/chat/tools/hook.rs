@@ -1,4 +1,6 @@
-use crate::command::chat::hook::{HookDef, HookEvent, HookFilter, HookManager, HookType, OnError};
+use crate::command::chat::infra::hook::{
+    HookDef, HookEvent, HookFilter, HookManager, HookType, OnError,
+};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };

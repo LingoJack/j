@@ -1,5 +1,5 @@
 use super::chat_app::ChatApp;
-use crate::command::chat::skill::{self, skills_dir};
+use crate::command::chat::infra::skill::{self, skills_dir};
 use crate::command::chat::storage::{
     ChatMessage, load_memory, load_soul, load_style, load_system_prompt,
 };

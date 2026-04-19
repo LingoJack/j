@@ -1,5 +1,5 @@
+use crate::command::chat::render::theme::Theme;
 use crate::command::chat::storage::load_agent_config;
-use crate::command::chat::theme::Theme;
 use crate::command::report;
 use crate::config::YamlConfig;
 use crate::constants::todo_filter;

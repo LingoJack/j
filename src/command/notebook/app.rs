@@ -1,6 +1,6 @@
 use crate::command::chat::markdown::markdown_to_lines;
+use crate::command::chat::render::theme::Theme;
 use crate::command::chat::storage::load_agent_config;
-use crate::command::chat::theme::Theme;
 use crate::config::YamlConfig;
 use crate::constants::{config_key, section, shell};
 use crate::error;

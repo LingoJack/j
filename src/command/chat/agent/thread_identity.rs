@@ -3,7 +3,7 @@
 //! 主 Agent、SubAgent、Teammate 各自运行在独立线程中，
 //! 通过 thread_local 记录当前线程所属的 agent 名称/类型以及工作目录覆盖。
 
-use crate::command::chat::permission_queue::AgentType;
+use crate::command::chat::permission::queue::AgentType;
 use std::cell::RefCell;
 use std::path::PathBuf;
 

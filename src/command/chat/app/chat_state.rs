@@ -1,5 +1,5 @@
-use crate::command::chat::command::CustomCommand;
-use crate::command::chat::skill::Skill;
+use crate::command::chat::infra::command::CustomCommand;
+use crate::command::chat::infra::skill::Skill;
 use crate::command::chat::storage::{AgentConfig, ChatMessage, ChatSession};
 use std::sync::{Arc, Mutex};
 

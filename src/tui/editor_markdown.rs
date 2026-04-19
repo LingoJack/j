@@ -11,7 +11,7 @@ use crate::command::chat::storage::{load_agent_config, save_agent_config};
 use std::io;
 
 use crate::command::chat::markdown::highlight::highlight_code_line;
-use crate::command::chat::theme::{Theme, ThemeName};
+use crate::command::chat::render::theme::{Theme, ThemeName};
 
 use crate::tui::editor_core::{EditorTheme, HighlightFn, ThemeGalleryItem};
 // 直接使用 editor_core 的公共 API

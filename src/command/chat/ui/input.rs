@@ -2,7 +2,7 @@
 //!
 //! 提取自 chat.rs，处理用户输入框的渲染、折行、光标位置计算和 @mention 高亮。
 
-use crate::command::chat::theme::Theme;
+use crate::command::chat::render::theme::Theme;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

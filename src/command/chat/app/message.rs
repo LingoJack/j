@@ -1,9 +1,9 @@
 use super::chat_app::ChatApp;
 use super::system_prompt::{StaticPlaceholderValues, apply_static_placeholders};
-use crate::command::chat::agent_config::{AgentLoopConfig, AgentLoopSharedState};
-use crate::command::chat::command;
-use crate::command::chat::hook::{HookContext, HookEvent, HookManager};
-use crate::command::chat::skill::{self, skills_dir};
+use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState};
+use crate::command::chat::infra::command;
+use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
+use crate::command::chat::infra::skill::{self, skills_dir};
 use crate::command::chat::storage::ChatMessage;
 use crate::util::safe_lock;
 use std::sync::Arc;

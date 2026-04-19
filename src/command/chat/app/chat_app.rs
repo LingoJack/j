@@ -5,26 +5,26 @@ use super::tool_executor::ToolExecutor;
 use super::types::{AskAnswer, AskRequest, ToolExecStatus};
 use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_md;
-use crate::command::chat::archive;
-use crate::command::chat::command;
 use crate::command::chat::constants::{
     FINE_SCROLL_LINES, INPUT_BUFFER_MAX_LEN, PAGE_SCROLL_LINES, ROLE_ASSISTANT, ROLE_USER,
     TODO_NAG_INTERVAL_ROUNDS, TOOL_INTERACT_MAX_OPTIONS,
 };
-use crate::command::chat::hook::{HookContext, HookEvent, HookManager, HookResult};
+use crate::command::chat::infra::archive;
+use crate::command::chat::infra::command;
+use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager, HookResult};
+use crate::command::chat::infra::sandbox::Sandbox;
+use crate::command::chat::infra::skill;
 use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::JcliConfig;
-use crate::command::chat::permission_queue::PermissionQueue;
+use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::{ToolConfirmInfo, WsOutbound};
-use crate::command::chat::sandbox::Sandbox;
-use crate::command::chat::skill;
+use crate::command::chat::render::theme::{Theme, ThemeName};
 use crate::command::chat::storage::{
     ChatMessage, ChatSession, ModelProvider, delete_session, generate_session_id, list_sessions,
     load_agent_config, load_session, memory_path, save_agent_config, save_memory, save_soul,
     save_system_prompt, session_file_path, soul_path, system_prompt_path,
 };
 use crate::command::chat::teammate::TeammateManager;
-use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
 use crate::command::chat::tools::derived_shared::{DerivedAgentShared, SubAgentTracker};
@@ -98,7 +98,7 @@ pub struct ChatApp {
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
-    pub invoked_skills: crate::command::chat::compact::InvokedSkillsMap,
+    pub invoked_skills: crate::command::chat::agent::compact::InvokedSkillsMap,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -175,7 +175,7 @@ impl ChatApp {
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(TaskManager::new_with_session(&session_id));
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
-        let invoked_skills = crate::command::chat::compact::new_invoked_skills_map();
+        let invoked_skills = crate::command::chat::agent::compact::new_invoked_skills_map();
         let mut tool_registry = ToolRegistry::new(
             loaded_skills.clone(),
             ask_req_tx,
@@ -1029,7 +1029,7 @@ impl ChatApp {
                 }
             },
             Action::BrowseCopyMessage => {
-                use crate::command::chat::render_cache::copy_to_clipboard;
+                use crate::command::chat::render::cache::copy_to_clipboard;
                 if let Some(msg) = self.state.session.messages.get(self.ui.browse_msg_index) {
                     let content = msg.content.clone();
                     let filtered = self.browse_filtered_indices();
@@ -1119,7 +1119,7 @@ impl ChatApp {
                 }
             }
             Action::ConfigEnter => {
-                use crate::command::chat::ui_helpers::{
+                use crate::command::chat::render::helpers::{
                     config_field_raw_value_global, config_field_raw_value_model,
                 };
                 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
@@ -1301,7 +1301,7 @@ impl ChatApp {
                 self.ui.config_edit_cursor = 0;
             }
             Action::ConfigEditSubmit => {
-                use crate::command::chat::ui_helpers::{
+                use crate::command::chat::render::helpers::{
                     config_field_set_global, config_field_set_model,
                 };
                 let val = self.ui.config_edit_buf.clone();
@@ -1910,7 +1910,7 @@ impl ChatApp {
 
             // ========== 快速操作 ==========
             Action::CopyLastAiReply => {
-                use crate::command::chat::render_cache::copy_to_clipboard;
+                use crate::command::chat::render::cache::copy_to_clipboard;
                 if let Some(last_ai) = self
                     .state
                     .session

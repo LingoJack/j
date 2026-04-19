@@ -2,7 +2,7 @@ use crate::command::chat::agent::thread_identity::{
     clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
 };
 use crate::command::chat::permission::JcliConfig;
-use crate::command::chat::permission_queue::AgentType;
+use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,

@@ -5,7 +5,7 @@ use super::types::{
 };
 use super::ui_state::ChatMode;
 use crate::command::chat::constants::ROLE_ASSISTANT;
-use crate::command::chat::hook::{HookContext, HookEvent};
+use crate::command::chat::infra::hook::{HookContext, HookEvent};
 use crate::command::chat::remote::protocol::{AskOptionInfo, AskQuestionInfo, WsOutbound};
 use crate::command::chat::storage::ChatMessage;
 use crate::util::log::write_info_log;

@@ -72,8 +72,8 @@ pub struct PlanStatePersist {
 /// Session Hook 注册快照
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionHookPersist {
-    pub event: crate::command::chat::hook::HookEvent,
-    pub definition: crate::command::chat::hook::HookDef,
+    pub event: crate::command::chat::infra::hook::HookEvent,
+    pub definition: crate::command::chat::infra::hook::HookDef,
 }
 
 /// Sandbox 额外安全目录快照

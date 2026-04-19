@@ -1,6 +1,6 @@
 use super::types::{StreamMsg, ToolResultMsg};
+use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::agent::run_main_agent_loop;
-use crate::command::chat::agent_config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
 use async_openai::types::chat::ChatCompletionTools;

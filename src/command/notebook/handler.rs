@@ -4,8 +4,8 @@ use super::app::{
     handle_preview_mode, handle_ratio_input_mode, load_notes, note_file_path, notebook_dir,
 };
 use super::ui::draw_ui;
+use crate::command::chat::render::theme::Theme;
 use crate::command::chat::storage::load_agent_config;
-use crate::command::chat::theme::Theme;
 use crate::constants::{notebook_action, shell};
 use crate::util::fuzzy;
 use crate::{error, info};

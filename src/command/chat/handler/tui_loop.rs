@@ -613,7 +613,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // ★ SessionEnd hook（fire-and-forget，终端已恢复）
     {
-        use crate::command::chat::hook::{HookContext, HookEvent, HookManager};
+        use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
         let has_hooks = app
             .hook_manager
             .lock()

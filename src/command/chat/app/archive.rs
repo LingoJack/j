@@ -5,7 +5,7 @@ use crate::command::chat::storage::{SessionEvent, append_session_event};
 impl ChatApp {
     /// 开始归档确认流程
     pub fn start_archive_confirm(&mut self) {
-        use crate::command::chat::archive::generate_default_archive_name;
+        use crate::command::chat::infra::archive::generate_default_archive_name;
         self.ui.archive_default_name = generate_default_archive_name();
         self.ui.archive_custom_name = String::new();
         self.ui.archive_editing_name = false;
@@ -15,7 +15,7 @@ impl ChatApp {
 
     /// 开始还原流程（加载归档列表）
     pub fn start_archive_list(&mut self) {
-        use crate::command::chat::archive::list_archives;
+        use crate::command::chat::infra::archive::list_archives;
         self.ui.archives = list_archives();
         self.ui.archive_list_index = 0;
         self.ui.restore_confirm_needed = false;
@@ -24,7 +24,7 @@ impl ChatApp {
 
     /// 执行归档
     pub fn do_archive(&mut self, name: &str) {
-        use crate::command::chat::archive::create_archive;
+        use crate::command::chat::infra::archive::create_archive;
 
         match create_archive(name, self.state.session.messages.clone()) {
             Ok(_) => {
@@ -40,7 +40,7 @@ impl ChatApp {
 
     /// 执行还原归档
     pub fn do_restore(&mut self) {
-        use crate::command::chat::archive::restore_archive;
+        use crate::command::chat::infra::archive::restore_archive;
 
         let archive_name = self
             .ui
@@ -69,13 +69,13 @@ impl ChatApp {
 
     /// 删除选中的归档
     pub fn do_delete_archive(&mut self) {
-        use crate::command::chat::archive::delete_archive;
+        use crate::command::chat::infra::archive::delete_archive;
 
         if let Some(archive) = self.ui.archives.get(self.ui.archive_list_index) {
             match delete_archive(&archive.name) {
                 Ok(_) => {
                     self.show_toast(format!("归档已删除: {}", archive.name), false);
-                    self.ui.archives = crate::command::chat::archive::list_archives();
+                    self.ui.archives = crate::command::chat::infra::archive::list_archives();
                     if self.ui.archive_list_index >= self.ui.archives.len()
                         && self.ui.archive_list_index > 0
                     {
