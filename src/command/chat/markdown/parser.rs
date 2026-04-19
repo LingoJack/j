@@ -652,12 +652,43 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                 row_spans.push(Span::styled("│", border_style));
                                 for (i, cw) in col_widths.iter().enumerate() {
                                     let empty_line: (Vec<Span<'static>>, usize) = (Vec::new(), 0);
-                                    let (cell_spans, cell_line_w) = wrapped_cells
+                                    let (mut cell_spans, cell_line_w) = wrapped_cells
                                         .get(i)
                                         .and_then(|lines| lines.get(sub_row))
                                         .cloned()
                                         .unwrap_or(empty_line);
-                                    let fill = cw.saturating_sub(cell_line_w);
+                                    // 当 cell_line_w > cw 时（宽字符无法被窄列容纳），
+                                    // 截断内容以确保实际渲染宽度不超过列宽
+                                    if cell_line_w > *cw {
+                                        let mut truncated = Vec::new();
+                                        let mut w = 0;
+                                        for span in cell_spans {
+                                            let span_w: usize =
+                                                span.content.chars().map(char_width).sum();
+                                            if w + span_w <= *cw {
+                                                w += span_w;
+                                                truncated.push(span);
+                                            } else {
+                                                let remain = *cw - w;
+                                                let mut buf = String::new();
+                                                let mut bw = 0;
+                                                for ch in span.content.chars() {
+                                                    let chw = char_width(ch);
+                                                    if bw + chw > remain {
+                                                        break;
+                                                    }
+                                                    buf.push(ch);
+                                                    bw += chw;
+                                                }
+                                                if !buf.is_empty() {
+                                                    truncated.push(Span::styled(buf, span.style));
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        cell_spans = truncated;
+                                    }
+                                    let fill = cw.saturating_sub(cell_line_w.min(*cw));
                                     let align = table_alignments
                                         .get(i)
                                         .copied()
