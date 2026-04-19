@@ -45,6 +45,11 @@ pub enum StreamMsg {
     },
     /// 上下文正在压缩（auto_compact 执行中）
     Compacting,
+    /// 上下文压缩完成（携带压缩前的消息数量，供 UI 展示）
+    Compacted {
+        /// 压缩前的消息数量
+        messages_before: usize,
+    },
 }
 
 /// 工具执行状态

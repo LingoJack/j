@@ -8,7 +8,7 @@ use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
     ToolCallContext, drain_pending_user_messages, flush_streaming_as_message, process_tool_calls,
-    push_ui,
+    push_ui, sync_ui_after_compact,
 };
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::util::log::{write_error_log, write_info_log};
@@ -213,7 +213,11 @@ pub async fn run_main_agent_loop(
                                     &format!("auto_compact failed: {}", e),
                                 );
                             }
-                            Ok(_result) => {
+                            Ok(result) => {
+                                sync_ui_after_compact(&ui_messages, &messages);
+                                let _ = tx.send(StreamMsg::Compacted {
+                                    messages_before: result.messages_before,
+                                });
                                 // ★ PostAutoCompact hook
                                 if hook_manager.has_hooks_for(HookEvent::PostAutoCompact) {
                                     let ctx = HookContext {
@@ -222,11 +226,12 @@ pub async fn run_main_agent_loop(
                                         session_id: Some(session_id.clone()),
                                         ..Default::default()
                                     };
-                                    if let Some(result) =
+                                    if let Some(hook_result) =
                                         hook_manager.execute(HookEvent::PostAutoCompact, ctx)
-                                        && let Some(new_msgs) = result.messages
+                                        && let Some(new_msgs) = hook_result.messages
                                     {
                                         messages = new_msgs;
+                                        sync_ui_after_compact(&ui_messages, &messages);
                                     }
                                 }
                             }
@@ -548,7 +553,7 @@ pub async fn run_main_agent_loop(
                 // 通过 auto_compact 重建干净的上下文（摘要 + 全新消息结构，无孤立引用）
                 if compact_config.enabled {
                     let _ = tx.send(StreamMsg::Compacting);
-                    if let Err(e) = compact::auto_compact(
+                    match compact::auto_compact(
                         &mut messages,
                         &provider,
                         &invoked_skills,
@@ -557,15 +562,23 @@ pub async fn run_main_agent_loop(
                     )
                     .await
                     {
-                        write_error_log(
-                            "agent_loop",
-                            &format!("tool_call_id 恢复时 auto_compact 失败: {}", e),
-                        );
-                        let _ = tx.send(StreamMsg::Error(ChatError::Other(format!(
-                            "消息历史损坏且自动修复失败: {}",
-                            e
-                        ))));
-                        return;
+                        Err(e) => {
+                            write_error_log(
+                                "agent_loop",
+                                &format!("tool_call_id 恢复时 auto_compact 失败: {}", e),
+                            );
+                            let _ = tx.send(StreamMsg::Error(ChatError::Other(format!(
+                                "消息历史损坏且自动修复失败: {}",
+                                e
+                            ))));
+                            return;
+                        }
+                        Ok(result) => {
+                            sync_ui_after_compact(&ui_messages, &messages);
+                            let _ = tx.send(StreamMsg::Compacted {
+                                messages_before: result.messages_before,
+                            });
+                        }
                     }
                     continue 'round;
                 } else {
@@ -740,14 +753,20 @@ pub async fn run_main_agent_loop(
                             // ── Layer 3: compact tool 触发 ──
                             if result.compact_requested && compact_config.enabled {
                                 let _ = tx.send(StreamMsg::Compacting);
-                                let _ = compact::auto_compact(
+                                if let Ok(compact_result) = compact::auto_compact(
                                     &mut messages,
                                     &provider,
                                     &invoked_skills,
                                     &session_id,
                                     None,
                                 )
-                                .await;
+                                .await
+                                {
+                                    sync_ui_after_compact(&ui_messages, &messages);
+                                    let _ = tx.send(StreamMsg::Compacted {
+                                        messages_before: compact_result.messages_before,
+                                    });
+                                }
                             }
                             // ── Plan 被批准且清空上下文 ──
                             if let Some(ref plan_content) = result.plan_with_context_clear {
@@ -912,14 +931,20 @@ pub async fn run_main_agent_loop(
                         // ── Layer 3: compact tool 触发 ──
                         if result.compact_requested && compact_config.enabled {
                             let _ = tx.send(StreamMsg::Compacting);
-                            let _ = compact::auto_compact(
+                            if let Ok(compact_result) = compact::auto_compact(
                                 &mut messages,
                                 &provider,
                                 &invoked_skills,
                                 &session_id,
                                 None,
                             )
-                            .await;
+                            .await
+                            {
+                                sync_ui_after_compact(&ui_messages, &messages);
+                                let _ = tx.send(StreamMsg::Compacted {
+                                    messages_before: compact_result.messages_before,
+                                });
+                            }
                         }
                         // ── Plan 被批准且清空上下文 ──
                         if let Some(ref plan_content) = result.plan_with_context_clear {

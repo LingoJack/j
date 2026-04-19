@@ -320,6 +320,9 @@ impl ChatApp {
                     StreamMsg::Compacting => {
                         actions.push(Action::StreamCompacting);
                     }
+                    StreamMsg::Compacted { messages_before } => {
+                        actions.push(Action::StreamCompacted { messages_before });
+                    }
                 }
             }
         }

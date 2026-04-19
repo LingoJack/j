@@ -87,6 +87,11 @@ pub enum Action {
     },
     /// 上下文正在压缩（auto_compact 执行中）
     StreamCompacting,
+    /// 上下文压缩完成（UI 同步消息 + 展示 toast）
+    StreamCompacted {
+        /// 压缩前的消息数量
+        messages_before: usize,
+    },
 
     // ========== 工具执行和确认 ==========
     /// 执行当前待处理工具（用户确认）

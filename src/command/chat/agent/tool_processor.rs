@@ -55,6 +55,17 @@ pub(super) fn push_ui(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
     }
 }
 
+/// auto_compact 后同步 ui_messages：清空旧消息，重新推送压缩后的消息列表
+pub(super) fn sync_ui_after_compact(
+    shared: &Arc<Mutex<Vec<ChatMessage>>>,
+    new_messages: &[ChatMessage],
+) {
+    if let Ok(mut msgs) = shared.lock() {
+        msgs.clear();
+        msgs.extend_from_slice(new_messages);
+    }
+}
+
 /// 将 streaming_content 中的文本保存为 assistant 消息（多轮 agent loop 中间轮的文本回复）
 /// 调用后 streaming_content 被清空，避免 UI 侧 finish_loading 再次保存导致重复
 pub(super) fn flush_streaming_as_message(

@@ -709,6 +709,30 @@ impl ChatApp {
             Action::StreamCompacting => {
                 self.state.retry_hint = Some("📦 压缩上下文中...".to_string());
             }
+            Action::StreamCompacted { messages_before } => {
+                self.state.retry_hint = None;
+                // 从 ui_messages 同步压缩后的完整消息列表
+                {
+                    let shared = crate::util::safe_lock(&self.ui_messages, "StreamCompacted::sync");
+                    let total = shared.len();
+                    if total < self.ui_messages_read_offset {
+                        // ui_messages 被 clear+re-push 过，从头同步
+                        self.state.session.messages = shared.clone();
+                        self.ui_messages_read_offset = total;
+                    } else {
+                        // 增量同步（正常情况）
+                        for msg in &shared[self.ui_messages_read_offset..] {
+                            self.state.session.messages.push(msg.clone());
+                        }
+                        self.ui_messages_read_offset = total;
+                    }
+                }
+                self.ui.msg_lines_cache = None;
+                self.show_toast(
+                    format!("📦 上下文已压缩 ({} 条消息 → 摘要)", messages_before),
+                    false,
+                );
+            }
 
             // ========== 工具执行 ==========
             Action::ExecutePendingTool => {
