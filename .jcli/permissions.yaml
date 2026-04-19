@@ -131,4 +131,5 @@ allow:
 - Bash(cat ~/.jdata/agent/skills/webapp-gen/SKILL.md:*)
 - Bash(cargo fmt:*)
 - Bash(git mv:*)
+- Bash(mv /Users/lingojack/dev_custom/j/src/command/chat/storage/mod.rs:*)
 deny: []

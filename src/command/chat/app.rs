@@ -1,7 +1,13 @@
 mod action;
 mod agent_handle;
+mod archive;
+mod browse;
 mod chat_app;
 mod chat_state;
+mod message;
+mod session_mgr;
+mod stream_poll;
+mod system_prompt;
 mod tool_executor;
 pub mod types;
 mod ui_state;
