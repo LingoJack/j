@@ -25,7 +25,7 @@ struct ShellParams {
     command: String,
     /// A short description of the command (5-10 words), displayed in the UI
     #[serde(default)]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // 仅用于 UI 展示，通过 arguments JSON 提取
     description: Option<String>,
     /// Working directory for the command (absolute path). Defaults to the current process working directory if not specified.
     #[serde(default)]

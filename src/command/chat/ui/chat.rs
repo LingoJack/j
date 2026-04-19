@@ -138,13 +138,25 @@ pub fn draw_title_bar(
                 .active_tool_calls
                 .iter()
                 .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
-                .map(|tc| format!(" 🔧 执行 {}...", tc.tool_name))
+                .map(|tc| {
+                    if let Some(ref desc) = tc.tool_description {
+                        format!(" 🔧 执行 {} - {}...", tc.tool_name, desc)
+                    } else {
+                        format!(" 🔧 执行 {}...", tc.tool_name)
+                    }
+                })
                 .or_else(|| {
                     app.tool_executor
                         .active_tool_calls
                         .iter()
                         .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
-                        .map(|tc| format!(" 🔧 调用 {}...", tc.tool_name))
+                        .map(|tc| {
+                            if let Some(ref desc) = tc.tool_description {
+                                format!(" 🔧 调用 {} - {}...", tc.tool_name, desc)
+                            } else {
+                                format!(" 🔧 调用 {}...", tc.tool_name)
+                            }
+                        })
                 });
             if let Some(info) = tool_info {
                 info

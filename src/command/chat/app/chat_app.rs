@@ -2737,6 +2737,10 @@ impl ChatApp {
                                                     status: ToolExecStatus::Failed(
                                                         "该工具调用被 hook 跳过".to_string(),
                                                     ),
+                                                    tool_description: extract_tool_description(
+                                                        &tc.name,
+                                                        &tc.arguments,
+                                                    ),
                                                 },
                                             );
                                             continue;
@@ -2759,6 +2763,10 @@ impl ChatApp {
                                     ),
                                     status: ToolExecStatus::Failed(
                                         "该命令被 .jcli/ 权限配置拒绝".to_string(),
+                                    ),
+                                    tool_description: extract_tool_description(
+                                        &tc.name,
+                                        &tc.arguments,
                                     ),
                                 });
                                 continue;
@@ -2789,6 +2797,7 @@ impl ChatApp {
                                 } else {
                                     ToolExecStatus::Executing
                                 },
+                                tool_description: extract_tool_description(&tc.name, &tc.arguments),
                             });
                         }
 
@@ -3605,4 +3614,14 @@ impl ChatApp {
             self.ui.mode = new_mode;
         }
     }
+}
+
+/// 从工具调用参数 JSON 中提取 description（仅 Bash 工具有意义）
+fn extract_tool_description(tool_name: &str, arguments: &str) -> Option<String> {
+    if tool_name != "Bash" {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(arguments)
+        .ok()
+        .and_then(|v| v.get("description")?.as_str().map(|s| s.to_string()))
 }

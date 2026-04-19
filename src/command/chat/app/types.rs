@@ -69,6 +69,8 @@ pub struct ToolCallStatus {
     pub arguments: String,
     pub confirm_message: String,
     pub status: ToolExecStatus,
+    /// 工具调用的简短描述（仅 Bash 工具从 arguments.description 提取）
+    pub tool_description: Option<String>,
 }
 
 /// 主线程 → 后台线程的工具结果消息

@@ -1395,13 +1395,19 @@ pub fn render_tool_call_request_msg(
         let status_color = status.color(theme);
 
         if expand {
-            // 展开模式：图标 + 工具名 + 状态（第一行）
+            // 展开模式：图标 + 工具名 + description（若有）+ 状态（第一行）
+            let tool_desc = extract_tool_description_from_args(&tc.name, &tc.arguments);
+            let display_name = if let Some(ref desc) = tool_desc {
+                format!("{} - {}", tc.name, desc)
+            } else {
+                tc.name.clone()
+            };
             lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
                 Span::styled(icon, Style::default().fg(tool_color)),
                 Span::styled(" ", Style::default()),
                 Span::styled(
-                    tc.name.clone(),
+                    display_name,
                     Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(" ", Style::default()),
@@ -1423,58 +1429,75 @@ pub fn render_tool_call_request_msg(
                 }
             }
         } else {
-            // 折叠模式：图标 + 工具名 + 参数预览
-            let total_len = tc.arguments.chars().count();
-            let truncated = total_len > TOOL_ARG_PREVIEW_MAX_CHARS;
+            // 折叠模式：图标 + 工具名 + description（若有）或参数预览
+            let tool_desc = extract_tool_description_from_args(&tc.name, &tc.arguments);
 
-            // 检测 JSON 开括号类型，用于截断时添加闭合括号
-            let closing_bracket = if truncated {
-                tc.arguments.chars().next().and_then(|c| match c {
-                    '{' => Some('}'),
-                    '[' => Some(']'),
-                    _ => None,
-                })
-            } else {
-                None
-            };
-
-            // 如果需要闭合括号，预留 4 字符给 "...}" 或 "...]"
-            let max_preview = TOOL_ARG_PREVIEW_MAX_CHARS;
-            let preview_len = if closing_bracket.is_some() {
-                max_preview - 4
-            } else {
-                max_preview
-            };
-
-            let args_preview: String = tc.arguments.chars().take(preview_len).collect();
-
-            let suffix = if truncated {
-                if let Some(bracket) = closing_bracket {
-                    format!("...{}", bracket)
-                } else {
-                    "…".to_string()
-                }
-            } else {
-                "".to_string()
-            };
-
-            lines.push(Line::from(vec![
-                Span::styled("  ", Style::default()),
-                Span::styled(icon, Style::default().fg(tool_color)),
-                Span::styled(" ", Style::default()),
-                Span::styled(
-                    tc.name.clone(),
-                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-                ),
-                if !args_preview.is_empty() {
+            if let Some(desc) = tool_desc {
+                // 有 description 时优先展示，替代 raw arguments
+                lines.push(Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(icon, Style::default().fg(tool_color)),
+                    Span::styled(" ", Style::default()),
                     Span::styled(
-                        format!(" {}{}", args_preview, suffix),
-                        Style::default().fg(theme.text_dim),
-                    )
+                        tc.name.clone(),
+                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(format!("  {}", desc), Style::default().fg(theme.text_dim)),
+                ]));
+            } else {
+                // 无 description，保留原有的参数预览逻辑
+                let total_len = tc.arguments.chars().count();
+                let truncated = total_len > TOOL_ARG_PREVIEW_MAX_CHARS;
+
+                // 检测 JSON 开括号类型，用于截断时添加闭合括号
+                let closing_bracket = if truncated {
+                    tc.arguments.chars().next().and_then(|c| match c {
+                        '{' => Some('}'),
+                        '[' => Some(']'),
+                        _ => None,
+                    })
                 } else {
-                    Span::raw("")
-                },
-            ]));
+                    None
+                };
+
+                // 如果需要闭合括号，预留 4 字符给 "...}" 或 "...]"
+                let max_preview = TOOL_ARG_PREVIEW_MAX_CHARS;
+                let preview_len = if closing_bracket.is_some() {
+                    max_preview - 4
+                } else {
+                    max_preview
+                };
+
+                let args_preview: String = tc.arguments.chars().take(preview_len).collect();
+
+                let suffix = if truncated {
+                    if let Some(bracket) = closing_bracket {
+                        format!("...{}", bracket)
+                    } else {
+                        "…".to_string()
+                    }
+                } else {
+                    "".to_string()
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(icon, Style::default().fg(tool_color)),
+                    Span::styled(" ", Style::default()),
+                    Span::styled(
+                        tc.name.clone(),
+                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                    ),
+                    if !args_preview.is_empty() {
+                        Span::styled(
+                            format!(" {}{}", args_preview, suffix),
+                            Style::default().fg(theme.text_dim),
+                        )
+                    } else {
+                        Span::raw("")
+                    },
+                ]));
+            }
         }
     }
 }
@@ -1961,4 +1984,14 @@ pub fn copy_to_clipboard(content: &str) -> bool {
         }
         Err(_) => false,
     }
+}
+
+/// 从工具调用参数 JSON 中提取 description（仅 Bash 工具有意义）
+fn extract_tool_description_from_args(tool_name: &str, arguments: &str) -> Option<String> {
+    if tool_name != "Bash" {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(arguments)
+        .ok()
+        .and_then(|v| v.get("description")?.as_str().map(|s| s.to_string()))
 }
