@@ -3328,31 +3328,24 @@ impl ChatApp {
         // SubAgent 运行状态仅用于 UI 展示历史，不需要恢复
     }
 
-    /// 从 teammate 独立 JSONL 中恢复丢失的 `<Name>` 显示条目。
+    /// 从 teammate 独立 JSONL 中恢复 `<Name>` 显示条目。
     ///
-    /// 策略：对每个 teammate，在已加载的 `state.session.messages` 中统计 `<Name>` 前缀条目数，
-    /// 从 jsonl 合成显示条目，仅把「第 count 条之后」的尾部追加到 messages。
-    /// 这样老 session（无 jsonl）不受影响；新 session 能补齐未 flush 的中间消息。
+    /// 策略：以独立 jsonl 为唯一真相源，合成全部 `<Name>` 显示条目；
+    /// 删除主 transcript 中该 teammate 的旧条目，用合成结果整体替换。
+    /// 这样避免了"写入端/合成端计数不一致导致 delta 补齐失效"的问题。
     fn restore_teammate_transcripts(&mut self, sid: &str, teammate_names: &[String]) {
         if teammate_names.is_empty() {
             return;
         }
         for name in teammate_names {
             let prefix_marker = format!("<{}>", name);
-            let existing_count = self
-                .state
-                .session
-                .messages
-                .iter()
-                .filter(|m| m.role == "assistant" && m.content.starts_with(&prefix_marker))
-                .count();
-
             let path = SessionPaths::new(sid).teammate_transcript(&sanitize_filename(name));
             if !path.exists() {
                 continue;
             }
             let transcript = read_transcript_with_timestamps(&path);
 
+            // 从独立 jsonl 合成全部显示条目
             let mut synthesized: Vec<String> = Vec::new();
             for (msg, _ts) in &transcript {
                 if msg.role != "assistant" {
@@ -3370,15 +3363,43 @@ impl ChatApp {
                 }
             }
 
-            if synthesized.len() > existing_count {
-                for content in synthesized.into_iter().skip(existing_count) {
-                    self.state
-                        .session
-                        .messages
-                        .push(ChatMessage::text("assistant", content));
-                }
-                self.ui.msg_lines_cache = None;
+            if synthesized.is_empty() {
+                continue;
             }
+
+            // 从主 transcript 中移除该 teammate 的旧条目，用合成结果替换
+            // 保留所有非该 teammate 的消息，保持原始顺序
+            let mut new_messages: Vec<ChatMessage> = Vec::new();
+            let mut synth_iter = synthesized.iter().peekable();
+            for msg in &self.state.session.messages {
+                if msg.role == "assistant" && msg.content.starts_with(&prefix_marker) {
+                    // 第一个旧条目位置：在此之前插入所有合成条目
+                    if synth_iter.peek().is_some()
+                        && !new_messages
+                            .iter()
+                            .any(|m| m.role == "assistant" && m.content.starts_with(&prefix_marker))
+                    {
+                        for s in &synthesized {
+                            new_messages.push(ChatMessage::text("assistant", s.clone()));
+                        }
+                    }
+                    // 跳过旧条目（已被合成结果替代）
+                } else {
+                    new_messages.push(msg.clone());
+                }
+            }
+            // 如果旧条目不存在（jsonl 有内容但主 transcript 还没写入过），直接追加
+            if !new_messages
+                .iter()
+                .any(|m| m.role == "assistant" && m.content.starts_with(&prefix_marker))
+            {
+                for s in &synthesized {
+                    new_messages.push(ChatMessage::text("assistant", s.clone()));
+                }
+            }
+
+            self.state.session.messages = new_messages;
+            self.ui.msg_lines_cache = None;
         }
     }
 

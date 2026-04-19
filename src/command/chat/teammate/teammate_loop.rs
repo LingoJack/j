@@ -231,6 +231,15 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             // 无工具调用 — 进入轮询等待模式
             set_status(TeammateStatus::WaitingForMessage);
 
+            // 文字回复也写入 messages + jsonl
+            // 否则独立 jsonl 缺少这部分，resume 时 existing_count > synthesized.len() 导致 delta 补齐失效
+            if !assistant_text.is_empty() {
+                messages.push(ChatMessage::text("assistant", assistant_text.clone()));
+                if let Some(last) = messages.last() {
+                    append_messages(std::slice::from_ref(last));
+                }
+            }
+
             // 先把已到达的旁听消息 drain 到 messages（保留上下文，但不自动唤醒）
             let prev_len = messages.len();
             let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
@@ -404,6 +413,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             "assistant",
             format!("<{}> [已完成工作]", name),
         ));
+        // 同步写入独立 jsonl（不带 <Name> 前缀，合成时会加前缀）
+        let done_msg = ChatMessage::text("assistant", "[已完成工作]".to_string());
+        append_messages(std::slice::from_ref(&done_msg));
     }
 
     if final_text.is_empty() {
