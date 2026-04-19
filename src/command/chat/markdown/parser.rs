@@ -571,7 +571,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         let mut col_widths: Vec<usize> = vec![0; num_cols];
                         for row in &table_rows {
                             for (i, cell) in row.iter().enumerate() {
-                                let w = display_width(cell);
+                                let w = display_width_cell(cell);
                                 if w > col_widths[i] {
                                     col_widths[i] = w;
                                 }
@@ -649,36 +649,43 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                         .and_then(|lines| lines.get(sub_row))
                                         .map(|s| s.as_str())
                                         .unwrap_or("");
-                                    let cell_line_w = display_width(cell_line);
+                                    let cell_line_w = display_width_cell(cell_line);
                                     let fill = cw.saturating_sub(cell_line_w);
                                     let align = table_alignments
                                         .get(i)
                                         .copied()
                                         .unwrap_or(pulldown_cmark::Alignment::None);
-                                    let formatted = match align {
-                                        pulldown_cmark::Alignment::Center => {
-                                            let left = fill / 2;
-                                            let right = fill - left;
-                                            format!(
-                                                " {}{}{} ",
-                                                " ".repeat(left),
-                                                cell_line,
-                                                " ".repeat(right)
-                                            )
-                                        }
-                                        pulldown_cmark::Alignment::Right => {
-                                            format!(" {}{} ", " ".repeat(fill), cell_line)
-                                        }
-                                        _ => {
-                                            format!(" {}{} ", cell_line, " ".repeat(fill))
-                                        }
-                                    };
-                                    let style = if row_idx == 0 {
+                                    let base_style = if row_idx == 0 {
                                         header_style
                                     } else {
                                         table_style
                                     };
-                                    row_spans.push(Span::styled(formatted, style));
+                                    let code_style = Style::default()
+                                        .fg(theme.md_inline_code_fg)
+                                        .bg(theme.md_inline_code_bg);
+                                    // 根据对齐方式计算左右填充
+                                    let (left_pad, right_pad) = match align {
+                                        pulldown_cmark::Alignment::Center => {
+                                            let left = fill / 2;
+                                            (left, fill - left)
+                                        }
+                                        pulldown_cmark::Alignment::Right => (fill, 0),
+                                        _ => (0, fill),
+                                    };
+                                    // 左侧 " " + left_pad
+                                    row_spans.push(Span::styled(
+                                        format!(" {}", " ".repeat(left_pad)),
+                                        base_style,
+                                    ));
+                                    // 单元格内容：拆分行内代码 `` `code` ``
+                                    let cell_spans =
+                                        split_cell_spans(cell_line, base_style, code_style);
+                                    row_spans.extend(cell_spans);
+                                    // 右侧 right_pad + " "
+                                    row_spans.push(Span::styled(
+                                        format!("{} ", " ".repeat(right_pad)),
+                                        base_style,
+                                    ));
                                     row_spans.push(Span::styled("│", border_style));
                                 }
                                 if table_right_pad > 0 {
@@ -790,6 +797,62 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     }
 
     lines
+}
+
+/// 将表格单元格文本拆分为 Span 列表，`` `code` `` 片段应用行内代码样式。
+/// 反引号仅用作标记，渲染时移除，只显示代码内容。
+fn split_cell_spans(cell_text: &str, base_style: Style, code_style: Style) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut remaining = cell_text;
+    while !remaining.is_empty() {
+        if let Some(start) = remaining.find('`') {
+            // 反引号之前的普通文本
+            if start > 0 {
+                spans.push(Span::styled(remaining[..start].to_string(), base_style));
+            }
+            // 找到配对的反引号
+            let after_tick = &remaining[start + 1..];
+            if let Some(end) = after_tick.find('`') {
+                let code_text = &after_tick[..end];
+                // 移除反引号，只显示代码内容并应用行内代码样式
+                spans.push(Span::styled(code_text.to_string(), code_style));
+                remaining = &after_tick[end + 1..];
+            } else {
+                // 无配对反引号，当作普通文本
+                spans.push(Span::styled(remaining[start..].to_string(), base_style));
+                break;
+            }
+        } else {
+            spans.push(Span::styled(remaining.to_string(), base_style));
+            break;
+        }
+    }
+    spans
+}
+
+/// 计算表格单元格文本的显示宽度，扣除行内代码标记反引号的宽度。
+fn display_width_cell(cell: &str) -> usize {
+    let mut width = 0;
+    let mut remaining = cell;
+    while !remaining.is_empty() {
+        if let Some(start) = remaining.find('`') {
+            width += display_width(&remaining[..start]);
+            let after_tick = &remaining[start + 1..];
+            if let Some(end) = after_tick.find('`') {
+                // 代码内容计入宽度，反引号不计
+                width += display_width(&after_tick[..end]);
+                remaining = &after_tick[end + 1..];
+            } else {
+                // 未配对反引号：前缀宽度已累加，这里只计从反引号起的剩余部分
+                width += display_width(&remaining[start..]);
+                break;
+            }
+        } else {
+            width += display_width(remaining);
+            break;
+        }
+    }
+    width
 }
 
 /// 将文本拆分为普通文本和 URL 片段，对 URL 应用链接样式
