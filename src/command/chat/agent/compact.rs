@@ -9,9 +9,9 @@ use super::super::tools::skill::LoadSkillTool;
 use super::super::tools::task::TaskTool;
 use super::super::tools::todo::{TodoReadTool, TodoWriteTool};
 use super::api::create_openai_client;
-use crate::command::chat::tools::agent::AgentTool;
 use crate::command::chat::tools::agent_team::AgentTeamTool;
 use crate::command::chat::tools::plan::{EnterPlanModeTool, ExitPlanModeTool};
+use crate::command::chat::tools::sub_agent::SubAgentTool;
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
@@ -178,7 +178,7 @@ pub const BUILTIN_EXEMPT_TOOLS: &[&str] = &[
     TodoReadTool::NAME,
     EnterPlanModeTool::NAME,
     ExitPlanModeTool::NAME,
-    AgentTool::NAME,
+    SubAgentTool::NAME,
     AgentTeamTool::NAME,
     AskTool::NAME,
     // Teammate 工具结果不压缩（承载协作上下文）

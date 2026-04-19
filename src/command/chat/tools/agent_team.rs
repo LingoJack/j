@@ -1,5 +1,5 @@
 use crate::command::chat::teammate::TeammateManager;
-use crate::command::chat::tools::agent_shared::ChildAgentShared;
+use crate::command::chat::tools::agent_shared::DerivedAgentShared;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -32,7 +32,7 @@ struct AgentTeamMember {
 /// Agent Team 工具：批量创建多个 teammate（CreateTeammate 的便捷封装）
 #[allow(dead_code)]
 pub struct AgentTeamTool {
-    pub shared: ChildAgentShared,
+    pub shared: DerivedAgentShared,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
 }
 

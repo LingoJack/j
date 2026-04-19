@@ -5,7 +5,7 @@ use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::tools::agent_shared::{
-    ChildAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
+    DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
 };
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
@@ -87,7 +87,7 @@ fn sanitize_agent_name(description: &str) -> String {
     }
 }
 
-/// AgentTool 参数
+/// SubAgentTool 参数
 #[derive(Deserialize, JsonSchema)]
 struct AgentParams {
     /// The task for the sub-agent to perform
@@ -109,19 +109,19 @@ struct AgentParams {
     inherit_permissions: bool,
 }
 
-// ========== AgentTool ==========
+// ========== SubAgentTool ==========
 
-/// Agent 工具：启动子代理执行复杂多步任务
+/// SubAgent 工具：启动子代理执行复杂多步任务
 #[allow(dead_code)]
-pub struct AgentTool {
-    pub shared: ChildAgentShared,
+pub struct SubAgentTool {
+    pub shared: DerivedAgentShared,
 }
 
-impl AgentTool {
+impl SubAgentTool {
     pub const NAME: &'static str = "Agent";
 }
 
-impl Tool for AgentTool {
+impl Tool for SubAgentTool {
     fn name(&self) -> &str {
         Self::NAME
     }
@@ -165,9 +165,9 @@ impl Tool for AgentTool {
         let use_worktree = params.worktree;
 
         // 获取 provider 和 system prompt 的快照
-        let provider = safe_lock(&self.shared.provider, "AgentTool::provider").clone();
+        let provider = safe_lock(&self.shared.provider, "SubAgentTool::provider").clone();
         let system_prompt =
-            safe_lock(&self.shared.system_prompt, "AgentTool::system_prompt").clone();
+            safe_lock(&self.shared.system_prompt, "SubAgentTool::system_prompt").clone();
 
         // worktree 隔离：提前创建（在调用线程中；失败则提前退出，避免浪费 sub_id）
         let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
@@ -189,7 +189,7 @@ impl Tool for AgentTool {
         // 提前分配 sub_id，用于构造独立 todos/transcript 路径
         let sub_id = self.shared.sub_agent_tracker.allocate_id();
         let session_id_snapshot =
-            safe_lock(&self.shared.session_id, "AgentTool::session_id").clone();
+            safe_lock(&self.shared.session_id, "SubAgentTool::session_id").clone();
         let session_paths = crate::command::chat::storage::SessionPaths::new(&session_id_snapshot);
         let subagent_todos_path = session_paths.subagent_todos_file(&sub_id);
         let subagent_transcript_path = session_paths.subagent_transcript(&sub_id);
@@ -272,7 +272,7 @@ impl Tool for AgentTool {
 
                 // 写入输出缓冲区
                 {
-                    let mut buf = safe_lock(&output_buffer, "AgentTool::bg_output");
+                    let mut buf = safe_lock(&output_buffer, "SubAgentTool::bg_output");
                     buf.push_str(&result);
                 }
 

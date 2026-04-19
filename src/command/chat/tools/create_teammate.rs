@@ -4,7 +4,7 @@ use crate::command::chat::agent::thread_identity::{
 use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
 use crate::command::chat::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
-use crate::command::chat::tools::agent_shared::ChildAgentShared;
+use crate::command::chat::tools::agent_shared::DerivedAgentShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
 use crate::command::chat::tools::work_done::WorkDoneTool;
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
@@ -46,7 +46,7 @@ struct CreateTeammateParams {
 /// CreateTeammate 工具：创建一个新的 teammate agent
 #[allow(dead_code)]
 pub struct CreateTeammateTool {
-    pub shared: ChildAgentShared,
+    pub shared: DerivedAgentShared,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
 }
 

@@ -1,4 +1,3 @@
-pub mod agent;
 pub mod agent_shared;
 pub mod agent_team;
 pub mod ask;
@@ -16,6 +15,7 @@ pub mod plan;
 pub mod send_message;
 mod shell;
 pub mod skill;
+pub mod sub_agent;
 pub mod task;
 pub mod todo;
 mod web_fetch;
@@ -54,7 +54,7 @@ pub mod tool_names {
     pub const ENTER_WORKTREE: &str = super::worktree::EnterWorktreeTool::NAME;
     pub const EXIT_WORKTREE: &str = super::worktree::ExitWorktreeTool::NAME;
     pub const LOAD_SKILL: &str = super::skill::LoadSkillTool::NAME;
-    pub const AGENT: &str = super::agent::AgentTool::NAME;
+    pub const AGENT: &str = super::sub_agent::SubAgentTool::NAME;
     pub const AGENT_TEAM: &str = super::agent_team::AgentTeamTool::NAME;
     pub const CREATE_TEAMMATE: &str = super::create_teammate::CreateTeammateTool::NAME;
     pub const SEND_MESSAGE: &str = super::send_message::SendMessageTool::NAME;

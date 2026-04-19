@@ -217,7 +217,7 @@ pub struct TeammateManager {
     /// 所有 teammate 的句柄（key = name）
     pub teammates: HashMap<String, TeammateHandle>,
     /// Teammate → Main agent LLM 上下文通道（broadcast 时注入，drain_pending_user_messages 消费）
-    pub main_agent_pending: Arc<Mutex<Vec<ChatMessage>>>,
+    pub main_agent_inbox: Arc<Mutex<Vec<ChatMessage>>>,
     /// Agent/Teammate → UI 显示通道（teammate 消息也要写入以在 TUI 显示）
     pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 从 session 恢复的 teammate 快照（只读展示，无活跃线程）
@@ -228,12 +228,12 @@ pub struct TeammateManager {
 impl TeammateManager {
     /// 创建管理器
     pub fn new(
-        main_agent_pending: Arc<Mutex<Vec<ChatMessage>>>,
+        main_agent_inbox: Arc<Mutex<Vec<ChatMessage>>>,
         ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     ) -> Self {
         Self {
             teammates: HashMap::new(),
-            main_agent_pending,
+            main_agent_inbox,
             ui_messages,
             recovered_teammates: HashMap::new(),
         }
@@ -269,9 +269,9 @@ impl TeammateManager {
             ),
         );
 
-        // 注入到主 agent 的 pending（如果发送者不是主 agent）
+        // 注入到主 agent 的 inbox（如果发送者不是主 agent）
         if from != "Main"
-            && let Ok(mut pending) = self.main_agent_pending.lock()
+            && let Ok(mut pending) = self.main_agent_inbox.lock()
         {
             pending.push(ChatMessage::text("user", &formatted));
         }
@@ -424,7 +424,7 @@ impl Default for TeammateManager {
     fn default() -> Self {
         Self {
             teammates: HashMap::new(),
-            main_agent_pending: Arc::new(Mutex::new(Vec::new())),
+            main_agent_inbox: Arc::new(Mutex::new(Vec::new())),
             ui_messages: Arc::new(Mutex::new(Vec::new())),
             recovered_teammates: HashMap::new(),
         }

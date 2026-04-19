@@ -38,7 +38,7 @@ use crate::command::chat::teammate::{TeammateManager, TeammateStatusPersist};
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::agent_shared::{
-    ChildAgentShared, SubAgentStatus, SubAgentTracker,
+    DerivedAgentShared, SubAgentStatus, SubAgentTracker,
 };
 use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
 use crate::command::chat::tools::plan::PlanApprovalQueue;
@@ -84,7 +84,7 @@ pub struct ChatApp {
     pub sandbox: Sandbox,
     /// 本次会话 ID（启动时生成，对应 sessions/{id}.jsonl）
     pub session_id: String,
-    /// 与 `ChildAgentShared` 共享的 session id 槽；切换 session 时用 `switch_session_id` 同步更新。
+    /// 与 `DerivedAgentShared` 共享的 session id 槽；切换 session 时用 `switch_session_id` 同步更新。
     pub shared_session_id: Arc<Mutex<String>>,
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
     pub last_persisted_len: usize,
@@ -108,7 +108,7 @@ pub struct ChatApp {
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
     /// 子 Agent（AgentTool）运行快照追踪器（供 /dump 读取）
     pub sub_agent_tracker: Arc<SubAgentTracker>,
-    /// 子 agent 权限请求队列（ChildAgentShared 和 TUI 共享同一个 Arc）
+    /// 派生 Agent 权限请求队列（DerivedAgentShared 和 TUI 共享同一个 Arc）
     pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
@@ -265,8 +265,8 @@ impl ChatApp {
         // 共享的 session id 槽：session 切换时 chat_app 会同步更新，teammate/subagent 据此定位 transcript
         let shared_session_id = Arc::new(Mutex::new(session_id.clone()));
 
-        // 构建 ChildAgentShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
-        let child_agent_shared = ChildAgentShared {
+        // 构建 DerivedAgentShared（SubAgentTool / AgentTeamTool / CreateTeammateTool 共用）
+        let derived_agent_shared = DerivedAgentShared {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
             system_prompt: Arc::clone(&agent_system_prompt),
@@ -280,12 +280,14 @@ impl ChatApp {
             ui_messages: Arc::clone(&ui_messages),
             session_id: Arc::clone(&shared_session_id),
         };
-        tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
-            shared: child_agent_shared.clone(),
-        }));
+        tool_registry.register(Box::new(
+            crate::command::chat::tools::sub_agent::SubAgentTool {
+                shared: derived_agent_shared.clone(),
+            },
+        ));
         tool_registry.register(Box::new(
             crate::command::chat::tools::agent_team::AgentTeamTool {
-                shared: child_agent_shared,
+                shared: derived_agent_shared,
                 teammate_manager: Arc::clone(&teammate_manager),
             },
         ));

@@ -51,7 +51,7 @@ pub struct TeammateLoopConfig {
 
 /// Teammate 专用的 agent loop
 ///
-/// 与 headless agent loop 的关键区别：
+/// 与 sub_agent_loop 的关键区别：
 /// 1. 无 TUI 交互式确认（通过 permission 规则自动决定）
 /// 2. 每轮开始检查 pending_user_messages（来自广播）
 /// 3. 使用 SendMessage 工具与其他 agent 通信

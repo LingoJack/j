@@ -130,4 +130,5 @@ allow:
 - Bash(cat ~/.jdata/agent/skills/skill-creator/SKILL.md:*)
 - Bash(cat ~/.jdata/agent/skills/webapp-gen/SKILL.md:*)
 - Bash(cargo fmt:*)
+- Bash(git mv:*)
 deny: []

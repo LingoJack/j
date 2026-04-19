@@ -1,11 +1,11 @@
-/// 子 agent/teammate 权限请求队列
+/// 派生 Agent 权限请求队列
 ///
-/// 当子 agent 需要执行需要确认的工具（Write、Edit、Bash 等）
+/// 当派生 Agent（SubAgent / Teammate）需要执行需要确认的工具（Write、Edit、Bash 等）
 /// 且未被 .jcli/permissions.yaml 预先允许时，把请求推入此队列并阻塞
 /// 等待主 TUI 用户批准或拒绝。
 ///
 /// 设计约束：
-/// - 子 agent 线程调用 `request_blocking`，阻塞最长 60 秒
+/// - 派生 Agent 线程调用 `request_blocking`，阻塞最长 60 秒
 /// - 主 TUI 循环 poll `pop_pending`，展示对话框，用户 y/n 后调用 `resolve`
 /// - session 取消时调用 `deny_all` 唤醒所有阻塞线程
 use std::collections::VecDeque;
@@ -15,6 +15,8 @@ use std::time::Duration;
 /// 发起权限请求的 agent 类型
 #[derive(Clone, Debug, PartialEq)]
 pub enum AgentType {
+    /// 主 Agent（拥有 TUI，直接与用户交互；当前不会进入权限队列，但作为默认值预留）
+    Main,
     /// Teammate agent（name 为 teammate 名称，如 "Backend"）
     Teammate,
     /// SubAgent（name 为 sub_id，如 "sub_0001"）
@@ -60,12 +62,13 @@ impl PendingAgentPerm {
     /// 权限请求标题：按 agent 类型区分显示
     pub fn title(&self) -> String {
         match &self.agent_type {
+            AgentType::Main => format!(" 权限请求 [Main] "),
             AgentType::Teammate => format!(" 权限请求 [{}] ", self.name),
             AgentType::SubAgent => format!(" SubAgent 权限请求 [{}] ", self.name),
         }
     }
 
-    /// 子 agent 线程调用：阻塞等待决策，超时返回 false（拒绝）
+    /// 派生 Agent 线程调用：阻塞等待决策，超时返回 false（拒绝）
     pub fn wait_for_decision(&self, timeout_secs: u64) -> bool {
         let (lock, cvar) = &*self.decision;
         let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -112,7 +115,7 @@ impl PermissionQueue {
         }
     }
 
-    /// agent 线程调用：把请求加入队列并阻塞等待（最长 60 秒）。
+    /// 派生 Agent 线程调用：把请求加入队列并阻塞等待（最长 60 秒）。
     /// 返回 true 表示用户批准，false 表示拒绝或超时。
     pub fn request_blocking(&self, req: Arc<PendingAgentPerm>) -> bool {
         {

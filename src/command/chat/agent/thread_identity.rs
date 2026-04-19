@@ -12,8 +12,8 @@ use std::path::PathBuf;
 thread_local! {
     /// 当前线程所属的 agent 名称（主 agent 为 "Main"，teammate 为其名称，subagent 为 sub_id）
     static CURRENT_AGENT_NAME: RefCell<String> = RefCell::new("Main".to_string());
-    /// 当前线程所属的 agent 类型（主 agent / subagent 默认 SubAgent，teammate 设置为 Teammate）
-    static CURRENT_AGENT_TYPE: RefCell<AgentType> = const { RefCell::new(AgentType::SubAgent) };
+    /// 当前线程所属的 agent 类型（默认 Main；teammate 设置为 Teammate，subagent 设置为 SubAgent）
+    static CURRENT_AGENT_TYPE: RefCell<AgentType> = const { RefCell::new(AgentType::Main) };
     /// 当前线程的工作目录覆盖（worktree 模式下指向 worktree 路径）
     static THREAD_CWD: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }

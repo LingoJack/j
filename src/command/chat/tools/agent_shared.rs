@@ -253,16 +253,16 @@ impl Default for SubAgentTracker {
     }
 }
 
-// ========== ChildAgentShared ==========
+// ========== DerivedAgentShared ==========
 
 // NOTE: Cannot derive Debug - contains PermissionQueue, PlanApprovalQueue, SubAgentTracker
 //       which do not implement Debug, and multiple Arc<Mutex<Option<T>>> fields
-/// 子 Agent 共享字段（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
+/// 派生 Agent（SubAgent / Teammate）共享字段
 ///
 /// 所有字段均为 Arc 引用，Clone 开销极小。
 /// 消除了三个 Tool struct 之间逐字段 hand-copy Arc 的重复代码。
 #[derive(Clone)]
-pub struct ChildAgentShared {
+pub struct DerivedAgentShared {
     pub background_manager: Arc<BackgroundManager>,
     pub provider: Arc<Mutex<ModelProvider>>,
     pub system_prompt: Arc<Mutex<Option<String>>>,
@@ -282,7 +282,7 @@ pub struct ChildAgentShared {
     pub session_id: Arc<Mutex<String>>,
 }
 
-impl ChildAgentShared {
+impl DerivedAgentShared {
     /// 构建子工具注册表（不含 skills，标准 ask channel）
     ///
     /// 返回未 Arc 包装的 ToolRegistry，调用者可在包装前注册额外工具（如 SendMessage）。
@@ -313,7 +313,7 @@ impl ChildAgentShared {
     }
 }
 
-// ========== Headless Loop 共享 Helper ==========
+// ========== Derived Agent Loop 共享 Helper ==========
 
 /// 创建 tokio runtime 和 OpenAI client
 ///
@@ -364,7 +364,7 @@ pub fn call_llm_non_stream(
             }
             Err(e) => {
                 let chat_err = ChatError::from(e);
-                if let Some(policy) = headless_retry_policy(&chat_err)
+                if let Some(policy) = derived_retry_policy(&chat_err)
                     && attempt <= policy.max_attempts
                 {
                     let delay_ms = backoff_delay_ms(attempt, policy.base_ms, policy.cap_ms);
@@ -385,10 +385,10 @@ pub fn call_llm_non_stream(
     }
 }
 
-// ========== Headless 重试策略 ==========
+// ========== Derived Agent 重试策略 ==========
 
-/// 子 agent / teammate 的重试策略（比主 agent 更保守）
-struct HeadlessRetryPolicy {
+/// 派生 Agent 的重试策略（比主 Agent 更保守）
+struct DerivedRetryPolicy {
     /// 最大重试次数（不含首次请求）
     max_attempts: u32,
     /// 首次退避基础延迟（毫秒）
@@ -405,27 +405,27 @@ struct HeadlessRetryPolicy {
 /// - 5xx 服务端错误（500/502）：基础 3s，最多 1 次
 /// - 429：基础 5s，最多 2 次
 /// - 消息中含过载关键词：基础 3s，最多 2 次
-fn headless_retry_policy(error: &ChatError) -> Option<HeadlessRetryPolicy> {
+fn derived_retry_policy(error: &ChatError) -> Option<DerivedRetryPolicy> {
     match error {
-        ChatError::NetworkTimeout(_) | ChatError::NetworkError(_) => Some(HeadlessRetryPolicy {
+        ChatError::NetworkTimeout(_) | ChatError::NetworkError(_) => Some(DerivedRetryPolicy {
             max_attempts: 2,
             base_ms: 2_000,
             cap_ms: 15_000,
         }),
         ChatError::ApiServerError { status, .. } => match status {
-            503 | 504 | 529 => Some(HeadlessRetryPolicy {
+            503 | 504 | 529 => Some(DerivedRetryPolicy {
                 max_attempts: 2,
                 base_ms: 3_000,
                 cap_ms: 15_000,
             }),
-            500 | 502 => Some(HeadlessRetryPolicy {
+            500 | 502 => Some(DerivedRetryPolicy {
                 max_attempts: 1,
                 base_ms: 3_000,
                 cap_ms: 15_000,
             }),
             _ => None,
         },
-        ChatError::ApiRateLimit { .. } => Some(HeadlessRetryPolicy {
+        ChatError::ApiRateLimit { .. } => Some(DerivedRetryPolicy {
             max_attempts: 2,
             base_ms: 5_000,
             cap_ms: 30_000,
@@ -433,7 +433,7 @@ fn headless_retry_policy(error: &ChatError) -> Option<HeadlessRetryPolicy> {
         ChatError::AbnormalFinish(reason)
             if matches!(reason.as_str(), "network_error" | "timeout" | "overloaded") =>
         {
-            Some(HeadlessRetryPolicy {
+            Some(DerivedRetryPolicy {
                 max_attempts: 2,
                 base_ms: 2_000,
                 cap_ms: 15_000,
@@ -446,7 +446,7 @@ fn headless_retry_policy(error: &ChatError) -> Option<HeadlessRetryPolicy> {
                 || msg.contains("too busy")
                 || msg.contains("1305") =>
         {
-            Some(HeadlessRetryPolicy {
+            Some(DerivedRetryPolicy {
                 max_attempts: 2,
                 base_ms: 3_000,
                 cap_ms: 15_000,
