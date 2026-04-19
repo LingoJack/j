@@ -1,7 +1,7 @@
 use super::super::theme::Theme;
 use super::highlight::highlight_code_line;
 use crate::tui::editor_core::EditorTheme;
-use crate::util::text::{display_width, wrap_text};
+use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -604,7 +604,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         let header_style = Style::default()
                             .fg(theme.table_header)
                             .add_modifier(Modifier::BOLD);
-                        let border_style = Style::default().fg(theme.table_border);
+                        let border_style = Style::default().fg(theme.text_dim);
 
                         let total_col_w_final: usize = col_widths.iter().sum();
                         let table_row_w = sep_w + pad_w + total_col_w_final;
@@ -626,44 +626,42 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         lines.push(Line::from(top_spans));
 
                         for (row_idx, row) in table_rows.iter().enumerate() {
-                            // 对每个单元格进行折行
-                            let wrapped_cells: Vec<Vec<String>> = col_widths
+                            let base_style = if row_idx == 0 {
+                                header_style
+                            } else {
+                                table_style
+                            };
+                            let code_style = Style::default()
+                                .fg(theme.md_inline_code_fg)
+                                .bg(theme.md_inline_code_bg);
+
+                            // 对每个单元格按显示宽度折行，保留行内代码样式
+                            let wrapped_cells: Vec<Vec<(Vec<Span<'static>>, usize)>> = col_widths
                                 .iter()
                                 .enumerate()
                                 .map(|(i, cw)| {
                                     let cell_text = row.get(i).map(|s| s.as_str()).unwrap_or("");
-                                    wrap_text(cell_text, *cw)
+                                    wrap_cell_styled(cell_text, *cw, base_style, code_style)
                                 })
                                 .collect();
 
-                            // 计算最大折行行数
                             let max_rows = wrapped_cells.iter().map(|r| r.len()).max().unwrap_or(1);
 
-                            // 渲染每个折行子行
                             for sub_row in 0..max_rows {
                                 let mut row_spans: Vec<Span> = Vec::new();
                                 row_spans.push(Span::styled("│", border_style));
                                 for (i, cw) in col_widths.iter().enumerate() {
-                                    let cell_line = wrapped_cells
+                                    let empty_line: (Vec<Span<'static>>, usize) = (Vec::new(), 0);
+                                    let (cell_spans, cell_line_w) = wrapped_cells
                                         .get(i)
                                         .and_then(|lines| lines.get(sub_row))
-                                        .map(|s| s.as_str())
-                                        .unwrap_or("");
-                                    let cell_line_w = display_width_cell(cell_line);
+                                        .cloned()
+                                        .unwrap_or(empty_line);
                                     let fill = cw.saturating_sub(cell_line_w);
                                     let align = table_alignments
                                         .get(i)
                                         .copied()
                                         .unwrap_or(pulldown_cmark::Alignment::None);
-                                    let base_style = if row_idx == 0 {
-                                        header_style
-                                    } else {
-                                        table_style
-                                    };
-                                    let code_style = Style::default()
-                                        .fg(theme.md_inline_code_fg)
-                                        .bg(theme.md_inline_code_bg);
-                                    // 根据对齐方式计算左右填充
                                     let (left_pad, right_pad) = match align {
                                         pulldown_cmark::Alignment::Center => {
                                             let left = fill / 2;
@@ -672,16 +670,11 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                         pulldown_cmark::Alignment::Right => (fill, 0),
                                         _ => (0, fill),
                                     };
-                                    // 左侧 " " + left_pad
                                     row_spans.push(Span::styled(
                                         format!(" {}", " ".repeat(left_pad)),
                                         base_style,
                                     ));
-                                    // 单元格内容：拆分行内代码 `` `code` ``
-                                    let cell_spans =
-                                        split_cell_spans(cell_line, base_style, code_style);
                                     row_spans.extend(cell_spans);
-                                    // 右侧 right_pad + " "
                                     row_spans.push(Span::styled(
                                         format!("{} ", " ".repeat(right_pad)),
                                         base_style,
@@ -799,35 +792,84 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     lines
 }
 
-/// 将表格单元格文本拆分为 Span 列表，`` `code` `` 片段应用行内代码样式。
-/// 反引号仅用作标记，渲染时移除，只显示代码内容。
-fn split_cell_spans(cell_text: &str, base_style: Style, code_style: Style) -> Vec<Span<'static>> {
-    let mut spans = Vec::new();
-    let mut remaining = cell_text;
+/// 将单元格拆成 (text, style) 片段：配对反引号内的是行内代码样式，其余为 base 样式。
+/// 反引号作为标记被剥离，不进入返回文本。未配对的反引号保留为普通文本。
+fn cell_to_pieces(cell: &str, base: Style, code: Style) -> Vec<(String, Style)> {
+    let mut out = Vec::new();
+    let mut remaining = cell;
     while !remaining.is_empty() {
-        if let Some(start) = remaining.find('`') {
-            // 反引号之前的普通文本
-            if start > 0 {
-                spans.push(Span::styled(remaining[..start].to_string(), base_style));
+        if let Some(s) = remaining.find('`') {
+            if s > 0 {
+                out.push((remaining[..s].to_string(), base));
             }
-            // 找到配对的反引号
-            let after_tick = &remaining[start + 1..];
-            if let Some(end) = after_tick.find('`') {
-                let code_text = &after_tick[..end];
-                // 移除反引号，只显示代码内容并应用行内代码样式
-                spans.push(Span::styled(code_text.to_string(), code_style));
-                remaining = &after_tick[end + 1..];
+            let after = &remaining[s + 1..];
+            if let Some(e) = after.find('`') {
+                if e > 0 {
+                    out.push((after[..e].to_string(), code));
+                }
+                remaining = &after[e + 1..];
             } else {
-                // 无配对反引号，当作普通文本
-                spans.push(Span::styled(remaining[start..].to_string(), base_style));
+                out.push((remaining[s..].to_string(), base));
                 break;
             }
         } else {
-            spans.push(Span::styled(remaining.to_string(), base_style));
+            out.push((remaining.to_string(), base));
             break;
         }
     }
-    spans
+    out
+}
+
+/// 按显示宽度对单元格折行，保留行内代码样式。
+/// 返回每个子行的 (spans, 显示宽度)。
+fn wrap_cell_styled(
+    cell: &str,
+    max_width: usize,
+    base: Style,
+    code: Style,
+) -> Vec<(Vec<Span<'static>>, usize)> {
+    let max_width = max_width.max(2);
+    let pieces = cell_to_pieces(cell, base, code);
+
+    let mut lines: Vec<(Vec<Span<'static>>, usize)> = Vec::new();
+    let mut cur_line: Vec<Span<'static>> = Vec::new();
+    let mut cur_w: usize = 0;
+    let mut cur_buf: String = String::new();
+    let mut cur_style: Style = base;
+
+    for (text, style) in pieces {
+        if !cur_buf.is_empty() && style != cur_style {
+            cur_line.push(Span::styled(std::mem::take(&mut cur_buf), cur_style));
+        }
+        cur_style = style;
+        for ch in text.chars() {
+            if ch == '\n' {
+                if !cur_buf.is_empty() {
+                    cur_line.push(Span::styled(std::mem::take(&mut cur_buf), cur_style));
+                }
+                lines.push((std::mem::take(&mut cur_line), cur_w));
+                cur_w = 0;
+                continue;
+            }
+            let cw = char_width(ch);
+            if cur_w + cw > max_width && cur_w > 0 {
+                if !cur_buf.is_empty() {
+                    cur_line.push(Span::styled(std::mem::take(&mut cur_buf), cur_style));
+                }
+                lines.push((std::mem::take(&mut cur_line), cur_w));
+                cur_w = 0;
+            }
+            cur_buf.push(ch);
+            cur_w += cw;
+        }
+    }
+    if !cur_buf.is_empty() {
+        cur_line.push(Span::styled(cur_buf, cur_style));
+    }
+    if !cur_line.is_empty() || lines.is_empty() {
+        lines.push((cur_line, cur_w));
+    }
+    lines
 }
 
 /// 计算表格单元格文本的显示宽度，扣除行内代码标记反引号的宽度。
@@ -839,11 +881,9 @@ fn display_width_cell(cell: &str) -> usize {
             width += display_width(&remaining[..start]);
             let after_tick = &remaining[start + 1..];
             if let Some(end) = after_tick.find('`') {
-                // 代码内容计入宽度，反引号不计
                 width += display_width(&after_tick[..end]);
                 remaining = &after_tick[end + 1..];
             } else {
-                // 未配对反引号：前缀宽度已累加，这里只计从反引号起的剩余部分
                 width += display_width(&remaining[start..]);
                 break;
             }
