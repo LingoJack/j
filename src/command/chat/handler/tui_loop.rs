@@ -306,7 +306,20 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             needs_redraw = true;
         }
 
-        // Phase 2c: 收集 WebSocket 远程消息
+        // Phase 2c: main agent 空闲时，drain teammate inbox 消息并触发新 agent loop
+        // teammate 通过 broadcast 向 main_agent_inbox 注入消息，该 Arc 与 pending_user_messages 共享。
+        // 如果 main agent 已结束 agent loop（is_loading=false），inbox 中的消息无人消费，
+        // 需要在此唤醒 main agent 处理这些消息。
+        if !app.state.is_loading {
+            let has_inbox =
+                !safe_lock(&app.state.pending_user_messages, "tui_loop::inbox_check").is_empty();
+            if has_inbox {
+                app.wake_from_teammate_inbox();
+                needs_redraw = true;
+            }
+        }
+
+        // Phase 2d: 收集 WebSocket 远程消息
         if app.ws_bridge.is_some() {
             // 取出 ws_bridge 来避免借用冲突
             // is_some() 已在上方判断，take() 必返回 Some

@@ -3094,6 +3094,152 @@ impl ChatApp {
         }
     }
 
+    /// main agent 空闲时，teammate 通过 broadcast 向 main_agent_inbox 注入的消息
+    /// 已通过 ui_messages → poll_stream_actions → session.messages 显示在 TUI 中，
+    /// 但 main agent loop 已退出，无人消费 pending_user_messages 中的消息。
+    /// 此方法清空 inbox 并启动新的 agent loop，让 main agent 响应 teammate 的消息。
+    /// 不走 send_message_internal，因为消息已在 session 中，无需重复 push user message。
+    pub fn wake_from_teammate_inbox(&mut self) {
+        // 清空 inbox（消息已通过 ui_messages 进入 session.messages，不需要再追加）
+        {
+            let mut pending =
+                safe_lock(&self.state.pending_user_messages, "wake_from_inbox::clear");
+            if pending.is_empty() {
+                return; // 无消息，不需要唤醒
+            }
+            pending.clear();
+        }
+
+        let provider = match self.active_provider() {
+            Some(p) => p.clone(),
+            None => {
+                self.show_toast("未配置模型提供方，请先编辑配置文件", true);
+                return;
+            }
+        };
+
+        // 同步更新子 Agent 的 provider
+        {
+            let mut p = safe_lock(
+                &self.child_agent_provider,
+                "wake_from_inbox::agent_provider",
+            );
+            *p = provider.clone();
+        }
+
+        self.state.is_loading = true;
+        self.ui.last_rendered_streaming_len = 0;
+        self.ui.last_stream_render_time = std::time::Instant::now();
+        self.ui.msg_lines_cache = None;
+        self.tool_executor.reset();
+
+        let api_messages = self.build_api_messages();
+
+        // 清空流式内容缓冲
+        {
+            let mut sc = safe_lock(
+                &self.state.streaming_content,
+                "wake_from_inbox::streaming_content",
+            );
+            sc.clear();
+        }
+
+        let streaming_content = Arc::clone(&self.state.streaming_content);
+        let tools_enabled = self.state.agent_config.tools_enabled;
+        let max_tool_rounds = self.state.agent_config.max_tool_rounds;
+        let tools = if tools_enabled {
+            self.tool_registry
+                .to_openai_tools_filtered(&self.state.agent_config.disabled_tools)
+        } else {
+            vec![]
+        };
+
+        let pending_user_messages = Arc::clone(&self.state.pending_user_messages);
+        let background_manager = Arc::clone(&self.background_manager);
+        let compact_config = self.state.agent_config.compact.clone();
+
+        let loaded_skills = self.state.loaded_skills.clone();
+        let disabled_skills = self.state.agent_config.disabled_skills.clone();
+        let disabled_tools = self.state.agent_config.disabled_tools.clone();
+        let tool_registry = Arc::clone(&self.tool_registry);
+        let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
+            use crate::command::chat::agent_md;
+            use crate::command::chat::storage::{
+                load_memory, load_soul, load_style, load_system_prompt,
+            };
+            let template = load_system_prompt()?;
+            let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
+            let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
+            let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
+            let memory_text = load_memory().unwrap_or_default();
+            let soul_text = load_soul().unwrap_or_default();
+            let agent_md_text = agent_md::load_agent_md();
+            let current_dir = std::env::current_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| ".".to_string());
+            let skill_dir = skills_dir().to_string_lossy().to_string();
+            let project_skill_dir = skill::project_skills_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            Some(apply_static_placeholders(
+                &template,
+                &StaticPlaceholderValues {
+                    skills_summary: &skills_summary,
+                    tools_summary: &tools_summary,
+                    style_text: &style_text,
+                    memory_text: &memory_text,
+                    soul_text: &soul_text,
+                    agent_md_text: &agent_md_text,
+                    current_dir: &current_dir,
+                    skill_dir: &skill_dir,
+                    project_skill_dir: &project_skill_dir,
+                },
+            ))
+        });
+
+        let hook_manager_clone = match self.hook_manager.lock() {
+            Ok(manager) => manager.clone(),
+            Err(_) => HookManager::default(),
+        };
+
+        let todo_manager = Arc::clone(&self.todo_manager);
+
+        // 重置共享消息状态
+        {
+            let mut shared = safe_lock(&self.ui_messages, "wake_from_inbox::clear_shared");
+            shared.clear();
+        }
+        self.ui_messages_cursor = 0;
+
+        let agent_config = MainLoopConfig {
+            provider,
+            max_tool_rounds,
+            compact_config,
+            hook_manager: hook_manager_clone,
+            cancel_token: CancellationToken::new(),
+        };
+        let agent_shared = MainLoopSharedState {
+            streaming_content,
+            pending_user_messages,
+            background_manager,
+            todo_manager,
+            ui_messages: Arc::clone(&self.ui_messages),
+            context_tokens: Arc::clone(&self.context_tokens),
+            invoked_skills: Arc::clone(&self.invoked_skills),
+            session_id: self.session_id.clone(),
+        };
+        let (handle, tool_result_tx) = MainAgentHandle::spawn(
+            agent_config,
+            agent_shared,
+            api_messages,
+            tools,
+            system_prompt_fn,
+        );
+
+        self.main_agent = Some(handle);
+        self.tool_executor.tool_result_tx = Some(tool_result_tx);
+    }
+
     /// 只取消工具执行，不终止 agent loop
     pub fn cancel_tools_only(&mut self) {
         self.tool_executor.cancel();
