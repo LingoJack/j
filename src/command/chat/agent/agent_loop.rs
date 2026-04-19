@@ -12,9 +12,9 @@ use crate::util::log::{write_error_log, write_info_log};
 
 /// 流式响应中逐步聚合的工具调用片段（按 chunk index 聚合 id/name/arguments）
 struct StreamingToolCallPart {
-    id: String,
-    name: String,
-    arguments: String,
+    call_id: String,
+    function_name: String,
+    function_arguments: String,
 }
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
@@ -24,8 +24,8 @@ use std::sync::{Arc, Mutex, mpsc};
 
 /// process_tool_calls 所需的通道和共享状态
 struct ToolCallContext<'a> {
-    tx: &'a mpsc::Sender<StreamMsg>,
-    tool_result_rx: &'a mpsc::Receiver<ToolResultMsg>,
+    stream_msg_sender: &'a mpsc::Sender<StreamMsg>,
+    tool_result_receiver: &'a mpsc::Receiver<ToolResultMsg>,
     pending_user_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     hook_manager: &'a HookManager,
     supports_vision: bool,
@@ -67,8 +67,8 @@ pub async fn run_main_agent_loop(
     let client = create_openai_client(&provider);
 
     let tool_ctx = ToolCallContext {
-        tx: &tx,
-        tool_result_rx: &tool_result_rx,
+        stream_msg_sender: &tx,
+        tool_result_receiver: &tool_result_rx,
         pending_user_messages: &pending_user_messages,
         hook_manager: &hook_manager,
         supports_vision: provider.supports_vision,
@@ -251,8 +251,8 @@ pub async fn run_main_agent_loop(
         // 记录请求输入日志
         {
             let mut log_content = String::new();
-            if let Some(ref sp) = system_prompt {
-                log_content.push_str(&format!("[System] {}\n", sp));
+            if let Some(ref system_prompt) = system_prompt {
+                log_content.push_str(&format!("[System] {}\n", system_prompt));
             }
             for msg in &messages {
                 match msg.role.as_str() {
@@ -260,11 +260,11 @@ pub async fn run_main_agent_loop(
                         if !msg.content.is_empty() {
                             log_content.push_str(&format!("[Assistant] {}\n", msg.content));
                         }
-                        if let Some(ref tcs) = msg.tool_calls {
-                            for tc in tcs {
+                        if let Some(ref tool_calls) = msg.tool_calls {
+                            for tool_call in tool_calls {
                                 log_content.push_str(&format!(
                                     "[Assistant/ToolCall] {}: {}\n",
-                                    tc.name, tc.arguments
+                                    tool_call.name, tool_call.arguments
                                 ));
                             }
                         }
@@ -274,8 +274,8 @@ pub async fn run_main_agent_loop(
                         let tool_name = msg
                             .tool_calls
                             .as_ref()
-                            .and_then(|tc| tc.first())
-                            .map(|tc| tc.name.as_str())
+                            .and_then(|tool_calls| tool_calls.first())
+                            .map(|tool_call| tool_call.name.as_str())
                             .unwrap_or("unknown");
                         log_content.push_str(&format!(
                             "[Tool/Result({} with id `{}`)] result:\n{}\n",
@@ -421,10 +421,8 @@ pub async fn run_main_agent_loop(
             let mut finish_reason: Option<async_openai::types::chat::FinishReason> = None;
             let mut assistant_text = String::new();
             // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
-            let mut streaming_tool_call_parts: std::collections::BTreeMap<
-                u32,
-                StreamingToolCallPart,
-            > = std::collections::BTreeMap::new();
+            let mut active_tool_call_parts: std::collections::BTreeMap<u32, StreamingToolCallPart> =
+                std::collections::BTreeMap::new();
             let mut deserialize_failed = false;
             // 流式读取中途遇到 tool_call_id 不一致的请求错误
             let mut needs_compact_for_tool_id_mismatch = false;
@@ -441,13 +439,13 @@ pub async fn run_main_agent_loop(
                                 received_chunks += 1;
                                 // 记录前几个 chunk 的原始信息，便于调试
                                 if received_chunks <= 3 {
-                                    let choices_debug: Vec<String> = response.choices.iter().map(|c| {
+                                    let choices_debug: Vec<String> = response.choices.iter().map(|choice| {
                                         format!(
                                             "idx={}, finish_reason={:?}, has_content={}, has_tool_calls={}",
-                                            c.index,
-                                            c.finish_reason,
-                                            c.delta.content.is_some(),
-                                            c.delta.tool_calls.is_some(),
+                                            choice.index,
+                                            choice.finish_reason,
+                                            choice.delta.content.is_some(),
+                                            choice.delta.tool_calls.is_some(),
                                         )
                                     }).collect();
                                     write_info_log(
@@ -467,29 +465,29 @@ pub async fn run_main_agent_loop(
                                     if let Some(ref toolcall_chunks) = choice.delta.tool_calls {
                                         for chunk in toolcall_chunks {
                                             let entry =
-                                                streaming_tool_call_parts.entry(chunk.index).or_insert_with(|| {
+                                                active_tool_call_parts.entry(chunk.index).or_insert_with(|| {
                                                     StreamingToolCallPart {
-                                                        id: chunk.id.clone().unwrap_or_default(),
-                                                        name: String::new(),
-                                                        arguments: String::new(),
+                                                        call_id: chunk.id.clone().unwrap_or_default(),
+                                                        function_name: String::new(),
+                                                        function_arguments: String::new(),
                                                     }
                                                 });
-                                            if entry.id.is_empty()
+                                            if entry.call_id.is_empty()
                                                 && let Some(ref id) = chunk.id {
-                                                    entry.id = id.clone();
+                                                    entry.call_id = id.clone();
                                                 }
                                             if let Some(ref tool_function) = chunk.function {
                                                 if let Some(ref name) = tool_function.name {
-                                                    entry.name.push_str(name);
+                                                    entry.function_name.push_str(name);
                                                 }
                                                 if let Some(ref args) = tool_function.arguments {
-                                                    entry.arguments.push_str(args);
+                                                    entry.function_arguments.push_str(args);
                                                 }
                                             }
                                         }
                                     }
-                                    if let Some(ref fr) = choice.finish_reason {
-                                        finish_reason = Some(*fr);
+                                    if let Some(ref finish_reason_val) = choice.finish_reason {
+                                        finish_reason = Some(*finish_reason_val);
                                     }
                                 }
                             }
@@ -631,10 +629,10 @@ pub async fn run_main_agent_loop(
             write_info_log(
                 "agent_loop",
                 &format!(
-                    "流式循环结束: finish_reason={:?}, assistant_text_len={}, streaming_tool_call_parts={}, deserialize_failed={}",
+                    "流式循环结束: finish_reason={:?}, assistant_text_len={}, active_tool_call_parts={}, deserialize_failed={}",
                     finish_reason,
                     assistant_text.len(),
-                    streaming_tool_call_parts.len(),
+                    active_tool_call_parts.len(),
                     deserialize_failed
                 ),
             );
@@ -644,7 +642,7 @@ pub async fn run_main_agent_loop(
             // 常见场景：某些 API 对多模态+流式组合返回空 choices，需要非流式重试。
             let stream_empty = finish_reason.is_none()
                 && assistant_text.is_empty()
-                && streaming_tool_call_parts.is_empty();
+                && active_tool_call_parts.is_empty();
             write_info_log(
                 "agent_loop",
                 &format!(
@@ -720,17 +718,17 @@ pub async fn run_main_agent_loop(
                     "agent_loop",
                     &format!(
                         "fallback 非流式结果: has_tool_calls={}, has_content={}, finish_reason={:?}",
-                        fallback_result.has_tool_calls,
+                        fallback_result.has_tool_calls(),
                         fallback_result
                             .content
                             .as_ref()
-                            .map(|c| c.len())
+                            .map(|content| content.len())
                             .unwrap_or(0),
                         fallback_result.finish_reason
                     ),
                 );
 
-                if fallback_result.has_tool_calls
+                if fallback_result.has_tool_calls()
                     && let Some(tool_items) = fallback_result.tool_calls
                 {
                     if tool_items.is_empty() {
@@ -753,7 +751,7 @@ pub async fn run_main_agent_loop(
                                 .await;
                             }
                             // ── Plan 被批准且清空上下文 ──
-                            if let Some(ref plan_content) = result.plan_approved_clear_context {
+                            if let Some(ref plan_content) = result.plan_with_context_clear {
                                 write_info_log(
                                     "agent_loop",
                                     "Clearing context after plan approval",
@@ -833,11 +831,11 @@ pub async fn run_main_agent_loop(
             }
 
             // ── 检查流式模式下是否有 tool_calls ──
-            // 优先检查 streaming_tool_call_parts 是否非空，而非仅依赖 finish_reason。
+            // 优先检查 active_tool_call_parts 是否非空，而非仅依赖 finish_reason。
             // 某些 API（非 OpenAI）流式返回的 finish_reason 不是 ToolCodes 枚举值，
             // 但 chunk 中确实包含 tool_calls 数据。此时如果只看 finish_reason 会直接
             // break 'round，导致工具调用被丢弃，agent 提前结束。
-            let has_tool_calls = !streaming_tool_call_parts.is_empty();
+            let has_tool_calls = !active_tool_call_parts.is_empty();
             write_info_log(
                 "agent_loop",
                 &format!(
@@ -856,20 +854,20 @@ pub async fn run_main_agent_loop(
                     write_info_log(
                         "agent_loop",
                         &format!(
-                            "finish_reason={:?} 不是 ToolCalls 但 streaming_tool_call_parts 非空({})，仍处理工具调用",
+                            "finish_reason={:?} 不是 ToolCalls 但 active_tool_call_parts 非空({})，仍处理工具调用",
                             finish_reason,
-                            streaming_tool_call_parts.len()
+                            active_tool_call_parts.len()
                         ),
                     );
                 }
 
-                let tool_items: Vec<ToolCallItem> = streaming_tool_call_parts
+                let tool_items: Vec<ToolCallItem> = active_tool_call_parts
                     .into_values()
                     .map(|part| {
                         // 某些 API 在流式 chunk 中不返回 tool_call id，
                         // 导致 id 为空字符串；发送给 API 时会报 tool_call_id not found。
                         // 此处为空 id 生成随机唯一 id。
-                        let id = if part.id.is_empty() {
+                        let id = if part.call_id.is_empty() {
                             let rand_id =
                                 format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
                             write_info_log(
@@ -881,9 +879,9 @@ pub async fn run_main_agent_loop(
                             );
                             rand_id
                         } else {
-                            part.id
+                            part.call_id
                         };
-                        ToolCallItem { id, name: part.name, arguments: part.arguments }
+                        ToolCallItem { id, name: part.function_name, arguments: part.function_arguments }
                     })
                     .collect();
 
@@ -918,7 +916,7 @@ pub async fn run_main_agent_loop(
                             .await;
                         }
                         // ── Plan 被批准且清空上下文 ──
-                        if let Some(ref plan_content) = result.plan_approved_clear_context {
+                        if let Some(ref plan_content) = result.plan_with_context_clear {
                             write_info_log("agent_loop", "Clearing context after plan approval");
                             messages.clear();
                             if let Ok(mut shared) = ui_messages.lock() {
@@ -1106,7 +1104,7 @@ fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg])
 struct ToolCallResult {
     compact_requested: bool,
     /// Plan 被批准且用户选择清空上下文，值为 plan 文件内容
-    plan_approved_clear_context: Option<String>,
+    plan_with_context_clear: Option<String>,
 }
 
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
@@ -1158,7 +1156,7 @@ fn process_tool_calls(
     push_ui(ctx.ui_messages, tool_call_msg);
 
     if ctx
-        .tx
+        .stream_msg_sender
         .send(StreamMsg::ToolCallRequest(tool_items.clone()))
         .is_err()
     {
@@ -1168,7 +1166,7 @@ fn process_tool_calls(
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
     let mut plan_clear_context: Option<String> = None;
     for _ in &tool_items {
-        match ctx.tool_result_rx.recv() {
+        match ctx.tool_result_receiver.recv() {
             Ok(result) => {
                 // 检测 ExitPlanMode 返回清空上下文信号
                 if result.plan_decision == PlanDecision::ApproveAndClearContext {
@@ -1288,7 +1286,7 @@ fn process_tool_calls(
 
     Ok(ToolCallResult {
         compact_requested,
-        plan_approved_clear_context: plan_clear_context,
+        plan_with_context_clear: plan_clear_context,
     })
 }
 

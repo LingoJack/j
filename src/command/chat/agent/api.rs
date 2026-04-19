@@ -87,21 +87,21 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                     builder.content(msg.content.as_str());
                 }
                 if let Some(ref tool_calls) = msg.tool_calls {
-                    let tc_list: Vec<ChatCompletionMessageToolCalls> = tool_calls
+                    let openai_tool_calls: Vec<ChatCompletionMessageToolCalls> = tool_calls
                         .iter()
-                        .map(|tc| {
+                        .map(|tool_call| {
                             ChatCompletionMessageToolCalls::Function(
                                 ChatCompletionMessageToolCall {
-                                    id: tc.id.clone(),
+                                    id: tool_call.id.clone(),
                                     function: FunctionCall {
-                                        name: tc.name.clone(),
-                                        arguments: tc.arguments.clone(),
+                                        name: tool_call.name.clone(),
+                                        arguments: tool_call.arguments.clone(),
                                     },
                                 },
                             )
                         })
                         .collect();
-                    builder.tool_calls(tc_list);
+                    builder.tool_calls(openai_tool_calls);
                 }
                 builder
                     .build()
@@ -182,16 +182,16 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
                 }
             }
             if msg.role == ROLE_ASSISTANT
-                && let Some(ref tcs) = msg.tool_calls
+                && let Some(ref tool_calls) = msg.tool_calls
             {
                 // 仅保留：id 非空 且 已有对应 tool result 的条目
-                let valid_tool_calls: Vec<_> = tcs
+                let valid_tool_calls: Vec<_> = tool_calls
                     .iter()
-                    .filter(|tc| !tc.id.is_empty() && tool_result_ids.contains(&tc.id))
+                    .filter(|tool_call| !tool_call.id.is_empty() && tool_result_ids.contains(&tool_call.id))
                     .cloned()
                     .collect();
-                if valid_tool_calls.len() != tcs.len() {
-                    let dropped = tcs.len() - valid_tool_calls.len();
+                if valid_tool_calls.len() != tool_calls.len() {
+                    let dropped = tool_calls.len() - valid_tool_calls.len();
                     write_error_log(
                         "sanitize_messages",
                         &format!(
@@ -223,20 +223,24 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
 /// 以及移除 assistant 消息中无对应 tool result 的 tool_call 条目。
 fn sanitize_openai_messages(messages: &mut Vec<ChatCompletionRequestMessage>) {
     // 1. 收集所有 assistant 消息中的 tool_call id
-    let assistant_tc_ids: std::collections::HashSet<String> = messages
+    let assistant_tool_call_ids: std::collections::HashSet<String> = messages
         .iter()
         .filter_map(|m| {
-            if let ChatCompletionRequestMessage::Assistant(a) = m {
-                Some(a)
+            if let ChatCompletionRequestMessage::Assistant(assistant_msg) = m {
+                Some(assistant_msg)
             } else {
                 None
             }
         })
-        .flat_map(|a| {
-            a.tool_calls.iter().flatten().filter_map(|tc| match tc {
-                ChatCompletionMessageToolCalls::Function(f) => Some(f.id.clone()),
-                _ => None,
-            })
+        .flat_map(|assistant_msg| {
+            assistant_msg
+                .tool_calls
+                .iter()
+                .flatten()
+                .filter_map(|tool_call| match tool_call {
+                    ChatCompletionMessageToolCalls::Function(f) => Some(f.id.clone()),
+                    _ => None,
+                })
         })
         .filter(|id| !id.is_empty())
         .collect();
@@ -245,8 +249,8 @@ fn sanitize_openai_messages(messages: &mut Vec<ChatCompletionRequestMessage>) {
     let tool_result_ids: std::collections::HashSet<String> = messages
         .iter()
         .filter_map(|m| {
-            if let ChatCompletionRequestMessage::Tool(t) = m {
-                Some(t.tool_call_id.clone())
+            if let ChatCompletionRequestMessage::Tool(tool_msg) = m {
+                Some(tool_msg.tool_call_id.clone())
             } else {
                 None
             }
@@ -258,14 +262,14 @@ fn sanitize_openai_messages(messages: &mut Vec<ChatCompletionRequestMessage>) {
 
     // 3. 移除孤立的 tool result（tool_call_id 不在 assistant tool_calls 中）
     messages.retain(|m| {
-        if let ChatCompletionRequestMessage::Tool(t) = m
-            && !assistant_tc_ids.contains(&t.tool_call_id)
+        if let ChatCompletionRequestMessage::Tool(tool_msg) = m
+            && !assistant_tool_call_ids.contains(&tool_msg.tool_call_id)
         {
             write_error_log(
                 "sanitize_openai_messages",
                 &format!(
                     "移除孤立 tool result (tool_call_id={})：在 assistant tool_calls 中无对应项",
-                    t.tool_call_id
+                    tool_msg.tool_call_id
                 ),
             );
             return false;
@@ -275,27 +279,27 @@ fn sanitize_openai_messages(messages: &mut Vec<ChatCompletionRequestMessage>) {
 
     // 4. 清理 assistant 消息中无对应 tool result 的 tool_call 条目
     for msg in messages.iter_mut() {
-        if let ChatCompletionRequestMessage::Assistant(a) = msg
-            && let Some(ref mut tcs) = a.tool_calls
+        if let ChatCompletionRequestMessage::Assistant(assistant_msg) = msg
+            && let Some(ref mut tool_calls) = assistant_msg.tool_calls
         {
-            let before = tcs.len();
-            tcs.retain(|tc| match tc {
+            let before = tool_calls.len();
+            tool_calls.retain(|tool_call| match tool_call {
                 ChatCompletionMessageToolCalls::Function(f) => {
                     f.id.is_empty() || tool_result_ids.contains(&f.id)
                 }
                 _ => true,
             });
-            if tcs.len() != before {
+            if tool_calls.len() != before {
                 write_error_log(
                     "sanitize_openai_messages",
                     &format!(
                         "assistant tool_calls 中 {} 个条目无对应 tool result，已移除",
-                        before - tcs.len()
+                        before - tool_calls.len()
                     ),
                 );
             }
-            if tcs.is_empty() {
-                a.tool_calls = None;
+            if tool_calls.is_empty() {
+                assistant_msg.tool_calls = None;
             }
         }
     }
@@ -318,8 +322,8 @@ pub fn build_request_with_tools(
 ) -> Result<CreateChatCompletionRequest, ChatError> {
     let sanitized_messages = sanitize_messages(messages);
     let mut openai_messages = Vec::with_capacity(sanitized_messages.len());
-    if let Some(sys) = system_prompt {
-        let trimmed_system_prompt = sys.trim();
+    if let Some(system_prompt_text) = system_prompt {
+        let trimmed_system_prompt = system_prompt_text.trim();
         if !trimmed_system_prompt.is_empty()
             && let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
                 .content(trimmed_system_prompt)
@@ -363,8 +367,8 @@ pub async fn call_openai_stream_async(
     let client = create_openai_client(provider);
     let mut openai_messages = Vec::with_capacity(messages.len());
 
-    if let Some(sys) = system_prompt {
-        let trimmed_system_prompt = sys.trim();
+    if let Some(system_prompt_text) = system_prompt {
+        let trimmed_system_prompt = system_prompt_text.trim();
         if !trimmed_system_prompt.is_empty()
             && let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
                 .content(trimmed_system_prompt)
@@ -466,8 +470,14 @@ pub struct LenientChatResponse {
 pub struct FallbackResult {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCallItem>>,
-    pub has_tool_calls: bool,
     pub finish_reason: Option<String>,
+}
+
+impl FallbackResult {
+    /// 是否包含 tool calls
+    pub fn has_tool_calls(&self) -> bool {
+        self.tool_calls.is_some()
+    }
 }
 
 /// 使用 reqwest 发送非流式请求，用宽松结构反序列化，兼容非标准 finish_reason
@@ -523,39 +533,34 @@ pub async fn call_openai_non_stream_lenient(
             return Ok(FallbackResult {
                 content: None,
                 tool_calls: None,
-                has_tool_calls: false,
                 finish_reason: None,
             });
         }
     };
 
-    let has_tool_calls = choice
-        .finish_reason
-        .as_deref()
-        .is_some_and(|r| r == "tool_calls");
-
-    let tool_items = choice.message.tool_calls.as_ref().map(|tcs| {
-        tcs.iter()
-            .map(|tc| {
+    let tool_items = choice.message.tool_calls.as_ref().map(|tool_calls| {
+        tool_calls
+            .iter()
+            .map(|tool_call| {
                 // 与流式路径保持一致：API 未返回 id 时生成随机 id，避免下一轮报 tool_call_id not found
-                let id = if tc.id.is_empty() {
+                let id = if tool_call.id.is_empty() {
                     use rand::Rng;
                     let rand_id = format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
                     write_info_log(
                         "call_openai_non_stream_lenient",
                         &format!(
                             "tool_call id 为空，已生成随机 id: {} (tool: {})",
-                            rand_id, tc.function.name
+                            rand_id, tool_call.function.name
                         ),
                     );
                     rand_id
                 } else {
-                    tc.id.clone()
+                    tool_call.id.clone()
                 };
                 ToolCallItem {
                     id,
-                    name: tc.function.name.clone(),
-                    arguments: tc.function.arguments.clone(),
+                    name: tool_call.function.name.clone(),
+                    arguments: tool_call.function.arguments.clone(),
                 }
             })
             .collect()
@@ -577,7 +582,6 @@ pub async fn call_openai_non_stream_lenient(
     Ok(FallbackResult {
         content: choice.message.content.clone(),
         tool_calls: tool_items,
-        has_tool_calls,
         finish_reason: choice.finish_reason.clone(),
     })
 }

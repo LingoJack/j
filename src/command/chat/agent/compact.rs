@@ -33,9 +33,9 @@ pub struct InvokedSkill {
     /// 技能目录路径
     pub dir_path: String,
     /// 完整的解析后内容（含 $ARGUMENTS 替换、references/scripts 列表）
-    pub content: String,
-    /// 调用时间戳（用于 LRU 排序，最近调用的优先保留）
-    pub invoked_at: u64,
+    pub resolved_content: String,
+    /// 调用时间戳，单位：秒（用于 LRU 排序，最近调用的优先保留）
+    pub invoked_at_secs: u64,
 }
 
 /// 会话内已调用技能的共享状态（Agent 线程写入，auto_compact 读取）
@@ -65,8 +65,8 @@ pub fn record_skill_invocation(
             InvokedSkill {
                 name,
                 dir_path,
-                content,
-                invoked_at: now,
+                resolved_content: content,
+                invoked_at_secs: now,
             },
         );
         write_info_log("invoked_skills", &format!("记录技能调用: {}", log_name));
@@ -84,7 +84,7 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
 
     // 按最近调用时间排序（新→旧）
     let mut sorted_by_recency: Vec<&InvokedSkill> = skills.values().collect();
-    sorted_by_recency.sort_by(|a, b| b.invoked_at.cmp(&a.invoked_at));
+    sorted_by_recency.sort_by(|a, b| b.invoked_at_secs.cmp(&a.invoked_at_secs));
 
     let mut result =
         String::from("Skills invoked in this session (preserved across compaction):\n\n");
@@ -93,7 +93,7 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
     let total_budget = COMPACT_SKILL_TOKEN_BUDGET;
 
     for skill in sorted_by_recency {
-        let skill_tokens = skill.content.len() / 4; // 粗略估算
+        let skill_tokens = skill.resolved_content.len() / 4; // 粗略估算
         let available = if total_tokens + per_skill_budget > total_budget {
             total_budget.saturating_sub(total_tokens)
         } else {
@@ -107,12 +107,12 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
         result.push_str(&format!("Path: {}\n", skill.dir_path));
 
         if skill_tokens <= available {
-            result.push_str(&skill.content);
+            result.push_str(&skill.resolved_content);
             total_tokens += skill_tokens;
         } else {
             // 截断到 available tokens (~4 chars/token)，保留头部（通常包含最关键的使用说明）
             let char_cutoff = available * 4;
-            let truncated: String = skill.content.chars().take(char_cutoff).collect();
+            let truncated: String = skill.resolved_content.chars().take(char_cutoff).collect();
             result.push_str(&truncated);
             result.push_str("\n\n[... skill content truncated for compaction ...]");
             total_tokens += available;
@@ -204,10 +204,10 @@ pub fn micro_compact(
     let mut tool_call_id_to_name: HashMap<String, String> = HashMap::new();
     for msg in messages.iter() {
         if msg.role == ROLE_ASSISTANT
-            && let Some(ref tcs) = msg.tool_calls
+            && let Some(ref tool_calls) = msg.tool_calls
         {
-            for tc in tcs {
-                tool_call_id_to_name.insert(tc.id.clone(), tc.name.clone());
+            for tool_call in tool_calls {
+                tool_call_id_to_name.insert(tool_call.id.clone(), tool_call.name.clone());
             }
         }
     }
@@ -318,7 +318,7 @@ pub async fn auto_compact(
     // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
     let conversation_text = serde_json::to_string(messages).unwrap_or_default();
     // 截断到 80000 chars
-    let truncated_conversation: String = conversation_text
+    let truncated_conversation_text: String = conversation_text
         .chars()
         .take(COMPACT_TRUNCATE_MAX_CHARS)
         .collect();
@@ -337,7 +337,7 @@ pub async fn auto_compact(
          \n\
          Be concise but preserve critical details. Section 6 (Active Skills/Workflows) is especially important — preserve all skill instructions and progress so the model can continue following them without re-loading.\n\n\
          {}",
-        truncated_conversation
+        truncated_conversation_text
     );
 
     // 追加保护指令（来自 PreAutoCompact hook 的 additional_context）

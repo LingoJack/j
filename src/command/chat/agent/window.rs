@@ -22,15 +22,15 @@ use crate::util::log::write_info_log;
 #[derive(Debug, Clone)]
 enum MessageUnit {
     /// 系统消息，始终保留
-    System { idx: usize },
+    System { message_index: usize },
     /// 用户消息，最高优先级
-    User { idx: usize },
+    User { message_index: usize },
     /// Assistant 纯文字消息（有 content，无 tool_calls）
-    AssistantText { idx: usize },
+    AssistantText { message_index: usize },
     /// 工具调用组 — assistant(tool_calls) + 所有对应 tool result，原子单元
     ToolGroup {
         /// assistant(tool_calls) 消息的索引
-        assistant_idx: usize,
+        assistant_message_index: usize,
         /// 对应 tool result 消息的索引列表（紧跟在 assistant 后面）
         tool_result_indices: Vec<usize>,
     },
@@ -63,28 +63,33 @@ impl MessageUnit {
     /// 该单元中第一条消息的索引（用于时间排序）
     fn first_idx(&self) -> usize {
         match self {
-            MessageUnit::System { idx }
-            | MessageUnit::User { idx }
-            | MessageUnit::AssistantText { idx } => *idx,
-            MessageUnit::ToolGroup { assistant_idx, .. } => *assistant_idx,
+            MessageUnit::System { message_index }
+            | MessageUnit::User { message_index }
+            | MessageUnit::AssistantText { message_index } => *message_index,
+            MessageUnit::ToolGroup {
+                assistant_message_index,
+                ..
+            } => *assistant_message_index,
         }
     }
 
     /// 估算该单元的 token 数（用 chars 计数 + /3，兼顾中文场景）
     fn estimate_tokens(&self, messages: &[ChatMessage]) -> usize {
         let total_chars: usize = match self {
-            MessageUnit::System { idx }
-            | MessageUnit::User { idx }
-            | MessageUnit::AssistantText { idx } => messages[*idx].content.chars().count(),
+            MessageUnit::System { message_index }
+            | MessageUnit::User { message_index }
+            | MessageUnit::AssistantText { message_index } => {
+                messages[*message_index].content.chars().count()
+            }
             MessageUnit::ToolGroup {
-                assistant_idx,
+                assistant_message_index,
                 tool_result_indices,
             } => {
-                let mut chars = messages[*assistant_idx].content.chars().count();
-                for &ri in tool_result_indices {
-                    chars += messages[ri].content.chars().count();
+                let mut chars = messages[*assistant_message_index].content.chars().count();
+                for &result_index in tool_result_indices {
+                    chars += messages[result_index].content.chars().count();
                 }
-                if let Some(ref tcs) = messages[*assistant_idx].tool_calls {
+                if let Some(ref tcs) = messages[*assistant_message_index].tool_calls {
                     for tc in tcs {
                         chars += tc.name.chars().count() + tc.arguments.chars().count();
                     }
@@ -98,7 +103,10 @@ impl MessageUnit {
     /// ToolGroup 是否包含豁免工具（任一 tool_call 命中豁免清单即返回 true）
     fn has_exempt_tool(&self, messages: &[ChatMessage], exempt_tools: &[String]) -> bool {
         match self {
-            MessageUnit::ToolGroup { assistant_idx, .. } => messages[*assistant_idx]
+            MessageUnit::ToolGroup {
+                assistant_message_index,
+                ..
+            } => messages[*assistant_message_index]
                 .tool_calls
                 .as_ref()
                 .map(|tcs| tcs.iter().any(|tc| is_exempt_tool(&tc.name, exempt_tools)))
@@ -119,15 +127,15 @@ fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
         let msg = &messages[i];
 
         if msg.role == ROLE_SYSTEM {
-            units.push(MessageUnit::System { idx: i });
+            units.push(MessageUnit::System { message_index: i });
             i += 1;
         } else if msg.role == ROLE_USER {
-            units.push(MessageUnit::User { idx: i });
+            units.push(MessageUnit::User { message_index: i });
             i += 1;
         } else if msg.role == ROLE_ASSISTANT {
             if msg.tool_calls.is_some() {
                 // assistant + tool_calls → 收集后续 tool result
-                let assistant_idx = i;
+                let assistant_message_index = i;
                 let mut tool_result_indices = Vec::new();
                 i += 1;
                 while i < messages.len() && messages[i].role == ROLE_TOOL {
@@ -135,12 +143,12 @@ fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
                     i += 1;
                 }
                 units.push(MessageUnit::ToolGroup {
-                    assistant_idx,
+                    assistant_message_index,
                     tool_result_indices,
                 });
             } else {
                 // 纯文字 assistant 消息
-                units.push(MessageUnit::AssistantText { idx: i });
+                units.push(MessageUnit::AssistantText { message_index: i });
                 i += 1;
             }
         } else if msg.role == ROLE_TOOL {
@@ -155,12 +163,12 @@ fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
             }
             // 孤立 tool results 最低优先级，作为 ToolGroup 处理
             units.push(MessageUnit::ToolGroup {
-                assistant_idx: start, // 没有真正的 assistant，用第一个 tool result 的索引
+                assistant_message_index: start, // 没有真正的 assistant，用第一个 tool result 的索引
                 tool_result_indices,
             });
         } else {
             // 未知角色，作为单条处理
-            units.push(MessageUnit::System { idx: i });
+            units.push(MessageUnit::System { message_index: i });
             i += 1;
         }
     }
@@ -194,15 +202,15 @@ fn select_units(
     let mut used_token_count = 0usize;
 
     // 记账 + 预算检查的闭包式辅助（rust 中改为函数避免借用问题）
-    let try_retain_unit = |idx: usize,
+    let try_retain_unit = |message_index: usize,
                            retained: &mut [bool],
                            used_message_count: &mut usize,
                            used_token_count: &mut usize|
      -> bool {
-        if retained[idx] {
+        if retained[message_index] {
             return false;
         }
-        let unit = &units[idx];
+        let unit = &units[message_index];
         let unit_msg_count = unit.msg_count();
         let unit_tokens = unit.estimate_tokens(messages);
         if *used_message_count + unit_msg_count > max_history_messages
@@ -210,7 +218,7 @@ fn select_units(
         {
             return false;
         }
-        retained[idx] = true;
+        retained[message_index] = true;
         *used_message_count += unit_msg_count;
         *used_token_count += unit_tokens;
         true
@@ -340,7 +348,10 @@ fn select_units(
 /// 提取 ToolGroup 的工具名称列表（用于占位符）
 fn tool_names_of(unit: &MessageUnit, messages: &[ChatMessage]) -> Vec<String> {
     match unit {
-        MessageUnit::ToolGroup { assistant_idx, .. } => messages[*assistant_idx]
+        MessageUnit::ToolGroup {
+            assistant_message_index,
+            ..
+        } => messages[*assistant_message_index]
             .tool_calls
             .as_ref()
             .map(|tcs| tcs.iter().map(|tc| tc.name.clone()).collect())
@@ -426,18 +437,18 @@ pub fn select_messages(
         if selection.retained[i] {
             flush_pending(&mut pending_dropped_names, &mut result);
             match unit {
-                MessageUnit::System { idx }
-                | MessageUnit::User { idx }
-                | MessageUnit::AssistantText { idx } => {
-                    result.push(messages[*idx].clone());
+                MessageUnit::System { message_index }
+                | MessageUnit::User { message_index }
+                | MessageUnit::AssistantText { message_index } => {
+                    result.push(messages[*message_index].clone());
                 }
                 MessageUnit::ToolGroup {
-                    assistant_idx,
+                    assistant_message_index,
                     tool_result_indices,
                 } => {
-                    result.push(messages[*assistant_idx].clone());
-                    for &ri in tool_result_indices {
-                        result.push(messages[ri].clone());
+                    result.push(messages[*assistant_message_index].clone());
+                    for &result_index in tool_result_indices {
+                        result.push(messages[result_index].clone());
                     }
                 }
             }
