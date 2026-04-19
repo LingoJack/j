@@ -4,7 +4,7 @@ use super::super::hook::{HookContext, HookEvent, HookManager};
 use super::super::storage::{ChatMessage, ToolCallItem};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::compact;
-use super::config::{AgentLoopConfig, AgentSharedState};
+use super::config::{MainLoopConfig, MainLoopSharedState};
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
@@ -31,22 +31,22 @@ struct ToolCallContext<'a> {
 
 /// 后台 Agent 循环：支持多轮工具调用
 pub async fn run_agent_loop(
-    config: AgentLoopConfig,
-    shared: AgentSharedState,
+    config: MainLoopConfig,
+    shared: MainLoopSharedState,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ChatCompletionTools>,
     system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
 ) {
-    let AgentLoopConfig {
+    let MainLoopConfig {
         provider,
         max_tool_rounds,
         compact_config,
         hook_manager,
         cancel_token,
     } = config;
-    let AgentSharedState {
+    let MainLoopSharedState {
         streaming_content,
         pending_user_messages,
         background_manager: _,

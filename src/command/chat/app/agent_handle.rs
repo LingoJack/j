@@ -1,6 +1,6 @@
 use super::types::{StreamMsg, ToolResultMsg};
 use crate::command::chat::agent::run_agent_loop;
-use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
+use crate::command::chat::agent_config::{MainLoopConfig, MainLoopSharedState};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
 use async_openai::types::chat::ChatCompletionTools;
@@ -9,20 +9,20 @@ use tokio_util::sync::CancellationToken;
 
 // ========== Agent 生命周期句柄 ==========
 
-/// Agent 生命周期管理：封装 stream channel、取消令牌等
+/// 主 Agent 生命周期管理：封装 stream channel、取消令牌等
 #[derive(Debug)]
-pub struct AgentHandle {
+pub struct MainAgentHandle {
     /// 用于接收后台流式回复的 channel
     pub stream_rx: mpsc::Receiver<StreamMsg>,
     /// 流式请求取消令牌
     pub cancel_token: CancellationToken,
 }
 
-impl AgentHandle {
-    /// 启动一个 agent loop，返回 (AgentHandle, tool_result_tx)
+impl MainAgentHandle {
+    /// 启动一个主 agent loop，返回 (MainAgentHandle, tool_result_tx)
     pub fn spawn(
-        config: AgentLoopConfig,
-        shared: AgentSharedState,
+        config: MainLoopConfig,
+        shared: MainLoopSharedState,
         api_messages: Vec<ChatMessage>,
         tools: Vec<ChatCompletionTools>,
         system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
@@ -66,15 +66,14 @@ impl AgentHandle {
                 } else {
                     "Agent 线程发生未知 panic".to_string()
                 };
-                crate::util::log::write_error_log("AgentHandle::spawn", &panic_msg);
+                crate::util::log::write_error_log("MainAgentHandle::spawn", &panic_msg);
                 // 通知主线程，避免 loading 状态永久卡住
                 let _ = stream_tx_panic.send(StreamMsg::Error(ChatError::AgentPanic(panic_msg)));
             }
         });
 
-        // 这里是一个表达式
         (
-            AgentHandle {
+            MainAgentHandle {
                 stream_rx,
                 cancel_token,
             },

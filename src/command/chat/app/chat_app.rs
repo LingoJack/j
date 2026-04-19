@@ -1,12 +1,12 @@
 use super::action::{Action, CursorDirection};
-use super::agent_handle::AgentHandle;
+use super::agent_handle::MainAgentHandle;
 use super::chat_state::ChatState;
 use super::tool_executor::ToolExecutor;
 use super::types::{
     AskAnswer, AskRequest, PlanDecision, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
 };
 use super::ui_state::{ChatMode, ConfigTab, UIState};
-use crate::command::chat::agent_config::{AgentLoopConfig, AgentSharedState};
+use crate::command::chat::agent_config::{MainLoopConfig, MainLoopSharedState};
 use crate::command::chat::agent_md;
 use crate::command::chat::archive;
 use crate::command::chat::command;
@@ -61,8 +61,8 @@ pub struct ChatApp {
     pub state: ChatState,
     /// 工具执行器
     pub tool_executor: ToolExecutor,
-    /// Agent 生命周期句柄（存在时表示有进行中的请求）
-    pub agent: Option<AgentHandle>,
+    /// 主 Agent 生命周期句柄（存在时表示有进行中的请求）
+    pub main_agent: Option<MainAgentHandle>,
     /// 工具注册表
     pub tool_registry: Arc<ToolRegistry>,
     /// .jcli/ 权限配置
@@ -2490,7 +2490,7 @@ impl ChatApp {
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),
         };
-        let (handle, tool_result_tx) = AgentHandle::spawn(
+        let (handle, tool_result_tx) = MainAgentHandle::spawn(
             agent_config,
             agent_shared,
             api_messages,
@@ -2498,7 +2498,7 @@ impl ChatApp {
             system_prompt_fn,
         );
 
-        self.agent = Some(handle);
+        self.main_agent = Some(handle);
         self.tool_executor.tool_result_tx = Some(tool_result_tx);
     }
 
@@ -2535,7 +2535,7 @@ impl ChatApp {
             }
         }
 
-        if self.agent.is_none() {
+        if self.main_agent.is_none() {
             return actions;
         }
 
@@ -2687,7 +2687,7 @@ impl ChatApp {
         }
 
         // 直接轮询 agent channel 中的流式消息
-        if let Some(ref agent) = self.agent {
+        if let Some(ref agent) = self.main_agent {
             let msgs = agent.poll();
             for msg in msgs {
                 match msg {
@@ -2944,14 +2944,14 @@ impl ChatApp {
     fn finish_loading(&mut self, had_error: bool, was_cancelled: bool) {
         // ★ 先取消 agent loop，确保 agent 线程能安全退出，
         // 避免它在 tool_result_rx.recv() 上阻塞或继续写 channel
-        if let Some(ref agent) = self.agent {
+        if let Some(ref agent) = self.main_agent {
             agent.cancel();
         }
 
         // ★ 先 drop tool_result_tx，让 agent 线程的 tool_result_rx.recv() 返回 Err 并退出，
         // 然后再 drop agent（包含 stream_rx 和 cancel_token）
         self.tool_executor.tool_result_tx = None;
-        self.agent = None;
+        self.main_agent = None;
         self.tool_executor.tools_executing_count = 0;
         self.state.is_loading = false;
         self.ui.last_rendered_streaming_len = 0;
