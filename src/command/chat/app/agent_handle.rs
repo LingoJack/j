@@ -1,5 +1,5 @@
 use super::types::{StreamMsg, ToolResultMsg};
-use crate::command::chat::agent::run_agent_loop;
+use crate::command::chat::agent::run_main_agent_loop;
 use crate::command::chat::agent_config::{MainLoopConfig, MainLoopSharedState};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
@@ -46,7 +46,7 @@ impl MainAgentHandle {
                     }
                 };
 
-                runtime.block_on(run_agent_loop(
+                runtime.block_on(run_main_agent_loop(
                     config,
                     shared,
                     api_messages,

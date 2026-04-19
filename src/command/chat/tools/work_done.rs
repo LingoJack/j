@@ -1,4 +1,5 @@
-use crate::command::chat::teammate::{TeammateManager, current_agent_name};
+use crate::command::chat::agent::thread_identity::current_agent_name;
+use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };

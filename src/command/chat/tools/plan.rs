@@ -440,7 +440,7 @@ impl Tool for ExitPlanModeTool {
         };
 
         // 判断是否在 teammate 线程中（非 Main agent）
-        let agent_name = crate::command::chat::teammate::current_agent_name();
+        let agent_name = crate::command::chat::agent::thread_identity::current_agent_name();
         if agent_name != "Main" {
             // Teammate 模式：通过 PlanApprovalQueue 路由到主 TUI
             if let Some(ref queue) = self.plan_approval_queue {

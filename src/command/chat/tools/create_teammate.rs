@@ -1,8 +1,8 @@
-use crate::command::chat::permission_queue::AgentType;
-use crate::command::chat::teammate::{
-    TeammateHandle, TeammateManager, TeammateStatus, set_current_agent_name,
-    set_current_agent_type, set_thread_cwd,
+use crate::command::chat::agent::thread_identity::{
+    set_current_agent_name, set_current_agent_type, set_thread_cwd,
 };
+use crate::command::chat::permission_queue::AgentType;
+use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
 use crate::command::chat::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::tools::agent_shared::ChildAgentShared;
 use crate::command::chat::tools::send_message::SendMessageTool;

@@ -12,7 +12,7 @@ pub fn expand_tilde(path: &str) -> String {
     }
 }
 
-use crate::command::chat::teammate::thread_cwd;
+use crate::command::chat::agent::thread_identity::thread_cwd;
 
 /// 解析路径：展开 ~，若路径为相对路径且当前线程有 worktree CWD，则相对于该 CWD 解析。
 pub fn resolve_path(path: &str) -> String {

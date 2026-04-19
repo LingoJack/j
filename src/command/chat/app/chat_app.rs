@@ -517,7 +517,7 @@ impl ChatApp {
                 retry_hint: None,
             },
             tool_executor: ToolExecutor::new(),
-            agent: None,
+            main_agent: None,
             tool_registry,
             jcli_config,
             background_manager,
@@ -2473,14 +2473,14 @@ impl ChatApp {
         self.ui_messages_cursor = 0;
 
         // 启动 agent handle
-        let agent_config = AgentLoopConfig {
+        let agent_config = MainLoopConfig {
             provider,
             max_tool_rounds,
             compact_config,
             hook_manager: hook_manager_clone,
             cancel_token: CancellationToken::new(),
         };
-        let agent_shared = AgentSharedState {
+        let agent_shared = MainLoopSharedState {
             streaming_content,
             pending_user_messages,
             background_manager,

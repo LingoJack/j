@@ -1,9 +1,9 @@
 use super::ToolResult;
 use super::background::BackgroundManager;
+use crate::command::chat::agent::thread_identity::thread_cwd;
 use crate::command::chat::constants::{
     SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
 };
-use crate::command::chat::teammate::thread_cwd;
 use crate::command::chat::tools::{
     PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
     schema_to_tool_params,

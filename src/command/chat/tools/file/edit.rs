@@ -1,4 +1,5 @@
-use crate::command::chat::teammate::{acquire_global_file_lock, current_agent_name};
+use crate::command::chat::agent::thread_identity::current_agent_name;
+use crate::command::chat::teammate::acquire_global_file_lock;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, resolve_path, schema_to_tool_params,
 };

@@ -30,7 +30,7 @@ struct ToolCallContext<'a> {
 }
 
 /// 后台 Agent 循环：支持多轮工具调用
-pub async fn run_agent_loop(
+pub async fn run_main_agent_loop(
     config: MainLoopConfig,
     shared: MainLoopSharedState,
     mut messages: Vec<ChatMessage>,

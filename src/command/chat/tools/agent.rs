@@ -1,9 +1,9 @@
+use crate::command::chat::agent::thread_identity::{
+    clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
+};
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
-use crate::command::chat::teammate::{
-    clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
-};
 use crate::command::chat::tools::agent_shared::{
     ChildAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
@@ -23,8 +23,8 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-/// 子 Agent 运行时快照引用集合，供 loop 同步状态/系统提示/消息列表。
-struct SubAgentSnapshotRefs {
+/// 子 Agent 运行时状态引用集合，供 loop 同步状态/系统提示/消息列表。
+struct SubAgentLoopStateRefs {
     system_prompt: Arc<Mutex<String>>,
     messages: Arc<Mutex<Vec<ChatMessage>>>,
     status: Arc<Mutex<SubAgentStatus>>,
@@ -33,7 +33,7 @@ struct SubAgentSnapshotRefs {
     current_round: Arc<AtomicUsize>,
 }
 
-impl SubAgentSnapshotRefs {
+impl SubAgentLoopStateRefs {
     fn from_handle(handle: &SubAgentHandle) -> Self {
         Self {
             system_prompt: Arc::clone(&handle.system_prompt),
@@ -66,7 +66,7 @@ struct SubAgentLoopParams {
     tools: Vec<ChatCompletionTools>,
     registry: Arc<ToolRegistry>,
     jcli_config: Arc<JcliConfig>,
-    snapshot: Option<SubAgentSnapshotRefs>,
+    snapshot: Option<SubAgentLoopStateRefs>,
     description: String,
     /// 独立 transcript JSONL 路径：每轮消息 append 到此（崩溃安全）。
     transcript_path: Option<std::path::PathBuf>,
@@ -227,7 +227,7 @@ impl Tool for AgentTool {
                 "background",
             );
             let snap_running = Arc::clone(&handle.is_running);
-            let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
+            let snapshot_refs = SubAgentLoopStateRefs::from_handle(&handle);
 
             let bg_manager = Arc::clone(&self.shared.background_manager);
             let task_id_clone = task_id.clone();
@@ -307,7 +307,7 @@ impl Tool for AgentTool {
                 "foreground",
             );
             let snap_running = Arc::clone(&handle.is_running);
-            let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
+            let snapshot_refs = SubAgentLoopStateRefs::from_handle(&handle);
 
             let cancelled_clone = Arc::clone(cancelled);
             let result = run_sub_agent_loop(

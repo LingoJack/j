@@ -1,3 +1,4 @@
+use crate::command::chat::agent::thread_identity::{current_agent_name, current_agent_type};
 use crate::command::chat::api::{build_request_with_tools, create_openai_client};
 use crate::command::chat::app::AskRequest;
 use crate::command::chat::compact::new_invoked_skills_map;
@@ -6,7 +7,6 @@ use crate::command::chat::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission_queue::{PendingAgentPerm, PermissionQueue};
 use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
-use crate::command::chat::teammate::{current_agent_name, current_agent_type};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::PlanApprovalQueue;
@@ -98,7 +98,10 @@ pub struct SubAgentDisplay {
     pub elapsed_secs: u64,
 }
 
-/// 管理所有运行中的子 Agent 快照，供 /dump 读取
+/// 管理所有运行中的子 Agent 快照，供 /dump 读取。
+///
+/// **仅追踪 `AgentTool` 创建的临时子代理（SubAgent），不含 Teammate
+/// （Teammate 由 `TeammateManager` 独立管理）。**
 pub struct SubAgentTracker {
     agents: Mutex<Vec<SubAgentSnapshot>>,
     counter: AtomicU64,
