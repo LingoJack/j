@@ -207,14 +207,6 @@ impl SessionEvent {
             timestamp_ms: current_millis(),
         }
     }
-
-    /// 构造一条带指定时间戳的 Msg 事件（用于并发/旁路 agent 的消息记录）
-    pub fn msg_at(message: ChatMessage, timestamp_ms: u64) -> Self {
-        Self::Msg {
-            message,
-            timestamp_ms,
-        }
-    }
 }
 
 // ========== 文件路径 ==========
@@ -285,15 +277,24 @@ impl SessionPaths {
         self.dir.join("teammates.json")
     }
 
-    /// Teammate 独立 transcript 目录：`sessions/<id>/teammates/`
+    /// Teammate 独立目录根：`sessions/<id>/teammates/`
     pub fn teammates_dir(&self) -> PathBuf {
         self.dir.join("teammates")
     }
 
-    /// 单个 teammate 的 transcript JSONL 路径：`sessions/<id>/teammates/<sanitized_name>.jsonl`
+    /// 单个 teammate 的独立子目录：`sessions/<id>/teammates/<sanitized_name>/`
+    pub fn teammate_dir(&self, sanitized_name: &str) -> PathBuf {
+        self.teammates_dir().join(sanitized_name)
+    }
+
+    /// 单个 teammate 的 transcript JSONL 路径：`sessions/<id>/teammates/<sanitized_name>/transcript.jsonl`
     pub fn teammate_transcript(&self, sanitized_name: &str) -> PathBuf {
-        self.teammates_dir()
-            .join(format!("{}.jsonl", sanitized_name))
+        self.teammate_dir(sanitized_name).join("transcript.jsonl")
+    }
+
+    /// 单个 teammate 的 todo 文件路径：`sessions/<id>/teammates/<sanitized_name>/todos.json`
+    pub fn teammate_todos_file(&self, sanitized_name: &str) -> PathBuf {
+        self.teammate_dir(sanitized_name).join("todos.json")
     }
 
     /// SubAgent 状态文件：`sessions/<id>/subagents.json`
@@ -301,19 +302,24 @@ impl SessionPaths {
         self.dir.join("subagents.json")
     }
 
-    /// SubAgent 独立 transcript 目录：`sessions/<id>/subagents/`
+    /// SubAgent 独立目录根：`sessions/<id>/subagents/`
     pub fn subagents_dir(&self) -> PathBuf {
         self.dir.join("subagents")
     }
 
-    /// 单个 subagent 的 transcript JSONL 路径：`sessions/<id>/subagents/<sub_id>.jsonl`
-    pub fn subagent_transcript(&self, sub_id: &str) -> PathBuf {
-        self.subagents_dir().join(format!("{}.jsonl", sub_id))
+    /// 单个 subagent 的独立子目录：`sessions/<id>/subagents/<sub_id>/`
+    pub fn subagent_dir(&self, sub_id: &str) -> PathBuf {
+        self.subagents_dir().join(sub_id)
     }
 
-    /// 单个 subagent 的 todo 文件路径：`sessions/<id>/subagents/<sub_id>_todos.json`
+    /// 单个 subagent 的 transcript JSONL 路径：`sessions/<id>/subagents/<sub_id>/transcript.jsonl`
+    pub fn subagent_transcript(&self, sub_id: &str) -> PathBuf {
+        self.subagent_dir(sub_id).join("transcript.jsonl")
+    }
+
+    /// 单个 subagent 的 todo 文件路径：`sessions/<id>/subagents/<sub_id>/todos.json`
     pub fn subagent_todos_file(&self, sub_id: &str) -> PathBuf {
-        self.subagents_dir().join(format!("{}_todos.json", sub_id))
+        self.subagent_dir(sub_id).join("todos.json")
     }
 
     /// Task 状态文件：`sessions/<id>/tasks.json`
@@ -966,9 +972,8 @@ pub fn delete_session(session_id: &str) -> bool {
 
 /// Teammate 快照（可序列化，用于 session 持久化）
 ///
-/// 注意：`messages_snapshot` / `system_prompt_snapshot` 历史版本会序列化到此结构，
-/// 现版改为写入独立 transcript JSONL（`sessions/<id>/teammates/<name>.jsonl`），
-/// 这两个字段仅为反序列化老数据保留 `#[serde(default)]`，save 时不再写出。
+/// 消息历史存储于独立 transcript JSONL：`sessions/<id>/teammates/<sanitized_name>.jsonl`。
+/// 本结构只保存元数据 + 未消费的 pending（供将来 RespawnTeammate 灌回）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeammateSnapshotPersist {
     pub name: String,
@@ -984,14 +989,6 @@ pub struct TeammateSnapshotPersist {
     pub tool_calls_count: usize,
     pub current_tool: Option<String>,
     pub work_done: bool,
-    /// 【已废弃】历史版本将 system prompt 写入 teammates.json；现已改为 transcript JSONL。
-    /// 仅为反序列化老数据保留，序列化时自动省略。
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub system_prompt_snapshot: String,
-    /// 【已废弃】历史版本将 messages 写入 teammates.json；现已改为 transcript JSONL。
-    /// 仅为反序列化老数据保留，序列化时自动省略。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub messages_snapshot: Vec<ChatMessage>,
 }
 
 /// 把任意名字转成文件系统安全的文件名片段（去除非法字符，限长）。
@@ -1025,6 +1022,9 @@ pub struct SubAgentSnapshotPersist {
     pub tool_calls_count: usize,
     pub current_round: usize,
     pub started_at_epoch: u64,
+    /// 独立 transcript 相对路径（相对于 session 根目录），例：`subagents/sub_0001/transcript.jsonl`
+    #[serde(default)]
+    pub transcript_file: String,
 }
 
 /// Plan 状态快照（可序列化，用于 session 持久化）

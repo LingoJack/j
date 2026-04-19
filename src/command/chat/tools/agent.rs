@@ -65,6 +65,8 @@ struct HeadlessAgentParams {
     jcli_config: Arc<JcliConfig>,
     snapshot: Option<SubAgentSnapshotRefs>,
     description: String,
+    /// 独立 transcript JSONL 路径：每轮消息 append 到此（崩溃安全）。
+    transcript_path: Option<std::path::PathBuf>,
 }
 
 /// 将任意描述转为适合作为 <前缀> 显示的名字（去空白，限长度）
@@ -164,24 +166,7 @@ impl Tool for AgentTool {
         let system_prompt =
             safe_lock(&self.shared.system_prompt, "AgentTool::system_prompt").clone();
 
-        // 构建子 registry（排除 "Agent" 工具防递归）
-        let (sub_registry, _) = self.shared.build_sub_registry();
-        let sub_registry = Arc::new(sub_registry);
-
-        let mut disabled = self.shared.disabled_tools.as_ref().clone();
-        disabled.push("Agent".to_string());
-        let tools = sub_registry.to_openai_tools_filtered(&disabled);
-
-        // inherit_permissions：复制 JcliConfig 并启用 allow_all
-        let jcli_config = if params.inherit_permissions {
-            let mut cfg = self.shared.jcli_config.as_ref().clone();
-            cfg.permissions.allow_all = true;
-            Arc::new(cfg)
-        } else {
-            Arc::clone(&self.shared.jcli_config)
-        };
-
-        // worktree 隔离：提前创建（在调用线程中；失败则提前退出）
+        // worktree 隔离：提前创建（在调用线程中；失败则提前退出，避免浪费 sub_id）
         let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
             match create_agent_worktree(&description) {
                 Ok(info) => Some(info),
@@ -198,6 +183,31 @@ impl Tool for AgentTool {
             None
         };
 
+        // 提前分配 sub_id，用于构造独立 todos/transcript 路径
+        let sub_id = self.shared.sub_agent_tracker.allocate_id();
+        let session_id_snapshot =
+            safe_lock(&self.shared.session_id, "AgentTool::session_id").clone();
+        let session_paths = crate::command::chat::storage::SessionPaths::new(&session_id_snapshot);
+        let subagent_todos_path = session_paths.subagent_todos_file(&sub_id);
+        let subagent_transcript_path = session_paths.subagent_transcript(&sub_id);
+
+        // 构建子 registry（排除 "Agent" 工具防递归，独立 todos 文件）
+        let (sub_registry, _) = self.shared.build_sub_registry(subagent_todos_path);
+        let sub_registry = Arc::new(sub_registry);
+
+        let mut disabled = self.shared.disabled_tools.as_ref().clone();
+        disabled.push("Agent".to_string());
+        let tools = sub_registry.to_openai_tools_filtered(&disabled);
+
+        // inherit_permissions：复制 JcliConfig 并启用 allow_all
+        let jcli_config = if params.inherit_permissions {
+            let mut cfg = self.shared.jcli_config.as_ref().clone();
+            cfg.permissions.allow_all = true;
+            Arc::new(cfg)
+        } else {
+            Arc::clone(&self.shared.jcli_config)
+        };
+
         if run_in_background {
             // 后台模式：注册任务并 spawn 线程
             let (task_id, output_buffer) = self.shared.background_manager.spawn_command(
@@ -208,10 +218,11 @@ impl Tool for AgentTool {
 
             // 注册到子 Agent tracker 供 /dump + UI dashboard 读取
             self.shared.sub_agent_tracker.gc_finished();
-            let handle = self
-                .shared
-                .sub_agent_tracker
-                .register(&description, "background");
+            let handle = self.shared.sub_agent_tracker.register_with_id(
+                sub_id.clone(),
+                &description,
+                "background",
+            );
             let snap_running = Arc::clone(&handle.is_running);
             let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
 
@@ -221,6 +232,7 @@ impl Tool for AgentTool {
 
             let description_clone = description.clone();
             let shared_messages_clone = Arc::clone(&self.shared.shared_messages);
+            let transcript_path = subagent_transcript_path.clone();
             std::thread::spawn(move || {
                 // 设置 worktree CWD
                 if let Some((ref wt_path, _)) = worktree_info {
@@ -237,6 +249,7 @@ impl Tool for AgentTool {
                         jcli_config,
                         snapshot: Some(snapshot_refs),
                         description: description_clone.clone(),
+                        transcript_path: Some(transcript_path),
                     },
                     &cancelled_clone,
                     &shared_messages_clone,
@@ -261,6 +274,7 @@ impl Tool for AgentTool {
             ToolResult {
                 output: json!({
                     "task_id": task_id,
+                    "sub_id": sub_id,
                     "description": description,
                     "status": "running in background"
                 })
@@ -279,10 +293,11 @@ impl Tool for AgentTool {
 
             // 注册到子 Agent tracker 供 /dump + UI dashboard 读取
             self.shared.sub_agent_tracker.gc_finished();
-            let handle = self
-                .shared
-                .sub_agent_tracker
-                .register(&description, "foreground");
+            let handle = self.shared.sub_agent_tracker.register_with_id(
+                sub_id.clone(),
+                &description,
+                "foreground",
+            );
             let snap_running = Arc::clone(&handle.is_running);
             let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
 
@@ -297,6 +312,7 @@ impl Tool for AgentTool {
                     jcli_config,
                     snapshot: Some(snapshot_refs),
                     description,
+                    transcript_path: Some(subagent_transcript_path),
                 },
                 &cancelled_clone,
                 &self.shared.shared_messages,
@@ -384,7 +400,22 @@ fn run_headless_agent_loop(
             *snap = msgs.clone();
         }
     };
+
+    // 独立 transcript append：每条新消息 append 一行 SessionEvent::Msg 到 jsonl 文件
+    let transcript_path = params.transcript_path.clone();
+    let append_to_transcript = |msgs: &[ChatMessage]| {
+        if let Some(ref path) = transcript_path {
+            for m in msgs {
+                let _ = crate::command::chat::storage::append_event_to_path(
+                    path,
+                    &crate::command::chat::storage::SessionEvent::msg(m.clone()),
+                );
+            }
+        }
+    };
+
     sync_messages(&messages);
+    append_to_transcript(&messages);
 
     let mut final_text = String::new();
 
@@ -439,6 +470,15 @@ fn run_headless_agent_loop(
         );
 
         if !is_tool_calls || choice.message.tool_calls.is_none() {
+            // 纯文本回复结束：把 assistant 消息也 append 到 transcript（无 tool_calls）
+            if !assistant_text.is_empty() {
+                let final_msg = ChatMessage::text("assistant", assistant_text.clone());
+                messages.push(final_msg);
+                if let Some(last) = messages.last() {
+                    append_to_transcript(std::slice::from_ref(last));
+                }
+                sync_messages(&messages);
+            }
             break;
         }
 
@@ -458,13 +498,17 @@ fn run_headless_agent_loop(
         }
 
         // 将 assistant 消息（含 tool_calls）加入历史
-        messages.push(ChatMessage {
+        let assistant_msg = ChatMessage {
             role: "assistant".to_string(),
             content: assistant_text,
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
-        });
+        };
+        messages.push(assistant_msg);
+        if let Some(last) = messages.last() {
+            append_to_transcript(std::slice::from_ref(last));
+        }
 
         // 逐个执行工具
         for item in &tool_items {
@@ -481,6 +525,9 @@ fn run_headless_agent_loop(
                 true,
             );
             messages.push(result_msg);
+            if let Some(last) = messages.last() {
+                append_to_transcript(std::slice::from_ref(last));
+            }
         }
         if let Some(ref refs) = params.snapshot {
             refs.set_current_tool(None);

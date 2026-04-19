@@ -128,9 +128,20 @@ impl SubAgentTracker {
         }
     }
 
-    /// 注册一个子 Agent；返回 Handle 集合，供 loop 写入状态
-    pub fn register(&self, description: &str, mode: &'static str) -> SubAgentHandle {
-        let id = format!("sub_{:04}", self.counter.fetch_add(1, Ordering::Relaxed));
+    /// 分配一个新的 sub_id（不注册，仅递增计数器）。
+    ///
+    /// 用于在注册前提前确定 sub_id，以便构建子 agent 独立存储路径（transcript、todos）。
+    pub fn allocate_id(&self) -> String {
+        format!("sub_{:04}", self.counter.fetch_add(1, Ordering::Relaxed))
+    }
+
+    /// 使用已分配的 id 注册子 Agent；返回 Handle 集合。
+    pub fn register_with_id(
+        &self,
+        id: String,
+        description: &str,
+        mode: &'static str,
+    ) -> SubAgentHandle {
         let is_running = Arc::new(AtomicBool::new(true));
         let system_prompt = Arc::new(Mutex::new(String::new()));
         let messages = Arc::new(Mutex::new(Vec::new()));
@@ -273,7 +284,14 @@ impl AgentToolShared {
     ///
     /// 返回未 Arc 包装的 ToolRegistry，调用者可在包装前注册额外工具（如 SendMessage）。
     /// 子注册表自动继承父 shared 的 permission_queue，使子 agent 权限请求能路由到主 TUI。
-    pub fn build_sub_registry(&self) -> (ToolRegistry, mpsc::Receiver<AskRequest>) {
+    ///
+    /// `todos_file_path`：该子 agent 独立的 todos.json 存储路径。
+    /// - Teammate 传 `sessions/<sid>/teammates/<sanitized_name>/todos.json`
+    /// - SubAgent 传 `sessions/<sid>/subagents/<sub_id>/todos.json`
+    pub fn build_sub_registry(
+        &self,
+        todos_file_path: std::path::PathBuf,
+    ) -> (ToolRegistry, mpsc::Receiver<AskRequest>) {
         let (ask_tx, ask_rx) = mpsc::channel::<AskRequest>();
         let mut registry = ToolRegistry::new(
             vec![], // 不传 skills
@@ -282,7 +300,7 @@ impl AgentToolShared {
             Arc::clone(&self.task_manager),
             Arc::clone(&self.hook_manager),
             new_invoked_skills_map(),
-            "_sub_agent_", // 子 agent 不需要独立 session 存储
+            todos_file_path,
         );
         // 将权限队列传入子注册表，使子 agent 的阻塞式确认请求能到达主 TUI
         registry.permission_queue = Some(Arc::clone(&self.permission_queue));

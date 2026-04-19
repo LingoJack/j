@@ -229,7 +229,7 @@ impl ChatApp {
             Arc::clone(&task_manager),
             Arc::clone(&hook_manager),
             Arc::clone(&invoked_skills),
-            &session_id,
+            crate::command::chat::storage::SessionPaths::new(&session_id).todos_file(),
         );
         let todo_manager = Arc::clone(&tool_registry.todo_manager);
 
@@ -3165,8 +3165,6 @@ impl ChatApp {
                     worktree_branch,
                     inherit_permissions,
                     status: final_status,
-                    system_prompt_snapshot: String::new(),
-                    messages_snapshot: Vec::new(),
                     pending_user_messages: pending,
                     tool_calls_count: handle.tool_calls_count.load(Ordering::Relaxed),
                     current_tool,
@@ -3198,7 +3196,7 @@ impl ChatApp {
                     SubAgentStatus::Error(_) => "error",
                 };
                 SubAgentSnapshotPersist {
-                    id: s.id,
+                    id: s.id.clone(),
                     description: s.description,
                     mode: s.mode.to_string(),
                     status: status_str.to_string(),
@@ -3206,6 +3204,7 @@ impl ChatApp {
                     tool_calls_count: s.tool_calls_count,
                     current_round: s.current_round,
                     started_at_epoch: 0, // Instant 不可序列化，用 0 占位
+                    transcript_file: format!("subagents/{}/transcript.jsonl", s.id),
                 }
             })
             .collect();

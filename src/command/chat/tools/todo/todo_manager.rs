@@ -56,15 +56,19 @@ impl TodoManager {
         }
     }
 
-    /// 创建 session 级 TodoManager（存储到 sessions/{id}/todos.json）
-    pub fn new_with_session(session_id: &str) -> Self {
-        let paths = crate::command::chat::storage::SessionPaths::new(session_id);
-        let _ = paths.ensure_dir();
-        let file_path = paths.todos_file();
-
-        // 从 session 级文件加载已有数据
-        let items = crate::command::chat::storage::load_todos_state(session_id).unwrap_or_default();
-
+    /// 使用任意文件路径创建 TodoManager（用于 session / teammate / subagent 独立 todo 文件）
+    pub fn new_with_file_path(file_path: PathBuf) -> Self {
+        if let Some(parent) = file_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let items = if file_path.exists() {
+            fs::read_to_string(&file_path)
+                .ok()
+                .and_then(|data| serde_json::from_str::<Vec<TodoItem>>(&data).ok())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         Self {
             items: Mutex::new(items),
             file_path,

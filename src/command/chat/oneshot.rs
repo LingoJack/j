@@ -230,7 +230,7 @@ fn run_oneshot_agent(
         task_manager,
         hook_manager,
         new_invoked_skills_map(),
-        session_id,
+        crate::command::chat::storage::SessionPaths::new(session_id).todos_file(),
     );
 
     // 启动 Ask 请求处理线程：在终端交互式回答 AI 的提问

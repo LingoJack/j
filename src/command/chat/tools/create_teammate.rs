@@ -168,8 +168,13 @@ impl Tool for CreateTeammateTool {
         let system_prompt =
             safe_lock(&self.shared.system_prompt, "CreateTeammate::system_prompt").clone();
 
-        // 构建子工具注册表
-        let (mut sub_registry, _) = self.shared.build_sub_registry();
+        // 构建子工具注册表（teammate 独立 todos：sessions/<sid>/teammates/<name>/todos.json）
+        let teammate_todos_path = {
+            let sid = safe_lock(&self.shared.session_id, "CreateTeammate::session_id").clone();
+            let sanitized = crate::command::chat::storage::sanitize_filename(&params.name);
+            crate::command::chat::storage::SessionPaths::new(&sid).teammate_todos_file(&sanitized)
+        };
+        let (mut sub_registry, _) = self.shared.build_sub_registry(teammate_todos_path);
 
         // 注册 SendMessage 工具到子注册表
         sub_registry.register(Box::new(SendMessageTool {
