@@ -34,7 +34,7 @@ fn generate_oneshot_session_id() -> String {
 
 fn persist_messages(session_id: &str, messages: &[ChatMessage], start_idx: usize) {
     for msg in messages.iter().skip(start_idx) {
-        append_session_event(session_id, &SessionEvent::Msg(msg.clone()));
+        append_session_event(session_id, &SessionEvent::msg(msg.clone()));
     }
 }
 

@@ -25,13 +25,14 @@ use crate::command::chat::sandbox::Sandbox;
 use crate::command::chat::skill::{self, skills_dir};
 use crate::command::chat::storage::{
     ChatMessage, ChatSession, ModelProvider, PlanStatePersist, SandboxStatePersist, SessionEvent,
-    SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, delete_session,
-    generate_session_id, list_sessions, load_agent_config, load_hooks_state, load_plan_state,
-    load_sandbox_state, load_session, load_skills_state, load_tasks_state, load_teammates_state,
-    load_todos_state, memory_path, save_agent_config, save_hooks_state, save_memory,
-    save_plan_state, save_sandbox_state, save_skills_state, save_soul, save_subagents_state,
-    save_system_prompt, save_tasks_state, save_teammates_state, save_todos_state,
-    session_file_path, soul_path, system_prompt_path,
+    SessionPaths, SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event,
+    delete_session, generate_session_id, list_sessions, load_agent_config, load_hooks_state,
+    load_plan_state, load_sandbox_state, load_session, load_skills_state, load_tasks_state,
+    load_teammates_state, load_todos_state, memory_path, read_transcript_with_timestamps,
+    sanitize_filename, save_agent_config, save_hooks_state, save_memory, save_plan_state,
+    save_sandbox_state, save_skills_state, save_soul, save_subagents_state, save_system_prompt,
+    save_tasks_state, save_teammates_state, save_todos_state, session_file_path, soul_path,
+    system_prompt_path,
 };
 use crate::command::chat::teammate::{TeammateManager, TeammateStatusPersist};
 use crate::command::chat::theme::{Theme, ThemeName};
@@ -81,6 +82,8 @@ pub struct ChatApp {
     pub sandbox: Sandbox,
     /// 本次会话 ID（启动时生成，对应 sessions/{id}.jsonl）
     pub session_id: String,
+    /// 与 `AgentToolShared` 共享的 session id 槽；切换 session 时用 `switch_session_id` 同步更新。
+    pub shared_session_id: Arc<Mutex<String>>,
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
     pub last_persisted_len: usize,
     /// 远程控制 WebSocket 桥接器
@@ -259,6 +262,9 @@ impl ChatApp {
         // 子 Agent 快照追踪器（/dump 从中读取正在运行的子 Agent）
         let sub_agent_tracker = Arc::new(SubAgentTracker::new());
 
+        // 共享的 session id 槽：session 切换时 chat_app 会同步更新，teammate/subagent 据此定位 transcript
+        let shared_session_id = Arc::new(Mutex::new(session_id.clone()));
+
         // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
         let agent_tool_shared = AgentToolShared {
             background_manager: Arc::clone(&background_manager),
@@ -272,6 +278,7 @@ impl ChatApp {
             plan_approval_queue: Arc::clone(&plan_approval_queue),
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
             shared_messages: Arc::clone(&shared_agent_messages),
+            session_id: Arc::clone(&shared_session_id),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
             shared: agent_tool_shared.clone(),
@@ -521,6 +528,7 @@ impl ChatApp {
             hook_manager: Arc::clone(&hook_manager),
             sandbox: Sandbox::new(),
             session_id,
+            shared_session_id,
             last_persisted_len: 0,
             ws_bridge: None,
             remote_connected: false,
@@ -1688,6 +1696,9 @@ impl ChatApp {
                         // 加载目标会话
                         let session = load_session(&session_id);
                         self.session_id = session_id.clone();
+                        if let Ok(mut s) = self.shared_session_id.lock() {
+                            *s = session_id.clone();
+                        }
                         self.last_persisted_len = session.messages.len();
                         self.state.session = session;
                         // 恢复目标会话的状态
@@ -1722,6 +1733,9 @@ impl ChatApp {
                     // 生成新会话
                     let new_id = generate_session_id();
                     self.session_id = new_id.clone();
+                    if let Ok(mut s) = self.shared_session_id.lock() {
+                        *s = new_id.clone();
+                    }
                     self.state.session.messages.clear();
                     self.last_persisted_len = 0;
                     self.ui.scroll_offset = 0;
@@ -1776,7 +1790,10 @@ impl ChatApp {
                     // 加载目标会话
                     let session = load_session(&target_id);
                     self.last_persisted_len = session.messages.len();
-                    self.session_id = target_id;
+                    self.session_id = target_id.clone();
+                    if let Ok(mut s) = self.shared_session_id.lock() {
+                        *s = target_id;
+                    }
                     self.state.session = session;
                     // 恢复目标会话的状态
                     self.restore_session_state();
@@ -1817,7 +1834,10 @@ impl ChatApp {
                 self.clear_runtime_state();
                 // 生成新会话
                 let new_id = generate_session_id();
-                self.session_id = new_id;
+                self.session_id = new_id.clone();
+                if let Ok(mut s) = self.shared_session_id.lock() {
+                    *s = new_id;
+                }
                 self.state.session.messages.clear();
                 self.last_persisted_len = 0;
                 self.ui.scroll_offset = 0;
@@ -3085,7 +3105,7 @@ impl ChatApp {
         let start = self.last_persisted_len;
         let msgs: Vec<_> = self.state.session.messages[start..].to_vec();
         for msg in msgs {
-            append_session_event(&self.session_id, &SessionEvent::Msg(msg));
+            append_session_event(&self.session_id, &SessionEvent::msg(msg));
         }
         self.last_persisted_len = self.state.session.messages.len();
     }
@@ -3105,16 +3125,8 @@ impl ChatApp {
                     .lock()
                     .map(|s| s.clone().into())
                     .unwrap_or(TeammateStatusPersist::Cancelled);
-                let system_prompt = handle
-                    .system_prompt_snapshot
-                    .lock()
-                    .map(|s| s.clone())
-                    .unwrap_or_default();
-                let messages = handle
-                    .messages_snapshot
-                    .lock()
-                    .map(|m| m.clone())
-                    .unwrap_or_default();
+                // system_prompt / messages 已改由 transcript jsonl 作为事实来源，
+                // teammates.json 仅保留运行态元数据，减小文件体积
                 let pending = handle
                     .pending_user_messages
                     .lock()
@@ -3153,8 +3165,8 @@ impl ChatApp {
                     worktree_branch,
                     inherit_permissions,
                     status: final_status,
-                    system_prompt_snapshot: system_prompt,
-                    messages_snapshot: messages,
+                    system_prompt_snapshot: String::new(),
+                    messages_snapshot: Vec::new(),
                     pending_user_messages: pending,
                     tool_calls_count: handle.tool_calls_count.load(Ordering::Relaxed),
                     current_tool,
@@ -3244,7 +3256,8 @@ impl ChatApp {
 
     /// 从磁盘恢复当前 session_id 的所有状态
     pub fn restore_session_state(&mut self) {
-        let sid = &self.session_id;
+        let sid = self.session_id.clone();
+        let sid = sid.as_str();
 
         // 1. InvokedSkills
         if let Some(skills) = load_skills_state(sid)
@@ -3296,14 +3309,78 @@ impl ChatApp {
         }
 
         // 7. Teammates — 恢复到 recovered_teammates（不重新 spawn 线程）
-        if let Some(teammates) = load_teammates_state(sid)
-            && let Ok(mut mgr) = self.teammate_manager.lock()
-        {
-            mgr.set_recovered_teammates(teammates);
-        }
+        let teammate_names: Vec<String> = if let Some(teammates) = load_teammates_state(sid) {
+            let names: Vec<String> = teammates.iter().map(|t| t.name.clone()).collect();
+            if let Ok(mut mgr) = self.teammate_manager.lock() {
+                mgr.set_recovered_teammates(teammates);
+            }
+            names
+        } else {
+            Vec::new()
+        };
+
+        // 7b. Teammate transcripts — 从 <sid>/teammates/<sanitize(name)>.jsonl 合并中间消息
+        //     main transcript.jsonl 只在 persist_new_messages 触发时落盘，
+        //     崩溃/切换时可能丢失大段 teammate 中间 <Name> 行；
+        //     从独立 jsonl 补齐，按「同名前缀条目计数差」追加缺失部分。
+        self.restore_teammate_transcripts(sid, &teammate_names);
 
         // 8. SubAgents — 仅加载历史记录（无运行时恢复）
         // SubAgent 运行状态仅用于 UI 展示历史，不需要恢复
+    }
+
+    /// 从 teammate 独立 JSONL 中恢复丢失的 `<Name>` 显示条目。
+    ///
+    /// 策略：对每个 teammate，在已加载的 `state.session.messages` 中统计 `<Name>` 前缀条目数，
+    /// 从 jsonl 合成显示条目，仅把「第 count 条之后」的尾部追加到 messages。
+    /// 这样老 session（无 jsonl）不受影响；新 session 能补齐未 flush 的中间消息。
+    fn restore_teammate_transcripts(&mut self, sid: &str, teammate_names: &[String]) {
+        if teammate_names.is_empty() {
+            return;
+        }
+        for name in teammate_names {
+            let prefix_marker = format!("<{}>", name);
+            let existing_count = self
+                .state
+                .session
+                .messages
+                .iter()
+                .filter(|m| m.role == "assistant" && m.content.starts_with(&prefix_marker))
+                .count();
+
+            let path = SessionPaths::new(sid).teammate_transcript(&sanitize_filename(name));
+            if !path.exists() {
+                continue;
+            }
+            let transcript = read_transcript_with_timestamps(&path);
+
+            let mut synthesized: Vec<String> = Vec::new();
+            for (msg, _ts) in &transcript {
+                if msg.role != "assistant" {
+                    continue;
+                }
+                if !msg.content.is_empty() {
+                    synthesized.push(format!("<{}> {}", name, msg.content));
+                }
+                if let Some(tcs) = &msg.tool_calls {
+                    for tc in tcs {
+                        if tc.name != "SendMessage" {
+                            synthesized.push(format!("<{}> [调用工具 {}]", name, tc.name));
+                        }
+                    }
+                }
+            }
+
+            if synthesized.len() > existing_count {
+                for content in synthesized.into_iter().skip(existing_count) {
+                    self.state
+                        .session
+                        .messages
+                        .push(ChatMessage::text("assistant", content));
+                }
+                self.ui.msg_lines_cache = None;
+            }
+        }
     }
 
     /// 清除运行时状态（session 切换前调用）
@@ -3352,6 +3429,9 @@ impl ChatApp {
         // 生成新会话 ID
         let new_id = generate_session_id();
         self.session_id = new_id.clone();
+        if let Ok(mut s) = self.shared_session_id.lock() {
+            *s = new_id.clone();
+        }
         // 清空消息
         self.state.session.messages.clear();
         self.last_persisted_len = 0;

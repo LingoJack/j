@@ -214,6 +214,7 @@ impl Tool for CreateTeammateTool {
         let current_tool_clone = Arc::clone(&current_tool);
         let wake_flag_clone = Arc::clone(&wake_flag);
         let work_done_clone = Arc::clone(&work_done);
+        let session_id_clone = Arc::clone(&self.shared.session_id);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份
@@ -243,6 +244,7 @@ impl Tool for CreateTeammateTool {
                 initial_prompt,
                 provider,
                 base_system_prompt: system_prompt,
+                session_id: session_id_clone,
                 tools,
                 registry: sub_registry,
                 jcli_config,

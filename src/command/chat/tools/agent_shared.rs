@@ -264,6 +264,8 @@ pub struct AgentToolShared {
     pub sub_agent_tracker: Arc<SubAgentTracker>,
     /// 主 TUI 的 shared_agent_messages（子 agent 的 UI 状态行推送到这里）
     pub shared_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 当前 session id（session 切换时由 chat_app 更新，teammate/subagent 用来定位自己的 transcript 路径）
+    pub session_id: Arc<Mutex<String>>,
 }
 
 impl AgentToolShared {

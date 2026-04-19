@@ -174,11 +174,47 @@ pub struct ChatSession {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SessionEvent {
     /// 新增一条消息
-    Msg(ChatMessage),
+    Msg {
+        #[serde(flatten)]
+        message: ChatMessage,
+        /// 消息产生时刻（epoch milliseconds）；老数据反序列化为 0。
+        #[serde(default, skip_serializing_if = "is_zero_u64")]
+        timestamp_ms: u64,
+    },
     /// 对话清空
     Clear,
     /// 归档还原（messages 为还原后的完整消息列表）
     Restore { messages: Vec<ChatMessage> },
+}
+
+fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
+}
+
+/// 当前时刻（epoch milliseconds）
+pub fn current_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+impl SessionEvent {
+    /// 构造一条带当前时间戳的 Msg 事件
+    pub fn msg(message: ChatMessage) -> Self {
+        Self::Msg {
+            message,
+            timestamp_ms: current_millis(),
+        }
+    }
+
+    /// 构造一条带指定时间戳的 Msg 事件（用于并发/旁路 agent 的消息记录）
+    pub fn msg_at(message: ChatMessage, timestamp_ms: u64) -> Self {
+        Self::Msg {
+            message,
+            timestamp_ms,
+        }
+    }
 }
 
 // ========== 文件路径 ==========
@@ -249,9 +285,35 @@ impl SessionPaths {
         self.dir.join("teammates.json")
     }
 
+    /// Teammate 独立 transcript 目录：`sessions/<id>/teammates/`
+    pub fn teammates_dir(&self) -> PathBuf {
+        self.dir.join("teammates")
+    }
+
+    /// 单个 teammate 的 transcript JSONL 路径：`sessions/<id>/teammates/<sanitized_name>.jsonl`
+    pub fn teammate_transcript(&self, sanitized_name: &str) -> PathBuf {
+        self.teammates_dir()
+            .join(format!("{}.jsonl", sanitized_name))
+    }
+
     /// SubAgent 状态文件：`sessions/<id>/subagents.json`
     pub fn subagents_file(&self) -> PathBuf {
         self.dir.join("subagents.json")
+    }
+
+    /// SubAgent 独立 transcript 目录：`sessions/<id>/subagents/`
+    pub fn subagents_dir(&self) -> PathBuf {
+        self.dir.join("subagents")
+    }
+
+    /// 单个 subagent 的 transcript JSONL 路径：`sessions/<id>/subagents/<sub_id>.jsonl`
+    pub fn subagent_transcript(&self, sub_id: &str) -> PathBuf {
+        self.subagents_dir().join(format!("{}.jsonl", sub_id))
+    }
+
+    /// 单个 subagent 的 todo 文件路径：`sessions/<id>/subagents/<sub_id>_todos.json`
+    pub fn subagent_todos_file(&self, sub_id: &str) -> PathBuf {
+        self.subagents_dir().join(format!("{}_todos.json", sub_id))
     }
 
     /// Task 状态文件：`sessions/<id>/tasks.json`
@@ -404,7 +466,7 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
     });
     meta.updated_at = now;
     match event {
-        SessionEvent::Msg(msg) => {
+        SessionEvent::Msg { message: msg, .. } => {
             meta.message_count += 1;
             if meta.title.is_empty() && msg.role == "user" && !msg.content.is_empty() {
                 meta.title = msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect();
@@ -476,7 +538,7 @@ pub fn load_session(session_id: &str) -> ChatSession {
         }
         match serde_json::from_str::<SessionEvent>(line) {
             Ok(event) => match event {
-                SessionEvent::Msg(msg) => messages.push(msg),
+                SessionEvent::Msg { message, .. } => messages.push(message),
                 SessionEvent::Clear => messages.clear(),
                 SessionEvent::Restore { messages: restored } => messages = restored,
             },
@@ -486,6 +548,46 @@ pub fn load_session(session_id: &str) -> ChatSession {
         }
     }
     ChatSession { messages }
+}
+
+/// 从 JSONL 文件按出现顺序读取 `(ChatMessage, timestamp_ms)` 列表。
+///
+/// 供 teammate / subagent 等独立 transcript 的读取使用：保留时间戳、不做 Clear/Restore 处理。
+pub fn read_transcript_with_timestamps(path: &Path) -> Vec<(ChatMessage, u64)> {
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut out: Vec<(ChatMessage, u64)> = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(SessionEvent::Msg {
+            message,
+            timestamp_ms,
+        }) = serde_json::from_str::<SessionEvent>(line)
+        {
+            out.push((message, timestamp_ms));
+        }
+    }
+    out
+}
+
+/// 向任意路径的 JSONL 文件 append 一条事件（append-only；用于 teammate/subagent 独立 transcript）。
+pub fn append_event_to_path(path: &Path, event: &SessionEvent) -> bool {
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let line = match serde_json::to_string(event) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    match fs::OpenOptions::new().create(true).append(true).open(path) {
+        Ok(mut file) => writeln!(file, "{}", line).is_ok(),
+        Err(_) => false,
+    }
 }
 
 /// 加载系统提示词（来自独立文件）
@@ -729,7 +831,9 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
         }
         if let Ok(event) = serde_json::from_str::<SessionEvent>(line) {
             match event {
-                SessionEvent::Msg(ref msg) => {
+                SessionEvent::Msg {
+                    message: ref msg, ..
+                } => {
                     message_count += 1;
                     if first_user_preview.is_none() && msg.role == "user" && !msg.content.is_empty()
                     {
@@ -861,6 +965,10 @@ pub fn delete_session(session_id: &str) -> bool {
 // ========== Session 状态持久化类型 ==========
 
 /// Teammate 快照（可序列化，用于 session 持久化）
+///
+/// 注意：`messages_snapshot` / `system_prompt_snapshot` 历史版本会序列化到此结构，
+/// 现版改为写入独立 transcript JSONL（`sessions/<id>/teammates/<name>.jsonl`），
+/// 这两个字段仅为反序列化老数据保留 `#[serde(default)]`，save 时不再写出。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeammateSnapshotPersist {
     pub name: String,
@@ -870,12 +978,40 @@ pub struct TeammateSnapshotPersist {
     pub worktree_branch: Option<String>,
     pub inherit_permissions: bool,
     pub status: crate::command::chat::teammate::TeammateStatusPersist,
-    pub system_prompt_snapshot: String,
-    pub messages_snapshot: Vec<ChatMessage>,
+    /// 未被消费的广播消息（将来 Respawn 时灌回）
+    #[serde(default)]
     pub pending_user_messages: Vec<ChatMessage>,
     pub tool_calls_count: usize,
     pub current_tool: Option<String>,
     pub work_done: bool,
+    /// 【已废弃】历史版本将 system prompt 写入 teammates.json；现已改为 transcript JSONL。
+    /// 仅为反序列化老数据保留，序列化时自动省略。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub system_prompt_snapshot: String,
+    /// 【已废弃】历史版本将 messages 写入 teammates.json；现已改为 transcript JSONL。
+    /// 仅为反序列化老数据保留，序列化时自动省略。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages_snapshot: Vec<ChatMessage>,
+}
+
+/// 把任意名字转成文件系统安全的文件名片段（去除非法字符，限长）。
+pub fn sanitize_filename(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if c.is_whitespace() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+            out.push('_');
+        } else {
+            out.push(c);
+        }
+    }
+    // 限长 64，避免极端长名
+    if out.chars().count() > 64 {
+        out = out.chars().take(64).collect();
+    }
+    if out.is_empty() {
+        out.push('_');
+    }
+    out
 }
 
 /// SubAgent 快照（只读历史，用于 session 恢复时展示）
@@ -1123,7 +1259,7 @@ mod tests {
         let paths = SessionPaths::new("append-id");
 
         let msg = ChatMessage::text("user", "hello".to_string());
-        assert!(append_session_event("append-id", &SessionEvent::Msg(msg)));
+        assert!(append_session_event("append-id", &SessionEvent::msg(msg)));
 
         assert!(paths.transcript().exists());
     }
@@ -1133,7 +1269,7 @@ mod tests {
         let _tmp = TempDataDir::new();
 
         let msg = ChatMessage::text("user", "round trip test");
-        assert!(append_session_event("rt-id", &SessionEvent::Msg(msg)));
+        assert!(append_session_event("rt-id", &SessionEvent::msg(msg)));
 
         let session = load_session("rt-id");
         assert_eq!(session.messages.len(), 1);
@@ -1147,7 +1283,7 @@ mod tests {
         let paths = SessionPaths::new("ls-test");
         paths.ensure_dir().unwrap();
         let msg = ChatMessage::text("user", "list test");
-        let line = serde_json::to_string(&SessionEvent::Msg(msg)).unwrap();
+        let line = serde_json::to_string(&SessionEvent::msg(msg)).unwrap();
         fs::write(paths.transcript(), format!("{}\n", line)).unwrap();
 
         let metas = list_sessions();
@@ -1192,7 +1328,7 @@ mod tests {
     fn append_event_updates_meta() {
         let _tmp = TempDataDir::new();
         let msg1 = ChatMessage::text("user", "hello world");
-        assert!(append_session_event("meta-upd", &SessionEvent::Msg(msg1)));
+        assert!(append_session_event("meta-upd", &SessionEvent::msg(msg1)));
 
         let meta = load_session_meta_file("meta-upd").expect("meta should exist");
         assert_eq!(meta.id, "meta-upd");
@@ -1202,7 +1338,7 @@ mod tests {
 
         // 追加第二条消息
         let msg2 = ChatMessage::text("assistant", "hi there");
-        assert!(append_session_event("meta-upd", &SessionEvent::Msg(msg2)));
+        assert!(append_session_event("meta-upd", &SessionEvent::msg(msg2)));
 
         let meta2 = load_session_meta_file("meta-upd").expect("meta should exist");
         assert_eq!(meta2.message_count, 2);
@@ -1223,7 +1359,7 @@ mod tests {
         let paths = SessionPaths::new("lazy-gen");
         paths.ensure_dir().unwrap();
         let msg = ChatMessage::text("user", "lazy generation test");
-        let line = serde_json::to_string(&SessionEvent::Msg(msg)).unwrap();
+        let line = serde_json::to_string(&SessionEvent::msg(msg)).unwrap();
         fs::write(paths.transcript(), format!("{}\n", line)).unwrap();
 
         // session.json 不存在

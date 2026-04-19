@@ -1,5 +1,7 @@
 use crate::command::chat::permission::JcliConfig;
-use crate::command::chat::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::storage::{
+    ChatMessage, ModelProvider, SessionEvent, SessionPaths, append_event_to_path, sanitize_filename,
+};
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::agent_shared::{
@@ -8,6 +10,7 @@ use crate::command::chat::tools::agent_shared::{
 };
 use crate::util::log::write_info_log;
 use async_openai::types::chat::ChatCompletionTools;
+use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -21,6 +24,8 @@ pub struct TeammateLoopConfig {
     pub initial_prompt: String,
     pub provider: ModelProvider,
     pub base_system_prompt: Option<String>,
+    /// 共享的当前 session id 槽（session 切换时会被主线程更新）
+    pub session_id: Arc<Mutex<String>>,
     pub tools: Vec<ChatCompletionTools>,
     pub registry: Arc<ToolRegistry>,
     pub jcli_config: Arc<JcliConfig>,
@@ -58,6 +63,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         initial_prompt,
         provider,
         base_system_prompt,
+        session_id,
         tools,
         registry,
         jcli_config,
@@ -72,6 +78,22 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         wake_flag,
         work_done,
     } = config;
+
+    // 定位当前 teammate 的 transcript JSONL 路径（按 session_id 实时解析，切换 session 也能落到正确位置）
+    let transcript_path = |name: &str| -> PathBuf {
+        let sid = session_id
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_else(|_| "unknown".to_string());
+        SessionPaths::new(&sid).teammate_transcript(&sanitize_filename(name))
+    };
+
+    let append_messages = |msgs: &[ChatMessage]| {
+        let path = transcript_path(&name);
+        for m in msgs {
+            let _ = append_event_to_path(&path, &SessionEvent::msg(m.clone()));
+        }
+    };
 
     // 辅助闭包：更新状态
     let set_status = |new_status: TeammateStatus| {
@@ -110,6 +132,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         tool_call_id: None,
         images: None,
     }];
+    // 初始 prompt 也要写入 transcript，便于恢复时重现对话
+    append_messages(&messages);
 
     // 辅助闭包：将当前 messages clone 到共享快照
     let sync_messages = |msgs: &Vec<ChatMessage>| {
@@ -144,7 +168,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // Drain 来自广播的消息（包括旁听消息，保留上下文）
         // 注意：idle_rounds 的管理下放到 WaitingForMessage 分支，
         // 本处不再根据 had_new_messages 重置，避免"任何消息都触发 LLM"。
+        let prev_len = messages.len();
         let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+        if messages.len() > prev_len {
+            append_messages(&messages[prev_len..]);
+        }
 
         // 同步 messages 快照（供 /dump 读取）
         sync_messages(&messages);
@@ -203,7 +231,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             set_status(TeammateStatus::WaitingForMessage);
 
             // 先把已到达的旁听消息 drain 到 messages（保留上下文，但不自动唤醒）
+            let prev_len = messages.len();
             let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+            if messages.len() > prev_len {
+                append_messages(&messages[prev_len..]);
+            }
 
             // 唤醒判断：仅当收到 @self 或来自 Main 的广播，wake_flag 才为 true
             if wake_flag.swap(false, Ordering::Relaxed) {
@@ -232,7 +264,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
                 // 在轮询期间也 drain 旁听消息到 messages（仅累积上下文）
+                let prev_len = messages.len();
                 let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+                if messages.len() > prev_len {
+                    append_messages(&messages[prev_len..]);
+                }
 
                 if wake_flag.swap(false, Ordering::Relaxed) {
                     idle_rounds = 0;
@@ -259,6 +295,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             tool_call_id: None,
             images: None,
         });
+        if let Some(last) = messages.last() {
+            append_messages(std::slice::from_ref(last));
+        }
 
         // 在 TUI 中显示 teammate 的工具调用（SendMessage 不显示，因为 broadcast 会单独显示消息内容）
         if let Ok(manager) = teammate_manager.lock()
@@ -284,6 +323,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     tool_call_id: Some(item.id.clone()),
                     images: None,
                 });
+                if let Some(last) = messages.last() {
+                    append_messages(std::slice::from_ref(last));
+                }
                 continue;
             }
 
@@ -302,6 +344,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 false,
             );
             messages.push(result_msg);
+            if let Some(last) = messages.last() {
+                append_messages(std::slice::from_ref(last));
+            }
 
             // 清除当前工具名
             if let Ok(mut ct) = current_tool.lock() {
