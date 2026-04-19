@@ -1,8 +1,10 @@
+use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::teammate::{
-    TeammateHandle, TeammateManager, TeammateStatus, set_current_agent_name, set_thread_cwd,
+    TeammateHandle, TeammateManager, TeammateStatus, set_current_agent_name,
+    set_current_agent_type, set_thread_cwd,
 };
 use crate::command::chat::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
-use crate::command::chat::tools::agent_shared::AgentToolShared;
+use crate::command::chat::tools::agent_shared::ChildAgentShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
 use crate::command::chat::tools::work_done::WorkDoneTool;
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
@@ -44,7 +46,7 @@ struct CreateTeammateParams {
 /// CreateTeammate 工具：创建一个新的 teammate agent
 #[allow(dead_code)]
 pub struct CreateTeammateTool {
-    pub shared: AgentToolShared,
+    pub shared: ChildAgentShared,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
 }
 
@@ -174,24 +176,24 @@ impl Tool for CreateTeammateTool {
             let sanitized = crate::command::chat::storage::sanitize_filename(&params.name);
             crate::command::chat::storage::SessionPaths::new(&sid).teammate_todos_file(&sanitized)
         };
-        let (mut sub_registry, _) = self.shared.build_sub_registry(teammate_todos_path);
+        let (mut child_registry, _) = self.shared.build_child_registry(teammate_todos_path);
 
         // 注册 SendMessage 工具到子注册表
-        sub_registry.register(Box::new(SendMessageTool {
+        child_registry.register(Box::new(SendMessageTool {
             teammate_manager: Arc::clone(&self.teammate_manager),
         }));
         // 注册 WorkDone 工具（与本 teammate 的 work_done 标志绑定）
-        sub_registry.register(Box::new(WorkDoneTool {
+        child_registry.register(Box::new(WorkDoneTool {
             work_done: Arc::clone(&work_done),
             teammate_manager: Arc::clone(&self.teammate_manager),
         }));
-        let sub_registry = Arc::new(sub_registry);
+        let child_registry = Arc::new(child_registry);
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push("CreateTeammate".to_string());
         disabled.push("AgentTeam".to_string());
         disabled.push("Agent".to_string());
-        let tools = sub_registry.to_openai_tools_filtered(&disabled);
+        let tools = child_registry.to_openai_tools_filtered(&disabled);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all
         let jcli_config = if params.inherit_permissions {
@@ -224,6 +226,7 @@ impl Tool for CreateTeammateTool {
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份
             set_current_agent_name(&teammate_name);
+            set_current_agent_type(AgentType::Teammate);
 
             // 设置 worktree CWD（若有）
             if let Some((ref wt_path, _)) = worktree_info {
@@ -251,7 +254,7 @@ impl Tool for CreateTeammateTool {
                 base_system_prompt: system_prompt,
                 session_id: session_id_clone,
                 tools,
-                registry: sub_registry,
+                registry: child_registry,
                 jcli_config,
                 teammate_manager,
                 pending_user_messages: pending_clone,

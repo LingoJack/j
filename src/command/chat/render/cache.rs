@@ -1168,7 +1168,7 @@ fn render_tool_confirm_content(
         }
     }
 }
-/// 渲染子 Agent 权限确认区域
+/// 渲染权限确认区域（子 Agent / Teammate 通用）
 fn render_agent_perm_confirm_area(
     app: &ChatApp,
     bubble_max_width: usize,
@@ -1191,7 +1191,7 @@ fn render_agent_perm_confirm_area(
     )));
 
     // 标题行
-    let title = format!(" 子 Agent 权限请求 [{}] ", req.agent_name);
+    let title = req.title();
     lines.push(bordered_line(
         vec![Span::styled(
             title,

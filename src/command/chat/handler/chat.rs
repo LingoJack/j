@@ -1038,13 +1038,13 @@ fn dump_teammates(app: &ChatApp, dump_dir: &std::path::Path) -> usize {
     count
 }
 
-/// 将正在运行的子 Agent 写入 dump_dir/sub_agents/<id>/，返回成功导出的数量
+/// 将正在运行的子 Agent 写入 dump_dir/subagents/<id>/，返回成功导出的数量
 fn dump_sub_agents(app: &ChatApp, dump_dir: &std::path::Path) -> usize {
     let snapshots = app.sub_agent_tracker.snapshot_running();
     if snapshots.is_empty() {
         return 0;
     }
-    let sub_root = dump_dir.join("sub_agents");
+    let sub_root = dump_dir.join("subagents");
     if std::fs::create_dir_all(&sub_root).is_err() {
         return 0;
     }

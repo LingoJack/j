@@ -1,6 +1,6 @@
 /// 子 agent/teammate 权限请求队列
 ///
-/// 当 headless agent 需要执行需要确认的工具（Write、Edit、Bash 等）
+/// 当子 agent 需要执行需要确认的工具（Write、Edit、Bash 等）
 /// 且未被 .jcli/permissions.yaml 预先允许时，把请求推入此队列并阻塞
 /// 等待主 TUI 用户批准或拒绝。
 ///
@@ -12,11 +12,22 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+/// 发起权限请求的 agent 类型
+#[derive(Clone, Debug, PartialEq)]
+pub enum AgentType {
+    /// Teammate agent（name 为 teammate 名称，如 "Backend"）
+    Teammate,
+    /// SubAgent（name 为 sub_id，如 "sub_0001"）
+    SubAgent,
+}
+
 // NOTE: Cannot derive Debug - contains Condvar which does not implement Debug
 /// 单条待决权限请求（共享给 TUI 和 agent 线程）
 pub struct PendingAgentPerm {
-    /// 发起请求的 agent 名称（"Backend"/"SubAgent:xxx"）
-    pub agent_name: String,
+    /// 发起请求的 agent 类型
+    pub agent_type: AgentType,
+    /// 发起请求的 agent 名称（teammate 名 / sub_id）
+    pub name: String,
     /// 工具名称（"Write"/"Edit"/"Bash"）
     pub tool_name: String,
     /// 工具调用的 JSON 参数
@@ -30,18 +41,28 @@ pub struct PendingAgentPerm {
 
 impl PendingAgentPerm {
     pub fn new(
-        agent_name: String,
+        agent_type: AgentType,
+        name: String,
         tool_name: String,
         arguments: String,
         confirm_msg: String,
     ) -> Arc<Self> {
         Arc::new(Self {
-            agent_name,
+            agent_type,
+            name,
             tool_name,
             arguments,
             confirm_msg,
             decision: Arc::new((Mutex::new(None), Condvar::new())),
         })
+    }
+
+    /// 权限请求标题：按 agent 类型区分显示
+    pub fn title(&self) -> String {
+        match &self.agent_type {
+            AgentType::Teammate => format!(" 权限请求 [{}] ", self.name),
+            AgentType::SubAgent => format!(" SubAgent 权限请求 [{}] ", self.name),
+        }
     }
 
     /// 子 agent 线程调用：阻塞等待决策，超时返回 false（拒绝）

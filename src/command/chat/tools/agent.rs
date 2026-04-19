@@ -1,8 +1,11 @@
 use crate::command::chat::permission::JcliConfig;
+use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
-use crate::command::chat::teammate::{clear_thread_cwd, set_thread_cwd, thread_cwd};
+use crate::command::chat::teammate::{
+    clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
+};
 use crate::command::chat::tools::agent_shared::{
-    AgentToolShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
+    ChildAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
 };
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
@@ -56,7 +59,7 @@ impl SubAgentSnapshotRefs {
 }
 
 /// 无 UI 子代理循环的参数集合
-struct HeadlessAgentParams {
+struct SubAgentLoopParams {
     provider: ModelProvider,
     system_prompt: Option<String>,
     prompt: String,
@@ -111,7 +114,7 @@ struct AgentParams {
 /// Agent 工具：启动子代理执行复杂多步任务
 #[allow(dead_code)]
 pub struct AgentTool {
-    pub shared: AgentToolShared,
+    pub shared: ChildAgentShared,
 }
 
 impl AgentTool {
@@ -192,12 +195,12 @@ impl Tool for AgentTool {
         let subagent_transcript_path = session_paths.subagent_transcript(&sub_id);
 
         // 构建子 registry（排除 "Agent" 工具防递归，独立 todos 文件）
-        let (sub_registry, _) = self.shared.build_sub_registry(subagent_todos_path);
-        let sub_registry = Arc::new(sub_registry);
+        let (child_registry, _) = self.shared.build_child_registry(subagent_todos_path);
+        let child_registry = Arc::new(child_registry);
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push("Agent".to_string());
-        let tools = sub_registry.to_openai_tools_filtered(&disabled);
+        let tools = child_registry.to_openai_tools_filtered(&disabled);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all
         let jcli_config = if params.inherit_permissions {
@@ -233,19 +236,24 @@ impl Tool for AgentTool {
             let description_clone = description.clone();
             let ui_display_clone = Arc::clone(&self.shared.ui_messages);
             let transcript_path = subagent_transcript_path.clone();
+            let sub_id_for_thread = sub_id.clone();
             std::thread::spawn(move || {
+                // 设置线程的 agent 身份
+                set_current_agent_name(&sub_id_for_thread);
+                set_current_agent_type(AgentType::SubAgent);
+
                 // 设置 worktree CWD
                 if let Some((ref wt_path, _)) = worktree_info {
                     set_thread_cwd(wt_path);
                 }
 
-                let result = run_headless_agent_loop(
-                    HeadlessAgentParams {
+                let result = run_sub_agent_loop(
+                    SubAgentLoopParams {
                         provider,
                         system_prompt,
                         prompt,
                         tools,
-                        registry: sub_registry,
+                        registry: child_registry,
                         jcli_config,
                         snapshot: Some(snapshot_refs),
                         description: description_clone.clone(),
@@ -302,13 +310,13 @@ impl Tool for AgentTool {
             let snapshot_refs = SubAgentSnapshotRefs::from_handle(&handle);
 
             let cancelled_clone = Arc::clone(cancelled);
-            let result = run_headless_agent_loop(
-                HeadlessAgentParams {
+            let result = run_sub_agent_loop(
+                SubAgentLoopParams {
                     provider,
                     system_prompt,
                     prompt,
                     tools,
-                    registry: sub_registry,
+                    registry: child_registry,
                     jcli_config,
                     snapshot: Some(snapshot_refs),
                     description,
@@ -343,15 +351,15 @@ impl Tool for AgentTool {
     }
 }
 
-// ========== Headless Agent Loop ==========
+// ========== SubAgent Loop ==========
 
 /// 无 UI 的子代理循环：执行工具调用直到完成或达到限制
 ///
 /// - 不发送 StreamMsg（无 UI 交互）
 /// - 需要确认的工具通过 permission 检查：允许则执行，否则返回 "Tool denied"
 /// - 返回最终的 assistant 文本
-fn run_headless_agent_loop(
-    params: HeadlessAgentParams,
+fn run_sub_agent_loop(
+    params: SubAgentLoopParams,
     cancelled: &Arc<AtomicBool>,
     ui_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {

@@ -71,7 +71,7 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     app.ui.msg_lines_cache = None;
 }
 
-/// 子 Agent 权限请求确认模式：Y/Enter 批准，N/Esc 拒绝
+/// 权限请求确认模式：Y/Enter 批准，N/Esc 拒绝
 pub fn handle_agent_perm_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {

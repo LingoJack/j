@@ -37,7 +37,9 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::{TeammateManager, TeammateStatusPersist};
 use crate::command::chat::theme::{Theme, ThemeName};
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::agent_shared::{AgentToolShared, SubAgentStatus, SubAgentTracker};
+use crate::command::chat::tools::agent_shared::{
+    ChildAgentShared, SubAgentStatus, SubAgentTracker,
+};
 use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
 use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
@@ -82,7 +84,7 @@ pub struct ChatApp {
     pub sandbox: Sandbox,
     /// 本次会话 ID（启动时生成，对应 sessions/{id}.jsonl）
     pub session_id: String,
-    /// 与 `AgentToolShared` 共享的 session id 槽；切换 session 时用 `switch_session_id` 同步更新。
+    /// 与 `ChildAgentShared` 共享的 session id 槽；切换 session 时用 `switch_session_id` 同步更新。
     pub shared_session_id: Arc<Mutex<String>>,
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
     pub last_persisted_len: usize,
@@ -90,11 +92,11 @@ pub struct ChatApp {
     pub ws_bridge: Option<crate::command::chat::remote::bridge::WsBridge>,
     /// 远程客户端是否已连接
     pub remote_connected: bool,
-    /// AgentTool 的 provider 共享引用（每次发送请求前更新）
-    pub agent_tool_provider: Arc<Mutex<ModelProvider>>,
-    /// AgentTool 的 system_prompt 共享引用（每次发送请求前更新）
+    /// 子 Agent 共用 provider（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
+    pub child_agent_provider: Arc<Mutex<ModelProvider>>,
+    /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
     #[allow(dead_code)]
-    pub agent_tool_system_prompt: Arc<Mutex<Option<String>>>,
+    pub child_agent_system_prompt: Arc<Mutex<Option<String>>>,
     /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
     pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// UI 侧已读取到的位置（用于增量检测）
@@ -106,7 +108,7 @@ pub struct ChatApp {
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
     /// 子 Agent（AgentTool）运行快照追踪器（供 /dump 读取）
     pub sub_agent_tracker: Arc<SubAgentTracker>,
-    /// 子 agent 权限请求队列（AgentToolShared 和 TUI 共享同一个 Arc）
+    /// 子 agent 权限请求队列（ChildAgentShared 和 TUI 共享同一个 Arc）
     pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
@@ -263,8 +265,8 @@ impl ChatApp {
         // 共享的 session id 槽：session 切换时 chat_app 会同步更新，teammate/subagent 据此定位 transcript
         let shared_session_id = Arc::new(Mutex::new(session_id.clone()));
 
-        // 构建 AgentToolShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
-        let agent_tool_shared = AgentToolShared {
+        // 构建 ChildAgentShared（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
+        let child_agent_shared = ChildAgentShared {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
             system_prompt: Arc::clone(&agent_system_prompt),
@@ -279,11 +281,11 @@ impl ChatApp {
             session_id: Arc::clone(&shared_session_id),
         };
         tool_registry.register(Box::new(crate::command::chat::tools::agent::AgentTool {
-            shared: agent_tool_shared.clone(),
+            shared: child_agent_shared.clone(),
         }));
         tool_registry.register(Box::new(
             crate::command::chat::tools::agent_team::AgentTeamTool {
-                shared: agent_tool_shared,
+                shared: child_agent_shared,
                 teammate_manager: Arc::clone(&teammate_manager),
             },
         ));
@@ -530,8 +532,8 @@ impl ChatApp {
             last_persisted_len: 0,
             ws_bridge: None,
             remote_connected: false,
-            agent_tool_provider: agent_provider,
-            agent_tool_system_prompt: agent_system_prompt,
+            child_agent_provider: agent_provider,
+            child_agent_system_prompt: agent_system_prompt,
             ui_messages,
             ui_messages_cursor: 0,
             context_tokens: Arc::new(Mutex::new(0)),
@@ -2363,9 +2365,9 @@ impl ChatApp {
             }
         };
 
-        // 同步更新 AgentTool 的 provider（子代理使用最新的 provider）
+        // 同步更新子 Agent 的 provider（子代理使用最新的 provider）
         {
-            let mut p = safe_lock(&self.agent_tool_provider, "send_message::agent_provider");
+            let mut p = safe_lock(&self.child_agent_provider, "send_message::agent_provider");
             *p = provider.clone();
         }
 

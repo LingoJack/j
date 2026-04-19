@@ -6,7 +6,7 @@ use crate::command::chat::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission_queue::{PendingAgentPerm, PermissionQueue};
 use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
-use crate::command::chat::teammate::current_agent_name;
+use crate::command::chat::teammate::{current_agent_name, current_agent_type};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::PlanApprovalQueue;
@@ -250,16 +250,16 @@ impl Default for SubAgentTracker {
     }
 }
 
-// ========== AgentToolShared ==========
+// ========== ChildAgentShared ==========
 
 // NOTE: Cannot derive Debug - contains PermissionQueue, PlanApprovalQueue, SubAgentTracker
 //       which do not implement Debug, and multiple Arc<Mutex<Option<T>>> fields
-/// Agent 工具共享字段（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
+/// 子 Agent 共享字段（AgentTool / AgentTeamTool / CreateTeammateTool 共用）
 ///
 /// 所有字段均为 Arc 引用，Clone 开销极小。
 /// 消除了三个 Tool struct 之间逐字段 hand-copy Arc 的重复代码。
 #[derive(Clone)]
-pub struct AgentToolShared {
+pub struct ChildAgentShared {
     pub background_manager: Arc<BackgroundManager>,
     pub provider: Arc<Mutex<ModelProvider>>,
     pub system_prompt: Arc<Mutex<Option<String>>>,
@@ -279,7 +279,7 @@ pub struct AgentToolShared {
     pub session_id: Arc<Mutex<String>>,
 }
 
-impl AgentToolShared {
+impl ChildAgentShared {
     /// 构建子工具注册表（不含 skills，标准 ask channel）
     ///
     /// 返回未 Arc 包装的 ToolRegistry，调用者可在包装前注册额外工具（如 SendMessage）。
@@ -288,7 +288,7 @@ impl AgentToolShared {
     /// `todos_file_path`：该子 agent 独立的 todos.json 存储路径。
     /// - Teammate 传 `sessions/<sid>/teammates/<sanitized_name>/todos.json`
     /// - SubAgent 传 `sessions/<sid>/subagents/<sub_id>/todos.json`
-    pub fn build_sub_registry(
+    pub fn build_child_registry(
         &self,
         todos_file_path: std::path::PathBuf,
     ) -> (ToolRegistry, mpsc::Receiver<AskRequest>) {
@@ -314,7 +314,7 @@ impl AgentToolShared {
 
 /// 创建 tokio runtime 和 OpenAI client
 ///
-/// 供 run_headless_agent_loop 和 run_teammate_loop 共用。
+/// 供 run_sub_agent_loop 和 run_teammate_loop 共用。
 pub fn create_runtime_and_client(
     provider: &ModelProvider,
 ) -> Result<
@@ -528,11 +528,13 @@ pub fn execute_tool_with_permission(
     if requires_confirm && !jcli_config.is_allowed(&item.name, &item.arguments) {
         // 尝试通过权限队列请求用户实时确认
         if let Some(queue) = registry.permission_queue.as_ref() {
+            let agent_type = current_agent_type();
             let agent_name = current_agent_name();
             let confirm_msg = tool_ref
                 .map(|t| t.confirmation_message(&item.arguments))
                 .unwrap_or_else(|| format!("调用工具 {}", item.name));
             let req = PendingAgentPerm::new(
+                agent_type,
                 agent_name,
                 item.name.clone(),
                 item.arguments.clone(),

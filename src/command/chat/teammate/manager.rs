@@ -1,3 +1,4 @@
+use crate::command::chat::permission_queue::AgentType;
 use crate::command::chat::storage::{ChatMessage, TeammateSnapshotPersist};
 use crate::util::log::write_info_log;
 use serde::{Deserialize, Serialize};
@@ -110,22 +111,36 @@ pub struct TeammateSnapshot {
 // ========== Thread-local Agent Identity ==========
 
 thread_local! {
-    /// 当前线程所属的 agent 名称（主 agent 为 "Main"，teammate 为其名称）
+    /// 当前线程所属的 agent 名称（主 agent 为 "Main"，teammate 为其名称，subagent 为 sub_id）
     static CURRENT_AGENT_NAME: RefCell<String> = RefCell::new("Main".to_string());
+    /// 当前线程所属的 agent 类型（主 agent / subagent 默认 SubAgent，teammate 设置为 Teammate）
+    static CURRENT_AGENT_TYPE: RefCell<AgentType> = const { RefCell::new(AgentType::SubAgent) };
     /// 当前线程的工作目录覆盖（worktree 模式下指向 worktree 路径）
     static THREAD_CWD: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
-/// 设置当前线程的 agent 名称（在 teammate agent loop 启动时调用）
+/// 设置当前线程的 agent 名称和类型（在 teammate/subagent agent loop 启动时调用）
 pub fn set_current_agent_name(name: &str) {
     CURRENT_AGENT_NAME.with(|cell| {
         *cell.borrow_mut() = name.to_string();
     });
 }
 
+/// 设置当前线程的 agent 类型
+pub fn set_current_agent_type(agent_type: AgentType) {
+    CURRENT_AGENT_TYPE.with(|cell| {
+        *cell.borrow_mut() = agent_type;
+    });
+}
+
 /// 获取当前线程的 agent 名称
 pub fn current_agent_name() -> String {
     CURRENT_AGENT_NAME.with(|cell| cell.borrow().clone())
+}
+
+/// 获取当前线程的 agent 类型
+pub fn current_agent_type() -> AgentType {
+    CURRENT_AGENT_TYPE.with(|cell| cell.borrow().clone())
 }
 
 // ========== Thread-local CWD (worktree 隔离) ==========
@@ -260,7 +275,7 @@ pub struct TeammateManager {
     /// 所有 teammate 的句柄（key = name）
     pub teammates: HashMap<String, TeammateHandle>,
     /// Teammate → Main agent LLM 上下文通道（broadcast 时注入，drain_pending_user_messages 消费）
-    pub pending_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    pub main_agent_pending: Arc<Mutex<Vec<ChatMessage>>>,
     /// Agent/Teammate → UI 显示通道（teammate 消息也要写入以在 TUI 显示）
     pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 从 session 恢复的 teammate 快照（只读展示，无活跃线程）
@@ -271,12 +286,12 @@ pub struct TeammateManager {
 impl TeammateManager {
     /// 创建管理器
     pub fn new(
-        pending_messages: Arc<Mutex<Vec<ChatMessage>>>,
+        main_agent_pending: Arc<Mutex<Vec<ChatMessage>>>,
         ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     ) -> Self {
         Self {
             teammates: HashMap::new(),
-            pending_messages,
+            main_agent_pending,
             ui_messages,
             recovered_teammates: HashMap::new(),
         }
@@ -314,7 +329,7 @@ impl TeammateManager {
 
         // 注入到主 agent 的 pending（如果发送者不是主 agent）
         if from != "Main"
-            && let Ok(mut pending) = self.pending_messages.lock()
+            && let Ok(mut pending) = self.main_agent_pending.lock()
         {
             pending.push(ChatMessage::text("user", &formatted));
         }
@@ -467,7 +482,7 @@ impl Default for TeammateManager {
     fn default() -> Self {
         Self {
             teammates: HashMap::new(),
-            pending_messages: Arc::new(Mutex::new(Vec::new())),
+            main_agent_pending: Arc::new(Mutex::new(Vec::new())),
             ui_messages: Arc::new(Mutex::new(Vec::new())),
             recovered_teammates: HashMap::new(),
         }
