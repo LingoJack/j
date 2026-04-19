@@ -142,7 +142,7 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
 ///   - tool 消息：tool_call_id 为空或在任何 assistant tool_calls 中无对应 id 的，跳过。
 pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     // Step 1：收集所有有效 tool result id（非空）
-    let result_ids: std::collections::HashSet<String> = messages
+    let tool_result_ids: std::collections::HashSet<String> = messages
         .iter()
         .filter(|m| m.role == ROLE_TOOL)
         .filter_map(|m| m.tool_call_id.clone())
@@ -150,7 +150,7 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         .collect();
 
     // 收集所有 assistant 消息中合法（id 非空）的 tool_call id
-    let assistant_ids: std::collections::HashSet<String> = messages
+    let assistant_tool_call_ids: std::collections::HashSet<String> = messages
         .iter()
         .filter(|m| m.role == ROLE_ASSISTANT)
         .flat_map(|m| {
@@ -162,14 +162,14 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         })
         .collect();
 
-    let mut removed = 0usize;
+    let mut removed_count = 0usize;
     let result: Vec<ChatMessage> = messages
         .iter()
         .filter_map(|msg| {
             if msg.role == ROLE_TOOL {
                 let id = msg.tool_call_id.as_deref().unwrap_or("");
                 // 孤立 tool result：id 为空，或在 assistant tool_calls 中无对应项
-                if id.is_empty() || !assistant_ids.contains(id) {
+                if id.is_empty() || !assistant_tool_call_ids.contains(id) {
                     write_error_log(
                         "sanitize_messages",
                         &format!(
@@ -177,7 +177,7 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
                             msg.tool_call_id
                         ),
                     );
-                    removed += 1;
+                    removed_count += 1;
                     return None;
                 }
             }
@@ -185,13 +185,13 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
                 && let Some(ref tcs) = msg.tool_calls
             {
                 // 仅保留：id 非空 且 已有对应 tool result 的条目
-                let clean: Vec<_> = tcs
+                let valid_tool_calls: Vec<_> = tcs
                     .iter()
-                    .filter(|tc| !tc.id.is_empty() && result_ids.contains(&tc.id))
+                    .filter(|tc| !tc.id.is_empty() && tool_result_ids.contains(&tc.id))
                     .cloned()
                     .collect();
-                if clean.len() != tcs.len() {
-                    let dropped = tcs.len() - clean.len();
+                if valid_tool_calls.len() != tcs.len() {
+                    let dropped = tcs.len() - valid_tool_calls.len();
                     write_error_log(
                         "sanitize_messages",
                         &format!(
@@ -199,20 +199,20 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
                             dropped
                         ),
                     );
-                    removed += dropped;
-                    let mut fixed = msg.clone();
-                    fixed.tool_calls = if clean.is_empty() { None } else { Some(clean) };
-                    return Some(fixed);
+                    removed_count += dropped;
+                    let mut sanitized_msg = msg.clone();
+                    sanitized_msg.tool_calls = if valid_tool_calls.is_empty() { None } else { Some(valid_tool_calls) };
+                    return Some(sanitized_msg);
                 }
             }
             Some(msg.clone())
         })
         .collect();
 
-    if removed > 0 {
+    if removed_count > 0 {
         write_info_log(
             "sanitize_messages",
-            &format!("共清理 {} 个孤立/无效 tool_call 相关条目", removed),
+            &format!("共清理 {} 个孤立/无效 tool_call 相关条目", removed_count),
         );
     }
     result
@@ -300,11 +300,11 @@ fn sanitize_openai_messages(messages: &mut Vec<ChatCompletionRequestMessage>) {
         }
     }
 
-    let removed = original_len - messages.len();
-    if removed > 0 {
+    let removed_count = original_len - messages.len();
+    if removed_count > 0 {
         write_info_log(
             "sanitize_openai_messages",
-            &format!("后置验证：共移除 {} 条孤立消息", removed),
+            &format!("后置验证：共移除 {} 条孤立消息", removed_count),
         );
     }
 }
@@ -316,19 +316,19 @@ pub fn build_request_with_tools(
     tools: Vec<ChatCompletionTools>,
     system_prompt: Option<&str>,
 ) -> Result<CreateChatCompletionRequest, ChatError> {
-    let sanitized = sanitize_messages(messages);
-    let mut openai_messages = Vec::with_capacity(sanitized.len());
+    let sanitized_messages = sanitize_messages(messages);
+    let mut openai_messages = Vec::with_capacity(sanitized_messages.len());
     if let Some(sys) = system_prompt {
-        let trimmed = sys.trim();
-        if !trimmed.is_empty()
+        let trimmed_system_prompt = sys.trim();
+        if !trimmed_system_prompt.is_empty()
             && let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
-                .content(trimmed)
+                .content(trimmed_system_prompt)
                 .build()
         {
             openai_messages.push(ChatCompletionRequestMessage::System(msg));
         }
     }
-    openai_messages.extend(to_openai_messages(&sanitized));
+    openai_messages.extend(to_openai_messages(&sanitized_messages));
 
     // ── 后置验证：确保转换后的消息中 tool_call_id 双向一致 ──
     // to_openai_messages 可能通过 .build().ok() 静默丢弃某些消息，
@@ -345,7 +345,7 @@ pub fn build_request_with_tools(
         let err_msg = format!("构建请求失败: {}", e);
         let params_info = format!(
             "入参信息:\n  model: {}\n  api_base: {}\n  messages数量: {}\n  tools数量: {}\n  system_prompt: {:?}",
-            provider.model, provider.api_base, sanitized.len(), tools_count, system_prompt
+            provider.model, provider.api_base, sanitized_messages.len(), tools_count, system_prompt
         );
         write_info_log("build_request_with_tools ERROR", &format!("{}\n{}", err_msg, params_info));
         ChatError::RequestBuild(e.to_string())
@@ -364,10 +364,10 @@ pub async fn call_openai_stream_async(
     let mut openai_messages = Vec::with_capacity(messages.len());
 
     if let Some(sys) = system_prompt {
-        let trimmed = sys.trim();
-        if !trimmed.is_empty()
+        let trimmed_system_prompt = sys.trim();
+        if !trimmed_system_prompt.is_empty()
             && let Ok(msg) = ChatCompletionRequestSystemMessageArgs::default()
-                .content(trimmed)
+                .content(trimmed_system_prompt)
                 .build()
         {
             openai_messages.push(ChatCompletionRequestMessage::System(msg));
@@ -466,7 +466,7 @@ pub struct LenientChatResponse {
 pub struct FallbackResult {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCallItem>>,
-    pub is_tool_calls: bool,
+    pub has_tool_calls: bool,
     pub finish_reason: Option<String>,
 }
 
@@ -523,13 +523,13 @@ pub async fn call_openai_non_stream_lenient(
             return Ok(FallbackResult {
                 content: None,
                 tool_calls: None,
-                is_tool_calls: false,
+                has_tool_calls: false,
                 finish_reason: None,
             });
         }
     };
 
-    let is_tool_calls = choice
+    let has_tool_calls = choice
         .finish_reason
         .as_deref()
         .is_some_and(|r| r == "tool_calls");
@@ -577,7 +577,7 @@ pub async fn call_openai_non_stream_lenient(
     Ok(FallbackResult {
         content: choice.message.content.clone(),
         tool_calls: tool_items,
-        is_tool_calls,
+        has_tool_calls,
         finish_reason: choice.finish_reason.clone(),
     })
 }

@@ -248,7 +248,7 @@ impl TeammateManager {
     /// 消息格式: `<FromAgent> @Target text` 或 `<FromAgent> text`
     /// 以 user 角色注入（和用户 append 消息走同一个 drain 机制）
     pub fn broadcast(&self, from: &str, text: &str, at_target: Option<&str>) {
-        let formatted = if let Some(target) = at_target {
+        let broadcast_message = if let Some(target) = at_target {
             format!("<{}> @{} {}", from, target, text)
         } else {
             format!("<{}> {}", from, text)
@@ -259,9 +259,9 @@ impl TeammateManager {
             &format!(
                 "broadcast from={}: {}",
                 from,
-                &formatted[..{
-                    let mut b = formatted.len().min(100);
-                    while b > 0 && !formatted.is_char_boundary(b) {
+                &broadcast_message[..{
+                    let mut b = broadcast_message.len().min(100);
+                    while b > 0 && !broadcast_message.is_char_boundary(b) {
                         b -= 1;
                     }
                     b
@@ -273,7 +273,7 @@ impl TeammateManager {
         if from != "Main"
             && let Ok(mut pending) = self.main_agent_inbox.lock()
         {
-            pending.push(ChatMessage::text("user", &formatted));
+            pending.push(ChatMessage::text("user", &broadcast_message));
         }
 
         // 注入到所有其他 teammate 的 pending
@@ -284,7 +284,7 @@ impl TeammateManager {
                 continue; // 不给自己发
             }
             if let Ok(mut pending) = handle.pending_user_messages.lock() {
-                pending.push(ChatMessage::text("user", &formatted));
+                pending.push(ChatMessage::text("user", &broadcast_message));
             }
             let should_wake = from == "Main" || at_target == Some(name.as_str());
             if should_wake {
@@ -297,7 +297,7 @@ impl TeammateManager {
         if from != "Main"
             && let Ok(mut shared) = self.ui_messages.lock()
         {
-            shared.push(ChatMessage::text("assistant", &formatted));
+            shared.push(ChatMessage::text("assistant", &broadcast_message));
         }
     }
 
@@ -313,7 +313,7 @@ impl TeammateManager {
             let status = handle
                 .status
                 .lock()
-                .map(|s| format!("{} {}", s.icon(), s.label()))
+                .map(|status_val| format!("{} {}", status_val.icon(), status_val.label()))
                 .unwrap_or_else(|_| {
                     if handle.running() {
                         "● 工作中".to_string()
@@ -402,8 +402,8 @@ impl TeammateManager {
 
         for name in finished {
             if let Some(mut handle) = self.teammates.remove(&name) {
-                if let Some(th) = handle.thread_handle.take() {
-                    let _ = th.join();
+                if let Some(thread) = handle.thread_handle.take() {
+                    let _ = thread.join();
                 }
                 write_info_log("TeammateManager", &format!("cleaned up teammate: {}", name));
             }

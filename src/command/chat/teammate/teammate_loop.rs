@@ -105,8 +105,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
     set_status(TeammateStatus::Initializing);
 
-    let max_rounds = 200; // 足够大，实际由 cancel_token 控制生命周期
-    let max_consecutive_idle = 120; // 连续空闲 120 次（约 2 分钟）后退出
+    let max_rounds: u32 = 200; // 足够大，实际由 cancel_token 控制生命周期
+    let max_consecutive_idle_polls: u32 = 120; // 连续空闲 120 次（约 2 分钟）后退出
 
     let (rt, client) = match create_runtime_and_client(&provider) {
         Ok(pair) => pair,
@@ -144,17 +144,17 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     };
     sync_messages(&messages);
 
-    let mut final_text = String::new();
-    let mut idle_rounds = 0;
+    let mut last_assistant_text = String::new();
+    let mut consecutive_idle_polls = 0;
 
     // 创建 AtomicBool 作为取消信号（与 CancellationToken 桥接）
-    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancel_flag = Arc::new(AtomicBool::new(false));
 
     for round in 0..max_rounds {
         // 检查取消
-        if cancel_token.is_cancelled() || cancelled.load(Ordering::Relaxed) {
+        if cancel_token.is_cancelled() || cancel_flag.load(Ordering::Relaxed) {
             set_status(TeammateStatus::Cancelled);
-            return format!("{}\n[Teammate '{}' cancelled]", final_text, name);
+            return format!("{}\n[Teammate '{}' cancelled]", last_assistant_text, name);
         }
 
         // WorkDone 终态检查：teammate 明确声明完成工作后立即退出
@@ -167,12 +167,12 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // Drain 来自广播的消息（包括旁听消息，保留上下文）
-        // 注意：idle_rounds 的管理下放到 WaitingForMessage 分支，
+        // 注意：consecutive_idle_polls 的管理下放到 WaitingForMessage 分支，
         // 本处不再根据 had_new_messages 重置，避免"任何消息都触发 LLM"。
-        let prev_len = messages.len();
+        let len_before_drain = messages.len();
         let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
-        if messages.len() > prev_len {
-            append_messages(&messages[prev_len..]);
+        if messages.len() > len_before_drain {
+            append_messages(&messages[len_before_drain..]);
         }
 
         // 同步 messages 快照（供 /dump 读取）
@@ -192,7 +192,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // 更新状态为 Working（即将调用 LLM）
         set_status(TeammateStatus::Working);
 
-        let choice = match call_llm_non_stream(
+        let response_choice = match call_llm_non_stream(
             &rt,
             &client,
             &provider,
@@ -203,13 +203,13 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             Ok(c) => c,
             Err(e) => {
                 set_status(TeammateStatus::Error(e.clone()));
-                return format!("{}\n{}", final_text, e);
+                return format!("{}\n{}", last_assistant_text, e);
             }
         };
 
-        let assistant_text = choice.message.content.clone().unwrap_or_default();
+        let assistant_text = response_choice.message.content.clone().unwrap_or_default();
         if !assistant_text.is_empty() {
-            final_text = assistant_text.clone();
+            last_assistant_text = assistant_text.clone();
             // 将 teammate 的文字回复通过广播显示在聊天室
             if let Ok(manager) = teammate_manager.lock()
                 && let Ok(mut shared) = manager.ui_messages.lock()
@@ -222,12 +222,12 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // 检查是否有工具调用
-        let is_tool_calls = matches!(
-            choice.finish_reason,
+        let has_tool_calls = matches!(
+            response_choice.finish_reason,
             Some(async_openai::types::chat::FinishReason::ToolCalls)
         );
 
-        if !is_tool_calls || choice.message.tool_calls.is_none() {
+        if !has_tool_calls || response_choice.message.tool_calls.is_none() {
             // 无工具调用 — 进入轮询等待模式
             set_status(TeammateStatus::WaitingForMessage);
 
@@ -241,15 +241,15 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             }
 
             // 先把已到达的旁听消息 drain 到 messages（保留上下文，但不自动唤醒）
-            let prev_len = messages.len();
+            let len_before_drain = messages.len();
             let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
-            if messages.len() > prev_len {
-                append_messages(&messages[prev_len..]);
+            if messages.len() > len_before_drain {
+                append_messages(&messages[len_before_drain..]);
             }
 
             // 唤醒判断：有 pending 消息就唤醒（除非已 WorkDone 且未被 @）
             // work_done=true 时，只有 @self 才能重新激活（清除 work_done 继续工作）
-            let has_new = messages.len() > prev_len;
+            let has_new = messages.len() > len_before_drain;
             if has_new {
                 if work_done.load(Ordering::Relaxed) {
                     // WorkDone 后只有 @self 才能重新激活
@@ -259,24 +259,27 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                             "TeammateLoop",
                             &format!("{}: re-activated after WorkDone by @mention", name),
                         );
-                        idle_rounds = 0;
+                        consecutive_idle_polls = 0;
                         continue;
                     }
                     // WorkDone 且未被 @，忽略消息
                 } else {
                     // 未 WorkDone，任何消息都唤醒
                     let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理 wake_flag
-                    idle_rounds = 0;
+                    consecutive_idle_polls = 0;
                     continue;
                 }
             }
             let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理残留 wake_flag
 
-            idle_rounds += 1;
-            if idle_rounds >= max_consecutive_idle {
+            consecutive_idle_polls += 1;
+            if consecutive_idle_polls >= max_consecutive_idle_polls {
                 write_info_log(
                     "TeammateLoop",
-                    &format!("{}: idle for {} rounds (~2min), exiting", name, idle_rounds),
+                    &format!(
+                        "{}: idle for {} rounds (~2min), exiting",
+                        name, consecutive_idle_polls
+                    ),
                 );
                 break;
             }
@@ -285,7 +288,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             for _ in 0..10 {
                 if cancel_token.is_cancelled() {
                     set_status(TeammateStatus::Cancelled);
-                    return format!("{}\n[Teammate '{}' cancelled]", final_text, name);
+                    return format!("{}\n[Teammate '{}' cancelled]", last_assistant_text, name);
                 }
                 if work_done.load(Ordering::Relaxed) {
                     break;
@@ -293,10 +296,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
                 // 在轮询期间也 drain 消息到 messages
-                let prev_len = messages.len();
+                let len_before_drain = messages.len();
                 let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
-                if messages.len() > prev_len {
-                    append_messages(&messages[prev_len..]);
+                if messages.len() > len_before_drain {
+                    append_messages(&messages[len_before_drain..]);
 
                     // 有新消息：未 WorkDone 就唤醒，WorkDone 后只有 @self 才重新激活
                     if work_done.load(Ordering::Relaxed) {
@@ -306,12 +309,12 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                                 "TeammateLoop",
                                 &format!("{}: re-activated after WorkDone by @mention", name),
                             );
-                            idle_rounds = 0;
+                            consecutive_idle_polls = 0;
                             break;
                         }
                     } else {
                         let _ = wake_flag.swap(false, Ordering::Relaxed);
-                        idle_rounds = 0;
+                        consecutive_idle_polls = 0;
                         break;
                     }
                 }
@@ -321,7 +324,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // 上面已检查 tool_calls.is_none() 会 continue，此处用 let else 确保安全
-        let Some(tool_calls) = choice.message.tool_calls.as_ref() else {
+        let Some(tool_calls) = response_choice.message.tool_calls.as_ref() else {
             continue;
         };
         let tool_items = extract_tool_items(tool_calls);
@@ -330,7 +333,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // 重置空闲计数（有工具调用说明正在工作）
-        idle_rounds = 0;
+        consecutive_idle_polls = 0;
 
         messages.push(ChatMessage {
             role: "assistant".to_string(),
@@ -383,7 +386,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 item,
                 &registry,
                 &jcli_config,
-                &cancelled,
+                &cancel_flag,
                 "TeammateLoop",
                 false,
             );
@@ -418,10 +421,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         append_messages(std::slice::from_ref(&done_msg));
     }
 
-    if final_text.is_empty() {
+    if last_assistant_text.is_empty() {
         format!("[Teammate '{}' completed with no output]", name)
     } else {
-        final_text
+        last_assistant_text
     }
 }
 

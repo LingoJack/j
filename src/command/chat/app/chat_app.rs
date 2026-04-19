@@ -6,7 +6,7 @@ use super::types::{
     AskAnswer, AskRequest, PlanDecision, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
 };
 use super::ui_state::{ChatMode, ConfigTab, UIState};
-use crate::command::chat::agent_config::{MainLoopConfig, MainLoopSharedState};
+use crate::command::chat::agent_config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::agent_md;
 use crate::command::chat::archive;
 use crate::command::chat::command;
@@ -87,20 +87,20 @@ pub struct ChatApp {
     /// 与 `DerivedAgentShared` 共享的 session id 槽；切换 session 时用 `switch_session_id` 同步更新。
     pub shared_session_id: Arc<Mutex<String>>,
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
-    pub last_persisted_len: usize,
+    pub persisted_message_count: usize,
     /// 远程控制 WebSocket 桥接器
     pub ws_bridge: Option<crate::command::chat::remote::bridge::WsBridge>,
     /// 远程客户端是否已连接
     pub remote_connected: bool,
     /// 子 Agent 共用 provider（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
-    pub child_agent_provider: Arc<Mutex<ModelProvider>>,
+    pub derived_agent_provider: Arc<Mutex<ModelProvider>>,
     /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
     #[allow(dead_code)]
-    pub child_agent_system_prompt: Arc<Mutex<Option<String>>>,
+    pub derived_agent_system_prompt: Arc<Mutex<Option<String>>>,
     /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
     pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// UI 侧已读取到的位置（用于增量检测）
-    pub ui_messages_cursor: usize,
+    pub ui_messages_read_offset: usize,
     /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
     pub context_tokens: Arc<Mutex<usize>>,
     /// Teammate 管理器（多 agent 协作）
@@ -531,13 +531,13 @@ impl ChatApp {
             sandbox: Sandbox::new(),
             session_id,
             shared_session_id,
-            last_persisted_len: 0,
+            persisted_message_count: 0,
             ws_bridge: None,
             remote_connected: false,
-            child_agent_provider: agent_provider,
-            child_agent_system_prompt: agent_system_prompt,
+            derived_agent_provider: agent_provider,
+            derived_agent_system_prompt: agent_system_prompt,
             ui_messages,
-            ui_messages_cursor: 0,
+            ui_messages_read_offset: 0,
             context_tokens: Arc::new(Mutex::new(0)),
             teammate_manager,
             sub_agent_tracker,
@@ -1701,7 +1701,7 @@ impl ChatApp {
                         if let Ok(mut s) = self.shared_session_id.lock() {
                             *s = session_id.clone();
                         }
-                        self.last_persisted_len = session.messages.len();
+                        self.persisted_message_count = session.messages.len();
                         self.state.session = session;
                         // 恢复目标会话的状态
                         self.restore_session_state();
@@ -1739,7 +1739,7 @@ impl ChatApp {
                         *s = new_id.clone();
                     }
                     self.state.session.messages.clear();
-                    self.last_persisted_len = 0;
+                    self.persisted_message_count = 0;
                     self.ui.scroll_offset = 0;
                     self.ui.msg_lines_cache = None;
                     if let Ok(mut ct) = self.context_tokens.lock() {
@@ -1791,7 +1791,7 @@ impl ChatApp {
                     self.clear_runtime_state();
                     // 加载目标会话
                     let session = load_session(&target_id);
-                    self.last_persisted_len = session.messages.len();
+                    self.persisted_message_count = session.messages.len();
                     self.session_id = target_id.clone();
                     if let Ok(mut s) = self.shared_session_id.lock() {
                         *s = target_id;
@@ -1841,7 +1841,7 @@ impl ChatApp {
                     *s = new_id;
                 }
                 self.state.session.messages.clear();
-                self.last_persisted_len = 0;
+                self.persisted_message_count = 0;
                 self.ui.scroll_offset = 0;
                 self.ui.msg_lines_cache = None;
                 if let Ok(mut ct) = self.context_tokens.lock() {
@@ -2369,7 +2369,7 @@ impl ChatApp {
 
         // 同步更新子 Agent 的 provider（子代理使用最新的 provider）
         {
-            let mut p = safe_lock(&self.child_agent_provider, "send_message::agent_provider");
+            let mut p = safe_lock(&self.derived_agent_provider, "send_message::agent_provider");
             *p = provider.clone();
         }
 
@@ -2402,7 +2402,7 @@ impl ChatApp {
 
         let streaming_content = Arc::clone(&self.state.streaming_content);
         let tools_enabled = self.state.agent_config.tools_enabled;
-        let max_tool_rounds = self.state.agent_config.max_tool_rounds;
+        let max_llm_rounds = self.state.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
             self.tool_registry
                 .to_openai_tools_filtered(&self.state.agent_config.disabled_tools)
@@ -2472,23 +2472,23 @@ impl ChatApp {
             let mut shared = safe_lock(&self.ui_messages, "start_agent::clear_shared");
             shared.clear();
         }
-        self.ui_messages_cursor = 0;
+        self.ui_messages_read_offset = 0;
 
         // 启动 agent handle
-        let agent_config = MainLoopConfig {
+        let agent_config = AgentLoopConfig {
             provider,
-            max_tool_rounds,
+            max_llm_rounds,
             compact_config,
             hook_manager: hook_manager_clone,
             cancel_token: CancellationToken::new(),
         };
-        let agent_shared = MainLoopSharedState {
+        let agent_shared = AgentLoopSharedState {
             streaming_content,
             pending_user_messages,
             background_manager,
             todo_manager,
             ui_messages: Arc::clone(&self.ui_messages),
-            context_tokens: Arc::clone(&self.context_tokens),
+            estimated_context_tokens: Arc::clone(&self.context_tokens),
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),
         };
@@ -2523,11 +2523,11 @@ impl ChatApp {
         {
             let shared = safe_lock(&self.ui_messages, "poll::shared_msgs");
             let new_count = shared.len();
-            if new_count > self.ui_messages_cursor {
-                for msg in &shared[self.ui_messages_cursor..] {
+            if new_count > self.ui_messages_read_offset {
+                for msg in &shared[self.ui_messages_read_offset..] {
                     self.state.session.messages.push(msg.clone());
                 }
-                self.ui_messages_cursor = new_count;
+                self.ui_messages_read_offset = new_count;
                 self.ui.msg_lines_cache = None;
                 // 仅在 agent 主动流式传输且用户未手动上滚时自动滚动到底部
                 // 后台 teammate 消息不应强制滚动，否则用户无法上滚查看历史
@@ -3121,7 +3121,7 @@ impl ChatApp {
         // 同步更新子 Agent 的 provider
         {
             let mut p = safe_lock(
-                &self.child_agent_provider,
+                &self.derived_agent_provider,
                 "wake_from_inbox::agent_provider",
             );
             *p = provider.clone();
@@ -3146,7 +3146,7 @@ impl ChatApp {
 
         let streaming_content = Arc::clone(&self.state.streaming_content);
         let tools_enabled = self.state.agent_config.tools_enabled;
-        let max_tool_rounds = self.state.agent_config.max_tool_rounds;
+        let max_llm_rounds = self.state.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
             self.tool_registry
                 .to_openai_tools_filtered(&self.state.agent_config.disabled_tools)
@@ -3209,22 +3209,22 @@ impl ChatApp {
             let mut shared = safe_lock(&self.ui_messages, "wake_from_inbox::clear_shared");
             shared.clear();
         }
-        self.ui_messages_cursor = 0;
+        self.ui_messages_read_offset = 0;
 
-        let agent_config = MainLoopConfig {
+        let agent_config = AgentLoopConfig {
             provider,
-            max_tool_rounds,
+            max_llm_rounds,
             compact_config,
             hook_manager: hook_manager_clone,
             cancel_token: CancellationToken::new(),
         };
-        let agent_shared = MainLoopSharedState {
+        let agent_shared = AgentLoopSharedState {
             streaming_content,
             pending_user_messages,
             background_manager,
             todo_manager,
             ui_messages: Arc::clone(&self.ui_messages),
-            context_tokens: Arc::clone(&self.context_tokens),
+            estimated_context_tokens: Arc::clone(&self.context_tokens),
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),
         };
@@ -3259,12 +3259,12 @@ impl ChatApp {
 
     /// 将 session.messages 中尚未持久化的新消息追加到 JSONL
     fn persist_new_messages(&mut self) {
-        let start = self.last_persisted_len;
+        let start = self.persisted_message_count;
         let msgs: Vec<_> = self.state.session.messages[start..].to_vec();
         for msg in msgs {
             append_session_event(&self.session_id, &SessionEvent::msg(msg));
         }
-        self.last_persisted_len = self.state.session.messages.len();
+        self.persisted_message_count = self.state.session.messages.len();
     }
 
     /// 保存当前 session 的所有状态到磁盘（teammates/tasks/todos/plan/skills/hooks/sandbox）
@@ -3611,7 +3611,7 @@ impl ChatApp {
         }
         // 清空消息
         self.state.session.messages.clear();
-        self.last_persisted_len = 0;
+        self.persisted_message_count = 0;
         self.ui.scroll_offset = 0;
         self.ui.msg_lines_cache = None;
         // 重置上下文 token 计数
@@ -3702,7 +3702,7 @@ impl ChatApp {
                     self.ui.msg_lines_cache = None;
                     self.ui.clear_input();
                     append_session_event(&self.session_id, &SessionEvent::Restore { messages });
-                    self.last_persisted_len = self.state.session.messages.len();
+                    self.persisted_message_count = self.state.session.messages.len();
                     self.show_toast(format!("已还原归档: {}", archive_name), false);
                 }
                 Err(e) => {

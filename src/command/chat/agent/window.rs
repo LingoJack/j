@@ -189,50 +189,60 @@ fn select_units(
     keep_recent: usize,
     exempt_tools: &[String],
 ) -> SelectionResult {
-    let mut retained = vec![false; units.len()];
-    let mut used_msgs = 0usize;
-    let mut used_toks = 0usize;
+    let mut retained_flags = vec![false; units.len()];
+    let mut used_message_count = 0usize;
+    let mut used_token_count = 0usize;
 
     // 记账 + 预算检查的闭包式辅助（rust 中改为函数避免借用问题）
-    let try_retain =
-        |idx: usize, retained: &mut [bool], used_msgs: &mut usize, used_toks: &mut usize| -> bool {
-            if retained[idx] {
-                return false;
-            }
-            let unit = &units[idx];
-            let m = unit.msg_count();
-            let t = unit.estimate_tokens(messages);
-            if *used_msgs + m > max_history_messages || *used_toks + t > max_context_tokens {
-                return false;
-            }
-            retained[idx] = true;
-            *used_msgs += m;
-            *used_toks += t;
-            true
-        };
+    let try_retain_unit = |idx: usize,
+                           retained: &mut [bool],
+                           used_message_count: &mut usize,
+                           used_token_count: &mut usize|
+     -> bool {
+        if retained[idx] {
+            return false;
+        }
+        let unit = &units[idx];
+        let unit_msg_count = unit.msg_count();
+        let unit_tokens = unit.estimate_tokens(messages);
+        if *used_message_count + unit_msg_count > max_history_messages
+            || *used_token_count + unit_tokens > max_context_tokens
+        {
+            return false;
+        }
+        retained[idx] = true;
+        *used_message_count += unit_msg_count;
+        *used_token_count += unit_tokens;
+        true
+    };
 
     // ── System：始终保留（不计配额）──
     for (i, unit) in units.iter().enumerate() {
         if matches!(unit, MessageUnit::System { .. }) {
             // System 即使超预算也保留（通常极少极短）
-            retained[i] = true;
-            used_msgs += unit.msg_count();
-            used_toks += unit.estimate_tokens(messages);
+            retained_flags[i] = true;
+            used_message_count += unit.msg_count();
+            used_token_count += unit.estimate_tokens(messages);
         }
     }
 
     // ── Stage 1: 时间保底 ── 最近 K 个非 System unit 无条件保留
-    let keep_k = keep_recent.saturating_mul(WINDOW_KEEP_RECENT_MULTIPLIER);
-    let mut stage1_taken = 0usize;
+    let recent_units_to_keep = keep_recent.saturating_mul(WINDOW_KEEP_RECENT_MULTIPLIER);
+    let mut stage1_retained_count = 0usize;
     for i in (0..units.len()).rev() {
-        if stage1_taken >= keep_k {
+        if stage1_retained_count >= recent_units_to_keep {
             break;
         }
         if matches!(units[i], MessageUnit::System { .. }) {
             continue;
         }
-        if try_retain(i, &mut retained, &mut used_msgs, &mut used_toks) {
-            stage1_taken += 1;
+        if try_retain_unit(
+            i,
+            &mut retained_flags,
+            &mut used_message_count,
+            &mut used_token_count,
+        ) {
+            stage1_retained_count += 1;
         } else {
             // 预算耗尽即停（最新的装不下，更老的也别试了）
             break;
@@ -241,17 +251,22 @@ fn select_units(
 
     // ── Stage 2: 豁免保底 ── 含豁免工具的 ToolGroup 按时间倒序保留
     for i in (0..units.len()).rev() {
-        if retained[i] {
+        if retained_flags[i] {
             continue;
         }
         if units[i].has_exempt_tool(messages, exempt_tools) {
-            try_retain(i, &mut retained, &mut used_msgs, &mut used_toks);
+            try_retain_unit(
+                i,
+                &mut retained_flags,
+                &mut used_message_count,
+                &mut used_token_count,
+            );
         }
     }
 
     // ── Stage 3: 比例配额 ── 剩余预算按比例分给三个 tier，tier 内按时间倒序
-    let remaining_msgs = max_history_messages.saturating_sub(used_msgs);
-    let remaining_toks = max_context_tokens.saturating_sub(used_toks);
+    let remaining_msgs = max_history_messages.saturating_sub(used_message_count);
+    let remaining_toks = max_context_tokens.saturating_sub(used_token_count);
 
     let quotas: [(u8, f32); 3] = [
         (1, WINDOW_QUOTA_USER),       // User
@@ -261,51 +276,63 @@ fn select_units(
 
     for (tier_prio, ratio) in quotas {
         // tier 子预算（向下取整；溢出阶段会吸收未用完部分）
-        let sub_msgs_cap = ((remaining_msgs as f32) * ratio) as usize;
-        let sub_toks_cap = ((remaining_toks as f32) * ratio) as usize;
-        let tier_start_msgs = used_msgs;
-        let tier_start_toks = used_toks;
+        let tier_message_budget = ((remaining_msgs as f32) * ratio) as usize;
+        let tier_token_budget = ((remaining_toks as f32) * ratio) as usize;
+        let tier_start_msg_count = used_message_count;
+        let tier_start_token_count = used_token_count;
 
         // 该 tier 未保留的 unit，按时间倒序
-        let mut candidates: Vec<usize> = (0..units.len())
-            .filter(|&i| !retained[i] && units[i].priority() == tier_prio)
+        let mut tier_candidates: Vec<usize> = (0..units.len())
+            .filter(|&i| !retained_flags[i] && units[i].priority() == tier_prio)
             .collect();
-        candidates.sort_by(|&a, &b| units[b].first_idx().cmp(&units[a].first_idx()));
+        tier_candidates.sort_by(|&a, &b| units[b].first_idx().cmp(&units[a].first_idx()));
 
-        for idx in candidates {
+        for idx in tier_candidates {
             let unit = &units[idx];
-            let m = unit.msg_count();
-            let t = unit.estimate_tokens(messages);
+            let unit_msg_count = unit.msg_count();
+            let unit_tokens = unit.estimate_tokens(messages);
             // 子预算 + 全局预算双检查
-            if used_msgs - tier_start_msgs + m > sub_msgs_cap {
+            if used_message_count - tier_start_msg_count + unit_msg_count > tier_message_budget {
                 continue;
             }
-            if used_toks - tier_start_toks + t > sub_toks_cap {
+            if used_token_count - tier_start_token_count + unit_tokens > tier_token_budget {
                 continue;
             }
-            try_retain(idx, &mut retained, &mut used_msgs, &mut used_toks);
+            try_retain_unit(
+                idx,
+                &mut retained_flags,
+                &mut used_message_count,
+                &mut used_token_count,
+            );
         }
     }
 
     // ── Stage 4: 溢出 ── 剩余预算按时间倒序贪心填充未保留 unit（任意 tier）
     for i in (0..units.len()).rev() {
-        try_retain(i, &mut retained, &mut used_msgs, &mut used_toks);
+        try_retain_unit(
+            i,
+            &mut retained_flags,
+            &mut used_message_count,
+            &mut used_token_count,
+        );
     }
 
     // ── 兜底 ── 至少保留最新 User unit
     let has_user_retained = units
         .iter()
         .enumerate()
-        .any(|(i, u)| matches!(u, MessageUnit::User { .. }) && retained[i]);
+        .any(|(i, u)| matches!(u, MessageUnit::User { .. }) && retained_flags[i]);
     if !has_user_retained
         && let Some(last_user_idx) = (0..units.len())
             .rev()
             .find(|&i| matches!(units[i], MessageUnit::User { .. }))
     {
-        retained[last_user_idx] = true;
+        retained_flags[last_user_idx] = true;
     }
 
-    SelectionResult { retained }
+    SelectionResult {
+        retained: retained_flags,
+    }
 }
 
 // ========== 占位符替换 ==========

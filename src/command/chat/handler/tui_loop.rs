@@ -205,7 +205,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         let session = super::super::storage::load_session(&latest_id);
         if !session.messages.is_empty() {
             app.session_id = latest_id;
-            app.last_persisted_len = session.messages.len();
+            app.persisted_message_count = session.messages.len();
             app.state.session = session;
             // 恢复 session 状态（tasks/todos/skills/hooks/teammates 等）
             app.restore_session_state();

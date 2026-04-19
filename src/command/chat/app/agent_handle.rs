@@ -1,6 +1,6 @@
 use super::types::{StreamMsg, ToolResultMsg};
 use crate::command::chat::agent::run_main_agent_loop;
-use crate::command::chat::agent_config::{MainLoopConfig, MainLoopSharedState};
+use crate::command::chat::agent_config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
 use async_openai::types::chat::ChatCompletionTools;
@@ -21,8 +21,8 @@ pub struct MainAgentHandle {
 impl MainAgentHandle {
     /// 启动一个主 agent loop，返回 (MainAgentHandle, tool_result_tx)
     pub fn spawn(
-        config: MainLoopConfig,
-        shared: MainLoopSharedState,
+        config: AgentLoopConfig,
+        shared: AgentLoopSharedState,
         api_messages: Vec<ChatMessage>,
         tools: Vec<ChatCompletionTools>,
         system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,

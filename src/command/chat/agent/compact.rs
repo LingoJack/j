@@ -83,8 +83,8 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
     }
 
     // 按最近调用时间排序（新→旧）
-    let mut sorted: Vec<&InvokedSkill> = skills.values().collect();
-    sorted.sort_by(|a, b| b.invoked_at.cmp(&a.invoked_at));
+    let mut sorted_by_recency: Vec<&InvokedSkill> = skills.values().collect();
+    sorted_by_recency.sort_by(|a, b| b.invoked_at.cmp(&a.invoked_at));
 
     let mut result =
         String::from("Skills invoked in this session (preserved across compaction):\n\n");
@@ -92,7 +92,7 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
     let per_skill_budget = COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET;
     let total_budget = COMPACT_SKILL_TOKEN_BUDGET;
 
-    for skill in sorted {
+    for skill in sorted_by_recency {
         let skill_tokens = skill.content.len() / 4; // 粗略估算
         let available = if total_tokens + per_skill_budget > total_budget {
             total_budget.saturating_sub(total_tokens)
@@ -111,8 +111,8 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
             total_tokens += skill_tokens;
         } else {
             // 截断到 available tokens (~4 chars/token)，保留头部（通常包含最关键的使用说明）
-            let truncation_point = available * 4;
-            let truncated: String = skill.content.chars().take(truncation_point).collect();
+            let char_cutoff = available * 4;
+            let truncated: String = skill.content.chars().take(char_cutoff).collect();
             result.push_str(&truncated);
             result.push_str("\n\n[... skill content truncated for compaction ...]");
             total_tokens += available;
@@ -201,13 +201,13 @@ pub fn micro_compact(
     extra_exempt_tools: &[String],
 ) {
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
-    let mut tool_name_map: HashMap<String, String> = HashMap::new();
+    let mut tool_call_id_to_name: HashMap<String, String> = HashMap::new();
     for msg in messages.iter() {
         if msg.role == ROLE_ASSISTANT
             && let Some(ref tcs) = msg.tool_calls
         {
             for tc in tcs {
-                tool_name_map.insert(tc.id.clone(), tc.name.clone());
+                tool_call_id_to_name.insert(tc.id.clone(), tc.name.clone());
             }
         }
     }
@@ -225,14 +225,14 @@ pub fn micro_compact(
     }
 
     // 3. 除最近 keep_recent 个外，content.len() > MICRO_COMPACT_BYTES_THRESHOLD 的替换为占位符
-    let to_compact = &tool_indices[..tool_indices.len() - keep_recent];
+    let indices_to_compact = &tool_indices[..tool_indices.len() - keep_recent];
     let mut compacted_count = 0;
 
-    for &idx in to_compact {
+    for &idx in indices_to_compact {
         let msg = &messages[idx];
         if msg.content.chars().count() > MICRO_COMPACT_BYTES_THRESHOLD {
             let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
-            let tool_name = tool_name_map
+            let tool_name = tool_call_id_to_name
                 .get(&tool_call_id)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
@@ -318,7 +318,7 @@ pub async fn auto_compact(
     // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
     let conversation_text = serde_json::to_string(messages).unwrap_or_default();
     // 截断到 80000 chars
-    let truncated: String = conversation_text
+    let truncated_conversation: String = conversation_text
         .chars()
         .take(COMPACT_TRUNCATE_MAX_CHARS)
         .collect();
@@ -337,11 +337,11 @@ pub async fn auto_compact(
          \n\
          Be concise but preserve critical details. Section 6 (Active Skills/Workflows) is especially important — preserve all skill instructions and progress so the model can continue following them without re-loading.\n\n\
          {}",
-        truncated
+        truncated_conversation
     );
 
     // 追加保护指令（来自 PreAutoCompact hook 的 additional_context）
-    let summary_prompt = if let Some(protected) = protected_context {
+    let summary_prompt_with_context = if let Some(protected) = protected_context {
         format!(
             "{}\n\n[Protected Context — MUST preserve in full]:\n{}",
             summary_prompt, protected
@@ -351,7 +351,7 @@ pub async fn auto_compact(
     };
 
     let user_msg = ChatCompletionRequestUserMessageArgs::default()
-        .content(summary_prompt.as_str())
+        .content(summary_prompt_with_context.as_str())
         .build()
         .map_err(|e| format!("构建摘要请求消息失败: {}", e))?;
 

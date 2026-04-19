@@ -4,11 +4,18 @@ use super::super::hook::{HookContext, HookEvent, HookManager};
 use super::super::storage::{ChatMessage, ToolCallItem};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::compact;
-use super::config::{MainLoopConfig, MainLoopSharedState};
+use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
 use crate::util::log::{write_error_log, write_info_log};
+
+/// 流式响应中逐步聚合的工具调用片段（按 chunk index 聚合 id/name/arguments）
+struct StreamingToolCallPart {
+    id: String,
+    name: String,
+    arguments: String,
+}
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
@@ -31,28 +38,28 @@ struct ToolCallContext<'a> {
 
 /// 后台 Agent 循环：支持多轮工具调用
 pub async fn run_main_agent_loop(
-    config: MainLoopConfig,
-    shared: MainLoopSharedState,
+    config: AgentLoopConfig,
+    shared: AgentLoopSharedState,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ChatCompletionTools>,
     system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
 ) {
-    let MainLoopConfig {
+    let AgentLoopConfig {
         provider,
-        max_tool_rounds,
+        max_llm_rounds,
         compact_config,
         hook_manager,
         cancel_token,
     } = config;
-    let MainLoopSharedState {
+    let AgentLoopSharedState {
         streaming_content,
         pending_user_messages,
         background_manager: _,
         todo_manager,
         ui_messages,
-        context_tokens,
+        estimated_context_tokens,
         invoked_skills,
         session_id,
     } = shared;
@@ -74,8 +81,8 @@ pub async fn run_main_agent_loop(
     write_info_log(
         "agent_loop",
         &format!(
-            "agent loop 启动: max_tool_rounds={}, model={}, tools_count={}",
-            max_tool_rounds,
+            "agent loop 启动: max_llm_rounds={}, model={}, tools_count={}",
+            max_llm_rounds,
             provider.model,
             tools.len()
         ),
@@ -99,14 +106,14 @@ pub async fn run_main_agent_loop(
         write_info_log("agent_loop", "警告: tools 列表为空，LLM 将无法调用任何工具");
     }
 
-    let mut last_round: usize = 0;
-    'round: for _round in 0..max_tool_rounds {
-        last_round = _round;
+    let mut final_round_idx: usize = 0;
+    'round: for round_idx in 0..max_llm_rounds {
+        final_round_idx = round_idx;
         write_info_log(
             "agent_loop",
             &format!(
                 "========== 第 {} 轮开始 (max={}) ==========",
-                _round, max_tool_rounds
+                round_idx, max_llm_rounds
             ),
         );
 
@@ -237,8 +244,8 @@ pub async fn run_main_agent_loop(
 
         // 清空流式内容缓冲（每轮开始时）
         {
-            let mut sc = safe_lock(&streaming_content, "agent::streaming_content_clear");
-            sc.clear();
+            let mut stream_buf = safe_lock(&streaming_content, "agent::streaming_content_clear");
+            stream_buf.clear();
         }
 
         // 记录请求输入日志
@@ -319,7 +326,7 @@ pub async fn run_main_agent_loop(
         // 更新实际上下文 token 估算值（供 UI 显示）
         {
             let tokens = compact::estimate_tokens(&messages);
-            if let Ok(mut ct) = context_tokens.lock() {
+            if let Ok(mut ct) = estimated_context_tokens.lock() {
                 *ct = tokens;
             }
         }
@@ -333,7 +340,7 @@ pub async fn run_main_agent_loop(
                 "agent_loop",
                 &format!(
                     "第 {} 轮请求: messages={}, has_images={}, supports_vision={}",
-                    _round,
+                    round_idx,
                     messages.len(),
                     has_images,
                     provider.supports_vision
@@ -358,16 +365,16 @@ pub async fn run_main_agent_loop(
         };
 
         // ── 指数退避重试循环：包裹整个流式请求+读取过程 ──
-        // api_attempt 从 1 开始，每次创建流或读流失败后自增并重试
-        let mut api_attempt: u32 = 0;
+        // retry_attempt 从 1 开始，每次创建流或读流失败后自增并重试
+        let mut retry_attempt: u32 = 0;
 
         'api_retry: loop {
-            api_attempt += 1;
+            retry_attempt += 1;
 
             // ── 创建流式请求（可重试）──
             write_info_log(
                 "agent_loop",
-                &format!("开始创建流式请求 (attempt={})...", api_attempt),
+                &format!("开始创建流式请求 (attempt={})...", retry_attempt),
             );
             let mut stream = match client.chat().create_stream(request.clone()).await {
                 Ok(s) => {
@@ -378,18 +385,19 @@ pub async fn run_main_agent_loop(
                     let err = ChatError::from(e);
                     write_error_log("Chat API 流式请求创建", &err.to_string());
                     if let Some(policy) = retry_policy_for(&err)
-                        && api_attempt <= policy.max_attempts
+                        && retry_attempt <= policy.max_attempts
                     {
-                        let delay_ms = backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                        let delay_ms =
+                            backoff_delay_ms(retry_attempt, policy.base_ms, policy.cap_ms);
                         write_info_log(
                             "agent_loop",
                             &format!(
                                 "流式创建失败，{}ms 后重试 ({}/{})",
-                                delay_ms, api_attempt, policy.max_attempts
+                                delay_ms, retry_attempt, policy.max_attempts
                             ),
                         );
                         let _ = tx.send(StreamMsg::Retrying {
-                            attempt: api_attempt,
+                            attempt: retry_attempt,
                             max_attempts: policy.max_attempts,
                             delay_ms,
                             error: err.display_message(),
@@ -413,24 +421,26 @@ pub async fn run_main_agent_loop(
             let mut finish_reason: Option<async_openai::types::chat::FinishReason> = None;
             let mut assistant_text = String::new();
             // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
-            let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
-                std::collections::BTreeMap::new();
-            let mut stream_had_deserialize_error = false;
+            let mut streaming_tool_call_parts: std::collections::BTreeMap<
+                u32,
+                StreamingToolCallPart,
+            > = std::collections::BTreeMap::new();
+            let mut deserialize_failed = false;
             // 流式读取中途遇到 tool_call_id 不一致的请求错误
-            let mut stream_tool_id_error = false;
+            let mut needs_compact_for_tool_id_mismatch = false;
             // 流式读取中途遇到的可重试错误
-            let mut stream_retry_error: Option<ChatError> = None;
+            let mut stream_retriable_error: Option<ChatError> = None;
 
-            let mut stream_chunk_count: u32 = 0;
+            let mut received_chunks: u32 = 0;
 
             'stream: loop {
                 tokio::select! {
                     result = stream.next() => {
                         match result {
                             Some(Ok(response)) => {
-                                stream_chunk_count += 1;
+                                received_chunks += 1;
                                 // 记录前几个 chunk 的原始信息，便于调试
-                                if stream_chunk_count <= 3 {
+                                if received_chunks <= 3 {
                                     let choices_debug: Vec<String> = response.choices.iter().map(|c| {
                                         format!(
                                             "idx={}, finish_reason={:?}, has_content={}, has_tool_calls={}",
@@ -442,38 +452,38 @@ pub async fn run_main_agent_loop(
                                     }).collect();
                                     write_info_log(
                                         "stream_chunk",
-                                        &format!("chunk #{}: choices=[{}]", stream_chunk_count, choices_debug.join("; ")),
+                                        &format!("chunk #{}: choices=[{}]", received_chunks, choices_debug.join("; ")),
                                     );
                                 }
                                 for choice in &response.choices {
                                     if let Some(ref content) = choice.delta.content {
                                         assistant_text.push_str(content);
-                                        let mut sc = safe_lock(&streaming_content, "agent::stream_chunk");
-                                        sc.push_str(content);
-                                        drop(sc);
+                                        let mut stream_buf = safe_lock(&streaming_content, "agent::stream_chunk");
+                                        stream_buf.push_str(content);
+                                        drop(stream_buf);
                                         let _ = tx.send(StreamMsg::Chunk);
                                     }
                                     // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
                                     if let Some(ref toolcall_chunks) = choice.delta.tool_calls {
                                         for chunk in toolcall_chunks {
                                             let entry =
-                                                raw_tool_calls.entry(chunk.index).or_insert_with(|| {
-                                                    (
-                                                        chunk.id.clone().unwrap_or_default(),
-                                                        String::new(),
-                                                        String::new(),
-                                                    )
+                                                streaming_tool_call_parts.entry(chunk.index).or_insert_with(|| {
+                                                    StreamingToolCallPart {
+                                                        id: chunk.id.clone().unwrap_or_default(),
+                                                        name: String::new(),
+                                                        arguments: String::new(),
+                                                    }
                                                 });
-                                            if entry.0.is_empty()
+                                            if entry.id.is_empty()
                                                 && let Some(ref id) = chunk.id {
-                                                    entry.0 = id.clone();
+                                                    entry.id = id.clone();
                                                 }
                                             if let Some(ref tool_function) = chunk.function {
                                                 if let Some(ref name) = tool_function.name {
-                                                    entry.1.push_str(name);
+                                                    entry.name.push_str(name);
                                                 }
                                                 if let Some(ref args) = tool_function.arguments {
-                                                    entry.2.push_str(args);
+                                                    entry.arguments.push_str(args);
                                                 }
                                             }
                                         }
@@ -491,7 +501,7 @@ pub async fn run_main_agent_loop(
                                     || error_str.contains("tool_calls")
                                 {
                                     // 标记需要用非流式重做，跳出流式循环
-                                    stream_had_deserialize_error = true;
+                                    deserialize_failed = true;
                                     break 'stream;
                                 }
                                 let err = ChatError::from(e);
@@ -502,12 +512,12 @@ pub async fn run_main_agent_loop(
                                         "Chat API 流式响应",
                                         &format!("检测到 tool_call_id 不一致错误，将压缩上下文后重试: {}", err),
                                     );
-                                    stream_tool_id_error = true;
+                                    needs_compact_for_tool_id_mismatch = true;
                                     break 'stream;
                                 }
                                 // 可重试错误：记录后跳出流式循环，由外层决策是否重试
                                 if retry_policy_for(&err).is_some() {
-                                    stream_retry_error = Some(err);
+                                    stream_retriable_error = Some(err);
                                     break 'stream;
                                 }
                                 // 不可重试：直接报错退出
@@ -529,15 +539,16 @@ pub async fn run_main_agent_loop(
             }
 
             // ── 处理 tool_call_id 不一致错误：压缩上下文后重试本轮 ──
-            if stream_tool_id_error {
+            if needs_compact_for_tool_id_mismatch {
                 write_info_log(
                     "agent_loop",
                     "tool_call_id 不一致错误：将执行 auto_compact 压缩上下文后重试",
                 );
                 // 清空已积累的部分内容
                 {
-                    let mut sc = safe_lock(&streaming_content, "agent::tool_id_error_clear");
-                    sc.clear();
+                    let mut stream_buf =
+                        safe_lock(&streaming_content, "agent::tool_id_error_clear");
+                    stream_buf.clear();
                 }
                 // 通过 auto_compact 重建干净的上下文（摘要 + 全新消息结构，无孤立引用）
                 if compact_config.enabled {
@@ -572,26 +583,27 @@ pub async fn run_main_agent_loop(
             }
 
             // ── 处理流式读取中途的可重试错误 ──
-            if let Some(err) = stream_retry_error {
+            if let Some(err) = stream_retriable_error {
                 write_error_log("Chat API 流式响应（将重试）", &err.to_string());
                 if let Some(policy) = retry_policy_for(&err)
-                    && api_attempt <= policy.max_attempts
+                    && retry_attempt <= policy.max_attempts
                 {
                     // 清空已积累的部分内容，重新开始本轮请求
                     {
-                        let mut sc = safe_lock(&streaming_content, "agent::stream_retry_clear");
-                        sc.clear();
+                        let mut stream_buf =
+                            safe_lock(&streaming_content, "agent::stream_retry_clear");
+                        stream_buf.clear();
                     }
-                    let delay_ms = backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                    let delay_ms = backoff_delay_ms(retry_attempt, policy.base_ms, policy.cap_ms);
                     write_info_log(
                         "agent_loop",
                         &format!(
                             "流式中断，{}ms 后重试 ({}/{})",
-                            delay_ms, api_attempt, policy.max_attempts
+                            delay_ms, retry_attempt, policy.max_attempts
                         ),
                     );
                     let _ = tx.send(StreamMsg::Retrying {
-                        attempt: api_attempt,
+                        attempt: retry_attempt,
                         max_attempts: policy.max_attempts,
                         delay_ms,
                         error: err.display_message(),
@@ -619,40 +631,41 @@ pub async fn run_main_agent_loop(
             write_info_log(
                 "agent_loop",
                 &format!(
-                    "流式循环结束: finish_reason={:?}, assistant_text_len={}, raw_tool_calls={}, stream_had_deserialize_error={}",
+                    "流式循环结束: finish_reason={:?}, assistant_text_len={}, streaming_tool_call_parts={}, deserialize_failed={}",
                     finish_reason,
                     assistant_text.len(),
-                    raw_tool_calls.len(),
-                    stream_had_deserialize_error
+                    streaming_tool_call_parts.len(),
+                    deserialize_failed
                 ),
             );
 
             // 如果流式遇到 tool_calls 反序列化错误，或者流式返回空响应（finish_reason=None 且无有效内容），
             // fallback 到非流式获取完整响应。
             // 常见场景：某些 API 对多模态+流式组合返回空 choices，需要非流式重试。
-            let stream_empty =
-                finish_reason.is_none() && assistant_text.is_empty() && raw_tool_calls.is_empty();
+            let stream_empty = finish_reason.is_none()
+                && assistant_text.is_empty()
+                && streaming_tool_call_parts.is_empty();
             write_info_log(
                 "agent_loop",
                 &format!(
-                    "流式结果分析: stream_empty={}, stream_had_deserialize_error={}, stream_chunk_count={}",
-                    stream_empty, stream_had_deserialize_error, stream_chunk_count
+                    "流式结果分析: stream_empty={}, deserialize_failed={}, received_chunks={}",
+                    stream_empty, deserialize_failed, received_chunks
                 ),
             );
-            if stream_had_deserialize_error || stream_empty {
+            if deserialize_failed || stream_empty {
                 if stream_empty {
                     write_info_log(
                         "agent_loop",
                         &format!(
                             "流式返回空响应 (chunks={}, finish_reason=None, 无内容)，fallback 到非流式重试",
-                            stream_chunk_count
+                            received_chunks
                         ),
                     );
                 }
                 // 清空流式内容（切换到非流式）
                 {
-                    let mut sc = safe_lock(&streaming_content, "agent::fallback_clear");
-                    sc.clear();
+                    let mut stream_buf = safe_lock(&streaming_content, "agent::fallback_clear");
+                    stream_buf.clear();
                 }
                 // 使用宽松反序列化的非流式调用（兼容非标准 finish_reason），同样支持重试
                 let fallback_result = loop {
@@ -669,26 +682,26 @@ pub async fn run_main_agent_loop(
                         Err(e) => {
                             write_error_log("Sprite API fallback 非流式", &e.to_string());
                             if let Some(policy) = retry_policy_for(&e)
-                                && api_attempt <= policy.max_attempts
+                                && retry_attempt <= policy.max_attempts
                             {
                                 let delay_ms =
-                                    backoff_delay_ms(api_attempt, policy.base_ms, policy.cap_ms);
+                                    backoff_delay_ms(retry_attempt, policy.base_ms, policy.cap_ms);
                                 write_info_log(
                                     "agent_loop",
                                     &format!(
                                         "fallback 非流式失败，{}ms 后重试 ({}/{})",
-                                        delay_ms, api_attempt, policy.max_attempts
+                                        delay_ms, retry_attempt, policy.max_attempts
                                     ),
                                 );
                                 let _ = tx.send(StreamMsg::Retrying {
-                                    attempt: api_attempt,
+                                    attempt: retry_attempt,
                                     max_attempts: policy.max_attempts,
                                     delay_ms,
                                     error: e.display_message(),
                                 });
                                 tokio::select! {
                                     _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
-                                        api_attempt += 1;
+                                        retry_attempt += 1;
                                         continue;
                                     }
                                     _ = cancel_token.cancelled() => {
@@ -706,8 +719,8 @@ pub async fn run_main_agent_loop(
                 write_info_log(
                     "agent_loop",
                     &format!(
-                        "fallback 非流式结果: is_tool_calls={}, has_content={}, finish_reason={:?}",
-                        fallback_result.is_tool_calls,
+                        "fallback 非流式结果: has_tool_calls={}, has_content={}, finish_reason={:?}",
+                        fallback_result.has_tool_calls,
                         fallback_result
                             .content
                             .as_ref()
@@ -717,7 +730,7 @@ pub async fn run_main_agent_loop(
                     ),
                 );
 
-                if fallback_result.is_tool_calls
+                if fallback_result.has_tool_calls
                     && let Some(tool_items) = fallback_result.tool_calls
                 {
                     if tool_items.is_empty() {
@@ -780,9 +793,9 @@ pub async fn run_main_agent_loop(
                     && !content.is_empty()
                 {
                     write_info_log("Sprite 回复", content);
-                    let mut sc = safe_lock(&streaming_content, "agent::fallback_content");
-                    sc.push_str(content);
-                    drop(sc);
+                    let mut stream_buf = safe_lock(&streaming_content, "agent::fallback_content");
+                    stream_buf.push_str(content);
+                    drop(stream_buf);
                     let _ = tx.send(StreamMsg::Chunk);
                 }
                 // 非标准 finish_reason 且无内容时，报告错误
@@ -820,11 +833,11 @@ pub async fn run_main_agent_loop(
             }
 
             // ── 检查流式模式下是否有 tool_calls ──
-            // 优先检查 raw_tool_calls 是否非空，而非仅依赖 finish_reason。
+            // 优先检查 streaming_tool_call_parts 是否非空，而非仅依赖 finish_reason。
             // 某些 API（非 OpenAI）流式返回的 finish_reason 不是 ToolCodes 枚举值，
             // 但 chunk 中确实包含 tool_calls 数据。此时如果只看 finish_reason 会直接
             // break 'round，导致工具调用被丢弃，agent 提前结束。
-            let has_tool_calls = !raw_tool_calls.is_empty();
+            let has_tool_calls = !streaming_tool_call_parts.is_empty();
             write_info_log(
                 "agent_loop",
                 &format!(
@@ -835,28 +848,28 @@ pub async fn run_main_agent_loop(
 
             if has_tool_calls {
                 // 日志：检测 finish_reason 与实际 tool_calls 是否一致
-                let finish_is_tool_calls = matches!(
+                let finish_reason_is_tool_calls = matches!(
                     finish_reason,
                     Some(async_openai::types::chat::FinishReason::ToolCalls)
                 );
-                if !finish_is_tool_calls {
+                if !finish_reason_is_tool_calls {
                     write_info_log(
                         "agent_loop",
                         &format!(
-                            "finish_reason={:?} 不是 ToolCalls 但 raw_tool_calls 非空({})，仍处理工具调用",
+                            "finish_reason={:?} 不是 ToolCalls 但 streaming_tool_call_parts 非空({})，仍处理工具调用",
                             finish_reason,
-                            raw_tool_calls.len()
+                            streaming_tool_call_parts.len()
                         ),
                     );
                 }
 
-                let tool_items: Vec<ToolCallItem> = raw_tool_calls
+                let tool_items: Vec<ToolCallItem> = streaming_tool_call_parts
                     .into_values()
-                    .map(|(id, name, arguments)| {
+                    .map(|part| {
                         // 某些 API 在流式 chunk 中不返回 tool_call id，
                         // 导致 id 为空字符串；发送给 API 时会报 tool_call_id not found。
                         // 此处为空 id 生成随机唯一 id。
-                        let id = if id.is_empty() {
+                        let id = if part.id.is_empty() {
                             let rand_id =
                                 format!("call_{:016x}", rand::thread_rng().r#gen::<u64>());
                             write_info_log(
@@ -868,9 +881,9 @@ pub async fn run_main_agent_loop(
                             );
                             rand_id
                         } else {
-                            id
+                            part.id
                         };
-                        ToolCallItem { id, name, arguments }
+                        ToolCallItem { id, name: part.name, arguments: part.arguments }
                     })
                     .collect();
 
@@ -994,7 +1007,7 @@ pub async fn run_main_agent_loop(
                     "agent_loop",
                     &format!(
                         "break 'round: LLM 返回 Stop 且无工具调用，无待处理消息 (round={}, text_len={})",
-                        _round,
+                        round_idx,
                         assistant_text.len()
                     ),
                 );
@@ -1013,7 +1026,7 @@ pub async fn run_main_agent_loop(
         "agent_loop",
         &format!(
             "agent loop 结束，发送 Done (共执行 {} 轮后退出 'round)",
-            last_round + 1
+            final_round_idx + 1
         ),
     );
     let _ = tx.send(StreamMsg::Done);
@@ -1050,11 +1063,11 @@ fn flush_streaming_as_message(
     messages: &mut Vec<ChatMessage>,
     ui_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) {
-    let mut sc = safe_lock(streaming_content, "agent::flush_streaming");
-    if !sc.is_empty() {
+    let mut stream_buf = safe_lock(streaming_content, "agent::flush_streaming");
+    if !stream_buf.is_empty() {
         let text_msg = ChatMessage {
             role: ROLE_ASSISTANT.to_string(),
-            content: std::mem::take(&mut *sc),
+            content: std::mem::take(&mut *stream_buf),
             tool_calls: None,
             tool_call_id: None,
             images: None,
@@ -1129,8 +1142,8 @@ fn process_tool_calls(
         messages.push(text_msg.clone());
         push_ui(ctx.ui_messages, text_msg);
         // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
-        if let Ok(mut sc) = ctx.streaming_content.lock() {
-            sc.clear();
+        if let Ok(mut stream_buf) = ctx.streaming_content.lock() {
+            stream_buf.clear();
         }
     }
 
