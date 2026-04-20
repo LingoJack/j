@@ -212,13 +212,19 @@ fn draw_content(f: &mut Frame, app: &mut HelpApp, area: Rect, _theme: &Theme) {
 
     let scroll_offset = app.scroll_offset();
 
-    // 给每行加左边距 "  "
+    // 给每行加左边距 "  "，继承该行首个 span 的背景色
     let display_lines: Vec<Line<'static>> = all_lines
         .into_iter()
         .skip(scroll_offset)
         .take(visible_height)
         .map(|line| {
-            let mut spans = vec![Span::raw("  ")];
+            // 检测行内第一个 span 的背景色，让左边距保持一致
+            let bg = line.spans.first().and_then(|s| s.style().bg);
+            let padding_style = match bg {
+                Some(c) => Style::default().bg(c),
+                None => Style::default(),
+            };
+            let mut spans = vec![Span::styled("  ", padding_style)];
             spans.extend(line.spans);
             Line::from(spans)
         })
