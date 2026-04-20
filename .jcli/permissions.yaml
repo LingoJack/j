@@ -135,4 +135,5 @@ allow:
 - Bash(cp /Users/lingojack/dev_custom/j/src/command/chat/render/theme.rs:*)
 - Bash(git stash:*)
 - Bash(git show:*)
+- Bash(mv src/tui/components/mod.rs:*)
 deny: []
