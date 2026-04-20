@@ -232,8 +232,11 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             highlighted.iter().map(|s| display_width(&s.content)).sum();
                         let fill = code_inner_w.saturating_sub(text_w);
                         let mut spans_vec = Vec::new();
-                        // 左侧边框：│ (2字符，无背景色)
-                        spans_vec.push(Span::styled("│ ", Style::default().fg(theme.code_border)));
+                        // 左侧边框：│ (2字符，有背景色)
+                        spans_vec.push(Span::styled(
+                            "│ ",
+                            Style::default().fg(theme.code_border).bg(theme.code_bg),
+                        ));
                         // 代码内容（有背景色）
                         for hs in highlighted {
                             spans_vec.push(Span::styled(
