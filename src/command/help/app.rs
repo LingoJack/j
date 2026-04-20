@@ -58,6 +58,12 @@ impl HelpApp {
     pub fn current_tab_lines(&mut self, content_width: usize) -> &[Line<'static>] {
         let idx = self.active_tab;
 
+        // 边界检查
+        if idx >= self.tab_caches.len() || idx >= self.tab_raw_contents.len() {
+            self.total_lines = 1;
+            return &[];
+        }
+
         // 检查缓存是否有效
         let need_rebuild = match &self.tab_caches[idx] {
             Some(cache) => cache.cached_width != content_width,
@@ -85,7 +91,7 @@ impl HelpApp {
     }
 
     pub fn scroll_offset(&self) -> usize {
-        self.tab_scrolls[self.active_tab]
+        self.tab_scrolls.get(self.active_tab).copied().unwrap_or(0)
     }
 
     pub fn next_tab(&mut self) {
@@ -103,24 +109,28 @@ impl HelpApp {
     }
 
     pub fn scroll_down(&mut self, n: usize) {
-        let idx = self.active_tab;
-        self.tab_scrolls[idx] = self.tab_scrolls[idx].saturating_add(n);
+        if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
+            *scroll = scroll.saturating_add(n);
+        }
     }
 
     pub fn scroll_up(&mut self, n: usize) {
-        let idx = self.active_tab;
-        self.tab_scrolls[idx] = self.tab_scrolls[idx].saturating_sub(n);
+        if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
+            *scroll = scroll.saturating_sub(n);
+        }
     }
 
     pub fn scroll_to_top(&mut self) {
-        let idx = self.active_tab;
-        self.tab_scrolls[idx] = 0;
+        if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
+            *scroll = 0;
+        }
     }
 
     pub fn scroll_to_bottom(&mut self) {
-        let idx = self.active_tab;
-        // total_lines 会在 draw 时更新，这里设一个很大的值，在 draw 时会被钳制
-        self.tab_scrolls[idx] = usize::MAX;
+        if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
+            // total_lines 会在 draw 时更新，这里设一个很大的值，在 draw 时会被钳制
+            *scroll = usize::MAX;
+        }
     }
 
     pub fn invalidate_cache(&mut self) {
@@ -131,10 +141,11 @@ impl HelpApp {
 
     /// 钳制滚动偏移（在 draw 后调用，确保不超出内容范围）
     pub fn clamp_scroll(&mut self, visible_height: usize) {
-        let idx = self.active_tab;
-        let max_scroll = self.total_lines.saturating_sub(visible_height);
-        if self.tab_scrolls[idx] > max_scroll {
-            self.tab_scrolls[idx] = max_scroll;
+        if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
+            let max_scroll = self.total_lines.saturating_sub(visible_height);
+            if *scroll > max_scroll {
+                *scroll = max_scroll;
+            }
         }
     }
 }
