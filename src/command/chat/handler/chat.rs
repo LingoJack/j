@@ -672,6 +672,11 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
             }
         }
 
+        // Tab：无弹窗时切换 bypass 模式
+        KeyCode::Tab => {
+            app.update(Action::ToggleAutoApprove);
+        }
+
         _ => {}
     }
 

@@ -4,9 +4,10 @@ use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::{
     ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
     SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, generate_session_id,
-    load_hooks_state, load_plan_state, load_sandbox_state, load_skills_state, load_tasks_state,
-    load_teammates_state, load_todos_state, read_transcript_with_timestamps, sanitize_filename,
-    save_hooks_state, save_plan_state, save_sandbox_state, save_skills_state, save_subagents_state,
+    load_hooks_state, load_plan_state, load_sandbox_state, load_session_meta_file,
+    load_skills_state, load_tasks_state, load_teammates_state, load_todos_state,
+    read_transcript_with_timestamps, sanitize_filename, save_hooks_state, save_plan_state,
+    save_sandbox_state, save_session_meta_file, save_skills_state, save_subagents_state,
     save_tasks_state, save_teammates_state, save_todos_state,
 };
 use crate::command::chat::teammate::TeammateStatusPersist;
@@ -200,12 +201,25 @@ impl ChatApp {
                 extra_safe_dirs: self.sandbox.extra_safe_dirs(),
             },
         );
+
+        // 9. auto_approve → session.json
+        if let Some(mut meta) = load_session_meta_file(sid)
+            && meta.auto_approve != self.ui.auto_approve
+        {
+            meta.auto_approve = self.ui.auto_approve;
+            save_session_meta_file(&meta);
+        }
     }
 
     /// 从磁盘恢复当前 session_id 的所有状态
     pub fn restore_session_state(&mut self) {
         let sid = self.session_id.clone();
         let sid = sid.as_str();
+
+        // 0. auto_approve ← session.json
+        if let Some(meta) = load_session_meta_file(sid) {
+            self.ui.auto_approve = meta.auto_approve;
+        }
 
         // 1. InvokedSkills
         if let Some(skills) = load_skills_state(sid)

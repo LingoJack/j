@@ -278,7 +278,8 @@ impl ChatApp {
                                 .map(|t| t.requires_confirmation())
                                 .unwrap_or(false);
                             let needs_confirm = (tool_needs_confirm || sandbox_outside)
-                                && !self.jcli_config.is_allowed(&tc.name, &tc.arguments);
+                                && !self.jcli_config.is_allowed(&tc.name, &tc.arguments)
+                                && !self.ui.auto_approve;
                             self.tool_executor.active_tool_calls.push(ToolCallStatus {
                                 tool_call_id: tc.id.clone(),
                                 tool_name: tc.name.clone(),

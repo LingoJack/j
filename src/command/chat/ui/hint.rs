@@ -24,13 +24,24 @@ pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     let hints = match app.ui.mode {
         ChatMode::Chat if app.state.is_loading => vec![], // 加载中时无提示
-        ChatMode::Chat => vec![
-            ("@", "引用"),
-            ("/", "命令"),
-            ("Ctrl+M", "选中模式"),
-            ("Ctrl+O", "工具详情"),
-            ("?/F1", "帮助"),
-        ],
+        ChatMode::Chat => {
+            let hints = vec![
+                ("@", "引用"),
+                ("/", "命令"),
+                ("Ctrl+M", "选中模式"),
+                ("Ctrl+O", "工具详情"),
+                (
+                    "Tab",
+                    if app.ui.auto_approve {
+                        "关闭Bypass"
+                    } else {
+                        "Bypass"
+                    },
+                ),
+                ("?/F1", "帮助"),
+            ];
+            hints
+        }
         ChatMode::SelectModel => vec![("↑↓/jk", "移动"), ("Enter", "确认"), ("Esc", "取消")],
         ChatMode::SelectTheme => vec![("↑↓/jk", "选择"), ("Enter", "确认"), ("Esc", "返回")],
         ChatMode::Browse => {

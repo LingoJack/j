@@ -164,6 +164,8 @@ pub struct UIState {
     pub compact_exempt_sublist: bool,
     /// 豁免压缩工具子列表选中索引
     pub compact_exempt_idx: usize,
+    /// 是否自动批准所有操作（bypass 模式，per-session 持久化）
+    pub auto_approve: bool,
 }
 
 /// 消息渲染行缓存

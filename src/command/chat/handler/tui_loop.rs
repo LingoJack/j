@@ -289,10 +289,15 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             && matches!(app.ui.mode, ChatMode::Chat)
             && let Some(req) = app.permission_queue.pop_pending()
         {
-            app.ui.pending_agent_perm = Some(req);
-            app.ui.mode = ChatMode::AgentPermConfirm;
-            app.ui.msg_lines_cache = None;
-            needs_redraw = true;
+            if app.ui.auto_approve {
+                // bypass 模式：自动批准
+                req.resolve(true);
+            } else {
+                app.ui.pending_agent_perm = Some(req);
+                app.ui.mode = ChatMode::AgentPermConfirm;
+                app.ui.msg_lines_cache = None;
+                needs_redraw = true;
+            }
         }
 
         // Phase 2b2: 轮询 Teammate Plan 审批请求队列
@@ -300,10 +305,15 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             && matches!(app.ui.mode, ChatMode::Chat)
             && let Some(req) = app.plan_approval_queue.pop_pending()
         {
-            app.ui.pending_plan_approval = Some(req);
-            app.ui.mode = ChatMode::PlanApprovalConfirm;
-            app.ui.msg_lines_cache = None;
-            needs_redraw = true;
+            if app.ui.auto_approve {
+                // bypass 模式：自动批准
+                req.resolve(crate::command::chat::app::types::PlanDecision::Approve);
+            } else {
+                app.ui.pending_plan_approval = Some(req);
+                app.ui.mode = ChatMode::PlanApprovalConfirm;
+                app.ui.msg_lines_cache = None;
+                needs_redraw = true;
+            }
         }
 
         // Phase 2c: main agent 空闲时，drain teammate inbox 消息并触发新 agent loop

@@ -18,7 +18,8 @@ pub use persist::{
 pub use session::{
     SessionMeta, SessionPaths, append_event_to_path, append_session_event, delete_session,
     find_latest_session_id, generate_session_id, list_sessions, load_session,
-    read_transcript_with_timestamps, session_file_path, sessions_dir,
+    load_session_meta_file, read_transcript_with_timestamps, save_session_meta_file,
+    session_file_path, sessions_dir,
 };
 pub use types::{
     ChatMessage, ChatSession, DisplayType, ImageData, MessageRole, SessionEvent, ToolCallItem,
@@ -153,6 +154,7 @@ mod tests {
             created_at: 1000,
             updated_at: 2000,
             model: Some("gpt-4o".to_string()),
+            auto_approve: false,
         };
         assert!(save_session_meta_file(&meta));
         let loaded = load_session_meta_file("meta-test").expect("should load");

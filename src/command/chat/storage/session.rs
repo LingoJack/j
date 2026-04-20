@@ -182,6 +182,7 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
         created_at: now,
         updated_at: now,
         model: None,
+        auto_approve: false,
     });
     meta.updated_at = now;
     match event {
@@ -402,6 +403,9 @@ pub struct SessionMetaFile {
     /// 使用的模型名称
     #[serde(default)]
     pub model: Option<String>,
+    /// 是否自动批准所有操作（bypass 模式）
+    #[serde(default)]
+    pub auto_approve: bool,
 }
 
 /// 会话元数据（用于会话列表展示）
@@ -492,6 +496,7 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
         created_at: updated_at,
         updated_at,
         model: None,
+        auto_approve: false,
     })
 }
 

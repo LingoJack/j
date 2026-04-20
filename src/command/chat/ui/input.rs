@@ -24,12 +24,13 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     // 提示符逻辑
-    let (prompt, prompt_style) = if app.state.is_loading {
-        (" + ", Style::default().fg(t.input_prompt_loading))
+    let (prompt, prompt_style, prompt_width) = if app.state.is_loading {
+        (" + ", Style::default().fg(t.input_prompt_loading), 3)
+    } else if app.ui.auto_approve {
+        (" bypass > ", Style::default().fg(t.config_toggle_on), 10)
     } else {
-        (" > ", Style::default().fg(t.input_prompt))
+        (" > ", Style::default().fg(t.input_prompt), 3)
     };
-    let prompt_width: usize = 3;
 
     let usable_width = area.width.saturating_sub(2) as usize;
     let input_text = app.ui.input_text();

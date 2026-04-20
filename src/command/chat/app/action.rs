@@ -292,6 +292,8 @@ pub enum Action {
     Quit,
     /// 切换工具详情展开/折叠（Ctrl+O）
     ToggleExpandTools,
+    /// 切换自动批准模式（bypass，Tab 键）
+    ToggleAutoApprove,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -461,6 +461,7 @@ impl ChatApp {
                 pending_plan_approval: None,
                 compact_exempt_sublist: false,
                 compact_exempt_idx: 0,
+                auto_approve: false,
             },
             state: ChatState {
                 agent_config,
@@ -1991,6 +1992,24 @@ impl ChatApp {
                         "展开工具详情"
                     } else {
                         "折叠工具详情"
+                    },
+                    false,
+                );
+            }
+            Action::ToggleAutoApprove => {
+                self.ui.auto_approve = !self.ui.auto_approve;
+                // 持久化到 session.json
+                let sid = self.session_id.clone();
+                if let Some(mut meta) = crate::command::chat::storage::load_session_meta_file(&sid)
+                {
+                    meta.auto_approve = self.ui.auto_approve;
+                    crate::command::chat::storage::save_session_meta_file(&meta);
+                }
+                self.show_toast(
+                    if self.ui.auto_approve {
+                        "Bypass 模式已开启"
+                    } else {
+                        "Bypass 模式已关闭"
                     },
                     false,
                 );
