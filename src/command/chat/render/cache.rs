@@ -1637,6 +1637,9 @@ pub fn render_tool_result_msg(
     } else if tool_name == "Compact" {
         // Compact 结果边框显示（类似 Agent 的嵌套样式）
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
+    } else if tool_name == "LoadSkill" {
+        // LoadSkill 结果边框显示（技能内容，与 Agent 嵌套样式一致）
+        render_agent_result_nested(&clean, bubble_max_width, lines, theme);
     } else if tool_name == "Bash" {
         // Bash 结果：命令行高亮 + 输出
         render_bash_result(&clean, tool_args, content_w, lines, theme);
