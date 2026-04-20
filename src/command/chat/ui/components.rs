@@ -1,6 +1,6 @@
 use crate::command::chat::render::theme::Theme;
 use ratatui::{
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
 };
 
@@ -18,31 +18,32 @@ pub const LABEL_WIDTH: usize = 16; // 显示宽度（CJK 字符占 2 列）
 
 /// 配置面板列表组件
 ///
-/// 自动在 item 之间插入淡色分隔线，比空行更紧凑，最后一个 item 后不插入。
+/// 每个 item 行使用 panel 背景色（bg_primary），间距行不加背景色，
+/// 利用色差在视觉上产生"行内 padding"效果，比空行更紧凑。
 /// 同时维护 `field_line_indices`，用于滚动定位。
 pub struct ItemList<'a> {
     lines: Vec<Line<'a>>,
     field_line_indices: Vec<usize>,
-    theme: &'a Theme,
+    item_bg: Color,
 }
 
 impl<'a> ItemList<'a> {
-    /// 创建空列表
-    pub fn new(theme: &'a Theme) -> Self {
+    /// 创建空列表，传入 item 背景色
+    pub fn new(item_bg: Color) -> Self {
         Self {
             lines: Vec::new(),
             field_line_indices: Vec::new(),
-            theme,
+            item_bg,
         }
     }
 
-    /// 添加一个列表项
+    /// 添加一个列表项（自动带背景色 + 空行间距）
     pub fn push(&mut self, line: Line<'a>) {
         if !self.lines.is_empty() {
-            self.lines.push(self.thin_separator());
+            self.lines.push(Line::from(""));
         }
         self.field_line_indices.push(self.lines.len());
-        self.lines.push(line);
+        self.lines.push(self.with_bg(line));
     }
 
     /// 添加一行非 item 内容（如分组标题、分隔线），不触发间距逻辑
@@ -55,18 +56,19 @@ impl<'a> ItemList<'a> {
         (self.lines, self.field_line_indices)
     }
 
-    /// 淡色细分隔线（比空行紧凑，视觉上更轻）
-    fn thin_separator(&self) -> Line<'a> {
-        Line::from(Span::styled(
-            format!("{INDENT}{}", "\u{2500}".repeat(3)),
-            Style::default().fg(self.theme.text_dim),
-        ))
+    /// 给一行的所有 span 加上 item 背景色
+    fn with_bg(&self, line: Line<'a>) -> Line<'a> {
+        line.patch_style(Style::default().bg(self.item_bg))
     }
 }
 
 impl Default for ItemList<'_> {
     fn default() -> Self {
-        Self::new(&Theme::default())
+        Self {
+            lines: Vec::new(),
+            field_line_indices: Vec::new(),
+            item_bg: Color::Reset,
+        }
     }
 }
 

@@ -476,7 +476,7 @@ fn draw_tab_model_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp, available
 fn draw_tab_model_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let provider_count = app.state.agent_config.providers.len();
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     if provider_count > 0 {
         for (i, provider_field) in CONFIG_FIELDS.iter().enumerate() {
@@ -528,7 +528,7 @@ fn draw_tab_model_list<'a>(app: &ChatApp) -> ItemList<'a> {
 /// Global tab 内容（三列布局: label | value | desc，--- 分隔分组）
 fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     // compact_exempt_tools 子列表模式
     if app.ui.compact_exempt_sublist {
@@ -710,7 +710,7 @@ fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     for (i, name) in tool_names.iter().enumerate() {
         let is_selected = i == app.ui.config_field_idx;
@@ -762,7 +762,7 @@ fn draw_tab_skills_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 /// Skills tab 可滚动列表
 fn draw_tab_skills_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     for (i, skill) in app.state.loaded_skills.iter().enumerate() {
         let is_selected = i == app.ui.config_field_idx;
@@ -904,7 +904,7 @@ fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 /// Commands tab 可滚动列表
 fn draw_tab_commands_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     for (i, cmd) in app.state.loaded_commands.iter().enumerate() {
         let is_selected = i == app.ui.config_field_idx;
@@ -1084,7 +1084,7 @@ fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 /// Teammates tab 可滚动列表
 fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     let snapshots = app
         .teammate_manager
@@ -1340,7 +1340,7 @@ fn draw_tab_archive_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 /// Archive tab 可滚动列表（归档列表）
 fn draw_tab_archive_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     for (i, archive) in app.ui.archives.iter().enumerate() {
         let is_selected = i == app.ui.archive_list_index;
@@ -1412,7 +1412,7 @@ fn draw_tab_session_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 /// Session tab 可滚动列表（历史会话列表）
 fn draw_tab_session_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
-    let mut list = ItemList::new();
+    let mut list = ItemList::new(t.bg_primary);
 
     for (i, session) in app.ui.session_list.iter().enumerate() {
         let is_selected = i == app.ui.session_list_index;
