@@ -12,8 +12,8 @@ mod skills;
 mod teammates;
 mod tools;
 
-use super::components::{separator_line, tab_bar};
 use crate::command::chat::app::{ChatApp, ConfigTab};
+use crate::tui::components::{separator_line, tab_bar};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},

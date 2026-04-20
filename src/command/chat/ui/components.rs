@@ -3,34 +3,14 @@
 //! 通用组件复用 `tui::components`，仅保留 chat 专属组件。
 
 use crate::theme::Theme;
+use crate::tui::components::{
+    LABEL_WIDTH, TOGGLE_OFF, TOGGLE_ON, cursor_spans, desc_span, label_span, pointer_span,
+    value_style,
+};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
 };
-
-// ── 复用公共组件 ──────────────────────────────────────────
-
-pub use crate::tui::components::{
-    ItemList, LABEL_WIDTH, POINTER_EMPTY, POINTER_SELECTED, SEPARATOR_V, TOGGLE_OFF, TOGGLE_ON,
-    cursor_spans, desc_span, help_key_row, hint_spans, pointer_span, section_header,
-    selectable_row, separator_line, tab_bar, text_field_row, toggle_list_item, toggle_row,
-};
-
-// 内部使用 label.rs 的 desc_span — 已通过上方 pub use 导入
-
-// ── 值样式（内部复用）──────────────────────────────────────
-
-fn value_style(selected: bool, editing: bool, theme: &Theme) -> Style {
-    if editing && selected {
-        Style::default()
-            .fg(theme.text_white)
-            .bg(theme.config_edit_bg)
-    } else if selected {
-        Style::default().fg(theme.text_white)
-    } else {
-        Style::default().fg(theme.config_value)
-    }
-}
 
 // ── 预览值（内部）───────────────────────────────────────────
 
@@ -66,7 +46,7 @@ pub fn secret_field_row<'a>(
         let vs = value_style(selected, editing, theme);
         let mut spans = vec![
             pointer_span(selected, theme),
-            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+            label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
         ];
         spans.extend(cursor_spans(value, cursor, vs, theme));
@@ -79,7 +59,7 @@ pub fn secret_field_row<'a>(
         };
         Line::from(vec![
             pointer_span(selected, theme),
-            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+            label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(
                 if value.is_empty() {
@@ -109,7 +89,7 @@ pub fn global_text_row<'a>(
     if editing && selected {
         let mut spans = vec![
             pointer_span(selected, theme),
-            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+            label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
         ];
         spans.extend(cursor_spans(value, cursor, vs, theme));
@@ -122,7 +102,7 @@ pub fn global_text_row<'a>(
         };
         Line::from(vec![
             pointer_span(selected, theme),
-            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+            label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(display_value, vs),
             desc_span(desc, 30, theme),
@@ -153,7 +133,7 @@ pub fn global_toggle_row<'a>(
     };
     Line::from(vec![
         pointer_span(selected, theme),
-        crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+        label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(toggle_text, toggle_style),
         desc_span(desc, 30, theme),
@@ -180,7 +160,7 @@ pub fn global_preview_row<'a>(
     let vs = value_style(selected, false, theme);
     Line::from(vec![
         pointer_span(selected, theme),
-        crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+        label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(render_preview_value(raw), vs),
         desc_span(desc, 30, theme),
@@ -206,7 +186,7 @@ pub fn global_theme_row<'a>(
 ) -> Line<'a> {
     Line::from(vec![
         pointer_span(selected, theme),
-        crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
+        label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(
             format!("\u{1f3a8} {name}"),

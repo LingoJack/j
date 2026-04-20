@@ -1,5 +1,7 @@
 use super::super::app::ChatApp;
-use super::components::{cursor_spans, help_key_row, section_header, separator_line};
+use crate::tui::components::{
+    POINTER_EMPTY, POINTER_SELECTED, cursor_spans, help_key_row, section_header, separator_line,
+};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -230,9 +232,9 @@ pub fn draw_archive_list(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         .map(|(i, archive)| {
             let is_selected = i == app.ui.archive_list_index;
             let marker = if is_selected {
-                super::components::POINTER_SELECTED
+                POINTER_SELECTED
             } else {
-                super::components::POINTER_EMPTY
+                POINTER_EMPTY
             };
             let msg_count = archive.messages.len();
             let created_at = archive

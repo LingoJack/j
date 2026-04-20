@@ -1,7 +1,7 @@
-use super::super::components::ItemList;
 use crate::command::chat::app::ChatApp;
 use crate::command::chat::teammate::TeammateStatus;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
+use crate::tui::components::ItemList;
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},

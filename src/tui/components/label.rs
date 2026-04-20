@@ -62,7 +62,7 @@ pub fn desc_span<'a>(text: &str, max_width: usize, theme: &Theme) -> Span<'a> {
 }
 
 /// 值的样式（普通/选中/编辑中）
-pub(crate) fn value_style(selected: bool, editing: bool, theme: &Theme) -> Style {
+pub fn value_style(selected: bool, editing: bool, theme: &Theme) -> Style {
     if editing && selected {
         Style::default()
             .fg(theme.text_white)

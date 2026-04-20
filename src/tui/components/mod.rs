@@ -15,7 +15,7 @@ pub mod tab_bar;
 pub use consts::*;
 pub use cursor::cursor_spans;
 pub use hint::{help_key_row, hint_spans};
-pub use label::{desc_span, label_span};
+pub use label::{desc_span, label_span, value_style};
 pub use list::ItemList;
 pub use pointer::pointer_span;
 pub use row::{selectable_row, text_field_row, toggle_list_item, toggle_row};

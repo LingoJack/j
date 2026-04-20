@@ -1,5 +1,5 @@
-use super::super::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, toggle_list_item};
 use crate::command::chat::app::ChatApp;
+use crate::tui::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, toggle_list_item};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},

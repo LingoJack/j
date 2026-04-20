@@ -12,7 +12,7 @@ use ratatui::{
 
 use crate::command::chat::app::ChatApp;
 
-use super::components::{POINTER_EMPTY, POINTER_SELECTED, TOGGLE_OFF, TOGGLE_ON};
+use crate::tui::components::{POINTER_EMPTY, POINTER_SELECTED, TOGGLE_OFF, TOGGLE_ON};
 
 /// 绘制模型选择界面
 pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {

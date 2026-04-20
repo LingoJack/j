@@ -7,6 +7,7 @@ use super::super::autocomplete::{
 use super::super::storage::{ChatMessage, MessageRole};
 use super::super::theme::ThemeName;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
+use crate::command::chat::infra::command;
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -520,6 +521,12 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                 // agent loop 期间：将用户消息追加到待处理队列
                 let text = app.ui.input_text().trim().to_string();
                 if !text.is_empty() {
+                    // 展开 @command:name 引用
+                    let text = command::expand_command_mentions(
+                        &text,
+                        &app.state.loaded_commands,
+                        &app.state.agent_config.disabled_commands,
+                    );
                     app.state
                         .session
                         .messages

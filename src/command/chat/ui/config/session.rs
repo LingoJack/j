@@ -1,5 +1,5 @@
-use super::super::components::{ItemList, selectable_row};
 use crate::command::chat::app::ChatApp;
+use crate::tui::components::{ItemList, selectable_row};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},

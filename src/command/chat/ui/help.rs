@@ -12,7 +12,7 @@ use ratatui::{
 use crate::command::chat::app::ChatApp;
 use crate::command::chat::storage::agent_config_path;
 
-use super::components;
+use crate::tui::components;
 
 /// 绘制帮助界面
 pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {

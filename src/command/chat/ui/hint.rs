@@ -15,7 +15,7 @@ use crate::command::chat::{
 };
 use crate::util::text::display_width;
 
-use super::components;
+use crate::tui::components;
 
 /// 绘制底部提示栏
 pub fn draw_hint_bar(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {

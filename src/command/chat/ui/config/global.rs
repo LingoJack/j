@@ -2,11 +2,11 @@ use super::super::super::ui_helpers::{
     config_field_desc_global, config_field_label_global, config_field_value_global,
 };
 use super::super::components::{
-    ItemList, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
-    toggle_list_item,
+    global_preview_row, global_text_row, global_theme_row, global_toggle_row,
 };
 use crate::command::chat::app::ChatApp;
 use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
+use crate::tui::components::{ItemList, toggle_list_item};
 use ratatui::{
     style::Style,
     text::{Line, Span},
