@@ -1,9 +1,9 @@
 use super::super::app::{ChatApp, ChatMode, MsgLinesCache, ToolExecStatus};
-use super::super::compact::estimate_tokens;
-use super::super::handler::{
+use super::super::autocomplete::{
     AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
     get_filtered_skill_names, get_filtered_slash_commands,
 };
+use super::super::compact::estimate_tokens;
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;

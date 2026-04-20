@@ -16,9 +16,3 @@ pub use tool_confirm::{
 
 // Re-export TUI event loop entry point
 pub use tui_loop::run_chat_tui;
-
-// Re-export autocomplete functions (for ui/chat.rs compatibility)
-pub use super::autocomplete::{
-    AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
-    get_filtered_skill_names, get_filtered_slash_commands,
-};

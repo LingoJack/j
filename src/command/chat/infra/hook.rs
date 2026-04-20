@@ -566,17 +566,12 @@ pub struct HookResult {
     /// 控制流动作：`stop` = 中止当前步骤及其所属子管线，`skip` = 跳过当前步骤（同级继续）
     #[serde(default)]
     pub action: Option<HookAction>,
-    /// 向后兼容：旧脚本返回 `abort: true` 等价于 `action: "stop"`
-    /// 向后兼容：旧脚本返回 `abort: true` 等价于 `action: "stop"`（内部字段，请勿使用）
-    #[doc(hidden)]
-    #[serde(default, rename = "abort")]
-    pub _legacy_abort: bool,
 }
 
 impl HookResult {
     /// 是否请求 stop（中止当前步骤及其所属子管线）
     pub fn is_stop(&self) -> bool {
-        self.action == Some(HookAction::Stop) || self._legacy_abort
+        self.action == Some(HookAction::Stop)
     }
 
     /// 是否请求 skip（跳过当前步骤，同级继续）

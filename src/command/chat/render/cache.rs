@@ -7,6 +7,7 @@ use crate::command::chat::constants::{
     THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS, TOOL_ARG_PREVIEW_MAX_CHARS,
 };
 use crate::util::safe_lock;
+use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -622,9 +623,6 @@ pub fn render_assistant_msg(
         Style::default().bg(bubble_bg),
     )]));
 }
-
-// 文本工具函数已移至 crate::util::text，此处 re-export 保持兼容
-pub use crate::util::text::{char_width, display_width, wrap_text};
 
 /// 构建一行带左右边框的行，自动用空格补齐到 bubble_max_width
 /// content_spans: 不含左右边框的内容 spans（会被消费）
