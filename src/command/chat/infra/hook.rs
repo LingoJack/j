@@ -1625,8 +1625,9 @@ fn execute_llm_hook(
 ///
 /// 协议：
 /// - 执行方式: `sh -c "<command>"`
-/// - 工作目录: hook 目录（目录布局下）或用户当前目录（session hook）
+/// - 工作目录: 用户当前目录（目录布局下，hook 目录会前置到 PATH）
 /// - 环境变量: `JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（用户当前目录）、`JCLI_HOOK_DIR`（hook 目录）
+/// - PATH: 目录布局下，hook 目录前置到 PATH，脚本可直接用文件名调用（如 `script.sh`）
 /// - stdin: HookContext JSON
 /// - stdout: HookResult JSON（可为空字符串/空 JSON `{}`，表示无修改）
 /// - exit 0: 成功
@@ -1636,11 +1637,7 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
     let context_json =
         serde_json::to_string(context).map_err(|e| format!("序列化 context 失败: {}", e))?;
 
-    // 目录布局下使用 hook 目录作为 cwd，session hook 使用用户当前目录
-    let cwd = hook
-        .dir_path
-        .clone()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    // cwd 始终使用用户当前目录
     let user_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let hook_dir_str = hook
         .dir_path
@@ -1648,13 +1645,26 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
         .map(|p| p.display().to_string())
         .unwrap_or_default();
 
-    let mut child = Command::new("sh")
-        .arg("-c")
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c")
         .arg(&hook.command)
-        .current_dir(&cwd)
+        .current_dir(&user_cwd)
         .env("JCLI_HOOK_EVENT", context.event.as_str())
         .env("JCLI_CWD", user_cwd.display().to_string())
-        .env("JCLI_HOOK_DIR", &hook_dir_str)
+        .env("JCLI_HOOK_DIR", &hook_dir_str);
+
+    // 目录布局下，将 hook 目录前置到 PATH，脚本可直接用文件名调用
+    if let Some(ref hook_dir) = hook.dir_path {
+        let existing_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = if existing_path.is_empty() {
+            hook_dir.display().to_string()
+        } else {
+            format!("{}:{}", hook_dir.display(), existing_path)
+        };
+        cmd.env("PATH", new_path);
+    }
+
+    let mut child = cmd
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

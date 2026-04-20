@@ -148,7 +148,8 @@ Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分
 ### Bash Hook 脚本协议
 
 - 执行方式：`sh -c "<command>"`
-- 工作目录：hook 目录（目录布局下为 `<hook_name>/`，session hook 为用户当前目录）
+- 工作目录：用户当前目录
+- PATH：目录布局下，hook 目录前置到 PATH，脚本可直接用文件名调用（如 `script.sh`）
 - 环境变量：`JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（用户当前目录）、`JCLI_HOOK_DIR`（hook 目录，目录布局下有值）
 - stdin：HookContext JSON
 - stdout：HookResult JSON（只返回要修改的字段，空/`{}` 表示无修改）
@@ -212,7 +213,7 @@ Hook 采用目录布局，每个 hook 是一个目录：
 ```
 ~/.jdata/agent/hooks/<hook_name>/
 ├── HOOK.yaml      # hook 定义
-└── script.sh      # 可选脚本，command 里用 ./script.sh 引用
+└── script.sh      # 可选脚本，command 里直接用文件名引用（hook 目录在 PATH 中）
 ```
 
 **HOOK.yaml 示例 (bash)**：
@@ -221,7 +222,7 @@ Hook 采用目录布局，每个 hook 是一个目录：
 # ~/.jdata/agent/hooks/inject_time/HOOK.yaml
 events: [pre_send_message]
 type: bash
-command: ./inject_time.sh
+command: inject_time.sh
 timeout: 5
 on_error: skip
 ```
@@ -245,7 +246,7 @@ filter:
 # 同一个 hook 绑定多个事件
 events: [pre_send_message, post_send_message]
 type: bash
-command: ./log.sh
+command: log.sh
 ```
 
 ### 更多示例
@@ -293,7 +294,8 @@ echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
 ```yaml
 # ~/.jdata/agent/hooks/inject_time/HOOK.yaml
 events: [pre_send_message]
-command: ./inject_time.sh
+type: bash
+command: inject_time.sh
 ```
 
 #### 示例 4：Bash 脚本 - 跳过危险命令（pre_tool_execution）
@@ -314,7 +316,7 @@ fi
 ```yaml
 # ~/.jdata/agent/hooks/rm_guard/HOOK.yaml
 events: [pre_tool_execution]
-command: ./guard.sh
+command: guard.sh
 ```
 
 #### 示例 5：带过滤器的工具审查
