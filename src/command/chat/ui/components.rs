@@ -18,26 +18,28 @@ pub const LABEL_WIDTH: usize = 16; // 显示宽度（CJK 字符占 2 列）
 
 /// 配置面板列表组件
 ///
-/// 自动在 item 之间插入空行间距，最后一个 item 后不插入。
+/// 自动在 item 之间插入淡色分隔线，比空行更紧凑，最后一个 item 后不插入。
 /// 同时维护 `field_line_indices`，用于滚动定位。
 pub struct ItemList<'a> {
     lines: Vec<Line<'a>>,
     field_line_indices: Vec<usize>,
+    theme: &'a Theme,
 }
 
 impl<'a> ItemList<'a> {
     /// 创建空列表
-    pub fn new() -> Self {
+    pub fn new(theme: &'a Theme) -> Self {
         Self {
             lines: Vec::new(),
             field_line_indices: Vec::new(),
+            theme,
         }
     }
 
-    /// 添加一个列表项，自动在非首个 item 前插入空行
+    /// 添加一个列表项
     pub fn push(&mut self, line: Line<'a>) {
         if !self.lines.is_empty() {
-            self.lines.push(Line::from(""));
+            self.lines.push(self.thin_separator());
         }
         self.field_line_indices.push(self.lines.len());
         self.lines.push(line);
@@ -52,11 +54,19 @@ impl<'a> ItemList<'a> {
     pub fn into_parts(self) -> (Vec<Line<'a>>, Vec<usize>) {
         (self.lines, self.field_line_indices)
     }
+
+    /// 淡色细分隔线（比空行紧凑，视觉上更轻）
+    fn thin_separator(&self) -> Line<'a> {
+        Line::from(Span::styled(
+            format!("{INDENT}{}", "\u{2500}".repeat(3)),
+            Style::default().fg(self.theme.text_dim),
+        ))
+    }
 }
 
 impl Default for ItemList<'_> {
     fn default() -> Self {
-        Self::new()
+        Self::new(&Theme::default())
     }
 }
 

@@ -20,6 +20,11 @@ impl ChatApp {
         {
             let shared = safe_lock(&self.ui_messages, "poll::shared_msgs");
             let new_count = shared.len();
+            // auto_compact 会 clear ui_messages 并重 push；此时 new_count < read_offset，
+            // 需要把 read_offset 归零，避免新消息永远进不了 session.messages。
+            if new_count < self.ui_messages_read_offset {
+                self.ui_messages_read_offset = 0;
+            }
             if new_count > self.ui_messages_read_offset {
                 for msg in &shared[self.ui_messages_read_offset..] {
                     self.state.session.messages.push(msg.clone());

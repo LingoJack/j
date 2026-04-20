@@ -14,14 +14,54 @@ use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use std::sync::atomic::Ordering;
 
 impl ChatApp {
-    /// 将 session.messages 中尚未持久化的新消息追加到 JSONL
+    /// 将 session.messages 中尚未持久化的新消息追加到 JSONL（按 turn 原子提交）。
+    ///
+    /// 从 `persisted_message_count` 开始扫描未持久化区间，只 append 到最后一个
+    /// "安全切点"——该位置之前的每一条 `assistant(tool_calls)` 都已配齐对应数量的
+    /// `tool_result`。半完成的 tool_call 尾部留到下次 persist，避免 jsonl 里出现
+    /// 孤立的 tool_call 或 tool_result。
     pub(super) fn persist_new_messages(&mut self) {
         let start = self.persisted_message_count;
-        let msgs: Vec<_> = self.state.session.messages[start..].to_vec();
-        for msg in msgs {
-            append_session_event(&self.session_id, &SessionEvent::msg(msg));
+        let all = &self.state.session.messages;
+        if start >= all.len() {
+            return;
         }
-        self.persisted_message_count = self.state.session.messages.len();
+
+        let mut pending: i64 = 0;
+        let mut last_safe = start;
+        for (i, msg) in all[start..].iter().enumerate() {
+            let abs = start + i;
+            match msg.role {
+                MessageRole::Assistant => {
+                    if let Some(ref tcs) = msg.tool_calls {
+                        pending += tcs.len() as i64;
+                    } else if pending == 0 {
+                        last_safe = abs + 1;
+                    }
+                }
+                MessageRole::Tool => {
+                    pending -= 1;
+                    if pending <= 0 {
+                        // 防御性 clamp：历史遗留的 orphan tool result 可能让 pending 变负
+                        pending = 0;
+                        last_safe = abs + 1;
+                    }
+                }
+                MessageRole::User | MessageRole::System => {
+                    if pending == 0 {
+                        last_safe = abs + 1;
+                    }
+                }
+            }
+        }
+
+        if last_safe > start {
+            let msgs: Vec<_> = all[start..last_safe].to_vec();
+            for msg in msgs {
+                append_session_event(&self.session_id, &SessionEvent::msg(msg));
+            }
+            self.persisted_message_count = last_safe;
+        }
     }
 
     /// 保存当前 session 的所有状态到磁盘

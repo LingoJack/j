@@ -111,7 +111,8 @@ fn log_tool_results(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg])
 
 /// 处理工具调用的公共逻辑：发送请求、等待结果、更新 messages
 /// 返回 Ok(ToolCallResult) 表示成功（应 continue 循环）
-/// Err(ChatError) 表示 channel 断开或执行失败
+/// Err(ChatError) 仅在 stream_msg_sender 通道断开时返回；
+/// tool 执行侧的错误（result 通道断开/结果缺失）会被合成为 tool_result，不上抛。
 pub(super) fn process_tool_calls(
     tool_items: Vec<ToolCallItem>,
     assistant_text: String,
@@ -161,7 +162,11 @@ pub(super) fn process_tool_calls(
 
     let mut tool_results: Vec<ToolResultMsg> = Vec::new();
     let mut plan_clear_context: Option<String> = None;
+    let mut channel_broken = false;
     for _ in &tool_items {
+        if channel_broken {
+            break;
+        }
         match ctx.tool_result_receiver.recv() {
             Ok(result) => {
                 // 检测 ExitPlanMode 返回清空上下文信号
@@ -170,7 +175,32 @@ pub(super) fn process_tool_calls(
                 }
                 tool_results.push(result);
             }
-            Err(_) => return Err(ChatError::Other("工具执行结果通道已断开".to_string())),
+            Err(_) => {
+                channel_broken = true;
+            }
+        }
+    }
+
+    // ★ 配对兜底：凡 tool_items 中的 id 未收到对应 result，合成错误 tool_result。
+    //   这样 tool_call 与 tool_result 在内存中永远成对，下游 persist 才能原子提交。
+    let received_ids: std::collections::HashSet<String> = tool_results
+        .iter()
+        .map(|r| r.tool_call_id.clone())
+        .collect();
+    for item in &tool_items {
+        if !received_ids.contains(&item.id) {
+            let reason = if channel_broken {
+                "[工具执行中断: 结果通道已断开]"
+            } else {
+                "[工具执行中断: 未收到结果]"
+            };
+            tool_results.push(ToolResultMsg {
+                tool_call_id: item.id.clone(),
+                result: reason.to_string(),
+                is_error: true,
+                images: Vec::new(),
+                plan_decision: PlanDecision::None,
+            });
         }
     }
 

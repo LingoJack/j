@@ -266,7 +266,81 @@ pub fn load_session(session_id: &str) -> ChatSession {
             }
         }
     }
+
+    // ★ 存量清理：移除历史遗留的孤立 tool_call / tool_result。
+    //   检测到变化时追加一条 Restore 事件，让 jsonl 下次加载直接从干净快照出发，
+    //   orphan 不再反复出现在 sanitize 日志里。
+    if let Some(sanitized) = sanitize_loaded_messages(&messages) {
+        let restore_event = SessionEvent::Restore {
+            messages: sanitized.clone(),
+        };
+        append_session_event(session_id, &restore_event);
+        messages = sanitized;
+    }
+
     ChatSession { messages }
+}
+
+/// 双向配对清理：
+///   - 移除 tool_call_id 为空或在任何 assistant tool_calls 中找不到对应项的 tool result
+///   - 移除 assistant tool_calls 中 id 为空或找不到对应 tool result 的条目；
+///     tool_calls 被全部清空时置为 None（保留 content 文本）
+///
+/// 返回 `Some(sanitized)` 表示发生了变化，`None` 表示原样可用。
+fn sanitize_loaded_messages(messages: &[ChatMessage]) -> Option<Vec<ChatMessage>> {
+    let tool_result_ids: std::collections::HashSet<String> = messages
+        .iter()
+        .filter(|m| m.role == MessageRole::Tool)
+        .filter_map(|m| m.tool_call_id.clone())
+        .filter(|id| !id.is_empty())
+        .collect();
+
+    let assistant_tool_call_ids: std::collections::HashSet<String> = messages
+        .iter()
+        .filter(|m| m.role == MessageRole::Assistant)
+        .flat_map(|m| m.tool_calls.as_ref().map(|v| v.as_slice()).unwrap_or(&[]))
+        .map(|tc| tc.id.clone())
+        .filter(|id| !id.is_empty())
+        .collect();
+
+    let mut changed = false;
+    let mut out: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+    for msg in messages {
+        if msg.role == MessageRole::Tool {
+            let id = msg.tool_call_id.as_deref().unwrap_or("");
+            if id.is_empty() || !assistant_tool_call_ids.contains(id) {
+                changed = true;
+                continue;
+            }
+            out.push(msg.clone());
+        } else if msg.role == MessageRole::Assistant {
+            if let Some(ref tcs) = msg.tool_calls {
+                let kept: Vec<_> = tcs
+                    .iter()
+                    .filter(|tc| !tc.id.is_empty() && tool_result_ids.contains(&tc.id))
+                    .cloned()
+                    .collect();
+                if kept.len() != tcs.len() {
+                    changed = true;
+                    let mut new_msg = msg.clone();
+                    new_msg.tool_calls = if kept.is_empty() { None } else { Some(kept) };
+                    // 若 tool_calls 被清空且没有文本内容，整条消息也无意义——跳过
+                    if new_msg.tool_calls.is_none() && new_msg.content.trim().is_empty() {
+                        continue;
+                    }
+                    out.push(new_msg);
+                } else {
+                    out.push(msg.clone());
+                }
+            } else {
+                out.push(msg.clone());
+            }
+        } else {
+            out.push(msg.clone());
+        }
+    }
+
+    if changed { Some(out) } else { None }
 }
 
 /// 从 JSONL 文件按出现顺序读取 `(ChatMessage, timestamp_ms)` 列表。
