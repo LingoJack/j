@@ -298,7 +298,7 @@ fn sanitize_loaded_messages(messages: &[ChatMessage]) -> Option<Vec<ChatMessage>
     let assistant_tool_call_ids: std::collections::HashSet<String> = messages
         .iter()
         .filter(|m| m.role == MessageRole::Assistant)
-        .flat_map(|m| m.tool_calls.as_ref().map(|v| v.as_slice()).unwrap_or(&[]))
+        .flat_map(|m| m.tool_calls.as_deref().unwrap_or(&[]))
         .map(|tc| tc.id.clone())
         .filter(|id| !id.is_empty())
         .collect();
