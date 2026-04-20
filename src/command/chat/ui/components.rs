@@ -1,132 +1,25 @@
+//! Chat UI 组件（薄封装）
+//!
+//! 通用组件复用 `tui::components`，仅保留 chat 专属组件。
+
 use crate::theme::Theme;
 use ratatui::{
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
 };
 
-// ── 常量 ──────────────────────────────────────────────
+// ── 复用公共组件 ──────────────────────────────────────────
 
-pub const POINTER_SELECTED: &str = "  ❯ ";
-pub const POINTER_EMPTY: &str = "    ";
-pub const TOGGLE_ON: &str = "\u{25cf}";
-pub const TOGGLE_OFF: &str = "\u{25cb}";
-pub const SEPARATOR_V: &str = "\u{2502}";
-pub const INDENT: &str = "  ";
-pub const LABEL_WIDTH: usize = 16; // 显示宽度（CJK 字符占 2 列）
+pub use crate::tui::components::{
+    ItemList, LABEL_WIDTH, POINTER_EMPTY, POINTER_SELECTED, SEPARATOR_V, TOGGLE_OFF, TOGGLE_ON,
+    cursor_spans, desc_span, help_key_row, hint_spans, pointer_span, section_header,
+    selectable_row, separator_line, tab_bar, text_field_row, toggle_list_item, toggle_row,
+};
 
-// ── ItemList 组件 ──────────────────────────────────────
+// 内部使用 label.rs 的 desc_span — 已通过上方 pub use 导入
 
-/// 配置面板列表组件
-///
-/// 每个 item 行使用 panel 背景色（bg_primary），间距行不加背景色，
-/// 利用色差在视觉上产生"行内 padding"效果，比空行更紧凑。
-/// 同时维护 `field_line_indices`，用于滚动定位。
-pub struct ItemList<'a> {
-    lines: Vec<Line<'a>>,
-    field_line_indices: Vec<usize>,
-    item_bg: Color,
-}
+// ── 值样式（内部复用）──────────────────────────────────────
 
-impl<'a> ItemList<'a> {
-    /// 创建空列表，传入 item 背景色
-    pub fn new(item_bg: Color) -> Self {
-        Self {
-            lines: Vec::new(),
-            field_line_indices: Vec::new(),
-            item_bg,
-        }
-    }
-
-    /// 添加一个列表项（自动带背景色 + 空行间距）
-    pub fn push(&mut self, line: Line<'a>) {
-        if !self.lines.is_empty() {
-            self.lines.push(Line::from(""));
-        }
-        self.field_line_indices.push(self.lines.len());
-        self.lines.push(self.with_bg(line));
-    }
-
-    /// 添加一行非 item 内容（如分组标题、分隔线），不触发间距逻辑
-    pub fn push_raw(&mut self, line: Line<'a>) {
-        self.lines.push(line);
-    }
-
-    /// 消费 self，返回 (lines, field_line_indices)
-    pub fn into_parts(self) -> (Vec<Line<'a>>, Vec<usize>) {
-        (self.lines, self.field_line_indices)
-    }
-
-    /// 给一行的所有 span 加上 item 背景色
-    fn with_bg(&self, line: Line<'a>) -> Line<'a> {
-        line.patch_style(Style::default().bg(self.item_bg))
-    }
-}
-
-impl Default for ItemList<'_> {
-    fn default() -> Self {
-        Self {
-            lines: Vec::new(),
-            field_line_indices: Vec::new(),
-            item_bg: Color::Reset,
-        }
-    }
-}
-
-// ── 分隔线 ────────────────────────────────────────────
-
-/// 自适应宽度分隔线（替代硬编码 41 字符的 "─────…"）
-pub fn separator_line(width: u16, theme: &Theme) -> Line<'static> {
-    let w = (width as usize).saturating_sub(4); // 左缩进 2 字符 + 右留 2
-    let bar: String = "\u{2500}".repeat(w);
-    Line::from(Span::styled(
-        format!("{INDENT}{bar}"),
-        Style::default().fg(theme.separator),
-    ))
-}
-
-// ── 章节标题 ──────────────────────────────────────────
-
-/// 章节标题（如 "📖 快捷键帮助"）
-pub fn section_header<'a>(icon: &str, title: &str, theme: &Theme) -> Line<'a> {
-    Line::from(Span::styled(
-        format!("{INDENT}{icon} {title}"),
-        Style::default()
-            .fg(theme.help_title)
-            .add_modifier(Modifier::BOLD),
-    ))
-}
-
-// ── 指针 / 标签 ──────────────────────────────────────
-
-/// 选中指针 span
-pub fn pointer_span<'a>(selected: bool, theme: &Theme) -> Span<'a> {
-    if selected {
-        Span::styled(POINTER_SELECTED, Style::default().fg(theme.config_pointer))
-    } else {
-        Span::styled(POINTER_EMPTY, Style::default())
-    }
-}
-
-/// 标签 span（固定显示宽度，左对齐，CJK 感知）
-pub fn label_span<'a>(text: &str, width: usize, selected: bool, theme: &Theme) -> Span<'a> {
-    use unicode_width::UnicodeWidthStr;
-    let style = if selected {
-        Style::default()
-            .fg(theme.config_label_selected)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.config_label)
-    };
-    let display_w = UnicodeWidthStr::width(text);
-    let padding = if display_w < width {
-        " ".repeat(width - display_w)
-    } else {
-        String::new()
-    };
-    Span::styled(format!("{text}{padding}"), style)
-}
-
-/// 值的样式（普通/选中/编辑中）
 fn value_style(selected: bool, editing: bool, theme: &Theme) -> Style {
     if editing && selected {
         Style::default()
@@ -139,34 +32,7 @@ fn value_style(selected: bool, editing: bool, theme: &Theme) -> Style {
     }
 }
 
-// ── 行内光标 ─────────────────────────────────────────
-
-/// 构建带行内光标的 span 列表（从 config.rs render_cursor_spans 迁移）
-pub fn cursor_spans<'a>(value: &str, cursor: usize, style: Style, theme: &Theme) -> Vec<Span<'a>> {
-    let chars: Vec<char> = value.chars().collect();
-    let before: String = chars[..cursor.min(chars.len())].iter().collect();
-    let cursor_ch = if cursor < chars.len() {
-        chars[cursor].to_string()
-    } else {
-        " ".to_string()
-    };
-    let after: String = if cursor < chars.len() {
-        chars[cursor + 1..].iter().collect()
-    } else {
-        String::new()
-    };
-    vec![
-        Span::styled(before, style),
-        Span::styled(
-            cursor_ch,
-            Style::default().fg(theme.cursor_fg).bg(theme.cursor_bg),
-        ),
-        Span::styled(after, style),
-        Span::styled(" \u{270f}\u{fe0f}", Style::default()),
-    ]
-}
-
-// ── 预览值 ───────────────────────────────────────────
+// ── 预览值（内部）───────────────────────────────────────────
 
 /// 长文本截断预览（替换换行为空格，超 40 字符截断）
 fn render_preview_value(raw: &str) -> String {
@@ -185,82 +51,7 @@ fn render_preview_value(raw: &str) -> String {
     }
 }
 
-// ── 开关行 ───────────────────────────────────────────
-
-/// 开关字段行（auto_restore_session 等）
-pub fn toggle_row<'a>(
-    label: &str,
-    is_on: bool,
-    selected: bool,
-    hint: &str,
-    theme: &Theme,
-) -> Line<'a> {
-    let toggle_style = if is_on {
-        Style::default()
-            .fg(theme.config_toggle_on)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.config_toggle_off)
-    };
-    let toggle_text = if is_on {
-        format!("{TOGGLE_ON} \u{5f00}\u{542f}")
-    } else {
-        format!("{TOGGLE_OFF} \u{5173}\u{95ed}")
-    };
-    Line::from(vec![
-        pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
-        Span::styled("  ", Style::default()),
-        Span::styled(toggle_text, toggle_style),
-        Span::styled(
-            if selected {
-                format!("  ({hint})")
-            } else {
-                String::new()
-            },
-            Style::default().fg(theme.config_dim),
-        ),
-    ])
-}
-
-// ── 可编辑文本字段行 ─────────────────────────────────
-
-/// 普通可编辑文本字段行
-pub fn text_field_row<'a>(
-    label: &str,
-    value: &str,
-    selected: bool,
-    editing: bool,
-    cursor: usize,
-    theme: &Theme,
-) -> Line<'a> {
-    let vs = value_style(selected, editing, theme);
-    if editing && selected {
-        let mut spans = vec![
-            pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
-            Span::styled("  ", Style::default()),
-        ];
-        spans.extend(cursor_spans(value, cursor, vs, theme));
-        Line::from(spans)
-    } else {
-        Line::from(vec![
-            pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
-            Span::styled("  ", Style::default()),
-            Span::styled(
-                if value.is_empty() {
-                    "(\u{7a7a})".to_string()
-                } else {
-                    value.to_string()
-                },
-                vs,
-            ),
-        ])
-    }
-}
-
-// ── API Key 遮罩字段行 ──────────────────────────────
+// ── API Key 遮罩字段行（chat 专属）─────────────────────────────
 
 /// API Key 字段（未编辑时使用 api_key 颜色）
 pub fn secret_field_row<'a>(
@@ -275,7 +66,7 @@ pub fn secret_field_row<'a>(
         let vs = value_style(selected, editing, theme);
         let mut spans = vec![
             pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
         ];
         spans.extend(cursor_spans(value, cursor, vs, theme));
@@ -288,7 +79,7 @@ pub fn secret_field_row<'a>(
         };
         Line::from(vec![
             pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(
                 if value.is_empty() {
@@ -302,46 +93,7 @@ pub fn secret_field_row<'a>(
     }
 }
 
-// ── 说明列 span ──────────────────────────────────────
-
-/// 说明文字 span（固定显示宽度，超长截断加 "..."，CJK 感知）
-fn desc_span<'a>(text: &str, max_width: usize, theme: &Theme) -> Span<'a> {
-    use unicode_width::UnicodeWidthStr;
-    if text.is_empty() {
-        return Span::styled(String::new(), Style::default());
-    }
-    let display_w = UnicodeWidthStr::width(text);
-    if display_w <= max_width {
-        let padding = " ".repeat(max_width - display_w);
-        Span::styled(
-            format!("  {text}{padding}"),
-            Style::default().fg(theme.config_dim),
-        )
-    } else {
-        // 逐字符累加，直到超宽，然后加 "..."
-        let mut w = 0;
-        let end = max_width.saturating_sub(3); // 留 3 给 "..."
-        let truncated: String = text
-            .chars()
-            .take_while(|c| {
-                let cw = UnicodeWidthStr::width(c.to_string().as_str());
-                if w + cw > end {
-                    false
-                } else {
-                    w += cw;
-                    true
-                }
-            })
-            .collect();
-        let padding = " ".repeat(max_width - w - 3);
-        Span::styled(
-            format!("  {truncated}...{padding}"),
-            Style::default().fg(theme.config_dim),
-        )
-    }
-}
-
-// ── Global tab 三列布局行 ────────────────────────────
+// ── Global tab 三列布局行（chat 专属）───────────────────────────
 
 /// Global tab 可编辑文本行（三列: label | value | desc）
 pub fn global_text_row<'a>(
@@ -357,7 +109,7 @@ pub fn global_text_row<'a>(
     if editing && selected {
         let mut spans = vec![
             pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
         ];
         spans.extend(cursor_spans(value, cursor, vs, theme));
@@ -370,7 +122,7 @@ pub fn global_text_row<'a>(
         };
         Line::from(vec![
             pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(display_value, vs),
             desc_span(desc, 30, theme),
@@ -401,7 +153,7 @@ pub fn global_toggle_row<'a>(
     };
     Line::from(vec![
         pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(toggle_text, toggle_style),
         desc_span(desc, 30, theme),
@@ -428,7 +180,7 @@ pub fn global_preview_row<'a>(
     let vs = value_style(selected, false, theme);
     Line::from(vec![
         pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(render_preview_value(raw), vs),
         desc_span(desc, 30, theme),
@@ -454,7 +206,7 @@ pub fn global_theme_row<'a>(
 ) -> Line<'a> {
     Line::from(vec![
         pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        crate::tui::components::label_span(label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(
             format!("\u{1f3a8} {name}"),
@@ -474,147 +226,7 @@ pub fn global_theme_row<'a>(
     ])
 }
 
-// ── 开关列表项 ──────────────────────────────────────
-
-/// 工具/技能/命令的开关列表项
-pub fn toggle_list_item<'a>(
-    name: &str,
-    enabled: bool,
-    selected: bool,
-    desc: Option<&str>,
-    tag: Option<&str>,
-    theme: &Theme,
-) -> Line<'a> {
-    let toggle_style = if enabled {
-        Style::default()
-            .fg(theme.config_toggle_on)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.config_toggle_off)
-    };
-    let toggle_text = if enabled { TOGGLE_ON } else { TOGGLE_OFF };
-    let name_style = if selected {
-        Style::default()
-            .fg(theme.config_label_selected)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.config_label)
-    };
-
-    let mut spans = vec![
-        pointer_span(selected, theme),
-        Span::styled(toggle_text, toggle_style),
-        Span::styled(" ", Style::default()),
-        Span::styled(name.to_string(), name_style),
-    ];
-    if let Some(d) = desc {
-        spans.push(Span::styled(
-            format!("  {d}"),
-            Style::default().fg(theme.config_dim),
-        ));
-    }
-    if let Some(t) = tag {
-        spans.push(Span::styled(
-            format!(" [{t}]"),
-            Style::default().fg(theme.config_dim),
-        ));
-    }
-    Line::from(spans)
-}
-
-// ── 可选行（session / archive 列表） ────────────────
-
-/// 可选行（主文本 + 次要信息）
-pub fn selectable_row<'a>(
-    primary: &str,
-    secondary: &str,
-    selected: bool,
-    theme: &Theme,
-) -> Line<'a> {
-    let name_style = if selected {
-        Style::default()
-            .fg(theme.config_label_selected)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.config_label)
-    };
-    Line::from(vec![
-        pointer_span(selected, theme),
-        Span::styled(primary.to_string(), name_style),
-        Span::styled(
-            format!("  {secondary}"),
-            Style::default().fg(theme.config_dim),
-        ),
-    ])
-}
-
-// ── Tab 栏 ──────────────────────────────────────────
-
-/// Tab 栏（支持任意 tab 列表）
-pub fn tab_bar<'a>(tabs: &[(&str, bool)], hint: &str, theme: &Theme) -> Line<'a> {
-    let mut spans: Vec<Span<'a>> = vec![Span::styled("  ", Style::default())];
-    for (i, (label, active)) in tabs.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(
-                format!(" {SEPARATOR_V} "),
-                Style::default().fg(theme.separator),
-            ));
-        }
-        let text = format!(" {label} ");
-        if *active {
-            spans.push(Span::styled(
-                text,
-                Style::default()
-                    .fg(theme.config_tab_active_fg)
-                    .bg(theme.config_tab_active_bg)
-                    .add_modifier(Modifier::BOLD),
-            ));
-        } else {
-            spans.push(Span::styled(
-                text,
-                Style::default().fg(theme.config_tab_inactive),
-            ));
-        }
-    }
-    if !hint.is_empty() {
-        spans.push(Span::styled(
-            format!("    ({hint})"),
-            Style::default().fg(theme.config_dim),
-        ));
-    }
-    Line::from(spans)
-}
-
-// ── 帮助页快捷键行 ──────────────────────────────────
-
-/// 帮助页快捷键行
-pub fn help_key_row<'a>(key: &str, desc: &str, key_width: usize, theme: &Theme) -> Line<'a> {
-    Line::from(vec![
-        Span::styled(INDENT, Style::default()),
-        Span::styled(
-            format!("{:<width$}", key, width = key_width),
-            Style::default()
-                .fg(theme.help_key)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(desc.to_string(), Style::default().fg(theme.help_desc)),
-    ])
-}
-
-// ── 底部提示栏单项 ──────────────────────────────────
-
-/// 底部提示栏单项 spans
-pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
-    vec![
-        Span::styled(
-            format!(" {key} "),
-            Style::default().fg(theme.hint_key_fg).bg(theme.hint_key_bg),
-        ),
-        Span::styled(format!(" {desc}"), Style::default().fg(theme.hint_desc)),
-    ]
-}
-
-// ── 欢迎框 ──────────────────────────────────────────
+// ── 欢迎框（chat 专属）─────────────────────────────────────────
 
 /// 自适应居中欢迎框（主题感知渐变色）
 ///

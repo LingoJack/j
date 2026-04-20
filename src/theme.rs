@@ -779,8 +779,8 @@ impl Theme {
             md_link: Color::Rgb(86, 156, 214),
 
             // 代码块
-            code_border: Color::Rgb(70, 70, 80),
-            code_bg: Color::Rgb(35, 35, 38),
+            code_border: Color::Rgb(90, 90, 105),
+            code_bg: Color::Rgb(25, 25, 30),
             code_default: Color::Rgb(212, 212, 212),
             code_keyword: Color::Rgb(198, 120, 221),
             code_string: Color::Rgb(152, 195, 121),
@@ -932,8 +932,8 @@ impl Theme {
             md_link: Color::Rgb(0, 102, 204),
 
             // 代码块（VS Code Light+ 风格）
-            code_border: Color::Rgb(195, 200, 210),
-            code_bg: Color::Rgb(250, 250, 252),
+            code_border: Color::Rgb(175, 180, 195),
+            code_bg: Color::Rgb(243, 243, 248),
             code_default: Color::Rgb(45, 45, 55),
             code_keyword: Color::Rgb(175, 0, 219),
             code_string: Color::Rgb(163, 21, 21),
@@ -1085,11 +1085,11 @@ impl Theme {
             md_link: Color::Rgb(136, 192, 208), // nord8
 
             // 代码块 — Nord 风格语法高亮
-            code_border: Color::Rgb(76, 86, 106),    // nord3
-            code_bg: Color::Rgb(46, 52, 64),         // nord0
+            code_border: Color::Rgb(94, 104, 124), // nord3 偏亮
+            code_bg: Color::Rgb(38, 43, 55),       // 比 bg_primary 更深
             code_default: Color::Rgb(216, 222, 233), // nord4
             code_keyword: Color::Rgb(180, 142, 173), // nord15
-            code_string: Color::Rgb(163, 190, 140),  // nord14
+            code_string: Color::Rgb(163, 190, 140), // nord14
             code_comment: Color::Rgb(97, 110, 128),
             code_number: Color::Rgb(208, 135, 112), // nord12
             code_type: Color::Rgb(235, 203, 139),   // nord13
@@ -1238,8 +1238,8 @@ impl Theme {
             md_link: Color::Rgb(102, 217, 239),
 
             // 代码块 — Monokai 经典语法高亮
-            code_border: Color::Rgb(80, 80, 70),
-            code_bg: Color::Rgb(39, 40, 34),
+            code_border: Color::Rgb(100, 100, 88),
+            code_bg: Color::Rgb(33, 34, 28),
             code_default: Color::Rgb(248, 248, 242), // monokai foreground
             code_keyword: Color::Rgb(249, 38, 114),  // monokai pink
             code_string: Color::Rgb(230, 219, 116),  // monokai yellow
@@ -1396,8 +1396,8 @@ impl Theme {
             md_link: Color::Rgb(160, 74, 46), // 加深赭红
 
             // 代码块（渲染在 code_bg #f5f0e8 上，需要足够对比度）
-            code_border: Color::Rgb(208, 198, 186),
-            code_bg: Color::Rgb(242, 236, 224),
+            code_border: Color::Rgb(185, 172, 155),
+            code_bg: Color::Rgb(235, 228, 214),
             code_default: Color::Rgb(26, 22, 18),
             code_keyword: Color::Rgb(98, 72, 138),   // 深紫
             code_string: Color::Rgb(48, 100, 54),    // 深绿
@@ -1554,8 +1554,8 @@ impl Theme {
             md_link: Color::Rgb(79, 214, 190), // #4fd6be url青
 
             // 代码块
-            code_border: Color::Rgb(47, 51, 77),
-            code_bg: Color::Rgb(27, 29, 43), // #1b1d2b
+            code_border: Color::Rgb(65, 72, 110),
+            code_bg: Color::Rgb(22, 24, 38), // #161826 更深
             code_default: Color::Rgb(200, 211, 245),
             code_keyword: Color::Rgb(192, 153, 255),   // 紫
             code_string: Color::Rgb(195, 232, 141),    // 绿
