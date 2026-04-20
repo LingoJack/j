@@ -4,6 +4,7 @@ use super::super::autocomplete::{
     get_filtered_skill_names, get_filtered_slash_commands, update_at_filter, update_command_filter,
     update_file_filter, update_skill_filter,
 };
+use super::super::storage::{ChatMessage, MessageRole};
 use super::super::theme::ThemeName;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
 use crate::util::safe_lock;
@@ -522,13 +523,13 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     app.state
                         .session
                         .messages
-                        .push(super::super::storage::ChatMessage::text("user", &text));
+                        .push(ChatMessage::text(MessageRole::User, &text));
                     {
                         let mut pending = safe_lock(
                             &app.state.pending_user_messages,
                             "handler_chat::pending_user_messages",
                         );
-                        pending.push(super::super::storage::ChatMessage::text("user", &text));
+                        pending.push(ChatMessage::text(MessageRole::User, &text));
                     }
                     app.ui.clear_input();
                     app.ui.msg_lines_cache = None;

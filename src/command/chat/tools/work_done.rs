@@ -1,4 +1,5 @@
 use crate::command::chat::agent::thread_identity::current_agent_name;
+use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
@@ -78,10 +79,7 @@ impl Tool for WorkDoneTool {
                 }
                 _ => format!("<{}> [已完成工作]", from),
             };
-            shared.push(crate::command::chat::storage::ChatMessage::text(
-                "assistant",
-                text,
-            ));
+            shared.push(ChatMessage::text(MessageRole::Assistant, text));
         }
 
         self.work_done.store(true, Ordering::Relaxed);

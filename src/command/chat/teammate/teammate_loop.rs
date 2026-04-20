@@ -1,6 +1,7 @@
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{
-    ChatMessage, ModelProvider, SessionEvent, SessionPaths, append_event_to_path, sanitize_filename,
+    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
+    sanitize_filename,
 };
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
@@ -127,7 +128,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     }
 
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
-        role: "user".to_string(),
+        role: MessageRole::User,
         content: initial_prompt,
         tool_calls: None,
         tool_call_id: None,
@@ -215,7 +216,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 && let Ok(mut shared) = manager.ui_messages.lock()
             {
                 shared.push(ChatMessage::text(
-                    "assistant",
+                    MessageRole::Assistant,
                     format!("<{}> {}", name, &assistant_text),
                 ));
             }
@@ -234,7 +235,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             // 文字回复也写入 messages + jsonl
             // 否则独立 jsonl 缺少这部分，resume 时 existing_count > synthesized.len() 导致 delta 补齐失效
             if !assistant_text.is_empty() {
-                messages.push(ChatMessage::text("assistant", assistant_text.clone()));
+                messages.push(ChatMessage::text(
+                    MessageRole::Assistant,
+                    assistant_text.clone(),
+                ));
                 if let Some(last) = messages.last() {
                     append_messages(std::slice::from_ref(last));
                 }
@@ -336,7 +340,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         consecutive_idle_polls = 0;
 
         messages.push(ChatMessage {
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: assistant_text,
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
@@ -353,7 +357,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             for item in &tool_items {
                 if item.name != "SendMessage" {
                     shared.push(ChatMessage::text(
-                        "assistant",
+                        MessageRole::Assistant,
                         format!("<{}> [调用工具 {}]", name, item.name),
                     ));
                 }
@@ -364,7 +368,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         for item in &tool_items {
             if cancel_token.is_cancelled() {
                 messages.push(ChatMessage {
-                    role: "tool".to_string(),
+                    role: MessageRole::Tool,
                     content: "[Cancelled]".to_string(),
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
@@ -413,11 +417,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         && let Ok(mut shared) = manager.ui_messages.lock()
     {
         shared.push(ChatMessage::text(
-            "assistant",
+            MessageRole::Assistant,
             format!("<{}> [已完成工作]", name),
         ));
         // 同步写入独立 jsonl（不带 <Name> 前缀，合成时会加前缀）
-        let done_msg = ChatMessage::text("assistant", "[已完成工作]".to_string());
+        let done_msg = ChatMessage::text(MessageRole::Assistant, "[已完成工作]".to_string());
         append_messages(std::slice::from_ref(&done_msg));
     }
 

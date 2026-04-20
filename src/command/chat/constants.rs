@@ -1,13 +1,6 @@
 //! Chat 模块常量定义
 //! 集中管理所有魔法数字，便于维护和调整
 
-// ========== Chat 消息角色 ==========
-
-pub const ROLE_SYSTEM: &str = "system";
-pub const ROLE_USER: &str = "user";
-pub const ROLE_ASSISTANT: &str = "assistant";
-pub const ROLE_TOOL: &str = "tool";
-
 // ========== 工具执行相关 ==========
 
 /// 工具输出摘要最大长度（字符数）

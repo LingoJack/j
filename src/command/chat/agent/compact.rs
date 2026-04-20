@@ -1,9 +1,9 @@
 use super::super::constants::{
     COMPACT_KEEP_RECENT, COMPACT_KEEP_RECENT_USER_MESSAGES, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET,
     COMPACT_SKILL_TOKEN_BUDGET, COMPACT_TOKEN_THRESHOLD, COMPACT_TRUNCATE_MAX_CHARS,
-    MICRO_COMPACT_BYTES_THRESHOLD, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER,
+    MICRO_COMPACT_BYTES_THRESHOLD,
 };
-use super::super::storage::{ChatMessage, ModelProvider, SessionPaths};
+use super::super::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
 use super::super::tools::ask::AskTool;
 use super::super::tools::skill::LoadSkillTool;
 use super::super::tools::task::TaskTool;
@@ -201,7 +201,7 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 pub fn extract_user_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     messages
         .iter()
-        .filter(|m| m.role == ROLE_USER)
+        .filter(|m| m.role == MessageRole::User)
         .cloned()
         .collect()
 }
@@ -213,7 +213,7 @@ pub fn extract_user_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
 pub fn extract_recent_user_messages(messages: &[ChatMessage], count: usize) -> Vec<ChatMessage> {
     let mut recent: Vec<ChatMessage> = Vec::new();
     for m in messages.iter().rev() {
-        if m.role == ROLE_USER {
+        if m.role == MessageRole::User {
             recent.push(m.clone());
             if recent.len() >= count {
                 break;
@@ -257,7 +257,7 @@ pub fn micro_compact(
     // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
     let mut tool_call_id_to_name: HashMap<String, String> = HashMap::new();
     for msg in messages.iter() {
-        if msg.role == ROLE_ASSISTANT
+        if msg.role == MessageRole::Assistant
             && let Some(ref tool_calls) = msg.tool_calls
         {
             for tool_call in tool_calls {
@@ -270,7 +270,7 @@ pub fn micro_compact(
     let tool_indices: Vec<usize> = messages
         .iter()
         .enumerate()
-        .filter(|(_, msg)| msg.role == ROLE_TOOL)
+        .filter(|(_, msg)| msg.role == MessageRole::Tool)
         .map(|(i, _)| i)
         .collect();
 
@@ -459,20 +459,11 @@ pub async fn auto_compact(
         );
     }
 
-    messages.push(ChatMessage {
-        role: "user".to_string(),
-        content: summary_content,
-        tool_calls: None,
-        tool_call_id: None,
-        images: None,
-    });
-    messages.push(ChatMessage {
-        role: ROLE_ASSISTANT.to_string(),
-        content: "Understood. I have the context from the summary and any active skill instructions. Continuing to follow them.".to_string(),
-        tool_calls: None,
-        tool_call_id: None,
-        images: None,
-    });
+    messages.push(ChatMessage::text(MessageRole::User, summary_content));
+    messages.push(ChatMessage::text(
+        MessageRole::Assistant,
+        "Understood. I have the context from the summary and any active skill instructions. Continuing to follow them.",
+    ));
 
     // 追加最近 N 条 user 消息原文，确保 LLM 能看到用户的精确措辞
     let recent_user_clone = recent_user.clone();

@@ -1,9 +1,8 @@
 use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent, HookManager};
-use super::super::storage::{ChatMessage, ImageData, ToolCallItem};
 use super::compact;
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole, ToolCallItem};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact::CompactTool;
 use crate::util::log::write_info_log;
@@ -40,7 +39,7 @@ pub(super) fn drain_pending_user_messages(
     if !pending.is_empty() {
         // 给每条追加的用户消息添加 [User appended] 标记
         for msg in pending.iter_mut() {
-            if msg.role == "user" {
+            if msg.role == MessageRole::User {
                 msg.content = format!("[User appended] {}", msg.content);
             }
         }
@@ -79,13 +78,7 @@ pub(super) fn flush_streaming_as_message(
 ) {
     let mut stream_buf = safe_lock(streaming_content, "agent::flush_streaming");
     if !stream_buf.is_empty() {
-        let text_msg = ChatMessage {
-            role: ROLE_ASSISTANT.to_string(),
-            content: std::mem::take(&mut *stream_buf),
-            tool_calls: None,
-            tool_call_id: None,
-            images: None,
-        };
+        let text_msg = ChatMessage::text(MessageRole::Assistant, std::mem::take(&mut *stream_buf));
         messages.push(text_msg.clone());
         push_ui(ui_messages, text_msg);
     }
@@ -139,13 +132,7 @@ pub(super) fn process_tool_calls(
     //   2. tool_call assistant 消息（content 为空，只带 tool_calls）
     //   这样渲染时文字在上面，tool_call 在下面
     if !assistant_text.is_empty() {
-        let text_msg = ChatMessage {
-            role: ROLE_ASSISTANT.to_string(),
-            content: assistant_text,
-            tool_calls: None,
-            tool_call_id: None,
-            images: None,
-        };
+        let text_msg = ChatMessage::text(MessageRole::Assistant, assistant_text);
         messages.push(text_msg.clone());
         push_ui(ctx.ui_messages, text_msg);
         // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
@@ -155,7 +142,7 @@ pub(super) fn process_tool_calls(
     }
 
     let tool_call_msg = ChatMessage {
-        role: ROLE_ASSISTANT.to_string(),
+        role: MessageRole::Assistant,
         content: String::new(),
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
@@ -225,7 +212,7 @@ pub(super) fn process_tool_calls(
         }
 
         let tool_msg = ChatMessage {
-            role: ROLE_TOOL.to_string(),
+            role: MessageRole::Tool,
             content: result_content,
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id.clone()),
@@ -247,7 +234,7 @@ pub(super) fn process_tool_calls(
             );
             if ctx.supports_vision {
                 let img_msg = ChatMessage {
-                    role: ROLE_USER.to_string(),
+                    role: MessageRole::User,
                     content: format!(
                         "[{tool_label} 返回了 {img_count} 张图片，请查看图片内容并继续帮助完成任务]"
                     ),

@@ -2,7 +2,7 @@ use super::chat_app::ChatApp;
 use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::{
-    ChatMessage, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
+    ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
     SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, generate_session_id,
     load_hooks_state, load_plan_state, load_sandbox_state, load_skills_state, load_tasks_state,
     load_teammates_state, load_todos_state, read_transcript_with_timestamps, sanitize_filename,
@@ -244,7 +244,7 @@ impl ChatApp {
 
             let mut synthesized: Vec<String> = Vec::new();
             for (msg, _ts) in &transcript {
-                if msg.role != "assistant" {
+                if msg.role != MessageRole::Assistant {
                     continue;
                 }
                 if !msg.content.is_empty() {
@@ -266,14 +266,15 @@ impl ChatApp {
             let mut new_messages: Vec<ChatMessage> = Vec::new();
             let mut synth_iter = synthesized.iter().peekable();
             for msg in &self.state.session.messages {
-                if msg.role == "assistant" && msg.content.starts_with(&prefix_marker) {
+                if msg.role == MessageRole::Assistant && msg.content.starts_with(&prefix_marker) {
                     if synth_iter.peek().is_some()
-                        && !new_messages
-                            .iter()
-                            .any(|m| m.role == "assistant" && m.content.starts_with(&prefix_marker))
+                        && !new_messages.iter().any(|m| {
+                            m.role == MessageRole::Assistant
+                                && m.content.starts_with(&prefix_marker)
+                        })
                     {
                         for s in &synthesized {
-                            new_messages.push(ChatMessage::text("assistant", s.clone()));
+                            new_messages.push(ChatMessage::text(MessageRole::Assistant, s.clone()));
                         }
                     }
                 } else {
@@ -282,10 +283,10 @@ impl ChatApp {
             }
             if !new_messages
                 .iter()
-                .any(|m| m.role == "assistant" && m.content.starts_with(&prefix_marker))
+                .any(|m| m.role == MessageRole::Assistant && m.content.starts_with(&prefix_marker))
             {
                 for s in &synthesized {
-                    new_messages.push(ChatMessage::text("assistant", s.clone()));
+                    new_messages.push(ChatMessage::text(MessageRole::Assistant, s.clone()));
                 }
             }
 

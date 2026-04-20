@@ -6,8 +6,8 @@ use super::types::{AskAnswer, AskRequest, ToolExecStatus};
 use super::ui_state::{ChatMode, ConfigTab, UIState};
 use crate::command::chat::agent_md;
 use crate::command::chat::constants::{
-    FINE_SCROLL_LINES, INPUT_BUFFER_MAX_LEN, PAGE_SCROLL_LINES, ROLE_ASSISTANT, ROLE_USER,
-    TODO_NAG_INTERVAL_ROUNDS, TOOL_INTERACT_MAX_OPTIONS,
+    FINE_SCROLL_LINES, INPUT_BUFFER_MAX_LEN, PAGE_SCROLL_LINES, TODO_NAG_INTERVAL_ROUNDS,
+    TOOL_INTERACT_MAX_OPTIONS,
 };
 use crate::command::chat::infra::archive;
 use crate::command::chat::infra::command;
@@ -19,6 +19,7 @@ use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::{ToolConfirmInfo, WsOutbound};
 use crate::command::chat::render::theme::{Theme, ThemeName};
+use crate::command::chat::storage::MessageRole;
 use crate::command::chat::storage::{
     ChatMessage, ChatSession, ModelProvider, delete_session, generate_session_id, list_sessions,
     load_agent_config, load_session, memory_path, save_agent_config, save_memory, save_soul,
@@ -296,7 +297,7 @@ impl ChatApp {
                                 notif.task_id, notif.command, notif.status, notif.result
                             );
                             inject.push(ChatMessage {
-                                role: ROLE_USER.to_string(),
+                                role: MessageRole::User,
                                 content: format!("<system-reminder>\n{}\n</system-reminder>", body),
                                 tool_calls: None,
                                 tool_call_id: None,
@@ -363,7 +364,7 @@ impl ChatApp {
                         todos_summary
                     );
                     let inject = vec![ChatMessage {
-                        role: ROLE_USER.to_string(),
+                        role: MessageRole::User,
                         content: format!("<system-reminder>\n{}\n</system-reminder>", body),
                         tool_calls: None,
                         tool_call_id: None,
@@ -662,10 +663,10 @@ impl ChatApp {
                 // 广播完整消息和状态到远程
                 if self.ws_bridge.is_some() {
                     if let Some(last_msg) = self.state.session.messages.last()
-                        && last_msg.role == "assistant"
+                        && last_msg.role == MessageRole::Assistant
                     {
                         self.broadcast_ws(WsOutbound::Message {
-                            role: "assistant".to_string(),
+                            role: MessageRole::Assistant.to_string(),
                             content: last_msg.content.clone(),
                         });
                     }
@@ -1050,9 +1051,9 @@ impl ChatApp {
                     let filtered = self.browse_filtered_indices();
                     let pos_in_filtered =
                         filtered.iter().position(|&i| i == self.ui.browse_msg_index);
-                    let role_label = if msg.role == ROLE_ASSISTANT {
+                    let role_label = if msg.role == MessageRole::Assistant {
                         "AI"
-                    } else if msg.role == ROLE_USER {
+                    } else if msg.role == MessageRole::User {
                         "用户"
                     } else {
                         "系统"
@@ -1932,7 +1933,7 @@ impl ChatApp {
                     .messages
                     .iter()
                     .rev()
-                    .find(|m| m.role == ROLE_ASSISTANT)
+                    .find(|m| m.role == MessageRole::Assistant)
                 {
                     if copy_to_clipboard(&last_ai.content) {
                         self.show_toast("已复制最后一条 AI 回复", false);
@@ -2024,7 +2025,7 @@ impl ChatApp {
             .messages
             .iter()
             .map(|m| SyncMessage {
-                role: m.role.clone(),
+                role: m.role.to_string(),
                 content: m.content.clone(),
                 tool_calls: m.tool_calls.as_ref().map(|tc| {
                     tc.iter()
@@ -2065,17 +2066,17 @@ impl ChatApp {
         }
         if self.state.is_loading {
             // agent loop 运行中：追加到 pending 队列，下一轮 loop 会处理
-            use crate::command::chat::storage::ChatMessage;
+            use crate::command::chat::storage::{ChatMessage, MessageRole};
             self.state
                 .session
                 .messages
-                .push(ChatMessage::text("user", &text));
+                .push(ChatMessage::text(MessageRole::User, &text));
             {
                 let mut pending = crate::util::safe_lock(
                     &self.state.pending_user_messages,
                     "inject_remote_message::pending",
                 );
-                pending.push(ChatMessage::text("user", &text));
+                pending.push(ChatMessage::text(MessageRole::User, &text));
             }
             self.ui.msg_lines_cache = None;
             self.ui.auto_scroll = true;

@@ -3,7 +3,7 @@ use crate::command::chat::agent::thread_identity::{
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
-use crate::command::chat::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider};
 use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
@@ -394,7 +394,7 @@ fn run_sub_agent_loop(
     }
 
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
-        role: "user".to_string(),
+        role: MessageRole::User,
         content: params.prompt,
         tool_calls: None,
         tool_call_id: None,
@@ -466,7 +466,7 @@ fn run_sub_agent_loop(
             write_info_log("SubAgent", &format!("Reply: {}", &final_text));
             // UI 状态行：显示 sub-agent 的文字回复（前缀为 agent_name，无空白以便 parse）
             push_ui(ChatMessage::text(
-                "assistant",
+                MessageRole::Assistant,
                 format!("<{}> {}", agent_name, &assistant_text),
             ));
         }
@@ -480,7 +480,7 @@ fn run_sub_agent_loop(
         if !is_tool_calls || choice.message.tool_calls.is_none() {
             // 纯文本回复结束：把 assistant 消息也 append 到 transcript（无 tool_calls）
             if !assistant_text.is_empty() {
-                let final_msg = ChatMessage::text("assistant", assistant_text.clone());
+                let final_msg = ChatMessage::text(MessageRole::Assistant, assistant_text.clone());
                 messages.push(final_msg);
                 if let Some(last) = messages.last() {
                     append_to_transcript(std::slice::from_ref(last));
@@ -502,14 +502,14 @@ fn run_sub_agent_loop(
         // UI 状态行：显示 sub-agent 的工具调用名（不含参数/结果）
         for item in &tool_items {
             push_ui(ChatMessage::text(
-                "assistant",
+                MessageRole::Assistant,
                 format!("<{}> [调用工具 {}]", agent_name, item.name),
             ));
         }
 
         // 将 assistant 消息（含 tool_calls）加入历史
         let assistant_msg = ChatMessage {
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: assistant_text,
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
@@ -549,7 +549,7 @@ fn run_sub_agent_loop(
 
     // UI 状态行：sub-agent 结束
     push_ui(ChatMessage::text(
-        "assistant",
+        MessageRole::Assistant,
         format!("<{}> [已完成]", agent_name),
     ));
 

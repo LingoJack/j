@@ -4,7 +4,7 @@ use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState}
 use crate::command::chat::infra::command;
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::infra::skill::{self, skills_dir};
-use crate::command::chat::storage::ChatMessage;
+use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::util::safe_lock;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -75,7 +75,7 @@ impl ChatApp {
         self.state
             .session
             .messages
-            .push(ChatMessage::text("user", &text));
+            .push(ChatMessage::text(MessageRole::User, &text));
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = u16::MAX;
 

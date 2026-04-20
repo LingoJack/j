@@ -1,5 +1,5 @@
 use super::chat_app::ChatApp;
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_USER};
+use crate::command::chat::storage::MessageRole;
 
 impl ChatApp {
     /// 返回浏览模式下符合当前过滤条件的消息索引列表
@@ -12,8 +12,8 @@ impl ChatApp {
             .enumerate()
             .filter(|(_, m)| {
                 match &self.ui.browse_role_filter {
-                    Some(r) if r == "ai" && m.role != ROLE_ASSISTANT => return false,
-                    Some(r) if r == "user" && m.role != ROLE_USER => return false,
+                    Some(r) if r == "ai" && m.role != MessageRole::Assistant => return false,
+                    Some(r) if r == "user" && m.role != MessageRole::User => return false,
                     _ => {}
                 }
                 if !filter_lower.is_empty() {

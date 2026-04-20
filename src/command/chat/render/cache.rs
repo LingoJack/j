@@ -3,9 +3,10 @@ use super::super::markdown::markdown_to_lines;
 use super::theme::Theme;
 use crate::command::chat::constants::{
     AGENT_RESULT_MAX_LINES, BASH_OUTPUT_MAX_LINES, CONFIRM_MSG_MAX_LINES, ERROR_RESULT_MAX_LINES,
-    NORMAL_RESULT_MAX_LINES, ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER,
-    THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS, TOOL_ARG_PREVIEW_MAX_CHARS,
+    NORMAL_RESULT_MAX_LINES, THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS,
+    TOOL_ARG_PREVIEW_MAX_CHARS,
 };
+use crate::command::chat::storage::DisplayType;
 use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
@@ -124,8 +125,8 @@ pub fn build_message_lines_incremental(
 
         // 缓存未命中 → 重新渲染到临时 Vec
         let mut tmp_lines: Vec<Line<'static>> = Vec::new();
-        match m.role.as_str() {
-            ROLE_USER => {
+        match m.display_type() {
+            DisplayType::User => {
                 render_user_msg(
                     &m.content,
                     is_selected,
@@ -135,7 +136,10 @@ pub fn build_message_lines_incremental(
                     t,
                 );
             }
-            ROLE_ASSISTANT => {
+            DisplayType::AssistantText => {
+                render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut tmp_lines, t);
+            }
+            DisplayType::ToolCallRequest => {
                 if let Some(ref tool_calls) = m.tool_calls {
                     render_tool_call_request_msg(
                         tool_calls,
@@ -144,17 +148,9 @@ pub fn build_message_lines_incremental(
                         t,
                         expand,
                     );
-                } else {
-                    render_assistant_msg(
-                        &m.content,
-                        is_selected,
-                        bubble_max_width,
-                        &mut tmp_lines,
-                        t,
-                    );
                 }
             }
-            ROLE_TOOL => {
+            DisplayType::ToolResult => {
                 // 查找对应的工具名：向前搜索 assistant 消息中匹配 tool_call_id 的 ToolCallItem
                 let tool_name = m
                     .tool_call_id
@@ -203,7 +199,7 @@ pub fn build_message_lines_incremental(
                     expand,
                 );
             }
-            ROLE_SYSTEM => {
+            DisplayType::System => {
                 tmp_lines.push(Line::from(""));
                 let wrapped = wrap_text(&m.content, inner_width.saturating_sub(8));
                 for wl in wrapped {
@@ -213,7 +209,6 @@ pub fn build_message_lines_incremental(
                     )));
                 }
             }
-            _ => {}
         }
 
         // 缓存此历史消息的渲染行（无需额外复制，直接存入）

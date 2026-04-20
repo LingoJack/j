@@ -1,5 +1,5 @@
 use super::config::agent_data_dir;
-use super::types::{ChatMessage, ChatSession, SessionEvent};
+use super::types::{ChatMessage, ChatSession, MessageRole, SessionEvent};
 use crate::command::chat::constants::MESSAGE_PREVIEW_MAX_LEN;
 use crate::error;
 use serde::{Deserialize, Serialize};
@@ -187,7 +187,7 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
     match event {
         SessionEvent::Msg { message: msg, .. } => {
             meta.message_count += 1;
-            if meta.title.is_empty() && msg.role == "user" && !msg.content.is_empty() {
+            if meta.title.is_empty() && msg.role == MessageRole::User && !msg.content.is_empty() {
                 meta.title = msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect();
             }
         }
@@ -199,7 +199,7 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
             if meta.title.is_empty()
                 && let Some(first_user) = messages
                     .iter()
-                    .find(|m| m.role == "user" && !m.content.is_empty())
+                    .find(|m| m.role == MessageRole::User && !m.content.is_empty())
             {
                 meta.title = first_user
                     .content
@@ -380,7 +380,9 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
                     message: ref msg, ..
                 } => {
                     message_count += 1;
-                    if first_user_preview.is_none() && msg.role == "user" && !msg.content.is_empty()
+                    if first_user_preview.is_none()
+                        && msg.role == MessageRole::User
+                        && !msg.content.is_empty()
                     {
                         first_user_preview =
                             Some(msg.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
@@ -394,7 +396,7 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
                     message_count = messages.len();
                     first_user_preview = messages
                         .iter()
-                        .find(|m| m.role == "user" && !m.content.is_empty())
+                        .find(|m| m.role == MessageRole::User && !m.content.is_empty())
                         .map(|m| m.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
                 }
             }

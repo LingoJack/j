@@ -4,10 +4,9 @@ use super::types::{
     AskAnswer, AskRequest, PlanDecision, StreamMsg, ToolCallStatus, ToolExecStatus, ToolResultMsg,
 };
 use super::ui_state::ChatMode;
-use crate::command::chat::constants::ROLE_ASSISTANT;
 use crate::command::chat::infra::hook::{HookContext, HookEvent};
 use crate::command::chat::remote::protocol::{AskOptionInfo, AskQuestionInfo, WsOutbound};
-use crate::command::chat::storage::ChatMessage;
+use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 
@@ -460,7 +459,7 @@ impl ChatApp {
                 self.state
                     .session
                     .messages
-                    .push(ChatMessage::text(ROLE_ASSISTANT, cancelled_content));
+                    .push(ChatMessage::text(MessageRole::Assistant, cancelled_content));
             }
             safe_lock(
                 &self.state.streaming_content,
@@ -534,7 +533,7 @@ impl ChatApp {
                 self.state
                     .session
                     .messages
-                    .push(ChatMessage::text(ROLE_ASSISTANT, content));
+                    .push(ChatMessage::text(MessageRole::Assistant, content));
                 safe_lock(
                     &self.state.streaming_content,
                     "finish_loading::streaming_content_done_clear",

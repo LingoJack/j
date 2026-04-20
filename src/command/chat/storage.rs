@@ -21,7 +21,9 @@ pub use session::{
     find_latest_session_id, generate_session_id, list_sessions, load_session,
     read_transcript_with_timestamps, session_file_path, sessions_dir,
 };
-pub use types::{ChatMessage, ChatSession, ImageData, SessionEvent, ToolCallItem};
+pub use types::{
+    ChatMessage, ChatSession, DisplayType, ImageData, MessageRole, SessionEvent, ToolCallItem,
+};
 
 #[cfg(test)]
 mod tests {
@@ -97,7 +99,7 @@ mod tests {
         let _tmp = TempDataDir::new();
         let paths = SessionPaths::new("append-id");
 
-        let msg = ChatMessage::text("user", "hello".to_string());
+        let msg = ChatMessage::text(MessageRole::User, "hello".to_string());
         assert!(append_session_event("append-id", &SessionEvent::msg(msg)));
 
         assert!(paths.transcript().exists());
@@ -107,7 +109,7 @@ mod tests {
     fn load_session_round_trip() {
         let _tmp = TempDataDir::new();
 
-        let msg = ChatMessage::text("user", "round trip test");
+        let msg = ChatMessage::text(MessageRole::User, "round trip test");
         assert!(append_session_event("rt-id", &SessionEvent::msg(msg)));
 
         let session = load_session("rt-id");
@@ -121,7 +123,7 @@ mod tests {
 
         let paths = SessionPaths::new("ls-test");
         paths.ensure_dir().unwrap();
-        let msg = ChatMessage::text("user", "list test");
+        let msg = ChatMessage::text(MessageRole::User, "list test");
         let line = serde_json::to_string(&SessionEvent::msg(msg)).unwrap();
         fs::write(paths.transcript(), format!("{}\n", line)).unwrap();
 
@@ -166,7 +168,7 @@ mod tests {
     #[test]
     fn append_event_updates_meta() {
         let _tmp = TempDataDir::new();
-        let msg1 = ChatMessage::text("user", "hello world");
+        let msg1 = ChatMessage::text(MessageRole::User, "hello world");
         assert!(append_session_event("meta-upd", &SessionEvent::msg(msg1)));
 
         let meta = load_session_meta_file("meta-upd").expect("meta should exist");
@@ -175,7 +177,7 @@ mod tests {
         assert_eq!(meta.title, "hello world");
         assert!(meta.updated_at > 0);
 
-        let msg2 = ChatMessage::text("assistant", "hi there");
+        let msg2 = ChatMessage::text(MessageRole::Assistant, "hi there");
         assert!(append_session_event("meta-upd", &SessionEvent::msg(msg2)));
 
         let meta2 = load_session_meta_file("meta-upd").expect("meta should exist");
@@ -193,7 +195,7 @@ mod tests {
 
         let paths = SessionPaths::new("lazy-gen");
         paths.ensure_dir().unwrap();
-        let msg = ChatMessage::text("user", "lazy generation test");
+        let msg = ChatMessage::text(MessageRole::User, "lazy generation test");
         let line = serde_json::to_string(&SessionEvent::msg(msg)).unwrap();
         fs::write(paths.transcript(), format!("{}\n", line)).unwrap();
 

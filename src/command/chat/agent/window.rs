@@ -9,10 +9,10 @@
 //! 输出顺序始终保持原始时间顺序；丢弃的 ToolGroup 用统一占位符替换。
 
 use super::super::constants::{
-    ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER, WINDOW_KEEP_RECENT_MULTIPLIER,
-    WINDOW_QUOTA_ASST_TEXT, WINDOW_QUOTA_TOOL_GROUP, WINDOW_QUOTA_USER,
+    WINDOW_KEEP_RECENT_MULTIPLIER, WINDOW_QUOTA_ASST_TEXT, WINDOW_QUOTA_TOOL_GROUP,
+    WINDOW_QUOTA_USER,
 };
-use super::super::storage::ChatMessage;
+use super::super::storage::{ChatMessage, MessageRole};
 use super::compact::is_exempt_tool;
 use crate::util::log::write_info_log;
 
@@ -126,19 +126,19 @@ fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
     while i < messages.len() {
         let msg = &messages[i];
 
-        if msg.role == ROLE_SYSTEM {
+        if msg.role == MessageRole::System {
             units.push(MessageUnit::System { message_index: i });
             i += 1;
-        } else if msg.role == ROLE_USER {
+        } else if msg.role == MessageRole::User {
             units.push(MessageUnit::User { message_index: i });
             i += 1;
-        } else if msg.role == ROLE_ASSISTANT {
+        } else if msg.role == MessageRole::Assistant {
             if msg.tool_calls.is_some() {
                 // assistant + tool_calls → 收集后续 tool result
                 let assistant_message_index = i;
                 let mut tool_result_indices = Vec::new();
                 i += 1;
-                while i < messages.len() && messages[i].role == ROLE_TOOL {
+                while i < messages.len() && messages[i].role == MessageRole::Tool {
                     tool_result_indices.push(i);
                     i += 1;
                 }
@@ -151,13 +151,13 @@ fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
                 units.push(MessageUnit::AssistantText { message_index: i });
                 i += 1;
             }
-        } else if msg.role == ROLE_TOOL {
+        } else if msg.role == MessageRole::Tool {
             // 孤立的 tool result（没有前面的 assistant+tool_calls）
             // 作为 ToolGroup 处理（只有 result 没有 assistant）
             let start = i;
             let mut tool_result_indices = vec![i];
             i += 1;
-            while i < messages.len() && messages[i].role == ROLE_TOOL {
+            while i < messages.len() && messages[i].role == MessageRole::Tool {
                 tool_result_indices.push(i);
                 i += 1;
             }
@@ -368,13 +368,7 @@ fn merged_placeholder(names: &[String]) -> ChatMessage {
     } else {
         format!("[Previous: used {}]", names.join(", "))
     };
-    ChatMessage {
-        role: ROLE_ASSISTANT.to_string(),
-        content,
-        tool_calls: None,
-        tool_call_id: None,
-        images: None,
-    }
+    ChatMessage::text(MessageRole::Assistant, content)
 }
 
 // ========== 公开接口 ==========
@@ -501,28 +495,16 @@ mod tests {
     use super::*;
 
     fn user_msg(content: &str) -> ChatMessage {
-        ChatMessage {
-            role: ROLE_USER.to_string(),
-            content: content.to_string(),
-            tool_calls: None,
-            tool_call_id: None,
-            images: None,
-        }
+        ChatMessage::text(MessageRole::User, content)
     }
 
     fn assistant_msg(content: &str) -> ChatMessage {
-        ChatMessage {
-            role: ROLE_ASSISTANT.to_string(),
-            content: content.to_string(),
-            tool_calls: None,
-            tool_call_id: None,
-            images: None,
-        }
+        ChatMessage::text(MessageRole::Assistant, content)
     }
 
     fn tool_call_msg(names: &[&str]) -> ChatMessage {
         ChatMessage {
-            role: ROLE_ASSISTANT.to_string(),
+            role: MessageRole::Assistant,
             content: String::new(),
             tool_calls: Some(
                 names
@@ -542,7 +524,7 @@ mod tests {
 
     fn tool_result_msg(call_id: &str, content: &str) -> ChatMessage {
         ChatMessage {
-            role: ROLE_TOOL.to_string(),
+            role: MessageRole::Tool,
             content: content.to_string(),
             tool_calls: None,
             tool_call_id: Some(call_id.to_string()),
@@ -555,8 +537,8 @@ mod tests {
         let msgs = vec![user_msg("hello"), assistant_msg("hi")];
         let result = select_messages(&msgs, 100, 0, 10, &[]); // 0 = 不限制
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].role, ROLE_USER);
-        assert_eq!(result[1].role, ROLE_ASSISTANT);
+        assert_eq!(result[0].role, MessageRole::User);
+        assert_eq!(result[1].role, MessageRole::Assistant);
     }
 
     #[test]
@@ -575,8 +557,8 @@ mod tests {
         let result = select_messages(&msgs, 100, 1, 0, &[]);
 
         // User 应该保留，ToolGroup 应该被占位符替换
-        assert!(result.iter().any(|m| m.role == ROLE_USER));
-        assert!(!result.iter().any(|m| m.role == ROLE_TOOL)); // tool result 被丢弃
+        assert!(result.iter().any(|m| m.role == MessageRole::User));
+        assert!(!result.iter().any(|m| m.role == MessageRole::Tool)); // tool result 被丢弃
         assert!(result.iter().any(|m| m.content.contains("Previous: used"))); // 占位符
     }
 
@@ -597,7 +579,7 @@ mod tests {
         let user_positions: Vec<usize> = result
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.role == ROLE_USER)
+            .filter(|(_, m)| m.role == MessageRole::User)
             .map(|(i, _)| i)
             .collect();
         assert!(user_positions[0] < user_positions[1]);
@@ -643,7 +625,7 @@ mod tests {
 
         // 豁免 ToolGroup 的 tool result 应该保留，不会变占位符
         assert!(
-            result.iter().any(|m| m.role == ROLE_TOOL),
+            result.iter().any(|m| m.role == MessageRole::Tool),
             "exempt tool result 应该被保留"
         );
     }
@@ -663,13 +645,13 @@ mod tests {
         let result = select_messages(&msgs, 100, 2, 2, &[]);
 
         assert!(
-            result.iter().any(|m| m.role == ROLE_TOOL),
+            result.iter().any(|m| m.role == MessageRole::Tool),
             "最近的 tool result 应该被时间保底保留"
         );
         assert!(
             result
                 .iter()
-                .any(|m| m.role == ROLE_USER && m.content == "latest"),
+                .any(|m| m.role == MessageRole::User && m.content == "latest"),
             "最新 User 必须保留"
         );
     }

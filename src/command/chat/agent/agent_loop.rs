@@ -1,7 +1,6 @@
 use super::super::app::types::{StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent};
-use super::super::storage::{ChatMessage, ToolCallItem};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::compact;
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
@@ -10,7 +9,7 @@ use super::tool_processor::{
     ToolCallContext, clear_ui_messages, drain_pending_user_messages, flush_streaming_as_message,
     process_tool_calls, push_ui, sync_ui_full,
 };
-use crate::command::chat::constants::{ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER};
+use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
@@ -34,7 +33,7 @@ fn push_compact_tool_messages(
         arguments: r#"{"reason":"auto_compact"}"#.to_string(),
     };
     let tool_call_msg = ChatMessage {
-        role: ROLE_ASSISTANT.to_string(),
+        role: MessageRole::Assistant,
         content: String::new(),
         tool_calls: Some(vec![tool_call_item]),
         tool_call_id: None,
@@ -49,7 +48,7 @@ fn push_compact_tool_messages(
         compact_result.messages_before, compact_result.transcript_path, compact_result.summary,
     );
     let tool_msg = ChatMessage {
-        role: ROLE_TOOL.to_string(),
+        role: MessageRole::Tool,
         content: result_content,
         tool_calls: None,
         tool_call_id: Some(tool_call_id),
@@ -305,8 +304,8 @@ pub async fn run_main_agent_loop(
                 log_content.push_str(&format!("[System] {}\n", system_prompt));
             }
             for msg in &messages {
-                match msg.role.as_str() {
-                    ROLE_ASSISTANT => {
+                match msg.role {
+                    MessageRole::Assistant => {
                         if !msg.content.is_empty() {
                             log_content.push_str(&format!("[Assistant] {}\n", msg.content));
                         }
@@ -319,7 +318,7 @@ pub async fn run_main_agent_loop(
                             }
                         }
                     }
-                    ROLE_TOOL => {
+                    MessageRole::Tool => {
                         let id = msg.tool_call_id.as_deref().unwrap_or("?");
                         let tool_name = msg
                             .tool_calls
@@ -332,7 +331,7 @@ pub async fn run_main_agent_loop(
                             tool_name, id, msg.content
                         ));
                     }
-                    ROLE_USER => {
+                    MessageRole::User => {
                         log_content.push_str(&format!("[User] {}\n", msg.content));
                     }
                     other => {
@@ -839,16 +838,10 @@ pub async fn run_main_agent_loop(
                                     messages.push(user_msg.clone());
                                     push_ui(&ui_messages, user_msg);
                                 }
-                                let plan_msg = ChatMessage {
-                                    role: ROLE_USER.to_string(),
-                                    content: format!(
-                                        "以下计划已获批准，请按计划执行：\n\n{}",
-                                        plan_content
-                                    ),
-                                    tool_calls: None,
-                                    tool_call_id: None,
-                                    images: None,
-                                };
+                                let plan_msg = ChatMessage::text(
+                                    MessageRole::User,
+                                    format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
+                                );
                                 messages.push(plan_msg.clone());
                                 push_ui(&ui_messages, plan_msg);
                             }
@@ -1019,16 +1012,10 @@ pub async fn run_main_agent_loop(
                                 messages.push(user_msg.clone());
                                 push_ui(&ui_messages, user_msg);
                             }
-                            let plan_msg = ChatMessage {
-                                role: ROLE_USER.to_string(),
-                                content: format!(
-                                    "以下计划已获批准，请按计划执行：\n\n{}",
-                                    plan_content
-                                ),
-                                tool_calls: None,
-                                tool_call_id: None,
-                                images: None,
-                            };
+                            let plan_msg = ChatMessage::text(
+                                MessageRole::User,
+                                format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
+                            );
                             messages.push(plan_msg.clone());
                             push_ui(&ui_messages, plan_msg);
                         }
@@ -1079,13 +1066,8 @@ pub async fn run_main_agent_loop(
                         // retry_feedback → 注入为 user message，LLM 带反馈继续
                         if let Some(ref feedback) = result.retry_feedback {
                             write_info_log("Stop hook", &format!("纠查官反馈: {}", feedback));
-                            let feedback_msg = ChatMessage {
-                                role: ROLE_USER.to_string(),
-                                content: feedback.clone(),
-                                tool_calls: None,
-                                tool_call_id: None,
-                                images: None,
-                            };
+                            let feedback_msg =
+                                ChatMessage::text(MessageRole::User, feedback.clone());
                             messages.push(feedback_msg.clone());
                             push_ui(&ui_messages, feedback_msg);
                             continue 'round;

@@ -1,4 +1,4 @@
-use crate::command::chat::storage::{ChatMessage, TeammateSnapshotPersist};
+use crate::command::chat::storage::{ChatMessage, MessageRole, TeammateSnapshotPersist};
 use crate::util::log::write_info_log;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -273,7 +273,7 @@ impl TeammateManager {
         if from != "Main"
             && let Ok(mut pending) = self.main_agent_inbox.lock()
         {
-            pending.push(ChatMessage::text("user", &broadcast_message));
+            pending.push(ChatMessage::text(MessageRole::User, &broadcast_message));
         }
 
         // 注入到所有其他 teammate 的 pending
@@ -284,7 +284,7 @@ impl TeammateManager {
                 continue; // 不给自己发
             }
             if let Ok(mut pending) = handle.pending_user_messages.lock() {
-                pending.push(ChatMessage::text("user", &broadcast_message));
+                pending.push(ChatMessage::text(MessageRole::User, &broadcast_message));
             }
             let should_wake = from == "Main" || at_target == Some(name.as_str());
             if should_wake {
@@ -297,7 +297,10 @@ impl TeammateManager {
         if from != "Main"
             && let Ok(mut shared) = self.ui_messages.lock()
         {
-            shared.push(ChatMessage::text("assistant", &broadcast_message));
+            shared.push(ChatMessage::text(
+                MessageRole::Assistant,
+                &broadcast_message,
+            ));
         }
     }
 

@@ -1,6 +1,52 @@
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// 消息角色（API 层 + 存储层共用）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageRole {
+    User,
+    Assistant,
+    Tool,
+    System,
+}
+
+impl MessageRole {
+    /// 返回对应的字符串表示（用于日志、外部协议等）
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::Tool => "tool",
+            MessageRole::System => "system",
+        }
+    }
+}
+
+impl std::fmt::Display for MessageRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// 显示类型（渲染层专用，面向 UI 语义细分）
+///
+/// 将 `role` + `tool_calls` 组合映射为精确的渲染语义，
+/// 渲染层只需 `match msg.display_type()` 即可，无需二次判断。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayType {
+    /// 用户消息（右对齐气泡）
+    User,
+    /// AI 文本回复（左对齐气泡 + Markdown）
+    AssistantText,
+    /// 工具调用请求（折叠/展开参数）
+    ToolCallRequest,
+    /// 工具执行结果（带状态图标 + 摘要）
+    ToolResult,
+    /// 系统消息（灰色缩进）
+    System,
+}
+
 /// 单次工具调用请求（序列化到历史记录）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallItem {
@@ -21,7 +67,7 @@ pub struct ImageData {
 /// 对话消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    pub role: String, // "user" | "assistant" | "system" | "tool"
+    pub role: MessageRole,
     /// 消息内容（tool_call 类消息可为空）
     #[serde(default)]
     pub content: String,
@@ -38,9 +84,9 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     /// 创建普通文本消息
-    pub fn text(role: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
         Self {
-            role: role.into(),
+            role,
             content: content.into(),
             tool_calls: None,
             tool_call_id: None,
@@ -51,12 +97,12 @@ impl ChatMessage {
     /// 创建带图片的 user 消息
     #[allow(dead_code)]
     pub fn with_images(
-        role: impl Into<String>,
+        role: MessageRole,
         content: impl Into<String>,
         images: Vec<ImageData>,
     ) -> Self {
         Self {
-            role: role.into(),
+            role,
             content: content.into(),
             tool_calls: None,
             tool_call_id: None,
@@ -65,6 +111,25 @@ impl ChatMessage {
             } else {
                 Some(images)
             },
+        }
+    }
+
+    /// 推断显示类型（渲染层入口）
+    ///
+    /// 将 `role` + `tool_calls` 组合映射为精确的 `DisplayType`，
+    /// 渲染层无需再做 `role == "assistant" && tool_calls.is_some()` 的判断。
+    pub fn display_type(&self) -> DisplayType {
+        match self.role {
+            MessageRole::User => DisplayType::User,
+            MessageRole::System => DisplayType::System,
+            MessageRole::Assistant => {
+                if self.tool_calls.is_some() {
+                    DisplayType::ToolCallRequest
+                } else {
+                    DisplayType::AssistantText
+                }
+            }
+            MessageRole::Tool => DisplayType::ToolResult,
         }
     }
 }

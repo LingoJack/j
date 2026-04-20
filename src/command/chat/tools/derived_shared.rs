@@ -6,7 +6,7 @@ use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::{PendingAgentPerm, PermissionQueue};
-use crate::command::chat::storage::{ChatMessage, ModelProvider, ToolCallItem};
+use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::PlanApprovalQueue;
@@ -502,7 +502,7 @@ pub fn execute_tool_with_permission(
 ) -> ChatMessage {
     if cancelled.load(Ordering::Relaxed) {
         return ChatMessage {
-            role: "tool".to_string(),
+            role: MessageRole::Tool,
             content: "[Cancelled]".to_string(),
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
@@ -516,7 +516,7 @@ pub fn execute_tool_with_permission(
             write_info_log(log_tag, &format!("Tool denied by deny rule: {}", item.name));
         }
         return ChatMessage {
-            role: "tool".to_string(),
+            role: MessageRole::Tool,
             content: format!("Tool '{}' was denied by permission rules.", item.name),
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
@@ -554,7 +554,7 @@ pub fn execute_tool_with_permission(
             if !approved {
                 write_info_log(log_tag, &format!("Tool '{}' denied by user", item.name));
                 return ChatMessage {
-                    role: "tool".to_string(),
+                    role: MessageRole::Tool,
                     content: format!("Tool '{}' was denied by the user.", item.name),
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
@@ -573,7 +573,7 @@ pub fn execute_tool_with_permission(
                 );
             }
             return ChatMessage {
-                role: "tool".to_string(),
+                role: MessageRole::Tool,
                 content: format!(
                     "Tool '{}' requires user confirmation which is not available in sub-agent mode. \
                      Add a permission rule to allow this tool automatically.",
@@ -608,7 +608,7 @@ pub fn execute_tool_with_permission(
     }
 
     ChatMessage {
-        role: "tool".to_string(),
+        role: MessageRole::Tool,
         content: result.output,
         tool_calls: None,
         tool_call_id: Some(item.id.clone()),

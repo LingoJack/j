@@ -11,9 +11,9 @@ use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::infra::skill::{project_skills_dir, skills_dir};
 use crate::command::chat::permission::{JcliConfig, generate_allow_rule};
 use crate::command::chat::storage::{
-    AgentConfig, ChatMessage, ModelProvider, SessionEvent, ToolCallItem, append_session_event,
-    find_latest_session_id, load_agent_config, load_memory, load_session, load_soul, load_style,
-    load_system_prompt,
+    AgentConfig, ChatMessage, MessageRole, ModelProvider, SessionEvent, ToolCallItem,
+    append_session_event, find_latest_session_id, load_agent_config, load_memory, load_session,
+    load_soul, load_style, load_system_prompt,
 };
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
@@ -114,7 +114,7 @@ pub fn handle_chat(
         use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
 
-        let user_msg = ChatMessage::text("user", message.clone());
+        let user_msg = ChatMessage::text(MessageRole::User, message.clone());
         let mut messages = prior_messages.clone();
         messages.push(user_msg.clone());
 
@@ -183,7 +183,7 @@ pub fn handle_chat(
                     persist_messages(&session_id, &[user_msg], 0);
                     persist_messages(
                         &session_id,
-                        &[ChatMessage::text("assistant", &full_text)],
+                        &[ChatMessage::text(MessageRole::Assistant, &full_text)],
                         0,
                     );
                     use colored::Colorize;
@@ -423,7 +423,7 @@ fn run_oneshot_agent(
     let max_rounds = agent_config.max_tool_rounds;
 
     // 构建初始消息列表：先写入历史，再追加本次用户消息
-    let user_msg = ChatMessage::text("user", message);
+    let user_msg = ChatMessage::text(MessageRole::User, message);
     let prior_len = prior_messages.len();
     let mut messages = prior_messages;
     messages.push(user_msg);
@@ -655,7 +655,10 @@ fn run_oneshot_agent(
         if ctrl_c.load(std::sync::atomic::Ordering::Relaxed) {
             println!();
             if !sr.assistant_text.is_empty() {
-                messages.push(ChatMessage::text("assistant", &sr.assistant_text));
+                messages.push(ChatMessage::text(
+                    MessageRole::Assistant,
+                    &sr.assistant_text,
+                ));
             }
             persist_messages(session_id, &messages, prior_len);
             eprintln!("\n{}", "⏹ 已中断".dimmed());
@@ -692,7 +695,7 @@ fn run_oneshot_agent(
 
         // 添加 assistant 消息（含 tool_calls）
         messages.push(ChatMessage {
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: sr.assistant_text,
             tool_calls: Some(sr.tool_items.clone()),
             tool_call_id: None,
@@ -709,7 +712,7 @@ fn run_oneshot_agent(
                     "被权限规则拒绝".red()
                 );
                 messages.push(ChatMessage {
-                    role: "tool".to_string(),
+                    role: MessageRole::Tool,
                     content: "工具调用被拒绝（deny 规则匹配）".to_string(),
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
@@ -742,7 +745,7 @@ fn run_oneshot_agent(
                     _ => {
                         println!("{} {}", "⏭".dimmed(), "已跳过".dimmed());
                         messages.push(ChatMessage {
-                            role: "tool".to_string(),
+                            role: MessageRole::Tool,
                             content: "用户拒绝执行该工具".to_string(),
                             tool_calls: None,
                             tool_call_id: Some(item.id.clone()),
@@ -762,7 +765,7 @@ fn run_oneshot_agent(
             }
 
             messages.push(ChatMessage {
-                role: "tool".to_string(),
+                role: MessageRole::Tool,
                 content: result.output,
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),

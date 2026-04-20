@@ -1,6 +1,5 @@
 use super::super::error::ChatError;
-use super::super::storage::{ChatMessage, ModelProvider, ToolCallItem};
-use crate::command::chat::constants;
+use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::{
     Client,
@@ -16,7 +15,6 @@ use async_openai::{
         FunctionCall, ImageUrl,
     },
 };
-use constants::{ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_TOOL, ROLE_USER};
 use futures::StreamExt;
 use serde::Deserialize;
 
@@ -32,13 +30,13 @@ pub fn create_openai_client(provider: &ModelProvider) -> Client<OpenAIConfig> {
 pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequestMessage> {
     messages
         .iter()
-        .filter_map(|msg| match msg.role.as_str() {
-            ROLE_SYSTEM => ChatCompletionRequestSystemMessageArgs::default()
+        .filter_map(|msg| match msg.role {
+            MessageRole::System => ChatCompletionRequestSystemMessageArgs::default()
                 .content(msg.content.as_str())
                 .build()
                 .ok()
                 .map(ChatCompletionRequestMessage::System),
-            ROLE_USER => {
+            MessageRole::User => {
                 if let Some(ref images) = msg.images
                     && !images.is_empty()
                 {
@@ -81,7 +79,7 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                     .ok()
                     .map(ChatCompletionRequestMessage::User)
             }
-            ROLE_ASSISTANT => {
+            MessageRole::Assistant => {
                 let mut builder = ChatCompletionRequestAssistantMessageArgs::default();
                 if !msg.content.is_empty() {
                     builder.content(msg.content.as_str());
@@ -108,7 +106,7 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                     .ok()
                     .map(ChatCompletionRequestMessage::Assistant)
             }
-            ROLE_TOOL => {
+            MessageRole::Tool => {
                 let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
                 // tool_call_id 为空会导致 API 报 "tool_call_id is not found"，直接跳过
                 if tool_call_id.is_empty() {
@@ -125,7 +123,6 @@ pub fn to_openai_messages(messages: &[ChatMessage]) -> Vec<ChatCompletionRequest
                     .ok()
                     .map(ChatCompletionRequestMessage::Tool)
             }
-            _ => None,
         })
         .collect()
 }
@@ -144,7 +141,7 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     // Step 1：收集所有有效 tool result id（非空）
     let tool_result_ids: std::collections::HashSet<String> = messages
         .iter()
-        .filter(|m| m.role == ROLE_TOOL)
+        .filter(|m| m.role == MessageRole::Tool)
         .filter_map(|m| m.tool_call_id.clone())
         .filter(|id| !id.is_empty())
         .collect();
@@ -152,7 +149,7 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     // 收集所有 assistant 消息中合法（id 非空）的 tool_call id
     let assistant_tool_call_ids: std::collections::HashSet<String> = messages
         .iter()
-        .filter(|m| m.role == ROLE_ASSISTANT)
+        .filter(|m| m.role == MessageRole::Assistant)
         .flat_map(|m| {
             m.tool_calls
                 .iter()
@@ -166,7 +163,7 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     let result: Vec<ChatMessage> = messages
         .iter()
         .filter_map(|msg| {
-            if msg.role == ROLE_TOOL {
+            if msg.role == MessageRole::Tool {
                 let id = msg.tool_call_id.as_deref().unwrap_or("");
                 // 孤立 tool result：id 为空，或在 assistant tool_calls 中无对应项
                 if id.is_empty() || !assistant_tool_call_ids.contains(id) {
@@ -181,7 +178,7 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
                     return None;
                 }
             }
-            if msg.role == ROLE_ASSISTANT
+            if msg.role == MessageRole::Assistant
                 && let Some(ref tool_calls) = msg.tool_calls
             {
                 // 仅保留：id 非空 且 已有对应 tool result 的条目
