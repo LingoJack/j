@@ -2060,13 +2060,23 @@ impl ChatApp {
     /// 如果当前正在 loading（agent loop 运行中），消息追加到待处理队列，
     /// 与 TUI 本地模式下 Enter 的行为一致。
     pub fn inject_remote_message(&mut self, content: &str) {
+        use crate::command::chat::infra::command;
+        use crate::command::chat::storage::{ChatMessage, MessageRole};
+
         let text = content.trim().to_string();
         if text.is_empty() {
             return;
         }
+
+        // 展开 @command:name 引用
+        let text = command::expand_command_mentions(
+            &text,
+            &self.state.loaded_commands,
+            &self.state.agent_config.disabled_commands,
+        );
+
         if self.state.is_loading {
             // agent loop 运行中：追加到 pending 队列，下一轮 loop 会处理
-            use crate::command::chat::storage::{ChatMessage, MessageRole};
             self.state
                 .session
                 .messages
