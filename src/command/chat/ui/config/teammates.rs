@@ -20,12 +20,12 @@ pub(super) fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &Cha
 
     if snapshots.is_empty() && sub_snaps.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  (暂无 Teammate / SubAgent)",
+            "  (暂无协作者 / 子代理)",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  Teammate 由 AI 通过 CreateTeammate 工具创建，SubAgent 由 Agent 工具触发",
+            "  协作者由 AI 通过 CreateTeammate 工具创建，子代理由 Agent 工具触发",
             Style::default().fg(t.config_dim),
         )));
         return;
@@ -58,7 +58,7 @@ pub(super) fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &Cha
             .count();
 
         let mut summary_spans = vec![Span::styled(
-            format!("  Teammates: {} 个  ", snapshots.len()),
+            format!("  协作者: {} 个  ", snapshots.len()),
             Style::default()
                 .fg(t.config_label)
                 .add_modifier(Modifier::BOLD),
@@ -119,7 +119,7 @@ pub(super) fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &Cha
             .count();
 
         let mut summary_spans = vec![Span::styled(
-            format!("  SubAgents: {} 个  ", sub_snaps.len()),
+            format!("  子代理: {} 个  ", sub_snaps.len()),
             Style::default()
                 .fg(t.config_label)
                 .add_modifier(Modifier::BOLD),
@@ -155,7 +155,7 @@ pub(super) fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &Cha
     }
 
     lines.push(Line::from(Span::styled(
-        "  (s 停止 Teammate, Enter 详情；SubAgent 只读)",
+        "  (s 停止协作者, Enter 查看详情；子代理只读)",
         Style::default().fg(t.config_dim),
     )));
     lines.push(Line::from(""));
@@ -245,7 +245,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let sub_snaps = app.sub_agent_tracker.display_snapshots();
     if !sub_snaps.is_empty() {
         list.push_raw(Line::from(Span::styled(
-            "  ── SubAgents (只读) ──",
+            "  ── 子代理 (只读) ──",
             Style::default()
                 .fg(t.config_label)
                 .add_modifier(Modifier::BOLD),

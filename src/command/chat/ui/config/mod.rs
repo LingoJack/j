@@ -69,7 +69,7 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Hooks => " \u{1fa9d} Hooks ",
         ConfigTab::Commands => " \u{1f4cb} \u{81ea}\u{5b9a}\u{4e49}\u{547d}\u{4ee4} ",
         ConfigTab::Session => " \u{1f4ac} \u{4f1a}\u{8bdd}\u{7ba1}\u{7406} ",
-        ConfigTab::Teammates => " Teammates ",
+        ConfigTab::Teammates => " 👥 协作者 ",
         ConfigTab::Archive => " \u{1f4e6} \u{5f52}\u{6863}\u{7ba1}\u{7406} ",
     };
 

@@ -266,14 +266,14 @@ impl ConfigTab {
     /// 返回 Tab 显示标签
     pub fn label(&self) -> &'static str {
         match self {
-            ConfigTab::Model => "Model",
-            ConfigTab::Session => "Session",
-            ConfigTab::Global => "Global",
-            ConfigTab::Tools => "Tools",
-            ConfigTab::Skills => "Skills",
-            ConfigTab::Hooks => "Hooks",
-            ConfigTab::Commands => "Commands",
-            ConfigTab::Teammates => "Teammates",
+            ConfigTab::Model => "模型",
+            ConfigTab::Session => "会话",
+            ConfigTab::Global => "全局",
+            ConfigTab::Tools => "工具",
+            ConfigTab::Skills => "技能",
+            ConfigTab::Hooks => "钩子",
+            ConfigTab::Commands => "命令",
+            ConfigTab::Teammates => "协作者",
             ConfigTab::Archive => "归档",
         }
     }

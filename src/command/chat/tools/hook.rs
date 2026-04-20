@@ -204,7 +204,7 @@ impl RegisterHookTool {
 ```
 
 ## 关键字段说明
-- `action`：控制流动作，字符串 `"stop"` 或 `"skip"`。旧字段 `abort: true` 等价于 `action: "stop"`。
+- `action`：控制流动作，字符串 `"stop"` 或 `"skip"`
   - `"stop"`：中止当前步骤及其所属子管线
   - `"skip"`：跳过当前步骤，同级步骤继续（仅 `pre_tool_execution` 中使用）
 - `retry_feedback`：与 stop 配合使用。在 stop/pre_send_message/post_llm_response 中，stop+retry_feedback 会中止当前操作并将反馈注入为新消息，LLM 带反馈重新生成。这是实现"宪法 AI/纠查官"的核心机制。

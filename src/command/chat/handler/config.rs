@@ -140,10 +140,24 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Char('d') => Action::ToggleMenuDisableAll,
             _ => return,
         },
-        ConfigTab::Hooks | ConfigTab::Commands => match key.code {
+        ConfigTab::Hooks => match key.code {
             KeyCode::Esc => Action::SaveConfig,
             KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
             KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+            _ => return,
+        },
+        ConfigTab::Commands => match key.code {
+            KeyCode::Esc => {
+                save_agent_config(&app.state.agent_config);
+                Action::SaveConfig
+            }
+            KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
+            KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+            KeyCode::Up | KeyCode::Char('k') => Action::ToggleMenuNavigate(CursorDirection::Up),
+            KeyCode::Down | KeyCode::Char('j') => Action::ToggleMenuNavigate(CursorDirection::Down),
+            KeyCode::Enter | KeyCode::Char(' ') => Action::ToggleMenuToggle,
+            KeyCode::Char('a') => Action::ToggleMenuEnableAll,
+            KeyCode::Char('d') => Action::ToggleMenuDisableAll,
             _ => return,
         },
         ConfigTab::Teammates => match key.code {
