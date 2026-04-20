@@ -129,7 +129,7 @@ command/chat/
 ├── compact.rs           # Context window compaction (micro_compact + auto_compact)
 ├── permission.rs        # .jcli permission rule matching (allow/deny/allow_all)
 ├── skill.rs             # Skill loading from ~/.jdata/agent/skills/
-├── hook.rs              # 3-level hook system (user/project/session), 8 event types
+├── hook.rs              # 4-level hook system (builtin/user/project/session), directory-based layout, 14 event types
 ├── storage.rs           # Persistence: agent_config.json, chat_history.json, archives
 ├── theme.rs             # 6 built-in themes (Dark, Light, Dracula, Gruvbox, Monokai, Nord)
 ├── render_cache.rs      # Per-message rendering cache with throttled streaming

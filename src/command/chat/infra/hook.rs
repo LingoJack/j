@@ -322,6 +322,7 @@ pub struct LlmHook {
     /// 条件过滤
     pub filter: HookFilter,
     /// Hook 目录路径（目录布局下有值，session hook 为 None）
+    #[allow(dead_code)]
     pub dir_path: Option<PathBuf>,
 }
 

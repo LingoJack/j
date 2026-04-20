@@ -347,8 +347,14 @@ impl RegisterHookTool {
                             )
                         })
                         .unwrap_or_default();
+                    let name_str = entry.name.as_deref().unwrap_or("");
+                    let name_display = if name_str.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", name={}", name_str)
+                    };
                     output.push_str(&format!(
-                        "  [{}] event={}, source={}, type={}{}, label={}, timeout={}, on_error={}{}{}\n",
+                        "  [{}] event={}, source={}, type={}{}, label={}, timeout={}, on_error={}{}{}{}\n",
                         i,
                         entry.event.as_str(),
                         entry.source,
@@ -359,6 +365,7 @@ impl RegisterHookTool {
                         on_error_str,
                         filter_str,
                         metrics_str,
+                        name_display,
                     ));
                 }
                 ToolResult {
