@@ -416,7 +416,7 @@ impl ChatApp {
                         }
                         AskAnswer::FreeText(text) => text.clone(),
                     };
-                    answers_map.insert(q.question.clone(), serde_json::Value::String(val));
+                    answers_map.insert(q.header.clone(), serde_json::Value::String(val));
                 }
             }
 

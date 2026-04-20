@@ -329,7 +329,7 @@ fn run_oneshot_agent(
                         result.join(", ")
                     };
                     println!("  → {}", answer.green());
-                    answers.insert(q.question.clone(), serde_json::Value::String(answer));
+                    answers.insert(q.header.clone(), serde_json::Value::String(answer));
                 } else {
                     // 单选模式：复用 interactive_confirm 的模式
                     let options: Vec<String> = q
@@ -406,7 +406,7 @@ fn run_oneshot_agent(
                         .map(|o| o.label.clone())
                         .unwrap_or_default();
                     println!("  → {}", answer.green());
-                    answers.insert(q.question.clone(), serde_json::Value::String(answer));
+                    answers.insert(q.header.clone(), serde_json::Value::String(answer));
                 }
             }
 
