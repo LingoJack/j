@@ -27,8 +27,9 @@ use tokio_util::sync::CancellationToken;
 struct CreateTeammateParams {
     /// Teammate name (e.g. "Frontend", "Backend", "DevOps")
     name: String,
-    /// Role description (e.g. "React frontend developer")
-    role: String,
+    /// Role description (e.g. "React frontend developer"). Optional, defaults to name.
+    #[serde(default)]
+    role: Option<String>,
     /// Initial task prompt for this teammate
     prompt: String,
     /// If true, create an isolated git worktree for this teammate.
@@ -207,7 +208,7 @@ impl Tool for CreateTeammateTool {
 
         // 构建 teammate 专用 system prompt
         let teammate_name = params.name.clone();
-        let teammate_role = params.role.clone();
+        let teammate_role = params.role.clone().unwrap_or_else(|| params.name.clone());
         let initial_prompt = params.prompt.clone();
 
         // Clone 用于线程
@@ -298,7 +299,7 @@ impl Tool for CreateTeammateTool {
         // 注册 teammate
         let handle = TeammateHandle {
             name: params.name.clone(),
-            role: params.role.clone(),
+            role: params.role.clone().unwrap_or_default(),
             pending_user_messages,
             streaming_content,
             cancel_token,
@@ -334,7 +335,7 @@ impl Tool for CreateTeammateTool {
             output: format!(
                 "Teammate '{}' ({}){} created and started working on: {}",
                 params.name,
-                params.role,
+                params.role.as_deref().unwrap_or(&params.name),
                 worktree_note,
                 &params.prompt[..{
                     let mut b = params.prompt.len().min(100);
