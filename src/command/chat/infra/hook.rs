@@ -3,12 +3,14 @@ use super::super::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::constants::{
     HOOK_DEFAULT_LLM_TIMEOUT_SECS, HOOK_DEFAULT_TIMEOUT_SECS, HOOK_LLM_MAX_TOKENS,
 };
+use crate::config::YamlConfig;
 use crate::util::log::{write_error_log, write_info_log};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -291,16 +293,22 @@ pub enum HookKind {
 /// Shell hook：一条命令 + 超时 + 失败策略 + 条件过滤
 #[derive(Debug, Clone)]
 pub struct ShellHook {
+    /// Hook 目录名（目录布局下有值，session hook 为 None）
+    pub name: Option<String>,
     pub command: String,
     pub timeout: u64,
     pub retry: u32,
     pub on_error: OnError,
     pub filter: HookFilter,
+    /// Hook 目录路径（目录布局下有值，session hook 为 None）
+    pub dir_path: Option<PathBuf>,
 }
 
 /// LLM hook：prompt 模板 + 模型覆盖 + 超时 + 重试 + 失败策略 + 条件过滤
 #[derive(Debug, Clone)]
 pub struct LlmHook {
+    /// Hook 目录名（目录布局下有值，session hook 为 None）
+    pub name: Option<String>,
     /// Prompt 模板，支持 {{variable}} 模板变量
     pub prompt: String,
     /// 模型名覆盖（空则使用当前活跃 provider 的模型）
@@ -313,6 +321,8 @@ pub struct LlmHook {
     pub on_error: OnError,
     /// 条件过滤
     pub filter: HookFilter,
+    /// Hook 目录路径（目录布局下有值，session hook 为 None）
+    pub dir_path: Option<PathBuf>,
 }
 
 impl HookDef {
@@ -325,11 +335,13 @@ impl HookDef {
                     return Err("bash hook 缺少 command 字段".to_string());
                 }
                 Ok(HookKind::Shell(ShellHook {
+                    name: None,
                     command,
                     timeout: self.timeout,
                     retry: self.retry,
                     on_error: self.on_error,
                     filter: self.filter,
+                    dir_path: None,
                 }))
             }
             HookType::Llm => {
@@ -338,6 +350,7 @@ impl HookDef {
                     return Err("llm hook 缺少 prompt 字段".to_string());
                 }
                 Ok(HookKind::Llm(LlmHook {
+                    name: None,
                     prompt,
                     model: self.model,
                     timeout: if self.timeout == default_timeout() {
@@ -348,6 +361,7 @@ impl HookDef {
                     retry: if self.retry == 0 { 1 } else { self.retry },
                     on_error: self.on_error,
                     filter: self.filter,
+                    dir_path: None,
                 }))
             }
         }
@@ -360,14 +374,170 @@ impl From<HookDef> for HookKind {
             write_error_log("HookDef::into_hook_kind", &e);
             // 回退到空 Shell hook（不会执行有效操作，但不会 panic）
             HookKind::Shell(ShellHook {
+                name: None,
                 command: String::new(),
                 timeout: 0,
                 retry: 0,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
+                dir_path: None,
             })
         })
     }
+}
+
+// ========== HookDirDef（目录布局下的 HOOK.yaml 格式）==========
+
+/// HOOK.yaml 定义（目录布局下的格式）
+///
+/// 与 `HookDef` 的区别：`events` 为列表（一个 hook 可绑定多个事件），无 `command`/`prompt` 以外的不必要字段。
+/// 目录布局下 `command` 中的相对路径以 hook 目录为 cwd 解析。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookDirDef {
+    /// 绑定的事件列表
+    pub events: Vec<HookEvent>,
+    /// Hook 类型
+    #[serde(default)]
+    pub r#type: HookType,
+    /// Shell 命令（type=bash 时必填，通过 `sh -c` 执行，cwd 为 hook 目录）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// LLM prompt 模板（type=llm 时必填，支持 {{variable}} 模板变量）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    /// LLM 模型名覆盖
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// 超时秒数（bash 默认 10，llm 默认 30）
+    #[serde(default = "default_timeout")]
+    pub timeout: u64,
+    /// 重试次数（仅 Err 路径生效）
+    #[serde(default)]
+    pub retry: u32,
+    /// 失败策略
+    #[serde(default)]
+    pub on_error: OnError,
+    /// 条件过滤
+    #[serde(default, skip_serializing_if = "HookFilter::is_empty")]
+    pub filter: HookFilter,
+}
+
+impl HookDirDef {
+    /// 转换为 `Vec<(HookEvent, HookKind)>`（每个 event 一个条目）
+    pub fn into_hook_kinds(
+        self,
+        name: &str,
+        dir_path: &Path,
+    ) -> Result<Vec<(HookEvent, HookKind)>, String> {
+        if self.events.is_empty() {
+            return Err(format!("hook '{}' 的 events 为空", name));
+        }
+        let kind = match self.r#type {
+            HookType::Bash => {
+                let command = self.command.unwrap_or_default();
+                if command.is_empty() {
+                    return Err(format!("bash hook '{}' 缺少 command 字段", name));
+                }
+                HookKind::Shell(ShellHook {
+                    name: Some(name.to_string()),
+                    command,
+                    timeout: self.timeout,
+                    retry: self.retry,
+                    on_error: self.on_error,
+                    filter: self.filter,
+                    dir_path: Some(dir_path.to_path_buf()),
+                })
+            }
+            HookType::Llm => {
+                let prompt = self.prompt.unwrap_or_default();
+                if prompt.is_empty() {
+                    return Err(format!("llm hook '{}' 缺少 prompt 字段", name));
+                }
+                HookKind::Llm(LlmHook {
+                    name: Some(name.to_string()),
+                    prompt,
+                    model: self.model,
+                    timeout: if self.timeout == default_timeout() {
+                        default_llm_timeout()
+                    } else {
+                        self.timeout
+                    },
+                    retry: if self.retry == 0 { 1 } else { self.retry },
+                    on_error: self.on_error,
+                    filter: self.filter,
+                    dir_path: Some(dir_path.to_path_buf()),
+                })
+            }
+        };
+        Ok(self.events.into_iter().map(|e| (e, kind.clone())).collect())
+    }
+}
+
+// ========== 目录加载函数 ==========
+
+/// 返回用户级 hooks 目录: ~/.jdata/agent/hooks/
+pub fn hooks_dir() -> PathBuf {
+    let dir = YamlConfig::data_dir().join("agent").join("hooks");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// 返回项目级 hooks 目录: .jcli/hooks/（如果存在）
+pub fn project_hooks_dir() -> Option<PathBuf> {
+    let config_dir = JcliConfig::find_config_dir()?;
+    let dir = config_dir.join("hooks");
+    if dir.is_dir() { Some(dir) } else { None }
+}
+
+/// 从指定目录加载 hooks（遍历子目录，解析 HOOK.yaml）
+fn load_hooks_from_dir(dir: &Path, source_name: &str) -> Vec<(String, HookDirDef, PathBuf)> {
+    let mut hooks = Vec::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return hooks,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let hook_yaml = path.join("HOOK.yaml");
+        let hook_name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        if !hook_yaml.exists() {
+            continue;
+        }
+        match std::fs::read_to_string(&hook_yaml) {
+            Ok(content) => match serde_yaml::from_str::<HookDirDef>(&content) {
+                Ok(def) => {
+                    if def.events.is_empty() {
+                        write_error_log(
+                            "load_hooks_from_dir",
+                            &format!("hook '{}' 的 events 为空，跳过", hook_name),
+                        );
+                        continue;
+                    }
+                    hooks.push((hook_name, def, path));
+                }
+                Err(e) => write_error_log(
+                    "load_hooks_from_dir",
+                    &format!("解析 {}/HOOK.yaml 失败: {}", hook_name, e),
+                ),
+            },
+            Err(e) => write_error_log(
+                "load_hooks_from_dir",
+                &format!("读取 {}/HOOK.yaml 失败: {}", hook_name, e),
+            ),
+        }
+    }
+    write_info_log(
+        "load_hooks_from_dir",
+        &format!("从 {} 加载了 {} 个 hook", source_name, hooks.len()),
+    );
+    hooks
 }
 
 /// 内置 hook 的处理函数类型
@@ -395,12 +565,14 @@ impl std::fmt::Debug for HookKind {
         match self {
             HookKind::Shell(shell) => f
                 .debug_struct("HookKind::Shell")
+                .field("name", &shell.name)
                 .field("command", &shell.command)
                 .field("timeout", &shell.timeout)
                 .field("on_error", &shell.on_error)
                 .finish(),
             HookKind::Llm(llm) => f
                 .debug_struct("HookKind::Llm")
+                .field("name", &llm.name)
                 .field("prompt", &llm.prompt.len())
                 .field("model", &llm.model)
                 .field("timeout", &llm.timeout)
@@ -658,6 +830,8 @@ const HOOK_SOURCE_SESSION: &str = "session";
 
 /// 列出 hook 时的摘要信息
 pub struct HookEntry {
+    /// Hook 目录名（目录布局下有值）
+    pub name: Option<String>,
     pub event: HookEvent,
     pub source: &'static str,
     /// Hook 类型标签（bash / llm / builtin）
@@ -677,96 +851,45 @@ pub struct HookEntry {
 }
 
 impl HookManager {
-    /// 加载用户级（`~/.jdata/agent/hooks.yaml`）+ 项目级（`.jcli/hooks.yaml`）hook
+    /// 加载用户级（`~/.jdata/agent/hooks/`）+ 项目级（`.jcli/hooks/`）hook
     pub fn load() -> Self {
         let mut manager = HookManager::default();
 
-        // 加载用户级 hooks：~/.jdata/agent/hooks.yaml
-        let user_hooks_path = super::super::storage::hooks_config_path();
-        if user_hooks_path.is_file() {
-            match std::fs::read_to_string(&user_hooks_path) {
-                Ok(content) => {
-                    match serde_yaml::from_str::<HashMap<String, Vec<HookDef>>>(&content) {
-                        Ok(hooks_map) => {
-                            for (event_name, defs) in hooks_map {
-                                if let Some(event) = HookEvent::parse(&event_name) {
-                                    manager
-                                        .user_hooks
-                                        .entry(event)
-                                        .or_default()
-                                        .extend(defs.into_iter().map(HookKind::from));
-                                } else {
-                                    write_error_log(
-                                        "HookManager::load",
-                                        &format!("未知 hook 事件: {}", event_name),
-                                    );
-                                }
-                            }
-                            write_info_log(
-                                "HookManager::load",
-                                &format!("已加载用户级 hooks: {}", user_hooks_path.display()),
-                            );
-                        }
-                        Err(e) => {
-                            write_error_log(
-                                "HookManager::load",
-                                &format!("解析用户级 hooks.yaml 失败: {}", e),
-                            );
+        // 加载用户级 hooks: ~/.jdata/agent/hooks/
+        let user_dir = hooks_dir();
+        if user_dir.is_dir() {
+            for (name, dir_def, dir_path) in load_hooks_from_dir(&user_dir, "用户级") {
+                match dir_def.into_hook_kinds(&name, &dir_path) {
+                    Ok(pairs) => {
+                        for (event, kind) in pairs {
+                            manager.user_hooks.entry(event).or_default().push(kind);
                         }
                     }
-                }
-                Err(e) => {
-                    write_error_log("HookManager::load", &format!("读取 hooks.yaml 失败: {}", e));
+                    Err(e) => write_error_log("HookManager::load", &e),
                 }
             }
+            write_info_log(
+                "HookManager::load",
+                &format!("已加载用户级 hooks: {}", user_dir.display()),
+            );
         }
 
-        // 加载项目级 hooks：从 .jcli/hooks.yaml
-        if let Some(config_dir) = JcliConfig::find_config_dir() {
-            let hooks_path = config_dir.join("hooks.yaml");
-            if hooks_path.is_file() {
-                match std::fs::read_to_string(&hooks_path) {
-                    Ok(content) => {
-                        match serde_yaml::from_str::<HashMap<String, Vec<HookDef>>>(&content) {
-                            Ok(hooks_map) => {
-                                for (event_name, defs) in hooks_map {
-                                    if let Some(event) = HookEvent::parse(&event_name) {
-                                        manager
-                                            .project_hooks
-                                            .entry(event)
-                                            .or_default()
-                                            .extend(defs.into_iter().map(HookKind::from));
-                                    } else {
-                                        write_error_log(
-                                            "HookManager::load",
-                                            &format!(
-                                                "项目级 .jcli/hooks.yaml 中未知 hook 事件: {}",
-                                                event_name
-                                            ),
-                                        );
-                                    }
-                                }
-                                write_info_log(
-                                    "HookManager::load",
-                                    &format!("已加载项目级 hooks: {}", hooks_path.display()),
-                                );
-                            }
-                            Err(e) => {
-                                write_error_log(
-                                    "HookManager::load",
-                                    &format!("解析项目级 hooks.yaml 失败: {}", e),
-                                );
-                            }
+        // 加载项目级 hooks: .jcli/hooks/
+        if let Some(proj_dir) = project_hooks_dir() {
+            for (name, dir_def, dir_path) in load_hooks_from_dir(&proj_dir, "项目级") {
+                match dir_def.into_hook_kinds(&name, &dir_path) {
+                    Ok(pairs) => {
+                        for (event, kind) in pairs {
+                            manager.project_hooks.entry(event).or_default().push(kind);
                         }
                     }
-                    Err(e) => {
-                        write_error_log(
-                            "HookManager::load",
-                            &format!("读取项目级 hooks.yaml 失败: {}", e),
-                        );
-                    }
+                    Err(e) => write_error_log("HookManager::load", &e),
                 }
             }
+            write_info_log(
+                "HookManager::load",
+                &format!("已加载项目级 hooks: {}", proj_dir.display()),
+            );
         }
 
         manager
@@ -897,6 +1020,7 @@ impl HookManager {
                           metrics: &HashMap<String, HookMetrics>| {
             let label = hook_label(hook);
             HookEntry {
+                name: hook_name(hook).map(|s| s.to_string()),
                 event,
                 source,
                 hook_type: hook_type_str(hook),
@@ -959,7 +1083,7 @@ impl HookManager {
 
     /// 热重载用户级和项目级 hook 配置
     ///
-    /// 重新读取 `~/.jdata/agent/hooks.yaml` 和 `.jcli/hooks.yaml`，
+    /// 重新读取 `~/.jdata/agent/hooks/` 和 `.jcli/hooks/` 目录，
     /// 替换当前的 user_hooks 和 project_hooks（builtin 和 session 级不受影响）。
     /// 指标数据和 provider 保留不清零。
     #[allow(dead_code)]
@@ -1500,8 +1624,8 @@ fn execute_llm_hook(
 ///
 /// 协议：
 /// - 执行方式: `sh -c "<command>"`
-/// - 工作目录: 用户当前目录 (`std::env::current_dir()`)
-/// - 环境变量: `JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（当前目录）
+/// - 工作目录: hook 目录（目录布局下）或用户当前目录（session hook）
+/// - 环境变量: `JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（用户当前目录）、`JCLI_HOOK_DIR`（hook 目录）
 /// - stdin: HookContext JSON
 /// - stdout: HookResult JSON（可为空字符串/空 JSON `{}`，表示无修改）
 /// - exit 0: 成功
@@ -1511,14 +1635,25 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
     let context_json =
         serde_json::to_string(context).map_err(|e| format!("序列化 context 失败: {}", e))?;
 
-    let cwd = std::env::current_dir().map_err(|e| format!("获取 cwd 失败: {}", e))?;
+    // 目录布局下使用 hook 目录作为 cwd，session hook 使用用户当前目录
+    let cwd = hook
+        .dir_path
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let user_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let hook_dir_str = hook
+        .dir_path
+        .as_ref()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
 
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(&hook.command)
         .current_dir(&cwd)
         .env("JCLI_HOOK_EVENT", context.event.as_str())
-        .env("JCLI_CWD", cwd.display().to_string())
+        .env("JCLI_CWD", user_cwd.display().to_string())
+        .env("JCLI_HOOK_DIR", &hook_dir_str)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -1590,10 +1725,25 @@ fn execute_shell_hook(hook: &ShellHook, context: &HookContext) -> Result<HookRes
 
 // ========== 辅助函数 ==========
 
+/// 获取 hook 的名称（目录布局下的目录名）
+fn hook_name(kind: &HookKind) -> Option<&str> {
+    match kind {
+        HookKind::Shell(shell) => shell.name.as_deref(),
+        HookKind::Llm(llm) => llm.name.as_deref(),
+        HookKind::Builtin(builtin) => Some(&builtin.name),
+    }
+}
+
 /// 获取 hook 的显示标签（Shell 用命令，LLM 用 prompt 摘要，Builtin 用名称）
 fn hook_label(kind: &HookKind) -> String {
     match kind {
-        HookKind::Shell(shell) => shell.command.clone(),
+        HookKind::Shell(shell) => {
+            if let Some(ref name) = shell.name {
+                format!("{}: {}", name, shell.command)
+            } else {
+                shell.command.clone()
+            }
+        }
         HookKind::Llm(llm) => {
             // 取 prompt 前一行或前 80 字符作为标签
             let first_line = llm
@@ -1601,10 +1751,15 @@ fn hook_label(kind: &HookKind) -> String {
                 .lines()
                 .find(|l| !l.trim().is_empty())
                 .unwrap_or(&llm.prompt);
-            if first_line.len() > 80 {
-                format!("[llm: {}...]", &first_line[..80])
+            let prompt_preview = if first_line.len() > 80 {
+                format!("{}...", &first_line[..80])
             } else {
-                format!("[llm: {}]", first_line)
+                first_line.to_string()
+            };
+            if let Some(ref name) = llm.name {
+                format!("[llm: {}] {}", name, prompt_preview)
+            } else {
+                format!("[llm: {}]", prompt_preview)
             }
         }
         HookKind::Builtin(builtin) => format!("[builtin: {}]", builtin.name),
@@ -1844,11 +1999,13 @@ retry: 2
     #[test]
     fn test_execute_shell_hook_echo() {
         let hook = ShellHook {
+            name: None,
             command: r#"echo '{"user_input": "hooked"}'"#.to_string(),
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -1863,11 +2020,13 @@ retry: 2
     #[test]
     fn test_execute_shell_hook_empty_output() {
         let hook = ShellHook {
+            name: None,
             command: "echo ''".to_string(),
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx).unwrap();
@@ -1878,11 +2037,13 @@ retry: 2
     #[test]
     fn test_execute_shell_hook_nonzero_exit() {
         let hook = ShellHook {
+            name: None,
             command: "exit 1".to_string(),
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx);
@@ -1892,11 +2053,13 @@ retry: 2
     #[test]
     fn test_execute_shell_hook_reads_stdin() {
         let hook = ShellHook {
+            name: None,
             command: r#"input=$(cat); event=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('event',''))" 2>/dev/null || echo ""); echo '{"user_input": "got_input"}'"#.to_string(),
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -2309,11 +2472,13 @@ on_error: abort"#;
     fn test_shell_hook_stderr_captured() {
         // 验证 stderr 输出不会导致死锁，且进程正常完成
         let hook = ShellHook {
+            name: None,
             command: r#"echo '{"user_input": "ok"}'; echo "debug info" >&2"#.to_string(),
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext {
             event: HookEvent::PreSendMessage,
@@ -2328,11 +2493,13 @@ on_error: abort"#;
     fn test_shell_hook_stderr_in_error() {
         // 验证失败时 stderr 内容包含在错误信息中
         let hook = ShellHook {
+            name: None,
             command: r#"echo "something went wrong" >&2; exit 1"#.to_string(),
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext::default();
         let result = execute_shell_hook(&hook, &ctx);
@@ -2670,12 +2837,14 @@ prompt: "check this""#;
         manager.register_session_hook_kind(
             HookEvent::PreSendMessage,
             HookKind::Llm(LlmHook {
+                name: None,
                 prompt: "check content".to_string(),
                 model: None,
                 timeout: 30,
                 retry: 1,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
+                dir_path: None,
             }),
         );
 
@@ -2689,12 +2858,14 @@ prompt: "check this""#;
     #[test]
     fn test_llm_hook_no_provider_returns_err() {
         let hook = LlmHook {
+            name: None,
             prompt: "test".to_string(),
             model: None,
             timeout: 5,
             retry: 0,
             on_error: OnError::Skip,
             filter: HookFilter::default(),
+            dir_path: None,
         };
         let ctx = HookContext::default();
         let result = execute_llm_hook(&hook, &ctx, &None);

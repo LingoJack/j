@@ -208,7 +208,7 @@ Skills live in `~/.jdata/agent/skills/<name>/SKILL.md` with YAML frontmatter (na
 
 ### Hook System
 
-Three levels (user `~/.jdata/agent/hooks.yaml`, project `.jcli` hooks section, session via `register_hook` tool). 8 events: pre/post_send_message, pre/post_llm_request, pre/post_tool_execution, session_start/end. Hooks receive JSON via stdin, return JSON modifications via stdout.
+Three levels (user `~/.jdata/agent/hooks/<name>/HOOK.yaml`, project `.jcli/hooks/<name>/HOOK.yaml`, session via `register_hook` tool). Each hook is a directory containing `HOOK.yaml` (with `events` list, type, command/prompt, timeout, retry, on_error, filter) and optional script files. Shell hooks execute with cwd set to the hook directory. 14 events: pre/post_send_message, pre/post_llm_request, pre/post_tool_execution, post_tool_execution_failure, stop, pre/post_micro_compact, pre/post_auto_compact, session_start/end. Hooks receive JSON via stdin, return JSON modifications via stdout.
 
 ## Key Conventions
 

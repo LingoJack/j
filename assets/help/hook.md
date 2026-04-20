@@ -7,8 +7,8 @@ order: 8
 
 Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分，支持三级来源：
 
-1. **用户级**：`~/.jdata/agent/hooks.yaml` — 全局生效
-2. **项目级**：`.jcli/hooks.yaml` — 项目目录下生效
+1. **用户级**：`~/.jdata/agent/hooks/<hook_name>/HOOK.yaml` — 全局生效
+2. **项目级**：`.jcli/hooks/<hook_name>/HOOK.yaml` — 项目目录下生效
 3. **Session 级**：通过 `register_hook` 工具由 AI 动态注册 — 仅当前会话
 
 > 运行时实际还存在**内置 hook**，执行顺序是：内置 -> 用户级 -> 项目级 -> Session 级。
@@ -148,8 +148,8 @@ Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分
 ### Bash Hook 脚本协议
 
 - 执行方式：`sh -c "<command>"`
-- 工作目录：用户当前目录
-- 环境变量：`JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（当前目录）
+- 工作目录：hook 目录（目录布局下为 `<hook_name>/`，session hook 为用户当前目录）
+- 环境变量：`JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（用户当前目录）、`JCLI_HOOK_DIR`（hook 目录，目录布局下有值）
 - stdin：HookContext JSON
 - stdout：HookResult JSON（只返回要修改的字段，空/`{}` 表示无修改）
 - exit 0 = 成功，非零 = 失败（按 on_error 策略处理：skip=记录日志继续，abort=中止整条链）
@@ -207,22 +207,45 @@ Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分
 
 ### 配置示例
 
-`~/.jdata/agent/hooks.yaml`：
+Hook 采用目录布局，每个 hook 是一个目录：
+
+```
+~/.jdata/agent/hooks/<hook_name>/
+├── HOOK.yaml      # hook 定义
+└── script.sh      # 可选脚本，command 里用 ./script.sh 引用
+```
+
+**HOOK.yaml 示例 (bash)**：
 
 ```yaml
-pre_send_message:
-  - command: "python3 ~/.jdata/agent/hooks/inject_time.py"
-    timeout: 5
-    on_error: skip
-session_start:
-  - command: "echo '{\"inject_messages\": [{\"role\": \"user\", \"content\": \"当前用户: jack\"}]}'"
-pre_tool_execution:
-  - type: llm
-    prompt: |
-      审查工具调用是否安全：工具={{tool_name}} 参数={{tool_arguments}}
-      如果不安全，返回 {"action":"skip"}，否则返回 {}
-    filter:
-      tool_matcher: "Bash|Shell"
+# ~/.jdata/agent/hooks/inject_time/HOOK.yaml
+events: [pre_send_message]
+type: bash
+command: ./inject_time.sh
+timeout: 5
+on_error: skip
+```
+
+**HOOK.yaml 示例 (llm)**：
+
+```yaml
+# ~/.jdata/agent/hooks/safety_check/HOOK.yaml
+events: [pre_tool_execution]
+type: llm
+prompt: |
+  审查工具调用是否安全：工具={{tool_name}} 参数={{tool_arguments}}
+  如果不安全，返回 {"action":"skip"}，否则返回 {}
+filter:
+  tool_matcher: "Bash|Shell"
+```
+
+**多事件绑定**：
+
+```yaml
+# 同一个 hook 绑定多个事件
+events: [pre_send_message, post_send_message]
+type: bash
+command: ./log.sh
 ```
 
 ### 更多示例
@@ -230,45 +253,54 @@ pre_tool_execution:
 #### 示例 1：LLM 纠查官（推荐，type=llm）
 
 ```yaml
-# ~/.jdata/agent/hooks.yaml
-post_llm_response:
-  - type: llm
-    prompt: |
-      检查以下 AI 回复是否包含敏感信息（密码、密钥、token）：
-      {{assistant_output}}
-      如果包含敏感信息，返回 action=stop + retry_feedback 说明问题。
-      如果没有问题，返回空 JSON {}。
-    timeout: 30
-    retry: 1
-    on_error: skip
+# ~/.jdata/agent/hooks/censor/HOOK.yaml
+events: [post_llm_response]
+type: llm
+prompt: |
+  检查以下 AI 回复是否包含敏感信息（密码、密钥、token）：
+  {{assistant_output}}
+  如果包含敏感信息，返回 action=stop + retry_feedback 说明问题。
+  如果没有问题，返回空 JSON {}。
+timeout: 30
+retry: 1
+on_error: skip
 ```
 
 #### 示例 2：LLM 消息审查（pre_send_message）
 
 ```yaml
-pre_send_message:
-  - type: llm
-    prompt: |
-      审查用户消息是否合规：{{user_input}}
-      如有违规返回 action=stop 和 retry_feedback。
-    model: gpt-4o-mini
-    timeout: 15
-    retry: 1
+# ~/.jdata/agent/hooks/msg_review/HOOK.yaml
+events: [pre_send_message]
+type: llm
+prompt: |
+  审查用户消息是否合规：{{user_input}}
+  如有违规返回 action=stop 和 retry_feedback。
+model: gpt-4o-mini
+timeout: 15
+retry: 1
 ```
 
 #### 示例 3：Bash 脚本 - 给消息加时间戳（pre_send_message）
 
 ```bash
 #!/bin/bash
+# ~/.jdata/agent/hooks/inject_time/inject_time.sh
 input=$(cat)
 msg=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_input',''))")
 echo "{\"user_input\": \"[$(date '+%H:%M')] $msg\"}"
+```
+
+```yaml
+# ~/.jdata/agent/hooks/inject_time/HOOK.yaml
+events: [pre_send_message]
+command: ./inject_time.sh
 ```
 
 #### 示例 4：Bash 脚本 - 跳过危险命令（pre_tool_execution）
 
 ```bash
 #!/bin/bash
+# ~/.jdata/agent/hooks/rm_guard/guard.sh
 input=$(cat)
 tool=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_name',''))")
 args=$(echo "$input" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_arguments',''))")
@@ -279,18 +311,25 @@ else
 fi
 ```
 
-#### 示例 5：YAML 配置 - 带过滤器的工具审查
+```yaml
+# ~/.jdata/agent/hooks/rm_guard/HOOK.yaml
+events: [pre_tool_execution]
+command: ./guard.sh
+```
+
+#### 示例 5：带过滤器的工具审查
 
 ```yaml
-pre_tool_execution:
-  - type: llm
-    prompt: |
-      审查工具调用是否安全：工具={{tool_name}}, 参数={{tool_arguments}}
-      如果不安全，返回 action=skip。
-    filter:
-      tool_matcher: "Bash|Shell"
-    timeout: 15
-    retry: 1
+# ~/.jdata/agent/hooks/tool_review/HOOK.yaml
+events: [pre_tool_execution]
+type: llm
+prompt: |
+  审查工具调用是否安全：工具={{tool_name}}, 参数={{tool_arguments}}
+  如果不安全，返回 action=skip。
+filter:
+  tool_matcher: "Bash|Shell"
+timeout: 15
+retry: 1
 ```
 
 ### HookContext 字段（stdin JSON）
@@ -308,7 +347,7 @@ pre_tool_execution:
 | `tool_result` | string | 工具执行结果 |
 | `tool_error` | string | 工具执行失败原因 |
 | `session_id` | string | 当前会话 ID |
-| `cwd` | string | 当前工作目录 |
+| `cwd` | string | 用户当前工作目录（JCLI_CWD 环境变量，与 hook 执行目录 JCLI_HOOK_DIR 可能不同） |
 
 > 各字段按事件类型有选择性地填充，未填充的字段序列化时省略
 

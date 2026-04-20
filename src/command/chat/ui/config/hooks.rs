@@ -21,11 +21,11 @@ pub(super) fn draw_tab_hooks_lines<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp)
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  \u{7528}\u{6237}\u{7ea7}: ~/.jdata/agent/hooks.yaml",
+            "  \u{7528}\u{6237}\u{7ea7}: ~/.jdata/agent/hooks/",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(Span::styled(
-            "  \u{9879}\u{76ee}\u{7ea7}: .jcli/hooks.yaml",
+            "  \u{9879}\u{76ee}\u{7ea7}: .jcli/hooks/",
             Style::default().fg(t.config_dim),
         )));
         lines.push(Line::from(Span::styled(

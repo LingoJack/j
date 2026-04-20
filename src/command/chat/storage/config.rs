@@ -119,13 +119,6 @@ pub fn soul_path() -> PathBuf {
     agent_data_dir().join("soul.md")
 }
 
-/// 获取用户级 hooks 配置文件路径: ~/.jdata/agent/hooks.yaml
-pub fn hooks_config_path() -> PathBuf {
-    let dir = YamlConfig::data_dir().join("agent");
-    let _ = fs::create_dir_all(&dir);
-    dir.join("hooks.yaml")
-}
-
 /// 加载 Agent 配置
 pub fn load_agent_config() -> AgentConfig {
     let path = agent_config_path();
