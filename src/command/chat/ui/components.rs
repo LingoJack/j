@@ -14,6 +14,52 @@ pub const SEPARATOR_V: &str = "\u{2502}";
 pub const INDENT: &str = "  ";
 pub const LABEL_WIDTH: usize = 16; // 显示宽度（CJK 字符占 2 列）
 
+// ── ItemList 组件 ──────────────────────────────────────
+
+/// 配置面板列表组件
+///
+/// 自动在 item 之间插入空行间距，最后一个 item 后不插入。
+/// 同时维护 `field_line_indices`，用于滚动定位。
+pub struct ItemList<'a> {
+    lines: Vec<Line<'a>>,
+    field_line_indices: Vec<usize>,
+}
+
+impl<'a> ItemList<'a> {
+    /// 创建空列表
+    pub fn new() -> Self {
+        Self {
+            lines: Vec::new(),
+            field_line_indices: Vec::new(),
+        }
+    }
+
+    /// 添加一个列表项，自动在非首个 item 前插入空行
+    pub fn push(&mut self, line: Line<'a>) {
+        if !self.lines.is_empty() {
+            self.lines.push(Line::from(""));
+        }
+        self.field_line_indices.push(self.lines.len());
+        self.lines.push(line);
+    }
+
+    /// 添加一行非 item 内容（如分组标题、分隔线），不触发间距逻辑
+    pub fn push_raw(&mut self, line: Line<'a>) {
+        self.lines.push(line);
+    }
+
+    /// 消费 self，返回 (lines, field_line_indices)
+    pub fn into_parts(self) -> (Vec<Line<'a>>, Vec<usize>) {
+        (self.lines, self.field_line_indices)
+    }
+}
+
+impl Default for ItemList<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ── 分隔线 ────────────────────────────────────────────
 
 /// 自适应宽度分隔线（替代硬编码 41 字符的 "─────…"）

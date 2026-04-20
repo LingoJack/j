@@ -3,8 +3,9 @@ use super::super::ui_helpers::{
     config_field_value_global, config_field_value_model,
 };
 use super::components::{
-    global_preview_row, global_text_row, global_theme_row, global_toggle_row, secret_field_row,
-    selectable_row, separator_line, tab_bar, text_field_row, toggle_list_item, toggle_row,
+    ItemList, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
+    secret_field_row, selectable_row, separator_line, tab_bar, text_field_row, toggle_list_item,
+    toggle_row,
 };
 use crate::command::chat::app::{ChatApp, ConfigTab};
 use crate::command::chat::teammate::TeammateStatus;
@@ -77,19 +78,31 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     match app.ui.config_tab {
         ConfigTab::Model => {
             draw_tab_model_header(&mut tab_header_lines, app, area.width.saturating_sub(2));
-            draw_tab_model_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_model_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Global => {
             // Global 没有固定头部，全部是字段列表
-            draw_tab_global_lines(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_global_lines(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Tools => {
             draw_tab_tools_header(&mut tab_header_lines, app);
-            draw_tab_tools_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_tools_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Skills => {
             draw_tab_skills_header(&mut tab_header_lines, app);
-            draw_tab_skills_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_skills_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Hooks => {
             // Hooks 没有可选列表，全部固定展示
@@ -97,19 +110,31 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         }
         ConfigTab::Commands => {
             draw_tab_commands_header(&mut tab_header_lines, app);
-            draw_tab_commands_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_commands_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Teammates => {
             draw_tab_teammates_header(&mut tab_header_lines, app);
-            draw_tab_teammates_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_teammates_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Session => {
             draw_tab_session_header(&mut tab_header_lines, app);
-            draw_tab_session_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_session_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Archive => {
             draw_tab_archive_header(&mut tab_header_lines, app);
-            draw_tab_archive_list(&mut list_lines, &mut field_line_indices, app);
+            let list = draw_tab_archive_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
     }
 
@@ -448,17 +473,13 @@ fn draw_tab_model_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp, available
 }
 
 /// Model tab 可滚动列表（配置字段）
-fn draw_tab_model_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_model_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let provider_count = app.state.agent_config.providers.len();
+    let mut list = ItemList::new();
 
     if provider_count > 0 {
         for (i, provider_field) in CONFIG_FIELDS.iter().enumerate() {
-            field_line_indices.push(lines.len());
             let is_selected = app.ui.config_field_idx == i;
             let label = config_field_label_model(i);
             let value = if app.ui.config_editing && is_selected {
@@ -498,24 +519,21 @@ fn draw_tab_model_list<'a>(
                     t,
                 )
             };
-            lines.push(line);
-            lines.push(Line::from(""));
+            list.push(line);
         }
     }
+    list
 }
 
 /// Global tab 内容（三列布局: label | value | desc，--- 分隔分组）
-fn draw_tab_global_lines<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
+    let mut list = ItemList::new();
 
     // compact_exempt_tools 子列表模式
     if app.ui.compact_exempt_sublist {
-        // 标题行 (lines[0]) + 空行 (lines[1])
-        lines.push(Line::from(vec![
+        // 标题行 + 空行
+        list.push_raw(Line::from(vec![
             Span::styled(
                 "  豁免压缩工具  ",
                 Style::default().fg(t.config_label_selected),
@@ -526,7 +544,7 @@ fn draw_tab_global_lines<'a>(
                 Style::default().fg(t.config_dim),
             ),
         ]));
-        lines.push(Line::from(""));
+        list.push_raw(Line::from(""));
 
         use crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS;
         let tool_names = app.tool_registry.tool_names();
@@ -543,14 +561,13 @@ fn draw_tab_global_lines<'a>(
                 name.to_string()
             };
 
-            field_line_indices.push(lines.len());
-            lines.push(toggle_list_item(&label, is_exempt, selected, None, None, t));
+            list.push(toggle_list_item(&label, is_exempt, selected, None, None, t));
         }
-        return;
+        return list;
     }
 
     // 顶部留白
-    lines.push(Line::from(""));
+    list.push_raw(Line::from(""));
 
     // 分组定义: (字段起始索引, 包含字段数)
     let groups: &[(usize, usize)] = &[
@@ -564,12 +581,12 @@ fn draw_tab_global_lines<'a>(
     for (gi, &(start, count)) in groups.iter().enumerate() {
         // --- 分隔线 + 空行（首组不画）
         if gi > 0 {
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
+            list.push_raw(Line::from(""));
+            list.push_raw(Line::from(Span::styled(
                 "  ────────────────────────────────────",
                 Style::default().fg(t.separator),
             )));
-            lines.push(Line::from(""));
+            list.push_raw(Line::from(""));
         }
 
         for i in start..start + count {
@@ -580,7 +597,6 @@ fn draw_tab_global_lines<'a>(
             // is_none() 已在上方判断并 continue，此处 field 必为 Some
             let field_name = field.expect("checked is_none() above with continue");
 
-            field_line_indices.push(lines.len());
             let is_selected = app.ui.config_field_idx == i;
             let label = config_field_label_global(i);
             let value = if app.ui.config_editing && is_selected {
@@ -643,10 +659,10 @@ fn draw_tab_global_lines<'a>(
                     t,
                 )
             };
-            lines.push(line);
-            lines.push(Line::from(""));
+            list.push(line);
         }
     }
+    list
 }
 
 /// Tools tab 固定头部（总开关）
@@ -691,16 +707,12 @@ fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 }
 
 /// Tools tab 可滚动列表
-fn draw_tab_tools_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
+    let mut list = ItemList::new();
 
     for (i, name) in tool_names.iter().enumerate() {
-        field_line_indices.push(lines.len());
         let is_selected = i == app.ui.config_field_idx;
         let is_enabled = !app
             .state
@@ -708,7 +720,7 @@ fn draw_tab_tools_list<'a>(
             .disabled_tools
             .iter()
             .any(|d| d == *name);
-        lines.push(toggle_list_item(
+        list.push(toggle_list_item(
             name,
             is_enabled,
             is_selected,
@@ -716,8 +728,8 @@ fn draw_tab_tools_list<'a>(
             None,
             t,
         ));
-        lines.push(Line::from(""));
     }
+    list
 }
 
 /// Skills tab 固定头部（已启用计数）
@@ -748,15 +760,11 @@ fn draw_tab_skills_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 }
 
 /// Skills tab 可滚动列表
-fn draw_tab_skills_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_skills_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
+    let mut list = ItemList::new();
 
     for (i, skill) in app.state.loaded_skills.iter().enumerate() {
-        field_line_indices.push(lines.len());
         let is_selected = i == app.ui.config_field_idx;
         let name = &skill.frontmatter.name;
         let is_enabled = !app
@@ -765,7 +773,7 @@ fn draw_tab_skills_list<'a>(
             .disabled_skills
             .iter()
             .any(|d| d == name);
-        lines.push(toggle_list_item(
+        list.push(toggle_list_item(
             name,
             is_enabled,
             is_selected,
@@ -773,8 +781,8 @@ fn draw_tab_skills_list<'a>(
             Some(skill.source.label()),
             t,
         ));
-        lines.push(Line::from(""));
     }
+    list
 }
 
 /// Hooks tab（展示已注册的 hooks）
@@ -894,15 +902,11 @@ fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 }
 
 /// Commands tab 可滚动列表
-fn draw_tab_commands_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_commands_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
+    let mut list = ItemList::new();
 
     for (i, cmd) in app.state.loaded_commands.iter().enumerate() {
-        field_line_indices.push(lines.len());
         let is_selected = i == app.ui.config_field_idx;
         let name = &cmd.frontmatter.name;
         let is_enabled = !app
@@ -911,7 +915,7 @@ fn draw_tab_commands_list<'a>(
             .disabled_commands
             .iter()
             .any(|d| d == name);
-        lines.push(toggle_list_item(
+        list.push(toggle_list_item(
             name,
             is_enabled,
             is_selected,
@@ -919,8 +923,8 @@ fn draw_tab_commands_list<'a>(
             Some(cmd.source.label()),
             t,
         ));
-        lines.push(Line::from(""));
     }
+    list
 }
 
 /// Teammates tab 固定头部（团队摘要 + SubAgents 摘要）
@@ -1078,12 +1082,9 @@ fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 }
 
 /// Teammates tab 可滚动列表
-fn draw_tab_teammates_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
+    let mut list = ItemList::new();
 
     let snapshots = app
         .teammate_manager
@@ -1092,7 +1093,6 @@ fn draw_tab_teammates_list<'a>(
         .unwrap_or_default();
 
     for (i, snap) in snapshots.iter().enumerate() {
-        field_line_indices.push(lines.len());
         let is_selected = i == app.ui.teammate_list_index;
 
         let pointer = if is_selected { "❯ " } else { "  " };
@@ -1143,7 +1143,7 @@ fn draw_tab_teammates_list<'a>(
                 .add_modifier(Modifier::BOLD)
         };
 
-        lines.push(Line::from(vec![
+        list.push(Line::from(vec![
             Span::styled(pointer.to_string(), pointer_style),
             Span::styled(format!("{:<12}", snap.name), name_style),
             Span::styled(
@@ -1159,19 +1159,18 @@ fn draw_tab_teammates_list<'a>(
                 Style::default().fg(t.text_dim),
             ),
         ]));
-        lines.push(Line::from(""));
     }
 
     // ── SubAgents 只读分组 ──
     let sub_snaps = app.sub_agent_tracker.display_snapshots();
     if !sub_snaps.is_empty() {
-        lines.push(Line::from(Span::styled(
+        list.push_raw(Line::from(Span::styled(
             "  ── SubAgents (只读) ──",
             Style::default()
                 .fg(t.config_label)
                 .add_modifier(Modifier::BOLD),
         )));
-        lines.push(Line::from(""));
+        list.push_raw(Line::from(""));
 
         for snap in sub_snaps.iter() {
             let status_color = match &snap.status {
@@ -1217,7 +1216,7 @@ fn draw_tab_teammates_list<'a>(
                 format!("{}m{}s", snap.elapsed_secs / 60, snap.elapsed_secs % 60)
             };
 
-            lines.push(Line::from(vec![
+            list.push_raw(Line::from(vec![
                 Span::styled("  ".to_string(), Style::default().fg(t.text_normal)),
                 Span::styled(
                     format!("{:<12}", snap.id),
@@ -1241,9 +1240,9 @@ fn draw_tab_teammates_list<'a>(
                     Style::default().fg(t.text_dim),
                 ),
             ]));
-            lines.push(Line::from(""));
         }
     }
+    list
 }
 
 /// 格式化 Unix 时间戳为人类可读格式
@@ -1339,22 +1338,18 @@ fn draw_tab_archive_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 }
 
 /// Archive tab 可滚动列表（归档列表）
-fn draw_tab_archive_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_archive_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
+    let mut list = ItemList::new();
 
     for (i, archive) in app.ui.archives.iter().enumerate() {
-        field_line_indices.push(lines.len());
         let is_selected = i == app.ui.archive_list_index;
         let name_truncated: String = archive.name.chars().take(40).collect();
         let time_str = &archive.created_at;
         let secondary = format!("({} \u{6761}, {})", archive.messages.len(), time_str);
-        lines.push(selectable_row(&name_truncated, &secondary, is_selected, t));
-        lines.push(Line::from(""));
+        list.push(selectable_row(&name_truncated, &secondary, is_selected, t));
     }
+    list
 }
 
 /// Session tab 固定头部（当前会话 + 确认恢复 + 历史会话标题）
@@ -1415,15 +1410,11 @@ fn draw_tab_session_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
 }
 
 /// Session tab 可滚动列表（历史会话列表）
-fn draw_tab_session_list<'a>(
-    lines: &mut Vec<Line<'a>>,
-    field_line_indices: &mut Vec<usize>,
-    app: &ChatApp,
-) {
+fn draw_tab_session_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
+    let mut list = ItemList::new();
 
     for (i, session) in app.ui.session_list.iter().enumerate() {
-        field_line_indices.push(lines.len());
         let is_selected = i == app.ui.session_list_index;
         let preview = session
             .title
@@ -1433,12 +1424,12 @@ fn draw_tab_session_list<'a>(
         let preview_truncated: String = preview.chars().take(40).collect();
         let time_str = format_timestamp(session.updated_at);
         let secondary = format!("({} \u{6761}, {})", session.message_count, time_str);
-        lines.push(selectable_row(
+        list.push(selectable_row(
             &preview_truncated,
             &secondary,
             is_selected,
             t,
         ));
-        lines.push(Line::from(""));
     }
+    list
 }
