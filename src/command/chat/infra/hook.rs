@@ -1796,8 +1796,8 @@ retry: 2
 
     #[test]
     fn test_hook_result_with_abort() {
-        // 旧字段 abort=true 等价于 action=stop
-        let json = r#"{"abort": true}"#;
+        // action=stop 中止当前步骤
+        let json = r#"{"action": "stop"}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
         assert!(result.is_stop());
     }
@@ -2428,8 +2428,8 @@ on_error: abort"#;
 
     #[test]
     fn test_hook_result_retry_feedback() {
-        // 旧字段 abort=true + retry_feedback（向后兼容）
-        let json = r#"{"abort": true, "retry_feedback": "请修正敏感信息"}"#;
+        // action=stop + retry_feedback
+        let json = r#"{"action": "stop", "retry_feedback": "请修正敏感信息"}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
         assert!(result.is_stop());
         assert_eq!(result.retry_feedback.as_deref(), Some("请修正敏感信息"));

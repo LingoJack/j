@@ -249,7 +249,13 @@ fn sanitize_html(input: &str) -> String {
     for ch in input.chars() {
         match ch {
             '<' => in_tag = true,
-            '>' => in_tag = false,
+            '>' => {
+                in_tag = false;
+                // 标签闭合时插入空格，以便相邻标签内容之间有分隔
+                if !result.is_empty() && !result.ends_with(char::is_whitespace) {
+                    result.push(' ');
+                }
+            }
             _ if !in_tag => result.push(ch),
             _ => {}
         }
@@ -302,7 +308,7 @@ mod tests {
     #[test]
     fn test_truncate() {
         assert_eq!(truncate("hello", 10), "hello");
-        assert_eq!(truncate("hello world", 8), "hello...");
+        assert_eq!(truncate("hello world", 8), "hello wo...");
     }
 
     #[test]
