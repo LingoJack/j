@@ -89,7 +89,9 @@ impl TodoManager {
             // 合并模式：按 id 更新已有项，添加新项
             for new_item in new_items {
                 if let Some(existing) = items.iter_mut().find(|i| i.id == new_item.id) {
-                    existing.content = new_item.content;
+                    if !new_item.content.is_empty() {
+                        existing.content = new_item.content;
+                    }
                     existing.status = new_item.status;
                 } else {
                     // 新项，自动分配 id（如果为空）

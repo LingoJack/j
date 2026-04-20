@@ -12,7 +12,8 @@ struct TodoItemParam {
     /// Item ID. Required when merge=true to update existing items. Auto-generated if omitted.
     #[serde(default)]
     id: Option<String>,
-    /// The todo item text
+    /// The todo item text. Required for new items; optional when merge=true (omit to keep existing).
+    #[serde(default)]
     content: String,
     /// Item status: pending, in_progress, completed, or cancelled
     #[serde(default = "default_status")]
@@ -68,6 +69,31 @@ impl Tool for TodoWriteTool {
             Ok(p) => p,
             Err(e) => return e,
         };
+
+        if !params.merge {
+            let empty_indices: Vec<usize> = params
+                .todos
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| item.content.is_empty())
+                .map(|(i, _)| i + 1)
+                .collect();
+            if !empty_indices.is_empty() {
+                return ToolResult {
+                    output: format!(
+                        "content is required for new items (merge=false). Missing in item(s): {}",
+                        empty_indices
+                            .iter()
+                            .map(|i| i.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        }
 
         let items: Vec<TodoItem> = params
             .todos
