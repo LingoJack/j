@@ -570,10 +570,17 @@ impl ChatApp {
 }
 
 pub(super) fn extract_tool_description(tool_name: &str, arguments: &str) -> Option<String> {
-    if tool_name != "Bash" {
-        return None;
+    let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
+
+    match tool_name {
+        // Bash / Shell：提取 description 字段
+        "Bash" | "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        // 文件工具：提取 path / file_path 作为描述
+        "Read" | "Write" | "Edit" | "Glob" | "Grep" => parsed
+            .get("path")
+            .or_else(|| parsed.get("file_path"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
     }
-    serde_json::from_str::<serde_json::Value>(arguments)
-        .ok()
-        .and_then(|v| v.get("description")?.as_str().map(|s| s.to_string()))
 }

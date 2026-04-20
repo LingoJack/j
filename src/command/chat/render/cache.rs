@@ -1982,12 +1982,19 @@ pub fn copy_to_clipboard(content: &str) -> bool {
     }
 }
 
-/// 从工具调用参数 JSON 中提取 description（仅 Bash 工具有意义）
+/// 从工具调用参数 JSON 中提取描述信息
+/// - Bash/Shell：提取 description 字段
+/// - Read/Write/Edit/Glob/Grep：提取 path 或 file_path 字段
 fn extract_tool_description_from_args(tool_name: &str, arguments: &str) -> Option<String> {
-    if tool_name != "Bash" {
-        return None;
+    let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
+
+    match tool_name {
+        "Bash" | "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        "Read" | "Write" | "Edit" | "Glob" | "Grep" => parsed
+            .get("path")
+            .or_else(|| parsed.get("file_path"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
     }
-    serde_json::from_str::<serde_json::Value>(arguments)
-        .ok()
-        .and_then(|v| v.get("description")?.as_str().map(|s| s.to_string()))
 }
