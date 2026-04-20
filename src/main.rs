@@ -4,6 +4,7 @@ mod command;
 mod config;
 mod constants;
 mod interactive;
+mod theme;
 mod tui;
 mod util;
 

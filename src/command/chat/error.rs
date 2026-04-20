@@ -225,6 +225,7 @@ impl ChatError {
                     || msg_lower.contains("quota exceeded")
                     || msg_lower.contains("concurrency limit")
                     || msg_lower.contains("请求频率")
+                    || msg_lower.contains("busy")
                 {
                     ChatError::ApiRateLimit {
                         message: api_err.message,

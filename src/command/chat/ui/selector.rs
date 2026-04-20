@@ -2,7 +2,7 @@
 //!
 //! 提取自 chat.rs，使用通用选择器构建逻辑消除代码重复。
 
-use crate::command::chat::render::theme::Theme;
+use crate::theme::Theme;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},

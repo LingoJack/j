@@ -1,9 +1,9 @@
-use crate::command::chat::render::theme::Theme;
 use crate::command::chat::storage::load_agent_config;
 use crate::command::report;
 use crate::config::YamlConfig;
 use crate::constants::todo_filter;
 use crate::error;
+use crate::theme::Theme;
 use chrono::Local;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::widgets::ListState;

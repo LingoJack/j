@@ -1,5 +1,5 @@
 use super::app::HelpApp;
-use crate::command::chat::render::theme::Theme;
+use crate::theme::Theme;
 use crate::util::text::display_width;
 use ratatui::{
     Frame,

@@ -18,7 +18,6 @@ use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::{ToolConfirmInfo, WsOutbound};
-use crate::command::chat::render::theme::{Theme, ThemeName};
 use crate::command::chat::storage::MessageRole;
 use crate::command::chat::storage::{
     ChatMessage, ChatSession, ModelProvider, delete_session, generate_session_id, list_sessions,
@@ -32,6 +31,7 @@ use crate::command::chat::tools::derived_shared::{DerivedAgentShared, SubAgentTr
 use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
+use crate::theme::{Theme, ThemeName};
 use crate::tui::editor_core::text_buffer::TextBuffer;
 use crate::util::safe_lock;
 use ratatui::widgets::ListState;

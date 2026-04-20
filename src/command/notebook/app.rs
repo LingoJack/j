@@ -1,10 +1,10 @@
 use crate::command::chat::markdown::markdown_to_lines;
-use crate::command::chat::render::theme::Theme;
 use crate::command::chat::storage::load_agent_config;
 use crate::config::YamlConfig;
 use crate::constants::{config_key, section, shell};
 use crate::error;
 use crate::info;
+use crate::theme::Theme;
 use crate::util::fuzzy;
 use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

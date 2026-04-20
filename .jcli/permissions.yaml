@@ -132,4 +132,5 @@ allow:
 - Bash(cargo fmt:*)
 - Bash(git mv:*)
 - Bash(mv /Users/lingojack/dev_custom/j/src/command/chat/storage/mod.rs:*)
+- Bash(cp /Users/lingojack/dev_custom/j/src/command/chat/render/theme.rs:*)
 deny: []
