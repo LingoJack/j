@@ -1,10 +1,13 @@
 use super::app::{AppMode, FlatEntryKind, NotebookApp};
-use crate::util::text::wrap_text;
+use crate::tui::components::{
+    CommandItem, CommandPopupConfig, ConfirmDialogConfig, StatusInputParams, cursor_wrapped_lines,
+    draw_command_popup as render_command_popup, draw_confirm_dialog, draw_status_input,
+};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 
 /// 绘制 TUI 界面
@@ -55,7 +58,7 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
 
     // ========== 主区域 ==========
     if app.mode == AppMode::Help {
-        render_help(f, chunks[1]);
+        render_help(f, chunks[1], &app.theme);
     } else if app.mode == AppMode::Preview {
         render_preview_full(f, app, chunks[1]);
     } else {
@@ -119,7 +122,13 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
                 && app.mode == AppMode::Renaming
                 && app.rename_index == Some(*note_index)
             {
-                return build_rename_item(&app.input, app.cursor_pos, inner_width, is_selected);
+                return build_rename_item(
+                    &app.input,
+                    app.cursor_pos,
+                    inner_width,
+                    is_selected,
+                    &app.theme,
+                );
             }
 
             // 缩进空格
@@ -175,6 +184,7 @@ fn render_list(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
             app.cursor_pos,
             inner_width,
             is_selected,
+            &app.theme,
         ));
     }
 
@@ -207,12 +217,13 @@ fn build_adding_item(
     cursor_pos: usize,
     width: usize,
     selected: bool,
+    theme: &crate::theme::Theme,
 ) -> ListItem<'static> {
     let pointer = if selected {
         Span::styled(
             " ❯ ",
             Style::default()
-                .fg(Color::Green)
+                .fg(theme.md_h1)
                 .add_modifier(Modifier::BOLD),
         )
     } else {
@@ -220,91 +231,21 @@ fn build_adding_item(
     };
 
     let content_width = width.saturating_sub(3); // pointer
+    let cursor_lines =
+        cursor_wrapped_lines(input, cursor_pos, content_width, Some("输入标题…"), theme);
 
-    if input.is_empty() {
-        return ListItem::new(Line::from(vec![
-            pointer,
-            Span::styled(
-                "输入标题…".to_string(),
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(" ", Style::default().fg(Color::Black).bg(Color::White)),
-        ]));
-    }
-
-    let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-    let text_style = Style::default().fg(Color::Reset);
-
-    let wrapped = wrap_text(input, content_width);
-    let mut char_offset = 0;
-    let mut cursor_placed = false;
-
-    let mut lines = Vec::new();
-    for (line_idx, line_str) in wrapped.iter().enumerate() {
-        let line_chars: Vec<char> = line_str.chars().collect();
-        let line_len = line_chars.len();
-        let is_last = line_idx == wrapped.len() - 1;
-
-        let cursor_on_this_line = !cursor_placed
-            && (cursor_pos < char_offset + line_len
-                || (is_last && cursor_pos == char_offset + line_len));
-
-        if line_idx == 0 {
-            if cursor_on_this_line {
-                cursor_placed = true;
-                let pos_in_line = cursor_pos - char_offset;
-                let before: String = line_chars[..pos_in_line].iter().collect();
-                let (cursor_ch, after) = if pos_in_line < line_len {
-                    (
-                        line_chars[pos_in_line].to_string(),
-                        line_chars[pos_in_line + 1..].iter().collect::<String>(),
-                    )
-                } else {
-                    (" ".to_string(), String::new())
-                };
-                lines.push(Line::from(vec![
-                    pointer.clone(),
-                    Span::styled(before, text_style),
-                    Span::styled(cursor_ch, cursor_style),
-                    Span::styled(after, text_style),
-                ]));
-            } else {
-                lines.push(Line::from(vec![
-                    pointer.clone(),
-                    Span::styled(line_str.clone(), text_style),
-                ]));
-            }
+    let mut item_lines: Vec<Line<'static>> = Vec::new();
+    for (i, line) in cursor_lines.lines.into_iter().enumerate() {
+        let mut spans = if i == 0 {
+            vec![pointer.clone()]
         } else {
-            let indent = Span::raw("   ");
-            if cursor_on_this_line {
-                cursor_placed = true;
-                let pos_in_line = cursor_pos - char_offset;
-                let before: String = line_chars[..pos_in_line].iter().collect();
-                let (cursor_ch, after) = if pos_in_line < line_len {
-                    (
-                        line_chars[pos_in_line].to_string(),
-                        line_chars[pos_in_line + 1..].iter().collect::<String>(),
-                    )
-                } else {
-                    (" ".to_string(), String::new())
-                };
-                lines.push(Line::from(vec![
-                    indent,
-                    Span::styled(before, text_style),
-                    Span::styled(cursor_ch, cursor_style),
-                    Span::styled(after, text_style),
-                ]));
-            } else {
-                lines.push(Line::from(vec![
-                    indent,
-                    Span::styled(line_str.clone(), text_style),
-                ]));
-            }
-        }
-        char_offset += line_len;
+            vec![Span::raw("   ")]
+        };
+        spans.extend(line.spans);
+        item_lines.push(Line::from(spans));
     }
 
-    ListItem::new(lines)
+    ListItem::new(item_lines)
 }
 
 /// 构建重命名输入行
@@ -313,9 +254,9 @@ fn build_rename_item(
     cursor_pos: usize,
     width: usize,
     selected: bool,
+    theme: &crate::theme::Theme,
 ) -> ListItem<'static> {
-    // 复用 adding 逻辑
-    build_adding_item(input, cursor_pos, width, selected)
+    build_adding_item(input, cursor_pos, width, selected, theme)
 }
 
 /// 渲染右侧预览区
@@ -389,176 +330,44 @@ fn render_preview_full(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect
 }
 
 /// 渲染帮助页
-fn render_help(f: &mut ratatui::Frame, area: Rect) {
-    let help_lines = vec![
-        Line::from(Span::styled(
-            "  快捷键帮助",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  n / ↓ / j    ", Style::default().fg(Color::Yellow)),
-            Span::raw("向下移动"),
-        ]),
-        Line::from(vec![
-            Span::styled("  N / ↑ / k    ", Style::default().fg(Color::Yellow)),
-            Span::raw("向上移动"),
-        ]),
-        Line::from(vec![
-            Span::styled("  Enter / e    ", Style::default().fg(Color::Yellow)),
-            Span::raw("编辑笔记（Markdown 编辑器）"),
-        ]),
-        Line::from(vec![
-            Span::styled("  a            ", Style::default().fg(Color::Yellow)),
-            Span::raw("新建笔记"),
-        ]),
-        Line::from(vec![
-            Span::styled("  d            ", Style::default().fg(Color::Yellow)),
-            Span::raw("删除笔记（需确认）"),
-        ]),
-        Line::from(vec![
-            Span::styled("  r            ", Style::default().fg(Color::Yellow)),
-            Span::raw("重命名笔记"),
-        ]),
-        Line::from(vec![
-            Span::styled("  Tab          ", Style::default().fg(Color::Yellow)),
-            Span::raw("展开/折叠目录"),
-        ]),
-        Line::from(vec![
-            Span::styled("  / mkdir      ", Style::default().fg(Color::Yellow)),
-            Span::raw("新建目录"),
-        ]),
-        Line::from(vec![
-            Span::styled("  / mv         ", Style::default().fg(Color::Yellow)),
-            Span::raw("移动笔记到目录"),
-        ]),
-        Line::from(vec![
-            Span::styled("  p            ", Style::default().fg(Color::Yellow)),
-            Span::raw("全屏预览当前笔记"),
-        ]),
-        Line::from(vec![
-            Span::styled("  /            ", Style::default().fg(Color::Yellow)),
-            Span::raw("打开命令面板"),
-        ]),
-        Line::from(vec![
-            Span::styled("  [            ", Style::default().fg(Color::Yellow)),
-            Span::raw("缩小左侧面板 (-5%)"),
-        ]),
-        Line::from(vec![
-            Span::styled("  ]            ", Style::default().fg(Color::Yellow)),
-            Span::raw("扩大左侧面板 (+5%)"),
-        ]),
-        Line::from(vec![
-            Span::styled("  y            ", Style::default().fg(Color::Yellow)),
-            Span::raw("复制笔记名到剪切板"),
-        ]),
-        Line::from(vec![
-            Span::styled("  o            ", Style::default().fg(Color::Yellow)),
-            Span::raw("在 Finder 中打开 notebook 目录"),
-        ]),
-        Line::from(vec![
-            Span::styled("  s            ", Style::default().fg(Color::Yellow)),
-            Span::raw("刷新笔记列表"),
-        ]),
-        Line::from(vec![
-            Span::styled("  Esc          ", Style::default().fg(Color::Yellow)),
-            Span::raw("清除搜索 / 退出"),
-        ]),
-        Line::from(vec![
-            Span::styled("  q            ", Style::default().fg(Color::Yellow)),
-            Span::raw("退出"),
-        ]),
-        Line::from(vec![
-            Span::styled("  Ctrl+C       ", Style::default().fg(Color::Yellow)),
-            Span::raw("强制退出"),
-        ]),
-        Line::from(vec![
-            Span::styled("  ?            ", Style::default().fg(Color::Yellow)),
-            Span::raw("显示此帮助"),
-        ]),
+fn render_help(f: &mut ratatui::Frame, area: Rect, theme: &crate::theme::Theme) {
+    use crate::tui::components::{HelpPageConfig, HelpShortcut, draw_help_page};
+
+    let shortcuts = [
+        HelpShortcut::new("  n / ↓ / j    ", "向下移动"),
+        HelpShortcut::new("  N / ↑ / k    ", "向上移动"),
+        HelpShortcut::new("  Enter / e    ", "编辑笔记（Markdown 编辑器）"),
+        HelpShortcut::new("  a            ", "新建笔记"),
+        HelpShortcut::new("  d            ", "删除笔记（需确认）"),
+        HelpShortcut::new("  r            ", "重命名笔记"),
+        HelpShortcut::new("  Tab          ", "展开/折叠目录"),
+        HelpShortcut::new("  / mkdir      ", "新建目录"),
+        HelpShortcut::new("  / mv         ", "移动笔记到目录"),
+        HelpShortcut::new("  p            ", "全屏预览当前笔记"),
+        HelpShortcut::new("  /            ", "打开命令面板"),
+        HelpShortcut::new("  [            ", "缩小左侧面板 (-5%)"),
+        HelpShortcut::new("  ]            ", "扩大左侧面板 (+5%)"),
+        HelpShortcut::new("  y            ", "复制笔记名到剪切板"),
+        HelpShortcut::new("  o            ", "在 Finder 中打开 notebook 目录"),
+        HelpShortcut::new("  s            ", "刷新笔记列表"),
+        HelpShortcut::new("  Esc          ", "清除搜索 / 退出"),
+        HelpShortcut::new("  q            ", "退出"),
+        HelpShortcut::new("  Ctrl+C       ", "强制退出"),
+        HelpShortcut::new("  ?            ", "显示此帮助"),
     ];
-    let help_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
-        .title(" 帮助 ");
-    let help_widget = Paragraph::new(help_lines).block(help_block);
-    f.render_widget(help_widget, area);
-}
 
-/// 状态栏输入框渲染参数
-struct InputStatusBarParams<'a> {
-    label: &'a str,
-    label_color: Color,
-    input: &'a str,
-    cursor_pos: usize,
-    placeholder: &'a str,
-    hint: &'a str,
-}
-
-/// 在状态栏区域渲染输入框（带标签、文本、光标、占位符）
-fn render_input_status_bar(f: &mut ratatui::Frame, area: Rect, params: &InputStatusBarParams<'_>) {
-    let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-    let text_style = Style::default().fg(Color::Reset);
-    let placeholder_style = Style::default().fg(Color::DarkGray);
-    let hint_style = Style::default().fg(Color::DarkGray);
-
-    let _inner_width = area.width.saturating_sub(2) as usize; // 减边框
-    let label_display = format!(" {} ", params.label);
-    let label_width = unicode_width::UnicodeWidthStr::width(label_display.as_str());
-
-    let mut spans = vec![Span::styled(
-        label_display,
-        Style::default()
-            .fg(params.label_color)
-            .add_modifier(Modifier::BOLD),
-    )];
-
-    if params.input.is_empty() {
-        // 空输入：显示占位符 + 闪烁光标
-        spans.push(Span::styled(" ", cursor_style));
-        spans.push(Span::styled(
-            params.placeholder.to_string(),
-            placeholder_style,
-        ));
-    } else {
-        // 有输入：逐字符渲染，光标位置高亮
-        let input_chars: Vec<char> = params.input.chars().collect();
-        for (i, ch) in input_chars.iter().enumerate() {
-            if i == params.cursor_pos {
-                spans.push(Span::styled(ch.to_string(), cursor_style));
-            } else {
-                spans.push(Span::styled(ch.to_string(), text_style));
-            }
-        }
-        if params.cursor_pos >= input_chars.len() {
-            spans.push(Span::styled(" ", cursor_style));
-        }
-    }
-
-    // 添加提示
-    spans.push(Span::styled(format!("  {}", params.hint), hint_style));
-
-    let status = Paragraph::new(Line::from(spans)).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(params.label_color)),
+    draw_help_page(
+        f,
+        area,
+        &HelpPageConfig {
+            title: "快捷键帮助",
+            title_icon: None,
+            block_title: Some(" 帮助 "),
+            shortcuts: &shortcuts,
+            footer_lines: None,
+            theme,
+        },
     );
-    f.render_widget(status, area);
-
-    // 设置终端光标位置
-    let cursor_x_offset = if params.input.is_empty() {
-        0
-    } else {
-        let chars_before_cursor: String = params.input.chars().take(params.cursor_pos).collect();
-        unicode_width::UnicodeWidthStr::width(chars_before_cursor.as_str())
-    };
-    let cursor_x = area.x + 1 + label_width as u16 + cursor_x_offset as u16;
-    let cursor_y = area.y + 1; // 3 行状态栏的中间行
-    if cursor_x < area.x + area.width.saturating_sub(1) && cursor_y < area.y + area.height {
-        f.set_cursor_position((cursor_x, cursor_y));
-    }
 }
 
 /// 渲染状态栏
@@ -605,10 +414,10 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             f.render_widget(status, area);
         }
         AppMode::Mkdir => {
-            render_input_status_bar(
+            draw_status_input(
                 f,
                 area,
-                &InputStatusBarParams {
+                &StatusInputParams {
                     label: "新建目录",
                     label_color: Color::Cyan,
                     input: &app.input,
@@ -616,13 +425,14 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     placeholder: "输入目录名…",
                     hint: "Enter 确认 | Esc 取消",
                 },
+                &app.theme,
             );
         }
         AppMode::Mv => {
-            render_input_status_bar(
+            draw_status_input(
                 f,
                 area,
-                &InputStatusBarParams {
+                &StatusInputParams {
                     label: "移动笔记",
                     label_color: Color::Magenta,
                     input: &app.input,
@@ -630,13 +440,14 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     placeholder: "输入目标路径…",
                     hint: "Enter 确认 | Esc 取消",
                 },
+                &app.theme,
             );
         }
         AppMode::Search => {
-            render_input_status_bar(
+            draw_status_input(
                 f,
                 area,
-                &InputStatusBarParams {
+                &StatusInputParams {
                     label: "搜索",
                     label_color: Color::Cyan,
                     input: &app.input,
@@ -644,6 +455,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     placeholder: "输入关键词…",
                     hint: "Enter 搜索 | Esc 取消",
                 },
+                &app.theme,
             );
         }
         AppMode::ConfirmDelete => {
@@ -652,17 +464,15 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             } else {
                 " 没有选中的笔记".to_string()
             };
-            let confirm_widget = Paragraph::new(Line::from(Span::styled(
-                msg,
-                Style::default().fg(Color::Red),
-            )))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Red))
-                    .title(" 确认删除 "),
+            draw_confirm_dialog(
+                f,
+                area,
+                &ConfirmDialogConfig {
+                    title: " 确认删除 ",
+                    message: msg,
+                    color: Color::Red,
+                },
             );
-            f.render_widget(confirm_widget, area);
         }
         AppMode::Preview => {
             let status = Paragraph::new(Line::from(vec![
@@ -685,10 +495,10 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             f.render_widget(status, area);
         }
         AppMode::CommandPopup => {
-            render_input_status_bar(
+            draw_status_input(
                 f,
                 area,
-                &InputStatusBarParams {
+                &StatusInputParams {
                     label: "命令面板",
                     label_color: Color::Magenta,
                     input: &app.cmd_popup_filter,
@@ -696,13 +506,14 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     placeholder: "输入筛选…",
                     hint: "↑↓ 选择 | Enter 确认 | Esc 取消",
                 },
+                &app.theme,
             );
         }
         AppMode::RatioInput => {
-            render_input_status_bar(
+            draw_status_input(
                 f,
                 area,
-                &InputStatusBarParams {
+                &StatusInputParams {
                     label: "比例",
                     label_color: Color::Yellow,
                     input: &app.input,
@@ -710,6 +521,7 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                     placeholder: "20:80",
                     hint: "如 20:80",
                 },
+                &app.theme,
             );
         }
         _ => {
@@ -732,96 +544,26 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
 /// 绘制命令面板弹窗（浮动在主区域底部）
 fn draw_command_popup(f: &mut ratatui::Frame, app: &mut NotebookApp, main_area: Rect) {
     let items = app.filtered_cmd_items();
-    if items.is_empty() {
-        return;
-    }
-
-    let item_count = items.len();
-    let popup_height = (item_count as u16) + 2; // 内容 + 边框
-
-    // 计算宽度：基于最长 "key - 描述" 组合
-    let max_label_width = items
+    let cmd_items: Vec<CommandItem<'_>> = items
         .iter()
-        .map(|(_, key, label)| {
-            // "  key - 描述"
-            2 + unicode_width::UnicodeWidthStr::width(*key)
-                + 3
-                + unicode_width::UnicodeWidthStr::width(*label)
-        })
-        .max()
-        .unwrap_or(16)
-        .max(16);
-    let popup_width = (max_label_width as u16 + 2) // 边框
-        .min(main_area.width.saturating_sub(4));
+        .map(|(_, key, label)| CommandItem::new(key, label))
+        .collect();
 
-    // 位置：主区域底部偏左
-    let x = main_area.x + 2;
-    let y = main_area
-        .bottom()
-        .saturating_sub(popup_height)
-        .max(main_area.y);
-    let popup_area = Rect::new(x, y, popup_width, popup_height);
-
-    // 标题
     let title = if app.cmd_popup_filter.is_empty() {
         " 命令面板 ".to_string()
     } else {
         format!(" 命令面板 [{}] ", app.cmd_popup_filter)
     };
 
-    // 使用主题颜色（与 todo 命令面板保持一致）
-    let accent = app.theme.md_h1;
-    let popup_bg = app.theme.bg_primary;
-    let text_color = app.theme.text_normal;
-    let dim_color = app.theme.text_dim;
-    let label_ai = app.theme.label_ai;
-    let highlight_bg = accent;
-    let border_color = accent;
-    let title_color = accent;
-
-    // 构建列表项
-    let selected = app.cmd_popup_selected.min(item_count.saturating_sub(1));
-    let list_items: Vec<ListItem> = items
-        .iter()
-        .enumerate()
-        .map(|(i, (_, key, label))| {
-            let is_selected = i == selected;
-            let pointer = if is_selected { "❯ " } else { "  " };
-            ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(text_color)),
-                Span::styled(
-                    format!("{:<8}", key),
-                    Style::default().fg(label_ai).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(label.to_string(), Style::default().fg(dim_color)),
-            ]))
-        })
-        .collect();
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(selected));
-
-    let list = List::new(list_items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(border_color))
-                .title(Span::styled(
-                    title,
-                    Style::default()
-                        .fg(title_color)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(popup_bg)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(highlight_bg)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    f.render_widget(Clear, popup_area);
-    f.render_stateful_widget(list, popup_area, &mut list_state);
+    render_command_popup(
+        f,
+        main_area,
+        &CommandPopupConfig {
+            title,
+            items: cmd_items,
+            selected: app.cmd_popup_selected,
+            highlight_fg: Some(Color::Black),
+            theme: &app.theme,
+        },
+    );
 }

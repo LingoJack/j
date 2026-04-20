@@ -1,5 +1,8 @@
 use super::app::{AppMode, HelpApp};
 use crate::theme::{Theme, ThemeName};
+use crate::tui::components::{
+    CommandItem, CommandPopupConfig, draw_command_popup as render_command_popup,
+};
 use crate::util::text::display_width;
 use ratatui::{
     Frame,
@@ -279,28 +282,10 @@ fn draw_hint_bar(f: &mut Frame, help_app: &HelpApp, area: Rect, theme: &Theme) {
 /// 绘制命令面板弹窗（浮动在内容区底部偏左）
 fn draw_command_popup(f: &mut Frame, help_app: &HelpApp, main_area: Rect, theme: &Theme) {
     let items = help_app.filtered_cmd_items();
-    if items.is_empty() {
-        return;
-    }
-
-    let item_count = items.len();
-    let popup_height = (item_count as u16) + 2; // 内容 + 边框
-
-    // 基于最长 "key - 描述" 组合计算宽度
-    let max_label_width = items
+    let cmd_items: Vec<CommandItem<'_>> = items
         .iter()
-        .map(|(_, key, label)| 2 + display_width(key) + 3 + display_width(label))
-        .max()
-        .unwrap_or(16)
-        .max(20);
-    let popup_width = (max_label_width as u16 + 2).min(main_area.width.saturating_sub(4));
-
-    let x = main_area.x + 2;
-    let y = main_area
-        .bottom()
-        .saturating_sub(popup_height)
-        .max(main_area.y);
-    let popup_area = Rect::new(x, y, popup_width, popup_height);
+        .map(|(_, key, label)| CommandItem::new(key, label))
+        .collect();
 
     let title = if help_app.cmd_popup_filter.is_empty() {
         " 命令面板 ".to_string()
@@ -308,56 +293,17 @@ fn draw_command_popup(f: &mut Frame, help_app: &HelpApp, main_area: Rect, theme:
         format!(" 命令面板 [{}] ", help_app.cmd_popup_filter)
     };
 
-    let accent = theme.md_h1;
-    let popup_bg = theme.bg_primary;
-    let text_color = theme.text_normal;
-    let dim_color = theme.text_dim;
-    let label_ai = theme.label_ai;
-
-    let selected = help_app
-        .cmd_popup_selected
-        .min(item_count.saturating_sub(1));
-    let list_items: Vec<ListItem> = items
-        .iter()
-        .enumerate()
-        .map(|(i, (_, key, label))| {
-            let is_selected = i == selected;
-            let pointer = if is_selected { "❯ " } else { "  " };
-            ListItem::new(Line::from(vec![
-                Span::styled(pointer.to_string(), Style::default().fg(text_color)),
-                Span::styled(
-                    format!("{:<8}", key),
-                    Style::default().fg(label_ai).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(label.to_string(), Style::default().fg(dim_color)),
-            ]))
-        })
-        .collect();
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(selected));
-
-    let list = List::new(list_items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(accent))
-                .title(Span::styled(
-                    title,
-                    Style::default().fg(accent).add_modifier(Modifier::BOLD),
-                ))
-                .style(Style::default().bg(popup_bg)),
-        )
-        .highlight_style(
-            Style::default()
-                .bg(accent)
-                .fg(popup_bg)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    f.render_widget(Clear, popup_area);
-    f.render_stateful_widget(list, popup_area, &mut list_state);
+    render_command_popup(
+        f,
+        main_area,
+        &CommandPopupConfig {
+            title,
+            items: cmd_items,
+            selected: help_app.cmd_popup_selected,
+            highlight_fg: None,
+            theme,
+        },
+    );
 }
 
 /// 绘制主题选择弹窗
