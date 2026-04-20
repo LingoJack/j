@@ -581,6 +581,14 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             }
                         }
 
+                        // ═══════════════════════════════════════════════════════════════
+                        // 列宽压缩逻辑
+                        // ═══════════════════════════════════════════════════════════════
+                        // 当终端宽度不足以容纳所有列时，按比例压缩列宽。
+                        // 注意：压缩后 col_widths[i] 可能很小（如 1 或 2），
+                        // 但某些宽字符（中文、emoji）的显示宽度 >= 2，无法放入。
+                        // 这需要在渲染层截断处理，见下方 cell_spans 截断逻辑。
+                        // ═══════════════════════════════════════════════════════════════
                         let sep_w = num_cols + 1;
                         let pad_w = num_cols * 2;
                         let avail = content_width.saturating_sub(sep_w + pad_w);
@@ -654,15 +662,35 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                 let mut row_spans: Vec<Span> = Vec::new();
                                 row_spans.push(Span::styled("│", border_style));
                                 for (i, cw) in col_widths.iter().enumerate() {
+                                    // ═══════════════════════════════════════════════════════════════
+                                    // 单元格内容截断逻辑（修复窄终端下表格竖线错位）
+                                    // ═══════════════════════════════════════════════════════════════
+                                    // 问题背景：
+                                    //   1. 列宽压缩后 col_widths[i] 可能很小（如 1）
+                                    //   2. wrap_cell_styled 中 max_width = max(cw, 2) 允许行宽为 2
+                                    //   3. 宽字符（中文、emoji）宽度 >= 2，折行后子行宽度可能 > cw
+                                    //   4. 如果不截断，单元格实际渲染宽度超过列宽，多列溢出后总行宽
+                                    //      超出终端宽度，导致竖线被挤到下一行
+                                    //
+                                    // 解决方案：
+                                    //   渲染层从 cell_spans 重新计算实际显示宽度 actual_w，
+                                    //   当 actual_w > cw 时逐 span 按字符截断，确保：
+                                    //   - 每个单元格实际渲染宽度 <= cw
+                                    //   - fill 填充量基于截断后的 actual_w 计算
+                                    // ═══════════════════════════════════════════════════════════════
                                     let empty_line: (Vec<Span<'static>>, usize) = (Vec::new(), 0);
-                                    let (mut cell_spans, cell_line_w) = wrapped_cells
+                                    let (mut cell_spans, _cell_line_w) = wrapped_cells
                                         .get(i)
                                         .and_then(|lines| lines.get(sub_row))
                                         .cloned()
                                         .unwrap_or(empty_line);
-                                    // 当 cell_line_w > cw 时（宽字符无法被窄列容纳），
-                                    // 截断内容以确保实际渲染宽度不超过列宽
-                                    if cell_line_w > *cw {
+                                    // 从 cell_spans 计算实际显示宽度，并在溢出时截断
+                                    let mut actual_w: usize = cell_spans
+                                        .iter()
+                                        .map(|s| s.content.chars().map(char_width).sum::<usize>())
+                                        .sum();
+                                    // 当 actual_w > cw 时（宽字符无法被窄列容纳），截断内容
+                                    if actual_w > *cw {
                                         let mut truncated = Vec::new();
                                         let mut w = 0;
                                         for span in cell_spans {
@@ -685,13 +713,15 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                                                 }
                                                 if !buf.is_empty() {
                                                     truncated.push(Span::styled(buf, span.style));
+                                                    w += bw;
                                                 }
                                                 break;
                                             }
                                         }
                                         cell_spans = truncated;
+                                        actual_w = w;
                                     }
-                                    let fill = cw.saturating_sub(cell_line_w.min(*cw));
+                                    let fill = cw.saturating_sub(actual_w);
                                     let align = table_alignments
                                         .get(i)
                                         .copied()
@@ -862,6 +892,10 @@ fn wrap_cell_styled(
     base: Style,
     code: Style,
 ) -> Vec<(Vec<Span<'static>>, usize)> {
+    // IMPORTANT: 这里将 max_width 提升到至少 2，是为了让宽字符（如中文，宽度=2）
+    // 至少能放一个字符，避免死循环（一个字符都放不下时无法折行）。
+    // 但这会导致返回的子行宽度可能超过调用方传入的 max_width（即 col_widths[i]）。
+    // 渲染层必须对此做截断处理，见渲染层的 cell_spans 截断逻辑。
     let max_width = max_width.max(2);
     let pieces = cell_to_pieces(cell, base, code);
 
@@ -988,4 +1022,124 @@ fn split_text_with_urls<'a>(text: &str, normal_style: Style, link_style: Style) 
     }
 
     spans
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::chat::theme::ThemeName;
+
+    /// 计算一行 Line 的实际显示宽度（基于 spans 中所有 content 的字符宽度之和）
+    fn line_display_width(line: &Line<'_>) -> usize {
+        line.spans
+            .iter()
+            .map(|s| s.content.chars().map(char_width).sum::<usize>())
+            .sum()
+    }
+
+    /// 验证窄终端下表格竖线不错位：每行实际宽度不超过 max_width
+    #[test]
+    fn narrow_terminal_table_no_overflow() {
+        let theme = Theme::from_name(&ThemeName::default());
+        // 多列表格，包含中文宽字符内容
+        let md = r"| 列1 | 列2 | 列3 |
+|-----|-----|-----|
+| 中文字符 | 测试内容 | 第三列数据 |";
+
+        // 窄终端（20 字符），列宽被压缩，宽字符可能导致溢出
+        let max_width = 20usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        // 验证每行实际显示宽度不超过 max_width
+        for line in &lines {
+            let w = line_display_width(line);
+            assert!(
+                w <= max_width,
+                "行宽度 {} 超过 max_width {}: {:?}",
+                w,
+                max_width,
+                line.spans.iter().map(|s| &s.content).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    /// 验证极窄终端（10 字符）下表格渲染不溢出
+    #[test]
+    fn very_narrow_terminal_table_no_overflow() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let md = r"| A | B | C |
+|---|---|---|
+| 中文 | 测试 | 数据 |";
+
+        let max_width = 10usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        for line in &lines {
+            let w = line_display_width(line);
+            assert!(
+                w <= max_width,
+                "行宽度 {} 超过 max_width {}: {:?}",
+                w,
+                max_width,
+                line.spans.iter().map(|s| &s.content).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    /// 验证 `wrap_cell_styled` 返回的子行宽度不超过 max_width（允许为 2，因为 max(2) 提升）
+    #[test]
+    fn wrap_cell_styled_width_constraint() {
+        let base = Style::default();
+        let code = Style::default();
+
+        // 测试纯中文内容，每个字符宽度为 2
+        let cell = "中文字符测试";
+        // 极窄列宽（1），会被提升到 max(2)
+        let max_width = 1usize;
+        let wrapped = wrap_cell_styled(cell, max_width, base, code);
+
+        // 由于 max_width = max(1, 2) = 2，每个子行最多容纳一个中文字符
+        for (_spans, w) in &wrapped {
+            // 每行最多 2（一个中文字符），但可能截断后更少
+            assert!(
+                *w <= 2,
+                "wrap_cell_styled 返回的行宽度 {} 超过 max(2): {:?}",
+                w,
+                wrapped
+            );
+        }
+
+        // 验证所有子行的内容拼接后总宽度等于原文本宽度
+        let total_w: usize = wrapped.iter().map(|(_, w)| *w).sum();
+        let expected_w: usize = cell.chars().map(char_width).sum();
+        assert_eq!(
+            total_w, expected_w,
+            "所有子行宽度之和 {} != 原文本宽度 {}",
+            total_w, expected_w
+        );
+    }
+
+    /// 验证截断逻辑正确工作：当 col_widths[i] 小于字符宽度时，内容被截断
+    #[test]
+    fn truncation_when_column_width_too_small() {
+        let theme = Theme::from_name(&ThemeName::default());
+        // 单列表格，包含一个宽度为 2 的中文字符
+        let md = "| 中 |\n|---|\n| 文 |";
+
+        // 极窄终端（5 字符），列宽会被压缩
+        let max_width = 5usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        // 验证每行不溢出
+        for line in &lines {
+            let w = line_display_width(line);
+            assert!(
+                w <= max_width,
+                "行宽度 {} 超过 max_width {}: {:?}",
+                w,
+                max_width,
+                line.spans.iter().map(|s| &s.content).collect::<Vec<_>>()
+            );
+        }
+    }
 }
