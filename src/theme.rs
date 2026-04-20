@@ -1453,8 +1453,8 @@ impl Theme {
             // 气泡
             bubble_ai: Color::Rgb(30, 32, 48),
             bubble_ai_selected: Color::Rgb(45, 63, 118), // #2d3f76
-            bubble_user: Color::Rgb(45, 63, 118),
-            bubble_user_selected: Color::Rgb(58, 80, 144),
+            bubble_user: Color::Rgb(25, 45, 35),         // #192d23 暗绿
+            bubble_user_selected: Color::Rgb(35, 60, 45), // #233c2d
 
             // 标签
             label_ai: Color::Rgb(195, 232, 141),   // #c3e88d 绿
