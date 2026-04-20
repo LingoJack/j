@@ -543,15 +543,20 @@ pub async fn run_main_agent_loop(
                             Some(Err(e)) => {
                                 let error_str = format!("{}", e);
                                 write_error_log("Chat API 流式响应 error", &error_str);
-                                // 检测是否是 tool_calls 反序列化错误（Gemini 等不返回 chunk index）
-                                if error_str.contains("missing field `index`")
+                                let err = ChatError::from(e);
+                                // 反序列化错误优先走非流式 fallback（宽松 schema 能绕过大多数格式问题）；
+                                // 保留字符串匹配兜底，防止外层包装错误未能转成 StreamDeserialize。
+                                if matches!(err, ChatError::StreamDeserialize(_))
+                                    || error_str.contains("missing field `index`")
                                     || error_str.contains("tool_calls")
                                 {
-                                    // 标记需要用非流式重做，跳出流式循环
+                                    write_info_log(
+                                        "Chat API 流式响应",
+                                        &format!("检测到反序列化错误，将 fallback 到非流式: {}", err),
+                                    );
                                     deserialize_failed = true;
                                     break 'stream;
                                 }
-                                let err = ChatError::from(e);
                                 // 检测 tool_call_id 不一致错误（API 返回 "tool_call_id ... not found"）
                                 // 这通常是消息历史损坏导致的，通过压缩上下文并重试可恢复
                                 if matches!(&err, ChatError::ApiBadRequest(msg) if msg.contains("tool_call_id")) {

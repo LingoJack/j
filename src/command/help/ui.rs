@@ -219,7 +219,7 @@ fn draw_content(f: &mut Frame, app: &mut HelpApp, area: Rect, _theme: &Theme) {
         .take(visible_height)
         .map(|line| {
             // 检测行内第一个 span 的背景色，让左边距保持一致
-            let bg = line.spans.first().and_then(|s| s.style().bg);
+            let bg = line.spans.first().and_then(|s| s.style.bg);
             let padding_style = match bg {
                 Some(c) => Style::default().bg(c),
                 None => Style::default(),

@@ -109,6 +109,15 @@ impl RetryPolicy {
         }
     }
 
+    /// 响应解析失败策略：服务端返回格式异常/SSE 截断/HTML 错误页等，通常为瞬时问题
+    const fn deserialize_error() -> Self {
+        Self {
+            max_attempts: MAX_ATTEMPTS_CONSERVATIVE,
+            base_ms: BASE_MEDIUM_MS,
+            cap_ms: CAP_ABNORMAL_MS,
+        }
+    }
+
     /// 兜底过载策略：Other 中包含过载/访问量过大关键词
     const fn fallback_overloaded() -> Self {
         Self {
@@ -128,12 +137,14 @@ impl RetryPolicy {
 /// - 429 有 retry_after：精确等待（上限 120s），只重试 1 次
 /// - 429 无 retry_after：保守重试，基础 5s，最多 3 次
 /// - 非标准 finish_reason（如 network_error）：中等重试
+/// - 响应解析失败（JSON 格式异常/SSE 截断）：中等重试，fallback 非流式失败后的兜底
 pub(super) fn retry_policy_for(error: &ChatError) -> Option<RetryPolicy> {
     match error {
         ChatError::NetworkTimeout(_) | ChatError::StreamInterrupted(_) => {
             Some(RetryPolicy::network_transient())
         }
         ChatError::NetworkError(_) => Some(RetryPolicy::network_error()),
+        ChatError::StreamDeserialize(_) => Some(RetryPolicy::deserialize_error()),
         ChatError::ApiServerError { status, .. } => match status {
             503 | 504 | 529 => Some(RetryPolicy::server_overloaded()),
             500 | 502 => Some(RetryPolicy::server_error()),
