@@ -1142,4 +1142,196 @@ mod tests {
             );
         }
     }
+
+    /// 验证表格中行内代码样式正确保留
+    #[test]
+    fn table_inline_code_style_preserved() {
+        let theme = Theme::from_name(&ThemeName::default());
+        // 表格包含行内代码
+        let md = "| 列1 | 列2 |\n|-----|-----|\n| `code` | 普通 |";
+
+        let max_width = 40usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        // 打印所有行内容用于调试
+        for (i, line) in lines.iter().enumerate() {
+            eprintln!(
+                "Line {}: {:?}",
+                i,
+                line.spans
+                    .iter()
+                    .map(|s| (&s.content, s.style))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 检查是否有 span 包含 "code"
+        let has_code_content: bool = lines
+            .iter()
+            .flat_map(|line| &line.spans)
+            .any(|s| s.content.contains("code"));
+
+        assert!(
+            has_code_content,
+            "表格渲染结果中应包含 'code' 内容: {:?}",
+            lines
+                .iter()
+                .flat_map(|l| &l.spans)
+                .map(|s| &s.content)
+                .collect::<Vec<_>>()
+        );
+
+        // 检查 "code" span 具有行内代码样式（有背景色）
+        let code_spans: Vec<_> = lines
+            .iter()
+            .flat_map(|line| &line.spans)
+            .filter(|s| s.content == "code")
+            .collect();
+
+        assert!(!code_spans.is_empty(), "应存在 content='code' 的 span");
+
+        for cs in &code_spans {
+            assert!(
+                cs.style.bg.is_some(),
+                "'code' span 应有背景色（行内代码样式）: {:?}",
+                cs.style
+            );
+        }
+    }
+
+    /// 验证宽终端下行内代码样式正确渲染
+    #[test]
+    fn table_inline_code_wide_terminal() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let md = "| 命令 | 说明 |\n|------|------|\n| `git status` | 查看状态 |\n| `cargo build` | 编译项目 |";
+
+        let max_width = 60usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        eprintln!("=== wide terminal test ===");
+        for (i, line) in lines.iter().enumerate() {
+            eprintln!(
+                "Line {}: {:?}",
+                i,
+                line.spans
+                    .iter()
+                    .map(|s| (&s.content, s.style))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 检查 git status 和 cargo build 都有代码样式
+        let code_contents = ["git status", "cargo build"];
+        for expected in code_contents {
+            let found = lines
+                .iter()
+                .flat_map(|line| &line.spans)
+                .any(|s| s.content == expected && s.style.bg.is_some());
+            assert!(found, "应有 content='{}' 且有背景色的 span", expected);
+        }
+    }
+
+    /// 验证窄终端下行内代码仍保留样式
+    #[test]
+    fn table_inline_code_narrow_terminal() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let md = "| A | B |\n|---|---|\n| `code` | 文本 |";
+
+        let max_width = 15usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        eprintln!("=== narrow terminal test ===");
+        for (i, line) in lines.iter().enumerate() {
+            eprintln!(
+                "Line {}: {:?}",
+                i,
+                line.spans
+                    .iter()
+                    .map(|s| (&s.content, s.style))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 在窄终端下，"code" 可能被截断，但只要存在就应有代码样式
+        let code_spans: Vec<_> = lines
+            .iter()
+            .flat_map(|line| &line.spans)
+            .filter(|s| s.content.contains("code"))
+            .collect();
+
+        for cs in &code_spans {
+            assert!(
+                cs.style.bg.is_some(),
+                "'code' span 应有背景色: content={}, style={:?}",
+                cs.content,
+                cs.style
+            );
+        }
+    }
+
+    /// 验证复杂表格（类似 hook.md）中行内代码样式正确渲染
+    #[test]
+    fn table_complex_inline_code_like_hook_md() {
+        let theme = Theme::from_name(&ThemeName::default());
+        // 模拟 hook.md 中的表格结构，包含大量行内代码
+        let md = r"| 事件 | 触发时机 | 可读字段 | 可写字段 |
+|------|----------|----------|----------|
+| `pre_send_message` | 用户发送消息前 | `user_input`, `messages` | `user_input`, `action=stop`, `retry_feedback` |
+| `post_send_message` | 用户发送消息后 | `user_input`, `messages` | 仅通知，返回值被忽略 |
+| `pre_llm_request` | LLM API 请求前 | `messages`, `system_prompt`, `model` | `messages`, `system_prompt`, `inject_messages` |";
+
+        let max_width = 80usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        eprintln!("=== hook.md style table test ===");
+        for (i, line) in lines.iter().enumerate() {
+            eprintln!(
+                "Line {}: {:?}",
+                i,
+                line.spans
+                    .iter()
+                    .map(|s| (&s.content, s.style))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 检查所有行内代码都有背景色
+        let code_spans: Vec<_> = lines
+            .iter()
+            .flat_map(|line| &line.spans)
+            .filter(|s| {
+                // 行内代码内容：包含下划线的事件名、字段名等
+                let content = &s.content;
+                content.contains("pre_send_message")
+                    || content.contains("post_send_message")
+                    || content.contains("pre_llm_request")
+                    || content.contains("user_input")
+                    || content.contains("messages")
+                    || content.contains("system_prompt")
+                    || content.contains("action")
+                    || content.contains("retry_feedback")
+                    || content.contains("inject_messages")
+                    || content.contains("model")
+            })
+            .collect();
+
+        eprintln!("Found {} code-like spans", code_spans.len());
+        for cs in &code_spans {
+            eprintln!(
+                "  content='{}', has_bg={}",
+                cs.content,
+                cs.style.bg.is_some()
+            );
+        }
+
+        // 所有这些内容都应有背景色（行内代码样式）
+        for cs in &code_spans {
+            assert!(
+                cs.style.bg.is_some(),
+                "行内代码 '{}' 应有背景色: {:?}",
+                cs.content,
+                cs.style
+            );
+        }
+    }
 }
