@@ -136,4 +136,5 @@ allow:
 - Bash(git stash:*)
 - Bash(git show:*)
 - Bash(mv src/tui/components/mod.rs:*)
+- Bash(bash /Users/lingojack/.jdata/agent/skills/j-cli/scripts/ensure_j.sh:*)
 deny: []

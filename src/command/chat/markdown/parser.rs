@@ -1334,4 +1334,60 @@ mod tests {
             );
         }
     }
+
+    /// 直接使用 hook.md 中实际的表格内容测试行内代码渲染
+    #[test]
+    fn table_hook_md_actual_content() {
+        let theme = Theme::from_name(&ThemeName::default());
+        // 来自 hook.md 第 100-103 行的表格
+        let md = r"| 事件 | 触发时机 | 可读字段 | 可写字段 |
+|------|----------|----------|----------|
+| `pre_send_message` | 用户发送消息前 | `user_input`, `messages` | `user_input`, `action=stop`, `retry_feedback` |
+| `post_send_message` | 用户发送消息后 | `user_input`, `messages` | 仅通知，返回值被忽略 |";
+
+        // 模拟 help 页面的 content_width（终端宽度 80 - 4 = 76）
+        let max_width = 76usize;
+        let lines = markdown_to_lines(md, max_width, &theme);
+
+        eprintln!("=== hook.md actual table test ===");
+        for (i, line) in lines.iter().enumerate() {
+            eprintln!(
+                "Line {}: {:?}",
+                i,
+                line.spans
+                    .iter()
+                    .map(|s| (&s.content, s.style))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 检查所有有代码样式的 span（有背景色）
+        let code_spans: Vec<_> = lines
+            .iter()
+            .flat_map(|line| &line.spans)
+            .filter(|s| s.style.bg.is_some())
+            .collect();
+
+        eprintln!(
+            "Found {} spans with background color (code style)",
+            code_spans.len()
+        );
+        for cs in &code_spans {
+            eprintln!("  code: '{}'", cs.content);
+        }
+
+        // 验证存在代码样式的 span
+        assert!(!code_spans.is_empty(), "表格中应有代码样式的 span");
+
+        // 验证关键内容存在（可能被截断，所以用 contains）
+        let code_content: String = code_spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            code_content.contains("pre_send") || code_content.contains("post_send"),
+            "应有 pre_send 或 post_send 相关的代码内容"
+        );
+        assert!(
+            code_content.contains("user_input"),
+            "应有 user_input 代码内容"
+        );
+    }
 }
