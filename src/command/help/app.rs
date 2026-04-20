@@ -1,5 +1,6 @@
 use crate::assets::{self, HelpTab};
 use crate::command::chat::markdown::markdown_to_lines;
+use crate::command::chat::storage::{load_agent_config, save_agent_config};
 use crate::theme::{Theme, ThemeName};
 use ratatui::text::Line;
 
@@ -7,6 +8,23 @@ use ratatui::text::Line;
 struct TabCache {
     lines: Vec<Line<'static>>,
     cached_width: usize,
+}
+
+/// 命令面板选项列表 (key, 中文标签)
+pub const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
+    ("theme", "切换主题"),
+    ("help", "查看帮助首页"),
+    ("quit", "退出"),
+];
+
+#[derive(PartialEq, Clone)]
+pub enum AppMode {
+    /// 正常浏览模式
+    Normal,
+    /// 命令面板（/ 弹窗）
+    CommandPopup,
+    /// 主题选择
+    ThemeSelect,
 }
 
 /// HelpApp 状态
@@ -20,6 +38,18 @@ pub struct HelpApp {
     /// 当前 Tab 的总渲染行数（用于滚动限制）
     pub total_lines: usize,
     theme: Theme,
+    /// 当前主题名称（用于标识与保存）
+    pub theme_name: ThemeName,
+    /// 当前模式
+    pub mode: AppMode,
+    /// 命令面板筛选文本
+    pub cmd_popup_filter: String,
+    /// 命令面板选中索引
+    pub cmd_popup_selected: usize,
+    /// 主题弹窗选中索引
+    pub theme_popup_selected: usize,
+    /// 状态栏临时消息
+    pub message: Option<String>,
 }
 
 impl Default for HelpApp {
@@ -34,6 +64,13 @@ impl HelpApp {
         let count = tabs.len();
         let tab_names: Vec<String> = tabs.iter().map(|t| t.name.clone()).collect();
         let tab_raw_contents: Vec<String> = tabs.into_iter().map(|t| t.content).collect();
+        let agent_config = load_agent_config();
+        let theme_name = agent_config.theme.clone();
+        let theme = Theme::from_name(&theme_name);
+        let theme_popup_selected = ThemeName::all()
+            .iter()
+            .position(|t| t == &theme_name)
+            .unwrap_or(0);
         Self {
             active_tab: 0,
             tab_count: count,
@@ -42,7 +79,13 @@ impl HelpApp {
             tab_caches: (0..count).map(|_| None).collect(),
             tab_scrolls: vec![0; count],
             total_lines: 0,
-            theme: Theme::from_name(&ThemeName::default()),
+            theme,
+            theme_name,
+            mode: AppMode::Normal,
+            cmd_popup_filter: String::new(),
+            cmd_popup_selected: 0,
+            theme_popup_selected,
+            message: None,
         }
     }
 
@@ -146,6 +189,51 @@ impl HelpApp {
             if *scroll > max_scroll {
                 *scroll = max_scroll;
             }
+        }
+    }
+
+    /// 模糊筛选命令面板选项，返回 (原索引, key, 标签)
+    pub fn filtered_cmd_items(&self) -> Vec<(usize, &'static str, &'static str)> {
+        let filter = self.cmd_popup_filter.to_lowercase();
+        CMD_POPUP_ITEMS
+            .iter()
+            .enumerate()
+            .filter(|(_, (key, label))| {
+                filter.is_empty()
+                    || key.contains(filter.as_str())
+                    || label.contains(filter.as_str())
+            })
+            .map(|(i, (key, label))| (i, *key, *label))
+            .collect()
+    }
+
+    /// 进入命令面板模式
+    pub fn open_command_popup(&mut self) {
+        self.mode = AppMode::CommandPopup;
+        self.cmd_popup_filter.clear();
+        self.cmd_popup_selected = 0;
+    }
+
+    /// 进入主题选择模式
+    pub fn open_theme_select(&mut self) {
+        self.mode = AppMode::ThemeSelect;
+        self.theme_popup_selected = ThemeName::all()
+            .iter()
+            .position(|t| t == &self.theme_name)
+            .unwrap_or(0);
+    }
+
+    /// 应用选中的主题并持久化
+    pub fn apply_selected_theme(&mut self) {
+        let all = ThemeName::all();
+        if let Some(name) = all.get(self.theme_popup_selected) {
+            self.theme_name = name.clone();
+            self.theme = Theme::from_name(name);
+            self.invalidate_cache();
+            let mut config = load_agent_config();
+            config.theme = name.clone();
+            save_agent_config(&config);
+            self.message = Some(format!("主题: {}", name.display_name()));
         }
     }
 }
