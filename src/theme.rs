@@ -525,8 +525,8 @@ impl Theme {
             // 气泡
             bubble_ai: Color::Rgb(28, 28, 38),
             bubble_ai_selected: Color::Rgb(255, 255, 255),
-            bubble_user: Color::Rgb(220, 235, 255), // 与 Light 统一
-            bubble_user_selected: Color::Rgb(200, 225, 255), // 与 Light 统一
+            bubble_user: Color::Rgb(40, 70, 120),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(120, 220, 160),
@@ -678,8 +678,8 @@ impl Theme {
             // 气泡
             bubble_ai: Color::Rgb(34, 34, 34),
             bubble_ai_selected: Color::Rgb(255, 255, 255),
-            bubble_user: Color::Rgb(220, 235, 255), // 与 Light 统一
-            bubble_user_selected: Color::Rgb(200, 225, 255), // 与 Light 统一
+            bubble_user: Color::Rgb(38, 65, 110),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(80, 200, 120),
@@ -984,8 +984,8 @@ impl Theme {
             // 气泡
             bubble_ai: Color::Rgb(50, 56, 68),
             bubble_ai_selected: Color::Rgb(255, 255, 255),
-            bubble_user: Color::Rgb(220, 235, 255), // 与 Light 统一
-            bubble_user_selected: Color::Rgb(200, 225, 255), // 与 Light 统一
+            bubble_user: Color::Rgb(52, 75, 110),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签 — Frost / Aurora
             label_ai: Color::Rgb(163, 190, 140),       // nord14
@@ -1137,8 +1137,8 @@ impl Theme {
             // 气泡
             bubble_ai: Color::Rgb(43, 44, 38),
             bubble_ai_selected: Color::Rgb(255, 255, 255),
-            bubble_user: Color::Rgb(220, 235, 255), // 与 Light 统一
-            bubble_user_selected: Color::Rgb(200, 225, 255), // 与 Light 统一
+            bubble_user: Color::Rgb(55, 65, 90),
+            bubble_user_selected: Color::Rgb(255, 255, 255),
 
             // 标签
             label_ai: Color::Rgb(166, 226, 46),    // monokai green
@@ -1453,8 +1453,8 @@ impl Theme {
             // 气泡
             bubble_ai: Color::Rgb(30, 32, 48),
             bubble_ai_selected: Color::Rgb(45, 63, 118), // #2d3f76
-            bubble_user: Color::Rgb(220, 235, 255),      // 与 Light 统一
-            bubble_user_selected: Color::Rgb(200, 225, 255), // 与 Light 统一
+            bubble_user: Color::Rgb(45, 63, 118),
+            bubble_user_selected: Color::Rgb(58, 80, 144),
 
             // 标签
             label_ai: Color::Rgb(195, 232, 141),   // #c3e88d 绿

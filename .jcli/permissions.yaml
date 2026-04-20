@@ -133,4 +133,6 @@ allow:
 - Bash(git mv:*)
 - Bash(mv /Users/lingojack/dev_custom/j/src/command/chat/storage/mod.rs:*)
 - Bash(cp /Users/lingojack/dev_custom/j/src/command/chat/render/theme.rs:*)
+- Bash(git stash:*)
+- Bash(git show:*)
 deny: []
