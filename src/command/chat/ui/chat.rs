@@ -179,6 +179,17 @@ pub fn draw_title_bar(
     // 第二行：状态信息
     let mut title_spans = vec![
         Span::styled(" 🦞 ", Style::default().fg(t.title_icon)),
+        // Bypass 模式标识（紧跟龙虾图标，更醒目）
+        if app.ui.auto_approve {
+            Span::styled(
+                "[BYPASS] ",
+                Style::default()
+                    .fg(t.config_toggle_off)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::raw("")
+        },
         Span::styled(
             "Sprite",
             Style::default()
