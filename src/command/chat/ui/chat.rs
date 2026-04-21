@@ -176,65 +176,77 @@ pub fn draw_title_bar(
     .style(Style::default().bg(t.bg_primary));
     f.render_widget(top_separator, Rect::new(area.x, area.y, area.width, 1));
 
-    // 第二行：状态信息
-    let mut title_spans = vec![
-        Span::styled(" 🦞 ", Style::default().fg(t.title_icon)),
-        // Bypass 模式标识（紧跟龙虾图标，更醒目）
-        if app.ui.auto_approve {
-            Span::styled(
-                "[BYPASS] ",
-                Style::default()
-                    .fg(t.config_toggle_off)
-                    .add_modifier(Modifier::BOLD),
-            )
-        } else {
-            Span::raw("")
-        },
+    // 第二行：状态信息（左侧：品牌+指标，右侧：动态状态）
+    let icon = if app.ui.auto_approve {
+        Span::styled(
+            " ⚡ ",
+            Style::default()
+                .fg(t.config_toggle_off)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::styled(" 🦞 ", Style::default().fg(t.title_icon))
+    };
+
+    let left_spans: Vec<Span> = vec![
+        icon,
         Span::styled(
             "Sprite",
             Style::default()
                 .fg(t.text_white)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("  │  ", Style::default().fg(t.title_separator)),
-        Span::styled("💫 ", Style::default()),
+        Span::raw("  "),
         Span::styled(
-            format!("Context: {}", ctx_str),
+            format!("context({})", ctx_str),
             Style::default()
                 .fg(t.title_model)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("  │  ", Style::default().fg(t.title_separator)),
+        Span::styled(" · ", Style::default().fg(t.text_dim)),
         Span::styled(
-            format!("📬 Message: {}", msg_count),
+            format!("message({})", msg_count),
             Style::default().fg(t.title_count),
         ),
-        Span::styled("  │  ", Style::default().fg(t.title_separator)),
     ];
 
-    // Loading 状态（始终显示分隔符）
+    // 右侧动态状态
+    let mut right_spans: Vec<Span> = Vec::new();
     if !loading.is_empty() {
-        title_spans.push(Span::styled(
+        right_spans.push(Span::styled(
             loading,
             Style::default()
                 .fg(t.title_loading)
                 .add_modifier(Modifier::BOLD),
         ));
     }
-
-    // 远程控制连接指示器
     if app.remote_connected {
-        title_spans.push(Span::styled(
-            "  │  ",
-            Style::default().fg(t.title_separator),
-        ));
-        title_spans.push(Span::styled(
-            "📱 远程已连接",
+        if !right_spans.is_empty() {
+            right_spans.push(Span::raw("  "));
+        }
+        right_spans.push(Span::styled(
+            "📱 远程",
             Style::default()
                 .fg(t.title_count)
                 .add_modifier(Modifier::BOLD),
         ));
     }
+
+    // 拼接：左侧 + 填充空格（右对齐右侧）+ 右侧
+    let left_width: usize = left_spans
+        .iter()
+        .map(|s| display_width(s.content.as_ref()))
+        .sum();
+    let right_width: usize = right_spans
+        .iter()
+        .map(|s| display_width(s.content.as_ref()))
+        .sum();
+    let available = area.width as usize;
+    let padding = available.saturating_sub(left_width + right_width);
+
+    let mut title_spans = left_spans;
+    title_spans.push(Span::raw(" ".repeat(padding)));
+    title_spans.extend(right_spans);
 
     // 渲染内容行
     let content_line =
