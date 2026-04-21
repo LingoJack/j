@@ -1368,7 +1368,7 @@ pub fn render_tool_call_request_msg(
     theme: &Theme,
     expand: bool,
 ) {
-    use super::super::tools::classification::{ToolCategory, ToolStatus};
+    use super::super::tools::classification::ToolCategory;
 
     let content_w = bubble_max_width.saturating_sub(6);
 
@@ -1383,9 +1383,6 @@ pub fn render_tool_call_request_msg(
         let category = ToolCategory::from_name(&tc.name);
         let icon = category.icon();
         let tool_color = category.color(theme);
-        let status = ToolStatus::Pending;
-        let status_icon = status.icon();
-        let status_color = status.color(theme);
 
         if expand {
             // 展开模式：图标 + 工具名 + description（若有）+ 状态（第一行）
@@ -1403,13 +1400,27 @@ pub fn render_tool_call_request_msg(
                     display_name,
                     Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(" ", Style::default()),
-                Span::styled(status_icon, Style::default().fg(status_color)),
             ]));
 
             // 参数详情
             if !tc.arguments.is_empty() {
-                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&tc.arguments) {
+                if matches!(tc.name.as_str(), "Bash" | "Shell") {
+                    // Bash/Shell 工具使用专用渲染：显示命令 + 附加信息
+                    if let Some(bash_args) = extract_bash_args(&tc.arguments) {
+                        render_bash_call_request_expanded(
+                            &bash_args,
+                            bubble_max_width,
+                            lines,
+                            theme,
+                        );
+                    } else if let Ok(json_value) =
+                        serde_json::from_str::<serde_json::Value>(&tc.arguments)
+                    {
+                        render_json_params_enhanced(&json_value, content_w, lines, theme);
+                    }
+                } else if let Ok(json_value) =
+                    serde_json::from_str::<serde_json::Value>(&tc.arguments)
+                {
                     render_json_params_enhanced(&json_value, content_w, lines, theme);
                 } else {
                     // 非 JSON 参数，普通折行显示
@@ -1999,5 +2010,80 @@ fn extract_tool_description_from_args(tool_name: &str, arguments: &str) -> Optio
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
         _ => None,
+    }
+}
+
+/// Bash 工具参数结构
+struct BashArgs {
+    command: Option<String>,
+    timeout: Option<u64>,
+    run_in_background: bool,
+    cwd: Option<String>,
+}
+
+/// 从 Bash 工具的 arguments JSON 中提取参数
+fn extract_bash_args(arguments: &str) -> Option<BashArgs> {
+    let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
+
+    Some(BashArgs {
+        command: parsed
+            .get("command")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        timeout: parsed.get("timeout").and_then(|v| v.as_u64()),
+        run_in_background: parsed
+            .get("run_in_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        cwd: parsed
+            .get("cwd")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
+}
+
+/// 渲染 Bash 工具调用请求的展开模式
+fn render_bash_call_request_expanded(
+    args: &BashArgs,
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    // 渲染命令行（$ 前缀）
+    if let Some(ref cmd) = args.command {
+        let cmd_with_prefix = format!("$ {}", cmd);
+        for line in crate::util::text::wrap_text(&cmd_with_prefix, content_w) {
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(line, Style::default().fg(theme.text_normal)),
+            ]));
+        }
+    }
+
+    // 渲染附加信息行（后台运行、超时、工作目录）
+    let mut meta_parts: Vec<String> = Vec::new();
+
+    if args.run_in_background {
+        meta_parts.push("[background]".to_string());
+    }
+
+    if let Some(timeout) = args.timeout {
+        meta_parts.push(format!("timeout: {}s", timeout));
+    }
+
+    if let Some(ref cwd) = args.cwd {
+        meta_parts.push(format!("cwd: {}", cwd));
+    }
+
+    if !meta_parts.is_empty() {
+        let meta_line = meta_parts.join("  ");
+        for line in crate::util::text::wrap_text(&meta_line, content_w) {
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(line, Style::default().fg(theme.text_dim)),
+            ]));
+        }
     }
 }

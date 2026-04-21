@@ -78,6 +78,7 @@ impl ToolCategory {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolStatus {
     /// 等待确认
+    #[allow(dead_code)]
     Pending,
     /// 执行中
     #[allow(dead_code)]
