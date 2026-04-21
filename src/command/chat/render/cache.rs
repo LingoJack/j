@@ -666,7 +666,7 @@ fn render_tool_confirm_area(
 
     // 标题行
     let title = if is_ask {
-        "  🪐 那我问你："
+        "  🪐 Some Questions："
     } else {
         "  🔧 工具调用确认"
     };
