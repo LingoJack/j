@@ -142,8 +142,8 @@ pub enum OnError {
     /// 记录错误日志后继续执行后续 hook（默认）
     #[default]
     Skip,
-    /// 立即中止整条 hook 链
-    Abort,
+    /// 中止整条 hook 链
+    Stop,
 }
 
 /// Hook 条件过滤：仅当条件匹配时才执行该 hook
@@ -1442,7 +1442,7 @@ impl HookManager {
                     );
                     // 按 on_error 策略处理
                     match hook_on_error_strategy(hook_ref.kind) {
-                        OnError::Abort => {
+                        OnError::Stop => {
                             return Some(HookResult {
                                 action: Some(HookAction::Stop),
                                 ..Default::default()
@@ -1460,7 +1460,7 @@ impl HookManager {
                         &format!("Hook 最终失败 ({}): {}", label, e),
                     );
                     match hook_on_error_strategy(hook_ref.kind) {
-                        OnError::Abort => {
+                        OnError::Stop => {
                             return Some(HookResult {
                                 action: Some(HookAction::Stop),
                                 ..Default::default()
@@ -1895,7 +1895,7 @@ fn hook_on_error_strategy(kind: &HookKind) -> OnError {
     match kind {
         HookKind::Shell(shell) => shell.on_error,
         HookKind::Llm(llm) => llm.on_error,
-        HookKind::Builtin(_) => OnError::Abort,
+        HookKind::Builtin(_) => OnError::Stop,
     }
 }
 
@@ -2038,7 +2038,7 @@ retry: 2
     }
 
     #[test]
-    fn test_hook_result_with_abort() {
+    fn test_hook_result_with_stop() {
         // action=stop 中止当前步骤
         let json = r#"{"action": "stop"}"#;
         let result: HookResult = serde_json::from_str(json).unwrap();
@@ -2384,7 +2384,7 @@ retry: 2
     }
 
     #[test]
-    fn test_hook_abort_stops_chain() {
+    fn test_hook_stop_stops_chain() {
         let mut manager = HookManager::default();
 
         manager.register_session_hook(
@@ -2396,7 +2396,7 @@ retry: 2
                 model: None,
                 timeout: 5,
                 retry: 0,
-                on_error: OnError::Abort,
+                on_error: OnError::Stop,
                 filter: HookFilter::default(),
             },
         );
@@ -2488,8 +2488,8 @@ retry: 2
     }
 
     #[test]
-    fn test_on_error_abort_stops_chain() {
-        // on_error=abort 时，失败的 hook 中止整条链
+    fn test_on_error_stop_stops_chain() {
+        // on_error=stop 时，失败的 hook 中止整条链
         let mut manager = HookManager::default();
 
         manager.register_session_hook(
@@ -2501,7 +2501,7 @@ retry: 2
                 model: None,
                 timeout: 5,
                 retry: 0,
-                on_error: OnError::Abort,
+                on_error: OnError::Stop,
                 filter: HookFilter::default(),
             },
         );
@@ -2550,10 +2550,10 @@ on_error: skip"#;
         let def: HookDef = serde_yaml::from_str(yaml_skip).unwrap();
         assert_eq!(def.on_error, OnError::Skip);
 
-        let yaml_abort = r#"command: "echo test"
-on_error: abort"#;
-        let def: HookDef = serde_yaml::from_str(yaml_abort).unwrap();
-        assert_eq!(def.on_error, OnError::Abort);
+        let yaml_stop = r#"command: "echo test"
+on_error: stop"#;
+        let def: HookDef = serde_yaml::from_str(yaml_stop).unwrap();
+        assert_eq!(def.on_error, OnError::Stop);
     }
 
     #[test]
@@ -2632,7 +2632,7 @@ on_error: abort"#;
                 model: None,
                 timeout: 5,
                 retry: 0,
-                on_error: OnError::Abort,
+                on_error: OnError::Stop,
                 filter: HookFilter::default(),
             },
         );
@@ -2653,7 +2653,7 @@ on_error: abort"#;
         // 第二个 session hook
         assert_eq!(hooks[2].source, "session");
         assert_eq!(hooks[2].session_index, Some(1));
-        assert_eq!(hooks[2].on_error, Some(OnError::Abort));
+        assert_eq!(hooks[2].on_error, Some(OnError::Stop));
     }
 
     #[test]

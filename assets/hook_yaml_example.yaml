@@ -54,7 +54,7 @@
 
 # on_error: [可选] 失败策略，默认 skip
 #   - skip:  记录日志继续执行后续 hook
-#   - abort: 中止整条 hook 链
+#   - stop: 中止整条 hook 链
 
 # filter: [可选] 条件过滤，仅当匹配时执行
 #   - tool_name: 工具名精确匹配

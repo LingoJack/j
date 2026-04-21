@@ -153,7 +153,7 @@ Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分
 - 环境变量：`JCLI_HOOK_EVENT`（事件名）、`JCLI_CWD`（用户当前目录）、`JCLI_HOOK_DIR`（hook 目录，目录布局下有值）
 - stdin：HookContext JSON
 - stdout：HookResult JSON（只返回要修改的字段，空/`{}` 表示无修改）
-- exit 0 = 成功，非零 = 失败（按 on_error 策略处理：skip=记录日志继续，abort=中止整条链）
+- exit 0 = 成功，非零 = 失败（按 on_error 策略处理：skip=记录日志继续，stop=中止整条链）
 - on_error 默认 "skip"：脚本失败时不中断操作，仅记录错误日志
 - retry 默认 0：失败后不重试；设置 >0 则重试指定次数（受链总超时 30s 约束）
 

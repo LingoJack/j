@@ -40,7 +40,7 @@ struct RegisterHookParams {
     /// Index of the session hook to remove (required for remove). Use session_idx from list output.
     #[serde(default)]
     index: Option<usize>,
-    /// Error handling strategy: "skip" (default, log and continue) or "abort" (stop hook chain)
+    /// Error handling strategy: "skip" (default, log and continue) or "stop" (stop hook chain)
     #[serde(default)]
     on_error: Option<String>,
 }
@@ -229,13 +229,13 @@ impl RegisterHookTool {
         });
 
         let on_error = match params.on_error.as_deref() {
-            Some("abort") => OnError::Abort,
+            Some("stop") => OnError::Stop,
             _ => OnError::Skip, // 默认 skip
         };
 
         let on_error_str = match on_error {
             OnError::Skip => "skip",
-            OnError::Abort => "abort",
+            OnError::Stop => "stop",
         };
 
         let hook_def = HookDef {
@@ -308,7 +308,7 @@ impl RegisterHookTool {
                         .on_error
                         .map(|e| match e {
                             OnError::Skip => "skip",
-                            OnError::Abort => "abort",
+                            OnError::Stop => "stop",
                         })
                         .unwrap_or("-");
                     let session_idx_str = entry
