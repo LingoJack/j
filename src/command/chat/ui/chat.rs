@@ -210,20 +210,21 @@ pub fn draw_title_bar(
         ),
     ];
 
-    // 右侧动态状态
-    let mut right_spans: Vec<Span> = Vec::new();
+    // 思考中状态放在左侧（紧跟 message 后面）
+    let mut loading_spans: Vec<Span> = Vec::new();
     if !loading.is_empty() {
-        right_spans.push(Span::styled(
+        loading_spans.push(Span::styled("  ", Style::default()));
+        loading_spans.push(Span::styled(
             loading,
             Style::default()
                 .fg(t.title_loading)
                 .add_modifier(Modifier::BOLD),
         ));
     }
+
+    // 右侧动态状态（远程连接等）
+    let mut right_spans: Vec<Span> = Vec::new();
     if app.remote_connected {
-        if !right_spans.is_empty() {
-            right_spans.push(Span::raw("  "));
-        }
         right_spans.push(Span::styled(
             "📱 远程",
             Style::default()
@@ -232,8 +233,12 @@ pub fn draw_title_bar(
         ));
     }
 
-    // 拼接：左侧 + 填充空格（右对齐右侧）+ 右侧
+    // 拼接：左侧 + 思考状态 + 填充空格（右对齐右侧）+ 右侧
     let left_width: usize = left_spans
+        .iter()
+        .map(|s| display_width(s.content.as_ref()))
+        .sum();
+    let loading_width: usize = loading_spans
         .iter()
         .map(|s| display_width(s.content.as_ref()))
         .sum();
@@ -242,9 +247,10 @@ pub fn draw_title_bar(
         .map(|s| display_width(s.content.as_ref()))
         .sum();
     let available = area.width as usize;
-    let padding = available.saturating_sub(left_width + right_width);
+    let padding = available.saturating_sub(left_width + loading_width + right_width);
 
     let mut title_spans = left_spans;
+    title_spans.extend(loading_spans);
     title_spans.push(Span::raw(" ".repeat(padding)));
     title_spans.extend(right_spans);
 
