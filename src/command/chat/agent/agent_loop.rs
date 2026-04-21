@@ -181,7 +181,8 @@ pub async fn run_main_agent_loop(
                     session_id: Some(session_id.clone()),
                     ..Default::default()
                 };
-                if let Some(result) = hook_manager.execute(HookEvent::PreMicroCompact, ctx, &disabled_hooks)
+                if let Some(result) =
+                    hook_manager.execute(HookEvent::PreMicroCompact, ctx, &disabled_hooks)
                     && result.is_stop()
                 {
                     write_info_log(
@@ -207,7 +208,8 @@ pub async fn run_main_agent_loop(
                         session_id: Some(session_id.clone()),
                         ..Default::default()
                     };
-                    if let Some(result) = hook_manager.execute(HookEvent::PostMicroCompact, ctx, &disabled_hooks)
+                    if let Some(result) =
+                        hook_manager.execute(HookEvent::PostMicroCompact, ctx, &disabled_hooks)
                         && let Some(new_msgs) = result.messages
                     {
                         messages = new_msgs;
@@ -232,7 +234,9 @@ pub async fn run_main_agent_loop(
                             session_id: Some(session_id.clone()),
                             ..Default::default()
                         };
-                        if let Some(result) = hook_manager.execute(HookEvent::PreAutoCompact, ctx, &disabled_hooks) {
+                        if let Some(result) =
+                            hook_manager.execute(HookEvent::PreAutoCompact, ctx, &disabled_hooks)
+                        {
                             if result.is_stop() {
                                 write_info_log("PreAutoCompact hook", "auto_compact 被 hook 中止");
                                 compact_aborted = true;
@@ -274,9 +278,11 @@ pub async fn run_main_agent_loop(
                                         session_id: Some(session_id.clone()),
                                         ..Default::default()
                                     };
-                                    if let Some(hook_result) =
-                                        hook_manager.execute(HookEvent::PostAutoCompact, ctx, &disabled_hooks)
-                                        && let Some(new_msgs) = hook_result.messages
+                                    if let Some(hook_result) = hook_manager.execute(
+                                        HookEvent::PostAutoCompact,
+                                        ctx,
+                                        &disabled_hooks,
+                                    ) && let Some(new_msgs) = hook_result.messages
                                     {
                                         messages = new_msgs;
                                         // hook 可能修改了消息，重新全量同步
@@ -357,7 +363,9 @@ pub async fn run_main_agent_loop(
                     .unwrap_or_else(|_| ".".to_string()),
                 ..Default::default()
             };
-            if let Some(result) = hook_manager.execute(HookEvent::PreLlmRequest, ctx, &disabled_hooks) {
+            if let Some(result) =
+                hook_manager.execute(HookEvent::PreLlmRequest, ctx, &disabled_hooks)
+            {
                 if result.is_stop() {
                     let _ = tx.send(StreamMsg::Error(ChatError::HookAborted));
                     return;
@@ -1064,7 +1072,9 @@ pub async fn run_main_agent_loop(
                         session_id: Some(session_id.clone()),
                         ..Default::default()
                     };
-                    if let Some(result) = hook_manager.execute(HookEvent::Stop, stop_ctx, &disabled_hooks) {
+                    if let Some(result) =
+                        hook_manager.execute(HookEvent::Stop, stop_ctx, &disabled_hooks)
+                    {
                         // 注入额外上下文（追加到 system_prompt）
                         if let Some(ref ctx_text) = result.additional_context {
                             let current = system_prompt.unwrap_or_default();

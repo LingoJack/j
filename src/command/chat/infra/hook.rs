@@ -1183,22 +1183,38 @@ impl HookManager {
         // 执行顺序：内置 → 用户 → 项目 → session
         if let Some(hooks) = self.builtin_hooks.get(&event) {
             for h in hooks.iter() {
-                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_BUILTIN, session_index: None });
+                all_hooks.push(HookRef {
+                    kind: h,
+                    source: HOOK_SOURCE_BUILTIN,
+                    session_index: None,
+                });
             }
         }
         if let Some(hooks) = self.user_hooks.get(&event) {
             for h in hooks.iter() {
-                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_USER, session_index: None });
+                all_hooks.push(HookRef {
+                    kind: h,
+                    source: HOOK_SOURCE_USER,
+                    session_index: None,
+                });
             }
         }
         if let Some(hooks) = self.project_hooks.get(&event) {
             for h in hooks.iter() {
-                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_PROJECT, session_index: None });
+                all_hooks.push(HookRef {
+                    kind: h,
+                    source: HOOK_SOURCE_PROJECT,
+                    session_index: None,
+                });
             }
         }
         if let Some(hooks) = self.session_hooks.get(&event) {
             for (idx, h) in hooks.iter().enumerate() {
-                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_SESSION, session_index: Some(idx) });
+                all_hooks.push(HookRef {
+                    kind: h,
+                    source: HOOK_SOURCE_SESSION,
+                    session_index: Some(idx),
+                });
             }
         }
 

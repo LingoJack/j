@@ -240,10 +240,9 @@ fn get_bash_summary(content: &str, tool_args: Option<&str>) -> String {
     }
 }
 
-/// TodoWrite 工具摘要：从结果内容统计状态（与 TodoRead 一致）
-fn get_todo_write_summary(content: &str, tool_args: Option<&str>) -> String {
-    // TodoWrite 返回更新后的全部 todo 列表，用相同的统计逻辑
-    let action_prefix = tool_args
+/// TodoWrite 工具摘要：显示操作描述
+fn get_todo_write_summary(_content: &str, tool_args: Option<&str>) -> String {
+    tool_args
         .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
         .map(|v| {
             let is_merge = v.get("merge").and_then(|m| m.as_bool()).unwrap_or(false);
@@ -253,47 +252,18 @@ fn get_todo_write_summary(content: &str, tool_args: Option<&str>) -> String {
                 .map(|a| a.len())
                 .unwrap_or(0);
             if is_merge {
-                format!("更新 {} 项 → ", count)
+                format!("更新 {} 项待办", count)
             } else {
-                format!("写入 {} 项 → ", count)
+                format!("写入 {} 项待办", count)
             }
         })
-        .unwrap_or_default();
-
-    let status_summary = get_todo_status_summary(content);
-    format!("{}{}", action_prefix, status_summary)
+        .unwrap_or_else(|| "写入待办".to_string())
 }
 
-/// TodoRead 工具摘要：解析 JSON 内容统计状态
+/// TodoRead 工具摘要：显示读取数量
 fn get_todo_read_summary(content: &str) -> String {
-    get_todo_status_summary(content)
-}
-
-/// 从 todo JSON 列表中统计状态摘要
-fn get_todo_status_summary(content: &str) -> String {
     if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(content) {
-        let total = items.len();
-        let completed = items
-            .iter()
-            .filter(|i| i.get("status").and_then(|s| s.as_str()) == Some("completed"))
-            .count();
-        let in_progress = items
-            .iter()
-            .filter(|i| i.get("status").and_then(|s| s.as_str()) == Some("in_progress"))
-            .count();
-        let pending = total.saturating_sub(completed + in_progress);
-
-        let mut parts = Vec::new();
-        if pending > 0 {
-            parts.push(format!("⬜{}", pending));
-        }
-        if in_progress > 0 {
-            parts.push(format!("[~]{}", in_progress));
-        }
-        if completed > 0 {
-            parts.push(format!("☑️{}", completed));
-        }
-        format!("{} 项 ({})", total, parts.join(" "))
+        format!("读取 {} 项待办", items.len())
     } else {
         get_generic_summary(content)
     }

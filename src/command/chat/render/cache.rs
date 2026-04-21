@@ -1598,7 +1598,10 @@ pub fn render_tool_result_msg(
         Span::styled(summary, Style::default().fg(theme.text_dim)),
     ]));
 
-    if !expand || content.is_empty() {
+    // Todo 工具特殊处理：折叠模式也显示 todo 列表
+    let is_todo_tool = tool_name == "TodoRead" || tool_name == "TodoWrite";
+
+    if (!expand && !is_todo_tool) || content.is_empty() {
         return;
     }
 
@@ -1655,8 +1658,8 @@ pub fn render_tool_result_msg(
         // Bash 结果：命令行高亮 + 输出
         render_bash_result(&clean, tool_args, content_w, lines, theme);
     } else if tool_name == "TodoRead" || tool_name == "TodoWrite" {
-        // TodoRead/TodoWrite 结果：checkbox 样式
-        render_todo_result(content, content_w, lines, theme);
+        // TodoRead/TodoWrite 结果：折叠和展开都显示 todo 列表
+        render_todo_result(content, content_w, lines, theme, expand);
     } else {
         // 正常结果
         let all_lines: Vec<&str> = clean.lines().take(NORMAL_RESULT_MAX_LINES).collect();
@@ -1837,14 +1840,36 @@ fn render_bash_result(
     }
 }
 
-/// 渲染 TodoRead/TodoWrite 工具结果（checkbox 样式，与 todo TUI 一致）
+/// 渲染 TodoRead/TodoWrite 工具结果（实心点/空心点样式）
+/// expand=true 时额外显示完成/未完成条数统计
 fn render_todo_result(
     content: &str,
     content_w: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
+    expand: bool,
 ) {
     if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(content) {
+        // 展开模式：先显示统计信息
+        if expand {
+            let total = items.len();
+            let completed = items
+                .iter()
+                .filter(|i| i.get("status").and_then(|s| s.as_str()) == Some("completed"))
+                .count();
+            let pending = total.saturating_sub(completed);
+
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(
+                    format!("完成 {} / 未完成 {}", completed, pending),
+                    Style::default().fg(theme.text_dim),
+                ),
+            ]));
+            lines.push(Line::from(""));
+        }
+
+        // 列出每个 todo 项
         for item in &items {
             let status = item
                 .get("status")
@@ -1854,29 +1879,22 @@ fn render_todo_result(
                 .get("content")
                 .and_then(|c| c.as_str())
                 .unwrap_or("(empty)");
-            let id = item.get("id").and_then(|i| i.as_str()).unwrap_or("");
 
-            // 与 todo TUI 保持一致的 checkbox 样式和颜色
-            let (checkbox, color) = match status {
-                "completed" => ("[x]", theme.label_ai), // 绿色，与 todo UI 一致
-                "in_progress" => ("[~]", theme.title_loading), // 黄色
-                "cancelled" => ("[-]", theme.text_dim), // 灰色
-                _ => ("[ ]", Color::Yellow),            // pending: 黄色，与 todo UI 一致
+            // 实心点 ● 表示已完成/进行中，空心点 ○ 表示未开始
+            let (dot, color) = match status {
+                "completed" => ("●", theme.label_ai),        // 绿色实心点
+                "in_progress" => ("◉", theme.title_loading), // 黄色双圈实心点
+                "cancelled" => ("◌", theme.text_dim),        // 灰色空心虚圈
+                _ => ("○", Color::Yellow),                   // pending: 黄色空心点
             };
 
-            let id_display = if !id.is_empty() {
-                format!("{} ", id)
-            } else {
-                String::new()
-            };
-
-            let item_text = format!("{}{}", id_display, text);
-            let max_w = content_w.saturating_sub(10); // "    [x] " prefix
-            for (i, wrapped) in wrap_text(&item_text, max_w).iter().enumerate() {
+            let max_w = content_w.saturating_sub(10); // "    ● " prefix
+            for (i, wrapped) in wrap_text(text, max_w).iter().enumerate() {
                 if i == 0 {
                     lines.push(Line::from(vec![
                         Span::styled("    ", Style::default()),
-                        Span::styled(format!("{} ", checkbox), Style::default().fg(color)),
+                        Span::styled(dot, Style::default().fg(color)),
+                        Span::styled(" ", Style::default()),
                         Span::styled(
                             wrapped.clone(),
                             if status == "completed" {
@@ -1890,7 +1908,7 @@ fn render_todo_result(
                     ]));
                 } else {
                     lines.push(Line::from(Span::styled(
-                        format!("        {}", wrapped),
+                        format!("      {}", wrapped),
                         Style::default().fg(theme.text_dim),
                     )));
                 }

@@ -46,7 +46,11 @@ impl ChatApp {
                     ..Default::default()
                 };
                 if let Ok(manager) = self.hook_manager.lock() {
-                    manager.execute(HookEvent::PreSendMessage, ctx, &self.state.agent_config.disabled_hooks)
+                    manager.execute(
+                        HookEvent::PreSendMessage,
+                        ctx,
+                        &self.state.agent_config.disabled_hooks,
+                    )
                 } else {
                     None
                 }

@@ -926,7 +926,11 @@ fn dump_current_request(app: &mut ChatApp, processed: bool) {
                         .unwrap_or_else(|_| ".".to_string()),
                     ..Default::default()
                 };
-                if let Some(result) = mgr.execute(HookEvent::PreLlmRequest, ctx, &app.state.agent_config.disabled_hooks) {
+                if let Some(result) = mgr.execute(
+                    HookEvent::PreLlmRequest,
+                    ctx,
+                    &app.state.agent_config.disabled_hooks,
+                ) {
                     if let Some(new_msgs) = result.messages {
                         messages = new_msgs;
                     }
