@@ -215,6 +215,7 @@ pub struct PerMsgCache {
     pub is_selected: bool,
 }
 
+/// 聊天界面模式枚举，定义 TUI 的不同交互状态
 #[derive(PartialEq)]
 pub enum ChatMode {
     /// 正常对话模式（焦点在输入框）

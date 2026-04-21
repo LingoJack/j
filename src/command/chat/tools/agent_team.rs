@@ -1,4 +1,6 @@
+use crate::command::chat::constants::TEAM_MAX_MEMBERS;
 use crate::command::chat::teammate::TeammateManager;
+use crate::command::chat::tools::create_teammate::CreateTeammateTool;
 use crate::command::chat::tools::derived_shared::DerivedAgentShared;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
@@ -92,9 +94,9 @@ impl Tool for AgentTeamTool {
             };
         }
 
-        if params.members.len() > 10 {
+        if params.members.len() > TEAM_MAX_MEMBERS {
             return ToolResult {
-                output: "Team size limited to 10 members".to_string(),
+                output: format!("Team size limited to {TEAM_MAX_MEMBERS} members"),
                 is_error: true,
                 images: vec![],
                 plan_decision: PlanDecision::None,
@@ -102,7 +104,7 @@ impl Tool for AgentTeamTool {
         }
 
         // 为每个成员调用 CreateTeammate 的逻辑
-        let create_tool = crate::command::chat::tools::create_teammate::CreateTeammateTool {
+        let create_tool = CreateTeammateTool {
             shared: self.shared.clone(),
             teammate_manager: Arc::clone(&self.teammate_manager),
         };

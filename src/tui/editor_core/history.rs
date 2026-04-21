@@ -4,6 +4,9 @@
 
 use std::collections::VecDeque;
 
+/// 编辑器历史记录最大条数
+const EDITOR_HISTORY_MAX_SIZE: usize = 100;
+
 /// 历史记录快照
 #[derive(Debug, Clone)]
 pub struct Snapshot {
@@ -51,7 +54,7 @@ impl History {
         Self {
             stack: VecDeque::new(),
             cursor: 0,
-            max_size: 100,
+            max_size: EDITOR_HISTORY_MAX_SIZE,
         }
     }
 

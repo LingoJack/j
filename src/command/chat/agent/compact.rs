@@ -1,7 +1,7 @@
 use super::super::constants::{
     COMPACT_KEEP_RECENT, COMPACT_KEEP_RECENT_USER_MESSAGES, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET,
-    COMPACT_SKILL_TOKEN_BUDGET, COMPACT_TOKEN_THRESHOLD, COMPACT_TRUNCATE_MAX_CHARS,
-    MICRO_COMPACT_BYTES_THRESHOLD,
+    COMPACT_SKILL_TOKEN_BUDGET, COMPACT_SUMMARY_MAX_TOKENS, COMPACT_TOKEN_THRESHOLD,
+    COMPACT_TRUNCATE_MAX_CHARS, MICRO_COMPACT_BYTES_THRESHOLD,
 };
 use super::super::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
 use super::super::tools::ask::AskTool;
@@ -415,7 +415,7 @@ pub async fn auto_compact(
     let request = CreateChatCompletionRequestArgs::default()
         .model(&provider.model)
         .messages(vec![ChatCompletionRequestMessage::User(user_msg)])
-        .max_tokens(20000u32)
+        .max_tokens(COMPACT_SUMMARY_MAX_TOKENS)
         .build()
         .map_err(|e| format!("构建摘要请求失败: {}", e))?;
 

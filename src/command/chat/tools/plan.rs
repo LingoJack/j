@@ -1,3 +1,4 @@
+use crate::command::chat::agent::thread_identity::current_agent_name;
 use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
 use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
@@ -236,8 +237,10 @@ struct EnterPlanModeParams {
     description: Option<String>,
 }
 
+/// 进入计划模式工具，用于在编写代码前探索代码库并设计实现方案
 #[derive(Debug)]
 pub struct EnterPlanModeTool {
+    /// 计划模式的全局共享状态
     pub plan_state: Arc<PlanModeState>,
 }
 
@@ -378,8 +381,11 @@ struct AllowedPrompt {
     prompt: Option<String>,
 }
 
+/// 退出计划模式工具，读取计划文件并提交用户审批
 pub struct ExitPlanModeTool {
+    /// 计划模式的全局共享状态
     pub plan_state: Arc<PlanModeState>,
+    /// 用于向主线程发送提问请求的通道发送端
     pub ask_tx: mpsc::Sender<AskRequest>,
     /// Plan 审批队列（teammate 通过此队列路由审批请求到主 TUI）
     pub plan_approval_queue: Option<Arc<PlanApprovalQueue>>,
@@ -441,7 +447,7 @@ impl Tool for ExitPlanModeTool {
         };
 
         // 判断是否在 teammate 线程中（非 Main agent）
-        let agent_name = crate::command::chat::agent::thread_identity::current_agent_name();
+        let agent_name = current_agent_name();
         if agent_name != "Main" {
             // Teammate 模式：通过 PlanApprovalQueue 路由到主 TUI
             if let Some(ref queue) = self.plan_approval_queue {

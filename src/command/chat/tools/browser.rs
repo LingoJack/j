@@ -3,6 +3,8 @@
 //! 启用 `browser_cdp` feature 时，使用 chromiumoxide 进行真实 CDP 浏览器控制。
 //! 未启用时，退化为基于 reqwest 的 Lite 模式（HTTP 抓取 + HTML 解析）。
 
+#[cfg(feature = "browser_cdp")]
+use crate::command::chat::constants::{BROWSER_SNAPSHOT_MAX_ELEMENTS, BROWSER_TEXT_MAX_CHARS};
 use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -352,8 +354,8 @@ mod cdp {
 
         let text = crate::util::html_extract::extract_text_from_html(&raw_html);
 
-        if text.len() > 50_000 {
-            let mut end = 50_000;
+        if text.len() > BROWSER_TEXT_MAX_CHARS {
+            let mut end = BROWSER_TEXT_MAX_CHARS;
             while end > 0 && !text.is_char_boundary(end) {
                 end -= 1;
             }
@@ -682,13 +684,14 @@ mod cdp {
 
         let elements: serde_json::Value = page
             .evaluate(
-                r#"
+                format!(
+                    r#"
             Array.from(document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"]'))
-                .slice(0, 50)
-                .map((el, i) => {
+                .slice(0, {})
+                .map((el, i) => {{
                     const ref = 'e' + i;
                     el.setAttribute('data-jref', ref);
-                    return {
+                    return {{
                         ref,
                         selector: '[data-jref="' + ref + '"]',
                         tag: el.tagName.toLowerCase(),
@@ -696,9 +699,12 @@ mod cdp {
                         text: el.textContent?.trim().slice(0, 50) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '',
                         type: el.type || null,
                         href: el.href || null
-                    };
+                    }};
                 })
             "#,
+                    BROWSER_SNAPSHOT_MAX_ELEMENTS
+                )
+                .as_str(),
             )
             .await
             .map_err(|e| format!("获取页面元素失败: {}。页面可能正在加载，建议稍后重试", e))?
@@ -812,6 +818,10 @@ mod cdp {
 
 #[cfg(not(feature = "browser_cdp"))]
 mod lite {
+    use crate::command::chat::constants::{
+        BROWSER_LITE_MAX_FORMS, BROWSER_LITE_MAX_LINKS, BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS,
+        BROWSER_SNAPSHOT_MAX_ELEMENTS, BROWSER_TEXT_MAX_CHARS,
+    };
     use serde_json::{Value, json};
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
@@ -985,8 +995,8 @@ mod lite {
             "elements": tab.interactive,
             "links_count": tab.links.len(),
             "forms_count": tab.forms.len(),
-            "text_preview": if tab.text_content.len() > 500 {
-                let mut end = 500;
+            "text_preview": if tab.text_content.len() > BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS {
+                let mut end = BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS;
                 while end > 0 && !tab.text_content.is_char_boundary(end) {
                     end -= 1;
                 }
@@ -1008,8 +1018,8 @@ mod lite {
             None => br.tabs.values().next().ok_or("没有已打开的标签页")?,
         };
         let text = &tab.text_content;
-        if text.len() > 50_000 {
-            let mut end = 50_000;
+        if text.len() > BROWSER_TEXT_MAX_CHARS {
+            let mut end = BROWSER_TEXT_MAX_CHARS;
             while end > 0 && !text.is_char_boundary(end) {
                 end -= 1;
             }
@@ -1108,7 +1118,7 @@ mod lite {
                     } else { text },
                 }));
             }
-            if links.len() >= 50 {
+            if links.len() >= BROWSER_LITE_MAX_LINKS {
                 break;
             }
             search_from = close + 4;
@@ -1134,7 +1144,7 @@ mod lite {
                 "action": action,
                 "method": method.to_uppercase(),
             }));
-            if forms.len() >= 20 {
+            if forms.len() >= BROWSER_LITE_MAX_FORMS {
                 break;
             }
             search_from = tag_end + 1;
@@ -1188,12 +1198,12 @@ mod lite {
                     }
                 }
                 elements.push(elem);
-                if elements.len() >= 50 {
+                if elements.len() >= BROWSER_SNAPSHOT_MAX_ELEMENTS {
                     break;
                 }
                 search_from = tag_end + 1;
             }
-            if elements.len() >= 50 {
+            if elements.len() >= BROWSER_SNAPSHOT_MAX_ELEMENTS {
                 break;
             }
         }
@@ -1249,12 +1259,12 @@ mod lite {
                     elem["href"] = json!(h);
                 }
                 elements.push(elem);
-                if elements.len() >= 50 {
+                if elements.len() >= BROWSER_SNAPSHOT_MAX_ELEMENTS {
                     break;
                 }
                 search_from = tag_end + 1;
             }
-            if elements.len() >= 50 {
+            if elements.len() >= BROWSER_SNAPSHOT_MAX_ELEMENTS {
                 break;
             }
         }
@@ -1309,6 +1319,7 @@ struct BrowserParams {
     headless: Option<bool>,
 }
 
+/// 浏览器自动化工具，支持网页浏览、交互和内容提取
 #[derive(Debug)]
 pub struct BrowserTool;
 

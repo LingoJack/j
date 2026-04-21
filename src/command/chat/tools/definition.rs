@@ -13,33 +13,50 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 pub use crate::command::chat::app::types::PlanDecision;
 
+/// 图片数据，以 base64 编码存储
 #[derive(Debug, Clone)]
 pub struct ImageData {
+    /// 图片的 base64 编码数据
     pub base64: String,
+    /// 图片的 MIME 媒体类型（如 "image/png"）
     pub media_type: String,
 }
 
+/// 工具执行结果，包含输出文本、错误标记、附加图片和计划决策
 #[derive(Debug)]
 pub struct ToolResult {
+    /// 工具执行的文本输出
     pub output: String,
+    /// 是否为错误结果
     pub is_error: bool,
+    /// 执行过程中产生的图片列表
     pub images: Vec<ImageData>,
+    /// 计划模式下的决策结果
     pub plan_decision: PlanDecision,
 }
 
+/// 工具核心接口，定义工具的名称、描述、参数模式和执行逻辑
 pub trait Tool: Send + Sync {
+    /// 返回工具名称
     fn name(&self) -> &str;
+    /// 返回工具功能描述
     fn description(&self) -> &str;
+    /// 返回工具参数的 JSON Schema
     fn parameters_schema(&self) -> Value;
+    /// 执行工具，传入参数字符串和取消信号，返回执行结果
     fn execute(&self, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult;
+    /// 该工具是否需要用户确认后才能执行
     fn requires_confirmation(&self) -> bool {
         false
     }
+    /// 生成用户确认时显示的提示消息
     fn confirmation_message(&self, arguments: &str) -> String {
         format!("调用工具 {} 参数: {}", self.name(), arguments)
     }
 }
 
+/// 将实现了 `JsonSchema` 的类型转换为基础清理后的工具参数 JSON Schema，
+/// 自动内联所有 `$ref` 引用并移除 `$schema`、`title`、`definitions` 等冗余字段
 pub fn schema_to_tool_params<T: JsonSchema>() -> Value {
     let root = schemars::schema_for!(T);
     let mut v = serde_json::to_value(root).unwrap_or_default();
@@ -90,6 +107,7 @@ fn inline_refs(value: &mut Value, definitions: &serde_json::Map<String, Value>) 
     }
 }
 
+/// 将 JSON 参数字符串解析为指定类型 `T`，解析失败时返回包含错误信息的 `ToolResult`
 pub fn parse_tool_args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<T, ToolResult> {
     serde_json::from_str::<T>(arguments).map_err(|e| ToolResult {
         output: format!("参数解析失败: {}", e),
@@ -101,17 +119,24 @@ pub fn parse_tool_args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<
 
 // ========== ToolRegistry ==========
 
+/// 工具注册中心，管理所有可用工具及其相关状态
 pub struct ToolRegistry {
     tools: Vec<Box<dyn Tool>>,
+    /// 待办事项管理器
     pub todo_manager: Arc<super::todo::TodoManager>,
+    /// 计划模式状态
     pub plan_mode_state: Arc<super::plan::PlanModeState>,
+    /// 工作树状态（当前未使用）
     #[allow(dead_code)]
     pub worktree_state: Arc<super::worktree::WorktreeState>,
+    /// 权限请求队列
     pub permission_queue: Option<Arc<PermissionQueue>>,
+    /// 计划审批队列
     pub plan_approval_queue: Option<Arc<super::plan::PlanApprovalQueue>>,
 }
 
 impl ToolRegistry {
+    /// 创建工具注册中心，初始化所有内置工具及相关状态
     pub fn new(
         skills: Vec<Skill>,
         ask_tx: mpsc::Sender<AskRequest>,
@@ -191,10 +216,12 @@ impl ToolRegistry {
         registry
     }
 
+    /// 注册一个新工具到注册中心
     pub fn register(&mut self, tool: Box<dyn Tool>) {
         self.tools.push(tool);
     }
 
+    /// 根据名称获取工具的引用
     pub fn get(&self, name: &str) -> Option<&dyn Tool> {
         self.tools
             .iter()
@@ -202,6 +229,7 @@ impl ToolRegistry {
             .map(|t| t.as_ref())
     }
 
+    /// 执行指定名称的工具，自动处理计划模式下的权限限制
     pub fn execute(&self, name: &str, arguments: &str, cancelled: &Arc<AtomicBool>) -> ToolResult {
         let (is_active, plan_file_path) = self.plan_mode_state.get_state();
         if is_active && !super::plan::is_allowed_in_plan_mode(name) {
@@ -266,6 +294,7 @@ impl ToolRegistry {
         }
     }
 
+    /// 构建工具摘要，以 XML 格式展示所有未禁用工具的名称、描述和参数
     pub fn build_tools_summary(&self, disabled: &[String]) -> String {
         let mut md = String::new();
         for t in self
@@ -282,6 +311,7 @@ impl ToolRegistry {
         md.trim_end().to_string()
     }
 
+    /// 将未禁用的工具转换为 OpenAI 函数调用格式的工具列表
     pub fn to_openai_tools_filtered(&self, disabled: &[String]) -> Vec<ChatCompletionTools> {
         self.tools
             .iter()
@@ -299,10 +329,12 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// 返回所有已注册工具的名称列表
     pub fn tool_names(&self) -> Vec<&str> {
         self.tools.iter().map(|t| t.name()).collect()
     }
 
+    /// 构建会话状态摘要，包含计划模式和工作树等当前状态信息
     pub fn build_session_state_summary(&self) -> String {
         let mut parts = Vec::new();
 

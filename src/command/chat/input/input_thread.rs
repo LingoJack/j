@@ -1,3 +1,6 @@
+use crate::command::chat::constants::{
+    INPUT_THREAD_PAUSE_SETTLE_MS, INPUT_THREAD_PAUSE_WAIT_MS, INPUT_THREAD_POLL_MS,
+};
 use crossterm::event::{self, Event};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
@@ -47,11 +50,11 @@ impl InputThread {
     fn run_loop(tx: mpsc::Sender<Event>, quit: Arc<AtomicBool>, pause: Arc<AtomicBool>) {
         while !quit.load(Ordering::Acquire) {
             if pause.load(Ordering::Acquire) {
-                std::thread::sleep(std::time::Duration::from_millis(50));
+                std::thread::sleep(std::time::Duration::from_millis(INPUT_THREAD_PAUSE_WAIT_MS));
                 continue;
             }
             // poll 50ms：既保证响应退出/暂停信号，又不会忙等
-            match event::poll(std::time::Duration::from_millis(50)) {
+            match event::poll(std::time::Duration::from_millis(INPUT_THREAD_POLL_MS)) {
                 Ok(true) => {
                     // 二次检查 pause，避免 poll 返回 true 后 pause 已被设置
                     if pause.load(Ordering::Acquire) {
@@ -83,11 +86,13 @@ impl InputThread {
 
     /// 暂停输入线程（编辑器需要独占 stdin 时调用）
     ///
-    /// 设置 pause_flag 后 sleep 120ms，确保线程退出当前 poll 周期。
+    /// 设置 pause_flag 后 sleep 一小段时间，确保线程退出当前 poll 周期。
     /// 使用 Release ordering 保证 store 对其他线程立即可见。
     pub fn pause(&self) {
         self.pause_flag.store(true, Ordering::Release);
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        std::thread::sleep(std::time::Duration::from_millis(
+            INPUT_THREAD_PAUSE_SETTLE_MS,
+        ));
     }
 
     /// 恢复输入线程

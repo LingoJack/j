@@ -7,6 +7,7 @@ use super::error::AicError;
 
 // --- Data types matching j-ax JSON output ---
 
+/// UI 元素的矩形区域，包含位置和尺寸信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Frame {
     pub x: f64,
@@ -15,6 +16,7 @@ pub struct Frame {
     pub h: f64,
 }
 
+/// 无障碍树节点，表示 UI 元素的层级结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AxNode {
     pub role: String,
@@ -26,6 +28,7 @@ pub struct AxNode {
     pub children: Option<Vec<AxNode>>,
 }
 
+/// 元素查找结果，包含角色、标题、位置和中心坐标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FindResult {
     pub role: String,

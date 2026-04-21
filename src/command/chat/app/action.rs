@@ -296,6 +296,7 @@ pub enum Action {
     ToggleAutoApprove,
 }
 
+/// 光标移动方向枚举，用于消息浏览中的上下导航
 #[derive(Debug, Clone, Copy)]
 pub enum CursorDirection {
     Up,

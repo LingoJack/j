@@ -10,7 +10,10 @@ use super::{
     handle_browse_mode, handle_chat_mode, handle_config_mode, handle_plan_approval_confirm_mode,
     handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
+use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
+use crate::command::chat::constants::{TUI_IDLE_POLL_MS, TUI_LOADING_POLL_MS};
+use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
@@ -308,7 +311,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         {
             if app.ui.auto_approve {
                 // bypass 模式：自动批准
-                req.resolve(crate::command::chat::app::types::PlanDecision::Approve);
+                req.resolve(PlanDecision::Approve);
             } else {
                 app.ui.pending_plan_approval = Some(req);
                 app.ui.mode = ChatMode::PlanApprovalConfirm;
@@ -472,11 +475,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         // ================================================================
         #[allow(clippy::if_same_then_else)]
         let poll_timeout = if app.state.is_loading {
-            std::time::Duration::from_millis(100)
+            std::time::Duration::from_millis(TUI_LOADING_POLL_MS)
         } else if app.ui.mode == ChatMode::ToolConfirm {
-            std::time::Duration::from_millis(500)
+            std::time::Duration::from_millis(TUI_IDLE_POLL_MS)
         } else {
-            std::time::Duration::from_millis(500)
+            std::time::Duration::from_millis(TUI_IDLE_POLL_MS)
         };
 
         // 阻塞等待第一个事件（受 poll_timeout 限制）
@@ -624,7 +627,6 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // ★ SessionEnd hook（fire-and-forget，终端已恢复）
     {
-        use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
         let has_hooks = app
             .hook_manager
             .lock()

@@ -34,8 +34,10 @@ struct TodoWriteParams {
     merge: bool,
 }
 
+/// 待办事项写入工具，用于创建和管理结构化待办列表
 #[derive(Debug)]
 pub struct TodoWriteTool {
+    /// 待办事项管理器实例
     pub manager: Arc<TodoManager>,
 }
 

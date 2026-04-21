@@ -8,6 +8,8 @@ use super::super::storage::{ChatMessage, MessageRole};
 use super::super::theme::ThemeName;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
 use crate::command::chat::infra::command;
+use crate::command::chat::infra::hook::{HookContext, HookEvent};
+use crate::command::chat::storage::agent_data_dir;
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -885,8 +887,6 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
 /// rolling window → micro_compact → PreLlmRequest hooks → sanitize，
 /// 产出与最终发给 LLM 一致的数据。
 fn dump_current_request(app: &mut ChatApp, processed: bool) {
-    use crate::command::chat::storage::agent_data_dir;
-
     let mut system_prompt = app.build_current_system_prompt();
     let mut messages = app.build_api_messages();
 
@@ -904,12 +904,7 @@ fn dump_current_request(app: &mut ChatApp, processed: bool) {
             }
         }
         // Layer 2: PreLlmRequest hook 链（内置→用户→项目→session）
-        // 这会执行 tasks_status、background_status、session_state、
-        // teammates_status、todo_nag 等内置 hook，以及用户自定义 hook。
-        // 注意：background_status 的 drain_notifications 是有副作用的，
-        // 这里为 dump 目的执行一次是合理的（等同于真实请求前的状态快照）。
         {
-            use crate::command::chat::infra::hook::{HookContext, HookEvent};
             let hook_manager = app.hook_manager.lock();
             if let Ok(mgr) = hook_manager
                 && mgr.has_hooks_for(HookEvent::PreLlmRequest)
@@ -1002,7 +997,7 @@ fn dump_current_request(app: &mut ChatApp, processed: bool) {
 fn write_agent_dump(
     dir: &std::path::Path,
     system_prompt: Option<&str>,
-    messages: &[crate::command::chat::storage::ChatMessage],
+    messages: &[ChatMessage],
 ) -> Result<(), String> {
     let sp_content = system_prompt
         .map(|s| s.to_string())

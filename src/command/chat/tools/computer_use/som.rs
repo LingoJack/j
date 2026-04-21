@@ -88,6 +88,7 @@ fn number_width(num: usize, scale: u32) -> u32 {
 
 // --- SoM index entry for JSON output ---
 
+/// SoM（Set-of-Mark）索引条目，表示截屏标注中的一个可交互元素
 #[derive(Debug, Serialize)]
 pub struct SomIndexEntry {
     pub index: usize,

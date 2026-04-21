@@ -1,4 +1,5 @@
 use super::super::storage::ChatMessage;
+use crate::command::chat::constants::ARCHIVE_NAME_MAX_LEN;
 use crate::error;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -127,8 +128,8 @@ pub fn validate_archive_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("归档名称不能为空".to_string());
     }
-    if name.len() > 50 {
-        return Err("归档名称过长，最多 50 字符".to_string());
+    if name.len() > ARCHIVE_NAME_MAX_LEN {
+        return Err(format!("归档名称过长，最多 {ARCHIVE_NAME_MAX_LEN} 字符"));
     }
 
     // 检查非法字符

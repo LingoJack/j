@@ -24,6 +24,7 @@ impl SkillSource {
     }
 }
 
+/// 技能的 YAML frontmatter 元数据
 #[derive(Debug, Clone, Deserialize)]
 pub struct SkillFrontmatter {
     pub name: String,
@@ -34,6 +35,7 @@ pub struct SkillFrontmatter {
     pub argument_hint: Option<String>,
 }
 
+/// 技能定义，包含 frontmatter 元数据、正文内容、目录路径和来源层级
 #[derive(Debug, Clone)]
 pub struct Skill {
     pub frontmatter: SkillFrontmatter,

@@ -12,6 +12,7 @@ use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::TaskManager;
 use crate::util::log::write_info_log;
+use async_openai::types::chat::{ChatChoice, ChatCompletionMessageToolCalls, ChatCompletionTools};
 use rand::Rng;
 use std::sync::{
     Arc, Mutex,
@@ -345,9 +346,9 @@ pub fn call_llm_non_stream(
     client: &async_openai::Client<async_openai::config::OpenAIConfig>,
     provider: &ModelProvider,
     messages: &[ChatMessage],
-    tools: &[async_openai::types::chat::ChatCompletionTools],
+    tools: &[ChatCompletionTools],
     system_prompt: Option<&str>,
-) -> Result<async_openai::types::chat::ChatChoice, String> {
+) -> Result<ChatChoice, String> {
     let request = build_request_with_tools(provider, messages, tools.to_vec(), system_prompt)
         .map_err(|e| format!("Failed to build request: {}", e))?;
 
@@ -467,13 +468,11 @@ fn backoff_delay_ms(attempt: u32, base_ms: u64, cap_ms: u64) -> u64 {
 }
 
 /// 从 LLM response 的 tool_calls 中提取 ToolCallItem 列表
-pub fn extract_tool_items(
-    tool_calls: &[async_openai::types::chat::ChatCompletionMessageToolCalls],
-) -> Vec<ToolCallItem> {
+pub fn extract_tool_items(tool_calls: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
     tool_calls
         .iter()
         .filter_map(|tc| {
-            if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(f) = tc {
+            if let ChatCompletionMessageToolCalls::Function(f) = tc {
                 Some(ToolCallItem {
                     id: f.id.clone(),
                     name: f.function.name.clone(),

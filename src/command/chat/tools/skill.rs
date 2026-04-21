@@ -20,8 +20,10 @@ struct LoadSkillParams {
 
 // ========== LoadSkillTool ==========
 
+/// 技能加载工具，用于将指定技能的完整内容加载到上下文中
 #[derive(Debug)]
 pub struct LoadSkillTool {
+    /// 可用技能列表
     pub skills: Vec<Skill>,
     /// 已调用技能追踪（执行时记录，供 auto_compact 后恢复）
     pub invoked_skills: InvokedSkillsMap,

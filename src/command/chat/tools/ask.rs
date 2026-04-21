@@ -40,13 +40,15 @@ struct AskParams {
 
 // ========== AskTool ==========
 
+/// 用户提问工具，用于向用户展示结构化问题并等待回复
 #[derive(Debug)]
 pub struct AskTool {
-    /// 发送 ask 请求到主线程
+    /// 用于向主线程发送提问请求的通道发送端
     pub ask_tx: mpsc::Sender<AskRequest>,
 }
 
 impl AskTool {
+    /// 工具名称常量
     pub const NAME: &'static str = "Ask";
 }
 

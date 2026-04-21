@@ -174,7 +174,77 @@ pub const GLOB_DEFAULT_LIMIT: usize = 100;
 /// 拖拽操作默认持续时间（毫秒）
 pub const DRAG_DEFAULT_DURATION_MS: u64 = 500;
 
-// ========== Compact 截断 ==========
+// ========== Compact 相关（续）==========
+
+/// Compact 摘要最大 token 数
+pub const COMPACT_SUMMARY_MAX_TOKENS: u32 = 20000;
 
 /// Compact 截断字符数（80K 字符）
 pub const COMPACT_TRUNCATE_MAX_CHARS: usize = 80_000;
+
+// ========== Browser 工具 ==========
+
+/// 浏览器页面正文最大字符数
+pub const BROWSER_TEXT_MAX_CHARS: usize = 50_000;
+
+/// 浏览器快照元素最大数量
+pub const BROWSER_SNAPSHOT_MAX_ELEMENTS: usize = 50;
+
+/// 浏览器 Lite 模式链接最大数量
+pub const BROWSER_LITE_MAX_LINKS: usize = 50;
+
+/// 浏览器 Lite 模式表单最大数量
+pub const BROWSER_LITE_MAX_FORMS: usize = 20;
+
+/// 浏览器 Lite 模式文本预览截断长度
+pub const BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS: usize = 500;
+
+// ========== Computer Use 工具 ==========
+
+/// 无障碍树输出最大字符数
+pub const AX_TREE_OUTPUT_MAX_CHARS: usize = 20_000;
+
+/// 应用聚焦等待时间（毫秒）
+pub const APP_FOCUS_WAIT_MS: u64 = 300;
+
+/// 鼠标双击间隔等待时间（毫秒）
+pub const MOUSE_DOUBLE_CLICK_WAIT_MS: u64 = 50;
+
+// ========== Agent Team ==========
+
+/// 团队最大成员数
+pub const TEAM_MAX_MEMBERS: usize = 10;
+
+// ========== Worktree ==========
+
+/// Worktree 名称最大长度
+pub const WORKTREE_NAME_MAX_LEN: usize = 64;
+
+// ========== Archive ==========
+
+/// 归档名称最大长度
+pub const ARCHIVE_NAME_MAX_LEN: usize = 50;
+
+// ========== Hook 相关（续）==========
+
+/// Hook prompt 预览最大长度
+pub const HOOK_PROMPT_PREVIEW_MAX_LEN: usize = 80;
+
+// ========== TUI 输入线程 ==========
+
+/// 输入线程暂停等待时间（毫秒）
+pub const INPUT_THREAD_PAUSE_WAIT_MS: u64 = 50;
+
+/// 输入线程 poll 超时（毫秒）
+pub const INPUT_THREAD_POLL_MS: u64 = 50;
+
+/// 输入线程暂停后等待时间（毫秒，确保线程退出当前 poll 周期）
+pub const INPUT_THREAD_PAUSE_SETTLE_MS: u64 = 120;
+
+// ========== TUI 主循环 ==========
+
+/// TUI 主循环加载中轮询超时（毫秒）
+pub const TUI_LOADING_POLL_MS: u64 = 100;
+
+/// TUI 主循环空闲轮询超时（毫秒）
+pub const TUI_IDLE_POLL_MS: u64 = 500;

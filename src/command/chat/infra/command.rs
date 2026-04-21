@@ -24,12 +24,14 @@ impl CommandSource {
     }
 }
 
+/// 自定义命令的 YAML frontmatter 元数据
 #[derive(Debug, Clone, Deserialize)]
 pub struct CommandFrontmatter {
     pub name: String,
     pub description: String,
 }
 
+/// 自定义命令，包含 frontmatter 元数据、提示词正文和来源层级
 #[derive(Debug, Clone)]
 pub struct CustomCommand {
     pub frontmatter: CommandFrontmatter,

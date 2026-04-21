@@ -1,3 +1,4 @@
+use crate::command::chat::constants::WORKTREE_NAME_MAX_LEN;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -87,8 +88,8 @@ fn validate_slug(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("名称不能为空".to_string());
     }
-    if name.len() > 64 {
-        return Err("名称不能超过 64 个字符".to_string());
+    if name.len() > WORKTREE_NAME_MAX_LEN {
+        return Err(format!("名称不能超过 {WORKTREE_NAME_MAX_LEN} 个字符"));
     }
     if name.contains("..") {
         return Err("名称不能包含 '..'".to_string());
@@ -221,13 +222,15 @@ pub fn remove_agent_worktree(worktree_path: &std::path::Path, branch: &str) {
 
 #[derive(Deserialize, JsonSchema)]
 struct EnterWorktreeParams {
-    /// Optional name for the worktree. Only letters, digits, dots, underscores, dashes allowed; max 64 chars. A random name is generated if not provided.
+    /// Optional name for the worktree. Only letters, digits, dots, underscores, dashes allowed; max WORKTREE_NAME_MAX_LEN chars. A random name is generated if not provided.
     #[serde(default)]
     name: Option<String>,
 }
 
+/// 进入工作树工具，创建隔离的 git worktree 并切换会话到其中
 #[derive(Debug)]
 pub struct EnterWorktreeTool {
+    /// 跨工具共享的 worktree 状态
     pub state: Arc<WorktreeState>,
 }
 
@@ -415,8 +418,10 @@ struct ExitWorktreeParams {
     discard_changes: bool,
 }
 
+/// 退出工作树工具，退出当前 worktree 会话并选择保留或删除
 #[derive(Debug)]
 pub struct ExitWorktreeTool {
+    /// 跨工具共享的 worktree 状态
     pub state: Arc<WorktreeState>,
 }
 

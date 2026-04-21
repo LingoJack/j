@@ -1,4 +1,6 @@
-use crate::command::chat::constants::DRAG_DEFAULT_DURATION_MS;
+use crate::command::chat::constants::{
+    APP_FOCUS_WAIT_MS, AX_TREE_OUTPUT_MAX_CHARS, DRAG_DEFAULT_DURATION_MS,
+};
 use crate::command::chat::tools::{
     ImageData, PlanDecision, Tool, ToolResult, schema_to_tool_params,
 };
@@ -78,6 +80,7 @@ struct SomState {
 
 const SOM_STALE_SECONDS: u64 = 30;
 
+/// 计算机使用工具，支持 macOS 桌面截屏、点击、输入、滚动等操作
 #[derive(Debug)]
 pub struct ComputerUseTool {
     som_state: Arc<Mutex<Option<SomState>>>,
@@ -691,8 +694,8 @@ end tell
                 let mut output = format!("[无障碍树]\n当前活跃窗口: {}\n\n", active_window);
 
                 let json_str = serde_json::to_string_pretty(&tree).unwrap_or_default();
-                if json_str.len() > 20000 {
-                    output.push_str(&json_str[..20000]);
+                if json_str.len() > AX_TREE_OUTPUT_MAX_CHARS {
+                    output.push_str(&json_str[..AX_TREE_OUTPUT_MAX_CHARS]);
                     output
                         .push_str("\n...(输出过长已截断，请使用 depth 或 clickable 参数缩小范围)");
                 } else {
@@ -771,7 +774,7 @@ end tell
         match result {
             Ok(output) => {
                 if output.status.success() {
-                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    std::thread::sleep(std::time::Duration::from_millis(APP_FOCUS_WAIT_MS));
                     let active_window = Self::get_active_window();
                     ToolResult {
                         output: format!(

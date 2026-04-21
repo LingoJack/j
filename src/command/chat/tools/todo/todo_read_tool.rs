@@ -9,8 +9,10 @@ use std::sync::{Arc, atomic::AtomicBool};
 #[derive(Deserialize, JsonSchema)]
 struct TodoReadParams {}
 
+/// 待办事项读取工具，用于查看当前所有待办项的状态
 #[derive(Debug)]
 pub struct TodoReadTool {
+    /// 待办事项管理器实例
     pub manager: Arc<TodoManager>,
 }
 

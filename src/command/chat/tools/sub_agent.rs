@@ -3,7 +3,9 @@ use crate::command::chat::agent::thread_identity::{
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
-use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider};
+use crate::command::chat::storage::{
+    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
+};
 use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
     create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
@@ -190,7 +192,7 @@ impl Tool for SubAgentTool {
         let sub_id = self.shared.sub_agent_tracker.allocate_id();
         let session_id_snapshot =
             safe_lock(&self.shared.session_id, "SubAgentTool::session_id").clone();
-        let session_paths = crate::command::chat::storage::SessionPaths::new(&session_id_snapshot);
+        let session_paths = SessionPaths::new(&session_id_snapshot);
         let subagent_todos_path = session_paths.subagent_todos_file(&sub_id);
         let subagent_transcript_path = session_paths.subagent_transcript(&sub_id);
 
@@ -414,10 +416,7 @@ fn run_sub_agent_loop(
     let append_to_transcript = |msgs: &[ChatMessage]| {
         if let Some(ref path) = transcript_path {
             for m in msgs {
-                let _ = crate::command::chat::storage::append_event_to_path(
-                    path,
-                    &crate::command::chat::storage::SessionEvent::msg(m.clone()),
-                );
+                let _ = append_event_to_path(path, &SessionEvent::msg(m.clone()));
             }
         }
     };

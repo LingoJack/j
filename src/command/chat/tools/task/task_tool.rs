@@ -42,8 +42,10 @@ struct TaskParams {
     add_blocked_by: Option<Vec<u64>>,
 }
 
+/// 任务管理工具，支持任务的创建、查询、列表和更新
 #[derive(Debug)]
 pub struct TaskTool {
+    /// 任务管理器实例
     pub manager: Arc<TaskManager>,
 }
 

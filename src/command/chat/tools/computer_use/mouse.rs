@@ -1,6 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
+use crate::command::chat::constants::MOUSE_DOUBLE_CLICK_WAIT_MS;
 use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType, CGMouseButton};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use core_graphics::geometry::CGPoint;
@@ -82,7 +83,7 @@ pub fn double_click(x: f64, y: f64) -> Result<(), AicError> {
     down1.post(CGEventTapLocation::HID);
     thread::sleep(Duration::from_millis(10));
     up1.post(CGEventTapLocation::HID);
-    thread::sleep(Duration::from_millis(50));
+    thread::sleep(Duration::from_millis(MOUSE_DOUBLE_CLICK_WAIT_MS));
     down2.post(CGEventTapLocation::HID);
     thread::sleep(Duration::from_millis(10));
     up2.post(CGEventTapLocation::HID);

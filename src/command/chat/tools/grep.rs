@@ -48,6 +48,7 @@ fn default_output_mode() -> String {
     "content".to_string()
 }
 
+/// 正则搜索工具，用于在文件内容中搜索匹配的文本
 #[derive(Debug)]
 pub struct GrepTool;
 

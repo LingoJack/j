@@ -33,6 +33,7 @@ fn default_limit() -> usize {
     GLOB_DEFAULT_LIMIT
 }
 
+/// 文件模式匹配工具，支持 glob 语法快速查找文件
 #[derive(Debug)]
 pub struct GlobTool;
 

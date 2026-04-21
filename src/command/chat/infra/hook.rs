@@ -2,7 +2,9 @@ use super::super::permission::JcliConfig;
 use super::super::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::constants::{
     HOOK_DEFAULT_LLM_TIMEOUT_SECS, HOOK_DEFAULT_TIMEOUT_SECS, HOOK_LLM_MAX_TOKENS,
+    HOOK_PROMPT_PREVIEW_MAX_LEN,
 };
+use crate::command::chat::storage::SessionHookPersist;
 use crate::config::YamlConfig;
 use crate::util::log::{write_error_log, write_info_log};
 use nix::sys::signal::{self, Signal};
@@ -965,13 +967,13 @@ impl HookManager {
 
     /// 获取所有 session 级 hook 的可序列化快照（用于 session 持久化）
     /// 只保存 Shell 和 Llm 类型（Builtin 不可序列化）
-    pub fn session_hooks_snapshot(&self) -> Vec<super::super::storage::SessionHookPersist> {
+    pub fn session_hooks_snapshot(&self) -> Vec<SessionHookPersist> {
         let mut result = Vec::new();
         for (event, hooks) in &self.session_hooks {
             for kind in hooks {
                 match kind {
                     HookKind::Shell(sh) => {
-                        result.push(super::super::storage::SessionHookPersist {
+                        result.push(SessionHookPersist {
                             event: *event,
                             definition: HookDef {
                                 r#type: HookType::Bash,
@@ -986,7 +988,7 @@ impl HookManager {
                         });
                     }
                     HookKind::Llm(lh) => {
-                        result.push(super::super::storage::SessionHookPersist {
+                        result.push(SessionHookPersist {
                             event: *event,
                             definition: HookDef {
                                 r#type: HookType::Llm,
@@ -1015,7 +1017,7 @@ impl HookManager {
     }
 
     /// 从持久化快照恢复 session 级 hook
-    pub fn restore_session_hooks(&mut self, hooks: &[super::super::storage::SessionHookPersist]) {
+    pub fn restore_session_hooks(&mut self, hooks: &[SessionHookPersist]) {
         self.session_hooks.clear();
         for hook in hooks {
             self.register_session_hook(hook.event, hook.definition.clone());
@@ -1848,8 +1850,8 @@ fn hook_label(kind: &HookKind) -> String {
                 .lines()
                 .find(|l| !l.trim().is_empty())
                 .unwrap_or(&llm.prompt);
-            let prompt_preview = if first_line.len() > 80 {
-                format!("{}...", &first_line[..80])
+            let prompt_preview = if first_line.len() > HOOK_PROMPT_PREVIEW_MAX_LEN {
+                format!("{}...", &first_line[..HOOK_PROMPT_PREVIEW_MAX_LEN])
             } else {
                 first_line.to_string()
             };

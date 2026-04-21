@@ -1,5 +1,6 @@
 use std::fmt;
 
+/// 计算机使用模块错误类型
 #[derive(Debug)]
 pub enum AicError {
     UnknownKey(String),
