@@ -48,7 +48,7 @@ futures = "0.3"
 pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
 self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
-nix = { version = "0.31", features = ["process"] }
+nix = { version = "0.31", features = ["process", "signal"] }
 libc = "0.2"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "json"] }
 urlencoding = "2.1"

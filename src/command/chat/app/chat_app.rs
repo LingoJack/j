@@ -274,6 +274,9 @@ impl ChatApp {
                 HookEvent::PreLlmRequest,
                 "background_status",
                 move |ctx| {
+                    // ★ 先清理已死进程，确保状态准确
+                    bg_mgr.cleanup_dead_tasks();
+
                     let running_summary =
                         build_running_summary(&bg_mgr);
                     let notifications = bg_mgr.drain_notifications();

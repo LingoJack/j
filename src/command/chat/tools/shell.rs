@@ -321,7 +321,11 @@ impl ShellTool {
             }
 
             let mut child = match child_cmd.spawn() {
-                Ok(c) => c,
+                Ok(c) => {
+                    let pid = c.id();
+                    manager.update_child_pid(&tid, pid);
+                    c
+                }
                 Err(e) => {
                     let mut buf = output_buffer.lock().unwrap_or_else(|e| e.into_inner());
                     *buf = format!("启动失败: {}", e);

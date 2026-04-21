@@ -193,6 +193,7 @@ impl PlanModeState {
 }
 
 /// plan mode 下允许执行的工具白名单
+/// TODO 此处不应该 magic value 应该引用现有的 constant 常量
 pub const PLAN_MODE_WHITELIST: &[&str] = &[
     "Read",
     "Glob",
