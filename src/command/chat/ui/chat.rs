@@ -140,9 +140,9 @@ pub fn draw_title_bar(
                 .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
                 .map(|tc| {
                     if let Some(ref desc) = tc.tool_description {
-                        format!(" 🔧 执行 {} - {}...", tc.tool_name, desc)
+                        format!(" ⚙ 执行 {} - {}...", tc.tool_name, desc)
                     } else {
-                        format!(" 🔧 执行 {}...", tc.tool_name)
+                        format!(" ⚙ 执行 {}...", tc.tool_name)
                     }
                 })
                 .or_else(|| {
@@ -152,16 +152,16 @@ pub fn draw_title_bar(
                         .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
                         .map(|tc| {
                             if let Some(ref desc) = tc.tool_description {
-                                format!(" 🔧 调用 {} - {}...", tc.tool_name, desc)
+                                format!(" ⚙ 调用 {} - {}...", tc.tool_name, desc)
                             } else {
-                                format!(" 🔧 调用 {}...", tc.tool_name)
+                                format!(" ⚙ 调用 {}...", tc.tool_name)
                             }
                         })
                 });
             if let Some(info) = tool_info {
                 info
             } else {
-                " ⏳ 思考中...".to_string()
+                " ⏱ 思考中...".to_string()
             }
         }
     } else {
@@ -179,7 +179,7 @@ pub fn draw_title_bar(
     // 第二行：状态信息（左侧：品牌+指标，右侧：动态状态）
     let icon = if app.ui.auto_approve {
         Span::styled(
-            " ⚡ ",
+            " ▶▶ ",
             Style::default()
                 .fg(t.config_toggle_off)
                 .add_modifier(Modifier::BOLD),
@@ -226,7 +226,7 @@ pub fn draw_title_bar(
     let mut right_spans: Vec<Span> = Vec::new();
     if app.remote_connected {
         right_spans.push(Span::styled(
-            "📱 远程",
+            "◉ 远程",
             Style::default()
                 .fg(t.title_count)
                 .add_modifier(Modifier::BOLD),
