@@ -242,6 +242,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 disabled_tools: Vec::new(),
                 disabled_skills: Vec::new(),
                 disabled_commands: Vec::new(),
+                disabled_hooks: Vec::new(),
                 compact: Default::default(),
                 auto_restore_session: false,
             };
@@ -643,6 +644,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 std::sync::Arc::clone(&app.hook_manager),
                 HookEvent::SessionEnd,
                 ctx,
+                app.state.agent_config.disabled_hooks.clone(),
             );
         }
     }

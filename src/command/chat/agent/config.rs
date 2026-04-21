@@ -17,6 +17,8 @@ pub struct AgentLoopConfig {
     pub compact_config: CompactConfig,
     /// Hook 管理器
     pub hook_manager: HookManager,
+    /// 被禁用的 hook 标识列表
+    pub disabled_hooks: Vec<String>,
     /// 取消令牌
     pub cancel_token: CancellationToken,
 }

@@ -67,6 +67,9 @@ pub struct AgentConfig {
     /// 被禁用的 command 名称列表
     #[serde(default)]
     pub disabled_commands: Vec<String>,
+    /// 被禁用的 hook 标识列表（格式：`source:unique_id`，如 `user:my_hook`、`session:0`）
+    #[serde(default)]
+    pub disabled_hooks: Vec<String>,
     /// Context compact 配置
     #[serde(default)]
     pub compact: CompactConfig,

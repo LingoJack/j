@@ -46,7 +46,7 @@ impl ChatApp {
                     ..Default::default()
                 };
                 if let Ok(manager) = self.hook_manager.lock() {
-                    manager.execute(HookEvent::PreSendMessage, ctx)
+                    manager.execute(HookEvent::PreSendMessage, ctx, &self.state.agent_config.disabled_hooks)
                 } else {
                     None
                 }
@@ -101,6 +101,7 @@ impl ChatApp {
                     Arc::clone(&self.hook_manager),
                     HookEvent::PostSendMessage,
                     ctx,
+                    self.state.agent_config.disabled_hooks.clone(),
                 );
             }
         }
@@ -276,6 +277,7 @@ impl ChatApp {
             max_llm_rounds,
             compact_config,
             hook_manager: hook_manager_clone,
+            disabled_hooks: self.state.agent_config.disabled_hooks.clone(),
             cancel_token: CancellationToken::new(),
         };
         let agent_shared = AgentLoopSharedState {

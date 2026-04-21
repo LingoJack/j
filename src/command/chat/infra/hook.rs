@@ -849,6 +849,27 @@ pub struct HookEntry {
     pub filter: Option<HookFilter>,
     /// 执行指标
     pub metrics: Option<HookMetrics>,
+    /// Hook 唯一标识，格式：`builtin:<name>` / `user:<dir_name>` / `project:<dir_name>` / `session:<event_idx>`
+    pub unique_id: String,
+}
+
+/// 生成 hook 唯一标识，格式：`source:unique_key`
+pub fn hook_unique_id(source: &str, kind: &HookKind, session_index: Option<usize>) -> String {
+    let key = match kind {
+        HookKind::Builtin(b) => b.name.clone(),
+        HookKind::Shell(s) => s
+            .name
+            .clone()
+            .unwrap_or_else(|| s.command.chars().take(40).collect()),
+        HookKind::Llm(l) => l
+            .name
+            .clone()
+            .unwrap_or_else(|| l.prompt.chars().take(40).collect()),
+    };
+    match session_index {
+        Some(idx) => format!("{}:{}", source, idx),
+        None => format!("{}:{}", source, key),
+    }
 }
 
 impl HookManager {
@@ -1020,6 +1041,7 @@ impl HookManager {
                           session_index: Option<usize>,
                           metrics: &HashMap<String, HookMetrics>| {
             let label = hook_label(hook);
+            let uid = hook_unique_id(source, hook, session_index);
             HookEntry {
                 name: hook_name(hook).map(|s| s.to_string()),
                 event,
@@ -1031,6 +1053,7 @@ impl HookManager {
                 metrics: metrics.get(&label).cloned(),
                 session_index,
                 label,
+                unique_id: uid,
             }
         };
         for event in HookEvent::all() {
@@ -1125,10 +1148,11 @@ impl HookManager {
         manager: Arc<Mutex<HookManager>>,
         event: HookEvent,
         context: HookContext,
+        disabled_hooks: Vec<String>,
     ) {
         std::thread::spawn(move || {
             if let Ok(m) = manager.lock() {
-                let _ = m.execute(event, context);
+                let _ = m.execute(event, context, &disabled_hooks);
             }
         });
     }
@@ -1137,24 +1161,45 @@ impl HookManager {
     ///
     /// 返回 `Some(HookResult)` 如果有任何修改或 stop/skip，否则 `None`。
     /// 链式执行中，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。
+    /// `disabled_hooks` 为被禁用的 hook 标识列表（来自 AgentConfig.disabled_hooks）。
     ///
     /// **注意**：调用方应先用 `has_hooks_for()` 检查，再构建 HookContext 并调用此方法，
     /// 避免在没有 hook 注册时进行不必要的内存分配。
-    pub fn execute(&self, event: HookEvent, mut context: HookContext) -> Option<HookResult> {
-        let mut all_hooks: Vec<&HookKind> = Vec::new();
+    pub fn execute(
+        &self,
+        event: HookEvent,
+        mut context: HookContext,
+        disabled_hooks: &[String],
+    ) -> Option<HookResult> {
+        // 收集所有 hook 及其 source 标识
+        struct HookRef<'a> {
+            kind: &'a HookKind,
+            source: &'static str,
+            session_index: Option<usize>,
+        }
+
+        let mut all_hooks: Vec<HookRef<'_>> = Vec::new();
 
         // 执行顺序：内置 → 用户 → 项目 → session
         if let Some(hooks) = self.builtin_hooks.get(&event) {
-            all_hooks.extend(hooks.iter());
+            for h in hooks.iter() {
+                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_BUILTIN, session_index: None });
+            }
         }
         if let Some(hooks) = self.user_hooks.get(&event) {
-            all_hooks.extend(hooks.iter());
+            for h in hooks.iter() {
+                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_USER, session_index: None });
+            }
         }
         if let Some(hooks) = self.project_hooks.get(&event) {
-            all_hooks.extend(hooks.iter());
+            for h in hooks.iter() {
+                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_PROJECT, session_index: None });
+            }
         }
         if let Some(hooks) = self.session_hooks.get(&event) {
-            all_hooks.extend(hooks.iter());
+            for (idx, h) in hooks.iter().enumerate() {
+                all_hooks.push(HookRef { kind: h, source: HOOK_SOURCE_SESSION, session_index: Some(idx) });
+            }
         }
 
         if all_hooks.is_empty() {
@@ -1175,7 +1220,7 @@ impl HookManager {
         let chain_start = std::time::Instant::now();
         let chain_timeout = std::time::Duration::from_secs(MAX_CHAIN_DURATION_SECS);
 
-        for hook in all_hooks {
+        for hook_ref in &all_hooks {
             // 链总超时检查
             if chain_start.elapsed() > chain_timeout {
                 write_error_log(
@@ -1189,10 +1234,11 @@ impl HookManager {
                 break;
             }
 
-            let label = hook_label(hook);
+            let label = hook_label(hook_ref.kind);
 
-            // 条件过滤检查
-            if !hook_should_execute(hook, &context) {
+            // 禁用检查
+            let uid = hook_unique_id(hook_ref.source, hook_ref.kind, hook_ref.session_index);
+            if disabled_hooks.contains(&uid) {
                 if let Ok(mut metrics) = self.metrics.lock() {
                     let m = metrics.entry(label).or_default();
                     m.skipped += 1;
@@ -1200,7 +1246,16 @@ impl HookManager {
                 continue;
             }
 
-            let max_attempts = 1 + hook_retry_count(hook); // 1 + retry
+            // 条件过滤检查
+            if !hook_should_execute(hook_ref.kind, &context) {
+                if let Ok(mut metrics) = self.metrics.lock() {
+                    let m = metrics.entry(label).or_default();
+                    m.skipped += 1;
+                }
+                continue;
+            }
+
+            let max_attempts = 1 + hook_retry_count(hook_ref.kind); // 1 + retry
             let mut last_outcome = None;
 
             for attempt in 0..max_attempts {
@@ -1222,7 +1277,7 @@ impl HookManager {
                 }
 
                 let hook_start = std::time::Instant::now();
-                let result = execute_hook_with_provider(hook, &context, &self.provider);
+                let result = execute_hook_with_provider(hook_ref.kind, &context, &self.provider);
 
                 let elapsed_ms = hook_start.elapsed().as_millis() as u64;
 
@@ -1364,7 +1419,7 @@ impl HookManager {
                         &format!("Hook 重试未完成 ({}): {}", label, error),
                     );
                     // 按 on_error 策略处理
-                    match hook_on_error_strategy(hook) {
+                    match hook_on_error_strategy(hook_ref.kind) {
                         OnError::Abort => {
                             return Some(HookResult {
                                 action: Some(HookAction::Stop),
@@ -1382,7 +1437,7 @@ impl HookManager {
                         "HookManager::execute",
                         &format!("Hook 最终失败 ({}): {}", label, e),
                     );
-                    match hook_on_error_strategy(hook) {
+                    match hook_on_error_strategy(hook_ref.kind) {
                         OnError::Abort => {
                             return Some(HookResult {
                                 action: Some(HookAction::Stop),

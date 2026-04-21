@@ -108,8 +108,11 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             field_line_indices.extend(item_indices);
         }
         ConfigTab::Hooks => {
-            // Hooks 没有可选列表，全部固定展示
-            hooks::draw_tab_hooks_lines(&mut tab_header_lines, app);
+            hooks::draw_tab_hooks_header(&mut tab_header_lines, app);
+            let list = hooks::draw_tab_hooks_list(app);
+            let (item_lines, item_indices) = list.into_parts();
+            list_lines.extend(item_lines);
+            field_line_indices.extend(item_indices);
         }
         ConfigTab::Commands => {
             commands::draw_tab_commands_header(&mut tab_header_lines, app);

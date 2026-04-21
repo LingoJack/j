@@ -112,7 +112,11 @@ pub fn config_tab_field_count(app: &ChatApp) -> usize {
         ConfigTab::Tools => app.tool_registry.tool_names().len(),
         ConfigTab::Skills => app.state.loaded_skills.len(),
         ConfigTab::Commands => app.state.loaded_commands.len(),
-        ConfigTab::Hooks => 0,
+        ConfigTab::Hooks => app
+            .hook_manager
+            .lock()
+            .map(|m| m.list_hooks().len())
+            .unwrap_or(0),
         ConfigTab::Session => app.ui.session_list.len(),
         ConfigTab::Teammates => app
             .teammate_manager
@@ -526,6 +530,7 @@ impl ChatApp {
                     Arc::clone(&new_app.hook_manager),
                     HookEvent::SessionStart,
                     ctx,
+                    new_app.state.agent_config.disabled_hooks.clone(),
                 );
             }
         }
@@ -1471,6 +1476,25 @@ impl ChatApp {
                     } else {
                         self.state.agent_config.disabled_commands.push(name);
                     }
+                } else if self.ui.config_tab == ConfigTab::Hooks {
+                    // Hooks 切换处理
+                    if let Ok(manager) = self.hook_manager.lock() {
+                        let hooks = manager.list_hooks();
+                        if let Some(entry) = hooks.get(self.ui.config_field_idx) {
+                            let uid = entry.unique_id.clone();
+                            if let Some(pos) = self
+                                .state
+                                .agent_config
+                                .disabled_hooks
+                                .iter()
+                                .position(|d| d == &uid)
+                            {
+                                self.state.agent_config.disabled_hooks.remove(pos);
+                            } else {
+                                self.state.agent_config.disabled_hooks.push(uid);
+                            }
+                        }
+                    }
                 }
             }
             Action::ToggleMenuEnableAll => {
@@ -1483,6 +1507,9 @@ impl ChatApp {
                 } else if self.ui.config_tab == ConfigTab::Commands {
                     self.state.agent_config.disabled_commands.clear();
                     self.show_toast("已启用全部命令", false);
+                } else if self.ui.config_tab == ConfigTab::Hooks {
+                    self.state.agent_config.disabled_hooks.clear();
+                    self.show_toast("已启用全部 Hooks", false);
                 }
             }
             Action::ToggleMenuDisableAll => {
@@ -1510,6 +1537,15 @@ impl ChatApp {
                         .map(|c| c.frontmatter.name.clone())
                         .collect();
                     self.show_toast("已禁用全部命令", false);
+                } else if self.ui.config_tab == ConfigTab::Hooks {
+                    if let Ok(manager) = self.hook_manager.lock() {
+                        self.state.agent_config.disabled_hooks = manager
+                            .list_hooks()
+                            .iter()
+                            .map(|h| h.unique_id.clone())
+                            .collect();
+                    }
+                    self.show_toast("已禁用全部 Hooks", false);
                 }
             }
             Action::CompactExemptToggle => {

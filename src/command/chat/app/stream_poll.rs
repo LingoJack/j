@@ -95,8 +95,11 @@ impl ChatApp {
                                 ..Default::default()
                             };
                             if let Ok(manager) = self.hook_manager.lock() {
-                                if let Some(result) =
-                                    manager.execute(HookEvent::PostToolExecutionFailure, ctx)
+                                if let Some(result) = manager.execute(
+                                    HookEvent::PostToolExecutionFailure,
+                                    ctx,
+                                    &self.state.agent_config.disabled_hooks,
+                                )
                                 {
                                     result.tool_error.unwrap_or_else(|| msg.clone())
                                 } else {
@@ -214,7 +217,7 @@ impl ChatApp {
                                     };
                                     if let Ok(manager) = self.hook_manager.lock()
                                         && let Some(result) =
-                                            manager.execute(HookEvent::PreToolExecution, ctx)
+                                            manager.execute(HookEvent::PreToolExecution, ctx, &self.state.agent_config.disabled_hooks)
                                     {
                                         if result.is_skip() {
                                             self.tool_executor.active_tool_calls.push(
@@ -505,7 +508,7 @@ impl ChatApp {
                             ..Default::default()
                         };
                         if let Ok(manager) = self.hook_manager.lock() {
-                            manager.execute(HookEvent::PostLlmResponse, ctx)
+                            manager.execute(HookEvent::PostLlmResponse, ctx, &self.state.agent_config.disabled_hooks)
                         } else {
                             None
                         }

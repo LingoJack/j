@@ -15,6 +15,7 @@ pub(super) struct ToolCallContext<'a> {
     pub(super) tool_result_receiver: &'a mpsc::Receiver<ToolResultMsg>,
     pub(super) pending_user_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     pub(super) hook_manager: &'a HookManager,
+    pub(super) disabled_hooks: &'a [String],
     pub(super) supports_vision: bool,
     pub(super) ui_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     pub(super) streaming_content: &'a Arc<Mutex<String>>,
@@ -234,7 +235,7 @@ pub(super) fn process_tool_calls(
             };
             if let Some(hook_result) = ctx
                 .hook_manager
-                .execute(HookEvent::PostToolExecution, hook_ctx)
+                .execute(HookEvent::PostToolExecution, hook_ctx, ctx.disabled_hooks)
                 && let Some(new_result) = hook_result.tool_result
             {
                 result_content = new_result;
