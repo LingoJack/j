@@ -4,9 +4,11 @@
 # 创建新 hook 时，复制此目录结构并修改：
 #   .jcli/hooks/<your_hook_name>/HOOK.yaml
 #
+# 注意：文件名支持 HOOK.yaml 或 HOOK.yml，两者共存时优先取 HOOK.yaml。
+#
 # Hook 目录结构：
 # .jcli/hooks/<hook_name>/
-# ├── HOOK.yaml      # hook 定义（必须）
+# ├── HOOK.yaml      # hook 定义（也支持 HOOK.yml）
 # └── script.sh      # 可选脚本（bash hook 可直接用文件名调用）
 #
 # Hook 支持三级来源：

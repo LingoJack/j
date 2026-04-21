@@ -387,9 +387,9 @@ impl From<HookDef> for HookKind {
     }
 }
 
-// ========== HookDirDef（目录布局下的 HOOK.yaml 格式）==========
+// ========== HookDirDef（目录布局下的 HOOK.yaml / HOOK.yml 格式）==========
 
-/// HOOK.yaml 定义（目录布局下的格式）
+/// HOOK.yaml / HOOK.yml 定义（目录布局下的格式）
 ///
 /// 与 `HookDef` 的区别：`events` 为列表（一个 hook 可绑定多个事件），无 `command`/`prompt` 以外的不必要字段。
 /// 目录布局下 `command` 中的相对路径以 hook 目录为 cwd 解析。
@@ -490,7 +490,7 @@ pub fn project_hooks_dir() -> Option<PathBuf> {
     if dir.is_dir() { Some(dir) } else { None }
 }
 
-/// 从指定目录加载 hooks（遍历子目录，解析 HOOK.yaml）
+/// 从指定目录加载 hooks（遍历子目录，解析 HOOK.yaml 或 HOOK.yml）
 fn load_hooks_from_dir(dir: &Path, source_name: &str) -> Vec<(String, HookDirDef, PathBuf)> {
     let mut hooks = Vec::new();
     let entries = match std::fs::read_dir(dir) {
@@ -513,10 +513,19 @@ fn load_hooks_from_dir(dir: &Path, source_name: &str) -> Vec<(String, HookDirDef
             continue;
         }
 
-        let hook_yaml = path.join("HOOK.yaml");
-        if !hook_yaml.exists() {
+        // 优先 HOOK.yaml，其次 HOOK.yml；两者共存时取 HOOK.yaml
+        let hook_yaml = if path.join("HOOK.yaml").exists() {
+            path.join("HOOK.yaml")
+        } else if path.join("HOOK.yml").exists() {
+            path.join("HOOK.yml")
+        } else {
             continue;
-        }
+        };
+        let yaml_file_name = hook_yaml
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         match std::fs::read_to_string(&hook_yaml) {
             Ok(content) => match serde_yaml::from_str::<HookDirDef>(&content) {
                 Ok(def) => {
@@ -531,12 +540,12 @@ fn load_hooks_from_dir(dir: &Path, source_name: &str) -> Vec<(String, HookDirDef
                 }
                 Err(e) => write_error_log(
                     "load_hooks_from_dir",
-                    &format!("解析 {}/HOOK.yaml 失败: {}", hook_name, e),
+                    &format!("解析 {}/{} 失败: {}", hook_name, yaml_file_name, e),
                 ),
             },
             Err(e) => write_error_log(
                 "load_hooks_from_dir",
-                &format!("读取 {}/HOOK.yaml 失败: {}", hook_name, e),
+                &format!("读取 {}/{} 失败: {}", hook_name, yaml_file_name, e),
             ),
         }
     }

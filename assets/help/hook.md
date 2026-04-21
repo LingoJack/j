@@ -7,8 +7,8 @@ order: 8
 
 Hook 允许在对话关键节点注入自定义逻辑。对用户可配置部分，支持三级来源：
 
-1. **用户级**：`~/.jdata/agent/hooks/<hook_name>/HOOK.yaml` — 全局生效
-2. **项目级**：`.jcli/hooks/<hook_name>/HOOK.yaml` — 项目目录下生效
+1. **用户级**：`~/.jdata/agent/hooks/<hook_name>/HOOK.yaml`（或 `HOOK.yml`）— 全局生效
+2. **项目级**：`.jcli/hooks/<hook_name>/HOOK.yaml`（或 `HOOK.yml`）— 项目目录下生效
 3. **Session 级**：通过 `register_hook` 工具由 AI 动态注册 — 仅当前会话
 
 > 运行时实际还存在**内置 hook**，执行顺序是：内置 -> 用户级 -> 项目级 -> Session 级。
@@ -212,7 +212,7 @@ Hook 采用目录布局，每个 hook 是一个目录：
 
 ```
 ~/.jdata/agent/hooks/<hook_name>/
-├── HOOK.yaml      # hook 定义
+├── HOOK.yaml      # hook 定义（也支持 HOOK.yml；两者共存时取 HOOK.yaml）
 └── script.sh      # 可选脚本，command 里直接用文件名引用（hook 目录在 PATH 中）
 ```
 
