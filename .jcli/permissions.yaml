@@ -139,4 +139,5 @@ allow:
 - Bash(bash /Users/lingojack/.jdata/agent/skills/j-cli/scripts/ensure_j.sh:*)
 - Bash(rm -rf:*)
 - Bash(cat /Users/lingojack/dev_custom/j/.jcli/hooks/check-mod-rs/HOOK.yaml:*)
+- Bash(realpath --relative-to=src/command/chat/permission:*)
 deny: []

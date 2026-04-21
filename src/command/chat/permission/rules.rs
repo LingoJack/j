@@ -62,6 +62,19 @@ impl JcliConfig {
     pub fn ensure_config_dir() -> Option<PathBuf> {
         let dir = std::env::current_dir().ok()?.join(".jcli");
         let _ = std::fs::create_dir_all(&dir);
+
+        // 创建 hooks/example 目录和 HOOK.yaml 模板（仅在首次创建时）
+        let example_dir = dir.join("hooks").join("example");
+        if !example_dir.exists() {
+            let _ = std::fs::create_dir_all(&example_dir);
+            let example_yaml = example_dir.join("HOOK.yaml");
+            if !example_yaml.exists() {
+                const HOOK_YAML_EXAMPLE: &str =
+                    include_str!("../../../../assets/hook_yaml_example.yaml");
+                let _ = std::fs::write(&example_yaml, HOOK_YAML_EXAMPLE);
+            }
+        }
+
         Some(dir)
     }
 

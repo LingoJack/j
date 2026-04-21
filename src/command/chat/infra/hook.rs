@@ -502,12 +502,18 @@ fn load_hooks_from_dir(dir: &Path, source_name: &str) -> Vec<(String, HookDirDef
         if !path.is_dir() {
             continue;
         }
-        let hook_yaml = path.join("HOOK.yaml");
         let hook_name = path
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
+
+        // 跳过 example 目录（模板示例，不是实际可执行的 hook）
+        if hook_name == "example" {
+            continue;
+        }
+
+        let hook_yaml = path.join("HOOK.yaml");
         if !hook_yaml.exists() {
             continue;
         }
