@@ -23,8 +23,10 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         return;
     }
 
-    // 提示符逻辑
-    let (prompt, prompt_style, prompt_width) = if app.state.is_loading {
+    // 提示符逻辑：loading + bypass 组合
+    let (prompt, prompt_style, prompt_width) = if app.state.is_loading && app.ui.auto_approve {
+        (" bypass + ", Style::default().fg(t.config_toggle_on), 10)
+    } else if app.state.is_loading {
         (" + ", Style::default().fg(t.input_prompt_loading), 3)
     } else if app.ui.auto_approve {
         (" bypass > ", Style::default().fg(t.config_toggle_on), 10)
