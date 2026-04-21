@@ -233,7 +233,7 @@ impl BackgroundManager {
             }
 
             let confirmed_alive = if let Some(pid) = task.child_pid {
-                // 双重验证：PID 存在 + command 匹配（防止 PID 复用）
+                // PID 存活检测：kill(pid, 0) 判断进程是否仍存在
                 if !process_exists(pid) {
                     crate::util::log::write_info_log(
                         "BgTask::cleanup_dead_tasks",
@@ -241,17 +241,7 @@ impl BackgroundManager {
                     );
                     false
                 } else {
-                    let matches = command_matches_pid(pid, &task.command);
-                    if !matches {
-                        crate::util::log::write_info_log(
-                            "BgTask::cleanup_dead_tasks",
-                            &format!(
-                                "任务 {} (PID: {}) PID 复用检测: cmdline 不匹配, cmd={}",
-                                task.task_id, pid, task.command
-                            ),
-                        );
-                    }
-                    matches
+                    true
                 }
             } else {
                 // 无 PID（SubAgent 等），用 pgrep 备选验证
