@@ -233,16 +233,14 @@ impl BackgroundManager {
             }
 
             let confirmed_alive = if let Some(pid) = task.child_pid {
-                // PID 存活检测：kill(pid, 0) 判断进程是否仍存在
-                if !process_exists(pid) {
+                let alive = process_exists(pid);
+                if !alive {
                     crate::util::log::write_info_log(
                         "BgTask::cleanup_dead_tasks",
                         &format!("任务 {} (PID: {}) 进程不存在", task.task_id, pid),
                     );
-                    false
-                } else {
-                    true
                 }
+                alive
             } else {
                 // 无 PID（SubAgent 等），用 pgrep 备选验证
                 crate::util::log::write_info_log(
@@ -323,60 +321,6 @@ fn process_exists(pid: u32) -> bool {
 
 #[cfg(not(unix))]
 fn process_exists(_pid: u32) -> bool {
-    true
-}
-
-/// 第二层检测：读取 /proc/<pid>/cmdline 验证命令是否匹配
-/// 用于防止 PID 复用导致的误判
-#[cfg(unix)]
-fn command_matches_pid(pid: u32, expected_command: &str) -> bool {
-    use std::fs::File;
-    use std::io::Read;
-
-    let cmdline_path = format!("/proc/{}/cmdline", pid);
-    let mut file = match File::open(&cmdline_path) {
-        Ok(f) => f,
-        Err(_) => return false, // 无法读取，可能进程已死
-    };
-
-    let mut cmdline_bytes = Vec::new();
-    if file.read_to_end(&mut cmdline_bytes).is_err() {
-        return false;
-    }
-
-    // /proc/<pid>/cmdline 格式：参数以 \0 分隔，需替换为空格
-    let cmdline = String::from_utf8_lossy(&cmdline_bytes)
-        .replace('\0', " ")
-        .trim_end()
-        .to_string();
-
-    // 命令匹配逻辑：
-    // expected_command 是 "bash -c xxx"，cmdline 是 "/bin/bash -c xxx"
-    // 只需检查核心部分是否匹配（去除路径前缀）
-    let expected_parts: Vec<&str> = expected_command.split_whitespace().collect();
-    let cmdline_parts: Vec<&str> = cmdline.split_whitespace().collect();
-
-    if expected_parts.is_empty() || cmdline_parts.is_empty() {
-        return false;
-    }
-
-    // 检查命令名（去除路径）是否匹配
-    let expected_cmd = expected_parts[0];
-    let actual_cmd = cmdline_parts[0]
-        .rsplit('/')
-        .next()
-        .unwrap_or(cmdline_parts[0]);
-
-    if expected_cmd != actual_cmd && !expected_cmd.ends_with(actual_cmd) {
-        return false;
-    }
-
-    // 检查参数是否包含 expected_command 的核心部分
-    cmdline.contains(expected_command) || expected_parts.iter().skip(1).all(|p| cmdline.contains(p))
-}
-
-#[cfg(not(unix))]
-fn command_matches_pid(_pid: u32, _expected_command: &str) -> bool {
     true
 }
 
