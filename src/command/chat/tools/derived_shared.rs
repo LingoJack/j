@@ -30,6 +30,13 @@ pub enum SubAgentStatus {
     Initializing,
     /// 正在调用 LLM 或执行工具
     Working,
+    /// LLM API 重试中（指数退避）
+    Retrying {
+        attempt: u32,
+        max_attempts: u32,
+        delay_ms: u64,
+        error: String,
+    },
     /// 正常完成
     Completed,
     /// 用户取消或父 agent 取消
@@ -43,6 +50,7 @@ impl SubAgentStatus {
         match self {
             Self::Initializing => "◐",
             Self::Working => "●",
+            Self::Retrying { .. } => "↻",
             Self::Completed => "✓",
             Self::Cancelled => "✗",
             Self::Error(_) => "✗",
@@ -53,6 +61,7 @@ impl SubAgentStatus {
         match self {
             Self::Initializing => "初始化",
             Self::Working => "工作中",
+            Self::Retrying { .. } => "重试中",
             Self::Completed => "已完成",
             Self::Cancelled => "已取消",
             Self::Error(_) => "错误",
@@ -241,7 +250,9 @@ impl SubAgentTracker {
                 s.started_at.elapsed().as_secs() < 30
                     || matches!(
                         s.status.lock().map(|x| x.clone()),
-                        Ok(SubAgentStatus::Working) | Ok(SubAgentStatus::Initializing)
+                        Ok(SubAgentStatus::Working)
+                            | Ok(SubAgentStatus::Initializing)
+                            | Ok(SubAgentStatus::Retrying { .. })
                     )
             });
         }
@@ -348,6 +359,9 @@ pub fn call_llm_non_stream(
     messages: &[ChatMessage],
     tools: &[ChatCompletionTools],
     system_prompt: Option<&str>,
+    /// 重试前的回调：`fn(attempt, max_attempts, delay_ms, error_message)`
+    /// 可用于更新 UI 状态或推送日志
+    on_retry: Option<&dyn Fn(u32, u32, u64, &str)>,
 ) -> Result<ChatChoice, String> {
     let request = build_request_with_tools(provider, messages, tools.to_vec(), system_prompt)
         .map_err(|e| format!("Failed to build request: {}", e))?;
@@ -376,6 +390,15 @@ pub fn call_llm_non_stream(
                             delay_ms, attempt, policy.max_attempts
                         ),
                     );
+                    // 通知调用方进入重试状态
+                    if let Some(cb) = on_retry {
+                        cb(
+                            attempt,
+                            policy.max_attempts,
+                            delay_ms,
+                            &chat_err.display_message(),
+                        );
+                    }
                     std::thread::sleep(std::time::Duration::from_millis(delay_ms));
                     continue;
                 }

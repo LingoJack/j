@@ -200,6 +200,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             &messages,
             &tools,
             Some(&system_prompt),
+            None, // teammate 暂不使用重试回调
         ) {
             Ok(c) => c,
             Err(e) => {

@@ -300,7 +300,7 @@ impl ShellTool {
 
         let (task_id, output_buffer) =
             self.manager
-                .spawn_command(&command, effective_cwd.clone(), timeout_secs);
+                .spawn_command(&command, effective_cwd.clone(), timeout_secs, None);
         let manager = Arc::clone(&self.manager);
         let tid = task_id.clone();
         let cmd = command.clone();

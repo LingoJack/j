@@ -365,6 +365,7 @@ pub fn draw_title_bar(
 
                 let status_color = match &snap.status {
                     SubAgentStatus::Working => t.title_loading,
+                    SubAgentStatus::Retrying { .. } => t.title_warning,
                     SubAgentStatus::Completed => t.config_toggle_on,
                     SubAgentStatus::Cancelled => t.text_dim,
                     SubAgentStatus::Error(_) => t.config_toggle_off,
@@ -374,7 +375,7 @@ pub fn draw_title_bar(
                 // 名字：description 做紧凑显示（≤20 字节）
                 let name = short_subagent_label(&snap.description);
 
-                // 状态文字：Working 显示当前工具/轮次；终态显示 icon+label；Error 显示截断错误
+                // 状态文字：Working 显示当前工具/轮次；Retrying 显示重试进度；终态显示 icon+label；Error 显示截断错误
                 let status_text = match &snap.status {
                     SubAgentStatus::Working => {
                         if let Some(ref tool) = snap.current_tool {
@@ -387,6 +388,13 @@ pub fn draw_title_bar(
                                 snap.tool_calls_count
                             )
                         }
+                    }
+                    SubAgentStatus::Retrying {
+                        attempt,
+                        max_attempts,
+                        ..
+                    } => {
+                        format!("{} {}/{}", snap.status.icon(), attempt, max_attempts)
                     }
                     SubAgentStatus::Error(msg) => {
                         let short = truncate_str(msg, 20);

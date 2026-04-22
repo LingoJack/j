@@ -101,7 +101,9 @@ pub(super) fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &Cha
             .filter(|s| {
                 matches!(
                     s.status,
-                    SubAgentStatus::Working | SubAgentStatus::Initializing
+                    SubAgentStatus::Working
+                        | SubAgentStatus::Initializing
+                        | SubAgentStatus::Retrying { .. }
                 )
             })
             .count();
@@ -255,6 +257,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
         for snap in sub_snaps.iter() {
             let status_color = match &snap.status {
                 SubAgentStatus::Working => t.title_loading,
+                SubAgentStatus::Retrying { .. } => t.title_warning,
                 SubAgentStatus::Completed => t.config_toggle_on,
                 SubAgentStatus::Cancelled => t.text_dim,
                 SubAgentStatus::Error(_) => t.config_toggle_off,
@@ -273,6 +276,13 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                     } else {
                         format!("{} 工作中 R{}", snap.status.icon(), snap.current_round)
                     }
+                }
+                SubAgentStatus::Retrying {
+                    attempt,
+                    max_attempts,
+                    ..
+                } => {
+                    format!("{} 重试 {}/{}", snap.status.icon(), attempt, max_attempts)
                 }
                 SubAgentStatus::Error(msg) => {
                     let short: String = msg.chars().take(28).collect();

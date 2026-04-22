@@ -141,6 +141,7 @@ impl ChatApp {
                 let status_str = match s.status {
                     SubAgentStatus::Initializing => "initializing",
                     SubAgentStatus::Working => "working",
+                    SubAgentStatus::Retrying { .. } => "retrying",
                     SubAgentStatus::Completed => "completed",
                     SubAgentStatus::Cancelled => "cancelled",
                     SubAgentStatus::Error(_) => "error",

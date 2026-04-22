@@ -7,7 +7,10 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
 // ========== BgTask ==========
@@ -24,6 +27,8 @@ pub(super) struct BgTask {
     pub started_at: Instant,
     /// 子进程 PID，用于存活检测（仅 shell 后台任务有值，SubAgent 后台无子进程）
     pub child_pid: Option<u32>,
+    /// 线程类任务的存活标记（SubAgent 等非进程任务使用 AtomicBool 标记存活）
+    pub is_thread_running: Option<Arc<AtomicBool>>,
 }
 
 /// 后台任务完成通知
@@ -82,11 +87,14 @@ impl BackgroundManager {
 
     /// 注册后台命令为 running 状态，返回 task_id（实际 spawn 在调用方完成）
     /// 返回 task_id 和共享输出缓冲区的 Arc，调用方将 buffer 传给 reader 线程实现实时写入
+    /// `is_thread_running`：线程类任务（如 SubAgent）可传入 Arc<AtomicBool> 用于存活检测；
+    /// shell 后台任务传 None（通过 child_pid + pgrep 检测）
     pub fn spawn_command(
         &self,
         command: &str,
         _cwd: Option<String>,
         _timeout_secs: u64,
+        is_thread_running: Option<Arc<AtomicBool>>,
     ) -> (String, Arc<Mutex<String>>) {
         let task_id = self.gen_id();
         let output_buffer = Arc::new(Mutex::new(String::new()));
@@ -99,6 +107,7 @@ impl BackgroundManager {
             result: None,
             started_at: Instant::now(),
             child_pid: None,
+            is_thread_running,
         };
 
         {
@@ -241,12 +250,25 @@ impl BackgroundManager {
                     );
                 }
                 alive
+            } else if let Some(ref is_running) = task.is_thread_running {
+                // 线程类任务（SubAgent 等）：通过 Arc<AtomicBool> 检测存活
+                let alive = is_running.load(Ordering::Relaxed);
+                if !alive {
+                    crate::util::log::write_info_log(
+                        "BgTask::cleanup_dead_tasks",
+                        &format!(
+                            "任务 {} 线程标记已置为 false (cmd: {})",
+                            task.task_id, task.command
+                        ),
+                    );
+                }
+                alive
             } else {
-                // 无 PID（SubAgent 等），用 pgrep 备选验证
+                // 兜底：无 PID 无线程标记，用 pgrep 备选验证
                 crate::util::log::write_info_log(
                     "BgTask::cleanup_dead_tasks",
                     &format!(
-                        "任务 {} 无 PID，使用 command 匹配检测 (cmd: {})",
+                        "任务 {} 无 PID 且无线程标记，使用 command 匹配检测 (cmd: {})",
                         task.task_id, task.command
                     ),
                 );

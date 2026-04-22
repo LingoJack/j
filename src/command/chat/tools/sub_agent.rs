@@ -214,20 +214,22 @@ impl Tool for SubAgentTool {
         };
 
         if run_in_background {
-            // 后台模式：注册任务并 spawn 线程
-            let (task_id, output_buffer) = self.shared.background_manager.spawn_command(
-                &format!("Agent: {}", description),
-                None,
-                0,
-            );
-
-            // 注册到子 Agent tracker 供 /dump + UI dashboard 读取
+            // 后台模式：先注册到 tracker 获得 handle，再 spawn_command
             self.shared.sub_agent_tracker.gc_finished();
             let handle = self.shared.sub_agent_tracker.register_with_id(
                 sub_id.clone(),
                 &description,
                 "background",
             );
+
+            // 注册到 background_manager，传入线程存活标记
+            let (task_id, output_buffer) = self.shared.background_manager.spawn_command(
+                &format!("Agent: {}", description),
+                None,
+                0,
+                Some(Arc::clone(&handle.is_running)), // 线程存活标记
+            );
+
             let snap_running = Arc::clone(&handle.is_running);
             let snapshot_refs = SubAgentLoopStateRefs::from_handle(&handle);
 
@@ -441,6 +443,19 @@ fn run_sub_agent_loop(
 
         write_info_log("SubAgent", &format!("Round {}/{}", round + 1, max_rounds));
 
+        // 构建重试回调：更新 SubAgent 状态为 Retrying
+        let snapshot_for_retry = params.snapshot.clone();
+        let retry_callback = |attempt: u32, max_attempts: u32, delay_ms: u64, error: &str| {
+            if let Some(ref refs) = snapshot_for_retry {
+                refs.set_status(SubAgentStatus::Retrying {
+                    attempt,
+                    max_attempts,
+                    delay_ms,
+                    error: error.to_string(),
+                });
+            }
+        };
+
         let choice = match call_llm_non_stream(
             &rt,
             &client,
@@ -448,8 +463,15 @@ fn run_sub_agent_loop(
             &messages,
             &params.tools,
             params.system_prompt.as_deref(),
+            Some(&retry_callback),
         ) {
-            Ok(c) => c,
+            Ok(c) => {
+                // LLM 调用成功，恢复 Working 状态
+                if let Some(ref refs) = params.snapshot {
+                    refs.set_status(SubAgentStatus::Working);
+                }
+                c
+            }
             Err(e) => {
                 if let Some(ref refs) = params.snapshot {
                     refs.set_status(SubAgentStatus::Error(e.clone()));
