@@ -459,13 +459,9 @@ pub async fn auto_compact(
         );
     }
 
-    messages.push(ChatMessage::text(MessageRole::User, summary_content));
-    messages.push(ChatMessage::text(
-        MessageRole::Assistant,
-        "Understood. I have the context from the summary and any active skill instructions. Continuing to follow them.",
-    ));
-
-    // 追加最近 N 条 user 消息原文，确保 LLM 能看到用户的精确措辞
+    // 先追加最近 N 条 user 消息原文（确保 UI 中 user 消息在 compact 摘要之前），
+    // 再追加 summary + understood，这样 LLM 上下文中 summary 在 user msgs 之后，
+    // 且 UI 渲染顺序也正确
     let recent_user_clone = recent_user.clone();
     if !recent_user.is_empty() {
         write_info_log(
@@ -479,6 +475,12 @@ pub async fn auto_compact(
             messages.push(msg);
         }
     }
+
+    messages.push(ChatMessage::text(MessageRole::User, summary_content));
+    messages.push(ChatMessage::text(
+        MessageRole::Assistant,
+        "Understood. I have the context from the summary and any active skill instructions. Continuing to follow them.",
+    ));
 
     Ok(CompactResult {
         messages_before,
