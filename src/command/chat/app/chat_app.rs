@@ -238,6 +238,7 @@ impl ChatApp {
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
             ui_messages: Arc::clone(&ui_messages),
             session_id: Arc::clone(&shared_session_id),
+            plan_mode_state: Arc::clone(&tool_registry.plan_mode_state),
         };
         tool_registry.register(Box::new(
             crate::command::chat::tools::sub_agent::SubAgentTool {

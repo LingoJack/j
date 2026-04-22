@@ -9,7 +9,7 @@ use crate::command::chat::permission::queue::{PendingAgentPerm, PermissionQueue}
 use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
-use crate::command::chat::tools::plan::PlanApprovalQueue;
+use crate::command::chat::tools::plan::{PlanApprovalQueue, PlanModeState};
 use crate::command::chat::tools::task::TaskManager;
 use crate::util::log::write_info_log;
 use async_openai::types::chat::{ChatChoice, ChatCompletionMessageToolCalls, ChatCompletionTools};
@@ -297,7 +297,7 @@ pub struct DerivedAgentShared {
     /// 当前 session id（session 切换时由 chat_app 更新，teammate/subagent 用来定位自己的 transcript 路径）
     pub session_id: Arc<Mutex<String>>,
     /// 父 agent 的 plan mode 状态（子 agent 据此决定是否进入只读模式）
-    pub plan_mode_active: Arc<std::sync::atomic::AtomicBool>,
+    pub plan_mode_state: Arc<PlanModeState>,
 }
 
 impl DerivedAgentShared {
@@ -327,6 +327,8 @@ impl DerivedAgentShared {
         registry.permission_queue = Some(Arc::clone(&self.permission_queue));
         // 将 Plan 审批队列传入子注册表，使 teammate 的 ExitPlanMode 能路由到主 TUI
         registry.plan_approval_queue = Some(Arc::clone(&self.plan_approval_queue));
+        // 共享主 agent 的 plan mode 状态，子 agent 据此继承只读限制
+        registry.plan_mode_state = Arc::clone(&self.plan_mode_state);
         (registry, ask_rx)
     }
 }

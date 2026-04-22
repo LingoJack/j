@@ -198,6 +198,7 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 
 /// 提取 messages 中所有 role="user" 的消息（保留原始顺序）。
 /// 用于 plan-clear 场景：清空 assistant 探索过程与 tool 结果，但保留用户的全部意图/追问。
+#[allow(dead_code)]
 pub fn extract_user_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     messages
         .iter()
