@@ -3,8 +3,6 @@
 //! 启用 `browser_cdp` feature 时，使用 chromiumoxide 进行真实 CDP 浏览器控制。
 //! 未启用时，退化为基于 reqwest 的 Lite 模式（HTTP 抓取 + HTML 解析）。
 
-#[cfg(feature = "browser_cdp")]
-use crate::command::chat::constants::{BROWSER_SNAPSHOT_MAX_ELEMENTS, BROWSER_TEXT_MAX_CHARS};
 use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -15,6 +13,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 
 #[cfg(feature = "browser_cdp")]
 mod cdp {
+    use crate::command::chat::constants::{BROWSER_SNAPSHOT_MAX_ELEMENTS, BROWSER_TEXT_MAX_CHARS};
     use chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat;
     use chromiumoxide::{Browser, BrowserConfig, Page};
     use futures::StreamExt;
@@ -36,8 +35,11 @@ mod cdp {
     }
 
     pub fn get_runtime() -> &'static tokio::runtime::Runtime {
-        BROWSER_RUNTIME
-            .get_or_init(|| tokio::runtime::Runtime::new().expect("创建浏览器 Runtime 失败"))
+        BROWSER_RUNTIME.get_or_init(|| {
+            // SAFETY: tokio Runtime 创建失败仅可能发生在系统资源耗尽等极端情况，
+            // 此时程序无法正常运行，panic 是合理的终止方式。
+            tokio::runtime::Runtime::new().expect("创建浏览器 Runtime 失败")
+        })
     }
 
     fn browser_state() -> &'static Mutex<Option<BrowserState>> {
@@ -700,7 +702,7 @@ mod cdp {
                         type: el.type || null,
                         href: el.href || null
                     }};
-                })
+                }})
             "#,
                     BROWSER_SNAPSHOT_MAX_ELEMENTS
                 )
@@ -908,6 +910,7 @@ mod lite {
         .to_string())
     }
 
+    /// 启动浏览器 Lite 模式
     pub fn start() -> Result<String, String> {
         Ok("浏览器 Lite 模式就绪（基于 reqwest）。无需外部浏览器。".to_string())
     }
@@ -919,6 +922,7 @@ mod lite {
         Ok("Lite 浏览器状态已清空".to_string())
     }
 
+    /// 列出所有浏览器标签页
     pub fn list_tabs() -> Result<String, String> {
         let br = browser().lock().map_err(|_| "锁被占用")?;
         let tabs: Vec<Value> = br
@@ -935,6 +939,7 @@ mod lite {
         Ok(json!({ "tabs": tabs, "count": tabs.len() }).to_string())
     }
 
+    /// 打开或导航到指定 URL
     pub fn open_tab(url: &str) -> Result<String, String> {
         let tab = fetch_tab(url)?;
         let mut br = browser().lock().map_err(|_| "锁被占用")?;

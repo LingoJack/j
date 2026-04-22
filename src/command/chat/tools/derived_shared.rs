@@ -46,6 +46,7 @@ pub enum SubAgentStatus {
 }
 
 impl SubAgentStatus {
+    /// 返回当前状态对应的图标字符
     pub fn icon(&self) -> &'static str {
         match self {
             Self::Initializing => "◐",
@@ -57,6 +58,7 @@ impl SubAgentStatus {
         }
     }
 
+    /// 返回当前状态的中文标签
     pub fn label(&self) -> &'static str {
         match self {
             Self::Initializing => "初始化",
@@ -68,6 +70,7 @@ impl SubAgentStatus {
         }
     }
 
+    /// 判断当前状态是否为终止状态（已完成、已取消或出错）
     #[allow(dead_code)]
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Completed | Self::Cancelled | Self::Error(_))
@@ -134,6 +137,7 @@ pub struct SubAgentHandle {
 }
 
 impl SubAgentTracker {
+    /// 创建新的子 Agent 追踪器实例
     pub fn new() -> Self {
         Self {
             agents: Mutex::new(Vec::new()),

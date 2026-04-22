@@ -127,6 +127,7 @@ pub fn config_tab_field_count(app: &ChatApp) -> usize {
 }
 
 impl ChatApp {
+    /// 创建新的 ChatApp 实例，初始化所有子系统和通道
     pub fn new(session_id: String) -> Self {
         let agent_config = load_agent_config();
         // 首次运行：各数据文件不存在时写入默认内容
@@ -2187,6 +2188,7 @@ impl ChatApp {
     /// 与 send_message 的 system_prompt_fn + 内置 PreLlmRequest hook 合起来的效果一致：
     /// 同时替换静态占位符（.tools/.skills/.memory/…）和状态占位符
     /// (.tasks/.background_tasks/.session_state/.teammates)。
+    /// 仅取消工具执行，不取消整个流式请求
     pub fn cancel_tools_only(&mut self) {
         self.tool_executor.cancel();
         self.tool_executor.tools_executing_count = 0;

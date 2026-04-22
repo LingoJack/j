@@ -191,12 +191,15 @@ pub const BROWSER_TEXT_MAX_CHARS: usize = 50_000;
 pub const BROWSER_SNAPSHOT_MAX_ELEMENTS: usize = 50;
 
 /// 浏览器 Lite 模式链接最大数量
+#[cfg(not(feature = "browser_cdp"))]
 pub const BROWSER_LITE_MAX_LINKS: usize = 50;
 
 /// 浏览器 Lite 模式表单最大数量
+#[cfg(not(feature = "browser_cdp"))]
 pub const BROWSER_LITE_MAX_FORMS: usize = 20;
 
 /// 浏览器 Lite 模式文本预览截断长度
+#[cfg(not(feature = "browser_cdp"))]
 pub const BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS: usize = 500;
 
 // ========== Computer Use 工具 ==========

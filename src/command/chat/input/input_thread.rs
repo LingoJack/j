@@ -36,6 +36,8 @@ impl InputThread {
             .spawn(move || {
                 Self::run_loop(tx, quit, pause);
             })
+            // SAFETY: 线程创建失败仅可能发生在系统资源耗尽（如达到进程线程数限制），
+            // 此情况极罕见，panic 是合理的终止方式。
             .expect("failed to spawn input thread");
 
         Self {

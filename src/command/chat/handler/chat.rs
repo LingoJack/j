@@ -13,6 +13,7 @@ use crate::command::chat::storage::agent_data_dir;
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+/// 处理 Chat 模式下的键盘事件，包括输入、快捷键、弹窗交互等；返回 true 表示退出
 pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
     // Ctrl+C 强制退出
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {

@@ -69,6 +69,7 @@ impl Default for BackgroundManager {
 }
 
 impl BackgroundManager {
+    /// 创建新的后台任务管理器实例
     pub fn new() -> Self {
         Self {
             tasks: Mutex::new(HashMap::new()),

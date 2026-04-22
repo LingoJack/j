@@ -142,4 +142,5 @@ allow:
 - Bash(realpath --relative-to=src/command/chat/permission:*)
 - Bash(mv /Users/lingojack/dev_custom/j/src/command/chat/ui/config/mod.rs:*)
 - Bash(gh repo:*)
+- Bash(head -10:*)
 deny: []

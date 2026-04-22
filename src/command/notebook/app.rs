@@ -82,12 +82,15 @@ fn save_expanded_dirs(dirs: &ExpandedDirs) {
 pub struct ExpandedDirs(pub std::collections::HashSet<String>);
 
 impl ExpandedDirs {
+    /// 创建空的展开目录集合
     pub fn new() -> Self {
         Self(std::collections::HashSet::new())
     }
+    /// 判断指定目录是否已展开
     pub fn is_expanded(&self, dir_path: &str) -> bool {
         self.0.contains(dir_path)
     }
+    /// 切换指定目录的展开/折叠状态
     pub fn toggle(&mut self, dir_path: &str) {
         if self.0.contains(dir_path) {
             self.0.remove(dir_path);
@@ -113,6 +116,7 @@ pub struct FlatEntry {
 }
 
 #[derive(Debug, Clone)]
+/// 扁平化条目类型枚举，用于渲染时的行类型区分
 pub enum FlatEntryKind {
     /// 文件条目，引用 notes 列表中的索引
     File { note_index: usize },
@@ -434,6 +438,7 @@ pub struct NotebookApp {
 }
 
 #[derive(PartialEq, Clone)]
+/// Notebook 应用模式枚举
 pub enum AppMode {
     /// 正常浏览模式
     Normal,
@@ -466,6 +471,7 @@ impl Default for NotebookApp {
 }
 
 impl NotebookApp {
+    /// 创建 NotebookApp 实例，加载笔记列表和配置
     pub fn new() -> Self {
         let notes = load_notes();
         let expanded_dirs = load_expanded_dirs();

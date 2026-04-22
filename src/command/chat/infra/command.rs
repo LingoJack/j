@@ -16,6 +16,7 @@ pub enum CommandSource {
 }
 
 impl CommandSource {
+    /// 返回当前来源的中文标签
     pub fn label(&self) -> &'static str {
         match self {
             CommandSource::User => "用户",

@@ -15,6 +15,7 @@ use rustyline::{
     Cmd, CompletionType, Config, EditMode, Editor, EventHandler, KeyCode, KeyEvent, Modifiers,
 };
 
+/// 启动交互式命令行循环
 pub fn run_interactive(config: &mut YamlConfig) {
     let rl_config = Config::builder()
         .completion_type(CompletionType::Circular)
@@ -24,8 +25,10 @@ pub fn run_interactive(config: &mut YamlConfig) {
 
     let helper = CopilotHelper::new(config);
 
-    let mut rl: Editor<CopilotHelper, DefaultHistory> =
-        Editor::with_config(rl_config).expect("无法初始化编辑器");
+    let mut rl: Editor<CopilotHelper, DefaultHistory> = Editor::with_config(rl_config)
+        // SAFETY: 编辑器初始化失败仅可能发生在终端不支持等极罕见情况，
+        // 此交互模式无法运行，panic 是合理的终止方式。
+        .expect("无法初始化编辑器");
     rl.set_helper(Some(helper));
 
     rl.bind_sequence(

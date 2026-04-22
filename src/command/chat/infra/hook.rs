@@ -2174,14 +2174,10 @@ retry: 2
         let builtin = BuiltinHook {
             name: "test_hook".to_string(),
             handler: Arc::new(|ctx| {
-                if let Some(ref input) = ctx.user_input {
-                    Some(HookResult {
-                        user_input: Some(format!("[hooked] {}", input)),
-                        ..Default::default()
-                    })
-                } else {
-                    None
-                }
+                ctx.user_input.as_ref().map(|input| HookResult {
+                    user_input: Some(format!("[hooked] {}", input)),
+                    ..Default::default()
+                })
             }),
         };
         let kind = HookKind::Builtin(builtin);
@@ -2211,7 +2207,7 @@ retry: 2
     fn test_hook_manager_empty() {
         let manager = HookManager::default();
         assert!(manager.list_hooks().is_empty());
-        let result = manager.execute(HookEvent::PreSendMessage, HookContext::default());
+        let result = manager.execute(HookEvent::PreSendMessage, HookContext::default(), &[]);
         assert!(result.is_none());
     }
 
@@ -2244,6 +2240,7 @@ retry: 2
                     user_input: Some("original".to_string()),
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
         assert_eq!(result.user_input.as_deref(), Some("session_hooked"));
@@ -2253,14 +2250,10 @@ retry: 2
     fn test_hook_manager_builtin_hooks() {
         let mut manager = HookManager::default();
         manager.register_builtin(HookEvent::PreSendMessage, "test_builtin", |ctx| {
-            if let Some(ref input) = ctx.user_input {
-                Some(HookResult {
-                    user_input: Some(format!("[builtin] {}", input)),
-                    ..Default::default()
-                })
-            } else {
-                None
-            }
+            ctx.user_input.as_ref().map(|input| HookResult {
+                user_input: Some(format!("[builtin] {}", input)),
+                ..Default::default()
+            })
         });
 
         let hooks = manager.list_hooks();
@@ -2276,6 +2269,7 @@ retry: 2
                     user_input: Some("hello".to_string()),
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
         assert_eq!(result.user_input.as_deref(), Some("[builtin] hello"));
@@ -2286,14 +2280,10 @@ retry: 2
         // 内置 hook 应在 session hook 之前执行，session hook 应能覆盖内置 hook 的结果
         let mut manager = HookManager::default();
         manager.register_builtin(HookEvent::PreSendMessage, "prefix", |ctx| {
-            if let Some(ref input) = ctx.user_input {
-                Some(HookResult {
-                    user_input: Some(format!("[builtin] {}", input)),
-                    ..Default::default()
-                })
-            } else {
-                None
-            }
+            ctx.user_input.as_ref().map(|input| HookResult {
+                user_input: Some(format!("[builtin] {}", input)),
+                ..Default::default()
+            })
         });
         manager.register_session_hook(
             HookEvent::PreSendMessage,
@@ -2309,6 +2299,7 @@ retry: 2
             },
         );
 
+        // session hook 在 builtin 之后执行，覆盖了 builtin 的结果
         let result = manager
             .execute(
                 HookEvent::PreSendMessage,
@@ -2317,6 +2308,7 @@ retry: 2
                     user_input: Some("original".to_string()),
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
         // session hook 在 builtin 之后执行，覆盖了 builtin 的结果
@@ -2387,6 +2379,7 @@ retry: 2
                     user_input: Some("original".to_string()),
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
 
@@ -2432,6 +2425,7 @@ retry: 2
                     event: HookEvent::PreSendMessage,
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
 
@@ -2490,6 +2484,7 @@ retry: 2
                     user_input: Some("original".to_string()),
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
 
@@ -2537,6 +2532,7 @@ retry: 2
                     event: HookEvent::PreSendMessage,
                     ..Default::default()
                 },
+                &[],
             )
             .unwrap();
 

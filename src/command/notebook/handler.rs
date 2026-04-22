@@ -21,6 +21,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::process::Command;
 
+/// 处理 notebook 命令入口：无参数启动 TUI，有参数按子命令分发
 pub fn handle_notebook(args: &[String]) {
     if args.is_empty() {
         run_notebook_tui();

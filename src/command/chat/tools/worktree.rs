@@ -53,6 +53,7 @@ impl WorktreeState {
         }
     }
 
+    /// 清除当前会话并返回被清除的 WorktreeSession
     pub fn clear_session(&self) -> Option<WorktreeSession> {
         self.session.lock().ok()?.take()
     }

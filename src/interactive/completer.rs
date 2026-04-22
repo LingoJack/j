@@ -82,7 +82,7 @@ pub enum ArgHint {
     None,
 }
 
-/// 获取命令的补全规则定义
+/// 获取所有命令的参数补全规则定义
 pub fn command_completion_rules() -> Vec<(&'static [&'static str], Vec<ArgHint>)> {
     vec![
         (

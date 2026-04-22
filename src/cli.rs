@@ -16,6 +16,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+/// j-cli 命令行子命令定义
 pub enum SubCmd {
     // ========== 别名管理 ==========
     /// 设置别名（路径/URL）

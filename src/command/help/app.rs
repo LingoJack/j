@@ -18,6 +18,7 @@ pub const CMD_POPUP_ITEMS: &[(&str, &str)] = &[
 ];
 
 #[derive(PartialEq, Clone)]
+/// Help 应用模式枚举
 pub enum AppMode {
     /// 正常浏览模式
     Normal,
@@ -59,6 +60,7 @@ impl Default for HelpApp {
 }
 
 impl HelpApp {
+    /// 创建 HelpApp 实例，加载帮助页面内容和主题配置
     pub fn new() -> Self {
         let tabs: Vec<HelpTab> = assets::load_help_tabs();
         let count = tabs.len();
@@ -89,10 +91,12 @@ impl HelpApp {
         }
     }
 
+    /// 获取指定索引的 Tab 名称
     pub fn tab_name(&self, idx: usize) -> &str {
         self.tab_names.get(idx).map(|s| s.as_str()).unwrap_or("?")
     }
 
+    /// 获取当前主题引用
     pub fn theme(&self) -> &Theme {
         &self.theme
     }
@@ -133,42 +137,50 @@ impl HelpApp {
         &cache.lines
     }
 
+    /// 获取当前 Tab 的滚动偏移量
     pub fn scroll_offset(&self) -> usize {
         self.tab_scrolls.get(self.active_tab).copied().unwrap_or(0)
     }
 
+    /// 切换到下一个 Tab
     pub fn next_tab(&mut self) {
         self.active_tab = (self.active_tab + 1) % self.tab_count;
     }
 
+    /// 切换到上一个 Tab
     pub fn prev_tab(&mut self) {
         self.active_tab = (self.active_tab + self.tab_count - 1) % self.tab_count;
     }
 
+    /// 跳转到指定索引的 Tab
     pub fn goto_tab(&mut self, idx: usize) {
         if idx < self.tab_count {
             self.active_tab = idx;
         }
     }
 
+    /// 向下滚动指定行数
     pub fn scroll_down(&mut self, n: usize) {
         if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
             *scroll = scroll.saturating_add(n);
         }
     }
 
+    /// 向上滚动指定行数
     pub fn scroll_up(&mut self, n: usize) {
         if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
             *scroll = scroll.saturating_sub(n);
         }
     }
 
+    /// 滚动到顶部
     pub fn scroll_to_top(&mut self) {
         if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
             *scroll = 0;
         }
     }
 
+    /// 滚动到底部
     pub fn scroll_to_bottom(&mut self) {
         if let Some(scroll) = self.tab_scrolls.get_mut(self.active_tab) {
             // total_lines 会在 draw 时更新，这里设一个很大的值，在 draw 时会被钳制
@@ -176,6 +188,7 @@ impl HelpApp {
         }
     }
 
+    /// 清除所有 Tab 的渲染缓存
     pub fn invalidate_cache(&mut self) {
         for cache in &mut self.tab_caches {
             *cache = None;

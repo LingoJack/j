@@ -21,6 +21,7 @@ use ratatui::{
 };
 use ratatui_image::{Resize, StatefulImage};
 
+/// 绘制 Chat 主界面：标题栏、消息区、输入区、提示栏及各类弹窗覆盖层
 pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     let size = f.area();
 
@@ -474,6 +475,7 @@ fn get_line_at(
     }
 }
 
+/// 绘制消息列表区域，支持缓存增量渲染、图片加载和滚动定位
 pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let t = &app.ui.theme;
     let block = Block::default()
@@ -1075,6 +1077,7 @@ pub fn draw_skill_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp)
     draw_popup_list(f, input_area, items, &labels, &cfg);
 }
 
+/// 绘制命令补全弹窗（输入区域上方浮动），显示命令名称和描述
 pub fn draw_command_popup(f: &mut ratatui::Frame, input_area: Rect, app: &ChatApp) {
     let t = &app.ui.theme;
     let filtered = get_filtered_command_names(app);

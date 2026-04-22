@@ -24,6 +24,7 @@ pub struct PendingPlanApproval {
 }
 
 impl PendingPlanApproval {
+    /// 创建一条待决的 Plan 审批请求，返回 Arc 包装实例
     pub fn new(agent_name: String, plan_content: String, plan_name: String) -> Arc<Self> {
         Arc::new(Self {
             agent_name,
@@ -79,6 +80,7 @@ impl Default for PlanApprovalQueue {
 }
 
 impl PlanApprovalQueue {
+    /// 创建新的 Plan 审批队列
     pub fn new() -> Self {
         Self {
             pending: Mutex::new(VecDeque::new()),

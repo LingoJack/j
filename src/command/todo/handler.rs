@@ -18,6 +18,7 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 
+/// 处理 todo 命令入口：无参数启动 TUI，有参数按子命令分发
 pub fn handle_todo(content: &[String], config: &mut YamlConfig) {
     if content.is_empty() {
         run_todo_tui(config);

@@ -130,6 +130,7 @@ fn dispatch_event(
     }
 }
 
+/// Chat TUI 入口函数：初始化 panic hook，按需启动远程 WS 服务，然后进入主循环
 pub fn run_chat_tui(remote_mode: bool, port: u16) {
     // 设置 panic hook，确保 panic 时也能恢复终端状态
     let original_hook = std::panic::take_hook();
@@ -171,6 +172,7 @@ fn generate_session_id() -> String {
     super::super::storage::generate_session_id()
 }
 
+/// Chat TUI 主循环：初始化终端、会话状态，持续处理事件轮询、后台任务和渲染
 pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();

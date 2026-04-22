@@ -86,6 +86,8 @@ fn run_countdown(total_secs: u64) {
     pb.set_style(
         ProgressStyle::default_bar()
             .template("  {spinner:.cyan} ⏱️  {msg}  {wide_bar:.cyan/dark_gray}  {percent}%")
+            // SAFETY: 模板是静态字符串字面量，格式正确性由代码作者保证，
+            // 不会因运行时输入而失败。
             .expect("进度条模板格式错误")
             .progress_chars("━╸─"),
     );

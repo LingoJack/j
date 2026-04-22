@@ -16,6 +16,7 @@ pub enum SkillSource {
 }
 
 impl SkillSource {
+    /// 返回当前来源的中文标签
     pub fn label(&self) -> &'static str {
         match self {
             SkillSource::User => "用户",

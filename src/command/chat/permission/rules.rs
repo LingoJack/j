@@ -491,7 +491,6 @@ mod tests {
                 allow: vec!["Bash(cargo:*)".to_string()],
                 deny: vec!["Bash(cargo build:*)".to_string()],
             },
-            ..Default::default()
         };
         // cargo test 被 allow 的 cargo:* 覆盖
         let args_test = r#"{"command": "cargo test"}"#;
@@ -511,7 +510,6 @@ mod tests {
                 allow: vec![],
                 deny: vec![],
             },
-            ..Default::default()
         };
         assert!(config.is_allowed("Bash", r#"{"command": "rm -rf /"}"#));
 
@@ -522,7 +520,6 @@ mod tests {
                 allow: vec![],
                 deny: vec!["Bash(rm -rf:*)".to_string()],
             },
-            ..Default::default()
         };
         assert!(!config2.is_allowed("Bash", r#"{"command": "rm -rf /"}"#));
     }

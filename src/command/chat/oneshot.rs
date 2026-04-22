@@ -38,6 +38,7 @@ fn persist_messages(session_id: &str, messages: &[ChatMessage], start_idx: usize
     }
 }
 
+/// 处理 chat 子命令入口
 pub fn handle_chat(
     content: &[String],
     cont: bool,

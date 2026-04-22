@@ -139,6 +139,7 @@ pub struct TodoApp {
 }
 
 #[derive(PartialEq, Clone)]
+/// Todo 应用模式枚举
 pub enum AppMode {
     /// 正常浏览模式
     Normal,
@@ -165,6 +166,7 @@ impl Default for TodoApp {
 }
 
 impl TodoApp {
+    /// 创建 TodoApp 实例，加载待办列表和主题配置
     pub fn new() -> Self {
         let list = load_todo_list();
         let snapshot = list.clone();
