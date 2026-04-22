@@ -296,6 +296,8 @@ pub struct DerivedAgentShared {
     pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 当前 session id（session 切换时由 chat_app 更新，teammate/subagent 用来定位自己的 transcript 路径）
     pub session_id: Arc<Mutex<String>>,
+    /// 父 agent 的 plan mode 状态（子 agent 据此决定是否进入只读模式）
+    pub plan_mode_active: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl DerivedAgentShared {

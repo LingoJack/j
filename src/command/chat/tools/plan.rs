@@ -213,6 +213,8 @@ pub const PLAN_MODE_WHITELIST: &[&str] = &[
     "ExitPlanMode",
     "EnterWorktree",
     "ExitWorktree",
+    "Agent",     // plan mode 允许启动子 agent 做代码探索
+    "AgentTeam", // plan mode 允许批量创建 teammate
 ];
 
 /// 检查工具是否在 plan mode 白名单中

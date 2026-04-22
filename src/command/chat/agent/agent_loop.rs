@@ -861,48 +861,18 @@ pub async fn run_main_agent_loop(
                                     "agent_loop",
                                     "Clearing context after plan approval (fallback path)",
                                 );
-                                // 保留所有历史 user 消息（用户的真实意图/追问是实施依据），
-                                // 仅清除 assistant 探索过程与 tool 结果
-                                let preserved_users = compact::extract_user_messages(&messages);
+                                // 清空 messages 和 ui_messages
                                 messages.clear();
                                 if let Ok(mut shared) = ui_messages.lock() {
                                     shared.clear();
                                 }
-                                // 恢复 user messages
-                                for user_msg in &preserved_users {
-                                    messages.push(user_msg.clone());
-                                    push_ui(&ui_messages, user_msg.clone());
-                                }
-                                // 计划内容作为 ExitPlanMode 的 Tool Result（而非代替用户发消息）
-                                let plan_tool_call_id = "plan_exit_approved";
-                                let plan_tool_call_item = ToolCallItem {
-                                    id: plan_tool_call_id.to_string(),
-                                    name: "ExitPlanMode".to_string(),
-                                    arguments: r#"{"approved":true}"#.to_string(),
-                                };
-                                let plan_tool_call_msg = ChatMessage {
-                                    role: MessageRole::Assistant,
-                                    content: String::new(),
-                                    tool_calls: Some(vec![plan_tool_call_item]),
-                                    tool_call_id: None,
-                                    images: None,
-                                };
-                                messages.push(plan_tool_call_msg.clone());
-                                push_ui(&ui_messages, plan_tool_call_msg);
-
-                                let plan_result_content = format!(
-                                    "Plan approved with context clear! Exited plan mode.\n\n{}\n\n请按以上计划继续执行。",
-                                    plan_content
+                                // 以 User 角色注入计划指令（给 LLM 上下文使用），
+                                // 但不 push_ui — UI 中不应出现用户未发送的消息
+                                let plan_msg = ChatMessage::text(
+                                    MessageRole::User,
+                                    format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
                                 );
-                                let plan_tool_result = ChatMessage {
-                                    role: MessageRole::Tool,
-                                    content: plan_result_content,
-                                    tool_calls: None,
-                                    tool_call_id: Some(plan_tool_call_id.to_string()),
-                                    images: None,
-                                };
-                                messages.push(plan_tool_result.clone());
-                                push_ui(&ui_messages, plan_tool_result);
+                                messages.push(plan_msg);
                             }
                             continue 'round;
                         }
@@ -1063,48 +1033,18 @@ pub async fn run_main_agent_loop(
                                 "agent_loop",
                                 "Clearing context after plan approval (stream path)",
                             );
-                            // 保留所有历史 user 消息（用户的真实意图/追问是实施依据），
-                            // 仅清除 assistant 探索过程与 tool 结果
-                            let preserved_users = compact::extract_user_messages(&messages);
+                            // 清空 messages 和 ui_messages
                             messages.clear();
                             if let Ok(mut shared) = ui_messages.lock() {
                                 shared.clear();
                             }
-                            // 恢复 user messages
-                            for user_msg in &preserved_users {
-                                messages.push(user_msg.clone());
-                                push_ui(&ui_messages, user_msg.clone());
-                            }
-                            // 计划内容作为 ExitPlanMode 的 Tool Result（而非代替用户发消息）
-                            let plan_tool_call_id = "plan_exit_approved";
-                            let plan_tool_call_item = ToolCallItem {
-                                id: plan_tool_call_id.to_string(),
-                                name: "ExitPlanMode".to_string(),
-                                arguments: r#"{"approved":true}"#.to_string(),
-                            };
-                            let plan_tool_call_msg = ChatMessage {
-                                role: MessageRole::Assistant,
-                                content: String::new(),
-                                tool_calls: Some(vec![plan_tool_call_item]),
-                                tool_call_id: None,
-                                images: None,
-                            };
-                            messages.push(plan_tool_call_msg.clone());
-                            push_ui(&ui_messages, plan_tool_call_msg);
-
-                            let plan_result_content = format!(
-                                "Plan approved with context clear! Exited plan mode.\n\n{}\n\n请按以上计划继续执行。",
-                                plan_content
+                            // 以 User 角色注入计划指令（给 LLM 上下文使用），
+                            // 但不 push_ui — UI 中不应出现用户未发送的消息
+                            let plan_msg = ChatMessage::text(
+                                MessageRole::User,
+                                format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
                             );
-                            let plan_tool_result = ChatMessage {
-                                role: MessageRole::Tool,
-                                content: plan_result_content,
-                                tool_calls: None,
-                                tool_call_id: Some(plan_tool_call_id.to_string()),
-                                images: None,
-                            };
-                            messages.push(plan_tool_result.clone());
-                            push_ui(&ui_messages, plan_tool_result);
+                            messages.push(plan_msg);
                         }
                         continue 'round;
                     }
