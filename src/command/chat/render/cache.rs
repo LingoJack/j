@@ -549,6 +549,7 @@ fn agent_name_color(name: &str) -> Color {
 }
 
 /// 渲染 AI 助手消息（含 teammate 消息）
+/// 气泡宽度根据实际内容自适应：最小宽度 20，最大宽度为传入的 bubble_max_width
 pub fn render_assistant_msg(
     content: &str,
     is_selected: bool,
@@ -599,9 +600,29 @@ pub fn render_assistant_msg(
     };
     let pad_left_w = 3usize;
     let pad_right_w = 3usize;
+
+    // 先用最大宽度渲染 markdown 内容
     let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
     let md_lines = markdown_to_lines(bubble_content, md_content_w + 2, theme);
-    let bubble_total_w = bubble_max_width;
+
+    // 计算实际内容最大宽度：取所有 md_lines 的最大显示宽度
+    let actual_content_max_w = md_lines
+        .iter()
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|span| display_width(&span.content))
+                .sum::<usize>()
+        })
+        .max()
+        .unwrap_or(0);
+
+    // 气泡自适应宽度：min(max(实际宽度+padding, 最小宽度), 最大宽度)
+    const BUBBLE_MIN_WIDTH: usize = 20;
+    let bubble_total_w = (actual_content_max_w + pad_left_w + pad_right_w)
+        .max(BUBBLE_MIN_WIDTH)
+        .min(bubble_max_width);
+
     // 上边距
     lines.push(Line::from(vec![Span::styled(
         " ".repeat(bubble_total_w),
