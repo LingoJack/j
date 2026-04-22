@@ -348,6 +348,9 @@ pub fn create_runtime_and_client(
 /// 非流式调用 LLM（含指数退避重试）
 ///
 /// 返回第一个 choice 的 message；出错时返回 Err(error_text)。
+/// LLM API 重试回调：参数为 (attempt, max_attempts, delay_ms, error_message)
+pub type RetryCallback = dyn Fn(u32, u32, u64, &str);
+
 /// 对瞬时错误（网络超时、5xx、429）自动重试，策略比主 agent 更保守：
 /// - 最多 2 次重试（主 agent 最多 5 次）
 /// - 退避上限 15s（主 agent 30s）
@@ -359,9 +362,8 @@ pub fn call_llm_non_stream(
     messages: &[ChatMessage],
     tools: &[ChatCompletionTools],
     system_prompt: Option<&str>,
-    /// 重试前的回调：`fn(attempt, max_attempts, delay_ms, error_message)`
-    /// 可用于更新 UI 状态或推送日志
-    on_retry: Option<&dyn Fn(u32, u32, u64, &str)>,
+    // 重试前的回调：可用于更新 UI 状态或推送日志
+    on_retry: Option<&RetryCallback>,
 ) -> Result<ChatChoice, String> {
     let request = build_request_with_tools(provider, messages, tools.to_vec(), system_prompt)
         .map_err(|e| format!("Failed to build request: {}", e))?;

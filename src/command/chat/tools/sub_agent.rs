@@ -444,15 +444,17 @@ fn run_sub_agent_loop(
         write_info_log("SubAgent", &format!("Round {}/{}", round + 1, max_rounds));
 
         // 构建重试回调：更新 SubAgent 状态为 Retrying
-        let snapshot_for_retry = params.snapshot.clone();
-        let retry_callback = |attempt: u32, max_attempts: u32, delay_ms: u64, error: &str| {
-            if let Some(ref refs) = snapshot_for_retry {
-                refs.set_status(SubAgentStatus::Retrying {
+        let status_for_retry = params.snapshot.as_ref().map(|r| Arc::clone(&r.status));
+        let retry_callback = move |attempt: u32, max_attempts: u32, delay_ms: u64, error: &str| {
+            if let Some(ref status_arc) = status_for_retry
+                && let Ok(mut s) = status_arc.lock()
+            {
+                *s = SubAgentStatus::Retrying {
                     attempt,
                     max_attempts,
                     delay_ms,
                     error: error.to_string(),
-                });
+                };
             }
         };
 

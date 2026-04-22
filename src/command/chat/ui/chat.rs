@@ -365,7 +365,7 @@ pub fn draw_title_bar(
 
                 let status_color = match &snap.status {
                     SubAgentStatus::Working => t.title_loading,
-                    SubAgentStatus::Retrying { .. } => t.title_warning,
+                    SubAgentStatus::Retrying { .. } => t.title_loading,
                     SubAgentStatus::Completed => t.config_toggle_on,
                     SubAgentStatus::Cancelled => t.text_dim,
                     SubAgentStatus::Error(_) => t.config_toggle_off,

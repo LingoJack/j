@@ -257,7 +257,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
         for snap in sub_snaps.iter() {
             let status_color = match &snap.status {
                 SubAgentStatus::Working => t.title_loading,
-                SubAgentStatus::Retrying { .. } => t.title_warning,
+                SubAgentStatus::Retrying { .. } => t.title_loading,
                 SubAgentStatus::Completed => t.config_toggle_on,
                 SubAgentStatus::Cancelled => t.text_dim,
                 SubAgentStatus::Error(_) => t.config_toggle_off,
