@@ -43,4 +43,6 @@ pub struct AgentLoopSharedState {
     pub invoked_skills: InvokedSkillsMap,
     /// 当前会话 ID（用于 auto_compact 写入 session 级 .transcripts/）
     pub session_id: String,
+    /// 子 Agent 共用 system_prompt（每轮构建后更新，供 AgentTool / CreateTeammateTool / AgentTeamTool 读取）
+    pub derived_system_prompt: Arc<Mutex<Option<String>>>,
 }

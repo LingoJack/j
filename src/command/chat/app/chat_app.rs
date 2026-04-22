@@ -81,7 +81,6 @@ pub struct ChatApp {
     /// 子 Agent 共用 provider（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
     pub derived_agent_provider: Arc<Mutex<ModelProvider>>,
     /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
-    #[allow(dead_code)]
     pub derived_agent_system_prompt: Arc<Mutex<Option<String>>>,
     /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
     pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,

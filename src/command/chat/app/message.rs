@@ -293,6 +293,7 @@ impl ChatApp {
             estimated_context_tokens: Arc::clone(&self.context_tokens),
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),
+            derived_system_prompt: Arc::clone(&self.derived_agent_system_prompt),
         };
         let (handle, tool_result_tx) = MainAgentHandle::spawn(
             agent_config,

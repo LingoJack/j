@@ -97,6 +97,7 @@ pub async fn run_main_agent_loop(
         estimated_context_tokens,
         invoked_skills,
         session_id,
+        derived_system_prompt,
     } = shared;
 
     let client = create_openai_client(&provider);
@@ -155,6 +156,13 @@ pub async fn run_main_agent_loop(
 
         // 每轮重新构建 system prompt（从磁盘读取最新配置）
         let mut system_prompt = system_prompt_fn();
+
+        // 同步到共享槽，供子 Agent（AgentTool / CreateTeammateTool / AgentTeamTool）读取
+        {
+            if let Ok(mut sp) = derived_system_prompt.lock() {
+                *sp = system_prompt.clone();
+            }
+        }
 
         // 每轮开始时从待处理队列中 drain 用户在 agent loop 期间输入的新消息
         let pending_count_before = safe_lock(&pending_user_messages, "agent::pending_count").len();
