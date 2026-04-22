@@ -4,8 +4,10 @@ use crate::command::chat::agent::thread_identity::{
 use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::teammate::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
+use crate::command::chat::tools::agent_team::AgentTeamTool;
 use crate::command::chat::tools::derived_shared::DerivedAgentShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
+use crate::command::chat::tools::sub_agent::SubAgentTool;
 use crate::command::chat::tools::work_done::WorkDoneTool;
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
@@ -191,9 +193,9 @@ impl Tool for CreateTeammateTool {
         let child_registry = Arc::new(child_registry);
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
-        disabled.push("CreateTeammate".to_string());
-        disabled.push("AgentTeam".to_string());
-        disabled.push("Agent".to_string());
+        disabled.push(Self::NAME.to_string());
+        disabled.push(AgentTeamTool::NAME.to_string());
+        disabled.push(SubAgentTool::NAME.to_string());
         let tools = child_registry.to_openai_tools_filtered(&disabled);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all

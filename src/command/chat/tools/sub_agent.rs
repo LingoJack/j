@@ -201,7 +201,7 @@ impl Tool for SubAgentTool {
         let child_registry = Arc::new(child_registry);
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
-        disabled.push("Agent".to_string());
+        disabled.push(Self::NAME.to_string());
         let tools = child_registry.to_openai_tools_filtered(&disabled);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all
