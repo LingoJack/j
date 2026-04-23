@@ -301,6 +301,13 @@ impl MarkdownEditor {
                     self.vim
                         .push_snapshot(Snapshot::new(self.buffer.snapshot()), self.buffer.cursor());
                 }
+                // 从 Search 模式退出时跳转到当前匹配结果
+                if matches!(old_mode, Mode::Search(_))
+                    && new_mode == Mode::Normal
+                    && let Some(m) = self.search.current_match()
+                {
+                    self.buffer.set_cursor(m.line, m.start);
+                }
                 self.vim.set_mode(new_mode);
                 self.rebuild_wrap_cache();
             }
