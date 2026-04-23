@@ -1,3 +1,6 @@
+use crate::command::chat::agent::message_compression::{
+    compress_other_agent_toolcalls, DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+};
 use crate::command::chat::agent::thread_identity::{
     clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
 };
@@ -89,6 +92,16 @@ fn sanitize_agent_name(description: &str) -> String {
     }
 }
 
+/// 构建 SubAgent 专用的 system prompt
+///
+/// 从嵌入模板加载，将 `{{.base_prompt}}` 替换为父 agent 的 system prompt，
+/// 使 SubAgent 继承基础能力同时拥有独立的身份和限制说明。
+fn build_sub_agent_system_prompt(base_prompt: Option<&str>) -> String {
+    let template = crate::assets::sub_agent_system_prompt_template();
+    let base = base_prompt.unwrap_or("You are a helpful assistant.");
+    template.as_ref().replace("{{.base_prompt}}", base)
+}
+
 /// SubAgentTool 参数
 #[derive(Deserialize, JsonSchema)]
 struct AgentParams {
@@ -166,10 +179,11 @@ impl Tool for SubAgentTool {
         let run_in_background = params.run_in_background;
         let use_worktree = params.worktree;
 
-        // 获取 provider 和 system prompt 的快照
+        // 获取 provider 和构建 SubAgent 独立 system prompt
         let provider = safe_lock(&self.shared.provider, "SubAgentTool::provider").clone();
-        let system_prompt =
+        let base_prompt =
             safe_lock(&self.shared.system_prompt, "SubAgentTool::system_prompt").clone();
+        let system_prompt = build_sub_agent_system_prompt(base_prompt.as_deref());
 
         // worktree 隔离：提前创建（在调用线程中；失败则提前退出，避免浪费 sub_id）
         let worktree_info: Option<(std::path::PathBuf, String)> = if use_worktree {
@@ -254,7 +268,7 @@ impl Tool for SubAgentTool {
                 let result = run_sub_agent_loop(
                     SubAgentLoopParams {
                         provider,
-                        system_prompt,
+                        system_prompt: Some(system_prompt),
                         prompt,
                         tools,
                         registry: child_registry,
@@ -317,7 +331,7 @@ impl Tool for SubAgentTool {
             let result = run_sub_agent_loop(
                 SubAgentLoopParams {
                     provider,
-                    system_prompt,
+                    system_prompt: Some(system_prompt),
                     prompt,
                     tools,
                     registry: child_registry,
@@ -458,11 +472,18 @@ fn run_sub_agent_loop(
             }
         };
 
+        // 压缩来自其他 agent 的 tool call 消息，减少上下文占用
+        let compressed_messages = compress_other_agent_toolcalls(
+            &messages,
+            &agent_name,
+            DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+        );
+
         let choice = match call_llm_non_stream(
             &rt,
             &client,
             &params.provider,
-            &messages,
+            &compressed_messages,
             &params.tools,
             params.system_prompt.as_deref(),
             Some(&retry_callback),

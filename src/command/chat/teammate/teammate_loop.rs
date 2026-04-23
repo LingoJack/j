@@ -1,3 +1,6 @@
+use crate::command::chat::agent::message_compression::{
+    compress_other_agent_toolcalls, DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+};
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{
     ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
@@ -193,11 +196,18 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // 更新状态为 Working（即将调用 LLM）
         set_status(TeammateStatus::Working);
 
+        // 压缩来自其他 agent 的 tool call 消息，减少上下文占用
+        let compressed_messages = compress_other_agent_toolcalls(
+            &messages,
+            &name,
+            DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+        );
+
         let response_choice = match call_llm_non_stream(
             &rt,
             &client,
             &provider,
-            &messages,
+            &compressed_messages,
             &tools,
             Some(&system_prompt),
             None, // teammate 暂不使用重试回调

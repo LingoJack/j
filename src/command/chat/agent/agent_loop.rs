@@ -4,6 +4,9 @@ use super::super::hook::{HookContext, HookEvent};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
 use super::compact;
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
+use super::message_compression::{
+    compress_other_agent_toolcalls, DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
     ToolCallContext, clear_ui_messages, drain_pending_user_messages, flush_streaming_as_message,
@@ -426,9 +429,17 @@ pub async fn run_main_agent_loop(
             );
         }
 
+        // 压缩来自其他 agent (SubAgent/Teammate) 的工具调用广播消息，
+        // 保留最近 N 条完整消息，将早期消息压缩为摘要
+        let compressed_messages = compress_other_agent_toolcalls(
+            &messages,
+            "Main",
+            DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+        );
+
         let request = match build_request_with_tools(
             &provider,
-            &messages,
+            &compressed_messages,
             tools.clone(),
             system_prompt.as_deref(),
         ) {
