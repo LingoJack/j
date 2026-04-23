@@ -69,17 +69,21 @@ impl Tool for WorkDoneTool {
 
         let from = current_agent_name();
 
-        // 通知团队（写入 ui_messages 以在 TUI 显示）
-        if let Ok(manager) = self.teammate_manager.lock()
-            && let Ok(mut shared) = manager.ui_messages.lock()
-        {
+        // 通知团队（写入 display + context 双通道：TUI 显示 + Main Agent context）
+        if let Ok(manager) = self.teammate_manager.lock() {
             let text = match params.summary.as_deref() {
                 Some(s) if !s.trim().is_empty() => {
                     format!("<{}> [已完成工作] {}", from, s.trim())
                 }
                 _ => format!("<{}> [已完成工作]", from),
             };
-            shared.push(ChatMessage::text(MessageRole::Assistant, text));
+            let msg = ChatMessage::text(MessageRole::Assistant, &text);
+            if let Ok(mut display) = manager.display_messages.lock() {
+                display.push(msg.clone());
+            }
+            if let Ok(mut context) = manager.context_messages.lock() {
+                context.push(msg);
+            }
         }
 
         self.work_done.store(true, Ordering::Relaxed);

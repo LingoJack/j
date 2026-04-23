@@ -5,14 +5,14 @@ use super::api::{build_request_with_tools, call_openai_non_stream_lenient, creat
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
-    ToolCallContext, clear_ui_messages, drain_pending_user_messages, flush_streaming_as_message,
-    process_tool_calls, push_ui, sync_ui_full,
+    ToolCallContext, clear_channels, drain_pending_user_messages, flush_streaming_as_message,
+    process_tool_calls, push_both, sync_context_full,
 };
 use crate::command::chat::context::compact;
 use crate::command::chat::context::message_compress::{
     DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
-use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{ChatMessage, ContextScope, MessageRole, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
@@ -20,7 +20,7 @@ use futures::StreamExt;
 use rand::Rng;
 use std::sync::{Arc, mpsc};
 
-/// auto_compact 成功后，向 messages 和 ui_messages 注入 Compact 工具调用 + 结果消息，
+/// auto_compact 成功后，向 messages 和双通道注入 Compact 工具调用 + 结果消息，
 /// 等同于 LLM 手动调用 CompactTool 的效果。
 ///
 /// UI 显示顺序（从上到下）：
@@ -34,15 +34,16 @@ use std::sync::{Arc, mpsc};
 /// 3. tool result
 fn push_compact_tool_messages(
     messages: &mut Vec<ChatMessage>,
-    ui_messages: &Arc<std::sync::Mutex<Vec<ChatMessage>>>,
+    display: &Arc<std::sync::Mutex<Vec<ChatMessage>>>,
+    context: &Arc<std::sync::Mutex<Vec<ChatMessage>>>,
     compact_result: &compact::CompactResult,
 ) {
     let tool_call_id = format!("compact_auto_{}", compact_result.messages_before);
 
     // 1. 先推送 recent_user_messages（UI 中用户消息在 compact 摘要上方）
-    //    这些消息已在 messages 中（由 auto_compact 添加），只需同步到 ui_messages
+    //    这些消息已在 messages 中（由 auto_compact 添加），只需同步到双通道
     for msg in &compact_result.recent_user_messages {
-        push_ui(ui_messages, msg.clone());
+        push_both(display, context, msg.clone());
     }
 
     // 2. 创建 Compact 工具调用消息（模拟 LLM 调用 Compact 工具）
@@ -57,9 +58,10 @@ fn push_compact_tool_messages(
         tool_calls: Some(vec![tool_call_item]),
         tool_call_id: None,
         images: None,
+        context_scope: ContextScope::default(),
     };
     messages.push(tool_call_msg.clone());
-    push_ui(ui_messages, tool_call_msg);
+    push_both(display, context, tool_call_msg);
 
     // 3. tool result 消息：包含摘要内容，UI 以边框形式展示
     let result_content = format!(
@@ -72,9 +74,10 @@ fn push_compact_tool_messages(
         tool_calls: None,
         tool_call_id: Some(tool_call_id),
         images: None,
+        context_scope: ContextScope::default(),
     };
     messages.push(tool_msg.clone());
-    push_ui(ui_messages, tool_msg);
+    push_both(display, context, tool_msg);
 }
 
 /// 流式响应中逐步聚合的工具调用片段（按 chunk index 聚合 id/name/arguments）
@@ -107,7 +110,8 @@ pub async fn run_main_agent_loop(
         pending_user_messages,
         background_manager: _,
         todo_manager,
-        ui_messages,
+        display_messages,
+        context_messages,
         estimated_context_tokens,
         invoked_skills,
         session_id,
@@ -123,7 +127,8 @@ pub async fn run_main_agent_loop(
         hook_manager: &hook_manager,
         disabled_hooks: &disabled_hooks,
         supports_vision: provider.supports_vision,
-        ui_messages: &ui_messages,
+        display_messages: &display_messages,
+        context_messages: &context_messages,
         streaming_content: &streaming_content,
         invoked_skills: &invoked_skills,
         session_id: &session_id,
@@ -287,8 +292,13 @@ pub async fn run_main_agent_loop(
                                 );
                             }
                             Ok(result) => {
-                                clear_ui_messages(&ui_messages);
-                                push_compact_tool_messages(&mut messages, &ui_messages, &result);
+                                clear_channels(&display_messages, &context_messages);
+                                push_compact_tool_messages(
+                                    &mut messages,
+                                    &display_messages,
+                                    &context_messages,
+                                    &result,
+                                );
                                 let _ = tx.send(StreamMsg::Compacted {
                                     messages_before: result.messages_before,
                                 });
@@ -308,7 +318,11 @@ pub async fn run_main_agent_loop(
                                     {
                                         messages = new_msgs;
                                         // hook 可能修改了消息，重新全量同步
-                                        sync_ui_full(&ui_messages, &messages);
+                                        sync_context_full(
+                                            &display_messages,
+                                            &context_messages,
+                                            &messages,
+                                        );
                                     }
                                 }
                             }
@@ -666,8 +680,13 @@ pub async fn run_main_agent_loop(
                             return;
                         }
                         Ok(result) => {
-                            clear_ui_messages(&ui_messages);
-                            push_compact_tool_messages(&mut messages, &ui_messages, &result);
+                            clear_channels(&display_messages, &context_messages);
+                            push_compact_tool_messages(
+                                &mut messages,
+                                &display_messages,
+                                &context_messages,
+                                &result,
+                            );
                             let _ = tx.send(StreamMsg::Compacted {
                                 messages_before: result.messages_before,
                             });
@@ -855,10 +874,11 @@ pub async fn run_main_agent_loop(
                                 )
                                 .await
                                 {
-                                    clear_ui_messages(&ui_messages);
+                                    clear_channels(&display_messages, &context_messages);
                                     push_compact_tool_messages(
                                         &mut messages,
-                                        &ui_messages,
+                                        &display_messages,
+                                        &context_messages,
                                         &compact_result,
                                     );
                                     let _ = tx.send(StreamMsg::Compacted {
@@ -872,13 +892,16 @@ pub async fn run_main_agent_loop(
                                     "agent_loop",
                                     "Clearing context after plan approval (fallback path)",
                                 );
-                                // 清空 messages 和 ui_messages
+                                // 清空 messages 和双通道
                                 messages.clear();
-                                if let Ok(mut shared) = ui_messages.lock() {
+                                if let Ok(mut shared) = display_messages.lock() {
+                                    shared.clear();
+                                }
+                                if let Ok(mut shared) = context_messages.lock() {
                                     shared.clear();
                                 }
                                 // 以 User 角色注入计划指令（给 LLM 上下文使用），
-                                // 但不 push_ui — UI 中不应出现用户未发送的消息
+                                // 但不 push_both — UI 中不应出现用户未发送的消息
                                 let plan_msg = ChatMessage::text(
                                     MessageRole::User,
                                     format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
@@ -933,7 +956,12 @@ pub async fn run_main_agent_loop(
                     &format!("fallback 正常结束，pending_user_messages={}", has_pending),
                 );
                 if has_pending {
-                    flush_streaming_as_message(&streaming_content, &mut messages, &ui_messages);
+                    flush_streaming_as_message(
+                        &streaming_content,
+                        &mut messages,
+                        &display_messages,
+                        &context_messages,
+                    );
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
@@ -1027,10 +1055,11 @@ pub async fn run_main_agent_loop(
                             )
                             .await
                             {
-                                clear_ui_messages(&ui_messages);
+                                clear_channels(&display_messages, &context_messages);
                                 push_compact_tool_messages(
                                     &mut messages,
-                                    &ui_messages,
+                                    &display_messages,
+                                    &context_messages,
                                     &compact_result,
                                 );
                                 let _ = tx.send(StreamMsg::Compacted {
@@ -1044,13 +1073,16 @@ pub async fn run_main_agent_loop(
                                 "agent_loop",
                                 "Clearing context after plan approval (stream path)",
                             );
-                            // 清空 messages 和 ui_messages
+                            // 清空 messages 和双通道
                             messages.clear();
-                            if let Ok(mut shared) = ui_messages.lock() {
+                            if let Ok(mut shared) = display_messages.lock() {
+                                shared.clear();
+                            }
+                            if let Ok(mut shared) = context_messages.lock() {
                                 shared.clear();
                             }
                             // 以 User 角色注入计划指令（给 LLM 上下文使用），
-                            // 但不 push_ui — UI 中不应出现用户未发送的消息
+                            // 但不 push_both — UI 中不应出现用户未发送的消息
                             let plan_msg = ChatMessage::text(
                                 MessageRole::User,
                                 format!("以下计划已获批准，请按计划执行：\n\n{}", plan_content),
@@ -1078,14 +1110,24 @@ pub async fn run_main_agent_loop(
                     ),
                 );
                 if has_pending {
-                    flush_streaming_as_message(&streaming_content, &mut messages, &ui_messages);
+                    flush_streaming_as_message(
+                        &streaming_content,
+                        &mut messages,
+                        &display_messages,
+                        &context_messages,
+                    );
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
                 }
 
                 // ★ Stop hook：LLM 即将结束回复（无工具调用且无待处理消息），纠查官可阻止并注入反馈
                 if hook_manager.has_hooks_for(HookEvent::Stop) {
-                    flush_streaming_as_message(&streaming_content, &mut messages, &ui_messages);
+                    flush_streaming_as_message(
+                        &streaming_content,
+                        &mut messages,
+                        &display_messages,
+                        &context_messages,
+                    );
                     let stop_ctx = HookContext {
                         event: HookEvent::Stop,
                         messages: Some(messages.clone()),
@@ -1109,7 +1151,7 @@ pub async fn run_main_agent_loop(
                             let feedback_msg =
                                 ChatMessage::text(MessageRole::User, feedback.clone());
                             messages.push(feedback_msg.clone());
-                            push_ui(&ui_messages, feedback_msg);
+                            push_both(&display_messages, &context_messages, feedback_msg);
                             continue 'round;
                         }
                         // stop → 直接中止

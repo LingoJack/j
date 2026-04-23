@@ -3,8 +3,8 @@ use crate::command::chat::context::message_compress::{
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
-    sanitize_filename,
+    ChatMessage, ContextScope, MessageRole, ModelProvider, SessionEvent, SessionPaths,
+    append_event_to_path, sanitize_filename,
 };
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
@@ -136,6 +136,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         tool_calls: None,
         tool_call_id: None,
         images: None,
+        context_scope: ContextScope::default(),
     }];
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
     append_messages(&messages);
@@ -223,13 +224,18 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         if !assistant_text.is_empty() {
             last_assistant_text = assistant_text.clone();
             // 将 teammate 的文字回复通过广播显示在聊天室
-            if let Ok(manager) = teammate_manager.lock()
-                && let Ok(mut shared) = manager.ui_messages.lock()
-            {
-                shared.push(ChatMessage::text(
+            // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+            if let Ok(manager) = teammate_manager.lock() {
+                let msg = ChatMessage::text(
                     MessageRole::Assistant,
                     format!("<{}> {}", name, &assistant_text),
-                ));
+                );
+                if let Ok(mut display) = manager.display_messages.lock() {
+                    display.push(msg.clone());
+                }
+                if let Ok(mut context) = manager.context_messages.lock() {
+                    context.push(msg);
+                }
             }
         }
 
@@ -356,21 +362,27 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
+            context_scope: ContextScope::default(),
         });
         if let Some(last) = messages.last() {
             append_messages(std::slice::from_ref(last));
         }
 
         // 在 TUI 中显示 teammate 的工具调用（SendMessage 不显示，因为 broadcast 会单独显示消息内容）
-        if let Ok(manager) = teammate_manager.lock()
-            && let Ok(mut shared) = manager.ui_messages.lock()
-        {
+        // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+        if let Ok(manager) = teammate_manager.lock() {
             for item in &tool_items {
                 if item.name != "SendMessage" {
-                    shared.push(ChatMessage::text(
+                    let msg = ChatMessage::text(
                         MessageRole::Assistant,
                         format!("<{}> [调用工具 {}]", name, item.name),
-                    ));
+                    );
+                    if let Ok(mut display) = manager.display_messages.lock() {
+                        display.push(msg.clone());
+                    }
+                    if let Ok(mut context) = manager.context_messages.lock() {
+                        context.push(msg);
+                    }
                 }
             }
         }
@@ -384,6 +396,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
+                    context_scope: ContextScope::default(),
                 });
                 if let Some(last) = messages.last() {
                     append_messages(std::slice::from_ref(last));
@@ -423,14 +436,17 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     // 通知团队：teammate 已完成
     set_status(TeammateStatus::Completed);
     // WorkDone 工具自己已广播过 [已完成工作]，避免重复；其他路径（idle 超时等）补一次
+    // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
     if !work_done.load(Ordering::Relaxed)
         && let Ok(manager) = teammate_manager.lock()
-        && let Ok(mut shared) = manager.ui_messages.lock()
     {
-        shared.push(ChatMessage::text(
-            MessageRole::Assistant,
-            format!("<{}> [已完成工作]", name),
-        ));
+        let msg = ChatMessage::text(MessageRole::Assistant, format!("<{}> [已完成工作]", name));
+        if let Ok(mut display) = manager.display_messages.lock() {
+            display.push(msg.clone());
+        }
+        if let Ok(mut context) = manager.context_messages.lock() {
+            context.push(msg);
+        }
         // 同步写入独立 jsonl（不带 <Name> 前缀，合成时会加前缀）
         let done_msg = ChatMessage::text(MessageRole::Assistant, "[已完成工作]".to_string());
         append_messages(std::slice::from_ref(&done_msg));

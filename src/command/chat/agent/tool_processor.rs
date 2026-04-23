@@ -2,7 +2,9 @@ use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::context::compact;
-use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{
+    ChatMessage, ContextScope, ImageData, MessageRole, ToolCallItem,
+};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact_tool::CompactTool;
 use crate::util::log::write_info_log;
@@ -17,7 +19,10 @@ pub(super) struct ToolCallContext<'a> {
     pub(super) hook_manager: &'a HookManager,
     pub(super) disabled_hooks: &'a [String],
     pub(super) supports_vision: bool,
-    pub(super) ui_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
+    /// 仅 UI 显示通道（不作为 LLM context 数据源）
+    pub(super) display_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
+    /// LLM context 同步通道（poll_stream_actions 从此增量同步到 session.messages）
+    pub(super) context_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     pub(super) streaming_content: &'a Arc<Mutex<String>>,
     #[allow(dead_code)]
     pub(super) invoked_skills: &'a compact::InvokedSkillsMap,
@@ -48,23 +53,53 @@ pub(super) fn drain_pending_user_messages(
     }
 }
 
-/// 向共享消息列表中追加一条消息（agent 线程写入，UI 线程读取）
-pub(super) fn push_ui(shared: &Arc<Mutex<Vec<ChatMessage>>>, msg: ChatMessage) {
-    if let Ok(mut msgs) = shared.lock() {
+/// 向 display 和 context 双通道同时推送消息。
+///
+/// Main Agent 的对话消息（text reply、tool_call、tool result）走此函数，
+/// 因为这些消息既要在 UI 显示，也要进入 Main Agent 的 LLM context。
+///
+/// **设计说明**：
+/// - `display_messages`：仅 UI 显示，`poll_stream_actions` 不从此同步到 `session.messages`
+/// - `context_messages`：LLM context 同步通道，`poll_stream_actions` 从此增量同步到 `session.messages`
+///
+/// SubAgent/Teammate 的消息由各自的推送逻辑决定走哪个通道（见 sub_agent.rs / teammate_loop.rs）。
+pub(super) fn push_both(
+    display: &Arc<Mutex<Vec<ChatMessage>>>,
+    context: &Arc<Mutex<Vec<ChatMessage>>>,
+    msg: ChatMessage,
+) {
+    if let Ok(mut msgs) = display.lock() {
+        msgs.push(msg.clone());
+    }
+    if let Ok(mut msgs) = context.lock() {
         msgs.push(msg);
     }
 }
 
-/// auto_compact 后清空 ui_messages（旧消息已过时，由后续 push_ui 重建）
-pub(super) fn clear_ui_messages(shared: &Arc<Mutex<Vec<ChatMessage>>>) {
-    if let Ok(mut msgs) = shared.lock() {
+/// auto_compact 后清空双通道（旧消息已过时，由后续 push 重建）
+pub(super) fn clear_channels(
+    display: &Arc<Mutex<Vec<ChatMessage>>>,
+    context: &Arc<Mutex<Vec<ChatMessage>>>,
+) {
+    if let Ok(mut msgs) = display.lock() {
+        msgs.clear();
+    }
+    if let Ok(mut msgs) = context.lock() {
         msgs.clear();
     }
 }
 
-/// 全量同步 ui_messages（仅用于 PostAutoCompact hook 修改了 messages 的罕见场景）
-pub(super) fn sync_ui_full(shared: &Arc<Mutex<Vec<ChatMessage>>>, new_messages: &[ChatMessage]) {
-    if let Ok(mut msgs) = shared.lock() {
+/// 全量同步 context 通道（仅用于 PostAutoCompact hook 修改了 messages 的罕见场景）
+pub(super) fn sync_context_full(
+    display: &Arc<Mutex<Vec<ChatMessage>>>,
+    context: &Arc<Mutex<Vec<ChatMessage>>>,
+    new_messages: &[ChatMessage],
+) {
+    if let Ok(mut msgs) = context.lock() {
+        msgs.clear();
+        msgs.extend_from_slice(new_messages);
+    }
+    if let Ok(mut msgs) = display.lock() {
         msgs.clear();
         msgs.extend_from_slice(new_messages);
     }
@@ -75,13 +110,14 @@ pub(super) fn sync_ui_full(shared: &Arc<Mutex<Vec<ChatMessage>>>, new_messages: 
 pub(super) fn flush_streaming_as_message(
     streaming_content: &Arc<Mutex<String>>,
     messages: &mut Vec<ChatMessage>,
-    ui_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    display: &Arc<Mutex<Vec<ChatMessage>>>,
+    context: &Arc<Mutex<Vec<ChatMessage>>>,
 ) {
     let mut stream_buf = safe_lock(streaming_content, "agent::flush_streaming");
     if !stream_buf.is_empty() {
         let text_msg = ChatMessage::text(MessageRole::Assistant, std::mem::take(&mut *stream_buf));
         messages.push(text_msg.clone());
-        push_ui(ui_messages, text_msg);
+        push_both(display, context, text_msg);
     }
 }
 
@@ -136,7 +172,7 @@ pub(super) fn process_tool_calls(
     if !assistant_text.is_empty() {
         let text_msg = ChatMessage::text(MessageRole::Assistant, assistant_text);
         messages.push(text_msg.clone());
-        push_ui(ctx.ui_messages, text_msg);
+        push_both(ctx.display_messages, ctx.context_messages, text_msg);
         // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
         if let Ok(mut stream_buf) = ctx.streaming_content.lock() {
             stream_buf.clear();
@@ -149,9 +185,10 @@ pub(super) fn process_tool_calls(
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
         images: None,
+        context_scope: ContextScope::default(),
     };
     messages.push(tool_call_msg.clone());
-    push_ui(ctx.ui_messages, tool_call_msg);
+    push_both(ctx.display_messages, ctx.context_messages, tool_call_msg);
 
     if ctx
         .stream_msg_sender
@@ -248,9 +285,10 @@ pub(super) fn process_tool_calls(
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id.clone()),
             images: None,
+            context_scope: ContextScope::default(),
         };
         messages.push(tool_msg.clone());
-        push_ui(ctx.ui_messages, tool_msg);
+        push_both(ctx.display_messages, ctx.context_messages, tool_msg);
 
         // 如果模型支持视觉且工具返回了图片，先收集，稍后统一注入
         if !result_images.is_empty() {
@@ -280,6 +318,7 @@ pub(super) fn process_tool_calls(
                             })
                             .collect(),
                     ),
+                    context_scope: ContextScope::default(),
                 };
                 deferred_image_msgs.push(img_msg);
             } else {
@@ -304,7 +343,7 @@ pub(super) fn process_tool_calls(
             ),
         );
         for img_msg in deferred_image_msgs {
-            // 只加入 LLM 上下文，不推送到 ui_messages（避免 UI 渲染这条内部消息）
+            // 只加入 LLM 上下文，不推送到 display（避免 UI 渲染这条内部消息）
             messages.push(img_msg);
         }
     }

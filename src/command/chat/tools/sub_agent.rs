@@ -7,7 +7,8 @@ use crate::command::chat::context::message_compress::{
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
+    ChatMessage, ContextScope, MessageRole, ModelProvider, SessionEvent, SessionPaths,
+    append_event_to_path,
 };
 use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
@@ -252,7 +253,8 @@ impl Tool for SubAgentTool {
             let cancelled_clone = Arc::clone(cancelled);
 
             let description_clone = description.clone();
-            let ui_display_clone = Arc::clone(&self.shared.ui_messages);
+            let display_clone = Arc::clone(&self.shared.display_messages);
+            let context_clone = Arc::clone(&self.shared.context_messages);
             let transcript_path = subagent_transcript_path.clone();
             let sub_id_for_thread = sub_id.clone();
             std::thread::spawn(move || {
@@ -278,7 +280,8 @@ impl Tool for SubAgentTool {
                         transcript_path: Some(transcript_path),
                     },
                     &cancelled_clone,
-                    &ui_display_clone,
+                    &display_clone,
+                    &context_clone,
                 );
 
                 snap_running.store(false, Ordering::Relaxed);
@@ -341,7 +344,8 @@ impl Tool for SubAgentTool {
                     transcript_path: Some(subagent_transcript_path),
                 },
                 &cancelled_clone,
-                &self.shared.ui_messages,
+                &self.shared.display_messages,
+                &self.shared.context_messages,
             );
 
             snap_running.store(false, Ordering::Relaxed);
@@ -379,12 +383,21 @@ impl Tool for SubAgentTool {
 fn run_sub_agent_loop(
     params: SubAgentLoopParams,
     cancelled: &Arc<AtomicBool>,
-    ui_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    display_messages: &Arc<Mutex<Vec<ChatMessage>>>,
+    context_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {
     let agent_name = sanitize_agent_name(&params.description);
-    let push_ui = |msg: ChatMessage| {
-        if let Ok(mut shared) = ui_messages.lock() {
-            shared.push(msg);
+    // SubAgent 的中间消息通过双通道推送：
+    // - display_messages：UI 显示（TUI 渲染）
+    // - context_messages：显式注入 Main Agent LLM context（有意为之的设计）
+    //
+    // Main Agent 能看到子代理的中间文本回复和工具调用名，以便感知工作进度。
+    let push_both = |msg: ChatMessage| {
+        if let Ok(mut display) = display_messages.lock() {
+            display.push(msg.clone());
+        }
+        if let Ok(mut context) = context_messages.lock() {
+            context.push(msg);
         }
     };
     let max_rounds = 30; // 子代理最大轮数
@@ -417,6 +430,7 @@ fn run_sub_agent_loop(
         tool_calls: None,
         tool_call_id: None,
         images: None,
+        context_scope: ContextScope::default(),
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
@@ -509,7 +523,10 @@ fn run_sub_agent_loop(
             final_text = assistant_text.clone();
             write_info_log("SubAgent", &format!("Reply: {}", &final_text));
             // UI 状态行：显示 sub-agent 的文字回复（前缀为 agent_name，无空白以便 parse）
-            push_ui(ChatMessage::text(
+            // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+            // Main Agent 能看到子代理的中间文本回复，以便感知工作进度。
+            // 参见 tool_processor.rs 中 push_both 函数的文档注释。
+            push_both(ChatMessage::text(
                 MessageRole::Assistant,
                 format!("<{}> {}", agent_name, &assistant_text),
             ));
@@ -544,8 +561,10 @@ fn run_sub_agent_loop(
         }
 
         // UI 状态行：显示 sub-agent 的工具调用名（不含参数/结果）
+        // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+        // Main Agent 能看到子代理正在调用的工具名，以便感知工作进度。
         for item in &tool_items {
-            push_ui(ChatMessage::text(
+            push_both(ChatMessage::text(
                 MessageRole::Assistant,
                 format!("<{}> [调用工具 {}]", agent_name, item.name),
             ));
@@ -558,6 +577,7 @@ fn run_sub_agent_loop(
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
+            context_scope: ContextScope::default(),
         };
         messages.push(assistant_msg);
         if let Some(last) = messages.last() {
@@ -592,7 +612,8 @@ fn run_sub_agent_loop(
     }
 
     // UI 状态行：sub-agent 结束
-    push_ui(ChatMessage::text(
+    // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+    push_both(ChatMessage::text(
         MessageRole::Assistant,
         format!("<{}> [已完成]", agent_name),
     ));

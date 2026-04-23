@@ -271,10 +271,13 @@ impl ChatApp {
 
         // 重置共享消息状态
         {
-            let mut shared = safe_lock(&self.ui_messages, "spawn_agent::clear_shared");
+            let mut shared = safe_lock(&self.display_messages, "spawn_agent::clear_display");
+            shared.clear();
+            let mut shared = safe_lock(&self.context_messages, "spawn_agent::clear_context");
             shared.clear();
         }
-        self.ui_messages_read_offset = 0;
+        self.display_read_offset = 0;
+        self.context_read_offset = 0;
 
         let agent_config = AgentLoopConfig {
             provider,
@@ -289,7 +292,8 @@ impl ChatApp {
             pending_user_messages,
             background_manager,
             todo_manager,
-            ui_messages: Arc::clone(&self.ui_messages),
+            display_messages: Arc::clone(&self.display_messages),
+            context_messages: Arc::clone(&self.context_messages),
             estimated_context_tokens: Arc::clone(&self.context_tokens),
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),

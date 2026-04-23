@@ -6,7 +6,9 @@ use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::{PendingAgentPerm, PermissionQueue};
-use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
+use crate::command::chat::storage::{
+    ChatMessage, ContextScope, MessageRole, ModelProvider, ToolCallItem,
+};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::{PlanApprovalQueue, PlanModeState};
@@ -292,8 +294,10 @@ pub struct DerivedAgentShared {
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 子 agent 运行时快照追踪器（供 /dump 读取）
     pub sub_agent_tracker: Arc<SubAgentTracker>,
-    /// Agent/Teammate → UI 显示通道（子 agent 的 UI 状态行推送到这里）
-    pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// Agent/Teammate → UI 显示通道（子 agent 的 UI 状态行推送到这里，仅 UI 渲染用）
+    pub display_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// Agent/Teammate → LLM context 同步通道（显式注入 Main Agent context）
+    pub context_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 当前 session id（session 切换时由 chat_app 更新，teammate/subagent 用来定位自己的 transcript 路径）
     pub session_id: Arc<Mutex<String>>,
     /// 父 agent 的 plan mode 状态（子 agent 据此决定是否进入只读模式）
@@ -539,6 +543,7 @@ pub fn execute_tool_with_permission(
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
             images: None,
+            context_scope: ContextScope::default(),
         };
     }
 
@@ -553,6 +558,7 @@ pub fn execute_tool_with_permission(
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
             images: None,
+            context_scope: ContextScope::default(),
         };
     }
 
@@ -591,6 +597,7 @@ pub fn execute_tool_with_permission(
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
+                    context_scope: ContextScope::default(),
                 };
             }
             // 用户批准 → 继续往下执行
@@ -614,6 +621,7 @@ pub fn execute_tool_with_permission(
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),
                 images: None,
+                context_scope: ContextScope::default(),
             };
         }
     }
@@ -645,5 +653,6 @@ pub fn execute_tool_with_permission(
         tool_calls: None,
         tool_call_id: Some(item.id.clone()),
         images: None,
+        context_scope: ContextScope::default(),
     }
 }

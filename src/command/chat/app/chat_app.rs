@@ -20,9 +20,9 @@ use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::{ToolConfirmInfo, WsOutbound};
 use crate::command::chat::storage::MessageRole;
 use crate::command::chat::storage::{
-    ChatMessage, ChatSession, ModelProvider, delete_session, generate_session_id, list_sessions,
-    load_agent_config, load_session, memory_path, save_agent_config, save_memory, save_soul,
-    save_system_prompt, session_file_path, soul_path, system_prompt_path,
+    ChatMessage, ChatSession, ContextScope, ModelProvider, delete_session, generate_session_id,
+    list_sessions, load_agent_config, load_session, memory_path, save_agent_config, save_memory,
+    save_soul, save_system_prompt, session_file_path, soul_path, system_prompt_path,
 };
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::ToolRegistry;
@@ -83,9 +83,16 @@ pub struct ChatApp {
     /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
     pub derived_agent_system_prompt: Arc<Mutex<Option<String>>>,
     /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
-    pub ui_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 仅用于 UI 渲染，不作为 LLM context 数据源。
+    pub display_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// UI 侧已读取到的位置（用于增量检测）
-    pub ui_messages_read_offset: usize,
+    pub display_read_offset: usize,
+    /// Agent/Teammate → LLM context 同步通道
+    /// `poll_stream_actions` 从此增量同步到 `session.messages`。
+    /// 只有需要进入 Main Agent LLM context 的消息才写入此通道。
+    pub context_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// context 侧已读取到的位置（用于增量检测）
+    pub context_read_offset: usize,
     /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
     pub context_tokens: Arc<Mutex<usize>>,
     /// Teammate 管理器（多 agent 协作）
@@ -173,10 +180,14 @@ impl ChatApp {
         let (ask_req_tx, ask_req_rx) = mpsc::channel::<AskRequest>();
         let queued_tasks: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let pending_user_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
-        let ui_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
-        let teammate_manager: Arc<Mutex<TeammateManager>> = Arc::new(Mutex::new(
-            TeammateManager::new(Arc::clone(&pending_user_messages), Arc::clone(&ui_messages)),
-        ));
+        let display_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
+        let context_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(Vec::new()));
+        let teammate_manager: Arc<Mutex<TeammateManager>> =
+            Arc::new(Mutex::new(TeammateManager::new(
+                Arc::clone(&pending_user_messages),
+                Arc::clone(&display_messages),
+                Arc::clone(&context_messages),
+            )));
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(TaskManager::new_with_session(&session_id));
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
@@ -236,7 +247,8 @@ impl ChatApp {
             permission_queue: Arc::clone(&permission_queue),
             plan_approval_queue: Arc::clone(&plan_approval_queue),
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
-            ui_messages: Arc::clone(&ui_messages),
+            display_messages: Arc::clone(&display_messages),
+            context_messages: Arc::clone(&context_messages),
             session_id: Arc::clone(&shared_session_id),
             plan_mode_state: Arc::clone(&tool_registry.plan_mode_state),
         };
@@ -310,6 +322,7 @@ impl ChatApp {
                                 tool_calls: None,
                                 tool_call_id: None,
                                 images: None,
+                                context_scope: ContextScope::default(),
                             });
                         }
                         result.inject_messages = Some(inject);
@@ -377,6 +390,7 @@ impl ChatApp {
                         tool_calls: None,
                         tool_call_id: None,
                         images: None,
+                        context_scope: ContextScope::default(),
                     }];
                     Some(HookResult {
                         inject_messages: Some(inject),
@@ -500,8 +514,10 @@ impl ChatApp {
             remote_connected: false,
             derived_agent_provider: agent_provider,
             derived_agent_system_prompt: agent_system_prompt,
-            ui_messages,
-            ui_messages_read_offset: 0,
+            display_messages,
+            display_read_offset: 0,
+            context_messages,
+            context_read_offset: 0,
             context_tokens: Arc::new(Mutex::new(0)),
             teammate_manager,
             sub_agent_tracker,
@@ -722,12 +738,19 @@ impl ChatApp {
             }
             Action::StreamCompacted { messages_before: _ } => {
                 self.state.retry_hint = None;
-                // 从 ui_messages 同步压缩后的消息列表
-                // ui_messages 已被 clear+re-push，需要从头替换
+                // 从 context_messages 同步压缩后的消息列表
+                // context_messages 已被 clear+re-push，需要从头替换
                 {
-                    let shared = crate::util::safe_lock(&self.ui_messages, "StreamCompacted::sync");
+                    let shared =
+                        crate::util::safe_lock(&self.context_messages, "StreamCompacted::sync");
                     self.state.session.messages = shared.clone();
-                    self.ui_messages_read_offset = shared.len();
+                    self.context_read_offset = shared.len();
+                    // 同步 display_messages 以保持一致
+                    let display = crate::util::safe_lock(
+                        &self.display_messages,
+                        "StreamCompacted::sync_display",
+                    );
+                    self.display_read_offset = display.len();
                 }
                 self.ui.msg_lines_cache = None;
             }
