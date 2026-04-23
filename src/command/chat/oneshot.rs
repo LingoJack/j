@@ -11,7 +11,7 @@ use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::infra::skill::{project_skills_dir, skills_dir};
 use crate::command::chat::permission::{JcliConfig, generate_allow_rule};
 use crate::command::chat::storage::{
-    AgentConfig, ChatMessage, ContextScope, MessageRole, ModelProvider, SessionEvent, ToolCallItem,
+    AgentConfig, ChatMessage, MessageRole, ModelProvider, SessionEvent, ToolCallItem,
     append_session_event, find_latest_session_id, load_agent_config, load_memory, load_session,
     load_soul, load_style, load_system_prompt,
 };
@@ -701,7 +701,6 @@ fn run_oneshot_agent(
             tool_calls: Some(sr.tool_items.clone()),
             tool_call_id: None,
             images: None,
-            context_scope: ContextScope::default(),
         });
 
         // 逐个执行工具（同步上下文，reqwest::blocking 安全）
@@ -719,7 +718,6 @@ fn run_oneshot_agent(
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
-                    context_scope: ContextScope::default(),
                 });
                 continue;
             }
@@ -753,7 +751,6 @@ fn run_oneshot_agent(
                             tool_calls: None,
                             tool_call_id: Some(item.id.clone()),
                             images: None,
-                            context_scope: ContextScope::default(),
                         });
                         continue;
                     }
@@ -774,7 +771,6 @@ fn run_oneshot_agent(
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),
                 images: None,
-                context_scope: ContextScope::default(),
             });
         }
 

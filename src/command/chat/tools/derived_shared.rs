@@ -6,9 +6,7 @@ use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::{PendingAgentPerm, PermissionQueue};
-use crate::command::chat::storage::{
-    ChatMessage, ContextScope, MessageRole, ModelProvider, ToolCallItem,
-};
+use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::{PlanApprovalQueue, PlanModeState};
@@ -543,7 +541,6 @@ pub fn execute_tool_with_permission(
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
             images: None,
-            context_scope: ContextScope::default(),
         };
     }
 
@@ -558,7 +555,6 @@ pub fn execute_tool_with_permission(
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
             images: None,
-            context_scope: ContextScope::default(),
         };
     }
 
@@ -597,7 +593,6 @@ pub fn execute_tool_with_permission(
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
-                    context_scope: ContextScope::default(),
                 };
             }
             // 用户批准 → 继续往下执行
@@ -621,7 +616,6 @@ pub fn execute_tool_with_permission(
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),
                 images: None,
-                context_scope: ContextScope::default(),
             };
         }
     }
@@ -653,6 +647,5 @@ pub fn execute_tool_with_permission(
         tool_calls: None,
         tool_call_id: Some(item.id.clone()),
         images: None,
-        context_scope: ContextScope::default(),
     }
 }

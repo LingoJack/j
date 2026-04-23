@@ -3,8 +3,8 @@ use crate::command::chat::context::message_compress::{
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{
-    ChatMessage, ContextScope, MessageRole, ModelProvider, SessionEvent, SessionPaths,
-    append_event_to_path, sanitize_filename,
+    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
+    sanitize_filename,
 };
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
@@ -136,7 +136,6 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         tool_calls: None,
         tool_call_id: None,
         images: None,
-        context_scope: ContextScope::default(),
     }];
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
     append_messages(&messages);
@@ -362,7 +361,6 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
-            context_scope: ContextScope::default(),
         });
         if let Some(last) = messages.last() {
             append_messages(std::slice::from_ref(last));
@@ -396,7 +394,6 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
-                    context_scope: ContextScope::default(),
                 });
                 if let Some(last) = messages.last() {
                     append_messages(std::slice::from_ref(last));

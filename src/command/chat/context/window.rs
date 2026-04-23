@@ -493,7 +493,7 @@ fn estimate_tokens_simple(messages: &[ChatMessage]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::chat::storage::{ChatMessage, ContextScope, MessageRole, ToolCallItem};
+    use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
 
     fn user_msg(content: &str) -> ChatMessage {
         ChatMessage::text(MessageRole::User, content)
@@ -520,7 +520,6 @@ mod tests {
             ),
             tool_call_id: None,
             images: None,
-            context_scope: ContextScope::default(),
         }
     }
 
@@ -531,7 +530,6 @@ mod tests {
             tool_calls: None,
             tool_call_id: Some(call_id.to_string()),
             images: None,
-            context_scope: ContextScope::default(),
         }
     }
 

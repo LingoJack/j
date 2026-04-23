@@ -2,9 +2,7 @@ use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::context::compact;
-use crate::command::chat::storage::{
-    ChatMessage, ContextScope, ImageData, MessageRole, ToolCallItem,
-};
+use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole, ToolCallItem};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact_tool::CompactTool;
 use crate::util::log::write_info_log;
@@ -185,7 +183,6 @@ pub(super) fn process_tool_calls(
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
         images: None,
-        context_scope: ContextScope::default(),
     };
     messages.push(tool_call_msg.clone());
     push_both(ctx.display_messages, ctx.context_messages, tool_call_msg);
@@ -285,7 +282,6 @@ pub(super) fn process_tool_calls(
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id.clone()),
             images: None,
-            context_scope: ContextScope::default(),
         };
         messages.push(tool_msg.clone());
         push_both(ctx.display_messages, ctx.context_messages, tool_msg);
@@ -318,7 +314,6 @@ pub(super) fn process_tool_calls(
                             })
                             .collect(),
                     ),
-                    context_scope: ContextScope::default(),
                 };
                 deferred_image_msgs.push(img_msg);
             } else {

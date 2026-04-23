@@ -12,7 +12,7 @@ use crate::command::chat::context::compact;
 use crate::command::chat::context::message_compress::{
     DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
-use crate::command::chat::storage::{ChatMessage, ContextScope, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use async_openai::types::chat::ChatCompletionTools;
@@ -58,7 +58,6 @@ fn push_compact_tool_messages(
         tool_calls: Some(vec![tool_call_item]),
         tool_call_id: None,
         images: None,
-        context_scope: ContextScope::default(),
     };
     messages.push(tool_call_msg.clone());
     push_both(display, context, tool_call_msg);
@@ -74,7 +73,6 @@ fn push_compact_tool_messages(
         tool_calls: None,
         tool_call_id: Some(tool_call_id),
         images: None,
-        context_scope: ContextScope::default(),
     };
     messages.push(tool_msg.clone());
     push_both(display, context, tool_msg);

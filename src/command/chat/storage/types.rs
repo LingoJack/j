@@ -29,39 +29,6 @@ impl std::fmt::Display for MessageRole {
     }
 }
 
-/// 消息的上下文可见性范围
-///
-/// 用于控制消息在 UI 显示和各 Agent LLM context 之间的流转。
-/// `poll_stream_actions` 根据 `context_scope` 决定是否将消息同步到 `session.messages`。
-///
-/// 注意：此类型不持久化到 session 文件，仅运行时使用。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ContextScope {
-    /// 默认值：消息同时进入 UI 显示和 Main Agent 的 LLM context
-    ///
-    /// 用于 Main Agent 的正常对话消息（text reply、tool_call、tool result）。
-    #[default]
-    UiAndMainAgentContext,
-
-    /// 仅 UI 显示，不进入任何 agent 的 LLM context
-    ///
-    /// 用于临时性的 UI 状态提示（如流式输出动画、进度条等）。
-    Ui,
-
-    /// 消息应进入 SubAgent 的 context
-    ///
-    /// 标记此消息来自 SubAgent，Main Agent context 也会包含（显式注入）。
-    SubagentContext,
-
-    /// 消息应进入 DerivedAgent 的 context
-    DerivedAgentContext,
-
-    /// 消息应进入 Teammate 的 context
-    ///
-    /// 标记此消息来自 Teammate，Main Agent context 也会包含（显式注入）。
-    TeammateAgentContext,
-}
-
 /// 显示类型（渲染层专用，面向 UI 语义细分）
 ///
 /// 将 `role` + `tool_calls` 组合映射为精确的渲染语义，
@@ -113,13 +80,10 @@ pub struct ChatMessage {
     /// 图片数据（用于多模态 user message，不持久化到 session 文件）
     #[serde(skip)]
     pub images: Option<Vec<ImageData>>,
-    /// 上下文可见性范围（不持久化到 session 文件，运行时由推送通道决定）
-    #[serde(skip)]
-    pub context_scope: ContextScope,
 }
 
 impl ChatMessage {
-    /// 创建普通文本消息（默认 context_scope 为 UiAndMainAgentContext）
+    /// 创建普通文本消息
     pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
         Self {
             role,
@@ -127,23 +91,6 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             images: None,
-            context_scope: ContextScope::default(),
-        }
-    }
-
-    /// 创建带指定 context_scope 的文本消息
-    pub fn text_with_scope(
-        role: MessageRole,
-        content: impl Into<String>,
-        context_scope: ContextScope,
-    ) -> Self {
-        Self {
-            role,
-            content: content.into(),
-            tool_calls: None,
-            tool_call_id: None,
-            images: None,
-            context_scope,
         }
     }
 
@@ -164,7 +111,6 @@ impl ChatMessage {
             } else {
                 Some(images)
             },
-            context_scope: ContextScope::default(),
         }
     }
 

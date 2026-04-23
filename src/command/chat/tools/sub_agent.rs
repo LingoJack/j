@@ -7,8 +7,7 @@ use crate::command::chat::context::message_compress::{
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{
-    ChatMessage, ContextScope, MessageRole, ModelProvider, SessionEvent, SessionPaths,
-    append_event_to_path,
+    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
 };
 use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
@@ -430,7 +429,6 @@ fn run_sub_agent_loop(
         tool_calls: None,
         tool_call_id: None,
         images: None,
-        context_scope: ContextScope::default(),
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
@@ -577,7 +575,6 @@ fn run_sub_agent_loop(
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
-            context_scope: ContextScope::default(),
         };
         messages.push(assistant_msg);
         if let Some(last) = messages.last() {
