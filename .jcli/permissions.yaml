@@ -143,4 +143,5 @@ allow:
 - Bash(mv /Users/lingojack/dev_custom/j/src/command/chat/ui/config/mod.rs:*)
 - Bash(gh repo:*)
 - Bash(head -10:*)
+- Bash(mv src/command/chat/tools/compact.rs:*)
 deny: []

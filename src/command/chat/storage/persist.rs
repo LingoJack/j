@@ -177,7 +177,7 @@ pub fn load_plan_state(session_id: &str) -> Option<PlanStatePersist> {
 /// 保存 InvokedSkills 状态
 pub fn save_skills_state(
     session_id: &str,
-    data: &std::collections::HashMap<String, crate::command::chat::agent::compact::InvokedSkill>,
+    data: &std::collections::HashMap<String, crate::command::chat::context::compact::InvokedSkill>,
 ) -> bool {
     let paths = SessionPaths::new(session_id);
     let _ = paths.ensure_dir();
@@ -187,7 +187,8 @@ pub fn save_skills_state(
 /// 加载 InvokedSkills 状态
 pub fn load_skills_state(
     session_id: &str,
-) -> Option<std::collections::HashMap<String, crate::command::chat::agent::compact::InvokedSkill>> {
+) -> Option<std::collections::HashMap<String, crate::command::chat::context::compact::InvokedSkill>>
+{
     let paths = SessionPaths::new(session_id);
     load_session_json(&paths.skills_file())
 }

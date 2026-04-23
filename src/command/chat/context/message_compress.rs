@@ -11,7 +11,7 @@
 //! - 保留最近 threshold 条完整消息
 //! - 较早的合并为摘要：`<AgentName> [早期工具调用摘要: ToolA×5, ToolB×3, 共 8 次]`
 
-use crate::command::chat::storage::ChatMessage;
+use crate::command::chat::storage::{ChatMessage, MessageRole};
 use std::collections::HashMap;
 
 /// 默认压缩阈值：保留最近 5 条完整消息
@@ -74,7 +74,7 @@ pub fn compress_other_agent_toolcalls(
         .enumerate()
         .filter_map(|(idx, msg)| {
             // 只处理 User role 的广播消息（teammate/subagent 通过 pending_user_messages 接收）
-            if msg.role != crate::command::chat::storage::MessageRole::User {
+            if msg.role != MessageRole::User {
                 return None;
             }
             let content = &msg.content;
@@ -153,10 +153,7 @@ pub fn compress_other_agent_toolcalls(
                 "<{}> [早期工具调用摘要: {}, 共 {} 次]",
                 agent_name, tools_summary, total_calls
             );
-            result.push(ChatMessage::text(
-                crate::command::chat::storage::MessageRole::User,
-                summary_content,
-            ));
+            result.push(ChatMessage::text(MessageRole::User, summary_content));
         }
 
         if indices_to_compress.contains(&idx) {
@@ -174,7 +171,6 @@ pub fn compress_other_agent_toolcalls(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::chat::storage::{ChatMessage, MessageRole};
 
     #[test]
     fn test_extract_agent_source() {

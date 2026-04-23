@@ -1,10 +1,10 @@
 use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent, HookManager};
-use super::compact;
+use crate::command::chat::context::compact;
 use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole, ToolCallItem};
 use crate::command::chat::tools::Tool;
-use crate::command::chat::tools::compact::CompactTool;
+use crate::command::chat::tools::compact_tool::CompactTool;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use std::sync::{Arc, Mutex, mpsc};

@@ -1,7 +1,7 @@
-use crate::command::chat::agent::compact::CompactConfig;
 use crate::command::chat::constants::{
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS,
 };
+use crate::command::chat::context::compact::CompactConfig;
 use crate::config::YamlConfig;
 use crate::error;
 use crate::theme::ThemeName;

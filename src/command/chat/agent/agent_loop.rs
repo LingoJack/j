@@ -2,15 +2,15 @@ use super::super::app::types::{StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent};
 use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
-use super::compact;
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
-use super::message_compression::{
-    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
-};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
     ToolCallContext, clear_ui_messages, drain_pending_user_messages, flush_streaming_as_message,
     process_tool_calls, push_ui, sync_ui_full,
+};
+use crate::command::chat::context::compact;
+use crate::command::chat::context::message_compress::{
+    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
 use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};

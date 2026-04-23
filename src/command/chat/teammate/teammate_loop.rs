@@ -1,4 +1,4 @@
-use crate::command::chat::agent::message_compression::{
+use crate::command::chat::context::message_compress::{
     DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
 use crate::command::chat::permission::JcliConfig;

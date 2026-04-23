@@ -98,7 +98,7 @@ pub struct ChatApp {
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
-    pub invoked_skills: crate::command::chat::agent::compact::InvokedSkillsMap,
+    pub invoked_skills: crate::command::chat::context::compact::InvokedSkillsMap,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -180,7 +180,7 @@ impl ChatApp {
         let background_manager = Arc::new(BackgroundManager::new());
         let task_manager = Arc::new(TaskManager::new_with_session(&session_id));
         let hook_manager = Arc::new(Mutex::new(HookManager::load()));
-        let invoked_skills = crate::command::chat::agent::compact::new_invoked_skills_map();
+        let invoked_skills = crate::command::chat::context::compact::new_invoked_skills_map();
         let mut tool_registry = ToolRegistry::new(
             loaded_skills.clone(),
             ask_req_tx,

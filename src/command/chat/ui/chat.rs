@@ -3,7 +3,6 @@ use super::super::autocomplete::{
     AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
     get_filtered_skill_names, get_filtered_slash_commands,
 };
-use super::super::compact::estimate_tokens;
 use super::super::markdown::image_cache::ImageState;
 use super::super::markdown::image_loader::load_image;
 use super::super::render_cache::build_message_lines_incremental;
@@ -11,6 +10,7 @@ use super::super::teammate::TeammateStatus;
 use super::super::tools::derived_shared::SubAgentStatus;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
+use crate::command::chat::context::compact::estimate_tokens;
 use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width};
 use ratatui::{

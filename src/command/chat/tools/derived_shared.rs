@@ -1,7 +1,7 @@
 use crate::command::chat::agent::api::{build_request_with_tools, create_openai_client};
-use crate::command::chat::agent::compact::new_invoked_skills_map;
 use crate::command::chat::agent::thread_identity::{current_agent_name, current_agent_type};
 use crate::command::chat::app::AskRequest;
+use crate::command::chat::context::compact::new_invoked_skills_map;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;

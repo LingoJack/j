@@ -1,10 +1,10 @@
 use crate::command::chat::agent::api::{
     build_request_with_tools, call_openai_stream, create_openai_client,
 };
-use crate::command::chat::agent::compact::new_invoked_skills_map;
-use crate::command::chat::agent::window::select_messages;
 use crate::command::chat::agent_md::load_agent_md;
 use crate::command::chat::app::AskRequest;
+use crate::command::chat::context::compact::new_invoked_skills_map;
+use crate::command::chat::context::window::select_messages;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::handler::run_chat_tui;
 use crate::command::chat::infra::hook::HookManager;

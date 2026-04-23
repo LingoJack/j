@@ -33,7 +33,7 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
         ]));
         list.push_raw(Line::from(""));
 
-        use crate::command::chat::agent::compact::BUILTIN_EXEMPT_TOOLS;
+        use crate::command::chat::context::compact::BUILTIN_EXEMPT_TOOLS;
         let tool_names = app.tool_registry.tool_names();
         let exempt = &app.state.agent_config.compact.micro_compact_exempt_tools;
 

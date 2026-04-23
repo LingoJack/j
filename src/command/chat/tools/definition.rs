@@ -1,5 +1,5 @@
-use crate::command::chat::agent::compact::InvokedSkillsMap;
 use crate::command::chat::app::AskRequest;
+use crate::command::chat::context::compact::InvokedSkillsMap;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::infra::skill::Skill;
 use crate::command::chat::permission::queue::PermissionQueue;
@@ -186,7 +186,7 @@ impl ToolRegistry {
                 Box::new(super::todo::TodoReadTool {
                     manager: Arc::clone(&todo_manager),
                 }),
-                Box::new(super::compact::CompactTool),
+                Box::new(super::compact_tool::CompactTool),
                 Box::new(super::hook::RegisterHookTool { hook_manager }),
                 Box::new(super::computer_use::ComputerUseTool::new()),
                 Box::new(super::plan::EnterPlanModeTool {

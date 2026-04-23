@@ -3,7 +3,7 @@ pub mod ask;
 pub mod background;
 mod browser;
 pub mod classification;
-pub mod compact;
+pub mod compact_tool;
 mod computer_use;
 pub mod create_teammate;
 pub mod definition;
@@ -46,7 +46,7 @@ pub mod tool_names {
     pub const TASK: &str = super::task::TaskTool::NAME;
     pub const TODO_WRITE: &str = super::todo::TodoWriteTool::NAME;
     pub const TODO_READ: &str = super::todo::TodoReadTool::NAME;
-    pub const COMPACT: &str = super::compact::CompactTool::NAME;
+    pub const COMPACT: &str = super::compact_tool::CompactTool::NAME;
     pub const REGISTER_HOOK: &str = super::hook::RegisterHookTool::NAME;
     pub const COMPUTER_USE: &str = super::computer_use::ComputerUseTool::NAME;
     pub const ENTER_PLAN_MODE: &str = super::plan::EnterPlanModeTool::NAME;

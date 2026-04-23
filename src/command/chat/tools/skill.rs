@@ -1,4 +1,4 @@
-use crate::command::chat::agent::compact::{InvokedSkillsMap, record_skill_invocation};
+use crate::command::chat::context::compact::{InvokedSkillsMap, record_skill_invocation};
 use crate::command::chat::infra::skill::Skill;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,

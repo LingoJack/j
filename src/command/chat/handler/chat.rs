@@ -894,7 +894,7 @@ fn dump_current_request(app: &mut ChatApp, processed: bool) {
     if processed {
         // Layer 1: micro_compact（替换旧 tool results）
         {
-            use crate::command::chat::agent::compact;
+            use crate::command::chat::context::compact;
             let compact_config = &app.state.agent_config.compact;
             if compact_config.enabled {
                 compact::micro_compact(

@@ -8,12 +8,12 @@
 //!
 //! 输出顺序始终保持原始时间顺序；丢弃的 ToolGroup 用统一占位符替换。
 
-use super::super::constants::{
+use super::compact::is_exempt_tool;
+use crate::command::chat::constants::{
     WINDOW_KEEP_RECENT_MULTIPLIER, WINDOW_QUOTA_ASST_TEXT, WINDOW_QUOTA_TOOL_GROUP,
     WINDOW_QUOTA_USER,
 };
-use super::super::storage::{ChatMessage, MessageRole};
-use super::compact::is_exempt_tool;
+use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::util::log::write_info_log;
 
 // ========== MessageUnit 定义 ==========
@@ -450,7 +450,7 @@ pub fn select_messages(
             // 累积相邻被丢弃的 ToolGroup，后续一次性输出合并占位符
             pending_dropped_names.extend(tool_names_of(unit, messages));
         }
-        // User / AssistantText 被丢弃时直接跳过（兜底保证最新 User 一定保留）
+        // User / AssistantText 丢弃时直接跳过（兜底保证最新 User 一定保留）
     }
     flush_pending(&mut pending_dropped_names, &mut result);
 
@@ -493,6 +493,7 @@ fn estimate_tokens_simple(messages: &[ChatMessage]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
 
     fn user_msg(content: &str) -> ChatMessage {
         ChatMessage::text(MessageRole::User, content)
@@ -510,7 +511,7 @@ mod tests {
                 names
                     .iter()
                     .enumerate()
-                    .map(|(i, name)| super::super::super::storage::ToolCallItem {
+                    .map(|(i, name)| ToolCallItem {
                         id: format!("call_{}", i),
                         name: name.to_string(),
                         arguments: "{}".to_string(),
@@ -558,7 +559,7 @@ mod tests {
 
         // User 应该保留，ToolGroup 应该被占位符替换
         assert!(result.iter().any(|m| m.role == MessageRole::User));
-        assert!(!result.iter().any(|m| m.role == MessageRole::Tool)); // tool result 被丢弃
+        assert!(!result.iter().any(|m| m.role == MessageRole::Tool)); // tool result 丢弃
         assert!(result.iter().any(|m| m.content.contains("Previous: used"))); // 占位符
     }
 

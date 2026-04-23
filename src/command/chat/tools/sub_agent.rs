@@ -1,8 +1,8 @@
-use crate::command::chat::agent::message_compression::{
-    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
-};
 use crate::command::chat::agent::thread_identity::{
     clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
+};
+use crate::command::chat::context::message_compress::{
+    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;

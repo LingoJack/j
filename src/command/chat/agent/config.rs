@@ -2,7 +2,7 @@ use super::super::hook::HookManager;
 use super::super::storage::{ChatMessage, ModelProvider};
 use super::super::tools::background::BackgroundManager;
 use super::super::tools::todo::TodoManager;
-use super::compact::{CompactConfig, InvokedSkillsMap};
+use crate::command::chat::context::compact::{CompactConfig, InvokedSkillsMap};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 
