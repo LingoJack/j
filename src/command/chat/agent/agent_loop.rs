@@ -5,7 +5,7 @@ use super::api::{build_request_with_tools, call_openai_non_stream_lenient, creat
 use super::compact;
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::message_compression::{
-    compress_other_agent_toolcalls, DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{

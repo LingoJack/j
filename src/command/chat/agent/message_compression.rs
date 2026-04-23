@@ -93,17 +93,19 @@ pub fn compress_other_agent_toolcalls(
     }
 
     // 2. 按 agent 来源分组，记录每个 agent 的消息索引和工具名
-    let agent_groups: HashMap<String, Vec<(usize, String)>> = other_agent_tool_calls
-        .iter()
-        .fold(HashMap::new(), |mut acc, (idx, agent, tool)| {
-            acc.entry(agent.clone()).or_default().push((*idx, tool.clone()));
-            acc
-        });
+    let agent_groups: HashMap<String, Vec<(usize, String)>> =
+        other_agent_tool_calls
+            .iter()
+            .fold(HashMap::new(), |mut acc, (idx, agent, tool)| {
+                acc.entry(agent.clone())
+                    .or_default()
+                    .push((*idx, tool.clone()));
+                acc
+            });
 
     // 3. 对于每个 agent，决定哪些索引需要压缩
     let mut indices_to_compress: Vec<usize> = Vec::new();
-    let mut summary_by_first_idx: HashMap<usize, (String, HashMap<String, usize>)> =
-        HashMap::new();
+    let mut summary_by_first_idx: HashMap<usize, (String, HashMap<String, usize>)> = HashMap::new();
 
     for (agent_name, calls) in agent_groups {
         let total = calls.len();
@@ -122,12 +124,13 @@ pub fn compress_other_agent_toolcalls(
         }
 
         // 统计压缩部分的工具调用次数
-        let tool_counts: HashMap<String, usize> = to_compress
-            .iter()
-            .fold(HashMap::new(), |mut acc, (_, tool)| {
-                *acc.entry(tool.clone()).or_default() += 1;
-                acc
-            });
+        let tool_counts: HashMap<String, usize> =
+            to_compress
+                .iter()
+                .fold(HashMap::new(), |mut acc, (_, tool)| {
+                    *acc.entry(tool.clone()).or_default() += 1;
+                    acc
+                });
 
         // 记录摘要信息，放在该 agent 最早出现的位置（to_compress 的第一个索引）
         if let Some((first_idx, _)) = to_compress.first() {
@@ -198,10 +201,7 @@ mod tests {
             Some(("Backend".to_string(), "Edit".to_string()))
         );
         // 不是 tool call
-        assert_eq!(
-            is_tool_call_broadcast("<Frontend> hello world"),
-            None
-        );
+        assert_eq!(is_tool_call_broadcast("<Frontend> hello world"), None);
         // 不是广播格式
         assert_eq!(is_tool_call_broadcast("regular message"), None);
     }

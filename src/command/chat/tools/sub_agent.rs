@@ -1,5 +1,5 @@
 use crate::command::chat::agent::message_compression::{
-    compress_other_agent_toolcalls, DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
 use crate::command::chat::agent::thread_identity::{
     clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,

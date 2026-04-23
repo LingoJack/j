@@ -477,8 +477,8 @@ impl Tool for ExitPlanModeTool {
                             .unwrap_or_default();
                         ToolResult {
                             output: format!(
-                                "Plan approved! Exited plan mode. You can now proceed with implementation.{}",
-                                preserved_msg
+                                "Plan approved! Exited plan mode. You can now proceed with implementation.{}\n\n**Plan Content:**\n\n{}",
+                                preserved_msg, plan_content
                             ),
                             is_error: false,
                             images: vec![],
@@ -494,8 +494,8 @@ impl Tool for ExitPlanModeTool {
                             .unwrap_or_default();
                         ToolResult {
                             output: format!(
-                                "Plan approved with context clear! Exited plan mode.{}",
-                                preserved_msg
+                                "Plan approved with context clear! Exited plan mode.{}\n\n**Plan Content:**\n\n{}",
+                                preserved_msg, plan_content
                             ),
                             is_error: false,
                             images: vec![],
@@ -592,8 +592,8 @@ impl ExitPlanModeTool {
                         .unwrap_or_default();
                     ToolResult {
                         output: format!(
-                            "Plan approved with context clear! Exited plan mode.{}",
-                            preserved_msg
+                            "Plan approved with context clear! Exited plan mode.{}\n\n**Plan Content:**\n\n{}",
+                            preserved_msg, plan_content
                         ),
                         is_error: false,
                         images: vec![],
@@ -608,8 +608,8 @@ impl ExitPlanModeTool {
                         .unwrap_or_default();
                     ToolResult {
                         output: format!(
-                            "Plan approved! Exited plan mode. You can now proceed with implementation.{}",
-                            preserved_msg
+                            "Plan approved! Exited plan mode. You can now proceed with implementation.{}\n\n**Plan Content:**\n\n{}",
+                            preserved_msg, plan_content
                         ),
                         is_error: false,
                         images: vec![],
