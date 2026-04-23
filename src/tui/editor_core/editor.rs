@@ -64,6 +64,8 @@ pub struct MarkdownEditor {
     status_message: Option<String>,
     /// 用户在主题画廊中选择的主题ID（退出时返回）
     selected_theme_id: Option<&'static str>,
+    /// 进入搜索前的光标位置，用于 Esc 恢复
+    cursor_before_search: Option<(usize, usize)>,
 }
 
 impl MarkdownEditor {
@@ -116,6 +118,7 @@ impl MarkdownEditor {
             theme_popup_selected: theme_index,
             status_message: None,
             selected_theme_id: None,
+            cursor_before_search: None,
         }
     }
 
@@ -308,6 +311,9 @@ impl MarkdownEditor {
                 {
                     self.buffer.set_cursor(m.line, m.start);
                 }
+                if matches!(old_mode, Mode::Search(_)) {
+                    self.cursor_before_search = None;
+                }
                 self.vim.set_mode(new_mode);
                 self.rebuild_wrap_cache();
             }
@@ -316,6 +322,14 @@ impl MarkdownEditor {
             }
             Transition::Cancel => {
                 return EditorAction::Cancel;
+            }
+            Transition::SearchAbort => {
+                // Esc 取消搜索：恢复光标到搜索前位置，清除搜索高亮
+                if let Some(pos) = self.cursor_before_search.take() {
+                    self.buffer.set_cursor(pos.0, pos.1);
+                }
+                self.search.clear();
+                self.vim.set_mode(Mode::Normal);
             }
             Transition::Nop => {
                 // 处理 Command/Search 模式的字符输入
@@ -435,6 +449,7 @@ impl MarkdownEditor {
             "save" | "w" | "wq" | "x" => EditorAction::Submit(self.buffer.to_string()),
             "quit" | "q" => EditorAction::Cancel,
             "search" => {
+                self.cursor_before_search = Some(self.buffer.cursor());
                 self.vim.set_mode(Mode::Search(String::new()));
                 EditorAction::Continue
             }

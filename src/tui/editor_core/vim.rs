@@ -194,6 +194,8 @@ pub enum Transition {
     ToggleWrap(bool),
     /// 执行命令面板命令（交给 editor 层处理）
     ExecuteCommand(String),
+    /// 取消搜索，恢复光标到搜索前位置
+    SearchAbort,
 }
 
 /// Vim 引擎
@@ -413,7 +415,7 @@ impl Vim {
 
     fn handle_search_mode(&mut self, input: &Input, _pattern: String) -> Transition {
         match input.key {
-            Key::Esc => Transition::Mode(Mode::Normal),
+            Key::Esc => Transition::SearchAbort,
             Key::Enter => Transition::Mode(Mode::Normal),
             _ => Transition::Nop,
         }

@@ -108,6 +108,14 @@ impl SearchState {
         self.matches.len()
     }
 
+    /// 清除搜索状态
+    pub fn clear(&mut self) {
+        self.pattern.clear();
+        self.matches.clear();
+        self.line_index.clear();
+        self.current_index = 0;
+    }
+
     /// 高亮行中的搜索匹配
     ///
     /// `line` 可能是视觉行片段（折行后的子串），`char_offset` 是该片段
