@@ -24,15 +24,17 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     }
 
     // 提示符逻辑：loading + bypass 组合
-    let (prompt, prompt_style, prompt_width) = if app.state.is_loading && app.ui.auto_approve {
-        (" bypass + ", Style::default().fg(t.config_toggle_on), 10)
+    let (prompt, prompt_style) = if app.state.is_loading && app.ui.auto_approve {
+        (" bypass + ", Style::default().fg(t.config_toggle_on))
     } else if app.state.is_loading {
-        (" + ", Style::default().fg(t.input_prompt_loading), 3)
+        (" + ", Style::default().fg(t.input_prompt_loading))
     } else if app.ui.auto_approve {
-        (" bypass > ", Style::default().fg(t.config_toggle_on), 10)
+        (" bypass > ", Style::default().fg(t.config_toggle_on))
     } else {
-        (" > ", Style::default().fg(t.input_prompt), 3)
+        (" > ", Style::default().fg(t.input_prompt))
     };
+    // prompt 只含 ASCII 字符，用 len() 即可得到显示宽度
+    let prompt_width = prompt.len();
 
     let usable_width = area.width.saturating_sub(2) as usize;
     let input_text = app.ui.input_text();
@@ -110,7 +112,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         if line_idx == 0 && line_scroll == 0 {
             spans.push(Span::styled(prompt, prompt_style));
         } else {
-            spans.push(Span::styled("   ", Style::default()));
+            spans.push(Span::styled(" ".repeat(prompt_width), Style::default()));
         }
 
         let line_chars: Vec<char> = wl.chars().collect();
