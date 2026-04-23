@@ -390,7 +390,7 @@ impl MarkdownRenderer {
 
             // 普通续行
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            if search.is_searching() && search.match_count() > 0 {
+            if search.is_highlight_visible() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
             } else {
                 spans.push(Span::styled(
@@ -412,7 +412,7 @@ impl MarkdownRenderer {
             }
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            if search.is_searching() && search.match_count() > 0 {
+            if search.is_highlight_visible() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             } else {
                 spans.push(Span::styled(truncated, self.style(self.theme.text_normal)));
@@ -504,7 +504,7 @@ impl MarkdownRenderer {
         let text_display_width = display_width(&text);
 
         // 搜索高亮
-        if ctx.search.is_searching() && ctx.search.match_count() > 0 {
+        if ctx.search.is_highlight_visible() && ctx.search.match_count() > 0 {
             spans.extend(ctx.search.highlight_line(
                 vl.logical_line,
                 &text,

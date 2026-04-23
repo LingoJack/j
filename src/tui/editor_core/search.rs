@@ -29,6 +29,8 @@ pub struct SearchState {
     line_index: std::collections::HashMap<usize, (usize, usize)>,
     /// 当前匹配索引
     current_index: usize,
+    /// 是否显示搜索高亮（Enter/Esc 后关闭，仅输入搜索词时显示）
+    highlight_visible: bool,
 }
 
 impl SearchState {
@@ -48,6 +50,7 @@ impl SearchState {
         self.matches.clear();
         self.line_index.clear();
         self.current_index = 0;
+        self.highlight_visible = !pattern.is_empty();
 
         if pattern.is_empty() {
             return 0;
@@ -114,6 +117,17 @@ impl SearchState {
         self.matches.clear();
         self.line_index.clear();
         self.current_index = 0;
+        self.highlight_visible = false;
+    }
+
+    /// 隐藏搜索高亮但保留搜索数据（供 n/N 跳转使用）
+    pub fn hide_highlight(&mut self) {
+        self.highlight_visible = false;
+    }
+
+    /// 是否显示搜索高亮
+    pub fn is_highlight_visible(&self) -> bool {
+        self.highlight_visible
     }
 
     /// 高亮行中的搜索匹配

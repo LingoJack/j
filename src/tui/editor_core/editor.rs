@@ -310,6 +310,7 @@ impl MarkdownEditor {
                     && let Some(m) = self.search.current_match()
                 {
                     self.buffer.set_cursor(m.line, m.start);
+                    self.search.hide_highlight();
                 }
                 if matches!(old_mode, Mode::Search(_)) {
                     self.cursor_before_search = None;
