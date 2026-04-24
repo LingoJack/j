@@ -458,27 +458,27 @@ pub async fn run_main_agent_loop(
             Ok(req) => {
                 // debug: dump reasoning_content 状态
                 for (i, m) in compressed_messages.iter().enumerate() {
-                    if m.reasoning_content.is_some() {
+                    if let Some(rc) = &m.reasoning_content {
                         write_info_log(
                             "agent_loop",
                             &format!(
                                 "compressed_messages[{}] role={:?} has reasoning_content len={}",
                                 i,
                                 m.role,
-                                m.reasoning_content.as_ref().unwrap().len()
+                                rc.len()
                             ),
                         );
                     }
                 }
                 for (i, m) in messages.iter().enumerate() {
-                    if m.reasoning_content.is_some() {
+                    if let Some(rc) = &m.reasoning_content {
                         write_info_log(
                             "agent_loop",
                             &format!(
                                 "messages[{}] role={:?} has reasoning_content len={}",
                                 i,
                                 m.role,
-                                m.reasoning_content.as_ref().unwrap().len()
+                                rc.len()
                             ),
                         );
                     }

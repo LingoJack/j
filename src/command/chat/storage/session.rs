@@ -188,6 +188,7 @@ pub fn append_session_op(session_id: &str, op: &SessionOp) -> bool {
 }
 
 /// 读取 session 的所有操作审计记录
+#[allow(dead_code)]
 pub fn load_session_ops(session_id: &str) -> Vec<SessionOp> {
     let path = SessionPaths::new(session_id).ops_file();
     let content = match fs::read_to_string(&path) {

@@ -108,14 +108,14 @@ fn dispatch_event(
                 *needs_redraw = true;
             } else if matches!(app.ui.mode, ChatMode::ToolConfirm) {
                 // Ask 选项模式下直接粘贴：与按 Char 键行为一致，自动切到自由输入行
-                if app.ui.tool_ask_mode && !app.ui.tool_interact_typing {
-                    if let Some(cur_q) = app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx)
-                    {
-                        app.ui.tool_ask_cursor = cur_q.options.len();
-                        app.ui.tool_interact_typing = true;
-                        app.ui.tool_interact_input.clear();
-                        app.ui.tool_interact_cursor = 0;
-                    }
+                if app.ui.tool_ask_mode
+                    && !app.ui.tool_interact_typing
+                    && let Some(cur_q) = app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx)
+                {
+                    app.ui.tool_ask_cursor = cur_q.options.len();
+                    app.ui.tool_interact_typing = true;
+                    app.ui.tool_interact_input.clear();
+                    app.ui.tool_interact_cursor = 0;
                 }
                 // Ask 自由输入 / 工具拒绝原因输入 的粘贴支持
                 if app.ui.tool_interact_typing {

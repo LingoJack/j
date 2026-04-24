@@ -154,6 +154,7 @@ pub struct StreamChoice {
 
 impl StreamChoice {
     /// Returns true if the finish reason indicates a tool call.
+    #[allow(dead_code)]
     pub fn is_tool_calls(&self) -> bool {
         self.finish_reason.as_deref() == Some("tool_calls")
     }
@@ -162,6 +163,7 @@ impl StreamChoice {
 /// The incremental delta in a streaming response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Delta {
+    #[allow(dead_code)]
     pub role: Option<Role>,
     pub content: Option<String>,
     pub reasoning_content: Option<String>,
