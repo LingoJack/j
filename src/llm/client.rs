@@ -4,28 +4,28 @@ use super::types::{ChatRequest, ChatResponse};
 
 /// OpenAI-compatible Chat Completions client backed by reqwest.
 pub struct LlmClient {
-    http: reqwest::Client,
-    api_base: String,
+    http_client: reqwest::Client,
+    base_url: String,
     api_key: String,
 }
 
 impl LlmClient {
     pub fn new(api_base: &str, api_key: &str) -> Self {
         Self {
-            http: reqwest::Client::new(),
-            api_base: api_base.trim_end_matches('/').to_string(),
+            http_client: reqwest::Client::new(),
+            base_url: api_base.trim_end_matches('/').to_string(),
             api_key: api_key.to_string(),
         }
     }
 
     fn endpoint(&self) -> String {
-        format!("{}/chat/completions", self.api_base)
+        format!("{}/chat/completions", self.base_url)
     }
 
     /// Non-streaming chat completion.
     pub async fn chat_completion(&self, request: &ChatRequest) -> Result<ChatResponse, LlmError> {
         let resp = self
-            .http
+            .http_client
             .post(self.endpoint())
             .bearer_auth(&self.api_key)
             .json(request)
@@ -60,7 +60,7 @@ impl LlmClient {
             .insert("stream".to_string(), serde_json::Value::Bool(true));
 
         let resp = self
-            .http
+            .http_client
             .post(self.endpoint())
             .bearer_auth(&self.api_key)
             .header("Content-Type", "application/json")
