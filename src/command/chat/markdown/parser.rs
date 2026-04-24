@@ -1390,4 +1390,128 @@ mod tests {
             "应有 user_input 代码内容"
         );
     }
+
+    // ════════════════════════════════════════════════════════════════
+    // 回归测试：核心 Markdown 渲染场景
+    // 如果以下测试失败，说明 markdown 渲染管线被意外修改
+    // ════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn renders_plain_text() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let lines = markdown_to_lines("hello world", 80, &theme);
+        // 至少有一行包含 hello world
+        let content: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(
+            content.contains("hello world"),
+            "纯文本应包含 'hello world'"
+        );
+    }
+
+    #[test]
+    fn renders_bold_text() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let lines = markdown_to_lines("this is **bold** text", 80, &theme);
+        let all_spans: Vec<_> = lines.iter().flat_map(|l| l.spans.iter()).collect();
+        let bold_span = all_spans.iter().find(|s| s.content.contains("bold"));
+        assert!(bold_span.is_some(), "应有包含 'bold' 的 span");
+        let span = bold_span.unwrap();
+        assert!(
+            span.style.add_modifier.contains(Modifier::BOLD),
+            "'bold' span 应有 BOLD 修饰"
+        );
+    }
+
+    #[test]
+    fn renders_code_block_with_borders() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let md = "```rust\nfn main() {}\n```";
+        let lines = markdown_to_lines(md, 80, &theme);
+        // 应有顶边框和底边框
+        let border_lines: Vec<_> = lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .filter(|s| s.content.contains('┌') || s.content.contains('└'))
+            .collect();
+        assert!(!border_lines.is_empty(), "代码块应有边框字符 ┌ / └");
+        // 应包含代码内容
+        let content: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(content.contains("fn main()"), "代码块应包含代码内容");
+    }
+
+    #[test]
+    fn renders_inline_code() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let lines = markdown_to_lines("use `cargo test` to run", 80, &theme);
+        let code_span = lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .find(|s| s.content.contains("cargo test"));
+        assert!(code_span.is_some(), "应有包含 'cargo test' 的 span");
+        assert!(code_span.unwrap().style.bg.is_some(), "行内代码应有背景色");
+    }
+
+    #[test]
+    fn renders_heading_with_prefix() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let lines = markdown_to_lines("# Title", 80, &theme);
+        let content: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect();
+        assert!(content.contains("◆"), "H1 应有 ◆ 前缀");
+        assert!(content.contains("Title"), "H1 应包含标题内容");
+    }
+
+    #[test]
+    fn renders_list_with_bullet() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let md = "- item one\n- item two";
+        let lines = markdown_to_lines(md, 80, &theme);
+        let bullets: Vec<_> = lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .filter(|s| s.content.contains('•'))
+            .collect();
+        assert!(
+            bullets.len() >= 2,
+            "应有至少 2 个列表子弹符号 •，实际 {}",
+            bullets.len()
+        );
+    }
+
+    #[test]
+    fn handles_chinese_quotes_bold() {
+        let theme = Theme::from_name(&ThemeName::default());
+        // \u{201C} = " \u{201D} = "
+        let md = "**\u{201C}中文引号内容\u{201D}**";
+        let lines = markdown_to_lines(md, 80, &theme);
+        let bold_spans: Vec<_> = lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .filter(|s| s.style.add_modifier.contains(Modifier::BOLD))
+            .collect();
+        assert!(!bold_spans.is_empty(), "中文引号内的 ** 加粗应生效");
+        let content: String = bold_spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(content.contains("中文引号内容"), "加粗内容应包含中文字符");
+    }
+
+    #[test]
+    fn renders_empty_input_returns_empty_or_wrapped() {
+        let theme = Theme::from_name(&ThemeName::default());
+        let lines = markdown_to_lines("", 80, &theme);
+        // 空输入不应 panic
+        assert!(
+            lines
+                .iter()
+                .all(|l| l.spans.is_empty() || l.spans.iter().all(|s| s.content.is_empty())),
+            "空输入的所有行应为空或仅含空 span"
+        );
+    }
 }

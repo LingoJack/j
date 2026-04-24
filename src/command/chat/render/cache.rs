@@ -139,14 +139,14 @@ pub fn build_message_lines_incremental(
             DisplayType::AssistantText => {
                 // 如果有 reasoning_content，先渲染 thinking 区块
                 if let Some(ref reasoning) = m.reasoning_content {
-                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t);
+                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t, expand);
                 }
                 render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut tmp_lines, t);
             }
             DisplayType::ToolCallRequest => {
                 // 如果有 reasoning_content，先渲染 thinking 区块
                 if let Some(ref reasoning) = m.reasoning_content {
-                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t);
+                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t, expand);
                 }
                 // 先渲染文本内容（如果有）— LLM 可能同时返回文本解释和工具调用
                 if !m.content.is_empty() {
@@ -611,11 +611,13 @@ fn agent_name_color(name: &str) -> Color {
 }
 
 /// 渲染 thinking 区块（reasoning_content），显示在 AI 气泡上方
+/// 折叠模式下（expand=false）仅显示前若干行，避免占用过多屏幕空间
 fn render_thinking_block(
     reasoning: &str,
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
+    expand: bool,
 ) {
     if reasoning.is_empty() {
         return;
@@ -633,10 +635,30 @@ fn render_thinking_block(
 
     // Reasoning 内容（灰色文本）
     let content_w = bubble_max_width.saturating_sub(6);
-    for wrapped_line in wrap_text(reasoning, content_w) {
+    let wrapped = wrap_text(reasoning, content_w);
+
+    // 折叠模式：最多显示 FOLDED_MAX_LINES 行，超出时追加省略提示
+    const FOLDED_MAX_LINES: usize = 5;
+    let total = wrapped.len();
+    let (shown, truncated) = if !expand && total > FOLDED_MAX_LINES {
+        (&wrapped[..FOLDED_MAX_LINES], true)
+    } else {
+        (&wrapped[..], false)
+    };
+
+    for wrapped_line in shown {
         lines.push(Line::from(Span::styled(
             format!("    {}", wrapped_line),
             Style::default().fg(theme.text_dim),
+        )));
+    }
+
+    if truncated {
+        lines.push(Line::from(Span::styled(
+            format!("    … (+{} 行, Ctrl+O 展开)", total - FOLDED_MAX_LINES),
+            Style::default()
+                .fg(theme.text_dim)
+                .add_modifier(Modifier::ITALIC),
         )));
     }
 }

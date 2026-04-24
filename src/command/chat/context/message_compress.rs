@@ -313,4 +313,62 @@ mod tests {
         assert!(result.iter().any(|m| m.content == "assistant response"));
         assert!(result.iter().any(|m| m.content == "another user message"));
     }
+
+    // ════════════════════════════════════════════════════════════════
+    // 回归测试：边界条件
+    // ════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn compress_empty_messages_returns_empty() {
+        let result = compress_other_agent_toolcalls(&[], "Main", 5);
+        assert!(result.is_empty(), "空输入应返回空输出");
+    }
+
+    #[test]
+    fn compress_threshold_zero_returns_original() {
+        let messages = vec![
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
+        ];
+        let result = compress_other_agent_toolcalls(&messages, "Backend", 0);
+        assert_eq!(result.len(), 2, "threshold=0 应原样返回");
+        assert_eq!(result[0].content, "<Frontend> [调用工具 Read]");
+    }
+
+    #[test]
+    fn compress_self_agent_excluded() {
+        // 自己发出的 tool call 广播不应被压缩
+        let messages = vec![
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+        ];
+        // self_agent_name = "Frontend"，不压缩自己的消息
+        let result = compress_other_agent_toolcalls(&messages, "Frontend", 1);
+        assert_eq!(result.len(), 4, "self agent 的消息不压缩");
+    }
+
+    #[test]
+    fn compress_mixed_broadcast_and_regular() {
+        // 混合广播消息和普通消息
+        let messages = vec![
+            ChatMessage::text(MessageRole::User, "normal message".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(MessageRole::Assistant, "response".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
+            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+        ];
+        let result = compress_other_agent_toolcalls(&messages, "Backend", 2);
+        // 普通消息和 assistant 消息保留，Frontend 超过 threshold 的被压缩
+        assert!(result.iter().any(|m| m.content == "normal message"));
+        assert!(result.iter().any(|m| m.content == "response"));
+        // 应有摘要
+        assert!(
+            result
+                .iter()
+                .any(|m| m.content.contains("[早期工具调用摘要"))
+        );
+    }
 }
