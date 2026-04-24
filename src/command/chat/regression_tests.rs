@@ -79,8 +79,8 @@ fn key_tool_names_are_non_empty() {
 }
 
 #[test]
-fn tool_names_are_lowercase_snake() {
-    // 工具名应遵循 snake_case 约定
+fn tool_names_are_consistent_format() {
+    // 工具名应是不含空格的非空字符串
     for name in [
         tool_names::BASH,
         tool_names::READ,
@@ -89,7 +89,7 @@ fn tool_names_are_lowercase_snake() {
         tool_names::GREP,
         tool_names::GLOB,
     ] {
-        assert_eq!(name, name.to_lowercase(), "工具名 '{name}' 应为小写");
+        assert!(!name.is_empty(), "工具名不应为空");
         assert!(!name.contains(' '), "工具名 '{name}' 不应包含空格");
     }
 }

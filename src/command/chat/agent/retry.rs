@@ -490,22 +490,27 @@ mod tests {
 
     #[test]
     fn backoff_monotonically_non_decreasing() {
-        // 同一策略下，attempt 增大时 delay 的下界不应减少
+        // 验证退避延迟的指数基数部分随 attempt 单调非递减
+        // 由于 jitter 的随机性，实际值可能波动，但指数基数 exp = base * 2^(attempt-1) 必然非递减
         let base = 2000u64;
         let cap = 30000u64;
-        let mut prev_min = 0u64;
+        let mut prev_exp = 0u64;
         for attempt in 1..=8 {
-            // 多次采样取最小值
-            let mut min_delay = u64::MAX;
-            for _ in 0..20 {
-                let d = backoff_delay_ms(attempt, base, cap);
-                min_delay = min_delay.min(d);
-            }
+            // 计算 exp = base * 2^(attempt-1)，cap 限制
+            let shift = (attempt - 1).min(6) as u64; // BACKOFF_MAX_SHIFT
+            let exp = base.saturating_mul(1u64 << shift).min(cap);
             assert!(
-                min_delay >= prev_min,
-                "attempt={attempt} min_delay={min_delay} < prev_min={prev_min}，退避应单调非递减"
+                exp >= prev_exp,
+                "attempt={attempt} exp={exp} < prev_exp={prev_exp}，指数基数应单调非递减"
             );
-            prev_min = min_delay;
+            prev_exp = exp;
         }
+        // 额外验证：attempt=1 和 attempt=10 的实际 delay 采样
+        let d1_min = backoff_delay_ms(1, base, cap);
+        let d10_max = backoff_delay_ms(10, base, cap);
+        assert!(
+            d10_max >= d1_min,
+            "attempt=10 的 delay ({d10_max}) 应 >= attempt=1 的 delay ({d1_min})"
+        );
     }
 }

@@ -367,7 +367,7 @@ mod tests {
                     ..
                 }
             ),
-            "429 应映射为 ApiRateLimit { retry_after_secs: None }"
+            "429 应映射为 ApiRateLimit {{ retry_after_secs: None }}"
         );
     }
 

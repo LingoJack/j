@@ -267,7 +267,7 @@ mod tests {
         // 模拟 push_back（直接操作内部 pending）
         // 由于 request_blocking 会阻塞，我们直接通过内部机制测试
         // 这里用 Arc clone 来模拟入队
-        let q = queue.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let mut q = queue.pending.lock().unwrap_or_else(|e| e.into_inner());
         q.push_back(Arc::clone(&req1));
         q.push_back(Arc::clone(&req2));
         drop(q);
