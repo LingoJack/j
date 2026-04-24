@@ -7,6 +7,7 @@
 //! - `PLAN_MODE_WHITELIST`: Plan mode 允许的工具白名单
 
 use crate::command::chat::app::types::PlanDecision;
+use crate::command::chat::tools::tool_names;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -198,24 +199,26 @@ impl PlanModeState {
 }
 
 /// plan mode 下允许执行的工具白名单
+///
+/// 所有名称均引用 `tool_names` 常量，与各工具的 `NAME` 定义自动对齐。
 pub const PLAN_MODE_WHITELIST: &[&str] = &[
-    "Read",
-    "Glob",
-    "Grep",
-    "WebFetch",
-    "WebSearch",
-    "Ask",
-    "Compact",
-    "TodoRead",
-    "TodoWrite",
-    "TaskOutput",
-    "Task",
-    "EnterPlanMode",
-    "ExitPlanMode",
-    "EnterWorktree",
-    "ExitWorktree",
-    "Agent",     // plan mode 允许启动子 agent 做代码探索
-    "AgentTeam", // plan mode 允许批量创建 teammate
+    tool_names::READ,
+    tool_names::GLOB,
+    tool_names::GREP,
+    tool_names::WEB_FETCH,
+    tool_names::WEB_SEARCH,
+    tool_names::ASK,
+    tool_names::COMPACT,
+    tool_names::TODO_READ,
+    tool_names::TODO_WRITE,
+    tool_names::TASK_OUTPUT,
+    tool_names::TASK,
+    tool_names::ENTER_PLAN_MODE,
+    tool_names::EXIT_PLAN_MODE,
+    tool_names::ENTER_WORKTREE,
+    tool_names::EXIT_WORKTREE,
+    tool_names::AGENT,      // plan mode 允许启动子 agent 做代码探索
+    tool_names::AGENT_TEAM, // plan mode 允许批量创建 teammate
 ];
 
 /// 检查工具是否在 plan mode 白名单中

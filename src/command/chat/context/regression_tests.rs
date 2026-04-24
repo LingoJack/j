@@ -141,7 +141,9 @@ fn builtin_exempt_tools_aliases_key_tools() {
 /// is_exempt_tool(..., &[]) 等价于 is_key_tool
 #[test]
 fn is_exempt_tool_without_extra_equals_is_key_tool() {
-    for name in ["EnterPlanMode", "Bash", "Read", "LoadSkill", "Ask", "Grep"] {
+    use crate::command::chat::tools::tool_names::*;
+
+    for name in [ENTER_PLAN_MODE, BASH, READ, LOAD_SKILL, ASK, GREP] {
         assert_eq!(
             is_exempt_tool(name, &[]),
             is_key_tool(name),
@@ -154,10 +156,12 @@ fn is_exempt_tool_without_extra_equals_is_key_tool() {
 /// 用户扩展清单优先级高于 policy：即使 policy 判定 RegularTool，用户扩展也能豁免
 #[test]
 fn user_extra_exempt_tools_override() {
-    let extra = vec!["Bash".to_string()];
-    assert!(is_exempt_tool("Bash", &extra), "Bash 被用户扩展豁免应生效");
+    use crate::command::chat::tools::tool_names::BASH;
+
+    let extra = vec![BASH.to_string()];
+    assert!(is_exempt_tool(BASH, &extra), "Bash 被用户扩展豁免应生效");
     assert!(
-        !is_exempt_tool("Bash", &[]),
+        !is_exempt_tool(BASH, &[]),
         "Bash 未被扩展豁免时应非豁免（默认 RegularTool）"
     );
 }
@@ -167,27 +171,29 @@ fn user_extra_exempt_tools_override() {
 /// KeyTool 的 tool result 永不被占位符替换（即使超阈值且早于 keep_recent）
 #[test]
 fn micro_compact_preserves_key_tool_results() {
+    use crate::command::chat::tools::tool_names::*;
+
     let big = "x".repeat(5000); // 远超 MICRO_COMPACT_BYTES_THRESHOLD
     let mut msgs = vec![
         user("load skill"),
-        tool_call_with_id("k1", "LoadSkill"),
+        tool_call_with_id("k1", LOAD_SKILL),
         tool_result("k1", &big),
         user("enter plan mode"),
-        tool_call_with_id("k2", "EnterPlanMode"),
+        tool_call_with_id("k2", ENTER_PLAN_MODE),
         tool_result("k2", &big),
         user("edit worktree"),
-        tool_call_with_id("k3", "EnterWorktree"),
+        tool_call_with_id("k3", ENTER_WORKTREE),
         tool_result("k3", &big),
         user("query ask"),
-        tool_call_with_id("k4", "Ask"),
+        tool_call_with_id("k4", ASK),
         tool_result("k4", &big),
         // 后面堆叠足够多的 tool result 迫使前面被考虑压缩
         user("do shell"),
-        tool_call_with_id("b1", "Bash"),
+        tool_call_with_id("b1", BASH),
         tool_result("b1", "ls output"),
-        tool_call_with_id("b2", "Bash"),
+        tool_call_with_id("b2", BASH),
         tool_result("b2", "ls output"),
-        tool_call_with_id("b3", "Bash"),
+        tool_call_with_id("b3", BASH),
         tool_result("b3", "ls output"),
     ];
 
@@ -206,16 +212,18 @@ fn micro_compact_preserves_key_tool_results() {
 /// RegularTool 的大体积 result 应按 keep_recent 替换为占位符
 #[test]
 fn micro_compact_placeholder_for_regular_tools() {
+    use crate::command::chat::tools::tool_names::BASH;
+
     let big = "x".repeat(5000);
     let mut msgs = vec![
         user("q1"),
-        tool_call_with_id("b1", "Bash"),
+        tool_call_with_id("b1", BASH),
         tool_result("b1", &big),
         user("q2"),
-        tool_call_with_id("b2", "Bash"),
+        tool_call_with_id("b2", BASH),
         tool_result("b2", &big),
         user("q3"),
-        tool_call_with_id("b3", "Bash"),
+        tool_call_with_id("b3", BASH),
         tool_result("b3", &big),
     ];
 
@@ -232,16 +240,18 @@ fn micro_compact_placeholder_for_regular_tools() {
 /// 小于阈值的 result 不被替换
 #[test]
 fn micro_compact_below_threshold_not_replaced() {
+    use crate::command::chat::tools::tool_names::BASH;
+
     let small = "ok".to_string();
     let mut msgs = vec![
         user("q1"),
-        tool_call_with_id("b1", "Bash"),
+        tool_call_with_id("b1", BASH),
         tool_result("b1", &small),
         user("q2"),
-        tool_call_with_id("b2", "Bash"),
+        tool_call_with_id("b2", BASH),
         tool_result("b2", &small),
         user("q3"),
-        tool_call_with_id("b3", "Bash"),
+        tool_call_with_id("b3", BASH),
         tool_result("b3", &small),
     ];
 
@@ -259,7 +269,9 @@ fn micro_compact_below_threshold_not_replaced() {
 /// 用户明确点名的 KeyTool 在极端预算下必须通过 Stage 2 豁免保底保留
 #[test]
 fn window_preserves_user_mentioned_key_tools_under_tight_budget() {
-    for key_tool in ["EnterPlanMode", "EnterWorktree", "Ask", "LoadSkill"] {
+    use crate::command::chat::tools::tool_names::*;
+
+    for key_tool in [ENTER_PLAN_MODE, ENTER_WORKTREE, ASK, LOAD_SKILL] {
         let msgs = vec![
             user("load it"),
             tool_call(&[key_tool]),
@@ -288,9 +300,11 @@ fn window_preserves_user_mentioned_key_tools_under_tight_budget() {
 /// User 兜底：至少保留最新 User 消息
 #[test]
 fn window_always_retains_latest_user() {
+    use crate::command::chat::tools::tool_names::BASH;
+
     let mut msgs = Vec::new();
     for i in 0..50 {
-        msgs.push(tool_call(&["Bash"]));
+        msgs.push(tool_call(&[BASH]));
         msgs.push(tool_result("call_0", &"output ".repeat(500)));
         msgs.push(user(&format!("q{}", i)));
     }
@@ -310,11 +324,13 @@ fn window_always_retains_latest_user() {
 /// 时间保底：最近 keep_recent * MULTIPLIER 个 unit 无条件保留
 #[test]
 fn window_stage1_time_fallback() {
+    use crate::command::chat::tools::tool_names::BASH;
+
     let mut msgs = Vec::new();
     for i in 0..20 {
         msgs.push(user(&format!("old {}", i).repeat(30)));
     }
-    msgs.push(tool_call(&["Bash"]));
+    msgs.push(tool_call(&[BASH]));
     msgs.push(tool_result("call_0", "recent bash"));
     msgs.push(user("latest"));
 
@@ -338,13 +354,15 @@ fn window_stage1_time_fallback() {
 /// 占位符合并：相邻被丢弃的 ToolGroup 合并为单条 `[Previous: used X, Y, Z]`
 #[test]
 fn window_merges_adjacent_dropped_tool_groups() {
+    use crate::command::chat::tools::tool_names::*;
+
     let msgs = vec![
         user("run"),
-        tool_call(&["Bash"]),
+        tool_call(&[BASH]),
         tool_result("call_0", &"x".repeat(3000)),
-        tool_call(&["Read"]),
+        tool_call(&[READ]),
         tool_result("call_0", &"y".repeat(3000)),
-        tool_call(&["Grep"]),
+        tool_call(&[GREP]),
         tool_result("call_0", &"z".repeat(3000)),
         user("latest"),
     ];
@@ -366,7 +384,7 @@ fn window_merges_adjacent_dropped_tool_groups() {
         .collect::<Vec<_>>()
         .join("\n");
     // 三个工具名中至少两个会合并到同一占位符
-    let hit = ["Bash", "Read", "Grep"]
+    let hit = [BASH, READ, GREP]
         .iter()
         .filter(|name| combined.contains(*name))
         .count();
@@ -380,10 +398,12 @@ fn window_merges_adjacent_dropped_tool_groups() {
 /// 时间顺序保持：被保留的消息在输出中保持原始时间顺序
 #[test]
 fn window_preserves_time_order() {
+    use crate::command::chat::tools::tool_names::BASH;
+
     let msgs = vec![
         user("A"),
         assistant("a1"),
-        tool_call(&["Bash"]),
+        tool_call(&[BASH]),
         tool_result("call_0", "r1"),
         user("B"),
         assistant("a2"),
@@ -430,7 +450,9 @@ fn plan_mode_whitelist_recognized_by_policy() {
 /// 但仍然是 KeyTool（被加载过的技能调用结果不可丢失）。两语义正交。
 #[test]
 fn plan_mode_decision_tools_are_key_tools() {
-    for name in ["EnterPlanMode", "ExitPlanMode", "Ask"] {
+    use crate::command::chat::tools::tool_names::*;
+
+    for name in [ENTER_PLAN_MODE, EXIT_PLAN_MODE, ASK] {
         assert!(
             PLAN_MODE_WHITELIST.contains(&name),
             "{} 应在 Plan mode 白名单",
@@ -440,8 +462,8 @@ fn plan_mode_decision_tools_are_key_tools() {
     }
 
     // LoadSkill 不在 plan 白名单，但仍是 KeyTool
-    assert!(!PLAN_MODE_WHITELIST.contains(&"LoadSkill"));
-    assert!(is_key_tool("LoadSkill"));
+    assert!(!PLAN_MODE_WHITELIST.contains(&LOAD_SKILL));
+    assert!(is_key_tool(LOAD_SKILL));
 }
 
 // ========== Tier 优先级语义 ==========
@@ -449,14 +471,16 @@ fn plan_mode_decision_tools_are_key_tools() {
 /// 用户定义的优先级：User > KeyTool > Assistant > RegularTool
 #[test]
 fn tier_ordering_matches_user_requirement() {
+    use crate::command::chat::tools::tool_names::*;
+
     assert!(ContextTier::User < ContextTier::KeyTool);
     assert!(ContextTier::KeyTool < ContextTier::Assistant);
     assert!(ContextTier::Assistant < ContextTier::RegularTool);
 
     // 用户明确点名的四个工具的 tier 严格优于普通 Shell
-    for name in ["EnterPlanMode", "EnterWorktree", "Ask", "LoadSkill"] {
+    for name in [ENTER_PLAN_MODE, ENTER_WORKTREE, ASK, LOAD_SKILL] {
         assert!(
-            tier_for(name) < tier_for("Bash"),
+            tier_for(name) < tier_for(BASH),
             "{} 的 tier 必须严格优于 Bash",
             name
         );

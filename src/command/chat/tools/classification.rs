@@ -40,7 +40,7 @@ impl ToolCategory {
             tool_names::WEB_FETCH | tool_names::WEB_SEARCH | tool_names::BROWSER => Self::Network,
             tool_names::ENTER_PLAN_MODE | tool_names::EXIT_PLAN_MODE => Self::Plan,
             tool_names::AGENT => Self::Agent,
-            "Compact" => Self::Compact,
+            tool_names::COMPACT => Self::Compact,
             _ => Self::Other,
         }
     }
@@ -185,7 +185,7 @@ pub fn get_result_summary_for_tool(
         tool_names::TODO_READ => get_todo_read_summary(content),
         tool_names::TASK => get_task_summary(content, tool_args),
         tool_names::AGENT => get_agent_summary(content, tool_args),
-        "Compact" => get_compact_summary(content),
+        tool_names::COMPACT => get_compact_summary(content),
         _ => get_generic_summary(content),
     }
 }

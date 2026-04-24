@@ -200,13 +200,15 @@ mod tests {
 
     #[test]
     fn test_is_tool_call_broadcast() {
+        use crate::command::chat::tools::tool_names::{EDIT, READ};
+
         assert_eq!(
-            is_tool_call_broadcast("<Frontend> [调用工具 Read]"),
-            Some(("Frontend".to_string(), "Read".to_string()))
+            is_tool_call_broadcast(&format!("<Frontend> [调用工具 {}]", READ)),
+            Some(("Frontend".to_string(), READ.to_string()))
         );
         assert_eq!(
-            is_tool_call_broadcast("<Backend>  [调用工具 Edit] "),
-            Some(("Backend".to_string(), "Edit".to_string()))
+            is_tool_call_broadcast(&format!("<Backend>  [调用工具 {}] ", EDIT)),
+            Some(("Backend".to_string(), EDIT.to_string()))
         );
         // 不是 tool call
         assert_eq!(is_tool_call_broadcast("<Frontend> hello world"), None);
