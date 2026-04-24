@@ -147,4 +147,5 @@ allow:
 - Bash(rm /Users/jacklingo/dev_custom/j/src/llm/mod.rs:*)
 - Bash(cd /Users/lingojack/dev_custom/j/.jcli/worktrees/paste-support:*)
 - Bash(python3 -c:*)
+- Bash(find /Users/lingojack/dev_custom/j/target:*)
 deny: []
