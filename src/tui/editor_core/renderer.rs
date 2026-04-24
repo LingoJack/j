@@ -561,12 +561,9 @@ impl MarkdownRenderer {
         // 搜索高亮 + 光标叠加：当光标行同时启用搜索时，
         // 使用搜索高亮作为基础，再在光标位置叠加光标块
         if ctx.search.is_searching() && ctx.search.match_count() > 0 {
-            let highlight_spans = ctx.search.highlight_line(
-                vl.logical_line,
-                &text,
-                &self.theme,
-                vl.start_col,
-            );
+            let highlight_spans =
+                ctx.search
+                    .highlight_line(vl.logical_line, &text, &self.theme, vl.start_col);
             let cursor_style = Style::default()
                 .fg(self.theme.cursor_fg)
                 .bg(self.theme.cursor_bg)

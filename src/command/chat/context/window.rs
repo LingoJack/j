@@ -9,6 +9,7 @@
 //! 输出顺序始终保持原始时间顺序；丢弃的 ToolGroup 用统一占位符替换。
 
 use super::compact::is_exempt_tool;
+use super::policy::ContextTier;
 use crate::command::chat::constants::{
     WINDOW_KEEP_RECENT_MULTIPLIER, WINDOW_QUOTA_ASST_TEXT, WINDOW_QUOTA_TOOL_GROUP,
     WINDOW_QUOTA_USER,
@@ -38,12 +39,19 @@ enum MessageUnit {
 
 impl MessageUnit {
     /// 消息单元的优先级（数值越小优先级越高）
+    ///
+    /// 数值与 `context::policy::ContextTier` 对齐：
+    /// - System=0, User=1, KeyTool=2, Assistant=3, RegularTool=4
+    ///
+    /// ToolGroup 的 tier 取组内 tool_call 的最高优先级（最小数值）。
+    /// Stage 2 的豁免保底已经把 KeyTool ToolGroup 单独保留，Stage 3 的比例
+    /// 配额只对未保留 unit 生效，故实际参与 Stage 3 筛选的 ToolGroup 通常是 RegularTool。
     fn priority(&self) -> u8 {
         match self {
-            MessageUnit::System { .. } => 0,
-            MessageUnit::User { .. } => 1,
-            MessageUnit::AssistantText { .. } => 2,
-            MessageUnit::ToolGroup { .. } => 3,
+            MessageUnit::System { .. } => ContextTier::System.priority(),
+            MessageUnit::User { .. } => ContextTier::User.priority(),
+            MessageUnit::AssistantText { .. } => ContextTier::Assistant.priority(),
+            MessageUnit::ToolGroup { .. } => ContextTier::RegularTool.priority(),
         }
     }
 
@@ -276,10 +284,12 @@ fn select_units(
     let remaining_msgs = max_history_messages.saturating_sub(used_message_count);
     let remaining_toks = max_context_tokens.saturating_sub(used_token_count);
 
+    // tier 数值与 ContextTier::priority() 对齐：
+    // User=1, Assistant=3, RegularTool=4（KeyTool=2 已在 Stage 2 豁免保底）
     let quotas: [(u8, f32); 3] = [
-        (1, WINDOW_QUOTA_USER),       // User
-        (2, WINDOW_QUOTA_ASST_TEXT),  // AssistantText
-        (3, WINDOW_QUOTA_TOOL_GROUP), // ToolGroup
+        (ContextTier::User.priority(), WINDOW_QUOTA_USER),
+        (ContextTier::Assistant.priority(), WINDOW_QUOTA_ASST_TEXT),
+        (ContextTier::RegularTool.priority(), WINDOW_QUOTA_TOOL_GROUP),
     ];
 
     for (tier_prio, ratio) in quotas {

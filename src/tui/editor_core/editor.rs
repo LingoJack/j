@@ -793,10 +793,7 @@ impl MarkdownEditor {
                 let hint = if pattern.is_empty() {
                     "  Esc:取消  Enter:跳到匹配".to_string()
                 } else {
-                    format!(
-                        "  [{}匹配]  Esc:取消  Enter:跳转  n/N:上下条",
-                        count
-                    )
+                    format!("  [{}匹配]  Esc:取消  Enter:跳转  n/N:上下条", count)
                 };
                 Line::from(vec![
                     Span::styled("/", Style::default().fg(Color::Magenta)),

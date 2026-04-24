@@ -4,14 +4,8 @@ use crate::command::chat::constants::{
     COMPACT_SKILL_TOKEN_BUDGET, COMPACT_SUMMARY_MAX_TOKENS, COMPACT_TOKEN_THRESHOLD,
     COMPACT_TRUNCATE_MAX_CHARS, MICRO_COMPACT_BYTES_THRESHOLD,
 };
+use crate::command::chat::context::policy;
 use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
-use crate::command::chat::tools::agent_team::AgentTeamTool;
-use crate::command::chat::tools::ask::AskTool;
-use crate::command::chat::tools::plan::{EnterPlanModeTool, ExitPlanModeTool};
-use crate::command::chat::tools::skill::LoadSkillTool;
-use crate::command::chat::tools::sub_agent::SubAgentTool;
-use crate::command::chat::tools::task::TaskTool;
-use crate::command::chat::tools::todo::{TodoReadTool, TodoWriteTool};
 use crate::util::log::{write_error_log, write_info_log};
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
@@ -225,25 +219,17 @@ pub fn extract_recent_user_messages(messages: &[ChatMessage], count: usize) -> V
     recent
 }
 
-/// 内置豁免工具列表（不可配置，始终不压缩这些工具的返回结果）
-pub const BUILTIN_EXEMPT_TOOLS: &[&str] = &[
-    LoadSkillTool::NAME,
-    TaskTool::NAME,
-    TodoWriteTool::NAME,
-    TodoReadTool::NAME,
-    EnterPlanModeTool::NAME,
-    ExitPlanModeTool::NAME,
-    SubAgentTool::NAME,
-    AgentTeamTool::NAME,
-    AskTool::NAME,
-    // Teammate 工具结果不压缩（承载协作上下文）
-    crate::command::chat::tools::send_message::SendMessageTool::NAME,
-    crate::command::chat::tools::create_teammate::CreateTeammateTool::NAME,
-];
+/// 内置豁免工具列表（从 `context::policy` 统一源头派生）
+///
+/// 这里是对 `policy::KEY_TOOL_NAMES` 的重新导出，保留原公共名便于 UI 引用。
+/// 新增 KeyTool 时应修改 `policy::policy_for` + `policy::KEY_TOOL_NAMES`，本常量自动跟随。
+pub use super::policy::KEY_TOOL_NAMES as BUILTIN_EXEMPT_TOOLS;
 
-/// 判断工具名是否应被豁免（合并内置 + 用户扩展清单）
+/// 判断工具名是否应被豁免（KeyTool + 用户扩展清单）
+///
+/// 内部统一走 `policy::is_key_tool`，用户扩展清单作为附加覆盖。
 pub fn is_exempt_tool(tool_name: &str, extra_exempt_tools: &[String]) -> bool {
-    BUILTIN_EXEMPT_TOOLS.contains(&tool_name) || extra_exempt_tools.iter().any(|t| t == tool_name)
+    policy::is_key_tool(tool_name) || extra_exempt_tools.iter().any(|t| t == tool_name)
 }
 
 /// Layer 1: micro_compact - 替换旧 tool result 为占位符，保留最近 keep_recent 个
