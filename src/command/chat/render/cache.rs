@@ -140,6 +140,17 @@ pub fn build_message_lines_incremental(
                 render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut tmp_lines, t);
             }
             DisplayType::ToolCallRequest => {
+                // 先渲染文本内容（如果有）— LLM 可能同时返回文本解释和工具调用
+                if !m.content.is_empty() {
+                    render_assistant_msg(
+                        &m.content,
+                        is_selected,
+                        bubble_max_width,
+                        &mut tmp_lines,
+                        t,
+                    );
+                }
+                // 再渲染工具调用
                 if let Some(ref tool_calls) = m.tool_calls {
                     render_tool_call_request_msg(
                         tool_calls,
