@@ -124,7 +124,9 @@
       "Bash(sort -k2)",
       "Bash(split -l 600 /tmp/hook_system_analysis.md /tmp/hook_analysis_part_)",
       "Bash(cargo clean *)",
-      "Bash(cargo fix *)"
+      "Bash(cargo fix *)",
+      "Bash(j --version)",
+      "Read(//Users/lingojack/.cargo/bin/**)"
     ]
   },
   "language": "zh-CN",
