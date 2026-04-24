@@ -136,6 +136,11 @@ impl SessionPaths {
     pub fn ensure_dir(&self) -> std::io::Result<()> {
         fs::create_dir_all(&self.dir)
     }
+
+    /// 返回 session ID（即目录名）
+    pub fn id(&self) -> &str {
+        self.dir.file_name().and_then(|s| s.to_str()).unwrap_or("")
+    }
 }
 
 /// 追加一个事件到 session JSONL 文件（append-only，POSIX 下原子安全）
