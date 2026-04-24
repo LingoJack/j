@@ -17,9 +17,9 @@ use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
+use crate::llm::ToolDefinition;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
-use async_openai::types::chat::ChatCompletionTools;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -68,7 +68,7 @@ struct SubAgentLoopParams {
     provider: ModelProvider,
     system_prompt: Option<String>,
     prompt: String,
-    tools: Vec<ChatCompletionTools>,
+    tools: Vec<ToolDefinition>,
     registry: Arc<ToolRegistry>,
     jcli_config: Arc<JcliConfig>,
     snapshot: Option<SubAgentLoopStateRefs>,
@@ -216,7 +216,7 @@ impl Tool for SubAgentTool {
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push(Self::NAME.to_string());
-        let tools = child_registry.to_openai_tools_filtered(&disabled);
+        let tools = child_registry.to_llm_tools_filtered(&disabled);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all
         let jcli_config = if params.inherit_permissions {
@@ -531,10 +531,7 @@ fn run_sub_agent_loop(
         }
 
         // 检查是否有工具调用
-        let is_tool_calls = matches!(
-            choice.finish_reason,
-            Some(async_openai::types::chat::FinishReason::ToolCalls)
-        );
+        let is_tool_calls = choice.finish_reason.as_deref() == Some("tool_calls");
 
         if !is_tool_calls || choice.message.tool_calls.is_none() {
             // 纯文本回复结束：把 assistant 消息也 append 到 transcript（无 tool_calls）

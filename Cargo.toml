@@ -41,7 +41,6 @@ indicatif = "0.18.3"
 termimad = "0.34.1"
 ratatui = "0.29.0"
 crossterm = "0.28.0"
-async-openai = { version = "0.34", default-features = false, features = ["chat-completion", "rustls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
@@ -50,7 +49,7 @@ unicode-width = "0.2"
 self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
 nix = { version = "0.31", features = ["process", "signal"] }
 libc = "0.2"
-reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "json", "stream"] }
 urlencoding = "2.1"
 html2text = "0.16"
 scraper = "0.26"

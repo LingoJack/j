@@ -3,7 +3,7 @@
 //! 所有 chat 核心链路中的错误统一使用 `ChatError`，按语义分类，
 //! 便于 UI 层给出差异化提示（认证失败 vs 网络超时 vs 服务端错误等）。
 
-use async_openai::error::{ApiError, OpenAIError};
+use crate::llm::LlmError;
 
 /// Chat 模块类型化错误
 #[derive(Debug)]
@@ -125,27 +125,33 @@ impl std::fmt::Display for ChatError {
 
 impl std::error::Error for ChatError {}
 
-// ── 从 OpenAIError 转换（保留结构化信息）──
+// ── 从 LlmError 转换 ──
 
-impl From<OpenAIError> for ChatError {
-    fn from(e: OpenAIError) -> Self {
+impl From<LlmError> for ChatError {
+    fn from(e: LlmError) -> Self {
         match e {
-            OpenAIError::Reqwest(re) => {
-                if re.is_timeout() {
-                    ChatError::NetworkTimeout(re.to_string())
-                } else if let Some(status) = re.status() {
-                    ChatError::from_http_status(status.as_u16(), re.to_string())
+            LlmError::Http(re) => ChatError::from(re),
+            LlmError::Api { status, body } => {
+                // 尝试从 body 中解析 { "error": { "code": ..., "message": ... } }
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body) {
+                    let error_obj = parsed.get("error").unwrap_or(&parsed);
+                    let code = error_obj.get("code").and_then(|v| {
+                        v.as_str()
+                            .map(|s| s.to_string())
+                            .or_else(|| v.as_i64().map(|n| n.to_string()))
+                    });
+                    let message = error_obj
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(&body);
+                    ChatError::from_api_error(code.as_deref(), message)
                 } else {
-                    ChatError::NetworkError(re.to_string())
+                    ChatError::from_http_status(status, sanitize_html(&body))
                 }
             }
-            OpenAIError::ApiError(api_err) => ChatError::from_api_error(api_err),
-            OpenAIError::JSONDeserialize(_, content) => {
-                ChatError::StreamDeserialize(truncate(&content, 500))
-            }
-            OpenAIError::StreamError(_) => ChatError::StreamInterrupted(e.to_string()),
-            OpenAIError::InvalidArgument(msg) => ChatError::RequestBuild(msg),
-            _ => ChatError::Other(e.to_string()),
+            LlmError::Deserialize(msg) => ChatError::StreamDeserialize(truncate(&msg, 500)),
+            LlmError::StreamInterrupted(msg) => ChatError::StreamInterrupted(msg),
+            LlmError::RequestBuild(msg) => ChatError::RequestBuild(msg),
         }
     }
 }
@@ -182,31 +188,28 @@ impl ChatError {
         }
     }
 
-    /// 从 async-openai 的 ApiError（结构化 JSON 错误）转换
-    fn from_api_error(api_err: ApiError) -> Self {
-        // 优先根据 code 分类（OpenAI 兼容 API 通常返回标准 code）
-        match api_err.code.as_deref() {
+    /// 从结构化 API 错误（code + message）转换
+    fn from_api_error(code: Option<&str>, message: &str) -> Self {
+        match code {
             Some("rate_limit_exceeded") => ChatError::ApiRateLimit {
-                message: api_err.message.clone(),
+                message: message.to_string(),
                 retry_after_secs: None,
             },
             Some("invalid_api_key") | Some("authentication_required") => {
-                ChatError::ApiAuth(api_err.message.clone())
+                ChatError::ApiAuth(message.to_string())
             }
-            Some("invalid_request_error") => ChatError::ApiBadRequest(api_err.message.clone()),
-            // code 1305：上游模型访问量过大（第三方 OpenAI 兼容 API）
+            Some("invalid_request_error") => ChatError::ApiBadRequest(message.to_string()),
             Some("1305") => ChatError::ApiRateLimit {
-                message: api_err.message.clone(),
+                message: message.to_string(),
                 retry_after_secs: None,
             },
             _ => {
-                // code 不明确时，尝试从 message 中推断
-                let msg_lower = api_err.message.to_lowercase();
+                let msg_lower = message.to_lowercase();
                 if msg_lower.contains("api key")
                     || msg_lower.contains("unauthorized")
                     || msg_lower.contains("authentication")
                 {
-                    ChatError::ApiAuth(api_err.message)
+                    ChatError::ApiAuth(message.to_string())
                 } else if msg_lower.contains("rate limit")
                     || msg_lower.contains("too many requests")
                     || msg_lower.contains("访问量过大")
@@ -222,14 +225,13 @@ impl ChatError {
                     || msg_lower.contains("busy")
                 {
                     ChatError::ApiRateLimit {
-                        message: api_err.message,
+                        message: message.to_string(),
                         retry_after_secs: None,
                     }
                 } else if msg_lower.contains("invalid") || msg_lower.contains("bad request") {
-                    ChatError::ApiBadRequest(api_err.message)
+                    ChatError::ApiBadRequest(message.to_string())
                 } else {
-                    // 无法分类，保留原始 message（但清理 HTML）
-                    ChatError::Other(sanitize_html(&api_err.message))
+                    ChatError::Other(sanitize_html(message))
                 }
             }
         }

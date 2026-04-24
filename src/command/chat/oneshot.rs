@@ -1,5 +1,5 @@
 use crate::command::chat::agent::api::{
-    build_request_with_tools, call_openai_stream, create_openai_client,
+    build_request_with_tools, call_llm_stream, create_llm_client,
 };
 use crate::command::chat::agent_md::load_agent_md;
 use crate::command::chat::app::AskRequest;
@@ -139,7 +139,7 @@ pub fn handle_chat(
             &agent_config.compact.micro_compact_exempt_tools,
         );
 
-        match call_openai_stream(
+        match call_llm_stream(
             provider,
             &send_messages,
             load_system_prompt().as_deref(),
@@ -417,7 +417,7 @@ fn run_oneshot_agent(
         }
     });
 
-    let openai_tools = tool_registry.to_openai_tools_filtered(&agent_config.disabled_tools);
+    let llm_tools = tool_registry.to_llm_tools_filtered(&agent_config.disabled_tools);
     let system_prompt = resolve_oneshot_system_prompt(&tool_registry, &agent_config.disabled_tools);
     let mut jcli_config = JcliConfig::load();
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -504,7 +504,7 @@ fn run_oneshot_agent(
         result
     }
 
-    let client = create_openai_client(provider);
+    let client = create_llm_client(provider);
 
     // Ctrl+C 中断标志
     let ctrl_c = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -524,20 +524,19 @@ fn run_oneshot_agent(
             let request = build_request_with_tools(
                 provider,
                 &messages,
-                openai_tools.clone(),
+                llm_tools.clone(),
                 system_prompt.as_deref(),
             )?;
 
             let mut stream = client
-                .chat()
-                .create_stream(request)
+                .chat_completion_stream(&request)
                 .await
                 .map_err(ChatError::from)?;
 
             let mut assistant_text = String::new();
             let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
                 std::collections::BTreeMap::new();
-            let mut finish_reason: Option<async_openai::types::chat::FinishReason> = None;
+            let mut finish_reason: Option<String> = None;
             let term_width = crossterm::terminal::size()
                 .map(|(w, _)| w as usize)
                 .unwrap_or(80);
@@ -600,7 +599,7 @@ fn run_oneshot_agent(
                                 }
                             }
                             if let Some(ref fr) = choice.finish_reason {
-                                finish_reason = Some(*fr);
+                                finish_reason = Some(fr.clone());
                             }
                         }
                     }
@@ -608,10 +607,7 @@ fn run_oneshot_agent(
                 }
             }
 
-            let is_tool_calls = matches!(
-                finish_reason,
-                Some(async_openai::types::chat::FinishReason::ToolCalls)
-            );
+            let is_tool_calls = finish_reason.as_deref() == Some("tool_calls");
             let tool_items: Vec<ToolCallItem> = if is_tool_calls {
                 raw_tool_calls
                     .into_values()

@@ -3,7 +3,7 @@ use crate::command::chat::context::compact::InvokedSkillsMap;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::infra::skill::Skill;
 use crate::command::chat::permission::queue::PermissionQueue;
-use async_openai::types::chat::{ChatCompletionTool, ChatCompletionTools, FunctionObject};
+use crate::llm::{FunctionObject, ToolDefinition};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -312,19 +312,18 @@ impl ToolRegistry {
     }
 
     /// 将未禁用的工具转换为 OpenAI 函数调用格式的工具列表
-    pub fn to_openai_tools_filtered(&self, disabled: &[String]) -> Vec<ChatCompletionTools> {
+    pub fn to_llm_tools_filtered(&self, disabled: &[String]) -> Vec<ToolDefinition> {
         self.tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
-            .map(|t| {
-                ChatCompletionTools::Function(ChatCompletionTool {
-                    function: FunctionObject {
-                        name: t.name().to_string(),
-                        description: Some(t.description().trim().to_string()),
-                        parameters: Some(t.parameters_schema()),
-                        strict: None,
-                    },
-                })
+            .map(|t| ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionObject {
+                    name: t.name().to_string(),
+                    description: Some(t.description().trim().to_string()),
+                    parameters: Some(t.parameters_schema()),
+                    strict: None,
+                },
             })
             .collect()
     }

@@ -111,7 +111,7 @@ release: ## 构建发布版本（release）
 # ============================================
 # 安装相关
 # ============================================
-install: release build-indicator build-ax ## 安装到系统（cargo bin 目录）
+install: test release build-indicator build-ax ## 安装到系统（cargo bin 目录）
 	@echo "📦 安装到系统..."
 	@mkdir -p $(CARGO_BIN_DIR)
 	@rm -f $(BIN_PATH)

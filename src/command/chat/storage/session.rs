@@ -138,6 +138,7 @@ impl SessionPaths {
     }
 
     /// 返回 session ID（即目录名）
+    #[allow(dead_code)]
     pub fn id(&self) -> &str {
         self.dir.file_name().and_then(|s| s.to_str()).unwrap_or("")
     }

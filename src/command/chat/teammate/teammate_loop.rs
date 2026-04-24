@@ -12,8 +12,8 @@ use crate::command::chat::tools::derived_shared::{
     call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
     extract_tool_items,
 };
+use crate::llm::ToolDefinition;
 use crate::util::log::write_info_log;
-use async_openai::types::chat::ChatCompletionTools;
 use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
@@ -30,7 +30,7 @@ pub struct TeammateLoopConfig {
     pub base_system_prompt: Option<String>,
     /// 共享的当前 session id 槽（session 切换时会被主线程更新）
     pub session_id: Arc<Mutex<String>>,
-    pub tools: Vec<ChatCompletionTools>,
+    pub tools: Vec<ToolDefinition>,
     pub registry: Arc<ToolRegistry>,
     pub jcli_config: Arc<JcliConfig>,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
@@ -239,10 +239,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // 检查是否有工具调用
-        let has_tool_calls = matches!(
-            response_choice.finish_reason,
-            Some(async_openai::types::chat::FinishReason::ToolCalls)
-        );
+        let has_tool_calls = response_choice.finish_reason.as_deref() == Some("tool_calls");
 
         if !has_tool_calls || response_choice.message.tool_calls.is_none() {
             // 无工具调用 — 进入轮询等待模式

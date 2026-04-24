@@ -196,7 +196,7 @@ impl Tool for CreateTeammateTool {
         disabled.push(Self::NAME.to_string());
         disabled.push(AgentTeamTool::NAME.to_string());
         disabled.push(SubAgentTool::NAME.to_string());
-        let tools = child_registry.to_openai_tools_filtered(&disabled);
+        let tools = child_registry.to_llm_tools_filtered(&disabled);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all
         let jcli_config = if params.inherit_permissions {

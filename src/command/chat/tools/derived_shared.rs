@@ -1,4 +1,4 @@
-use crate::command::chat::agent::api::{build_request_with_tools, create_openai_client};
+use crate::command::chat::agent::api::{build_request_with_tools, create_llm_client};
 use crate::command::chat::agent::thread_identity::{current_agent_name, current_agent_type};
 use crate::command::chat::app::AskRequest;
 use crate::command::chat::context::compact::new_invoked_skills_map;
@@ -11,8 +11,8 @@ use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::{PlanApprovalQueue, PlanModeState};
 use crate::command::chat::tools::task::TaskManager;
+use crate::llm::{Choice, ToolCall, ToolDefinition};
 use crate::util::log::write_info_log;
-use async_openai::types::chat::{ChatChoice, ChatCompletionMessageToolCalls, ChatCompletionTools};
 use rand::Rng;
 use std::sync::{
     Arc, Mutex,
@@ -337,21 +337,15 @@ impl DerivedAgentShared {
 
 // ========== Derived Agent Loop 共享 Helper ==========
 
-/// 创建 tokio runtime 和 OpenAI client
+/// 创建 tokio runtime 和 LlmClient
 ///
 /// 供 run_sub_agent_loop 和 run_teammate_loop 共用。
 pub fn create_runtime_and_client(
     provider: &ModelProvider,
-) -> Result<
-    (
-        tokio::runtime::Runtime,
-        async_openai::Client<async_openai::config::OpenAIConfig>,
-    ),
-    String,
-> {
+) -> Result<(tokio::runtime::Runtime, crate::llm::LlmClient), String> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create async runtime: {}", e))?;
-    let client = create_openai_client(provider);
+    let client = create_llm_client(provider);
     Ok((rt, client))
 }
 
@@ -367,21 +361,20 @@ pub type RetryCallback = dyn Fn(u32, u32, u64, &str);
 /// - 仍失败则直接返回错误文本
 pub fn call_llm_non_stream(
     rt: &tokio::runtime::Runtime,
-    client: &async_openai::Client<async_openai::config::OpenAIConfig>,
+    client: &crate::llm::LlmClient,
     provider: &ModelProvider,
     messages: &[ChatMessage],
-    tools: &[ChatCompletionTools],
+    tools: &[ToolDefinition],
     system_prompt: Option<&str>,
-    // 重试前的回调：可用于更新 UI 状态或推送日志
     on_retry: Option<&RetryCallback>,
-) -> Result<ChatChoice, String> {
+) -> Result<Choice, String> {
     let request = build_request_with_tools(provider, messages, tools.to_vec(), system_prompt)
         .map_err(|e| format!("Failed to build request: {}", e))?;
 
     let mut attempt: u32 = 0;
     loop {
         attempt += 1;
-        match rt.block_on(async { client.chat().create(request.clone()).await }) {
+        match rt.block_on(async { client.chat_completion(&request).await }) {
             Ok(response) => {
                 return response
                     .choices
@@ -402,7 +395,6 @@ pub fn call_llm_non_stream(
                             delay_ms, attempt, policy.max_attempts
                         ),
                     );
-                    // 通知调用方进入重试状态
                     if let Some(cb) = on_retry {
                         cb(
                             attempt,
@@ -414,7 +406,6 @@ pub fn call_llm_non_stream(
                     std::thread::sleep(std::time::Duration::from_millis(delay_ms));
                     continue;
                 }
-                // 不可重试或已耗尽重试次数
                 return Err(chat_err.display_message());
             }
         }
@@ -503,19 +494,13 @@ fn backoff_delay_ms(attempt: u32, base_ms: u64, cap_ms: u64) -> u64 {
 }
 
 /// 从 LLM response 的 tool_calls 中提取 ToolCallItem 列表
-pub fn extract_tool_items(tool_calls: &[ChatCompletionMessageToolCalls]) -> Vec<ToolCallItem> {
+pub fn extract_tool_items(tool_calls: &[ToolCall]) -> Vec<ToolCallItem> {
     tool_calls
         .iter()
-        .filter_map(|tc| {
-            if let ChatCompletionMessageToolCalls::Function(f) = tc {
-                Some(ToolCallItem {
-                    id: f.id.clone(),
-                    name: f.function.name.clone(),
-                    arguments: f.function.arguments.clone(),
-                })
-            } else {
-                None
-            }
+        .map(|tc| ToolCallItem {
+            id: tc.id.clone(),
+            name: tc.function.name.clone(),
+            arguments: tc.function.arguments.clone(),
         })
         .collect()
 }

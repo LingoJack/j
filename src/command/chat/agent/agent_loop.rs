@@ -1,7 +1,7 @@
 use super::super::app::types::{StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent};
-use super::api::{build_request_with_tools, call_openai_non_stream_lenient, create_openai_client};
+use super::api::{build_request_with_tools, call_llm_non_stream, create_llm_client};
 use super::config::{AgentLoopConfig, AgentLoopSharedState};
 use super::retry::{backoff_delay_ms, retry_policy_for};
 use super::tool_processor::{
@@ -13,9 +13,9 @@ use crate::command::chat::context::message_compress::{
     DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
 use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
+use crate::llm::ToolDefinition;
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
-use async_openai::types::chat::ChatCompletionTools;
 use futures::StreamExt;
 use rand::Rng;
 use std::sync::{Arc, mpsc};
@@ -90,7 +90,7 @@ pub async fn run_main_agent_loop(
     config: AgentLoopConfig,
     shared: AgentLoopSharedState,
     mut messages: Vec<ChatMessage>,
-    tools: Vec<ChatCompletionTools>,
+    tools: Vec<ToolDefinition>,
     system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
@@ -116,7 +116,7 @@ pub async fn run_main_agent_loop(
         derived_system_prompt,
     } = shared;
 
-    let client = create_openai_client(&provider);
+    let client = create_llm_client(&provider);
 
     let tool_ctx = ToolCallContext {
         stream_msg_sender: &tx,
@@ -141,16 +141,7 @@ pub async fn run_main_agent_loop(
         ),
     );
     if !tools.is_empty() {
-        let tool_names: Vec<&str> = tools
-            .iter()
-            .filter_map(|t| {
-                if let async_openai::types::chat::ChatCompletionTools::Function(f) = t {
-                    Some(f.function.name.as_str())
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let tool_names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         write_info_log(
             "agent_loop",
             &format!("可用工具列表: [{}]", tool_names.join(", ")),
@@ -476,7 +467,7 @@ pub async fn run_main_agent_loop(
                 "agent_loop",
                 &format!("开始创建流式请求 (attempt={})...", retry_attempt),
             );
-            let mut stream = match client.chat().create_stream(request.clone()).await {
+            let mut stream = match client.chat_completion_stream(&request).await {
                 Ok(s) => {
                     write_info_log("agent_loop", "流式请求创建成功");
                     s
@@ -518,7 +509,7 @@ pub async fn run_main_agent_loop(
             };
 
             // ── 读取流式响应 ──
-            let mut finish_reason: Option<async_openai::types::chat::FinishReason> = None;
+            let mut finish_reason: Option<String> = None;
             let mut assistant_text = String::new();
             // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
             let mut active_tool_call_parts: std::collections::BTreeMap<u32, StreamingToolCallPart> =
@@ -587,12 +578,12 @@ pub async fn run_main_agent_loop(
                                         }
                                     }
                                     if let Some(ref finish_reason_val) = choice.finish_reason {
-                                        finish_reason = Some(*finish_reason_val);
+                                        finish_reason = Some(finish_reason_val.clone());
                                     }
                                 }
                             }
                             Some(Err(e)) => {
-                                let error_str = format!("{}", e);
+                                let error_str = e.to_string();
                                 write_error_log("Chat API 流式响应 error", &error_str);
                                 let err = ChatError::from(e);
                                 // 反序列化错误优先走非流式 fallback（宽松 schema 能绕过大多数格式问题）；
@@ -787,7 +778,7 @@ pub async fn run_main_agent_loop(
                 }
                 // 使用宽松反序列化的非流式调用（兼容非标准 finish_reason），同样支持重试
                 let fallback_result = loop {
-                    let create_fut = call_openai_non_stream_lenient(&provider, &request);
+                    let create_fut = call_llm_non_stream(&provider, &request);
                     let result = tokio::select! {
                         result = create_fut => result,
                         _ = cancel_token.cancelled() => {
@@ -982,10 +973,7 @@ pub async fn run_main_agent_loop(
 
             if has_tool_calls {
                 // 日志：检测 finish_reason 与实际 tool_calls 是否一致
-                let finish_reason_is_tool_calls = matches!(
-                    finish_reason,
-                    Some(async_openai::types::chat::FinishReason::ToolCalls)
-                );
+                let finish_reason_is_tool_calls = finish_reason.as_deref() == Some("tool_calls");
                 if !finish_reason_is_tool_calls {
                     write_info_log(
                         "agent_loop",

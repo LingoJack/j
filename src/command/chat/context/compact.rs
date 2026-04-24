@@ -1,4 +1,4 @@
-use crate::command::chat::agent::api::create_openai_client;
+use crate::command::chat::agent::api::create_llm_client;
 use crate::command::chat::constants::{
     COMPACT_KEEP_RECENT, COMPACT_KEEP_RECENT_USER_MESSAGES, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET,
     COMPACT_SKILL_TOKEN_BUDGET, COMPACT_SUMMARY_MAX_TOKENS, COMPACT_TOKEN_THRESHOLD,
@@ -6,11 +6,8 @@ use crate::command::chat::constants::{
 };
 use crate::command::chat::context::policy;
 use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
+use crate::llm::{ChatRequest, Content, Message, Role};
 use crate::util::log::{write_error_log, write_info_log};
-use async_openai::types::chat::{
-    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
-    CreateChatCompletionRequestArgs,
-};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -383,23 +380,25 @@ pub async fn auto_compact(
         summary_prompt
     };
 
-    let user_msg = ChatCompletionRequestUserMessageArgs::default()
-        .content(summary_prompt_with_context.as_str())
-        .build()
-        .map_err(|e| format!("构建摘要请求消息失败: {}", e))?;
-
-    let request = CreateChatCompletionRequestArgs::default()
-        .model(&provider.model)
-        .messages(vec![ChatCompletionRequestMessage::User(user_msg)])
-        .max_tokens(COMPACT_SUMMARY_MAX_TOKENS)
-        .build()
-        .map_err(|e| format!("构建摘要请求失败: {}", e))?;
+    let request = ChatRequest {
+        model: provider.model.clone(),
+        messages: vec![Message {
+            role: Role::User,
+            content: Some(Content::Text(summary_prompt_with_context)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }],
+        tools: None,
+        stream: None,
+        max_tokens: Some(COMPACT_SUMMARY_MAX_TOKENS),
+        extra: serde_json::Map::new(),
+    };
 
     // 3. 调用 LLM（非流式）
-    let client = create_openai_client(provider);
+    let client = create_llm_client(provider);
     let response = client
-        .chat()
-        .create(request)
+        .chat_completion(&request)
         .await
         .map_err(|e| format!("auto_compact LLM 请求失败: {}", e))?;
 

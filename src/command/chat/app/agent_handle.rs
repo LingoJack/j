@@ -3,7 +3,7 @@ use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState}
 use crate::command::chat::agent::run_main_agent_loop;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
-use async_openai::types::chat::ChatCompletionTools;
+use crate::llm::ToolDefinition;
 use std::sync::{Arc, mpsc};
 use tokio_util::sync::CancellationToken;
 
@@ -24,7 +24,7 @@ impl MainAgentHandle {
         config: AgentLoopConfig,
         shared: AgentLoopSharedState,
         api_messages: Vec<ChatMessage>,
-        tools: Vec<ChatCompletionTools>,
+        tools: Vec<ToolDefinition>,
         system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     ) -> (Self, mpsc::SyncSender<ToolResultMsg>) {
         let (stream_tx, stream_rx) = mpsc::channel::<StreamMsg>();

@@ -214,7 +214,7 @@ impl ChatApp {
         let max_llm_rounds = self.state.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
             self.tool_registry
-                .to_openai_tools_filtered(&self.state.agent_config.disabled_tools)
+                .to_llm_tools_filtered(&self.state.agent_config.disabled_tools)
         } else {
             vec![]
         };
