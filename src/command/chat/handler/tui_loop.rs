@@ -106,22 +106,34 @@ fn dispatch_event(
                     app.update(Action::ConfigEditChar(c));
                 }
                 *needs_redraw = true;
-            } else if matches!(app.ui.mode, ChatMode::ToolConfirm) && app.ui.tool_interact_typing {
-                // Ask 自由输入 / 工具拒绝原因输入 的粘贴支持
-                for c in text.chars() {
-                    if c == '\r' {
-                        continue;
-                    }
-                    if c == '\n' && !app.ui.tool_ask_mode {
-                        continue; // 工具拒绝原因：单行，忽略换行
-                    }
-                    if app.ui.tool_ask_mode {
-                        app.update(Action::AskInputChar(c));
-                    } else {
-                        app.update(Action::ToolInteractInputChar(c));
+            } else if matches!(app.ui.mode, ChatMode::ToolConfirm) {
+                // Ask 选项模式下直接粘贴：与按 Char 键行为一致，自动切到自由输入行
+                if app.ui.tool_ask_mode && !app.ui.tool_interact_typing {
+                    if let Some(cur_q) = app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx)
+                    {
+                        app.ui.tool_ask_cursor = cur_q.options.len();
+                        app.ui.tool_interact_typing = true;
+                        app.ui.tool_interact_input.clear();
+                        app.ui.tool_interact_cursor = 0;
                     }
                 }
-                *needs_redraw = true;
+                // Ask 自由输入 / 工具拒绝原因输入 的粘贴支持
+                if app.ui.tool_interact_typing {
+                    for c in text.chars() {
+                        if c == '\r' {
+                            continue;
+                        }
+                        if c == '\n' && !app.ui.tool_ask_mode {
+                            continue; // 工具拒绝原因：单行，忽略换行
+                        }
+                        if app.ui.tool_ask_mode {
+                            app.update(Action::AskInputChar(c));
+                        } else {
+                            app.update(Action::ToolInteractInputChar(c));
+                        }
+                    }
+                    *needs_redraw = true;
+                }
             }
             false
         }
