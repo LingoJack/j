@@ -16,13 +16,14 @@ pub use persist::{
     save_tasks_state, save_teammates_state, save_todos_state,
 };
 pub use session::{
-    SessionMeta, SessionPaths, append_event_to_path, append_session_event, delete_session,
-    find_latest_session_id, generate_session_id, list_sessions, load_session,
-    load_session_meta_file, read_transcript_with_timestamps, save_session_meta_file,
-    session_file_path, sessions_dir,
+    SessionMeta, SessionPaths, append_event_to_path, append_session_event, append_session_op,
+    delete_session, find_latest_session_id, generate_session_id, list_sessions, load_session,
+    load_session_meta_file, load_session_ops, read_transcript_with_timestamps,
+    save_session_meta_file, session_file_path, sessions_dir,
 };
 pub use types::{
-    ChatMessage, ChatSession, DisplayType, ImageData, MessageRole, SessionEvent, ToolCallItem,
+    ChatMessage, ChatSession, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp,
+    SessionOpKind, ToolCallItem,
 };
 
 #[cfg(test)]

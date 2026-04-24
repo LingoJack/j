@@ -1,5 +1,5 @@
 use super::config::agent_data_dir;
-use super::types::{ChatMessage, ChatSession, MessageRole, SessionEvent};
+use super::types::{ChatMessage, ChatSession, MessageRole, SessionEvent, SessionOp};
 use crate::command::chat::constants::MESSAGE_PREVIEW_MAX_LEN;
 use crate::error;
 use serde::{Deserialize, Serialize};
@@ -133,6 +133,11 @@ impl SessionPaths {
         self.dir.join("sandbox.json")
     }
 
+    /// 操作审计文件：sessions/<id>/ops.jsonl
+    pub fn ops_file(&self) -> PathBuf {
+        self.dir.join("ops.jsonl")
+    }
+
     pub fn ensure_dir(&self) -> std::io::Result<()> {
         fs::create_dir_all(&self.dir)
     }
@@ -164,6 +169,42 @@ pub fn append_session_event(session_id: &str, event: &SessionEvent) -> bool {
         update_session_meta_on_event(session_id, event);
     }
     ok
+}
+
+/// 追加一条操作审计记录到 ops.jsonl（append-only，与 append_session_event 同模式）
+pub fn append_session_op(session_id: &str, op: &SessionOp) -> bool {
+    let paths = SessionPaths::new(session_id);
+    if paths.ensure_dir().is_err() {
+        return false;
+    }
+    let path = paths.ops_file();
+    match serde_json::to_string(op) {
+        Ok(line) => match fs::OpenOptions::new().create(true).append(true).open(&path) {
+            Ok(mut file) => writeln!(file, "{}", line).is_ok(),
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
+/// 读取 session 的所有操作审计记录
+pub fn load_session_ops(session_id: &str) -> Vec<SessionOp> {
+    let path = SessionPaths::new(session_id).ops_file();
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut ops = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(op) = serde_json::from_str::<SessionOp>(line) {
+            ops.push(op);
+        }
+    }
+    ops
 }
 
 /// 增量更新 session.json 元数据（追加事件后调用）

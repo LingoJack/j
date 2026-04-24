@@ -154,6 +154,38 @@ pub enum SessionEvent {
     Restore { messages: Vec<ChatMessage> },
 }
 
+/// Session 操作审计记录，追加到 sessions/<id>/ops.jsonl
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionOp {
+    /// 操作类型
+    pub op: SessionOpKind,
+    /// 时间戳（epoch ms）
+    pub timestamp_ms: u64,
+    /// 是否执行失败
+    pub is_error: bool,
+}
+
+/// 操作类型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionOpKind {
+    /// 文件编辑（Edit 工具）
+    Edit {
+        /// 被编辑的文件路径
+        path: String,
+    },
+    /// 文件写入（Write 工具）
+    Write {
+        /// 被写入的文件路径
+        path: String,
+    },
+    /// Shell 命令执行（Bash 工具）
+    Bash {
+        /// 执行的命令
+        command: String,
+    },
+}
+
 impl SessionEvent {
     /// 构造一条带当前时间戳的 Msg 事件
     pub fn msg(message: ChatMessage) -> Self {

@@ -1,7 +1,9 @@
 use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent, HookManager};
-use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{
+    ChatMessage, ImageData, MessageRole, SessionOp, SessionOpKind, ToolCallItem, append_session_op,
+};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact_tool::CompactTool;
 use crate::util::log::write_info_log;
@@ -242,6 +244,9 @@ pub(super) fn process_tool_calls(
 
     log_tool_results(&tool_items, &tool_results);
 
+    // ★ 记录写入操作到 ops.jsonl
+    append_write_ops(&tool_items, &tool_results, ctx.session_id);
+
     // 收集需要延迟注入的图片消息（在所有 tool results 之后统一注入，
     // 避免在 tool results 中间插入 user 消息导致 API 报错）
     let mut deferred_image_msgs: Vec<ChatMessage> = Vec::new();
@@ -352,6 +357,59 @@ pub(super) fn process_tool_calls(
         compact_requested,
         plan_with_context_clear: plan_clear_context,
     })
+}
+
+/// 从 Edit/Write 工具的 arguments JSON 中提取 path 字段
+fn extract_path_from_args(args: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(args)
+        .ok()
+        .and_then(|v| v.get("path")?.as_str().map(String::from))
+}
+
+/// 从 Bash 工具的 arguments JSON 中提取 command 字段
+fn extract_command_from_args(args: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(args)
+        .ok()
+        .and_then(|v| v.get("command")?.as_str().map(String::from))
+}
+
+/// 记录 Edit/Write/Bash 写入操作到 ops.jsonl
+fn append_write_ops(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg], session_id: &str) {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    for item in tool_items {
+        let is_error = tool_results
+            .iter()
+            .any(|r| r.tool_call_id == item.id && r.is_error);
+
+        let op_kind = match item.name.as_str() {
+            "Edit" => {
+                extract_path_from_args(&item.arguments).map(|path| SessionOpKind::Edit { path })
+            }
+            "Write" => {
+                extract_path_from_args(&item.arguments).map(|path| SessionOpKind::Write { path })
+            }
+            "Bash" => extract_command_from_args(&item.arguments)
+                .map(|cmd| SessionOpKind::Bash { command: cmd }),
+            _ => None,
+        };
+
+        if let Some(op) = op_kind {
+            let _ = append_session_op(
+                session_id,
+                &SessionOp {
+                    op,
+                    timestamp_ms: now_ms,
+                    is_error,
+                },
+            );
+        }
+    }
 }
 
 #[cfg(test)]
