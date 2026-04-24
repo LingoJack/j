@@ -17,7 +17,10 @@ use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind},
+    event::{
+        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags, MouseEventKind,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -29,13 +32,23 @@ use std::io;
 /// 正常退出路径调用 [`TerminalGuard::disarm`] 后，`Drop` 不再重复恢复。
 /// 异常路径（panic、loop 内 `?` 提前返回）由 `Drop` 兜底执行完整恢复序列。
 struct TerminalGuard {
+    /// keyboard enhancement 协议是否已 push
+    keyboard_enhancement_active: bool,
     /// 是否已手动恢复（disarm），避免 Drop 重复恢复
     disarmed: bool,
 }
 
 impl TerminalGuard {
     fn new() -> Self {
-        Self { disarmed: false }
+        Self {
+            keyboard_enhancement_active: false,
+            disarmed: false,
+        }
+    }
+
+    /// 标记 `PushKeyboardEnhancementFlags` 已执行成功
+    fn set_keyboard_active(&mut self) {
+        self.keyboard_enhancement_active = true;
     }
 
     /// 正常退出路径：手动完成恢复后调用，阻止 `Drop` 再次恢复。
@@ -53,12 +66,22 @@ impl Drop for TerminalGuard {
         // 使用 io::stdout() 而非 terminal.backend_mut()，
         // 因为 Drop 发生时 terminal 可能已经被 move 或 drop。
         let mut stdout = io::stdout();
-        let _ = execute!(
-            stdout,
-            event::DisableMouseCapture,
-            event::DisableBracketedPaste,
-            LeaveAlternateScreen
-        );
+        if self.keyboard_enhancement_active {
+            let _ = execute!(
+                stdout,
+                PopKeyboardEnhancementFlags,
+                event::DisableMouseCapture,
+                event::DisableBracketedPaste,
+                LeaveAlternateScreen
+            );
+        } else {
+            let _ = execute!(
+                stdout,
+                event::DisableMouseCapture,
+                event::DisableBracketedPaste,
+                LeaveAlternateScreen
+            );
+        }
     }
 }
 
@@ -187,6 +210,7 @@ fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
     let _ = execute!(
         io::stdout(),
+        PopKeyboardEnhancementFlags,
         event::DisableMouseCapture,
         event::DisableBracketedPaste,
         LeaveAlternateScreen
@@ -248,11 +272,13 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         event::EnableMouseCapture,
         event::EnableBracketedPaste
     )?;
-    // 不启用 kitty keyboard protocol：启用后 kitty 会把 Cmd+Shift+[/] 等自家快捷键
-    // 也按 CSI u 编码转发给 TUI，导致 kitty window/tab 切换失效。
-    // 改用 Alt+Enter 作为换行键（crossterm 原生可区分，无需协议支持）。
-    // 仍想用 Shift+Enter 换行的用户可在 kitty.conf 加：
-    //     map shift+enter send_text all \x1b\r
+    // 启用 kitty keyboard protocol，使终端能区分 Shift+Enter / Ctrl+Enter 等组合键。
+    // 不支持此协议的终端（如 Terminal.app）会忽略该指令，不会报错。
+    let _ = execute!(
+        stdout,
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    );
+    guard.set_keyboard_active();
 
     let mut mouse_capture_enabled = true;
 
@@ -700,6 +726,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     terminal::disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        PopKeyboardEnhancementFlags,
         event::DisableMouseCapture,
         event::DisableBracketedPaste,
         LeaveAlternateScreen

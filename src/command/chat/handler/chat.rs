@@ -513,9 +513,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
         }
 
         KeyCode::Enter => {
-            // Alt+Enter：插入换行符（无需任何终端协议，crossterm 原生可识别）。
-            // SHIFT 分支保留：仅当用户自行开启 kitty keyboard protocol 或在 kitty.conf
-            // 把 shift+enter 映射成 \x1b\r 时会命中；默认配置下不会误触发。
+            // Shift+Enter 或 Alt+Enter：插入换行符
+            // Shift+Enter 需要 kitty keyboard protocol（kitty/WezTerm 等）
+            // Alt+Enter 在所有终端均可用，作为通用备选
             if key.modifiers.contains(KeyModifiers::SHIFT)
                 || key.modifiers.contains(KeyModifiers::ALT)
             {

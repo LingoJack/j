@@ -21,7 +21,7 @@ pub fn draw_help(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     let shortcuts: &[(&str, &str)] = &[
         ("Enter", "发送消息"),
-        ("Alt+Enter", "输入框内换行"),
+        ("Shift/Alt+Enter", "输入框内换行"),
         ("↑ / ↓", "滚动对话记录"),
         ("← / →", "移动输入光标"),
         ("Home / End", "光标跳到行首/行尾"),
