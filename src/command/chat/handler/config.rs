@@ -46,6 +46,19 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
         return;
     }
 
+    // 统一拦截 [ / ] 切换 tab（非编辑模式下）
+    match key.code {
+        KeyCode::Char('[') => {
+            app.update(Action::ConfigSwitchTab(CursorDirection::Up));
+            return;
+        }
+        KeyCode::Char(']') => {
+            app.update(Action::ConfigSwitchTab(CursorDirection::Down));
+            return;
+        }
+        _ => {}
+    }
+
     let action = match app.ui.config_tab {
         ConfigTab::Model => match key.code {
             KeyCode::Esc => Action::SaveConfig,

@@ -125,6 +125,8 @@ fn handle_normal_key(app: &mut HelpApp, key: crossterm::event::KeyEvent) -> bool
         // Tab 切换
         KeyCode::Right | KeyCode::Char('l') => app.next_tab(),
         KeyCode::Left | KeyCode::Char('h') => app.prev_tab(),
+        KeyCode::Char('[') => app.prev_tab(),
+        KeyCode::Char(']') => app.next_tab(),
         KeyCode::Tab => {
             if key.modifiers.contains(KeyModifiers::SHIFT) {
                 app.prev_tab();
