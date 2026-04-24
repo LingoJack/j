@@ -7,6 +7,8 @@ use crate::command::chat::constants::{
     TOOL_ARG_PREVIEW_MAX_CHARS,
 };
 use crate::command::chat::storage::DisplayType;
+use crate::command::chat::storage::config::ThinkingStyle;
+use crate::command::chat::ui::palette;
 use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width, wrap_text};
 use ratatui::{
@@ -284,10 +286,18 @@ pub fn build_message_lines_incremental(
 
         // 思考指示器：颜色脉冲动画
         if streaming_text == "◍" {
-            let pulse_color = thinking_pulse_color(t);
             let tick = current_tick();
-            let frame = app.state.agent_config.thinking_style.frame(tick);
-            let indicator_line = Line::from(Span::styled(frame, Style::default().fg(pulse_color)));
+            let thinking_style = app.state.agent_config.thinking_style;
+
+            let indicator_line = if thinking_style == ThinkingStyle::Comet {
+                // ── 彗星逐字符渐变渲染 ──
+                // 使用 welcome_palette 调色板实现 RGB 三色分段插值
+                comet_gradient_line(tick, t.welcome_palette, t.label_ai)
+            } else {
+                let pulse_color = thinking_pulse_color(t);
+                let frame = thinking_style.frame(tick);
+                Line::from(Span::styled(frame, Style::default().fg(pulse_color)))
+            };
             let bubble_line = wrap_md_line_in_bubble(
                 indicator_line,
                 bubble_bg,
@@ -2125,6 +2135,61 @@ fn thinking_pulse_color(theme: &Theme) -> Color {
             theme.text_dim
         }
     }
+}
+
+/// 彗星逐字符渐变渲染：每个非空格字符独立着色，头亮尾暗
+///
+/// - 使用 `palette` 调色板获取三色渐变元组 (start, mid, end)
+/// - 彗星头部（██）使用亮色，拖尾（▓▒░·）逐步衰减
+/// - 空格保持背景色
+/// - 随 tick 做色相偏移，产生流动感
+fn comet_gradient_line(tick: u64, palette_idx: u8, fallback_color: Color) -> Line<'static> {
+    let frame = ThinkingStyle::Comet.frame(tick);
+
+    // 收集非空格字符的索引，用于计算渐变映射
+    let chars: Vec<char> = frame.chars().collect();
+    let non_space_count = chars.iter().filter(|&&c| c != ' ').count();
+
+    // 获取渐变色：每 7 个 tick（~700ms）切换一次色相
+    let grad_idx = (tick as usize / 7) % 16;
+    let (start_c, mid_c, end_c) = palette::get_gradient(palette_idx, grad_idx);
+
+    // 非空格数不足时回退到单色
+    if non_space_count < 2 {
+        return Line::from(Span::styled(
+            frame.to_string(),
+            Style::default().fg(fallback_color),
+        ));
+    }
+
+    let n = non_space_count;
+    let mut spans: Vec<Span<'static>> = Vec::with_capacity(chars.len());
+    let mut color_idx = 0usize;
+
+    for &ch in &chars {
+        if ch == ' ' {
+            spans.push(Span::raw(ch.to_string()));
+        } else {
+            // t: 0.0（头部/最亮）→ 1.0（尾部/最暗）
+            let t = color_idx as f32 / (n - 1).max(1) as f32;
+            // 三色分段插值：前半段 start→mid，后半段 mid→end
+            let (from, to, local_t) = if t <= 0.5 {
+                (start_c, mid_c, t * 2.0)
+            } else {
+                (mid_c, end_c, (t - 0.5) * 2.0)
+            };
+            let r = (from.0 as f32 * (1.0 - local_t) + to.0 as f32 * local_t).round() as u8;
+            let g = (from.1 as f32 * (1.0 - local_t) + to.1 as f32 * local_t).round() as u8;
+            let b = (from.2 as f32 * (1.0 - local_t) + to.2 as f32 * local_t).round() as u8;
+            spans.push(Span::styled(
+                ch.to_string(),
+                Style::default().fg(Color::Rgb(r, g, b)),
+            ));
+            color_idx += 1;
+        }
+    }
+
+    Line::from(spans)
 }
 
 pub fn copy_to_clipboard(content: &str) -> bool {
