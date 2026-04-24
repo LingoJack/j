@@ -64,17 +64,26 @@ impl Stream for SseStream {
     }
 }
 
+/// SSE event delimiter: double newline.
+const SSE_EVENT_DELIMITER: &str = "\n\n";
+
+/// SSE data line prefix.
+const SSE_DATA_PREFIX: &str = "data:";
+
+/// SSE stream termination sentinel value.
+const SSE_DONE_MARKER: &str = "[DONE]";
+
 /// Try to extract one complete SSE event from the buffer.
 fn try_parse_event(buf: &mut String) -> Result<Option<ChatStreamChunk>, LlmError> {
     loop {
-        let Some(boundary) = buf.find("\n\n") else {
+        let Some(boundary) = buf.find(SSE_EVENT_DELIMITER) else {
             return Ok(None);
         };
 
-        let event_text = buf[..boundary].to_string();
-        buf.drain(..boundary + 2);
+        let result = parse_sse_event(&buf[..boundary])?;
+        buf.drain(..boundary + SSE_EVENT_DELIMITER.len());
 
-        if let Some(chunk) = parse_sse_event(&event_text)? {
+        if let Some(chunk) = result {
             return Ok(Some(chunk));
         }
     }
@@ -99,7 +108,7 @@ fn parse_sse_event(event_text: &str) -> Result<Option<ChatStreamChunk>, LlmError
         if line.starts_with(':') {
             continue;
         }
-        if let Some(rest) = line.strip_prefix("data:") {
+        if let Some(rest) = line.strip_prefix(SSE_DATA_PREFIX) {
             let data = rest.strip_prefix(' ').unwrap_or(rest);
             data_parts.push(data);
         }
@@ -112,7 +121,7 @@ fn parse_sse_event(event_text: &str) -> Result<Option<ChatStreamChunk>, LlmError
     let data = data_parts.join("\n");
     let trimmed = data.trim();
 
-    if trimmed == "[DONE]" || trimmed.is_empty() {
+    if trimmed == SSE_DONE_MARKER || trimmed.is_empty() {
         return Ok(None);
     }
 

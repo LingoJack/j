@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 // ── Request types ──
 
+/// The role of a message author in a conversation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -11,7 +12,7 @@ pub enum Role {
     Tool,
 }
 
-/// Message content: simple text or multimodal parts
+/// Message content: simple text or multimodal parts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Content {
@@ -19,6 +20,7 @@ pub enum Content {
     Parts(Vec<ContentPart>),
 }
 
+/// A single part of multimodal content — text or image URL.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
@@ -26,6 +28,7 @@ pub enum ContentPart {
     ImageUrl { image_url: ImageUrl },
 }
 
+/// Image URL payload for multimodal content parts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageUrl {
     pub url: String,
@@ -33,7 +36,7 @@ pub struct ImageUrl {
     pub detail: Option<String>,
 }
 
-/// Flat message — single struct, no per-role variants
+/// Flat message — single struct, no per-role variants.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: Role,
@@ -49,6 +52,7 @@ pub struct Message {
     pub reasoning_content: Option<String>,
 }
 
+/// A tool call issued by the assistant in a response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     pub id: String,
@@ -57,13 +61,14 @@ pub struct ToolCall {
     pub function: FunctionCall,
 }
 
+/// The function call details inside a tool call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionCall {
     pub name: String,
     pub arguments: String,
 }
 
-/// Tool definition for request
+/// Tool definition for request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
     #[serde(rename = "type")]
@@ -71,6 +76,7 @@ pub struct ToolDefinition {
     pub function: FunctionObject,
 }
 
+/// Function specification within a tool definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionObject {
     pub name: String,
@@ -82,7 +88,7 @@ pub struct FunctionObject {
     pub strict: Option<bool>,
 }
 
-/// Chat completion request
+/// Chat completion request.
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatRequest {
     pub model: String,
@@ -99,17 +105,28 @@ pub struct ChatRequest {
 
 // ── Response types (non-streaming) ──
 
+/// Non-streaming chat completion response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatResponse {
     pub choices: Vec<Choice>,
 }
 
+/// A single choice in a completion response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Choice {
     pub message: ResponseMessage,
     pub finish_reason: Option<String>,
 }
 
+#[allow(dead_code)]
+impl Choice {
+    /// Returns true if the finish reason indicates a tool call.
+    pub fn is_tool_calls(&self) -> bool {
+        self.finish_reason.as_deref() == Some("tool_calls")
+    }
+}
+
+/// The message payload inside a non-streaming response choice.
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct ResponseMessage {
@@ -120,11 +137,13 @@ pub struct ResponseMessage {
 
 // ── Streaming response types ──
 
+/// A single chunk from a streaming chat completion.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatStreamChunk {
     pub choices: Vec<StreamChoice>,
 }
 
+/// A single choice within a streaming chunk.
 #[derive(Debug, Clone, Deserialize)]
 pub struct StreamChoice {
     #[serde(default)]
@@ -133,8 +152,15 @@ pub struct StreamChoice {
     pub finish_reason: Option<String>,
 }
 
+impl StreamChoice {
+    /// Returns true if the finish reason indicates a tool call.
+    pub fn is_tool_calls(&self) -> bool {
+        self.finish_reason.as_deref() == Some("tool_calls")
+    }
+}
+
+/// The incremental delta in a streaming response.
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct Delta {
     pub role: Option<Role>,
     pub content: Option<String>,
@@ -142,6 +168,7 @@ pub struct Delta {
     pub tool_calls: Option<Vec<DeltaToolCall>>,
 }
 
+/// A tool call delta carried by a streaming chunk.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeltaToolCall {
     #[serde(default)]
@@ -151,24 +178,9 @@ pub struct DeltaToolCall {
     pub function: Option<DeltaFunction>,
 }
 
+/// Function call delta within a streaming tool call.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeltaFunction {
     pub name: Option<String>,
     pub arguments: Option<String>,
-}
-
-// ── Finish reason helpers ──
-
-#[allow(dead_code)]
-impl Choice {
-    pub fn is_tool_calls(&self) -> bool {
-        self.finish_reason.as_deref() == Some("tool_calls")
-    }
-}
-
-#[allow(dead_code)]
-impl StreamChoice {
-    pub fn is_tool_calls(&self) -> bool {
-        self.finish_reason.as_deref() == Some("tool_calls")
-    }
 }
