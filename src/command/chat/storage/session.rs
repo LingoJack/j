@@ -25,22 +25,13 @@ pub fn session_file_path(session_id: &str) -> PathBuf {
 /// 布局：`sessions/<id>/transcript.jsonl`。
 #[derive(Debug)]
 pub struct SessionPaths {
-    id: String,
     dir: PathBuf,
 }
 
 impl SessionPaths {
     pub fn new(session_id: &str) -> Self {
         let dir = sessions_dir().join(session_id);
-        Self {
-            id: session_id.to_string(),
-            dir,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn id(&self) -> &str {
-        &self.id
+        Self { dir }
     }
 
     pub fn dir(&self) -> &Path {

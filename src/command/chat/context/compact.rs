@@ -190,17 +190,6 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
     serde_json::to_string(messages).unwrap_or_default().len() / 4
 }
 
-/// 提取 messages 中所有 role="user" 的消息（保留原始顺序）。
-/// 用于 plan-clear 场景：清空 assistant 探索过程与 tool 结果，但保留用户的全部意图/追问。
-#[allow(dead_code)]
-pub fn extract_user_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
-    messages
-        .iter()
-        .filter(|m| m.role == MessageRole::User)
-        .cloned()
-        .collect()
-}
-
 /// 提取最近 N 条 user 消息原文（不限于未被回复的）。
 /// 从末尾向前扫描，取最后 `count` 条 role=user 的消息，保留原始顺序。
 /// 用于 auto_compact 场景：压缩后必须保留用户最近的消息原文，

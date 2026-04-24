@@ -118,13 +118,6 @@ pub fn save_subagents_state(session_id: &str, data: &[SubAgentSnapshotPersist]) 
     save_session_json(&paths.subagents_file(), data)
 }
 
-/// 加载 SubAgents 状态
-#[allow(dead_code)]
-pub fn load_subagents_state(session_id: &str) -> Option<Vec<SubAgentSnapshotPersist>> {
-    let paths = SessionPaths::new(session_id);
-    load_session_json(&paths.subagents_file())
-}
-
 /// 保存 Tasks 状态
 pub fn save_tasks_state(
     session_id: &str,

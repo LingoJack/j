@@ -55,12 +55,6 @@ pub enum ChatError {
 }
 
 impl ChatError {
-    /// 是否为认证错误
-    #[allow(dead_code)]
-    pub fn is_auth_error(&self) -> bool {
-        matches!(self, Self::ApiAuth(_))
-    }
-
     /// 清理后的用户可读消息（剥离 HTML，截断长度，提取状态码）
     pub fn display_message(&self) -> String {
         match self {

@@ -570,13 +570,7 @@ pub fn execute_tool_with_permission(
             let confirm_msg = tool_ref
                 .map(|t| t.confirmation_message(&item.arguments))
                 .unwrap_or_else(|| format!("调用工具 {}", item.name));
-            let req = PendingAgentPerm::new(
-                agent_type,
-                agent_name,
-                item.name.clone(),
-                item.arguments.clone(),
-                confirm_msg,
-            );
+            let req = PendingAgentPerm::new(agent_type, agent_name, item.name.clone(), confirm_msg);
             write_info_log(
                 log_tag,
                 &format!(

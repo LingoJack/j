@@ -459,15 +459,6 @@ impl TeammateManager {
         self.recovered_teammates.clone()
     }
 
-    /// 获取 recovered teammate 的名称和角色列表（用于 UI 展示）
-    #[allow(dead_code)]
-    pub fn recovered_teammates_list(&self) -> Vec<(String, String, TeammateStatusPersist)> {
-        self.recovered_teammates
-            .iter()
-            .map(|(name, t)| (name.clone(), t.role.clone(), t.status.clone()))
-            .collect()
-    }
-
     /// 获取指定名称的 recovered teammate（用于 RespawnTeammate）
     pub fn get_recovered_teammate(&self, name: &str) -> Option<TeammateSnapshotPersist> {
         self.recovered_teammates.get(name).cloned()

@@ -59,16 +59,6 @@ impl PendingPlanApproval {
         *d = Some(decision);
         cvar.notify_one();
     }
-
-    /// 是否已有决策（用于防止重复显示已处理的请求）
-    #[allow(dead_code)]
-    pub fn is_decided(&self) -> bool {
-        self.decision
-            .0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_some()
-    }
 }
 
 /// Plan 审批请求队列（主 TUI 和所有 teammate 线程共享同一个 Arc 实例）

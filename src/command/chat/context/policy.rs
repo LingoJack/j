@@ -128,6 +128,7 @@ pub fn is_key_tool(tool_name: &str) -> bool {
 }
 
 /// 便捷查询：工具所属 tier
+#[cfg(test)]
 pub fn tier_for(tool_name: &str) -> ContextTier {
     policy_for(tool_name).tier
 }

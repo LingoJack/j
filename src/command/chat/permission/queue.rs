@@ -32,9 +32,6 @@ pub struct PendingAgentPerm {
     pub name: String,
     /// 工具名称（"Write"/"Edit"/"Bash"）
     pub tool_name: String,
-    /// 工具调用的 JSON 参数
-    #[allow(dead_code)]
-    pub arguments: String,
     /// 工具自身生成的人读确认提示
     pub confirm_msg: String,
     /// 决策通知（None=未决, Some(true)=允许, Some(false)=拒绝）
@@ -46,14 +43,12 @@ impl PendingAgentPerm {
         agent_type: AgentType,
         name: String,
         tool_name: String,
-        arguments: String,
         confirm_msg: String,
     ) -> Arc<Self> {
         Arc::new(Self {
             agent_type,
             name,
             tool_name,
-            arguments,
             confirm_msg,
             decision: Arc::new((Mutex::new(None), Condvar::new())),
         })
@@ -84,16 +79,6 @@ impl PendingAgentPerm {
         let mut d = lock.lock().unwrap_or_else(|e| e.into_inner());
         *d = Some(approved);
         cvar.notify_one();
-    }
-
-    /// 是否已有决策（用于防止重复显示已处理的请求）
-    #[allow(dead_code)]
-    pub fn is_decided(&self) -> bool {
-        self.decision
-            .0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_some()
     }
 }
 

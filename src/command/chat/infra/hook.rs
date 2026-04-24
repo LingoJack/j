@@ -1124,24 +1124,6 @@ impl HookManager {
 
     /// 热重载用户级和项目级 hook 配置
     ///
-    /// 重新读取 `~/.jdata/agent/hooks/` 和 `.jcli/hooks/` 目录，
-    /// 替换当前的 user_hooks 和 project_hooks（builtin 和 session 级不受影响）。
-    /// 指标数据和 provider 保留不清零。
-    #[allow(dead_code)]
-    pub fn reload(&mut self) {
-        let fresh = HookManager::load();
-        self.user_hooks = fresh.user_hooks;
-        self.project_hooks = fresh.project_hooks;
-        // provider 和 metrics 保留
-        write_info_log("HookManager::reload", "已重新加载用户级和项目级 hooks");
-    }
-
-    /// 获取所有 hook 的执行指标快照（按 label）
-    #[allow(dead_code)]
-    pub fn get_metrics(&self) -> HashMap<String, HookMetrics> {
-        self.metrics.lock().map(|m| m.clone()).unwrap_or_default()
-    }
-
     /// 检查某个事件是否有任何 hook 注册（内置/用户级/项目级/session 级）
     /// 用于调用方在构建 HookContext 之前短路，避免不必要的 clone 和内存分配
     pub fn has_hooks_for(&self, event: HookEvent) -> bool {
@@ -2929,18 +2911,18 @@ prompt: "check this""#;
         );
 
         // llm session hook → hook_type = "llm"
-        manager.register_session_hook_kind(
+        manager.register_session_hook(
             HookEvent::PreSendMessage,
-            HookKind::Llm(LlmHook {
-                name: None,
-                prompt: "check content".to_string(),
+            HookDef {
+                r#type: HookType::Llm,
+                command: None,
+                prompt: Some("check content".to_string()),
                 model: None,
                 timeout: 30,
                 retry: 1,
                 on_error: OnError::Skip,
                 filter: HookFilter::default(),
-                dir_path: None,
-            }),
+            },
         );
 
         let hooks = manager.list_hooks();

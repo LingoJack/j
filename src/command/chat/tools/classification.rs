@@ -77,53 +77,26 @@ impl ToolCategory {
 /// 工具执行状态
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ToolStatus {
-    /// 等待确认
-    #[allow(dead_code)]
-    Pending,
-    /// 执行中
-    #[allow(dead_code)]
-    Running,
     /// 成功完成
     Success,
     /// 失败
     Failed,
-    /// 被拒绝
-    #[allow(dead_code)]
-    Rejected,
 }
 
 impl ToolStatus {
     /// 状态图标
     pub fn icon(&self) -> &'static str {
         match self {
-            Self::Pending => "⏳",
-            Self::Running => "⏱",
             Self::Success => "✓",
             Self::Failed => "✗",
-            Self::Rejected => "⊘",
         }
     }
 
     /// 状态颜色
     pub fn color(&self, theme: &Theme) -> Color {
         match self {
-            Self::Pending => theme.title_loading,
-            Self::Running => theme.title_loading,
             Self::Success => theme.label_ai,
             Self::Failed => theme.toast_error_border,
-            Self::Rejected => theme.tool_confirm_border,
-        }
-    }
-
-    /// 状态文字
-    #[allow(dead_code)]
-    pub fn text(&self) -> &'static str {
-        match self {
-            Self::Pending => "等待确认",
-            Self::Running => "执行中",
-            Self::Success => "成功",
-            Self::Failed => "失败",
-            Self::Rejected => "已拒绝",
         }
     }
 }

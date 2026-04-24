@@ -94,26 +94,6 @@ impl ChatMessage {
         }
     }
 
-    /// 创建带图片的 user 消息
-    #[allow(dead_code)]
-    pub fn with_images(
-        role: MessageRole,
-        content: impl Into<String>,
-        images: Vec<ImageData>,
-    ) -> Self {
-        Self {
-            role,
-            content: content.into(),
-            tool_calls: None,
-            tool_call_id: None,
-            images: if images.is_empty() {
-                None
-            } else {
-                Some(images)
-            },
-        }
-    }
-
     /// 推断显示类型（渲染层入口）
     ///
     /// 将 `role` + `tool_calls` 组合映射为精确的 `DisplayType`，

@@ -31,16 +31,6 @@ impl Sandbox {
         }
     }
 
-    /// 添加一个安全目录（供用户在确认时选择"始终允许该目录"）
-    #[allow(dead_code)]
-    pub fn add_safe_dir(&mut self, dir: &Path) {
-        if let Ok(canonical) = dir.canonicalize()
-            && !self.safe_dirs.contains(&canonical)
-        {
-            self.safe_dirs.push(canonical);
-        }
-    }
-
     /// 获取除 cwd 以外的额外安全目录（用于 session 持久化）
     /// 第一个目录是 cwd，后续是 add_safe_dir 添加的
     pub fn extra_safe_dirs(&self) -> Vec<PathBuf> {
@@ -249,14 +239,6 @@ mod tests {
 
         let args2 = r#"{"path": "src/main.rs"}"#;
         assert!(!sandbox.is_outside("Read", args2));
-    }
-
-    #[test]
-    fn test_add_safe_dir() {
-        let mut sandbox = Sandbox::new();
-        let tmp = PathBuf::from("/tmp");
-        sandbox.add_safe_dir(&tmp);
-        assert!(sandbox.is_path_safe("/tmp/test.txt"));
     }
 
     #[test]

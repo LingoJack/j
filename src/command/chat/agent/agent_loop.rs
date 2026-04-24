@@ -128,7 +128,6 @@ pub async fn run_main_agent_loop(
         display_messages: &display_messages,
         context_messages: &context_messages,
         streaming_content: &streaming_content,
-        invoked_skills: &invoked_skills,
         session_id: &session_id,
     };
 

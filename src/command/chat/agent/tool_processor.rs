@@ -1,7 +1,6 @@
 use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use super::super::error::ChatError;
 use super::super::hook::{HookContext, HookEvent, HookManager};
-use crate::command::chat::context::compact;
 use crate::command::chat::storage::{ChatMessage, ImageData, MessageRole, ToolCallItem};
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact_tool::CompactTool;
@@ -22,8 +21,6 @@ pub(super) struct ToolCallContext<'a> {
     /// LLM context 同步通道（poll_stream_actions 从此增量同步到 session.messages）
     pub(super) context_messages: &'a Arc<Mutex<Vec<ChatMessage>>>,
     pub(super) streaming_content: &'a Arc<Mutex<String>>,
-    #[allow(dead_code)]
-    pub(super) invoked_skills: &'a compact::InvokedSkillsMap,
     pub(super) session_id: &'a str,
 }
 
