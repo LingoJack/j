@@ -145,4 +145,5 @@ allow:
 - Bash(head -10:*)
 - Bash(mv src/command/chat/tools/compact.rs:*)
 - Bash(rm /Users/jacklingo/dev_custom/j/src/llm/mod.rs:*)
+- Bash(cd /Users/lingojack/dev_custom/j/.jcli/worktrees/paste-support:*)
 deny: []

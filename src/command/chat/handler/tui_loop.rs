@@ -106,6 +106,22 @@ fn dispatch_event(
                     app.update(Action::ConfigEditChar(c));
                 }
                 *needs_redraw = true;
+            } else if matches!(app.ui.mode, ChatMode::ToolConfirm) && app.ui.tool_interact_typing {
+                // Ask 自由输入 / 工具拒绝原因输入 的粘贴支持
+                for c in text.chars() {
+                    if c == '\r' {
+                        continue;
+                    }
+                    if c == '\n' && !app.ui.tool_ask_mode {
+                        continue; // 工具拒绝原因：单行，忽略换行
+                    }
+                    if app.ui.tool_ask_mode {
+                        app.update(Action::AskInputChar(c));
+                    } else {
+                        app.update(Action::ToolInteractInputChar(c));
+                    }
+                }
+                *needs_redraw = true;
             }
             false
         }
@@ -501,6 +517,19 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             }
             if should_quit {
                 break;
+            }
+
+            // 事件处理后若状态改变，立即渲染（避免因 poll_timeout 阻塞导致粘贴等操作延迟显示）
+            if needs_redraw {
+                terminal.draw(|f| draw_chat_ui(f, &mut app))?;
+                needs_redraw = false;
+                last_render_time = std::time::Instant::now();
+                // 更新流式节流状态
+                if app.state.is_loading {
+                    app.ui.last_rendered_streaming_len =
+                        safe_lock(&app.state.streaming_content, "tui_loop::immediate_render").len();
+                    app.ui.last_stream_render_time = std::time::Instant::now();
+                }
             }
 
             // ================================================================
