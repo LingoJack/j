@@ -20,12 +20,13 @@
 
 ## 方案总览
 
-提供 **4 种动画风格**，在 Config Panel 全局配置页中可切换：
+提供 **5 种动画风格**（含原版），在 Config Panel 全局配置页中可切换：
 
 | 枚举值 | 名称 | 预览 | 说明 |
 |--------|------|------|------|
-| `Braille` | 旋转点阵 | ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ | 经典 braille spinner，辨识度最高 |
-| `Pulse` | 呼吸圆点 | · ◦ ○ ◔ ◕ ● ◕ ◔ ○ ◦ · | 原版升级：渐变圆环呼吸 |
+| `Braille` | 旋转点阵 | ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ | 经典 braille spinner，辨识度最高（默认） |
+| `Classic` | 经典圆点 | ◍ | 原版：静态 ◍ + 颜色脉冲呼吸 |
+| `Pulse` | 呼吸圆点 | · ◦ ○ ◔ ◕ ● ◕ ◔ ○ ◦ · | 渐变圆环呼吸 |
 | `Wave` | 波浪三连 | ●··  ·●·  ··● | 三点波浪起伏 |
 | `Blink` | 闪烁光标 | █ _ | 极简终端风 |
 
@@ -47,6 +48,8 @@ pub enum ThinkingStyle {
     /// Braille 点阵旋转（默认）
     #[default]
     Braille,
+    /// 经典圆点（原版 ◍ + 颜色脉冲）
+    Classic,
     /// 圆环呼吸（渐变大小）
     Pulse,
     /// 三点波浪
@@ -59,6 +62,7 @@ impl ThinkingStyle {
     /// 所有可能值，用于 config panel 循环切换
     pub const ALL: &[ThinkingStyle] = &[
         ThinkingStyle::Braille,
+        ThinkingStyle::Classic,
         ThinkingStyle::Pulse,
         ThinkingStyle::Wave,
         ThinkingStyle::Blink,
@@ -67,6 +71,7 @@ impl ThinkingStyle {
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::Braille => "旋转点阵",
+            Self::Classic => "经典圆点",
             Self::Pulse => "呼吸圆点",
             Self::Wave => "波浪三连",
             Self::Blink => "闪烁光标",
@@ -87,6 +92,7 @@ impl ThinkingStyle {
                 ];
                 FRAMES[(tick as usize) % FRAMES.len()]
             }
+            Self::Classic => "◍",
             Self::Pulse => {
                 const FRAMES: &[&str] = &[
                     "·", "◦", "○", "◔", "◕", "●", "◕", "◔", "○", "◦",
@@ -263,4 +269,4 @@ Config Panel 中将新增一行：
                   Enter 切换
 ```
 
-按 Enter 可在 `旋转点阵 → 呼吸圆点 → 波浪三连 → 闪烁光标` 之间循环切换。
+按 Enter 可在 `旋转点阵 → 经典圆点 → 呼吸圆点 → 波浪三连 → 闪烁光标` 之间循环切换。

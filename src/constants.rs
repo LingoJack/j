@@ -38,6 +38,7 @@ pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "tool_confirm_timeout",
     "theme",
     "auto_restore_session",
+    "thinking_style",
     "compact_enabled",
     "compact_token_threshold",
     "compact_keep_recent",

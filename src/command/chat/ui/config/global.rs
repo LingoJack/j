@@ -58,11 +58,11 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
 
     // 分组定义: (字段起始索引, 包含字段数)
     let groups: &[(usize, usize)] = &[
-        (0, 3), // system_prompt, agent_md, style
-        (3, 2), // max_history_messages, max_context_tokens
-        (5, 2), // max_tool_rounds, tool_confirm_timeout
-        (7, 2), // theme, auto_restore_session
-        (9, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
+        (0, 3),  // system_prompt, agent_md, style
+        (3, 2),  // max_history_messages, max_context_tokens
+        (5, 2),  // max_tool_rounds, tool_confirm_timeout
+        (7, 3),  // theme, auto_restore_session, thinking_style
+        (10, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
@@ -118,6 +118,16 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                 global_theme_row(
                     label,
                     theme_name,
+                    desc,
+                    is_selected,
+                    "Enter \u{5207}\u{6362}",
+                    t,
+                )
+            } else if *field_name == "thinking_style" {
+                let style_name = app.state.agent_config.thinking_style.display_name();
+                global_theme_row(
+                    label,
+                    style_name,
                     desc,
                     is_selected,
                     "Enter \u{5207}\u{6362}",

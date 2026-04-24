@@ -1232,6 +1232,15 @@ impl ChatApp {
                                 self.switch_theme();
                                 return;
                             }
+                            if field == "thinking_style" {
+                                let next = self.state.agent_config.thinking_style.next();
+                                self.state.agent_config.thinking_style = next;
+                                self.show_toast(
+                                    format!("思考动画: {}", next.display_name()),
+                                    false,
+                                );
+                                return;
+                            }
                             if field == "system_prompt" {
                                 self.ui.pending_system_prompt_edit = true;
                                 return;

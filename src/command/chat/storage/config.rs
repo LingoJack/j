@@ -25,6 +25,103 @@ pub struct ModelProvider {
     pub supports_vision: bool,
 }
 
+/// 思考指示器动画风格
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ThinkingStyle {
+    /// Braille 点阵旋转（默认）
+    #[default]
+    Braille,
+    /// 经典圆点（原版 ◍ + 颜色脉冲）
+    Classic,
+    /// 圆环呼吸（渐变大小）
+    Pulse,
+    /// 三点波浪
+    Wave,
+    /// 光标闪烁
+    Blink,
+}
+
+impl ThinkingStyle {
+    /// 所有可能值，用于 config panel 循环切换
+    pub const ALL: &[ThinkingStyle] = &[
+        ThinkingStyle::Braille,
+        ThinkingStyle::Classic,
+        ThinkingStyle::Pulse,
+        ThinkingStyle::Wave,
+        ThinkingStyle::Blink,
+    ];
+
+    /// 显示名称（中文）
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Braille => "旋转点阵",
+            Self::Classic => "经典圆点",
+            Self::Pulse => "呼吸圆点",
+            Self::Wave => "波浪三连",
+            Self::Blink => "闪烁光标",
+        }
+    }
+
+    /// 序列化名称
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Braille => "braille",
+            Self::Classic => "classic",
+            Self::Pulse => "pulse",
+            Self::Wave => "wave",
+            Self::Blink => "blink",
+        }
+    }
+
+    /// 从字符串解析，支持英文标识和中文名
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_lowercase().as_str() {
+            "braille" => Self::Braille,
+            "classic" => Self::Classic,
+            "pulse" => Self::Pulse,
+            "wave" => Self::Wave,
+            "blink" => Self::Blink,
+            // 中文名映射
+            "旋转点阵" => Self::Braille,
+            "经典圆点" => Self::Classic,
+            "呼吸圆点" => Self::Pulse,
+            "波浪三连" => Self::Wave,
+            "闪烁光标" => Self::Blink,
+            _ => Self::default(),
+        }
+    }
+
+    /// 切换到下一个风格
+    pub fn next(&self) -> Self {
+        let idx = Self::ALL.iter().position(|s| s == self).unwrap_or(0);
+        Self::ALL[(idx + 1) % Self::ALL.len()]
+    }
+
+    /// 基于 tick（每 100ms 递增 1）返回当前帧的显示字符
+    pub fn frame(&self, tick: u64) -> &'static str {
+        match self {
+            Self::Braille => {
+                const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                FRAMES[(tick as usize) % FRAMES.len()]
+            }
+            Self::Classic => "◍",
+            Self::Pulse => {
+                const FRAMES: &[&str] = &["·", "◦", "○", "◔", "◕", "●", "◕", "◔", "○", "◦"];
+                FRAMES[(tick as usize) % FRAMES.len()]
+            }
+            Self::Wave => {
+                const FRAMES: &[&str] = &["● · ·", "· ● ·", "· · ●", "· ● ·"];
+                FRAMES[(tick as usize) % FRAMES.len()]
+            }
+            Self::Blink => {
+                const FRAMES: &[&str] = &["█", " "];
+                FRAMES[(tick as usize / 5) % FRAMES.len()]
+            }
+        }
+    }
+}
+
 /// Agent 配置
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentConfig {
@@ -76,6 +173,9 @@ pub struct AgentConfig {
     /// 启动时是否自动恢复最近的 session
     #[serde(default)]
     pub auto_restore_session: bool,
+    /// 思考指示器动画风格
+    #[serde(default)]
+    pub thinking_style: ThinkingStyle,
 }
 
 fn default_max_history_messages() -> usize {

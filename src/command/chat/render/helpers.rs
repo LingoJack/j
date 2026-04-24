@@ -124,6 +124,7 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "max_tool_rounds" => "工具轮数上限",
         "tool_confirm_timeout" => "确认超时",
         "auto_restore_session" => "自动恢复会话",
+        "thinking_style" => "思考动画",
         "compact_enabled" => "上下文压缩",
         "compact_token_threshold" => "压缩阈值(K)",
         "compact_keep_recent" => "保留最近轮数",
@@ -147,6 +148,7 @@ pub fn config_field_desc_global(idx: usize) -> &'static str {
         "max_tool_rounds" => "单次对话中工具调用最大轮数",
         "tool_confirm_timeout" => "工具确认等待秒数，0=关闭自动确认",
         "auto_restore_session" => "启动时自动恢复上次会话",
+        "thinking_style" => "AI 思考时的加载动画风格",
         "compact_enabled" => "开启后自动压缩过长的上下文",
         "compact_token_threshold" => "上下文 Token 数超过此值时触发压缩(K)，0=使用默认值",
         "compact_keep_recent" => "micro_compact 保留最近几个工具结果不替换",
@@ -195,6 +197,12 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
                 "关闭".into()
             }
         }
+        "thinking_style" => app
+            .state
+            .agent_config
+            .thinking_style
+            .display_name()
+            .to_string(),
         "compact_enabled" => {
             if app.state.agent_config.compact.enabled {
                 "开启".into()
@@ -241,6 +249,7 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
                 "false".into()
             }
         }
+        "thinking_style" => app.state.agent_config.thinking_style.as_str().to_string(),
         "compact_enabled" => {
             if app.state.agent_config.compact.enabled {
                 "true".into()
@@ -321,6 +330,10 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
                 value.trim().to_lowercase().as_str(),
                 "true" | "1" | "开启" | "on" | "yes"
             );
+        }
+        "thinking_style" => {
+            app.state.agent_config.thinking_style =
+                crate::command::chat::storage::config::ThinkingStyle::parse(value.trim());
         }
         "compact_enabled" => {
             app.state.agent_config.compact.enabled = matches!(

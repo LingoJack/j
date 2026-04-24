@@ -285,7 +285,9 @@ pub fn build_message_lines_incremental(
         // 思考指示器：颜色脉冲动画
         if streaming_text == "◍" {
             let pulse_color = thinking_pulse_color(t);
-            let indicator_line = Line::from(Span::styled("◍", Style::default().fg(pulse_color)));
+            let tick = current_tick();
+            let frame = app.state.agent_config.thinking_style.frame(tick);
+            let indicator_line = Line::from(Span::styled(frame, Style::default().fg(pulse_color)));
             let bubble_line = wrap_md_line_in_bubble(
                 indicator_line,
                 bubble_bg,
@@ -2057,6 +2059,16 @@ fn parse_tool_label(label: &str) -> (String, bool) {
         label.split(['.', ' ']).next().unwrap_or(label).to_string()
     };
     (tool_name, is_error)
+}
+
+/// 基于 tick（每 100ms 递增 1）计算当前帧序号
+fn current_tick() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+        / 100
 }
 
 /// 计算思考指示器的脉冲颜色：基于 label_ai 颜色在亮暗之间平滑过渡

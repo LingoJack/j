@@ -278,6 +278,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 disabled_hooks: Vec::new(),
                 compact: Default::default(),
                 auto_restore_session: false,
+                thinking_style: Default::default(),
             };
             let _ = save_agent_config(&example);
             app.state.agent_config = example;
