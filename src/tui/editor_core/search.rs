@@ -29,8 +29,6 @@ pub struct SearchState {
     line_index: std::collections::HashMap<usize, (usize, usize)>,
     /// 当前匹配索引
     current_index: usize,
-    /// 是否显示搜索高亮（Enter/Esc 后关闭，仅输入搜索词时显示）
-    highlight_visible: bool,
 }
 
 impl SearchState {
@@ -50,7 +48,6 @@ impl SearchState {
         self.matches.clear();
         self.line_index.clear();
         self.current_index = 0;
-        self.highlight_visible = !pattern.is_empty();
 
         if pattern.is_empty() {
             return 0;
@@ -117,17 +114,6 @@ impl SearchState {
         self.matches.clear();
         self.line_index.clear();
         self.current_index = 0;
-        self.highlight_visible = false;
-    }
-
-    /// 隐藏搜索高亮但保留搜索数据（供 n/N 跳转使用）
-    pub fn hide_highlight(&mut self) {
-        self.highlight_visible = false;
-    }
-
-    /// 是否显示搜索高亮
-    pub fn is_highlight_visible(&self) -> bool {
-        self.highlight_visible
     }
 
     /// 高亮行中的搜索匹配
@@ -316,5 +302,30 @@ mod tests {
         // 传入片段（模拟折行），也不应 panic
         let spans = search.highlight_line(0, "搜索功能", &theme, 4);
         assert!(!spans.is_empty());
+    }
+
+    #[test]
+    fn test_highlight_chinese_correctness() {
+        let mut search = SearchState::new();
+        let lines = vec!["测试中文搜索功能".to_string()];
+        search.search("中文", &lines);
+
+        assert_eq!(search.match_count(), 1);
+        let m = search.current_match().unwrap();
+        assert_eq!(m.start, 2);
+        assert_eq!(m.end, 4);
+
+        let theme = test_theme();
+
+        // 完整行高亮
+        let spans = search.highlight_line(0, "测试中文搜索功能", &theme, 0);
+        // 应该有 3 段：测试(普通) + 中文(高亮) + 搜索功能(普通)
+        assert_eq!(spans.len(), 3, "应有3段span，实际: {:?}", spans);
+        assert_eq!(spans[0].content, "测试");
+        assert_eq!(spans[1].content, "中文");
+        assert_eq!(spans[2].content, "搜索功能");
+
+        // 验证高亮 span 的背景色是黄色
+        assert_eq!(spans[1].style.bg, Some(Color::Yellow));
     }
 }

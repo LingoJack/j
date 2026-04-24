@@ -13,7 +13,7 @@ use super::{
 };
 
 use crossterm::{
-    event::{self, Event, KeyEventKind},
+    event::{self, Event},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -310,7 +310,6 @@ impl MarkdownEditor {
                     && let Some(m) = self.search.current_match()
                 {
                     self.buffer.set_cursor(m.line, m.start);
-                    self.search.hide_highlight();
                 }
                 if matches!(old_mode, Mode::Search(_)) {
                     self.cursor_before_search = None;
@@ -988,11 +987,6 @@ pub fn open_markdown_editor_on_terminal(
             let evt = event::read()?;
 
             if let Event::Key(key) = evt {
-                // crossterm 0.28 对中文输入法会产生 Release/Repeat 事件，
-                // 只处理 Press 事件以避免字符重复或中间状态被误处理
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
                 let input = Input::from_keycode(key.code, key.modifiers);
 
                 match editor.handle_input(&input) {

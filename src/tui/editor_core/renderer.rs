@@ -390,7 +390,7 @@ impl MarkdownRenderer {
 
             // 普通续行
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            if search.is_highlight_visible() && search.match_count() > 0 {
+            if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
             } else {
                 spans.push(Span::styled(
@@ -412,7 +412,7 @@ impl MarkdownRenderer {
             }
             // 不成对的围栏，渲染为普通文本
             let mut spans = vec![Span::styled(line_num_str, line_num_style)];
-            if search.is_highlight_visible() && search.match_count() > 0 {
+            if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             } else {
                 spans.push(Span::styled(truncated, self.style(self.theme.text_normal)));
@@ -436,8 +436,14 @@ impl MarkdownRenderer {
             );
         }
 
-        // 其他行：Markdown 渲染（标题、列表、引用等）
-        vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
+        // 其他行：搜索高亮优先，否则 Markdown 渲染（标题、列表、引用等）
+        if search.is_searching() && search.match_count() > 0 {
+            let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+            spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
+            vec![Line::from(spans)]
+        } else {
+            vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
+        }
     }
 
     /// 将 tab 替换为空格（宽度为 1，与 char_width('\t') = 1 一致）
@@ -504,7 +510,7 @@ impl MarkdownRenderer {
         let text_display_width = display_width(&text);
 
         // 搜索高亮
-        if ctx.search.is_highlight_visible() && ctx.search.match_count() > 0 {
+        if ctx.search.is_searching() && ctx.search.match_count() > 0 {
             spans.extend(ctx.search.highlight_line(
                 vl.logical_line,
                 &text,
