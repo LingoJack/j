@@ -889,7 +889,13 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
 /// 产出与最终发给 LLM 一致的数据。
 fn dump_current_request(app: &mut ChatApp, processed: bool) {
     let mut system_prompt = app.build_current_system_prompt();
-    let mut messages = app.build_api_messages();
+    // 未处理模式：导出全部原生 message（session.messages 原样导出）
+    // 已处理模式：经过完整管线（window → micro_compact → hooks → sanitize）
+    let mut messages = if processed {
+        app.build_api_messages()
+    } else {
+        app.state.session.messages.clone()
+    };
 
     if processed {
         // Layer 1: micro_compact（替换旧 tool results）
