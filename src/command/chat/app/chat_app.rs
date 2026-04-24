@@ -489,6 +489,7 @@ impl ChatApp {
                 agent_config,
                 session,
                 streaming_content: Arc::new(Mutex::new(String::new())),
+                streaming_reasoning_content: Arc::new(Mutex::new(String::new())),
                 is_loading: false,
                 loaded_skills,
                 loaded_commands,

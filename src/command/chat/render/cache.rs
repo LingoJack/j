@@ -137,9 +137,17 @@ pub fn build_message_lines_incremental(
                 );
             }
             DisplayType::AssistantText => {
+                // 如果有 reasoning_content，先渲染 thinking 区块
+                if let Some(ref reasoning) = m.reasoning_content {
+                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t);
+                }
                 render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut tmp_lines, t);
             }
             DisplayType::ToolCallRequest => {
+                // 如果有 reasoning_content，先渲染 thinking 区块
+                if let Some(ref reasoning) = m.reasoning_content {
+                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t);
+                }
                 // 先渲染文本内容（如果有）— LLM 可能同时返回文本解释和工具调用
                 if !m.content.is_empty() {
                     render_assistant_msg(
@@ -286,6 +294,47 @@ pub fn build_message_lines_incremental(
                 bubble_total_w,
             );
             streaming_lines.push(bubble_line);
+
+            // 如果有 reasoning 内容，在绿点下方渲染 thinking 区块
+            let reasoning_str = safe_lock(
+                &app.state.streaming_reasoning_content,
+                "render::streaming_reasoning",
+            )
+            .clone();
+            if !reasoning_str.is_empty() {
+                // Thinking 标签（灰色斜体）
+                let thinking_label = Line::from(Span::styled(
+                    "  Thinking...",
+                    Style::default()
+                        .fg(t.text_dim)
+                        .add_modifier(Modifier::ITALIC),
+                ));
+                let label_bubble = wrap_md_line_in_bubble(
+                    thinking_label,
+                    bubble_bg,
+                    pad_left_w,
+                    pad_right_w,
+                    bubble_total_w,
+                );
+                streaming_lines.push(label_bubble);
+
+                // Reasoning 内容（灰色文本，带气泡背景）
+                let reason_content_w = md_content_w.saturating_sub(2);
+                for wrapped_line in wrap_text(&reasoning_str, reason_content_w) {
+                    let line = Line::from(Span::styled(
+                        format!("  {}", wrapped_line),
+                        Style::default().fg(t.text_dim),
+                    ));
+                    let bubble_line = wrap_md_line_in_bubble(
+                        line,
+                        bubble_bg,
+                        pad_left_w,
+                        pad_right_w,
+                        bubble_total_w,
+                    );
+                    streaming_lines.push(bubble_line);
+                }
+            }
 
             // 下边距
             streaming_lines.push(Line::from(vec![Span::styled(
@@ -557,6 +606,37 @@ fn agent_name_color(name: &str) -> Color {
         .bytes()
         .fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
     PALETTE[hash as usize % PALETTE.len()]
+}
+
+/// 渲染 thinking 区块（reasoning_content），显示在 AI 气泡上方
+fn render_thinking_block(
+    reasoning: &str,
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    if reasoning.is_empty() {
+        return;
+    }
+
+    lines.push(Line::from(""));
+
+    // Thinking 标签（灰色斜体）
+    lines.push(Line::from(Span::styled(
+        "  >> Thinking...",
+        Style::default()
+            .fg(theme.text_dim)
+            .add_modifier(Modifier::ITALIC),
+    )));
+
+    // Reasoning 内容（灰色文本）
+    let content_w = bubble_max_width.saturating_sub(6);
+    for wrapped_line in wrap_text(reasoning, content_w) {
+        lines.push(Line::from(Span::styled(
+            format!("    {}", wrapped_line),
+            Style::default().fg(theme.text_dim),
+        )));
+    }
 }
 
 /// 渲染 AI 助手消息（含 teammate 消息）

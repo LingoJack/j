@@ -104,6 +104,7 @@ pub(super) fn sync_context_full(
 /// 调用后 streaming_content 被清空，避免 UI 侧 finish_loading 再次保存导致重复
 pub(super) fn flush_streaming_as_message(
     streaming_content: &Arc<Mutex<String>>,
+    streaming_reasoning_content: &Arc<Mutex<String>>,
     messages: &mut Vec<ChatMessage>,
     display: &Arc<Mutex<Vec<ChatMessage>>>,
     context: &Arc<Mutex<Vec<ChatMessage>>>,
@@ -117,6 +118,12 @@ pub(super) fn flush_streaming_as_message(
         messages.push(text_msg.clone());
         push_both(display, context, text_msg);
     }
+    // 清空 reasoning 缓冲区
+    safe_lock(
+        streaming_reasoning_content,
+        "agent::flush_streaming_reasoning",
+    )
+    .clear();
 }
 
 /// 记录工具调用请求日志

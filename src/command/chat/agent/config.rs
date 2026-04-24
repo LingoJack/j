@@ -28,6 +28,8 @@ pub struct AgentLoopConfig {
 pub struct AgentLoopSharedState {
     /// 流式内容缓冲区（agent 写入，UI 读取）
     pub streaming_content: Arc<Mutex<String>>,
+    /// 流式思考内容缓冲区（reasoning_content，agent 写入，UI 读取）
+    pub streaming_reasoning_content: Arc<Mutex<String>>,
     /// 用户在 agent loop 期间追加的消息队列
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// 后台任务管理器（由内置 PreLlmRequest hook 通过 Arc 引用使用）

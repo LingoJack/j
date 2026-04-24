@@ -210,6 +210,7 @@ impl ChatApp {
         use super::agent_handle::MainAgentHandle;
 
         let streaming_content = Arc::clone(&self.state.streaming_content);
+        let streaming_reasoning_content = Arc::clone(&self.state.streaming_reasoning_content);
         let tools_enabled = self.state.agent_config.tools_enabled;
         let max_llm_rounds = self.state.agent_config.max_tool_rounds;
         let tools = if tools_enabled {
@@ -289,6 +290,7 @@ impl ChatApp {
         };
         let agent_shared = AgentLoopSharedState {
             streaming_content,
+            streaming_reasoning_content,
             pending_user_messages,
             background_manager,
             todo_manager,

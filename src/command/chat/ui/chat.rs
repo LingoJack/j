@@ -528,15 +528,21 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else {
         None
     };
-    let cache_hit = if let Some(ref cache) = app.ui.msg_lines_cache {
-        cache.msg_count == msg_count
-            && cache.last_msg_len == last_msg_len
-            && cache.streaming_len == streaming_len
-            && cache.is_loading == app.state.is_loading
-            && cache.bubble_max_width == bubble_max_width
-            && cache.browse_index == current_browse_index
-            && cache.tool_confirm_idx == current_tool_confirm_idx
+    let cache_hit = if !app.state.is_loading {
+        // 非 loading 状态：正常缓存判断
+        if let Some(ref cache) = app.ui.msg_lines_cache {
+            cache.msg_count == msg_count
+                && cache.last_msg_len == last_msg_len
+                && cache.streaming_len == streaming_len
+                && cache.bubble_max_width == bubble_max_width
+                && cache.browse_index == current_browse_index
+                && cache.tool_confirm_idx == current_tool_confirm_idx
+        } else {
+            false
+        }
     } else {
+        // loading 状态：始终重绘（脉冲动画 + reasoning 内容需要实时更新）
+        // P0 增量缓存仍然有效，历史消息零开销复用
         false
     };
 
@@ -556,7 +562,6 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             msg_count,
             last_msg_len,
             streaming_len,
-            is_loading: app.state.is_loading,
             bubble_max_width,
             browse_index: current_browse_index,
             tool_confirm_idx: current_tool_confirm_idx,

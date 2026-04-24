@@ -176,8 +176,6 @@ pub struct MsgLinesCache {
     pub last_msg_len: usize,
     /// 流式内容长度
     pub streaming_len: usize,
-    /// 是否正在加载
-    pub is_loading: bool,
     /// 气泡最大宽度（窗口变化时需要重算）
     pub bubble_max_width: usize,
     /// 浏览模式选中索引（None 表示非浏览模式）

@@ -107,6 +107,7 @@ pub async fn run_main_agent_loop(
     } = config;
     let AgentLoopSharedState {
         streaming_content,
+        streaming_reasoning_content,
         pending_user_messages,
         background_manager: _,
         todo_manager,
@@ -329,6 +330,13 @@ pub async fn run_main_agent_loop(
         {
             let mut stream_buf = safe_lock(&streaming_content, "agent::streaming_content_clear");
             stream_buf.clear();
+        }
+        {
+            let mut reason_buf = safe_lock(
+                &streaming_reasoning_content,
+                "agent::streaming_reasoning_clear",
+            );
+            reason_buf.clear();
         }
 
         // 记录请求输入日志
@@ -584,6 +592,12 @@ pub async fn run_main_agent_loop(
                                     }
                                     if let Some(ref reasoning) = choice.delta.reasoning_content {
                                         assistant_reasoning.push_str(reasoning);
+                                        // 写入 UI 可见的流式缓冲区
+                                        {
+                                            let mut reason_buf = safe_lock(&streaming_reasoning_content, "agent::stream_reasoning");
+                                            reason_buf.push_str(reasoning);
+                                        }
+                                        let _ = tx.send(StreamMsg::Chunk);
                                     }
                                     if !assistant_reasoning.is_empty() && choice.delta.reasoning_content.is_some() && assistant_reasoning.len() < 50 {
                                         write_info_log("agent_loop", &format!("reasoning积累中 len={}", assistant_reasoning.len()));
@@ -680,6 +694,13 @@ pub async fn run_main_agent_loop(
                         safe_lock(&streaming_content, "agent::tool_id_error_clear");
                     stream_buf.clear();
                 }
+                {
+                    let mut reason_buf = safe_lock(
+                        &streaming_reasoning_content,
+                        "agent::tool_id_error_reason_clear",
+                    );
+                    reason_buf.clear();
+                }
                 // 通过 auto_compact 重建干净的上下文（摘要 + 全新消息结构，无孤立引用）
                 if compact_config.enabled {
                     let _ = tx.send(StreamMsg::Compacting);
@@ -738,6 +759,13 @@ pub async fn run_main_agent_loop(
                         let mut stream_buf =
                             safe_lock(&streaming_content, "agent::stream_retry_clear");
                         stream_buf.clear();
+                    }
+                    {
+                        let mut reason_buf = safe_lock(
+                            &streaming_reasoning_content,
+                            "agent::stream_retry_reason_clear",
+                        );
+                        reason_buf.clear();
                     }
                     let delay_ms = backoff_delay_ms(retry_attempt, policy.base_ms, policy.cap_ms);
                     write_info_log(
@@ -811,6 +839,11 @@ pub async fn run_main_agent_loop(
                 {
                     let mut stream_buf = safe_lock(&streaming_content, "agent::fallback_clear");
                     stream_buf.clear();
+                }
+                {
+                    let mut reason_buf =
+                        safe_lock(&streaming_reasoning_content, "agent::fallback_reason_clear");
+                    reason_buf.clear();
                 }
                 // 使用宽松反序列化的非流式调用（兼容非标准 finish_reason），同样支持重试
                 let fallback_result = loop {
@@ -988,6 +1021,7 @@ pub async fn run_main_agent_loop(
                 if has_pending {
                     flush_streaming_as_message(
                         &streaming_content,
+                        &streaming_reasoning_content,
                         &mut messages,
                         &display_messages,
                         &context_messages,
@@ -1154,6 +1188,7 @@ pub async fn run_main_agent_loop(
                     };
                     flush_streaming_as_message(
                         &streaming_content,
+                        &streaming_reasoning_content,
                         &mut messages,
                         &display_messages,
                         &context_messages,
@@ -1171,6 +1206,7 @@ pub async fn run_main_agent_loop(
                     };
                     flush_streaming_as_message(
                         &streaming_content,
+                        &streaming_reasoning_content,
                         &mut messages,
                         &display_messages,
                         &context_messages,

@@ -14,6 +14,8 @@ pub struct ChatState {
     pub session: ChatSession,
     /// 当前正在流式接收的 AI 回复内容（实时更新）
     pub streaming_content: Arc<Mutex<String>>,
+    /// 当前正在流式接收的 AI 思考内容（reasoning_content，实时更新）
+    pub streaming_reasoning_content: Arc<Mutex<String>>,
     /// 是否正在等待 AI 回复
     pub is_loading: bool,
     /// 已加载的 skills（用于补全和高亮）
