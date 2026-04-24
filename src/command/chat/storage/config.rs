@@ -126,7 +126,7 @@ impl ThinkingStyle {
                 FRAMES[(tick as usize / 5) % FRAMES.len()]
             }
             Self::Comet => {
-                // 宽度 9 的轨道上，密度渐变的 "▓▒░" 彗星从左向右滑过并消失，循环播放
+                // 宽度 9 的轨道上，密度渐变的 "▓▒░" 彗星左右来回弹跳（ping-pong）
                 const FRAMES: &[&str] = &[
                     "▓▒░      ",
                     " ▓▒░     ",
@@ -135,9 +135,11 @@ impl ThinkingStyle {
                     "    ▓▒░  ",
                     "     ▓▒░ ",
                     "      ▓▒░",
-                    "       ▓▒",
-                    "        ▓",
-                    "         ",
+                    "     ▓▒░ ",
+                    "    ▓▒░  ",
+                    "   ▓▒░   ",
+                    "  ▓▒░    ",
+                    " ▓▒░     ",
                 ];
                 FRAMES[(tick as usize) % FRAMES.len()]
             }
