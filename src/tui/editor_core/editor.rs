@@ -222,6 +222,16 @@ impl MarkdownEditor {
                 self.search_prev();
                 return EditorAction::Continue;
             }
+            // Enter 跳到下一个匹配（直观一致）
+            if input.key == Key::Enter && !input.ctrl {
+                self.search_next();
+                return EditorAction::Continue;
+            }
+            // Esc 清除搜索高亮
+            if input.key == Key::Esc && !input.ctrl {
+                self.search.clear();
+                return EditorAction::Continue;
+            }
         }
 
         // 命令面板模式：拦截上下键和回车键
@@ -373,8 +383,11 @@ impl MarkdownEditor {
                 let mut pattern = pattern.clone();
                 match &input.key {
                     Key::Char(c) => {
-                        pattern.push(*c);
-                        self.search.search(&pattern, self.buffer.lines());
+                        // 过滤控制字符（如 Esc 产生的 \x1b）
+                        if !c.is_control() {
+                            pattern.push(*c);
+                            self.search.search(&pattern, self.buffer.lines());
+                        }
                     }
                     Key::Backspace => {
                         pattern.pop();
@@ -762,21 +775,41 @@ impl MarkdownEditor {
 
     /// 渲染命令栏
     fn render_command_bar(&self) -> Line<'static> {
+        let cursor_style = Style::default()
+            .fg(self.theme.cursor_fg)
+            .bg(self.theme.cursor_bg)
+            .add_modifier(Modifier::BOLD);
+        let text_style = Style::default().fg(self.theme.text_normal);
+        let hint_style = Style::default().fg(self.theme.text_dim);
         match self.vim.mode() {
             Mode::Command(cmd) => Line::from(vec![
-                Span::styled(":", Style::default().fg(self.theme.text_normal)),
-                Span::styled(cmd.clone(), Style::default().fg(self.theme.text_normal)),
-                Span::styled(" ", Style::default().fg(self.theme.text_normal)),
+                Span::styled(":", text_style),
+                Span::styled(cmd.clone(), text_style),
+                Span::styled(" ", cursor_style),
+                Span::styled("  Esc:取消  Enter:执行", hint_style),
             ]),
-            Mode::Search(pattern) => Line::from(vec![
-                Span::styled("/", Style::default().fg(Color::Magenta)),
-                Span::styled(pattern.clone(), Style::default().fg(self.theme.text_normal)),
-                Span::styled(" ", Style::default().fg(self.theme.text_normal)),
-            ]),
+            Mode::Search(pattern) => {
+                let count = self.search.match_count();
+                let hint = if pattern.is_empty() {
+                    "  Esc:取消  Enter:跳到匹配".to_string()
+                } else {
+                    format!(
+                        "  [{}匹配]  Esc:取消  Enter:跳转  n/N:上下条",
+                        count
+                    )
+                };
+                Line::from(vec![
+                    Span::styled("/", Style::default().fg(Color::Magenta)),
+                    Span::styled(pattern.clone(), text_style),
+                    Span::styled(" ", cursor_style),
+                    Span::styled(hint, hint_style),
+                ])
+            }
             Mode::CommandPanel(filter) => Line::from(vec![
                 Span::styled("/", Style::default().fg(Color::Magenta)),
-                Span::styled(filter.clone(), Style::default().fg(self.theme.text_normal)),
-                Span::styled(" ", Style::default().fg(self.theme.text_normal)),
+                Span::styled(filter.clone(), text_style),
+                Span::styled(" ", cursor_style),
+                Span::styled("  Esc:取消  Enter:执行", hint_style),
             ]),
             _ => Line::default(),
         }

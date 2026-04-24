@@ -470,6 +470,55 @@ impl MarkdownRenderer {
         result
     }
 
+    /// 在已渲染的 spans 上叠加光标样式（按字符索引定位）
+    fn overlay_cursor_on_spans(
+        spans: Vec<Span<'static>>,
+        cursor_char_idx: usize,
+        cursor_style: Style,
+    ) -> Vec<Span<'static>> {
+        let mut result = Vec::with_capacity(spans.len() + 2);
+        let mut chars_seen = 0;
+        let mut placed = false;
+
+        for span in spans {
+            if placed {
+                result.push(span);
+                continue;
+            }
+            let span_chars: Vec<char> = span.content.chars().collect();
+            let span_len = span_chars.len();
+            let span_end = chars_seen + span_len;
+
+            if cursor_char_idx >= span_end {
+                result.push(span);
+                chars_seen = span_end;
+                continue;
+            }
+
+            let local = cursor_char_idx - chars_seen;
+            if local > 0 {
+                let before: String = span_chars[..local].iter().collect();
+                result.push(Span::styled(before, span.style));
+            }
+            if local < span_len {
+                result.push(Span::styled(span_chars[local].to_string(), cursor_style));
+                if local + 1 < span_len {
+                    let after: String = span_chars[local + 1..].iter().collect();
+                    result.push(Span::styled(after, span.style));
+                }
+            }
+            placed = true;
+            chars_seen = span_end;
+        }
+
+        // 光标在所有 span 之后（行尾），追加一个空格光标块
+        if !placed {
+            result.push(Span::styled(" ", cursor_style));
+        }
+
+        result
+    }
+
     /// 渲染光标行的视觉行（源码 + 光标高亮）
     fn render_cursor_visual_line(
         &self,
@@ -509,14 +558,39 @@ impl MarkdownRenderer {
         // 计算显示宽度（在 text 被消费之前）
         let text_display_width = display_width(&text);
 
-        // 搜索高亮
+        // 搜索高亮 + 光标叠加：当光标行同时启用搜索时，
+        // 使用搜索高亮作为基础，再在光标位置叠加光标块
         if ctx.search.is_searching() && ctx.search.match_count() > 0 {
-            spans.extend(ctx.search.highlight_line(
+            let highlight_spans = ctx.search.highlight_line(
                 vl.logical_line,
                 &text,
                 &self.theme,
                 vl.start_col,
-            ));
+            );
+            let cursor_style = Style::default()
+                .fg(self.theme.cursor_fg)
+                .bg(self.theme.cursor_bg)
+                .add_modifier(Modifier::BOLD);
+
+            if let Some(col) = ctx.cursor_col {
+                let cursor_in_this_vl = if col == vl.end_col {
+                    ctx.is_last_vl
+                } else {
+                    col >= vl.start_col && col < vl.end_col
+                };
+                if cursor_in_this_vl {
+                    let char_idx_at_cursor = col.saturating_sub(vl.start_col);
+                    spans.extend(Self::overlay_cursor_on_spans(
+                        highlight_spans,
+                        char_idx_at_cursor,
+                        cursor_style,
+                    ));
+                } else {
+                    spans.extend(highlight_spans);
+                }
+            } else {
+                spans.extend(highlight_spans);
+            }
             return Line::from(spans).patch_style(Style::default().bg(line_num_bg));
         }
 
