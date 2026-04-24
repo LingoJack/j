@@ -490,10 +490,16 @@ impl ChatApp {
             };
             if !content.is_empty() {
                 let cancelled_content = format!("{}\n\n*[已取消]*", content);
-                self.state
-                    .session
-                    .messages
-                    .push(ChatMessage::text(MessageRole::Assistant, cancelled_content));
+                let mut msg = ChatMessage::text(MessageRole::Assistant, cancelled_content);
+                let reasoning = safe_lock(
+                    &self.state.streaming_reasoning_content,
+                    "finish_loading::cancel_reasoning",
+                )
+                .clone();
+                if !reasoning.is_empty() {
+                    msg.reasoning_content = Some(reasoning);
+                }
+                self.state.session.messages.push(msg);
             }
             safe_lock(
                 &self.state.streaming_content,
@@ -568,13 +574,25 @@ impl ChatApp {
                     }
                 }
 
-                self.state
-                    .session
-                    .messages
-                    .push(ChatMessage::text(MessageRole::Assistant, content));
+                let mut msg = ChatMessage::text(MessageRole::Assistant, content);
+                // 读取流式 reasoning_content，保存到历史消息以便后续渲染 thinking 区块
+                let reasoning = safe_lock(
+                    &self.state.streaming_reasoning_content,
+                    "finish_loading::reasoning_content",
+                )
+                .clone();
+                if !reasoning.is_empty() {
+                    msg.reasoning_content = Some(reasoning);
+                }
+                self.state.session.messages.push(msg);
                 safe_lock(
                     &self.state.streaming_content,
                     "finish_loading::streaming_content_done_clear",
+                )
+                .clear();
+                safe_lock(
+                    &self.state.streaming_reasoning_content,
+                    "finish_loading::reasoning_content_clear",
                 )
                 .clear();
                 self.show_toast("回复完成 ✓", false);
