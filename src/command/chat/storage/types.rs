@@ -80,6 +80,9 @@ pub struct ChatMessage {
     /// 图片数据（用于多模态 user message，不持久化到 session 文件）
     #[serde(skip)]
     pub images: Option<Vec<ImageData>>,
+    /// LLM 思考内容（thinking mode 返回的 reasoning_content，需传回下一轮请求）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 impl ChatMessage {
@@ -91,6 +94,7 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             images: None,
+            reasoning_content: None,
         }
     }
 

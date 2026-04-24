@@ -526,6 +526,7 @@ pub fn execute_tool_with_permission(
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
             images: None,
+            reasoning_content: None,
         };
     }
 
@@ -540,6 +541,7 @@ pub fn execute_tool_with_permission(
             tool_calls: None,
             tool_call_id: Some(item.id.clone()),
             images: None,
+            reasoning_content: None,
         };
     }
 
@@ -572,6 +574,7 @@ pub fn execute_tool_with_permission(
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
+                    reasoning_content: None,
                 };
             }
             // 用户批准 → 继续往下执行
@@ -595,6 +598,7 @@ pub fn execute_tool_with_permission(
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),
                 images: None,
+                reasoning_content: None,
             };
         }
     }
@@ -626,5 +630,6 @@ pub fn execute_tool_with_permission(
         tool_calls: None,
         tool_call_id: Some(item.id.clone()),
         images: None,
+        reasoning_content: None,
     }
 }

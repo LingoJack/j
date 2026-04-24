@@ -136,6 +136,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         tool_calls: None,
         tool_call_id: None,
         images: None,
+        reasoning_content: None,
     }];
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
     append_messages(&messages);
@@ -220,6 +221,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         };
 
         let assistant_text = response_choice.message.content.clone().unwrap_or_default();
+        let reasoning_content = response_choice.message.reasoning_content.clone();
         if !assistant_text.is_empty() {
             last_assistant_text = assistant_text.clone();
             // 将 teammate 的文字回复通过广播显示在聊天室
@@ -358,6 +360,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
+            reasoning_content,
         });
         if let Some(last) = messages.last() {
             append_messages(std::slice::from_ref(last));
@@ -391,6 +394,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
+                    reasoning_content: None,
                 });
                 if let Some(last) = messages.last() {
                     append_messages(std::slice::from_ref(last));

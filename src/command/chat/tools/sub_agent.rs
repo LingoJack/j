@@ -429,6 +429,7 @@ fn run_sub_agent_loop(
         tool_calls: None,
         tool_call_id: None,
         images: None,
+        reasoning_content: None,
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
@@ -517,6 +518,7 @@ fn run_sub_agent_loop(
         };
 
         let assistant_text = choice.message.content.clone().unwrap_or_default();
+        let reasoning_content = choice.message.reasoning_content.clone();
         if !assistant_text.is_empty() {
             final_text = assistant_text.clone();
             write_info_log("SubAgent", &format!("Reply: {}", &final_text));
@@ -572,6 +574,7 @@ fn run_sub_agent_loop(
             tool_calls: Some(tool_items.clone()),
             tool_call_id: None,
             images: None,
+            reasoning_content,
         };
         messages.push(assistant_msg);
         if let Some(last) = messages.last() {

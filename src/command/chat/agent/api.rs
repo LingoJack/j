@@ -23,6 +23,7 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             }),
             MessageRole::User => {
                 if let Some(ref images) = msg.images
@@ -55,6 +56,7 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
                         name: None,
                         tool_calls: None,
                         tool_call_id: None,
+                        reasoning_content: None,
                     });
                 }
                 // 纯文本消息
@@ -64,6 +66,7 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 })
             }
             MessageRole::Assistant => {
@@ -90,6 +93,7 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
                     name: None,
                     tool_calls,
                     tool_call_id: None,
+                    reasoning_content: msg.reasoning_content.clone(),
                 })
             }
             MessageRole::Tool => {
@@ -107,6 +111,7 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
                     name: None,
                     tool_calls: None,
                     tool_call_id: Some(tool_call_id),
+                    reasoning_content: None,
                 })
             }
         })
@@ -278,10 +283,26 @@ pub fn build_request_with_tools(
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             });
         }
     }
     llm_messages.extend(to_llm_messages(&sanitized_messages));
+
+    // debug: 检查是否有 reasoning_content 被传递
+    for (i, msg) in llm_messages.iter().enumerate() {
+        if msg.reasoning_content.is_some() {
+            write_info_log(
+                "build_request_with_tools",
+                &format!(
+                    "消息[{}] role={:?} 携带 reasoning_content (len={})",
+                    i,
+                    msg.role,
+                    msg.reasoning_content.as_ref().map(|s| s.len()).unwrap_or(0)
+                ),
+            );
+        }
+    }
 
     sanitize_llm_messages(&mut llm_messages);
 
@@ -314,6 +335,7 @@ pub async fn call_llm_stream_async(
                 name: None,
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             });
         }
     }
@@ -377,6 +399,7 @@ pub struct FallbackResult {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCallItem>>,
     pub finish_reason: Option<String>,
+    pub reasoning_content: Option<String>,
 }
 
 impl FallbackResult {
@@ -410,6 +433,7 @@ pub async fn call_llm_non_stream(
                 content: None,
                 tool_calls: None,
                 finish_reason: None,
+                reasoning_content: None,
             });
         }
     };
@@ -457,6 +481,7 @@ pub async fn call_llm_non_stream(
         content: choice.message.content.clone(),
         tool_calls: tool_items,
         finish_reason: choice.finish_reason.clone(),
+        reasoning_content: choice.message.reasoning_content.clone(),
     })
 }
 

@@ -107,10 +107,13 @@ pub(super) fn flush_streaming_as_message(
     messages: &mut Vec<ChatMessage>,
     display: &Arc<Mutex<Vec<ChatMessage>>>,
     context: &Arc<Mutex<Vec<ChatMessage>>>,
+    reasoning_content: Option<String>,
 ) {
     let mut stream_buf = safe_lock(streaming_content, "agent::flush_streaming");
     if !stream_buf.is_empty() {
-        let text_msg = ChatMessage::text(MessageRole::Assistant, std::mem::take(&mut *stream_buf));
+        let mut text_msg =
+            ChatMessage::text(MessageRole::Assistant, std::mem::take(&mut *stream_buf));
+        text_msg.reasoning_content = reasoning_content;
         messages.push(text_msg.clone());
         push_both(display, context, text_msg);
     }
@@ -150,6 +153,7 @@ pub(super) fn process_tool_calls(
     assistant_text: String,
     messages: &mut Vec<ChatMessage>,
     ctx: &ToolCallContext<'_>,
+    reasoning_content: Option<String>,
 ) -> Result<ToolCallResult, ChatError> {
     log_tool_request(&tool_items);
 
@@ -160,29 +164,22 @@ pub(super) fn process_tool_calls(
     // 检查是否有 compact tool 被调用
     let compact_requested = tool_items.iter().any(|t| t.name == CompactTool {}.name());
 
-    // ★ 如果 LLM 同时返回了文本和 tool_calls，拆成两条消息：
-    //   1. 纯文本 assistant 消息（让 UI 先渲染文字）
-    //   2. tool_call assistant 消息（content 为空，只带 tool_calls）
-    //   这样渲染时文字在上面，tool_call 在下面
-    if !assistant_text.is_empty() {
-        let text_msg = ChatMessage::text(MessageRole::Assistant, assistant_text);
-        messages.push(text_msg.clone());
-        push_both(ctx.display_messages, ctx.context_messages, text_msg);
-        // 清空 streaming_content，文本已保存，避免 UI 继续显示流式内容
-        if let Ok(mut stream_buf) = ctx.streaming_content.lock() {
-            stream_buf.clear();
-        }
-    }
-
+    // ★ content + reasoning_content + tool_calls 合为一条 assistant message
+    //   DeepSeek 等 API 要求 reasoning_content 与 tool_calls 在同一条消息中传回
     let tool_call_msg = ChatMessage {
         role: MessageRole::Assistant,
-        content: String::new(),
+        content: assistant_text,
         tool_calls: Some(tool_items.clone()),
         tool_call_id: None,
         images: None,
+        reasoning_content,
     };
     messages.push(tool_call_msg.clone());
     push_both(ctx.display_messages, ctx.context_messages, tool_call_msg);
+    // 清空 streaming_content，文本已保存
+    if let Ok(mut stream_buf) = ctx.streaming_content.lock() {
+        stream_buf.clear();
+    }
 
     if ctx
         .stream_msg_sender
@@ -279,6 +276,7 @@ pub(super) fn process_tool_calls(
             tool_calls: None,
             tool_call_id: Some(result.tool_call_id.clone()),
             images: None,
+            reasoning_content: None,
         };
         messages.push(tool_msg.clone());
         push_both(ctx.display_messages, ctx.context_messages, tool_msg);
@@ -311,6 +309,7 @@ pub(super) fn process_tool_calls(
                             })
                             .collect(),
                     ),
+                    reasoning_content: None,
                 };
                 deferred_image_msgs.push(img_msg);
             } else {

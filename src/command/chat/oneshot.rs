@@ -512,6 +512,7 @@ fn run_oneshot_agent(
     // 流式调用结果
     struct StreamResult {
         assistant_text: String,
+        assistant_reasoning: String,
         tool_items: Vec<ToolCallItem>,
         raw_lines: usize,
         cur_col: usize,
@@ -534,6 +535,7 @@ fn run_oneshot_agent(
                 .map_err(ChatError::from)?;
 
             let mut assistant_text = String::new();
+            let mut assistant_reasoning = String::new();
             let mut raw_tool_calls: std::collections::BTreeMap<u32, (String, String, String)> =
                 std::collections::BTreeMap::new();
             let mut finish_reason: Option<String> = None;
@@ -572,6 +574,9 @@ fn run_oneshot_agent(
                                         }
                                     }
                                 }
+                            }
+                            if let Some(ref reasoning) = choice.delta.reasoning_content {
+                                assistant_reasoning.push_str(reasoning);
                             }
                             if let Some(ref tc_chunks) = choice.delta.tool_calls {
                                 for chunk in tc_chunks {
@@ -634,6 +639,7 @@ fn run_oneshot_agent(
 
             Ok(StreamResult {
                 assistant_text,
+                assistant_reasoning,
                 tool_items,
                 raw_lines,
                 cur_col,
@@ -697,6 +703,11 @@ fn run_oneshot_agent(
             tool_calls: Some(sr.tool_items.clone()),
             tool_call_id: None,
             images: None,
+            reasoning_content: if sr.assistant_reasoning.is_empty() {
+                None
+            } else {
+                Some(sr.assistant_reasoning)
+            },
         });
 
         // 逐个执行工具（同步上下文，reqwest::blocking 安全）
@@ -714,6 +725,7 @@ fn run_oneshot_agent(
                     tool_calls: None,
                     tool_call_id: Some(item.id.clone()),
                     images: None,
+                    reasoning_content: None,
                 });
                 continue;
             }
@@ -747,6 +759,7 @@ fn run_oneshot_agent(
                             tool_calls: None,
                             tool_call_id: Some(item.id.clone()),
                             images: None,
+                            reasoning_content: None,
                         });
                         continue;
                     }
@@ -767,6 +780,7 @@ fn run_oneshot_agent(
                 tool_calls: None,
                 tool_call_id: Some(item.id.clone()),
                 images: None,
+                reasoning_content: None,
             });
         }
 

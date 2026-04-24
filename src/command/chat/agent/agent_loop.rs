@@ -58,6 +58,7 @@ fn push_compact_tool_messages(
         tool_calls: Some(vec![tool_call_item]),
         tool_call_id: None,
         images: None,
+        reasoning_content: None,
     };
     messages.push(tool_call_msg.clone());
     push_both(display, context, tool_call_msg);
@@ -73,6 +74,7 @@ fn push_compact_tool_messages(
         tool_calls: None,
         tool_call_id: Some(tool_call_id),
         images: None,
+        reasoning_content: None,
     };
     messages.push(tool_msg.clone());
     push_both(display, context, tool_msg);
@@ -446,6 +448,33 @@ pub async fn run_main_agent_loop(
             system_prompt.as_deref(),
         ) {
             Ok(req) => {
+                // debug: dump reasoning_content 状态
+                for (i, m) in compressed_messages.iter().enumerate() {
+                    if m.reasoning_content.is_some() {
+                        write_info_log(
+                            "agent_loop",
+                            &format!(
+                                "compressed_messages[{}] role={:?} has reasoning_content len={}",
+                                i,
+                                m.role,
+                                m.reasoning_content.as_ref().unwrap().len()
+                            ),
+                        );
+                    }
+                }
+                for (i, m) in messages.iter().enumerate() {
+                    if m.reasoning_content.is_some() {
+                        write_info_log(
+                            "agent_loop",
+                            &format!(
+                                "messages[{}] role={:?} has reasoning_content len={}",
+                                i,
+                                m.role,
+                                m.reasoning_content.as_ref().unwrap().len()
+                            ),
+                        );
+                    }
+                }
                 write_info_log("agent_loop", "build_request_with_tools 成功");
                 req
             }
@@ -511,6 +540,7 @@ pub async fn run_main_agent_loop(
             // ── 读取流式响应 ──
             let mut finish_reason: Option<String> = None;
             let mut assistant_text = String::new();
+            let mut assistant_reasoning = String::new();
             // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
             let mut active_tool_call_parts: std::collections::BTreeMap<u32, StreamingToolCallPart> =
                 std::collections::BTreeMap::new();
@@ -551,6 +581,12 @@ pub async fn run_main_agent_loop(
                                         stream_buf.push_str(content);
                                         drop(stream_buf);
                                         let _ = tx.send(StreamMsg::Chunk);
+                                    }
+                                    if let Some(ref reasoning) = choice.delta.reasoning_content {
+                                        assistant_reasoning.push_str(reasoning);
+                                    }
+                                    if !assistant_reasoning.is_empty() && choice.delta.reasoning_content.is_some() && assistant_reasoning.len() < 50 {
+                                        write_info_log("agent_loop", &format!("reasoning积累中 len={}", assistant_reasoning.len()));
                                     }
                                     // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
                                     if let Some(ref toolcall_chunks) = choice.delta.tool_calls {
@@ -848,7 +884,13 @@ pub async fn run_main_agent_loop(
                     }
                     let assistant_text: String =
                         fallback_result.content.clone().unwrap_or_default();
-                    match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
+                    match process_tool_calls(
+                        tool_items,
+                        assistant_text,
+                        &mut messages,
+                        &tool_ctx,
+                        fallback_result.reasoning_content.clone(),
+                    ) {
                         Ok(result) => {
                             // ── Layer 3: compact tool 触发 ──
                             if result.compact_requested && compact_config.enabled {
@@ -949,6 +991,7 @@ pub async fn run_main_agent_loop(
                         &mut messages,
                         &display_messages,
                         &context_messages,
+                        fallback_result.reasoning_content.clone(),
                     );
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
@@ -1026,7 +1069,17 @@ pub async fn run_main_agent_loop(
                             .join(", ")
                     ),
                 );
-                match process_tool_calls(tool_items, assistant_text, &mut messages, &tool_ctx) {
+                let reasoning_opt = {
+                    let r: String = std::mem::take(&mut assistant_reasoning);
+                    if r.is_empty() { None } else { Some(r) }
+                };
+                match process_tool_calls(
+                    tool_items,
+                    assistant_text,
+                    &mut messages,
+                    &tool_ctx,
+                    reasoning_opt,
+                ) {
                     Ok(result) => {
                         // ── Layer 3: compact tool 触发 ──
                         if result.compact_requested && compact_config.enabled {
@@ -1095,11 +1148,16 @@ pub async fn run_main_agent_loop(
                     ),
                 );
                 if has_pending {
+                    let reasoning_for_flush: Option<String> = {
+                        let r = std::mem::take(&mut assistant_reasoning);
+                        if r.is_empty() { None } else { Some(r) }
+                    };
                     flush_streaming_as_message(
                         &streaming_content,
                         &mut messages,
                         &display_messages,
                         &context_messages,
+                        reasoning_for_flush,
                     );
                     write_info_log("agent_loop", "有用户增量消息，continue 'round");
                     continue 'round;
@@ -1107,11 +1165,16 @@ pub async fn run_main_agent_loop(
 
                 // ★ Stop hook：LLM 即将结束回复（无工具调用且无待处理消息），纠查官可阻止并注入反馈
                 if hook_manager.has_hooks_for(HookEvent::Stop) {
+                    let reasoning_for_flush: Option<String> = {
+                        let r = std::mem::take(&mut assistant_reasoning);
+                        if r.is_empty() { None } else { Some(r) }
+                    };
                     flush_streaming_as_message(
                         &streaming_content,
                         &mut messages,
                         &display_messages,
                         &context_messages,
+                        reasoning_for_flush,
                     );
                     let stop_ctx = HookContext {
                         event: HookEvent::Stop,
