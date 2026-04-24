@@ -778,18 +778,48 @@ fn bordered_line(
 ) -> Line<'static> {
     // 左边框 "  │ " 占 4 列，右边框 " │" 占 2 列
     let border_overhead = 4 + 2;
-    let content_used: usize = content_spans
-        .iter()
-        .map(|s| display_width(&s.content))
-        .sum();
-    let fill = bubble_max_width.saturating_sub(border_overhead + content_used);
+    let target_content_w = bubble_max_width.saturating_sub(border_overhead);
 
-    let mut spans = Vec::with_capacity(content_spans.len() + 3);
+    // 溢出钳制：逐 span 逐字符截断，确保内容不超出目标宽度
+    let mut clamped_spans: Vec<Span<'static>> = Vec::with_capacity(content_spans.len());
+    let mut used: usize = 0;
+    for span in content_spans {
+        let sw = display_width(&span.content);
+        if used + sw <= target_content_w {
+            used += sw;
+            clamped_spans.push(span);
+        } else {
+            // 当前 span 需要截断
+            let remaining = target_content_w.saturating_sub(used);
+            if remaining > 0 {
+                let mut truncated = String::new();
+                let mut tw = 0;
+                for ch in span.content.chars() {
+                    let cw = char_width(ch);
+                    if tw + cw > remaining {
+                        break;
+                    }
+                    truncated.push(ch);
+                    tw += cw;
+                }
+                if !truncated.is_empty() {
+                    used += tw;
+                    clamped_spans.push(Span::styled(truncated, span.style));
+                }
+            }
+            // 后续 span 全部跳过（已溢出）
+            break;
+        }
+    }
+
+    let fill = target_content_w.saturating_sub(used);
+
+    let mut spans = Vec::with_capacity(clamped_spans.len() + 3);
     spans.push(Span::styled(
         "  │ ",
         Style::default().fg(border_color).bg(bg),
     ));
-    spans.extend(content_spans);
+    spans.extend(clamped_spans);
     spans.push(Span::styled(" ".repeat(fill), Style::default().bg(bg)));
     spans.push(Span::styled(" │", Style::default().fg(border_color).bg(bg)));
     Line::from(spans)
