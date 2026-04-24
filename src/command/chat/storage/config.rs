@@ -40,6 +40,8 @@ pub enum ThinkingStyle {
     Wave,
     /// 光标闪烁
     Blink,
+    /// 渐变彗星（拖尾字符密度渐变）
+    Comet,
 }
 
 impl ThinkingStyle {
@@ -50,6 +52,7 @@ impl ThinkingStyle {
         ThinkingStyle::Pulse,
         ThinkingStyle::Wave,
         ThinkingStyle::Blink,
+        ThinkingStyle::Comet,
     ];
 
     /// 显示名称（中文）
@@ -60,6 +63,7 @@ impl ThinkingStyle {
             Self::Pulse => "呼吸圆点",
             Self::Wave => "波浪三连",
             Self::Blink => "闪烁光标",
+            Self::Comet => "渐变彗星",
         }
     }
 
@@ -71,6 +75,7 @@ impl ThinkingStyle {
             Self::Pulse => "pulse",
             Self::Wave => "wave",
             Self::Blink => "blink",
+            Self::Comet => "comet",
         }
     }
 
@@ -82,12 +87,14 @@ impl ThinkingStyle {
             "pulse" => Self::Pulse,
             "wave" => Self::Wave,
             "blink" => Self::Blink,
+            "comet" => Self::Comet,
             // 中文名映射
             "旋转点阵" => Self::Braille,
             "经典圆点" => Self::Classic,
             "呼吸圆点" => Self::Pulse,
             "波浪三连" => Self::Wave,
             "闪烁光标" => Self::Blink,
+            "渐变彗星" => Self::Comet,
             _ => Self::default(),
         }
     }
@@ -117,6 +124,22 @@ impl ThinkingStyle {
             Self::Blink => {
                 const FRAMES: &[&str] = &["█", " "];
                 FRAMES[(tick as usize / 5) % FRAMES.len()]
+            }
+            Self::Comet => {
+                // 宽度 9 的轨道上，密度渐变的 "▓▒░" 彗星从左向右滑过并消失，循环播放
+                const FRAMES: &[&str] = &[
+                    "▓▒░      ",
+                    " ▓▒░     ",
+                    "  ▓▒░    ",
+                    "   ▓▒░   ",
+                    "    ▓▒░  ",
+                    "     ▓▒░ ",
+                    "      ▓▒░",
+                    "       ▓▒",
+                    "        ▓",
+                    "         ",
+                ];
+                FRAMES[(tick as usize) % FRAMES.len()]
             }
         }
     }

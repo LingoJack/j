@@ -27,16 +27,62 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 
-/// 恢复终端状态：离开备用屏幕、关闭 raw mode
-fn restore_terminal() {
-    let _ = terminal::disable_raw_mode();
-    let _ = execute!(
-        io::stdout(),
-        PopKeyboardEnhancementFlags,
-        event::DisableMouseCapture,
-        event::DisableBracketedPaste,
-        LeaveAlternateScreen
-    );
+/// RAII guard：确保 TUI 退出时（含 panic / `?` 传播）恢复终端到正常状态。
+///
+/// 正常退出路径调用 [`TerminalGuard::disarm`] 后，`Drop` 不再重复恢复。
+/// 异常路径（panic、loop 内 `?` 提前返回）由 `Drop` 兜底执行完整恢复序列。
+struct TerminalGuard {
+    /// keyboard enhancement 协议是否已 push
+    keyboard_enhancement_active: bool,
+    /// 是否已手动恢复（disarm），避免 Drop 重复恢复
+    disarmed: bool,
+}
+
+impl TerminalGuard {
+    fn new() -> Self {
+        Self {
+            keyboard_enhancement_active: false,
+            disarmed: false,
+        }
+    }
+
+    /// 标记 `PushKeyboardEnhancementFlags` 已执行成功
+    fn set_keyboard_active(&mut self) {
+        self.keyboard_enhancement_active = true;
+    }
+
+    /// 正常退出路径：手动完成恢复后调用，阻止 `Drop` 再次恢复。
+    fn disarm(&mut self) {
+        self.disarmed = true;
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        if self.disarmed {
+            return;
+        }
+        let _ = terminal::disable_raw_mode();
+        // 使用 io::stdout() 而非 terminal.backend_mut()，
+        // 因为 Drop 发生时 terminal 可能已经被 move 或 drop。
+        let mut stdout = io::stdout();
+        if self.keyboard_enhancement_active {
+            let _ = execute!(
+                stdout,
+                PopKeyboardEnhancementFlags,
+                event::DisableMouseCapture,
+                event::DisableBracketedPaste,
+                LeaveAlternateScreen
+            );
+        } else {
+            let _ = execute!(
+                stdout,
+                event::DisableMouseCapture,
+                event::DisableBracketedPaste,
+                LeaveAlternateScreen
+            );
+        }
+    }
 }
 
 /// 将单个 crossterm Event 分发到对应的 handler / Action。
@@ -158,6 +204,19 @@ fn dispatch_event(
     }
 }
 
+/// 恢复终端状态（仅用于 panic hook）。
+/// panic 发生时 `TerminalGuard` 也会 Drop 恢复，此处作为双重保险。
+fn restore_terminal() {
+    let _ = terminal::disable_raw_mode();
+    let _ = execute!(
+        io::stdout(),
+        PopKeyboardEnhancementFlags,
+        event::DisableMouseCapture,
+        event::DisableBracketedPaste,
+        LeaveAlternateScreen
+    );
+}
+
 /// Chat TUI 入口函数：初始化 panic hook，按需启动远程 WS 服务，然后进入主循环
 pub fn run_chat_tui(remote_mode: bool, port: u16) {
     // 设置 panic hook，确保 panic 时也能恢复终端状态
@@ -190,7 +249,7 @@ pub fn run_chat_tui(remote_mode: bool, port: u16) {
     let _ = std::panic::take_hook();
 
     if let Err(e) = result {
-        restore_terminal();
+        // TerminalGuard 的 Drop 已恢复终端状态，此处仅打印错误
         error!("✖️ Chat TUI 启动失败: {}", e);
     }
 }
@@ -202,6 +261,9 @@ fn generate_session_id() -> String {
 
 /// Chat TUI 主循环：初始化终端、会话状态，持续处理事件轮询、后台任务和渲染
 pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
+    // RAII guard：异常退出（panic / `?` 传播）时自动恢复终端状态
+    let mut guard = TerminalGuard::new();
+
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(
@@ -216,6 +278,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         stdout,
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
     );
+    guard.set_keyboard_active();
 
     let mut mouse_capture_enabled = true;
 
@@ -668,6 +731,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         event::DisableBracketedPaste,
         LeaveAlternateScreen
     )?;
+    guard.disarm(); // 已手动恢复，阻止 Drop 重复执行
 
     // ★ SessionEnd hook（fire-and-forget，终端已恢复）
     {
