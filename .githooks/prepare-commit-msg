@@ -1,0 +1,96 @@
+#!/bin/bash
+# =============================================================================
+# jcli AI Commit Message Generator
+# =============================================================================
+# 当设置环境变量 J_AI_COMMIT=1 时，自动用 j ai 生成 commit message
+#
+# 启用方式 (二选一):
+#   1. 持久启用:
+#      git config core.hooksPath .githooks
+#      export J_AI_COMMIT=1
+#
+#   2. 一次性使用:
+#      J_AI_COMMIT=1 git commit
+#
+#   3. 通过 Makefile:
+#      make push-ai
+# =============================================================================
+
+# 仅在显式启用时运行
+if [ "$J_AI_COMMIT" != "1" ]; then
+    exit 0
+fi
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# 只在无预填 message 时触发
+# COMMIT_SOURCE 值: message (-m), template (-t), merge, squash, commit (amend)
+# 空 = 普通的 git commit (无 -m)
+if [ -n "$COMMIT_SOURCE" ]; then
+    exit 0
+fi
+
+# 获取 staged diff 统计
+DIFF_STAT=$(git diff --cached --stat 2>/dev/null)
+
+# 没有 staged changes 则跳过
+if [ -z "$DIFF_STAT" ]; then
+    exit 0
+fi
+
+# 获取详细 diff（排除 lock 文件）
+DIFF_DETAIL=$(git diff --cached --no-color --unified=3 \
+    -- ":(exclude)package-lock.json" \
+    -- ":(exclude)yarn.lock" \
+    -- ":(exclude)Cargo.lock" \
+    -- ":(exclude)pnpm-lock.yaml" \
+    2>/dev/null)
+
+# 限制 diff 大小以控制 token 消耗
+if [ ${#DIFF_DETAIL} -gt 8000 ]; then
+    DIFF_DETAIL=$(git diff --cached --no-color --unified=1 \
+        -- ":(exclude)package-lock.json" \
+        -- ":(exclude)yarn.lock" \
+        -- ":(exclude)Cargo.lock" \
+        -- ":(exclude)pnpm-lock.yaml" \
+        2>/dev/null)
+fi
+
+if [ ${#DIFF_DETAIL} -gt 12000 ]; then
+    DIFF_DETAIL="$DIFF_STAT"
+fi
+
+# 构建 prompt
+PROMPT="你是一个 Git 提交信息生成器。根据以下代码变更，生成一个简洁的 commit message。
+
+要求:
+1. 格式：<类型>: <中文描述>
+2. 类型可选: feat/fix/refactor/docs/style/test/chore/perf
+3. 描述不超过 30 字，清晰概括变更
+4. 只输出一行 commit message，不要其他内容
+
+变更文件:
+${DIFF_STAT}
+
+变更详情:
+${DIFF_DETAIL}"
+
+# 调用 j ai 生成 commit message
+# 使用 timeout 防止 API 超时阻塞 commit
+AI_MSG=$(timeout 30 j ai "$PROMPT" 2>/dev/null | head -5 | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+if [ -n "$AI_MSG" ]; then
+    # 写入 AI 生成的 message
+    echo "$AI_MSG" > "$COMMIT_MSG_FILE"
+    # 附加注释信息供用户参考
+    echo "" >> "$COMMIT_MSG_FILE"
+    echo "# --- AI 生成的 commit message (可直接编辑) ---" >> "$COMMIT_MSG_FILE"
+    echo "# 变更文件:" >> "$COMMIT_MSG_FILE"
+    echo "$DIFF_STAT" | while IFS= read -r line; do
+        echo "# $line" >> "$COMMIT_MSG_FILE"
+    done
+else
+    # AI 调用失败，fallback 到时间戳格式
+    echo "更新: $(date +'%Y-%m-%d %H:%M:%S')" > "$COMMIT_MSG_FILE"
+fi

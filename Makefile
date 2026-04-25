@@ -13,10 +13,11 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # 伪目标声明
 # ============================================
 .PHONY: help \
-        current_dir push pull status \
+        current_dir push push-ai pull status \
         build release debug build-indicator build-ax \
         install uninstall reinstall \
         publish publish-check tag tags bump-version set-version \
+        release-note \
         test test-all bench \
         fmt lint check clippy \
         clean clean-all \
@@ -66,6 +67,20 @@ push: current_dir fmt build-web ## 提交并推送代码
 	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
 	&& git push origin $(GIT_BRANCH)
 	@echo "☑️ 代码已推送"
+
+push-ai: current_dir fmt build-web ## AI 生成 commit message 并推送
+	@echo "🤖 AI 生成变更说明..."
+	@diff_stat="$$(git diff --stat 2>/dev/null)"; \
+	if [ -z "$$diff_stat" ]; then \
+		diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
+	fi; \
+	if [ -z "$$diff_stat" ]; then \
+		echo "ℹ️ 没有检测到变更"; exit 0; \
+	fi; \
+	msg=$$(timeout 30 j ai "你是 Git 提交信息生成器。根据以下代码变更生成一个简洁的 commit message。要求: 1. 格式：<类型>: <中文描述> 2. 类型: feat/fix/refactor/docs/style/test/chore/perf 3. 描述不超过 30 字，清晰概括变更 4. 只输出一行 commit message，不要其他内容。变更: $$diff_stat" 2>/dev/null | head -3 | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//'); \
+	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
+	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
+	echo "✅ 已推送: $$msg"
 
 pull: current_dir ## 拉取最新代码
 	@echo "📥 拉取最新代码..."
@@ -160,19 +175,38 @@ bump-version: ## 递增版本号（最后一位 patch）
 	fi; \
 	echo "☑️ 版本号已更新为 $$new_version"
 
-publish: ## 发布到 crates.io（自动递增版本号）
+publish: ## 发布到 crates.io（自动递增版本号，AI 生成 Release Note）
 	@echo "📦 开始发布流程..."
 	@$(MAKE) bump-version
 	@$(MAKE) release
 	@git add .
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	last_tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
+	if [ -n "$$last_tag" ]; then \
+		log=$$(git log --oneline "$$last_tag"..HEAD); \
+	else \
+		log=$$(git log --oneline -20); \
+	fi; \
+	release_note=$$(timeout 30 j ai "你是 Release Note 撰写者。版本 v$$version 的变更如下，生成中文版本发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。Git Log: $$log" 2>/dev/null || echo "Release v$$version"); \
 	git commit -m "chore: bump version to v$$version"; \
-	git tag -a "v$$version" -m "Release v$$version"; \
+	git tag -a "v$$version" -m "$$release_note"; \
 	git push origin $(GIT_BRANCH); \
 	git push origin "v$$version"; \
 	echo "📤 发布到 crates.io..."; \
 	cargo publish --registry crates-io --allow-dirty; \
 	echo "☑️ 已发布 v$$version! 验证: cargo search j-cli"
+
+release-note: ## 生成自上次 tag 以来的 Release Note
+	@last_tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
+	if [ -z "$$last_tag" ]; then \
+		log=$$(git log --oneline -20); \
+	else \
+		log=$$(git log --oneline "$$last_tag"..HEAD); \
+	fi; \
+	if [ -z "$$log" ]; then echo "没有新的提交"; exit 0; fi; \
+	echo "📋 自 $$last_tag 以来的变更:"; \
+	echo ""; \
+	j ai "你是 Release Note 撰写者。根据以下 git log 生成中文版本发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。Git Log: $$log" 2>/dev/null
 
 publish-check: ## 发布前检查（dry-run）
 	@echo "🔍 发布前检查（dry-run）..."
