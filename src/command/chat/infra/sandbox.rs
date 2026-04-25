@@ -1,3 +1,4 @@
+use crate::util::path_utils::expand_tilde;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -73,7 +74,7 @@ impl Sandbox {
 
     /// 检查单个路径是否在安全目录内
     fn is_path_safe(&self, path_str: &str) -> bool {
-        let expanded = super::super::tools::expand_tilde(path_str);
+        let expanded = expand_tilde(path_str);
         let path = Path::new(&expanded);
 
         // 转为绝对路径

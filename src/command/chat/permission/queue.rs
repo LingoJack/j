@@ -12,6 +12,9 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+/// 派生 Agent 权限请求的最大等待超时（秒）
+const AGENT_PERM_TIMEOUT_SECS: u64 = 60;
+
 /// 发起权限请求的 agent 类型
 #[derive(Clone, Debug, PartialEq)]
 pub enum AgentType {
@@ -100,14 +103,14 @@ impl PermissionQueue {
         }
     }
 
-    /// 派生 Agent 线程调用：把请求加入队列并阻塞等待（最长 60 秒）。
+    /// 派生 Agent 线程调用：把请求加入队列并阻塞等待（最长 [`AGENT_PERM_TIMEOUT_SECS`] 秒）。
     /// 返回 true 表示用户批准，false 表示拒绝或超时。
     pub fn request_blocking(&self, req: Arc<PendingAgentPerm>) -> bool {
         {
             let mut q = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             q.push_back(Arc::clone(&req));
         }
-        req.wait_for_decision(60)
+        req.wait_for_decision(AGENT_PERM_TIMEOUT_SECS)
     }
 
     /// TUI 循环调用：取出下一个待决请求（非阻塞）

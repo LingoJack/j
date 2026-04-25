@@ -1,6 +1,12 @@
 use super::session::SessionPaths;
 use super::types::ChatMessage;
+use crate::command::chat::context::compact::InvokedSkill;
+use crate::command::chat::infra::hook::{HookDef, HookEvent};
+use crate::command::chat::teammate::TeammateStatusPersist;
+use crate::command::chat::tools::task::AgentTask;
+use crate::command::chat::tools::todo::TodoItem;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,7 +22,7 @@ pub struct TeammateSnapshotPersist {
     pub worktree: bool,
     pub worktree_branch: Option<String>,
     pub inherit_permissions: bool,
-    pub status: crate::command::chat::teammate::TeammateStatusPersist,
+    pub status: TeammateStatusPersist,
     /// 未被消费的广播消息（将来 Respawn 时灌回）
     #[serde(default)]
     pub pending_user_messages: Vec<ChatMessage>,
@@ -72,8 +78,8 @@ pub struct PlanStatePersist {
 /// Session Hook 注册快照
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionHookPersist {
-    pub event: crate::command::chat::infra::hook::HookEvent,
-    pub definition: crate::command::chat::infra::hook::HookDef,
+    pub event: HookEvent,
+    pub definition: HookDef,
 }
 
 /// Sandbox 额外安全目录快照
@@ -119,37 +125,27 @@ pub fn save_subagents_state(session_id: &str, data: &[SubAgentSnapshotPersist]) 
 }
 
 /// 保存 Tasks 状态
-pub fn save_tasks_state(
-    session_id: &str,
-    data: &[crate::command::chat::tools::task::AgentTask],
-) -> bool {
+pub fn save_tasks_state(session_id: &str, data: &[AgentTask]) -> bool {
     let paths = SessionPaths::new(session_id);
     let _ = paths.ensure_dir();
     save_session_json(&paths.tasks_file(), data)
 }
 
 /// 加载 Tasks 状态
-pub fn load_tasks_state(
-    session_id: &str,
-) -> Option<Vec<crate::command::chat::tools::task::AgentTask>> {
+pub fn load_tasks_state(session_id: &str) -> Option<Vec<AgentTask>> {
     let paths = SessionPaths::new(session_id);
     load_session_json(&paths.tasks_file())
 }
 
 /// 保存 Todos 状态
-pub fn save_todos_state(
-    session_id: &str,
-    data: &[crate::command::chat::tools::todo::TodoItem],
-) -> bool {
+pub fn save_todos_state(session_id: &str, data: &[TodoItem]) -> bool {
     let paths = SessionPaths::new(session_id);
     let _ = paths.ensure_dir();
     save_session_json(&paths.todos_file(), data)
 }
 
 /// 加载 Todos 状态
-pub fn load_todos_state(
-    session_id: &str,
-) -> Option<Vec<crate::command::chat::tools::todo::TodoItem>> {
+pub fn load_todos_state(session_id: &str) -> Option<Vec<TodoItem>> {
     let paths = SessionPaths::new(session_id);
     load_session_json(&paths.todos_file())
 }
@@ -168,20 +164,14 @@ pub fn load_plan_state(session_id: &str) -> Option<PlanStatePersist> {
 }
 
 /// 保存 InvokedSkills 状态
-pub fn save_skills_state(
-    session_id: &str,
-    data: &std::collections::HashMap<String, crate::command::chat::context::compact::InvokedSkill>,
-) -> bool {
+pub fn save_skills_state(session_id: &str, data: &HashMap<String, InvokedSkill>) -> bool {
     let paths = SessionPaths::new(session_id);
     let _ = paths.ensure_dir();
     save_session_json(&paths.skills_file(), data)
 }
 
 /// 加载 InvokedSkills 状态
-pub fn load_skills_state(
-    session_id: &str,
-) -> Option<std::collections::HashMap<String, crate::command::chat::context::compact::InvokedSkill>>
-{
+pub fn load_skills_state(session_id: &str) -> Option<HashMap<String, InvokedSkill>> {
     let paths = SessionPaths::new(session_id);
     load_session_json(&paths.skills_file())
 }

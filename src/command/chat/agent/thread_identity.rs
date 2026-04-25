@@ -5,7 +5,7 @@
 
 use crate::command::chat::permission::queue::AgentType;
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ========== Thread-local Agent Identity ==========
 
@@ -45,7 +45,7 @@ pub fn current_agent_type() -> AgentType {
 // ========== Thread-local CWD (worktree 隔离) ==========
 
 /// 设置当前线程的工作目录（进入 worktree 时调用）
-pub fn set_thread_cwd(path: &std::path::Path) {
+pub fn set_thread_cwd(path: &Path) {
     THREAD_CWD.with(|cell| {
         *cell.borrow_mut() = Some(path.to_path_buf());
     });

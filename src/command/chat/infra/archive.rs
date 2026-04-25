@@ -1,10 +1,18 @@
-use super::super::storage::ChatMessage;
 use crate::command::chat::constants::ARCHIVE_NAME_MAX_LEN;
+use crate::command::chat::storage::{ChatMessage, agent_data_dir};
 use crate::error;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+
+// ========== 常量 ==========
+
+/// 归档名称中的非法字符集
+const INVALID_NAME_CHARS: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+
+/// 默认归档名称前缀
+const ARCHIVE_NAME_PREFIX: &str = "archive-";
 
 // ========== 数据结构 ==========
 
@@ -23,7 +31,7 @@ pub struct ChatArchive {
 
 /// 获取归档目录路径: ~/.jdata/agent/data/archives/
 pub fn get_archives_dir() -> PathBuf {
-    super::super::storage::agent_data_dir().join("archives")
+    agent_data_dir().join("archives")
 }
 
 /// 确保归档目录存在
@@ -133,8 +141,7 @@ pub fn validate_archive_name(name: &str) -> Result<(), String> {
     }
 
     // 检查非法字符
-    let invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-    for c in invalid_chars {
+    for c in INVALID_NAME_CHARS {
         if name.contains(c) {
             return Err(format!("归档名称包含非法字符: {}", c));
         }
@@ -146,7 +153,7 @@ pub fn validate_archive_name(name: &str) -> Result<(), String> {
 /// 生成默认归档名称（格式：archive-YYYY-MM-DD，重名时自动添加后缀）
 pub fn generate_default_archive_name() -> String {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let base_name = format!("archive-{}", today);
+    let base_name = format!("{}{}", ARCHIVE_NAME_PREFIX, today);
 
     // 如果基础名称不存在，直接使用
     if !archive_exists(&base_name) {

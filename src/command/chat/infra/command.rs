@@ -1,8 +1,14 @@
+use crate::command::chat::permission::JcliConfig;
 use crate::config::YamlConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+// ========== 常量 ==========
+
+/// 消息中引用自定义命令的前缀标记
+const COMMAND_MENTION_PREFIX: &str = "@command:";
 
 // ========== 数据结构 ==========
 
@@ -53,7 +59,6 @@ pub fn commands_dir() -> PathBuf {
 
 /// 返回项目级 commands 目录: .jcli/commands/（如果存在）
 pub fn project_commands_dir() -> Option<PathBuf> {
-    use super::super::permission::JcliConfig;
     let config_dir = JcliConfig::find_config_dir()?;
     let dir = config_dir.join("commands");
     if dir.is_dir() { Some(dir) } else { None }
@@ -133,10 +138,10 @@ pub fn expand_command_mentions(
     let mut result = text.to_string();
     // 反复查找 @command: 模式
     loop {
-        let Some(start) = result.find("@command:") else {
+        let Some(start) = result.find(COMMAND_MENTION_PREFIX) else {
             break;
         };
-        let name_start = start + "@command:".len();
+        let name_start = start + COMMAND_MENTION_PREFIX.len();
         // 名称到空白字符或字符串末尾为止
         let name_end = result[name_start..]
             .find(|c: char| c.is_whitespace())

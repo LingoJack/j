@@ -116,7 +116,7 @@ pub fn compress_other_agent_toolcalls(
             });
 
     // 3. 对于每个 agent，决定哪些索引需要压缩
-    let mut indices_to_compress: Vec<usize> = Vec::new();
+    let mut indices_to_compress: Vec<usize> = Vec::new(); // 大小依赖运行时计算
     let mut summary_by_first_idx: HashMap<usize, (String, HashMap<String, usize>)> = HashMap::new();
 
     for (agent_name, calls) in agent_groups {
@@ -151,7 +151,7 @@ pub fn compress_other_agent_toolcalls(
     }
 
     // 4. 构建压缩后的消息列表
-    let mut result: Vec<ChatMessage> = Vec::new();
+    let mut result: Vec<ChatMessage> = Vec::with_capacity(messages.len());
     for (idx, msg) in messages.iter().enumerate() {
         if let Some((agent_name, tool_counts)) = summary_by_first_idx.get(&idx) {
             // 在此位置插入压缩摘要

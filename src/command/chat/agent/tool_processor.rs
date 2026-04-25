@@ -8,7 +8,11 @@ use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact_tool::CompactTool;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
+use std::collections::HashSet;
+use std::env::current_dir;
+use std::mem::take;
 use std::sync::{Arc, Mutex, mpsc};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// process_tool_calls 所需的通道和共享状态
 pub(super) struct ToolCallContext<'a> {
@@ -114,8 +118,7 @@ pub(super) fn flush_streaming_as_message(
 ) {
     let mut stream_buf = safe_lock(streaming_content, "agent::flush_streaming");
     if !stream_buf.is_empty() {
-        let mut text_msg =
-            ChatMessage::text(MessageRole::Assistant, std::mem::take(&mut *stream_buf));
+        let mut text_msg = ChatMessage::text(MessageRole::Assistant, take(&mut *stream_buf));
         text_msg.reasoning_content = reasoning_content;
         messages.push(text_msg.clone());
         push_both(display, context, text_msg);
@@ -198,7 +201,7 @@ pub(super) fn process_tool_calls(
         return Err(ChatError::Other("工具调用通道已断开".to_string()));
     }
 
-    let mut tool_results: Vec<ToolResultMsg> = Vec::new();
+    let mut tool_results: Vec<ToolResultMsg> = Vec::with_capacity(tool_items.len());
     let mut plan_clear_context: Option<String> = None;
     let mut channel_broken = false;
     for _ in &tool_items {
@@ -221,7 +224,7 @@ pub(super) fn process_tool_calls(
 
     // ★ 配对兜底：凡 tool_items 中的 id 未收到对应 result，合成错误 tool_result。
     //   这样 tool_call 与 tool_result 在内存中永远成对，下游 persist 才能原子提交。
-    let received_ids: std::collections::HashSet<String> = tool_results
+    let received_ids: HashSet<String> = tool_results
         .iter()
         .map(|r| r.tool_call_id.clone())
         .collect();
@@ -249,7 +252,8 @@ pub(super) fn process_tool_calls(
 
     // 收集需要延迟注入的图片消息（在所有 tool results 之后统一注入，
     // 避免在 tool results 中间插入 user 消息导致 API 报错）
-    let mut deferred_image_msgs: Vec<ChatMessage> = Vec::new();
+    // 预分配：最多每个 result 可能产生一条图片消息
+    let mut deferred_image_msgs: Vec<ChatMessage> = Vec::with_capacity(tool_results.len());
 
     for result in tool_results {
         let mut result_content = result.result;
@@ -268,7 +272,7 @@ pub(super) fn process_tool_calls(
                 tool_name: tool_name.clone(),
                 tool_result: Some(result_content.clone()),
                 session_id: Some(ctx.session_id.to_string()),
-                cwd: std::env::current_dir()
+                cwd: current_dir()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string()),
                 ..Default::default()
@@ -375,8 +379,6 @@ fn extract_command_from_args(args: &str) -> Option<String> {
 
 /// 记录 Edit/Write/Bash 写入操作到 ops.jsonl
 fn append_write_ops(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg], session_id: &str) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

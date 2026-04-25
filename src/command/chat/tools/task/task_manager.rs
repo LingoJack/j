@@ -1,5 +1,6 @@
 use super::entity::AgentTask;
 use crate::command::chat::permission::JcliConfig;
+use crate::command::chat::storage::{load_tasks_state, sessions_dir};
 use crate::util::safe_lock;
 use serde_json::Value;
 use std::fs;
@@ -42,8 +43,8 @@ impl TaskManager {
 
     /// 创建 session 级 TaskManager（存储到 sessions/{id}/tasks.json）
     pub fn new_with_session(session_id: &str) -> Self {
-        let sessions_dir = crate::command::chat::storage::sessions_dir();
-        let session_dir = sessions_dir.join(session_id);
+        let sdir = sessions_dir();
+        let session_dir = sdir.join(session_id);
         let tasks_dir = session_dir.join("tasks_session");
         let _ = fs::create_dir_all(&tasks_dir);
         let mgr = Self {
@@ -51,7 +52,7 @@ impl TaskManager {
             write_lock: Mutex::new(()),
         };
         // 如果有 session 级 tasks.json，从中加载
-        if let Some(tasks) = crate::command::chat::storage::load_tasks_state(session_id) {
+        if let Some(tasks) = load_tasks_state(session_id) {
             mgr.replace_all(tasks);
         }
         mgr

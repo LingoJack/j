@@ -281,8 +281,8 @@ fn match_regex(pattern: &str, input: &str) -> bool {
         .entry(regex_str.to_string())
         .or_insert_with(|| match Regex::new(regex_str) {
             Ok(r) => r,
-            // 永不匹配的兜底正则：编译失败说明正则语法错误，此静态模式不可能失败
-            Err(_) => Regex::new("^$").expect("静态正则 ^$ 不可能编译失败"),
+            // SAFETY: "^$" 是合法正则模式，此处 unwrap 永不触发 panic
+            Err(_) => Regex::new("^$").unwrap_or_else(|_| unreachable!("^$ 是合法正则")),
         });
 
     re.is_match(input)
@@ -341,25 +341,8 @@ fn match_glob_prefix(pattern: &str, path: &str) -> bool {
 
 /// URL 域名匹配
 fn url_matches_domain(url: &str, domain: &str) -> bool {
-    // 简单解析：从 url 中提取 host
-    let url_lower = url.to_lowercase();
+    let host = extract_host(url);
     let domain_lower = domain.to_lowercase();
-
-    // 跳过 scheme
-    let after_scheme = if let Some(pos) = url_lower.find("://") {
-        &url_lower[pos + 3..]
-    } else {
-        &url_lower
-    };
-
-    // 取 host 部分（到 / 或 : 为止）
-    let host = after_scheme
-        .split('/')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
 
     host == domain_lower || host.ends_with(&format!(".{}", domain_lower))
 }
@@ -407,19 +390,7 @@ pub fn generate_allow_rule(tool_name: &str, arguments: &str) -> String {
         }
         "WebFetch" => {
             let url = parsed.get("url").and_then(|v| v.as_str()).unwrap_or("");
-            // 提取域名
-            let after_scheme = if let Some(pos) = url.find("://") {
-                &url[pos + 3..]
-            } else {
-                url
-            };
-            let host = after_scheme
-                .split('/')
-                .next()
-                .unwrap_or("")
-                .split(':')
-                .next()
-                .unwrap_or("");
+            let host = extract_host(url);
             if !host.is_empty() {
                 format!("WebFetch(domain:{})", host)
             } else {

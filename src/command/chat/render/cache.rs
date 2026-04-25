@@ -1,13 +1,17 @@
-use super::super::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
-use super::super::markdown::markdown_to_lines;
 use super::theme::Theme;
+use crate::command::chat::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache, ToolCallStatus};
 use crate::command::chat::constants::{
     AGENT_RESULT_MAX_LINES, BASH_OUTPUT_MAX_LINES, CONFIRM_MSG_MAX_LINES, ERROR_RESULT_MAX_LINES,
     NORMAL_RESULT_MAX_LINES, THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS,
     TOOL_ARG_PREVIEW_MAX_CHARS,
 };
+use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::storage::DisplayType;
+use crate::command::chat::storage::ToolCallItem;
 use crate::command::chat::storage::config::ThinkingStyle;
+use crate::command::chat::tools::classification::{
+    ToolCategory, ToolStatus, format_json_value, get_result_summary_for_tool,
+};
 use crate::command::chat::ui::palette;
 use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width, wrap_text};
@@ -17,6 +21,17 @@ use ratatui::{
 };
 use std::io::Write;
 use std::sync::Arc;
+
+// ── 模块级常量（提取自各渲染函数中的魔法值）──
+
+/// `render_thinking_block` 折叠模式下最大显示行数
+const THINKING_FOLDED_MAX_LINES: usize = 5;
+/// `render_assistant_msg` 气泡最小宽度（字符列数）
+const BUBBLE_MIN_WIDTH: usize = 20;
+/// `render_user_msg` 用户气泡左右内边距（字符列数）
+const USER_BUBBLE_PAD_LR: usize = 3;
+/// `render_tool_result_msg` / `render_bash_result` 普通结果截断显示的行数上限
+const TOOL_RESULT_DISPLAY_MAX_LINES: usize = 100;
 
 pub fn find_stable_boundary(content: &str) -> usize {
     // 统计 ``` 出现次数，奇数说明有未闭合的代码块
@@ -530,7 +545,7 @@ pub fn render_user_msg(
     } else {
         theme.bubble_user
     };
-    let user_pad_lr = 3usize;
+    let user_pad_lr = USER_BUBBLE_PAD_LR;
     let user_content_w = bubble_max_width.saturating_sub(user_pad_lr * 2);
     let mut all_wrapped_lines: Vec<String> = Vec::new();
     for content_line in content.lines() {
@@ -647,11 +662,10 @@ fn render_thinking_block(
     let content_w = bubble_max_width.saturating_sub(6);
     let wrapped = wrap_text(reasoning, content_w);
 
-    // 折叠模式：最多显示 FOLDED_MAX_LINES 行，超出时追加省略提示
-    const FOLDED_MAX_LINES: usize = 5;
+    // 折叠模式：最多显示 THINKING_FOLDED_MAX_LINES 行，超出时追加省略提示
     let total = wrapped.len();
-    let (shown, truncated) = if !expand && total > FOLDED_MAX_LINES {
-        (&wrapped[..FOLDED_MAX_LINES], true)
+    let (shown, truncated) = if !expand && total > THINKING_FOLDED_MAX_LINES {
+        (&wrapped[..THINKING_FOLDED_MAX_LINES], true)
     } else {
         (&wrapped[..], false)
     };
@@ -665,7 +679,10 @@ fn render_thinking_block(
 
     if truncated {
         lines.push(Line::from(Span::styled(
-            format!("    … (+{} 行, Ctrl+O 展开)", total - FOLDED_MAX_LINES),
+            format!(
+                "    … (+{} 行, Ctrl+O 展开)",
+                total - THINKING_FOLDED_MAX_LINES
+            ),
             Style::default()
                 .fg(theme.text_dim)
                 .add_modifier(Modifier::ITALIC),
@@ -743,7 +760,6 @@ pub fn render_assistant_msg(
         .unwrap_or(0);
 
     // 气泡自适应宽度：min(max(实际宽度+padding, 最小宽度), 最大宽度)
-    const BUBBLE_MIN_WIDTH: usize = 20;
     let bubble_total_w = (actual_content_max_w + pad_left_w + pad_right_w)
         .max(BUBBLE_MIN_WIDTH)
         .min(bubble_max_width);
@@ -1178,7 +1194,7 @@ fn render_ask_questions(
 /// 渲染工具确认模式的内容和选项
 fn render_tool_confirm_content(
     app: &ChatApp,
-    tc: &super::super::app::ToolCallStatus,
+    tc: &ToolCallStatus,
     bubble_max_width: usize,
     content_w: usize,
     lines: &mut Vec<Line<'static>>,
@@ -1538,14 +1554,12 @@ fn render_plan_approval_confirm_area(
 }
 
 pub fn render_tool_call_request_msg(
-    tool_calls: &[super::super::storage::ToolCallItem],
+    tool_calls: &[ToolCallItem],
     bubble_max_width: usize,
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
     expand: bool,
 ) {
-    use super::super::tools::classification::ToolCategory;
-
     let content_w = bubble_max_width.saturating_sub(6);
 
     // 与前一条消息之间留一行间距
@@ -1689,8 +1703,6 @@ fn render_json_params_enhanced(
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
-    use super::super::tools::classification::format_json_value;
-
     if let Some(obj) = json.as_object() {
         for (key, value) in obj {
             let value_str = format_json_value(value);
@@ -1734,10 +1746,6 @@ pub fn render_tool_result_msg(
     theme: &Theme,
     expand: bool,
 ) {
-    use super::super::tools::classification::{
-        ToolCategory, ToolStatus, get_result_summary_for_tool,
-    };
-
     // 与前一条消息（tool_call）之间留一行间距
     lines.push(Line::from(""));
 
@@ -1849,9 +1857,12 @@ pub fn render_tool_result_msg(
         }
 
         let total_lines = clean.lines().count();
-        if total_lines > 100 {
+        if total_lines > TOOL_RESULT_DISPLAY_MAX_LINES {
             lines.push(Line::from(Span::styled(
-                format!("    ... (共 {} 行，显示前 100 行)", total_lines),
+                format!(
+                    "    ... (共 {} 行，显示前 {} 行)",
+                    total_lines, TOOL_RESULT_DISPLAY_MAX_LINES
+                ),
                 Style::default().fg(theme.text_dim),
             )));
         }

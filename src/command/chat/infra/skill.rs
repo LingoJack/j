@@ -1,3 +1,4 @@
+use crate::command::chat::permission::JcliConfig;
 use crate::config::YamlConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -55,7 +56,6 @@ pub fn skills_dir() -> PathBuf {
 
 /// 返回项目级 skills 目录: .jcli/skills/（如果存在）
 pub fn project_skills_dir() -> Option<PathBuf> {
-    use super::super::permission::JcliConfig;
     let config_dir = JcliConfig::find_config_dir()?;
     let dir = config_dir.join("skills");
     if dir.is_dir() { Some(dir) } else { None }
@@ -106,7 +106,7 @@ pub fn load_all_skills() -> Vec<Skill> {
 }
 
 /// 解析 SKILL.md: YAML frontmatter + body
-fn parse_skill_md(path: &PathBuf, dir: &Path) -> Option<Skill> {
+fn parse_skill_md(path: &Path, dir: &Path) -> Option<Skill> {
     let content = fs::read_to_string(path).ok()?;
     let (fm_str, body) = split_frontmatter(&content)?;
     let frontmatter: SkillFrontmatter = serde_yaml::from_str(&fm_str).ok()?;

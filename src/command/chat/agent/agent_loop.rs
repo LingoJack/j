@@ -18,7 +18,16 @@ use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use futures::StreamExt;
 use rand::Rng;
-use std::sync::{Arc, mpsc};
+use std::collections::BTreeMap;
+use std::env::current_dir;
+use std::mem::take;
+use std::sync::{Arc, Mutex, mpsc};
+use std::time::Duration;
+
+/// 调试日志中记录的最大 chunk 数量
+const DEBUG_LOG_CHUNK_LIMIT: u32 = 3;
+/// reasoning 内容日志输出的最小长度阈值
+const REASONING_LOG_THRESHOLD: usize = 50;
 
 /// auto_compact 成功后，向 messages 和双通道注入 Compact 工具调用 + 结果消息，
 /// 等同于 LLM 手动调用 CompactTool 的效果。
@@ -34,8 +43,8 @@ use std::sync::{Arc, mpsc};
 /// 3. tool result
 fn push_compact_tool_messages(
     messages: &mut Vec<ChatMessage>,
-    display: &Arc<std::sync::Mutex<Vec<ChatMessage>>>,
-    context: &Arc<std::sync::Mutex<Vec<ChatMessage>>>,
+    display: &Arc<Mutex<Vec<ChatMessage>>>,
+    context: &Arc<Mutex<Vec<ChatMessage>>>,
     compact_result: &compact::CompactResult,
 ) {
     let tool_call_id = format!("compact_auto_{}", compact_result.messages_before);
@@ -392,7 +401,7 @@ pub async fn run_main_agent_loop(
                 system_prompt: system_prompt.clone(),
                 model: Some(provider.model.clone()),
                 session_id: Some(session_id.clone()),
-                cwd: std::env::current_dir()
+                cwd: current_dir()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string()),
                 ..Default::default()
@@ -531,7 +540,7 @@ pub async fn run_main_agent_loop(
                             error: err.display_message(),
                         });
                         tokio::select! {
-                            _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                            _ = tokio::time::sleep(Duration::from_millis(delay_ms)) => {
                                 continue 'api_retry;
                             }
                             _ = cancel_token.cancelled() => {
@@ -550,8 +559,7 @@ pub async fn run_main_agent_loop(
             let mut assistant_text = String::new();
             let mut assistant_reasoning = String::new();
             // 手动收集 tool_calls：按 index 聚合 (id, name, arguments)
-            let mut active_tool_call_parts: std::collections::BTreeMap<u32, StreamingToolCallPart> =
-                std::collections::BTreeMap::new();
+            let mut active_tool_call_parts: BTreeMap<u32, StreamingToolCallPart> = BTreeMap::new();
             let mut deserialize_failed = false;
             // 流式读取中途遇到 tool_call_id 不一致的请求错误
             let mut needs_compact_for_tool_id_mismatch = false;
@@ -567,7 +575,7 @@ pub async fn run_main_agent_loop(
                             Some(Ok(response)) => {
                                 received_chunks += 1;
                                 // 记录前几个 chunk 的原始信息，便于调试
-                                if received_chunks <= 3 {
+                                if received_chunks <= DEBUG_LOG_CHUNK_LIMIT {
                                     let choices_debug: Vec<String> = response.choices.iter().map(|choice| {
                                         format!(
                                             "idx={}, finish_reason={:?}, has_content={}, has_tool_calls={}",
@@ -599,7 +607,7 @@ pub async fn run_main_agent_loop(
                                         }
                                         let _ = tx.send(StreamMsg::Chunk);
                                     }
-                                    if !assistant_reasoning.is_empty() && choice.delta.reasoning_content.is_some() && assistant_reasoning.len() < 50 {
+                                    if !assistant_reasoning.is_empty() && choice.delta.reasoning_content.is_some() && assistant_reasoning.len() < REASONING_LOG_THRESHOLD {
                                         write_info_log("agent_loop", &format!("reasoning积累中 len={}", assistant_reasoning.len()));
                                     }
                                     // 尝试直接读取 tool_calls（若 async-openai 能反序列化）
@@ -782,7 +790,7 @@ pub async fn run_main_agent_loop(
                         error: err.display_message(),
                     });
                     tokio::select! {
-                        _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                        _ = tokio::time::sleep(Duration::from_millis(delay_ms)) => {
                             continue 'api_retry;
                         }
                         _ = cancel_token.cancelled() => {
@@ -878,7 +886,7 @@ pub async fn run_main_agent_loop(
                                     error: e.display_message(),
                                 });
                                 tokio::select! {
-                                    _ = tokio::time::sleep(std::time::Duration::from_millis(delay_ms)) => {
+                                    _ = tokio::time::sleep(Duration::from_millis(delay_ms)) => {
                                         retry_attempt += 1;
                                         continue;
                                     }
@@ -1104,7 +1112,7 @@ pub async fn run_main_agent_loop(
                     ),
                 );
                 let reasoning_opt = {
-                    let r: String = std::mem::take(&mut assistant_reasoning);
+                    let r: String = take(&mut assistant_reasoning);
                     if r.is_empty() { None } else { Some(r) }
                 };
                 match process_tool_calls(
@@ -1183,7 +1191,7 @@ pub async fn run_main_agent_loop(
                 );
                 if has_pending {
                     let reasoning_for_flush: Option<String> = {
-                        let r = std::mem::take(&mut assistant_reasoning);
+                        let r = take(&mut assistant_reasoning);
                         if r.is_empty() { None } else { Some(r) }
                     };
                     flush_streaming_as_message(
@@ -1201,7 +1209,7 @@ pub async fn run_main_agent_loop(
                 // ★ Stop hook：LLM 即将结束回复（无工具调用且无待处理消息），纠查官可阻止并注入反馈
                 if hook_manager.has_hooks_for(HookEvent::Stop) {
                     let reasoning_for_flush: Option<String> = {
-                        let r = std::mem::take(&mut assistant_reasoning);
+                        let r = take(&mut assistant_reasoning);
                         if r.is_empty() { None } else { Some(r) }
                     };
                     flush_streaming_as_message(

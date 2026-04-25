@@ -251,3 +251,29 @@ pub const TUI_LOADING_POLL_MS: u64 = 100;
 
 /// TUI 主循环空闲轮询超时（毫秒）
 pub const TUI_IDLE_POLL_MS: u64 = 500;
+
+// ========== Computer Use 输入事件 ==========
+
+/// 按键按下-释放间隔延迟（毫秒）
+pub const KEY_PRESS_DELAY_MS: u64 = 10;
+
+// ========== Browser Lite 模式 ==========
+
+/// Browser Lite HTTP 请求超时（秒）
+pub const BROWSER_LITE_HTTP_TIMEOUT_SECS: u64 = 15;
+
+/// Browser Lite HTTP 最大重定向次数
+pub const BROWSER_LITE_MAX_REDIRECTS: usize = 10;
+
+// ========== Hook 日志 ==========
+
+/// Hook 日志描述截断最大长度
+pub const HOOK_LOG_DESC_MAX_LEN: usize = 60;
+
+// ========== Teammate 创建 ==========
+
+/// Teammate 日志结果截断最大长度
+pub const TEAMMATE_LOG_RESULT_MAX_CHARS: usize = 200;
+
+/// Teammate prompt 预览截断最大长度
+pub const TEAMMATE_PROMPT_PREVIEW_MAX_CHARS: usize = 100;

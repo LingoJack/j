@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use crate::command::chat::constants::MOUSE_DOUBLE_CLICK_WAIT_MS;
+use crate::command::chat::constants::{KEY_PRESS_DELAY_MS, MOUSE_DOUBLE_CLICK_WAIT_MS};
 use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType, CGMouseButton};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use core_graphics::geometry::CGPoint;
@@ -59,7 +59,7 @@ pub fn click(x: f64, y: f64) -> Result<(), AicError> {
     let up = mouse_event(CGEventType::LeftMouseUp, point, CGMouseButton::Left)?;
 
     down.post(CGEventTapLocation::HID);
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     up.post(CGEventTapLocation::HID);
     Ok(())
 }
@@ -81,11 +81,11 @@ pub fn double_click(x: f64, y: f64) -> Result<(), AicError> {
     up2.set_integer_value_field(1, 2);
 
     down1.post(CGEventTapLocation::HID);
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     up1.post(CGEventTapLocation::HID);
     thread::sleep(Duration::from_millis(MOUSE_DOUBLE_CLICK_WAIT_MS));
     down2.post(CGEventTapLocation::HID);
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     up2.post(CGEventTapLocation::HID);
     Ok(())
 }
@@ -98,7 +98,7 @@ pub fn right_click(x: f64, y: f64) -> Result<(), AicError> {
     let up = mouse_event(CGEventType::RightMouseUp, point, CGMouseButton::Right)?;
 
     down.post(CGEventTapLocation::HID);
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     up.post(CGEventTapLocation::HID);
     Ok(())
 }
@@ -136,7 +136,7 @@ pub fn drag(x1: f64, y1: f64, x2: f64, y2: f64, duration_ms: u64) -> Result<(), 
 pub fn scroll(dx: i32, dy: i32, at: Option<(f64, f64)>) -> Result<(), AicError> {
     if let Some((x, y)) = at {
         move_to(x, y)?;
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     }
 
     // SAFETY: CGEventCreateScrollWheelEvent / CGEventPost / CFRelease 均为 macOS CoreGraphics

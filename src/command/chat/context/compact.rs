@@ -14,6 +14,9 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// 粗略估算：每 4 个字符 ≈ 1 token
+const CHARS_PER_TOKEN_ESTIMATE: usize = 4;
+
 // ========== InvokedSkills 追踪 ==========
 
 /// 记录一次技能调用的完整信息（用于 auto_compact 后恢复）
@@ -84,7 +87,7 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
     let total_budget = COMPACT_SKILL_TOKEN_BUDGET;
 
     for skill in sorted_by_recency {
-        let skill_tokens = skill.resolved_content.len() / 4; // 粗略估算
+        let skill_tokens = skill.resolved_content.len() / CHARS_PER_TOKEN_ESTIMATE; // 粗略估算
         let available = if total_tokens + per_skill_budget > total_budget {
             total_budget.saturating_sub(total_tokens)
         } else {
@@ -184,7 +187,7 @@ impl CompactConfig {
 
 /// 粗略估算 messages 的 token 数（~4 chars per token）
 pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
-    serde_json::to_string(messages).unwrap_or_default().len() / 4
+    serde_json::to_string(messages).unwrap_or_default().len() / CHARS_PER_TOKEN_ESTIMATE
 }
 
 /// 提取最近 N 条 user 消息原文（不限于未被回复的）。
@@ -192,7 +195,7 @@ pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
 /// 用于 auto_compact 场景：压缩后必须保留用户最近的消息原文，
 /// 否则 LLM 只能看到摘要而丢失用户的精确措辞和当前任务意图。
 pub fn extract_recent_user_messages(messages: &[ChatMessage], count: usize) -> Vec<ChatMessage> {
-    let mut recent: Vec<ChatMessage> = Vec::new();
+    let mut recent: Vec<ChatMessage> = Vec::with_capacity(count);
     for m in messages.iter().rev() {
         if m.role == MessageRole::User {
             recent.push(m.clone());

@@ -2,6 +2,7 @@ use crate::command::chat::agent::thread_identity::{
     set_current_agent_name, set_current_agent_type, set_thread_cwd,
 };
 use crate::command::chat::permission::queue::AgentType;
+use crate::command::chat::storage::{SessionPaths, sanitize_filename};
 use crate::command::chat::teammate::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
 use crate::command::chat::tools::agent_team::AgentTeamTool;
@@ -176,8 +177,8 @@ impl Tool for CreateTeammateTool {
         // 构建子工具注册表（teammate 独立 todos：sessions/<sid>/teammates/<name>/todos.json）
         let teammate_todos_path = {
             let sid = safe_lock(&self.shared.session_id, "CreateTeammate::session_id").clone();
-            let sanitized = crate::command::chat::storage::sanitize_filename(&params.name);
-            crate::command::chat::storage::SessionPaths::new(&sid).teammate_todos_file(&sanitized)
+            let sanitized = sanitize_filename(&params.name);
+            SessionPaths::new(&sid).teammate_todos_file(&sanitized)
         };
         let (mut child_registry, _) = self.shared.build_child_registry(teammate_todos_path);
 

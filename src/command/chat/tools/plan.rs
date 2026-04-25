@@ -1,6 +1,7 @@
 use crate::command::chat::agent::thread_identity::current_agent_name;
 use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{AskOption, AskQuestion, AskRequest};
+use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -81,7 +82,7 @@ impl Tool for EnterPlanModeTool {
             .unwrap_or("implementation-plan");
 
         // 创建 plan 目录
-        let plan_dir = crate::command::chat::permission::JcliConfig::ensure_config_dir()
+        let plan_dir = JcliConfig::ensure_config_dir()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(".jcli"));
         let plans_dir = plan_dir.join("plans");
         let _ = std::fs::create_dir_all(&plans_dir);

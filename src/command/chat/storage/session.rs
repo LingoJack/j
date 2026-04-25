@@ -564,7 +564,7 @@ pub fn list_sessions() -> Vec<SessionMeta> {
         }
     }
 
-    let mut sessions: Vec<SessionMeta> = Vec::new();
+    let mut sessions: Vec<SessionMeta> = Vec::with_capacity(ids.len());
     for id in ids {
         // 优先读 session.json
         if let Some(meta_file) = load_session_meta_file(&id) {

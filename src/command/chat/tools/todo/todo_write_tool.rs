@@ -1,6 +1,8 @@
-use super::super::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use super::entity::TodoItem;
 use super::todo_manager::TodoManager;
+use crate::command::chat::tools::{
+    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;

@@ -7,7 +7,7 @@ use crate::error;
 use crate::theme::ThemeName;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// 单个模型提供方配置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -219,6 +219,56 @@ fn default_max_tool_rounds() -> usize {
     DEFAULT_MAX_TOOL_ROUNDS
 }
 
+// ========== 通用文本文件读写辅助 ==========
+
+/// 从文件加载文本内容，trim 后返回；文件不存在或内容为空返回 None
+fn load_text_file(path: &Path) -> Option<String> {
+    if !path.exists() {
+        return None;
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Err(e) => {
+            error!("✖️ 读取 {} 失败: {}", path.display(), e);
+            None
+        }
+    }
+}
+
+/// 保存文本内容到文件（空字符串删除文件）
+fn save_text_file(path: &Path, content: &str) -> bool {
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return match fs::remove_file(path) {
+            Ok(_) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) => {
+                error!("✖️ 删除 {} 失败: {}", path.display(), e);
+                false
+            }
+        };
+    }
+
+    match fs::write(path, trimmed) {
+        Ok(_) => true,
+        Err(e) => {
+            error!("✖️ 保存 {} 失败: {}", path.display(), e);
+            false
+        }
+    }
+}
+
 /// 获取 agent 数据目录: ~/.jdata/agent/data/
 pub fn agent_data_dir() -> PathBuf {
     let dir = YamlConfig::data_dir().join("agent").join("data");
@@ -296,146 +346,32 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
 
 /// 加载系统提示词（来自独立文件）
 pub fn load_system_prompt() -> Option<String> {
-    let path = system_prompt_path();
-    if !path.exists() {
-        return None;
-    }
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let trimmed = content.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }
-        Err(e) => {
-            error!("✖️ 读取 system_prompt.md 失败: {}", e);
-            None
-        }
-    }
+    load_text_file(&system_prompt_path())
 }
 
 /// 保存系统提示词到独立文件（空字符串会删除文件）
 pub fn save_system_prompt(prompt: &str) -> bool {
-    let path = system_prompt_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    let trimmed = prompt.trim();
-    if trimmed.is_empty() {
-        return match fs::remove_file(&path) {
-            Ok(_) => true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
-            Err(e) => {
-                error!("✖️ 删除 system_prompt.md 失败: {}", e);
-                false
-            }
-        };
-    }
-
-    match fs::write(path, trimmed) {
-        Ok(_) => true,
-        Err(e) => {
-            error!("✖️ 保存 system_prompt.md 失败: {}", e);
-            false
-        }
-    }
+    save_text_file(&system_prompt_path(), prompt)
 }
 
 /// 加载回复风格（来自独立文件）
 pub fn load_style() -> Option<String> {
-    let path = style_path();
-    if !path.exists() {
-        return None;
-    }
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let trimmed = content.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }
-        Err(e) => {
-            error!("✖️ 读取 style.md 失败: {}", e);
-            None
-        }
-    }
+    load_text_file(&style_path())
 }
 
 /// 保存回复风格到独立文件（空字符串会删除文件）
 pub fn save_style(style: &str) -> bool {
-    let path = style_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    let trimmed = style.trim();
-    if trimmed.is_empty() {
-        return match fs::remove_file(&path) {
-            Ok(_) => true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
-            Err(e) => {
-                error!("✖️ 删除 style.md 失败: {}", e);
-                false
-            }
-        };
-    }
-
-    match fs::write(path, trimmed) {
-        Ok(_) => true,
-        Err(e) => {
-            error!("✖️ 保存 style.md 失败: {}", e);
-            false
-        }
-    }
+    save_text_file(&style_path(), style)
 }
 
 /// 加载记忆（来自独立文件）
 pub fn load_memory() -> Option<String> {
-    let path = memory_path();
-    if !path.exists() {
-        return None;
-    }
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let trimmed = content.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }
-        Err(e) => {
-            error!("✖️ 读取 memory.md 失败: {}", e);
-            None
-        }
-    }
+    load_text_file(&memory_path())
 }
 
 /// 加载灵魂（来自独立文件）
 pub fn load_soul() -> Option<String> {
-    let path = soul_path();
-    if !path.exists() {
-        return None;
-    }
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let trimmed = content.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        }
-        Err(e) => {
-            error!("✖️ 读取 soul.md 失败: {}", e);
-            None
-        }
-    }
+    load_text_file(&soul_path())
 }
 
 /// 保存记忆到独立文件

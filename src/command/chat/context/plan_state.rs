@@ -11,6 +11,9 @@ use crate::command::chat::tools::tool_names;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 
+/// Plan 审批等待超时（秒）
+const PLAN_APPROVAL_TIMEOUT_SECS: u64 = 120;
+
 // ========== Plan Approval Queue (Teammate → TUI) ==========
 
 // NOTE: Cannot derive Debug - contains Condvar which does not implement Debug
@@ -80,14 +83,14 @@ impl PlanApprovalQueue {
         }
     }
 
-    /// Teammate 线程调用：把请求加入队列并阻塞等待（最长 120 秒）
+    /// Teammate 线程调用：把请求加入队列并阻塞等待
     /// 返回 PlanDecision 表示用户决策
     pub fn request_blocking(&self, req: Arc<PendingPlanApproval>) -> PlanDecision {
         {
             let mut q = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             q.push_back(Arc::clone(&req));
         }
-        req.wait_for_decision(120)
+        req.wait_for_decision(PLAN_APPROVAL_TIMEOUT_SECS)
     }
 
     /// TUI 循环调用：取出下一个待决请求（非阻塞）

@@ -21,6 +21,15 @@ use std::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
+/// Teammate loop 最大轮数（足够大，实际由 cancel_token 控制生命周期）
+const MAX_TEAMMATE_ROUNDS: u32 = 200;
+/// 连续空闲轮询上限（约 2 分钟后退出）
+const MAX_CONSECUTIVE_IDLE_POLLS: u32 = 120;
+/// 轮询等待期间的内层循环次数（每次休眠 POLL_SLEEP_MILLIS）
+const POLL_CHECK_INTERVAL: u32 = 10;
+/// 轮询等待期间每次休眠的毫秒数
+const POLL_SLEEP_MILLIS: u64 = 100;
+
 /// Teammate agent loop 的配置
 pub struct TeammateLoopConfig {
     pub name: String,
@@ -109,9 +118,6 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
     set_status(TeammateStatus::Initializing);
 
-    let max_rounds: u32 = 200; // 足够大，实际由 cancel_token 控制生命周期
-    let max_consecutive_idle_polls: u32 = 120; // 连续空闲 120 次（约 2 分钟）后退出
-
     let (rt, client) = match create_runtime_and_client(&provider) {
         Ok(pair) => pair,
         Err(e) => return e,
@@ -130,14 +136,15 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         *sp = system_prompt.clone();
     }
 
-    let mut messages: Vec<ChatMessage> = vec![ChatMessage {
+    let mut messages: Vec<ChatMessage> = Vec::with_capacity(1 + initial_prompt.len());
+    messages.push(ChatMessage {
         role: MessageRole::User,
         content: initial_prompt,
         tool_calls: None,
         tool_call_id: None,
         images: None,
         reasoning_content: None,
-    }];
+    });
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
     append_messages(&messages);
 
@@ -155,7 +162,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     // 创建 AtomicBool 作为取消信号（与 CancellationToken 桥接）
     let cancel_flag = Arc::new(AtomicBool::new(false));
 
-    for round in 0..max_rounds {
+    for round in 0..MAX_TEAMMATE_ROUNDS {
         // 检查取消
         if cancel_token.is_cancelled() || cancel_flag.load(Ordering::Relaxed) {
             set_status(TeammateStatus::Cancelled);
@@ -189,7 +196,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 "{}: Round {}/{}, messages={}",
                 name,
                 round + 1,
-                max_rounds,
+                MAX_TEAMMATE_ROUNDS,
                 messages.len(),
             ),
         );
@@ -292,7 +299,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理残留 wake_flag
 
             consecutive_idle_polls += 1;
-            if consecutive_idle_polls >= max_consecutive_idle_polls {
+            if consecutive_idle_polls >= MAX_CONSECUTIVE_IDLE_POLLS {
                 write_info_log(
                     "TeammateLoop",
                     &format!(
@@ -304,7 +311,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             }
 
             // 等待 1 秒后再检查（可被 cancel_token 中断）
-            for _ in 0..10 {
+            for _ in 0..POLL_CHECK_INTERVAL {
                 if cancel_token.is_cancelled() {
                     set_status(TeammateStatus::Cancelled);
                     return format!("{}\n[Teammate '{}' cancelled]", last_assistant_text, name);
@@ -312,7 +319,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 if work_done.load(Ordering::Relaxed) {
                     break;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(POLL_SLEEP_MILLIS));
 
                 // 在轮询期间也 drain 消息到 messages
                 let len_before_drain = messages.len();

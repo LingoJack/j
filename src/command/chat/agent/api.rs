@@ -6,6 +6,7 @@ use crate::llm::{
 };
 use crate::util::log::{write_error_log, write_info_log};
 use futures::StreamExt;
+use std::collections::HashSet;
 
 /// 根据 ModelProvider 配置创建 LlmClient
 pub fn create_llm_client(provider: &ModelProvider) -> LlmClient {
@@ -121,14 +122,14 @@ pub fn to_llm_messages(messages: &[ChatMessage]) -> Vec<Message> {
 /// 预处理消息数组，保证 assistant tool_calls ↔ tool result 双向配对完整，
 /// 避免 API 报 "tool_call_id not found" 或 "missing tool result" 错误。
 pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
-    let tool_result_ids: std::collections::HashSet<String> = messages
+    let tool_result_ids: HashSet<String> = messages
         .iter()
         .filter(|m| m.role == MessageRole::Tool)
         .filter_map(|m| m.tool_call_id.clone())
         .filter(|id| !id.is_empty())
         .collect();
 
-    let assistant_tool_call_ids: std::collections::HashSet<String> = messages
+    let assistant_tool_call_ids: HashSet<String> = messages
         .iter()
         .filter(|m| m.role == MessageRole::Assistant)
         .flat_map(|m| {
@@ -202,14 +203,14 @@ pub fn sanitize_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
 
 /// 后置验证：确保转换后的消息中 tool_call_id 双向一致。
 fn sanitize_llm_messages(messages: &mut Vec<Message>) {
-    let assistant_tool_call_ids: std::collections::HashSet<String> = messages
+    let assistant_tool_call_ids: HashSet<String> = messages
         .iter()
         .filter(|m| m.role == Role::Assistant)
         .flat_map(|m| m.tool_calls.iter().flatten().map(|tc| tc.id.clone()))
         .filter(|id| !id.is_empty())
         .collect();
 
-    let tool_result_ids: std::collections::HashSet<String> = messages
+    let tool_result_ids: HashSet<String> = messages
         .iter()
         .filter(|m| m.role == Role::Tool)
         .filter_map(|m| m.tool_call_id.clone())

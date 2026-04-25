@@ -1,8 +1,10 @@
-use super::super::agent_md;
-use super::super::app::ChatApp;
-use super::super::storage::{load_style, load_system_prompt, save_style, save_system_prompt};
 use super::theme::ThemeName;
+use crate::command::chat::agent_md;
+use crate::command::chat::app::ChatApp;
 use crate::command::chat::context::compact::BUILTIN_EXEMPT_TOOLS;
+use crate::command::chat::storage::{
+    load_style, load_system_prompt, save_style, save_system_prompt,
+};
 use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 
 // ========== Model tab helpers ==========

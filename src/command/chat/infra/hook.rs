@@ -1,10 +1,10 @@
-use super::super::permission::JcliConfig;
-use super::super::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::constants::{
     HOOK_DEFAULT_LLM_TIMEOUT_SECS, HOOK_DEFAULT_TIMEOUT_SECS, HOOK_LLM_MAX_TOKENS,
     HOOK_PROMPT_PREVIEW_MAX_LEN,
 };
+use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::SessionHookPersist;
+use crate::command::chat::storage::{ChatMessage, ModelProvider};
 use crate::config::YamlConfig;
 use crate::util::log::{write_error_log, write_info_log};
 use nix::sys::signal::{self, Signal};

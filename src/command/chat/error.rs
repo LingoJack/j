@@ -3,6 +3,9 @@
 //! 所有 chat 核心链路中的错误统一使用 `ChatError`，按语义分类，
 //! 便于 UI 层给出差异化提示（认证失败 vs 网络超时 vs 服务端错误等）。
 
+use crate::command::chat::constants::{
+    TEAMMATE_LOG_RESULT_MAX_CHARS, TEAMMATE_PROMPT_PREVIEW_MAX_CHARS,
+};
 use crate::llm::LlmError;
 
 /// Chat 模块类型化错误
@@ -77,25 +80,37 @@ impl ChatError {
             Self::NetworkTimeout(_) => "网络连接超时，请检查网络后重试".to_string(),
             Self::NetworkError(_) => "网络连接失败，请检查网络设置".to_string(),
             Self::StreamInterrupted(msg) => {
-                format!("流式响应中断: {}", truncate(&sanitize_html(msg), 100))
+                format!(
+                    "流式响应中断: {}",
+                    truncate(&sanitize_html(msg), TEAMMATE_PROMPT_PREVIEW_MAX_CHARS)
+                )
             }
             Self::StreamDeserialize(msg) => {
-                format!("响应解析失败: {}", truncate(&sanitize_html(msg), 100))
+                format!(
+                    "响应解析失败: {}",
+                    truncate(&sanitize_html(msg), TEAMMATE_PROMPT_PREVIEW_MAX_CHARS)
+                )
             }
             Self::RequestBuild(msg) => {
                 format!("构建请求失败: {}", truncate(msg, 150))
             }
             Self::HookAborted => "请求被 hook 中止".to_string(),
             Self::RuntimeFailed(msg) => {
-                format!("运行时错误: {}", truncate(msg, 100))
+                format!(
+                    "运行时错误: {}",
+                    truncate(msg, TEAMMATE_PROMPT_PREVIEW_MAX_CHARS)
+                )
             }
             Self::AgentPanic(msg) => {
-                format!("Agent 异常: {}", truncate(msg, 100))
+                format!(
+                    "Agent 异常: {}",
+                    truncate(msg, TEAMMATE_PROMPT_PREVIEW_MAX_CHARS)
+                )
             }
             Self::AbnormalFinish(reason) => {
                 format!("API 返回异常: finish_reason={}", truncate(reason, 80))
             }
-            Self::Other(msg) => truncate(&sanitize_html(msg), 200),
+            Self::Other(msg) => truncate(&sanitize_html(msg), TEAMMATE_LOG_RESULT_MAX_CHARS),
         }
     }
 }

@@ -36,9 +36,8 @@ mod cdp {
 
     pub fn get_runtime() -> &'static tokio::runtime::Runtime {
         BROWSER_RUNTIME.get_or_init(|| {
-            // SAFETY: tokio Runtime 创建失败仅可能发生在系统资源耗尽等极端情况，
-            // 此时程序无法正常运行，panic 是合理的终止方式。
-            tokio::runtime::Runtime::new().expect("创建浏览器 Runtime 失败")
+            tokio::runtime::Runtime::new()
+                .unwrap_or_else(|e| panic!("创建浏览器 Runtime 失败: {e}"))
         })
     }
 
@@ -821,7 +820,8 @@ mod cdp {
 #[cfg(not(feature = "browser_cdp"))]
 mod lite {
     use crate::command::chat::constants::{
-        BROWSER_LITE_MAX_FORMS, BROWSER_LITE_MAX_LINKS, BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS,
+        BROWSER_LITE_HTTP_TIMEOUT_SECS, BROWSER_LITE_MAX_FORMS, BROWSER_LITE_MAX_LINKS,
+        BROWSER_LITE_MAX_REDIRECTS, BROWSER_LITE_TEXT_PREVIEW_MAX_CHARS,
         BROWSER_SNAPSHOT_MAX_ELEMENTS, BROWSER_TEXT_MAX_CHARS,
     };
     use serde_json::{Value, json};
@@ -859,9 +859,9 @@ mod lite {
 
     fn http_client() -> Result<reqwest::blocking::Client, String> {
         reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(BROWSER_LITE_HTTP_TIMEOUT_SECS))
             .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(BROWSER_LITE_MAX_REDIRECTS))
             .build()
             .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
     }

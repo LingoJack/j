@@ -1,5 +1,5 @@
 use crate::command::chat::context::compact::{InvokedSkillsMap, record_skill_invocation};
-use crate::command::chat::infra::skill::Skill;
+use crate::command::chat::infra::skill::{Skill, resolve_skill_content};
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
 };
@@ -69,7 +69,7 @@ impl Tool for LoadSkillTool {
             .find(|s| s.frontmatter.name == params.name)
         {
             Some(skill) => {
-                let content = crate::command::chat::infra::skill::resolve_skill_content(skill);
+                let content = resolve_skill_content(skill);
                 let resolved = content.replace("$ARGUMENTS", args_str);
                 // 记录技能调用（供 auto_compact 后恢复技能指令）
                 record_skill_invocation(

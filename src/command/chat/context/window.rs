@@ -17,6 +17,12 @@ use crate::command::chat::constants::{
 use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::util::log::write_info_log;
 
+/// 简单 token 估算：每 3 个字符 ≈ 1 token
+const SIMPLE_CHARS_PER_TOKEN: usize = 3;
+
+/// token_K 到实际 token 数的换算乘数
+const TOKEN_K_MULTIPLIER: usize = 1000;
+
 // ========== MessageUnit 定义 ==========
 
 /// 消息分组 — 原子单元，要么全部保留，要么全部丢弃
@@ -105,7 +111,7 @@ impl MessageUnit {
                 chars
             }
         };
-        total_chars / 3
+        total_chars / SIMPLE_CHARS_PER_TOKEN
     }
 
     /// ToolGroup 是否包含豁免工具（任一 tool_call 命中豁免清单即返回 true）
@@ -144,7 +150,7 @@ fn parse_message_units(messages: &[ChatMessage]) -> Vec<MessageUnit> {
             if msg.tool_calls.is_some() {
                 // assistant + tool_calls → 收集后续 tool result
                 let assistant_message_index = i;
-                let mut tool_result_indices = Vec::new();
+                let mut tool_result_indices = Vec::new(); // 大小未知，无法预分配
                 i += 1;
                 while i < messages.len() && messages[i].role == MessageRole::Tool {
                     tool_result_indices.push(i);
@@ -408,7 +414,7 @@ pub fn select_messages(
     let max_tokens = if max_context_tokens_k == 0 {
         usize::MAX
     } else {
-        max_context_tokens_k * 1000
+        max_context_tokens_k * TOKEN_K_MULTIPLIER
     };
 
     let total_tokens = estimate_tokens_simple(messages);
@@ -427,8 +433,8 @@ pub fn select_messages(
     );
 
     // 按原始顺序重组消息；被丢弃的相邻 ToolGroup 合并为单个占位符
-    let mut result = Vec::new();
-    let mut pending_dropped_names: Vec<String> = Vec::new();
+    let mut result = Vec::with_capacity(messages.len());
+    let mut pending_dropped_names: Vec<String> = Vec::new(); // 大小未知
 
     let flush_pending = |pending: &mut Vec<String>, out: &mut Vec<ChatMessage>| {
         if !pending.is_empty() {

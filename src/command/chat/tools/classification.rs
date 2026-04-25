@@ -1,6 +1,6 @@
 use crate::command::chat::constants::{
     CLASSIFY_SIZE_THRESHOLD_BYTES, CLASSIFY_SIZE_THRESHOLD_CHARS, CLASSIFY_TITLE_TRUNCATE_LEN,
-    CLASSIFY_TRUNCATE_LEN,
+    CLASSIFY_TRUNCATE_LEN, HOOK_LOG_DESC_MAX_LEN,
 };
 use crate::theme::Theme;
 use ratatui::style::Color;
@@ -332,7 +332,7 @@ fn get_compact_summary(content: &str) -> String {
         .lines()
         .next()
         .map(|l| {
-            let chars: String = l.chars().take(60).collect();
+            let chars: String = l.chars().take(HOOK_LOG_DESC_MAX_LEN).collect();
             chars
         })
         .unwrap_or_else(|| "压缩完成".to_string())

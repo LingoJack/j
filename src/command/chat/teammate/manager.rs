@@ -9,6 +9,9 @@ use std::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
+/// 广播消息日志截断长度
+const BROADCAST_LOG_MAX_LEN: usize = 100;
+
 // ========== Teammate 状态枚举 ==========
 
 /// Teammate 的细粒度运行状态
@@ -264,7 +267,7 @@ impl TeammateManager {
                 "broadcast from={}: {}",
                 from,
                 &broadcast_message[..{
-                    let mut b = broadcast_message.len().min(100);
+                    let mut b = broadcast_message.len().min(BROADCAST_LOG_MAX_LEN);
                     while b > 0 && !broadcast_message.is_char_boundary(b) {
                         b -= 1;
                     }
@@ -350,7 +353,8 @@ impl TeammateManager {
 
     /// 获取所有 teammate 名称列表（包含 "Main"）
     pub fn all_names(&self) -> Vec<String> {
-        let mut names = vec!["Main".to_string()];
+        let mut names = Vec::with_capacity(self.teammates.len() + 1);
+        names.push("Main".to_string());
         names.extend(self.teammates.keys().cloned());
         names
     }

@@ -1,4 +1,5 @@
 use crate::assets::Assets;
+use crate::command::chat::constants::HOOK_LOG_DESC_MAX_LEN;
 use crate::command::chat::infra::hook::{
     HookDef, HookEvent, HookFilter, HookManager, HookType, OnError,
 };
@@ -261,7 +262,13 @@ impl RegisterHookTool {
                         let prompt_preview = params
                             .prompt
                             .as_deref()
-                            .map(|p| if p.len() > 60 { &p[..60] } else { p })
+                            .map(|p| {
+                                if p.len() > HOOK_LOG_DESC_MAX_LEN {
+                                    &p[..HOOK_LOG_DESC_MAX_LEN]
+                                } else {
+                                    p
+                                }
+                            })
                             .unwrap_or("?");
                         format!("prompt={}", prompt_preview)
                     }

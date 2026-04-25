@@ -1,6 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
+use crate::command::chat::constants::KEY_PRESS_DELAY_MS;
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
@@ -27,7 +28,7 @@ fn post_key(keycode: u16, down: bool, flags: CGEventFlags) -> Result<(), AicErro
 pub fn press_key(key: &str) -> Result<(), AicError> {
     let keycode = resolve_key(key)?;
     post_key(keycode, true, CGEventFlags::CGEventFlagNull)?;
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     post_key(keycode, false, CGEventFlags::CGEventFlagNull)?;
     Ok(())
 }
@@ -52,10 +53,11 @@ pub fn key_combo(keys: &[String]) -> Result<(), AicError> {
             flags |= resolve_modifier(k)?;
         } else {
             // Non-modifier before the last position — treat last as main key
+            // keys.last() is safe: keys is non-empty (checked at line 38) and we are iterating over it
             main_key = Some(
                 keys.last()
-                    .expect("keys is non-empty: we are iterating over it")
-                    .as_str(),
+                    .map(|s| s.as_str())
+                    .unwrap_or_else(|| keys[0].as_str()),
             );
             // All others before it that are modifiers already handled
             break;
@@ -68,7 +70,7 @@ pub fn key_combo(keys: &[String]) -> Result<(), AicError> {
 
     let keycode = resolve_key(main_key)?;
     post_key(keycode, true, flags)?;
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(KEY_PRESS_DELAY_MS));
     post_key(keycode, false, flags)?;
     Ok(())
 }
