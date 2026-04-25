@@ -210,8 +210,8 @@ pub const PLAN_MODE_WHITELIST: &[&str] = &[
     tool_names::EXIT_PLAN_MODE,
     tool_names::ENTER_WORKTREE,
     tool_names::EXIT_WORKTREE,
-    tool_names::AGENT,      // plan mode 允许启动子 agent 做代码探索
-    tool_names::AGENT_TEAM, // plan mode 允许批量创建 teammate
+    tool_names::AGENT,    // plan mode 允许启动子 agent 做代码探索
+    tool_names::TEAMMATE, // plan mode 允许创建 teammate
 ];
 
 /// 检查工具是否在 plan mode 白名单中

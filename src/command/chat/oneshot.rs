@@ -45,7 +45,7 @@ fn extract_tool_desc(tool_name: &str, arguments: &str) -> Option<String> {
             .or_else(|| parsed.get("file_path"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
-        "Agent" | "AgentTeam" => parsed
+        "Agent" | "Teammate" => parsed
             .get("description")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),

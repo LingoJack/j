@@ -1,11 +1,10 @@
-pub mod agent_team;
 pub mod ask;
 pub mod background;
 mod browser;
 pub mod classification;
 pub mod compact_tool;
 mod computer_use;
-pub mod create_teammate;
+pub mod teammate_tool;
 pub mod definition;
 pub mod derived_shared;
 mod file;
@@ -55,8 +54,7 @@ pub mod tool_names {
     pub const EXIT_WORKTREE: &str = super::worktree::ExitWorktreeTool::NAME;
     pub const LOAD_SKILL: &str = super::skill::LoadSkillTool::NAME;
     pub const AGENT: &str = super::sub_agent::SubAgentTool::NAME;
-    pub const AGENT_TEAM: &str = super::agent_team::AgentTeamTool::NAME;
-    pub const CREATE_TEAMMATE: &str = super::create_teammate::CreateTeammateTool::NAME;
+    pub const TEAMMATE: &str = super::teammate_tool::TeammateTool::NAME;
     pub const SEND_MESSAGE: &str = super::send_message::SendMessageTool::NAME;
     pub const WORK_DONE: &str = super::work_done::WorkDoneTool::NAME;
 }

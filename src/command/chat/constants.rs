@@ -218,9 +218,6 @@ pub const MOUSE_DOUBLE_CLICK_WAIT_MS: u64 = 50;
 
 // ========== Agent Team ==========
 
-/// 团队最大成员数
-pub const TEAM_MAX_MEMBERS: usize = 10;
-
 // ========== Worktree ==========
 
 /// Worktree 名称最大长度

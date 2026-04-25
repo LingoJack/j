@@ -25,7 +25,7 @@ pub(super) fn draw_tab_teammates_header<'a>(lines: &mut Vec<Line<'a>>, app: &Cha
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  协作者由 AI 通过 CreateTeammate 工具创建，子代理由 Agent 工具触发",
+            "  协作者由 AI 通过 Teammate 工具创建，子代理由 Agent 工具触发",
             Style::default().fg(t.config_dim),
         )));
         return;

@@ -5,7 +5,6 @@ use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{SessionPaths, sanitize_filename};
 use crate::command::chat::teammate::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
-use crate::command::chat::tools::agent_team::AgentTeamTool;
 use crate::command::chat::tools::derived_shared::DerivedAgentShared;
 use crate::command::chat::tools::send_message::SendMessageTool;
 use crate::command::chat::tools::sub_agent::SubAgentTool;
@@ -25,9 +24,9 @@ use std::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
-/// CreateTeammate 参数
+/// Teammate 工具参数
 #[derive(Deserialize, JsonSchema)]
-struct CreateTeammateParams {
+struct TeammateParams {
     /// Teammate name (e.g. "Frontend", "Backend", "DevOps")
     name: String,
     /// Role description (e.g. "React frontend developer"). Optional, defaults to name.
@@ -47,18 +46,18 @@ struct CreateTeammateParams {
     inherit_permissions: bool,
 }
 
-/// CreateTeammate 工具：创建一个新的 teammate agent
+/// Teammate 工具：创建一个新的 teammate agent（面向 Main agent）
 #[allow(dead_code)]
-pub struct CreateTeammateTool {
+pub struct TeammateTool {
     pub shared: DerivedAgentShared,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
 }
 
-impl CreateTeammateTool {
-    pub const NAME: &'static str = "CreateTeammate";
+impl TeammateTool {
+    pub const NAME: &'static str = "Teammate";
 }
 
-impl Tool for CreateTeammateTool {
+impl Tool for TeammateTool {
     fn name(&self) -> &str {
         Self::NAME
     }
@@ -75,7 +74,7 @@ impl Tool for CreateTeammateTool {
         - prompt: Initial task/instructions for this teammate
 
         The teammate starts working immediately on the given prompt.
-        It can use all tools except CreateTeammate (no recursive spawning).
+        It can use all tools except Teammate (no recursive spawning).
         Teammates are session-scoped and cleaned up when the session ends.
 
         Example:
@@ -88,11 +87,11 @@ impl Tool for CreateTeammateTool {
     }
 
     fn parameters_schema(&self) -> Value {
-        schema_to_tool_params::<CreateTeammateParams>()
+        schema_to_tool_params::<TeammateParams>()
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
-        let params: CreateTeammateParams = match parse_tool_args(arguments) {
+        let params: TeammateParams = match parse_tool_args(arguments) {
             Ok(p) => p,
             Err(e) => return e,
         };
@@ -134,7 +133,7 @@ impl Tool for CreateTeammateTool {
             match create_agent_worktree(&params.name) {
                 Ok(info) => {
                     write_info_log(
-                        "CreateTeammate",
+                        "TeammateTool",
                         &format!(
                             "Teammate '{}' worktree created: {}",
                             params.name,
@@ -170,13 +169,13 @@ impl Tool for CreateTeammateTool {
         let work_done = Arc::new(AtomicBool::new(false));
 
         // 获取 provider 快照
-        let provider = safe_lock(&self.shared.provider, "CreateTeammate::provider").clone();
+        let provider = safe_lock(&self.shared.provider, "TeammateTool::provider").clone();
         let system_prompt =
-            safe_lock(&self.shared.system_prompt, "CreateTeammate::system_prompt").clone();
+            safe_lock(&self.shared.system_prompt, "TeammateTool::system_prompt").clone();
 
         // 构建子工具注册表（teammate 独立 todos：sessions/<sid>/teammates/<name>/todos.json）
         let teammate_todos_path = {
-            let sid = safe_lock(&self.shared.session_id, "CreateTeammate::session_id").clone();
+            let sid = safe_lock(&self.shared.session_id, "TeammateTool::session_id").clone();
             let sanitized = sanitize_filename(&params.name);
             SessionPaths::new(&sid).teammate_todos_file(&sanitized)
         };
@@ -195,7 +194,6 @@ impl Tool for CreateTeammateTool {
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push(Self::NAME.to_string());
-        disabled.push(AgentTeamTool::NAME.to_string());
         disabled.push(SubAgentTool::NAME.to_string());
         let tools = child_registry.to_llm_tools_filtered(&disabled);
 
@@ -240,7 +238,7 @@ impl Tool for CreateTeammateTool {
             if let Some((ref wt_path, _)) = worktree_info {
                 set_thread_cwd(wt_path);
                 write_info_log(
-                    "CreateTeammate",
+                    "TeammateTool",
                     &format!(
                         "Teammate '{}' working in worktree: {}",
                         teammate_name,
@@ -250,7 +248,7 @@ impl Tool for CreateTeammateTool {
             }
 
             write_info_log(
-                "CreateTeammate",
+                "TeammateTool",
                 &format!("Teammate '{}' agent loop starting", teammate_name),
             );
 
@@ -282,7 +280,7 @@ impl Tool for CreateTeammateTool {
             // 清理 worktree
             if let Some((ref wt_path, ref branch)) = worktree_info {
                 write_info_log(
-                    "CreateTeammate",
+                    "TeammateTool",
                     &format!("Teammate '{}' cleaning up worktree", teammate_name),
                 );
                 remove_agent_worktree(wt_path, branch);
@@ -291,7 +289,7 @@ impl Tool for CreateTeammateTool {
             is_running_clone.store(false, Ordering::Relaxed);
 
             write_info_log(
-                "CreateTeammate",
+                "TeammateTool",
                 &format!(
                     "Teammate '{}' agent loop ended: {}",
                     teammate_name,

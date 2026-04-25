@@ -95,9 +95,8 @@ fn tool_name_constants_match_policy_hardcoded_strings() {
     assert!(is_key_tool(TODO_WRITE), "TodoWrite 应为 KeyTool");
     assert!(is_key_tool(TODO_READ), "TodoRead 应为 KeyTool");
     assert!(is_key_tool(AGENT), "Agent 应为 KeyTool");
-    assert!(is_key_tool(AGENT_TEAM), "AgentTeam 应为 KeyTool");
+    assert!(is_key_tool(TEAMMATE), "Teammate 应为 KeyTool");
     assert!(is_key_tool(SEND_MESSAGE), "SendMessage 应为 KeyTool");
-    assert!(is_key_tool(CREATE_TEAMMATE), "CreateTeammate 应为 KeyTool");
 }
 
 /// 常规工具必须归为 RegularTool + Placeholder

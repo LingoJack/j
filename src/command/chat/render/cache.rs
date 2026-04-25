@@ -1751,7 +1751,7 @@ pub fn render_tool_call_request_msg(
                         render_json_params_enhanced(&json_value, content_w, lines, theme);
                     }
                 // Agent 工具使用专用渲染：边框 + prompt + 元信息
-                } else if matches!(tc.name.as_str(), tool_names::AGENT | tool_names::AGENT_TEAM) {
+                } else if matches!(tc.name.as_str(), tool_names::AGENT | tool_names::TEAMMATE) {
                     if let Some(agent_args) = extract_agent_args(&tc.arguments) {
                         render_agent_call_request_expanded(
                             &agent_args,
@@ -1780,8 +1780,8 @@ pub fn render_tool_call_request_msg(
         } else {
             // 折叠模式：图标 + 工具名 + description（若有）或参数预览
 
-            // Agent/AgentTeam 工具专用折叠渲染：显示 [background] + description
-            if matches!(tc.name.as_str(), tool_names::AGENT | tool_names::AGENT_TEAM)
+            // Agent/Teammate 工具专用折叠渲染：显示 [background] + description
+            if matches!(tc.name.as_str(), tool_names::AGENT | tool_names::TEAMMATE)
                 && let Some(agent_args) = extract_agent_args(&tc.arguments)
             {
                 let mut desc_parts: Vec<String> = Vec::new();
@@ -2485,7 +2485,7 @@ fn extract_tool_description_from_args(tool_name: &str, arguments: &str) -> Optio
             .or_else(|| parsed.get("file_path"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
-        tool_names::AGENT | tool_names::AGENT_TEAM => parsed
+        tool_names::AGENT | tool_names::TEAMMATE => parsed
             .get("description")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
