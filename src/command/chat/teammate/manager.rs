@@ -385,7 +385,11 @@ impl TeammateManager {
             ));
         }
         summary.push_str(
-            "\n使用 SendMessage 工具向其他 agent 发送消息。可以用 @AgentName 指定目标。\n",
+            "\n使用 SendMessage 工具向其他 agent 发送消息。可以用 @AgentName 指定目标。\n\n\
+             IMPORTANT: 所有广播消息所有 agent 都能看到。因此：\n\
+             - Teammate 之间可以直接沟通，**不要**通过 Main 中转消息\n\
+             - 如果你需要 A 和 B 协作，告诉 A 去联系 B 即可，不要自己转述\n\
+             - 你的角色是分配任务和协调方向，不是充当消息中继\n",
         );
         summary
     }

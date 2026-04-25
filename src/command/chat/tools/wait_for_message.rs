@@ -11,22 +11,25 @@ use std::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
-/// Default timeout in seconds (matches MAX_CONSECUTIVE_IDLE_POLLS)
-const DEFAULT_TIMEOUT_SECS: u64 = 120;
+/// Default timeout in seconds
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
 /// Poll interval in milliseconds
 const POLL_INTERVAL_MS: u64 = 100;
 
 #[derive(Deserialize, JsonSchema)]
 struct WaitForMessageParams {
-    /// Maximum time to wait in seconds (default: 120). Returns error on timeout.
+    /// Maximum time to wait in seconds (default: 30).
+    /// Returns whatever messages are available on timeout (even if none match from/keyword).
     #[serde(default = "default_timeout")]
     timeout: u64,
-    /// Optional: only return messages from this agent (e.g. "Backend", "Main").
-    /// Messages from other agents are preserved for the next round.
+    /// Optional: wait until a message from this agent arrives (e.g. "Backend", "Main").
+    /// When a matching message arrives, ALL accumulated messages are returned (not just matching ones).
+    /// On timeout, ALL accumulated messages are returned regardless of filter.
     #[serde(default)]
     from: Option<String>,
-    /// Optional: only return messages containing this keyword/substring.
-    /// Messages not containing the keyword are preserved for the next round.
+    /// Optional: wait until a message containing this keyword arrives.
+    /// When a matching message arrives, ALL accumulated messages are returned.
+    /// On timeout, ALL accumulated messages are returned regardless of filter.
     #[serde(default)]
     keyword: Option<String>,
 }
@@ -38,7 +41,8 @@ fn default_timeout() -> u64 {
 /// WaitForMessage 工具：teammate 阻塞等待其他 agent 的消息
 ///
 /// 调用后阻塞当前线程，直到收到匹配的广播消息或超时/取消。
-/// 消息从 `pending_user_messages` 中 drain，不会与 teammate_loop 的 drain 冲突。
+/// **关键语义**：from/keyword 仅控制「何时停止等待」，返回时始终给出 ALL 积累的消息。
+/// 这避免了过滤导致的消息堆积和互等死锁。
 pub struct WaitForMessageTool {
     /// 该 teammate 的 pending_user_messages（与 TeammateHandle 共享）
     pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
@@ -57,30 +61,33 @@ impl Tool for WaitForMessageTool {
 
     fn description(&self) -> &str {
         r#"
-        Block and wait for a message from another agent in the chatroom.
+        Wait for messages from other agents in the chatroom.
 
-        Use this when you need input from a teammate before proceeding.
-        The tool blocks until a matching message arrives or the timeout expires.
+        Blocks until a matching message arrives or timeout. On return, delivers ALL
+        accumulated messages (not just filtered ones) so you never miss context.
+
+        Filter semantics:
+        - from/keyword control WHEN to stop waiting, not WHAT you see.
+        - When a matching message arrives → return immediately with ALL messages.
+        - On timeout → return ALL accumulated messages (even if none match).
 
         Usage:
-        - timeout: Max wait time in seconds (default 120). Returns error on timeout.
-        - from: Optional sender filter. Only messages from this agent will be returned.
-                Other agents' messages are preserved for your next round.
-        - keyword: Optional content filter. Only messages containing this keyword will be returned.
-                   Non-matching messages are preserved for your next round.
+        - timeout: Max wait in seconds (default 30).
+        - from: Wait until a message from this agent arrives.
+        - keyword: Wait until a message containing this keyword arrives.
 
         Examples:
-        {}                                               // Wait for any message
-        {"from": "Backend"}                              // Wait for a message from Backend
-        {"keyword": "deploy"}                            // Wait for any message containing "deploy"
+        {}                                               // Wait for any message, return all
+        {"from": "Backend"}                              // Wait until Backend sends, return all
+        {"keyword": "deploy"}                            // Wait until "deploy" mentioned, return all
         {"from": "Main", "keyword": "approved"}          // Wait for Main to say "approved"
-        {"from": "Main", "timeout": 60}                  // Wait up to 60s for Main's message
+        {"from": "Main", "timeout": 60}                  // Wait up to 60s
 
         IMPORTANT:
         - While waiting, you cannot use other tools or respond to messages.
         - If you need to do work while waiting, DO NOT call this tool -- stay idle instead.
+        - Two teammates should NEVER both wait for each other simultaneously — that causes a deadlock.
         - After receiving a message, use SendMessage to reply if needed.
-        - On timeout, consider whether to retry, call WorkDone, or take other action.
         "#
     }
 
@@ -97,25 +104,21 @@ impl Tool for WaitForMessageTool {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(params.timeout);
         let poll_interval = std::time::Duration::from_millis(POLL_INTERVAL_MS);
+        let mut accumulated: Vec<ChatMessage> = Vec::new();
 
         loop {
             // 取消检查
             if cancelled.load(Ordering::Relaxed) || self.cancel_token.is_cancelled() {
                 return ToolResult {
-                    output: "WaitForMessage cancelled".to_string(),
-                    is_error: true,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                };
-            }
-
-            // 超时检查
-            if start.elapsed() >= timeout {
-                return ToolResult {
-                    output: format!(
-                        "WaitForMessage timed out after {}s (no message arrived)",
-                        params.timeout
-                    ),
+                    output: if accumulated.is_empty() {
+                        "WaitForMessage cancelled".to_string()
+                    } else {
+                        format!(
+                            "WaitForMessage cancelled, but {} message(s) received:\n{}",
+                            accumulated.len(),
+                            format_messages(&accumulated)
+                        )
+                    },
                     is_error: true,
                     images: vec![],
                     plan_decision: PlanDecision::None,
@@ -132,36 +135,58 @@ impl Tool for WaitForMessageTool {
             };
 
             if !drained.is_empty() {
-                let (matching, non_matching): (Vec<_>, Vec<_>) =
-                    drained.into_iter().partition(|m| {
-                        message_matches(
-                            &m.content,
-                            params.from.as_deref(),
-                            params.keyword.as_deref(),
-                        )
-                    });
+                accumulated.extend(drained);
 
-                // 放回不匹配的消息
-                if !non_matching.is_empty()
-                    && let Ok(mut pending) = self.pending_user_messages.lock()
-                {
-                    let mut combined = non_matching;
-                    combined.append(&mut *pending);
-                    *pending = combined;
-                }
+                // 检查是否有匹配的消息（控制停止等待的条件）
+                let has_match = accumulated.iter().any(|m| {
+                    message_matches(
+                        &m.content,
+                        params.from.as_deref(),
+                        params.keyword.as_deref(),
+                    )
+                });
 
-                if !matching.is_empty() {
+                if has_match {
+                    // 匹配消息到达 → 返回所有积累的消息
                     return ToolResult {
-                        output: format_messages(&matching),
+                        output: format_messages(&accumulated),
                         is_error: false,
                         images: vec![],
                         plan_decision: PlanDecision::None,
                     };
                 }
-                // 没有匹配的消息，继续等待
+                // 无匹配但已有消息 → 继续等待匹配消息（但有消息在手，互等时可被打破）
             }
 
-            // 无消息，休眠后继续轮询
+            // 超时检查
+            if start.elapsed() >= timeout {
+                if !accumulated.is_empty() {
+                    // 超时但有消息 → 返回所有积累的消息
+                    return ToolResult {
+                        output: format!(
+                            "WaitForMessage timed out after {}s. No message matched filter, but {} message(s) received:\n{}",
+                            params.timeout,
+                            accumulated.len(),
+                            format_messages(&accumulated)
+                        ),
+                        is_error: false,
+                        images: vec![],
+                        plan_decision: PlanDecision::None,
+                    };
+                }
+                // 超时且无消息
+                return ToolResult {
+                    output: format!(
+                        "WaitForMessage timed out after {}s (no message arrived)",
+                        params.timeout
+                    ),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+
+            // 无消息 / 无匹配 → 休眠后继续轮询
             std::thread::sleep(poll_interval);
         }
     }

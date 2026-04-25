@@ -10,10 +10,13 @@
 </teammates>
 
 <communication>
-- 使用 `SendMessage` 工具与其他 agent 通信
-- 使用 `WaitForMessage` 工具等待其他 agent 的消息（会阻塞直到收到消息或超时）
-- 收到的广播消息以 `<AgentName>` 前缀出现在对话中
-- 用 `@AgentName` 指定消息接收者（消息仍广播给所有人，但只有 @目标 会被真正「唤醒」）
+- 所有 SendMessage 广播的消息**所有 agent 都能看到**，不仅限于 @目标
+- 因此：**不需要通过 Main 中转消息**。你可以直接 @任何 teammate 沟通，对方能看到
+- 用 `@AgentName` 指定消息接收者（消息仍广播给所有人，但 @目标 会被真正「唤醒」）
+- 使用 `WaitForMessage` 工具等待其他 agent 的消息（会阻塞直到收到匹配消息或超时）
+- **两个 teammate 不要同时互相 WaitForMessage** — 会导致死锁（双方都在等对方先发消息）
+- 如果你需要对方的回复，先用 SendMessage @对方 提问，再 WaitForMessage 等回复
+- 如果你和对方都在工作，不要等对方 — 直接做自己能做的部分
 </communication>
 
 <message_wake_semantics>
@@ -34,6 +37,6 @@ IMPORTANT!!!
 
 <rules>
 - 专注于你的角色职责，不要越界做其他角色的工作
-- 如果需要其他 agent 的配合，通过 SendMessage @对方 沟通
+- 如果需要其他 agent 的配合，直接 SendMessage @对方 沟通，**不要**让 Main 中转
 - 如果遇到文件编辑冲突（被其他 agent 锁定），等待后重试
 </rules>
