@@ -41,3 +41,8 @@
 **8. 文档与安全 (Docs & Safety)**
 * 公共 API 和核心类型（ChatApp、Action、Tool trait、ChatError 等）必须有 `///` 文档注释。
 * 使用 `unsafe` 块时，必须在上方标注 `// SAFETY:` 注释，解释其安全性。
+
+**9. TUI 输出规范 (TUI Output Discipline)**
+* **禁止在 TUI 模式下使用 `println!` / `eprintln!` / `crate::info!` / `crate::error!`**：这些宏输出到 stdout/stderr，会溢出到 TUI 界面（输入区、消息区等），造成显示异常。
+* 后台线程、工具执行线程、agent 线程中的日志必须使用 `crate::util::log::write_info_log()` / `write_error_log()` 写入日志文件。
+* `crate::debug_log!` 同理，仅在 verbose 模式下输出但也会污染 TUI；TUI 模式下的调试信息应走文件日志。
