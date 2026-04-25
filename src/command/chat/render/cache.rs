@@ -2583,7 +2583,15 @@ fn render_teammate_call_request_expanded(
     let content_w = bubble_max_width.saturating_sub(6);
 
     // 元信息行：name(role) [worktree]
-    let mut meta_parts = vec![format!("{}({})", args.name, if args.role.is_empty() { &args.name } else { &args.role })];
+    let mut meta_parts = vec![format!(
+        "{}({})",
+        args.name,
+        if args.role.is_empty() {
+            &args.name
+        } else {
+            &args.role
+        }
+    )];
     if args.worktree {
         meta_parts.push("[worktree]".to_string());
     }
