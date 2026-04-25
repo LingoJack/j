@@ -289,6 +289,13 @@ impl ChatApp {
                 teammate_manager: Arc::clone(&teammate_manager),
             },
         ));
+        tool_registry.register(Box::new(
+            crate::command::chat::tools::main_wait_for_message::MainWaitForMessageTool {
+                context_messages: Arc::clone(&context_messages),
+                teammate_manager: Arc::clone(&teammate_manager),
+                last_seen_len: std::sync::atomic::AtomicUsize::new(0),
+            },
+        ));
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
 

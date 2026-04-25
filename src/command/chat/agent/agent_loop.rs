@@ -10,7 +10,6 @@ use super::tool_processor::{
 };
 use crate::command::chat::context::compact;
 use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
-use crate::llm::ToolDefinition;
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use futures::StreamExt;
@@ -98,7 +97,6 @@ pub async fn run_main_agent_loop(
     config: AgentLoopConfig,
     shared: AgentLoopSharedState,
     mut messages: Vec<ChatMessage>,
-    tools: Vec<ToolDefinition>,
     system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     tx: mpsc::Sender<StreamMsg>,
     tool_result_rx: mpsc::Receiver<ToolResultMsg>,
@@ -123,6 +121,9 @@ pub async fn run_main_agent_loop(
         invoked_skills,
         session_id,
         derived_system_prompt,
+        tool_registry,
+        disabled_tools,
+        tools_enabled,
     } = shared;
 
     let client = create_llm_client(&provider);
@@ -140,33 +141,36 @@ pub async fn run_main_agent_loop(
         session_id: &session_id,
     };
 
-    write_info_log(
-        "agent_loop",
-        &format!(
-            "agent loop 启动: max_llm_rounds={}, model={}, tools_count={}",
-            max_llm_rounds,
-            provider.model,
-            tools.len()
-        ),
-    );
-    if !tools.is_empty() {
-        let tool_names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
-        write_info_log(
-            "agent_loop",
-            &format!("可用工具列表: [{}]", tool_names.join(", ")),
-        );
-    } else {
-        write_info_log("agent_loop", "警告: tools 列表为空，LLM 将无法调用任何工具");
-    }
-
     let mut final_round_idx: usize = 0;
     'round: for round_idx in 0..max_llm_rounds {
         final_round_idx = round_idx;
+
+        // 每轮开始时动态获取可用工具（检查 is_available，如 SendMessage/WaitForMessage）
+        let tools = if tools_enabled {
+            tool_registry.to_llm_tools_filtered(&disabled_tools)
+        } else {
+            vec![]
+        };
+
         write_info_log(
             "agent_loop",
             &format!(
                 "========== 第 {} 轮开始 (max={}) ==========",
                 round_idx, max_llm_rounds
+            ),
+        );
+
+        write_info_log(
+            "agent_loop",
+            &format!(
+                "第 {} 轮可用工具: [{}] (count={})",
+                round_idx,
+                tools
+                    .iter()
+                    .map(|t| t.function.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                tools.len()
             ),
         );
 

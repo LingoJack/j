@@ -53,6 +53,13 @@ pub trait Tool: Send + Sync {
     fn confirmation_message(&self, arguments: &str) -> String {
         format!("调用工具 {} 参数: {}", self.name(), arguments)
     }
+    /// 工具是否当前可用（默认 `true`）。
+    ///
+    /// 返回 `false` 时，该工具不会出现在 LLM 的工具列表和工具摘要中，
+    /// 且直接调用会返回错误提示。
+    fn is_available(&self) -> bool {
+        true
+    }
 }
 
 /// 将实现了 `JsonSchema` 的类型转换为基础清理后的工具参数 JSON Schema，
@@ -133,6 +140,15 @@ pub struct ToolRegistry {
     pub permission_queue: Option<Arc<PermissionQueue>>,
     /// 计划审批队列
     pub plan_approval_queue: Option<Arc<super::plan::PlanApprovalQueue>>,
+}
+
+impl std::fmt::Debug for ToolRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tool_names: Vec<&str> = self.tools.iter().map(|t| t.name()).collect();
+        f.debug_struct("ToolRegistry")
+            .field("tool_names", &tool_names)
+            .finish()
+    }
 }
 
 impl ToolRegistry {
@@ -284,7 +300,17 @@ impl ToolRegistry {
         }
 
         match self.get(name) {
-            Some(tool) => tool.execute(arguments, cancelled),
+            Some(tool) => {
+                if !tool.is_available() {
+                    return ToolResult {
+                        output: format!("Tool '{}' is currently not available.", name),
+                        is_error: true,
+                        images: vec![],
+                        plan_decision: PlanDecision::None,
+                    };
+                }
+                tool.execute(arguments, cancelled)
+            }
             None => ToolResult {
                 output: format!("未知工具: {}", name),
                 is_error: true,
@@ -294,13 +320,14 @@ impl ToolRegistry {
         }
     }
 
-    /// 构建工具摘要，以 XML 格式展示所有未禁用工具的名称、描述和参数
+    /// 构建工具摘要，以 XML 格式展示所有未禁用且可用的工具的名称、描述和参数
     pub fn build_tools_summary(&self, disabled: &[String]) -> String {
         let mut md = String::new();
         for t in self
             .tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
+            .filter(|t| t.is_available())
         {
             let name = t.name();
             md.push_str(&format!("<{}>\n", name));
@@ -311,11 +338,12 @@ impl ToolRegistry {
         md.trim_end().to_string()
     }
 
-    /// 将未禁用的工具转换为 OpenAI 函数调用格式的工具列表
+    /// 将未禁用且可用的工具转换为 OpenAI 函数调用格式的工具列表
     pub fn to_llm_tools_filtered(&self, disabled: &[String]) -> Vec<ToolDefinition> {
         self.tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
+            .filter(|t| t.is_available())
             .map(|t| ToolDefinition {
                 tool_type: "function".to_string(),
                 function: FunctionObject {

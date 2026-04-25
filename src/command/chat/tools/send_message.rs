@@ -109,4 +109,11 @@ impl Tool for SendMessageTool {
     fn requires_confirmation(&self) -> bool {
         false
     }
+
+    fn is_available(&self) -> bool {
+        self.teammate_manager
+            .lock()
+            .map(|m| m.has_active_teammates())
+            .unwrap_or(false)
+    }
 }

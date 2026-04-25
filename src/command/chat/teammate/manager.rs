@@ -470,6 +470,13 @@ impl TeammateManager {
         );
         self.teammates.insert(handle.name.clone(), handle);
     }
+
+    /// 是否存在活跃的 teammate（running 且非终态）
+    pub fn has_active_teammates(&self) -> bool {
+        self.teammates
+            .iter()
+            .any(|(_, h)| h.running() && h.status.lock().map(|s| !s.is_terminal()).unwrap_or(false))
+    }
 }
 
 impl Default for TeammateManager {

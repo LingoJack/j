@@ -9,6 +9,7 @@ pub mod derived_shared;
 mod file;
 mod grep;
 pub mod hook;
+pub mod main_wait_for_message;
 pub mod plan;
 pub mod send_message;
 mod shell;

@@ -978,7 +978,6 @@ fn run_oneshot_agent(
     let mut messages = prior_messages;
     messages.push(user_msg);
 
-    let tools = tool_registry.to_llm_tools_filtered(&agent_config.disabled_tools);
     let loaded_skills = skill::load_all_skills();
     let system_prompt_fn = build_system_prompt_fn(
         loaded_skills,
@@ -1025,6 +1024,9 @@ fn run_oneshot_agent(
         invoked_skills,
         session_id: session_id.to_string(),
         derived_system_prompt,
+        tool_registry: Arc::clone(&tool_registry),
+        disabled_tools: agent_config.disabled_tools.clone(),
+        tools_enabled: agent_config.tools_enabled,
     };
 
     // Ctrl+C → cancel
@@ -1038,7 +1040,6 @@ fn run_oneshot_agent(
         agent_config_struct,
         agent_shared,
         api_messages,
-        tools,
         system_prompt_fn,
     );
     let tool_result_tx: std::sync::mpsc::SyncSender<ToolResultMsg> = tool_result_tx;

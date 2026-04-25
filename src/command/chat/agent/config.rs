@@ -1,6 +1,7 @@
 use super::super::hook::HookManager;
 use super::super::storage::{ChatMessage, ModelProvider};
 use super::super::tools::background::BackgroundManager;
+use super::super::tools::definition::ToolRegistry;
 use super::super::tools::todo::TodoManager;
 use crate::command::chat::context::compact::{CompactConfig, InvokedSkillsMap};
 use std::sync::{Arc, Mutex};
@@ -49,4 +50,10 @@ pub struct AgentLoopSharedState {
     pub session_id: String,
     /// 子 Agent 共用 system_prompt（每轮构建后更新，供 AgentTool / TeammateTool 读取）
     pub derived_system_prompt: Arc<Mutex<Option<String>>>,
+    /// 工具注册表（用于每轮动态获取可用工具）
+    pub tool_registry: Arc<ToolRegistry>,
+    /// 用户禁用的工具列表
+    pub disabled_tools: Vec<String>,
+    /// 工具是否启用
+    pub tools_enabled: bool,
 }

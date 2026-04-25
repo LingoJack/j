@@ -232,12 +232,6 @@ impl ChatApp {
         let streaming_reasoning_content = Arc::clone(&self.state.streaming_reasoning_content);
         let tools_enabled = self.state.agent_config.tools_enabled;
         let max_llm_rounds = self.state.agent_config.max_tool_rounds;
-        let tools = if tools_enabled {
-            self.tool_registry
-                .to_llm_tools_filtered(&self.state.agent_config.disabled_tools)
-        } else {
-            vec![]
-        };
 
         let pending_user_messages = Arc::clone(&self.state.pending_user_messages);
         let background_manager = Arc::clone(&self.background_manager);
@@ -250,8 +244,8 @@ impl ChatApp {
         let system_prompt_fn = build_system_prompt_fn(
             loaded_skills,
             disabled_skills,
-            disabled_tools,
-            tool_registry_arc,
+            disabled_tools.clone(),
+            Arc::clone(&tool_registry_arc),
         );
 
         let hook_manager_clone = match self.hook_manager.lock() {
@@ -291,14 +285,12 @@ impl ChatApp {
             invoked_skills: Arc::clone(&self.invoked_skills),
             session_id: self.session_id.clone(),
             derived_system_prompt: Arc::clone(&self.derived_agent_system_prompt),
+            tool_registry: tool_registry_arc,
+            disabled_tools,
+            tools_enabled,
         };
-        let (handle, tool_result_tx) = MainAgentHandle::spawn(
-            agent_config,
-            agent_shared,
-            api_messages,
-            tools,
-            system_prompt_fn,
-        );
+        let (handle, tool_result_tx) =
+            MainAgentHandle::spawn(agent_config, agent_shared, api_messages, system_prompt_fn);
 
         self.main_agent = Some(handle);
         self.tool_executor.tool_result_tx = Some(tool_result_tx);
