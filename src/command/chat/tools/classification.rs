@@ -22,6 +22,8 @@ pub enum ToolCategory {
     Plan,
     /// 代理类 (Agent)
     Agent,
+    /// 协作者类 (Teammate)
+    Teammate,
     /// 压缩类 (Compact)
     Compact,
     /// 其他类
@@ -40,6 +42,7 @@ impl ToolCategory {
             tool_names::WEB_FETCH | tool_names::WEB_SEARCH | tool_names::BROWSER => Self::Network,
             tool_names::ENTER_PLAN_MODE | tool_names::EXIT_PLAN_MODE => Self::Plan,
             tool_names::AGENT => Self::Agent,
+            tool_names::TEAMMATE => Self::Teammate,
             tool_names::COMPACT => Self::Compact,
             _ => Self::Other,
         }
@@ -54,6 +57,7 @@ impl ToolCategory {
             Self::Network => "🌐",
             Self::Plan => "📋",
             Self::Agent => "🤖",
+            Self::Teammate => "👥",
             Self::Compact => "📦",
             Self::Other => "🔧",
         }
@@ -68,6 +72,7 @@ impl ToolCategory {
             Self::Network => theme.config_title,  // 青色系
             Self::Plan => theme.label_ai,         // 绿色系
             Self::Agent => theme.title_loading,   // 黄/橙色系
+            Self::Teammate => theme.config_title, // 青色系
             Self::Compact => theme.config_title,  // 青色系
             Self::Other => theme.text_dim,        // 灰色
         }
@@ -158,6 +163,7 @@ pub fn get_result_summary_for_tool(
         tool_names::TODO_READ => get_todo_read_summary(content),
         tool_names::TASK => get_task_summary(content, tool_args),
         tool_names::AGENT => get_agent_summary(content, tool_args),
+        tool_names::TEAMMATE => get_teammate_summary(content, tool_args),
         tool_names::COMPACT => get_compact_summary(content),
         _ => get_generic_summary(content),
     }
@@ -318,6 +324,32 @@ fn get_agent_summary(content: &str, tool_args: Option<&str>) -> String {
         }
     } else if first_line.is_empty() {
         format!("{} 行", lines)
+    } else {
+        let max_f: String = first_line.chars().take(50).collect();
+        max_f
+    }
+}
+
+/// Teammate 工具摘要：提取 name + 首行输出
+fn get_teammate_summary(content: &str, tool_args: Option<&str>) -> String {
+    let name = tool_args
+        .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
+        .and_then(|v| {
+            v.get("name")
+                .and_then(|n| n.as_str().map(|s| s.to_string()))
+        });
+
+    let first_line = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+
+    if let Some(n) = name {
+        if first_line.is_empty() {
+            n
+        } else {
+            let max_f: String = first_line.chars().take(40).collect();
+            format!("{}: {}", n, max_f)
+        }
+    } else if first_line.is_empty() {
+        "完成".to_string()
     } else {
         let max_f: String = first_line.chars().take(50).collect();
         max_f
