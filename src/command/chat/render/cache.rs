@@ -211,11 +211,7 @@ pub fn build_message_lines_incremental(
                 }
                 // 再渲染工具调用
                 if let Some(ref tool_calls) = m.tool_calls {
-                    render_tool_call_request_msg(
-                        m.sender_name.as_deref(),
-                        tool_calls,
-                        &mut ctx,
-                    );
+                    render_tool_call_request_msg(m.sender_name.as_deref(), tool_calls, &mut ctx);
                 }
             }
             DisplayType::ToolResult => {
