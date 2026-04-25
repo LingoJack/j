@@ -102,26 +102,26 @@ fn box_width() -> usize {
     term_width().saturating_sub(4).clamp(20, 56)
 }
 
-/// 将 ratatui Color 映射为 colored 可用的颜色字符串
-fn ratatui_color_to_colored(color: ratatui::style::Color) -> String {
+/// 将 ratatui Color 提取为 RGB 三元组（用于 colored::truecolor）
+fn color_rgb(color: ratatui::style::Color) -> (u8, u8, u8) {
     use ratatui::style::Color;
     match color {
-        Color::Rgb(r, g, b) => format!("#{:02x}{:02x}{:02x}", r, g, b),
-        Color::Blue => "blue".to_string(),
-        Color::Cyan => "cyan".to_string(),
-        Color::Green => "green".to_string(),
-        Color::Yellow => "yellow".to_string(),
-        Color::Red => "red".to_string(),
-        Color::Magenta => "magenta".to_string(),
-        Color::White => "white".to_string(),
-        Color::DarkGray => "bright black".to_string(),
-        Color::LightBlue => "bright blue".to_string(),
-        Color::LightCyan => "bright cyan".to_string(),
-        Color::LightGreen => "bright green".to_string(),
-        Color::LightYellow => "bright yellow".to_string(),
-        Color::LightRed => "bright red".to_string(),
-        Color::LightMagenta => "bright magenta".to_string(),
-        _ => "white".to_string(),
+        Color::Rgb(r, g, b) => (r, g, b),
+        Color::Blue => (0, 0, 255),
+        Color::Cyan => (0, 255, 255),
+        Color::Green => (0, 255, 0),
+        Color::Yellow => (255, 255, 0),
+        Color::Red => (255, 0, 0),
+        Color::Magenta => (255, 0, 255),
+        Color::White => (255, 255, 255),
+        Color::DarkGray => (169, 169, 169),
+        Color::LightBlue => (173, 216, 230),
+        Color::LightCyan => (224, 255, 255),
+        Color::LightGreen => (144, 238, 144),
+        Color::LightYellow => (255, 255, 224),
+        Color::LightRed => (255, 160, 122),
+        Color::LightMagenta => (255, 182, 193),
+        _ => (200, 200, 200),
     }
 }
 
@@ -159,7 +159,7 @@ fn print_tool_call_line(tool_name: &str, arguments: &str) {
     let category = ToolCategory::from_name(tool_name);
     let icon = category.icon();
     let theme = Theme::terminal();
-    let tool_color = ratatui_color_to_colored(category.color(&theme));
+    let (tr, tg, tb) = color_rgb(category.color(&theme));
 
     let desc = if let Some(d) = extract_tool_desc(tool_name, arguments) {
         d
@@ -178,7 +178,7 @@ fn print_tool_call_line(tool_name: &str, arguments: &str) {
     eprintln!(
         "  {} {} {}",
         icon,
-        tool_name.color(tool_color).bold(),
+        tool_name.truecolor(tr, tg, tb).bold(),
         desc_colored
     );
 }
@@ -189,14 +189,14 @@ fn print_tool_result_line(tool_name: &str, is_error: bool, summary: &str, elapse
 
     let category = ToolCategory::from_name(tool_name);
     let theme = Theme::terminal();
-    let tool_color = ratatui_color_to_colored(category.color(&theme));
+    let (tr, tg, tb) = color_rgb(category.color(&theme));
 
     let status_icon = if is_error { "✗" } else { "✓" };
     let status_style = if is_error { "red" } else { "green" };
 
     eprintln!(
         "  🔧 {} {}{} {}",
-        tool_name.color(tool_color).bold(),
+        tool_name.truecolor(tr, tg, tb).bold(),
         status_icon.color(status_style),
         summary.dimmed(),
         elapsed.dimmed(),
@@ -457,7 +457,7 @@ fn interactive_confirm(
     let category = ToolCategory::from_name(tool_name);
     let icon = category.icon();
     let theme = Theme::terminal();
-    let border_color_str = ratatui_color_to_colored(theme.tool_confirm_border);
+    let (br, bg, bb) = color_rgb(theme.tool_confirm_border);
 
     let mut stdout = io::stdout();
     let mut cursor_pos = initial;
@@ -473,15 +473,18 @@ fn interactive_confirm(
         make_args_preview(arguments)
     };
 
-    // 布局: 顶边框 1 + 描述 1 + 空行 1 + 每选项 1 + 空行 1 + 提示 1 + 底边框 1
-    let inner_height = 1 + 1 + options.len() + 1 + 1;
-    let total_lines = (inner_height + 2) as u16; // +2 for top/bottom border
+    // 截断描述
+    let desc_display = if desc.len() > bw.saturating_sub(8) {
+        format!("{}...", &desc[..bw.saturating_sub(11)])
+    } else {
+        desc.clone()
+    };
 
-    let draw = |stdout: &mut io::Stdout,
-                cursor_pos: usize,
-                first: bool,
-                total_lines: u16|
-     -> io::Result<()> {
+    // 计算实际绘制行数（数 writeln 次数）
+    // 顶边框 1 + 描述 1 + 空行 1 + 每选项 1 + 空行 1 + 提示 1 + 底边框 1 = options.len() + 6
+    let total_lines = (options.len() + 6) as u16;
+
+    let draw = |stdout: &mut io::Stdout, cursor_pos: usize, first: bool| -> io::Result<()> {
         if !first {
             let _ = execute!(stdout, cursor::MoveUp(total_lines));
         }
@@ -493,35 +496,23 @@ fn interactive_confirm(
         let inner_w = bw.saturating_sub(2); // ┌ + ┐ = 2
         let dash_fill = inner_w.saturating_sub(title_len + 1); // +1 for trailing ┐
 
-        let top_border = format!(
-            "  {} {}{}{}",
-            "┌",
-            "─".color(border_color_str.clone()),
-            format!(" {} ", title)
-                .color(border_color_str.clone())
-                .bold(),
-            format!("{}┐", "─".repeat(dash_fill)).color(border_color_str.clone()),
-        );
-        writeln!(stdout, "{}\r", top_border)?;
+        // 顶边框
+        let dash_tail = "─".repeat(dash_fill);
+        let top_content = format!("  ┌─ {} {}─┐", title, dash_tail);
+        writeln!(stdout, "{}\r", top_content.truecolor(br, bg, bb).bold())?;
 
         // 描述行
-        let desc_display = format!(
-            "  │  {}",
-            if desc.len() > bw.saturating_sub(8) {
-                format!("{}...", &desc[..bw.saturating_sub(11)])
-            } else {
-                desc.clone()
-            }
-        )
-        .color(border_color_str.clone())
-        .to_string();
-        writeln!(stdout, "{}\r", desc_display)?;
+        writeln!(
+            stdout,
+            "{}\r",
+            format!("  │  {}", desc_display).truecolor(br, bg, bb)
+        )?;
 
         // 空行
         writeln!(
             stdout,
             "{}\r",
-            format!("  │{}", " ".repeat(bw.saturating_sub(4))).color(border_color_str.clone())
+            format!("  │{}", " ".repeat(bw.saturating_sub(4))).truecolor(br, bg, bb)
         )?;
 
         // 选项列表
@@ -539,22 +530,15 @@ fn interactive_confirm(
         writeln!(
             stdout,
             "{}\r",
-            format!("  │{}", " ".repeat(bw.saturating_sub(4))).color(border_color_str.clone())
+            format!("  │{}", " ".repeat(bw.saturating_sub(4))).truecolor(br, bg, bb)
         )?;
 
         // 操作提示
-        writeln!(
-            stdout,
-            "{}\r",
-            format!("  │  {} ↑↓ 移动  {} 确认", "•", "Enter").dimmed()
-        )?;
+        writeln!(stdout, "{}\r", "  │  • ↑↓ 移动  Enter 确认".dimmed())?;
 
         // 底边框
-        writeln!(
-            stdout,
-            "{}\r",
-            format!("  └{}┘", "─".repeat(bw.saturating_sub(3))).color(border_color_str.clone())
-        )?;
+        let bottom = format!("  └{}┘", "─".repeat(bw.saturating_sub(3)));
+        writeln!(stdout, "{}\r", bottom.truecolor(br, bg, bb))?;
 
         stdout.flush()?;
         Ok(())
@@ -564,7 +548,7 @@ fn interactive_confirm(
         return None;
     }
 
-    let _ = draw(&mut stdout, cursor_pos, true, total_lines);
+    let _ = draw(&mut stdout, cursor_pos, true);
 
     let result = loop {
         if let Ok(Event::Key(key)) = event::read() {
@@ -581,7 +565,7 @@ fn interactive_confirm(
                 KeyCode::Esc | KeyCode::Char('q') => break None,
                 _ => continue,
             }
-            let _ = draw(&mut stdout, cursor_pos, false, total_lines);
+            let _ = draw(&mut stdout, cursor_pos, false);
         }
     };
 
@@ -681,7 +665,7 @@ fn run_oneshot_agent(
             for q in &req.questions {
                 let bw = box_width();
                 let theme = Theme::terminal();
-                let border_color_str = ratatui_color_to_colored(theme.tool_confirm_border);
+                let (br, bg, bb) = color_rgb(theme.tool_confirm_border);
 
                 // ── 标题行 ──
                 let title = if !q.header.is_empty() {
@@ -690,28 +674,37 @@ fn run_oneshot_agent(
                     "选择".to_string()
                 };
 
-                // 计算布局行数
-                let question_lines = if q.question.is_empty() {
-                    0
+                // 问题文本按宽度折行
+                let question_lines_text: Vec<String> = if q.question.is_empty() {
+                    vec![]
                 } else {
-                    let max_chars = bw.saturating_sub(6);
-                    (q.question.chars().count() + max_chars - 1) / max_chars.max(1)
+                    let max_chars = bw.saturating_sub(6).max(1);
+                    let chars: Vec<char> = q.question.chars().collect();
+                    let mut lines = vec![];
+                    let mut start = 0;
+                    while start < chars.len() {
+                        let end = (start + max_chars).min(chars.len());
+                        let line: String = chars[start..end].iter().collect();
+                        lines.push(line);
+                        start = end;
+                    }
+                    lines
                 };
-                // 顶边框 1 + 问题区 question_lines + 空行 1 + 每选项 2行(label+desc) + 间隔 0 + 空行 1 + 提示 1 + 底边框 1
-                let options_height = q.options.len() * 2;
-                let inner_height = 1 + question_lines + 1 + options_height + 1 + 1;
-                let total_lines = (inner_height + 2) as u16;
 
                 if q.multi_select {
                     // ── 多选 ──
                     let mut selected = vec![false; q.options.len()];
                     let mut cursor_pos: usize = 0;
 
+                    // 实际行数：顶边框 1 + 问题行数 + 空行 1 + 选项*2(label+desc) + 空行 1 + 提示 1 + 底边框 1
+                    let total_lines =
+                        (1 + question_lines_text.len() + 1 + q.options.len() * 2 + 1 + 1 + 1)
+                            as u16;
+
                     let draw_multi = |stdout: &mut io::Stdout,
                                       cursor_pos: usize,
                                       selected: &[bool],
-                                      first: bool,
-                                      total_lines: u16|
+                                      first: bool|
                      -> io::Result<()> {
                         if !first {
                             let _ = execute!(stdout, cursor::MoveUp(total_lines));
@@ -721,32 +714,19 @@ fn run_oneshot_agent(
 
                         // 顶边框
                         let title_text = format!(" {} ", title);
-                        let title_display_len = title.chars().count() + 2;
                         let inner_w = bw.saturating_sub(2);
-                        let dash_fill = inner_w.saturating_sub(title_display_len + 1);
-                        let top_line = format!(
-                            "  ┌{}{}{}┐",
-                            "─".color(border_color_str.clone()),
-                            title_text.color(border_color_str.clone()).bold(),
-                            format!("{}─", "─".repeat(dash_fill)).color(border_color_str.clone()),
-                        );
-                        writeln!(stdout, "{}\r", top_line)?;
+                        let dash_fill = inner_w.saturating_sub(title_text.chars().count() + 2);
+                        let dash_tail = "─".repeat(dash_fill);
+                        let top_line = format!("  ┌─ {} {}─┐", title_text, dash_tail);
+                        writeln!(stdout, "{}\r", top_line.truecolor(br, bg, bb).bold())?;
 
                         // 问题区域
-                        if !q.question.is_empty() {
-                            let max_chars = bw.saturating_sub(6);
-                            let chars: Vec<char> = q.question.chars().collect();
-                            let mut start = 0;
-                            while start < chars.len() {
-                                let end = (start + max_chars).min(chars.len());
-                                let line: String = chars[start..end].iter().collect();
-                                writeln!(
-                                    stdout,
-                                    "{}\r",
-                                    format!("  │  {}", line).color(border_color_str.clone())
-                                )?;
-                                start = end;
-                            }
+                        for line in &question_lines_text {
+                            writeln!(
+                                stdout,
+                                "{}\r",
+                                format!("  │  {}", line).truecolor(br, bg, bb)
+                            )?;
                         }
 
                         // 空行
@@ -754,7 +734,7 @@ fn run_oneshot_agent(
                             stdout,
                             "{}\r",
                             format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .color(border_color_str.clone())
+                                .truecolor(br, bg, bb)
                         )?;
 
                         // 选项列表
@@ -778,24 +758,19 @@ fn run_oneshot_agent(
                             stdout,
                             "{}\r",
                             format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .color(border_color_str.clone())
+                                .truecolor(br, bg, bb)
                         )?;
 
                         // 操作提示
                         writeln!(
                             stdout,
                             "{}\r",
-                            format!("  │  {} ↑↓ 移动  {} 切换  {} 确认", "•", "Space", "Enter")
-                                .dimmed()
+                            "  │  • ↑↓ 移动  Space 切换  Enter 确认".dimmed()
                         )?;
 
                         // 底边框
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  └{}┘", "─".repeat(bw.saturating_sub(3)))
-                                .color(border_color_str.clone())
-                        )?;
+                        let bottom = format!("  └{}┘", "─".repeat(bw.saturating_sub(3)));
+                        writeln!(stdout, "{}\r", bottom.truecolor(br, bg, bb))?;
 
                         stdout.flush()?;
                         Ok(())
@@ -803,7 +778,7 @@ fn run_oneshot_agent(
 
                     let _ = terminal::enable_raw_mode();
                     let mut stdout = io::stdout();
-                    let _ = draw_multi(&mut stdout, cursor_pos, &selected, true, total_lines);
+                    let _ = draw_multi(&mut stdout, cursor_pos, &selected, true);
 
                     loop {
                         if let Ok(Event::Key(key)) = event::read() {
@@ -823,8 +798,7 @@ fn run_oneshot_agent(
                                 KeyCode::Esc => break,
                                 _ => continue,
                             }
-                            let _ =
-                                draw_multi(&mut stdout, cursor_pos, &selected, false, total_lines);
+                            let _ = draw_multi(&mut stdout, cursor_pos, &selected, false);
                         }
                     }
                     let _ = terminal::disable_raw_mode();
@@ -849,10 +823,14 @@ fn run_oneshot_agent(
                     // ── 单选 ──
                     let mut cursor_pos: usize = 0;
 
+                    // 实际行数：顶边框 1 + 问题行数 + 空行 1 + 选项*2(label+desc) + 空行 1 + 提示 1 + 底边框 1
+                    let total_lines =
+                        (1 + question_lines_text.len() + 1 + q.options.len() * 2 + 1 + 1 + 1)
+                            as u16;
+
                     let draw_single = |stdout: &mut io::Stdout,
                                        cursor_pos: usize,
-                                       first: bool,
-                                       total_lines: u16|
+                                       first: bool|
                      -> io::Result<()> {
                         if !first {
                             let _ = execute!(stdout, cursor::MoveUp(total_lines));
@@ -862,32 +840,19 @@ fn run_oneshot_agent(
 
                         // 顶边框
                         let title_text = format!(" {} ", title);
-                        let title_display_len = title.chars().count() + 2;
                         let inner_w = bw.saturating_sub(2);
-                        let dash_fill = inner_w.saturating_sub(title_display_len + 1);
-                        let top_line = format!(
-                            "  ┌{}{}{}┐",
-                            "─".color(border_color_str.clone()),
-                            title_text.color(border_color_str.clone()).bold(),
-                            format!("{}─", "─".repeat(dash_fill)).color(border_color_str.clone()),
-                        );
-                        writeln!(stdout, "{}\r", top_line)?;
+                        let dash_fill = inner_w.saturating_sub(title_text.chars().count() + 2);
+                        let dash_tail = "─".repeat(dash_fill);
+                        let top_line = format!("  ┌─ {} {}─┐", title_text, dash_tail);
+                        writeln!(stdout, "{}\r", top_line.truecolor(br, bg, bb).bold())?;
 
                         // 问题区域
-                        if !q.question.is_empty() {
-                            let max_chars = bw.saturating_sub(6);
-                            let chars: Vec<char> = q.question.chars().collect();
-                            let mut start = 0;
-                            while start < chars.len() {
-                                let end = (start + max_chars).min(chars.len());
-                                let line: String = chars[start..end].iter().collect();
-                                writeln!(
-                                    stdout,
-                                    "{}\r",
-                                    format!("  │  {}", line).color(border_color_str.clone())
-                                )?;
-                                start = end;
-                            }
+                        for line in &question_lines_text {
+                            writeln!(
+                                stdout,
+                                "{}\r",
+                                format!("  │  {}", line).truecolor(br, bg, bb)
+                            )?;
                         }
 
                         // 空行
@@ -895,7 +860,7 @@ fn run_oneshot_agent(
                             stdout,
                             "{}\r",
                             format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .color(border_color_str.clone())
+                                .truecolor(br, bg, bb)
                         )?;
 
                         // 选项列表
@@ -918,23 +883,15 @@ fn run_oneshot_agent(
                             stdout,
                             "{}\r",
                             format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .color(border_color_str.clone())
+                                .truecolor(br, bg, bb)
                         )?;
 
                         // 操作提示
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  │  {} ↑↓ 移动  {} 确认", "•", "Enter").dimmed()
-                        )?;
+                        writeln!(stdout, "{}\r", "  │  • ↑↓ 移动  Enter 确认".dimmed())?;
 
                         // 底边框
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  └{}┘", "─".repeat(bw.saturating_sub(3)))
-                                .color(border_color_str.clone())
-                        )?;
+                        let bottom = format!("  └{}┘", "─".repeat(bw.saturating_sub(3)));
+                        writeln!(stdout, "{}\r", bottom.truecolor(br, bg, bb))?;
 
                         stdout.flush()?;
                         Ok(())
@@ -942,7 +899,7 @@ fn run_oneshot_agent(
 
                     let _ = terminal::enable_raw_mode();
                     let mut stdout = io::stdout();
-                    let _ = draw_single(&mut stdout, cursor_pos, true, total_lines);
+                    let _ = draw_single(&mut stdout, cursor_pos, true);
 
                     loop {
                         if let Ok(Event::Key(key)) = event::read() {
@@ -959,7 +916,7 @@ fn run_oneshot_agent(
                                 KeyCode::Esc => break,
                                 _ => continue,
                             }
-                            let _ = draw_single(&mut stdout, cursor_pos, false, total_lines);
+                            let _ = draw_single(&mut stdout, cursor_pos, false);
                         }
                     }
                     let _ = terminal::disable_raw_mode();
@@ -1086,8 +1043,8 @@ fn run_oneshot_agent(
                         // 打印 AI 标签（首次文本到来时）
                         if first_content {
                             let theme = Theme::terminal();
-                            let label_color = ratatui_color_to_colored(theme.label_ai);
-                            eprintln!("  {}", "Sprite".color(label_color).bold());
+                            let (lr, lg, lb) = color_rgb(theme.label_ai);
+                            eprintln!("  {}", "Sprite".truecolor(lr, lg, lb).bold());
                             first_content = false;
                         }
 
