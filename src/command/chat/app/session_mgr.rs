@@ -2,11 +2,10 @@ use super::chat_app::ChatApp;
 use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
-    SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, generate_session_id,
-    load_hooks_state, load_plan_state, load_sandbox_state, load_session_meta_file,
-    load_skills_state, load_tasks_state, load_teammates_state, load_todos_state,
-    read_transcript_with_timestamps, sanitize_filename, save_hooks_state, save_plan_state,
+    MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SubAgentSnapshotPersist,
+    TeammateSnapshotPersist, append_session_event, generate_session_id, load_hooks_state,
+    load_plan_state, load_sandbox_state, load_session_meta_file, load_skills_state,
+    load_tasks_state, load_teammates_state, load_todos_state, save_hooks_state, save_plan_state,
     save_sandbox_state, save_session_meta_file, save_skills_state, save_subagents_state,
     save_tasks_state, save_teammates_state, save_todos_state,
 };
@@ -271,83 +270,16 @@ impl ChatApp {
         }
 
         // 7. Teammates
-        let teammate_names: Vec<String> = if let Some(teammates) = load_teammates_state(sid) {
-            let names: Vec<String> = teammates.iter().map(|t| t.name.clone()).collect();
-            if let Ok(mut mgr) = self.teammate_manager.lock() {
-                mgr.set_recovered_teammates(teammates);
-            }
-            names
-        } else {
-            Vec::new()
-        };
-
-        self.restore_teammate_transcripts(sid, &teammate_names);
-    }
-
-    /// 从 teammate 独立 JSONL 中恢复 `<Teammate@Name>` 显示条目。
-    fn restore_teammate_transcripts(&mut self, sid: &str, teammate_names: &[String]) {
-        if teammate_names.is_empty() {
-            return;
+        if let Some(teammates) = load_teammates_state(sid)
+            && let Ok(mut mgr) = self.teammate_manager.lock()
+        {
+            mgr.set_recovered_teammates(teammates);
         }
-        for name in teammate_names {
-            let prefix_marker = format!("<Teammate@{}>", name);
-            let path = SessionPaths::new(sid).teammate_transcript(&sanitize_filename(name));
-            if !path.exists() {
-                continue;
-            }
-            let transcript = read_transcript_with_timestamps(&path);
 
-            let mut synthesized: Vec<String> = Vec::new();
-            for (msg, _ts) in &transcript {
-                if msg.role != MessageRole::Assistant {
-                    continue;
-                }
-                if !msg.content.is_empty() {
-                    synthesized.push(format!("<Teammate@{}> {}", name, msg.content));
-                }
-                if let Some(tcs) = &msg.tool_calls {
-                    for tc in tcs {
-                        if tc.name != "SendMessage" {
-                            synthesized.push(format!("<Teammate@{}> [调用工具 {}]", name, tc.name));
-                        }
-                    }
-                }
-            }
-
-            if synthesized.is_empty() {
-                continue;
-            }
-
-            let mut new_messages: Vec<ChatMessage> = Vec::new();
-            let mut synth_iter = synthesized.iter().peekable();
-            for msg in &self.state.session.messages {
-                if msg.role == MessageRole::Assistant && msg.content.starts_with(&prefix_marker) {
-                    if synth_iter.peek().is_some()
-                        && !new_messages.iter().any(|m| {
-                            m.role == MessageRole::Assistant
-                                && m.content.starts_with(&prefix_marker)
-                        })
-                    {
-                        for s in &synthesized {
-                            new_messages.push(ChatMessage::text(MessageRole::Assistant, s.clone()));
-                        }
-                    }
-                } else {
-                    new_messages.push(msg.clone());
-                }
-            }
-            if !new_messages
-                .iter()
-                .any(|m| m.role == MessageRole::Assistant && m.content.starts_with(&prefix_marker))
-            {
-                for s in &synthesized {
-                    new_messages.push(ChatMessage::text(MessageRole::Assistant, s.clone()));
-                }
-            }
-
-            self.state.session.messages = new_messages;
-            self.ui.msg_lines_cache = None;
-        }
+        // Teammates 状态已通过 set_recovered_teammates 恢复，无需额外处理 transcript。
+        // 主 transcript（transcript.jsonl）已包含所有来源的消息（Main/Teammate/SubAgent），
+        // 它们在实时运行时通过 push_both → context_messages → session.messages 写入，
+        // 顺序正确。无需从独立 transcript 重新合成消息。
     }
 
     /// 清除运行时状态（session 切换前调用）

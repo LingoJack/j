@@ -386,6 +386,7 @@ fn sanitize_loaded_messages(messages: &[ChatMessage]) -> Option<Vec<ChatMessage>
 /// 从 JSONL 文件按出现顺序读取 `(ChatMessage, timestamp_ms)` 列表。
 ///
 /// 供 teammate / subagent 等独立 transcript 的读取使用：保留时间戳、不做 Clear/Restore 处理。
+#[allow(dead_code)]
 pub fn read_transcript_with_timestamps(path: &Path) -> Vec<(ChatMessage, u64)> {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
