@@ -211,7 +211,11 @@ pub fn build_message_lines_incremental(
                 }
                 // 再渲染工具调用
                 if let Some(ref tool_calls) = m.tool_calls {
-                    render_tool_call_request_msg(tool_calls, &mut ctx);
+                    render_tool_call_request_msg(
+                        m.sender_name.as_deref(),
+                        tool_calls,
+                        &mut ctx,
+                    );
                 }
             }
             DisplayType::ToolResult => {
@@ -248,6 +252,7 @@ pub fn build_message_lines_incremental(
                 };
 
                 render_tool_result_msg(
+                    m.sender_name.as_deref(),
                     &m.content,
                     &label,
                     tool_args.as_deref(),
@@ -1729,7 +1734,11 @@ fn render_plan_approval_confirm_area(
     )));
 }
 
-pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut RenderContext<'_>) {
+pub fn render_tool_call_request_msg(
+    sender_name: Option<&str>,
+    tool_calls: &[ToolCallItem],
+    ctx: &mut RenderContext<'_>,
+) {
     let lines = &mut *ctx.lines;
     let theme = ctx.theme;
     let bubble_max_width = ctx.bubble_max_width;
@@ -1748,6 +1757,23 @@ pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut Rende
         let icon = category.icon();
         let tool_color = category.color(theme);
 
+        // 构建首行前缀：有 sender_name 时 "  name · "，否则 "  "
+        let sender_prefix_spans: Vec<Span<'static>> = if let Some(name) = sender_name {
+            let label_color = agent_name_color(name);
+            vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    name.to_string(),
+                    Style::default()
+                        .fg(label_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" · ", Style::default().fg(theme.text_dim)),
+            ]
+        } else {
+            vec![Span::styled("  ", Style::default())]
+        };
+
         if expand {
             // 展开模式：图标 + 工具名 + description（若有）+ 状态（第一行）
             let tool_desc = extract_tool_description_from_args(&tc.name, &tc.arguments);
@@ -1756,15 +1782,14 @@ pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut Rende
             } else {
                 tc.name.clone()
             };
-            lines.push(Line::from(vec![
-                Span::styled("  ", Style::default()),
-                Span::styled(icon, Style::default().fg(tool_color)),
-                Span::styled(" ", Style::default()),
-                Span::styled(
-                    display_name,
-                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-                ),
-            ]));
+            let mut spans = sender_prefix_spans.clone();
+            spans.push(Span::styled(icon, Style::default().fg(tool_color)));
+            spans.push(Span::styled(" ", Style::default()));
+            spans.push(Span::styled(
+                display_name,
+                Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+            ));
+            lines.push(Line::from(spans));
 
             // 参数详情
             if !tc.arguments.is_empty() {
@@ -1847,19 +1872,18 @@ pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut Rende
                     desc_parts.push(preview);
                 }
                 let desc_text = desc_parts.join("  ");
-                lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(icon, Style::default().fg(tool_color)),
-                    Span::styled(" ", Style::default()),
-                    Span::styled(
-                        tc.name.clone(),
-                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        format!("  {}", desc_text),
-                        Style::default().fg(theme.text_dim),
-                    ),
-                ]));
+                let mut spans = sender_prefix_spans.clone();
+                spans.push(Span::styled(icon, Style::default().fg(tool_color)));
+                spans.push(Span::styled(" ", Style::default()));
+                spans.push(Span::styled(
+                    tc.name.clone(),
+                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                ));
+                spans.push(Span::styled(
+                    format!("  {}", desc_text),
+                    Style::default().fg(theme.text_dim),
+                ));
+                lines.push(Line::from(spans));
                 continue;
             }
 
@@ -1884,19 +1908,18 @@ pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut Rende
                 };
                 desc_parts.push(preview);
                 let desc_text = desc_parts.join("  ");
-                lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(icon, Style::default().fg(tool_color)),
-                    Span::styled(" ", Style::default()),
-                    Span::styled(
-                        tc.name.clone(),
-                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        format!("  {}", desc_text),
-                        Style::default().fg(theme.text_dim),
-                    ),
-                ]));
+                let mut spans = sender_prefix_spans.clone();
+                spans.push(Span::styled(icon, Style::default().fg(tool_color)));
+                spans.push(Span::styled(" ", Style::default()));
+                spans.push(Span::styled(
+                    tc.name.clone(),
+                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                ));
+                spans.push(Span::styled(
+                    format!("  {}", desc_text),
+                    Style::default().fg(theme.text_dim),
+                ));
+                lines.push(Line::from(spans));
                 continue;
             }
 
@@ -1904,16 +1927,18 @@ pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut Rende
 
             if let Some(desc) = tool_desc {
                 // 有 description 时优先展示，替代 raw arguments
-                lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(icon, Style::default().fg(tool_color)),
-                    Span::styled(" ", Style::default()),
-                    Span::styled(
-                        tc.name.clone(),
-                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(format!("  {}", desc), Style::default().fg(theme.text_dim)),
-                ]));
+                let mut spans = sender_prefix_spans.clone();
+                spans.push(Span::styled(icon, Style::default().fg(tool_color)));
+                spans.push(Span::styled(" ", Style::default()));
+                spans.push(Span::styled(
+                    tc.name.clone(),
+                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                ));
+                spans.push(Span::styled(
+                    format!("  {}", desc),
+                    Style::default().fg(theme.text_dim),
+                ));
+                lines.push(Line::from(spans));
             } else {
                 // 无 description，保留原有的参数预览逻辑
                 let total_len = tc.arguments.chars().count();
@@ -1950,23 +1975,20 @@ pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut Rende
                     "".to_string()
                 };
 
-                lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
-                    Span::styled(icon, Style::default().fg(tool_color)),
-                    Span::styled(" ", Style::default()),
-                    Span::styled(
-                        tc.name.clone(),
-                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-                    ),
-                    if !args_preview.is_empty() {
-                        Span::styled(
-                            format!(" {}{}", args_preview, suffix),
-                            Style::default().fg(theme.text_dim),
-                        )
-                    } else {
-                        Span::raw("")
-                    },
-                ]));
+                let mut spans = sender_prefix_spans.clone();
+                spans.push(Span::styled(icon, Style::default().fg(tool_color)));
+                spans.push(Span::styled(" ", Style::default()));
+                spans.push(Span::styled(
+                    tc.name.clone(),
+                    Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                ));
+                if !args_preview.is_empty() {
+                    spans.push(Span::styled(
+                        format!(" {}{}", args_preview, suffix),
+                        Style::default().fg(theme.text_dim),
+                    ));
+                }
+                lines.push(Line::from(spans));
             }
         }
     }
@@ -2013,7 +2035,9 @@ fn render_json_params_enhanced(
 /// 格式化 JSON 参数字符串，返回适合显示的行列表
 /// 如果是有效的 JSON，则美化格式化；否则原样折行显示
 /// 渲染工具执行结果消息：展开时完整内容，折叠时只显示标签
+#[allow(clippy::too_many_arguments)]
 pub fn render_tool_result_msg(
+    sender_name: Option<&str>,
     content: &str,
     label: &str,
     tool_args: Option<&str>,
@@ -2022,6 +2046,23 @@ pub fn render_tool_result_msg(
     theme: &Theme,
     expand: bool,
 ) {
+    // 构建首行前缀：有 sender_name 时 "  name · "，否则 "  "
+    let sender_prefix_spans: Vec<Span<'static>> = if let Some(name) = sender_name {
+        let label_color = agent_name_color(name);
+        vec![
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                name.to_string(),
+                Style::default()
+                    .fg(label_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" · ", Style::default().fg(theme.text_dim)),
+        ]
+    } else {
+        vec![Span::styled("  ", Style::default())]
+    };
+
     // 与前一条消息（tool_call）之间留一行间距
     lines.push(Line::from(""));
 
@@ -2043,20 +2084,19 @@ pub fn render_tool_result_msg(
     // 获取结果摘要
     let summary = get_result_summary_for_tool(content, is_error, &tool_name, tool_args);
 
-    // 第一行：图标 + 工具名 + 状态 + 摘要
-    lines.push(Line::from(vec![
-        Span::styled("  ", Style::default()),
-        Span::styled(icon, Style::default().fg(tool_color)),
-        Span::styled(" ", Style::default()),
-        Span::styled(
-            tool_name.clone(),
-            Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" ", Style::default()),
-        Span::styled(status_icon, Style::default().fg(status_color)),
-        Span::styled(" ", Style::default()),
-        Span::styled(summary, Style::default().fg(theme.text_dim)),
-    ]));
+    // 第一行：sender_prefix + 图标 + 工具名 + 状态 + 摘要
+    let mut spans = sender_prefix_spans;
+    spans.push(Span::styled(icon, Style::default().fg(tool_color)));
+    spans.push(Span::styled(" ", Style::default()));
+    spans.push(Span::styled(
+        tool_name.clone(),
+        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::styled(" ", Style::default()));
+    spans.push(Span::styled(status_icon, Style::default().fg(status_color)));
+    spans.push(Span::styled(" ", Style::default()));
+    spans.push(Span::styled(summary, Style::default().fg(theme.text_dim)));
+    lines.push(Line::from(spans));
 
     // Todo 工具特殊处理：折叠模式也显示 todo 列表
     let is_todo_tool = tool_name == "TodoRead" || tool_name == "TodoWrite";

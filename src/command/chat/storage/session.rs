@@ -58,6 +58,11 @@ impl SessionPaths {
         self.dir.join("teammates.json")
     }
 
+    /// Display 消息 JSONL：`sessions/<id>/display.jsonl`
+    pub fn display(&self) -> PathBuf {
+        self.dir.join("display.jsonl")
+    }
+
     /// Teammate 独立目录根：`sessions/<id>/teammates/`
     pub fn teammates_dir(&self) -> PathBuf {
         self.dir.join("teammates")
@@ -319,6 +324,36 @@ pub fn load_session(session_id: &str) -> ChatSession {
     }
 
     ChatSession { messages }
+}
+
+/// 从 display.jsonl replay 出 display 消息列表。
+///
+/// 逻辑同 `load_session`，但只返回 `Vec<ChatMessage>`（不需要 ChatSession 包装），
+/// 也不做 sanitize（display 消息无需配对校验）。
+pub fn load_display_session(session_id: &str) -> Vec<ChatMessage> {
+    let path = SessionPaths::new(session_id).display();
+    if !path.exists() {
+        return Vec::new();
+    }
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut messages: Vec<ChatMessage> = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(event) = serde_json::from_str::<SessionEvent>(line) {
+            match event {
+                SessionEvent::Msg { message, .. } => messages.push(message),
+                SessionEvent::Clear => messages.clear(),
+                SessionEvent::Restore { messages: restored } => messages = restored,
+            }
+        }
+    }
+    messages
 }
 
 /// 双向配对清理：

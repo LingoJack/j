@@ -17,8 +17,9 @@ pub use persist::{
 };
 pub use session::{
     SessionMeta, SessionPaths, append_event_to_path, append_session_event, append_session_op,
-    delete_session, find_latest_session_id, generate_session_id, list_sessions, load_session,
-    load_session_meta_file, save_session_meta_file, session_file_path, sessions_dir,
+    delete_session, find_latest_session_id, generate_session_id, list_sessions,
+    load_display_session, load_session, load_session_meta_file, save_session_meta_file,
+    session_file_path, sessions_dir,
 };
 pub use types::{
     ChatMessage, ChatSession, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp,

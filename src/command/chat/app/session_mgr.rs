@@ -2,12 +2,13 @@ use super::chat_app::ChatApp;
 use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent,
-    SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, generate_session_id,
-    load_hooks_state, load_plan_state, load_sandbox_state, load_session_meta_file,
-    load_skills_state, load_tasks_state, load_teammates_state, load_todos_state, save_hooks_state,
-    save_plan_state, save_sandbox_state, save_session_meta_file, save_skills_state,
-    save_subagents_state, save_tasks_state, save_teammates_state, save_todos_state,
+    ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
+    SubAgentSnapshotPersist, TeammateSnapshotPersist, append_event_to_path, append_session_event,
+    generate_session_id, load_display_session, load_hooks_state, load_plan_state,
+    load_sandbox_state, load_session_meta_file, load_skills_state, load_tasks_state,
+    load_teammates_state, load_todos_state, save_hooks_state, save_plan_state, save_sandbox_state,
+    save_session_meta_file, save_skills_state, save_subagents_state, save_tasks_state,
+    save_teammates_state, save_todos_state,
 };
 use crate::command::chat::teammate::TeammateStatusPersist;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
@@ -63,6 +64,23 @@ impl ChatApp {
             }
             self.persisted_message_count = last_safe;
         }
+    }
+
+    /// 将 display_messages 中尚未持久化的新消息追加到 display.jsonl。
+    ///
+    /// 与 `persist_new_messages()` 不同，display 消息按推入顺序即完整配对，
+    /// 无需安全切点算法，直接全量 append。
+    pub(super) fn persist_new_display_messages(&mut self) {
+        let display = safe_lock(&self.display_messages, "persist_display");
+        let start = self.persisted_display_count;
+        if start >= display.len() {
+            return;
+        }
+        let path = SessionPaths::new(&self.session_id).display();
+        for msg in &display[start..] {
+            append_event_to_path(&path, &SessionEvent::msg(msg.clone()));
+        }
+        self.persisted_display_count = display.len();
     }
 
     /// 保存当前 session 的所有状态到磁盘
@@ -315,6 +333,7 @@ impl ChatApp {
     pub fn clear_session(&mut self) {
         self.sync_context_to_session();
         self.persist_new_messages();
+        self.persist_new_display_messages();
         self.save_session_state();
         self.clear_runtime_state();
         let new_id = generate_session_id();
@@ -325,6 +344,7 @@ impl ChatApp {
         self.state.session.messages.clear();
         self.clear_channels();
         self.persisted_message_count = 0;
+        self.persisted_display_count = 0;
         self.ui.scroll_offset = 0;
         self.ui.msg_lines_cache = None;
         if let Ok(mut ct) = self.context_tokens.lock() {
@@ -337,26 +357,33 @@ impl ChatApp {
     }
 
     /// 从 session.messages 重建双通道（会话恢复/归档还原后调用）。
+    /// 从 session.messages（context 格式）重建双通道。
     ///
-    /// session.messages 存的是 context 版本（可能含 XML 前缀），直接写入 context_messages。
-    /// display_messages 需要干净文本，对含 `sender_name` 的消息做去 XML 处理；
-    /// 无 `sender_name` 的消息直接复用（user/assistant/tool 等无 XML 包裹）。
+    /// 优先从 display.jsonl 读取 display 消息（独立格式，支持 tool_calls 结构体）；
+    /// 旧 session 无 display.jsonl 时，从 context 格式反推（strip XML 包裹）。
     pub fn rebuild_channels_from_session(&mut self) {
         let messages = std::mem::take(&mut self.state.session.messages);
 
-        let mut display: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+        // 尝试从 display.jsonl 加载
+        let display = load_display_session(&self.session_id);
 
-        for msg in &messages {
-            // display 通道：有 sender_name 的消息需要去除 XML 包裹
-            if let Some(ref sender) = msg.sender_name {
-                let clean_content = strip_agent_xml_tag(sender, &msg.content);
-                let mut display_msg = msg.clone();
-                display_msg.content = clean_content;
-                display.push(display_msg);
-            } else {
-                display.push(msg.clone());
+        let display = if display.is_empty() && !messages.is_empty() {
+            // fallback：旧 session，从 context 格式反推 display
+            let mut display: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+            for msg in &messages {
+                if let Some(ref sender) = msg.sender_name {
+                    let clean_content = strip_agent_xml_tag(sender, &msg.content);
+                    let mut display_msg = msg.clone();
+                    display_msg.content = clean_content;
+                    display.push(display_msg);
+                } else {
+                    display.push(msg.clone());
+                }
             }
-        }
+            display
+        } else {
+            display
+        };
 
         // context 通道：直接 move messages（零 clone）
         {
@@ -368,11 +395,13 @@ impl ChatApp {
             *dm = display;
         }
 
-        let len = safe_lock(&self.context_messages, "rebuild_channels::len").len();
+        let ctx_len = safe_lock(&self.context_messages, "rebuild_channels::len").len();
+        let disp_len = safe_lock(&self.display_messages, "rebuild_channels::disp_len").len();
         self.state.session.messages =
             safe_lock(&self.context_messages, "rebuild_channels::restore").clone();
-        self.display_read_offset = len;
-        self.context_read_offset = len;
+        self.display_read_offset = disp_len;
+        self.context_read_offset = ctx_len;
+        self.persisted_display_count = disp_len;
         self.ui.msg_lines_cache = None;
     }
 

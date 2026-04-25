@@ -597,6 +597,7 @@ impl ChatApp {
         // 再执行持久化。这保证了 push_both 刚推入的消息能被 persist_new_messages 看到。
         self.sync_context_to_session();
         self.persist_new_messages();
+        self.persist_new_display_messages();
 
         // 检查排队的任务
         let next_task = {

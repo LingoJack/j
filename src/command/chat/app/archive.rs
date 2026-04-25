@@ -1,6 +1,8 @@
 use super::chat_app::ChatApp;
 use super::ui_state::ChatMode;
-use crate::command::chat::storage::{SessionEvent, append_session_event};
+use crate::command::chat::storage::{
+    ChatMessage, SessionEvent, SessionPaths, append_event_to_path, append_session_event,
+};
 
 impl ChatApp {
     /// 开始归档确认流程
@@ -57,6 +59,7 @@ impl ChatApp {
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.clear_input();
+                    // context 持久化
                     append_session_event(
                         &self.session_id,
                         &SessionEvent::Restore {
@@ -64,6 +67,17 @@ impl ChatApp {
                         },
                     );
                     self.persisted_message_count = self.state.session.messages.len();
+                    // display 持久化
+                    let display_msgs: Vec<ChatMessage> =
+                        crate::util::safe_lock(&self.display_messages, "archive_restore").clone();
+                    let display_count = display_msgs.len();
+                    append_event_to_path(
+                        &SessionPaths::new(&self.session_id).display(),
+                        &SessionEvent::Restore {
+                            messages: display_msgs,
+                        },
+                    );
+                    self.persisted_display_count = display_count;
                     self.show_toast(format!("已还原归档: {}", archive_name), false);
                 }
                 Err(e) => {
