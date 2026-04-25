@@ -42,20 +42,8 @@ impl ChatApp {
             }
         }
 
-        // context_messages 增量检测：更新 offset + 同步到 session.messages（持久化用）
-        {
-            let shared = safe_lock(&self.context_messages, "poll::context_msgs");
-            let new_count = shared.len();
-            if new_count < self.context_read_offset {
-                self.context_read_offset = 0;
-            }
-            if new_count > self.context_read_offset {
-                for msg in &shared[self.context_read_offset..] {
-                    self.state.session.messages.push(msg.clone());
-                }
-                self.context_read_offset = new_count;
-            }
-        }
+        // context_messages 增量检测：同步到 session.messages（持久化用）
+        self.sync_context_to_session();
 
         if self.main_agent.is_none() {
             return actions;
@@ -499,9 +487,8 @@ impl ChatApp {
                 crate::command::chat::agent::push_both(
                     &self.display_messages,
                     &self.context_messages,
-                    msg.clone(),
+                    msg,
                 );
-                self.state.session.messages.push(msg);
             }
             safe_lock(
                 &self.state.streaming_content,
@@ -589,9 +576,8 @@ impl ChatApp {
                 crate::command::chat::agent::push_both(
                     &self.display_messages,
                     &self.context_messages,
-                    msg.clone(),
+                    msg,
                 );
-                self.state.session.messages.push(msg);
                 safe_lock(
                     &self.state.streaming_content,
                     "finish_loading::streaming_content_done_clear",
@@ -615,6 +601,9 @@ impl ChatApp {
             .clear();
         }
 
+        // 先将 context_messages 中的新消息同步到 session.messages（用于持久化），
+        // 再执行持久化。这保证了 push_both 刚推入的消息能被 persist_new_messages 看到。
+        self.sync_context_to_session();
         self.persist_new_messages();
 
         // 检查排队的任务
@@ -628,6 +617,21 @@ impl ChatApp {
         };
         if let Some(task_text) = next_task {
             self.send_message_internal(task_text);
+        }
+    }
+    /// 将 context_messages 中尚未同步的消息追加到 session.messages，并更新 offset。
+    /// 这是 session.messages 唯一的写入路径，确保不重复。
+    pub(super) fn sync_context_to_session(&mut self) {
+        let shared = safe_lock(&self.context_messages, "sync_context_to_session");
+        let new_count = shared.len();
+        if new_count < self.context_read_offset {
+            self.context_read_offset = 0;
+        }
+        if new_count > self.context_read_offset {
+            for msg in &shared[self.context_read_offset..] {
+                self.state.session.messages.push(msg.clone());
+            }
+            self.context_read_offset = new_count;
         }
     }
 }

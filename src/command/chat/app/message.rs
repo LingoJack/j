@@ -74,14 +74,14 @@ impl ChatApp {
             &self.state.agent_config.disabled_commands,
         );
 
-        // 添加用户消息到双通道（UI 渲染 + LLM context）和 session.messages（持久化）
+        // 添加用户消息到双通道（UI 渲染 + LLM context）
+        // session.messages 由 poll_stream_actions 从 context_messages 同步，不在此直接 push
         let user_msg = ChatMessage::text(MessageRole::User, &text);
         crate::command::chat::agent::push_both(
             &self.display_messages,
             &self.context_messages,
-            user_msg.clone(),
+            user_msg,
         );
-        self.state.session.messages.push(user_msg);
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = u16::MAX;
 
@@ -258,15 +258,11 @@ impl ChatApp {
 
         let todo_manager = Arc::clone(&self.todo_manager);
 
-        // 重置共享消息状态
-        {
-            let mut shared = safe_lock(&self.display_messages, "spawn_agent::clear_display");
-            shared.clear();
-            let mut shared = safe_lock(&self.context_messages, "spawn_agent::clear_context");
-            shared.clear();
-        }
-        self.display_read_offset = 0;
-        self.context_read_offset = 0;
+        // 不再清空双通道。UI 直接读 display_messages，LLM 直接读 context_messages，
+        // 清空会导致历史消息丢失。agent_loop 通过 push_both 追加新消息，
+        // offset 机制确保增量同步到 session.messages 不会重复。
+        // 也不重置 offset，避免重新同步整个通道导致 session.messages 重复。
+        // offset 保持不变，不清零，避免重复同步
 
         let agent_config = AgentLoopConfig {
             provider,

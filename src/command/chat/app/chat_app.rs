@@ -1804,6 +1804,7 @@ impl ChatApp {
                         });
                     } else {
                         // 保存当前会话（消息 + 状态）
+                        self.sync_context_to_session();
                         self.persist_new_messages();
                         self.save_session_state();
                         // 清除运行时状态

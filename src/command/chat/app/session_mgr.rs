@@ -312,6 +312,7 @@ impl ChatApp {
 
     /// 清空对话（创建新会话）
     pub fn clear_session(&mut self) {
+        self.sync_context_to_session();
         self.persist_new_messages();
         self.save_session_state();
         self.clear_runtime_state();
