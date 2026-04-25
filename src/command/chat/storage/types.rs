@@ -83,6 +83,11 @@ pub struct ChatMessage {
     /// LLM 思考内容（thinking mode 返回的 reasoning_content，需传回下一轮请求）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    /// 消息发送者名称（如 `Teammate@Frontend`、`SubAgent@search`）。
+    /// 仅由 teammate/subagent 消息设置；主 agent 消息为 None。
+    /// 不持久化到 session 文件，仅用于运行时 UI 渲染。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_name: Option<String>,
 }
 
 impl ChatMessage {
@@ -95,7 +100,16 @@ impl ChatMessage {
             tool_call_id: None,
             images: None,
             reasoning_content: None,
+            sender_name: None,
         }
+    }
+
+    /// 设置消息发送者名称（Builder 模式）。
+    ///
+    /// 用于 teammate/subagent 消息标记发送者，UI 渲染层据此显示气泡标签。
+    pub fn with_sender(mut self, name: impl Into<String>) -> Self {
+        self.sender_name = Some(name.into());
+        self
     }
 
     /// 推断显示类型（渲染层入口）

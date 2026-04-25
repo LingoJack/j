@@ -185,6 +185,7 @@ pub(super) fn process_tool_calls(
         tool_call_id: None,
         images: None,
         reasoning_content,
+        sender_name: None,
     };
     messages.push(tool_call_msg.clone());
     push_both(ctx.display_messages, ctx.context_messages, tool_call_msg);
