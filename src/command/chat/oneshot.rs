@@ -230,6 +230,7 @@ fn interactive_confirm(tool_msg: &str, options: &[&str], initial: usize) -> Opti
 
     let mut stdout = io::stdout();
     let mut cursor_pos = initial;
+    // 标题 1 行 + 每个选项 1 行 + 操作提示 1 行
     let total_lines = (1 + options.len() + 1) as u16;
 
     let draw = |stdout: &mut io::Stdout,
@@ -244,20 +245,16 @@ fn interactive_confirm(tool_msg: &str, options: &[&str], initial: usize) -> Opti
         write!(stdout, "{}\r\n", tool_msg)?;
         for (i, opt) in options.iter().enumerate() {
             let pointer = if cursor_pos == i { "❯" } else { " " };
+            let line = format!("   {} {}", pointer, opt);
             if cursor_pos == i {
-                write!(
-                    stdout,
-                    "{} {}\r\n",
-                    pointer.cyan().bold(),
-                    opt.cyan().bold()
-                )?;
+                write!(stdout, "{}\r\n", line.cyan().bold())?;
             } else {
-                write!(stdout, "{} {}\r\n", pointer, opt.dimmed())?;
+                write!(stdout, "{}\r\n", line.dimmed())?;
             }
         }
         write!(
             stdout,
-            "{} ↑↓ 选择  {} 确认\r\n",
+            "   {} ↑↓ 移动  {} 确认\r\n",
             "•".dimmed(),
             "Enter".dimmed()
         )?;
@@ -386,15 +383,20 @@ fn run_oneshot_agent(
         while let Ok(req) = ask_rx.recv() {
             let mut answers = serde_json::Map::new();
             for q in &req.questions {
-                println!("\n{}  {}", " ❓ ".cyan().bold(), q.question.cyan().bold());
+                // --- 标题区域 ---
                 if !q.header.is_empty() {
-                    println!("   {}", q.header.dimmed());
+                    println!("\n❓ {}", q.header.cyan().bold());
+                }
+                if !q.question.is_empty() {
+                    println!("   {}", q.question);
                 }
 
                 if q.multi_select {
+                    // --- 多选 ---
                     let mut selected = vec![false; q.options.len()];
                     let mut cursor_pos: usize = 0;
-                    let total_lines = (q.options.len() + 1) as u16;
+                    // 每个选项占 2 行（label + description）+ 操作提示 1 行
+                    let total_lines = (q.options.len() * 2 + 1) as u16;
 
                     let draw_multi = |stdout: &mut io::Stdout,
                                       cursor_pos: usize,
@@ -408,20 +410,20 @@ fn run_oneshot_agent(
                             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
                         for (i, opt) in q.options.iter().enumerate() {
                             let pointer = if cursor_pos == i { "❯" } else { " " };
-                            let check = if selected[i] { "✔" } else { "○" };
-                            let line = format!(
-                                "{} {} {} — {}",
-                                pointer, check, opt.label, opt.description
-                            );
+                            let check = if selected[i] { "✓" } else { "○" };
+                            let label_line = format!("   {} {} {}", pointer, check, opt.label);
+                            let desc_line = format!("     {}", opt.description);
                             if cursor_pos == i {
-                                write!(stdout, "{}\r\n", line.cyan().bold())?;
+                                write!(stdout, "{}\r\n", label_line.cyan().bold())?;
+                                write!(stdout, "{}\r\n", desc_line.dimmed())?;
                             } else {
-                                write!(stdout, "{}\r\n", line.dimmed())?;
+                                write!(stdout, "{}\r\n", label_line.dimmed())?;
+                                write!(stdout, "{}\r\n", desc_line.dimmed())?;
                             }
                         }
                         write!(
                             stdout,
-                            "{} ↑↓ 移动  {} 切换  {} 确认\r\n",
+                            "   {} ↑↓ 移动  {} 切换  {} 确认\r\n",
                             "•".dimmed(),
                             "Space".dimmed(),
                             "Enter".dimmed()
@@ -474,18 +476,13 @@ fn run_oneshot_agent(
                     println!("  → {}", answer.green());
                     answers.insert(q.header.clone(), serde_json::Value::String(answer));
                 } else {
-                    let options: Vec<String> = q
-                        .options
-                        .iter()
-                        .map(|o| format!("{} — {}", o.label, o.description))
-                        .collect();
-                    let option_refs: Vec<&str> = options.iter().map(|s| s.as_str()).collect();
+                    // --- 单选 ---
                     let mut cursor_pos: usize = 0;
-                    let total_lines = (option_refs.len() + 1) as u16;
+                    // 每个选项占 2 行（label + description）+ 操作提示 1 行
+                    let total_lines = (q.options.len() * 2 + 1) as u16;
 
                     let draw_single = |stdout: &mut io::Stdout,
                                        cursor_pos: usize,
-                                       opts: &[&str],
                                        first: bool|
                      -> io::Result<()> {
                         if !first {
@@ -493,22 +490,21 @@ fn run_oneshot_agent(
                         }
                         let _ =
                             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
-                        for (i, opt) in opts.iter().enumerate() {
+                        for (i, opt) in q.options.iter().enumerate() {
                             let pointer = if cursor_pos == i { "❯" } else { " " };
+                            let label_line = format!("   {} {}", pointer, opt.label);
+                            let desc_line = format!("     {}", opt.description);
                             if cursor_pos == i {
-                                write!(
-                                    stdout,
-                                    "{} {}\r\n",
-                                    pointer.cyan().bold(),
-                                    opt.cyan().bold()
-                                )?;
+                                write!(stdout, "{}\r\n", label_line.cyan().bold())?;
+                                write!(stdout, "{}\r\n", desc_line.dimmed())?;
                             } else {
-                                write!(stdout, "{} {}\r\n", pointer, opt.dimmed())?;
+                                write!(stdout, "{}\r\n", label_line.dimmed())?;
+                                write!(stdout, "{}\r\n", desc_line.dimmed())?;
                             }
                         }
                         write!(
                             stdout,
-                            "{} ↑↓ 选择  {} 确认\r\n",
+                            "   {} ↑↓ 移动  {} 确认\r\n",
                             "•".dimmed(),
                             "Enter".dimmed()
                         )?;
@@ -518,7 +514,7 @@ fn run_oneshot_agent(
 
                     let _ = terminal::enable_raw_mode();
                     let mut stdout = io::stdout();
-                    let _ = draw_single(&mut stdout, cursor_pos, &option_refs, true);
+                    let _ = draw_single(&mut stdout, cursor_pos, true);
 
                     loop {
                         if let Ok(Event::Key(key)) = event::read() {
@@ -527,7 +523,7 @@ fn run_oneshot_agent(
                                     cursor_pos = cursor_pos.saturating_sub(1);
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
-                                    if cursor_pos + 1 < option_refs.len() {
+                                    if cursor_pos + 1 < q.options.len() {
                                         cursor_pos += 1;
                                     }
                                 }
@@ -535,7 +531,7 @@ fn run_oneshot_agent(
                                 KeyCode::Esc => break,
                                 _ => continue,
                             }
-                            let _ = draw_single(&mut stdout, cursor_pos, &option_refs, false);
+                            let _ = draw_single(&mut stdout, cursor_pos, false);
                         }
                     }
                     let _ = terminal::disable_raw_mode();
@@ -684,17 +680,7 @@ fn run_oneshot_agent(
 
                     round += 1;
                     total_tools += items.len();
-                    let category_icons: String = items
-                        .iter()
-                        .map(|i| ToolCategory::from_name(&i.name).icon())
-                        .collect();
-                    eprintln!(
-                        "{} R{} {}个工具 {}",
-                        "⚙".dimmed(),
-                        round,
-                        items.len(),
-                        category_icons,
-                    );
+                    eprintln!("\n{} R{} · {} 工具", "⚙".dimmed(), round, items.len(),);
 
                     // 逐个确认 + 执行 + 发送结果
                     for (i, item) in items.iter().enumerate() {
@@ -727,7 +713,7 @@ fn run_oneshot_agent(
                     };
                     persist_messages(session_id, &ctx_msgs, persist_from);
                     if round > 0 {
-                        eprintln!("{} R{} {}个工具", "✓".green(), round, total_tools,);
+                        eprintln!("{} R{} · {} 工具", "✓".green(), round, total_tools);
                     }
                     eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
                     fire_session_end(
@@ -826,11 +812,11 @@ fn handle_tool_call(
     // .jcli deny 检查
     if jcli_config.is_denied(&item.name, &item.arguments) {
         eprintln!(
-            "{} {}{} {}",
+            "  {} {}{}{}",
             "✗".red(),
             multi_prefix,
             item.name.red().bold(),
-            "被权限规则拒绝".red()
+            " — 被权限规则拒绝".red()
         );
         return ToolResultMsg {
             tool_call_id: item.id.clone(),
@@ -841,11 +827,6 @@ fn handle_tool_call(
         };
     }
 
-    let confirm_msg = tool_registry
-        .get(&item.name)
-        .map(|t| t.confirmation_message(&item.arguments))
-        .unwrap_or_else(|| format!("调用工具 {} 参数: {}", item.name, item.arguments));
-
     let needs_confirm = tool_registry
         .get(&item.name)
         .map(|t| t.requires_confirmation())
@@ -853,7 +834,7 @@ fn handle_tool_call(
         && !jcli_config.is_allowed(&item.name, &item.arguments);
 
     if needs_confirm && !bypass {
-        let tool_desc = format!("{} {}  {}", multi_prefix, icon, confirm_msg.yellow());
+        let tool_desc = format!("  {} {} {}", multi_prefix, icon, item.name.cyan());
         let allow_rule = generate_allow_rule(&item.name, &item.arguments);
         let options = ["允许执行", "拒绝", &format!("始终允许 ({})", allow_rule)];
         let choice = interactive_confirm(&tool_desc, &options, 0);
@@ -864,11 +845,11 @@ fn handle_tool_call(
             }
             _ => {
                 eprintln!(
-                    "{} {}{} {}",
+                    "  {} {}{}{}",
                     "⏭".dimmed(),
                     multi_prefix,
                     item.name.dimmed(),
-                    "已跳过".dimmed()
+                    " — 已跳过".dimmed()
                 );
                 return ToolResultMsg {
                     tool_call_id: item.id.clone(),
@@ -879,9 +860,10 @@ fn handle_tool_call(
                 };
             }
         }
+    } else {
+        eprintln!("  {} {} {}", multi_prefix, icon, item.name.cyan());
     }
 
-    eprintln!("{}{} {} ...", icon, multi_prefix, confirm_msg.cyan());
     let start = std::time::Instant::now();
     let result = tool_registry.execute(&item.name, &item.arguments, cancelled);
     let elapsed = start.elapsed();
@@ -896,7 +878,7 @@ fn handle_tool_call(
 
     if result.is_error {
         eprintln!(
-            "{}{}{} {}",
+            "  {} {}{} · {}",
             "✗".red(),
             multi_prefix,
             "失败".red(),
@@ -904,7 +886,7 @@ fn handle_tool_call(
         );
     } else {
         eprintln!(
-            "{}{}{} {}",
+            "  {} {}{} · {}",
             "✓".green(),
             multi_prefix,
             summary.green(),
