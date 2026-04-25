@@ -3,12 +3,12 @@ use crate::command::chat::agent::api::{
 };
 use crate::command::chat::agent_md::load_agent_md;
 use crate::command::chat::app::AskRequest;
-use crate::command::chat::context::compact::new_invoked_skills_map;
+use crate::command::chat::context::compact::{self, new_invoked_skills_map};
 use crate::command::chat::context::window::select_messages;
 use crate::command::chat::error::ChatError;
 use crate::command::chat::handler::run_chat_tui;
-use crate::command::chat::infra::hook::HookManager;
-use crate::command::chat::infra::skill::{project_skills_dir, skills_dir};
+use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
+use crate::command::chat::infra::skill::{self, project_skills_dir, skills_dir};
 use crate::command::chat::permission::{JcliConfig, generate_allow_rule};
 use crate::command::chat::storage::{
     AgentConfig, ChatMessage, MessageRole, ModelProvider, SessionEvent, ToolCallItem,
@@ -16,11 +16,13 @@ use crate::command::chat::storage::{
     load_soul, load_style, load_system_prompt,
 };
 use crate::command::chat::tools::ToolRegistry;
-use crate::command::chat::tools::background::BackgroundManager;
-use crate::command::chat::tools::task::TaskManager;
+use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
+use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
 use crate::config::YamlConfig;
+use crate::util::log::write_info_log;
 use crate::{error, info};
 use std::io::{self, Write};
+use std::sync::Arc;
 
 fn generate_oneshot_session_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -222,20 +224,42 @@ fn run_oneshot_agent(
         }
     };
 
+    // 加载 hooks（用户级 + 项目级）
+    let hook_manager = Arc::new(Mutex::new(HookManager::load()));
+    let disabled_hooks: Vec<String> = vec![];
+
     // 构建工具注册表
     let (ask_tx, ask_rx) = std::sync::mpsc::channel::<AskRequest>();
     let background_manager = Arc::new(BackgroundManager::new());
     let task_manager = Arc::new(TaskManager::new_with_session(session_id));
-    let hook_manager = Arc::new(Mutex::new(HookManager::default()));
+    let hook_manager_for_registry = Arc::clone(&hook_manager);
+    let invoked_skills = new_invoked_skills_map();
+    let background_for_prompt = Arc::clone(&background_manager);
+    let task_for_prompt = Arc::clone(&task_manager);
     let tool_registry = ToolRegistry::new(
         vec![],
         ask_tx,
         background_manager,
         task_manager,
-        hook_manager,
-        new_invoked_skills_map(),
+        hook_manager_for_registry,
+        invoked_skills.clone(),
         crate::command::chat::storage::SessionPaths::new(session_id).todos_file(),
     );
+
+    // ★ SessionStart hook
+    {
+        let hm = hook_manager.lock().unwrap();
+        if hm.has_hooks_for(HookEvent::SessionStart) {
+            let ctx = HookContext {
+                event: HookEvent::SessionStart,
+                messages: Some(prior_messages.clone()),
+                model: Some(provider.model.clone()),
+                session_id: Some(session_id.to_string()),
+                ..Default::default()
+            };
+            hm.execute(HookEvent::SessionStart, ctx, &disabled_hooks);
+        }
+    }
 
     // 启动 Ask 请求处理线程：在终端交互式回答 AI 的提问
     std::thread::spawn(move || {
@@ -421,10 +445,10 @@ fn run_oneshot_agent(
     });
 
     let llm_tools = tool_registry.to_llm_tools_filtered(&agent_config.disabled_tools);
-    let system_prompt = resolve_oneshot_system_prompt(&tool_registry, &agent_config.disabled_tools);
     let mut jcli_config = JcliConfig::load();
     let cancelled = Arc::new(AtomicBool::new(false));
     let max_rounds = agent_config.max_tool_rounds;
+    let compact_config = &agent_config.compact;
 
     // 构建初始消息列表：先写入历史，再追加本次用户消息
     let user_msg = ChatMessage::text(MessageRole::User, message);
@@ -522,12 +546,69 @@ fn run_oneshot_agent(
     }
 
     for _round in 0..max_rounds {
+        // ── micro_compact（替换旧 tool results）──
+        if compact_config.enabled {
+            compact::micro_compact(
+                &mut messages,
+                compact_config.keep_recent,
+                &compact_config.micro_compact_exempt_tools,
+            );
+        }
+
+        // 每轮构建 system prompt（从磁盘读取最新配置）
+        let mut system_prompt = resolve_oneshot_system_prompt(
+            &tool_registry,
+            &agent_config.disabled_tools,
+            &background_for_prompt,
+            &task_for_prompt,
+        );
+
+        // ★ PreLlmRequest hook（可修改 messages 和 system_prompt）
+        {
+            let hm = hook_manager.lock().unwrap();
+            if hm.has_hooks_for(HookEvent::PreLlmRequest) {
+                let ctx = HookContext {
+                    event: HookEvent::PreLlmRequest,
+                    messages: Some(messages.clone()),
+                    system_prompt: system_prompt.clone(),
+                    model: Some(provider.model.clone()),
+                    session_id: Some(session_id.to_string()),
+                    ..Default::default()
+                };
+                if let Some(result) = hm.execute(HookEvent::PreLlmRequest, ctx, &disabled_hooks) {
+                    if result.is_stop() {
+                        error!("PreLlmRequest hook 中止了请求");
+                        persist_messages(session_id, &messages, prior_len);
+                        return;
+                    }
+                    if let Some(new_msgs) = result.messages {
+                        messages = new_msgs;
+                    }
+                    if let Some(new_prompt) = result.system_prompt {
+                        system_prompt = Some(new_prompt);
+                    }
+                    if let Some(inject) = result.inject_messages {
+                        messages.extend(inject);
+                    }
+                }
+            }
+        }
+
+        // ── 消息窗口选择（与 TUI 对齐）──
+        let send_messages = select_messages(
+            &messages,
+            agent_config.max_history_messages,
+            agent_config.max_context_tokens,
+            compact_config.keep_recent,
+            &compact_config.micro_compact_exempt_tools,
+        );
+
         // ── 异步部分：API 流式调用 ──
         let ctrl_c_stream = Arc::clone(&ctrl_c);
         let stream_result: Result<StreamResult, ChatError> = rt.block_on(async {
             let request = build_request_with_tools(
                 provider,
-                &messages,
+                &send_messages,
                 llm_tools.clone(),
                 system_prompt.as_deref(),
             )?;
@@ -653,6 +734,14 @@ fn run_oneshot_agent(
             Ok(sr) => sr,
             Err(e) => {
                 error!("\n{}", e.display_message());
+                // ★ SessionEnd hook（出错退出）
+                fire_session_end(
+                    &hook_manager,
+                    &disabled_hooks,
+                    &messages,
+                    session_id,
+                    &provider.model,
+                );
                 return;
             }
         };
@@ -669,6 +758,13 @@ fn run_oneshot_agent(
             persist_messages(session_id, &messages, prior_len);
             eprintln!("\n{}", "⏹ 已中断".dimmed());
             eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
+            fire_session_end(
+                &hook_manager,
+                &disabled_hooks,
+                &messages,
+                session_id,
+                &provider.model,
+            );
             return;
         }
 
@@ -693,9 +789,45 @@ fn run_oneshot_agent(
         }
 
         if sr.tool_items.is_empty() {
-            // 无工具调用，正常结束：持久化本轮新增消息并打印会话 ID
+            // 无工具调用
+            // ★ Stop hook：LLM 即将结束回复，hook 可阻止并注入反馈
+            let mut stop_retry = false;
+            {
+                let hm = hook_manager.lock().unwrap();
+                if hm.has_hooks_for(HookEvent::Stop) {
+                    let stop_ctx = HookContext {
+                        event: HookEvent::Stop,
+                        messages: Some(messages.clone()),
+                        system_prompt: system_prompt.clone(),
+                        model: Some(provider.model.clone()),
+                        user_input: Some(sr.assistant_text.clone()),
+                        session_id: Some(session_id.to_string()),
+                        ..Default::default()
+                    };
+                    if let Some(result) = hm.execute(HookEvent::Stop, stop_ctx, &disabled_hooks)
+                        && let Some(ref feedback) = result.retry_feedback
+                    {
+                        write_info_log("Stop hook", &format!("纠查官反馈: {}", feedback));
+                        let feedback_msg = ChatMessage::text(MessageRole::User, feedback.clone());
+                        messages.push(feedback_msg);
+                        stop_retry = true;
+                    }
+                }
+            }
+            if stop_retry {
+                continue; // 带反馈继续下一轮
+            }
+
+            // 正常结束：持久化本轮新增消息并打印会话 ID
             persist_messages(session_id, &messages, prior_len);
             eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
+            fire_session_end(
+                &hook_manager,
+                &disabled_hooks,
+                &messages,
+                session_id,
+                &provider.model,
+            );
             return;
         }
 
@@ -722,6 +854,17 @@ fn run_oneshot_agent(
                     item.name.red().bold(),
                     "被权限规则拒绝".red()
                 );
+
+                // ★ PostToolExecutionFailure hook
+                fire_post_tool_failure(
+                    &hook_manager,
+                    &disabled_hooks,
+                    &item.name,
+                    &item.arguments,
+                    "工具调用被拒绝（deny 规则匹配）",
+                    session_id,
+                );
+
                 messages.push(ChatMessage {
                     role: MessageRole::Tool,
                     content: "工具调用被拒绝（deny 规则匹配）".to_string(),
@@ -744,9 +887,56 @@ fn run_oneshot_agent(
                 .unwrap_or(false)
                 && !jcli_config.is_allowed(&item.name, &item.arguments);
 
+            // ★ PreToolExecution hook（可修改参数或跳过）
+            let mut effective_args = item.arguments.clone();
+            let mut skip_tool = false;
+            {
+                let hm = hook_manager.lock().unwrap();
+                if hm.has_hooks_for(HookEvent::PreToolExecution) {
+                    let ctx = HookContext {
+                        event: HookEvent::PreToolExecution,
+                        tool_name: Some(item.name.clone()),
+                        tool_arguments: Some(item.arguments.clone()),
+                        session_id: Some(session_id.to_string()),
+                        ..Default::default()
+                    };
+                    if let Some(result) =
+                        hm.execute(HookEvent::PreToolExecution, ctx, &disabled_hooks)
+                    {
+                        if result.is_skip() {
+                            skip_tool = true;
+                        }
+                        if result.is_stop() {
+                            skip_tool = true;
+                        }
+                        if let Some(new_args) = result.tool_arguments {
+                            effective_args = new_args;
+                        }
+                    }
+                }
+            }
+
+            if skip_tool {
+                println!(
+                    "{} {} {}",
+                    "⏭".dimmed(),
+                    item.name.dimmed(),
+                    "被 hook 跳过".dimmed()
+                );
+                messages.push(ChatMessage {
+                    role: MessageRole::Tool,
+                    content: "工具调用被 hook 跳过".to_string(),
+                    tool_calls: None,
+                    tool_call_id: Some(item.id.clone()),
+                    images: None,
+                    reasoning_content: None,
+                });
+                continue;
+            }
+
             if needs_confirm && !bypass {
                 let tool_desc = format!("{}  {}", "🔧", confirm_msg.yellow());
-                let allow_rule = generate_allow_rule(&item.name, &item.arguments);
+                let allow_rule = generate_allow_rule(&item.name, &effective_args);
                 let options = ["允许执行", "拒绝", &format!("始终允许 ({})", allow_rule)];
                 let choice = interactive_confirm(&tool_desc, &options, 0);
                 match choice {
@@ -770,11 +960,42 @@ fn run_oneshot_agent(
             }
 
             println!("🔧 {} ...", confirm_msg.cyan());
-            let result = tool_registry.execute(&item.name, &item.arguments, &cancelled);
+            let result = tool_registry.execute(&item.name, &effective_args, &cancelled);
             if result.is_error {
                 println!("{} {}", " ✖ ".red(), "执行出错".red());
+
+                // ★ PostToolExecutionFailure hook
+                fire_post_tool_failure(
+                    &hook_manager,
+                    &disabled_hooks,
+                    &item.name,
+                    &effective_args,
+                    &result.output,
+                    session_id,
+                );
             } else {
                 println!("{} {}", " ✔ ".green(), "完成".green());
+
+                // ★ PostToolExecution hook
+                {
+                    let hm = hook_manager.lock().unwrap();
+                    if hm.has_hooks_for(HookEvent::PostToolExecution) {
+                        let ctx = HookContext {
+                            event: HookEvent::PostToolExecution,
+                            tool_name: Some(item.name.clone()),
+                            tool_arguments: Some(effective_args.clone()),
+                            tool_result: Some(result.output.clone()),
+                            session_id: Some(session_id.to_string()),
+                            ..Default::default()
+                        };
+                        if let Some(hook_result) =
+                            hm.execute(HookEvent::PostToolExecution, ctx, &disabled_hooks)
+                            && let Some(system_msg) = hook_result.system_message
+                        {
+                            eprintln!("{}", system_msg.dimmed());
+                        }
+                    }
+                }
             }
 
             messages.push(ChatMessage {
@@ -794,11 +1015,64 @@ fn run_oneshot_agent(
     persist_messages(session_id, &messages, prior_len);
     eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
     eprintln!("\n⚠️ 达到最大工具调用轮数 ({})", max_rounds);
+    fire_session_end(
+        &hook_manager,
+        &disabled_hooks,
+        &messages,
+        session_id,
+        &provider.model,
+    );
+}
+
+/// 触发 SessionEnd hook
+fn fire_session_end(
+    hook_manager: &Arc<std::sync::Mutex<HookManager>>,
+    disabled_hooks: &[String],
+    messages: &[ChatMessage],
+    session_id: &str,
+    model: &str,
+) {
+    let hm = hook_manager.lock().unwrap();
+    if hm.has_hooks_for(HookEvent::SessionEnd) {
+        let ctx = HookContext {
+            event: HookEvent::SessionEnd,
+            messages: Some(messages.to_vec()),
+            model: Some(model.to_string()),
+            session_id: Some(session_id.to_string()),
+            ..Default::default()
+        };
+        hm.execute(HookEvent::SessionEnd, ctx, disabled_hooks);
+    }
+}
+
+/// 触发 PostToolExecutionFailure hook
+fn fire_post_tool_failure(
+    hook_manager: &Arc<std::sync::Mutex<HookManager>>,
+    disabled_hooks: &[String],
+    tool_name: &str,
+    tool_arguments: &str,
+    error_msg: &str,
+    session_id: &str,
+) {
+    let hm = hook_manager.lock().unwrap();
+    if hm.has_hooks_for(HookEvent::PostToolExecutionFailure) {
+        let ctx = HookContext {
+            event: HookEvent::PostToolExecutionFailure,
+            tool_name: Some(tool_name.to_string()),
+            tool_arguments: Some(tool_arguments.to_string()),
+            tool_error: Some(error_msg.to_string()),
+            session_id: Some(session_id.to_string()),
+            ..Default::default()
+        };
+        hm.execute(HookEvent::PostToolExecutionFailure, ctx, disabled_hooks);
+    }
 }
 
 fn resolve_oneshot_system_prompt(
     tool_registry: &ToolRegistry,
     disabled_tools: &[String],
+    background_manager: &Arc<BackgroundManager>,
+    task_manager: &Arc<TaskManager>,
 ) -> Option<String> {
     let template = load_system_prompt()?;
     let tools_summary = tool_registry.build_tools_summary(disabled_tools);
@@ -814,9 +1088,14 @@ fn resolve_oneshot_system_prompt(
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
     let session_state_summary = tool_registry.build_session_state_summary();
+    let tasks_summary = build_tasks_summary(task_manager);
+    let background_summary = build_running_summary(background_manager);
+    // 加载 skills 摘要（与 TUI 对齐）
+    let loaded_skills = skill::load_all_skills();
+    let skills_summary = skill::build_skills_summary(&loaded_skills, &[]);
     let resolved = template
         .replace("{{.current_dir}}", &current_dir)
-        .replace("{{.skills}}", "")
+        .replace("{{.skills}}", &skills_summary)
         .replace("{{.skill_dir}}", &skill_dir)
         .replace("{{.project_skill_dir}}", &project_skill_dir)
         .replace("{{.tools}}", &tools_summary)
@@ -825,8 +1104,8 @@ fn resolve_oneshot_system_prompt(
         .replace("{{.soul}}", &soul_text)
         .replace("{{.agent_md}}", &agent_md_text)
         .replace("{{.session_state}}", &session_state_summary)
-        .replace("{{.tasks}}", "")
-        .replace("{{.background_tasks}}", "")
+        .replace("{{.tasks}}", &tasks_summary)
+        .replace("{{.background_tasks}}", &background_summary)
         .replace("{{.teammates}}", "");
     Some(resolved)
 }
