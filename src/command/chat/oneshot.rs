@@ -15,6 +15,7 @@ use crate::command::chat::storage::{
 };
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
+use crate::command::chat::tools::classification::{ToolCategory, get_result_summary_for_tool};
 use crate::command::chat::tools::task::TaskManager;
 use crate::command::chat::tools::todo::TodoManager;
 use crate::config::YamlConfig;
@@ -637,6 +638,8 @@ fn run_oneshot_agent(
         .unwrap_or(80);
     let jcli_config = JcliConfig::load();
     let cancelled = Arc::new(AtomicBool::new(false));
+    let mut round: usize = 0;
+    let mut total_tools: usize = 0;
 
     loop {
         let msgs = handle.poll();
@@ -679,14 +682,30 @@ fn run_oneshot_agent(
                         last_streaming_len = streaming_content.lock().unwrap().len();
                     }
 
+                    round += 1;
+                    total_tools += items.len();
+                    let category_icons: String = items
+                        .iter()
+                        .map(|i| ToolCategory::from_name(&i.name).icon())
+                        .collect();
+                    eprintln!(
+                        "{} R{} {}个工具 {}",
+                        "⚙".dimmed(),
+                        round,
+                        items.len(),
+                        category_icons,
+                    );
+
                     // 逐个确认 + 执行 + 发送结果
-                    for item in &items {
+                    for (i, item) in items.iter().enumerate() {
                         let tool_result = handle_tool_call(
                             item,
                             tool_registry.as_ref(),
                             &jcli_config,
                             &cancelled,
                             bypass,
+                            i + 1,
+                            items.len(),
                         );
                         let _ = tool_result_tx.send(tool_result);
                     }
@@ -707,6 +726,9 @@ fn run_oneshot_agent(
                         0
                     };
                     persist_messages(session_id, &ctx_msgs, persist_from);
+                    if round > 0 {
+                        eprintln!("{} R{} {}个工具", "✓".green(), round, total_tools,);
+                    }
                     eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
                     fire_session_end(
                         &hook_manager_for_end,
@@ -788,14 +810,25 @@ fn handle_tool_call(
     jcli_config: &JcliConfig,
     cancelled: &Arc<AtomicBool>,
     bypass: bool,
+    idx: usize,
+    total: usize,
 ) -> ToolResultMsg {
     use colored::Colorize;
 
+    let category = ToolCategory::from_name(&item.name);
+    let icon = category.icon();
+    let multi_prefix = if total > 1 {
+        format!("{}/{} ", idx, total)
+    } else {
+        String::new()
+    };
+
     // .jcli deny 检查
     if jcli_config.is_denied(&item.name, &item.arguments) {
-        println!(
-            "{} {} {}",
-            "⛔".red(),
+        eprintln!(
+            "{} {}{} {}",
+            "✗".red(),
+            multi_prefix,
             item.name.red().bold(),
             "被权限规则拒绝".red()
         );
@@ -820,7 +853,7 @@ fn handle_tool_call(
         && !jcli_config.is_allowed(&item.name, &item.arguments);
 
     if needs_confirm && !bypass {
-        let tool_desc = format!("{}  {}", "🔧", confirm_msg.yellow());
+        let tool_desc = format!("{} {}  {}", multi_prefix, icon, confirm_msg.yellow());
         let allow_rule = generate_allow_rule(&item.name, &item.arguments);
         let options = ["允许执行", "拒绝", &format!("始终允许 ({})", allow_rule)];
         let choice = interactive_confirm(&tool_desc, &options, 0);
@@ -830,7 +863,13 @@ fn handle_tool_call(
                 // 始终允许：写入 .jcli（简化处理，不再单独 add_allow_rule）
             }
             _ => {
-                println!("{} {}", "⏭".dimmed(), "已跳过".dimmed());
+                eprintln!(
+                    "{} {}{} {}",
+                    "⏭".dimmed(),
+                    multi_prefix,
+                    item.name.dimmed(),
+                    "已跳过".dimmed()
+                );
                 return ToolResultMsg {
                     tool_call_id: item.id.clone(),
                     result: "用户拒绝执行该工具".to_string(),
@@ -842,12 +881,35 @@ fn handle_tool_call(
         }
     }
 
-    println!("🔧 {} ...", confirm_msg.cyan());
+    eprintln!("{}{} {} ...", icon, multi_prefix, confirm_msg.cyan());
+    let start = std::time::Instant::now();
     let result = tool_registry.execute(&item.name, &item.arguments, cancelled);
+    let elapsed = start.elapsed();
+    let elapsed_str = format_duration(elapsed);
+
+    let summary = get_result_summary_for_tool(
+        &result.output,
+        result.is_error,
+        &item.name,
+        Some(&item.arguments),
+    );
+
     if result.is_error {
-        println!("{} {}", " ✖ ".red(), "执行出错".red());
+        eprintln!(
+            "{}{}{} {}",
+            "✗".red(),
+            multi_prefix,
+            "失败".red(),
+            elapsed_str.dimmed()
+        );
     } else {
-        println!("{} {}", " ✔ ".green(), "完成".green());
+        eprintln!(
+            "{}{}{} {}",
+            "✓".green(),
+            multi_prefix,
+            summary.green(),
+            elapsed_str.dimmed()
+        );
     }
 
     ToolResultMsg {
@@ -856,6 +918,15 @@ fn handle_tool_call(
         is_error: result.is_error,
         images: vec![],
         plan_decision: PlanDecision::None,
+    }
+}
+
+fn format_duration(d: std::time::Duration) -> String {
+    let ms = d.as_millis();
+    if ms < 1000 {
+        format!("{}ms", ms)
+    } else {
+        format!("{:.1}s", d.as_secs_f64())
     }
 }
 
