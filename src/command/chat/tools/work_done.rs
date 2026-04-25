@@ -1,5 +1,4 @@
 use crate::command::chat::agent::thread_identity::current_agent_name;
-use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::{
     PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
@@ -69,21 +68,16 @@ impl Tool for WorkDoneTool {
 
         let from = current_agent_name();
 
-        // 通知团队（写入 display + context 双通道：TUI 显示 + Main Agent context）
+        // 通过 broadcast 通知所有 agent（包括其他 teammate 和 Main）
+        // broadcast 会处理 display/context 双通道 + main_agent_inbox 唤醒信号
+        let broadcast_text = match params.summary.as_deref() {
+            Some(s) if !s.trim().is_empty() => {
+                format!("[已完成工作] {}", s.trim())
+            }
+            _ => "[已完成工作]".to_string(),
+        };
         if let Ok(manager) = self.teammate_manager.lock() {
-            let text = match params.summary.as_deref() {
-                Some(s) if !s.trim().is_empty() => {
-                    format!("<{}> [已完成工作] {}", from, s.trim())
-                }
-                _ => format!("<{}> [已完成工作]", from),
-            };
-            let msg = ChatMessage::text(MessageRole::Assistant, &text);
-            if let Ok(mut display) = manager.display_messages.lock() {
-                display.push(msg.clone());
-            }
-            if let Ok(mut context) = manager.context_messages.lock() {
-                context.push(msg);
-            }
+            manager.broadcast(&from, &broadcast_text, None);
         }
 
         self.work_done.store(true, Ordering::Relaxed);

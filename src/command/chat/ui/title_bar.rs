@@ -220,6 +220,7 @@ pub fn draw_title_bar(
                     TeammateStatus::Cancelled => t.text_dim,
                     TeammateStatus::Error(_) => t.config_toggle_off,
                     TeammateStatus::Initializing => t.config_dim,
+                    TeammateStatus::Retrying { .. } => t.title_loading,
                 };
 
                 let status_text = if snap.status == TeammateStatus::Working {

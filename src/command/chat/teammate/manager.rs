@@ -27,6 +27,13 @@ pub enum TeammateStatus {
     Completed,
     /// 被取消
     Cancelled,
+    /// LLM 调用重试中
+    Retrying {
+        attempt: u32,
+        max_attempts: u32,
+        delay_ms: u64,
+        error: String,
+    },
     /// 出错
     Error(String),
 }
@@ -39,6 +46,12 @@ pub enum TeammateStatusPersist {
     WaitingForMessage,
     Completed,
     Cancelled,
+    Retrying {
+        attempt: u32,
+        max_attempts: u32,
+        delay_ms: u64,
+        error: String,
+    },
     Error(String),
 }
 
@@ -50,6 +63,17 @@ impl From<TeammateStatus> for TeammateStatusPersist {
             TeammateStatus::WaitingForMessage => Self::WaitingForMessage,
             TeammateStatus::Completed => Self::Completed,
             TeammateStatus::Cancelled => Self::Cancelled,
+            TeammateStatus::Retrying {
+                attempt,
+                max_attempts,
+                delay_ms,
+                error,
+            } => Self::Retrying {
+                attempt,
+                max_attempts,
+                delay_ms,
+                error,
+            },
             TeammateStatus::Error(e) => Self::Error(e),
         }
     }
@@ -63,6 +87,17 @@ impl From<TeammateStatusPersist> for TeammateStatus {
             TeammateStatusPersist::WaitingForMessage => Self::WaitingForMessage,
             TeammateStatusPersist::Completed => Self::Completed,
             TeammateStatusPersist::Cancelled => Self::Cancelled,
+            TeammateStatusPersist::Retrying {
+                attempt,
+                max_attempts,
+                delay_ms,
+                error,
+            } => Self::Retrying {
+                attempt,
+                max_attempts,
+                delay_ms,
+                error,
+            },
             TeammateStatusPersist::Error(e) => Self::Error(e),
         }
     }
@@ -75,6 +110,7 @@ impl TeammateStatus {
             Self::Initializing => "◐",
             Self::Working => "●",
             Self::WaitingForMessage => "○",
+            Self::Retrying { .. } => "↻",
             Self::Completed => "✓",
             Self::Cancelled => "✗",
             Self::Error(_) => "✗",
@@ -87,6 +123,7 @@ impl TeammateStatus {
             Self::Initializing => "初始化",
             Self::Working => "工作中",
             Self::WaitingForMessage => "等待中",
+            Self::Retrying { .. } => "重试中",
             Self::Completed => "已完成",
             Self::Cancelled => "已取消",
             Self::Error(_) => "错误",
@@ -276,11 +313,12 @@ impl TeammateManager {
             ),
         );
 
-        // 注入到主 agent 的 inbox（如果发送者不是主 agent）
+        // 注入到主 agent 的 inbox 作为唤醒信号（如果发送者不是主 agent）
+        // 完整广播内容已通过 context_messages 同步，inbox 只需非空即可触发 wake
         if from != "Main"
             && let Ok(mut pending) = self.main_agent_inbox.lock()
         {
-            pending.push(ChatMessage::text(MessageRole::User, &broadcast_message));
+            pending.push(ChatMessage::text(MessageRole::User, "[teammate_signal]"));
         }
 
         // 注入到所有其他 teammate 的 pending

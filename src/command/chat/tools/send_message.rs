@@ -76,7 +76,13 @@ impl Tool for SendMessageTool {
         }
 
         let from = current_agent_name();
-        let to = params.to.as_deref().map(|s| s.trim_start_matches('@'));
+        let to = params.to.as_deref().map(|s| {
+            let s = s.trim_start_matches('@');
+            // 兼容全名格式：Teammate@Frontend → Frontend, SubAgent@search → search
+            s.strip_prefix("Teammate@")
+                .or_else(|| s.strip_prefix("SubAgent@"))
+                .unwrap_or(s)
+        });
 
         match self.teammate_manager.lock() {
             Ok(manager) => {

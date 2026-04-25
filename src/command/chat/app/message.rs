@@ -171,8 +171,9 @@ impl ChatApp {
         self.spawn_agent_loop(provider, api_messages);
     }
 
-    /// 此方法清空 inbox 并启动新的 agent loop，让 main agent 响应 teammate 的消息。
-    /// 不走 send_message_internal，因为消息已在 session 中，无需重复 push user message。
+    /// 此方法清空 inbox 唤醒信号并启动新的 agent loop，让 main agent 响应 teammate 的消息。
+    /// 广播内容已通过 context_messages → poll_stream_actions → session.messages 同步，
+    /// inbox 只含轻量唤醒信号，不重复注入消息内容。
     pub fn wake_from_teammate_inbox(&mut self) {
         {
             let mut pending =

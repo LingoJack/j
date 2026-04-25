@@ -414,10 +414,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             }
         }
 
-        // Phase 2c: main agent 空闲时，drain teammate inbox 消息并触发新 agent loop
-        // teammate 通过 broadcast 向 main_agent_inbox 注入消息，该 Arc 与 pending_user_messages 共享。
-        // 如果 main agent 已结束 agent loop（is_loading=false），inbox 中的消息无人消费，
-        // 需要在此唤醒 main agent 处理这些消息。
+        // Phase 2c: main agent 空闲时，检测 teammate 唤醒信号并触发新 agent loop
+        // teammate 通过 broadcast 向 main_agent_inbox 注入轻量唤醒信号，该 Arc 与 pending_user_messages 共享。
+        // 广播内容已通过 context_messages → poll_stream_actions → session.messages 同步。
+        // 如果 main agent 已结束 agent loop（is_loading=false），inbox 中的信号无人消费，
+        // 需要在此唤醒 main agent 响应 teammate 消息。
         if !app.state.is_loading {
             let has_inbox =
                 !safe_lock(&app.state.pending_user_messages, "tui_loop::inbox_check").is_empty();

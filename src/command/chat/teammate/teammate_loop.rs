@@ -282,6 +282,18 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             }
         }
 
+        let status_for_retry = Arc::clone(&status);
+        let retry_callback = move |attempt: u32, max_attempts: u32, delay_ms: u64, error: &str| {
+            if let Ok(mut s) = status_for_retry.lock() {
+                *s = TeammateStatus::Retrying {
+                    attempt,
+                    max_attempts,
+                    delay_ms,
+                    error: error.to_string(),
+                };
+            }
+        };
+
         let response_choice = match call_llm_non_stream(
             &rt,
             &client,
@@ -289,7 +301,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             &api_messages,
             &tools,
             Some(&effective_system_prompt),
-            None, // teammate 暂不使用重试回调
+            Some(&retry_callback),
         ) {
             Ok(c) => c,
             Err(e) => {

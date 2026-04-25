@@ -85,10 +85,8 @@ pub fn compress_other_agent_toolcalls(
         .iter()
         .enumerate()
         .filter_map(|(idx, msg)| {
-            // 只处理 User role 的广播消息（teammate/subagent 通过 pending_user_messages 接收）
-            if msg.role != MessageRole::User {
-                return None;
-            }
+            // 处理 User role（通过 pending_user_messages 接收的广播）
+            // 和 Assistant role（通过 context_messages 同步的 teammate/subagent 活动消息）
             let content = &msg.content;
             let (agent_name, tool_name) = is_tool_call_broadcast(content)?;
             // 排除自己发出的 tool call 广播
