@@ -484,11 +484,7 @@ impl ChatApp {
                 if !reasoning.is_empty() {
                     msg.reasoning_content = Some(reasoning);
                 }
-                crate::command::chat::agent::push_both(
-                    &self.display_messages,
-                    &self.context_messages,
-                    msg,
-                );
+                self.push_both_channels(msg);
             }
             safe_lock(
                 &self.state.streaming_content,
@@ -573,11 +569,7 @@ impl ChatApp {
                 if !reasoning.is_empty() {
                     msg.reasoning_content = Some(reasoning);
                 }
-                crate::command::chat::agent::push_both(
-                    &self.display_messages,
-                    &self.context_messages,
-                    msg,
-                );
+                self.push_both_channels(msg);
                 safe_lock(
                     &self.state.streaming_content,
                     "finish_loading::streaming_content_done_clear",

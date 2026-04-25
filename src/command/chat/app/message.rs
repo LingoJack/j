@@ -77,11 +77,7 @@ impl ChatApp {
         // 添加用户消息到双通道（UI 渲染 + LLM context）
         // session.messages 由 poll_stream_actions 从 context_messages 同步，不在此直接 push
         let user_msg = ChatMessage::text(MessageRole::User, &text);
-        crate::command::chat::agent::push_both(
-            &self.display_messages,
-            &self.context_messages,
-            user_msg,
-        );
+        self.push_both_channels(user_msg);
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = u16::MAX;
 

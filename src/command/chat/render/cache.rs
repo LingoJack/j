@@ -103,7 +103,7 @@ pub fn build_message_lines_incremental(
     let is_browse_mode = app.ui.mode == ChatMode::Browse;
 
     // ★ UI 渲染从 display_messages 读取（干净文本 + sender_name），不从 session.messages
-    let display_msgs = safe_lock(&app.display_messages, "render_cache::display_msgs").clone();
+    let display_msgs = safe_lock(&app.display_messages, "render_cache::display_msgs");
     let msg_count = display_msgs.len();
     let mut current_line_offset: usize = 0;
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::with_capacity(msg_count);
@@ -116,7 +116,7 @@ pub fn build_message_lines_incremental(
         .map(|c| c.bubble_max_width == bubble_max_width && c.expand_tools == expand)
         .unwrap_or(false);
 
-    // ===== P0 优化：引用 display_messages 克隆，避免重复锁 =====
+    // ===== P0 优化：直接引用 display_messages，避免整 Vec clone =====
     // 缓存命中时零拷贝复用，只在缓存未命中时才访问消息内容
     for (idx, m) in display_msgs.iter().enumerate() {
         let is_selected = is_browse_mode && idx == app.ui.browse_msg_index;
@@ -203,31 +203,25 @@ pub fn build_message_lines_incremental(
                     .tool_call_id
                     .as_ref()
                     .and_then(|tid| {
-                        app.state.session.messages[..idx]
-                            .iter()
-                            .rev()
-                            .find_map(|prev| {
-                                prev.tool_calls.as_ref().and_then(|tcs| {
-                                    tcs.iter()
-                                        .find(|tc| tc.id == *tid)
-                                        .map(|tc| tc.name.clone())
-                                })
+                        display_msgs[..idx].iter().rev().find_map(|prev| {
+                            prev.tool_calls.as_ref().and_then(|tcs| {
+                                tcs.iter()
+                                    .find(|tc| tc.id == *tid)
+                                    .map(|tc| tc.name.clone())
                             })
+                        })
                     })
                     .unwrap_or_default();
 
                 // 获取对应的 tool_call arguments（用于特性化渲染）
                 let tool_args = m.tool_call_id.as_ref().and_then(|tid| {
-                    app.state.session.messages[..idx]
-                        .iter()
-                        .rev()
-                        .find_map(|prev| {
-                            prev.tool_calls.as_ref().and_then(|tcs| {
-                                tcs.iter()
-                                    .find(|tc| tc.id == *tid)
-                                    .map(|tc| tc.arguments.clone())
-                            })
+                    display_msgs[..idx].iter().rev().find_map(|prev| {
+                        prev.tool_calls.as_ref().and_then(|tcs| {
+                            tcs.iter()
+                                .find(|tc| tc.id == *tid)
+                                .map(|tc| tc.arguments.clone())
                         })
+                    })
                 });
 
                 let label = if tool_name.is_empty() {

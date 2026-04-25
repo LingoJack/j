@@ -342,15 +342,11 @@ impl ChatApp {
     /// display_messages 需要干净文本，对含 `sender_name` 的消息做去 XML 处理；
     /// 无 `sender_name` 的消息直接复用（user/assistant/tool 等无 XML 包裹）。
     pub fn rebuild_channels_from_session(&mut self) {
-        let messages = &self.state.session.messages;
+        let messages = std::mem::take(&mut self.state.session.messages);
 
         let mut display: Vec<ChatMessage> = Vec::with_capacity(messages.len());
-        let mut context: Vec<ChatMessage> = Vec::with_capacity(messages.len());
 
-        for msg in messages {
-            // context 通道：原样保留（含 XML 前缀）
-            context.push(msg.clone());
-
+        for msg in &messages {
             // display 通道：有 sender_name 的消息需要去除 XML 包裹
             if let Some(ref sender) = msg.sender_name {
                 let clean_content = strip_agent_xml_tag(sender, &msg.content);
@@ -362,17 +358,21 @@ impl ChatApp {
             }
         }
 
+        // context 通道：直接 move messages（零 clone）
+        {
+            let mut cm = safe_lock(&self.context_messages, "rebuild_channels::context");
+            *cm = messages;
+        }
         {
             let mut dm = safe_lock(&self.display_messages, "rebuild_channels::display");
             *dm = display;
         }
-        {
-            let mut cm = safe_lock(&self.context_messages, "rebuild_channels::context");
-            *cm = context;
-        }
 
-        self.display_read_offset = self.state.session.messages.len();
-        self.context_read_offset = self.state.session.messages.len();
+        let len = safe_lock(&self.context_messages, "rebuild_channels::len").len();
+        self.state.session.messages =
+            safe_lock(&self.context_messages, "rebuild_channels::restore").clone();
+        self.display_read_offset = len;
+        self.context_read_offset = len;
         self.ui.msg_lines_cache = None;
     }
 
@@ -383,6 +383,12 @@ impl ChatApp {
         self.display_read_offset = 0;
         self.context_read_offset = 0;
         self.ui.msg_lines_cache = None;
+    }
+
+    /// 向双通道同时推送消息（display 用于 UI 渲染，context 用于 LLM + 持久化）。
+    pub fn push_both_channels(&self, msg: ChatMessage) {
+        safe_lock(&self.display_messages, "push_both_channels::display").push(msg.clone());
+        safe_lock(&self.context_messages, "push_both_channels::context").push(msg);
     }
 }
 
