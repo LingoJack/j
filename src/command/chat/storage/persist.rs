@@ -23,9 +23,10 @@ pub struct TeammateSnapshotPersist {
     pub worktree_branch: Option<String>,
     pub inherit_permissions: bool,
     pub status: TeammateStatusPersist,
-    /// 未被消费的广播消息（将来 Respawn 时灌回）
+    /// 未被消费的广播消息（将来 Respawn 时灌回 broadcast_inbox）
     #[serde(default)]
-    pub pending_user_messages: Vec<ChatMessage>,
+    #[serde(alias = "pending_user_messages")]
+    pub broadcast_inbox: Vec<ChatMessage>,
     pub tool_calls_count: usize,
     pub current_tool: Option<String>,
     pub work_done: bool,

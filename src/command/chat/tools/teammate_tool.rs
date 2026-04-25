@@ -157,7 +157,7 @@ impl Tool for TeammateTool {
         };
 
         // 准备 teammate 的资源
-        let pending_user_messages = Arc::new(Mutex::new(Vec::new()));
+        let broadcast_inbox = Arc::new(Mutex::new(Vec::new()));
         let streaming_content = Arc::new(Mutex::new(String::new()));
         let cancel_token = CancellationToken::new();
         let is_running = Arc::new(AtomicBool::new(true));
@@ -217,7 +217,7 @@ impl Tool for TeammateTool {
         let initial_prompt = params.prompt.clone();
 
         // Clone 用于线程
-        let pending_clone = Arc::clone(&pending_user_messages);
+        let inbox_clone = Arc::clone(&broadcast_inbox);
         let is_running_clone = Arc::clone(&is_running);
         let cancel_token_clone = cancel_token.clone();
         let sp_snapshot_clone = Arc::clone(&system_prompt_snapshot);
@@ -267,7 +267,7 @@ impl Tool for TeammateTool {
                 registry: child_registry,
                 jcli_config,
                 teammate_manager,
-                pending_user_messages: pending_clone,
+                broadcast_inbox: inbox_clone,
                 cancel_token: cancel_token_clone,
                 system_prompt_snapshot: sp_snapshot_clone,
                 messages_snapshot: msgs_snapshot_clone,
@@ -312,7 +312,7 @@ impl Tool for TeammateTool {
         let handle = TeammateHandle {
             name: params.name.clone(),
             role: params.role.clone().unwrap_or_default(),
-            pending_user_messages,
+            broadcast_inbox,
             streaming_content,
             cancel_token,
             is_running,

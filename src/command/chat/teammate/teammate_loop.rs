@@ -41,7 +41,8 @@ pub struct TeammateLoopConfig {
     pub registry: Arc<ToolRegistry>,
     pub jcli_config: Arc<JcliConfig>,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
-    pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// 广播收件箱（来自其他 agent 的广播消息）
+    pub broadcast_inbox: Arc<Mutex<Vec<ChatMessage>>>,
     pub cancel_token: CancellationToken,
     /// 供 /dump 读取的 system prompt 快照
     pub system_prompt_snapshot: Arc<Mutex<String>>,
@@ -70,7 +71,7 @@ pub struct TeammateLoopConfig {
 ///
 /// 与 sub_agent_loop 的关键区别：
 /// 1. 无 TUI 交互式确认（通过 permission 规则自动决定）
-/// 2. 每轮开始检查 pending_user_messages（来自广播）
+/// 2. 每轮开始检查 broadcast_inbox（来自广播）
 /// 3. 使用 SendMessage 工具与其他 agent 通信
 /// 4. idle polling — 无工具调用时不立即退出，而是轮询等待新消息
 /// 5. loop 结束后通知团队
@@ -86,7 +87,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         registry,
         jcli_config,
         teammate_manager,
-        pending_user_messages,
+        broadcast_inbox,
         cancel_token,
         system_prompt_snapshot,
         messages_snapshot,
@@ -193,7 +194,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // 注意：consecutive_idle_polls 的管理下放到 WaitingForMessage 分支，
         // 本处不再根据 had_new_messages 重置，避免"任何消息都触发 LLM"。
         let len_before_drain = messages.len();
-        let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+        let _ = drain_broadcast_messages(&mut messages, &broadcast_inbox);
         if messages.len() > len_before_drain {
             append_messages(&messages[len_before_drain..]);
         }
@@ -333,7 +334,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             // 将 teammate 的文字回复通过广播显示在聊天室
             // ★ 此消息通过三通道推送：
             //   - display + context：同步到 Main Agent 的 LLM 上下文
-            //   - 其他 teammate 的 pending_user_messages：旁听性质（不唤醒）
+            //   - 其他 teammate 的 broadcast_inbox：旁听性质（不唤醒）
             if let Ok(manager) = teammate_manager.lock() {
                 let broadcast_text = format!("<Teammate@{}> {}", name, &assistant_text);
                 let msg = ChatMessage::text(MessageRole::Assistant, &broadcast_text);
@@ -343,13 +344,13 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 if let Ok(mut context) = manager.context_messages.lock() {
                     context.push(msg);
                 }
-                // 推送到其他 teammate 的 pending_user_messages（旁听，不设 wake_flag）
+                // 推送到其他 teammate 的 broadcast_inbox（旁听，不设 wake_flag）
                 for (peer_name, handle) in &manager.teammates {
                     if peer_name == &name {
                         continue; // 不给自己发
                     }
-                    if let Ok(mut pending) = handle.pending_user_messages.lock() {
-                        pending.push(ChatMessage::text(MessageRole::User, &broadcast_text));
+                    if let Ok(mut inbox) = handle.broadcast_inbox.lock() {
+                        inbox.push(ChatMessage::text(MessageRole::User, &broadcast_text));
                     }
                 }
             }
@@ -376,7 +377,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
             // 先把已到达的旁听消息 drain 到 messages（保留上下文，但不自动唤醒）
             let len_before_drain = messages.len();
-            let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+            let _ = drain_broadcast_messages(&mut messages, &broadcast_inbox);
             if messages.len() > len_before_drain {
                 append_messages(&messages[len_before_drain..]);
             }
@@ -423,7 +424,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 // 在轮询期间也 drain 消息到 messages（保持上下文可见性，
                 // 但不据此唤醒 — 仅 wake_flag set 时才打断 idle）
                 let len_before_drain = messages.len();
-                let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
+                let _ = drain_broadcast_messages(&mut messages, &broadcast_inbox);
                 if messages.len() > len_before_drain {
                     append_messages(&messages[len_before_drain..]);
                 }
@@ -592,7 +593,7 @@ fn build_teammate_system_prompt(
         .replace("{{.team_summary}}", &team_summary)
 }
 
-/// 从 pending_user_messages 中 drain 广播消息到 messages
+/// 从 broadcast_inbox 中 drain 广播消息到 messages
 /// 返回 true 表示有新消息
 fn drain_broadcast_messages(
     messages: &mut Vec<ChatMessage>,

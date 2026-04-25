@@ -80,7 +80,7 @@ impl ChatApp {
                     .map(|s| s.clone().into())
                     .unwrap_or(TeammateStatusPersist::Cancelled);
                 let pending = handle
-                    .pending_user_messages
+                    .broadcast_inbox
                     .lock()
                     .map(|m| m.clone())
                     .unwrap_or_default();
@@ -115,7 +115,7 @@ impl ChatApp {
                     worktree_branch,
                     inherit_permissions,
                     status: final_status,
-                    pending_user_messages: pending,
+                    broadcast_inbox: pending,
                     tool_calls_count: handle.tool_calls_count.load(Ordering::Relaxed),
                     current_tool,
                     work_done: handle.work_done.load(Ordering::Relaxed),

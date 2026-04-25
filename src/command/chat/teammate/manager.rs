@@ -189,8 +189,8 @@ pub struct TeammateHandle {
     pub name: String,
     /// 角色描述（如 "React frontend developer"）
     pub role: String,
-    /// Teammate 的 pending_user_messages（广播消息注入到这里）
-    pub pending_user_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    /// Teammate 的广播收件箱（其他 agent 的广播消息注入到这里）
+    pub broadcast_inbox: Arc<Mutex<Vec<ChatMessage>>>,
     /// Teammate 的流式内容缓冲区
     pub streaming_content: Arc<Mutex<String>>,
     /// 取消令牌
@@ -256,7 +256,7 @@ impl Drop for FileLockGuard {
 pub struct TeammateManager {
     /// 所有 teammate 的句柄（key = name）
     pub teammates: HashMap<String, TeammateHandle>,
-    /// Teammate → Main agent LLM 上下文通道（broadcast 时注入，drain_pending_user_messages 消费）
+    /// Teammate → Main agent LLM 上下文通道（broadcast 时注入，Main Agent 通过 context_messages 同步消费）
     pub main_agent_inbox: Arc<Mutex<Vec<ChatMessage>>>,
     /// Agent/Teammate → UI 显示通道（仅 UI 渲染用，不作为 LLM context 数据源）
     pub display_messages: Arc<Mutex<Vec<ChatMessage>>>,
@@ -283,7 +283,7 @@ impl TeammateManager {
         }
     }
 
-    /// 广播消息到所有其他 agent 的 pending_user_messages
+    /// 广播消息到所有其他 agent 的 broadcast_inbox
     ///
     /// - `from`: 发送者名称
     /// - `text`: 消息内容
@@ -329,8 +329,8 @@ impl TeammateManager {
             if from == format!("Teammate@{}", name) {
                 continue; // 不给自己发
             }
-            if let Ok(mut pending) = handle.pending_user_messages.lock() {
-                pending.push(ChatMessage::text(MessageRole::User, &broadcast_message));
+            if let Ok(mut inbox) = handle.broadcast_inbox.lock() {
+                inbox.push(ChatMessage::text(MessageRole::User, &broadcast_message));
             }
             let should_wake = from == "Main" || at_target == Some(name.as_str());
             if should_wake {
