@@ -145,7 +145,7 @@ pub async fn run_main_agent_loop(
     'round: for round_idx in 0..max_llm_rounds {
         final_round_idx = round_idx;
 
-        // 每轮开始时动态获取可用工具（检查 is_available，如 SendMessage/WaitForMessage）
+        // 每轮开始时动态获取可用工具（检查 is_available，如 SendMessage/IgnoreMessage）
         let tools = if tools_enabled {
             tool_registry.to_llm_tools_filtered(&disabled_tools)
         } else {

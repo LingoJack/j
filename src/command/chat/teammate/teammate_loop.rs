@@ -312,7 +312,19 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
         let assistant_text = response_choice.message.content.clone().unwrap_or_default();
         let reasoning_content = response_choice.message.reasoning_content.clone();
-        if !assistant_text.is_empty() {
+
+        // 本轮是否仅调 IgnoreMessage：若是，跳过 assistant_text 的聊天室广播，
+        // 避免「我选择不响应」这段 prose 反过来唤醒别的 agent，制造连锁。
+        let is_ignore_only = response_choice
+            .message
+            .tool_calls
+            .as_ref()
+            .map(|calls| {
+                !calls.is_empty() && calls.iter().all(|c| c.function.name == "IgnoreMessage")
+            })
+            .unwrap_or(false);
+
+        if !assistant_text.is_empty() && !is_ignore_only {
             last_assistant_text = assistant_text.clone();
             // 将 teammate 的文字回复通过广播显示在聊天室
             // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
@@ -356,30 +368,21 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 append_messages(&messages[len_before_drain..]);
             }
 
-            // 唤醒判断：有 pending 消息就唤醒（除非已 WorkDone 且未被 @）
-            // work_done=true 时，只有 @self 才能重新激活（清除 work_done 继续工作）
-            let has_new = messages.len() > len_before_drain;
-            if has_new {
+            // 唤醒判断：仅当被 @self 或 from=Main 时（即 wake_flag set）才唤醒。
+            // 其他广播消息已 drain 进 transcript（下次唤醒时 LLM 自然看到），
+            // 但本身不打扰当前 idle 状态，避免 thrash 与互相凑话。
+            // WorkDone 后被 @self 同样会清除 work_done 重新激活。
+            if wake_flag.swap(false, Ordering::Relaxed) {
                 if work_done.load(Ordering::Relaxed) {
-                    // WorkDone 后只有 @self 才能重新激活
-                    if wake_flag.swap(false, Ordering::Relaxed) {
-                        work_done.store(false, Ordering::Relaxed);
-                        write_info_log(
-                            "TeammateLoop",
-                            &format!("{}: re-activated after WorkDone by @mention", name),
-                        );
-                        consecutive_idle_polls = 0;
-                        continue;
-                    }
-                    // WorkDone 且未被 @，忽略消息
-                } else {
-                    // 未 WorkDone，任何消息都唤醒
-                    let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理 wake_flag
-                    consecutive_idle_polls = 0;
-                    continue;
+                    work_done.store(false, Ordering::Relaxed);
+                    write_info_log(
+                        "TeammateLoop",
+                        &format!("{}: re-activated after WorkDone by @mention", name),
+                    );
                 }
+                consecutive_idle_polls = 0;
+                continue;
             }
-            let _ = wake_flag.swap(false, Ordering::Relaxed); // 清理残留 wake_flag
 
             consecutive_idle_polls += 1;
             if consecutive_idle_polls >= MAX_CONSECUTIVE_IDLE_POLLS {
@@ -404,30 +407,25 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(POLL_SLEEP_MILLIS));
 
-                // 在轮询期间也 drain 消息到 messages
+                // 在轮询期间也 drain 消息到 messages（保持上下文可见性，
+                // 但不据此唤醒 — 仅 wake_flag set 时才打断 idle）
                 let len_before_drain = messages.len();
                 let _ = drain_broadcast_messages(&mut messages, &pending_user_messages);
                 if messages.len() > len_before_drain {
                     append_messages(&messages[len_before_drain..]);
-
-                    // 有新消息：未 WorkDone 就唤醒，WorkDone 后只有 @self 才重新激活
-                    if work_done.load(Ordering::Relaxed) {
-                        if wake_flag.swap(false, Ordering::Relaxed) {
-                            work_done.store(false, Ordering::Relaxed);
-                            write_info_log(
-                                "TeammateLoop",
-                                &format!("{}: re-activated after WorkDone by @mention", name),
-                            );
-                            consecutive_idle_polls = 0;
-                            break;
-                        }
-                    } else {
-                        let _ = wake_flag.swap(false, Ordering::Relaxed);
-                        consecutive_idle_polls = 0;
-                        break;
-                    }
                 }
-                let _ = wake_flag.swap(false, Ordering::Relaxed);
+
+                if wake_flag.swap(false, Ordering::Relaxed) {
+                    if work_done.load(Ordering::Relaxed) {
+                        work_done.store(false, Ordering::Relaxed);
+                        write_info_log(
+                            "TeammateLoop",
+                            &format!("{}: re-activated after WorkDone by @mention", name),
+                        );
+                    }
+                    consecutive_idle_polls = 0;
+                    break;
+                }
             }
             continue;
         }
@@ -456,21 +454,24 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             append_messages(std::slice::from_ref(last));
         }
 
-        // 在 TUI 中显示 teammate 的工具调用（SendMessage 不显示，因为 broadcast 会单独显示消息内容）
+        // 在 TUI 中显示 teammate 的工具调用
+        // - SendMessage：跳过（broadcast 已单独显示消息内容）
+        // - IgnoreMessage：跳过（语义就是"静默"，不应留可见痕迹去打扰其他 agent context）
         // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
         if let Ok(manager) = teammate_manager.lock() {
             for item in &tool_items {
-                if item.name != "SendMessage" {
-                    let msg = ChatMessage::text(
-                        MessageRole::Assistant,
-                        format!("<Teammate@{}> [调用工具 {}]", name, item.name),
-                    );
-                    if let Ok(mut display) = manager.display_messages.lock() {
-                        display.push(msg.clone());
-                    }
-                    if let Ok(mut context) = manager.context_messages.lock() {
-                        context.push(msg);
-                    }
+                if matches!(item.name.as_str(), "SendMessage" | "IgnoreMessage") {
+                    continue;
+                }
+                let msg = ChatMessage::text(
+                    MessageRole::Assistant,
+                    format!("<Teammate@{}> [调用工具 {}]", name, item.name),
+                );
+                if let Ok(mut display) = manager.display_messages.lock() {
+                    display.push(msg.clone());
+                }
+                if let Ok(mut context) = manager.context_messages.lock() {
+                    context.push(msg);
                 }
             }
         }

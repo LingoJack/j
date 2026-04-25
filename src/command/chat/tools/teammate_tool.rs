@@ -6,9 +6,9 @@ use crate::command::chat::storage::{SessionPaths, sanitize_filename};
 use crate::command::chat::teammate::teammate_loop::{TeammateLoopConfig, run_teammate_loop};
 use crate::command::chat::teammate::{TeammateHandle, TeammateManager, TeammateStatus};
 use crate::command::chat::tools::derived_shared::DerivedAgentShared;
+use crate::command::chat::tools::ignore_message::IgnoreMessageTool;
 use crate::command::chat::tools::send_message::SendMessageTool;
 use crate::command::chat::tools::sub_agent::SubAgentTool;
-use crate::command::chat::tools::wait_for_message::WaitForMessageTool;
 use crate::command::chat::tools::work_done::WorkDoneTool;
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
@@ -191,10 +191,9 @@ impl Tool for TeammateTool {
             work_done: Arc::clone(&work_done),
             teammate_manager: Arc::clone(&self.teammate_manager),
         }));
-        // 注册 WaitForMessage 工具（与本 teammate 的 pending_user_messages 和 cancel_token 绑定）
-        child_registry.register(Box::new(WaitForMessageTool {
-            pending_user_messages: Arc::clone(&pending_user_messages),
-            cancel_token: cancel_token.clone(),
+        // 注册 IgnoreMessage 工具（teammate 端始终可用，无需 gating）
+        child_registry.register(Box::new(IgnoreMessageTool {
+            teammate_manager: None,
         }));
         let child_registry = Arc::new(child_registry);
 
