@@ -153,6 +153,9 @@ pub enum SubCmd {
         /// 远程控制监听端口
         #[arg(long, default_value = "9390")]
         port: u16,
+        /// 跳过工具执行确认（管道/脚本场景）
+        #[arg(long)]
+        bypass: bool,
         /// 消息内容（支持多个参数拼接）
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         content: Vec<String>,

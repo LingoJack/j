@@ -61,14 +61,8 @@ if [ ${#DIFF_DETAIL} -gt 12000 ]; then
     DIFF_DETAIL="$DIFF_STAT"
 fi
 
-# 构建 prompt
-PROMPT="你是一个 Git 提交信息生成器。根据以下代码变更，生成一个简洁的 commit message。
-
-要求:
-1. 格式：<类型>: <中文描述>
-2. 类型可选: feat/fix/refactor/docs/style/test/chore/perf
-3. 描述不超过 30 字，清晰概括变更
-4. 只输出一行 commit message，不要其他内容
+# 构建 prompt（要求 AI 用 <result> 标签包裹输出，方便管道提取）
+PROMPT="根据以下代码变更生成一个 commit message。格式：<类型>: <中文描述>，类型可选 feat/fix/refactor/docs/style/test/chore/perf，描述不超过 30 字。请用 <result>...</result> 包裹你的输出，不要输出其他内容。
 
 变更文件:
 ${DIFF_STAT}
@@ -76,9 +70,9 @@ ${DIFF_STAT}
 变更详情:
 ${DIFF_DETAIL}"
 
-# 调用 j ai 生成 commit message
-# 使用 timeout 防止 API 超时阻塞 commit
-AI_MSG=$(timeout 30 j ai "$PROMPT" 2>/dev/null | head -5 | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+# 调用 j ai 生成 commit message，用 awk 提取 <result> 标签内容
+AI_MSG=$(timeout 30 j ai --bypass -- "$PROMPT" 2>/dev/null \
+    | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}')
 
 if [ -n "$AI_MSG" ]; then
     # 写入 AI 生成的 message

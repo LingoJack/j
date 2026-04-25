@@ -45,6 +45,7 @@ pub fn handle_chat(
     session_id_opt: Option<&str>,
     remote: bool,
     port: u16,
+    bypass: bool,
     _config: &YamlConfig,
 ) {
     let agent_config = load_agent_config();
@@ -108,6 +109,7 @@ pub fn handle_chat(
             message,
             prior_messages,
             &session_id,
+            bypass,
         );
     } else {
         // 无工具模式：流式输出 + 结束后 markdown 重绘
@@ -204,6 +206,7 @@ fn run_oneshot_agent(
     message: String,
     prior_messages: Vec<ChatMessage>,
     session_id: &str,
+    bypass: bool,
 ) {
     use colored::Colorize;
     use crossterm::event::{self, Event, KeyCode};
@@ -741,7 +744,7 @@ fn run_oneshot_agent(
                 .unwrap_or(false)
                 && !jcli_config.is_allowed(&item.name, &item.arguments);
 
-            if needs_confirm {
+            if needs_confirm && !bypass {
                 let tool_desc = format!("{}  {}", "🔧", confirm_msg.yellow());
                 let allow_rule = generate_allow_rule(&item.name, &item.arguments);
                 let options = ["允许执行", "拒绝", &format!("始终允许 ({})", allow_rule)];

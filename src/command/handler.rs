@@ -89,8 +89,8 @@ command_handlers! {
     },
 
     // ========== AI 对话 ==========
-    ChatCmd { cont: bool, session: Option<String>, content: Vec<String>, remote: bool, port: u16 } => |self, config| {
-        crate::command::chat::handle_chat(&self.content, self.cont, self.session.as_deref(), self.remote, self.port, config);
+    ChatCmd { cont: bool, session: Option<String>, content: Vec<String>, remote: bool, port: u16, bypass: bool } => |self, config| {
+        crate::command::chat::handle_chat(&self.content, self.cont, self.session.as_deref(), self.remote, self.port, self.bypass, config);
     },
 
     // ========== 脚本 ==========
@@ -185,12 +185,14 @@ impl SubCmd {
                 content,
                 remote,
                 port,
+                bypass,
             } => Box::new(ChatCmd {
                 cont,
                 session,
                 content,
                 remote,
                 port,
+                bypass,
             }),
 
             // 脚本 & 计时

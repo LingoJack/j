@@ -176,6 +176,7 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         let mut session: Option<String> = None;
         let mut remote = false;
         let mut port: u16 = DEFAULT_REMOTE_PORT;
+        let mut bypass = false;
         let mut content: Vec<String> = Vec::new();
         let mut i = 0;
         while i < rest.len() {
@@ -202,6 +203,10 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
                         i += 1;
                     }
                 }
+                "--bypass" => {
+                    bypass = true;
+                    i += 1;
+                }
                 _ => {
                     content.push(rest[i].clone());
                     i += 1;
@@ -214,6 +219,7 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
             content,
             remote,
             port,
+            bypass,
         })
     } else if is(cmd::SCRIPT) {
         if rest.is_empty() {

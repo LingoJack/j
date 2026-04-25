@@ -68,6 +68,14 @@ push: current_dir fmt build-web ## 提交并推送代码
 	&& git push origin $(GIT_BRANCH)
 	@echo "☑️ 代码已推送"
 
+# --- j ai 输出提取辅助函数 ---
+# prompt 中要求 AI 用 <result>...</result> 包裹输出
+# 管道中直接用 awk 抓取标签内容，无需过滤任何噪音
+# 支持单行 <result>xxx</result> 和多行 <result>\n...\n</result>
+define J_AI_EXTRACT
+awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'
+endef
+
 push-ai: current_dir fmt build-web ## AI 生成 commit message 并推送
 	@echo "🤖 AI 生成变更说明..."
 	@diff_stat="$$(git diff --stat 2>/dev/null)"; \
@@ -77,7 +85,7 @@ push-ai: current_dir fmt build-web ## AI 生成 commit message 并推送
 	if [ -z "$$diff_stat" ]; then \
 		echo "ℹ️ 没有检测到变更"; exit 0; \
 	fi; \
-	msg=$$(timeout 30 j ai "你是 Git 提交信息生成器。根据以下代码变更生成一个简洁的 commit message。要求: 1. 格式：<类型>: <中文描述> 2. 类型: feat/fix/refactor/docs/style/test/chore/perf 3. 描述不超过 30 字，清晰概括变更 4. 只输出一行 commit message，不要其他内容。变更: $$diff_stat" 2>/dev/null | head -3 | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//'); \
+	msg=$$(timeout 30 j ai --bypass -- "根据以下代码变更生成一个 commit message。格式：<类型>: <中文描述>，类型可选 feat/fix/refactor/docs/style/test/chore/perf，描述不超过 30 字。请用 <result>...</result> 包裹你的输出。变更: $$diff_stat" 2>/dev/null | $(J_AI_EXTRACT)); \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
 	echo "✅ 已推送: $$msg"
@@ -187,7 +195,7 @@ publish: ## 发布到 crates.io（自动递增版本号，AI 生成 Release Note
 	else \
 		log=$$(git log --oneline -20); \
 	fi; \
-	release_note=$$(timeout 30 j ai "你是 Release Note 撰写者。版本 v$$version 的变更如下，生成中文版本发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。Git Log: $$log" 2>/dev/null || echo "Release v$$version"); \
+	release_note=$$(timeout 60 j ai --bypass -- "根据以下 git log 生成版本 v$$version 的中文发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。请用 <result>...</result> 包裹你的输出。Git Log: $$log" 2>/dev/null | $(J_AI_EXTRACT) || echo "Release v$$version"); \
 	git commit -m "chore: bump version to v$$version"; \
 	git tag -a "v$$version" -m "$$release_note"; \
 	git push origin $(GIT_BRANCH); \
@@ -206,7 +214,7 @@ release-note: ## 生成自上次 tag 以来的 Release Note
 	if [ -z "$$log" ]; then echo "没有新的提交"; exit 0; fi; \
 	echo "📋 自 $$last_tag 以来的变更:"; \
 	echo ""; \
-	j ai "你是 Release Note 撰写者。根据以下 git log 生成中文版本发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。Git Log: $$log" 2>/dev/null
+	j ai --bypass -- "根据以下 git log 生成中文版本发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。请用 <result>...</result> 包裹你的输出。Git Log: $$log" 2>/dev/null | $(J_AI_EXTRACT)
 
 publish-check: ## 发布前检查（dry-run）
 	@echo "🔍 发布前检查（dry-run）..."
