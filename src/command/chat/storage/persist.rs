@@ -8,6 +8,9 @@ use crate::command::chat::tools::todo::TodoItem;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+
+/// Session ID 文件名最大长度限制。
+const SESSION_ID_MAX_LEN: usize = 64;
 use std::path::{Path, PathBuf};
 
 /// Teammate 快照（可序列化，用于 session 持久化）
@@ -44,7 +47,7 @@ pub fn sanitize_filename(name: &str) -> String {
     }
     // 限长 64，避免极端长名
     if out.chars().count() > 64 {
-        out = out.chars().take(64).collect();
+        out = out.chars().take(SESSION_ID_MAX_LEN).collect();
     }
     if out.is_empty() {
         out.push('_');

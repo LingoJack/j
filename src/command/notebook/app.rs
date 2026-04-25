@@ -143,7 +143,7 @@ pub fn load_notes() -> Vec<NoteItem> {
     let dir = notebook_dir();
     let mut notes = Vec::new();
     walk_dir_for_notes(&dir, "", &mut notes);
-    notes.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    notes.sort_by_key(|b| std::cmp::Reverse(b.mtime));
     notes
 }
 
@@ -822,10 +822,8 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         }
         KeyCode::Char('n') | KeyCode::Down | KeyCode::Char('j') => app.move_down(),
         KeyCode::Char('N') | KeyCode::Up | KeyCode::Char('k') => app.move_up(),
-        KeyCode::Enter | KeyCode::Char('e') => {
-            if app.selected_name().is_some() {
-                return false; // 编辑操作在 TUI loop 中处理（需暂停/恢复终端）
-            }
+        KeyCode::Enter | KeyCode::Char('e') if app.selected_name().is_some() => {
+            return false; // 编辑操作在 TUI loop 中处理（需暂停/恢复终端）
         }
         KeyCode::Char('a') => {
             app.mode = AppMode::Adding;
@@ -833,10 +831,8 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
             app.cursor_pos = 0;
             app.message = None;
         }
-        KeyCode::Char('d') => {
-            if app.selected_real_index().is_some() {
-                app.mode = AppMode::ConfirmDelete;
-            }
+        KeyCode::Char('d') if app.selected_real_index().is_some() => {
+            app.mode = AppMode::ConfirmDelete;
         }
         KeyCode::Char('r') => {
             if let Some(idx) = app.selected_real_index() {
@@ -862,11 +858,9 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
                 app.update_preview();
             }
         }
-        KeyCode::Char('p') => {
-            if app.selected_real_index().is_some() {
-                app.mode = AppMode::Preview;
-                app.preview_scroll = 0;
-            }
+        KeyCode::Char('p') if app.selected_real_index().is_some() => {
+            app.mode = AppMode::Preview;
+            app.preview_scroll = 0;
         }
         KeyCode::Char('/') => {
             app.mode = AppMode::CommandPopup;
@@ -1118,15 +1112,11 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
             app.rename_index = None;
             app.message = Some("已取消".to_string());
         }
-        KeyCode::Left => {
-            if app.cursor_pos > 0 {
-                app.cursor_pos -= 1;
-            }
+        KeyCode::Left if app.cursor_pos > 0 => {
+            app.cursor_pos -= 1;
         }
-        KeyCode::Right => {
-            if app.cursor_pos < char_count {
-                app.cursor_pos += 1;
-            }
+        KeyCode::Right if app.cursor_pos < char_count => {
+            app.cursor_pos += 1;
         }
         KeyCode::Home => {
             app.cursor_pos = 0;
@@ -1134,40 +1124,36 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
         KeyCode::End => {
             app.cursor_pos = char_count;
         }
-        KeyCode::Backspace => {
-            if app.cursor_pos > 0 {
-                let start = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos - 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                let end = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.drain(start..end);
-                app.cursor_pos -= 1;
-            }
+        KeyCode::Backspace if app.cursor_pos > 0 => {
+            let start = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos - 1)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let end = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            app.input.drain(start..end);
+            app.cursor_pos -= 1;
         }
-        KeyCode::Delete => {
-            if app.cursor_pos < char_count {
-                let start = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                let end = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos + 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.drain(start..end);
-            }
+        KeyCode::Delete if app.cursor_pos < char_count => {
+            let start = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            let end = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos + 1)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            app.input.drain(start..end);
         }
         KeyCode::Char(c) => {
             let byte_idx = app
@@ -1346,24 +1332,22 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
             app.cursor_pos = 0;
             app.message = Some("已取消".to_string());
         }
-        KeyCode::Left => {
-            if app.cursor_pos > 0 {
+        KeyCode::Left
+            if app.cursor_pos > 0 => {
                 app.cursor_pos -= 1;
             }
-        }
-        KeyCode::Right => {
-            if app.cursor_pos < char_count {
+        KeyCode::Right
+            if app.cursor_pos < char_count => {
                 app.cursor_pos += 1;
             }
-        }
         KeyCode::Home => {
             app.cursor_pos = 0;
         }
         KeyCode::End => {
             app.cursor_pos = char_count;
         }
-        KeyCode::Backspace => {
-            if app.cursor_pos > 0 {
+        KeyCode::Backspace
+            if app.cursor_pos > 0 => {
                 let start = app
                     .input
                     .char_indices()
@@ -1379,9 +1363,8 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                 app.input.drain(start..end);
                 app.cursor_pos -= 1;
             }
-        }
-        KeyCode::Delete => {
-            if app.cursor_pos < char_count {
+        KeyCode::Delete
+            if app.cursor_pos < char_count => {
                 let start = app
                     .input
                     .char_indices()
@@ -1396,10 +1379,9 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                     .unwrap_or(app.input.len());
                 app.input.drain(start..end);
             }
-        }
-        KeyCode::Char(c) => {
+        KeyCode::Char(c)
             // 只允许数字和冒号
-            if c.is_ascii_digit() || c == ':' {
+            if (c.is_ascii_digit() || c == ':') => {
                 let byte_idx = app
                     .input
                     .char_indices()
@@ -1409,7 +1391,6 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
                 app.input.insert(byte_idx, c);
                 app.cursor_pos += 1;
             }
-        }
         _ => {}
     }
 }

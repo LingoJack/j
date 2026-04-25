@@ -137,10 +137,7 @@ pub fn expand_command_mentions(
 ) -> String {
     let mut result = text.to_string();
     // 反复查找 @command: 模式
-    loop {
-        let Some(start) = result.find(COMMAND_MENTION_PREFIX) else {
-            break;
-        };
+    while let Some(start) = result.find(COMMAND_MENTION_PREFIX) {
         let name_start = start + COMMAND_MENTION_PREFIX.len();
         // 名称到空白字符或字符串末尾为止
         let name_end = result[name_start..]

@@ -78,7 +78,7 @@ pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String>
 
     // 按最近调用时间排序（新→旧）
     let mut sorted_by_recency: Vec<&InvokedSkill> = skills.values().collect();
-    sorted_by_recency.sort_by(|a, b| b.invoked_at_secs.cmp(&a.invoked_at_secs));
+    sorted_by_recency.sort_by_key(|b| std::cmp::Reverse(b.invoked_at_secs));
 
     let mut result =
         String::from("Skills invoked in this session (preserved across compaction):\n\n");

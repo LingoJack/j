@@ -9,6 +9,7 @@ use crate::constants::{CONFIG_FIELDS, CONFIG_GLOBAL_FIELDS_TAB};
 
 // ========== Model tab helpers ==========
 
+/// 返回 Model 配置页中指定索引字段的显示标签。
 pub fn config_field_label_model(idx: usize) -> &'static str {
     if idx >= CONFIG_FIELDS.len() {
         return "";
@@ -23,6 +24,7 @@ pub fn config_field_label_model(idx: usize) -> &'static str {
     }
 }
 
+/// 返回 Model 配置页中指定索引字段的显示值（敏感信息脱敏）。
 pub fn config_field_value_model(app: &ChatApp, idx: usize) -> String {
     if idx >= CONFIG_FIELDS.len() {
         return String::new();
@@ -60,6 +62,7 @@ pub fn config_field_value_model(app: &ChatApp, idx: usize) -> String {
     }
 }
 
+/// 返回 Model 配置页中指定索引字段的原始值（不脱敏，用于编辑回填）。
 pub fn config_field_raw_value_model(app: &ChatApp, idx: usize) -> String {
     if idx >= CONFIG_FIELDS.len() {
         return String::new();
@@ -82,6 +85,7 @@ pub fn config_field_raw_value_model(app: &ChatApp, idx: usize) -> String {
     }
 }
 
+/// 将用户输入的值写入 Model 配置页指定索引字段。
 pub fn config_field_set_model(app: &mut ChatApp, idx: usize, value: &str) {
     if idx >= CONFIG_FIELDS.len() {
         return;
@@ -112,6 +116,7 @@ pub fn config_field_set_model(app: &mut ChatApp, idx: usize, value: &str) {
 
 // ========== Global tab helpers ==========
 
+/// 返回 Global 配置页中指定索引字段的显示标签。
 pub fn config_field_label_global(idx: usize) -> &'static str {
     let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(idx) else {
         return "";
@@ -159,6 +164,7 @@ pub fn config_field_desc_global(idx: usize) -> &'static str {
     }
 }
 
+/// 返回 Global 配置页中指定索引字段的显示值（敏感信息脱敏）。
 pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
     let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(idx) else {
         return String::new();
@@ -233,6 +239,7 @@ pub fn config_field_value_global(app: &ChatApp, idx: usize) -> String {
     }
 }
 
+/// 返回 Global 配置页中指定索引字段的原始值（不脱敏，用于编辑回填）。
 pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
     let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(idx) else {
         return String::new();
@@ -285,6 +292,7 @@ pub fn config_field_raw_value_global(app: &ChatApp, idx: usize) -> String {
     }
 }
 
+/// 将用户输入的值写入 Global 配置页指定索引字段。
 pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
     let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(idx) else {
         return;

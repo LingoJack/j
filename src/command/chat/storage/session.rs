@@ -275,7 +275,7 @@ pub fn find_latest_session_id() -> Option<String> {
             entries.push((modified, id.to_string()));
         }
     }
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    entries.sort_by_key(|b| std::cmp::Reverse(b.0));
     entries.into_iter().next().map(|(_, id)| id)
 }
 
@@ -601,7 +601,7 @@ pub fn list_sessions() -> Vec<SessionMeta> {
             });
         }
     }
-    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    sessions.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
     sessions
 }
 

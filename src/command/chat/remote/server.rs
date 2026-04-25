@@ -13,6 +13,8 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 
 /// 服务端 ping 间隔（秒）
 const PING_INTERVAL_SECS: u64 = 15;
+/// WebSocket 旧连接断开后轮询等待间隔（毫秒）。
+const WS_DISCONNECT_POLL_MS: u64 = 100;
 /// 未收到 pong 的超时时间（秒）
 const PONG_TIMEOUT_SECS: u64 = 30;
 /// ECDH 密钥协商超时（秒）
@@ -144,7 +146,7 @@ async fn handle_connection(
             if !ws_state.client_connected.load(Ordering::Relaxed) {
                 break;
             }
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(WS_DISCONNECT_POLL_MS)).await;
         }
 
         // WebSocket 升级

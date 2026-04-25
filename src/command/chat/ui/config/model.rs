@@ -1,5 +1,5 @@
 use super::super::super::ui_helpers::{config_field_label_model, config_field_value_model};
-use super::super::components::secret_field_row;
+use super::super::components::{RowContext, secret_field_row};
 use crate::command::chat::app::ChatApp;
 use crate::constants::CONFIG_FIELDS;
 use crate::tui::components::{
@@ -256,13 +256,16 @@ pub(super) fn draw_tab_model_list<'a>(app: &ChatApp) -> ItemList<'a> {
             };
 
             let line = if *provider_field == "api_key" {
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
                 secret_field_row(
                     label,
                     &value,
-                    is_selected,
                     app.ui.config_editing,
                     app.ui.config_edit_cursor,
-                    t,
+                    &ctx,
                 )
             } else if *provider_field == "supports_vision" {
                 let toggle_on = if let Some(p) = app

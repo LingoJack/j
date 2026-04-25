@@ -3,6 +3,9 @@ use super::super::teammate::TeammateStatus;
 use super::super::tools::derived_shared::SubAgentStatus;
 use crate::command::chat::context::compact::estimate_tokens;
 use crate::util::text::display_width;
+
+/// 标题栏模型名最大显示字符数。
+const TITLE_MODEL_NAME_MAX_CHARS: usize = 20;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -365,7 +368,7 @@ fn short_subagent_label(description: &str) -> String {
     if cleaned.chars().count() <= 20 {
         cleaned
     } else {
-        let s: String = cleaned.chars().take(20).collect();
+        let s: String = cleaned.chars().take(TITLE_MODEL_NAME_MAX_CHARS).collect();
         format!("{}…", s)
     }
 }

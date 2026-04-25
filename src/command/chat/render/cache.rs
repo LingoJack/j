@@ -33,7 +33,28 @@ const BUBBLE_MIN_WIDTH: usize = 20;
 const USER_BUBBLE_PAD_LR: usize = 3;
 /// `render_tool_result_msg` / `render_bash_result` 普通结果截断显示的行数上限
 const TOOL_RESULT_DISPLAY_MAX_LINES: usize = 100;
+/// Plan 内容折叠时最大显示行数。
+const PLAN_DISPLAY_MAX_LINES: usize = 20;
 
+// ── 渲染上下文结构体（提取自多参数渲染函数的公共参数）──
+
+/// 消息渲染的公共上下文
+pub struct RenderContext<'a> {
+    pub bubble_max_width: usize,
+    pub lines: &'a mut Vec<Line<'static>>,
+    pub theme: &'a Theme,
+    pub expand: bool,
+}
+
+/// 内容渲染的公共上下文（用于工具结果等）
+pub(crate) struct ContentContext<'a> {
+    pub content_w: usize,
+    pub lines: &'a mut Vec<Line<'static>>,
+    pub theme: &'a Theme,
+    pub expand: bool,
+}
+
+/// 在 Markdown 内容中查找一个安全的截断边界，确保不会在代码围栏中间截断。
 pub fn find_stable_boundary(content: &str) -> usize {
     // 统计 ``` 出现次数，奇数说明有未闭合的代码块
     let mut fence_count = 0usize;
@@ -147,33 +168,37 @@ pub fn build_message_lines_incremental(
         let mut tmp_lines: Vec<Line<'static>> = Vec::new();
         match m.display_type() {
             DisplayType::User => {
-                render_user_msg(
-                    &m.content,
-                    is_selected,
-                    inner_width,
+                let mut ctx = RenderContext {
                     bubble_max_width,
-                    &mut tmp_lines,
-                    t,
-                );
+                    lines: &mut tmp_lines,
+                    theme: t,
+                    expand,
+                };
+                render_user_msg(&m.content, is_selected, inner_width, &mut ctx);
             }
             DisplayType::AssistantText => {
+                let mut ctx = RenderContext {
+                    bubble_max_width,
+                    lines: &mut tmp_lines,
+                    theme: t,
+                    expand,
+                };
                 // 如果有 reasoning_content，先渲染 thinking 区块
                 if let Some(ref reasoning) = m.reasoning_content {
-                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t, expand);
+                    render_thinking_block(reasoning, &mut ctx);
                 }
-                render_assistant_msg(
-                    m.sender_name.as_deref(),
-                    &m.content,
-                    is_selected,
-                    bubble_max_width,
-                    &mut tmp_lines,
-                    t,
-                );
+                render_assistant_msg(m.sender_name.as_deref(), &m.content, is_selected, &mut ctx);
             }
             DisplayType::ToolCallRequest => {
+                let mut ctx = RenderContext {
+                    bubble_max_width,
+                    lines: &mut tmp_lines,
+                    theme: t,
+                    expand,
+                };
                 // 如果有 reasoning_content，先渲染 thinking 区块
                 if let Some(ref reasoning) = m.reasoning_content {
-                    render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t, expand);
+                    render_thinking_block(reasoning, &mut ctx);
                 }
                 // 先渲染文本内容（如果有）— LLM 可能同时返回文本解释和工具调用
                 if !m.content.is_empty() {
@@ -181,20 +206,12 @@ pub fn build_message_lines_incremental(
                         m.sender_name.as_deref(),
                         &m.content,
                         is_selected,
-                        bubble_max_width,
-                        &mut tmp_lines,
-                        t,
+                        &mut ctx,
                     );
                 }
                 // 再渲染工具调用
                 if let Some(ref tool_calls) = m.tool_calls {
-                    render_tool_call_request_msg(
-                        tool_calls,
-                        bubble_max_width,
-                        &mut tmp_lines,
-                        t,
-                        expand,
-                    );
+                    render_tool_call_request_msg(tool_calls, &mut ctx);
                 }
             }
             DisplayType::ToolResult => {
@@ -525,10 +542,11 @@ pub fn render_user_msg(
     content: &str,
     is_selected: bool,
     inner_width: usize,
-    bubble_max_width: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
+    ctx: &mut RenderContext<'_>,
 ) {
+    let lines = &mut *ctx.lines;
+    let theme = ctx.theme;
+    let bubble_max_width = ctx.bubble_max_width;
     lines.push(Line::from(""));
     let label = if is_selected { "▶ You " } else { "You " };
     let pad = inner_width.saturating_sub(display_width(label) + 2);
@@ -643,13 +661,11 @@ fn agent_name_color(name: &str) -> Color {
 
 /// 渲染 thinking 区块（reasoning_content），显示在 AI 气泡上方
 /// 折叠模式下（expand=false）仅显示前若干行，避免占用过多屏幕空间
-fn render_thinking_block(
-    reasoning: &str,
-    bubble_max_width: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
-    expand: bool,
-) {
+fn render_thinking_block(reasoning: &str, ctx: &mut RenderContext<'_>) {
+    let lines = &mut *ctx.lines;
+    let theme = ctx.theme;
+    let bubble_max_width = ctx.bubble_max_width;
+    let expand = ctx.expand;
     if reasoning.is_empty() {
         return;
     }
@@ -707,10 +723,12 @@ pub fn render_assistant_msg(
     sender_name: Option<&str>,
     content: &str,
     is_selected: bool,
-    bubble_max_width: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
+    ctx: &mut RenderContext<'_>,
 ) {
+    let lines = &mut *ctx.lines;
+    let theme = ctx.theme;
+    let bubble_max_width = ctx.bubble_max_width;
+
     if content.is_empty() {
         return;
     }
@@ -1652,7 +1670,11 @@ fn render_plan_approval_confirm_area(
     ));
 
     // Plan 内容（折行显示，最多 20 行）
-    let plan_lines: Vec<&str> = req.plan_content.lines().take(20).collect();
+    let plan_lines: Vec<&str> = req
+        .plan_content
+        .lines()
+        .take(PLAN_DISPLAY_MAX_LINES)
+        .collect();
     for line in &plan_lines {
         for wrapped in wrap_text(line, content_w) {
             lines.push(bordered_line(
@@ -1707,13 +1729,11 @@ fn render_plan_approval_confirm_area(
     )));
 }
 
-pub fn render_tool_call_request_msg(
-    tool_calls: &[ToolCallItem],
-    bubble_max_width: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
-    expand: bool,
-) {
+pub fn render_tool_call_request_msg(tool_calls: &[ToolCallItem], ctx: &mut RenderContext<'_>) {
+    let lines = &mut *ctx.lines;
+    let theme = ctx.theme;
+    let bubble_max_width = ctx.bubble_max_width;
+    let expand = ctx.expand;
     let content_w = bubble_max_width.saturating_sub(6);
 
     // 与前一条消息之间留一行间距
@@ -2096,10 +2116,27 @@ pub fn render_tool_result_msg(
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
     } else if tool_name == tool_names::BASH {
         // Bash 结果：命令行高亮 + 输出
-        render_bash_result(&clean, tool_args, content_w, lines, theme);
+        render_bash_result(
+            &clean,
+            tool_args,
+            &mut ContentContext {
+                content_w,
+                lines,
+                theme,
+                expand: false,
+            },
+        );
     } else if tool_name == tool_names::TODO_READ || tool_name == tool_names::TODO_WRITE {
         // TodoRead/TodoWrite 结果：折叠和展开都显示 todo 列表
-        render_todo_result(content, content_w, lines, theme, expand);
+        render_todo_result(
+            content,
+            &mut ContentContext {
+                content_w,
+                lines,
+                theme,
+                expand,
+            },
+        );
     } else {
         // 正常结果
         let all_lines: Vec<&str> = clean.lines().take(NORMAL_RESULT_MAX_LINES).collect();
@@ -2233,13 +2270,10 @@ fn render_agent_result_nested(
 }
 
 /// 渲染 Bash 工具结果（命令行高亮 + 输出）
-fn render_bash_result(
-    content: &str,
-    tool_args: Option<&str>,
-    content_w: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
-) {
+fn render_bash_result(content: &str, tool_args: Option<&str>, ctx: &mut ContentContext<'_>) {
+    let lines = &mut *ctx.lines;
+    let theme = ctx.theme;
+    let content_w = ctx.content_w;
     // 提取命令
     let command = tool_args
         .and_then(|args| serde_json::from_str::<serde_json::Value>(args).ok())
@@ -2289,13 +2323,11 @@ fn render_bash_result(
 
 /// 渲染 TodoRead/TodoWrite 工具结果（实心点/空心点样式）
 /// expand=true 时额外显示完成/未完成条数统计
-fn render_todo_result(
-    content: &str,
-    content_w: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
-    expand: bool,
-) {
+fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
+    let lines = &mut *ctx.lines;
+    let theme = ctx.theme;
+    let content_w = ctx.content_w;
+    let expand = ctx.expand;
     if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(content) {
         // 展开模式：先显示统计信息
         if expand {

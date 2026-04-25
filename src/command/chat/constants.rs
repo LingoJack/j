@@ -155,6 +155,8 @@ pub const HOOK_DEFAULT_LLM_TIMEOUT_SECS: u64 = 30;
 
 /// LLM hook 最大生成 token 数
 pub const HOOK_LLM_MAX_TOKENS: u64 = 2048;
+/// LLM hook 默认温度值（0.0 = 确定性输出）
+pub const HOOK_LLM_TEMPERATURE: f32 = 0.0;
 
 // ========== 后台任务相关 ==========
 
@@ -243,6 +245,8 @@ pub const INPUT_THREAD_POLL_MS: u64 = 50;
 
 /// 输入线程暂停后等待时间（毫秒，确保线程退出当前 poll 周期）
 pub const INPUT_THREAD_PAUSE_SETTLE_MS: u64 = 120;
+/// 输入线程读取/poll 出错后重试休眠间隔（毫秒）
+pub const INPUT_THREAD_RETRY_SLEEP_MS: u64 = 10;
 
 // ========== TUI 主循环 ==========
 

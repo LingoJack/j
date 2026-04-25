@@ -27,6 +27,9 @@ use ratatui::{
 };
 use std::io;
 
+/// 编辑器事件轮询间隔（约 60fps）。
+const EDITOR_POLL_MS: u64 = 16;
+
 /// 主题画廊项（显示名称 + 主题ID + 主题）
 pub type ThemeGalleryItem = (&'static str, &'static str, EditorTheme);
 
@@ -382,13 +385,12 @@ impl MarkdownEditor {
             Mode::Search(pattern) => {
                 let mut pattern = pattern.clone();
                 match &input.key {
-                    Key::Char(c) => {
+                    Key::Char(c)
                         // 过滤控制字符（如 Esc 产生的 \x1b）
-                        if !c.is_control() {
+                        if !c.is_control() => {
                             pattern.push(*c);
                             self.search.search(&pattern, self.buffer.lines());
                         }
-                    }
                     Key::Backspace => {
                         pattern.pop();
                         self.search.search(&pattern, self.buffer.lines());
@@ -1013,7 +1015,7 @@ pub fn open_markdown_editor_on_terminal(
             editor.render(f, area);
         })?;
 
-        if event::poll(std::time::Duration::from_millis(16))? {
+        if event::poll(std::time::Duration::from_millis(EDITOR_POLL_MS))? {
             let evt = event::read()?;
 
             if let Event::Key(key) = evt {

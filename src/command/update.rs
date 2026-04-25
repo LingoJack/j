@@ -339,17 +339,15 @@ fn select_features() -> Vec<String> {
                 KeyCode::Up | KeyCode::Char('k') => {
                     cursor_pos = cursor_pos.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if cursor_pos < OPTIONAL_FEATURES.len() {
+                KeyCode::Down | KeyCode::Char('j')
+                    if cursor_pos < OPTIONAL_FEATURES.len() => {
                         cursor_pos += 1;
                     }
-                }
-                KeyCode::Char(' ') => {
+                KeyCode::Char(' ')
                     // 空格切换选中状态（仅在 feature 行上有效）
-                    if cursor_pos < OPTIONAL_FEATURES.len() {
+                    if cursor_pos < OPTIONAL_FEATURES.len() => {
                         selected[cursor_pos] = !selected[cursor_pos];
                     }
-                }
                 KeyCode::Enter => {
                     // 如果光标在 "确认安装" 行上，直接确认
                     if cursor_pos == OPTIONAL_FEATURES.len() {

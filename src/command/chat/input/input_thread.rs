@@ -1,5 +1,6 @@
 use crate::command::chat::constants::{
     INPUT_THREAD_PAUSE_SETTLE_MS, INPUT_THREAD_PAUSE_WAIT_MS, INPUT_THREAD_POLL_MS,
+    INPUT_THREAD_RETRY_SLEEP_MS,
 };
 use crossterm::event::{self, Event};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -71,7 +72,9 @@ impl InputThread {
                         }
                         Err(_) => {
                             // read 出错（极罕见），短暂休眠后重试
-                            std::thread::sleep(std::time::Duration::from_millis(10));
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                INPUT_THREAD_RETRY_SLEEP_MS,
+                            ));
                         }
                     }
                 }
@@ -80,7 +83,9 @@ impl InputThread {
                 }
                 Err(_) => {
                     // poll 出错，短暂休眠后重试
-                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        INPUT_THREAD_RETRY_SLEEP_MS,
+                    ));
                 }
             }
         }

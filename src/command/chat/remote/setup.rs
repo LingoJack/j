@@ -4,6 +4,9 @@ use std::net::UdpSocket;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
+/// 远程模式启动后等待客户端就绪的时间（毫秒）。
+const REMOTE_STARTUP_WAIT_MS: u64 = 500;
+
 fn detect_local_ip() -> String {
     if let Ok(socket) = UdpSocket::bind("0.0.0.0:0")
         && socket.connect("8.8.8.8:80").is_ok()
@@ -51,6 +54,7 @@ async fn bind_with_reuse(port: u16) -> io::Result<tokio::net::TcpListener> {
     socket.listen(128)
 }
 
+/// 启动远程 WebSocket 桥接服务器并阻塞等待客户端连接，返回桥接实例和连接 URL。
 pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     let ip = detect_local_ip();
     let token = generate_token();
@@ -95,7 +99,7 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
     }
 
     println!("  ✅ 客户端已连接！正在启动对话界面...\n");
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    std::thread::sleep(std::time::Duration::from_millis(REMOTE_STARTUP_WAIT_MS));
 
     Ok((bridge, url))
 }

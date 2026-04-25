@@ -466,10 +466,8 @@ pub fn handle_normal_mode(app: &mut TodoApp, key: KeyEvent) -> bool {
                 }
             }
         }
-        KeyCode::Char('d') => {
-            if app.selected_real_index().is_some() {
-                app.mode = AppMode::ConfirmDelete;
-            }
+        KeyCode::Char('d') if app.selected_real_index().is_some() => {
+            app.mode = AppMode::ConfirmDelete;
         }
         KeyCode::Char('f') => app.toggle_filter(),
         KeyCode::Char('s') => app.save(),
@@ -540,15 +538,11 @@ pub fn handle_input_mode(app: &mut TodoApp, key: KeyEvent) {
                 app.message = Some("已取消".to_string());
             }
         }
-        KeyCode::Left => {
-            if app.cursor_pos > 0 {
-                app.cursor_pos -= 1;
-            }
+        KeyCode::Left if app.cursor_pos > 0 => {
+            app.cursor_pos -= 1;
         }
-        KeyCode::Right => {
-            if app.cursor_pos < char_count {
-                app.cursor_pos += 1;
-            }
+        KeyCode::Right if app.cursor_pos < char_count => {
+            app.cursor_pos += 1;
         }
         KeyCode::Home => {
             app.cursor_pos = 0;
@@ -556,40 +550,36 @@ pub fn handle_input_mode(app: &mut TodoApp, key: KeyEvent) {
         KeyCode::End => {
             app.cursor_pos = char_count;
         }
-        KeyCode::Backspace => {
-            if app.cursor_pos > 0 {
-                let start = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos - 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                let end = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.drain(start..end);
-                app.cursor_pos -= 1;
-            }
+        KeyCode::Backspace if app.cursor_pos > 0 => {
+            let start = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos - 1)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let end = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            app.input.drain(start..end);
+            app.cursor_pos -= 1;
         }
-        KeyCode::Delete => {
-            if app.cursor_pos < char_count {
-                let start = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                let end = app
-                    .input
-                    .char_indices()
-                    .nth(app.cursor_pos + 1)
-                    .map(|(i, _)| i)
-                    .unwrap_or(app.input.len());
-                app.input.drain(start..end);
-            }
+        KeyCode::Delete if app.cursor_pos < char_count => {
+            let start = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            let end = app
+                .input
+                .char_indices()
+                .nth(app.cursor_pos + 1)
+                .map(|(i, _)| i)
+                .unwrap_or(app.input.len());
+            app.input.drain(start..end);
         }
         KeyCode::Char(c) => {
             let byte_idx = app
@@ -667,22 +657,18 @@ pub fn handle_command_popup_mode(app: &mut TodoApp, key: KeyEvent) {
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
-            if !items.is_empty() {
-                if app.cmd_popup_selected > 0 {
-                    app.cmd_popup_selected -= 1;
-                } else {
-                    app.cmd_popup_selected = items.len() - 1;
-                }
+        KeyCode::Up | KeyCode::Char('k') if !items.is_empty() => {
+            if app.cmd_popup_selected > 0 {
+                app.cmd_popup_selected -= 1;
+            } else {
+                app.cmd_popup_selected = items.len() - 1;
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if !items.is_empty() {
-                if app.cmd_popup_selected < items.len() - 1 {
-                    app.cmd_popup_selected += 1;
-                } else {
-                    app.cmd_popup_selected = 0;
-                }
+        KeyCode::Down | KeyCode::Char('j') if !items.is_empty() => {
+            if app.cmd_popup_selected < items.len() - 1 {
+                app.cmd_popup_selected += 1;
+            } else {
+                app.cmd_popup_selected = 0;
             }
         }
         KeyCode::Backspace => {

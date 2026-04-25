@@ -14,6 +14,9 @@ use crate::theme::ThemeName;
 use app::{AppMode, HelpApp};
 use ui::draw_help_ui;
 
+/// 帮助页事件轮询间隔（毫秒）。
+const HELP_POLL_MS: u64 = 100;
+
 /// RAII guard：确保终端模式恢复（即使 panic 也会执行清理）
 struct TerminalGuard {
     active: bool,
@@ -69,7 +72,7 @@ fn run_help_tui() -> io::Result<()> {
             loop {
                 terminal.draw(|f| draw_help_ui(f, app))?;
 
-                if event::poll(std::time::Duration::from_millis(100))? {
+                if event::poll(std::time::Duration::from_millis(HELP_POLL_MS))? {
                     match event::read()? {
                         Event::Key(key) => {
                             if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -166,22 +169,18 @@ fn handle_command_popup_key(app: &mut HelpApp, key: crossterm::event::KeyEvent) 
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
-            if !items.is_empty() {
-                if app.cmd_popup_selected > 0 {
-                    app.cmd_popup_selected -= 1;
-                } else {
-                    app.cmd_popup_selected = items.len() - 1;
-                }
+        KeyCode::Up | KeyCode::Char('k') if !items.is_empty() => {
+            if app.cmd_popup_selected > 0 {
+                app.cmd_popup_selected -= 1;
+            } else {
+                app.cmd_popup_selected = items.len() - 1;
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if !items.is_empty() {
-                if app.cmd_popup_selected < items.len() - 1 {
-                    app.cmd_popup_selected += 1;
-                } else {
-                    app.cmd_popup_selected = 0;
-                }
+        KeyCode::Down | KeyCode::Char('j') if !items.is_empty() => {
+            if app.cmd_popup_selected < items.len() - 1 {
+                app.cmd_popup_selected += 1;
+            } else {
+                app.cmd_popup_selected = 0;
             }
         }
         KeyCode::Backspace => {
@@ -231,22 +230,18 @@ fn handle_theme_select_key(app: &mut HelpApp, key: crossterm::event::KeyEvent) {
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
-            if count > 0 {
-                if app.theme_popup_selected > 0 {
-                    app.theme_popup_selected -= 1;
-                } else {
-                    app.theme_popup_selected = count - 1;
-                }
+        KeyCode::Up | KeyCode::Char('k') if count > 0 => {
+            if app.theme_popup_selected > 0 {
+                app.theme_popup_selected -= 1;
+            } else {
+                app.theme_popup_selected = count - 1;
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if count > 0 {
-                if app.theme_popup_selected < count - 1 {
-                    app.theme_popup_selected += 1;
-                } else {
-                    app.theme_popup_selected = 0;
-                }
+        KeyCode::Down | KeyCode::Char('j') if count > 0 => {
+            if app.theme_popup_selected < count - 1 {
+                app.theme_popup_selected += 1;
+            } else {
+                app.theme_popup_selected = 0;
             }
         }
         KeyCode::Enter => {

@@ -8,6 +8,9 @@ use crate::command::chat::storage::load_agent_config;
 use crate::constants::{notebook_action, shell};
 use crate::theme::Theme;
 use crate::util::fuzzy;
+
+/// Notebook 事件轮询间隔（约 60fps）。
+const NOTEBOOK_POLL_MS: u64 = 16;
 use crate::{error, info};
 use colored::Colorize;
 use crossterm::event::{KeyCode, MouseEvent, MouseEventKind};
@@ -359,7 +362,7 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
-        if event::poll(std::time::Duration::from_millis(16))? {
+        if event::poll(std::time::Duration::from_millis(NOTEBOOK_POLL_MS))? {
             match event::read()? {
                 Event::Key(key) => {
                     let mut edit_requested: Option<String> = None;

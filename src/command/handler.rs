@@ -90,7 +90,15 @@ command_handlers! {
 
     // ========== AI 对话 ==========
     ChatCmd { cont: bool, session: Option<String>, content: Vec<String>, remote: bool, port: u16, bypass: bool } => |self, config| {
-        crate::command::chat::handle_chat(&self.content, self.cont, self.session.as_deref(), self.remote, self.port, self.bypass, config);
+        crate::command::chat::handle_chat(crate::command::chat::ChatArgs {
+            content: &self.content,
+            cont: self.cont,
+            session_id: self.session.as_deref(),
+            remote: self.remote,
+            port: self.port,
+            bypass: self.bypass,
+            config,
+        });
     },
 
     // ========== 脚本 ==========

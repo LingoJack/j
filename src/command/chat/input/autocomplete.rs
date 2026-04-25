@@ -120,6 +120,7 @@ pub enum AtPopupItem {
 
 impl AtPopupItem {}
 
+/// 根据当前输入光标位置更新 @ 弹窗的过滤关键字。
 pub fn update_at_filter(app: &mut ChatApp) {
     let chars: Vec<char> = app.ui.input_text().chars().collect();
     let cursor_pos = app.ui.cursor_char_idx();

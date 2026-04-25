@@ -8,6 +8,9 @@ use super::constant::{
 };
 use super::ui::draw_ui;
 use crate::config::YamlConfig;
+
+/// Todo TUI 事件轮询间隔（毫秒）。
+const TODO_POLL_MS: u64 = 100;
 use crate::{error, info, usage};
 use chrono::Local;
 use crossterm::{
@@ -154,7 +157,7 @@ fn run_todo_tui_internal(config: &mut YamlConfig) -> io::Result<()> {
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
-        if event::poll(std::time::Duration::from_millis(100))?
+        if event::poll(std::time::Duration::from_millis(TODO_POLL_MS))?
             && let Event::Key(key) = event::read()?
         {
             match app.mode {

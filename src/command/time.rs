@@ -118,6 +118,9 @@ fn run_countdown(total_secs: u64) {
     display_celebration();
 }
 
+/// 加载动画帧间隔（毫秒）。
+const LOADING_FRAME_INTERVAL_MS: u64 = 600;
+
 /// 结束庆祝动画
 fn display_celebration() {
     let frames = [
@@ -138,7 +141,7 @@ fn display_celebration() {
         // 用空格覆盖上一帧的残余字符
         print!("\r{:<60}", frames[i % frames.len()]);
         let _ = io::stdout().flush();
-        std::thread::sleep(std::time::Duration::from_millis(600));
+        std::thread::sleep(std::time::Duration::from_millis(LOADING_FRAME_INTERVAL_MS));
     }
     println!();
 }

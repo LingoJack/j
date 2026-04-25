@@ -2,7 +2,7 @@ use super::super::super::ui_helpers::{
     config_field_desc_global, config_field_label_global, config_field_value_global,
 };
 use super::super::components::{
-    global_preview_row, global_text_row, global_theme_row, global_toggle_row,
+    RowContext, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
 };
 use crate::command::chat::app::ChatApp;
 use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
@@ -95,65 +95,53 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
 
             let line = if *field_name == "auto_restore_session" {
                 let toggle_on = app.state.agent_config.auto_restore_session;
-                global_toggle_row(
-                    label,
-                    toggle_on,
-                    desc,
-                    is_selected,
-                    "Enter \u{5207}\u{6362}",
-                    t,
-                )
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
+                global_toggle_row(label, toggle_on, desc, "Enter \u{5207}\u{6362}", &ctx)
             } else if *field_name == "compact_enabled" {
                 let toggle_on = app.state.agent_config.compact.enabled;
-                global_toggle_row(
-                    label,
-                    toggle_on,
-                    desc,
-                    is_selected,
-                    "Enter \u{5207}\u{6362}",
-                    t,
-                )
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
+                global_toggle_row(label, toggle_on, desc, "Enter \u{5207}\u{6362}", &ctx)
             } else if *field_name == "theme" {
                 let theme_name = app.state.agent_config.theme.display_name();
-                global_theme_row(
-                    label,
-                    theme_name,
-                    desc,
-                    is_selected,
-                    "Enter \u{5207}\u{6362}",
-                    t,
-                )
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
+                global_theme_row(label, theme_name, desc, "Enter \u{5207}\u{6362}", &ctx)
             } else if *field_name == "thinking_style" {
                 let style_name = app.state.agent_config.thinking_style.display_name();
-                global_theme_row(
-                    label,
-                    style_name,
-                    desc,
-                    is_selected,
-                    "Enter \u{5207}\u{6362}",
-                    t,
-                )
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
+                global_theme_row(label, style_name, desc, "Enter \u{5207}\u{6362}", &ctx)
             } else if *field_name == "system_prompt"
                 || *field_name == "agent_md"
                 || *field_name == "style"
             {
-                global_preview_row(
-                    label,
-                    &value,
-                    desc,
-                    is_selected,
-                    "Enter \u{7f16}\u{8f91}",
-                    t,
-                )
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
+                global_preview_row(label, &value, desc, "Enter \u{7f16}\u{8f91}", &ctx)
             } else {
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
                 global_text_row(
                     label,
                     &value,
                     desc,
-                    is_selected,
                     app.ui.config_editing,
                     app.ui.config_edit_cursor,
-                    t,
+                    &ctx,
                 )
             };
             list.push(line);

@@ -35,6 +35,13 @@ use std::time::Duration;
 /// 工具调用参数最大预览长度（与 TUI TOOL_ARG_PREVIEW_MAX_CHARS 对齐）
 const TOOL_ARG_PREVIEW_MAX_CHARS: usize = 60;
 
+/// 退出动画 tick 间隔（毫秒）。
+const ONESHOT_EXIT_TICK_MS: u64 = 100;
+/// 退出动画结束后等待时间（毫秒）。
+const ONESHOT_EXIT_SETTLE_MS: u64 = 50;
+/// Agent 结果轮询间隔（毫秒）。
+const ONESHOT_POLL_MS: u64 = 30;
+
 /// 从工具调用参数 JSON 中提取描述信息
 fn extract_tool_desc(tool_name: &str, arguments: &str) -> Option<String> {
     let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
@@ -230,7 +237,7 @@ fn start_thinking_animation(thinking_style: ThinkingStyle) -> Arc<AtomicBool> {
             let _ = stdout.flush();
 
             tick += 1;
-            std::thread::sleep(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(ONESHOT_EXIT_TICK_MS));
         }
 
         // 清除动画行
@@ -249,7 +256,7 @@ fn start_thinking_animation(thinking_style: ThinkingStyle) -> Arc<AtomicBool> {
 fn stop_thinking_animation(stop_flag: &Arc<AtomicBool>) {
     stop_flag.store(true, Ordering::Relaxed);
     // 给动画线程时间清除行
-    std::thread::sleep(Duration::from_millis(50));
+    std::thread::sleep(Duration::from_millis(ONESHOT_EXIT_SETTLE_MS));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -270,16 +277,29 @@ fn persist_messages(session_id: &str, messages: &[ChatMessage], start_idx: usize
     }
 }
 
+/// oneshot chat 启动参数
+#[derive(Debug)]
+pub struct ChatArgs<'a> {
+    pub content: &'a [String],
+    pub cont: bool,
+    pub session_id: Option<&'a str>,
+    pub remote: bool,
+    pub port: u16,
+    pub bypass: bool,
+    pub config: &'a YamlConfig,
+}
+
 /// 处理 chat 子命令入口
-pub fn handle_chat(
-    content: &[String],
-    cont: bool,
-    session_id_opt: Option<&str>,
-    remote: bool,
-    port: u16,
-    bypass: bool,
-    _config: &YamlConfig,
-) {
+pub fn handle_chat(args: ChatArgs<'_>) {
+    let ChatArgs {
+        content,
+        cont,
+        session_id: session_id_opt,
+        remote,
+        port,
+        bypass,
+        config: _config,
+    } = args;
     let agent_config = load_agent_config();
 
     if remote
@@ -1061,7 +1081,7 @@ fn run_oneshot_agent(
     loop {
         let msgs = handle.poll();
         if msgs.is_empty() {
-            std::thread::sleep(Duration::from_millis(30));
+            std::thread::sleep(Duration::from_millis(ONESHOT_POLL_MS));
             continue;
         }
         for msg in msgs {

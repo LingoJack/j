@@ -2,6 +2,7 @@ use super::entity::AgentTask;
 use super::task_manager::TaskManager;
 use std::sync::Arc;
 
+/// 构建当前活跃任务的 Markdown 摘要文本，用于系统提示注入。
 pub fn build_tasks_summary(task_manager: &Arc<TaskManager>) -> String {
     let tasks = task_manager.list_tasks();
     let active: Vec<&AgentTask> = tasks

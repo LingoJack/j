@@ -9,6 +9,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
+/// Git worktree 移除后等待锁释放的时间（毫秒）。
+const GIT_LOCK_RELEASE_WAIT_MS: u64 = 200;
+/// Worktree 清理时等待 git 操作完成的时间（毫秒）。
+const WORKTREE_CLEANUP_WAIT_MS: u64 = 100;
+
 // ========== Worktree Session State ==========
 
 /// 当前 worktree 会话信息
@@ -215,7 +220,7 @@ pub fn remove_agent_worktree(worktree_path: &std::path::Path, branch: &str) {
         .args(["worktree", "remove", "--force", &wt_str])
         .output();
     // 等 git 释放内部锁
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    std::thread::sleep(std::time::Duration::from_millis(GIT_LOCK_RELEASE_WAIT_MS));
     let _ = Command::new("git").args(["branch", "-D", branch]).output();
 }
 
@@ -550,7 +555,7 @@ impl Tool for ExitWorktreeTool {
                 }
 
                 // 等待 git 释放锁
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(WORKTREE_CLEANUP_WAIT_MS));
 
                 // 删除分支
                 let branch_result = Command::new("git")

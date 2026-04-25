@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
+/// 将 Markdown 文本渲染为 TUI 可显示的 `Line` 列表，应用主题着色和自动换行。
 pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<'static>> {
     use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
@@ -347,12 +348,12 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     *last = Span::styled(symbol, style);
                 }
             }
-            Event::Start(Tag::Paragraph) => {
-                if !lines.is_empty() && !in_code_block && heading_level.is_none() {
-                    let last_empty = lines.last().map(|l| l.spans.is_empty()).unwrap_or(false);
-                    if !last_empty {
-                        lines.push(Line::from(""));
-                    }
+            Event::Start(Tag::Paragraph)
+                if !lines.is_empty() && !in_code_block && heading_level.is_none() =>
+            {
+                let last_empty = lines.last().map(|l| l.spans.is_empty()).unwrap_or(false);
+                if !last_empty {
+                    lines.push(Line::from(""));
                 }
             }
             Event::End(TagEnd::Paragraph) => {

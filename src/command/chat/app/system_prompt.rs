@@ -15,6 +15,7 @@ pub struct StaticPlaceholderValues<'a> {
     pub project_skill_dir: &'a str,
 }
 
+/// 将静态占位符值应用到系统提示模板中，返回替换后的完整字符串。
 pub fn apply_static_placeholders(template: &str, values: &StaticPlaceholderValues<'_>) -> String {
     template
         .replace("{{.current_dir}}", values.current_dir)

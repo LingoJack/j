@@ -82,6 +82,7 @@ fn run_ax_helper(args: &[&str]) -> Result<String, AicError> {
 
 // --- Public query functions ---
 
+/// 查询指定应用的辅助功能树，可选限制深度和仅可点击元素。
 pub fn query_tree(
     app: Option<&str>,
     depth: Option<u32>,
@@ -105,6 +106,7 @@ pub fn query_tree(
     serde_json::from_str(&json).map_err(|e| AicError::AxParseFailed(e.to_string()))
 }
 
+/// 根据查询字符串在辅助功能树中查找匹配元素。
 pub fn find_elements(
     query: &str,
     app: Option<&str>,
@@ -124,6 +126,7 @@ pub fn find_elements(
     serde_json::from_str(&json).map_err(|e| AicError::AxParseFailed(e.to_string()))
 }
 
+/// 收集指定应用中所有可交互元素（按钮、链接等）。
 pub fn collect_interactive_elements(app: Option<&str>) -> Result<Vec<FindResult>, AicError> {
     let mut args: Vec<&str> = vec!["interactive"];
     if let Some(a) = app {

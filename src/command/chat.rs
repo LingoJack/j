@@ -20,6 +20,7 @@ pub mod ui;
 #[cfg(test)]
 mod regression_tests;
 
+pub use oneshot::ChatArgs;
 pub use oneshot::handle_chat;
 
 // Re-exports needed by super::super:: relative paths within chat submodules

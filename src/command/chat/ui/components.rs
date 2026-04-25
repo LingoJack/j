@@ -12,6 +12,13 @@ use ratatui::{
     text::{Line, Span},
 };
 
+/// UI 配置行组件的公共渲染参数
+#[derive(Debug)]
+pub struct RowContext<'a> {
+    pub selected: bool,
+    pub theme: &'a Theme,
+}
+
 // ── 预览值（内部）───────────────────────────────────────────
 
 /// 长文本截断预览（替换换行为空格，超 40 字符截断）
@@ -34,14 +41,15 @@ fn render_preview_value(raw: &str) -> String {
 // ── API Key 遮罩字段行（chat 专属）─────────────────────────────
 
 /// API Key 字段（未编辑时使用 api_key 颜色）
-pub fn secret_field_row<'a>(
+pub(crate) fn secret_field_row<'a>(
     label: &str,
     value: &str,
-    selected: bool,
     editing: bool,
     cursor: usize,
-    theme: &Theme,
+    ctx: &RowContext<'_>,
 ) -> Line<'a> {
+    let selected = ctx.selected;
+    let theme = ctx.theme;
     if editing && selected {
         let vs = value_style(selected, editing, theme);
         let mut spans = vec![
@@ -76,15 +84,16 @@ pub fn secret_field_row<'a>(
 // ── Global tab 三列布局行（chat 专属）───────────────────────────
 
 /// Global tab 可编辑文本行（三列: label | value | desc）
-pub fn global_text_row<'a>(
+pub(crate) fn global_text_row<'a>(
     label: &str,
     value: &str,
     desc: &str,
-    selected: bool,
     editing: bool,
     cursor: usize,
-    theme: &Theme,
+    ctx: &RowContext<'_>,
 ) -> Line<'a> {
+    let selected = ctx.selected;
+    let theme = ctx.theme;
     let vs = value_style(selected, editing, theme);
     if editing && selected {
         let mut spans = vec![
@@ -111,14 +120,15 @@ pub fn global_text_row<'a>(
 }
 
 /// Global tab 开关行（三列: label | toggle | desc）
-pub fn global_toggle_row<'a>(
+pub(crate) fn global_toggle_row<'a>(
     label: &str,
     is_on: bool,
     desc: &str,
-    selected: bool,
     hint: &str,
-    theme: &Theme,
+    ctx: &RowContext<'_>,
 ) -> Line<'a> {
+    let selected = ctx.selected;
+    let theme = ctx.theme;
     let toggle_style = if is_on {
         Style::default()
             .fg(theme.config_toggle_on)
@@ -153,10 +163,11 @@ pub fn global_preview_row<'a>(
     label: &str,
     raw: &str,
     desc: &str,
-    selected: bool,
     hint: &str,
-    theme: &Theme,
+    ctx: &RowContext<'_>,
 ) -> Line<'a> {
+    let selected = ctx.selected;
+    let theme = ctx.theme;
     let vs = value_style(selected, false, theme);
     Line::from(vec![
         pointer_span(selected, theme),
@@ -180,10 +191,11 @@ pub fn global_theme_row<'a>(
     label: &str,
     name: &str,
     desc: &str,
-    selected: bool,
     hint: &str,
-    theme: &Theme,
+    ctx: &RowContext<'_>,
 ) -> Line<'a> {
+    let selected = ctx.selected;
+    let theme = ctx.theme;
     Line::from(vec![
         pointer_span(selected, theme),
         label_span(label, LABEL_WIDTH, selected, theme),

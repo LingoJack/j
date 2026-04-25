@@ -7,6 +7,9 @@ use super::config::draw_config_screen;
 use super::popup;
 use super::title_bar;
 use crate::util::safe_lock;
+
+/// 消息气泡宽度占内部可用宽度的百分比。
+const BUBBLE_WIDTH_PERCENT: usize = 85;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -141,8 +144,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
 
     // 内部可用宽度（减去边框和左右各1的 padding）
     let inner_width = area.width.saturating_sub(4) as usize;
-    // 消息内容最大宽度为可用宽度的 85%
-    let bubble_max_width = (inner_width * 85 / 100).max(20);
+    // 消息内容最大宽度为可用宽度的指定百分比
+    let bubble_max_width = (inner_width * BUBBLE_WIDTH_PERCENT / 100).max(20);
 
     let (msg_count, last_msg_len) = {
         let display = crate::util::safe_lock(&app.display_messages, "draw_messages::msg_stats");

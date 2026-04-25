@@ -102,13 +102,7 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
             }
             return;
         }
-        KeyCode::Char('d') | KeyCode::Char('D') => {
-            if count > 0 {
-                Action::DeleteArchive
-            } else {
-                return;
-            }
-        }
+        KeyCode::Char('d') | KeyCode::Char('D') if count > 0 => Action::DeleteArchive,
         _ => return,
     };
     app.update(action);

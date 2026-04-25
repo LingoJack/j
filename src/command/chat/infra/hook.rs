@@ -1,6 +1,6 @@
 use crate::command::chat::constants::{
     HOOK_DEFAULT_LLM_TIMEOUT_SECS, HOOK_DEFAULT_TIMEOUT_SECS, HOOK_LLM_MAX_TOKENS,
-    HOOK_PROMPT_PREVIEW_MAX_LEN,
+    HOOK_LLM_TEMPERATURE, HOOK_PROMPT_PREVIEW_MAX_LEN,
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::SessionHookPersist;
@@ -1605,7 +1605,7 @@ fn execute_llm_hook(
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg}
         ],
-        "temperature": 0.0,
+        "temperature": HOOK_LLM_TEMPERATURE,
         "max_tokens": HOOK_LLM_MAX_TOKENS,
     });
     let request_str = serde_json::to_string(&request_body)
