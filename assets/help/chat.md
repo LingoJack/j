@@ -136,8 +136,8 @@ j ai -c --remote           # 延续会话 + 远程控制
 | `/clear` | 新建对话（清空当前会话） |
 | `/theme` | 切换主题 |
 | `/resume` | 恢复历史会话 |
-| `/dump` | 导出真实传给 AI 的 system prompt 和 messages |
-| `/dump-processed` | 导出经处理管线后的最终请求数据 |
+| `/dump` | 导出原始 session messages（未经处理管线） |
+| `/dump-processed` | 导出经完整处理管线（window → compact → hooks → sanitize）后的最终数据 |
 | `/teammate` | 打开 Teammate 面板 |
 
 ### @ 补全系统

@@ -880,11 +880,12 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
     }
 }
 
-/// 将真实传给 AI 的 system prompt + messages 写入
-/// ~/.jdata/agent/dumps/dump_<ts>/ 目录，分文件存放。
-/// 同时导出所有当前注册的 Teammate 的 system prompt + messages。
+/// 将当前 session 的 system prompt + messages 导出到
+/// ~/.jdata/agent/dumps/<subdir>_<ts>/ 目录，分文件存放。
+/// 同时导出所有当前注册的 Teammate 和运行中子 Agent 的数据。
 ///
-/// `processed=true` 时，对 messages 应用与 agent loop 一致的处理管线：
+/// `processed=false`（`/dump`）：导出原始 session messages，不经过任何处理管线。
+/// `processed=true`（`/dump-processed`）：对 messages 应用与 agent loop 一致的处理管线：
 /// rolling window → micro_compact → PreLlmRequest hooks → sanitize，
 /// 产出与最终发给 LLM 一致的数据。
 fn dump_current_request(app: &mut ChatApp, processed: bool) {

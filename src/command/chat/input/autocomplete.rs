@@ -23,9 +23,9 @@ pub enum SlashCommand {
     Theme,
     /// 恢复历史会话
     Resume,
-    /// 导出真实传给 AI 的 system prompt 和 messages
+    /// 导出原始 session messages（未经 window/compact/hooks/sanitize 处理）
     Dump,
-    /// 导出经 micro_compact + sanitize 处理后的最终请求数据
+    /// 导出经完整处理管线（window → micro_compact → hooks → sanitize）后的最终请求数据
     DumpProcessed,
     /// Teammate 面板
     Teammate,
@@ -62,9 +62,9 @@ impl SlashCommand {
             SlashCommand::Clear => "新建对话".to_string(),
             SlashCommand::Theme => "切换主题".to_string(),
             SlashCommand::Resume => "恢复历史会话".to_string(),
-            SlashCommand::Dump => "导出真实传给 AI 的 system prompt 和 messages".to_string(),
+            SlashCommand::Dump => "导出原始 session messages（未经处理管线）".to_string(),
             SlashCommand::DumpProcessed => {
-                "导出经 micro_compact + sanitize 处理后的最终请求数据".to_string()
+                "导出经完整处理管线（window → compact → hooks → sanitize）后的最终数据".to_string()
             }
             SlashCommand::Teammate => "Teammate 面板".to_string(),
         }
