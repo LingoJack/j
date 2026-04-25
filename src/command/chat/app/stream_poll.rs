@@ -621,7 +621,7 @@ impl ChatApp {
     }
     /// 将 context_messages 中尚未同步的消息追加到 session.messages，并更新 offset。
     /// 这是 session.messages 唯一的写入路径，确保不重复。
-    pub(super) fn sync_context_to_session(&mut self) {
+    pub fn sync_context_to_session(&mut self) {
         let shared = safe_lock(&self.context_messages, "sync_context_to_session");
         let new_count = shared.len();
         if new_count < self.context_read_offset {
