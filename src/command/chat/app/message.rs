@@ -1,9 +1,8 @@
 use super::chat_app::ChatApp;
-use super::system_prompt::{StaticPlaceholderValues, apply_static_placeholders};
+use super::system_prompt::build_system_prompt_fn;
 use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::infra::command;
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
-use crate::command::chat::infra::skill::{self, skills_dir};
 use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::util::safe_lock;
 use std::sync::Arc;
@@ -246,41 +245,13 @@ impl ChatApp {
         let loaded_skills = self.state.loaded_skills.clone();
         let disabled_skills = self.state.agent_config.disabled_skills.clone();
         let disabled_tools = self.state.agent_config.disabled_tools.clone();
-        let tool_registry = Arc::clone(&self.tool_registry);
-        let system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync> = Arc::new(move || {
-            use crate::command::chat::agent_md;
-            use crate::command::chat::storage::{
-                load_memory, load_soul, load_style, load_system_prompt,
-            };
-            let template = load_system_prompt()?;
-            let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
-            let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
-            let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
-            let memory_text = load_memory().unwrap_or_default();
-            let soul_text = load_soul().unwrap_or_default();
-            let agent_md_text = agent_md::load_agent_md();
-            let current_dir = std::env::current_dir()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| ".".to_string());
-            let skill_dir = skills_dir().to_string_lossy().to_string();
-            let project_skill_dir = skill::project_skills_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-            Some(apply_static_placeholders(
-                &template,
-                &StaticPlaceholderValues {
-                    skills_summary: &skills_summary,
-                    tools_summary: &tools_summary,
-                    style_text: &style_text,
-                    memory_text: &memory_text,
-                    soul_text: &soul_text,
-                    agent_md_text: &agent_md_text,
-                    current_dir: &current_dir,
-                    skill_dir: &skill_dir,
-                    project_skill_dir: &project_skill_dir,
-                },
-            ))
-        });
+        let tool_registry_arc = Arc::clone(&self.tool_registry);
+        let system_prompt_fn = build_system_prompt_fn(
+            loaded_skills,
+            disabled_skills,
+            disabled_tools,
+            tool_registry_arc,
+        );
 
         let hook_manager_clone = match self.hook_manager.lock() {
             Ok(manager) => manager.clone(),

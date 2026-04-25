@@ -8,6 +8,7 @@ mod message;
 mod session_mgr;
 mod stream_poll;
 mod system_prompt;
+pub use system_prompt::build_system_prompt_fn;
 mod tool_executor;
 pub mod types;
 mod ui_state;
