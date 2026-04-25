@@ -124,7 +124,10 @@ impl BackgroundManager {
         let mut tasks = safe_lock(&self.tasks, "BackgroundManager::update_child_pid");
         if let Some(task) = tasks.get_mut(task_id) {
             task.child_pid = Some(pid);
-            crate::info!("[BgTask] 后台任务 {} 已关联子进程 PID: {}", task_id, pid);
+            crate::util::log::write_info_log(
+                "BgTask::update_child_pid",
+                &format!("后台任务 {} 已关联子进程 PID: {}", task_id, pid),
+            );
         }
     }
 
