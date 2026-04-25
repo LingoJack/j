@@ -2,15 +2,17 @@ use super::chat_app::ChatApp;
 use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::{
-    MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SubAgentSnapshotPersist,
-    TeammateSnapshotPersist, append_session_event, generate_session_id, load_hooks_state,
-    load_plan_state, load_sandbox_state, load_session_meta_file, load_skills_state,
-    load_tasks_state, load_teammates_state, load_todos_state, save_hooks_state, save_plan_state,
-    save_sandbox_state, save_session_meta_file, save_skills_state, save_subagents_state,
-    save_tasks_state, save_teammates_state, save_todos_state,
+    ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent,
+    SubAgentSnapshotPersist, TeammateSnapshotPersist, append_session_event, generate_session_id,
+    load_hooks_state, load_plan_state, load_sandbox_state, load_session_meta_file,
+    load_skills_state, load_tasks_state, load_teammates_state, load_todos_state,
+    save_hooks_state, save_plan_state, save_sandbox_state, save_session_meta_file,
+    save_skills_state, save_subagents_state, save_tasks_state, save_teammates_state,
+    save_todos_state,
 };
 use crate::command::chat::teammate::TeammateStatusPersist;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
+use crate::util::safe_lock;
 use std::sync::atomic::Ordering;
 
 impl ChatApp {
@@ -322,6 +324,7 @@ impl ChatApp {
             *s = new_id.clone();
         }
         self.state.session.messages.clear();
+        self.clear_channels();
         self.persisted_message_count = 0;
         self.ui.scroll_offset = 0;
         self.ui.msg_lines_cache = None;
@@ -332,5 +335,67 @@ impl ChatApp {
         self.broadcast_ws(sync);
         self.broadcast_ws(WsOutbound::SessionSwitched { session_id: new_id });
         self.show_toast("已创建新对话", false);
+    }
+
+    /// 从 session.messages 重建双通道（会话恢复/归档还原后调用）。
+    ///
+    /// session.messages 存的是 context 版本（可能含 XML 前缀），直接写入 context_messages。
+    /// display_messages 需要干净文本，对含 `sender_name` 的消息做去 XML 处理；
+    /// 无 `sender_name` 的消息直接复用（user/assistant/tool 等无 XML 包裹）。
+    pub fn rebuild_channels_from_session(&mut self) {
+        let messages = &self.state.session.messages;
+
+        let mut display: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+        let mut context: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+
+        for msg in messages {
+            // context 通道：原样保留（含 XML 前缀）
+            context.push(msg.clone());
+
+            // display 通道：有 sender_name 的消息需要去除 XML 包裹
+            if let Some(ref sender) = msg.sender_name {
+                let clean_content = strip_agent_xml_tag(sender, &msg.content);
+                let mut display_msg = msg.clone();
+                display_msg.content = clean_content;
+                display.push(display_msg);
+            } else {
+                display.push(msg.clone());
+            }
+        }
+
+        {
+            let mut dm = safe_lock(&self.display_messages, "rebuild_channels::display");
+            *dm = display;
+        }
+        {
+            let mut cm = safe_lock(&self.context_messages, "rebuild_channels::context");
+            *cm = context;
+        }
+
+        self.display_read_offset = self.state.session.messages.len();
+        self.context_read_offset = self.state.session.messages.len();
+        self.ui.msg_lines_cache = None;
+    }
+
+    /// 清空双通道 + offset（新建会话时调用）
+    pub fn clear_channels(&mut self) {
+        safe_lock(&self.display_messages, "clear_channels::display").clear();
+        safe_lock(&self.context_messages, "clear_channels::context").clear();
+        self.display_read_offset = 0;
+        self.context_read_offset = 0;
+        self.ui.msg_lines_cache = None;
+    }
+}
+
+/// 去除 `<Sender>content</Sender>` XML 包裹，返回干净文本。
+/// 如果 content 不以 `<Sender>` 开头，原样返回。
+fn strip_agent_xml_tag(sender: &str, content: &str) -> String {
+    let open_tag = format!("<{}>", sender);
+    let close_tag = format!("</{}>", sender);
+    if content.starts_with(&open_tag) && content.ends_with(&close_tag) {
+        let inner = &content[open_tag.len()..content.len() - close_tag.len()];
+        inner.to_string()
+    } else {
+        content.to_string()
     }
 }

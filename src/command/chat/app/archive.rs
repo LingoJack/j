@@ -51,11 +51,18 @@ impl ChatApp {
         if let Some(archive_name) = archive_name {
             match restore_archive(&archive_name) {
                 Ok(messages) => {
-                    self.state.session.messages = messages.clone();
+                    self.state.session.messages = messages;
+                    // 重建双通道（从 session.messages → display + context）
+                    self.rebuild_channels_from_session();
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.clear_input();
-                    append_session_event(&self.session_id, &SessionEvent::Restore { messages });
+                    append_session_event(
+                        &self.session_id,
+                        &SessionEvent::Restore {
+                            messages: self.state.session.messages.clone(),
+                        },
+                    );
                     self.persisted_message_count = self.state.session.messages.len();
                     self.show_toast(format!("已还原归档: {}", archive_name), false);
                 }

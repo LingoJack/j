@@ -1817,6 +1817,8 @@ impl ChatApp {
                         }
                         self.persisted_message_count = session.messages.len();
                         self.state.session = session;
+                        // 重建双通道（从 session.messages → display + context）
+                        self.rebuild_channels_from_session();
                         // 恢复目标会话的状态
                         self.restore_session_state();
                         self.ui.scroll_offset = 0;
@@ -1853,6 +1855,7 @@ impl ChatApp {
                         *s = new_id.clone();
                     }
                     self.state.session.messages.clear();
+                    self.clear_channels();
                     self.persisted_message_count = 0;
                     self.ui.scroll_offset = 0;
                     self.ui.msg_lines_cache = None;
@@ -1911,6 +1914,8 @@ impl ChatApp {
                         *s = target_id;
                     }
                     self.state.session = session;
+                    // 重建双通道（从 session.messages → display + context）
+                    self.rebuild_channels_from_session();
                     // 恢复目标会话的状态
                     self.restore_session_state();
                     self.ui.scroll_offset = u16::MAX;
@@ -1955,6 +1960,7 @@ impl ChatApp {
                     *s = new_id;
                 }
                 self.state.session.messages.clear();
+                self.clear_channels();
                 self.persisted_message_count = 0;
                 self.ui.scroll_offset = 0;
                 self.ui.msg_lines_cache = None;

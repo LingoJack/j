@@ -303,6 +303,8 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             app.session_id = latest_id;
             app.persisted_message_count = session.messages.len();
             app.state.session = session;
+            // 重建双通道（从 session.messages → display + context）
+            app.rebuild_channels_from_session();
             // 恢复 session 状态（tasks/todos/skills/hooks/teammates 等）
             app.restore_session_state();
             app.ui.scroll_offset = u16::MAX; // 滚动到底部
