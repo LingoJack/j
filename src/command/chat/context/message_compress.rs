@@ -161,8 +161,8 @@ pub fn compress_other_agent_toolcalls(
                 .collect::<Vec<_>>()
                 .join(", ");
             let summary_content = format!(
-                "<{}> [早期工具调用摘要: {}, 共 {} 次]",
-                agent_name, tools_summary, total_calls
+                "<{}> [早期工具调用摘要: {}, 共 {} 次]</{}>",
+                agent_name, tools_summary, total_calls, agent_name
             );
             result.push(ChatMessage::text(MessageRole::User, summary_content));
         }
