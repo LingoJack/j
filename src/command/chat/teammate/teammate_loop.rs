@@ -10,7 +10,6 @@ use crate::command::chat::tools::derived_shared::{
     AgentContextConfig, call_llm_non_stream, create_runtime_and_client,
     execute_tool_with_permission, extract_tool_items,
 };
-use crate::llm::ToolDefinition;
 use crate::util::log::write_info_log;
 use std::path::PathBuf;
 use std::sync::{
@@ -37,7 +36,8 @@ pub struct TeammateLoopConfig {
     pub base_system_prompt: Option<String>,
     /// 共享的当前 session id 槽（session 切换时会被主线程更新）
     pub session_id: Arc<Mutex<String>>,
-    pub tools: Vec<ToolDefinition>,
+    /// 禁用工具名列表（每轮动态调用 to_llm_tools_filtered）
+    pub disabled_tools: Vec<String>,
     pub registry: Arc<ToolRegistry>,
     pub jcli_config: Arc<JcliConfig>,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
@@ -82,7 +82,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         provider,
         base_system_prompt,
         session_id,
-        tools,
+        disabled_tools,
         registry,
         jcli_config,
         teammate_manager,
@@ -170,6 +170,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     let cancel_flag = Arc::new(AtomicBool::new(false));
 
     for round in 0..MAX_TEAMMATE_ROUNDS {
+        // 每轮开始时动态获取可用工具（与 Main Agent 对齐），
+        // 确保 SendMessage 等依赖 is_available() 的工具在 teammate 注册后立即可见。
+        let tools = registry.to_llm_tools_filtered(&disabled_tools);
+
         // 检查取消
         if cancel_token.is_cancelled() || cancel_flag.load(Ordering::Relaxed) {
             set_status(TeammateStatus::Cancelled);
@@ -327,17 +331,26 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         if !assistant_text.is_empty() && !is_ignore_only {
             last_assistant_text = assistant_text.clone();
             // 将 teammate 的文字回复通过广播显示在聊天室
-            // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+            // ★ 此消息通过三通道推送：
+            //   - display + context：同步到 Main Agent 的 LLM 上下文
+            //   - 其他 teammate 的 pending_user_messages：旁听性质（不唤醒）
             if let Ok(manager) = teammate_manager.lock() {
-                let msg = ChatMessage::text(
-                    MessageRole::Assistant,
-                    format!("<Teammate@{}> {}", name, &assistant_text),
-                );
+                let broadcast_text = format!("<Teammate@{}> {}", name, &assistant_text);
+                let msg = ChatMessage::text(MessageRole::Assistant, &broadcast_text);
                 if let Ok(mut display) = manager.display_messages.lock() {
                     display.push(msg.clone());
                 }
                 if let Ok(mut context) = manager.context_messages.lock() {
                     context.push(msg);
+                }
+                // 推送到其他 teammate 的 pending_user_messages（旁听，不设 wake_flag）
+                for (peer_name, handle) in &manager.teammates {
+                    if peer_name == &name {
+                        continue; // 不给自己发
+                    }
+                    if let Ok(mut pending) = handle.pending_user_messages.lock() {
+                        pending.push(ChatMessage::text(MessageRole::User, &broadcast_text));
+                    }
                 }
             }
         }
