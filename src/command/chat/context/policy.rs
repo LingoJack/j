@@ -91,9 +91,8 @@ pub const KEY_TOOL_NAMES: &[&str] = &[
     tool_names::TASK,
     // 协作类 — 承载 teammate/subagent 会话上下文
     tool_names::AGENT,
-    tool_names::AGENT_TEAM,
     tool_names::SEND_MESSAGE,
-    tool_names::CREATE_TEAMMATE,
+    tool_names::TEAMMATE,
 ];
 
 /// 查询指定工具的上下文策略
@@ -112,9 +111,8 @@ pub fn policy_for(tool_name: &str) -> ToolContextPolicy {
         | tool_names::TODO_READ
         | tool_names::TASK
         | tool_names::AGENT
-        | tool_names::AGENT_TEAM
         | tool_names::SEND_MESSAGE
-        | tool_names::CREATE_TEAMMATE => ToolContextPolicy::key_preserve(),
+        | tool_names::TEAMMATE => ToolContextPolicy::key_preserve(),
 
         // 其他所有工具（Bash/Read/Write/Edit/Glob/Grep/WebFetch/WebSearch/
         // Browser/ComputerUse/TaskOutput/WorkDone/Compact/RegisterHook 等）

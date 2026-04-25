@@ -173,7 +173,7 @@ pub async fn run_main_agent_loop(
         // 每轮重新构建 system prompt（从磁盘读取最新配置）
         let mut system_prompt = system_prompt_fn();
 
-        // 同步到共享槽，供子 Agent（AgentTool / CreateTeammateTool / AgentTeamTool）读取
+        // 同步到共享槽，供子 Agent（AgentTool / TeammateTool）读取
         {
             if let Ok(mut sp) = derived_system_prompt.lock() {
                 *sp = system_prompt.clone();

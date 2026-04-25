@@ -155,7 +155,7 @@ fn count_changes(worktree_path: &str, original_head: Option<&str>) -> (usize, us
 }
 
 // ========== Agent Worktree Helpers ==========
-// 供 CreateTeammate / AgentTool 调用，自动为并行 agent 创建/删除 worktree
+// 供 TeammateTool / AgentTool 调用，自动为并行 agent 创建/删除 worktree
 
 /// 为 agent 创建专用 worktree。
 /// - `agent_name`: 用于生成目录名和分支名（会被 slug 化）

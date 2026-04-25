@@ -462,7 +462,7 @@ impl TeammateManager {
         }
     }
 
-    /// 注册一个 teammate（由 CreateTeammate 工具或 teammate_loop 调用）
+    /// 注册一个 teammate（由 TeammateTool 或 teammate_loop 调用）
     pub fn register_teammate(&mut self, handle: TeammateHandle) {
         write_info_log(
             "TeammateManager",

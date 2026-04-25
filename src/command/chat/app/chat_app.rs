@@ -81,9 +81,9 @@ pub struct ChatApp {
     pub ws_bridge: Option<crate::command::chat::remote::bridge::WsBridge>,
     /// 远程客户端是否已连接
     pub remote_connected: bool,
-    /// 子 Agent 共用 provider（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
+    /// 子 Agent 共用 provider（每次发送请求前更新，AgentTool / TeammateTool 共用）
     pub derived_agent_provider: Arc<Mutex<ModelProvider>>,
-    /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
+    /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / TeammateTool 共用）
     pub derived_agent_system_prompt: Arc<Mutex<Option<String>>>,
     /// 子 Agent 共用上下文配置快照（每次发送请求前刷新）
     pub derived_agent_context_config:
@@ -254,7 +254,7 @@ impl ChatApp {
         // 子 agent 使用的 disabled_hooks 快照（Teammate 走 hook 链时用）
         let shared_disabled_hooks = Arc::new(Mutex::new(agent_config.disabled_hooks.clone()));
 
-        // 构建 DerivedAgentShared（SubAgentTool / AgentTeamTool / CreateTeammateTool 共用）
+        // 构建 DerivedAgentShared（SubAgentTool / TeammateTool 共用）
         let derived_agent_shared = DerivedAgentShared {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
@@ -279,8 +279,13 @@ impl ChatApp {
             },
         ));
         tool_registry.register(Box::new(
-            crate::command::chat::tools::agent_team::AgentTeamTool {
+            crate::command::chat::tools::teammate_tool::TeammateTool {
                 shared: derived_agent_shared,
+                teammate_manager: Arc::clone(&teammate_manager),
+            },
+        ));
+        tool_registry.register(Box::new(
+            crate::command::chat::tools::send_message::SendMessageTool {
                 teammate_manager: Arc::clone(&teammate_manager),
             },
         ));
