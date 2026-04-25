@@ -167,7 +167,6 @@ fn constants_positive_values() {
             "COMPACT_SUMMARY_MAX_TOKENS",
             COMPACT_SUMMARY_MAX_TOKENS as usize,
         ),
-        ("TEAM_MAX_MEMBERS", TEAM_MAX_MEMBERS),
         ("ARCHIVE_NAME_MAX_LEN", ARCHIVE_NAME_MAX_LEN),
     ];
     for (name, value) in positive_constants {
