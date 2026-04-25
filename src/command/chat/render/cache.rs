@@ -1125,17 +1125,80 @@ fn render_ask_questions(
                 // 块状光标样式（使用主题定义的光标颜色）
                 let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
 
-                lines.push(bordered_line(
-                    vec![
-                        Span::styled(" ❯ ✏ ", pointer_style),
-                        Span::styled(before, text_style),
-                        Span::styled(cursor_char.to_string(), cursor_style),
-                        Span::styled(after, text_style),
-                    ],
-                    bubble_max_width,
-                    border_color,
-                    confirm_bg,
-                ));
+                // 前缀 " ❯ ✏ " 的显示宽度
+                let prefix = " ❯ ✏ ";
+                let prefix_w = display_width(prefix);
+                // 续行缩进宽度（与前缀对齐）
+                let indent_w = prefix_w;
+                let avail_w = content_w.saturating_sub(prefix_w);
+                // 最少保证 4 列可用（光标占 1 + 至少 3 字符余量）
+                let avail_w = avail_w.max(4);
+
+                // 拼回完整文本，用 wrap_text 按可用宽度折行
+                let full_text = format!("{}{}{}", before, cursor_char, after);
+                let wrapped = wrap_text(&full_text, avail_w);
+
+                // 定位光标所在折行：逐行累加字符数，找到 cursor_pos 落在哪一行
+                let mut char_idx = 0usize;
+                let mut cursor_line = 0usize;
+                let mut cursor_offset_in_line = 0usize;
+                for (li, line_str) in wrapped.iter().enumerate() {
+                    let line_chars: Vec<char> = line_str.chars().collect();
+                    if cursor_pos >= char_idx && cursor_pos < char_idx + line_chars.len() {
+                        cursor_line = li;
+                        cursor_offset_in_line = cursor_pos - char_idx;
+                        break;
+                    }
+                    char_idx += line_chars.len();
+                    if li == wrapped.len() - 1 && cursor_pos == char_idx {
+                        // 光标在末尾
+                        cursor_line = li;
+                        cursor_offset_in_line = line_chars.len();
+                    }
+                }
+
+                for (li, _line_str) in wrapped.iter().enumerate() {
+                    let is_first = li == 0;
+                    let prefix_span = if is_first {
+                        Span::styled(prefix, pointer_style)
+                    } else {
+                        Span::styled(" ".repeat(indent_w), text_style)
+                    };
+
+                    if li == cursor_line {
+                        // 光标行：需要拆分 before / cursor_char / after
+                        let line_str = &wrapped[li];
+                        let line_chars: Vec<char> = line_str.chars().collect();
+                        let line_before: String =
+                            line_chars[..cursor_offset_in_line].iter().collect();
+                        let cc = line_chars
+                            .get(cursor_offset_in_line)
+                            .copied()
+                            .unwrap_or(' ');
+                        let line_after: String =
+                            line_chars[cursor_offset_in_line + 1..].iter().collect();
+
+                        lines.push(bordered_line(
+                            vec![
+                                prefix_span,
+                                Span::styled(line_before, text_style),
+                                Span::styled(cc.to_string(), cursor_style),
+                                Span::styled(line_after, text_style),
+                            ],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
+                    } else {
+                        // 非光标续行
+                        lines.push(bordered_line(
+                            vec![prefix_span, Span::styled(wrapped[li].clone(), text_style)],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
+                    }
+                }
             } else {
                 let pointer_str = if is_cursor { " ❯ " } else { "   " };
                 let pointer_style = if is_cursor {
@@ -1306,23 +1369,98 @@ fn render_tool_confirm_content(
             let pointer = if is_selected { "❯" } else { " " };
 
             if i == 3 && app.ui.tool_interact_typing {
-                let input_display = format!("{} type: {}█", pointer, app.ui.tool_interact_input);
-                let input_w = display_width(&input_display);
-                let fill = content_w.saturating_sub(input_w + 2);
-                lines.push(Line::from(vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ", Style::default().bg(confirm_bg)),
-                    Span::styled(pointer, arrow_style.bg(confirm_bg)),
-                    Span::styled(
-                        format!(" type: {}█", app.ui.tool_interact_input),
-                        Style::default().fg(t.text_white).bg(confirm_bg),
-                    ),
-                    Span::styled(
-                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                        Style::default().bg(confirm_bg),
-                    ),
-                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                ]));
+                // 前缀 " ❯ type: " 的显示宽度
+                let prefix = " ❯ type: ";
+                let prefix_w = display_width(prefix);
+                // 续行缩进宽度（与前缀对齐）
+                let indent_w = prefix_w;
+                let avail_w = content_w.saturating_sub(prefix_w);
+                // 最少保证 4 列可用（光标占 1 + 至少 3 字符余量）
+                let avail_w = avail_w.max(4);
+
+                let input = &app.ui.tool_interact_input;
+                let cursor_pos = app.ui.tool_interact_cursor;
+                let chars: Vec<char> = input.chars().collect();
+                let before: String = chars[..cursor_pos].iter().collect();
+                let cursor_char = chars.get(cursor_pos).copied().unwrap_or(' ');
+                let after: String = if cursor_pos < chars.len() {
+                    chars[cursor_pos + 1..].iter().collect()
+                } else {
+                    String::new()
+                };
+
+                let text_style = Style::default().fg(t.text_white).bg(confirm_bg);
+                let cursor_style = Style::default().fg(t.cursor_fg).bg(t.cursor_bg);
+                let pointer_style = Style::default()
+                    .fg(Color::Cyan)
+                    .bg(confirm_bg)
+                    .add_modifier(Modifier::BOLD);
+
+                // 将 before / cursor_char / after 拼回完整文本，用 wrap_text 按可用宽度折行
+                let full_text = format!("{}{}{}", before, cursor_char, after);
+                let wrapped = wrap_text(&full_text, avail_w);
+
+                // 定位光标所在折行：逐行累加宽度，找到 cursor_pos 落在哪一行
+                let mut char_idx = 0usize;
+                let mut cursor_line = 0usize;
+                let mut cursor_offset_in_line = 0usize;
+                for (li, line_str) in wrapped.iter().enumerate() {
+                    let line_chars: Vec<char> = line_str.chars().collect();
+                    if cursor_pos >= char_idx && cursor_pos < char_idx + line_chars.len() {
+                        cursor_line = li;
+                        cursor_offset_in_line = cursor_pos - char_idx;
+                        break;
+                    }
+                    char_idx += line_chars.len();
+                    if li == wrapped.len() - 1 && cursor_pos == char_idx {
+                        // 光标在末尾
+                        cursor_line = li;
+                        cursor_offset_in_line = line_chars.len();
+                    }
+                }
+
+                for (li, _line_str) in wrapped.iter().enumerate() {
+                    let is_first = li == 0;
+                    let prefix_span = if is_first {
+                        Span::styled(prefix, pointer_style)
+                    } else {
+                        Span::styled(" ".repeat(indent_w), text_style)
+                    };
+
+                    if li == cursor_line {
+                        // 光标行：需要拆分 before / cursor_char / after
+                        let line_str = &wrapped[li];
+                        let line_chars: Vec<char> = line_str.chars().collect();
+                        let line_before: String =
+                            line_chars[..cursor_offset_in_line].iter().collect();
+                        let cc = line_chars
+                            .get(cursor_offset_in_line)
+                            .copied()
+                            .unwrap_or(' ');
+                        let line_after: String =
+                            line_chars[cursor_offset_in_line + 1..].iter().collect();
+
+                        lines.push(bordered_line(
+                            vec![
+                                prefix_span,
+                                Span::styled(line_before, text_style),
+                                Span::styled(cc.to_string(), cursor_style),
+                                Span::styled(line_after, text_style),
+                            ],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
+                    } else {
+                        // 非光标续行
+                        lines.push(bordered_line(
+                            vec![prefix_span, Span::styled(wrapped[li].clone(), text_style)],
+                            bubble_max_width,
+                            border_color,
+                            confirm_bg,
+                        ));
+                    }
+                }
             } else {
                 let full_text = format!("{} {}", pointer, option);
                 let text_w = display_width(&full_text);
@@ -1376,20 +1514,21 @@ fn render_agent_perm_confirm_area(
         Style::default().fg(border_color),
     )));
 
-    // 标题行
+    // 标题行（支持折行）
     let title = req.title();
-    lines.push(bordered_line(
-        vec![Span::styled(
-            title,
-            Style::default()
-                .fg(t.tool_confirm_title)
-                .add_modifier(Modifier::BOLD)
-                .bg(confirm_bg),
-        )],
-        bubble_max_width,
-        border_color,
-        confirm_bg,
-    ));
+    let title_style = Style::default()
+        .fg(t.tool_confirm_title)
+        .add_modifier(Modifier::BOLD)
+        .bg(confirm_bg);
+    let title_wrapped = wrap_text(&title, content_w);
+    for line_text in title_wrapped {
+        lines.push(bordered_line(
+            vec![Span::styled(line_text, title_style)],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
+    }
 
     // 工具名行
     lines.push(bordered_line(
@@ -1469,20 +1608,21 @@ fn render_plan_approval_confirm_area(
         Style::default().fg(border_color),
     )));
 
-    // 标题行
+    // 标题行（支持折行）
     let title = format!(" Plan 审批请求 [{}] ", req.agent_name);
-    lines.push(bordered_line(
-        vec![Span::styled(
-            title,
-            Style::default()
-                .fg(t.tool_confirm_title)
-                .add_modifier(Modifier::BOLD)
-                .bg(confirm_bg),
-        )],
-        bubble_max_width,
-        border_color,
-        confirm_bg,
-    ));
+    let title_style = Style::default()
+        .fg(t.tool_confirm_title)
+        .add_modifier(Modifier::BOLD)
+        .bg(confirm_bg);
+    let title_wrapped = wrap_text(&title, content_w);
+    for line_text in title_wrapped {
+        lines.push(bordered_line(
+            vec![Span::styled(line_text, title_style)],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
+    }
 
     // Plan 名称行
     lines.push(bordered_line(
