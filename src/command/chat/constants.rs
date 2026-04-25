@@ -122,6 +122,9 @@ pub const NORMAL_RESULT_MAX_LINES: usize = 100;
 /// Agent 结果最大显示行数
 pub const AGENT_RESULT_MAX_LINES: usize = 30;
 
+/// Agent tool call request 展开模式下 prompt 最大显示行数
+pub const AGENT_CALL_PROMPT_MAX_LINES: usize = 15;
+
 /// Bash 输出最大显示行数
 pub const BASH_OUTPUT_MAX_LINES: usize = 100;
 

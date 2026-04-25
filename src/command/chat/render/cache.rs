@@ -1,9 +1,9 @@
 use super::theme::Theme;
 use crate::command::chat::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache, ToolCallStatus};
 use crate::command::chat::constants::{
-    AGENT_RESULT_MAX_LINES, BASH_OUTPUT_MAX_LINES, CONFIRM_MSG_MAX_LINES, ERROR_RESULT_MAX_LINES,
-    NORMAL_RESULT_MAX_LINES, THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS,
-    TOOL_ARG_PREVIEW_MAX_CHARS,
+    AGENT_CALL_PROMPT_MAX_LINES, AGENT_RESULT_MAX_LINES, BASH_OUTPUT_MAX_LINES,
+    CONFIRM_MSG_MAX_LINES, ERROR_RESULT_MAX_LINES, NORMAL_RESULT_MAX_LINES,
+    THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS, TOOL_ARG_PREVIEW_MAX_CHARS,
 };
 use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::storage::DisplayType;
@@ -12,6 +12,7 @@ use crate::command::chat::storage::config::ThinkingStyle;
 use crate::command::chat::tools::classification::{
     ToolCategory, ToolStatus, format_json_value, get_result_summary_for_tool,
 };
+use crate::command::chat::tools::tool_names;
 use crate::command::chat::ui::palette;
 use crate::util::safe_lock;
 use crate::util::text::{char_width, display_width, wrap_text};
@@ -1594,7 +1595,7 @@ pub fn render_tool_call_request_msg(
 
             // 参数详情
             if !tc.arguments.is_empty() {
-                if matches!(tc.name.as_str(), "Bash" | "Shell") {
+                if matches!(tc.name.as_str(), tool_names::BASH) {
                     // Bash/Shell 工具使用专用渲染：显示命令 + 附加信息
                     if let Some(bash_args) = extract_bash_args(&tc.arguments) {
                         render_bash_call_request_expanded(
@@ -1607,6 +1608,16 @@ pub fn render_tool_call_request_msg(
                         serde_json::from_str::<serde_json::Value>(&tc.arguments)
                     {
                         render_json_params_enhanced(&json_value, content_w, lines, theme);
+                    }
+                // Agent 工具使用专用渲染：边框 + prompt + 元信息
+                } else if matches!(tc.name.as_str(), tool_names::AGENT | tool_names::AGENT_TEAM) {
+                    if let Some(agent_args) = extract_agent_args(&tc.arguments) {
+                        render_agent_call_request_expanded(
+                            &agent_args,
+                            bubble_max_width,
+                            lines,
+                            theme,
+                        );
                     }
                 } else if let Ok(json_value) =
                     serde_json::from_str::<serde_json::Value>(&tc.arguments)
@@ -1624,6 +1635,49 @@ pub fn render_tool_call_request_msg(
             }
         } else {
             // 折叠模式：图标 + 工具名 + description（若有）或参数预览
+
+            // Agent/AgentTeam 工具专用折叠渲染：显示 [background] + description
+            if matches!(tc.name.as_str(), tool_names::AGENT | tool_names::AGENT_TEAM)
+                && let Some(agent_args) = extract_agent_args(&tc.arguments)
+            {
+                let mut desc_parts: Vec<String> = Vec::new();
+                if agent_args.run_in_background {
+                    desc_parts.push("[background]".to_string());
+                }
+                if let Some(ref desc) = agent_args.description {
+                    desc_parts.push(desc.clone());
+                }
+                if desc_parts.is_empty() {
+                    // 无 description/background，截取 prompt 第一行作为预览
+                    let first_line = agent_args.prompt.lines().next().unwrap_or("");
+                    let cw: String = first_line
+                        .chars()
+                        .take(TOOL_ARG_PREVIEW_MAX_CHARS)
+                        .collect();
+                    let preview = if first_line.chars().count() > TOOL_ARG_PREVIEW_MAX_CHARS {
+                        format!("{}...", cw)
+                    } else {
+                        cw
+                    };
+                    desc_parts.push(preview);
+                }
+                let desc_text = desc_parts.join("  ");
+                lines.push(Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(icon, Style::default().fg(tool_color)),
+                    Span::styled(" ", Style::default()),
+                    Span::styled(
+                        tc.name.clone(),
+                        Style::default().fg(tool_color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("  {}", desc_text),
+                        Style::default().fg(theme.text_dim),
+                    ),
+                ]));
+                continue;
+            }
+
             let tool_desc = extract_tool_description_from_args(&tc.name, &tc.arguments);
 
             if let Some(desc) = tool_desc {
@@ -1829,19 +1883,19 @@ pub fn render_tool_result_msg(
     } else if clean.contains("```diff\n") {
         // Diff 块特殊渲染
         render_diff_content(&clean, content_w, lines, theme);
-    } else if tool_name == "Agent" {
+    } else if tool_name == tool_names::AGENT {
         // Agent 结果边框显示
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
-    } else if tool_name == "Compact" {
+    } else if tool_name == tool_names::COMPACT {
         // Compact 结果边框显示（类似 Agent 的嵌套样式）
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
-    } else if tool_name == "LoadSkill" {
+    } else if tool_name == tool_names::LOAD_SKILL {
         // LoadSkill 结果边框显示（技能内容，与 Agent 嵌套样式一致）
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
-    } else if tool_name == "Bash" {
+    } else if tool_name == tool_names::BASH {
         // Bash 结果：命令行高亮 + 输出
         render_bash_result(&clean, tool_args, content_w, lines, theme);
-    } else if tool_name == "TodoRead" || tool_name == "TodoWrite" {
+    } else if tool_name == tool_names::TODO_READ || tool_name == tool_names::TODO_WRITE {
         // TodoRead/TodoWrite 结果：折叠和展开都显示 todo 列表
         render_todo_result(content, content_w, lines, theme, expand);
     } else {
@@ -2269,14 +2323,23 @@ pub fn copy_to_clipboard(content: &str) -> bool {
 /// 从工具调用参数 JSON 中提取描述信息
 /// - Bash/Shell：提取 description 字段
 /// - Read/Write/Edit/Glob/Grep：提取 path 或 file_path 字段
+/// - Agent/AgentTeam：提取 description 字段
 fn extract_tool_description_from_args(tool_name: &str, arguments: &str) -> Option<String> {
     let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
 
     match tool_name {
-        "Bash" | "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
-        "Read" | "Write" | "Edit" | "Glob" | "Grep" => parsed
+        tool_names::BASH => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        tool_names::READ
+        | tool_names::WRITE
+        | tool_names::EDIT
+        | tool_names::GLOB
+        | tool_names::GREP => parsed
             .get("path")
             .or_else(|| parsed.get("file_path"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        tool_names::AGENT | tool_names::AGENT_TEAM => parsed
+            .get("description")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
         _ => None,
@@ -2310,6 +2373,92 @@ fn extract_bash_args(arguments: &str) -> Option<BashArgs> {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
     })
+}
+
+/// Agent 工具参数结构（用于渲染）
+struct AgentCallArgs {
+    prompt: String,
+    description: Option<String>,
+    run_in_background: bool,
+}
+
+/// 从 Agent 工具的 arguments JSON 中提取参数
+fn extract_agent_args(arguments: &str) -> Option<AgentCallArgs> {
+    let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
+    Some(AgentCallArgs {
+        prompt: parsed.get("prompt")?.as_str()?.to_string(),
+        description: parsed
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        run_in_background: parsed
+            .get("run_in_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    })
+}
+
+/// 渲染 Agent 工具调用请求的展开模式（边框 + prompt + 元信息）
+fn render_agent_call_request_expanded(
+    args: &AgentCallArgs,
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    let border_color = theme.text_dim;
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    // 元信息行：[background] 标识
+    if args.run_in_background {
+        for wrapped in wrap_text("[background]", content_w) {
+            lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(wrapped, Style::default().fg(theme.text_dim)),
+            ]));
+        }
+    }
+
+    // Prompt 边框显示（复用 render_agent_result_nested 的边框风格）
+    let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
+    lines.push(Line::from(Span::styled(
+        top_border,
+        Style::default().fg(border_color),
+    )));
+
+    let prompt_lines: Vec<&str> = args.prompt.lines().collect();
+    let total = prompt_lines.len();
+    let max_display = AGENT_CALL_PROMPT_MAX_LINES;
+    let display_lines = &prompt_lines[..total.min(max_display)];
+
+    for line in display_lines {
+        for wrapped in wrap_text(line, content_w) {
+            lines.push(bordered_line(
+                vec![Span::styled(wrapped, Style::default().fg(theme.text_dim))],
+                bubble_max_width,
+                border_color,
+                Color::default(),
+            ));
+        }
+    }
+
+    // 截断提示
+    if total > max_display {
+        lines.push(bordered_line(
+            vec![Span::styled(
+                format!("... (共 {} 行)", total),
+                Style::default().fg(theme.text_dim),
+            )],
+            bubble_max_width,
+            border_color,
+            Color::default(),
+        ));
+    }
+
+    let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
+    lines.push(Line::from(Span::styled(
+        bottom_border,
+        Style::default().fg(border_color),
+    )));
 }
 
 /// 渲染 Bash 工具调用请求的展开模式
