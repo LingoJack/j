@@ -421,9 +421,9 @@ fn run_sub_agent_loop(
         };
     let max_rounds = 30; // 子代理最大轮数
 
-    // 进入 Working 状态
+    // 进入 Thinking 状态（即将调用 LLM）
     if let Some(ref refs) = params.snapshot {
-        refs.set_status(SubAgentStatus::Working);
+        refs.set_status(SubAgentStatus::Thinking);
     }
 
     let (rt, client) = match create_runtime_and_client(&params.provider) {
@@ -491,6 +491,11 @@ fn run_sub_agent_loop(
 
         write_info_log("SubAgent", &format!("Round {}/{}", round + 1, max_rounds));
 
+        // 进入 Thinking 状态（即将调用 LLM，等待模型回复）
+        if let Some(ref refs) = params.snapshot {
+            refs.set_status(SubAgentStatus::Thinking);
+        }
+
         // 构建重试回调：更新 SubAgent 状态为 Retrying
         let status_for_retry = params.snapshot.as_ref().map(|r| Arc::clone(&r.status));
         let retry_callback = move |attempt: u32, max_attempts: u32, delay_ms: u64, error: &str| {
@@ -533,10 +538,7 @@ fn run_sub_agent_loop(
             Some(&retry_callback),
         ) {
             Ok(c) => {
-                // LLM 调用成功，恢复 Working 状态
-                if let Some(ref refs) = params.snapshot {
-                    refs.set_status(SubAgentStatus::Working);
-                }
+                // LLM 调用成功，保持 Thinking（等待工具执行时切换为 Working）
                 c
             }
             Err(e) => {
@@ -620,6 +622,7 @@ fn run_sub_agent_loop(
         for item in &tool_items {
             if let Some(ref refs) = params.snapshot {
                 refs.set_current_tool(Some(item.name.clone()));
+                refs.set_status(SubAgentStatus::Working);
                 refs.tool_calls_count.fetch_add(1, Ordering::Relaxed);
             }
             let result_msg = execute_tool_with_permission(
@@ -637,6 +640,8 @@ fn run_sub_agent_loop(
         }
         if let Some(ref refs) = params.snapshot {
             refs.set_current_tool(None);
+            // 工具全部执行完毕，切回 Thinking（下一轮 LLM 调用前）
+            refs.set_status(SubAgentStatus::Thinking);
         }
 
         // 本轮工具结果写入后同步快照
