@@ -456,8 +456,6 @@ fn interactive_confirm(
     let bw = box_width();
     let category = ToolCategory::from_name(tool_name);
     let icon = category.icon();
-    let theme = Theme::terminal();
-    let (br, bg, bb) = color_rgb(theme.tool_confirm_border);
 
     let mut stdout = io::stdout();
     let mut cursor_pos = initial;
@@ -480,9 +478,11 @@ fn interactive_confirm(
         desc.clone()
     };
 
-    // 计算实际绘制行数（数 writeln 次数）
-    // 顶边框 1 + 描述 1 + 空行 1 + 每选项 1 + 空行 1 + 提示 1 + 底边框 1 = options.len() + 6
+    // 计算实际绘制行数：顶边框 1 + 描述 1 + 空行 1 + 每选项 1 + 空行 1 + 提示 1 + 底边框 1
     let total_lines = (options.len() + 6) as u16;
+
+    let border = "─".yellow();
+    let vbar = "│".yellow();
 
     let draw = |stdout: &mut io::Stdout, cursor_pos: usize, first: bool| -> io::Result<()> {
         if !first {
@@ -492,53 +492,58 @@ fn interactive_confirm(
 
         // 顶边框: ┌─ {icon} {tool_name} 需要确认 ─────┐
         let title = format!("{} {} 需要确认", icon, tool_name);
-        let title_len = title.chars().count() + 2; // +2 for "─ " prefix
-        let inner_w = bw.saturating_sub(2); // ┌ + ┐ = 2
-        let dash_fill = inner_w.saturating_sub(title_len + 1); // +1 for trailing ┐
+        let title_len = title.chars().count() + 2;
+        let inner_w = bw.saturating_sub(2);
+        let dash_fill = inner_w.saturating_sub(title_len + 1);
 
-        // 顶边框
-        let dash_tail = "─".repeat(dash_fill);
-        let top_content = format!("  ┌─ {} {}─┐", title, dash_tail);
-        writeln!(stdout, "{}\r", top_content.truecolor(br, bg, bb).bold())?;
+        writeln!(
+            stdout,
+            "{}\r",
+            format_args!(
+                "  {}{} {} {}{}",
+                "┌".yellow().bold(),
+                border,
+                title.white().bold(),
+                border,
+                format!("{}{}", "─".repeat(dash_fill), "┐").yellow().bold(),
+            )
+        )?;
 
         // 描述行
-        writeln!(
-            stdout,
-            "{}\r",
-            format!("  │  {}", desc_display).truecolor(br, bg, bb)
-        )?;
+        writeln!(stdout, "  {}  {}\r", vbar, desc_display.white())?;
 
         // 空行
-        writeln!(
-            stdout,
-            "{}\r",
-            format!("  │{}", " ".repeat(bw.saturating_sub(4))).truecolor(br, bg, bb)
-        )?;
+        writeln!(stdout, "  {}\r", vbar)?;
 
         // 选项列表
         for (i, opt) in options.iter().enumerate() {
-            let pointer = if cursor_pos == i { "❯" } else { " " };
-            let content = format!("  │  {} {}", pointer, opt);
             if cursor_pos == i {
-                writeln!(stdout, "{}\r", content.cyan().bold())?;
+                writeln!(
+                    stdout,
+                    "  {}  {} {}\r",
+                    vbar,
+                    "❯".cyan().bold(),
+                    opt.white().bold()
+                )?;
             } else {
-                writeln!(stdout, "{}\r", content.dimmed())?;
+                writeln!(stdout, "  {}    {}\r", vbar, opt.dimmed())?;
             }
         }
 
         // 空行
-        writeln!(
-            stdout,
-            "{}\r",
-            format!("  │{}", " ".repeat(bw.saturating_sub(4))).truecolor(br, bg, bb)
-        )?;
+        writeln!(stdout, "  {}\r", vbar)?;
 
         // 操作提示
-        writeln!(stdout, "{}\r", "  │  • ↑↓ 移动  Enter 确认".dimmed())?;
+        writeln!(stdout, "  {}  {}\r", vbar, "• ↑↓ 移动  Enter 确认".dimmed())?;
 
         // 底边框
-        let bottom = format!("  └{}┘", "─".repeat(bw.saturating_sub(3)));
-        writeln!(stdout, "{}\r", bottom.truecolor(br, bg, bb))?;
+        writeln!(
+            stdout,
+            "  {}{}{}\r",
+            "└".yellow().bold(),
+            "─".repeat(bw.saturating_sub(3)).yellow(),
+            "┘".yellow().bold(),
+        )?;
 
         stdout.flush()?;
         Ok(())
@@ -664,8 +669,6 @@ fn run_oneshot_agent(
             let mut answers = serde_json::Map::new();
             for q in &req.questions {
                 let bw = box_width();
-                let theme = Theme::terminal();
-                let (br, bg, bb) = color_rgb(theme.tool_confirm_border);
 
                 // ── 标题行 ──
                 let title = if !q.header.is_empty() {
@@ -675,7 +678,7 @@ fn run_oneshot_agent(
                 };
 
                 // 问题文本按宽度折行
-                let question_lines_text: Vec<String> = if q.question.is_empty() {
+                let question_lines: Vec<String> = if q.question.is_empty() {
                     vec![]
                 } else {
                     let max_chars = bw.saturating_sub(6).max(1);
@@ -698,8 +701,7 @@ fn run_oneshot_agent(
 
                     // 实际行数：顶边框 1 + 问题行数 + 空行 1 + 选项*2(label+desc) + 空行 1 + 提示 1 + 底边框 1
                     let total_lines =
-                        (1 + question_lines_text.len() + 1 + q.options.len() * 2 + 1 + 1 + 1)
-                            as u16;
+                        (1 + question_lines.len() + 1 + q.options.len() * 2 + 1 + 1 + 1) as u16;
 
                     let draw_multi = |stdout: &mut io::Stdout,
                                       cursor_pos: usize,
@@ -717,60 +719,75 @@ fn run_oneshot_agent(
                         let inner_w = bw.saturating_sub(2);
                         let dash_fill = inner_w.saturating_sub(title_text.chars().count() + 2);
                         let dash_tail = "─".repeat(dash_fill);
-                        let top_line = format!("  ┌─ {} {}─┐", title_text, dash_tail);
-                        writeln!(stdout, "{}\r", top_line.truecolor(br, bg, bb).bold())?;
+                        writeln!(
+                            stdout,
+                            "  {}{}{}{}{}\r",
+                            "┌".yellow().bold(),
+                            "─".yellow(),
+                            title_text.white().bold(),
+                            "─".yellow(),
+                            format!("{}{}", dash_tail, "┐").yellow().bold(),
+                        )?;
 
                         // 问题区域
-                        for line in &question_lines_text {
-                            writeln!(
-                                stdout,
-                                "{}\r",
-                                format!("  │  {}", line).truecolor(br, bg, bb)
-                            )?;
+                        for line in &question_lines {
+                            writeln!(stdout, "  {}  {}\r", "│".yellow(), line.white())?;
                         }
 
                         // 空行
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .truecolor(br, bg, bb)
-                        )?;
+                        writeln!(stdout, "  {}\r", "│".yellow())?;
 
                         // 选项列表
                         for (i, opt) in q.options.iter().enumerate() {
                             let pointer = if cursor_pos == i { "❯" } else { " " };
                             let check = if selected[i] { "◉" } else { "○" };
-                            let label_line = format!("  │  {} {} {}", pointer, check, opt.label);
-                            let desc_line = format!("  │    {}", opt.description);
 
                             if cursor_pos == i {
-                                writeln!(stdout, "{}\r", label_line.cyan().bold())?;
-                                writeln!(stdout, "{}\r", desc_line.dimmed())?;
+                                writeln!(
+                                    stdout,
+                                    "  {}  {} {} {}\r",
+                                    "│".yellow(),
+                                    pointer.cyan().bold(),
+                                    check.cyan().bold(),
+                                    opt.label.cyan().bold()
+                                )?;
                             } else {
-                                writeln!(stdout, "{}\r", label_line.dimmed())?;
-                                writeln!(stdout, "{}\r", desc_line.dimmed())?;
+                                writeln!(
+                                    stdout,
+                                    "  {}  {} {} {}\r",
+                                    "│".yellow(),
+                                    pointer,
+                                    check.white(),
+                                    opt.label.white()
+                                )?;
                             }
+                            writeln!(
+                                stdout,
+                                "  {}    {}\r",
+                                "│".yellow(),
+                                opt.description.dimmed()
+                            )?;
                         }
 
                         // 空行
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .truecolor(br, bg, bb)
-                        )?;
+                        writeln!(stdout, "  {}\r", "│".yellow())?;
 
                         // 操作提示
                         writeln!(
                             stdout,
-                            "{}\r",
-                            "  │  • ↑↓ 移动  Space 切换  Enter 确认".dimmed()
+                            "  {}  {}\r",
+                            "│".yellow(),
+                            "• ↑↓ 移动  Space 切换  Enter 确认".dimmed()
                         )?;
 
                         // 底边框
-                        let bottom = format!("  └{}┘", "─".repeat(bw.saturating_sub(3)));
-                        writeln!(stdout, "{}\r", bottom.truecolor(br, bg, bb))?;
+                        writeln!(
+                            stdout,
+                            "  {}{}{}\r",
+                            "└".yellow().bold(),
+                            "─".repeat(bw.saturating_sub(3)).yellow(),
+                            "┘".yellow().bold(),
+                        )?;
 
                         stdout.flush()?;
                         Ok(())
@@ -825,8 +842,7 @@ fn run_oneshot_agent(
 
                     // 实际行数：顶边框 1 + 问题行数 + 空行 1 + 选项*2(label+desc) + 空行 1 + 提示 1 + 底边框 1
                     let total_lines =
-                        (1 + question_lines_text.len() + 1 + q.options.len() * 2 + 1 + 1 + 1)
-                            as u16;
+                        (1 + question_lines.len() + 1 + q.options.len() * 2 + 1 + 1 + 1) as u16;
 
                     let draw_single = |stdout: &mut io::Stdout,
                                        cursor_pos: usize,
@@ -843,55 +859,72 @@ fn run_oneshot_agent(
                         let inner_w = bw.saturating_sub(2);
                         let dash_fill = inner_w.saturating_sub(title_text.chars().count() + 2);
                         let dash_tail = "─".repeat(dash_fill);
-                        let top_line = format!("  ┌─ {} {}─┐", title_text, dash_tail);
-                        writeln!(stdout, "{}\r", top_line.truecolor(br, bg, bb).bold())?;
+                        writeln!(
+                            stdout,
+                            "  {}{}{}{}{}\r",
+                            "┌".yellow().bold(),
+                            "─".yellow(),
+                            title_text.white().bold(),
+                            "─".yellow(),
+                            format!("{}{}", dash_tail, "┐").yellow().bold(),
+                        )?;
 
                         // 问题区域
-                        for line in &question_lines_text {
-                            writeln!(
-                                stdout,
-                                "{}\r",
-                                format!("  │  {}", line).truecolor(br, bg, bb)
-                            )?;
+                        for line in &question_lines {
+                            writeln!(stdout, "  {}  {}\r", "│".yellow(), line.white())?;
                         }
 
                         // 空行
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .truecolor(br, bg, bb)
-                        )?;
+                        writeln!(stdout, "  {}\r", "│".yellow())?;
 
                         // 选项列表
                         for (i, opt) in q.options.iter().enumerate() {
                             let pointer = if cursor_pos == i { "❯" } else { " " };
-                            let label_line = format!("  │  {} {}", pointer, opt.label);
-                            let desc_line = format!("  │    {}", opt.description);
 
                             if cursor_pos == i {
-                                writeln!(stdout, "{}\r", label_line.cyan().bold())?;
-                                writeln!(stdout, "{}\r", desc_line.dimmed())?;
+                                writeln!(
+                                    stdout,
+                                    "  {}  {} {}\r",
+                                    "│".yellow(),
+                                    pointer.cyan().bold(),
+                                    opt.label.cyan().bold()
+                                )?;
                             } else {
-                                writeln!(stdout, "{}\r", label_line.dimmed())?;
-                                writeln!(stdout, "{}\r", desc_line.dimmed())?;
+                                writeln!(
+                                    stdout,
+                                    "  {}  {} {}\r",
+                                    "│".yellow(),
+                                    pointer,
+                                    opt.label.white()
+                                )?;
                             }
+                            writeln!(
+                                stdout,
+                                "  {}    {}\r",
+                                "│".yellow(),
+                                opt.description.dimmed()
+                            )?;
                         }
 
                         // 空行
-                        writeln!(
-                            stdout,
-                            "{}\r",
-                            format!("  │{}", " ".repeat(bw.saturating_sub(4)))
-                                .truecolor(br, bg, bb)
-                        )?;
+                        writeln!(stdout, "  {}\r", "│".yellow())?;
 
                         // 操作提示
-                        writeln!(stdout, "{}\r", "  │  • ↑↓ 移动  Enter 确认".dimmed())?;
+                        writeln!(
+                            stdout,
+                            "  {}  {}\r",
+                            "│".yellow(),
+                            "• ↑↓ 移动  Enter 确认".dimmed()
+                        )?;
 
                         // 底边框
-                        let bottom = format!("  └{}┘", "─".repeat(bw.saturating_sub(3)));
-                        writeln!(stdout, "{}\r", bottom.truecolor(br, bg, bb))?;
+                        writeln!(
+                            stdout,
+                            "  {}{}{}\r",
+                            "└".yellow().bold(),
+                            "─".repeat(bw.saturating_sub(3)).yellow(),
+                            "┘".yellow().bold(),
+                        )?;
 
                         stdout.flush()?;
                         Ok(())

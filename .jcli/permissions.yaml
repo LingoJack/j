@@ -148,4 +148,7 @@ allow:
 - Bash(cd /Users/lingojack/dev_custom/j/.jcli/worktrees/paste-support:*)
 - Bash(python3 -c:*)
 - Bash(find /Users/lingojack/dev_custom/j/target:*)
+- Bash(cat -A:*)
+- Bash(cat -e:*)
+- Bash(xxd /Users/lingojack/dev_custom/j/src/command/chat/oneshot.rs:*)
 deny: []
