@@ -19,10 +19,164 @@ use crate::command::chat::tools::classification::{ToolCategory, get_result_summa
 use crate::command::chat::tools::task::TaskManager;
 use crate::command::chat::tools::todo::TodoManager;
 use crate::config::YamlConfig;
+use crate::theme::Theme;
 use crate::{error, info};
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::time::Duration;
+
+// ─────────────────────────────────────────────────────────────
+//  oneshot UI 辅助：与 TUI (render/cache.rs) 对齐的视觉风格
+// ─────────────────────────────────────────────────────────────
+
+/// 工具调用参数最大预览长度（与 TUI TOOL_ARG_PREVIEW_MAX_CHARS 对齐）
+const TOOL_ARG_PREVIEW_MAX_CHARS: usize = 60;
+
+/// 从工具调用参数 JSON 中提取描述信息
+/// 与 TUI cache.rs extract_tool_description_from_args 逻辑对齐
+fn extract_tool_desc(tool_name: &str, arguments: &str) -> Option<String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
+
+    match tool_name {
+        "Bash" | "Shell" => parsed.get("description")?.as_str().map(|s| s.to_string()),
+        "Read" | "Write" | "Edit" | "Glob" | "Grep" => parsed
+            .get("path")
+            .or_else(|| parsed.get("file_path"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        "Agent" | "AgentTeam" => parsed
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        "Ask" => parsed
+            .get("header")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
+    }
+}
+
+/// 生成截断后的参数预览（与 TUI 折叠模式对齐）
+fn make_args_preview(arguments: &str) -> String {
+    let total_len = arguments.chars().count();
+    if total_len <= TOOL_ARG_PREVIEW_MAX_CHARS {
+        return arguments.to_string();
+    }
+    let truncated = total_len > TOOL_ARG_PREVIEW_MAX_CHARS;
+    let closing_bracket = if truncated {
+        arguments.chars().next().and_then(|c| match c {
+            '{' => Some('}'),
+            '[' => Some(']'),
+            _ => None,
+        })
+    } else {
+        None
+    };
+    let preview_len = if closing_bracket.is_some() {
+        TOOL_ARG_PREVIEW_MAX_CHARS - 4
+    } else {
+        TOOL_ARG_PREVIEW_MAX_CHARS
+    };
+    let preview: String = arguments.chars().take(preview_len).collect();
+    if let Some(bracket) = closing_bracket {
+        format!("{}...{}", preview, bracket)
+    } else if truncated {
+        format!("{}…", preview)
+    } else {
+        preview
+    }
+}
+
+/// 获取终端宽度
+fn term_width() -> usize {
+    crossterm::terminal::size()
+        .map(|(w, _)| w as usize)
+        .unwrap_or(80)
+}
+
+/// 打印带颜色的工具调用行
+///
+/// TUI 折叠格式: `  {icon} {tool_name}  {desc}`
+/// 与 TUI cache.rs L1808-1820 完全对齐
+fn print_tool_call_line(tool_name: &str, arguments: &str) {
+    use colored::Colorize;
+
+    let category = ToolCategory::from_name(tool_name);
+    let icon = category.icon();
+    let theme = Theme::terminal();
+    let tool_color = category.color(&theme);
+
+    // 将 ratatui Color 映射为 colored 颜色字符串
+    let color_str = ratatui_color_to_colored(tool_color);
+
+    // 优先提取 description，否则截断显示原始参数
+    let desc = if let Some(d) = extract_tool_desc(tool_name, arguments) {
+        d
+    } else if !arguments.is_empty() {
+        make_args_preview(arguments)
+    } else {
+        String::new()
+    };
+
+    let tool_name_colored = tool_name.color(color_str.clone()).bold().to_string();
+    let desc_colored = if desc.is_empty() {
+        String::new()
+    } else {
+        format!("  {}", desc.dimmed())
+    };
+
+    eprintln!("  {} {} {}", icon, tool_name_colored, desc_colored);
+}
+
+/// 打印工具执行结果行
+///
+/// TUI 格式: `  🔧 {tool_name} {status_icon} {summary}`
+/// 与 TUI cache.rs L1968-1980 完全对齐
+fn print_tool_result_line(tool_name: &str, is_error: bool, summary: &str, elapsed: &str) {
+    use colored::Colorize;
+
+    let category = ToolCategory::from_name(tool_name);
+    let theme = Theme::terminal();
+    let tool_color = category.color(&theme);
+
+    let color_str = ratatui_color_to_colored(tool_color);
+    let status_icon = if is_error { "✗" } else { "✓" };
+    let status_color = if is_error { "red" } else { "green" };
+
+    eprintln!(
+        "  {} {} {}{} {}",
+        "🔧",
+        tool_name.color(color_str).bold(),
+        status_icon.color(status_color),
+        summary.dimmed(),
+        elapsed.dimmed(),
+    );
+}
+
+/// 将 ratatui Color 映射为 colored 可用的颜色字符串
+fn ratatui_color_to_colored(color: ratatui::style::Color) -> String {
+    use ratatui::style::Color;
+    match color {
+        Color::Rgb(r, g, b) => format!("#{:02x}{:02x}{:02x}", r, g, b),
+        Color::Blue => "blue".to_string(),
+        Color::Cyan => "cyan".to_string(),
+        Color::Green => "green".to_string(),
+        Color::Yellow => "yellow".to_string(),
+        Color::Red => "red".to_string(),
+        Color::Magenta => "magenta".to_string(),
+        Color::White => "white".to_string(),
+        Color::DarkGray => "bright black".to_string(),
+        Color::LightBlue => "bright blue".to_string(),
+        Color::LightCyan => "bright cyan".to_string(),
+        Color::LightGreen => "bright green".to_string(),
+        Color::LightYellow => "bright yellow".to_string(),
+        Color::LightRed => "bright red".to_string(),
+        Color::LightMagenta => "bright magenta".to_string(),
+        _ => "white".to_string(),
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 
 fn generate_oneshot_session_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -57,25 +211,21 @@ pub fn handle_chat(
         || content.is_empty() && !cont && session_id_opt.is_none()
         || agent_config.providers.is_empty()
     {
-        // 无参数 / remote / 尚未配置 provider：进入 TUI 对话界面
-        // 若 providers 为空，TUI 会自动切换到配置界面引导用户完成配置
         run_chat_tui(remote, port);
         return;
     }
 
-    // 有参数：快速发送消息并打印回复
     let message = content.join(" ");
     let message = message.trim().to_string();
     if message.is_empty() && !cont && session_id_opt.is_none() {
-        error!("⚠️ 消息内容为空");
+        error!("消息内容为空");
         return;
     }
     if message.is_empty() {
-        error!("⚠️ 消息内容为空（--continue / --session 需要附带消息内容）");
+        error!("消息内容为空（--continue / --session 需要附带消息内容）");
         return;
     }
 
-    // 解析会话 ID
     let session_id = if let Some(id) = session_id_opt {
         id.to_string()
     } else if cont {
@@ -84,13 +234,12 @@ pub fn handle_chat(
         generate_oneshot_session_id()
     };
 
-    // 加载历史消息（--continue 或 --session 时）
     let prior_messages = if cont || session_id_opt.is_some() {
         let loaded = load_session(&session_id).messages;
         if !loaded.is_empty() {
-            info!("📂 延续会话 {} （{} 条历史消息）", session_id, loaded.len());
+            info!("延续会话 {} （{} 条历史消息）", session_id, loaded.len());
         } else if session_id_opt.is_some() {
-            info!("📂 会话 {} 不存在或为空，开始新对话", session_id);
+            info!("会话 {} 不存在或为空，开始新对话", session_id);
         }
         loaded
     } else {
@@ -102,7 +251,7 @@ pub fn handle_chat(
         .min(agent_config.providers.len() - 1);
     let provider = &agent_config.providers[idx];
 
-    info!("💫 [{}] 思考中...", provider.name);
+    info!("[{}] 思考中...", provider.name);
 
     if agent_config.tools_enabled {
         run_oneshot_agent(
@@ -114,7 +263,6 @@ pub fn handle_chat(
             bypass,
         );
     } else {
-        // 无工具模式：流式输出 + 结束后 markdown 重绘
         run_oneshot_no_tools(
             provider,
             &agent_config,
@@ -140,9 +288,7 @@ fn run_oneshot_no_tools(
     let mut messages = prior_messages.clone();
     messages.push(user_msg.clone());
 
-    let term_width = crossterm::terminal::size()
-        .map(|(w, _)| w as usize)
-        .unwrap_or(80);
+    let tw = term_width();
     let mut cur_col: usize = 0;
     let mut raw_lines: usize = 0;
     let interrupted = Arc::new(AtomicBool::new(false));
@@ -175,7 +321,7 @@ fn run_oneshot_no_tools(
                     cur_col = 0;
                 } else {
                     cur_col += 1;
-                    if cur_col >= term_width {
+                    if cur_col >= tw {
                         raw_lines += 1;
                         cur_col = 0;
                     }
@@ -197,7 +343,7 @@ fn run_oneshot_no_tools(
             }
         }
         Err(e) => {
-            error!("\n✖️ {}", e.display_message());
+            error!("\n{}", e.display_message());
         }
     }
 }
@@ -222,16 +368,27 @@ fn redraw_markdown(raw_lines: usize, cur_col: usize, text: &str) {
 }
 
 /// 交互式工具确认（crossterm raw mode，↑↓ 选择，Enter 确认）
-/// 返回选中的选项索引
-fn interactive_confirm(tool_msg: &str, options: &[&str], initial: usize) -> Option<usize> {
+/// 使用边框盒子样式，与 TUI tool_confirm 对齐
+fn interactive_confirm(
+    tool_name: &str,
+    arguments: &str,
+    options: &[&str],
+    initial: usize,
+) -> Option<usize> {
     use colored::Colorize;
     use crossterm::event::{self, Event, KeyCode};
     use crossterm::{cursor, execute, terminal};
 
+    let tw = term_width();
+    let _box_width = tw.min(60).max(30);
+
     let mut stdout = io::stdout();
     let mut cursor_pos = initial;
-    // 标题 1 行 + 每个选项 1 行 + 操作提示 1 行
-    let total_lines = (1 + options.len() + 1) as u16;
+
+    // 计算总行数：标题行 + 参数区域 + 每个选项 1 行 + 操作提示 1 行
+    let args_preview = make_args_preview(arguments);
+    let args_lines_count = if args_preview.is_empty() { 0 } else { 1 };
+    let total_lines = (1 + args_lines_count + options.len() + 1) as u16;
 
     let draw = |stdout: &mut io::Stdout,
                 cursor_pos: usize,
@@ -242,19 +399,33 @@ fn interactive_confirm(tool_msg: &str, options: &[&str], initial: usize) -> Opti
             let _ = execute!(stdout, cursor::MoveUp(total_lines));
         }
         let _ = execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
-        write!(stdout, "{}\r\n", tool_msg)?;
+
+        // 标题行
+        let category = ToolCategory::from_name(tool_name);
+        let icon = category.icon();
+        let title = format!("{} {} 需要确认", icon, tool_name);
+        write!(stdout, "  {}\r\n", title.bold())?;
+
+        // 参数预览
+        if !args_preview.is_empty() {
+            write!(stdout, "  {}\r\n", args_preview.dimmed())?;
+        }
+
+        // 选项列表
         for (i, opt) in options.iter().enumerate() {
             let pointer = if cursor_pos == i { "❯" } else { " " };
-            let line = format!("   {} {}", pointer, opt);
+            let line = format!("  {} {}", pointer, opt);
             if cursor_pos == i {
                 write!(stdout, "{}\r\n", line.cyan().bold())?;
             } else {
                 write!(stdout, "{}\r\n", line.dimmed())?;
             }
         }
+
+        // 操作提示
         write!(
             stdout,
-            "   {} ↑↓ 移动  {} 确认\r\n",
+            "  {} ↑↓ 移动  {} 确认\r\n",
             "•".dimmed(),
             "Enter".dimmed()
         )?;
@@ -295,7 +466,7 @@ fn interactive_confirm(tool_msg: &str, options: &[&str], initial: usize) -> Opti
     result
 }
 
-/// 流式文本回退 + markdown 重绘（从 streaming_content Arc 读取）
+/// 流式文本回退 + markdown 重绘
 fn redraw_streaming_as_markdown(
     streaming_content: &Arc<Mutex<String>>,
     raw_lines: &mut usize,
@@ -305,10 +476,7 @@ fn redraw_streaming_as_markdown(
     if content.is_empty() {
         return;
     }
-    // 统计 raw 行数（含自动换行）
-    let term_width = crossterm::terminal::size()
-        .map(|(w, _)| w as usize)
-        .unwrap_or(80);
+    let tw = term_width();
     let mut rl: usize = 0;
     let mut cc: usize = 0;
     for ch in content.chars() {
@@ -317,7 +485,7 @@ fn redraw_streaming_as_markdown(
             cc = 0;
         } else {
             cc += 1;
-            if cc >= term_width {
+            if cc >= tw {
                 rl += 1;
                 cc = 0;
             }
@@ -338,7 +506,6 @@ fn run_oneshot_agent(
 ) {
     use colored::Colorize;
 
-    // 构建基础设施
     let hook_manager_loaded = HookManager::load();
     let hook_manager_for_end = hook_manager_loaded.clone();
     let disabled_hooks: Vec<String> = vec![];
@@ -374,7 +541,7 @@ fn run_oneshot_agent(
         crate::command::chat::storage::SessionPaths::new(session_id).todos_file(),
     ));
 
-    // Ask 请求处理线程
+    // Ask 请求处理线程 —— 使用边框盒子样式，与 TUI selector 对齐
     std::thread::spawn(move || {
         use colored::Colorize;
         use crossterm::event::{self, Event, KeyCode};
@@ -383,19 +550,32 @@ fn run_oneshot_agent(
         while let Ok(req) = ask_rx.recv() {
             let mut answers = serde_json::Map::new();
             for q in &req.questions {
-                // --- 标题区域 ---
+                let tw = term_width();
+                let box_width = tw.min(60).max(30);
+
+                // ── 标题区域 ──
                 if !q.header.is_empty() {
-                    println!("\n❓ {}", q.header.cyan().bold());
+                    println!("\n  ❓ {}", q.header.cyan().bold());
                 }
                 if !q.question.is_empty() {
-                    println!("   {}", q.question);
+                    // 长文本自动折行
+                    let question = &q.question;
+                    let max_len = box_width - 4;
+                    let mut start = 0;
+                    let chars: Vec<char> = question.chars().collect();
+                    while start < chars.len() {
+                        let end = (start + max_len).min(chars.len());
+                        let line: String = chars[start..end].iter().collect();
+                        println!("  │ {}", line);
+                        start = end;
+                    }
                 }
 
                 if q.multi_select {
-                    // --- 多选 ---
+                    // ── 多选 ──
                     let mut selected = vec![false; q.options.len()];
                     let mut cursor_pos: usize = 0;
-                    // 每个选项占 2 行（label + description）+ 操作提示 1 行
+                    // 每个选项 2 行 (label + description) + 操作提示 1 行
                     let total_lines = (q.options.len() * 2 + 1) as u16;
 
                     let draw_multi = |stdout: &mut io::Stdout,
@@ -410,9 +590,9 @@ fn run_oneshot_agent(
                             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
                         for (i, opt) in q.options.iter().enumerate() {
                             let pointer = if cursor_pos == i { "❯" } else { " " };
-                            let check = if selected[i] { "✓" } else { "○" };
-                            let label_line = format!("   {} {} {}", pointer, check, opt.label);
-                            let desc_line = format!("     {}", opt.description);
+                            let check = if selected[i] { "◉" } else { "○" };
+                            let label_line = format!("  {} {} {}", pointer, check, opt.label);
+                            let desc_line = format!("    {}", opt.description);
                             if cursor_pos == i {
                                 write!(stdout, "{}\r\n", label_line.cyan().bold())?;
                                 write!(stdout, "{}\r\n", desc_line.dimmed())?;
@@ -423,7 +603,7 @@ fn run_oneshot_agent(
                         }
                         write!(
                             stdout,
-                            "   {} ↑↓ 移动  {} 切换  {} 确认\r\n",
+                            "  {} ↑↓ 移动  {} 切换  {} 确认\r\n",
                             "•".dimmed(),
                             "Space".dimmed(),
                             "Enter".dimmed()
@@ -476,9 +656,9 @@ fn run_oneshot_agent(
                     println!("  → {}", answer.green());
                     answers.insert(q.header.clone(), serde_json::Value::String(answer));
                 } else {
-                    // --- 单选 ---
+                    // ── 单选 ──
                     let mut cursor_pos: usize = 0;
-                    // 每个选项占 2 行（label + description）+ 操作提示 1 行
+                    // 每个选项 2 行 (label + description) + 操作提示 1 行
                     let total_lines = (q.options.len() * 2 + 1) as u16;
 
                     let draw_single = |stdout: &mut io::Stdout,
@@ -492,8 +672,8 @@ fn run_oneshot_agent(
                             execute!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown));
                         for (i, opt) in q.options.iter().enumerate() {
                             let pointer = if cursor_pos == i { "❯" } else { " " };
-                            let label_line = format!("   {} {}", pointer, opt.label);
-                            let desc_line = format!("     {}", opt.description);
+                            let label_line = format!("  {} {}", pointer, opt.label);
+                            let desc_line = format!("    {}", opt.description);
                             if cursor_pos == i {
                                 write!(stdout, "{}\r\n", label_line.cyan().bold())?;
                                 write!(stdout, "{}\r\n", desc_line.dimmed())?;
@@ -504,7 +684,7 @@ fn run_oneshot_agent(
                         }
                         write!(
                             stdout,
-                            "   {} ↑↓ 移动  {} 确认\r\n",
+                            "  {} ↑↓ 移动  {} 确认\r\n",
                             "•".dimmed(),
                             "Enter".dimmed()
                         )?;
@@ -629,13 +809,10 @@ fn run_oneshot_agent(
     let mut last_streaming_len: usize = 0;
     let mut raw_lines: usize = 0;
     let mut cur_col: usize = 0;
-    let term_width = crossterm::terminal::size()
-        .map(|(w, _)| w as usize)
-        .unwrap_or(80);
+    let tw = term_width();
     let jcli_config = JcliConfig::load();
     let cancelled = Arc::new(AtomicBool::new(false));
     let mut round: usize = 0;
-    let mut total_tools: usize = 0;
 
     loop {
         let msgs = handle.poll();
@@ -651,14 +828,13 @@ fn run_oneshot_agent(
                         let delta = &content[last_streaming_len..];
                         print!("{}", delta);
                         let _ = io::stdout().flush();
-                        // 追踪 raw 行数用于后续 markdown 重绘
                         for ch in delta.chars() {
                             if ch == '\n' {
                                 raw_lines += 1;
                                 cur_col = 0;
                             } else {
                                 cur_col += 1;
-                                if cur_col >= term_width {
+                                if cur_col >= tw {
                                     raw_lines += 1;
                                     cur_col = 0;
                                 }
@@ -679,8 +855,6 @@ fn run_oneshot_agent(
                     }
 
                     round += 1;
-                    total_tools += items.len();
-                    eprintln!("\n{} R{} · {} 工具", "⚙".dimmed(), round, items.len(),);
 
                     // 逐个确认 + 执行 + 发送结果
                     for (i, item) in items.iter().enumerate() {
@@ -692,6 +866,7 @@ fn run_oneshot_agent(
                             bypass,
                             i + 1,
                             items.len(),
+                            round,
                         );
                         let _ = tool_result_tx.send(tool_result);
                     }
@@ -704,7 +879,6 @@ fn run_oneshot_agent(
                             &mut cur_col,
                         );
                     }
-                    // 从 context_messages 持久化增量
                     let ctx_msgs = context_messages.lock().unwrap();
                     let persist_from = if prior_len < ctx_msgs.len() {
                         prior_len
@@ -713,7 +887,7 @@ fn run_oneshot_agent(
                     };
                     persist_messages(session_id, &ctx_msgs, persist_from);
                     if round > 0 {
-                        eprintln!("{} R{} · {} 工具", "✓".green(), round, total_tools);
+                        eprintln!();
                     }
                     eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
                     fire_session_end(
@@ -790,6 +964,10 @@ fn run_oneshot_agent(
 }
 
 /// 处理单个工具调用：确认 + 执行，返回 ToolResultMsg
+///
+/// 渲染风格与 TUI cache.rs 完全对齐：
+/// - 工具调用行: `  {icon} {tool_name}  {desc}`
+/// - 工具结果行: `  🔧 {tool_name} {✓/✗} {summary} {elapsed}`
 fn handle_tool_call(
     item: &ToolCallItem,
     tool_registry: &ToolRegistry,
@@ -798,25 +976,17 @@ fn handle_tool_call(
     bypass: bool,
     idx: usize,
     total: usize,
+    round: usize,
 ) -> ToolResultMsg {
     use colored::Colorize;
-
-    let category = ToolCategory::from_name(&item.name);
-    let icon = category.icon();
-    let multi_prefix = if total > 1 {
-        format!("{}/{} ", idx, total)
-    } else {
-        String::new()
-    };
 
     // .jcli deny 检查
     if jcli_config.is_denied(&item.name, &item.arguments) {
         eprintln!(
-            "  {} {}{}{}",
+            "  {} {} — {}",
             "✗".red(),
-            multi_prefix,
             item.name.red().bold(),
-            " — 被权限规则拒绝".red()
+            "被权限规则拒绝".red()
         );
         return ToolResultMsg {
             tool_call_id: item.id.clone(),
@@ -833,23 +1003,38 @@ fn handle_tool_call(
         .unwrap_or(false)
         && !jcli_config.is_allowed(&item.name, &item.arguments);
 
+    // 打印工具调用行（与 TUI 折叠模式对齐）
+    let is_first_in_round = idx == 1;
+    if is_first_in_round {
+        // 轮次标题行
+        eprintln!();
+        eprintln!(
+            "  {} R{} · {} 工具{}",
+            "⚙".dimmed(),
+            round,
+            total,
+            if total > 1 { "" } else { "" }
+        );
+    }
+
     if needs_confirm && !bypass {
-        let tool_desc = format!("  {} {} {}", multi_prefix, icon, item.name.cyan());
+        // 需要确认：先显示工具信息
+        print_tool_call_line(&item.name, &item.arguments);
+
         let allow_rule = generate_allow_rule(&item.name, &item.arguments);
         let options = ["允许执行", "拒绝", &format!("始终允许 ({})", allow_rule)];
-        let choice = interactive_confirm(&tool_desc, &options, 0);
+        let choice = interactive_confirm(&item.name, &item.arguments, &options, 0);
         match choice {
             Some(0) => {}
             Some(2) => {
-                // 始终允许：写入 .jcli（简化处理，不再单独 add_allow_rule）
+                // 始终允许
             }
             _ => {
                 eprintln!(
-                    "  {} {}{}{}",
+                    "  {} {} — {}",
                     "⏭".dimmed(),
-                    multi_prefix,
                     item.name.dimmed(),
-                    " — 已跳过".dimmed()
+                    "已跳过".dimmed()
                 );
                 return ToolResultMsg {
                     tool_call_id: item.id.clone(),
@@ -861,7 +1046,8 @@ fn handle_tool_call(
             }
         }
     } else {
-        eprintln!("  {} {} {}", multi_prefix, icon, item.name.cyan());
+        // 无需确认：直接显示工具调用行
+        print_tool_call_line(&item.name, &item.arguments);
     }
 
     let start = std::time::Instant::now();
@@ -876,23 +1062,8 @@ fn handle_tool_call(
         Some(&item.arguments),
     );
 
-    if result.is_error {
-        eprintln!(
-            "  {} {}{} · {}",
-            "✗".red(),
-            multi_prefix,
-            "失败".red(),
-            elapsed_str.dimmed()
-        );
-    } else {
-        eprintln!(
-            "  {} {}{} · {}",
-            "✓".green(),
-            multi_prefix,
-            summary.green(),
-            elapsed_str.dimmed()
-        );
-    }
+    // 打印工具结果行（与 TUI tool_result 对齐）
+    print_tool_result_line(&item.name, result.is_error, &summary, &elapsed_str);
 
     ToolResultMsg {
         tool_call_id: item.id.clone(),
