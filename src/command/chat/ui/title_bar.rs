@@ -214,6 +214,7 @@ pub fn draw_title_bar(
                 }
 
                 let status_color = match &snap.status {
+                    TeammateStatus::Thinking => t.title_loading,
                     TeammateStatus::Working => t.title_loading,
                     TeammateStatus::WaitingForMessage => t.config_dim,
                     TeammateStatus::Completed => t.config_toggle_on,
@@ -279,6 +280,7 @@ pub fn draw_title_bar(
                 }
 
                 let status_color = match &snap.status {
+                    SubAgentStatus::Thinking => t.title_loading,
                     SubAgentStatus::Working => t.title_loading,
                     SubAgentStatus::Retrying { .. } => t.title_loading,
                     SubAgentStatus::Completed => t.config_toggle_on,
@@ -290,8 +292,11 @@ pub fn draw_title_bar(
                 // 名字：description 做紧凑显示（≤20 字节）
                 let name = short_subagent_label(&snap.description);
 
-                // 状态文字：Working 显示当前工具/轮次；Retrying 显示重试进度；终态显示 icon+label；Error 显示截断错误
+                // 状态文字：Thinking 显示轮次；Working 显示当前工具/轮次；Retrying 显示重试进度；终态显示 icon+label；Error 显示截断错误
                 let status_text = match &snap.status {
+                    SubAgentStatus::Thinking => {
+                        format!("{} R{}", snap.status.icon(), snap.current_round,)
+                    }
                     SubAgentStatus::Working => {
                         if let Some(ref tool) = snap.current_tool {
                             format!("{} R{} {}", snap.status.icon(), snap.current_round, tool)

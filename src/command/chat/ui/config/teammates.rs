@@ -181,6 +181,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
 
         // 状态颜色和符号
         let status_color = match &snap.status {
+            TeammateStatus::Thinking => t.title_loading,
             TeammateStatus::Working => t.title_loading,
             TeammateStatus::WaitingForMessage => t.config_dim,
             TeammateStatus::Completed => t.config_toggle_on,
@@ -257,6 +258,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
 
         for snap in sub_snaps.iter() {
             let status_color = match &snap.status {
+                SubAgentStatus::Thinking => t.title_loading,
                 SubAgentStatus::Working => t.title_loading,
                 SubAgentStatus::Retrying { .. } => t.title_loading,
                 SubAgentStatus::Completed => t.config_toggle_on,
@@ -266,6 +268,9 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
             };
 
             let status_text = match &snap.status {
+                SubAgentStatus::Thinking => {
+                    format!("{} 思考中 R{}", snap.status.icon(), snap.current_round)
+                }
                 SubAgentStatus::Working => {
                     if let Some(ref tool) = snap.current_tool {
                         format!(

@@ -139,6 +139,7 @@ impl ChatApp {
             .map(|s| {
                 let status_str = match s.status {
                     SubAgentStatus::Initializing => "initializing",
+                    SubAgentStatus::Thinking => "thinking",
                     SubAgentStatus::Working => "working",
                     SubAgentStatus::Retrying { .. } => "retrying",
                     SubAgentStatus::Completed => "completed",

@@ -213,8 +213,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             ),
         );
 
-        // 更新状态为 Working（即将调用 LLM）
-        set_status(TeammateStatus::Working);
+        // 更新状态为 Thinking（即将调用 LLM，等待模型回复）
+        set_status(TeammateStatus::Thinking);
 
         // 复用父 agent 的 context 配置，对齐 Main 管线：
         //   select_messages → micro_compact → PreLlmRequest hook 链 (含 broadcast_compress)
@@ -507,10 +507,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 continue;
             }
 
-            // 更新当前工具名
+            // 更新当前工具名 + 切换为 Working（正在执行工具）
             if let Ok(mut ct) = current_tool.lock() {
                 *ct = Some(item.name.clone());
             }
+            set_status(TeammateStatus::Working);
             tool_calls_count.fetch_add(1, Ordering::Relaxed);
 
             let result_msg = execute_tool_with_permission(
@@ -526,10 +527,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 append_messages(std::slice::from_ref(last));
             }
 
-            // 清除当前工具名
+            // 清除当前工具名 + 切回 Thinking（工具执行完毕，下一轮 LLM 调用前）
             if let Ok(mut ct) = current_tool.lock() {
                 *ct = None;
             }
+            set_status(TeammateStatus::Thinking);
         }
 
         // 本轮工具结果写入后同步快照

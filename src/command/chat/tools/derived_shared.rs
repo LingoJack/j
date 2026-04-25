@@ -28,7 +28,9 @@ use std::time::Instant;
 pub enum SubAgentStatus {
     /// 刚注册，尚未进入循环
     Initializing,
-    /// 正在调用 LLM 或执行工具
+    /// 正在调用 LLM（等待模型回复）
+    Thinking,
+    /// 正在执行工具
     Working,
     /// LLM API 重试中（指数退避）
     Retrying {
@@ -50,6 +52,7 @@ impl SubAgentStatus {
     pub fn icon(&self) -> &'static str {
         match self {
             Self::Initializing => "◐",
+            Self::Thinking => "◐",
             Self::Working => "●",
             Self::Retrying { .. } => "↻",
             Self::Completed => "✓",
@@ -62,7 +65,8 @@ impl SubAgentStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Initializing => "初始化",
-            Self::Working => "工作中",
+            Self::Thinking => "思考中",
+            Self::Working => "执行中",
             Self::Retrying { .. } => "重试中",
             Self::Completed => "已完成",
             Self::Cancelled => "已取消",

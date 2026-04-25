@@ -19,7 +19,9 @@ const BROADCAST_LOG_MAX_LEN: usize = 100;
 pub enum TeammateStatus {
     /// 刚创建，尚未开始
     Initializing,
-    /// 正在调用 LLM 或执行工具
+    /// 正在调用 LLM（等待模型回复）
+    Thinking,
+    /// 正在执行工具
     Working,
     /// 空闲轮询等待新消息
     WaitingForMessage,
@@ -42,6 +44,7 @@ pub enum TeammateStatus {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TeammateStatusPersist {
     Initializing,
+    Thinking,
     Working,
     WaitingForMessage,
     Completed,
@@ -59,6 +62,7 @@ impl From<TeammateStatus> for TeammateStatusPersist {
     fn from(status: TeammateStatus) -> Self {
         match status {
             TeammateStatus::Initializing => Self::Initializing,
+            TeammateStatus::Thinking => Self::Thinking,
             TeammateStatus::Working => Self::Working,
             TeammateStatus::WaitingForMessage => Self::WaitingForMessage,
             TeammateStatus::Completed => Self::Completed,
@@ -83,6 +87,7 @@ impl From<TeammateStatusPersist> for TeammateStatus {
     fn from(status: TeammateStatusPersist) -> Self {
         match status {
             TeammateStatusPersist::Initializing => Self::Initializing,
+            TeammateStatusPersist::Thinking => Self::Thinking,
             TeammateStatusPersist::Working => Self::Working,
             TeammateStatusPersist::WaitingForMessage => Self::WaitingForMessage,
             TeammateStatusPersist::Completed => Self::Completed,
@@ -108,6 +113,7 @@ impl TeammateStatus {
     pub fn icon(&self) -> &'static str {
         match self {
             Self::Initializing => "◐",
+            Self::Thinking => "◐",
             Self::Working => "●",
             Self::WaitingForMessage => "○",
             Self::Retrying { .. } => "↻",
@@ -121,7 +127,8 @@ impl TeammateStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Initializing => "初始化",
-            Self::Working => "工作中",
+            Self::Thinking => "思考中",
+            Self::Working => "执行中",
             Self::WaitingForMessage => "等待中",
             Self::Retrying { .. } => "重试中",
             Self::Completed => "已完成",
