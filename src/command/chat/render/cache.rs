@@ -101,7 +101,10 @@ pub fn build_message_lines_incremental(
 
     let t = &app.ui.theme;
     let is_browse_mode = app.ui.mode == ChatMode::Browse;
-    let msg_count = app.state.session.messages.len();
+
+    // ★ UI 渲染从 display_messages 读取（干净文本 + sender_name），不从 session.messages
+    let display_msgs = safe_lock(&app.display_messages, "render_cache::display_msgs").clone();
+    let msg_count = display_msgs.len();
     let mut current_line_offset: usize = 0;
     let mut msg_start_lines: Vec<(usize, usize)> = Vec::with_capacity(msg_count);
     let mut per_msg_cache: Vec<PerMsgCache> = Vec::with_capacity(msg_count);
@@ -113,10 +116,9 @@ pub fn build_message_lines_incremental(
         .map(|c| c.bubble_max_width == bubble_max_width && c.expand_tools == expand)
         .unwrap_or(false);
 
-    // ===== P0 优化：直接引用 session.messages，避免克隆全部内容 =====
+    // ===== P0 优化：引用 display_messages 克隆，避免重复锁 =====
     // 缓存命中时零拷贝复用，只在缓存未命中时才访问消息内容
-    for idx in 0..msg_count {
-        let m = &app.state.session.messages[idx];
+    for (idx, m) in display_msgs.iter().enumerate() {
         let is_selected = is_browse_mode && idx == app.ui.browse_msg_index;
 
         // 记录消息起始行号
@@ -705,7 +707,7 @@ fn render_thinking_block(
 ///
 /// # 参数
 /// - `sender_name`: 消息发送者名称（如 `Teammate@Frontend`）。优先使用此字段作为气泡标签。
-///                  若为 None，则尝试从 content 解析 `<Name> ...` 前缀（兼容老 session）。
+///   若为 None，则尝试从 content 解析 `<Name> ...` 前缀（兼容老 session）。
 /// - `content`: 消息正文（不含 sender_name 前缀）
 pub fn render_assistant_msg(
     sender_name: Option<&str>,

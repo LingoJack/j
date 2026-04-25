@@ -1,13 +1,13 @@
 use super::chat_app::ChatApp;
 use crate::command::chat::storage::MessageRole;
+use crate::util::safe_lock;
 
 impl ChatApp {
     /// 返回浏览模式下符合当前过滤条件的消息索引列表
     pub fn browse_filtered_indices(&self) -> Vec<usize> {
         let filter_lower = self.ui.browse_filter.to_lowercase();
-        self.state
-            .session
-            .messages
+        let display = safe_lock(&self.display_messages, "browse_filtered_indices");
+        display
             .iter()
             .enumerate()
             .filter(|(_, m)| {

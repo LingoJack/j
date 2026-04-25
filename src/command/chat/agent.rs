@@ -6,3 +6,4 @@ pub mod thread_identity;
 mod tool_processor;
 
 pub use agent_loop::*;
+pub use tool_processor::push_both;

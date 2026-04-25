@@ -65,7 +65,7 @@ pub(super) fn drain_pending_user_messages(
 ///
 /// SubAgent/Teammate 的消息由各自的推送逻辑决定走哪个通道（见 sub_agent.rs / teammate_loop.rs）。
 /// 他们分别构造 display_msg（干净文本 + sender_name）和 context_msg（XML 包裹），内容不同。
-pub(super) fn push_both(
+pub fn push_both(
     display: &Arc<Mutex<Vec<ChatMessage>>>,
     context: &Arc<Mutex<Vec<ChatMessage>>>,
     msg: ChatMessage,

@@ -125,8 +125,13 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .border_style(Style::default().fg(t.border_message))
         .style(Style::default().bg(t.bg_primary));
 
-    // 空消息时显示欢迎界面
-    if app.state.session.messages.is_empty() && !app.state.is_loading {
+    // 空消息时显示欢迎界面（以 display_messages 为准，它是 UI 的数据源）
+    // 快速检查是否为空，锁住后立即释放
+    let is_empty = {
+        let display = crate::util::safe_lock(&app.display_messages, "draw_messages::is_empty");
+        display.is_empty()
+    };
+    if is_empty && !app.state.is_loading {
         let inner_width = area.width.saturating_sub(4);
         let welcome_lines = super::components::welcome_box(inner_width, t, app.ui.quote_idx);
         let empty = Paragraph::new(welcome_lines).block(block);
@@ -139,14 +144,13 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 消息内容最大宽度为可用宽度的 85%
     let bubble_max_width = (inner_width * 85 / 100).max(20);
 
-    let msg_count = app.state.session.messages.len();
-    let last_msg_len = app
-        .state
-        .session
-        .messages
-        .last()
-        .map(|m| m.content.len())
-        .unwrap_or(0);
+    let (msg_count, last_msg_len) = {
+        let display = crate::util::safe_lock(&app.display_messages, "draw_messages::msg_stats");
+        (
+            display.len(),
+            display.last().map(|m| m.content.len()).unwrap_or(0),
+        )
+    };
     let streaming_len = if app.state.is_loading {
         safe_lock(
             &app.state.streaming_content,

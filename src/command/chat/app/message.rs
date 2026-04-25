@@ -74,11 +74,14 @@ impl ChatApp {
             &self.state.agent_config.disabled_commands,
         );
 
-        // 添加用户消息
-        self.state
-            .session
-            .messages
-            .push(ChatMessage::text(MessageRole::User, &text));
+        // 添加用户消息到双通道（UI 渲染 + LLM context）和 session.messages（持久化）
+        let user_msg = ChatMessage::text(MessageRole::User, &text);
+        crate::command::chat::agent::push_both(
+            &self.display_messages,
+            &self.context_messages,
+            user_msg.clone(),
+        );
+        self.state.session.messages.push(user_msg);
         self.ui.auto_scroll = true;
         self.ui.scroll_offset = u16::MAX;
 
@@ -172,7 +175,7 @@ impl ChatApp {
     }
 
     /// 此方法清空 inbox 唤醒信号并启动新的 agent loop，让 main agent 响应 teammate 的消息。
-    /// 广播内容已通过 display_messages → poll_stream_actions → session.messages 同步，
+    /// 广播内容已通过 display_messages 同步到 UI，context_messages 同步到 LLM context，
     /// inbox 只含轻量唤醒信号，不重复注入消息内容。
     pub fn wake_from_teammate_inbox(&mut self) {
         {

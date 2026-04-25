@@ -748,7 +748,9 @@ impl ChatApp {
                 self.state.retry_hint = None;
                 // 广播完整消息和状态到远程
                 if self.ws_bridge.is_some() {
-                    if let Some(last_msg) = self.state.session.messages.last()
+                    if let Some(last_msg) =
+                        crate::util::safe_lock(&self.display_messages, "StreamDone::ws_broadcast")
+                            .last()
                         && last_msg.role == MessageRole::Assistant
                     {
                         self.broadcast_ws(WsOutbound::Message {
@@ -798,20 +800,18 @@ impl ChatApp {
             }
             Action::StreamCompacted { messages_before: _ } => {
                 self.state.retry_hint = None;
-                // auto_compact 后双通道均被 clear+re-push：
-                // - display_messages（干净文本）→ session.messages（UI 渲染）
-                // - context_messages（XML 前缀）→ build_api_messages（LLM context）
+                // auto_compact 后双通道均被 clear+re-push，更新 offset 即可。
+                // - display_messages → UI 渲染（直接读，不中转 session.messages）
+                // - context_messages → LLM context + session.messages（持久化）
                 {
-                    // 从 display_messages 全量替换 session.messages
                     let display = crate::util::safe_lock(
                         &self.display_messages,
                         "StreamCompacted::sync_display",
                     );
-                    self.state.session.messages = display.clone();
                     self.display_read_offset = display.len();
-                    // 同步 context_messages offset
                     let shared =
                         crate::util::safe_lock(&self.context_messages, "StreamCompacted::sync_ctx");
+                    self.state.session.messages = shared.clone();
                     self.context_read_offset = shared.len();
                 }
                 self.ui.msg_lines_cache = None;
@@ -1141,18 +1141,26 @@ impl ChatApp {
             },
             Action::BrowseCopyMessage => {
                 use crate::command::chat::render::cache::copy_to_clipboard;
-                if let Some(msg) = self.state.session.messages.get(self.ui.browse_msg_index) {
-                    let content = msg.content.clone();
+                // 先提取所需数据，释放锁后再调用 self 方法（避免 borrow 冲突）
+                let copy_result = {
+                    let display =
+                        crate::util::safe_lock(&self.display_messages, "BrowseCopyMessage");
+                    display.get(self.ui.browse_msg_index).map(|msg| {
+                        let content = msg.content.clone();
+                        let role_label = if msg.role == MessageRole::Assistant {
+                            "AI"
+                        } else if msg.role == MessageRole::User {
+                            "用户"
+                        } else {
+                            "系统"
+                        };
+                        (content, role_label.to_string())
+                    })
+                };
+                if let Some((content, role_label)) = copy_result {
                     let filtered = self.browse_filtered_indices();
                     let pos_in_filtered =
                         filtered.iter().position(|&i| i == self.ui.browse_msg_index);
-                    let role_label = if msg.role == MessageRole::Assistant {
-                        "AI"
-                    } else if msg.role == MessageRole::User {
-                        "用户"
-                    } else {
-                        "系统"
-                    };
                     let extra = if let Some(pos) = pos_in_filtered {
                         format!(" ({}/{})", pos + 1, filtered.len())
                     } else {
