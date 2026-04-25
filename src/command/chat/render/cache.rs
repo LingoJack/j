@@ -2123,6 +2123,7 @@ fn render_agent_result_nested(
     let display_lines = &all_lines[..total.min(max_display)];
 
     let border_color = theme.text_dim;
+    let result_bg = theme.tool_result_bg;
     // bordered_line: 左 "  │ " (4) + 右 " │" (2) = 6 开销
     let content_w = bubble_max_width.saturating_sub(6);
 
@@ -2130,17 +2131,20 @@ fn render_agent_result_nested(
     let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
     lines.push(Line::from(Span::styled(
         top_border,
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(result_bg),
     )));
 
     // 内容行
     for line in display_lines.iter() {
         for wrapped in wrap_text(line, content_w) {
             lines.push(bordered_line(
-                vec![Span::styled(wrapped, Style::default().fg(theme.text_dim))],
+                vec![Span::styled(
+                    wrapped,
+                    Style::default().fg(theme.text_dim).bg(result_bg),
+                )],
                 bubble_max_width,
                 border_color,
-                Color::default(),
+                result_bg,
             ));
         }
     }
@@ -2150,11 +2154,11 @@ fn render_agent_result_nested(
         lines.push(bordered_line(
             vec![Span::styled(
                 format!("... (共 {} 行)", total),
-                Style::default().fg(theme.text_dim),
+                Style::default().fg(theme.text_dim).bg(result_bg),
             )],
             bubble_max_width,
             border_color,
-            Color::default(),
+            result_bg,
         ));
     }
 
@@ -2162,7 +2166,7 @@ fn render_agent_result_nested(
     let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
     lines.push(Line::from(Span::styled(
         bottom_border,
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(result_bg),
     )));
 }
 
@@ -2546,14 +2550,15 @@ fn render_agent_call_request_expanded(
     theme: &Theme,
 ) {
     let border_color = theme.text_dim;
+    let result_bg = theme.tool_result_bg;
     let content_w = bubble_max_width.saturating_sub(6);
 
     // 元信息行：[background] 标识
     if args.run_in_background {
         for wrapped in wrap_text("[background]", content_w) {
             lines.push(Line::from(vec![
-                Span::styled("    ", Style::default()),
-                Span::styled(wrapped, Style::default().fg(theme.text_dim)),
+                Span::styled("    ", Style::default().bg(result_bg)),
+                Span::styled(wrapped, Style::default().fg(theme.text_dim).bg(result_bg)),
             ]));
         }
     }
@@ -2562,7 +2567,7 @@ fn render_agent_call_request_expanded(
     let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
     lines.push(Line::from(Span::styled(
         top_border,
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(result_bg),
     )));
 
     let prompt_lines: Vec<&str> = args.prompt.lines().collect();
@@ -2573,10 +2578,13 @@ fn render_agent_call_request_expanded(
     for line in display_lines {
         for wrapped in wrap_text(line, content_w) {
             lines.push(bordered_line(
-                vec![Span::styled(wrapped, Style::default().fg(theme.text_dim))],
+                vec![Span::styled(
+                    wrapped,
+                    Style::default().fg(theme.text_dim).bg(result_bg),
+                )],
                 bubble_max_width,
                 border_color,
-                Color::default(),
+                result_bg,
             ));
         }
     }
@@ -2586,18 +2594,18 @@ fn render_agent_call_request_expanded(
         lines.push(bordered_line(
             vec![Span::styled(
                 format!("... (共 {} 行)", total),
-                Style::default().fg(theme.text_dim),
+                Style::default().fg(theme.text_dim).bg(result_bg),
             )],
             bubble_max_width,
             border_color,
-            Color::default(),
+            result_bg,
         ));
     }
 
     let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
     lines.push(Line::from(Span::styled(
         bottom_border,
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(result_bg),
     )));
 }
 

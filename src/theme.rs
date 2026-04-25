@@ -206,6 +206,8 @@ pub struct Theme {
     pub toast_error_text: Color,
 
     // ===== 工具确认区 =====
+    /// 工具结果区背景
+    pub tool_result_bg: Color,
     /// 工具确认区边框
     pub tool_confirm_border: Color,
     /// 工具确认区背景
@@ -426,6 +428,7 @@ impl Theme {
             toast_error_border: Color::Red,
             toast_error_bg: Color::Reset,
             toast_error_text: Color::LightRed,
+            tool_result_bg: Color::Reset,
             tool_confirm_border: Color::Cyan,
             tool_confirm_bg: Color::Blue,
             tool_confirm_title: Color::Yellow,
@@ -569,6 +572,7 @@ impl Theme {
             toast_error_text: Color::Rgb(255, 130, 130),
 
             // 工具确认区
+            tool_result_bg: Color::Rgb(25, 25, 35),
             tool_confirm_border: Color::Rgb(200, 180, 80),
             tool_confirm_bg: Color::Rgb(35, 30, 15),
             tool_confirm_title: Color::Rgb(255, 220, 100),
@@ -722,6 +726,7 @@ impl Theme {
             toast_error_text: Color::Rgb(255, 130, 130),
 
             // 工具确认区
+            tool_result_bg: Color::Rgb(32, 32, 32),
             tool_confirm_border: Color::Rgb(200, 180, 80),
             tool_confirm_bg: Color::Rgb(40, 35, 20),
             tool_confirm_title: Color::Rgb(255, 220, 100),
@@ -875,6 +880,7 @@ impl Theme {
             toast_error_text: Color::Rgb(160, 25, 25),
 
             // 工具确认区 - 重新设计，增加层次感
+            tool_result_bg: Color::Rgb(240, 240, 248),
             tool_confirm_border: Color::Rgb(210, 160, 50),
             tool_confirm_bg: Color::Rgb(255, 252, 240),
             tool_confirm_title: Color::Rgb(180, 100, 20),
@@ -1028,6 +1034,7 @@ impl Theme {
             toast_error_text: Color::Rgb(191, 97, 106),
 
             // 工具确认区
+            tool_result_bg: Color::Rgb(43, 48, 60),
             tool_confirm_border: Color::Rgb(235, 203, 139), // nord13
             tool_confirm_bg: Color::Rgb(52, 58, 70),
             tool_confirm_title: Color::Rgb(235, 203, 139),
@@ -1181,6 +1188,7 @@ impl Theme {
             toast_error_text: Color::Rgb(249, 38, 114),
 
             // 工具确认区
+            tool_result_bg: Color::Rgb(37, 38, 32),
             tool_confirm_border: Color::Rgb(230, 219, 116), // monokai yellow
             tool_confirm_bg: Color::Rgb(50, 48, 38),
             tool_confirm_title: Color::Rgb(230, 219, 116),
@@ -1339,6 +1347,7 @@ impl Theme {
             toast_error_text: Color::Rgb(128, 32, 32),
 
             // 工具确认区
+            tool_result_bg: Color::Rgb(240, 234, 224),
             tool_confirm_border: Color::Rgb(160, 120, 48), // 琥珀
             tool_confirm_bg: Color::Rgb(253, 248, 240),
             tool_confirm_title: Color::Rgb(122, 88, 32),
@@ -1497,6 +1506,7 @@ impl Theme {
             toast_error_text: Color::Rgb(255, 117, 127),
 
             // 工具确认区
+            tool_result_bg: Color::Rgb(26, 28, 44),
             tool_confirm_border: Color::Rgb(255, 199, 119), // 黄
             tool_confirm_bg: Color::Rgb(35, 37, 56),
             tool_confirm_title: Color::Rgb(255, 199, 119),
