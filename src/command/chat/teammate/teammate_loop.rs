@@ -484,16 +484,15 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // 在 TUI 中显示 teammate 的工具调用
         // - SendMessage：跳过（broadcast 已单独显示消息内容）
         // - IgnoreMessage：跳过（语义就是"静默"，不应留可见痕迹去打扰其他 agent context）
-        // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
+        // ★ context 通道：XML 包裹文本（Main Agent LLM context）
+        // ★ display 通道：tool_calls 结构体（渲染为工具卡片）
         if let Ok(manager) = teammate_manager.lock() {
             let sender_label = format!("Teammate@{}", name);
             for item in &tool_items {
                 if matches!(item.name.as_str(), "SendMessage" | "IgnoreMessage") {
                     continue;
                 }
-                let display_msg =
-                    ChatMessage::text(MessageRole::Assistant, format!("[调用工具 {}]", item.name))
-                        .with_sender(&sender_label);
+                // context：文本格式（XML 包裹）
                 let context_msg = ChatMessage::text(
                     MessageRole::Assistant,
                     format!(
@@ -502,11 +501,20 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     ),
                 )
                 .with_sender(&sender_label);
-                if let Ok(mut display) = manager.display_messages.lock() {
-                    display.push(display_msg);
-                }
                 if let Ok(mut context) = manager.context_messages.lock() {
                     context.push(context_msg);
+                }
+                // display：结构体格式
+                if let Ok(mut display) = manager.display_messages.lock() {
+                    display.push(ChatMessage {
+                        role: MessageRole::Assistant,
+                        content: String::new(),
+                        tool_calls: Some(vec![item.clone()]),
+                        tool_call_id: None,
+                        images: None,
+                        reasoning_content: None,
+                        sender_name: Some(sender_label.clone()),
+                    });
                 }
             }
         }
@@ -544,6 +552,20 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 "TeammateLoop",
                 false,
             );
+            // 工具结果推入 display only（完整内容，渲染为工具结果卡片）
+            if let Ok(manager) = teammate_manager.lock()
+                && let Ok(mut display) = manager.display_messages.lock()
+            {
+                display.push(ChatMessage {
+                    role: MessageRole::Tool,
+                    content: result_msg.content.clone(),
+                    tool_calls: None,
+                    tool_call_id: result_msg.tool_call_id.clone(),
+                    images: None,
+                    reasoning_content: None,
+                    sender_name: Some(format!("Teammate@{}", name)),
+                });
+            }
             messages.push(result_msg);
             if let Some(last) = messages.last() {
                 append_messages(std::slice::from_ref(last));

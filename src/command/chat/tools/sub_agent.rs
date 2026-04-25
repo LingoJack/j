@@ -5,7 +5,8 @@ use crate::command::chat::agent::thread_identity::{
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
+    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, ToolCallItem,
+    append_event_to_path,
 };
 use crate::command::chat::tools::derived_shared::{
     DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
@@ -404,10 +405,11 @@ fn run_sub_agent_loop(
     let agent_name = sanitize_agent_name(&params.description);
     let sender_label = format!("SubAgent@{}", agent_name);
     // SubAgent 的中间消息通过双通道推送：
-    // - display_messages：UI 显示（TUI 渲染）— 纯文本 + sender_name 字段
+    // - display_messages：UI 显示（TUI 渲染）— 纯文本/结构体 + sender_name 字段
     // - context_messages：显式注入 Main Agent LLM context — XML 包裹
     //
     // Main Agent 能看到子代理的中间文本回复和工具调用名，以便感知工作进度。
+    // 文本消息双通道分异（display 干净文本，context XML 包裹）
     let push_display_and_context =
         |display_content: String, context_content: String, sender: &str| {
             if let Ok(mut display) = display_messages.lock() {
@@ -419,6 +421,35 @@ fn run_sub_agent_loop(
                 context.push(
                     ChatMessage::text(MessageRole::Assistant, &context_content).with_sender(sender),
                 );
+            }
+        };
+    // 工具调用推入 display only（结构体格式，渲染为工具卡片）
+    let push_tool_call_to_display = |item: &ToolCallItem, sender: &str| {
+        if let Ok(mut display) = display_messages.lock() {
+            display.push(ChatMessage {
+                role: MessageRole::Assistant,
+                content: String::new(),
+                tool_calls: Some(vec![item.clone()]),
+                tool_call_id: None,
+                images: None,
+                reasoning_content: None,
+                sender_name: Some(sender.to_string()),
+            });
+        }
+    };
+    // 工具结果推入 display only
+    let push_tool_result_to_display =
+        |result_content: String, tool_call_id: String, sender: &str| {
+            if let Ok(mut display) = display_messages.lock() {
+                display.push(ChatMessage {
+                    role: MessageRole::Tool,
+                    content: result_content,
+                    tool_calls: None,
+                    tool_call_id: Some(tool_call_id),
+                    images: None,
+                    reasoning_content: None,
+                    sender_name: Some(sender.to_string()),
+                });
             }
         };
     let max_rounds = 30; // 子代理最大轮数
@@ -593,16 +624,24 @@ fn run_sub_agent_loop(
         }
 
         // UI 状态行：显示 sub-agent 的工具调用名（不含参数/结果）
-        // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文。
+        // ★ context 通道：XML 包裹文本（Main Agent LLM context）
+        // ★ display 通道：tool_calls 结构体（渲染为工具卡片）
         for item in &tool_items {
-            push_display_and_context(
-                format!("[调用工具 {}]", item.name),
-                format!(
-                    "<{}>[调用工具 {}]</{}>",
-                    sender_label, item.name, sender_label
-                ),
-                &sender_label,
-            );
+            // context：文本格式（XML 包裹）
+            if let Ok(mut context) = context_messages.lock() {
+                context.push(
+                    ChatMessage::text(
+                        MessageRole::Assistant,
+                        format!(
+                            "<{}>[调用工具 {}]</{}>",
+                            sender_label, item.name, sender_label
+                        ),
+                    )
+                    .with_sender(&sender_label),
+                );
+            }
+            // display：结构体格式
+            push_tool_call_to_display(item, &sender_label);
         }
 
         // 将 assistant 消息（含 tool_calls）加入历史
@@ -634,6 +673,12 @@ fn run_sub_agent_loop(
                 cancelled,
                 "SubAgent",
                 true,
+            );
+            // 工具结果推入 display only（完整内容，渲染为工具结果卡片）
+            push_tool_result_to_display(
+                result_msg.content.clone(),
+                result_msg.tool_call_id.clone().unwrap_or_default(),
+                &sender_label,
             );
             messages.push(result_msg);
             if let Some(last) = messages.last() {

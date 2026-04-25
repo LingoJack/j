@@ -77,6 +77,8 @@ pub struct ChatApp {
     pub shared_session_id: Arc<Mutex<String>>,
     /// 已持久化到 JSONL 的消息数量（用于增量追加）
     pub persisted_message_count: usize,
+    /// 已持久化到 display.jsonl 的消息数量（用于增量追加）
+    pub persisted_display_count: usize,
     /// 远程控制 WebSocket 桥接器
     pub ws_bridge: Option<crate::command::chat::remote::bridge::WsBridge>,
     /// 远程客户端是否已连接
@@ -568,6 +570,7 @@ impl ChatApp {
             session_id,
             shared_session_id,
             persisted_message_count: 0,
+            persisted_display_count: 0,
             ws_bridge: None,
             remote_connected: false,
             derived_agent_provider: agent_provider,
@@ -1806,6 +1809,7 @@ impl ChatApp {
                         // 保存当前会话（消息 + 状态）
                         self.sync_context_to_session();
                         self.persist_new_messages();
+                        self.persist_new_display_messages();
                         self.save_session_state();
                         // 清除运行时状态
                         self.clear_runtime_state();
@@ -1846,6 +1850,7 @@ impl ChatApp {
                     // 保存当前会话（消息 + 状态）
                     self.sync_context_to_session();
                     self.persist_new_messages();
+                    self.persist_new_display_messages();
                     self.save_session_state();
                     // 清除运行时状态
                     self.clear_runtime_state();
@@ -1858,8 +1863,8 @@ impl ChatApp {
                     self.state.session.messages.clear();
                     self.clear_channels();
                     self.persisted_message_count = 0;
+                    self.persisted_display_count = 0;
                     self.ui.scroll_offset = 0;
-                    self.ui.msg_lines_cache = None;
                     if let Ok(mut ct) = self.context_tokens.lock() {
                         *ct = 0;
                     }
@@ -1904,6 +1909,7 @@ impl ChatApp {
                     let target_id = meta.id.clone();
                     // 保存当前会话（消息 + 状态）
                     self.persist_new_messages();
+                    self.persist_new_display_messages();
                     self.save_session_state();
                     // 清除运行时状态
                     self.clear_runtime_state();
@@ -1953,6 +1959,7 @@ impl ChatApp {
                 // 保存当前会话（消息 + 状态）
                 self.sync_context_to_session();
                 self.persist_new_messages();
+                self.persist_new_display_messages();
                 self.save_session_state();
                 self.clear_runtime_state();
                 // 生成新会话
@@ -1964,6 +1971,7 @@ impl ChatApp {
                 self.state.session.messages.clear();
                 self.clear_channels();
                 self.persisted_message_count = 0;
+                self.persisted_display_count = 0;
                 self.ui.scroll_offset = 0;
                 self.ui.msg_lines_cache = None;
                 if let Ok(mut ct) = self.context_tokens.lock() {
