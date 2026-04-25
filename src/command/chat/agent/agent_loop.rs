@@ -64,6 +64,7 @@ fn push_compact_tool_messages(
         tool_call_id: None,
         images: None,
         reasoning_content: None,
+        sender_name: None,
     };
     messages.push(tool_call_msg.clone());
     push_both(display, context, tool_call_msg);
@@ -80,6 +81,7 @@ fn push_compact_tool_messages(
         tool_call_id: Some(tool_call_id),
         images: None,
         reasoning_content: None,
+        sender_name: None,
     };
     messages.push(tool_msg.clone());
     push_both(display, context, tool_msg);

@@ -648,5 +648,6 @@ pub fn execute_tool_with_permission(
         tool_call_id: Some(item.id.clone()),
         images: None,
         reasoning_content: None,
+        sender_name: None,
     }
 }
