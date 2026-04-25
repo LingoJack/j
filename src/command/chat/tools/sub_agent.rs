@@ -402,19 +402,23 @@ fn run_sub_agent_loop(
     context_messages: &Arc<Mutex<Vec<ChatMessage>>>,
 ) -> String {
     let agent_name = sanitize_agent_name(&params.description);
+    let sender_label = format!("SubAgent@{}", agent_name);
     // SubAgent 的中间消息通过双通道推送：
-    // - display_messages：UI 显示（TUI 渲染）
-    // - context_messages：显式注入 Main Agent LLM context（有意为之的设计）
+    // - display_messages：UI 显示（TUI 渲染）— 纯文本 + sender_name 字段
+    // - context_messages：显式注入 Main Agent LLM context — XML 包裹
     //
     // Main Agent 能看到子代理的中间文本回复和工具调用名，以便感知工作进度。
-    let push_both = |msg: ChatMessage| {
-        if let Ok(mut display) = display_messages.lock() {
-            display.push(msg.clone());
-        }
-        if let Ok(mut context) = context_messages.lock() {
-            context.push(msg);
-        }
-    };
+    let push_display_and_context =
+        |display_content: String, context_content: String, sender: &str| {
+            if let Ok(mut display) = display_messages.lock() {
+                display.push(
+                    ChatMessage::text(MessageRole::Assistant, &display_content).with_sender(sender),
+                );
+            }
+            if let Ok(mut context) = context_messages.lock() {
+                context.push(ChatMessage::text(MessageRole::Assistant, &context_content));
+            }
+        };
     let max_rounds = 30; // 子代理最大轮数
 
     // 进入 Working 状态
@@ -446,6 +450,7 @@ fn run_sub_agent_loop(
         tool_call_id: None,
         images: None,
         reasoning_content: None,
+        sender_name: None,
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
@@ -548,14 +553,14 @@ fn run_sub_agent_loop(
         if !assistant_text.is_empty() {
             final_text = assistant_text.clone();
             write_info_log("SubAgent", &format!("Reply: {}", &final_text));
-            // UI 状态行：显示 sub-agent 的文字回复（前缀为 agent_name，无空白以便 parse）
+            // UI 状态行：显示 sub-agent 的文字回复
             // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
-            // Main Agent 能看到子代理的中间文本回复，以便感知工作进度。
-            // 参见 tool_processor.rs 中 push_both 函数的文档注释。
-            push_both(ChatMessage::text(
-                MessageRole::Assistant,
-                format!("<SubAgent@{}> {}", agent_name, &assistant_text),
-            ));
+            // display: 纯文本 + sender_name | context: XML 包裹
+            push_display_and_context(
+                assistant_text.clone(),
+                format!("<{}>{}</{}>", sender_label, &assistant_text, sender_label),
+                &sender_label,
+            );
         }
 
         // 检查是否有工具调用
@@ -584,13 +589,16 @@ fn run_sub_agent_loop(
         }
 
         // UI 状态行：显示 sub-agent 的工具调用名（不含参数/结果）
-        // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
-        // Main Agent 能看到子代理正在调用的工具名，以便感知工作进度。
+        // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文。
         for item in &tool_items {
-            push_both(ChatMessage::text(
-                MessageRole::Assistant,
-                format!("<SubAgent@{}> [调用工具 {}]", agent_name, item.name),
-            ));
+            push_display_and_context(
+                format!("[调用工具 {}]", item.name),
+                format!(
+                    "<{}>[调用工具 {}]</{}>",
+                    sender_label, item.name, sender_label
+                ),
+                &sender_label,
+            );
         }
 
         // 将 assistant 消息（含 tool_calls）加入历史
@@ -601,6 +609,7 @@ fn run_sub_agent_loop(
             tool_call_id: None,
             images: None,
             reasoning_content,
+            sender_name: None,
         };
         messages.push(assistant_msg);
         if let Some(last) = messages.last() {
@@ -635,11 +644,12 @@ fn run_sub_agent_loop(
     }
 
     // UI 状态行：sub-agent 结束
-    // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
-    push_both(ChatMessage::text(
-        MessageRole::Assistant,
-        format!("<SubAgent@{}> [已完成]", agent_name),
-    ));
+    // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文。
+    push_display_and_context(
+        "[已完成]".to_string(),
+        format!("<{}>[已完成]</{}>", sender_label, sender_label),
+        &sender_label,
+    );
 
     if let Some(ref refs) = params.snapshot {
         refs.set_status(SubAgentStatus::Completed);

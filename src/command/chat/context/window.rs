@@ -537,6 +537,7 @@ mod tests {
             tool_call_id: None,
             images: None,
             reasoning_content: None,
+            sender_name: None,
         }
     }
 
@@ -548,6 +549,7 @@ mod tests {
             tool_call_id: Some(call_id.to_string()),
             images: None,
             reasoning_content: None,
+            sender_name: None,
         }
     }
 

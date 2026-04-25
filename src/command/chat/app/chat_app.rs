@@ -354,6 +354,7 @@ impl ChatApp {
                                 tool_call_id: None,
                                 images: None,
                                 reasoning_content: None,
+                                sender_name: None,
                             });
                         }
                         result.inject_messages = Some(inject);
@@ -422,6 +423,7 @@ impl ChatApp {
                         tool_call_id: None,
                         images: None,
                         reasoning_content: None,
+                        sender_name: None,
                     }];
                     Some(HookResult {
                         inject_messages: Some(inject),

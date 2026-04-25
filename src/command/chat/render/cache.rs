@@ -159,7 +159,14 @@ pub fn build_message_lines_incremental(
                 if let Some(ref reasoning) = m.reasoning_content {
                     render_thinking_block(reasoning, bubble_max_width, &mut tmp_lines, t, expand);
                 }
-                render_assistant_msg(&m.content, is_selected, bubble_max_width, &mut tmp_lines, t);
+                render_assistant_msg(
+                    m.sender_name.as_deref(),
+                    &m.content,
+                    is_selected,
+                    bubble_max_width,
+                    &mut tmp_lines,
+                    t,
+                );
             }
             DisplayType::ToolCallRequest => {
                 // 如果有 reasoning_content，先渲染 thinking 区块
@@ -169,6 +176,7 @@ pub fn build_message_lines_incremental(
                 // 先渲染文本内容（如果有）— LLM 可能同时返回文本解释和工具调用
                 if !m.content.is_empty() {
                     render_assistant_msg(
+                        m.sender_name.as_deref(),
                         &m.content,
                         is_selected,
                         bubble_max_width,
@@ -692,9 +700,15 @@ fn render_thinking_block(
     }
 }
 
-/// 渲染 AI 助手消息（含 teammate 消息）
+/// 渲染 AI 助手消息（含 teammate/subagent 消息）
 /// 气泡宽度根据实际内容自适应：最小宽度 20，最大宽度为传入的 bubble_max_width
+///
+/// # 参数
+/// - `sender_name`: 消息发送者名称（如 `Teammate@Frontend`）。优先使用此字段作为气泡标签。
+///                  若为 None，则尝试从 content 解析 `<Name> ...` 前缀（兼容老 session）。
+/// - `content`: 消息正文（不含 sender_name 前缀）
 pub fn render_assistant_msg(
+    sender_name: Option<&str>,
     content: &str,
     is_selected: bool,
     bubble_max_width: usize,
@@ -705,13 +719,15 @@ pub fn render_assistant_msg(
         return;
     }
 
-    // 检测 teammate 消息：`<AgentName> 正文`
-    let (agent_name, bubble_content): (String, &str) =
-        if let Some((name, rest)) = parse_agent_prefix(content) {
-            (name.to_string(), rest)
-        } else {
-            ("Sprite".to_string(), content)
-        };
+    // 确定 agent_name 和 bubble_content：
+    // 优先使用 sender_name 字段；若无则 fallback 解析 content 的 <Name> 前缀（兼容老 session）
+    let (agent_name, bubble_content): (String, &str) = if let Some(name) = sender_name {
+        (name.to_string(), content)
+    } else if let Some((name, rest)) = parse_agent_prefix(content) {
+        (name.to_string(), rest)
+    } else {
+        ("Sprite".to_string(), content)
+    };
 
     let is_teammate = agent_name != "Sprite";
 

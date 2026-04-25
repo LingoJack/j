@@ -294,6 +294,7 @@ pub(super) fn process_tool_calls(
             tool_call_id: Some(result.tool_call_id.clone()),
             images: None,
             reasoning_content: None,
+            sender_name: None,
         };
         messages.push(tool_msg.clone());
         push_both(ctx.display_messages, ctx.context_messages, tool_msg);
@@ -327,6 +328,7 @@ pub(super) fn process_tool_calls(
                             .collect(),
                     ),
                     reasoning_content: None,
+                    sender_name: None,
                 };
                 deferred_image_msgs.push(img_msg);
             } else {

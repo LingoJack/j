@@ -152,6 +152,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         tool_call_id: None,
         images: None,
         reasoning_content: None,
+        sender_name: None,
     });
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
     append_messages(&messages);
@@ -336,13 +337,20 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             //   - display + context：同步到 Main Agent 的 LLM 上下文
             //   - 其他 teammate 的 broadcast_inbox：旁听性质（不唤醒）
             if let Ok(manager) = teammate_manager.lock() {
-                let broadcast_text = format!("<Teammate@{}> {}", name, &assistant_text);
-                let msg = ChatMessage::text(MessageRole::Assistant, &broadcast_text);
+                let sender_label = format!("Teammate@{}", name);
+                // display: 纯文本 + sender_name（UI 渲染靠字段，不解析 content）
+                let display_msg = ChatMessage::text(MessageRole::Assistant, &assistant_text)
+                    .with_sender(&sender_label);
+                // context: XML 包裹（LLM 能清晰看到消息来源）
+                let context_msg = ChatMessage::text(
+                    MessageRole::Assistant,
+                    format!("<{}>{}</{}>", sender_label, &assistant_text, sender_label),
+                );
                 if let Ok(mut display) = manager.display_messages.lock() {
-                    display.push(msg.clone());
+                    display.push(display_msg);
                 }
                 if let Ok(mut context) = manager.context_messages.lock() {
-                    context.push(msg);
+                    context.push(context_msg);
                 }
                 // 推送到其他 teammate 的 broadcast_inbox（旁听，不设 wake_flag）
                 for (peer_name, handle) in &manager.teammates {
@@ -350,7 +358,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                         continue; // 不给自己发
                     }
                     if let Ok(mut inbox) = handle.broadcast_inbox.lock() {
-                        inbox.push(ChatMessage::text(MessageRole::User, &broadcast_text));
+                        inbox.push(
+                            ChatMessage::text(MessageRole::User, &assistant_text)
+                                .with_sender(&sender_label),
+                        );
                     }
                 }
             }
@@ -463,6 +474,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             tool_call_id: None,
             images: None,
             reasoning_content,
+            sender_name: None,
         });
         if let Some(last) = messages.last() {
             append_messages(std::slice::from_ref(last));
@@ -473,19 +485,26 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // - IgnoreMessage：跳过（语义就是"静默"，不应留可见痕迹去打扰其他 agent context）
         // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
         if let Ok(manager) = teammate_manager.lock() {
+            let sender_label = format!("Teammate@{}", name);
             for item in &tool_items {
                 if matches!(item.name.as_str(), "SendMessage" | "IgnoreMessage") {
                     continue;
                 }
-                let msg = ChatMessage::text(
+                let display_msg =
+                    ChatMessage::text(MessageRole::Assistant, format!("[调用工具 {}]", item.name))
+                        .with_sender(&sender_label);
+                let context_msg = ChatMessage::text(
                     MessageRole::Assistant,
-                    format!("<Teammate@{}> [调用工具 {}]", name, item.name),
+                    format!(
+                        "<{}>[调用工具 {}]</{}>",
+                        sender_label, item.name, sender_label
+                    ),
                 );
                 if let Ok(mut display) = manager.display_messages.lock() {
-                    display.push(msg.clone());
+                    display.push(display_msg);
                 }
                 if let Ok(mut context) = manager.context_messages.lock() {
-                    context.push(msg);
+                    context.push(context_msg);
                 }
             }
         }
@@ -500,6 +519,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     tool_call_id: Some(item.id.clone()),
                     images: None,
                     reasoning_content: None,
+                    sender_name: None,
                 });
                 if let Some(last) = messages.last() {
                     append_messages(std::slice::from_ref(last));
@@ -543,15 +563,18 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     if !work_done.load(Ordering::Relaxed)
         && let Ok(manager) = teammate_manager.lock()
     {
-        let msg = ChatMessage::text(
+        let sender_label = format!("Teammate@{}", name);
+        let display_msg =
+            ChatMessage::text(MessageRole::Assistant, "[已完成工作]").with_sender(&sender_label);
+        let context_msg = ChatMessage::text(
             MessageRole::Assistant,
-            format!("<Teammate@{}> [已完成工作]", name),
+            format!("<{}>[已完成工作]</{}>", sender_label, sender_label),
         );
         if let Ok(mut display) = manager.display_messages.lock() {
-            display.push(msg.clone());
+            display.push(display_msg);
         }
         if let Ok(mut context) = manager.context_messages.lock() {
-            context.push(msg);
+            context.push(context_msg);
         }
         // 同步写入独立 jsonl（不带 <Name> 前缀，合成时会加前缀）
         let done_msg = ChatMessage::text(MessageRole::Assistant, "[已完成工作]".to_string());

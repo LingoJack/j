@@ -39,6 +39,7 @@ fn tool_call_with_id(id: &str, name: &str) -> ChatMessage {
         tool_call_id: None,
         images: None,
         reasoning_content: None,
+        sender_name: None,
     }
 }
 
@@ -60,6 +61,7 @@ fn tool_call(names: &[&str]) -> ChatMessage {
         tool_call_id: None,
         images: None,
         reasoning_content: None,
+        sender_name: None,
     }
 }
 
@@ -71,6 +73,7 @@ fn tool_result(call_id: &str, content: &str) -> ChatMessage {
         tool_call_id: Some(call_id.to_string()),
         images: None,
         reasoning_content: None,
+        sender_name: None,
     }
 }
 
