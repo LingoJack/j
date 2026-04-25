@@ -17,6 +17,7 @@ pub mod sub_agent;
 pub mod task;
 pub mod teammate_tool;
 pub mod todo;
+pub mod wait_for_message;
 mod web_fetch;
 mod web_search;
 pub mod work_done;
@@ -57,4 +58,5 @@ pub mod tool_names {
     pub const TEAMMATE: &str = super::teammate_tool::TeammateTool::NAME;
     pub const SEND_MESSAGE: &str = super::send_message::SendMessageTool::NAME;
     pub const WORK_DONE: &str = super::work_done::WorkDoneTool::NAME;
+    pub const WAIT_FOR_MESSAGE: &str = super::wait_for_message::WaitForMessageTool::NAME;
 }

@@ -11,6 +11,7 @@
 
 <communication>
 - 使用 `SendMessage` 工具与其他 agent 通信
+- 使用 `WaitForMessage` 工具等待其他 agent 的消息（会阻塞直到收到消息或超时）
 - 收到的广播消息以 `<AgentName>` 前缀出现在对话中
 - 用 `@AgentName` 指定消息接收者（消息仍广播给所有人，但只有 @目标 会被真正「唤醒」）
 </communication>
