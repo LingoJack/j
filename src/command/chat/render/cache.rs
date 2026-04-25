@@ -1759,6 +1759,9 @@ pub fn render_tool_call_request_msg(
                             theme,
                         );
                     }
+                // ExitPlanMode 工具使用专用渲染：边框显示
+                } else if matches!(tc.name.as_str(), tool_names::EXIT_PLAN_MODE) {
+                    render_exit_plan_mode_request(bubble_max_width, lines, theme);
                 } else if let Ok(json_value) =
                     serde_json::from_str::<serde_json::Value>(&tc.arguments)
                 {
@@ -2023,14 +2026,13 @@ pub fn render_tool_result_msg(
     } else if clean.contains("```diff\n") {
         // Diff 块特殊渲染
         render_diff_content(&clean, content_w, lines, theme);
-    } else if tool_name == tool_names::AGENT {
-        // Agent 结果边框显示
-        render_agent_result_nested(&clean, bubble_max_width, lines, theme);
-    } else if tool_name == tool_names::COMPACT {
-        // Compact 结果边框显示（类似 Agent 的嵌套样式）
-        render_agent_result_nested(&clean, bubble_max_width, lines, theme);
-    } else if tool_name == tool_names::LOAD_SKILL {
-        // LoadSkill 结果边框显示（技能内容，与 Agent 嵌套样式一致）
+    } else if tool_name == tool_names::AGENT
+        || tool_name == tool_names::COMPACT
+        || tool_name == tool_names::LOAD_SKILL
+        || tool_name == tool_names::ENTER_PLAN_MODE
+        || tool_name == tool_names::EXIT_PLAN_MODE
+    {
+        // Agent/Compact/LoadSkill/Plan 结果边框显示
         render_agent_result_nested(&clean, bubble_max_width, lines, theme);
     } else if tool_name == tool_names::BASH {
         // Bash 结果：命令行高亮 + 输出
@@ -2123,7 +2125,7 @@ fn render_agent_result_nested(
     let display_lines = &all_lines[..total.min(max_display)];
 
     let border_color = theme.text_dim;
-    let result_bg = theme.tool_result_bg;
+    let result_bg = theme.bg_primary;
     // bordered_line: 左 "  │ " (4) + 右 " │" (2) = 6 开销
     let content_w = bubble_max_width.saturating_sub(6);
 
@@ -2550,7 +2552,7 @@ fn render_agent_call_request_expanded(
     theme: &Theme,
 ) {
     let border_color = theme.text_dim;
-    let result_bg = theme.tool_result_bg;
+    let result_bg = theme.bg_primary;
     let content_w = bubble_max_width.saturating_sub(6);
 
     // 元信息行：[background] 标识
@@ -2602,6 +2604,45 @@ fn render_agent_call_request_expanded(
         ));
     }
 
+    let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
+    lines.push(Line::from(Span::styled(
+        bottom_border,
+        Style::default().fg(border_color).bg(result_bg),
+    )));
+}
+
+/// 渲染 ExitPlanMode 工具调用请求（边框显示）
+fn render_exit_plan_mode_request(
+    bubble_max_width: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    let border_color = theme.text_dim;
+    let result_bg = theme.bg_primary;
+    let content_w = bubble_max_width.saturating_sub(6);
+
+    // 顶边框
+    let top_border = format!("  ┌{}┐", "─".repeat(bubble_max_width.saturating_sub(4)));
+    lines.push(Line::from(Span::styled(
+        top_border,
+        Style::default().fg(border_color).bg(result_bg),
+    )));
+
+    // 内容：提交计划审批提示
+    let hint = "提交计划审批，等待用户批准后退出计划模式";
+    for wrapped in wrap_text(hint, content_w) {
+        lines.push(bordered_line(
+            vec![Span::styled(
+                wrapped,
+                Style::default().fg(theme.text_dim).bg(result_bg),
+            )],
+            bubble_max_width,
+            border_color,
+            result_bg,
+        ));
+    }
+
+    // 底边框
     let bottom_border = format!("  └{}┘", "─".repeat(bubble_max_width.saturating_sub(4)));
     lines.push(Line::from(Span::styled(
         bottom_border,
