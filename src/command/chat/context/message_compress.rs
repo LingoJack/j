@@ -18,10 +18,10 @@
 //!
 //! # 压缩策略
 //!
-//! 广播消息格式：`<AgentName> [调用工具 ToolName]`
+//! 广播消息格式：`<Type: AgentName> [调用工具 ToolName]`
 //! - 按 agent 来源分组
 //! - 保留最近 threshold 条完整消息
-//! - 较早的合并为摘要：`<AgentName> [早期工具调用摘要: ToolA×5, ToolB×3, 共 8 次]`
+//! - 较早的合并为摘要：`<Type: AgentName> [早期工具调用摘要: ToolA×5, ToolB×3, 共 8 次]`
 
 use crate::command::chat::storage::{ChatMessage, MessageRole};
 use std::collections::HashMap;
@@ -31,7 +31,7 @@ pub const DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD: usize = 5;
 
 /// 从消息内容中提取 agent 来源
 ///
-/// 广播消息格式：`<AgentName> message`
+/// 广播消息格式：`<Type: AgentName> message` 或 `<AgentName> message`（旧格式兼容）
 /// 返回 (agent_name, remainder) 或 None（非广播消息）
 fn extract_agent_source(content: &str) -> Option<(String, &str)> {
     let trimmed = content.trim_start();
@@ -46,7 +46,7 @@ fn extract_agent_source(content: &str) -> Option<(String, &str)> {
 
 /// 判断是否为 tool call 广播消息
 ///
-/// 格式：`<AgentName> [调用工具 ToolName]`
+/// 格式：`<Type: AgentName> [调用工具 ToolName]` 或 `<AgentName> [调用工具 ToolName]`
 fn is_tool_call_broadcast(content: &str) -> Option<(String, String)> {
     let (agent_name, remainder) = extract_agent_source(content)?;
     let trimmed = remainder.trim_start();
@@ -187,12 +187,16 @@ mod tests {
     #[test]
     fn test_extract_agent_source() {
         assert_eq!(
-            extract_agent_source("<Frontend> hello"),
-            Some(("Frontend".to_string(), " hello"))
+            extract_agent_source("<Teammate@Frontend> hello"),
+            Some(("Teammate@Frontend".to_string(), " hello"))
         );
         assert_eq!(
-            extract_agent_source("  <Backend> [调用工具 Read]"),
-            Some(("Backend".to_string(), " [调用工具 Read]"))
+            extract_agent_source("  <Teammate@Backend> [调用工具 Read]"),
+            Some(("Teammate@Backend".to_string(), " [调用工具 Read]"))
+        );
+        assert_eq!(
+            extract_agent_source("<SubAgent@search_auth> text"),
+            Some(("SubAgent@search_auth".to_string(), " text"))
         );
         assert_eq!(extract_agent_source("no prefix"), None);
         assert_eq!(extract_agent_source("<no-close"), None);
@@ -203,15 +207,18 @@ mod tests {
         use crate::command::chat::tools::tool_names::{EDIT, READ};
 
         assert_eq!(
-            is_tool_call_broadcast(&format!("<Frontend> [调用工具 {}]", READ)),
-            Some(("Frontend".to_string(), READ.to_string()))
+            is_tool_call_broadcast(&format!("<Teammate@Frontend> [调用工具 {}]", READ)),
+            Some(("Teammate@Frontend".to_string(), READ.to_string()))
         );
         assert_eq!(
-            is_tool_call_broadcast(&format!("<Backend>  [调用工具 {}] ", EDIT)),
-            Some(("Backend".to_string(), EDIT.to_string()))
+            is_tool_call_broadcast(&format!("<Teammate@Backend>  [调用工具 {}] ", EDIT)),
+            Some(("Teammate@Backend".to_string(), EDIT.to_string()))
         );
         // 不是 tool call
-        assert_eq!(is_tool_call_broadcast("<Frontend> hello world"), None);
+        assert_eq!(
+            is_tool_call_broadcast("<Teammate@Frontend> hello world"),
+            None
+        );
         // 不是广播格式
         assert_eq!(is_tool_call_broadcast("regular message"), None);
     }
@@ -233,27 +240,51 @@ mod tests {
     fn test_compress_within_threshold() {
         // 其他 agent 的 tool call 数量 <= threshold，不压缩
         let messages = vec![
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
         ];
-        let result = compress_other_agent_toolcalls(&messages, "Backend", 5);
+        let result = compress_other_agent_toolcalls(&messages, "Main", 5);
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].content, "<Frontend> [调用工具 Read]");
-        assert_eq!(result[1].content, "<Frontend> [调用工具 Edit]");
+        assert_eq!(result[0].content, "<Teammate@Frontend> [调用工具 Read]");
+        assert_eq!(result[1].content, "<Teammate@Frontend> [调用工具 Edit]");
     }
 
     #[test]
     fn test_compress_exceed_threshold() {
         // 其他 agent 的 tool call 数量 > threshold，压缩早期消息
         let messages = vec![
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Bash]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Bash]".to_string(),
+            ),
         ];
-        let result = compress_other_agent_toolcalls(&messages, "Backend", 3);
+        let result = compress_other_agent_toolcalls(&messages, "Main", 3);
         // 前 3 条压缩为摘要 + 后 3 条保留 = 4 条
         assert_eq!(result.len(), 4);
         // 第一条应该是摘要
@@ -263,34 +294,52 @@ mod tests {
         assert!(result[0].content.contains("Bash×1"));
         assert!(result[0].content.contains("共 3 次"));
         // 后 3 条保留完整
-        assert_eq!(result[1].content, "<Frontend> [调用工具 Read]");
-        assert_eq!(result[2].content, "<Frontend> [调用工具 Edit]");
-        assert_eq!(result[3].content, "<Frontend> [调用工具 Bash]");
+        assert_eq!(result[1].content, "<Teammate@Frontend> [调用工具 Read]");
+        assert_eq!(result[2].content, "<Teammate@Frontend> [调用工具 Edit]");
+        assert_eq!(result[3].content, "<Teammate@Frontend> [调用工具 Bash]");
     }
 
     #[test]
     fn test_compress_multiple_agents() {
         // 多个其他 agent，各自独立压缩
         let messages = vec![
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Backend> [调用工具 Bash]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Backend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Backend> [调用工具 Read]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Bash]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Backend> [调用工具 Bash]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Backend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Backend> [调用工具 Read]".to_string(),
+            ),
         ];
-        let result = compress_other_agent_toolcalls(&messages, "DevOps", 2);
+        let result = compress_other_agent_toolcalls(&messages, "Main", 2);
         // Frontend: 1 摘要 + 2 保留 = 3
         // Backend: 1 摘要 + 2 保留 = 3
         // 总共 6 条消息
         assert_eq!(result.len(), 6);
         // 验证 Frontend 摘要
-        assert!(result[0].content.contains("<Frontend>"));
+        assert!(result[0].content.contains("<Teammate@Frontend>"));
         assert!(result[0].content.contains("[早期工具调用摘要"));
         // 验证 Backend 摘要（在其第一条消息的位置）
         let backend_summary_idx = result
             .iter()
-            .position(|m| m.content.contains("<Backend> [早期工具调用摘要"))
+            .position(|m| m.content.contains("<Teammate@Backend> [早期工具调用摘要"))
             .expect("Backend summary should exist");
         assert!(result[backend_summary_idx].content.contains("Bash×1"));
     }
@@ -301,13 +350,25 @@ mod tests {
         let messages = vec![
             ChatMessage::text(MessageRole::User, "user question".to_string()),
             ChatMessage::text(MessageRole::Assistant, "assistant response".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Bash]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
             ChatMessage::text(MessageRole::User, "another user message".to_string()),
         ];
-        let result = compress_other_agent_toolcalls(&messages, "Backend", 2);
+        let result = compress_other_agent_toolcalls(&messages, "Main", 2);
         // user question + assistant response + 摘要 + 保留的 2 条 tool call + another user message
         assert!(result.iter().any(|m| m.content == "user question"));
         assert!(result.iter().any(|m| m.content == "assistant response"));
@@ -327,25 +388,43 @@ mod tests {
     #[test]
     fn compress_threshold_zero_returns_original() {
         let messages = vec![
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
         ];
-        let result = compress_other_agent_toolcalls(&messages, "Backend", 0);
+        let result = compress_other_agent_toolcalls(&messages, "Main", 0);
         assert_eq!(result.len(), 2, "threshold=0 应原样返回");
-        assert_eq!(result[0].content, "<Frontend> [调用工具 Read]");
+        assert_eq!(result[0].content, "<Teammate@Frontend> [调用工具 Read]");
     }
 
     #[test]
     fn compress_self_agent_excluded() {
         // 自己发出的 tool call 广播不应被压缩
         let messages = vec![
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Bash]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
         ];
-        // self_agent_name = "Frontend"，不压缩自己的消息
-        let result = compress_other_agent_toolcalls(&messages, "Frontend", 1);
+        // self_agent_name 含类型前缀，与广播前缀一致
+        let result = compress_other_agent_toolcalls(&messages, "Teammate@Frontend", 1);
         assert_eq!(result.len(), 4, "self agent 的消息不压缩");
     }
 
@@ -354,13 +433,25 @@ mod tests {
         // 混合广播消息和普通消息
         let messages = vec![
             ChatMessage::text(MessageRole::User, "normal message".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
             ChatMessage::text(MessageRole::Assistant, "response".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Edit]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Bash]".to_string()),
-            ChatMessage::text(MessageRole::User, "<Frontend> [调用工具 Read]".to_string()),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Edit]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Bash]".to_string(),
+            ),
+            ChatMessage::text(
+                MessageRole::User,
+                "<Teammate@Frontend> [调用工具 Read]".to_string(),
+            ),
         ];
-        let result = compress_other_agent_toolcalls(&messages, "Backend", 2);
+        let result = compress_other_agent_toolcalls(&messages, "Main", 2);
         // 普通消息和 assistant 消息保留，Frontend 超过 threshold 的被压缩
         assert!(result.iter().any(|m| m.content == "normal message"));
         assert!(result.iter().any(|m| m.content == "response"));

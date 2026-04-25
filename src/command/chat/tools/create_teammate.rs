@@ -232,8 +232,8 @@ impl Tool for CreateTeammateTool {
         let context_config_clone = Arc::clone(&self.shared.agent_context_config);
 
         let thread_handle = std::thread::spawn(move || {
-            // 设置线程的 agent 身份
-            set_current_agent_name(&teammate_name);
+            // 设置线程的 agent 身份（含类型前缀，与广播 <Teammate@Name> 格式一致）
+            set_current_agent_name(&format!("Teammate@{}", teammate_name));
             set_current_agent_type(AgentType::Teammate);
 
             // 设置 worktree CWD（若有）

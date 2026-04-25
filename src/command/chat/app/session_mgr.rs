@@ -284,13 +284,13 @@ impl ChatApp {
         self.restore_teammate_transcripts(sid, &teammate_names);
     }
 
-    /// 从 teammate 独立 JSONL 中恢复 `<Name>` 显示条目。
+    /// 从 teammate 独立 JSONL 中恢复 `<Teammate@Name>` 显示条目。
     fn restore_teammate_transcripts(&mut self, sid: &str, teammate_names: &[String]) {
         if teammate_names.is_empty() {
             return;
         }
         for name in teammate_names {
-            let prefix_marker = format!("<{}>", name);
+            let prefix_marker = format!("<Teammate@{}>", name);
             let path = SessionPaths::new(sid).teammate_transcript(&sanitize_filename(name));
             if !path.exists() {
                 continue;
@@ -303,12 +303,12 @@ impl ChatApp {
                     continue;
                 }
                 if !msg.content.is_empty() {
-                    synthesized.push(format!("<{}> {}", name, msg.content));
+                    synthesized.push(format!("<Teammate@{}> {}", name, msg.content));
                 }
                 if let Some(tcs) = &msg.tool_calls {
                     for tc in tcs {
                         if tc.name != "SendMessage" {
-                            synthesized.push(format!("<{}> [调用工具 {}]", name, tc.name));
+                            synthesized.push(format!("<Teammate@{}> [调用工具 {}]", name, tc.name));
                         }
                     }
                 }

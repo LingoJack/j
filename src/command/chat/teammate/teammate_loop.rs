@@ -307,7 +307,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             if let Ok(manager) = teammate_manager.lock() {
                 let msg = ChatMessage::text(
                     MessageRole::Assistant,
-                    format!("<{}> {}", name, &assistant_text),
+                    format!("<Teammate@{}> {}", name, &assistant_text),
                 );
                 if let Ok(mut display) = manager.display_messages.lock() {
                     display.push(msg.clone());
@@ -451,7 +451,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 if item.name != "SendMessage" {
                     let msg = ChatMessage::text(
                         MessageRole::Assistant,
-                        format!("<{}> [调用工具 {}]", name, item.name),
+                        format!("<Teammate@{}> [调用工具 {}]", name, item.name),
                     );
                     if let Ok(mut display) = manager.display_messages.lock() {
                         display.push(msg.clone());
@@ -516,7 +516,10 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     if !work_done.load(Ordering::Relaxed)
         && let Ok(manager) = teammate_manager.lock()
     {
-        let msg = ChatMessage::text(MessageRole::Assistant, format!("<{}> [已完成工作]", name));
+        let msg = ChatMessage::text(
+            MessageRole::Assistant,
+            format!("<Teammate@{}> [已完成工作]", name),
+        );
         if let Ok(mut display) = manager.display_messages.lock() {
             display.push(msg.clone());
         }
