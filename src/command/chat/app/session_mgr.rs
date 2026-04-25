@@ -279,7 +279,7 @@ impl ChatApp {
 
         // Teammates 状态已通过 set_recovered_teammates 恢复，无需额外处理 transcript。
         // 主 transcript（transcript.jsonl）已包含所有来源的消息（Main/Teammate/SubAgent），
-        // 它们在实时运行时通过 push_both → context_messages → session.messages 写入，
+        // 它们在实时运行时通过 push_both/各自推送 → display_messages → session.messages 写入，
         // 顺序正确。无需从独立 transcript 重新合成消息。
     }
 

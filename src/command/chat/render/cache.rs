@@ -612,15 +612,15 @@ pub fn render_user_msg(
 
 /// 解析 teammate 消息的 `<AgentName>` 前缀。
 /// 返回 `Some((name, rest))` 其中 rest 已去除前导空格。
-/// 规则：内容以 `<` 开头，紧跟非空白非 `>` 字符，直到 `>`，后面是消息正文。
-/// 支持 `<Type@Name>` 格式（如 `<Teammate@Frontend>`、`<SubAgent@search_auth>`）。
+/// 规则：内容以 `<` 开头，紧跟非 `>` 字符，直到 `>`，后面是消息正文。
+/// 支持 `<Type@Name>` 格式（如 `<Teammate@Frontend>`、`<SubAgent@search_auth>`、`<Teammate@Go Advocate>`）。
 fn parse_agent_prefix(content: &str) -> Option<(&str, &str)> {
     if !content.starts_with('<') {
         return None;
     }
     let end = content.find('>')?;
     let name = &content[1..end];
-    if name.is_empty() || name.contains(char::is_whitespace) {
+    if name.is_empty() {
         return None;
     }
     let rest = content[end + 1..].trim_start();

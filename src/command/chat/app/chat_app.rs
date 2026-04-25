@@ -798,19 +798,21 @@ impl ChatApp {
             }
             Action::StreamCompacted { messages_before: _ } => {
                 self.state.retry_hint = None;
-                // 从 context_messages 同步压缩后的消息列表
-                // context_messages 已被 clear+re-push，需要从头替换
+                // auto_compact 后双通道均被 clear+re-push：
+                // - display_messages（干净文本）→ session.messages（UI 渲染）
+                // - context_messages（XML 前缀）→ build_api_messages（LLM context）
                 {
-                    let shared =
-                        crate::util::safe_lock(&self.context_messages, "StreamCompacted::sync");
-                    self.state.session.messages = shared.clone();
-                    self.context_read_offset = shared.len();
-                    // 同步 display_messages 以保持一致
+                    // 从 display_messages 全量替换 session.messages
                     let display = crate::util::safe_lock(
                         &self.display_messages,
                         "StreamCompacted::sync_display",
                     );
+                    self.state.session.messages = display.clone();
                     self.display_read_offset = display.len();
+                    // 同步 context_messages offset
+                    let shared =
+                        crate::util::safe_lock(&self.context_messages, "StreamCompacted::sync_ctx");
+                    self.context_read_offset = shared.len();
                 }
                 self.ui.msg_lines_cache = None;
             }

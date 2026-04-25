@@ -6,12 +6,13 @@
 //!
 //! # 上下文注入机制（Feature，非 Bug）
 //!
-//! SubAgent/Teammate 通过 `push_both` 推送的中间消息（如 `<AgentName> [调用工具 X]`）
-//! 同时写入 `display_messages`（UI 显示）和 `context_messages`（LLM context 同步）。
-//! `stream_poll::poll_stream_actions` 从 `context_messages` 增量同步到 `session.messages`，
-//! 最终进入 Main Agent LLM 的上下文。这是有意为之的设计：
-//! - Main Agent 需要感知子代理的工作进度和中间结果
-//! - 子代理的文本回复和工具调用摘要对 Main Agent 有参考价值
+//! SubAgent/Teammate 通过各自推送逻辑写入双通道：
+//! - `display_messages`：干净文本 + sender_name 字段 → UI 渲染
+//! - `context_messages`：XML 包裹（如 `<AgentName>text</AgentName>`） → LLM context
+//!
+//! 数据流：
+//! - `display_messages` → `session.messages`（UI 渲染数据源）
+//! - `context_messages` → `build_api_messages`（LLM context 数据源）
 //!
 //! 本模块的压缩功能用于减少这些消息对上下文的占用，而非完全过滤它们。
 //! 参见 `agent/tool_processor.rs` 中 `push_both` 函数的文档注释。

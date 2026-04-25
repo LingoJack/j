@@ -341,11 +341,12 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 // display: 纯文本 + sender_name（UI 渲染靠字段，不解析 content）
                 let display_msg = ChatMessage::text(MessageRole::Assistant, &assistant_text)
                     .with_sender(&sender_label);
-                // context: XML 包裹（LLM 能清晰看到消息来源）
+                // context: XML 包裹（LLM 能清晰看到消息来源）+ sender_name（UI 渲染靠字段，不解析 content）
                 let context_msg = ChatMessage::text(
                     MessageRole::Assistant,
                     format!("<{}>{}</{}>", sender_label, &assistant_text, sender_label),
-                );
+                )
+                .with_sender(&sender_label);
                 if let Ok(mut display) = manager.display_messages.lock() {
                     display.push(display_msg);
                 }
@@ -499,7 +500,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                         "<{}>[调用工具 {}]</{}>",
                         sender_label, item.name, sender_label
                     ),
-                );
+                )
+                .with_sender(&sender_label);
                 if let Ok(mut display) = manager.display_messages.lock() {
                     display.push(display_msg);
                 }
@@ -571,7 +573,8 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         let context_msg = ChatMessage::text(
             MessageRole::Assistant,
             format!("<{}>[已完成工作]</{}>", sender_label, sender_label),
-        );
+        )
+        .with_sender(&sender_label);
         if let Ok(mut display) = manager.display_messages.lock() {
             display.push(display_msg);
         }

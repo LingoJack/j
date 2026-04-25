@@ -16,29 +16,28 @@ impl ChatApp {
     pub fn poll_stream_actions(&mut self) -> Vec<Action> {
         let mut actions = Vec::new();
 
-        // ★ 从 context_messages 增量同步到 session.messages
+        // ★ 从 display_messages 增量同步到 session.messages（UI 渲染数据源）
         //
-        // **设计说明**：`context_messages` 是 LLM context 的唯一数据源。
-        // 只有通过 `push_both` / `push_context` 显式推送的消息才会进入这里。
-        // `display_messages` 仅用于 UI 渲染，不同步到 session.messages。
+        // **设计说明**：
+        // - `display_messages`：UI 渲染数据源，同步到 `session.messages`。内容为干净文本 + sender_name 字段。
+        // - `context_messages`：LLM context 数据源，由 `build_api_messages` 直接读取。
+        //   内容带 XML 前缀（如 `<Teammate@Frontend>text</Teammate@Frontend>`），LLM 据此区分消息来源。
         //
-        // Main Agent 的对话消息、SubAgent/Teammate 的缩略动作消息都会通过
-        // `push_both` 或 `push_context` 显式注入 Main Agent LLM context。
-        // 这是有意为之的设计：Main Agent 需要感知子代理的工作进度和中间结果。
-        // 参见 tool_processor.rs 中 push_both / push_context 函数的文档注释。
+        // 两个通道数据独立：display 用干净文本给 UI 渲染，context 用 XML 包裹给 LLM 识别来源。
+        // 两者通过 `push_both` / 各自推送逻辑保持同步写入。
         {
-            let shared = safe_lock(&self.context_messages, "poll::context_msgs");
-            let new_count = shared.len();
-            // auto_compact 会 clear context_messages 并重 push；此时 new_count < read_offset，
+            let display = safe_lock(&self.display_messages, "poll::display_msgs");
+            let new_count = display.len();
+            // auto_compact 会 clear display_messages 并重 push；此时 new_count < read_offset，
             // 需要把 read_offset 归零，避免新消息永远进不了 session.messages。
-            if new_count < self.context_read_offset {
-                self.context_read_offset = 0;
+            if new_count < self.display_read_offset {
+                self.display_read_offset = 0;
             }
-            if new_count > self.context_read_offset {
-                for msg in &shared[self.context_read_offset..] {
+            if new_count > self.display_read_offset {
+                for msg in &display[self.display_read_offset..] {
                     self.state.session.messages.push(msg.clone());
                 }
-                self.context_read_offset = new_count;
+                self.display_read_offset = new_count;
                 self.ui.msg_lines_cache = None;
                 if self.ui.auto_scroll && self.state.is_loading {
                     self.ui.scroll_offset = u16::MAX;
@@ -46,17 +45,16 @@ impl ChatApp {
             }
         }
 
-        // ★ display_messages 增量检测（仅用于 UI 渲染优化，不同步到 session.messages）
+        // ★ context_messages 增量检测（仅用于 LLM context，不再同步到 session.messages）
         {
-            let display = safe_lock(&self.display_messages, "poll::display_msgs");
-            let new_count = display.len();
-            if new_count < self.display_read_offset {
-                self.display_read_offset = 0;
+            let shared = safe_lock(&self.context_messages, "poll::context_msgs");
+            let new_count = shared.len();
+            if new_count < self.context_read_offset {
+                self.context_read_offset = 0;
             }
-            if new_count > self.display_read_offset {
-                self.display_read_offset = new_count;
-                // UI 缓存失效，需要重新渲染
-                self.ui.msg_lines_cache = None;
+            // 只更新 offset 和缓存失效标记，不推入 session.messages
+            if new_count > self.context_read_offset {
+                self.context_read_offset = new_count;
             }
         }
 

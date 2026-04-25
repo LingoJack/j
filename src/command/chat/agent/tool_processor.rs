@@ -60,10 +60,11 @@ pub(super) fn drain_pending_user_messages(
 /// 因为这些消息既要在 UI 显示，也要进入 Main Agent 的 LLM context。
 ///
 /// **设计说明**：
-/// - `display_messages`：仅 UI 显示，`poll_stream_actions` 不从此同步到 `session.messages`
-/// - `context_messages`：LLM context 同步通道，`poll_stream_actions` 从此增量同步到 `session.messages`
+/// - `display_messages`：UI 渲染数据源，`poll_stream_actions` 从此增量同步到 `session.messages`
+/// - `context_messages`：LLM context 数据源，`build_api_messages` 直接读取
 ///
 /// SubAgent/Teammate 的消息由各自的推送逻辑决定走哪个通道（见 sub_agent.rs / teammate_loop.rs）。
+/// 他们分别构造 display_msg（干净文本 + sender_name）和 context_msg（XML 包裹），内容不同。
 pub(super) fn push_both(
     display: &Arc<Mutex<Vec<ChatMessage>>>,
     context: &Arc<Mutex<Vec<ChatMessage>>>,

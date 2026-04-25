@@ -416,7 +416,9 @@ fn run_sub_agent_loop(
                 );
             }
             if let Ok(mut context) = context_messages.lock() {
-                context.push(ChatMessage::text(MessageRole::Assistant, &context_content));
+                context.push(
+                    ChatMessage::text(MessageRole::Assistant, &context_content).with_sender(sender),
+                );
             }
         };
     let max_rounds = 30; // 子代理最大轮数

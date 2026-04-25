@@ -349,7 +349,8 @@ impl TeammateManager {
         // Main agent 的消息不需要（Main 的工具调用本身已通过 agent loop 显示）
         // ★ 同时写入 context_messages 以注入 Main Agent LLM context（有意为之的设计）
         if from != "Main" {
-            let display_msg = ChatMessage::text(MessageRole::Assistant, &broadcast_message);
+            let display_msg =
+                ChatMessage::text(MessageRole::Assistant, &broadcast_message).with_sender(from);
             if let Ok(mut display) = self.display_messages.lock() {
                 display.push(display_msg.clone());
             }

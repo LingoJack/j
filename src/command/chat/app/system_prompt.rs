@@ -125,10 +125,16 @@ impl ChatApp {
         Some(resolved)
     }
 
+    /// 构建 LLM API 调用所需的消息列表。
+    ///
+    /// 从 `context_messages` 读取（带 XML 前缀，如 `<Teammate@Frontend>text</Teammate@Frontend>`），
+    /// 而非 `session.messages`（干净文本，用于 UI 渲染）。
+    /// LLM 依赖 XML 前缀区分消息来源。
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
         let compact = &self.state.agent_config.compact;
+        let context_msgs = crate::util::safe_lock(&self.context_messages, "build_api_messages");
         crate::command::chat::context::window::select_messages(
-            &self.state.session.messages,
+            &context_msgs,
             self.state.agent_config.max_history_messages,
             self.state.agent_config.max_context_tokens,
             compact.keep_recent,
