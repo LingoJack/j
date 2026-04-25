@@ -124,6 +124,25 @@ impl ChatApp {
             *p = provider.clone();
         }
 
+        // 同步更新子 Agent 的上下文配置快照（供 SubAgent/Teammate 复用 select_messages + micro_compact）
+        {
+            let mut cfg = safe_lock(
+                &self.derived_agent_context_config,
+                "send_message::agent_context_config",
+            );
+            cfg.max_history_messages = self.state.agent_config.max_history_messages;
+            cfg.max_context_tokens = self.state.agent_config.max_context_tokens;
+            cfg.compact = self.state.agent_config.compact.clone();
+        }
+        // 同步更新子 Agent 使用的 disabled_hooks 快照（Teammate 走 hook 链时用）
+        {
+            let mut dh = safe_lock(
+                &self.derived_agent_disabled_hooks,
+                "send_message::agent_disabled_hooks",
+            );
+            *dh = self.state.agent_config.disabled_hooks.clone();
+        }
+
         self.state.is_loading = true;
         self.ui.last_rendered_streaming_len = 0;
         self.ui.last_stream_render_time = std::time::Instant::now();

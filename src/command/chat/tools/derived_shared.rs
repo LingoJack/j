@@ -1,7 +1,7 @@
 use crate::command::chat::agent::api::{build_request_with_tools, create_llm_client};
 use crate::command::chat::agent::thread_identity::{current_agent_name, current_agent_type};
 use crate::command::chat::app::AskRequest;
-use crate::command::chat::context::compact::new_invoked_skills_map;
+use crate::command::chat::context::compact::{CompactConfig, new_invoked_skills_map};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
@@ -300,6 +300,19 @@ pub struct DerivedAgentShared {
     pub session_id: Arc<Mutex<String>>,
     /// 父 agent 的 plan mode 状态（子 agent 据此决定是否进入只读模式）
     pub plan_mode_state: Arc<PlanModeState>,
+    /// 父 agent 的上下文配置快照（子 agent 据此复用 select_messages + micro_compact）。
+    /// chat_app 在 send_message 时刷新，确保子 agent 拿到最新配置。
+    pub agent_context_config: Arc<Mutex<AgentContextConfig>>,
+    /// 父 agent 禁用的 hook 列表（Teammate 走 PreLlmRequest hook 链时需要）。
+    pub disabled_hooks: Arc<Mutex<Vec<String>>>,
+}
+
+/// 子 agent 调用 LLM 前用到的上下文配置（从父 AgentConfig 抽取）
+#[derive(Clone, Debug)]
+pub struct AgentContextConfig {
+    pub max_history_messages: usize,
+    pub max_context_tokens: usize,
+    pub compact: CompactConfig,
 }
 
 impl DerivedAgentShared {

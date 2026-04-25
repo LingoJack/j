@@ -226,6 +226,10 @@ impl Tool for CreateTeammateTool {
         let wake_flag_clone = Arc::clone(&wake_flag);
         let work_done_clone = Arc::clone(&work_done);
         let session_id_clone = Arc::clone(&self.shared.session_id);
+        // 共享的 hook 管理器 / disabled hooks / 上下文配置
+        let hook_manager_clone = Arc::clone(&self.shared.hook_manager);
+        let disabled_hooks_clone = Arc::clone(&self.shared.disabled_hooks);
+        let context_config_clone = Arc::clone(&self.shared.agent_context_config);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份
@@ -270,6 +274,9 @@ impl Tool for CreateTeammateTool {
                 current_tool: current_tool_clone,
                 wake_flag: wake_flag_clone,
                 work_done: work_done_clone,
+                hook_manager: hook_manager_clone,
+                disabled_hooks: disabled_hooks_clone,
+                context_config: context_config_clone,
             });
 
             // 清理 worktree

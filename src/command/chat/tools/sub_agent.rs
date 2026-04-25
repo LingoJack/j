@@ -1,9 +1,6 @@
 use crate::command::chat::agent::thread_identity::{
     clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
 };
-use crate::command::chat::context::message_compress::{
-    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
-};
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{
@@ -75,6 +72,8 @@ struct SubAgentLoopParams {
     description: String,
     /// 独立 transcript JSONL 路径：每轮消息 append 到此（崩溃安全）。
     transcript_path: Option<std::path::PathBuf>,
+    /// 父 agent 的上下文配置快照（供 select_messages + micro_compact 复用）
+    context_config: crate::command::chat::tools::derived_shared::AgentContextConfig,
 }
 
 /// 将任意描述转为适合作为 <前缀> 显示的名字（去空白，限长度）
@@ -227,6 +226,13 @@ impl Tool for SubAgentTool {
             Arc::clone(&self.shared.jcli_config)
         };
 
+        // 复用父 agent 的上下文配置快照
+        let context_config = safe_lock(
+            &self.shared.agent_context_config,
+            "SubAgentTool::context_config",
+        )
+        .clone();
+
         if run_in_background {
             // 后台模式：先注册到 tracker 获得 handle，再 spawn_command
             self.shared.sub_agent_tracker.gc_finished();
@@ -256,6 +262,7 @@ impl Tool for SubAgentTool {
             let context_clone = Arc::clone(&self.shared.context_messages);
             let transcript_path = subagent_transcript_path.clone();
             let sub_id_for_thread = sub_id.clone();
+            let context_config_clone = context_config.clone();
             std::thread::spawn(move || {
                 // 设置线程的 agent 身份
                 set_current_agent_name(&sub_id_for_thread);
@@ -277,6 +284,7 @@ impl Tool for SubAgentTool {
                         snapshot: Some(snapshot_refs),
                         description: description_clone.clone(),
                         transcript_path: Some(transcript_path),
+                        context_config: context_config_clone,
                     },
                     &cancelled_clone,
                     &display_clone,
@@ -341,6 +349,7 @@ impl Tool for SubAgentTool {
                     snapshot: Some(snapshot_refs),
                     description,
                     transcript_path: Some(subagent_transcript_path),
+                    context_config,
                 },
                 &cancelled_clone,
                 &self.shared.display_messages,
@@ -485,18 +494,28 @@ fn run_sub_agent_loop(
             }
         };
 
-        // 压缩来自其他 agent 的 tool call 消息，减少上下文占用
-        let compressed_messages = compress_other_agent_toolcalls(
+        // 上下文裁剪：复用父 agent 的 select_messages + micro_compact
+        // SubAgent 是隔离 loop，messages 里没有其他 agent 的广播，无需 compress_other_agent_toolcalls。
+        let mut api_messages = crate::command::chat::context::window::select_messages(
             &messages,
-            &agent_name,
-            DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+            params.context_config.max_history_messages,
+            params.context_config.max_context_tokens,
+            params.context_config.compact.keep_recent,
+            &params.context_config.compact.micro_compact_exempt_tools,
         );
+        if params.context_config.compact.enabled {
+            crate::command::chat::context::compact::micro_compact(
+                &mut api_messages,
+                params.context_config.compact.keep_recent,
+                &params.context_config.compact.micro_compact_exempt_tools,
+            );
+        }
 
         let choice = match call_llm_non_stream(
             &rt,
             &client,
             &params.provider,
-            &compressed_messages,
+            &api_messages,
             &params.tools,
             params.system_prompt.as_deref(),
             Some(&retry_callback),

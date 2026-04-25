@@ -1,6 +1,4 @@
-use crate::command::chat::context::message_compress::{
-    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
-};
+use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{
     ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
@@ -9,8 +7,8 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::derived_shared::{
-    call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
-    extract_tool_items,
+    AgentContextConfig, call_llm_non_stream, create_runtime_and_client,
+    execute_tool_with_permission, extract_tool_items,
 };
 use crate::llm::ToolDefinition;
 use crate::util::log::write_info_log;
@@ -60,6 +58,12 @@ pub struct TeammateLoopConfig {
     pub wake_flag: Arc<AtomicBool>,
     /// WorkDone 终态标志（与 TeammateHandle 共享）：WorkDone 工具调用后 set，loop 看到后退出
     pub work_done: Arc<AtomicBool>,
+    /// 父 agent 共享的 HookManager（Teammate 调 LLM 前走 PreLlmRequest hook 链）
+    pub hook_manager: Arc<Mutex<HookManager>>,
+    /// 父 agent 的 disabled_hooks 快照（Teammate 走 hook 链时用）
+    pub disabled_hooks: Arc<Mutex<Vec<String>>>,
+    /// 父 agent 的上下文配置快照（供 select_messages + micro_compact 复用）
+    pub context_config: Arc<Mutex<AgentContextConfig>>,
 }
 
 /// Teammate 专用的 agent loop
@@ -91,6 +95,9 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         current_tool,
         wake_flag,
         work_done,
+        hook_manager,
+        disabled_hooks,
+        context_config,
     } = config;
 
     // 定位当前 teammate 的 transcript JSONL 路径（按 session_id 实时解析，切换 session 也能落到正确位置）
@@ -204,20 +211,84 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         // 更新状态为 Working（即将调用 LLM）
         set_status(TeammateStatus::Working);
 
-        // 压缩来自其他 agent 的 tool call 消息，减少上下文占用
-        let compressed_messages = compress_other_agent_toolcalls(
+        // 复用父 agent 的 context 配置，对齐 Main 管线：
+        //   select_messages → micro_compact → PreLlmRequest hook 链 (含 broadcast_compress)
+        let ctx_cfg = match context_config.lock() {
+            Ok(g) => g.clone(),
+            Err(e) => {
+                set_status(TeammateStatus::Error(format!("context_config lock: {}", e)));
+                return format!("{}\ncontext_config lock poisoned", last_assistant_text);
+            }
+        };
+        let mut api_messages = crate::command::chat::context::window::select_messages(
             &messages,
-            &name,
-            DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+            ctx_cfg.max_history_messages,
+            ctx_cfg.max_context_tokens,
+            ctx_cfg.compact.keep_recent,
+            &ctx_cfg.compact.micro_compact_exempt_tools,
         );
+        if ctx_cfg.compact.enabled {
+            crate::command::chat::context::compact::micro_compact(
+                &mut api_messages,
+                ctx_cfg.compact.keep_recent,
+                &ctx_cfg.compact.micro_compact_exempt_tools,
+            );
+        }
+
+        // PreLlmRequest hook 链（内置 broadcast_compress 会按线程本地身份折叠其他 agent 广播）
+        let mut effective_system_prompt = system_prompt.clone();
+        {
+            let hook_mgr = match hook_manager.lock() {
+                Ok(g) => g,
+                Err(e) => {
+                    set_status(TeammateStatus::Error(format!("hook_manager lock: {}", e)));
+                    return format!("{}\nhook_manager lock poisoned", last_assistant_text);
+                }
+            };
+            if hook_mgr.has_hooks_for(HookEvent::PreLlmRequest) {
+                let disabled_snapshot: Vec<String> =
+                    disabled_hooks.lock().map(|g| g.clone()).unwrap_or_default();
+                let ctx = HookContext {
+                    event: HookEvent::PreLlmRequest,
+                    messages: Some(api_messages.clone()),
+                    system_prompt: Some(effective_system_prompt.clone()),
+                    model: Some(provider.model.clone()),
+                    session_id: session_id.lock().ok().map(|g| g.clone()),
+                    cwd: std::env::current_dir()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| ".".to_string()),
+                    ..Default::default()
+                };
+                if let Some(result) =
+                    hook_mgr.execute(HookEvent::PreLlmRequest, ctx, &disabled_snapshot)
+                {
+                    if result.is_stop() {
+                        set_status(TeammateStatus::Error("hook requested stop".to_string()));
+                        return format!(
+                            "{}\n[Teammate halted by PreLlmRequest hook]",
+                            last_assistant_text
+                        );
+                    }
+                    if let Some(new_msgs) = result.messages {
+                        api_messages = new_msgs;
+                    }
+                    if let Some(new_prompt) = result.system_prompt {
+                        effective_system_prompt = new_prompt;
+                    }
+                    if let Some(inject) = result.inject_messages {
+                        api_messages.extend(inject);
+                    }
+                }
+            }
+        }
 
         let response_choice = match call_llm_non_stream(
             &rt,
             &client,
             &provider,
-            &compressed_messages,
+            &api_messages,
             &tools,
-            Some(&system_prompt),
+            Some(&effective_system_prompt),
             None, // teammate 暂不使用重试回调
         ) {
             Ok(c) => c,

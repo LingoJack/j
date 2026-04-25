@@ -9,9 +9,6 @@ use super::tool_processor::{
     process_tool_calls, push_both, sync_context_full,
 };
 use crate::command::chat::context::compact;
-use crate::command::chat::context::message_compress::{
-    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
-};
 use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
 use crate::llm::ToolDefinition;
 use crate::util::log::{write_error_log, write_info_log};
@@ -450,35 +447,15 @@ pub async fn run_main_agent_loop(
             );
         }
 
-        // 压缩来自其他 agent (SubAgent/Teammate) 的工具调用广播消息，
-        // 保留最近 N 条完整消息，将早期消息压缩为摘要
-        let compressed_messages = compress_other_agent_toolcalls(
-            &messages,
-            "Main",
-            DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
-        );
-
+        // broadcast 压缩已由内置 PreLlmRequest hook (broadcast_compress) 处理
         let request = match build_request_with_tools(
             &provider,
-            &compressed_messages,
+            &messages,
             tools.clone(),
             system_prompt.as_deref(),
         ) {
             Ok(req) => {
                 // debug: dump reasoning_content 状态
-                for (i, m) in compressed_messages.iter().enumerate() {
-                    if let Some(rc) = &m.reasoning_content {
-                        write_info_log(
-                            "agent_loop",
-                            &format!(
-                                "compressed_messages[{}] role={:?} has reasoning_content len={}",
-                                i,
-                                m.role,
-                                rc.len()
-                            ),
-                        );
-                    }
-                }
                 for (i, m) in messages.iter().enumerate() {
                     if let Some(rc) = &m.reasoning_content {
                         write_info_log(

@@ -9,6 +9,9 @@ use crate::command::chat::constants::{
     FINE_SCROLL_LINES, INPUT_BUFFER_MAX_LEN, PAGE_SCROLL_LINES, TODO_NAG_INTERVAL_ROUNDS,
     TOOL_INTERACT_MAX_OPTIONS,
 };
+use crate::command::chat::context::message_compress::{
+    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
+};
 use crate::command::chat::infra::archive;
 use crate::command::chat::infra::command;
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager, HookResult};
@@ -82,6 +85,11 @@ pub struct ChatApp {
     pub derived_agent_provider: Arc<Mutex<ModelProvider>>,
     /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / CreateTeammateTool / AgentTeamTool 共用）
     pub derived_agent_system_prompt: Arc<Mutex<Option<String>>>,
+    /// 子 Agent 共用上下文配置快照（每次发送请求前刷新）
+    pub derived_agent_context_config:
+        Arc<Mutex<crate::command::chat::tools::derived_shared::AgentContextConfig>>,
+    /// 子 Agent 使用的 disabled_hooks 快照（每次发送请求前刷新）
+    pub derived_agent_disabled_hooks: Arc<Mutex<Vec<String>>>,
     /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
     /// 仅用于 UI 渲染，不作为 LLM context 数据源。
     pub display_messages: Arc<Mutex<Vec<ChatMessage>>>,
@@ -235,6 +243,17 @@ impl ChatApp {
         // 共享的 session id 槽：session 切换时 chat_app 会同步更新，teammate/subagent 据此定位 transcript
         let shared_session_id = Arc::new(Mutex::new(session_id.clone()));
 
+        // 子 agent 上下文配置快照（send_message 时刷新）
+        let agent_context_config = Arc::new(Mutex::new(
+            crate::command::chat::tools::derived_shared::AgentContextConfig {
+                max_history_messages: agent_config.max_history_messages,
+                max_context_tokens: agent_config.max_context_tokens,
+                compact: agent_config.compact.clone(),
+            },
+        ));
+        // 子 agent 使用的 disabled_hooks 快照（Teammate 走 hook 链时用）
+        let shared_disabled_hooks = Arc::new(Mutex::new(agent_config.disabled_hooks.clone()));
+
         // 构建 DerivedAgentShared（SubAgentTool / AgentTeamTool / CreateTeammateTool 共用）
         let derived_agent_shared = DerivedAgentShared {
             background_manager: Arc::clone(&background_manager),
@@ -251,6 +270,8 @@ impl ChatApp {
             context_messages: Arc::clone(&context_messages),
             session_id: Arc::clone(&shared_session_id),
             plan_mode_state: Arc::clone(&tool_registry.plan_mode_state),
+            agent_context_config: Arc::clone(&agent_context_config),
+            disabled_hooks: Arc::clone(&shared_disabled_hooks),
         };
         tool_registry.register(Box::new(
             crate::command::chat::tools::sub_agent::SubAgentTool {
@@ -398,6 +419,30 @@ impl ChatApp {
                     })
                 },
             );
+
+            // 内置 hook 6: broadcast_compress — 折叠来自其他 agent 的 tool call 广播
+            //
+            // 注册在末位，确保它在所有其他 hook（含 inject_messages）之后执行，
+            // 这样即便有 hook 追加了 <Name> [调用工具 X] 格式的消息也能被折叠。
+            // self_agent_name 取自线程本地身份：Main 线程返回 "Main"，teammate 线程返回
+            // 其 teammate 名，SubAgent 线程返回 sub_id（SubAgent 的 messages 里几乎不会有
+            // 广播，折叠无副作用）。
+            manager.register_builtin(HookEvent::PreLlmRequest, "broadcast_compress", |ctx| {
+                let messages = ctx.messages.as_ref()?;
+                let self_name = crate::command::chat::agent::thread_identity::current_agent_name();
+                let compressed = compress_other_agent_toolcalls(
+                    messages,
+                    &self_name,
+                    DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD,
+                );
+                if compressed.len() == messages.len() {
+                    return None;
+                }
+                Some(HookResult {
+                    messages: Some(compressed),
+                    ..Default::default()
+                })
+            });
         }
 
         let new_app = Self {
@@ -515,6 +560,8 @@ impl ChatApp {
             remote_connected: false,
             derived_agent_provider: agent_provider,
             derived_agent_system_prompt: agent_system_prompt,
+            derived_agent_context_config: agent_context_config,
+            derived_agent_disabled_hooks: shared_disabled_hooks,
             display_messages,
             display_read_offset: 0,
             context_messages,
