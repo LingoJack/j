@@ -1,5 +1,6 @@
 use crate::command::chat::agent::thread_identity::{
-    clear_thread_cwd, set_current_agent_name, set_current_agent_type, set_thread_cwd, thread_cwd,
+    clear_thread_cwd, current_agent_name, set_current_agent_name, set_current_agent_type,
+    set_thread_cwd, thread_cwd,
 };
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
@@ -261,11 +262,12 @@ impl Tool for SubAgentTool {
             let display_clone = Arc::clone(&self.shared.display_messages);
             let context_clone = Arc::clone(&self.shared.context_messages);
             let transcript_path = subagent_transcript_path.clone();
-            let sub_id_for_thread = sub_id.clone();
+            let _sub_id_for_thread = sub_id.clone();
             let context_config_clone = context_config.clone();
+            let agent_identity = format!("SubAgent@{}", sanitize_agent_name(&description));
             std::thread::spawn(move || {
-                // 设置线程的 agent 身份
-                set_current_agent_name(&sub_id_for_thread);
+                // 设置线程的 agent 身份（含类型前缀，与广播 <SubAgent@Name> 格式一致）
+                set_current_agent_name(&agent_identity);
                 set_current_agent_type(AgentType::SubAgent);
 
                 // 设置 worktree CWD
@@ -321,8 +323,12 @@ impl Tool for SubAgentTool {
             }
         } else {
             // 前台模式：阻塞执行
-            // 保存旧 CWD，执行完后恢复（前台 agent 在调用线程中运行）
+            // 保存旧身份 + CWD，执行完后恢复（前台 agent 在调用线程中运行）
+            let old_agent_name = current_agent_name();
             let old_cwd = thread_cwd();
+            let agent_identity = format!("SubAgent@{}", sanitize_agent_name(&description));
+            set_current_agent_name(&agent_identity);
+            set_current_agent_type(AgentType::SubAgent);
             if let Some((ref wt_path, _)) = worktree_info {
                 set_thread_cwd(wt_path);
             }
@@ -358,10 +364,11 @@ impl Tool for SubAgentTool {
 
             snap_running.store(false, Ordering::Relaxed);
 
-            // 清理 worktree 并恢复 CWD
+            // 清理 worktree 并恢复身份 + CWD
             if let Some((ref wt_path, ref branch)) = worktree_info {
                 remove_agent_worktree(wt_path, branch);
             }
+            set_current_agent_name(&old_agent_name);
             match old_cwd {
                 Some(p) => set_thread_cwd(&p),
                 None => clear_thread_cwd(),
@@ -547,7 +554,7 @@ fn run_sub_agent_loop(
             // 参见 tool_processor.rs 中 push_both 函数的文档注释。
             push_both(ChatMessage::text(
                 MessageRole::Assistant,
-                format!("<{}> {}", agent_name, &assistant_text),
+                format!("<SubAgent@{}> {}", agent_name, &assistant_text),
             ));
         }
 
@@ -582,7 +589,7 @@ fn run_sub_agent_loop(
         for item in &tool_items {
             push_both(ChatMessage::text(
                 MessageRole::Assistant,
-                format!("<{}> [调用工具 {}]", agent_name, item.name),
+                format!("<SubAgent@{}> [调用工具 {}]", agent_name, item.name),
             ));
         }
 
@@ -631,7 +638,7 @@ fn run_sub_agent_loop(
     // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
     push_both(ChatMessage::text(
         MessageRole::Assistant,
-        format!("<{}> [已完成]", agent_name),
+        format!("<SubAgent@{}> [已完成]", agent_name),
     ));
 
     if let Some(ref refs) = params.snapshot {

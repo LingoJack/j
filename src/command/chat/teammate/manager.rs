@@ -287,7 +287,8 @@ impl TeammateManager {
         // 唤醒语义：@self 或 from==Main 时 set wake_flag（用于 WorkDone 后重新激活判断）
         // 非 WorkDone 状态下，pending 有消息就唤醒，不依赖 wake_flag
         for (name, handle) in &self.teammates {
-            if name == from {
+            // from 含类型前缀（如 "Teammate@Frontend"），精确匹配完整身份
+            if from == format!("Teammate@{}", name) {
                 continue; // 不给自己发
             }
             if let Ok(mut pending) = handle.pending_user_messages.lock() {

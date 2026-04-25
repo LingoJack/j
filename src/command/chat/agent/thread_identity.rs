@@ -19,6 +19,11 @@ thread_local! {
 }
 
 /// 设置当前线程的 agent 名称（在 teammate/subagent agent loop 启动时调用）
+///
+/// 约定：Main 返回 "Main"，Teammate 返回 "Teammate@<name>"，
+/// SubAgent 返回 "SubAgent@<description>"。
+/// 广播消息前缀 `<{current_agent_name()}>` 与此一致，
+/// 使 broadcast_compress 能通过 `extract_agent_source` 正确匹配自身。
 pub fn set_current_agent_name(name: &str) {
     CURRENT_AGENT_NAME.with(|cell| {
         *cell.borrow_mut() = name.to_string();
@@ -32,7 +37,10 @@ pub fn set_current_agent_type(agent_type: AgentType) {
     });
 }
 
-/// 获取当前线程的 agent 名称
+/// 获取当前线程的 agent 名称（含类型前缀）
+///
+/// 返回值示例："Main"、"Teammate@Frontend"、"SubAgent@search_for_auth"
+/// 与广播消息 `<Name>` 前缀中的 Name 一致，供 broadcast_compress 自身匹配。
 pub fn current_agent_name() -> String {
     CURRENT_AGENT_NAME.with(|cell| cell.borrow().clone())
 }
