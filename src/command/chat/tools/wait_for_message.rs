@@ -25,6 +25,10 @@ struct WaitForMessageParams {
     /// Messages from other agents are preserved for the next round.
     #[serde(default)]
     from: Option<String>,
+    /// Optional: only return messages containing this keyword/substring.
+    /// Messages not containing the keyword are preserved for the next round.
+    #[serde(default)]
+    keyword: Option<String>,
 }
 
 fn default_timeout() -> u64 {
@@ -62,11 +66,15 @@ impl Tool for WaitForMessageTool {
         - timeout: Max wait time in seconds (default 120). Returns error on timeout.
         - from: Optional sender filter. Only messages from this agent will be returned.
                 Other agents' messages are preserved for your next round.
+        - keyword: Optional content filter. Only messages containing this keyword will be returned.
+                   Non-matching messages are preserved for your next round.
 
         Examples:
-        {}                                    // Wait for any message
-        {"from": "Backend"}                   // Wait for a message from Backend
-        {"from": "Main", "timeout": 60}       // Wait up to 60s for Main's message
+        {}                                               // Wait for any message
+        {"from": "Backend"}                              // Wait for a message from Backend
+        {"keyword": "deploy"}                            // Wait for any message containing "deploy"
+        {"from": "Main", "keyword": "approved"}          // Wait for Main to say "approved"
+        {"from": "Main", "timeout": 60}                  // Wait up to 60s for Main's message
 
         IMPORTANT:
         - While waiting, you cannot use other tools or respond to messages.
@@ -124,39 +132,33 @@ impl Tool for WaitForMessageTool {
             };
 
             if !drained.is_empty() {
-                if let Some(ref from) = params.from {
-                    // 按 from 过滤：matching 返回，non-matching 放回
-                    let (matching, non_matching): (Vec<_>, Vec<_>) = drained
-                        .into_iter()
-                        .partition(|m| is_from_sender(&m.content, from));
+                let (matching, non_matching): (Vec<_>, Vec<_>) =
+                    drained.into_iter().partition(|m| {
+                        message_matches(
+                            &m.content,
+                            params.from.as_deref(),
+                            params.keyword.as_deref(),
+                        )
+                    });
 
-                    // 放回不匹配的消息
-                    if !non_matching.is_empty()
-                        && let Ok(mut pending) = self.pending_user_messages.lock()
-                    {
-                        let mut combined = non_matching;
-                        combined.append(&mut *pending);
-                        *pending = combined;
-                    }
+                // 放回不匹配的消息
+                if !non_matching.is_empty()
+                    && let Ok(mut pending) = self.pending_user_messages.lock()
+                {
+                    let mut combined = non_matching;
+                    combined.append(&mut *pending);
+                    *pending = combined;
+                }
 
-                    if !matching.is_empty() {
-                        return ToolResult {
-                            output: format_messages(&matching),
-                            is_error: false,
-                            images: vec![],
-                            plan_decision: PlanDecision::None,
-                        };
-                    }
-                    // 没有匹配的消息，继续等待
-                } else {
-                    // 无过滤 — 返回所有消息
+                if !matching.is_empty() {
                     return ToolResult {
-                        output: format_messages(&drained),
+                        output: format_messages(&matching),
                         is_error: false,
                         images: vec![],
                         plan_decision: PlanDecision::None,
                     };
                 }
+                // 没有匹配的消息，继续等待
             }
 
             // 无消息，休眠后继续轮询
@@ -169,15 +171,25 @@ impl Tool for WaitForMessageTool {
     }
 }
 
-/// 检查消息是否来自指定发送者
+/// 检查消息是否匹配过滤条件（from + keyword 都满足才匹配）
 ///
 /// 消息格式：`<Main> text` 或 `<Teammate@Backend> text`
-fn is_from_sender(content: &str, from: &str) -> bool {
-    if from == "Main" {
-        content.starts_with("<Main>")
-    } else {
-        content.starts_with(&format!("<Teammate@{}>", from))
+fn message_matches(content: &str, from: Option<&str>, keyword: Option<&str>) -> bool {
+    if let Some(from) = from {
+        if from == "Main" {
+            if !content.starts_with("<Main>") {
+                return false;
+            }
+        } else if !content.starts_with(&format!("<Teammate@{}>", from)) {
+            return false;
+        }
     }
+    if let Some(keyword) = keyword
+        && !content.contains(keyword)
+    {
+        return false;
+    }
+    true
 }
 
 /// 将多条消息格式化为换行分隔的文本
