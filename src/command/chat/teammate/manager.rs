@@ -123,7 +123,7 @@ impl TeammateStatus {
         }
     }
 
-    /// 状态文字
+    /// 状态文字（中文，供 TUI 界面使用）
     pub fn label(&self) -> &'static str {
         match self {
             Self::Initializing => "初始化",
@@ -134,6 +134,20 @@ impl TeammateStatus {
             Self::Completed => "已完成",
             Self::Cancelled => "已取消",
             Self::Error(_) => "错误",
+        }
+    }
+
+    /// Status label in English (for system prompt injection)
+    pub fn label_en(&self) -> &'static str {
+        match self {
+            Self::Initializing => "initializing",
+            Self::Thinking => "thinking",
+            Self::Working => "working",
+            Self::WaitingForMessage => "waiting",
+            Self::Retrying { .. } => "retrying",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Error(_) => "error",
         }
     }
 
@@ -366,38 +380,38 @@ impl TeammateManager {
             return String::new();
         }
 
-        let mut summary = String::from("## Teammates\n\n当前团队成员:\n");
-        summary.push_str("- Main (主协调者)\n");
+        let mut summary = String::from("## Teammates\n\nCurrent team members:\n");
+        summary.push_str("- Main (coordinator)\n");
         for (name, handle) in &self.teammates {
             let status = handle
                 .status
                 .lock()
-                .map(|status_val| format!("{} {}", status_val.icon(), status_val.label()))
+                .map(|status_val| format!("{} {}", status_val.icon(), status_val.label_en()))
                 .unwrap_or_else(|_| {
                     if handle.running() {
-                        "● 工作中".to_string()
+                        "● working".to_string()
                     } else {
-                        "○ 空闲".to_string()
+                        "○ idle".to_string()
                     }
                 });
             summary.push_str(&format!("- {} ({}) [{}]\n", name, handle.role, status));
         }
-        // 展示从 session 恢复的 teammate（只读历史）
+        // Show recovered teammates from session (read-only history)
         for (name, snapshot) in &self.recovered_teammates {
             let status: TeammateStatus = snapshot.status.clone().into();
             summary.push_str(&format!(
                 "- {} ({}) [{} 🔄session-recovery]\n",
                 name,
                 snapshot.role,
-                status.label()
+                status.label_en()
             ));
         }
         summary.push_str(
-            "\n使用 SendMessage 工具向其他 agent 发送消息。可以用 @AgentName 指定目标。\n\n\
-             IMPORTANT: 所有广播消息所有 agent 都能看到。因此：\n\
-             - Teammate 之间可以直接沟通，**不要**通过 Main 中转消息\n\
-             - 如果你需要 A 和 B 协作，告诉 A 去联系 B 即可，不要自己转述\n\
-             - 你的角色是分配任务和协调方向，不是充当消息中继\n",
+            "\nUse the SendMessage tool to send messages to other agents. Use @AgentName to specify a target.\n\n\
+             IMPORTANT: All broadcast messages are visible to all agents. Therefore:\n\
+             - Teammates can communicate directly — do **not** relay messages through Main\n\
+             - If you need A and B to collaborate, tell A to contact B directly instead of relaying\n\
+             - Your role is to assign tasks and coordinate direction, not to act as a message relay\n",
         );
         summary
     }

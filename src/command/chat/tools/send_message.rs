@@ -45,9 +45,9 @@ impl Tool for SendMessageTool {
         All agents receive the message, but the @mentioned agent knows it's addressed to them.
 
         Example:
-        {"message": "API 端点已完成，请查看 routes/api.js", "to": "Frontend"}
-        {"message": "所有前端页面已完成", "to": "Main"}
-        {"message": "大家注意：数据库 schema 有更新"}
+        {"message": "API endpoints are done, check routes/api.js", "to": "Frontend"}
+        {"message": "All frontend pages are complete", "to": "Main"}
+        {"message": "Heads up: database schema has been updated"}
         "#
     }
 

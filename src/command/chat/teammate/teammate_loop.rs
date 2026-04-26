@@ -499,7 +499,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 let context_msg = ChatMessage::text(
                     MessageRole::Assistant,
                     format!(
-                        "<{}>[调用工具 {}]</{}>",
+                        "<{}>[called tool {}]</{}>",
                         sender_label, item.name, sender_label
                     ),
                 )
@@ -589,17 +589,17 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
     // 通知团队：teammate 已完成
     set_status(TeammateStatus::Completed);
-    // WorkDone 工具自己已广播过 [已完成工作]，避免重复；其他路径（idle 超时等）补一次
+    // WorkDone 工具自己已广播过 [work completed]，避免重复；其他路径（idle 超时等）补一次
     // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
     if !work_done.load(Ordering::Relaxed)
         && let Ok(manager) = teammate_manager.lock()
     {
         let sender_label = format!("Teammate@{}", name);
-        let display_msg =
-            ChatMessage::text(MessageRole::Assistant, "[已完成工作]").with_sender(&sender_label);
+        let display_msg = ChatMessage::text(MessageRole::Assistant, "[work completed]")
+            .with_sender(&sender_label);
         let context_msg = ChatMessage::text(
             MessageRole::Assistant,
-            format!("<{}>[已完成工作]</{}>", sender_label, sender_label),
+            format!("<{}>[work completed]</{}>", sender_label, sender_label),
         )
         .with_sender(&sender_label);
         if let Ok(mut display) = manager.display_messages.lock() {
@@ -609,7 +609,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             context.push(context_msg);
         }
         // 同步写入独立 jsonl（不带 <Name> 前缀，合成时会加前缀）
-        let done_msg = ChatMessage::text(MessageRole::Assistant, "[已完成工作]".to_string());
+        let done_msg = ChatMessage::text(MessageRole::Assistant, "[work completed]".to_string());
         append_messages(std::slice::from_ref(&done_msg));
     }
 

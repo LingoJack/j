@@ -1,5 +1,5 @@
 use crate::command::chat::app::ChatApp;
-use crate::tui::components::{ItemList, toggle_list_item};
+use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -46,14 +46,14 @@ pub(super) fn draw_tab_skills_list<'a>(app: &ChatApp) -> ItemList<'a> {
             .disabled_skills
             .iter()
             .any(|d| d == name);
-        list.push(toggle_list_item(
+        list.push(toggle_list_item(&ToggleListItemCtx {
             name,
-            is_enabled,
-            is_selected,
-            Some(&skill.frontmatter.description),
-            Some(skill.source.label()),
-            t,
-        ));
+            enabled: is_enabled,
+            selected: is_selected,
+            desc: Some(&skill.frontmatter.description),
+            tag: Some(skill.source.label()),
+            theme: t,
+        }));
     }
     list
 }

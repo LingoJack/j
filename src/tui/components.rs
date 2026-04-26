@@ -25,7 +25,10 @@ pub use hint::{help_key_row, hint_spans};
 pub use label::{desc_span, label_span, value_style};
 pub use list::ItemList;
 pub use pointer::pointer_span;
-pub use row::{selectable_row, text_field_row, toggle_list_item, toggle_row};
+pub use row::{
+    TextFieldRowCtx, ToggleListItemCtx, ToggleRowCtx, selectable_row, text_field_row,
+    toggle_list_item, toggle_row,
+};
 pub use separator::{section_header, separator_line};
 pub use status_input::{StatusInputParams, draw_status_input};
 pub use tab_bar::tab_bar;

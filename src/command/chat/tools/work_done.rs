@@ -22,7 +22,7 @@ struct WorkDoneParams {
 ///
 /// 调用后：
 /// - set work_done=true，teammate_loop 下次检查时 break 主循环
-/// - 自动广播一条 `<self> [已完成工作] summary` 给团队（帮 @Main 感知）
+/// - 自动广播一条 `<self> [work completed] summary` 给团队（帮 @Main 感知）
 pub struct WorkDoneTool {
     /// 该 teammate 的 work_done 标志（与 TeammateHandle 共享）
     pub work_done: Arc<AtomicBool>,
@@ -52,7 +52,7 @@ impl Tool for WorkDoneTool {
         - Do not call WorkDone just because the conversation is quiet; only call when your role's task is objectively done.
 
         Usage:
-        {"summary": "前端页面已完成，所有组件在 src/components/"}
+        {"summary": "Frontend pages complete, all components in src/components/"}
         "#
     }
 
@@ -72,9 +72,9 @@ impl Tool for WorkDoneTool {
         // broadcast 会处理 display/context 双通道 + main_agent_inbox 唤醒信号
         let broadcast_text = match params.summary.as_deref() {
             Some(s) if !s.trim().is_empty() => {
-                format!("[已完成工作] {}", s.trim())
+                format!("[work completed] {}", s.trim())
             }
-            _ => "[已完成工作]".to_string(),
+            _ => "[work completed]".to_string(),
         };
         if let Ok(manager) = self.teammate_manager.lock() {
             manager.broadcast(&from, &broadcast_text, None);

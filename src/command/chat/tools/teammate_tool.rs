@@ -145,7 +145,7 @@ impl Tool for TeammateTool {
                 }
                 Err(e) => {
                     return ToolResult {
-                        output: format!("创建 worktree 失败: {}", e),
+                        output: format!("Failed to create worktree: {}", e),
                         is_error: true,
                         images: vec![],
                         plan_decision: PlanDecision::None,
@@ -339,7 +339,7 @@ impl Tool for TeammateTool {
         }
 
         let worktree_note = if params.worktree {
-            " [worktree 隔离]"
+            " [worktree isolated]"
         } else {
             ""
         };

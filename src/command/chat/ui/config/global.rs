@@ -6,7 +6,7 @@ use crate::command::chat::ui::components::{
     RowContext, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
 };
 use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
-use crate::tui::components::{ItemList, toggle_list_item};
+use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
 use ratatui::{
     style::Style,
     text::{Line, Span},
@@ -48,7 +48,14 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                 name.to_string()
             };
 
-            list.push(toggle_list_item(&label, is_exempt, selected, None, None, t));
+            list.push(toggle_list_item(&ToggleListItemCtx {
+                name: &label,
+                enabled: is_exempt,
+                selected,
+                desc: None,
+                tag: None,
+                theme: t,
+            }));
         }
         return list;
     }

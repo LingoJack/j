@@ -3,7 +3,8 @@ use crate::command::chat::render::helpers::{config_field_label_model, config_fie
 use crate::command::chat::ui::components::{RowContext, secret_field_row};
 use crate::constants::CONFIG_FIELDS;
 use crate::tui::components::{
-    ItemList, SEPARATOR_V, TOGGLE_OFF, TOGGLE_ON, text_field_row, toggle_row,
+    ItemList, SEPARATOR_V, TOGGLE_OFF, TOGGLE_ON, TextFieldRowCtx, ToggleRowCtx, text_field_row,
+    toggle_row,
 };
 use ratatui::{
     style::{Modifier, Style},
@@ -278,16 +279,22 @@ pub(super) fn draw_tab_model_list<'a>(app: &ChatApp) -> ItemList<'a> {
                 } else {
                     false
                 };
-                toggle_row(label, toggle_on, is_selected, "Enter \u{5207}\u{6362}", t)
-            } else {
-                text_field_row(
+                toggle_row(&ToggleRowCtx {
                     label,
-                    &value,
-                    is_selected,
-                    app.ui.config_editing,
-                    app.ui.config_edit_cursor,
-                    t,
-                )
+                    is_on: toggle_on,
+                    selected: is_selected,
+                    hint: "Enter \u{5207}\u{6362}",
+                    theme: t,
+                })
+            } else {
+                text_field_row(&TextFieldRowCtx {
+                    label,
+                    value: &value,
+                    selected: is_selected,
+                    editing: app.ui.config_editing,
+                    cursor: app.ui.config_edit_cursor,
+                    theme: t,
+                })
             };
             list.push(line);
         }

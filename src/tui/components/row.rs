@@ -11,70 +11,78 @@ use super::cursor::cursor_spans;
 use super::label::{label_span, value_style};
 use super::pointer::pointer_span;
 
+/// 开关字段行的上下文参数
+#[derive(Debug)]
+pub struct ToggleRowCtx<'a> {
+    pub label: &'a str,
+    pub is_on: bool,
+    pub selected: bool,
+    pub hint: &'a str,
+    pub theme: &'a Theme,
+}
+
 /// 开关字段行（auto_restore_session 等）
-pub fn toggle_row<'a>(
-    label: &str,
-    is_on: bool,
-    selected: bool,
-    hint: &str,
-    theme: &Theme,
-) -> Line<'a> {
-    let toggle_style = if is_on {
+pub fn toggle_row<'a>(ctx: &ToggleRowCtx<'a>) -> Line<'a> {
+    let toggle_style = if ctx.is_on {
         Style::default()
-            .fg(theme.config_toggle_on)
+            .fg(ctx.theme.config_toggle_on)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(theme.config_toggle_off)
+        Style::default().fg(ctx.theme.config_toggle_off)
     };
-    let toggle_text = if is_on {
+    let toggle_text = if ctx.is_on {
         format!("{TOGGLE_ON} \u{5f00}\u{542f}")
     } else {
         format!("{TOGGLE_OFF} \u{5173}\u{95ed}")
     };
     Line::from(vec![
-        pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        pointer_span(ctx.selected, ctx.theme),
+        label_span(ctx.label, LABEL_WIDTH, ctx.selected, ctx.theme),
         Span::styled("  ", Style::default()),
         Span::styled(toggle_text, toggle_style),
         Span::styled(
-            if selected {
-                format!("  ({hint})")
+            if ctx.selected {
+                format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },
-            Style::default().fg(theme.config_dim),
+            Style::default().fg(ctx.theme.config_dim),
         ),
     ])
 }
 
+/// 文本字段行的上下文参数
+#[derive(Debug)]
+pub struct TextFieldRowCtx<'a> {
+    pub label: &'a str,
+    pub value: &'a str,
+    pub selected: bool,
+    pub editing: bool,
+    pub cursor: usize,
+    pub theme: &'a Theme,
+}
+
 /// 普通可编辑文本字段行
-pub fn text_field_row<'a>(
-    label: &str,
-    value: &str,
-    selected: bool,
-    editing: bool,
-    cursor: usize,
-    theme: &Theme,
-) -> Line<'a> {
-    let vs = value_style(selected, editing, theme);
-    if editing && selected {
+pub fn text_field_row<'a>(ctx: &TextFieldRowCtx<'a>) -> Line<'a> {
+    let vs = value_style(ctx.selected, ctx.editing, ctx.theme);
+    if ctx.editing && ctx.selected {
         let mut spans = vec![
-            pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            pointer_span(ctx.selected, ctx.theme),
+            label_span(ctx.label, LABEL_WIDTH, ctx.selected, ctx.theme),
             Span::styled("  ", Style::default()),
         ];
-        spans.extend(cursor_spans(value, cursor, vs, theme));
+        spans.extend(cursor_spans(ctx.value, ctx.cursor, vs, ctx.theme));
         Line::from(spans)
     } else {
         Line::from(vec![
-            pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            pointer_span(ctx.selected, ctx.theme),
+            label_span(ctx.label, LABEL_WIDTH, ctx.selected, ctx.theme),
             Span::styled("  ", Style::default()),
             Span::styled(
-                if value.is_empty() {
+                if ctx.value.is_empty() {
                     "(\u{7a7a})".to_string()
                 } else {
-                    value.to_string()
+                    ctx.value.to_string()
                 },
                 vs,
             ),
@@ -106,47 +114,51 @@ pub fn selectable_row<'a>(
     ])
 }
 
+/// 开关列表项的上下文参数
+#[derive(Debug)]
+pub struct ToggleListItemCtx<'a> {
+    pub name: &'a str,
+    pub enabled: bool,
+    pub selected: bool,
+    pub desc: Option<&'a str>,
+    pub tag: Option<&'a str>,
+    pub theme: &'a Theme,
+}
+
 /// 工具/技能/命令的开关列表项
-pub fn toggle_list_item<'a>(
-    name: &str,
-    enabled: bool,
-    selected: bool,
-    desc: Option<&str>,
-    tag: Option<&str>,
-    theme: &Theme,
-) -> Line<'a> {
-    let toggle_style = if enabled {
+pub fn toggle_list_item<'a>(ctx: &ToggleListItemCtx<'a>) -> Line<'a> {
+    let toggle_style = if ctx.enabled {
         Style::default()
-            .fg(theme.config_toggle_on)
+            .fg(ctx.theme.config_toggle_on)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(theme.config_toggle_off)
+        Style::default().fg(ctx.theme.config_toggle_off)
     };
-    let toggle_text = if enabled { TOGGLE_ON } else { TOGGLE_OFF };
-    let name_style = if selected {
+    let toggle_text = if ctx.enabled { TOGGLE_ON } else { TOGGLE_OFF };
+    let name_style = if ctx.selected {
         Style::default()
-            .fg(theme.config_label_selected)
+            .fg(ctx.theme.config_label_selected)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(theme.config_label)
+        Style::default().fg(ctx.theme.config_label)
     };
 
     let mut spans = vec![
-        pointer_span(selected, theme),
+        pointer_span(ctx.selected, ctx.theme),
         Span::styled(toggle_text, toggle_style),
         Span::styled(" ", Style::default()),
-        Span::styled(name.to_string(), name_style),
+        Span::styled(ctx.name.to_string(), name_style),
     ];
-    if let Some(d) = desc {
+    if let Some(d) = ctx.desc {
         spans.push(Span::styled(
             format!("  {d}"),
-            Style::default().fg(theme.config_dim),
+            Style::default().fg(ctx.theme.config_dim),
         ));
     }
-    if let Some(t) = tag {
+    if let Some(t) = ctx.tag {
         spans.push(Span::styled(
             format!(" [{t}]"),
-            Style::default().fg(theme.config_dim),
+            Style::default().fg(ctx.theme.config_dim),
         ));
     }
     Line::from(spans)

@@ -51,7 +51,7 @@ impl Tool for IgnoreMessageTool {
         Examples:
         {}
         {"reason": "B's progress update doesn't require my input"}
-        {"reason": "已注意到 schema 调整，不影响我当前任务"}
+        {"reason": "Noted schema change, does not affect my current task"}
 
         IMPORTANT:
         - Calling IgnoreMessage suppresses the prose of THIS turn — do NOT also

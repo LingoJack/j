@@ -1,5 +1,5 @@
 use crate::command::chat::app::ChatApp;
-use crate::tui::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, toggle_list_item};
+use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -105,21 +105,14 @@ pub(super) fn draw_tab_hooks_list<'a>(app: &ChatApp) -> ItemList<'a> {
             label_display
         );
 
-        let _toggle_str = if is_enabled { TOGGLE_ON } else { TOGGLE_OFF };
-        let _toggle_style = if is_enabled {
-            Style::default().fg(t.config_toggle_on)
-        } else {
-            Style::default().fg(t.config_toggle_off)
-        };
-
-        list.push(toggle_list_item(
-            &display_name,
-            is_enabled,
-            is_selected,
-            None,
-            None,
-            t,
-        ));
+        list.push(toggle_list_item(&ToggleListItemCtx {
+            name: &display_name,
+            enabled: is_enabled,
+            selected: is_selected,
+            desc: None,
+            tag: None,
+            theme: t,
+        }));
     }
 
     list

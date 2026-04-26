@@ -1,5 +1,7 @@
 use crate::command::chat::app::ChatApp;
-use crate::tui::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, toggle_list_item};
+use crate::tui::components::{
+    ItemList, TOGGLE_OFF, TOGGLE_ON, ToggleListItemCtx, toggle_list_item,
+};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -58,14 +60,14 @@ pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
             .disabled_tools
             .iter()
             .any(|d| d == *name);
-        list.push(toggle_list_item(
+        list.push(toggle_list_item(&ToggleListItemCtx {
             name,
-            is_enabled,
-            is_selected,
-            None,
-            None,
-            t,
-        ));
+            enabled: is_enabled,
+            selected: is_selected,
+            desc: None,
+            tag: None,
+            theme: t,
+        }));
     }
     list
 }
