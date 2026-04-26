@@ -1,4 +1,4 @@
-use super::super::app::ChatApp;
+use crate::command::chat::app::ChatApp;
 
 // ========== 斜杠命令定义 ==========
 

@@ -1,6 +1,6 @@
-use super::super::action::CursorDirection;
-use super::super::ui_state::ConfigTab;
 use super::ChatApp;
+use crate::command::chat::app::action::CursorDirection;
+use crate::command::chat::app::ui_state::ConfigTab;
 use crate::command::chat::storage::ModelProvider;
 use crate::constants::CONFIG_FIELDS;
 
@@ -546,6 +546,6 @@ impl ChatApp {
                 self.show_toast(format!("已切换主题: {}", name), false);
             }
         }
-        self.ui.mode = super::super::ui_state::ChatMode::Chat;
+        self.ui.mode = crate::command::chat::app::ui_state::ChatMode::Chat;
     }
 }

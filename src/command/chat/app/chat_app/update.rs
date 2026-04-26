@@ -1,5 +1,5 @@
-use super::super::action::Action;
 use super::ChatApp;
+use crate::command::chat::app::action::Action;
 
 impl ChatApp {
     /// Redux-like reducer：集中处理所有 Action，分发到具体方法
@@ -145,7 +145,9 @@ impl ChatApp {
             Action::DeleteArchive => self.do_delete_archive(),
 
             // ========== 模型和主题 ==========
-            Action::SwitchModel => self.ui.mode = super::super::ui_state::ChatMode::SelectModel,
+            Action::SwitchModel => {
+                self.ui.mode = crate::command::chat::app::ui_state::ChatMode::SelectModel
+            }
             Action::SwitchTheme => self.switch_theme(),
 
             // ========== 流式控制 ==========
@@ -159,7 +161,7 @@ impl ChatApp {
 
             // ========== 快速操作 ==========
             Action::CopyLastAiReply => self.update_copy_last_ai_reply(),
-            Action::ShowHelp => self.ui.mode = super::super::ui_state::ChatMode::Help,
+            Action::ShowHelp => self.ui.mode = crate::command::chat::app::ui_state::ChatMode::Help,
             Action::OpenLogWindows => self.update_open_log_windows(),
 
             // ========== 应用控制 ==========

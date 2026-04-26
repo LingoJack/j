@@ -1,7 +1,7 @@
-use super::super::action::CursorDirection;
-use super::super::types::ToolExecStatus;
-use super::super::ui_state::ChatMode;
 use super::ChatApp;
+use crate::command::chat::app::action::CursorDirection;
+use crate::command::chat::app::types::ToolExecStatus;
+use crate::command::chat::app::ui_state::ChatMode;
 use crate::command::chat::constants::{FINE_SCROLL_LINES, INPUT_BUFFER_MAX_LEN, PAGE_SCROLL_LINES};
 use crate::command::chat::remote::protocol::{ToolConfirmInfo, WsOutbound};
 use crate::command::chat::storage::{MessageRole, save_agent_config};

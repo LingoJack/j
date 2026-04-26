@@ -130,9 +130,9 @@ impl HelpApp {
             });
         }
 
-        let cache = self.tab_caches[idx]
-            .as_ref()
-            .expect("缓存应该在 need_rebuild 检查后存在");
+        let Some(cache) = self.tab_caches[idx].as_ref() else {
+            return &[];
+        };
         self.total_lines = cache.lines.len();
         &cache.lines
     }

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::super::storage::SessionMeta;
+use crate::command::chat::storage::SessionMeta;
 
 /// 客户端 → 服务端 消息
 #[derive(Debug, Deserialize)]

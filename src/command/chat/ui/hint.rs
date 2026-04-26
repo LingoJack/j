@@ -11,7 +11,7 @@ use ratatui::{
 
 use crate::command::chat::{
     app::{ChatApp, ConfigTab},
-    theme::Theme,
+    render::theme::Theme,
 };
 use crate::util::text::display_width;
 

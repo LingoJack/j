@@ -1,5 +1,5 @@
-use super::super::app::ChatApp;
-use super::super::autocomplete::{
+use crate::command::chat::app::ChatApp;
+use crate::command::chat::input::autocomplete::{
     AtPopupItem, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
     get_filtered_skill_names, get_filtered_slash_commands,
 };

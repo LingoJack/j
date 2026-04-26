@@ -1,4 +1,4 @@
-use super::super::app::ChatApp;
+use crate::command::chat::app::ChatApp;
 use crate::tui::components::{
     POINTER_EMPTY, POINTER_SELECTED, cursor_spans, help_key_row, section_header, separator_line,
 };

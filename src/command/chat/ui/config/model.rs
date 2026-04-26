@@ -1,6 +1,6 @@
-use super::super::super::ui_helpers::{config_field_label_model, config_field_value_model};
-use super::super::components::{RowContext, secret_field_row};
 use crate::command::chat::app::ChatApp;
+use crate::command::chat::render::helpers::{config_field_label_model, config_field_value_model};
+use crate::command::chat::ui::components::{RowContext, secret_field_row};
 use crate::constants::CONFIG_FIELDS;
 use crate::tui::components::{
     ItemList, SEPARATOR_V, TOGGLE_OFF, TOGGLE_ON, text_field_row, toggle_row,

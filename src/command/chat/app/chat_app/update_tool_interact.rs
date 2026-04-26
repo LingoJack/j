@@ -1,7 +1,7 @@
-use super::super::action::CursorDirection;
-use super::super::types::AskAnswer;
-use super::super::ui_state::ChatMode;
 use super::ChatApp;
+use crate::command::chat::app::action::CursorDirection;
+use crate::command::chat::app::types::AskAnswer;
+use crate::command::chat::app::ui_state::ChatMode;
 use crate::command::chat::constants::TOOL_INTERACT_MAX_OPTIONS;
 
 impl ChatApp {

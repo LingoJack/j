@@ -1,4 +1,4 @@
-use super::super::error::ChatError;
+use crate::command::chat::error::ChatError;
 use rand::Rng;
 
 // ── 退避延迟常量 ──────────────────────────────────────────────

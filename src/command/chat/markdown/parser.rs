@@ -3,8 +3,8 @@ mod table;
 mod tests;
 mod text;
 
-use super::super::theme::Theme;
 use super::highlight::highlight_code_line;
+use crate::command::chat::render::theme::Theme;
 use crate::tui::editor_core::EditorTheme;
 use crate::util::text::{display_width, wrap_text};
 use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
