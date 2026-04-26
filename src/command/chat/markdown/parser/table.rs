@@ -11,10 +11,7 @@ use ratatui::{
 
 impl<'a> ParserState<'a> {
     /// Handle `Event::Start(Tag::Table(alignments))`.
-    pub(crate) fn handle_table_start(
-        &mut self,
-        alignments: Vec<pulldown_cmark::Alignment>,
-    ) {
+    pub(crate) fn handle_table_start(&mut self, alignments: Vec<pulldown_cmark::Alignment>) {
         self.flush_line();
         self.in_table = true;
         self.table_rows.clear();
@@ -31,12 +28,7 @@ impl<'a> ParserState<'a> {
             return;
         }
 
-        let num_cols = self
-            .table_rows
-            .iter()
-            .map(|r| r.len())
-            .max()
-            .unwrap_or(0);
+        let num_cols = self.table_rows.iter().map(|r| r.len()).max().unwrap_or(0);
         if num_cols == 0 {
             self.table_rows.clear();
             self.table_alignments.clear();
@@ -143,8 +135,7 @@ impl<'a> ParserState<'a> {
                         let mut truncated = Vec::new();
                         let mut w = 0;
                         for span in cell_spans {
-                            let span_w: usize =
-                                span.content.chars().map(char_width).sum();
+                            let span_w: usize = span.content.chars().map(char_width).sum();
                             if w + span_w <= *cw {
                                 w += span_w;
                                 truncated.push(span);
@@ -276,11 +267,6 @@ impl<'a> ParserState<'a> {
         self.current_cell.push('`');
         self.current_cell.push_str(text);
         self.current_cell.push('`');
-    }
-
-    /// Handle text content when inside a table cell.
-    pub(crate) fn handle_text_in_table(&mut self, text: &str) {
-        self.current_cell.push_str(text);
     }
 
     /// Handle soft break inside a table cell.
