@@ -29,6 +29,8 @@ use std::sync::Arc;
 const THINKING_FOLDED_MAX_LINES: usize = 5;
 /// `render_assistant_msg` 气泡最小宽度（字符列数）
 const BUBBLE_MIN_WIDTH: usize = 20;
+/// `render_assistant_msg` 气泡左边距（字符列数），避免气泡贴近消息区左边界
+const ASSISTANT_BUBBLE_LEFT_MARGIN: usize = 2;
 /// `render_user_msg` 用户气泡左右内边距（字符列数）
 const USER_BUBBLE_PAD_LR: usize = 3;
 /// `render_tool_result_msg` / `render_bash_result` 普通结果截断显示的行数上限
@@ -306,21 +308,23 @@ pub fn build_message_lines_incremental(
         let bubble_bg = t.bubble_ai;
         let pad_left_w = 3usize;
         let pad_right_w = 3usize;
-        let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
-        let bubble_total_w = bubble_max_width;
+        let margin_str = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
+        let md_content_w = bubble_max_width
+            .saturating_sub(pad_left_w + pad_right_w + ASSISTANT_BUBBLE_LEFT_MARGIN);
+        let inner_bubble_w = bubble_max_width.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN);
 
         // AI 标签
         streaming_lines.push(Line::from(""));
         streaming_lines.push(Line::from(Span::styled(
-            "Sprite",
+            format!("{}Sprite", margin_str),
             Style::default().fg(t.label_ai).add_modifier(Modifier::BOLD),
         )));
 
         // 上边距
-        streaming_lines.push(Line::from(vec![Span::styled(
-            " ".repeat(bubble_total_w),
-            Style::default().bg(bubble_bg),
-        )]));
+        streaming_lines.push(Line::from(vec![
+            Span::styled(margin_str.clone(), Style::default()),
+            Span::styled(" ".repeat(inner_bubble_w), Style::default().bg(bubble_bg)),
+        ]));
 
         // 思考指示器：颜色脉冲动画
         if streaming_text == "◍" {
@@ -336,12 +340,13 @@ pub fn build_message_lines_incremental(
                 let frame = thinking_style.frame(tick);
                 Line::from(Span::styled(frame, Style::default().fg(pulse_color)))
             };
-            let bubble_line = wrap_md_line_in_bubble(
+            let bubble_line = wrap_md_line_in_bubble_with_margin(
                 indicator_line,
                 bubble_bg,
                 pad_left_w,
                 pad_right_w,
-                bubble_total_w,
+                inner_bubble_w,
+                &margin_str,
             );
             streaming_lines.push(bubble_line);
 
@@ -359,12 +364,13 @@ pub fn build_message_lines_incremental(
                         .fg(t.text_dim)
                         .add_modifier(Modifier::ITALIC),
                 ));
-                let label_bubble = wrap_md_line_in_bubble(
+                let label_bubble = wrap_md_line_in_bubble_with_margin(
                     thinking_label,
                     bubble_bg,
                     pad_left_w,
                     pad_right_w,
-                    bubble_total_w,
+                    inner_bubble_w,
+                    &margin_str,
                 );
                 streaming_lines.push(label_bubble);
 
@@ -375,22 +381,23 @@ pub fn build_message_lines_incremental(
                         format!("  {}", wrapped_line),
                         Style::default().fg(t.text_dim),
                     ));
-                    let bubble_line = wrap_md_line_in_bubble(
+                    let bubble_line = wrap_md_line_in_bubble_with_margin(
                         line,
                         bubble_bg,
                         pad_left_w,
                         pad_right_w,
-                        bubble_total_w,
+                        inner_bubble_w,
+                        &margin_str,
                     );
                     streaming_lines.push(bubble_line);
                 }
             }
 
             // 下边距
-            streaming_lines.push(Line::from(vec![Span::styled(
-                " ".repeat(bubble_total_w),
-                Style::default().bg(bubble_bg),
-            )]));
+            streaming_lines.push(Line::from(vec![
+                Span::styled(margin_str.clone(), Style::default()),
+                Span::styled(" ".repeat(inner_bubble_w), Style::default().bg(bubble_bg)),
+            ]));
         } else {
             let content = streaming_text;
             // 找到当前内容中最后一个安全的段落边界
@@ -406,37 +413,43 @@ pub fn build_message_lines_incremental(
                         bubble_bg,
                         pad_left_w,
                         pad_right_w,
-                        bubble_total_w,
+                        inner_bubble_w,
                     );
                     stable_lines.push(bubble_line);
                 }
             }
             final_stable_offset = boundary;
 
-            // 追加已缓存的稳定段落行（引用 clone，不再双重 clone）
-            streaming_lines.extend(stable_lines.iter().cloned());
+            // 追加已缓存的稳定段落行（带 margin 前缀）
+            for sl in stable_lines.iter() {
+                let mut line = sl.clone();
+                line.spans
+                    .insert(0, Span::styled(margin_str.clone(), Style::default()));
+                streaming_lines.push(line);
+            }
 
             // 只对最后一个不完整段落做全量 Markdown 解析
             let tail = &content[boundary..];
             if !tail.is_empty() {
                 let tail_md_lines = markdown_to_lines(tail, md_content_w + 2, t);
                 for md_line in tail_md_lines {
-                    let bubble_line = wrap_md_line_in_bubble(
+                    let bubble_line = wrap_md_line_in_bubble_with_margin(
                         md_line,
                         bubble_bg,
                         pad_left_w,
                         pad_right_w,
-                        bubble_total_w,
+                        inner_bubble_w,
+                        &margin_str,
                     );
                     streaming_lines.push(bubble_line);
                 }
             }
 
             // 下边距
-            streaming_lines.push(Line::from(vec![Span::styled(
-                " ".repeat(bubble_total_w),
-                Style::default().bg(bubble_bg),
-            )]));
+            streaming_lines.push(Line::from(vec![
+                Span::styled(margin_str.clone(), Style::default()),
+                Span::styled(" ".repeat(inner_bubble_w), Style::default().bg(bubble_bg)),
+            ]));
         }
     } else {
         // 非流式状态：stable_lines 不再需要
@@ -536,6 +549,25 @@ pub fn wrap_md_line_in_bubble(
     }
     styled_spans.push(Span::styled(pad_right, Style::default().bg(bubble_bg)));
     Line::from(styled_spans)
+}
+
+/// 带左边距的气泡行包装（用于 assistant 消息气泡）
+/// 在 `wrap_md_line_in_bubble` 基础上，在行首插入一个无背景色的 margin span
+fn wrap_md_line_in_bubble_with_margin(
+    md_line: Line<'static>,
+    bubble_bg: Color,
+    pad_left_w: usize,
+    pad_right_w: usize,
+    bubble_total_w: usize,
+    margin: &str,
+) -> Line<'static> {
+    // 先用原始函数生成气泡行
+    let mut line =
+        wrap_md_line_in_bubble(md_line, bubble_bg, pad_left_w, pad_right_w, bubble_total_w);
+    // 在最前面插入 margin span（无背景色，透出消息区背景）
+    line.spans
+        .insert(0, Span::styled(margin.to_string(), Style::default()));
+    line
 }
 
 /// 渲染用户消息
@@ -748,11 +780,12 @@ pub fn render_assistant_msg(
 
     lines.push(Line::from(""));
 
-    // 标签行：`  ▶ AgentName` 或 `  AgentName`
+    // 标签行：左边距 + `▶ AgentName` 或 `AgentName`
+    let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
     let label = if is_selected {
-        format!("  ▶ {}", agent_name)
+        format!("{}▶ {}", margin, agent_name)
     } else {
-        format!("  {}", agent_name)
+        format!("{}{}", margin, agent_name)
     };
     let label_color = if is_selected {
         theme.label_selected
@@ -777,7 +810,8 @@ pub fn render_assistant_msg(
     let pad_right_w = 3usize;
 
     // 先用最大宽度渲染 markdown 内容
-    let md_content_w = bubble_max_width.saturating_sub(pad_left_w + pad_right_w);
+    let md_content_w =
+        bubble_max_width.saturating_sub(pad_left_w + pad_right_w + ASSISTANT_BUBBLE_LEFT_MARGIN);
     let md_lines = markdown_to_lines(bubble_content, md_content_w + 2, theme);
 
     // 计算实际内容最大宽度：取所有 md_lines 的最大显示宽度
@@ -792,26 +826,40 @@ pub fn render_assistant_msg(
         .max()
         .unwrap_or(0);
 
-    // 气泡自适应宽度：min(max(实际宽度+padding, 最小宽度), 最大宽度)
-    let bubble_total_w = (actual_content_max_w + pad_left_w + pad_right_w)
-        .max(BUBBLE_MIN_WIDTH)
-        .min(bubble_max_width);
+    // 气泡自适应宽度：min(max(实际宽度+padding+margin, 最小宽度), 最大宽度)
+    let bubble_total_w =
+        (actual_content_max_w + pad_left_w + pad_right_w + ASSISTANT_BUBBLE_LEFT_MARGIN)
+            .max(BUBBLE_MIN_WIDTH + ASSISTANT_BUBBLE_LEFT_MARGIN)
+            .min(bubble_max_width);
 
     // 上边距
-    lines.push(Line::from(vec![Span::styled(
-        " ".repeat(bubble_total_w),
-        Style::default().bg(bubble_bg),
-    )]));
+    lines.push(Line::from(vec![
+        Span::styled(margin.clone(), Style::default()),
+        Span::styled(
+            " ".repeat(bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN)),
+            Style::default().bg(bubble_bg),
+        ),
+    ]));
     for md_line in md_lines {
-        let bubble_line =
-            wrap_md_line_in_bubble(md_line, bubble_bg, pad_left_w, pad_right_w, bubble_total_w);
+        let inner_bubble_w = bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN);
+        let bubble_line = wrap_md_line_in_bubble_with_margin(
+            md_line,
+            bubble_bg,
+            pad_left_w,
+            pad_right_w,
+            inner_bubble_w,
+            &margin,
+        );
         lines.push(bubble_line);
     }
     // 下边距
-    lines.push(Line::from(vec![Span::styled(
-        " ".repeat(bubble_total_w),
-        Style::default().bg(bubble_bg),
-    )]));
+    lines.push(Line::from(vec![
+        Span::styled(margin.clone(), Style::default()),
+        Span::styled(
+            " ".repeat(bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN)),
+            Style::default().bg(bubble_bg),
+        ),
+    ]));
 }
 
 /// 构建一行带左右边框的行，自动用空格补齐到 bubble_max_width
