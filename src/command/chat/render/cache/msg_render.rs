@@ -109,23 +109,6 @@ pub fn render_user_msg(
     let lines = &mut *ctx.lines;
     let theme = ctx.theme;
     let bubble_max_width = ctx.bubble_max_width;
-    let label = if is_selected { "▶ You " } else { "You " };
-    let pad = inner_width.saturating_sub(display_width(label) + 2);
-    lines.push(Line::from(vec![
-        Span::raw(" ".repeat(pad)),
-        Span::styled(
-            label,
-            Style::default()
-                .fg(if is_selected {
-                    theme.label_selected
-                } else {
-                    theme.label_user
-                })
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]));
-    // label 与气泡之间留一空行，避免视觉拥挤
-    lines.push(Line::from(""));
     let user_bg = if is_selected {
         theme.bubble_user_selected
     } else {
@@ -150,13 +133,28 @@ pub fn render_user_msg(
         .min(bubble_max_width)
         .max(user_pad_lr * 2 + 1);
     let actual_inner_content_w = actual_bubble_w.saturating_sub(user_pad_lr * 2);
-    // 上边距
+
+    // 顶行：label + 气泡背景填充合一，视觉紧凑
+    let label_color = if is_selected {
+        theme.label_selected
+    } else {
+        theme.label_user
+    };
     {
-        let bubble_text = " ".repeat(actual_bubble_w);
-        let pad = inner_width.saturating_sub(actual_bubble_w);
+        let label = if is_selected { "▶ You " } else { "You " };
+        let label_w = display_width(label);
+        let bubble_fill_w = actual_bubble_w.saturating_sub(label_w);
+        let left_pad = inner_width.saturating_sub(actual_bubble_w);
         lines.push(Line::from(vec![
-            Span::raw(" ".repeat(pad)),
-            Span::styled(bubble_text, Style::default().bg(user_bg)),
+            Span::raw(" ".repeat(left_pad)),
+            Span::styled(
+                label.to_string(),
+                Style::default()
+                    .fg(label_color)
+                    .bg(user_bg)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ".repeat(bubble_fill_w), Style::default().bg(user_bg)),
         ]));
     }
     for wl in &all_wrapped_lines {
@@ -220,30 +218,6 @@ pub fn render_assistant_msg(
 
     let is_teammate = agent_name != "Sprite";
 
-    // 标签行：左边距 + `▶ AgentName` 或 `AgentName`
-    let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
-    let label = if is_selected {
-        format!("{}▶ {}", margin, agent_name)
-    } else {
-        format!("{}{}", margin, agent_name)
-    };
-    let label_color = if is_selected {
-        theme.label_selected
-    } else if is_teammate {
-        agent_name_color(&agent_name)
-    } else {
-        theme.label_ai
-    };
-    lines.push(Line::from(Span::styled(
-        label,
-        Style::default()
-            .fg(label_color)
-            .add_modifier(Modifier::BOLD),
-    )));
-
-    // label 与气泡之间留一空行，避免视觉拥挤
-    lines.push(Line::from(""));
-
     let bubble_bg = if is_selected {
         theme.bubble_ai_selected
     } else {
@@ -251,6 +225,7 @@ pub fn render_assistant_msg(
     };
     let pad_left_w = 3usize;
     let pad_right_w = 3usize;
+    let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
 
     // 先用最大宽度渲染 markdown 内容
     let md_content_w =
@@ -275,13 +250,30 @@ pub fn render_assistant_msg(
             .max(BUBBLE_MIN_WIDTH + ASSISTANT_BUBBLE_LEFT_MARGIN)
             .min(bubble_max_width);
 
-    // 上边距
+    // 顶行：label + 气泡背景填充合一，视觉紧凑
+    let label_text = if is_selected {
+        format!("{}▶ {}", margin, agent_name)
+    } else {
+        format!("{}{}", margin, agent_name)
+    };
+    let label_color = if is_selected {
+        theme.label_selected
+    } else if is_teammate {
+        agent_name_color(&agent_name)
+    } else {
+        theme.label_ai
+    };
+    let label_w = display_width(&label_text);
+    let bubble_fill_w = bubble_total_w.saturating_sub(label_w);
     lines.push(Line::from(vec![
-        Span::styled(margin.clone(), Style::default()),
         Span::styled(
-            " ".repeat(bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN)),
-            Style::default().bg(bubble_bg),
+            label_text,
+            Style::default()
+                .fg(label_color)
+                .bg(bubble_bg)
+                .add_modifier(Modifier::BOLD),
         ),
+        Span::styled(" ".repeat(bubble_fill_w), Style::default().bg(bubble_bg)),
     ]));
     for md_line in md_lines {
         let inner_bubble_w = bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN);
