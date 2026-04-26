@@ -144,8 +144,8 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
                 return;
             }
             KeyCode::Up => {
-                // 光标在行首且上方有选项时，保存草稿退回选项列表
-                if app.ui.tool_interact_cursor == 0 && app.ui.tool_ask_cursor > 0 {
+                // 上方有选项时，保存草稿退回选项列表
+                if app.ui.tool_ask_cursor > 0 {
                     save_draft(app);
                     app.ui.tool_interact_typing = false;
                     app.ui.tool_ask_cursor -= 1;
