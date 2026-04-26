@@ -147,7 +147,7 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         )]));
     }
 
-    let input_widget = Paragraph::new(display_lines).style(Style::default().bg(t.bg_input));
+    let input_widget = Paragraph::new(display_lines).style(Style::default().bg(t.bg_primary));
     f.render_widget(input_widget, area);
 
     // 光标位置计算
@@ -419,6 +419,6 @@ fn draw_browse_filter(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
         ));
     }
 
-    let widget = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_input));
+    let widget = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(widget, area);
 }

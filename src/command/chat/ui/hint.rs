@@ -189,7 +189,7 @@ fn render_hint_bar(f: &mut ratatui::Frame, area: Rect, t: &Theme, hints: &[(&str
         used += need_w;
     }
 
-    let hint_bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_input));
+    let hint_bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_primary));
     f.render_widget(hint_bar, area);
 }
 
