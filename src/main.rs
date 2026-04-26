@@ -17,6 +17,16 @@ fn main() {
     // 加载配置
     let mut config = YamlConfig::load();
 
+    // 初始化颜色色阶（必须在任何 Theme 加载之前完成）
+    let color_mode = config
+        .get_property(
+            constants::section::SETTING,
+            constants::config_key::COLOR_MODE,
+        )
+        .cloned()
+        .unwrap_or_default();
+    util::color_adapt::init_from_config(&color_mode);
+
     // 安装预置脚本（静默失败）
     let _ = assets::install_default_scripts(&mut config);
 

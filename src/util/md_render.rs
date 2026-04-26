@@ -67,10 +67,15 @@ fn print_lines_to_terminal(lines: &[ratatui::text::Line]) {
     let _ = out.flush();
 }
 
-/// 映射 ratatui Color → crossterm Color
+/// 映射 ratatui Color → crossterm Color。
+///
+/// 入口先经 [`crate::util::color_adapt::degrade`]，让全局色阶设置（`color_mode` 配置项）
+/// 生效——这样在 ANSI16 / 256 / NoColor 模式下，主题里的 hex 真彩色会被降级到对应等级。
 fn map_color(color: ratatui::style::Color) -> crossterm::style::Color {
     use crossterm::style::Color as CtColor;
     use ratatui::style::Color as RColor;
+
+    let color = crate::util::color_adapt::degrade(color);
 
     match color {
         RColor::Rgb(r, g, b) => CtColor::Rgb { r, g, b },

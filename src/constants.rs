@@ -172,6 +172,8 @@ pub mod config_key {
     pub const BROWSER_HEADLESS: &str = "browser_headless";
     pub const NOTEBOOK_PANEL_RATIO: &str = "notebook_panel_ratio";
     pub const NOTEBOOK_EXPANDED_DIRS: &str = "notebook_expanded_dirs";
+    /// 颜色色阶模式：auto / truecolor / ansi256 / ansi16 / none
+    pub const COLOR_MODE: &str = "color_mode";
 }
 
 // ========== 搜索引擎 ==========

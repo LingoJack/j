@@ -1,3 +1,4 @@
+pub mod color_adapt;
 pub mod fuzzy;
 pub mod html_extract;
 pub mod log;

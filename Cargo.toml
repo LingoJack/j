@@ -74,6 +74,8 @@ sha2 = "0.11"
 ctrlc = "3.5"
 core-graphics = "0.25"
 core-foundation = "0.10"
+supports-color = "3"
+ansi_colours = "1.2"
 
 [features]
 default = []

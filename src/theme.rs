@@ -615,20 +615,100 @@ impl From<ThemeJson> for Theme {
 
 /// 颜色值的 JSON 反序列化包装
 ///
-/// 支持格式：
-/// - `"#rrggbb"` → `Color::Rgb(r, g, b)`
-/// - `"reset"` / `"white"` / `"dark_gray"` 等 → 对应 ANSI 命名色
+/// 支持两种形态：
+/// 1. **简单形态（字符串）**：与早期 schema 完全兼容
+///    - `"#rrggbb"` → `Color::Rgb(r, g, b)`
+///    - `"reset"` / `"white"` / `"dark_gray"` 等 → 对应 ANSI 命名色
+///
+/// 2. **多级形态（对象）**：可对关键色显式锁定 fallback，避免运行时最近邻误判
+///    ```json
+///    { "rgb": "#d7263d", "ansi256": 160, "ansi16": "red" }
+///    ```
+///    - `ansi16` 字段在全局 [`crate::util::color_adapt::ColorLevel::Ansi16`] 模式下命中
+///    - `ansi256` 在 Ansi256 模式下命中
+///    - 否则回落到 `rgb`（之后由 [`crate::util::color_adapt::degrade`] 在使用时降级）
 #[derive(Deserialize)]
-#[serde(try_from = "String")]
+#[serde(untagged)]
+enum RawColor {
+    Simple(String),
+    Multi {
+        #[serde(default)]
+        rgb: Option<String>,
+        #[serde(default)]
+        ansi256: Option<u8>,
+        #[serde(default)]
+        ansi16: Option<String>,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(try_from = "RawColor")]
 struct ColorValue(Color);
 
-impl TryFrom<String> for ColorValue {
+impl TryFrom<RawColor> for ColorValue {
     type Error = String;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        let color = parse_color(&s)?;
+    fn try_from(raw: RawColor) -> Result<Self, Self::Error> {
+        let color = match raw {
+            RawColor::Simple(s) => parse_color(&s)?,
+            RawColor::Multi {
+                rgb,
+                ansi256,
+                ansi16,
+            } => resolve_multi_color(rgb.as_deref(), ansi256, ansi16.as_deref())?,
+        };
         Ok(ColorValue(color))
     }
+}
+
+/// 在多级颜色对象中按当前 [`crate::util::color_adapt::ColorLevel`] 选取最优值。
+///
+/// 优先级：当前色阶的精确字段 > rgb > 其他色阶兜底。
+///
+/// # 为什么这个函数是 TUI 与 `color_mode` 的**唯一**桥梁
+/// chat TUI / todo TUI 走 ratatui+crossterm 渲染，**不会调用** [`crate::util::color_adapt::degrade`]
+/// 或 [`crate::util::color_adapt::apply_fg`]，所以运行时的色阶降级对 TUI 无效。
+/// 但 ColorValue 反序列化时（即 [`Theme::from_name`] 加载 JSON 那一刻）会调用 `current()`，
+/// 让对象形态的 JSON 字段在那时就解析成最终的 ratatui::Color 存进 Theme。
+/// TUI 之后拿到的就是这个已经"定型"的颜色值——色阶在 JSON 加载阶段一次性敲定，
+/// 不需要 TUI 在每次渲染时重做降级。
+///
+/// 因此：内置主题全是字符串形态 → 走 `RawColor::Simple` → 不读 ColorLevel → TUI 零感。
+/// 一旦某主题字段升级成对象形态 → 走本函数 → TUI 自动跟随 `color_mode`。
+fn resolve_multi_color(
+    rgb: Option<&str>,
+    ansi256: Option<u8>,
+    ansi16: Option<&str>,
+) -> Result<Color, String> {
+    use crate::util::color_adapt::{ColorLevel, current};
+
+    // 当前色阶精确匹配优先
+    match current() {
+        ColorLevel::Ansi16 => {
+            if let Some(name) = ansi16 {
+                return parse_color(name);
+            }
+        }
+        ColorLevel::Ansi256 => {
+            if let Some(idx) = ansi256 {
+                return Ok(Color::Indexed(idx));
+            }
+        }
+        _ => {}
+    }
+
+    // 回落顺序：rgb → ansi256 → ansi16
+    if let Some(hex) = rgb {
+        return parse_color(hex);
+    }
+    if let Some(idx) = ansi256 {
+        return Ok(Color::Indexed(idx));
+    }
+    if let Some(name) = ansi16 {
+        return parse_color(name);
+    }
+
+    Err("color object must specify at least one of rgb/ansi256/ansi16".into())
 }
 
 /// 解析颜色字符串

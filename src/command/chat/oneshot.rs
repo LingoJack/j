@@ -109,31 +109,9 @@ fn box_width() -> usize {
     term_width().saturating_sub(4).clamp(20, 56)
 }
 
-/// 将 ratatui Color 提取为 RGB 三元组（用于 colored::truecolor）
-fn color_rgb(color: ratatui::style::Color) -> (u8, u8, u8) {
-    use ratatui::style::Color;
-    match color {
-        Color::Rgb(r, g, b) => (r, g, b),
-        Color::Blue => (0, 0, 255),
-        Color::Cyan => (0, 255, 255),
-        Color::Green => (0, 255, 0),
-        Color::Yellow => (255, 255, 0),
-        Color::Red => (255, 0, 0),
-        Color::Magenta => (255, 0, 255),
-        Color::White => (255, 255, 255),
-        Color::DarkGray => (169, 169, 169),
-        Color::LightBlue => (173, 216, 230),
-        Color::LightCyan => (224, 255, 255),
-        Color::LightGreen => (144, 238, 144),
-        Color::LightYellow => (255, 255, 224),
-        Color::LightRed => (255, 160, 122),
-        Color::LightMagenta => (255, 182, 193),
-        _ => (200, 200, 200),
-    }
-}
-
-/// 思考动画脉冲颜色（与 TUI thinking_pulse_color 对齐）
-fn thinking_pulse_color_rgb() -> (u8, u8, u8) {
+/// 思考动画脉冲颜色（与 TUI thinking_pulse_color 对齐）。
+/// 返回插值后的 ratatui::Color::Rgb，调用方再走 apply_fg 做最终色阶降级。
+fn thinking_pulse_color() -> ratatui::style::Color {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let millis = SystemTime::now()
@@ -146,7 +124,7 @@ fn thinking_pulse_color_rgb() -> (u8, u8, u8) {
     let t = (phase * std::f64::consts::TAU).sin() * 0.5 + 0.5;
 
     let theme = Theme::terminal();
-    if let ratatui::style::Color::Rgb(r, g, b) = theme.label_ai {
+    let (r, g, b) = if let ratatui::style::Color::Rgb(r, g, b) = theme.label_ai {
         let min_factor = THINKING_PULSE_MIN_FACTOR;
         let factor = min_factor + (1.0 - min_factor) * t;
         (
@@ -155,8 +133,10 @@ fn thinking_pulse_color_rgb() -> (u8, u8, u8) {
             (b as f64 * factor).round().min(255.0) as u8,
         )
     } else {
-        (120, 220, 160) // 默认 label_ai 色
-    }
+        // 命名色无 RGB 信息时退化到固定 label_ai 默认色
+        (120, 220, 160)
+    };
+    ratatui::style::Color::Rgb(r, g, b)
 }
 
 /// 打印工具调用行（与 TUI 折叠模式对齐: `  {icon} {tool_name}  {desc}`）
@@ -166,7 +146,7 @@ fn print_tool_call_line(tool_name: &str, arguments: &str) {
     let category = ToolCategory::from_name(tool_name);
     let icon = category.icon();
     let theme = Theme::terminal();
-    let (tr, tg, tb) = color_rgb(category.color(&theme));
+    let tool_color = category.color(&theme);
 
     let desc = if let Some(d) = extract_tool_desc(tool_name, arguments) {
         d
@@ -185,7 +165,7 @@ fn print_tool_call_line(tool_name: &str, arguments: &str) {
     eprintln!(
         "  {} {} {}",
         icon,
-        tool_name.truecolor(tr, tg, tb).bold(),
+        crate::util::color_adapt::apply_fg(tool_name, tool_color).bold(),
         desc_colored
     );
 }
@@ -196,14 +176,14 @@ fn print_tool_result_line(tool_name: &str, is_error: bool, summary: &str, elapse
 
     let category = ToolCategory::from_name(tool_name);
     let theme = Theme::terminal();
-    let (tr, tg, tb) = color_rgb(category.color(&theme));
+    let tool_color = category.color(&theme);
 
     let status_icon = if is_error { "✗" } else { "✓" };
     let status_style = if is_error { "red" } else { "green" };
 
     eprintln!(
         "  🔧 {} {}{} {}",
-        tool_name.truecolor(tr, tg, tb).bold(),
+        crate::util::color_adapt::apply_fg(tool_name, tool_color).bold(),
         status_icon.color(status_style),
         summary.dimmed(),
         elapsed.dimmed(),
@@ -223,10 +203,12 @@ fn start_thinking_animation(thinking_style: ThinkingStyle) -> Arc<AtomicBool> {
         let mut stdout = io::stdout();
 
         while !stop_clone.load(Ordering::Relaxed) {
-            let (r, g, b) = thinking_pulse_color_rgb();
+            let pulse_color = thinking_pulse_color();
             let frame = thinking_style.frame(tick);
             let line = format!("  {} 思考中...", frame);
-            let colored_line = line.truecolor(r, g, b).bold().to_string();
+            let colored_line = crate::util::color_adapt::apply_fg(&line, pulse_color)
+                .bold()
+                .to_string();
 
             let _ = execute!(
                 stdout,
@@ -1097,8 +1079,10 @@ fn run_oneshot_agent(
                         // 打印 AI 标签（首次文本到来时）
                         if first_content {
                             let theme = Theme::terminal();
-                            let (lr, lg, lb) = color_rgb(theme.label_ai);
-                            eprintln!("  {}", "Sprite".truecolor(lr, lg, lb).bold());
+                            eprintln!(
+                                "  {}",
+                                crate::util::color_adapt::apply_fg("Sprite", theme.label_ai).bold()
+                            );
                             first_content = false;
                         }
 
