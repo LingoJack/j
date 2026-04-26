@@ -13,7 +13,7 @@ use std::io;
 use crate::command::chat::markdown::highlight::highlight_code_line;
 use crate::theme::{Theme, ThemeName};
 
-use crate::tui::editor_core::{EditorTheme, HighlightFn, ThemeGalleryItem};
+use crate::tui::editor_core::{EditorTheme, HighlightFn, MarkdownEditorOpts, ThemeGalleryItem};
 // 直接使用 editor_core 的公共 API
 use crate::tui::editor_core::{
     open_markdown_editor as core_open, open_markdown_editor_on_terminal as core_open_on_terminal,
@@ -92,6 +92,16 @@ fn save_theme_if_selected(theme_id: Option<&'static str>) {
 
 // ========== 公共 API ==========
 
+/// 构建 MarkdownEditorOpts（统一 Theme→EditorTheme 转换 + 高亮函数 + 主题画廊）
+fn build_editor_opts<'a>(title: &'a str, theme: &'a Theme) -> MarkdownEditorOpts<'a> {
+    MarkdownEditorOpts {
+        title,
+        theme: EditorTheme::from(theme),
+        highlight_fn: bridge_highlight as HighlightFn,
+        theme_gallery: build_theme_gallery(),
+    }
+}
+
 /// 打开 Markdown 编辑器（在已有终端上）
 pub fn open_markdown_editor_on_terminal(
     terminal: &mut ratatui::Terminal<ratatui::backend::CrosstermBackend<io::Stdout>>,
@@ -99,15 +109,8 @@ pub fn open_markdown_editor_on_terminal(
     content: &str,
     theme: &Theme,
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
-    let editor_theme = EditorTheme::from(theme);
-    let result = core_open_on_terminal(
-        terminal,
-        title,
-        content,
-        &editor_theme,
-        bridge_highlight as HighlightFn,
-        build_theme_gallery(),
-    )?;
+    let opts = build_editor_opts(title, theme);
+    let result = core_open_on_terminal(terminal, &opts, content)?;
     save_theme_if_selected(result.1);
     Ok(result)
 }
@@ -118,14 +121,8 @@ pub fn open_markdown_editor(
     content: &str,
     theme: &Theme,
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
-    let editor_theme = EditorTheme::from(theme);
-    let result = core_open(
-        title,
-        content,
-        &editor_theme,
-        bridge_highlight as HighlightFn,
-        build_theme_gallery(),
-    )?;
+    let opts = build_editor_opts(title, theme);
+    let result = core_open(&opts, content)?;
     save_theme_if_selected(result.1);
     Ok(result)
 }
@@ -136,14 +133,8 @@ pub fn open_markdown_editor_with_content(
     initial_lines: &[String],
     theme: &Theme,
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
-    let editor_theme = EditorTheme::from(theme);
-    let result = core_open_with_content(
-        title,
-        initial_lines,
-        &editor_theme,
-        bridge_highlight as HighlightFn,
-        build_theme_gallery(),
-    )?;
+    let opts = build_editor_opts(title, theme);
+    let result = core_open_with_content(&opts, initial_lines)?;
     save_theme_if_selected(result.1);
     Ok(result)
 }
@@ -158,14 +149,8 @@ pub fn open_script_editor(
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
     let agent_config = load_agent_config();
     let theme = Theme::from_name(&agent_config.theme);
-    let editor_theme = EditorTheme::from(&theme);
-    let result = core_open_with_content(
-        title,
-        initial_lines,
-        &editor_theme,
-        bridge_highlight as HighlightFn,
-        build_theme_gallery(),
-    )?;
+    let opts = build_editor_opts(title, &theme);
+    let result = core_open_with_content(&opts, initial_lines)?;
     save_theme_if_selected(result.1);
     Ok(result)
 }

@@ -995,17 +995,27 @@ pub enum EditorAction {
 
 // ========== 公共 API ==========
 
+/// Markdown 编辑器共享配置参数（封装 title/theme/highlight_fn/theme_gallery）
+pub struct MarkdownEditorOpts<'a> {
+    pub title: &'a str,
+    pub theme: EditorTheme,
+    pub highlight_fn: HighlightFn,
+    pub theme_gallery: Vec<ThemeGalleryItem>,
+}
+
 /// 打开 Markdown 编辑器（在已有终端上）
 pub fn open_markdown_editor_on_terminal(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    title: &str,
+    opts: &MarkdownEditorOpts,
     content: &str,
-    theme: &EditorTheme,
-    highlight_fn: HighlightFn,
-    theme_gallery: Vec<ThemeGalleryItem>,
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
-    let mut editor =
-        MarkdownEditor::new(title, content, theme.clone(), highlight_fn, theme_gallery);
+    let mut editor = MarkdownEditor::new(
+        opts.title,
+        content,
+        opts.theme.clone(),
+        opts.highlight_fn,
+        opts.theme_gallery.clone(),
+    );
 
     loop {
         let size = terminal.size()?;
@@ -1035,11 +1045,8 @@ pub fn open_markdown_editor_on_terminal(
 
 /// 打开 Markdown 编辑器（独立终端）
 pub fn open_markdown_editor(
-    title: &str,
+    opts: &MarkdownEditorOpts,
     content: &str,
-    theme: &EditorTheme,
-    highlight_fn: HighlightFn,
-    theme_gallery: Vec<ThemeGalleryItem>,
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -1048,14 +1055,7 @@ pub fn open_markdown_editor(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = open_markdown_editor_on_terminal(
-        &mut terminal,
-        title,
-        content,
-        theme,
-        highlight_fn,
-        theme_gallery,
-    );
+    let result = open_markdown_editor_on_terminal(&mut terminal, opts, content);
 
     terminal::disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -1065,12 +1065,9 @@ pub fn open_markdown_editor(
 
 /// 打开 Markdown 编辑器（带预填充内容，NORMAL 模式）
 pub fn open_markdown_editor_with_content(
-    title: &str,
+    opts: &MarkdownEditorOpts,
     initial_lines: &[String],
-    theme: &EditorTheme,
-    highlight_fn: HighlightFn,
-    theme_gallery: Vec<ThemeGalleryItem>,
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
     let content = initial_lines.join("\n");
-    open_markdown_editor(title, &content, theme, highlight_fn, theme_gallery)
+    open_markdown_editor(opts, &content)
 }

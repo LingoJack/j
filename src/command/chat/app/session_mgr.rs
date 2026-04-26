@@ -91,65 +91,8 @@ impl ChatApp {
 
         // 1. Teammates
         if let Ok(mgr) = self.teammate_manager.lock() {
-            let mut final_snapshots: Vec<TeammateSnapshotPersist> = Vec::new();
-            let recovered = mgr.recovered_teammates_snapshot();
-
-            for (name, handle) in &mgr.teammates {
-                let status = handle
-                    .status
-                    .lock()
-                    .map(|s| s.clone().into())
-                    .unwrap_or(TeammateStatusPersist::Cancelled);
-                let pending = handle
-                    .broadcast_inbox
-                    .lock()
-                    .map(|m| m.clone())
-                    .unwrap_or_default();
-                let current_tool = handle.current_tool.lock().ok().and_then(|t| t.clone());
-                let final_status = if handle.running()
-                    && !matches!(
-                        status,
-                        TeammateStatusPersist::Completed
-                            | TeammateStatusPersist::Cancelled
-                            | TeammateStatusPersist::Error(_)
-                    ) {
-                    TeammateStatusPersist::Cancelled
-                } else {
-                    status
-                };
-                let (prompt, worktree, worktree_branch, inherit_permissions) = recovered
-                    .get(name)
-                    .map(|r| {
-                        (
-                            r.prompt.clone(),
-                            r.worktree,
-                            r.worktree_branch.clone(),
-                            r.inherit_permissions,
-                        )
-                    })
-                    .unwrap_or_default();
-                final_snapshots.push(TeammateSnapshotPersist {
-                    name: name.clone(),
-                    role: handle.role.clone(),
-                    prompt,
-                    worktree,
-                    worktree_branch,
-                    inherit_permissions,
-                    status: final_status,
-                    broadcast_inbox: pending,
-                    tool_calls_count: handle.tool_calls_count.load(Ordering::Relaxed),
-                    current_tool,
-                    work_done: handle.work_done.load(Ordering::Relaxed),
-                });
-            }
-
-            for (name, r) in recovered {
-                if !final_snapshots.iter().any(|s| s.name == name) {
-                    final_snapshots.push(r);
-                }
-            }
-
-            save_teammates_state(sid, &final_snapshots);
+            let snapshots = Self::build_teammates_snapshot(&mgr);
+            save_teammates_state(sid, &snapshots);
         }
 
         // 2. SubAgents
@@ -231,6 +174,72 @@ impl ChatApp {
             meta.auto_approve = self.ui.auto_approve;
             save_session_meta_file(&meta);
         }
+    }
+
+    /// 构建 Teammates 持久化快照（活跃 + 已恢复但未重新启动的 teammate）
+    fn build_teammates_snapshot(
+        mgr: &crate::command::chat::teammate::TeammateManager,
+    ) -> Vec<TeammateSnapshotPersist> {
+        let mut snapshots: Vec<TeammateSnapshotPersist> = Vec::new();
+        let recovered = mgr.recovered_teammates_snapshot();
+
+        for (name, handle) in &mgr.teammates {
+            let status = handle
+                .status
+                .lock()
+                .map(|s| s.clone().into())
+                .unwrap_or(TeammateStatusPersist::Cancelled);
+            let pending = handle
+                .broadcast_inbox
+                .lock()
+                .map(|m| m.clone())
+                .unwrap_or_default();
+            let current_tool = handle.current_tool.lock().ok().and_then(|t| t.clone());
+            let final_status = if handle.running()
+                && !matches!(
+                    status,
+                    TeammateStatusPersist::Completed
+                        | TeammateStatusPersist::Cancelled
+                        | TeammateStatusPersist::Error(_)
+                ) {
+                TeammateStatusPersist::Cancelled
+            } else {
+                status
+            };
+            let (prompt, worktree, worktree_branch, inherit_permissions) = recovered
+                .get(name)
+                .map(|r| {
+                    (
+                        r.prompt.clone(),
+                        r.worktree,
+                        r.worktree_branch.clone(),
+                        r.inherit_permissions,
+                    )
+                })
+                .unwrap_or_default();
+            snapshots.push(TeammateSnapshotPersist {
+                name: name.clone(),
+                role: handle.role.clone(),
+                prompt,
+                worktree,
+                worktree_branch,
+                inherit_permissions,
+                status: final_status,
+                broadcast_inbox: pending,
+                tool_calls_count: handle.tool_calls_count.load(Ordering::Relaxed),
+                current_tool,
+                work_done: handle.work_done.load(Ordering::Relaxed),
+            });
+        }
+
+        // 追加已恢复但不在当前活跃列表中的 teammate
+        for (name, r) in recovered {
+            if !snapshots.iter().any(|s| s.name == name) {
+                snapshots.push(r);
+            }
+        }
+
+        snapshots
     }
 
     /// 从磁盘恢复当前 session_id 的所有状态

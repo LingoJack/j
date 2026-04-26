@@ -51,8 +51,8 @@
 - [ ] `command/chat/ui/archive.rs:draw_archive_list` — 149行, 3参数
 - [ ] `command/update.rs:perform_update_curl` — 148行, 2参数
 - [ ] `command/chat/app/message.rs:send_message_internal` — 148行, 1参数
-- [ ] `command/chat/app/session_mgr.rs:save_session_state` — 146行, 0参数
-- [ ] `command/chat/tools/web_search.rs:exec_search` — 145行, 1参数
+- [x] `command/chat/app/session_mgr.rs:save_session_state` — 146行, 0参数 *(已拆分：提取 `build_teammates_snapshot`，save_session_state 缩减至 ~90 行)*
+- [x] `command/chat/tools/web_search.rs:exec_search` — 145行, 1参数 *(已拆分：提取 `send_search_request` + `format_search_results`，exec_search 缩减至 ~30 行)*
 - [ ] `command/chat/render/cache/msg_render.rs:render_assistant_msg` — 145行, 5参数
 - [ ] `tui/editor_core/renderer.rs:render_table_rows` — 143行, 6参数
 - [ ] `command/script.rs:handle_script` — 143行, 3参数
@@ -83,7 +83,7 @@
 
 ### 8 参数
 
-- [ ] `tui/editor_core/editor.rs:open_markdown_editor_on_terminal` — 8参数, 36行
+- [x] `tui/editor_core/editor.rs:open_markdown_editor_on_terminal` — 7参数, 36行 *(已封装为 `MarkdownEditorOpts` struct，theme 改为 owned)*
 - [ ] `command/chat/tools/definition.rs:new` — 8参数, 78行
 - [ ] `command/chat/remote/server.rs:run_server` — 8参数, 38行
 - [ ] `command/notebook/app.rs:build_flat_entries_recursive` — 8参数, 79行
@@ -91,8 +91,8 @@
 ### 7 参数
 
 - [ ] `tui/editor_core/renderer.rs:render_visual_line` — 7参数, 207行
-- [ ] `tui/editor_core/editor.rs:open_markdown_editor` — 7参数, 28行
-- [ ] `tui/editor_core/editor.rs:open_markdown_editor_with_content` — 7参数, 10行
+- [x] `tui/editor_core/editor.rs:open_markdown_editor` — 6参数, 28行 *(同上，opts + content 两参数)*
+- [x] `tui/editor_core/editor.rs:open_markdown_editor_with_content` — 6参数, 10行 *(同上，opts + initial_lines 两参数)*
 - [ ] `tui/components/row.rs:text_field_row` — 7参数, 33行
 - [ ] `tui/components/row.rs:toggle_list_item` — 7参数, 44行
 - [ ] `command/chat/oneshot.rs:run_oneshot_agent` — 7参数, 629行
@@ -104,7 +104,7 @@
 
 ### 6 参数
 
-- [ ] `tui/editor_markdown.rs:open_markdown_editor_on_terminal` — 6参数, 18行
+- [x] `tui/editor_markdown.rs:open_markdown_editor_on_terminal` — 4参数, 18行 *(已封装：提取 `build_editor_opts` 统一构建 MarkdownEditorOpts)*
 - [ ] `tui/editor_core/renderer.rs:render_table_rows` — 6参数, 143行
 - [ ] `tui/editor_core/renderer.rs:render_table_border` — 6参数, 28行
 - [ ] `tui/editor_core/editor.rs:new` — 6参数, 51行
@@ -134,8 +134,8 @@
 
 ### 5 参数
 
-- [ ] `tui/editor_markdown.rs:open_markdown_editor` — 5参数, 16行
-- [ ] `tui/editor_markdown.rs:open_markdown_editor_with_content` — 5参数, 16行
+- [x] `tui/editor_markdown.rs:open_markdown_editor` — 3参数, 16行 *(同上，opts 内部构建)*
+- [x] `tui/editor_markdown.rs:open_markdown_editor_with_content` — 3参数, 16行 *(同上)*
 - [ ] `tui/editor_core/search.rs:highlight_line` — 5参数, 61行
 - [ ] `tui/components/row.rs:selectable_row` — 5参数, 22行
 - [ ] `interactive/completer.rs:complete` — 5参数, 228行
