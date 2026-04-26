@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::command::chat::markdown::markdown_to_lines;
-use crate::command::chat::render::cache::bubble::wrap_md_line_in_bubble_with_margin;
+use crate::command::chat::render::cache::bubble::wrap_md_line_in_bubble;
 use crate::command::chat::render::cache::{
     ASSISTANT_BUBBLE_LEFT_MARGIN, BUBBLE_MIN_WIDTH, RenderContext, THINKING_FOLDED_MAX_LINES,
     USER_BUBBLE_PAD_LR,
@@ -103,12 +103,16 @@ pub(crate) fn render_thinking_block(reasoning: &str, ctx: &mut RenderContext<'_>
 pub fn render_user_msg(
     content: &str,
     is_selected: bool,
-    inner_width: usize,
+    actual_inner_content_width: usize,
     ctx: &mut RenderContext<'_>,
 ) {
     let lines = &mut *ctx.lines;
     let theme = ctx.theme;
     let bubble_max_width = ctx.bubble_max_width;
+
+    // 与前一条消息之间留一行间距
+    lines.push(Line::from(""));
+
     let user_bg = if is_selected {
         theme.bubble_user_selected
     } else {
@@ -134,53 +138,79 @@ pub fn render_user_msg(
         .max(user_pad_lr * 2 + 1);
     let actual_inner_content_w = actual_bubble_w.saturating_sub(user_pad_lr * 2);
 
-    // 顶行：label + 气泡背景填充合一，视觉紧凑
+    // label 行（独立行，无背景）
     let label_color = if is_selected {
         theme.label_selected
     } else {
         theme.label_user
     };
+    let label = if is_selected { "▶ You " } else { "You " };
+    let left_pad = actual_inner_content_width.saturating_sub(actual_bubble_w);
+    lines.push(Line::from(vec![
+        Span::raw(" ".repeat(left_pad)),
+        Span::styled(
+            label.to_string(),
+            Style::default()
+                .fg(label_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    // label 与气泡之间空行
+    lines.push(Line::from(""));
+
+    // 边框颜色
+    let border_color = if is_selected {
+        theme.label_selected
+    } else {
+        theme.border_message
+    };
+    // 内容行：│ + pad + content + fill + pad + │
+
+    // 顶行：╭─...─╮
     {
-        let label = if is_selected { "▶ You " } else { "You " };
-        let label_w = display_width(label);
-        let bubble_fill_w = actual_bubble_w.saturating_sub(label_w);
-        let left_pad = inner_width.saturating_sub(actual_bubble_w);
+        let dash_w = actual_inner_content_w + user_pad_lr * 2;
+        let pad = actual_inner_content_width.saturating_sub(dash_w + 2);
         lines.push(Line::from(vec![
-            Span::raw(" ".repeat(left_pad)),
+            Span::raw(" ".repeat(pad)),
+            Span::styled("╭", Style::default().fg(border_color).bg(user_bg)),
             Span::styled(
-                label.to_string(),
-                Style::default()
-                    .fg(label_color)
-                    .bg(user_bg)
-                    .add_modifier(Modifier::BOLD),
+                "─".repeat(dash_w),
+                Style::default().fg(border_color).bg(user_bg),
             ),
-            Span::styled(" ".repeat(bubble_fill_w), Style::default().bg(user_bg)),
+            Span::styled("╮", Style::default().fg(border_color).bg(user_bg)),
         ]));
     }
+    // 内容行：│ pad content fill pad │
     for wl in &all_wrapped_lines {
         let wl_width = display_width(wl);
         let fill = actual_inner_content_w.saturating_sub(wl_width);
-        let text = format!(
-            "{}{}{}{}",
-            " ".repeat(user_pad_lr),
-            wl,
-            " ".repeat(fill),
-            " ".repeat(user_pad_lr),
-        );
-        let text_width = display_width(&text);
-        let pad = inner_width.saturating_sub(text_width);
+        let pad =
+            actual_inner_content_width.saturating_sub(actual_inner_content_w + user_pad_lr * 2 + 2);
         lines.push(Line::from(vec![
             Span::raw(" ".repeat(pad)),
-            Span::styled(text, Style::default().fg(theme.text_white).bg(user_bg)),
+            Span::styled("│", Style::default().fg(border_color).bg(user_bg)),
+            Span::styled(" ".repeat(user_pad_lr), Style::default().bg(user_bg)),
+            Span::styled(
+                wl.clone(),
+                Style::default().fg(theme.text_white).bg(user_bg),
+            ),
+            Span::styled(" ".repeat(fill), Style::default().bg(user_bg)),
+            Span::styled(" ".repeat(user_pad_lr), Style::default().bg(user_bg)),
+            Span::styled("│", Style::default().fg(border_color).bg(user_bg)),
         ]));
     }
-    // 下边距
+    // 底行：╰─...─╯
     {
-        let bubble_text = " ".repeat(actual_bubble_w);
-        let pad = inner_width.saturating_sub(actual_bubble_w);
+        let dash_w = actual_inner_content_w + user_pad_lr * 2;
+        let pad = actual_inner_content_width.saturating_sub(dash_w + 2);
         lines.push(Line::from(vec![
             Span::raw(" ".repeat(pad)),
-            Span::styled(bubble_text, Style::default().bg(user_bg)),
+            Span::styled("╰", Style::default().fg(border_color).bg(user_bg)),
+            Span::styled(
+                "─".repeat(dash_w),
+                Style::default().fg(border_color).bg(user_bg),
+            ),
+            Span::styled("╯", Style::default().fg(border_color).bg(user_bg)),
         ]));
     }
 }
@@ -227,9 +257,41 @@ pub fn render_assistant_msg(
     let pad_right_w = 3usize;
     let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
 
-    // 先用最大宽度渲染 markdown 内容
-    let md_content_w =
-        bubble_max_width.saturating_sub(pad_left_w + pad_right_w + ASSISTANT_BUBBLE_LEFT_MARGIN);
+    // 与前一条消息之间留一行间距
+    lines.push(Line::from(""));
+
+    // label 行（独立行，无背景）
+    let label_text = if is_selected {
+        format!("{}▶ {}", margin, agent_name)
+    } else {
+        format!("{}{}", margin, agent_name)
+    };
+    let label_color = if is_selected {
+        theme.label_selected
+    } else if is_teammate {
+        agent_name_color(&agent_name)
+    } else {
+        theme.label_ai
+    };
+    lines.push(Line::from(Span::styled(
+        label_text,
+        Style::default()
+            .fg(label_color)
+            .add_modifier(Modifier::BOLD),
+    )));
+    // label 与气泡之间空行
+    lines.push(Line::from(""));
+
+    // 边框颜色
+    let border_color = if is_selected {
+        theme.label_selected
+    } else {
+        theme.border_message
+    };
+
+    // 先用最大宽度渲染 markdown 内容（减去边框占宽：│1 + space1 + ... + space1 + │1 = 4）
+    let md_content_w = bubble_max_width
+        .saturating_sub(pad_left_w + pad_right_w + ASSISTANT_BUBBLE_LEFT_MARGIN + 2);
     let md_lines = markdown_to_lines(bubble_content, md_content_w + 2, theme);
 
     // 计算实际内容最大宽度：取所有 md_lines 的最大显示宽度
@@ -244,55 +306,64 @@ pub fn render_assistant_msg(
         .max()
         .unwrap_or(0);
 
-    // 气泡自适应宽度：min(max(实际宽度+padding+margin, 最小宽度), 最大宽度)
-    let bubble_total_w =
-        (actual_content_max_w + pad_left_w + pad_right_w + ASSISTANT_BUBBLE_LEFT_MARGIN)
-            .max(BUBBLE_MIN_WIDTH + ASSISTANT_BUBBLE_LEFT_MARGIN)
-            .min(bubble_max_width);
+    // 气泡内部宽度 = pad + content + pad
+    let bubble_actual_inner_content_w = (actual_content_max_w + pad_left_w + pad_right_w)
+        .max(BUBBLE_MIN_WIDTH)
+        .min(bubble_max_width.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN + 2));
+    // 边框顶/底行 ─ 数量
+    let dash_w = bubble_actual_inner_content_w;
 
-    // 顶行：label + 气泡背景填充合一，视觉紧凑
-    let label_text = if is_selected {
-        format!("{}▶ {}", margin, agent_name)
-    } else {
-        format!("{}{}", margin, agent_name)
-    };
-    let label_color = if is_selected {
-        theme.label_selected
-    } else if is_teammate {
-        agent_name_color(&agent_name)
-    } else {
-        theme.label_ai
-    };
-    let label_w = display_width(&label_text);
-    let bubble_fill_w = bubble_total_w.saturating_sub(label_w);
+    // 顶行：margin + ╭─...─╮
     lines.push(Line::from(vec![
+        Span::styled(margin.clone(), Style::default()),
+        Span::styled("╭", Style::default().fg(border_color).bg(bubble_bg)),
         Span::styled(
-            label_text,
-            Style::default()
-                .fg(label_color)
-                .bg(bubble_bg)
-                .add_modifier(Modifier::BOLD),
+            "─".repeat(dash_w),
+            Style::default().fg(border_color).bg(bubble_bg),
         ),
-        Span::styled(" ".repeat(bubble_fill_w), Style::default().bg(bubble_bg)),
+        Span::styled("╮", Style::default().fg(border_color).bg(bubble_bg)),
     ]));
+
+    // 内容行：margin + │ + bubble content + │
     for md_line in md_lines {
-        let inner_bubble_w = bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN);
-        let bubble_line = wrap_md_line_in_bubble_with_margin(
+        let mut bubble_line = wrap_md_line_in_bubble(
             md_line,
             bubble_bg,
             pad_left_w,
             pad_right_w,
-            inner_bubble_w,
-            &margin,
+            bubble_actual_inner_content_w,
         );
-        lines.push(bubble_line);
+        // 在内容两侧加 │
+        let last = bubble_line.spans.pop();
+        // 移除 pad_right 并在右侧加 │
+        // 实际上 wrap_md_line_in_bubble 末尾是 pad_right span，需要替换
+        // 更简单：直接构造 │ + bubble内容（去掉pad_right） + │
+        // 但改 wrap_md_line_in_bubble 影响太大，用 bordered_line 思路
+        if let Some(pad_span) = last {
+            // pad_span 是右侧 padding，保留它
+            bubble_line.spans.push(pad_span);
+        }
+        let mut spans = vec![Span::styled(margin.clone(), Style::default())];
+        spans.push(Span::styled(
+            "│",
+            Style::default().fg(border_color).bg(bubble_bg),
+        ));
+        spans.extend(bubble_line.spans);
+        spans.push(Span::styled(
+            "│",
+            Style::default().fg(border_color).bg(bubble_bg),
+        ));
+        lines.push(Line::from(spans));
     }
-    // 下边距
+
+    // 底行：margin + ╰─...─╯
     lines.push(Line::from(vec![
         Span::styled(margin.clone(), Style::default()),
+        Span::styled("╰", Style::default().fg(border_color).bg(bubble_bg)),
         Span::styled(
-            " ".repeat(bubble_total_w.saturating_sub(ASSISTANT_BUBBLE_LEFT_MARGIN)),
-            Style::default().bg(bubble_bg),
+            "─".repeat(dash_w),
+            Style::default().fg(border_color).bg(bubble_bg),
         ),
+        Span::styled("╯", Style::default().fg(border_color).bg(bubble_bg)),
     ]));
 }

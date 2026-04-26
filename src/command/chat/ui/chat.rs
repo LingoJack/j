@@ -10,6 +10,8 @@ use crate::util::safe_lock;
 
 /// 消息气泡宽度占内部可用宽度的百分比。
 const BUBBLE_WIDTH_PERCENT: usize = 85;
+/// 气泡渲染布局版本：边框样式变化时递增此值以强制缓存失效
+const RENDER_VERSION: u32 = 2;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -367,6 +369,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 && cache.bubble_max_width == bubble_max_width
                 && cache.browse_index == current_browse_index
                 && cache.tool_confirm_idx == current_tool_confirm_idx
+                && cache.render_version == RENDER_VERSION
         } else {
             false
         }
@@ -401,6 +404,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             streaming_stable_lines: new_stable_lines,
             streaming_stable_offset: new_stable_offset,
             expand_tools: app.ui.expand_tools,
+            render_version: RENDER_VERSION,
         });
     }
 

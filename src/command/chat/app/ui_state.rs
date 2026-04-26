@@ -198,6 +198,8 @@ pub struct MsgLinesCache {
     pub streaming_stable_offset: usize,
     /// 工具展开状态（缓存时记录，变化时需重建）
     pub expand_tools: bool,
+    /// 渲染布局版本（气泡样式变化时递增，强制缓存失效）
+    pub render_version: u32,
 }
 
 /// 单条消息的渲染缓存
