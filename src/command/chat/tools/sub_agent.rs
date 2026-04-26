@@ -586,8 +586,7 @@ fn run_sub_agent_loop(
         let assistant_text = choice.message.content.clone().unwrap_or_default();
         let reasoning_content = choice.message.reasoning_content.clone();
         if !assistant_text.is_empty() {
-            final_text = assistant_text.clone();
-            write_info_log("SubAgent", &format!("Reply: {}", &final_text));
+            write_info_log("SubAgent", &format!("Reply: {}", &assistant_text));
             // UI 状态行：显示 sub-agent 的文字回复
             // ★ 此消息通过双通道推送（display + context），会同步到 Main Agent 的 LLM 上下文（有意为之的设计）。
             // display: 纯文本 + sender_name | context: XML 包裹
@@ -602,7 +601,8 @@ fn run_sub_agent_loop(
         let is_tool_calls = choice.finish_reason.as_deref() == Some("tool_calls");
 
         if !is_tool_calls || choice.message.tool_calls.is_none() {
-            // 纯文本回复结束：把 assistant 消息也 append 到 transcript（无 tool_calls）
+            // 纯文本回复结束：用当前轮次的文本作为最终返回（而非之前的中间文本）
+            final_text = assistant_text.clone();
             if !assistant_text.is_empty() {
                 let final_msg = ChatMessage::text(MessageRole::Assistant, assistant_text.clone());
                 messages.push(final_msg);
