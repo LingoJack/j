@@ -126,7 +126,7 @@
 - [ ] `command/chat/context/window.rs:select_messages` — 6参数, 89行
 - [ ] `command/chat/render/cache/bubble.rs:wrap_md_line_in_bubble` — 6参数, 65行
 - [ ] `command/chat/agent/api.rs:build_request_with_tools` — 6参数, 49行
-- [ ] `command/chat/remote/server.rs:handle_connection` — 6参数, 81行
+- [ ] `command/chat/remote/server.rs:handle_connection` — 6参数, 81行 *(🔄 WIP: 同上，改为传 WsConnectionState)*
 - [ ] `command/chat/remote/server.rs:handle_websocket` — 6参数, 141行 *(🔄 WIP: 同上，改为传 WsConnectionState)*
 - [ ] `command/todo/ui.rs:build_normal_item` — 6参数, 73行
 - [ ] `command/notebook/ui.rs:build_adding_item` — 6参数, 35行

@@ -74,15 +74,15 @@ pub fn start_remote_and_wait(port: u16) -> io::Result<(WsBridge, String)> {
 
     let token_clone = token.clone();
     bridge.spawn(async move {
-        super::server::run_server(
+        super::server::run_server(super::server::ServerOpts {
             listener,
-            token_clone,
+            token: token_clone,
             inbound_tx,
             outbound_tx,
             client_connected,
-            client_notify2,
+            client_notify: client_notify2,
             expected_origin,
-        )
+        })
         .await;
     });
 

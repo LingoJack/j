@@ -30,29 +30,40 @@ struct WsConnectionState {
     kick_rx: watch::Receiver<u64>,
 }
 
+/// 服务器启动参数
+pub(crate) struct ServerOpts {
+    pub listener: TcpListener,
+    pub token: String,
+    pub inbound_tx: mpsc::Sender<WsInbound>,
+    pub outbound_tx: broadcast::Sender<WsOutbound>,
+    pub client_connected: Arc<AtomicBool>,
+    pub client_notify: Arc<Notify>,
+    pub expected_origin: String,
+}
+
 /// 启动 HTTP + WS 服务器
 ///
 /// - `GET /` → 返回嵌入的 remote.html
 /// - `GET /ws?token=xxx` → WebSocket 升级（含 Origin 校验 + ECDH 协商）
-pub async fn run_server(
-    listener: TcpListener,
-    token: String,
-    inbound_tx: mpsc::Sender<WsInbound>,
-    outbound_tx: broadcast::Sender<WsOutbound>,
-    client_connected: Arc<AtomicBool>,
-    client_notify: Arc<Notify>,
-    expected_origin: String,
-) {
+pub(crate) async fn run_server(opts: ServerOpts) {
     // kick_tx 用于踢掉旧的 WS 连接：每次发送新值，旧连接检测到变化后退出
     let (kick_tx, kick_rx) = watch::channel(0u64);
+
+    let ServerOpts {
+        listener,
+        token,
+        inbound_tx,
+        outbound_tx,
+        client_connected,
+        client_notify,
+        expected_origin,
+    } = opts;
 
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
             continue;
         };
 
-        let token = token.clone();
-        let expected_origin = expected_origin.clone();
         let ws_state = WsConnectionState {
             inbound_tx: inbound_tx.clone(),
             outbound_tx: outbound_tx.clone(),
@@ -62,6 +73,8 @@ pub async fn run_server(
             kick_rx: kick_rx.clone(),
         };
 
+        let token = token.clone();
+        let expected_origin = expected_origin.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream, &token, ws_state, &expected_origin).await {
                 crate::util::log::write_error_log(
@@ -154,14 +167,7 @@ async fn handle_connection(
         ws_state.client_connected.store(true, Ordering::Relaxed);
         ws_state.client_notify.notify_one();
 
-        handle_websocket(
-            ws_stream,
-            ws_state.inbound_tx,
-            ws_state.outbound_tx,
-            &ws_state.client_connected,
-            ws_state.kick_rx,
-        )
-        .await;
+        handle_websocket(ws_stream, &ws_state).await;
 
         ws_state.client_connected.store(false, Ordering::Relaxed);
         return Ok(());
@@ -268,13 +274,10 @@ async fn perform_key_exchange(
 /// 处理 WebSocket 连接（含 ECDH 协商 + AES-256-GCM 加密通信）
 async fn handle_websocket(
     ws_stream: tokio_tungstenite::WebSocketStream<TcpStream>,
-    inbound_tx: mpsc::Sender<WsInbound>,
-    outbound_tx: broadcast::Sender<WsOutbound>,
-    client_connected: &Arc<AtomicBool>,
-    mut kick_rx: watch::Receiver<u64>,
+    ws_state: &WsConnectionState,
 ) {
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
-    let mut outbound_rx = outbound_tx.subscribe();
+    let mut outbound_rx = ws_state.outbound_tx.subscribe();
 
     // ---- ECDH 密钥协商 ----
     let aes_key = match perform_key_exchange(&mut ws_tx, &mut ws_rx).await {
@@ -282,7 +285,7 @@ async fn handle_websocket(
         None => {
             crate::util::log::write_error_log("[remote::ws]", "ECDH 密钥协商失败或超时，断开连接");
             let _ = ws_tx.send(Message::Close(None)).await;
-            client_connected.store(false, Ordering::Relaxed);
+            ws_state.client_connected.store(false, Ordering::Relaxed);
             return;
         }
     };
@@ -298,7 +301,8 @@ async fn handle_websocket(
     let pong_timeout = tokio::time::Duration::from_secs(PONG_TIMEOUT_SECS);
 
     // 记录当前 kick 版本，后续检测是否有新连接踢掉自己
-    let kick_version = *kick_rx.borrow_and_update();
+    let mut kick_rx_clone = ws_state.kick_rx.clone();
+    let kick_version = *kick_rx_clone.borrow_and_update();
 
     loop {
         tokio::select! {
@@ -322,7 +326,7 @@ async fn handle_websocket(
                                 };
                                 match serde_json::from_str::<WsInbound>(&text) {
                                     Ok(inbound) => {
-                                        if inbound_tx.send(inbound).await.is_err() {
+                                        if ws_state.inbound_tx.send(inbound).await.is_err() {
                                             break;
                                         }
                                     }
@@ -392,8 +396,8 @@ async fn handle_websocket(
                 let _ = ws_tx.send(Message::Ping(vec![].into())).await;
             }
             // 被新连接踢掉
-            _ = kick_rx.changed() => {
-                if *kick_rx.borrow() != kick_version {
+            _ = kick_rx_clone.changed() => {
+                if *kick_rx_clone.borrow() != kick_version {
                     crate::util::log::write_info_log(
                         "[remote::ws]",
                         "新客户端连接，踢掉旧连接",
@@ -405,7 +409,7 @@ async fn handle_websocket(
         }
     }
 
-    client_connected.store(false, Ordering::Relaxed);
+    ws_state.client_connected.store(false, Ordering::Relaxed);
 }
 
 /// 从请求字符串中提取查询参数

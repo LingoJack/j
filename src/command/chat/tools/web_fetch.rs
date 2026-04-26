@@ -88,33 +88,20 @@ impl Tool for WebFetchTool {
 
 // ==================== Fetch 实现 ====================
 
-fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResult {
-    if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-        return ToolResult {
-            output: "操作已取消".to_string(),
-            is_error: true,
-            images: vec![],
-            plan_decision: PlanDecision::None,
-        };
-    }
-
-    // 构建 HTTP 客户端
-    let client = match reqwest::blocking::Client::builder()
+/// 构建带 UA 和超时的 blocking HTTP 客户端
+fn build_http_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(WEB_REQUEST_TIMEOUT_SECS))
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            return ToolResult {
-                output: format!("创建 HTTP 客户端失败: {}", e),
-                is_error: true,
-                    images: vec![],
-                plan_decision: PlanDecision::None,
-            };
-        }
-    };
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+}
 
+/// 发送 HTTP GET 请求，附带 authorization 和 custom headers
+fn send_http_request(
+    client: &reqwest::blocking::Client,
+    params: &WebFetchParams,
+) -> Result<reqwest::blocking::Response, String> {
     let mut request = client.get(&params.url).header("Referer", &params.url);
 
     if let Some(ref auth) = params.authorization {
@@ -126,18 +113,14 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
         }
     }
 
-    let response = match request.send() {
-        Ok(r) => r,
-        Err(e) => {
-            return ToolResult {
-                output: format!("请求失败: {}", e),
-                is_error: true,
-                images: vec![],
-                plan_decision: PlanDecision::None,
-            };
-        }
-    };
+    request.send().map_err(|e| format!("请求失败: {}", e))
+}
 
+/// 从 HTTP 响应提取文本内容（HTML → markdown/text，截断到 max_chars）
+fn extract_text_from_response(
+    response: reqwest::blocking::Response,
+    params: &WebFetchParams,
+) -> ToolResult {
     let status = response.status();
     if !status.is_success() {
         return ToolResult {
@@ -217,6 +200,43 @@ fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResul
         images: vec![],
         plan_decision: PlanDecision::None,
     }
+}
+
+fn exec_fetch(params: &WebFetchParams, cancelled: &Arc<AtomicBool>) -> ToolResult {
+    if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+        return ToolResult {
+            output: "操作已取消".to_string(),
+            is_error: true,
+            images: vec![],
+            plan_decision: PlanDecision::None,
+        };
+    }
+
+    let client = match build_http_client() {
+        Ok(c) => c,
+        Err(e) => {
+            return ToolResult {
+                output: e,
+                is_error: true,
+                images: vec![],
+                plan_decision: PlanDecision::None,
+            };
+        }
+    };
+
+    let response = match send_http_request(&client, params) {
+        Ok(r) => r,
+        Err(e) => {
+            return ToolResult {
+                output: e,
+                is_error: true,
+                images: vec![],
+                plan_decision: PlanDecision::None,
+            };
+        }
+    };
+
+    extract_text_from_response(response, params)
 }
 
 // ==================== HTML 解析辅助函数 ====================
