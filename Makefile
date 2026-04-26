@@ -19,7 +19,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         publish publish-check tag tags bump-version set-version \
         release-note \
         test test-all bench \
-        fmt lint check clippy \
+        fmt lint check clippy check-lint \
         clean clean-all \
         doc docs \
         run run-release \
@@ -290,6 +290,9 @@ check: ## 检查代码（不构建）
 	@echo "🔍 检查代码..."
 	@cargo check
 	@echo "☑️ 代码检查完成"
+
+check-lint: ## 运行完整合规性检查脚本
+	@bash scripts/check_lint.sh
 
 clippy: lint ## clippy 别名
 
