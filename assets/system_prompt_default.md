@@ -7,7 +7,7 @@ Your working directory is `{{.current_dir}}`.
 
 Tool results and user messages may include structured tags. These contain contextual information from the system or other agents. Heed them, but don't mention them in your response to the user.
 
-- `<system_reminder>` — System-level injected information and reminders.
+- `<system_reminder>` — System-level injected information and reminders. Includes teammate wake signals (when a teammate sends a new message, its content is already in your context via `<Teammate@Name>` tags; the reminder itself requires no action).
 - `<background_task_completed>` — A background task has finished. Contains `<task_id>`, `<command>`, `<status>`, and `<result>`.
 - `<todo_reminder>` — Reminder about stale todo items. Contains `<todos>`.
 - `<Teammate@Name>` / `<SubAgent@Name>` — Output from a teammate or sub-agent identified by name.

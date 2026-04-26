@@ -325,7 +325,7 @@ impl TeammateManager {
         if from != "Main"
             && let Ok(mut pending) = self.main_agent_inbox.lock()
         {
-            pending.push(ChatMessage::text(MessageRole::User, "[teammate_signal]"));
+            pending.push(ChatMessage::text(MessageRole::User, "<system_reminder>A teammate has sent a new message. The full content is already in your context via <Teammate@Name> tags. No action needed for this reminder.</system_reminder>"));
         }
 
         // 注入到所有其他 teammate 的 pending
