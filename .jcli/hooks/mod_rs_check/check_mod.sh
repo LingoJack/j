@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# post_tool_execution hook: Write/Edit 后检查 mod.rs 是否需要补充 mod 声明
+# post_tool_execution hook: Write/Edit 后扫描目录及祖先，发现 mod.rs 提醒换成 name.rs + name/ 模式
 set -euo pipefail
 
 export HOOK_INPUT="$(cat)"
 
 python3 /dev/stdin <<'PYEOF'
-import sys, json, os, re
+import sys, json, os
 
 try:
     data = json.loads(os.environ.get("HOOK_INPUT", "{}"))
@@ -28,41 +28,29 @@ if not file_path:
     print("{}"); sys.exit(0)
 
 abs_path = os.path.abspath(os.path.expanduser(file_path))
-filename = os.path.basename(abs_path)
-
-# 跳过 mod.rs 自身和 main.rs
-if filename in ("mod.rs", "main.rs"):
+if not abs_path.endswith(".rs"):
     print("{}"); sys.exit(0)
 
-stem = filename[:-3] if filename.endswith(".rs") else filename
+# 从文件所在目录向上扫描，最多 4 层，查找 mod.rs
 dir_path = os.path.dirname(abs_path)
-
 reminders = []
 
-# 1. 同目录 mod.rs → 检查 mod stem;
-mod_file = os.path.join(dir_path, "mod.rs")
-if os.path.isfile(mod_file):
-    try:
-        content = open(mod_file).read()
-        if not re.search(rf'\bmod\s+{re.escape(stem)}\b', content):
-            reminders.append(f"  - {mod_file} 缺少 'mod {stem};'")
-    except:
-        pass
-
-# 2. 父目录 mod.rs → 当前目录是子模块时，检查父 mod.rs 是否声明了子目录
-parent_dir = os.path.dirname(dir_path)
-dir_name = os.path.basename(dir_path)
-parent_mod = os.path.join(parent_dir, "mod.rs")
-if os.path.isfile(parent_mod):
-    try:
-        content = open(parent_mod).read()
-        if not re.search(rf'\bmod\s+{re.escape(dir_name)}\b', content):
-            reminders.append(f"  - {parent_mod} 缺少 'mod {dir_name};'")
-    except:
-        pass
+for _ in range(5):
+    mod_file = os.path.join(dir_path, "mod.rs")
+    if os.path.isfile(mod_file):
+        dir_name = os.path.basename(dir_path)
+        parent_dir = os.path.dirname(dir_path)
+        new_style = os.path.join(parent_dir, dir_name + ".rs")
+        reminders.append(
+            f"  - {mod_file} → 应改为 {new_style} + {dir_name}/"
+        )
+    parent_dir = os.path.dirname(dir_path)
+    if parent_dir == dir_path:
+        break
+    dir_path = parent_dir
 
 if reminders:
-    msg = f"mod.rs 检查：{abs_path} 可能需要在 mod.rs 中声明：\n" + "\n".join(reminders)
+    msg = "发现 mod.rs，建议改为 name.rs + name/ 模式：\n" + "\n".join(reminders)
     print(json.dumps({"system_message": msg}, ensure_ascii=False))
 else:
     print("{}")
