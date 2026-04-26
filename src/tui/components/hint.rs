@@ -27,8 +27,10 @@ pub fn hint_spans<'a>(key: &str, desc: &str, theme: &Theme) -> Vec<Span<'a>> {
     vec![
         Span::styled(
             format!(" {key} "),
-            Style::default().fg(theme.hint_key_fg).bg(theme.bg_primary),
+            Style::default()
+                .fg(theme.text_very_dim)
+                .bg(theme.bg_primary),
         ),
-        Span::styled(format!(" {desc}"), Style::default().fg(theme.hint_desc)),
+        Span::styled(format!(" {desc}"), Style::default().fg(theme.text_very_dim)),
     ]
 }
