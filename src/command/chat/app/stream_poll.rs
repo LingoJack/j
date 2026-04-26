@@ -373,6 +373,7 @@ impl ChatApp {
         self.ui.tool_ask_questions = ask_req.questions;
         self.ui.tool_ask_current_idx = 0;
         self.ui.tool_ask_answers = Vec::new();
+        self.ui.tool_ask_drafts = vec![String::new(); self.ui.tool_ask_questions.len()];
         self.ask_response_tx = Some(ask_req.response_tx);
         self.init_ask_question_state();
         self.ui.tool_interact_selected = 0;
@@ -441,6 +442,7 @@ impl ChatApp {
             self.ui.tool_ask_answers.clear();
             self.ui.tool_ask_selections.clear();
             self.ui.tool_ask_cursor = 0;
+            self.ui.tool_ask_drafts.clear();
             if !self.tool_executor.has_pending_confirm() {
                 self.ui.mode = ChatMode::Chat;
             }

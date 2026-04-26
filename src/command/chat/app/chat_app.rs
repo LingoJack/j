@@ -519,6 +519,7 @@ impl ChatApp {
                 tool_ask_answers: Vec::new(),
                 tool_ask_selections: Vec::new(),
                 tool_ask_cursor: 0,
+                tool_ask_drafts: Vec::new(),
                 pending_system_prompt_edit: false,
                 pending_agent_md_edit: false,
                 pending_style_edit: false,

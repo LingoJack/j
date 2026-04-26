@@ -128,15 +128,30 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         return;
     }
 
+    let cur_q = match app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx) {
+        Some(q) => q,
+        None => return,
+    };
+    let free_input_idx = cur_q.options.len();
+
     // 自由输入模式
     if app.ui.tool_interact_typing {
         let action = match key.code {
             KeyCode::Esc => {
-                // 如果输入为空，退出输入模式返回选项列表
-                // 如果有输入内容，也退出输入模式（清空输入）
+                // 保存草稿，退出输入模式但不清空内容
+                save_draft(app);
                 app.ui.tool_interact_typing = false;
-                app.ui.tool_interact_input.clear();
-                app.ui.tool_interact_cursor = 0;
+                return;
+            }
+            KeyCode::Up => {
+                // 光标在行首且上方有选项时，保存草稿退回选项列表
+                if app.ui.tool_interact_cursor == 0 && app.ui.tool_ask_cursor > 0 {
+                    save_draft(app);
+                    app.ui.tool_interact_typing = false;
+                    app.ui.tool_ask_cursor -= 1;
+                    app.ui.tool_interact_input.clear();
+                    app.ui.tool_interact_cursor = 0;
+                }
                 return;
             }
             KeyCode::Enter => {
@@ -167,10 +182,6 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         return;
     }
 
-    let cur_q = match app.ui.tool_ask_questions.get(app.ui.tool_ask_current_idx) {
-        Some(q) => q,
-        None => return,
-    };
     let is_multi = cur_q.multi_select;
 
     let action = match key.code {
@@ -179,12 +190,10 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Char(' ') if is_multi => Action::AskToggleMultiSelect,
         KeyCode::Enter => {
             let cursor = app.ui.tool_ask_cursor;
-            if cursor == cur_q.options.len() {
-                // "自由输入"选项：光标在此但未处于输入模式（如 Esc 退出后），
-                // 按 Enter 重新进入输入模式
+            if cursor == free_input_idx {
+                // "自由输入"选项：恢复草稿进入输入模式
                 app.ui.tool_interact_typing = true;
-                app.ui.tool_interact_input.clear();
-                app.ui.tool_interact_cursor = 0;
+                restore_draft(app);
                 return;
             } else if is_multi {
                 // 多选：收集所有选中的选项
@@ -215,15 +224,31 @@ fn handle_ask_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::PageDown => Action::PageScroll(CursorDirection::Down),
         KeyCode::Char(c) => {
             // 无论光标在哪个选项上，直接输入字符时自动跳到自由输入行
-            let free_idx = cur_q.options.len();
-            app.ui.tool_ask_cursor = free_idx;
+            app.ui.tool_ask_cursor = free_input_idx;
             app.ui.tool_interact_typing = true;
-            app.ui.tool_interact_input.clear();
-            app.ui.tool_interact_cursor = 0;
+            // 恢复已有草稿后追加字符
+            restore_draft(app);
             app.update(Action::AskInputChar(c));
             return;
         }
         _ => return,
     };
     app.update(action);
+}
+
+/// 保存当前自由输入内容到草稿缓存
+fn save_draft(app: &mut ChatApp) {
+    if let Some(draft) = app.ui.tool_ask_drafts.get_mut(app.ui.tool_ask_current_idx) {
+        *draft = app.ui.tool_interact_input.clone();
+    }
+}
+
+/// 从草稿缓存恢复自由输入内容
+fn restore_draft(app: &mut ChatApp) {
+    if let Some(draft) = app.ui.tool_ask_drafts.get(app.ui.tool_ask_current_idx) {
+        app.ui.tool_interact_input = draft.clone();
+    } else {
+        app.ui.tool_interact_input.clear();
+    }
+    app.ui.tool_interact_cursor = app.ui.tool_interact_input.chars().count();
 }

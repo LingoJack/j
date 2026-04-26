@@ -128,6 +128,8 @@ pub struct UIState {
     pub tool_ask_selections: Vec<bool>,
     /// ask 工具当前问题的选项游标位置
     pub tool_ask_cursor: usize,
+    /// ask 自由输入草稿缓存（每个问题对应一个 String，暂存自由输入内容）
+    pub tool_ask_drafts: Vec<String>,
     /// 配置界面：是否有待处理的 system_prompt 编辑
     pub pending_system_prompt_edit: bool,
     /// 配置界面：是否有待处理的 agent_md 编辑

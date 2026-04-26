@@ -36,6 +36,7 @@ impl ChatApp {
         if let Some(q) = self.ui.tool_ask_questions.get(self.ui.tool_ask_current_idx) {
             let option_count = q.options.len() + 1; // +1 for free input
             let free_input_idx = q.options.len();
+            let prev_cursor = self.ui.tool_ask_cursor;
 
             let new_cursor = match dir {
                 CursorDirection::Up => {
@@ -54,14 +55,30 @@ impl ChatApp {
                 }
             };
 
-            if new_cursor != self.ui.tool_ask_cursor {
+            if new_cursor != prev_cursor {
+                // 离开自由输入行：保存草稿
+                if prev_cursor == free_input_idx
+                    && let Some(draft) = self
+                        .ui
+                        .tool_ask_drafts
+                        .get_mut(self.ui.tool_ask_current_idx)
+                {
+                    *draft = self.ui.tool_interact_input.clone();
+                }
+
                 self.ui.tool_ask_cursor = new_cursor;
 
                 if new_cursor == free_input_idx {
+                    // 进入自由输入行：恢复草稿，直接可输入
                     self.ui.tool_interact_typing = true;
-                    self.ui.tool_interact_input.clear();
-                    self.ui.tool_interact_cursor = 0;
+                    if let Some(draft) = self.ui.tool_ask_drafts.get(self.ui.tool_ask_current_idx) {
+                        self.ui.tool_interact_input = draft.clone();
+                    } else {
+                        self.ui.tool_interact_input.clear();
+                    }
+                    self.ui.tool_interact_cursor = self.ui.tool_interact_input.chars().count();
                 } else {
+                    // 进入选项行
                     self.ui.tool_interact_typing = false;
                     self.ui.tool_interact_input.clear();
                     self.ui.tool_interact_cursor = 0;
@@ -79,10 +96,14 @@ impl ChatApp {
         {
             let cursor = self.ui.tool_ask_cursor;
             if cursor == q.options.len() {
-                // "自由输入"选项：进入输入模式
+                // "自由输入"选项：进入输入模式，恢复草稿
                 self.ui.tool_interact_typing = true;
-                self.ui.tool_interact_input.clear();
-                self.ui.tool_interact_cursor = 0;
+                if let Some(draft) = self.ui.tool_ask_drafts.get(self.ui.tool_ask_current_idx) {
+                    self.ui.tool_interact_input = draft.clone();
+                } else {
+                    self.ui.tool_interact_input.clear();
+                }
+                self.ui.tool_interact_cursor = self.ui.tool_interact_input.chars().count();
             } else {
                 self.ask_submit_answer(AskAnswer::Selected(vec![cursor]));
             }
@@ -140,6 +161,14 @@ impl ChatApp {
         } else {
             AskAnswer::FreeText(input_text)
         };
+        // 清空当前问题的草稿
+        if let Some(draft) = self
+            .ui
+            .tool_ask_drafts
+            .get_mut(self.ui.tool_ask_current_idx)
+        {
+            draft.clear();
+        }
         self.ask_submit_answer(answer);
         self.ui.tool_interact_input.clear();
         self.ui.tool_interact_cursor = 0;
@@ -156,6 +185,7 @@ impl ChatApp {
         self.ui.tool_ask_answers.clear();
         self.ui.tool_ask_selections.clear();
         self.ui.tool_ask_cursor = 0;
+        self.ui.tool_ask_drafts.clear();
         if !self.tool_executor.has_pending_confirm() {
             self.ui.mode = ChatMode::Chat;
         }

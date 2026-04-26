@@ -377,18 +377,40 @@ pub(crate) fn render_ask_questions(
                 } else {
                     Style::default().bg(confirm_bg)
                 };
+                // 如果有暂存草稿，显示预览
+                let draft = app
+                    .ui
+                    .tool_ask_drafts
+                    .get(app.ui.tool_ask_current_idx)
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
+                let label_text = if draft.is_empty() {
+                    "✏ 自由输入...".to_string()
+                } else {
+                    // 截断过长的草稿预览
+                    let max_preview = 30;
+                    let preview: String = draft.chars().take(max_preview).collect();
+                    if draft.chars().count() > max_preview {
+                        format!("✏ 已输入: {}...", preview)
+                    } else {
+                        format!("✏ 已输入: {}", preview)
+                    }
+                };
                 let text_style = if is_cursor {
                     Style::default()
                         .fg(Color::Cyan)
                         .bg(confirm_bg)
                         .add_modifier(Modifier::BOLD)
+                } else if draft.is_empty() {
+                    Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
                 } else {
+                    // 有草稿但未选中时，用稍亮的颜色提示
                     Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
                 };
                 lines.push(bordered_line(
                     vec![
                         Span::styled(pointer_str, pointer_style),
-                        Span::styled("✏ 自由输入...", text_style),
+                        Span::styled(label_text, text_style),
                     ],
                     bubble_max_width,
                     border_color,
