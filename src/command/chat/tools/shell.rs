@@ -130,17 +130,54 @@ impl Tool for ShellTool {
             return self.execute_background(params.command, params.cwd, timeout_secs);
         }
 
-        // ===== 同步执行（原有逻辑） =====
+        self.execute_sync(
+            &params.command,
+            params.cwd.as_deref(),
+            timeout_secs,
+            cancelled,
+        )
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation_message(&self, arguments: &str) -> String {
+        if let Ok(params) = serde_json::from_str::<ShellParams>(arguments) {
+            let prefix = if params.run_in_background {
+                "Background execute"
+            } else {
+                "Execute"
+            };
+
+            match params.cwd {
+                Some(dir) => format!("{}: {} (cwd: {})", prefix, params.command, dir),
+                None => format!("{}: {}", prefix, params.command),
+            }
+        } else {
+            format!("Execute: {}", arguments)
+        }
+    }
+}
+
+impl ShellTool {
+    /// 同步执行命令：spawn → 轮询等待 → 收集输出
+    fn execute_sync(
+        &self,
+        command: &str,
+        cwd: Option<&str>,
+        timeout_secs: u64,
+        cancelled: &Arc<AtomicBool>,
+    ) -> ToolResult {
         let mut cmd = std::process::Command::new("bash");
         cmd.arg("-c")
-            .arg(&params.command)
+            .arg(command)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
         // 设置工作目录：优先用显式 cwd，其次用 thread-local worktree CWD
-        let effective_dir = params
-            .cwd
-            .clone()
+        let effective_dir = cwd
+            .map(|s| s.to_string())
             .or_else(|| thread_cwd().map(|p| p.to_string_lossy().to_string()));
         if let Some(ref dir) = effective_dir {
             let path = std::path::Path::new(dir);
@@ -191,7 +228,6 @@ impl Tool for ShellTool {
         let timeout = Duration::from_secs(timeout_secs);
 
         let status = loop {
-            // 检测用户取消
             if cancelled.load(Ordering::Relaxed) {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -203,21 +239,16 @@ impl Tool for ShellTool {
                 };
             }
 
-            // 检测超时
             if start.elapsed() > timeout {
                 let _ = child.kill();
                 let _ = child.wait();
-
-                // 等待读取线程结束，收集已有输出
                 let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
                 let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
                 let partial = build_output(&stdout_bytes, &stderr_bytes);
-
                 let timeout_msg = format!(
                     "[超时] 命令执行超过 {}s 已自动终止。可能原因：命令等待交互输入（尝试加 --yes 等非交互标志）或命令长时间运行（尝试增大 timeout 值）。",
                     timeout_secs
                 );
-
                 return ToolResult {
                     output: if partial.is_empty() {
                         timeout_msg
@@ -246,7 +277,6 @@ impl Tool for ShellTool {
 
         let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
         let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
-
         let result = build_output(&stdout_bytes, &stderr_bytes);
 
         let is_error = !status.success();
@@ -262,29 +292,6 @@ impl Tool for ShellTool {
         }
     }
 
-    fn requires_confirmation(&self) -> bool {
-        true
-    }
-
-    fn confirmation_message(&self, arguments: &str) -> String {
-        if let Ok(params) = serde_json::from_str::<ShellParams>(arguments) {
-            let prefix = if params.run_in_background {
-                "Background execute"
-            } else {
-                "Execute"
-            };
-
-            match params.cwd {
-                Some(dir) => format!("{}: {} (cwd: {})", prefix, params.command, dir),
-                None => format!("{}: {}", prefix, params.command),
-            }
-        } else {
-            format!("Execute: {}", arguments)
-        }
-    }
-}
-
-impl ShellTool {
     /// 在后台线程执行命令，立即返回 task_id
     fn execute_background(
         &self,

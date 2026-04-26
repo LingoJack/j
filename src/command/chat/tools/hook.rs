@@ -189,32 +189,77 @@ impl RegisterHookTool {
             }
         };
 
-        // 解析 hook 类型
+        let (hook_def, detail, on_error_str) = match Self::build_hook_def_from_params(params) {
+            Ok(result) => result,
+            Err(err_msg) => {
+                return ToolResult {
+                    output: err_msg,
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+
+        match self.hook_manager.lock() {
+            Ok(mut manager) => {
+                manager.register_session_hook(event, hook_def);
+                let type_str = format!("{}", params.r#type.as_deref().unwrap_or("bash"));
+                ToolResult {
+                    output: format!(
+                        "已注册 session hook: event={}, type={}, {}, timeout={}s, retry={}, on_error={}",
+                        event_str,
+                        type_str,
+                        detail,
+                        params
+                            .timeout
+                            .unwrap_or(if params.r#type.as_deref() == Some("llm") {
+                                30
+                            } else {
+                                10
+                            }),
+                        params
+                            .retry
+                            .unwrap_or(if params.r#type.as_deref() == Some("llm") {
+                                1
+                            } else {
+                                0
+                            }),
+                        on_error_str
+                    ),
+                    is_error: false,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                }
+            }
+            Err(e) => ToolResult {
+                output: format!("获取 HookManager 锁失败: {}", e),
+                is_error: true,
+                images: vec![],
+                plan_decision: PlanDecision::None,
+            },
+        }
+    }
+
+    /// 从参数构建 HookDef，返回 (hook_def, 日志描述, on_error标签) 或错误消息
+    fn build_hook_def_from_params(
+        params: &RegisterHookParams,
+    ) -> Result<(HookDef, String, &'static str), String> {
         let hook_type = match params.r#type.as_deref() {
             Some("llm") => HookType::Llm,
-            _ => HookType::Bash, // 默认 bash
+            _ => HookType::Bash,
         };
 
         // 校验必填字段
         match hook_type {
             HookType::Bash => {
                 if params.command.is_none() {
-                    return ToolResult {
-                        output: "bash hook 缺少 command 参数".to_string(),
-                        is_error: true,
-                        images: vec![],
-                        plan_decision: PlanDecision::None,
-                    };
+                    return Err("bash hook 缺少 command 参数".to_string());
                 }
             }
             HookType::Llm => {
                 if params.prompt.is_none() {
-                    return ToolResult {
-                        output: "llm hook 缺少 prompt 参数".to_string(),
-                        is_error: true,
-                        images: vec![],
-                        plan_decision: PlanDecision::None,
-                    };
+                    return Err("llm hook 缺少 prompt 参数".to_string());
                 }
             }
         }
@@ -231,7 +276,7 @@ impl RegisterHookTool {
 
         let on_error = match params.on_error.as_deref() {
             Some("stop") => OnError::Stop,
-            _ => OnError::Skip, // 默认 skip
+            _ => OnError::Skip,
         };
 
         let on_error_str = match on_error {
@@ -250,46 +295,27 @@ impl RegisterHookTool {
             filter: HookFilter::default(),
         };
 
-        match self.hook_manager.lock() {
-            Ok(mut manager) => {
-                manager.register_session_hook(event, hook_def);
-                let type_str = format!("{}", hook_type);
-                let detail = match hook_type {
-                    HookType::Bash => {
-                        format!("command={}", params.command.as_deref().unwrap_or("?"))
-                    }
-                    HookType::Llm => {
-                        let prompt_preview = params
-                            .prompt
-                            .as_deref()
-                            .map(|p| {
-                                if p.len() > HOOK_LOG_DESC_MAX_LEN {
-                                    &p[..HOOK_LOG_DESC_MAX_LEN]
-                                } else {
-                                    p
-                                }
-                            })
-                            .unwrap_or("?");
-                        format!("prompt={}", prompt_preview)
-                    }
-                };
-                ToolResult {
-                    output: format!(
-                        "已注册 session hook: event={}, type={}, {}, timeout={}s, retry={}, on_error={}",
-                        event_str, type_str, detail, timeout, retry, on_error_str
-                    ),
-                    is_error: false,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                }
+        let detail = match hook_type {
+            HookType::Bash => {
+                format!("command={}", params.command.as_deref().unwrap_or("?"))
             }
-            Err(e) => ToolResult {
-                output: format!("获取 HookManager 锁失败: {}", e),
-                is_error: true,
-                images: vec![],
-                plan_decision: PlanDecision::None,
-            },
-        }
+            HookType::Llm => {
+                let prompt_preview = params
+                    .prompt
+                    .as_deref()
+                    .map(|p| {
+                        if p.len() > HOOK_LOG_DESC_MAX_LEN {
+                            &p[..HOOK_LOG_DESC_MAX_LEN]
+                        } else {
+                            p
+                        }
+                    })
+                    .unwrap_or("?");
+                format!("prompt={}", prompt_preview)
+            }
+        };
+
+        Ok((hook_def, detail, on_error_str))
     }
 
     fn handle_list(&self) -> ToolResult {

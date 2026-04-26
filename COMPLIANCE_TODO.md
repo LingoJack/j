@@ -41,7 +41,7 @@
 - [ ] `command/chat/ui/components.rs:welcome_box` — 177行, 3参数
 - [ ] `command/chat/ui/chat.rs:draw_messages` — 175行, 3参数
 - [ ] `command/notebook/ui.rs:render_status_bar` — 169行, 3参数
-- [ ] `command/chat/tools/shell.rs:execute` — 168行, 2参数
+- [x] `command/chat/tools/shell.rs:execute` — 168行, 2参数 *(已拆分：提取 `execute_sync`，execute 主体缩减至 ~40 行，execute_sync ~120 行)*
 - [ ] `command/report.rs:handle_pull` — 167行, 1参数
 - [ ] `command/chat/render/cache/tool_result_render.rs:render_tool_result_msg` — 165行, 9参数
 - [ ] `command/chat/app/chat_app/update.rs:update` — 159行, 1参数
@@ -66,7 +66,7 @@
 - [ ] `command/chat/tools/worktree.rs:execute` — 133行, 2参数
 - [ ] `command/chat/tools/web_fetch.rs:exec_fetch` — 130行, 2参数
 - [ ] `command/chat/ui/chat.rs:render_image_pass` — 129行, 6参数
-- [ ] `command/chat/tools/hook.rs:handle_register` — 127行, 1参数
+- [x] `command/chat/tools/hook.rs:handle_register` — 127行, 1参数 *(已拆分：提取 `build_hook_def_from_params`，handle_register 缩减至 ~65 行)*
 - [ ] `command/chat/tools/derived_shared.rs:execute_tool_with_permission` — 127行, 7参数
 
 ---
@@ -78,7 +78,7 @@
 ### > 7 参数
 
 - [ ] `command/chat/ui/chat.rs:render_text_pass` — 10参数, 46行
-- [ ] `command/chat/tools/derived_shared.rs:call_llm_non_stream` — 9参数, 52行
+- [x] `command/chat/tools/derived_shared.rs:call_llm_non_stream` — 7参数, 52行 *(已封装为 `LlmNonStreamRequest` struct)*
 - [ ] `command/chat/render/cache/tool_result_render.rs:render_tool_result_msg` — 9参数, 165行
 
 ### 8 参数
@@ -97,8 +97,8 @@
 - [ ] `tui/components/row.rs:toggle_list_item` — 7参数, 44行
 - [ ] `command/chat/oneshot.rs:run_oneshot_agent` — 7参数, 629行
 - [ ] `command/chat/ui/input.rs:build_line_segments` — 7参数, 80行
-- [ ] `command/chat/tools/derived_shared.rs:execute_tool_with_permission` — 7参数, 127行
-- [ ] `command/chat/context/compact.rs:auto_compact` — 7参数, 134行
+- [x] `command/chat/tools/derived_shared.rs:execute_tool_with_permission` — 6参数, 127行 *(已封装为 `ToolExecContext` struct)*
+- [x] `command/chat/context/compact.rs:auto_compact` — 5参数, 134行 *(已封装为 `AutoCompactParams` struct，messages 单独传)*
 - [ ] `command/chat/context/window.rs:select_units` — 7参数, 155行
 - [ ] `command/todo/ui.rs:build_editing_item` — 7参数, 26行
 

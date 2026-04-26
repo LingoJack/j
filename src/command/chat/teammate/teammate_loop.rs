@@ -7,8 +7,8 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::derived_shared::{
-    AgentContextConfig, call_llm_non_stream, create_runtime_and_client,
-    execute_tool_with_permission, extract_tool_items,
+    AgentContextConfig, LlmNonStreamRequest, ToolExecContext, call_llm_non_stream,
+    create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
 };
 use crate::util::log::write_info_log;
 use std::path::PathBuf;
@@ -300,15 +300,15 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             }
         };
 
-        let response_choice = match call_llm_non_stream(
-            &rt,
-            &client,
-            &provider,
-            &api_messages,
-            &tools,
-            Some(&effective_system_prompt),
-            Some(&retry_callback),
-        ) {
+        let response_choice = match call_llm_non_stream(&LlmNonStreamRequest {
+            rt: &rt,
+            client: &client,
+            provider: &provider,
+            messages: &api_messages,
+            tools: &tools,
+            system_prompt: Some(&effective_system_prompt),
+            on_retry: Some(&retry_callback),
+        }) {
             Ok(c) => c,
             Err(e) => {
                 set_status(TeammateStatus::Error(e.clone()));
@@ -546,11 +546,13 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
             let result_msg = execute_tool_with_permission(
                 item,
-                &registry,
-                &jcli_config,
-                &cancel_flag,
-                "TeammateLoop",
-                false,
+                &ToolExecContext {
+                    registry: &registry,
+                    jcli_config: &jcli_config,
+                    cancelled: &cancel_flag,
+                    log_tag: "TeammateLoop",
+                    verbose: false,
+                },
             );
             // 工具结果推入 display only（完整内容，渲染为工具结果卡片）
             if let Ok(manager) = teammate_manager.lock()

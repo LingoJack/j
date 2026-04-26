@@ -9,8 +9,9 @@ use crate::command::chat::storage::{
     append_event_to_path,
 };
 use crate::command::chat::tools::derived_shared::{
-    DerivedAgentShared, SubAgentHandle, SubAgentStatus, call_llm_non_stream,
-    create_runtime_and_client, execute_tool_with_permission, extract_tool_items,
+    DerivedAgentShared, LlmNonStreamRequest, SubAgentHandle, SubAgentStatus, ToolExecContext,
+    call_llm_non_stream, create_runtime_and_client, execute_tool_with_permission,
+    extract_tool_items,
 };
 use crate::command::chat::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::command::chat::tools::{
@@ -561,15 +562,15 @@ fn run_sub_agent_loop(
             );
         }
 
-        let choice = match call_llm_non_stream(
-            &rt,
-            &client,
-            &params.provider,
-            &api_messages,
-            &params.tools,
-            params.system_prompt.as_deref(),
-            Some(&retry_callback),
-        ) {
+        let choice = match call_llm_non_stream(&LlmNonStreamRequest {
+            rt: &rt,
+            client: &client,
+            provider: &params.provider,
+            messages: &api_messages,
+            tools: &params.tools,
+            system_prompt: params.system_prompt.as_deref(),
+            on_retry: Some(&retry_callback),
+        }) {
             Ok(c) => {
                 // LLM 调用成功，保持 Thinking（等待工具执行时切换为 Working）
                 c
@@ -668,11 +669,13 @@ fn run_sub_agent_loop(
             }
             let result_msg = execute_tool_with_permission(
                 item,
-                &params.registry,
-                &params.jcli_config,
-                cancelled,
-                "SubAgent",
-                true,
+                &ToolExecContext {
+                    registry: &params.registry,
+                    jcli_config: &params.jcli_config,
+                    cancelled,
+                    log_tag: "SubAgent",
+                    verbose: true,
+                },
             );
             // 工具结果推入 display only（完整内容，渲染为工具结果卡片）
             push_tool_result_to_display(

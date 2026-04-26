@@ -327,6 +327,14 @@ fn save_transcript(messages: &[ChatMessage], session_id: &str) -> Option<String>
     }
 }
 
+/// auto_compact 的只读参数（messages 作为被操作对象单独传递）
+pub struct AutoCompactParams<'a> {
+    pub provider: &'a ModelProvider,
+    pub invoked_skills: &'a InvokedSkillsMap,
+    pub session_id: &'a str,
+    pub protected_context: Option<&'a str>,
+}
+
 /// Layer 2: auto_compact - 保存 transcript + LLM 摘要 + 替换消息
 ///
 /// 需要调用 LLM（非流式，max_tokens=20000）。
@@ -336,17 +344,14 @@ fn save_transcript(messages: &[ChatMessage], session_id: &str) -> Option<String>
 /// 确保模型在压缩后仍能遵循正在执行的技能/工作流。
 pub async fn auto_compact(
     messages: &mut Vec<ChatMessage>,
-    provider: &ModelProvider,
-    invoked_skills: &InvokedSkillsMap,
-    session_id: &str,
-    protected_context: Option<&str>,
+    params: &AutoCompactParams<'_>,
 ) -> Result<CompactResult, String> {
     // 记录压缩前的消息数（用于 UI 提示）
     let messages_before = messages.len();
 
     // 1. 保存 transcript 到 session 级 .transcripts/ 目录
     let transcript_path =
-        save_transcript(messages, session_id).unwrap_or_else(|| "(unsaved)".to_string());
+        save_transcript(messages, params.session_id).unwrap_or_else(|| "(unsaved)".to_string());
 
     // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
     let conversation_text = serde_json::to_string(messages).unwrap_or_default();
@@ -374,7 +379,7 @@ pub async fn auto_compact(
     );
 
     // 追加保护指令（来自 PreAutoCompact hook 的 additional_context）
-    let summary_prompt_with_context = if let Some(protected) = protected_context {
+    let summary_prompt_with_context = if let Some(protected) = params.protected_context {
         format!(
             "{}\n\n[Protected Context — MUST preserve in full]:\n{}",
             summary_prompt, protected
@@ -384,7 +389,7 @@ pub async fn auto_compact(
     };
 
     let request = ChatRequest {
-        model: provider.model.clone(),
+        model: params.provider.model.clone(),
         messages: vec![Message {
             role: Role::User,
             content: Some(Content::Text(summary_prompt_with_context)),
@@ -400,7 +405,7 @@ pub async fn auto_compact(
     };
 
     // 3. 调用 LLM（非流式）
-    let client = create_llm_client(provider);
+    let client = create_llm_client(params.provider);
     let response = client
         .chat_completion(&request)
         .await
@@ -427,7 +432,7 @@ pub async fn auto_compact(
     );
 
     // 注入已调用技能附件（结构化保留，类似 Claude Code 的 invoked_skills 机制）
-    if let Some(skills_attachment) = build_invoked_skills_attachment(invoked_skills) {
+    if let Some(skills_attachment) = build_invoked_skills_attachment(params.invoked_skills) {
         summary_content.push_str(&format!(
             "\n\n<system-reminder>\n{}\n</system-reminder>",
             skills_attachment

@@ -366,6 +366,17 @@ pub fn create_runtime_and_client(
     Ok((rt, client))
 }
 
+/// call_llm_non_stream 的请求参数（封装 7 个独立参数为结构体）
+pub struct LlmNonStreamRequest<'a> {
+    pub rt: &'a tokio::runtime::Runtime,
+    pub client: &'a crate::llm::LlmClient,
+    pub provider: &'a ModelProvider,
+    pub messages: &'a [ChatMessage],
+    pub tools: &'a [ToolDefinition],
+    pub system_prompt: Option<&'a str>,
+    pub on_retry: Option<&'a RetryCallback>,
+}
+
 /// 非流式调用 LLM（含指数退避重试）
 ///
 /// 返回第一个 choice 的 message；出错时返回 Err(error_text)。
@@ -376,22 +387,22 @@ pub type RetryCallback = dyn Fn(u32, u32, u64, &str);
 /// - 最多 2 次重试（主 agent 最多 5 次）
 /// - 退避上限 15s（主 agent 30s）
 /// - 仍失败则直接返回错误文本
-pub fn call_llm_non_stream(
-    rt: &tokio::runtime::Runtime,
-    client: &crate::llm::LlmClient,
-    provider: &ModelProvider,
-    messages: &[ChatMessage],
-    tools: &[ToolDefinition],
-    system_prompt: Option<&str>,
-    on_retry: Option<&RetryCallback>,
-) -> Result<Choice, String> {
-    let request = build_request_with_tools(provider, messages, tools.to_vec(), system_prompt)
-        .map_err(|e| format!("Failed to build request: {}", e))?;
+pub fn call_llm_non_stream(req: &LlmNonStreamRequest) -> Result<Choice, String> {
+    let request = build_request_with_tools(
+        req.provider,
+        req.messages,
+        req.tools.to_vec(),
+        req.system_prompt,
+    )
+    .map_err(|e| format!("Failed to build request: {}", e))?;
 
     let mut attempt: u32 = 0;
     loop {
         attempt += 1;
-        match rt.block_on(async { client.chat_completion(&request).await }) {
+        match req
+            .rt
+            .block_on(async { req.client.chat_completion(&request).await })
+        {
             Ok(response) => {
                 return response
                     .choices
@@ -412,7 +423,7 @@ pub fn call_llm_non_stream(
                             delay_ms, attempt, policy.max_attempts
                         ),
                     );
-                    if let Some(cb) = on_retry {
+                    if let Some(cb) = req.on_retry {
                         cb(
                             attempt,
                             policy.max_attempts,
@@ -522,21 +533,23 @@ pub fn extract_tool_items(tool_calls: &[ToolCall]) -> Vec<ToolCallItem> {
         .collect()
 }
 
+/// execute_tool_with_permission 的上下文参数（封装 5 个独立参数为结构体）
+pub struct ToolExecContext<'a> {
+    pub registry: &'a Arc<ToolRegistry>,
+    pub jcli_config: &'a Arc<JcliConfig>,
+    pub cancelled: &'a Arc<AtomicBool>,
+    pub log_tag: &'a str,
+    pub verbose: bool,
+}
+
 /// 执行单个工具调用（含权限检查）
 ///
 /// 返回 tool role 的 ChatMessage。
 /// - 被拒绝/需要确认时返回拒绝消息
 /// - 正常执行时返回工具结果
 /// - 被取消时返回 [Cancelled]
-pub fn execute_tool_with_permission(
-    item: &ToolCallItem,
-    registry: &Arc<ToolRegistry>,
-    jcli_config: &Arc<JcliConfig>,
-    cancelled: &Arc<AtomicBool>,
-    log_tag: &str,
-    verbose: bool,
-) -> ChatMessage {
-    if cancelled.load(Ordering::Relaxed) {
+pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) -> ChatMessage {
+    if ctx.cancelled.load(Ordering::Relaxed) {
         return ChatMessage {
             role: MessageRole::Tool,
             content: "[Cancelled]".to_string(),
@@ -549,9 +562,12 @@ pub fn execute_tool_with_permission(
     }
 
     // deny 检查
-    if jcli_config.is_denied(&item.name, &item.arguments) {
-        if verbose {
-            write_info_log(log_tag, &format!("Tool denied by deny rule: {}", item.name));
+    if ctx.jcli_config.is_denied(&item.name, &item.arguments) {
+        if ctx.verbose {
+            write_info_log(
+                ctx.log_tag,
+                &format!("Tool denied by deny rule: {}", item.name),
+            );
         }
         return ChatMessage {
             role: MessageRole::Tool,
@@ -565,12 +581,12 @@ pub fn execute_tool_with_permission(
     }
 
     // 确认检查
-    let tool_ref = registry.get(&item.name);
+    let tool_ref = ctx.registry.get(&item.name);
     let requires_confirm = tool_ref.map(|t| t.requires_confirmation()).unwrap_or(false);
 
-    if requires_confirm && !jcli_config.is_allowed(&item.name, &item.arguments) {
+    if requires_confirm && !ctx.jcli_config.is_allowed(&item.name, &item.arguments) {
         // 尝试通过权限队列请求用户实时确认
-        if let Some(queue) = registry.permission_queue.as_ref() {
+        if let Some(queue) = ctx.registry.permission_queue.as_ref() {
             let agent_type = current_agent_type();
             let agent_name = current_agent_name();
             let confirm_msg = tool_ref
@@ -578,7 +594,7 @@ pub fn execute_tool_with_permission(
                 .unwrap_or_else(|| format!("调用工具 {}", item.name));
             let req = PendingAgentPerm::new(agent_type, agent_name, item.name.clone(), confirm_msg);
             write_info_log(
-                log_tag,
+                ctx.log_tag,
                 &format!(
                     "Tool '{}' queued for user permission (60s timeout)",
                     item.name
@@ -586,7 +602,7 @@ pub fn execute_tool_with_permission(
             );
             let approved = queue.request_blocking(req);
             if !approved {
-                write_info_log(log_tag, &format!("Tool '{}' denied by user", item.name));
+                write_info_log(ctx.log_tag, &format!("Tool '{}' denied by user", item.name));
                 return ChatMessage {
                     role: MessageRole::Tool,
                     content: format!("Tool '{}' was denied by the user.", item.name),
@@ -599,9 +615,9 @@ pub fn execute_tool_with_permission(
             }
             // 用户批准 → 继续往下执行
         } else {
-            if verbose {
+            if ctx.verbose {
                 write_info_log(
-                    log_tag,
+                    ctx.log_tag,
                     &format!(
                         "Tool '{}' requires confirmation but not auto-allowed, denying",
                         item.name
@@ -624,18 +640,20 @@ pub fn execute_tool_with_permission(
         }
     }
 
-    if verbose {
+    if ctx.verbose {
         write_info_log(
-            log_tag,
+            ctx.log_tag,
             &format!("Executing tool: {} args: {}", item.name, item.arguments),
         );
     }
 
-    let result = registry.execute(&item.name, &item.arguments, cancelled);
+    let result = ctx
+        .registry
+        .execute(&item.name, &item.arguments, ctx.cancelled);
 
-    if verbose {
+    if ctx.verbose {
         write_info_log(
-            log_tag,
+            ctx.log_tag,
             &format!(
                 "Tool result: {} is_error={} len={}",
                 item.name,

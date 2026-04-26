@@ -6,7 +6,7 @@ use super::tool_processor::{
     process_tool_calls, push_both, sync_context_full,
 };
 use crate::command::chat::app::types::{StreamMsg, ToolResultMsg};
-use crate::command::chat::context::compact;
+use crate::command::chat::context::compact::{self, AutoCompactParams};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::{HookContext, HookEvent};
 use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
@@ -281,10 +281,12 @@ pub async fn run_main_agent_loop(
                         let _ = tx.send(StreamMsg::Compacting);
                         match compact::auto_compact(
                             &mut messages,
-                            &provider,
-                            &invoked_skills,
-                            &session_id,
-                            protected_context.as_deref(),
+                            &AutoCompactParams {
+                                provider: &provider,
+                                invoked_skills: &invoked_skills,
+                                session_id: &session_id,
+                                protected_context: protected_context.as_deref(),
+                            },
                         )
                         .await
                         {
@@ -697,10 +699,12 @@ pub async fn run_main_agent_loop(
                     let _ = tx.send(StreamMsg::Compacting);
                     match compact::auto_compact(
                         &mut messages,
-                        &provider,
-                        &invoked_skills,
-                        &session_id,
-                        None,
+                        &AutoCompactParams {
+                            provider: &provider,
+                            invoked_skills: &invoked_skills,
+                            session_id: &session_id,
+                            protected_context: None,
+                        },
                     )
                     .await
                     {
@@ -921,10 +925,12 @@ pub async fn run_main_agent_loop(
                                 let _ = tx.send(StreamMsg::Compacting);
                                 if let Ok(compact_result) = compact::auto_compact(
                                     &mut messages,
-                                    &provider,
-                                    &invoked_skills,
-                                    &session_id,
-                                    None,
+                                    &AutoCompactParams {
+                                        provider: &provider,
+                                        invoked_skills: &invoked_skills,
+                                        session_id: &session_id,
+                                        protected_context: None,
+                                    },
                                 )
                                 .await
                                 {
@@ -1111,10 +1117,12 @@ pub async fn run_main_agent_loop(
                             let _ = tx.send(StreamMsg::Compacting);
                             if let Ok(compact_result) = compact::auto_compact(
                                 &mut messages,
-                                &provider,
-                                &invoked_skills,
-                                &session_id,
-                                None,
+                                &AutoCompactParams {
+                                    provider: &provider,
+                                    invoked_skills: &invoked_skills,
+                                    session_id: &session_id,
+                                    protected_context: None,
+                                },
                             )
                             .await
                             {
