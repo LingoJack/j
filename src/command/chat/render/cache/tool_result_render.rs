@@ -402,6 +402,13 @@ pub(crate) fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
                 _ => ("○", Color::Yellow),                   // pending: 黄色空心点
             };
 
+            let text_style = if status == "completed" {
+                Style::default()
+                    .fg(theme.text_dim)
+                    .add_modifier(Modifier::CROSSED_OUT)
+            } else {
+                Style::default().fg(theme.text_white)
+            };
             let max_w = content_w.saturating_sub(10); // "    ● " prefix
             for (i, wrapped) in wrap_text(text, max_w).iter().enumerate() {
                 if i == 0 {
@@ -409,22 +416,13 @@ pub(crate) fn render_todo_result(content: &str, ctx: &mut ContentContext<'_>) {
                         Span::styled("    ", Style::default()),
                         Span::styled(dot, Style::default().fg(color)),
                         Span::styled(" ", Style::default()),
-                        Span::styled(
-                            wrapped.clone(),
-                            if status == "completed" {
-                                Style::default()
-                                    .fg(theme.text_dim)
-                                    .add_modifier(Modifier::CROSSED_OUT)
-                            } else {
-                                Style::default().fg(theme.text_white)
-                            },
-                        ),
+                        Span::styled(wrapped.clone(), text_style),
                     ]));
                 } else {
-                    lines.push(Line::from(Span::styled(
-                        format!("      {}", wrapped),
-                        Style::default().fg(theme.text_dim),
-                    )));
+                    lines.push(Line::from(vec![
+                        Span::styled("      ", Style::default()),
+                        Span::styled(wrapped.clone(), text_style),
+                    ]));
                 }
             }
         }
