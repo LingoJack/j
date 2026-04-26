@@ -264,9 +264,11 @@ pub const KEY_PRESS_DELAY_MS: u64 = 10;
 // ========== Browser Lite 模式 ==========
 
 /// Browser Lite HTTP 请求超时（秒）
+#[cfg(not(feature = "browser_cdp"))]
 pub const BROWSER_LITE_HTTP_TIMEOUT_SECS: u64 = 15;
 
 /// Browser Lite HTTP 最大重定向次数
+#[cfg(not(feature = "browser_cdp"))]
 pub const BROWSER_LITE_MAX_REDIRECTS: usize = 10;
 
 // ========== Hook 日志 ==========
