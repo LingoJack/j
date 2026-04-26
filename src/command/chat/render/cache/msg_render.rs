@@ -157,8 +157,6 @@ pub fn render_user_msg(
                 .add_modifier(Modifier::BOLD),
         ),
     ]));
-    // label 与气泡之间空行
-    lines.push(Line::from(""));
 
     // 边框颜色
     let border_color = if is_selected {
@@ -238,6 +236,10 @@ pub fn render_assistant_msg(
         return;
     }
 
+    let pad_left_w = 3usize;
+    let pad_right_w = 3usize;
+    let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
+
     // 确定 agent_name 和 bubble_content：
     // 优先使用 sender_name 字段；若无则 fallback 解析 content 的 <Name> 前缀（兼容老 session）
     let (agent_name, bubble_content): (String, &str) = if let Some(name) = sender_name {
@@ -247,17 +249,15 @@ pub fn render_assistant_msg(
     } else {
         ("Sprite".to_string(), content)
     };
-
     let is_teammate = agent_name != "Sprite";
 
     let bubble_bg = if is_selected {
         theme.bubble_ai_selected
+    } else if ctx.flat_bubble {
+        theme.bg_primary
     } else {
         theme.bubble_ai
     };
-    let pad_left_w = 3usize;
-    let pad_right_w = 3usize;
-    let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
 
     // 与前一条消息之间留一行间距
     lines.push(Line::from(""));
@@ -281,8 +281,6 @@ pub fn render_assistant_msg(
             .fg(label_color)
             .add_modifier(Modifier::BOLD),
     )));
-    // label 与气泡之间空行
-    lines.push(Line::from(""));
 
     // 边框颜色
     let border_color = if is_selected {

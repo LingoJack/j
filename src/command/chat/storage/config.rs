@@ -152,7 +152,7 @@ impl ThinkingStyle {
 }
 
 /// Agent 配置
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// 模型提供方列表
     #[serde(default)]
@@ -224,6 +224,31 @@ fn default_max_tool_rounds() -> usize {
 
 fn default_true() -> bool {
     true
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            providers: Vec::new(),
+            active_index: 0,
+            system_prompt: None,
+            max_history_messages: DEFAULT_MAX_HISTORY_MESSAGES,
+            max_context_tokens: DEFAULT_MAX_CONTEXT_TOKENS,
+            theme: ThemeName::default(),
+            tools_enabled: false,
+            max_tool_rounds: DEFAULT_MAX_TOOL_ROUNDS,
+            style: None,
+            tool_confirm_timeout: 0,
+            disabled_tools: Vec::new(),
+            disabled_skills: Vec::new(),
+            disabled_commands: Vec::new(),
+            disabled_hooks: Vec::new(),
+            compact: CompactConfig::default(),
+            auto_restore_session: false,
+            flat_bubble: true,
+            thinking_style: ThinkingStyle::default(),
+        }
+    }
 }
 
 // ========== 通用文本文件读写辅助 ==========
