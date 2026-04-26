@@ -68,6 +68,8 @@ pub struct RenderContext<'a> {
     pub lines: &'a mut Vec<Line<'static>>,
     pub theme: &'a Theme,
     pub expand: bool,
+    /// 气泡背景色与主背景色一致（扁平效果）
+    pub flat_bubble: bool,
 }
 
 /// 内容渲染的公共上下文（用于工具结果等）
@@ -197,6 +199,7 @@ pub fn build_message_lines_incremental(
                     lines: &mut tmp_lines,
                     theme: t,
                     expand,
+                    flat_bubble: app.state.agent_config.flat_bubble,
                 };
                 render_user_msg(&m.content, is_selected, inner_width, &mut ctx);
             }
@@ -206,6 +209,7 @@ pub fn build_message_lines_incremental(
                     lines: &mut tmp_lines,
                     theme: t,
                     expand,
+                    flat_bubble: app.state.agent_config.flat_bubble,
                 };
                 // 如果有 reasoning_content，先渲染 thinking 区块
                 if let Some(ref reasoning) = m.reasoning_content {
@@ -219,6 +223,7 @@ pub fn build_message_lines_incremental(
                     lines: &mut tmp_lines,
                     theme: t,
                     expand,
+                    flat_bubble: app.state.agent_config.flat_bubble,
                 };
                 // 如果有 reasoning_content，先渲染 thinking 区块
                 if let Some(ref reasoning) = m.reasoning_content {

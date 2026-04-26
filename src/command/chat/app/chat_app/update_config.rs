@@ -109,6 +109,17 @@ impl ChatApp {
                         self.switch_theme();
                         return;
                     }
+                    if field == "flat_bubble" {
+                        self.state.agent_config.flat_bubble = !self.state.agent_config.flat_bubble;
+                        let status = if self.state.agent_config.flat_bubble {
+                            "开启"
+                        } else {
+                            "关闭"
+                        };
+                        self.show_toast(format!("扁平气泡已{}", status), false);
+                        self.ui.msg_lines_cache = None;
+                        return;
+                    }
                     if field == "thinking_style" {
                         let next = self.state.agent_config.thinking_style.next();
                         self.state.agent_config.thinking_style = next;

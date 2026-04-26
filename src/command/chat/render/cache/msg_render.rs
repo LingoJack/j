@@ -115,6 +115,8 @@ pub fn render_user_msg(
 
     let user_bg = if is_selected {
         theme.bubble_user_selected
+    } else if ctx.flat_bubble {
+        theme.bg_primary
     } else {
         theme.bubble_user
     };

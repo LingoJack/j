@@ -39,6 +39,7 @@ pub const CONFIG_GLOBAL_FIELDS_TAB: &[&str] = &[
     "theme",
     "auto_restore_session",
     "thinking_style",
+    "flat_bubble",
     "compact_enabled",
     "compact_token_threshold",
     "compact_keep_recent",

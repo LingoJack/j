@@ -202,6 +202,9 @@ pub struct AgentConfig {
     /// 启动时是否自动恢复最近的 session
     #[serde(default)]
     pub auto_restore_session: bool,
+    /// 气泡背景色与主背景色一致（扁平效果）
+    #[serde(default)]
+    pub flat_bubble: bool,
     /// 思考指示器动画风格
     #[serde(default)]
     pub thinking_style: ThinkingStyle,
