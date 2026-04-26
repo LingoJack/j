@@ -47,7 +47,8 @@ pub(crate) fn agent_name_color(name: &str) -> Color {
 }
 
 /// 渲染 thinking 区块（reasoning_content），显示在 AI 气泡上方
-/// 折叠模式下（expand=false）仅显示前若干行，避免占用过多屏幕空间
+/// 使用引用块风格：左侧竖线 `|` + 柔和背景色，复用 theme.md_blockquote_* 配色
+/// 折叠模式下（expand=false）仅显示前若干行，超出部分用省略提示
 pub(crate) fn render_thinking_block(reasoning: &str, ctx: &mut RenderContext<'_>) {
     let lines = &mut *ctx.lines;
     let theme = ctx.theme;
@@ -57,21 +58,38 @@ pub(crate) fn render_thinking_block(reasoning: &str, ctx: &mut RenderContext<'_>
         return;
     }
 
+    // 引用块配色（复用 markdown blockquote）
+    let bar_color = theme.md_blockquote_bar;
+    let text_color = theme.md_blockquote_text;
+    let bg_color = theme.md_blockquote_bg;
+
+    // 竖线前缀样式
+    let bar_style = Style::default()
+        .fg(bar_color)
+        .bg(bg_color)
+        .add_modifier(Modifier::BOLD);
+    let text_style = Style::default().fg(text_color).bg(bg_color);
+
     lines.push(Line::from(""));
 
-    // Thinking 标签（灰色斜体）
-    lines.push(Line::from(Span::styled(
-        "  >> Thinking...",
-        Style::default()
-            .fg(theme.text_dim)
-            .add_modifier(Modifier::ITALIC),
-    )));
+    // Thinking 标签行：竖线 + 标签文字（斜体）
+    lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        Span::styled("| ", bar_style),
+        Span::styled(
+            "Thinking...",
+            Style::default()
+                .fg(bar_color)
+                .bg(bg_color)
+                .add_modifier(Modifier::ITALIC),
+        ),
+    ]));
 
-    // Reasoning 内容（灰色文本）
-    let content_w = bubble_max_width.saturating_sub(6);
+    // Reasoning 内容（引用块风格，每行带 `| ` 前缀 + 背景色）
+    let content_w = bubble_max_width.saturating_sub(6); // 2空格缩进 + "| " + 1右侧留白
     let wrapped = wrap_text(reasoning, content_w);
 
-    // 折叠模式：最多显示 THINKING_FOLDED_MAX_LINES 行，超出时追加省略提示
+    // 折叠模式：最多显示 THINKING_FOLDED_MAX_LINES 行
     let total = wrapped.len();
     let (shown, truncated) = if !expand && total > THINKING_FOLDED_MAX_LINES {
         (&wrapped[..THINKING_FOLDED_MAX_LINES], true)
@@ -80,22 +98,26 @@ pub(crate) fn render_thinking_block(reasoning: &str, ctx: &mut RenderContext<'_>
     };
 
     for wrapped_line in shown {
-        lines.push(Line::from(Span::styled(
-            format!("    {}", wrapped_line),
-            Style::default().fg(theme.text_dim),
-        )));
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("| ", bar_style),
+            Span::styled(wrapped_line.clone(), text_style),
+        ]));
     }
 
     if truncated {
-        lines.push(Line::from(Span::styled(
-            format!(
-                "    … (+{} 行, Ctrl+O 展开)",
-                total - THINKING_FOLDED_MAX_LINES
+        let hidden = total - THINKING_FOLDED_MAX_LINES;
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("| ", bar_style),
+            Span::styled(
+                format!("... +{} 行, Ctrl+O 展开", hidden),
+                Style::default()
+                    .fg(bar_color)
+                    .bg(bg_color)
+                    .add_modifier(Modifier::ITALIC),
             ),
-            Style::default()
-                .fg(theme.text_dim)
-                .add_modifier(Modifier::ITALIC),
-        )));
+        ]));
     }
 }
 

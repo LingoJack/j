@@ -384,20 +384,35 @@ pub fn build_message_lines_incremental(
             );
             streaming_lines.push(bubble_line);
 
-            // 如果有 reasoning 内容，在绿点下方渲染 thinking 区块
+            // 如果有 reasoning 内容，在绿点下方渲染 thinking 区块（引用块风格）
             let reasoning_str = safe_lock(
                 &app.state.streaming_reasoning_content,
                 "render::streaming_reasoning",
             )
             .clone();
             if !reasoning_str.is_empty() {
-                // Thinking 标签（灰色斜体）
-                let thinking_label = Line::from(Span::styled(
-                    "  Thinking...",
-                    Style::default()
-                        .fg(t.text_dim)
-                        .add_modifier(Modifier::ITALIC),
-                ));
+                // 引用块配色（复用 markdown blockquote）
+                let bar_color = t.md_blockquote_bar;
+                let quote_text_color = t.md_blockquote_text;
+                let quote_bg = t.md_blockquote_bg;
+
+                // Thinking 标签行：竖线 + 斜体标签
+                let thinking_label = Line::from(vec![
+                    Span::styled(
+                        "| ",
+                        Style::default()
+                            .fg(bar_color)
+                            .bg(quote_bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        "Thinking...",
+                        Style::default()
+                            .fg(bar_color)
+                            .bg(quote_bg)
+                            .add_modifier(Modifier::ITALIC),
+                    ),
+                ]);
                 let label_bubble = wrap_md_line_in_bubble_with_margin(
                     thinking_label,
                     bubble_bg,
@@ -408,13 +423,22 @@ pub fn build_message_lines_incremental(
                 );
                 streaming_lines.push(label_bubble);
 
-                // Reasoning 内容（灰色文本，带气泡背景）
-                let reason_content_w = md_content_w.saturating_sub(2);
+                // Reasoning 内容（引用块风格，每行 `| ` 前缀 + 背景色）
+                let reason_content_w = md_content_w.saturating_sub(4); // "| " + 1右侧留白
                 for wrapped_line in wrap_text(&reasoning_str, reason_content_w) {
-                    let line = Line::from(Span::styled(
-                        format!("  {}", wrapped_line),
-                        Style::default().fg(t.text_dim),
-                    ));
+                    let line = Line::from(vec![
+                        Span::styled(
+                            "| ",
+                            Style::default()
+                                .fg(bar_color)
+                                .bg(quote_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            wrapped_line,
+                            Style::default().fg(quote_text_color).bg(quote_bg),
+                        ),
+                    ]);
                     let bubble_line = wrap_md_line_in_bubble_with_margin(
                         line,
                         bubble_bg,

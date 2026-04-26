@@ -95,6 +95,107 @@ impl<'a> ParserState<'a> {
 }
 
 // ---------------------------------------------------------------------------
+// Table separator normalization
+// ---------------------------------------------------------------------------
+
+/// 检测 markdown 文本中是否存在列数不足的表格分隔行。
+///
+/// 快速扫描：找到以 `|` 开头且仅含 `|---|`（一个分隔列）的行，
+/// 而其上一行（表头）含有多个 `|` 分隔列的情况。
+fn needs_table_separator_fix(md: &str) -> bool {
+    let lines: Vec<&str> = md.lines().collect();
+    for i in 1..lines.len() {
+        let prev = lines[i - 1].trim();
+        let curr = lines[i].trim();
+        if prev.starts_with('|') && is_separator_row(curr) {
+            let header_cols = count_pipe_cells(prev);
+            let sep_cols = count_pipe_cells(curr);
+            if header_cols > 1 && sep_cols < header_cols {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 补齐所有表格分隔行的列数，使其与对应的表头列数匹配。
+fn normalize_table_separators(md: &str) -> String {
+    let lines: Vec<&str> = md.lines().collect();
+    let mut result = String::with_capacity(md.len());
+    let mut modified = false;
+
+    for i in 0..lines.len() {
+        if i > 0 {
+            let prev = lines[i - 1].trim();
+            let curr = lines[i].trim();
+            if prev.starts_with('|') && is_separator_row(curr) {
+                let header_cols = count_pipe_cells(prev);
+                let sep_cols = count_pipe_cells(curr);
+                if header_cols > 1 && sep_cols < header_cols {
+                    // 直接重建分隔行：每列一个 "---"，用 "|" 包裹
+                    let mut fixed = String::from("|");
+                    for _ in 0..header_cols {
+                        fixed.push_str("---|");
+                    }
+                    result.push_str(&fixed);
+                    modified = true;
+                    result.push('\n');
+                    continue;
+                }
+            }
+        }
+        result.push_str(lines[i]);
+        result.push('\n');
+    }
+
+    if modified {
+        // 移除末尾多余的换行，保持与原文本一致
+        if md.ends_with('\n') && !result.ends_with('\n') {
+            result.push('\n');
+        } else if !md.ends_with('\n') && result.ends_with('\n') {
+            result.pop();
+        }
+        result
+    } else {
+        md.to_string()
+    }
+}
+
+/// 判断一行是否是表格分隔行（仅含 `|`、`-`、`:`、空格）。
+fn is_separator_row(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('|') {
+        return false;
+    }
+    // 去掉首尾 | 后，内容应仅由 - : 空格 组成
+    let inner = trimmed.trim_matches('|').trim();
+    !inner.is_empty()
+        && inner
+            .chars()
+            .all(|c| c == '-' || c == ':' || c == ' ' || c == '|')
+}
+
+/// 统计以 `|` 分隔的行的列数。
+/// `| A | B |` → 2，`|---|` → 1，`|---|---|` → 2
+fn count_pipe_cells(line: &str) -> usize {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('|') {
+        return 0;
+    }
+    // 按非转义的 | 分割，减去首尾空段
+    let segments: Vec<&str> = trimmed.split('|').collect();
+    // "| A | B |" → ["", " A ", " B ", ""] → 2 cells
+    // "|---|" → ["", "---", ""] → 1 cell
+    let count = segments.len().saturating_sub(1);
+    // 如果最后一个段是空（尾 |），减 1
+    if count > 0 && segments.last().is_some_and(|s| s.trim().is_empty()) {
+        count - 1
+    } else {
+        count
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -108,7 +209,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
     // 不被识别为有效的加粗开始标记。
     // 解决方案：在 ** 与中文引号之间插入零宽空格（U+200B），使 ** 后面不再紧跟标点，
     // 从而满足 CommonMark 规范。零宽空格在终端中不可见，不影响显示。
-    let md_owned;
+    let mut md_owned;
     let md = if md.contains("**\u{201C}")
         || md.contains("**\u{2018}")
         || md.contains("\u{201D}**")
@@ -119,6 +220,18 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
             .replace("**\u{2018}", "**\u{200B}\u{2018}")
             .replace("\u{201D}**", "\u{201D}\u{200B}**")
             .replace("\u{2019}**", "\u{2019}\u{200B}**");
+        &md_owned as &str
+    } else {
+        md
+    };
+
+    // 预处理：补齐表格分隔行列数。
+    // pulldown-cmark 要求分隔行的列数与表头匹配，否则整个表格不被识别。
+    // LLM 生成的表格有时分隔行只写 |---| 而表头有多列，需要自动补齐为 |---|---|。
+    let separator_fixed;
+    let md = if needs_table_separator_fix(md) {
+        separator_fixed = normalize_table_separators(md);
+        md_owned = separator_fixed;
         &md_owned as &str
     } else {
         md

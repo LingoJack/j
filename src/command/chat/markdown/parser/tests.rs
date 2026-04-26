@@ -488,3 +488,107 @@ fn renders_empty_input_returns_empty_or_wrapped() {
         "空输入的所有行应为空或仅含空 span"
     );
 }
+
+/// 回归测试：复现 AI 回复中第一个表格未渲染的 bug
+/// 场景：AI 回复包含多个表格，第一个表格出现在段落文字之后，
+/// 使用 `|---|` 单列分隔符格式。当整个内容被一次性解析时，表格应正确渲染。
+#[test]
+fn table_after_paragraph_with_single_col_separator() {
+    let theme = Theme::from_name(&ThemeName::default());
+
+    // 模拟 AI 的完整回复内容
+    let md = r##"渲染模块位于 `src/command/chat/render/cache/` 下，包含以下文件：
+
+| 文件 | 职责 |
+|---|
+| `cache.rs` | 主入口：`build_message_lines_incremental` 函数 |
+| `tool_call_render.rs` | **工具调用请求**渲染 |
+| `tool_result_render.rs` | **工具执行结果**渲染 |
+
+### 2. 数据模型
+
+| Category | 工具 | 图标 |
+|---|---|---|
+| `File` | Read, Write | 📄 |
+| `Search` | Grep | 🔍 |
+"##;
+
+    let lines = markdown_to_lines(md, 100, &theme);
+
+    eprintln!("=== table_after_paragraph test ===");
+    for (i, line) in lines.iter().enumerate() {
+        eprintln!(
+            "Line {}: {:?}",
+            i,
+            line.spans.iter().map(|s| &s.content).collect::<Vec<_>>()
+        );
+    }
+
+    // 验证至少有一个表格被渲染（通过检测表格边框字符 ┌ 或 └）
+    let has_table_border: bool = lines
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .any(|s| s.content.contains('┌') || s.content.contains('└'));
+
+    assert!(
+        has_table_border,
+        "应至少有一个表格被渲染（检测到 ┌ 或 └ 边框字符），实际输出: {:?}",
+        lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect::<Vec<_>>()
+    );
+
+    // 统计表格数量（每个表格有一个 ┌ 和一个 └）
+    let top_borders: Vec<_> = lines
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .filter(|s| s.content.contains('┌'))
+        .collect();
+
+    // 应该有 2 个表格
+    assert_eq!(
+        top_borders.len(),
+        2,
+        "应渲染 2 个表格，实际渲染了 {} 个",
+        top_borders.len()
+    );
+}
+
+/// 回归测试：流式渲染切分后，tail 中的表格能正确渲染
+/// 场景：find_stable_boundary 将内容切分后，tail 部分以 | 开头（表格开头）
+#[test]
+fn table_in_tail_after_stable_boundary_cut() {
+    let theme = Theme::from_name(&ThemeName::default());
+
+    // 模拟 find_stable_boundary 切分后的 tail 内容
+    // 在流式渲染中，boundary 在段落后的 \n\n 处，tail 以表格开头
+    let tail_content =
+        "| 文件 | 职责 |\n|---|\n| `cache.rs` | 主入口 |\n| `tool_call_render.rs` | 工具渲染 |";
+
+    let lines = markdown_to_lines(tail_content, 80, &theme);
+
+    eprintln!("=== table_in_tail test ===");
+    for (i, line) in lines.iter().enumerate() {
+        eprintln!(
+            "Line {}: {:?}",
+            i,
+            line.spans.iter().map(|s| &s.content).collect::<Vec<_>>()
+        );
+    }
+
+    // 验证表格被渲染
+    let has_table_border: bool = lines
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .any(|s| s.content.contains('┌') || s.content.contains('└'));
+
+    assert!(
+        has_table_border,
+        "tail 中的表格应被正确渲染，实际输出: {:?}",
+        lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect::<Vec<_>>()
+    );
+}
