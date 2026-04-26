@@ -78,54 +78,27 @@ pub fn render_tool_call_request_msg(
 
             // 参数详情
             if !tc.arguments.is_empty() {
-                if matches!(tc.name.as_str(), tool_names::BASH) {
-                    // Bash/Shell 工具使用专用渲染：显示命令 + 附加信息
-                    if let Some(bash_args) = extract_bash_args(&tc.arguments) {
-                        render_bash_call_request_expanded(
-                            &bash_args,
-                            bubble_max_width,
-                            lines,
-                            theme,
-                        );
-                    } else if let Ok(json_value) =
-                        serde_json::from_str::<serde_json::Value>(&tc.arguments)
+                // 尝试专用渲染，失败则回退到通用 JSON 渲染
+                if !render_specialized_tool_call(
+                    &tc.name,
+                    &tc.arguments,
+                    bubble_max_width,
+                    content_w,
+                    lines,
+                    theme,
+                ) {
+                    // 通用回退
+                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&tc.arguments)
                     {
                         render_json_params_enhanced(&json_value, content_w, lines, theme);
-                    }
-                // Agent 工具使用专用渲染：边框 + prompt + 元信息
-                } else if tc.name.as_str() == tool_names::AGENT {
-                    if let Some(agent_args) = extract_agent_args(&tc.arguments) {
-                        render_agent_call_request_expanded(
-                            &agent_args,
-                            bubble_max_width,
-                            lines,
-                            theme,
-                        );
-                    }
-                // Teammate 工具使用专用渲染：边框 + name/role + prompt
-                } else if tc.name.as_str() == tool_names::TEAMMATE {
-                    if let Some(tm_args) = extract_teammate_args(&tc.arguments) {
-                        render_teammate_call_request_expanded(
-                            &tm_args,
-                            bubble_max_width,
-                            lines,
-                            theme,
-                        );
-                    }
-                // ExitPlanMode 工具使用专用渲染：边框显示
-                } else if matches!(tc.name.as_str(), tool_names::EXIT_PLAN_MODE) {
-                    render_exit_plan_mode_request(bubble_max_width, lines, theme);
-                } else if let Ok(json_value) =
-                    serde_json::from_str::<serde_json::Value>(&tc.arguments)
-                {
-                    render_json_params_enhanced(&json_value, content_w, lines, theme);
-                } else {
-                    // 非 JSON 参数，普通折行显示
-                    for line in wrap_text(&tc.arguments, content_w) {
-                        lines.push(Line::from(vec![
-                            Span::styled("    ", Style::default()),
-                            Span::styled(line, Style::default().fg(theme.text_dim)),
-                        ]));
+                    } else {
+                        // 非 JSON 参数，普通折行显示
+                        for line in wrap_text(&tc.arguments, content_w) {
+                            lines.push(Line::from(vec![
+                                Span::styled("    ", Style::default()),
+                                Span::styled(line, Style::default().fg(theme.text_dim)),
+                            ]));
+                        }
                     }
                 }
             }
@@ -325,10 +298,24 @@ pub(crate) fn render_json_params_enhanced(
 // 3. extract_tool_description_from_args
 // ──────────────────────────────────────────────────────────────
 
-/// 从工具调用参数 JSON 中提取描述信息
+/// 从工具调用参数 JSON 中提取描述信息（用于折叠模式显示）
 /// - Bash/Shell：提取 description 字段
 /// - Read/Write/Edit/Glob/Grep：提取 path 或 file_path 字段
-/// - Agent/AgentTeam：提取 description 字段
+/// - Agent/Teammate：提取 description / role 字段
+/// - Task：action + title
+/// - TaskOutput：task_id
+/// - WebSearch：query
+/// - WebFetch：url
+/// - Ask：question 文本
+/// - TodoWrite/TodoRead：操作摘要
+/// - Compact：focus
+/// - EnterPlanMode：description
+/// - LoadSkill：skill name
+/// - RegisterHook：action + event
+/// - SendMessage：to + message 预览
+/// - EnterWorktree/ExitWorktree：name
+/// - WorkDone：summary
+/// - IgnoreMessage：静默标记
 pub(crate) fn extract_tool_description_from_args(
     tool_name: &str,
     arguments: &str,
@@ -336,6 +323,7 @@ pub(crate) fn extract_tool_description_from_args(
     let parsed = serde_json::from_str::<serde_json::Value>(arguments).ok()?;
 
     match tool_name {
+        // ── 文件操作 ──
         tool_names::BASH => parsed.get("description")?.as_str().map(|s| s.to_string()),
         tool_names::READ
         | tool_names::WRITE
@@ -346,6 +334,8 @@ pub(crate) fn extract_tool_description_from_args(
             .or_else(|| parsed.get("file_path"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
+
+        // ── Agent / Teammate ──
         tool_names::AGENT => parsed
             .get("description")
             .and_then(|v| v.as_str())
@@ -355,7 +345,155 @@ pub(crate) fn extract_tool_description_from_args(
             let role = parsed.get("role").and_then(|v| v.as_str()).unwrap_or(name);
             Some(role.to_string())
         }
+
+        // ── Task（任务管理）──
+        tool_names::TASK => {
+            let action = parsed
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("task");
+            let title = parsed.get("title").and_then(|v| v.as_str());
+            match title {
+                Some(t) => Some(format!("{}: {}", action, t)),
+                None => Some(action.to_string()),
+            }
+        }
+
+        // ── TaskOutput（后台任务输出）──
+        tool_names::TASK_OUTPUT => {
+            let task_id = parsed
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            Some(format!("获取任务 {} 输出", task_id))
+        }
+
+        // ── 网络 ──
+        tool_names::WEB_SEARCH => parsed
+            .get("query")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("搜索: {}", s)),
+        tool_names::WEB_FETCH => parsed
+            .get("url")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        tool_names::BROWSER => parsed
+            .get("url")
+            .or_else(|| parsed.get("action"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+
+        // ── Ask（用户提问）──
+        tool_names::ASK => {
+            // questions 是数组，取第一个问题的 question 字段
+            if let Some(questions) = parsed.get("questions").and_then(|v| v.as_array())
+                && let Some(first) = questions.first()
+            {
+                return first
+                    .get("question")
+                    .and_then(|v| v.as_str())
+                    .map(|s| truncate_str(s, TOOL_ARG_PREVIEW_MAX_CHARS));
+            }
+            None
+        }
+
+        // ── Todo ──
+        tool_names::TODO_WRITE => {
+            if let Some(todos) = parsed.get("todos").and_then(|v| v.as_array()) {
+                let count = todos.len();
+                Some(format!("更新 {} 项待办", count))
+            } else {
+                Some("更新待办".to_string())
+            }
+        }
+        tool_names::TODO_READ => Some("读取待办列表".to_string()),
+
+        // ── Compact（对话压缩）──
+        tool_names::COMPACT => {
+            let focus = parsed.get("focus").and_then(|v| v.as_str());
+            match focus {
+                Some(f) => Some(format!("压缩对话 (focus: {})", f)),
+                None => Some("压缩对话".to_string()),
+            }
+        }
+
+        // ── Plan ──
+        tool_names::ENTER_PLAN_MODE => parsed
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("进入计划模式: {}", s))
+            .or_else(|| Some("进入计划模式".to_string())),
+        tool_names::EXIT_PLAN_MODE => Some("提交计划审批".to_string()),
+
+        // ── LoadSkill ──
+        tool_names::LOAD_SKILL => parsed
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("加载技能: {}", s)),
+
+        // ── RegisterHook ──
+        tool_names::REGISTER_HOOK => {
+            let action = parsed
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("register");
+            let event = parsed.get("event").and_then(|v| v.as_str());
+            match event {
+                Some(e) => Some(format!("{} 钩子: {}", action, e)),
+                None => Some(format!("{} 钩子", action)),
+            }
+        }
+
+        // ── SendMessage ──
+        tool_names::SEND_MESSAGE => {
+            let to = parsed.get("to").and_then(|v| v.as_str());
+            let msg = parsed
+                .get("message")
+                .and_then(|v| v.as_str())
+                .map(|s| truncate_str(s, 40));
+            match (to, msg) {
+                (Some(t), Some(m)) => Some(format!("→ {} {}", t, m)),
+                (Some(t), None) => Some(format!("→ {}", t)),
+                (None, Some(m)) => Some(format!("广播: {}", m)),
+                (None, None) => Some("发送消息".to_string()),
+            }
+        }
+
+        // ── Worktree ──
+        tool_names::ENTER_WORKTREE => parsed
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("进入工作树: {}", s))
+            .or_else(|| Some("进入工作树".to_string())),
+        tool_names::EXIT_WORKTREE => Some("退出工作树".to_string()),
+
+        // ── WorkDone ──
+        tool_names::WORK_DONE => parsed
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate_str(s, TOOL_ARG_PREVIEW_MAX_CHARS))
+            .or_else(|| Some("工作完成".to_string())),
+
+        // ── IgnoreMessage ──
+        tool_names::IGNORE_MESSAGE => Some("忽略消息".to_string()),
+
+        // ── ComputerUse ──
+        tool_names::COMPUTER_USE => parsed
+            .get("action")
+            .and_then(|v| v.as_str())
+            .map(|s| format!("计算机操作: {}", s)),
+
         _ => None,
+    }
+}
+
+/// 将字符串截断到最大字符数，超出时加 "…"
+fn truncate_str(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_chars).collect();
+        format!("{}…", truncated)
     }
 }
 
@@ -680,4 +818,620 @@ pub(crate) fn render_exit_plan_mode_request(
         bottom_border,
         Style::default().fg(border_color).bg(result_bg),
     )));
+}
+
+// ──────────────────────────────────────────────────────────────
+// 8. render_specialized_tool_call — 展开模式专用渲染分发
+// ──────────────────────────────────────────────────────────────
+
+/// 根据工具名称分发到专用展开渲染，返回 true 表示已渲染
+fn render_specialized_tool_call(
+    tool_name: &str,
+    arguments: &str,
+    bubble_max_width: usize,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    match tool_name {
+        tool_names::BASH => {
+            if let Some(bash_args) = extract_bash_args(arguments) {
+                render_bash_call_request_expanded(&bash_args, bubble_max_width, lines, theme);
+                return true;
+            }
+            false
+        }
+        tool_names::AGENT => {
+            if let Some(agent_args) = extract_agent_args(arguments) {
+                render_agent_call_request_expanded(&agent_args, bubble_max_width, lines, theme);
+                return true;
+            }
+            false
+        }
+        tool_names::TEAMMATE => {
+            if let Some(tm_args) = extract_teammate_args(arguments) {
+                render_teammate_call_request_expanded(&tm_args, bubble_max_width, lines, theme);
+                return true;
+            }
+            false
+        }
+        tool_names::EXIT_PLAN_MODE => {
+            render_exit_plan_mode_request(bubble_max_width, lines, theme);
+            true
+        }
+        tool_names::TASK => render_task_call_request_expanded(arguments, content_w, lines, theme),
+        tool_names::TASK_OUTPUT => {
+            render_task_output_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::WEB_SEARCH => {
+            render_web_search_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::WEB_FETCH => {
+            render_web_fetch_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::BROWSER => {
+            render_browser_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::ASK => render_ask_call_request_expanded(arguments, content_w, lines, theme),
+        tool_names::TODO_WRITE => {
+            render_todo_write_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::TODO_READ => render_todo_read_call_request_expanded(content_w, lines, theme),
+        tool_names::COMPACT => {
+            render_compact_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::ENTER_PLAN_MODE => {
+            render_enter_plan_mode_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::LOAD_SKILL => {
+            render_load_skill_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::REGISTER_HOOK => {
+            render_register_hook_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::SEND_MESSAGE => {
+            render_send_message_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::ENTER_WORKTREE | tool_names::EXIT_WORKTREE => {
+            render_worktree_call_request_expanded(tool_name, arguments, content_w, lines, theme)
+        }
+        tool_names::WORK_DONE => {
+            render_work_done_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        tool_names::IGNORE_MESSAGE => {
+            render_ignore_message_call_request_expanded(content_w, lines, theme)
+        }
+        tool_names::COMPUTER_USE => {
+            render_computer_use_call_request_expanded(arguments, content_w, lines, theme)
+        }
+        _ => false,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 9. 各工具专用展开渲染
+// ──────────────────────────────────────────────────────────────
+
+/// 渲染键值对行
+fn render_kv_line(
+    key: &str,
+    value: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) {
+    let max_val_chars = content_w.saturating_sub(key.chars().count() + 7);
+    let display = if value.chars().count() > max_val_chars {
+        format!("{}…", truncate_str(value, max_val_chars))
+    } else {
+        value.to_string()
+    };
+    for wrapped in wrap_text(&display, content_w) {
+        lines.push(Line::from(vec![
+            Span::styled("    ", Style::default()),
+            Span::styled(format!("{}:", key), Style::default().fg(theme.text_dim)),
+            Span::styled(" ", Style::default()),
+            Span::styled(wrapped, Style::default().fg(theme.text_normal)),
+        ]));
+    }
+}
+
+/// 渲染标签行（如 `[background]`、`[worktree]` 等）
+fn render_tag_line(tag: &str, content_w: usize, lines: &mut Vec<Line<'static>>, theme: &Theme) {
+    for wrapped in wrap_text(tag, content_w) {
+        lines.push(Line::from(vec![
+            Span::styled("    ", Style::default()),
+            Span::styled(wrapped, Style::default().fg(theme.text_dim)),
+        ]));
+    }
+}
+
+/// Task 工具展开渲染
+fn render_task_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let action = parsed
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("task");
+
+    // action 标签
+    render_tag_line(&format!("[{}]", action), content_w, lines, theme);
+
+    // title
+    if let Some(title) = parsed.get("title").and_then(|v| v.as_str()) {
+        render_kv_line("title", title, content_w, lines, theme);
+    }
+
+    // description
+    if let Some(desc) = parsed.get("description").and_then(|v| v.as_str()) {
+        render_kv_line("description", desc, content_w, lines, theme);
+    }
+
+    // taskId（update/get 时）
+    if let Some(task_id) = parsed.get("taskId").and_then(|v| v.as_str()) {
+        render_kv_line("taskId", task_id, content_w, lines, theme);
+    }
+
+    // status（update 时）
+    if let Some(status) = parsed.get("status").and_then(|v| v.as_str()) {
+        render_kv_line("status", status, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// TaskOutput 工具展开渲染
+fn render_task_output_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(task_id) = parsed.get("task_id").and_then(|v| v.as_str()) {
+        render_kv_line("task_id", task_id, content_w, lines, theme);
+    }
+
+    // block
+    if let Some(block) = parsed.get("block").and_then(|v| v.as_bool()) {
+        render_kv_line(
+            "block",
+            if block {
+                "true (等待完成)"
+            } else {
+                "false (非阻塞)"
+            },
+            content_w,
+            lines,
+            theme,
+        );
+    }
+
+    // timeout
+    if let Some(timeout) = parsed.get("timeout").and_then(|v| v.as_u64()) {
+        render_kv_line(
+            "timeout",
+            &format!("{}ms", timeout),
+            content_w,
+            lines,
+            theme,
+        );
+    }
+
+    true
+}
+
+/// WebSearch 工具展开渲染
+fn render_web_search_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(query) = parsed.get("query").and_then(|v| v.as_str()) {
+        render_kv_line("query", query, content_w, lines, theme);
+    }
+
+    if let Some(count) = parsed.get("count").and_then(|v| v.as_u64()) {
+        render_kv_line("count", &count.to_string(), content_w, lines, theme);
+    }
+
+    if let Some(search_type) = parsed.get("type").and_then(|v| v.as_str()) {
+        render_kv_line("type", search_type, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// WebFetch 工具展开渲染
+fn render_web_fetch_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(url) = parsed.get("url").and_then(|v| v.as_str()) {
+        render_kv_line("url", url, content_w, lines, theme);
+    }
+
+    if let Some(mode) = parsed.get("extract_mode").and_then(|v| v.as_str()) {
+        render_kv_line("mode", mode, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// Browser 工具展开渲染
+fn render_browser_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(action) = parsed.get("action").and_then(|v| v.as_str()) {
+        render_kv_line("action", action, content_w, lines, theme);
+    }
+
+    if let Some(url) = parsed.get("url").and_then(|v| v.as_str()) {
+        render_kv_line("url", url, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// Ask 工具展开渲染
+fn render_ask_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(questions) = parsed.get("questions").and_then(|v| v.as_array()) {
+        for (i, q) in questions.iter().enumerate() {
+            let question_text = q.get("question").and_then(|v| v.as_str()).unwrap_or("?");
+            let header = q
+                .get("header")
+                .and_then(|v| v.as_str())
+                .unwrap_or("question");
+
+            // 问题标签
+            let label = if questions.len() > 1 {
+                format!("Q{} [{}]", i + 1, header)
+            } else {
+                header.to_string()
+            };
+            render_kv_line(&label, question_text, content_w, lines, theme);
+
+            // 选项预览
+            if let Some(options) = q.get("options").and_then(|v| v.as_array()) {
+                let opts_preview: Vec<String> = options
+                    .iter()
+                    .filter_map(|o| o.get("label").and_then(|l| l.as_str()).map(String::from))
+                    .collect();
+                if !opts_preview.is_empty() {
+                    render_kv_line(
+                        "options",
+                        &opts_preview.join(" / "),
+                        content_w,
+                        lines,
+                        theme,
+                    );
+                }
+            }
+        }
+    }
+
+    true
+}
+
+/// TodoWrite 工具展开渲染
+fn render_todo_write_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(todos) = parsed.get("todos").and_then(|v| v.as_array()) {
+        render_tag_line(
+            &format!("待办列表 ({} 项)", todos.len()),
+            content_w,
+            lines,
+            theme,
+        );
+        for todo in todos {
+            let content = todo.get("content").and_then(|v| v.as_str()).unwrap_or("?");
+            let status = todo
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("pending");
+            let bullet = match status {
+                "completed" => "[x]",
+                "in_progress" => "[~]",
+                "cancelled" => "[-]",
+                _ => "[ ]",
+            };
+            let line_text = format!("{} {}", bullet, content);
+            let display = truncate_str(&line_text, content_w);
+            lines.push(Line::from(vec![
+                Span::styled("      ", Style::default()),
+                Span::styled(display, Style::default().fg(theme.text_dim)),
+            ]));
+        }
+    }
+
+    true
+}
+
+/// TodoRead 工具展开渲染
+fn render_todo_read_call_request_expanded(
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    render_tag_line("读取待办列表", content_w, lines, theme);
+    true
+}
+
+/// Compact 工具展开渲染
+fn render_compact_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    render_tag_line("压缩对话上下文", content_w, lines, theme);
+
+    if let Some(focus) = parsed.get("focus").and_then(|v| v.as_str()) {
+        render_kv_line("focus", focus, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// EnterPlanMode 工具展开渲染
+fn render_enter_plan_mode_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    render_tag_line("进入计划模式（只读模式）", content_w, lines, theme);
+
+    if let Some(desc) = parsed.get("description").and_then(|v| v.as_str()) {
+        render_kv_line("plan", desc, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// LoadSkill 工具展开渲染
+fn render_load_skill_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let name = parsed
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    render_tag_line(&format!("加载技能: {}", name), content_w, lines, theme);
+
+    if let Some(args) = parsed.get("arguments").and_then(|v| v.as_str()) {
+        render_kv_line("arguments", args, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// RegisterHook 工具展开渲染
+fn render_register_hook_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let action = parsed
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("register");
+    render_tag_line(&format!("[{}]", action), content_w, lines, theme);
+
+    if let Some(event) = parsed.get("event").and_then(|v| v.as_str()) {
+        render_kv_line("event", event, content_w, lines, theme);
+    }
+
+    if let Some(hook_type) = parsed.get("type").and_then(|v| v.as_str()) {
+        render_kv_line("type", hook_type, content_w, lines, theme);
+    }
+
+    if let Some(command) = parsed.get("command").and_then(|v| v.as_str()) {
+        render_kv_line("command", command, content_w, lines, theme);
+    }
+
+    if let Some(prompt) = parsed.get("prompt").and_then(|v| v.as_str()) {
+        render_kv_line(
+            "prompt",
+            &truncate_str(prompt, 100),
+            content_w,
+            lines,
+            theme,
+        );
+    }
+
+    true
+}
+
+/// SendMessage 工具展开渲染
+fn render_send_message_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let to = parsed.get("to").and_then(|v| v.as_str());
+    if let Some(target) = to {
+        render_kv_line("to", &format!("@{}", target), content_w, lines, theme);
+    } else {
+        render_tag_line("广播消息", content_w, lines, theme);
+    }
+
+    if let Some(message) = parsed.get("message").and_then(|v| v.as_str()) {
+        render_kv_line(
+            "message",
+            &truncate_str(message, 100),
+            content_w,
+            lines,
+            theme,
+        );
+    }
+
+    true
+}
+
+/// EnterWorktree / ExitWorktree 工具展开渲染
+fn render_worktree_call_request_expanded(
+    tool_name: &str,
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if tool_name == tool_names::ENTER_WORKTREE {
+        render_tag_line("进入隔离工作树", content_w, lines, theme);
+        if let Some(name) = parsed.get("name").and_then(|v| v.as_str()) {
+            render_kv_line("name", name, content_w, lines, theme);
+        }
+    } else {
+        let action = parsed
+            .get("action")
+            .and_then(|v| v.as_str())
+            .unwrap_or("keep");
+        render_tag_line("退出工作树", content_w, lines, theme);
+        render_kv_line("action", action, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// WorkDone 工具展开渲染
+fn render_work_done_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    render_tag_line("工作完成声明", content_w, lines, theme);
+
+    if let Some(summary) = parsed.get("summary").and_then(|v| v.as_str()) {
+        render_kv_line("summary", summary, content_w, lines, theme);
+    }
+
+    true
+}
+
+/// IgnoreMessage 工具展开渲染
+fn render_ignore_message_call_request_expanded(
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    render_tag_line("忽略消息", content_w, lines, theme);
+    true
+}
+
+/// ComputerUse 工具展开渲染
+fn render_computer_use_call_request_expanded(
+    arguments: &str,
+    content_w: usize,
+    lines: &mut Vec<Line<'static>>,
+    theme: &Theme,
+) -> bool {
+    let parsed = match serde_json::from_str::<serde_json::Value>(arguments) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    if let Some(action) = parsed.get("action").and_then(|v| v.as_str()) {
+        render_kv_line("action", action, content_w, lines, theme);
+    }
+
+    if let Some(display_num) = parsed.get("display_number").and_then(|v| v.as_u64()) {
+        render_kv_line("display", &display_num.to_string(), content_w, lines, theme);
+    }
+
+    true
 }
