@@ -24,7 +24,7 @@
 - [ ] `command/chat/tools/sub_agent.rs:run_sub_agent_loop` — 318行, 5参数
 - [ ] `command/chat/infra/hook/manager.rs:execute` — 313行, 4参数
 - [ ] `command/chat/tools/teammate_tool.rs:execute` — 271行, 2参数
-- [ ] `command/chat/tools/grep.rs:execute` — 258行, 2参数
+- [x] `command/chat/tools/grep.rs:execute` — 258行, 2参数 *(已拆分：提取 `build_file_walker` / `search_single_file` / `build_content_line` / `format_grep_output` 等 8 个辅助函数，execute 主体缩减至 ~60 行)*
 - [ ] `command/chat/render/cache/tool_call_render.rs:render_tool_call_request_msg` — 258行, 4参数
 - [ ] `interactive/parser.rs:parse_interactive_command` — 230行, 1参数
 - [ ] `command/notebook/app.rs:handle_input_mode` — 229行, 2参数

@@ -3,6 +3,7 @@ use super::{
     schema_to_tool_params,
 };
 use ignore::WalkBuilder;
+use regex::Regex;
 use regex::RegexBuilder;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -92,7 +93,6 @@ impl Tool for GrepTool {
             Err(e) => return e,
         };
 
-        // 构建正则表达式
         let re = match RegexBuilder::new(&params.pattern)
             .case_insensitive(params.ignore_case)
             .build()
@@ -108,7 +108,6 @@ impl Tool for GrepTool {
             }
         };
 
-        // 搜索路径
         let search_path_str = params
             .path
             .as_deref()
@@ -117,43 +116,15 @@ impl Tool for GrepTool {
             .unwrap_or_else(effective_cwd);
         let search_path = Path::new(&search_path_str);
 
-        // glob 过滤
-        let glob_pattern = params.glob.as_deref();
-
-        // 文件类型过滤
         let type_extensions: Vec<&str> = params
             .file_type
             .as_deref()
             .map(get_extensions_for_type)
             .unwrap_or_default();
 
-        // 构建文件遍历器（自动处理 .gitignore）
-        let mut walker = WalkBuilder::new(search_path);
-        walker
-            .hidden(false) // 搜索隐藏文件
-            .git_ignore(true) // 尊重 .gitignore
-            .git_global(true)
-            .git_exclude(true);
+        let walker = build_file_walker(search_path, params.glob.as_deref());
 
-        // 应用 glob 过滤
-        if let Some(glob) = glob_pattern.and_then(|g| glob::Pattern::new(g).ok()) {
-            let globber = std::sync::Arc::new(glob);
-            walker.filter_entry(move |entry| {
-                let path = entry.path();
-                if path.is_dir() {
-                    return true;
-                }
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    return globber.matches(name);
-                }
-                false
-            });
-        }
-
-        // 收集结果
-        let mut matches: Vec<String> = Vec::new();
-        let mut file_matches: Vec<String> = Vec::new();
-        let mut total_count: usize = 0;
+        let mut results = SearchResults::default();
 
         for entry in walker.build() {
             if cancelled.load(Ordering::Relaxed) {
@@ -175,179 +146,263 @@ impl Tool for GrepTool {
                 continue;
             }
 
-            // 文件类型过滤
-            if !type_extensions.is_empty() {
-                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if !type_extensions.iter().any(|&e| e == ext || e == filename) {
-                    continue;
-                }
+            if !type_extensions.is_empty() && !matches_file_type(path, &type_extensions) {
+                continue;
             }
 
-            // 检查 head_limit（对于 files_with_matches 模式）
+            // 提前终止：files_with_matches 模式已收集够
             if params.output_mode == "files_with_matches"
                 && params
                     .head_limit
-                    .map(|l| file_matches.len() >= l)
-                    .unwrap_or(false)
+                    .is_some_and(|l| results.file_entries.len() >= l)
             {
                 break;
             }
 
-            // 读取文件并搜索
-            let file = match File::open(path) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-
-            let reader = BufReader::new(file);
-            let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
-            let path_str = path.display().to_string();
-
-            let mut file_has_match = false;
-            let mut file_count = 0;
-
-            for (line_num, line) in lines.iter().enumerate() {
-                if re.is_match(line) {
-                    file_has_match = true;
-                    file_count += 1;
-                    total_count += 1;
-
-                    if params.output_mode == "content" {
-                        // 检查 head_limit
-                        if params
-                            .head_limit
-                            .map(|l| matches.len() >= l)
-                            .unwrap_or(false)
-                        {
-                            break;
-                        }
-
-                        let mut result_line = format!("{}:{}:{}", path_str, line_num + 1, line);
-
-                        // 添加上下文
-                        if params.context > 0 {
-                            let start = line_num.saturating_sub(params.context);
-                            let end = (line_num + params.context + 1).min(lines.len());
-                            let mut context_lines = Vec::new();
-                            for (i, ctx_line) in lines.iter().enumerate().take(end).skip(start) {
-                                if i != line_num {
-                                    context_lines.push(format!(
-                                        "{}-{}:{}",
-                                        path_str,
-                                        i + 1,
-                                        ctx_line
-                                    ));
-                                }
-                            }
-                            if !context_lines.is_empty() {
-                                result_line =
-                                    format!("{}\n{}", result_line, context_lines.join("\n"));
-                            }
-                        }
-
-                        matches.push(result_line);
-                    }
-                }
-            }
-
-            if params.output_mode == "files_with_matches" && file_has_match {
-                file_matches.push(path_str);
-            } else if params.output_mode == "count" && file_count > 0 {
-                file_matches.push(format!("{}:{}", path_str, file_count));
-            }
+            search_single_file(
+                path,
+                &re,
+                &params.output_mode,
+                params.context,
+                params.head_limit,
+                &mut results,
+            );
         }
 
-        // 构建输出
-        if params.output_mode == "files_with_matches" {
-            if file_matches.is_empty() {
-                return ToolResult {
-                    output: format!("未找到匹配 '{}' 的文件", params.pattern),
-                    is_error: false,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                };
-            }
-            let total = file_matches.len();
-            let results: Vec<&str> = file_matches
-                .iter()
-                .skip(params.offset)
-                .take(params.head_limit.unwrap_or(usize::MAX))
-                .map(String::as_str)
-                .collect();
-            let mut output = format!("找到 {} 个匹配文件", total);
-            if params.offset > 0 || results.len() < total {
-                output.push_str(&format!(
-                    "（显示 {}-{} 项，共 {} 项）",
-                    params.offset + 1,
-                    params.offset + results.len(),
-                    total
-                ));
-            }
-            output.push_str(":\n\n");
-            output.push_str(&results.join("\n"));
-            ToolResult {
-                output,
-                is_error: false,
-                images: vec![],
-                plan_decision: PlanDecision::None,
-            }
-        } else if params.output_mode == "count" {
-            if file_matches.is_empty() {
-                return ToolResult {
-                    output: format!("未找到匹配 '{}' 的内容", params.pattern),
-                    is_error: false,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                };
-            }
-            let mut output = format!("共 {} 处匹配:\n\n", total_count);
-            output.push_str(&file_matches.join("\n"));
-            ToolResult {
-                output,
-                is_error: false,
-                images: vec![],
-                plan_decision: PlanDecision::None,
-            }
-        } else {
-            if matches.is_empty() {
-                return ToolResult {
-                    output: format!("未找到匹配 '{}' 的内容", params.pattern),
-                    is_error: false,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                };
-            }
-            let total = matches.len();
-            let results: Vec<&str> = matches
-                .iter()
-                .skip(params.offset)
-                .take(params.head_limit.unwrap_or(usize::MAX))
-                .map(String::as_str)
-                .collect();
-            let mut output = format!("找到 {} 个匹配", total);
-            if params.offset > 0 || results.len() < total {
-                output.push_str(&format!(
-                    "（显示 {}-{} 项，共 {} 项）",
-                    params.offset + 1,
-                    params.offset + results.len(),
-                    total
-                ));
-            }
-            output.push_str(":\n\n");
-            output.push_str(&results.join("\n"));
-            ToolResult {
-                output,
-                is_error: false,
-                images: vec![],
-                plan_decision: PlanDecision::None,
-            }
-        }
+        format_grep_output(&params, &results)
     }
 
     fn requires_confirmation(&self) -> bool {
         false
     }
+}
+
+// ========== Search Result Types ==========
+
+/// 搜索过程中收集的原始结果
+#[derive(Default)]
+struct SearchResults {
+    /// content 模式下每个匹配行（含行号、上下文等）
+    line_matches: Vec<String>,
+    /// files_with_matches 模式下匹配的文件路径；count 模式下为 "path:count"
+    file_entries: Vec<String>,
+    /// count 模式下的总匹配数
+    total_count: usize,
+}
+
+// ========== Search Helpers ==========
+
+/// 构建文件遍历器（自动处理 .gitignore）
+fn build_file_walker(root: &Path, glob_pattern: Option<&str>) -> WalkBuilder {
+    let mut walker = WalkBuilder::new(root);
+    walker
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true);
+
+    if let Some(glob) = glob_pattern.and_then(|g| glob::Pattern::new(g).ok()) {
+        let globber = Arc::new(glob);
+        walker.filter_entry(move |entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                return true;
+            }
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|name| globber.matches(name))
+        });
+    }
+
+    walker
+}
+
+/// 判断文件扩展名或文件名是否匹配给定的类型列表
+fn matches_file_type(path: &Path, type_extensions: &[&str]) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    type_extensions.iter().any(|&e| e == ext || e == filename)
+}
+
+/// 在单个文件中搜索正则匹配，将结果写入 `results`
+fn search_single_file(
+    path: &Path,
+    re: &Regex,
+    output_mode: &str,
+    context: usize,
+    head_limit: Option<usize>,
+    results: &mut SearchResults,
+) {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    let reader = BufReader::new(file);
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    let path_str = path.display().to_string();
+
+    let mut file_has_match = false;
+    let mut file_count = 0;
+
+    for (line_num, line) in lines.iter().enumerate() {
+        if !re.is_match(line) {
+            continue;
+        }
+
+        file_has_match = true;
+        file_count += 1;
+        results.total_count += 1;
+
+        if output_mode == "content" {
+            if head_limit.is_some_and(|l| results.line_matches.len() >= l) {
+                break;
+            }
+
+            let result_line = build_content_line(&path_str, line_num, line, &lines, context);
+            results.line_matches.push(result_line);
+        }
+    }
+
+    if output_mode == "files_with_matches" && file_has_match {
+        results.file_entries.push(path_str);
+    } else if output_mode == "count" && file_count > 0 {
+        results
+            .file_entries
+            .push(format!("{}:{}", path_str, file_count));
+    }
+}
+
+/// 构建单行 content 匹配结果（可选上下文行）
+fn build_content_line(
+    path_str: &str,
+    line_num: usize,
+    line: &str,
+    all_lines: &[String],
+    context: usize,
+) -> String {
+    let mut result_line = format!("{}:{}:{}", path_str, line_num + 1, line);
+
+    if context > 0 {
+        let start = line_num.saturating_sub(context);
+        let end = (line_num + context + 1).min(all_lines.len());
+        let ctx_lines: Vec<String> = all_lines
+            .iter()
+            .enumerate()
+            .take(end)
+            .skip(start)
+            .filter(|(i, _)| *i != line_num)
+            .map(|(i, l)| format!("{}-{}:{}", path_str, i + 1, l))
+            .collect();
+
+        if !ctx_lines.is_empty() {
+            result_line = format!("{}\n{}", result_line, ctx_lines.join("\n"));
+        }
+    }
+
+    result_line
+}
+
+// ========== Output Formatting ==========
+
+/// 根据输出模式格式化搜索结果
+fn format_grep_output(params: &GrepParams, results: &SearchResults) -> ToolResult {
+    match params.output_mode.as_str() {
+        "files_with_matches" => format_file_matches(params, &results.file_entries),
+        "count" => format_count_output(params, &results.file_entries, results.total_count),
+        _ => format_content_output(params, &results.line_matches),
+    }
+}
+
+/// files_with_matches 模式输出
+fn format_file_matches(params: &GrepParams, file_matches: &[String]) -> ToolResult {
+    if file_matches.is_empty() {
+        return empty_result(&params.pattern, "文件");
+    }
+    let output = paginate_and_format(
+        "找到 {} 个匹配文件",
+        file_matches,
+        params.offset,
+        params.head_limit,
+    );
+    ToolResult {
+        output,
+        is_error: false,
+        images: vec![],
+        plan_decision: PlanDecision::None,
+    }
+}
+
+/// count 模式输出
+fn format_count_output(
+    params: &GrepParams,
+    file_matches: &[String],
+    total_count: usize,
+) -> ToolResult {
+    if file_matches.is_empty() {
+        return empty_result(&params.pattern, "内容");
+    }
+    let mut output = format!("共 {} 处匹配:\n\n", total_count);
+    output.push_str(&file_matches.join("\n"));
+    ToolResult {
+        output,
+        is_error: false,
+        images: vec![],
+        plan_decision: PlanDecision::None,
+    }
+}
+
+/// content 模式输出
+fn format_content_output(params: &GrepParams, matches: &[String]) -> ToolResult {
+    if matches.is_empty() {
+        return empty_result(&params.pattern, "内容");
+    }
+    let output = paginate_and_format("找到 {} 个匹配", matches, params.offset, params.head_limit);
+    ToolResult {
+        output,
+        is_error: false,
+        images: vec![],
+        plan_decision: PlanDecision::None,
+    }
+}
+
+/// 无匹配时的通用结果
+fn empty_result(pattern: &str, kind: &str) -> ToolResult {
+    ToolResult {
+        output: format!("未找到匹配 '{}' 的{}", pattern, kind),
+        is_error: false,
+        images: vec![],
+        plan_decision: PlanDecision::None,
+    }
+}
+
+/// 对列表分页并格式化输出（用于 files_with_matches / content 模式共用）
+fn paginate_and_format(
+    header_fmt: &str,
+    items: &[String],
+    offset: usize,
+    head_limit: Option<usize>,
+) -> String {
+    let total = items.len();
+    let results: Vec<&str> = items
+        .iter()
+        .skip(offset)
+        .take(head_limit.unwrap_or(usize::MAX))
+        .map(String::as_str)
+        .collect();
+
+    let mut output = header_fmt.replace("{}", &total.to_string());
+    if offset > 0 || results.len() < total {
+        output.push_str(&format!(
+            "（显示 {}-{} 项，共 {} 项）",
+            offset + 1,
+            offset + results.len(),
+            total
+        ));
+    }
+    output.push_str(":\n\n");
+    output.push_str(&results.join("\n"));
+    output
 }
 
 /// 文件类型到扩展名的映射
