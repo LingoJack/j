@@ -109,7 +109,6 @@ pub fn render_user_msg(
     let lines = &mut *ctx.lines;
     let theme = ctx.theme;
     let bubble_max_width = ctx.bubble_max_width;
-    lines.push(Line::from(""));
     let label = if is_selected { "▶ You " } else { "You " };
     let pad = inner_width.saturating_sub(display_width(label) + 2);
     lines.push(Line::from(vec![
@@ -125,6 +124,8 @@ pub fn render_user_msg(
                 .add_modifier(Modifier::BOLD),
         ),
     ]));
+    // label 与气泡之间留一空行，避免视觉拥挤
+    lines.push(Line::from(""));
     let user_bg = if is_selected {
         theme.bubble_user_selected
     } else {
@@ -219,8 +220,6 @@ pub fn render_assistant_msg(
 
     let is_teammate = agent_name != "Sprite";
 
-    lines.push(Line::from(""));
-
     // 标签行：左边距 + `▶ AgentName` 或 `AgentName`
     let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
     let label = if is_selected {
@@ -241,6 +240,9 @@ pub fn render_assistant_msg(
             .fg(label_color)
             .add_modifier(Modifier::BOLD),
     )));
+
+    // label 与气泡之间留一空行，避免视觉拥挤
+    lines.push(Line::from(""));
 
     let bubble_bg = if is_selected {
         theme.bubble_ai_selected
