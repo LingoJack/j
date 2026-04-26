@@ -16,7 +16,7 @@ use crate::util::safe_lock;
 use std::sync::atomic::Ordering;
 
 impl ChatApp {
-    /// 将 session.messages 中尚未持久化的新消息追加到 JSONL（按 turn 原子提交）。
+    /// 将 context_messages 中尚未持久化的新消息追加到 JSONL（按 turn 原子提交）。
     ///
     /// 从 `persisted_message_count` 开始扫描未持久化区间，只 append 到最后一个
     /// "安全切点"——该位置之前的每一条 `assistant(tool_calls)` 都已配齐对应数量的
@@ -24,14 +24,14 @@ impl ChatApp {
     /// 孤立的 tool_call 或 tool_result。
     pub(super) fn persist_new_messages(&mut self) {
         let start = self.persisted_message_count;
-        let all = &self.state.session.messages;
-        if start >= all.len() {
+        let context = safe_lock(&self.context_messages, "persist_new_messages");
+        if start >= context.len() {
             return;
         }
 
         let mut pending: i64 = 0;
         let mut last_safe = start;
-        for (i, msg) in all[start..].iter().enumerate() {
+        for (i, msg) in context[start..].iter().enumerate() {
             let abs = start + i;
             match msg.role {
                 MessageRole::Assistant => {
@@ -58,7 +58,9 @@ impl ChatApp {
         }
 
         if last_safe > start {
-            let msgs: Vec<_> = all[start..last_safe].to_vec();
+            let msgs: Vec<_> = context[start..last_safe].to_vec();
+            // 释放锁再写磁盘
+            drop(context);
             for msg in msgs {
                 append_session_event(&self.session_id, &SessionEvent::msg(msg));
             }
@@ -331,7 +333,6 @@ impl ChatApp {
 
     /// 清空对话（创建新会话）
     pub fn clear_session(&mut self) {
-        self.sync_context_to_session();
         self.persist_new_messages();
         self.persist_new_display_messages();
         self.save_session_state();
@@ -341,7 +342,6 @@ impl ChatApp {
         if let Ok(mut s) = self.shared_session_id.lock() {
             *s = new_id.clone();
         }
-        self.state.session.messages.clear();
         self.clear_channels();
         self.persisted_message_count = 0;
         self.persisted_display_count = 0;
@@ -356,14 +356,11 @@ impl ChatApp {
         self.show_toast("已创建新对话", false);
     }
 
-    /// 从 session.messages 重建双通道（会话恢复/归档还原后调用）。
-    /// 从 session.messages（context 格式）重建双通道。
+    /// 从加载的 context 消息重建双通道（会话恢复/切换/归档还原后调用）。
     ///
     /// 优先从 display.jsonl 读取 display 消息（独立格式，支持 tool_calls 结构体）；
     /// 旧 session 无 display.jsonl 时，从 context 格式反推（strip XML 包裹）。
-    pub fn rebuild_channels_from_session(&mut self) {
-        let messages = std::mem::take(&mut self.state.session.messages);
-
+    pub fn rebuild_channels_from_loaded(&mut self, messages: Vec<ChatMessage>) {
         // 尝试从 display.jsonl 加载
         let display = load_display_session(&self.session_id);
 
@@ -397,8 +394,7 @@ impl ChatApp {
 
         let ctx_len = safe_lock(&self.context_messages, "rebuild_channels::len").len();
         let disp_len = safe_lock(&self.display_messages, "rebuild_channels::disp_len").len();
-        self.state.session.messages =
-            safe_lock(&self.context_messages, "rebuild_channels::restore").clone();
+        self.persisted_message_count = ctx_len;
         self.display_read_offset = disp_len;
         self.context_read_offset = ctx_len;
         self.persisted_display_count = disp_len;

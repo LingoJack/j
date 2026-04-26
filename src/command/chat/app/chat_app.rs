@@ -23,7 +23,7 @@ use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::{ToolConfirmInfo, WsOutbound};
 use crate::command::chat::storage::MessageRole;
 use crate::command::chat::storage::{
-    ChatMessage, ChatSession, ModelProvider, delete_session, generate_session_id, list_sessions,
+    ChatMessage, ModelProvider, delete_session, generate_session_id, list_sessions,
     load_agent_config, load_session, memory_path, save_agent_config, save_memory, save_soul,
     save_system_prompt, session_file_path, soul_path, system_prompt_path,
 };
@@ -98,7 +98,7 @@ pub struct ChatApp {
     /// UI 侧已读取到的位置（用于增量检测）
     pub display_read_offset: usize,
     /// Agent/Teammate → LLM context 同步通道
-    /// `poll_stream_actions` 从此增量同步到 `session.messages`。
+    /// `persist_new_messages` 直接从此通道读取并持久化到 transcript.jsonl。
     /// 只有需要进入 Main Agent LLM context 的消息才写入此通道。
     pub context_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// context 侧已读取到的位置（用于增量检测）
@@ -179,7 +179,6 @@ impl ChatApp {
         }
 
         // 每次启动创建全新会话（session_id 由调用方生成）
-        let session = ChatSession::default();
         let mut model_list_state = ListState::default();
         if !agent_config.providers.is_empty() {
             model_list_state.select(Some(agent_config.active_index));
@@ -546,7 +545,6 @@ impl ChatApp {
             },
             state: ChatState {
                 agent_config,
-                session,
                 streaming_content: Arc::new(Mutex::new(String::new())),
                 streaming_reasoning_content: Arc::new(Mutex::new(String::new())),
                 is_loading: false,
@@ -599,7 +597,9 @@ impl ChatApp {
             if should_fire {
                 let ctx = HookContext {
                     event: HookEvent::SessionStart,
-                    messages: Some(new_app.state.session.messages.clone()),
+                    messages: Some(
+                        safe_lock(&new_app.context_messages, "SessionStart::ctx_msgs").clone(),
+                    ),
                     session_id: Some(new_app.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
@@ -804,8 +804,8 @@ impl ChatApp {
             Action::StreamCompacted { messages_before: _ } => {
                 self.state.retry_hint = None;
                 // auto_compact 后双通道均被 clear+re-push，更新 offset 即可。
-                // - display_messages → UI 渲染（直接读，不中转 session.messages）
-                // - context_messages → LLM context + session.messages（持久化）
+                // - display_messages → UI 渲染
+                // - context_messages → LLM context + 持久化
                 {
                     let display = crate::util::safe_lock(
                         &self.display_messages,
@@ -814,7 +814,6 @@ impl ChatApp {
                     self.display_read_offset = display.len();
                     let shared =
                         crate::util::safe_lock(&self.context_messages, "StreamCompacted::sync_ctx");
-                    self.state.session.messages = shared.clone();
                     self.context_read_offset = shared.len();
                 }
                 self.ui.msg_lines_cache = None;
@@ -1807,22 +1806,19 @@ impl ChatApp {
                         });
                     } else {
                         // 保存当前会话（消息 + 状态）
-                        self.sync_context_to_session();
                         self.persist_new_messages();
                         self.persist_new_display_messages();
                         self.save_session_state();
                         // 清除运行时状态
                         self.clear_runtime_state();
                         // 加载目标会话
-                        let session = load_session(&session_id);
+                        let messages = load_session(&session_id);
                         self.session_id = session_id.clone();
                         if let Ok(mut s) = self.shared_session_id.lock() {
                             *s = session_id.clone();
                         }
-                        self.persisted_message_count = session.messages.len();
-                        self.state.session = session;
-                        // 重建双通道（从 session.messages → display + context）
-                        self.rebuild_channels_from_session();
+                        // 重建双通道（从加载的消息 → display + context）
+                        self.rebuild_channels_from_loaded(messages);
                         // 恢复目标会话的状态
                         self.restore_session_state();
                         self.ui.scroll_offset = 0;
@@ -1848,7 +1844,6 @@ impl ChatApp {
                     });
                 } else {
                     // 保存当前会话（消息 + 状态）
-                    self.sync_context_to_session();
                     self.persist_new_messages();
                     self.persist_new_display_messages();
                     self.save_session_state();
@@ -1860,7 +1855,6 @@ impl ChatApp {
                     if let Ok(mut s) = self.shared_session_id.lock() {
                         *s = new_id.clone();
                     }
-                    self.state.session.messages.clear();
                     self.clear_channels();
                     self.persisted_message_count = 0;
                     self.persisted_display_count = 0;
@@ -1914,15 +1908,13 @@ impl ChatApp {
                     // 清除运行时状态
                     self.clear_runtime_state();
                     // 加载目标会话
-                    let session = load_session(&target_id);
-                    self.persisted_message_count = session.messages.len();
+                    let messages = load_session(&target_id);
                     self.session_id = target_id.clone();
                     if let Ok(mut s) = self.shared_session_id.lock() {
                         *s = target_id;
                     }
-                    self.state.session = session;
-                    // 重建双通道（从 session.messages → display + context）
-                    self.rebuild_channels_from_session();
+                    // 重建双通道（从加载的消息 → display + context）
+                    self.rebuild_channels_from_loaded(messages);
                     // 恢复目标会话的状态
                     self.restore_session_state();
                     self.ui.scroll_offset = u16::MAX;
@@ -1957,7 +1949,6 @@ impl ChatApp {
             }
             Action::NewSessionFromList => {
                 // 保存当前会话（消息 + 状态）
-                self.sync_context_to_session();
                 self.persist_new_messages();
                 self.persist_new_display_messages();
                 self.save_session_state();
@@ -1968,7 +1959,6 @@ impl ChatApp {
                 if let Ok(mut s) = self.shared_session_id.lock() {
                     *s = new_id;
                 }
-                self.state.session.messages.clear();
                 self.clear_channels();
                 self.persisted_message_count = 0;
                 self.persisted_display_count = 0;
@@ -2087,15 +2077,13 @@ impl ChatApp {
             // ========== 快速操作 ==========
             Action::CopyLastAiReply => {
                 use crate::command::chat::render::cache::copy_to_clipboard;
-                if let Some(last_ai) = self
-                    .state
-                    .session
-                    .messages
+                let last_ai_content = safe_lock(&self.context_messages, "CopyLastAiReply")
                     .iter()
                     .rev()
                     .find(|m| m.role == MessageRole::Assistant)
-                {
-                    if copy_to_clipboard(&last_ai.content) {
+                    .map(|m| m.content.clone());
+                if let Some(content) = last_ai_content {
+                    if copy_to_clipboard(&content) {
                         self.show_toast("已复制最后一条 AI 回复", false);
                     } else {
                         self.show_toast("复制到剪切板失败", true);
@@ -2197,10 +2185,7 @@ impl ChatApp {
     /// 构建全量同步消息（复用于 Sync / SwitchSession / NewSession）
     pub fn build_sync_outbound(&self) -> WsOutbound {
         use crate::command::chat::remote::protocol::{SyncMessage, SyncToolCall};
-        let messages: Vec<SyncMessage> = self
-            .state
-            .session
-            .messages
+        let messages: Vec<SyncMessage> = safe_lock(&self.context_messages, "build_sync_outbound")
             .iter()
             .map(|m| SyncMessage {
                 role: m.role.to_string(),
@@ -2254,11 +2239,9 @@ impl ChatApp {
         );
 
         if self.state.is_loading {
-            // agent loop 运行中：追加到 pending 队列，下一轮 loop 会处理
-            self.state
-                .session
-                .messages
-                .push(ChatMessage::text(MessageRole::User, &text));
+            // agent loop 运行中：追加到 pending 队列 + 双通道，下一轮 loop 会处理
+            let user_msg = ChatMessage::text(MessageRole::User, &text);
+            self.push_both_channels(user_msg);
             {
                 let mut pending = crate::util::safe_lock(
                     &self.state.pending_user_messages,

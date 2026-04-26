@@ -125,7 +125,7 @@ pub fn build_message_lines_incremental(
     let t = &app.ui.theme;
     let is_browse_mode = app.ui.mode == ChatMode::Browse;
 
-    // ★ UI 渲染从 display_messages 读取（干净文本 + sender_name），不从 session.messages
+    // ★ UI 渲染从 display_messages 读取（干净文本 + sender_name）
     let display_msgs = safe_lock(&app.display_messages, "render_cache::display_msgs");
     let msg_count = display_msgs.len();
     let mut current_line_offset: usize = 0;

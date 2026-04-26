@@ -298,13 +298,11 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     if app.state.agent_config.auto_restore_session
         && let Some(latest_id) = super::super::storage::find_latest_session_id()
     {
-        let session = super::super::storage::load_session(&latest_id);
-        if !session.messages.is_empty() {
+        let messages = super::super::storage::load_session(&latest_id);
+        if !messages.is_empty() {
             app.session_id = latest_id;
-            app.persisted_message_count = session.messages.len();
-            app.state.session = session;
-            // 重建双通道（从 session.messages → display + context）
-            app.rebuild_channels_from_session();
+            // 重建双通道（从加载的消息 → display + context）
+            app.rebuild_channels_from_loaded(messages);
             // 恢复 session 状态（tasks/todos/skills/hooks/teammates 等）
             app.restore_session_state();
             app.ui.scroll_offset = u16::MAX; // 滚动到底部
@@ -418,7 +416,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
         // Phase 2c: main agent 空闲时，检测 teammate 唤醒信号并触发新 agent loop
         // teammate 通过 broadcast 向 main_agent_inbox 注入轻量唤醒信号，该 Arc 与 pending_user_messages 共享。
-        // 广播内容已通过 display_messages → poll_stream_actions → session.messages 同步。
+        // 广播内容已通过 push_both 写入双通道。
         // 如果 main agent 已结束 agent loop（is_loading=false），inbox 中的信号无人消费，
         // 需要在此唤醒 main agent 响应 teammate 消息。
         if !app.state.is_loading {
@@ -716,12 +714,13 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
     input_thread.shutdown();
 
     // ★ 保存会话状态（非空会话才保存）
-    if !app.state.session.messages.is_empty() {
+    let is_empty = safe_lock(&app.display_messages, "tui_exit::empty").is_empty();
+    if !is_empty {
         app.save_session_state();
     }
 
     // ★ 空会话不保存：删除无消息的 session 文件
-    if app.state.session.messages.is_empty() {
+    if is_empty {
         super::super::storage::delete_session(&app.session_id);
     }
 
@@ -746,7 +745,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
         if has_hooks {
             let ctx = HookContext {
                 event: HookEvent::SessionEnd,
-                messages: Some(app.state.session.messages.clone()),
+                messages: Some(safe_lock(&app.context_messages, "SessionEnd::ctx_msgs").clone()),
                 session_id: Some(app.session_id.clone()),
                 cwd: std::env::current_dir()
                     .map(|p| p.display().to_string())

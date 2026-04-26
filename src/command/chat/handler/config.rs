@@ -1,5 +1,6 @@
 use super::super::storage::save_agent_config;
 use crate::command::chat::app::{Action, ChatApp, ConfigTab, CursorDirection};
+use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// 配置模式按键处理（Tab 感知）
@@ -284,7 +285,7 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
                         if app.ui.archives.is_empty() {
                             return;
                         }
-                        if !app.state.session.messages.is_empty() {
+                        if !safe_lock(&app.display_messages, "config::restore_confirm").is_empty() {
                             app.ui.restore_confirm_needed = true;
                             return;
                         }
@@ -324,7 +325,7 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
                         if app.ui.session_list.is_empty() {
                             return;
                         }
-                        if !app.state.session.messages.is_empty() {
+                        if !safe_lock(&app.display_messages, "config::restore_confirm").is_empty() {
                             app.ui.session_restore_confirm = true;
                             return;
                         }

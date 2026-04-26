@@ -20,10 +20,9 @@ impl ChatApp {
         //
         // **设计说明**：
         // - `display_messages`：UI 渲染数据源（干净文本 + sender_name 字段），
-        //   `build_message_lines_incremental` 直接读取，不中转 session.messages。
+        //   `build_message_lines_incremental` 直接读取。
         // - `context_messages`：LLM context 数据源（XML 前缀，如 `<Teammate@Frontend>text</Teammate@Frontend>`），
-        //   `build_api_messages` 直接读取，LLM 据此区分消息来源。
-        // - `session.messages`：仅用于持久化（transcript.jsonl），不再作为 UI/LLM 数据源。
+        //   `build_api_messages` 直接读取，LLM 据此区分消息来源。也是持久化（transcript.jsonl）的数据源。
         //
         // 两个通道数据独立：display 用干净文本给 UI 渲染，context 用 XML 包裹给 LLM 识别来源。
         // 两者通过 `push_both` / 各自推送逻辑保持同步写入。
@@ -41,9 +40,6 @@ impl ChatApp {
                 }
             }
         }
-
-        // context_messages 增量检测：同步到 session.messages（持久化用）
-        self.sync_context_to_session();
 
         if self.main_agent.is_none() {
             return actions;
@@ -515,7 +511,10 @@ impl ChatApp {
                         let ctx = HookContext {
                             event: HookEvent::PostLlmResponse,
                             assistant_output: Some(content.clone()),
-                            messages: Some(self.state.session.messages.clone()),
+                            messages: Some(
+                                safe_lock(&self.context_messages, "PostLlmResponse::ctx_msgs")
+                                    .clone(),
+                            ),
                             model: self.active_provider().map(|p| p.model.clone()),
                             session_id: Some(self.session_id.clone()),
                             cwd: std::env::current_dir()
@@ -593,9 +592,8 @@ impl ChatApp {
             .clear();
         }
 
-        // 先将 context_messages 中的新消息同步到 session.messages（用于持久化），
-        // 再执行持久化。这保证了 push_both 刚推入的消息能被 persist_new_messages 看到。
-        self.sync_context_to_session();
+        // 直接从 context_messages 持久化到 transcript.jsonl。
+        // push_both 刚推入的消息在 context_messages 中，persist_new_messages 直接读取。
         self.persist_new_messages();
         self.persist_new_display_messages();
 
@@ -610,21 +608,6 @@ impl ChatApp {
         };
         if let Some(task_text) = next_task {
             self.send_message_internal(task_text);
-        }
-    }
-    /// 将 context_messages 中尚未同步的消息追加到 session.messages，并更新 offset。
-    /// 这是 session.messages 唯一的写入路径，确保不重复。
-    pub fn sync_context_to_session(&mut self) {
-        let shared = safe_lock(&self.context_messages, "sync_context_to_session");
-        let new_count = shared.len();
-        if new_count < self.context_read_offset {
-            self.context_read_offset = 0;
-        }
-        if new_count > self.context_read_offset {
-            for msg in &shared[self.context_read_offset..] {
-                self.state.session.messages.push(msg.clone());
-            }
-            self.context_read_offset = new_count;
         }
     }
 }

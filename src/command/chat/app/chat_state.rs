@@ -1,6 +1,6 @@
 use crate::command::chat::infra::command::CustomCommand;
 use crate::command::chat::infra::skill::Skill;
-use crate::command::chat::storage::{AgentConfig, ChatMessage, ChatSession};
+use crate::command::chat::storage::{AgentConfig, ChatMessage};
 use std::sync::{Arc, Mutex};
 
 // ========== 后端状态 ==========
@@ -10,8 +10,6 @@ use std::sync::{Arc, Mutex};
 pub struct ChatState {
     /// Agent 配置
     pub agent_config: AgentConfig,
-    /// 当前对话会话
-    pub session: ChatSession,
     /// 当前正在流式接收的 AI 回复内容（实时更新）
     pub streaming_content: Arc<Mutex<String>>,
     /// 当前正在流式接收的 AI 思考内容（reasoning_content，实时更新）

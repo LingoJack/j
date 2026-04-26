@@ -64,7 +64,7 @@ pub(super) fn draw_tab_session_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatA
     let t = &app.ui.theme;
 
     // 当前会话信息
-    let msg_count = app.state.session.messages.len();
+    let msg_count = crate::util::safe_lock(&app.display_messages, "session_tab::msg_count").len();
     lines.push(Line::from(vec![
         Span::styled(
             "  \u{5f53}\u{524d}\u{4f1a}\u{8bdd}: ",

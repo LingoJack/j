@@ -1,4 +1,5 @@
 use crate::command::chat::app::{Action, ChatApp, CursorDirection};
+use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// 消息浏览模式按键处理
@@ -13,7 +14,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// - 其他字符  输入关键词过滤
 /// - Backspace 删除过滤字符
 pub fn handle_browse_mode(app: &mut ChatApp, key: KeyEvent) {
-    let msg_count = app.state.session.messages.len();
+    let msg_count = safe_lock(&app.display_messages, "browse::msg_count").len();
     if msg_count == 0 {
         app.update(Action::ExitToChat);
         app.ui.msg_lines_cache = None;

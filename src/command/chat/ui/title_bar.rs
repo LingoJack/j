@@ -2,6 +2,7 @@ use super::super::app::{ChatApp, ToolExecStatus};
 use super::super::teammate::TeammateStatus;
 use super::super::tools::derived_shared::SubAgentStatus;
 use crate::command::chat::context::compact::estimate_tokens;
+use crate::util::safe_lock;
 use crate::util::text::display_width;
 
 /// 标题栏模型名最大显示字符数。
@@ -31,15 +32,15 @@ pub fn draw_title_bar(
     has_subagents: bool,
 ) {
     let t = &app.ui.theme;
-    let msg_count = app.state.session.messages.len();
+    let msg_count = safe_lock(&app.display_messages, "title_bar::msg_count").len();
 
-    // 估算上下文 tokens：优先使用 agent 实际上下文 token 数，否则从 session.messages 估算
+    // 估算上下文 tokens：优先使用 agent 实际上下文 token 数，否则从 context_messages 估算
     let estimated_tokens = {
         let agent_tokens = app.context_tokens.lock().ok().map(|ct| *ct).unwrap_or(0);
         if agent_tokens > 0 {
             agent_tokens
         } else {
-            estimate_tokens(&app.state.session.messages)
+            estimate_tokens(&safe_lock(&app.context_messages, "title_bar::est_tokens"))
         }
     };
     let ctx_str = format_context_tokens(estimated_tokens);

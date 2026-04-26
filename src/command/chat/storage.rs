@@ -22,8 +22,8 @@ pub use session::{
     session_file_path, sessions_dir,
 };
 pub use types::{
-    ChatMessage, ChatSession, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp,
-    SessionOpKind, ToolCallItem,
+    ChatMessage, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp, SessionOpKind,
+    ToolCallItem,
 };
 
 #[cfg(test)]
@@ -113,9 +113,9 @@ mod tests {
         let msg = ChatMessage::text(MessageRole::User, "round trip test");
         assert!(append_session_event("rt-id", &SessionEvent::msg(msg)));
 
-        let session = load_session("rt-id");
-        assert_eq!(session.messages.len(), 1);
-        assert_eq!(session.messages[0].content, "round trip test");
+        let messages = load_session("rt-id");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "round trip test");
     }
 
     #[test]

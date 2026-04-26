@@ -132,12 +132,6 @@ impl ChatMessage {
     }
 }
 
-/// 对话会话
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ChatSession {
-    pub messages: Vec<ChatMessage>,
-}
-
 pub(super) fn is_zero_u64(v: &u64) -> bool {
     *v == 0
 }

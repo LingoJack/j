@@ -3,6 +3,7 @@ use super::ui_state::ChatMode;
 use crate::command::chat::storage::{
     ChatMessage, SessionEvent, SessionPaths, append_event_to_path, append_session_event,
 };
+use crate::util::safe_lock;
 
 impl ChatApp {
     /// 开始归档确认流程
@@ -28,7 +29,8 @@ impl ChatApp {
     pub fn do_archive(&mut self, name: &str) {
         use crate::command::chat::infra::archive::create_archive;
 
-        match create_archive(name, self.state.session.messages.clone()) {
+        let messages = safe_lock(&self.context_messages, "do_archive::ctx").clone();
+        match create_archive(name, messages) {
             Ok(_) => {
                 self.clear_session();
                 self.show_toast(format!("对话已归档: {}", name), false);
@@ -53,23 +55,21 @@ impl ChatApp {
         if let Some(archive_name) = archive_name {
             match restore_archive(&archive_name) {
                 Ok(messages) => {
-                    self.state.session.messages = messages;
-                    // 重建双通道（从 session.messages → display + context）
-                    self.rebuild_channels_from_session();
+                    // 重建双通道（从加载的消息 → display + context）
+                    self.rebuild_channels_from_loaded(messages);
                     self.ui.scroll_offset = u16::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.clear_input();
                     // context 持久化
+                    let ctx_msgs =
+                        safe_lock(&self.context_messages, "archive_restore::ctx").clone();
                     append_session_event(
                         &self.session_id,
-                        &SessionEvent::Restore {
-                            messages: self.state.session.messages.clone(),
-                        },
+                        &SessionEvent::Restore { messages: ctx_msgs },
                     );
-                    self.persisted_message_count = self.state.session.messages.len();
                     // display 持久化
                     let display_msgs: Vec<ChatMessage> =
-                        crate::util::safe_lock(&self.display_messages, "archive_restore").clone();
+                        safe_lock(&self.display_messages, "archive_restore::display").clone();
                     let display_count = display_msgs.len();
                     append_event_to_path(
                         &SessionPaths::new(&self.session_id).display(),

@@ -37,7 +37,9 @@ impl ChatApp {
                 let ctx = HookContext {
                     event: HookEvent::PreSendMessage,
                     user_input: Some(text.clone()),
-                    messages: Some(self.state.session.messages.clone()),
+                    messages: Some(
+                        safe_lock(&self.context_messages, "PreSendMessage::ctx_msgs").clone(),
+                    ),
                     session_id: Some(self.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
@@ -75,7 +77,7 @@ impl ChatApp {
         );
 
         // 添加用户消息到双通道（UI 渲染 + LLM context）
-        // session.messages 由 poll_stream_actions 从 context_messages 同步，不在此直接 push
+        // context_messages 是 LLM 上下文和持久化的唯一数据源
         let user_msg = ChatMessage::text(MessageRole::User, &text);
         self.push_both_channels(user_msg);
         self.ui.auto_scroll = true;
@@ -92,7 +94,9 @@ impl ChatApp {
                 let ctx = HookContext {
                     event: HookEvent::PostSendMessage,
                     user_input: Some(text.clone()),
-                    messages: Some(self.state.session.messages.clone()),
+                    messages: Some(
+                        safe_lock(&self.context_messages, "PostSendMessage::ctx_msgs").clone(),
+                    ),
                     session_id: Some(self.session_id.clone()),
                     cwd: std::env::current_dir()
                         .map(|p| p.display().to_string())
@@ -256,8 +260,6 @@ impl ChatApp {
 
         // 不再清空双通道。UI 直接读 display_messages，LLM 直接读 context_messages，
         // 清空会导致历史消息丢失。agent_loop 通过 push_both 追加新消息，
-        // offset 机制确保增量同步到 session.messages 不会重复。
-        // 也不重置 offset，避免重新同步整个通道导致 session.messages 重复。
         // offset 保持不变，不清零，避免重复同步
 
         let agent_config = AgentLoopConfig {

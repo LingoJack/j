@@ -1,5 +1,5 @@
 use super::config::agent_data_dir;
-use super::types::{ChatMessage, ChatSession, MessageRole, SessionEvent, SessionOp};
+use super::types::{ChatMessage, MessageRole, SessionEvent, SessionOp};
 use crate::command::chat::constants::MESSAGE_PREVIEW_MAX_LEN;
 use crate::error;
 use serde::{Deserialize, Serialize};
@@ -284,15 +284,15 @@ pub fn find_latest_session_id() -> Option<String> {
     entries.into_iter().next().map(|(_, id)| id)
 }
 
-/// 从 JSONL 文件 replay 出 ChatSession（供 resume 等功能使用）
-pub fn load_session(session_id: &str) -> ChatSession {
+/// 从 JSONL 文件 replay 出消息列表（供 resume 等功能使用）
+pub fn load_session(session_id: &str) -> Vec<ChatMessage> {
     let path = SessionPaths::new(session_id).transcript();
     if !path.exists() {
-        return ChatSession::default();
+        return Vec::new();
     }
     let content = match fs::read_to_string(&path) {
         Ok(c) => c,
-        Err(_) => return ChatSession::default(),
+        Err(_) => return Vec::new(),
     };
     let mut messages: Vec<ChatMessage> = Vec::new();
     for line in content.lines() {
@@ -323,12 +323,12 @@ pub fn load_session(session_id: &str) -> ChatSession {
         messages = sanitized;
     }
 
-    ChatSession { messages }
+    messages
 }
 
 /// 从 display.jsonl replay 出 display 消息列表。
 ///
-/// 逻辑同 `load_session`，但只返回 `Vec<ChatMessage>`（不需要 ChatSession 包装），
+/// 逻辑同 `load_session`，但只返回 `Vec<ChatMessage>`，
 /// 也不做 sanitize（display 消息无需配对校验）。
 pub fn load_display_session(session_id: &str) -> Vec<ChatMessage> {
     let path = SessionPaths::new(session_id).display();

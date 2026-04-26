@@ -40,7 +40,7 @@ pub struct AgentLoopSharedState {
     pub todo_manager: Arc<TodoManager>,
     /// Agent/Teammate → UI 显示通道（仅用于 UI 渲染，不作为 LLM context 数据源）
     pub display_messages: Arc<Mutex<Vec<ChatMessage>>>,
-    /// Agent/Teammate → LLM context 同步通道（poll_stream_actions 从此增量同步到 session.messages）
+    /// Agent/Teammate → LLM context 同步通道（persist_new_messages 直接从此持久化）
     pub context_messages: Arc<Mutex<Vec<ChatMessage>>>,
     /// Agent 实际使用的上下文 token 估算值（agent 每轮更新，UI 读取显示）
     pub estimated_context_tokens: Arc<Mutex<usize>>,

@@ -11,7 +11,7 @@
 //! - `context_messages`：XML 包裹（如 `<AgentName>text</AgentName>`） → LLM context
 //!
 //! 数据流：
-//! - `display_messages` → `session.messages`（UI 渲染数据源）
+//! - `display_messages` → UI 渲染数据源
 //! - `context_messages` → `build_api_messages`（LLM context 数据源）
 //!
 //! 本模块的压缩功能用于减少这些消息对上下文的占用，而非完全过滤它们。

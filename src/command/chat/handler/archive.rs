@@ -94,7 +94,9 @@ pub fn handle_archive_list_mode(app: &mut ChatApp, key: KeyEvent) {
         KeyCode::Enter => {
             if count > 0 {
                 // 如果当前会话有消息，需要确认
-                if !app.state.session.messages.is_empty() {
+                if !crate::util::safe_lock(&app.display_messages, "archive::restore_confirm")
+                    .is_empty()
+                {
                     app.ui.restore_confirm_needed = true;
                 } else {
                     app.update(Action::RestoreArchive);

@@ -465,8 +465,9 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
 
     // Ctrl+B 进入消息浏览模式
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('b') {
-        if !app.state.session.messages.is_empty() {
-            app.ui.browse_msg_index = app.state.session.messages.len() - 1;
+        let msg_count = safe_lock(&app.display_messages, "chat_ctrl_b::msg_count").len();
+        if msg_count > 0 {
+            app.ui.browse_msg_index = msg_count - 1;
             app.ui.browse_scroll_offset = 0;
             app.ui.msg_lines_cache = None;
             app.update(Action::EnterMode(ChatMode::Browse));
@@ -532,7 +533,7 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                     );
                     let user_msg = ChatMessage::text(MessageRole::User, &text);
                     // 写入双通道（display_messages 渲染 + context_messages 持久化），
-                    // context_messages → sync_context_to_session() → session.messages
+                    // context_messages 是持久化的唯一数据源
                     app.push_both_channels(user_msg);
                     {
                         let mut pending = safe_lock(
@@ -807,8 +808,9 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
             app.update(Action::OpenLogWindows);
         }
         SlashCommand::Browse => {
-            if !app.state.session.messages.is_empty() {
-                app.ui.browse_msg_index = app.state.session.messages.len() - 1;
+            let msg_count = safe_lock(&app.display_messages, "slash_browse::msg_count").len();
+            if msg_count > 0 {
+                app.ui.browse_msg_index = msg_count - 1;
                 app.ui.browse_scroll_offset = 0;
                 app.ui.msg_lines_cache = None;
                 app.update(Action::EnterMode(ChatMode::Browse));
@@ -837,7 +839,7 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
             }
         }
         SlashCommand::Archive => {
-            if app.state.session.messages.is_empty() {
+            if safe_lock(&app.display_messages, "slash_archive::empty").is_empty() {
                 app.update(Action::ShowToast(
                     "当前对话为空，无法归档".to_string(),
                     true,
@@ -890,14 +892,13 @@ fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
 /// 产出与最终发给 LLM 一致的数据。
 fn dump_current_request(app: &mut ChatApp, processed: bool) {
     let mut system_prompt = app.build_current_system_prompt();
-    // 未处理模式：导出 session.messages 原样（context 版本，含 XML 前缀如 <Teammate@X>）
+    // 未处理模式：导出 context_messages 原样（context 版本，含 XML 前缀如 <Teammate@X>）
     // 已处理模式：经过完整管线（window → micro_compact → hooks → sanitize）
     let mut messages = if processed {
         app.build_api_messages()
     } else {
-        // 确保 session.messages 与 context_messages 同步（延迟同步可能缺最新消息）
-        app.sync_context_to_session();
-        app.state.session.messages.clone()
+        // context_messages 已是最新状态
+        safe_lock(&app.context_messages, "dump::ctx_msgs").clone()
     };
 
     if processed {

@@ -330,7 +330,7 @@ pub fn handle_chat(args: ChatArgs<'_>) {
     };
 
     let prior_messages = if cont || session_id_opt.is_some() {
-        let loaded = load_session(&session_id).messages;
+        let loaded = load_session(&session_id);
         if !loaded.is_empty() {
             info!("延续会话 {} （{} 条历史消息）", session_id, loaded.len());
         } else if session_id_opt.is_some() {

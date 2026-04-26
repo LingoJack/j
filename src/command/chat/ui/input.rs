@@ -3,6 +3,7 @@
 //! 提取自 chat.rs，处理用户输入框的渲染、折行、光标位置计算和 @mention 高亮。
 
 use crate::theme::Theme;
+use crate::util::safe_lock;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -391,7 +392,7 @@ fn draw_browse_filter(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
                 "{}{}/{} ",
                 role_label,
                 filtered.len(),
-                app.state.session.messages.len()
+                safe_lock(&app.display_messages, "input::msg_count").len()
             ),
             Style::default().fg(t.text_dim),
         ));
