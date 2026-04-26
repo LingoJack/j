@@ -70,7 +70,7 @@ impl JcliConfig {
             let example_yaml = example_dir.join("HOOK.yaml.example");
             if !example_yaml.exists() {
                 const HOOK_YAML_EXAMPLE: &str =
-                    include_str!("../../../../../assets/hook_yaml_example.yaml");
+                    include_str!("../../../../assets/hook_yaml_example.yaml");
                 let _ = std::fs::write(&example_yaml, HOOK_YAML_EXAMPLE);
             }
         }
