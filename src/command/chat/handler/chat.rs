@@ -530,10 +530,10 @@ pub fn handle_chat_mode(app: &mut ChatApp, key: KeyEvent) -> bool {
                         &app.state.loaded_commands,
                         &app.state.agent_config.disabled_commands,
                     );
-                    app.state
-                        .session
-                        .messages
-                        .push(ChatMessage::text(MessageRole::User, &text));
+                    let user_msg = ChatMessage::text(MessageRole::User, &text);
+                    // 写入双通道（display_messages 渲染 + context_messages 持久化），
+                    // context_messages → sync_context_to_session() → session.messages
+                    app.push_both_channels(user_msg);
                     {
                         let mut pending = safe_lock(
                             &app.state.pending_user_messages,
