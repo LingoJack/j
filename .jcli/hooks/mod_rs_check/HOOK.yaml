@@ -1,9 +1,0 @@
-# 每次使用 Write/Edit 工具后，检查 mod.rs 是否需要更新
-events:
-  - post_tool_execution
-type: bash
-command: check_mod.sh
-filter:
-  tool_matcher: "Write|Edit"
-timeout: 5
-on_error: skip
