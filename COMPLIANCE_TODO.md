@@ -30,11 +30,11 @@
 - [ ] `command/notebook/app.rs:handle_input_mode` — 229行, 2参数
 - [ ] `interactive/completer.rs:complete` — 228行, 5参数
 - [ ] `command/chat/tools/sub_agent.rs:execute` — 216行, 2参数
-- [ ] `tui/editor_core/renderer.rs:render_visual_line` — 207行, 7参数
+- [x] `tui/editor_core/renderer.rs:render_visual_line` — 207行, 7参数 *(已拆分：提取 CursorLineContext + render_cursor_visual_line → visual_line.rs，续行/非光标行逻辑留在 renderer.rs 主文件，render_visual_line 缩减至 ~160 行)*
 - [ ] `command/chat/ui/config.rs:draw_config_screen` — 201行, 3参数
 - [ ] `util/shell_safety.rs:check_single_segment` — 196行, 1参数
-- [ ] `tui/editor_core/renderer.rs:render_inline` — 190行, 1参数
-- [ ] `tui/editor_core/renderer.rs:render_single_line_with_number` — 186行, 4参数
+- [x] `tui/editor_core/renderer.rs:render_inline` — 190行, 1参数 *(已拆分：提取至 renderer/inline.rs)*
+- [x] `tui/editor_core/renderer.rs:render_single_line_with_number` — 186行, 4参数 *(已拆分：提取至 renderer/line.rs)*
 - [ ] `tui/editor_core/editor.rs:handle_input` — 181行, 1参数
 - [ ] `command/system.rs:generate_zsh_completion` — 178行, 1参数
 - [ ] `command/chat/tools/file/edit.rs:execute` — 178行, 2参数
@@ -54,7 +54,7 @@
 - [x] `command/chat/app/session_mgr.rs:save_session_state` — 146行, 0参数 *(已拆分：提取 `build_teammates_snapshot`，save_session_state 缩减至 ~90 行)*
 - [x] `command/chat/tools/web_search.rs:exec_search` — 145行, 1参数 *(已拆分：提取 `send_search_request` + `format_search_results`，exec_search 缩减至 ~30 行)*
 - [ ] `command/chat/render/cache/msg_render.rs:render_assistant_msg` — 145行, 5参数
-- [ ] `tui/editor_core/renderer.rs:render_table_rows` — 143行, 6参数
+- [x] `tui/editor_core/renderer.rs:render_table_rows` — 143行, 6参数 *(已拆分：提取至 renderer/table.rs)*
 - [ ] `command/script.rs:handle_script` — 143行, 3参数
 - [ ] `tui/editor_core/editor.rs:render` — 141行, 2参数
 - [ ] `command/chat/remote/server.rs:handle_websocket` — 141行, 6参数 *(🔄 WIP: 计划改为传 WsConnectionState，减少参数)*
@@ -62,7 +62,7 @@
 - [ ] `command/chat/oneshot.rs:interactive_confirm` — 138行, 5参数
 - [ ] `command/chat/input/autocomplete.rs:get_filtered_files_for_at` — 135行, 1参数
 - [ ] `command/chat/context/compact.rs:auto_compact` — 134行, 7参数
-- [ ] `tui/editor_core/renderer.rs:render_cursor_visual_line` — 133行, 4参数
+- [x] `tui/editor_core/renderer.rs:render_cursor_visual_line` — 133行, 4参数 *(已拆分：提取至 renderer/visual_line.rs)*
 - [x] `command/chat/tools/worktree.rs:execute` — 133行, 2参数 *(同上，EnterWorktreeTool::execute 缩减至 ~60 行)*
 - [ ] `command/chat/tools/web_fetch.rs:exec_fetch` — 130行, 2参数 *(🔄 WIP: 计划提取 send_http_request / extract_text_from_response)*
 - [ ] `command/chat/ui/chat.rs:render_image_pass` — 129行, 6参数
@@ -90,7 +90,7 @@
 
 ### 7 参数
 
-- [ ] `tui/editor_core/renderer.rs:render_visual_line` — 7参数, 207行
+- [x] `tui/editor_core/renderer.rs:render_visual_line` — 7参数, 207行 *(同上，render_visual_line 缩减至 ~160 行，参数未变)*
 - [x] `tui/editor_core/editor.rs:open_markdown_editor` — 6参数, 28行 *(同上，opts + content 两参数)*
 - [x] `tui/editor_core/editor.rs:open_markdown_editor_with_content` — 6参数, 10行 *(同上，opts + initial_lines 两参数)*
 - [x] `tui/components/row.rs:text_field_row` — 7参数, 33行 *(已封装为 `TextFieldRowCtx` struct)*
@@ -105,8 +105,8 @@
 ### 6 参数
 
 - [x] `tui/editor_markdown.rs:open_markdown_editor_on_terminal` — 4参数, 18行 *(已封装：提取 `build_editor_opts` 统一构建 MarkdownEditorOpts)*
-- [ ] `tui/editor_core/renderer.rs:render_table_rows` — 6参数, 143行
-- [ ] `tui/editor_core/renderer.rs:render_table_border` — 6参数, 28行
+- [x] `tui/editor_core/renderer.rs:render_table_rows` — 6参数, 143行 *(已拆分：提取至 renderer/table.rs)*
+- [x] `tui/editor_core/renderer.rs:render_table_border` — 6参数, 28行 *(已拆分：提取至 renderer/table.rs)*
 - [ ] `tui/editor_core/editor.rs:new` — 6参数, 51行
 - [ ] `tui/components/cursor.rs:cursor_wrapped_lines` — 6参数, 65行
 - [x] `tui/components/row.rs:toggle_row` — 6参数, 34行 *(已封装为 `ToggleRowCtx` struct)*
@@ -182,7 +182,7 @@
 
 按行数降序排列。修复方式：按职责拆分为子模块（独立 .rs 文件）。
 
-- [ ] `tui/editor_core/renderer.rs` — 1559行
+- [x] `tui/editor_core/renderer.rs` — 1559行 *(已拆分为 renderer.rs + renderer/ 子模块：code_block.rs ~180行, table.rs ~240行, inline.rs ~160行, line.rs ~200行, visual_line.rs ~160行, renderer.rs ~350行)*
 - [ ] `command/chat/tools/browser.rs` — 1522行
 - [ ] `command/notebook/app.rs` — 1440行
 - [ ] `command/chat/oneshot.rs` — 1381行
