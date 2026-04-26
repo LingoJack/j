@@ -6,9 +6,14 @@ use super::error::LlmError;
 use super::types::ChatStreamChunk;
 
 /// SSE stream: wraps a `reqwest::Response` byte stream, yields `ChatStreamChunk`.
+///
+/// Uses a `Vec<u8>` byte buffer to correctly handle multi-byte UTF-8 characters
+/// split across TCP chunks — a common occurrence when the server streams CJK text
+/// and the network fragments packets at arbitrary byte boundaries.
 pub struct SseStream {
     body: Pin<Box<dyn Stream<Item = Result<Vec<u8>, reqwest::Error>> + Send>>,
-    buf: String,
+    byte_buf: Vec<u8>,
+    str_buf: String,
 }
 
 impl SseStream {
@@ -16,7 +21,8 @@ impl SseStream {
         use futures::StreamExt;
         Self {
             body: Box::pin(response.bytes_stream().map(|r| r.map(|b| b.to_vec()))),
-            buf: String::new(),
+            byte_buf: Vec::new(),
+            str_buf: String::new(),
         }
     }
 }
@@ -28,31 +34,43 @@ impl Stream for SseStream {
         let this = self.get_mut();
 
         loop {
-            // Try to extract a complete SSE event from the buffer
-            if let Some(chunk) = try_parse_event(&mut this.buf)? {
+            // Try to extract a complete SSE event from the string buffer
+            if let Some(chunk) = try_parse_event(&mut this.str_buf)? {
                 return Poll::Ready(Some(Ok(chunk)));
             }
 
             // Need more data from the body stream
             match Pin::new(&mut this.body).poll_next(cx) {
-                Poll::Ready(Some(Ok(bytes))) => match std::str::from_utf8(&bytes) {
-                    Ok(s) => this.buf.push_str(s),
-                    Err(e) => {
-                        return Poll::Ready(Some(Err(LlmError::StreamInterrupted(format!(
-                            "Invalid UTF-8 in SSE stream: {e}"
-                        )))));
-                    }
-                },
+                Poll::Ready(Some(Ok(bytes))) => {
+                    this.byte_buf.extend_from_slice(&bytes);
+                    // Convert as many valid UTF-8 bytes as possible from byte_buf → str_buf.
+                    // Any trailing incomplete multi-byte sequence stays in byte_buf for the next chunk.
+                    flush_utf8(&mut this.byte_buf, &mut this.str_buf)?;
+                }
                 Poll::Ready(Some(Err(e))) => {
                     return Poll::Ready(Some(Err(LlmError::StreamInterrupted(e.to_string()))));
                 }
                 Poll::Ready(None) => {
-                    // Stream ended. Check if there's a final partial event in buf.
-                    if this.buf.trim().is_empty() {
+                    // Stream ended. Flush any remaining bytes (truly invalid UTF-8 at this point).
+                    if !this.byte_buf.is_empty() {
+                        match std::str::from_utf8(&this.byte_buf) {
+                            Ok(s) => {
+                                this.str_buf.push_str(s);
+                                this.byte_buf.clear();
+                            }
+                            Err(e) => {
+                                return Poll::Ready(Some(Err(LlmError::StreamInterrupted(
+                                    format!("Invalid UTF-8 in SSE stream: {e}"),
+                                ))));
+                            }
+                        }
+                    }
+                    // Check if there's a final partial event in str_buf.
+                    if this.str_buf.trim().is_empty() {
                         return Poll::Ready(None);
                     }
                     // Try to parse whatever remains
-                    match try_parse_remaining(&mut this.buf) {
+                    match try_parse_remaining(&mut this.str_buf) {
                         Ok(Some(chunk)) => return Poll::Ready(Some(Ok(chunk))),
                         Ok(None) => return Poll::Ready(None),
                         Err(e) => return Poll::Ready(Some(Err(e))),
@@ -60,6 +78,40 @@ impl Stream for SseStream {
                 }
                 Poll::Pending => return Poll::Pending,
             }
+        }
+    }
+}
+
+/// Convert complete UTF-8 sequences from `byte_buf` → `str_buf`.
+/// Any trailing incomplete multi-byte sequence stays in `byte_buf`.
+fn flush_utf8(byte_buf: &mut Vec<u8>, str_buf: &mut String) -> Result<(), LlmError> {
+    if byte_buf.is_empty() {
+        return Ok(());
+    }
+    match std::str::from_utf8(byte_buf) {
+        // Entire buffer is valid UTF-8 — flush everything.
+        Ok(s) => {
+            str_buf.push_str(s);
+            byte_buf.clear();
+            Ok(())
+        }
+        // Partial UTF-8 — flush the valid prefix, keep the incomplete tail.
+        Err(e) => {
+            let valid_up_to = e.valid_up_to();
+            if valid_up_to == 0 && e.error_len().is_some() {
+                // No valid prefix at all, and it's a real error (not just incomplete).
+                return Err(LlmError::StreamInterrupted(format!(
+                    "Invalid UTF-8 in SSE stream: {e}"
+                )));
+            }
+            // Flush the valid prefix.
+            let valid = std::str::from_utf8(&byte_buf[..valid_up_to])
+                .expect("valid_up_to is guaranteed to be a UTF-8 boundary");
+            str_buf.push_str(valid);
+            byte_buf.drain(..valid_up_to);
+            // The remaining bytes are an incomplete multi-byte sequence —
+            // they'll be completed when the next TCP chunk arrives.
+            Ok(())
         }
     }
 }
@@ -135,5 +187,13 @@ fn parse_sse_event(event_text: &str) -> Result<Option<ChatStreamChunk>, LlmError
 }
 
 fn truncate_str(s: &str, max_len: usize) -> &str {
-    if s.len() <= max_len { s } else { &s[..max_len] }
+    if s.len() <= max_len {
+        s
+    } else {
+        let end = (0..=max_len)
+            .rev()
+            .find(|&i| s.is_char_boundary(i))
+            .unwrap_or(0);
+        &s[..end]
+    }
 }
