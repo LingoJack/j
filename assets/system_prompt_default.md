@@ -79,7 +79,9 @@ Available skills:
 </teammates_status>
 </current_session_status>
 
+<customer_role>
 {{.agent_md}}
+</customer_role>
 
 <response_language>
 请使用中文回复
