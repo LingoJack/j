@@ -335,7 +335,11 @@ pub fn build_message_lines_incremental(
     if has_streaming_msg {
         let streaming_text = streaming_content_str.as_deref().unwrap_or("◍");
         // P1 增量段落渲染
-        let bubble_bg = t.bubble_ai;
+        let bubble_bg = if app.state.agent_config.flat_bubble {
+            t.bg_primary
+        } else {
+            t.bubble_ai
+        };
         let pad_left_w = 3usize;
         let pad_right_w = 3usize;
         let margin_str = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
