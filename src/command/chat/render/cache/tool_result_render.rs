@@ -16,18 +16,27 @@ use crate::command::chat::tools::classification::{
 use crate::command::chat::tools::tool_names;
 use crate::util::text::wrap_text;
 
+/// render_tool_result_msg 的只读参数（lines 作为输出单独传）
+pub struct ToolResultRenderParams<'a> {
+    pub sender_name: Option<&'a str>,
+    pub content: &'a str,
+    pub label: &'a str,
+    pub tool_args: Option<&'a str>,
+    pub bubble_max_width: usize,
+    pub theme: &'a Theme,
+    pub expand: bool,
+}
+
 /// 渲染工具执行结果消息：展开时完整内容，折叠时只显示标签
-#[allow(clippy::too_many_arguments)]
-pub fn render_tool_result_msg(
-    sender_name: Option<&str>,
-    content: &str,
-    label: &str,
-    tool_args: Option<&str>,
-    bubble_max_width: usize,
-    lines: &mut Vec<Line<'static>>,
-    theme: &Theme,
-    expand: bool,
-) {
+pub fn render_tool_result_msg(params: &ToolResultRenderParams, lines: &mut Vec<Line<'static>>) {
+    // 解构出局部变量，保持函数体不变
+    let sender_name = params.sender_name;
+    let content = params.content;
+    let label = params.label;
+    let tool_args = params.tool_args;
+    let bubble_max_width = params.bubble_max_width;
+    let theme = params.theme;
+    let expand = params.expand;
     // 构建首行前缀：有 sender_name 时 "  name · "，否则 "  "
     let sender_prefix_spans: Vec<Span<'static>> = if let Some(name) = sender_name {
         let label_color = agent_name_color(name);

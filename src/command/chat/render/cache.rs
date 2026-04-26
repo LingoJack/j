@@ -21,6 +21,7 @@ pub mod tool_result_render;
 pub use clipboard::copy_to_clipboard;
 pub use msg_render::{render_assistant_msg, render_user_msg};
 pub use tool_call_render::render_tool_call_request_msg;
+use tool_result_render::ToolResultRenderParams;
 pub use tool_result_render::render_tool_result_msg;
 
 use super::theme::Theme;
@@ -272,14 +273,16 @@ pub fn build_message_lines_incremental(
                 };
 
                 render_tool_result_msg(
-                    m.sender_name.as_deref(),
-                    &m.content,
-                    &label,
-                    tool_args.as_deref(),
-                    bubble_max_width,
+                    &ToolResultRenderParams {
+                        sender_name: m.sender_name.as_deref(),
+                        content: &m.content,
+                        label: &label,
+                        tool_args: tool_args.as_deref(),
+                        bubble_max_width,
+                        theme: t,
+                        expand,
+                    },
                     &mut tmp_lines,
-                    t,
-                    expand,
                 );
             }
             DisplayType::System => {

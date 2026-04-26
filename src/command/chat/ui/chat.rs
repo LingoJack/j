@@ -126,25 +126,27 @@ fn get_line_at(
     }
 }
 
-/// 文字渲染 pass：遍历可见行渲染文字，同时收集图片标记。
-/// 返回 `img_markers`: `(display_row, height, url)` 列表，供后续图片渲染 pass 使用。
-fn render_text_pass(
-    f: &mut ratatui::Frame,
+/// render_text_pass 的渲染参数（f 单独传）
+struct TextPassParams<'a> {
     inner: Rect,
-    cached: &MsgLinesCache,
+    cached: &'a MsgLinesCache,
     start: usize,
     end: usize,
     history_total: usize,
     msg_area_bg: Style,
-) -> Vec<(usize, u16, String)> {
+}
+
+/// 文字渲染 pass：遍历可见行渲染文字，同时收集图片标记。
+/// 返回 `img_markers`: `(display_row, height, url)` 列表，供后续图片渲染 pass 使用。
+fn render_text_pass(f: &mut ratatui::Frame, params: &TextPassParams) -> Vec<(usize, u16, String)> {
     let mut img_markers: Vec<(usize, u16, String)> = Vec::new();
-    for (i, line_idx) in (start..end).enumerate() {
-        let line = match get_line_at(cached, line_idx, history_total) {
+    for (i, line_idx) in (params.start..params.end).enumerate() {
+        let line = match get_line_at(params.cached, line_idx, params.history_total) {
             Some(l) => l,
             None => continue,
         };
-        let y = inner.y + i as u16;
-        let line_area = Rect::new(inner.x, y, inner.width, 1);
+        let y = params.inner.y + i as u16;
+        let line_area = Rect::new(params.inner.x, y, params.inner.width, 1);
 
         // 检查是否有图片标记 span
         let img_info: Option<(u16, String)> = line.spans.iter().find_map(|span| {
@@ -164,11 +166,11 @@ fn render_text_pass(
                 .filter(|s| !s.content.starts_with("\x00IMG:"))
                 .cloned()
                 .collect();
-            let p = Paragraph::new(Line::from(visible_spans)).style(msg_area_bg);
+            let p = Paragraph::new(Line::from(visible_spans)).style(params.msg_area_bg);
             f.render_widget(p, line_area);
             img_markers.push((i, height, url));
         } else {
-            let p = Paragraph::new(line.clone()).style(msg_area_bg);
+            let p = Paragraph::new(line.clone()).style(params.msg_area_bg);
             f.render_widget(p, line_area);
         }
     }
@@ -467,8 +469,17 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         let end = (start + visible_height as usize).min(cached.total_line_count);
         let history_total = cached.history_line_count;
         let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
-        let img_markers =
-            render_text_pass(f, inner, cached, start, end, history_total, msg_area_bg);
+        let img_markers = render_text_pass(
+            f,
+            &TextPassParams {
+                inner,
+                cached,
+                start,
+                end,
+                history_total,
+                msg_area_bg,
+            },
+        );
         (start, img_markers)
     }; // cached 借用在此释放
 

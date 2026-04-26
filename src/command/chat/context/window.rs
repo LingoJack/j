@@ -200,17 +200,28 @@ struct SelectionResult {
 
 /// 三阶段预算选择：时间保底 → 豁免保底 → 比例配额（+ 溢出）
 ///
-/// - `keep_recent`: micro_compact 的同名参数；最近 `keep_recent * WINDOW_KEEP_RECENT_MULTIPLIER`
-///   个 unit 无条件保留，确保最新 turn 完整闭环
-/// - `exempt_tools`: 与 micro_compact 共享的豁免工具清单；含豁免工具的 ToolGroup 在 Stage 2 优先保留
-fn select_units(
-    units: &[MessageUnit],
-    messages: &[ChatMessage],
+/// select_units 的只读配置参数（units/messages 单独传）
+struct SelectUnitsParams<'a> {
     max_history_messages: usize,
     max_context_tokens: usize,
     keep_recent: usize,
-    exempt_tools: &[String],
+    exempt_tools: &'a [String],
+}
+
+/// 三阶段选择逻辑：
+/// Stage 1: 保留最近 N 个 unit（时间保底）
+/// Stage 2: 保留豁免 ToolGroup（技能/任务保底）
+/// Stage 3: 按比例配额分配剩余预算
+fn select_units(
+    units: &[MessageUnit],
+    messages: &[ChatMessage],
+    params: &SelectUnitsParams,
 ) -> SelectionResult {
+    // 解构出局部变量，保持函数体不变
+    let max_history_messages = params.max_history_messages;
+    let max_context_tokens = params.max_context_tokens;
+    let keep_recent = params.keep_recent;
+    let exempt_tools = params.exempt_tools;
     let mut retained_flags = vec![false; units.len()];
     let mut used_message_count = 0usize;
     let mut used_token_count = 0usize;
@@ -426,10 +437,12 @@ pub fn select_messages(
     let selection = select_units(
         &units,
         messages,
-        max_msgs,
-        max_tokens,
-        keep_recent,
-        exempt_tools,
+        &SelectUnitsParams {
+            max_history_messages: max_msgs,
+            max_context_tokens: max_tokens,
+            keep_recent,
+            exempt_tools,
+        },
     );
 
     // 按原始顺序重组消息；被丢弃的相邻 ToolGroup 合并为单个占位符

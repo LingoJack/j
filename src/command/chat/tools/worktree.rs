@@ -305,10 +305,28 @@ impl Tool for EnterWorktreeTool {
             };
         }
 
-        let branch = format!("worktree-{}", slug);
-        let wt_path = repo_root.join(".jcli").join("worktrees").join(&slug);
+        self.create_and_enter(&repo_root, &slug)
+    }
 
-        // 如果目录已存在，说明 worktree 可能已存在
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation_message(&self, arguments: &str) -> String {
+        let name = serde_json::from_str::<EnterWorktreeParams>(arguments)
+            .ok()
+            .and_then(|p| p.name)
+            .unwrap_or_else(|| "(auto)".to_string());
+        format!("创建并进入 git worktree: {}", name)
+    }
+}
+
+impl EnterWorktreeTool {
+    /// 创建 worktree 并切换工作目录
+    fn create_and_enter(&self, repo_root: &std::path::Path, slug: &str) -> ToolResult {
+        let branch = format!("worktree-{}", slug);
+        let wt_path = repo_root.join(".jcli").join("worktrees").join(slug);
+
         if wt_path.exists() {
             return ToolResult {
                 output: format!(
@@ -321,7 +339,6 @@ impl Tool for EnterWorktreeTool {
             };
         }
 
-        // 确保 .jcli/worktrees 目录存在
         let worktrees_dir = repo_root.join(".jcli").join("worktrees");
         if let Err(e) = std::fs::create_dir_all(&worktrees_dir) {
             return ToolResult {
@@ -332,13 +349,11 @@ impl Tool for EnterWorktreeTool {
             };
         }
 
-        // 记录原始工作目录和 HEAD
         let original_cwd = std::env::current_dir().unwrap_or_default();
         let orig_head = head_commit();
 
-        // 创建 worktree: git worktree add -B <branch> <path> HEAD
         let output = Command::new("git")
-            .current_dir(&repo_root)
+            .current_dir(repo_root)
             .args([
                 "worktree",
                 "add",
@@ -370,7 +385,6 @@ impl Tool for EnterWorktreeTool {
             }
         }
 
-        // 切换工作目录
         if let Err(e) = std::env::set_current_dir(&wt_path) {
             return ToolResult {
                 output: format!("切换到 worktree 目录失败: {}", e),
@@ -380,7 +394,6 @@ impl Tool for EnterWorktreeTool {
             };
         }
 
-        // 保存会话状态
         self.state.set_session(WorktreeSession {
             original_cwd,
             worktree_path: wt_path.clone(),
@@ -398,18 +411,6 @@ impl Tool for EnterWorktreeTool {
             images: vec![],
             plan_decision: PlanDecision::None,
         }
-    }
-
-    fn requires_confirmation(&self) -> bool {
-        true
-    }
-
-    fn confirmation_message(&self, arguments: &str) -> String {
-        let name = serde_json::from_str::<EnterWorktreeParams>(arguments)
-            .ok()
-            .and_then(|p| p.name)
-            .unwrap_or_else(|| "(auto)".to_string());
-        format!("创建并进入 git worktree: {}", name)
     }
 }
 
@@ -474,126 +475,8 @@ impl Tool for ExitWorktreeTool {
         let wt_path_str = session.worktree_path.to_string_lossy().to_string();
 
         match params.action.as_str() {
-            "keep" => {
-                // 切回原目录
-                if let Err(e) = std::env::set_current_dir(&session.original_cwd) {
-                    return ToolResult {
-                        output: format!("切换回原目录失败: {}", e),
-                        is_error: true,
-                        images: vec![],
-                        plan_decision: PlanDecision::None,
-                    };
-                }
-                self.state.clear_session();
-
-                ToolResult {
-                    output: format!(
-                        "已退出 worktree，工作已保留:\n  路径: {}\n  分支: {}\n\n已切回原目录: {}",
-                        wt_path_str,
-                        session.branch,
-                        session.original_cwd.display(),
-                    ),
-                    is_error: false,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                }
-            }
-            "remove" => {
-                // 检查变更
-                let (changed_files, commits) =
-                    count_changes(&wt_path_str, session.original_head_commit.as_deref());
-
-                if (changed_files > 0 || commits > 0) && !params.discard_changes {
-                    let mut parts = Vec::new();
-                    if changed_files > 0 {
-                        parts.push(format!("{} 个未提交的文件", changed_files));
-                    }
-                    if commits > 0 {
-                        parts.push(format!("{} 个新 commit", commits));
-                    }
-                    return ToolResult {
-                        output: format!(
-                            "Worktree 中有 {}。删除将永久丢弃这些工作。\n请向用户确认后，使用 discard_changes: true 重新调用；或使用 action: \"keep\" 保留 worktree。",
-                            parts.join(" 和 "),
-                        ),
-                        is_error: true,
-                        images: vec![],
-                        plan_decision: PlanDecision::None,
-                    };
-                }
-
-                // 切回原目录
-                if let Err(e) = std::env::set_current_dir(&session.original_cwd) {
-                    return ToolResult {
-                        output: format!("切换回原目录失败: {}", e),
-                        is_error: true,
-                        images: vec![],
-                        plan_decision: PlanDecision::None,
-                    };
-                }
-
-                // 删除 worktree
-                let remove_result = Command::new("git")
-                    .args(["worktree", "remove", "--force", &wt_path_str])
-                    .output();
-
-                let mut messages = Vec::new();
-
-                match remove_result {
-                    Ok(o) if o.status.success() => {
-                        messages.push(format!("已删除 worktree: {}", wt_path_str));
-                    }
-                    Ok(o) => {
-                        let stderr = String::from_utf8_lossy(&o.stderr);
-                        messages.push(format!("删除 worktree 警告: {}", stderr.trim()));
-                        // 尝试强制删除目录
-                        let _ = std::fs::remove_dir_all(&session.worktree_path);
-                    }
-                    Err(e) => {
-                        messages.push(format!("执行 git worktree remove 失败: {}", e));
-                    }
-                }
-
-                // 等待 git 释放锁
-                std::thread::sleep(std::time::Duration::from_millis(WORKTREE_CLEANUP_WAIT_MS));
-
-                // 删除分支
-                let branch_result = Command::new("git")
-                    .args(["branch", "-D", &session.branch])
-                    .output();
-
-                match branch_result {
-                    Ok(o) if o.status.success() => {
-                        messages.push(format!("已删除分支: {}", session.branch));
-                    }
-                    Ok(o) => {
-                        let stderr = String::from_utf8_lossy(&o.stderr);
-                        messages.push(format!("删除分支警告: {}", stderr.trim()));
-                    }
-                    Err(_) => {}
-                }
-
-                self.state.clear_session();
-
-                let mut output = messages.join("\n");
-                if changed_files > 0 || commits > 0 {
-                    output.push_str(&format!(
-                        "\n已丢弃 {} 个未提交文件和 {} 个 commit。",
-                        changed_files, commits
-                    ));
-                }
-                output.push_str(&format!(
-                    "\n已切回原目录: {}",
-                    session.original_cwd.display()
-                ));
-
-                ToolResult {
-                    output,
-                    is_error: false,
-                    images: vec![],
-                    plan_decision: PlanDecision::None,
-                }
-            }
+            "keep" => self.handle_keep(&session, &wt_path_str),
+            "remove" => self.handle_remove(&session, &wt_path_str, params.discard_changes),
             other => ToolResult {
                 output: format!(
                     "无效的 action: \"{}\"，只支持 \"keep\" 或 \"remove\"",
@@ -619,6 +502,130 @@ impl Tool for ExitWorktreeTool {
             "keep" => "退出 worktree（保留工作目录和分支）".to_string(),
             "remove" => "退出并删除 worktree（包括工作目录和分支）".to_string(),
             _ => format!("退出 worktree (action: {})", action),
+        }
+    }
+}
+
+impl ExitWorktreeTool {
+    /// 保留 worktree 并切回原目录
+    fn handle_keep(&self, session: &WorktreeSession, wt_path_str: &str) -> ToolResult {
+        if let Err(e) = std::env::set_current_dir(&session.original_cwd) {
+            return ToolResult {
+                output: format!("切换回原目录失败: {}", e),
+                is_error: true,
+                images: vec![],
+                plan_decision: PlanDecision::None,
+            };
+        }
+        self.state.clear_session();
+
+        ToolResult {
+            output: format!(
+                "已退出 worktree，工作已保留:\n  路径: {}\n  分支: {}\n\n已切回原目录: {}",
+                wt_path_str,
+                session.branch,
+                session.original_cwd.display(),
+            ),
+            is_error: false,
+            images: vec![],
+            plan_decision: PlanDecision::None,
+        }
+    }
+
+    /// 删除 worktree 并切回原目录
+    fn handle_remove(
+        &self,
+        session: &WorktreeSession,
+        wt_path_str: &str,
+        discard_changes: bool,
+    ) -> ToolResult {
+        let (changed_files, commits) =
+            count_changes(wt_path_str, session.original_head_commit.as_deref());
+
+        if (changed_files > 0 || commits > 0) && !discard_changes {
+            let mut parts = Vec::new();
+            if changed_files > 0 {
+                parts.push(format!("{} 个未提交的文件", changed_files));
+            }
+            if commits > 0 {
+                parts.push(format!("{} 个新 commit", commits));
+            }
+            return ToolResult {
+                output: format!(
+                    "Worktree 中有 {}。删除将永久丢弃这些工作。\n请向用户确认后，使用 discard_changes: true 重新调用；或使用 action: \"keep\" 保留 worktree。",
+                    parts.join(" 和 "),
+                ),
+                is_error: true,
+                images: vec![],
+                plan_decision: PlanDecision::None,
+            };
+        }
+
+        if let Err(e) = std::env::set_current_dir(&session.original_cwd) {
+            return ToolResult {
+                output: format!("切换回原目录失败: {}", e),
+                is_error: true,
+                images: vec![],
+                plan_decision: PlanDecision::None,
+            };
+        }
+
+        // 删除 worktree
+        let remove_result = Command::new("git")
+            .args(["worktree", "remove", "--force", wt_path_str])
+            .output();
+
+        let mut messages = Vec::new();
+        match remove_result {
+            Ok(o) if o.status.success() => {
+                messages.push(format!("已删除 worktree: {}", wt_path_str));
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                messages.push(format!("删除 worktree 警告: {}", stderr.trim()));
+                let _ = std::fs::remove_dir_all(&session.worktree_path);
+            }
+            Err(e) => {
+                messages.push(format!("执行 git worktree remove 失败: {}", e));
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(WORKTREE_CLEANUP_WAIT_MS));
+
+        let branch_result = Command::new("git")
+            .args(["branch", "-D", &session.branch])
+            .output();
+
+        match branch_result {
+            Ok(o) if o.status.success() => {
+                messages.push(format!("已删除分支: {}", session.branch));
+            }
+            Ok(o) => {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                messages.push(format!("删除分支警告: {}", stderr.trim()));
+            }
+            Err(_) => {}
+        }
+
+        self.state.clear_session();
+
+        let mut output = messages.join("\n");
+        if changed_files > 0 || commits > 0 {
+            output.push_str(&format!(
+                "\n已丢弃 {} 个未提交文件和 {} 个 commit。",
+                changed_files, commits
+            ));
+        }
+        output.push_str(&format!(
+            "\n已切回原目录: {}",
+            session.original_cwd.display()
+        ));
+
+        ToolResult {
+            output,
+            is_error: false,
+            images: vec![],
+            plan_decision: PlanDecision::None,
         }
     }
 }
