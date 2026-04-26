@@ -23,11 +23,6 @@ mod regression_tests;
 pub use oneshot::ChatArgs;
 pub use oneshot::handle_chat;
 
-// Re-exports needed by super::super:: relative paths within chat submodules
+// Re-exports for crate:: absolute paths from submodules
 pub use infra::archive;
-pub use infra::hook;
-pub use input::autocomplete;
 pub use input::input_thread;
-pub use render::cache as render_cache;
-pub use render::helpers as ui_helpers;
-pub use render::theme;

@@ -48,7 +48,7 @@ pub fn draw_model_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp
 
 /// 绘制主题选择界面
 pub fn draw_theme_selector(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
-    use super::super::theme::ThemeName;
+    use crate::command::chat::render::theme::ThemeName;
 
     let t = &app.ui.theme;
     let all = ThemeName::all();

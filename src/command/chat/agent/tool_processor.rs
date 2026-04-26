@@ -1,6 +1,6 @@
-use super::super::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
-use super::super::error::ChatError;
-use super::super::hook::{HookContext, HookEvent, HookManager};
+use crate::command::chat::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
+use crate::command::chat::error::ChatError;
+use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::storage::{
     ChatMessage, ImageData, MessageRole, SessionOp, SessionOpKind, ToolCallItem, append_session_op,
 };

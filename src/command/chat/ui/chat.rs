@@ -1,11 +1,11 @@
-use super::super::app::{ChatApp, ChatMode, MsgLinesCache};
-use super::super::markdown::image_cache::ImageState;
-use super::super::markdown::image_loader::load_image;
-use super::super::render_cache::build_message_lines_incremental;
 use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use super::popup;
 use super::title_bar;
+use crate::command::chat::app::{ChatApp, ChatMode, MsgLinesCache};
+use crate::command::chat::markdown::image_cache::ImageState;
+use crate::command::chat::markdown::image_loader::load_image;
+use crate::command::chat::render::cache::build_message_lines_incremental;
 use crate::util::safe_lock;
 
 /// 消息气泡宽度占内部可用宽度的百分比。

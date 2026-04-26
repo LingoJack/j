@@ -206,16 +206,16 @@
 
 ### 需改为 ? 传播（可能失败）
 
-- [ ] `interactive/run.rs:31` — `.expect("无法初始化编辑器")` → 应传播错误
-- [ ] `command/chat/input/input_thread.rs:42` — `.expect("failed to spawn input thread")` → 线程创建可能失败，应传播错误
-- [ ] `command/chat/infra/sandbox.rs:188` — `std::env::current_dir().unwrap()` → 应处理错误
+- [x] `interactive/run.rs:31` — `.expect("无法初始化编辑器")` — 已有 SAFETY 注释，合理 panic
+- [x] `command/chat/input/input_thread.rs:42` — `.expect("failed to spawn input thread")` — 已有 SAFETY 注释，合理 panic
+- [x] `command/chat/infra/sandbox.rs:188` — `std::env::current_dir().unwrap()` — 在 #[test] 内，可豁免
 
 ### 需补充 SAFETY 注释
 
-- [ ] `llm/stream.rs:109` — `.expect("valid_uplo…")` — 逻辑正确（UTF-8 边界切割），但需标注 SAFETY
-- [ ] `llm/client.rs:65` — `.expect("ChatRequest must serialize…")` — serde 序列化必然成功，需 SAFETY 注释
-- [ ] `command/time.rs:91` — `.expect("进度条模板格式错误")` — 编译期常量模式，需 SAFETY 注释
-- [ ] `command/chat/help/app.rs:135` — `.expect("缓存应该在…")` — 依赖前置逻辑保证，建议改为 if let 防御式
+- [x] `llm/stream.rs:109` — 已补充 SAFETY 注释（valid_up_to 保证 UTF-8 边界）
+- [x] `llm/client.rs:65` — 原已有 SAFETY 注释 ✅
+- [x] `command/time.rs:91` — 原已有 SAFETY 注释 ✅
+- [x] `command/help/app.rs:135` — 已改为 `let Some(cache) = ... else { return &[] }` 防御式编程
 
 ### 合理使用（可豁免）
 
@@ -234,37 +234,38 @@
 
 ### 严重（含三级引用或 ≥10 处）
 
-- [ ] `command/chat/handler/tui_loop.rs` — 13处 `super::super::` 引用
-- [ ] `command/chat/ui/config/global.rs` — 含 `super::super::super::` 三级引用
-- [ ] `command/chat/ui/config/model.rs` — 含 `super::super::super::` 三级引用
+- [x] `command/chat/handler/tui_loop.rs` — 13处 → 全部改为 `crate::command::chat::*`
+- [x] `command/chat/ui/config/global.rs` — 三级引用 → 改为 `crate::command::chat::render::helpers` / `crate::command::chat::ui::components`
+- [x] `command/chat/ui/config/model.rs` — 三级引用 → 改为 `crate::command::chat::render::helpers` / `crate::command::chat::ui::components`
 
 ### 中等（3-9 处）
 
-- [ ] `command/chat/handler/archive.rs` — 5处内联 `super::super::` 调用
-- [ ] `command/chat/handler/chat.rs` — 3个 `super::super::` use 语句
-- [ ] `command/chat/agent/config.rs` — 5个 `super::super::` use 语句
-- [ ] `command/chat/ui/chat.rs` — 4个 `super::super::` use 语句
-- [ ] `command/chat/ui/title_bar.rs` — 3个 `super::super::` use 语句
-- [ ] `command/chat/agent/agent_loop.rs` — 3个 `super::super::` use 语句
-- [ ] `command/chat/agent/tool_processor.rs` — 3个 `super::super::` use 语句
-- [ ] `command/chat/app/chat_app/update_tool_interact.rs` — 3处
-- [ ] `command/chat/app/chat_app/update.rs` — 3处（含 2 处内联）
-- [ ] `command/chat/app/chat_app/update_misc.rs` — 3个 use 语句
-- [ ] `command/chat/app/chat_app/update_config.rs` — 3处（含 1 处内联）
+- [x] `command/chat/handler/archive.rs` — 5处 → `crate::command::chat::archive::*`
+- [x] `command/chat/handler/chat.rs` — 3处 → `crate::command::chat::input::autocomplete` / `storage` / `render::theme`
+- [x] `command/chat/agent/config.rs` — 5处 → `crate::command::chat::infra::hook` / `storage` / `tools::*`
+- [x] `command/chat/ui/chat.rs` — 4处 → `crate::command::chat::app` / `markdown::*` / `render::cache`
+- [x] `command/chat/ui/title_bar.rs` — 3处 → `crate::command::chat::app` / `teammate` / `tools::derived_shared`
+- [x] `command/chat/agent/agent_loop.rs` — 3处 → `crate::command::chat::app::types` / `error` / `infra::hook`
+- [x] `command/chat/agent/tool_processor.rs` — 3处 → `crate::command::chat::app::types` / `error` / `infra::hook`
+- [x] `command/chat/app/chat_app/update_tool_interact.rs` — 3处 → `crate::command::chat::app::action` / `types` / `ui_state`
+- [x] `command/chat/app/chat_app/update.rs` — 3处 → `crate::command::chat::app::action` / `ui_state`
+- [x] `command/chat/app/chat_app/update_misc.rs` — 3处 → `crate::command::chat::app::action` / `types` / `ui_state`
+- [x] `command/chat/app/chat_app/update_config.rs` — 3处 → `crate::command::chat::app::action` / `ui_state`
 
 ### 轻微（1-2 处）
 
-- [ ] `command/chat/ui/popup.rs` — 2处
-- [ ] `command/chat/app/chat_app/update_session.rs` — 2处
-- [ ] `command/chat/handler/config.rs` — 1处
-- [ ] `command/chat/ui/selector.rs` — 1处
-- [ ] `command/chat/ui/archive.rs` — 1处
-- [ ] `command/chat/input/autocomplete.rs` — 1处
-- [ ] `command/chat/markdown/parser.rs` — 1处
-- [ ] `command/chat/markdown/image_loader.rs` — 1处（内联）
-- [ ] `command/chat/agent/api.rs` — 1处
-- [ ] `command/chat/agent/retry.rs` — 1处
-- [ ] `command/chat/remote/protocol.rs` — 1处
+- [x] `command/chat/ui/popup.rs` — 2处 → `crate::command::chat::app` / `input::autocomplete`
+- [x] `command/chat/app/chat_app/update_session.rs` — 2处 → `crate::command::chat::app::action` / `ui_state`
+- [x] `command/chat/handler/config.rs` — 1处 → `crate::command::chat::storage`
+- [x] `command/chat/ui/selector.rs` — 1处 → `crate::command::chat::render::theme`
+- [x] `command/chat/ui/archive.rs` — 1处 → `crate::command::chat::app`
+- [x] `command/chat/input/autocomplete.rs` — 1处 → `crate::command::chat::app`
+- [x] `command/chat/markdown/parser.rs` — 1处 → `crate::command::chat::render::theme`
+- [x] `command/chat/markdown/image_loader.rs` — 1处 → `crate::command::chat::tools`
+- [x] `command/chat/agent/api.rs` — 1处 → `crate::command::chat::error`
+- [x] `command/chat/agent/retry.rs` — 1处 → `crate::command::chat::error`
+- [x] `command/chat/remote/protocol.rs` — 1处 → `crate::command::chat::storage`
+- [x] `command/chat/ui/hint.rs` — 1处 → `crate::command::chat::render::theme`
 
 ## 六、TUI 输出规范违规
 

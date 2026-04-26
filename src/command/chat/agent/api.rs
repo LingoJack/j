@@ -1,4 +1,4 @@
-use super::super::error::ChatError;
+use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
 use crate::llm::{
     ChatRequest, Content, ContentPart, FunctionCall, ImageUrl, LlmClient, Message, Role, ToolCall,

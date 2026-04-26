@@ -21,13 +21,13 @@ pub fn handle_archive_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
                     app.ui.archive_custom_name.clone()
                 };
                 // 验证名称
-                if let Err(e) = super::super::archive::validate_archive_name(&name) {
+                if let Err(e) = crate::command::chat::archive::validate_archive_name(&name) {
                     app.update(Action::ShowToast(e, true));
                     return;
                 }
                 // 检查是否重名
-                if super::super::archive::archive_exists(&name) {
-                    let _ = super::super::archive::delete_archive(&name);
+                if crate::command::chat::archive::archive_exists(&name) {
+                    let _ = crate::command::chat::archive::delete_archive(&name);
                 }
                 app.do_archive(&name);
                 return;
@@ -48,8 +48,8 @@ pub fn handle_archive_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Enter => {
                 // 使用默认名称归档
                 let name = app.ui.archive_default_name.clone();
-                if super::super::archive::archive_exists(&name) {
-                    let _ = super::super::archive::delete_archive(&name);
+                if crate::command::chat::archive::archive_exists(&name) {
+                    let _ = crate::command::chat::archive::delete_archive(&name);
                 }
                 app.do_archive(&name);
             }

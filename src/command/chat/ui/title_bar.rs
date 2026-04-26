@@ -1,7 +1,7 @@
-use super::super::app::{ChatApp, ToolExecStatus};
-use super::super::teammate::TeammateStatus;
-use super::super::tools::derived_shared::SubAgentStatus;
+use crate::command::chat::app::{ChatApp, ToolExecStatus};
 use crate::command::chat::context::compact::estimate_tokens;
+use crate::command::chat::teammate::TeammateStatus;
+use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use crate::util::safe_lock;
 use crate::util::text::display_width;
 

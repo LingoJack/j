@@ -1,5 +1,5 @@
-use super::super::storage::save_agent_config;
 use crate::command::chat::app::{Action, ChatApp, ConfigTab, CursorDirection};
+use crate::command::chat::storage::save_agent_config;
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 

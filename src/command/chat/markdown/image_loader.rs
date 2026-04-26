@@ -13,7 +13,7 @@ pub fn load_image(source: &str) -> Result<DynamicImage, String> {
         let path = if let Some(stripped) = source.strip_prefix("file://") {
             stripped.to_string()
         } else {
-            super::super::tools::expand_tilde(source)
+            crate::command::chat::tools::expand_tilde(source)
         };
         image::open(&path).map_err(|e| e.to_string())
     }

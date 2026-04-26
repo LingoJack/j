@@ -1,9 +1,9 @@
-use super::super::hook::HookManager;
-use super::super::storage::{ChatMessage, ModelProvider};
-use super::super::tools::background::BackgroundManager;
-use super::super::tools::definition::ToolRegistry;
-use super::super::tools::todo::TodoManager;
 use crate::command::chat::context::compact::{CompactConfig, InvokedSkillsMap};
+use crate::command::chat::infra::hook::HookManager;
+use crate::command::chat::storage::{ChatMessage, ModelProvider};
+use crate::command::chat::tools::background::BackgroundManager;
+use crate::command::chat::tools::definition::ToolRegistry;
+use crate::command::chat::tools::todo::TodoManager;
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 

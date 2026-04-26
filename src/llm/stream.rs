@@ -104,7 +104,9 @@ fn flush_utf8(byte_buf: &mut Vec<u8>, str_buf: &mut String) -> Result<(), LlmErr
                     "Invalid UTF-8 in SSE stream: {e}"
                 )));
             }
-            // Flush the valid prefix.
+            // SAFETY: `valid_up_to` from `Utf8Error` is guaranteed to be a valid UTF-8 boundary
+            // index into the original slice, so slicing `[..valid_up_to]` always produces
+            // valid UTF-8 and `from_utf8` will succeed.
             let valid = std::str::from_utf8(&byte_buf[..valid_up_to])
                 .expect("valid_up_to is guaranteed to be a UTF-8 boundary");
             str_buf.push_str(valid);

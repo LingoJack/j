@@ -1,15 +1,15 @@
-use super::super::autocomplete::{
+use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
+use crate::command::chat::infra::command;
+use crate::command::chat::infra::hook::{HookContext, HookEvent};
+use crate::command::chat::input::autocomplete::{
     AtPopupItem, SlashCommand, complete_at_direct, complete_command_mention, complete_file_mention,
     complete_skill_mention, get_filtered_all_items, get_filtered_command_names, get_filtered_files,
     get_filtered_skill_names, get_filtered_slash_commands, update_at_filter, update_command_filter,
     update_file_filter, update_skill_filter,
 };
-use super::super::storage::{ChatMessage, MessageRole};
-use super::super::theme::ThemeName;
-use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
-use crate::command::chat::infra::command;
-use crate::command::chat::infra::hook::{HookContext, HookEvent};
+use crate::command::chat::render::theme::ThemeName;
 use crate::command::chat::storage::agent_data_dir;
+use crate::command::chat::storage::{ChatMessage, MessageRole};
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 

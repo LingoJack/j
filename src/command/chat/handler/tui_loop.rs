@@ -1,19 +1,21 @@
-use super::super::agent_md;
-use super::super::input_thread::InputThread;
-use super::super::remote;
-use super::super::remote::bridge::WsBridge;
-use super::super::remote::protocol::{WsInbound, WsOutbound};
-use super::super::storage::{load_style, load_system_prompt, save_style, save_system_prompt};
-use super::super::ui::draw_chat_ui;
 use super::{
     handle_agent_perm_confirm_mode, handle_archive_confirm_mode, handle_archive_list_mode,
     handle_browse_mode, handle_chat_mode, handle_config_mode, handle_plan_approval_confirm_mode,
     handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
+use crate::command::chat::agent_md;
 use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
 use crate::command::chat::constants::{TUI_IDLE_POLL_MS, TUI_LOADING_POLL_MS};
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
+use crate::command::chat::input_thread::InputThread;
+use crate::command::chat::remote;
+use crate::command::chat::remote::bridge::WsBridge;
+use crate::command::chat::remote::protocol::{WsInbound, WsOutbound};
+use crate::command::chat::storage::{
+    load_style, load_system_prompt, save_style, save_system_prompt,
+};
+use crate::command::chat::ui::draw_chat_ui;
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
@@ -256,7 +258,7 @@ pub fn run_chat_tui(remote_mode: bool, port: u16) {
 
 /// 生成本次会话 ID（委托给 storage 模块）
 fn generate_session_id() -> String {
-    super::super::storage::generate_session_id()
+    crate::command::chat::storage::generate_session_id()
 }
 
 /// Chat TUI 主循环：初始化终端、会话状态，持续处理事件轮询、后台任务和渲染
@@ -296,9 +298,9 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // 自动恢复最近的 session（如果开启了 auto_restore_session）
     if app.state.agent_config.auto_restore_session
-        && let Some(latest_id) = super::super::storage::find_latest_session_id()
+        && let Some(latest_id) = crate::command::chat::storage::find_latest_session_id()
     {
-        let messages = super::super::storage::load_session(&latest_id);
+        let messages = crate::command::chat::storage::load_session(&latest_id);
         if !messages.is_empty() {
             app.session_id = latest_id;
             // 重建双通道（从加载的消息 → display + context）
@@ -312,10 +314,10 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // 首次运行（尚未配置 provider）时，自动进入配置界面引导用户完成配置
     if app.state.agent_config.providers.is_empty() {
-        use super::super::storage::{
+        use crate::command::chat::render::theme::ThemeName;
+        use crate::command::chat::storage::{
             AgentConfig, ModelProvider, agent_config_path, save_agent_config,
         };
-        use super::super::theme::ThemeName;
         // 自动创建示例配置文件（如果不存在）
         if !agent_config_path().exists() {
             let example = AgentConfig {
@@ -721,7 +723,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
 
     // ★ 空会话不保存：删除无消息的 session 文件
     if is_empty {
-        super::super::storage::delete_session(&app.session_id);
+        crate::command::chat::storage::delete_session(&app.session_id);
     }
 
     // ★ 先恢复终端，再跑 SessionEnd hook（避免 hook 阻塞时终端卡在 raw mode）
