@@ -3,7 +3,7 @@ use super::system_prompt::build_system_prompt_fn;
 use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState};
 use crate::command::chat::infra::command;
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
-use crate::command::chat::storage::{ChatMessage, MessageRole};
+use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider};
 use crate::util::safe_lock;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -224,11 +224,7 @@ impl ChatApp {
 
     /// 公共：构建 system_prompt_fn 并启动 agent loop（消除 send_message_internal 和
     /// wake_from_teammate_inbox 的重复代码）
-    fn spawn_agent_loop(
-        &mut self,
-        provider: crate::command::chat::storage::ModelProvider,
-        api_messages: Vec<ChatMessage>,
-    ) {
+    fn spawn_agent_loop(&mut self, provider: ModelProvider, api_messages: Vec<ChatMessage>) {
         use super::agent_handle::MainAgentHandle;
 
         let streaming_content = Arc::clone(&self.state.streaming_content);

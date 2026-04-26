@@ -295,7 +295,12 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                     let suffix = if msg.chars().count() > 28 { "…" } else { "" };
                     format!("{} 错误: {}{}", snap.status.icon(), short, suffix)
                 }
-                _ => format!("{} {}", snap.status.icon(), snap.status.label()),
+                // 这些状态使用默认 icon + label 展示
+                SubAgentStatus::Initializing
+                | SubAgentStatus::Completed
+                | SubAgentStatus::Cancelled => {
+                    format!("{} {}", snap.status.icon(), snap.status.label())
+                }
             };
 
             let desc_display: String = if snap.description.chars().count() > 22 {

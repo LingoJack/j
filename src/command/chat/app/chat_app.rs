@@ -30,9 +30,12 @@ use crate::command::chat::storage::{
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::{BackgroundManager, build_running_summary};
-use crate::command::chat::tools::derived_shared::{DerivedAgentShared, SubAgentTracker};
+use crate::command::chat::tools::derived_shared::{
+    AgentContextConfig, DerivedAgentShared, SubAgentTracker,
+};
 use crate::command::chat::tools::plan::PlanApprovalQueue;
 use crate::command::chat::tools::task::{TaskManager, build_tasks_summary};
+use crate::command::chat::tools::todo::TodoManager;
 use crate::constants::{CONFIG_FIELDS, TOAST_DURATION_SECS};
 use crate::theme::{Theme, ThemeName};
 use crate::tui::editor_core::text_buffer::TextBuffer;
@@ -62,7 +65,7 @@ pub struct ChatApp {
     #[allow(dead_code)]
     pub task_manager: Arc<TaskManager>,
     /// Todo 管理器
-    pub todo_manager: Arc<crate::command::chat::tools::todo::TodoManager>,
+    pub todo_manager: Arc<TodoManager>,
     /// ask 工具响应发送通道
     pub ask_response_tx: Option<mpsc::Sender<String>>,
     /// ask 工具请求接收通道
@@ -88,8 +91,7 @@ pub struct ChatApp {
     /// 子 Agent 共用 system_prompt（每次发送请求前更新，AgentTool / TeammateTool 共用）
     pub derived_agent_system_prompt: Arc<Mutex<Option<String>>>,
     /// 子 Agent 共用上下文配置快照（每次发送请求前刷新）
-    pub derived_agent_context_config:
-        Arc<Mutex<crate::command::chat::tools::derived_shared::AgentContextConfig>>,
+    pub derived_agent_context_config: Arc<Mutex<AgentContextConfig>>,
     /// 子 Agent 使用的 disabled_hooks 快照（每次发送请求前刷新）
     pub derived_agent_disabled_hooks: Arc<Mutex<Vec<String>>>,
     /// Agent/Teammate → UI 的显示通道（agent 线程 push，UI 线程 poll len 变化）
@@ -1335,19 +1337,15 @@ impl ChatApp {
                             self.ui.config_editing = true;
                         }
                     }
-                    ConfigTab::Tools => {
-                        // Toggle individual tool
+                    // Toggle 开关类 Tab
+                    ConfigTab::Tools | ConfigTab::Skills | ConfigTab::Commands => {
                         self.update(Action::ToggleMenuToggle);
                     }
-                    ConfigTab::Skills => {
-                        // Toggle individual skill
-                        self.update(Action::ToggleMenuToggle);
-                    }
-                    ConfigTab::Commands => {
-                        // Toggle individual command
-                        self.update(Action::ToggleMenuToggle);
-                    }
-                    _ => {}
+                    // 这些 Tab 的 Enter 键无特殊操作
+                    ConfigTab::Session
+                    | ConfigTab::Hooks
+                    | ConfigTab::Teammates
+                    | ConfigTab::Archive => {}
                 }
             }
             Action::ConfigEditChar(c) => {
@@ -1442,7 +1440,14 @@ impl ChatApp {
                     ConfigTab::Global => {
                         config_field_set_global(self, self.ui.config_field_idx, &val);
                     }
-                    _ => {}
+                    // 这些 Tab 不支持字段编辑提交
+                    ConfigTab::Session
+                    | ConfigTab::Tools
+                    | ConfigTab::Skills
+                    | ConfigTab::Hooks
+                    | ConfigTab::Commands
+                    | ConfigTab::Teammates
+                    | ConfigTab::Archive => {}
                 }
                 self.ui.config_editing = false;
             }

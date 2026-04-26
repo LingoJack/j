@@ -223,7 +223,13 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         ConfigTab::Archive => app.ui.archive_list_index,
         ConfigTab::Teammates => app.ui.teammate_list_index,
         ConfigTab::Global if app.ui.compact_exempt_sublist => app.ui.compact_exempt_idx,
-        _ => app.ui.config_field_idx,
+        // 这些 Tab 使用 config_field_idx 作为选中索引
+        ConfigTab::Model
+        | ConfigTab::Tools
+        | ConfigTab::Skills
+        | ConfigTab::Hooks
+        | ConfigTab::Commands
+        | ConfigTab::Global => app.ui.config_field_idx,
     };
     if let Some(&selected_line) = field_line_indices.get(selected_idx) {
         let scroll = app.ui.config_scroll_offset as usize;

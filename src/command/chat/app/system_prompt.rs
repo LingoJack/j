@@ -1,6 +1,9 @@
+use crate::command::chat::agent_md;
+use crate::command::chat::context::window;
 use crate::command::chat::infra::skill::{self, skills_dir};
 use crate::command::chat::storage::{load_memory, load_soul, load_style, load_system_prompt};
 use crate::command::chat::tools::ToolRegistry;
+use crate::util;
 use std::sync::Arc;
 
 pub struct StaticPlaceholderValues<'a> {
@@ -87,7 +90,7 @@ impl ChatApp {
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
-        let agent_md_text = crate::command::chat::agent_md::load_agent_md();
+        let agent_md_text = agent_md::load_agent_md();
         let current_dir = std::env::current_dir()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| ".".to_string());
@@ -132,8 +135,8 @@ impl ChatApp {
     /// LLM 据此区分消息来源。UI 渲染则从 `display_messages` 读取（干净文本），两者完全独立。
     pub fn build_api_messages(&self) -> Vec<ChatMessage> {
         let compact = &self.state.agent_config.compact;
-        let context_msgs = crate::util::safe_lock(&self.context_messages, "build_api_messages");
-        crate::command::chat::context::window::select_messages(
+        let context_msgs = util::safe_lock(&self.context_messages, "build_api_messages");
+        window::select_messages(
             &context_msgs,
             self.state.agent_config.max_history_messages,
             self.state.agent_config.max_context_tokens,

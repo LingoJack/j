@@ -57,7 +57,12 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
         ChatMode::Config => draw_config_screen(f, chunks[1], app),
         ChatMode::ArchiveConfirm => draw_archive_confirm(f, chunks[1], app),
         ChatMode::ArchiveList => draw_archive_list(f, chunks[1], app),
-        _ => draw_messages(f, chunks[1], app),
+        // 这些模式的主区域均显示消息列表
+        ChatMode::Chat
+        | ChatMode::Browse
+        | ChatMode::ToolConfirm
+        | ChatMode::AgentPermConfirm
+        | ChatMode::PlanApprovalConfirm => draw_messages(f, chunks[1], app),
     }
 
     // ========== 输入区 ==========

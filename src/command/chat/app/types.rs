@@ -1,5 +1,6 @@
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ToolCallItem;
+use crate::command::chat::tools::ImageData;
 use std::sync::mpsc;
 
 // ========== Plan 审批决策类型 ==========
@@ -88,7 +89,7 @@ pub struct ToolResultMsg {
     #[allow(dead_code)]
     pub is_error: bool,
     /// 工具返回的图片数据（用于多模态模型）
-    pub images: Vec<crate::command::chat::tools::ImageData>,
+    pub images: Vec<ImageData>,
     /// Plan 审批决策（仅 ExitPlanMode 工具会设置非 None 值）
     pub plan_decision: PlanDecision,
 }

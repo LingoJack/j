@@ -332,7 +332,10 @@ pub fn draw_title_bar(
                             snap.tool_calls_count
                         )
                     }
-                    _ => format!("{} {}", snap.status.icon(), snap.status.label()),
+                    // 这些状态使用默认 icon + label 展示
+                    SubAgentStatus::Initializing | SubAgentStatus::Cancelled => {
+                        format!("{} {}", snap.status.icon(), snap.status.label())
+                    }
                 };
 
                 let entry_width = name.chars().count() + 2 + status_text.chars().count() + 1;

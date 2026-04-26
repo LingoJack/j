@@ -1897,7 +1897,7 @@ fn hook_filter(kind: &HookKind) -> Option<&HookFilter> {
     match kind {
         HookKind::Shell(shell) if !shell.filter.is_empty() => Some(&shell.filter),
         HookKind::Llm(llm) if !llm.filter.is_empty() => Some(&llm.filter),
-        _ => None,
+        HookKind::Shell(_) | HookKind::Llm(_) | HookKind::Builtin(_) => None,
     }
 }
 
