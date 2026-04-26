@@ -203,7 +203,7 @@ pub struct AgentConfig {
     #[serde(default)]
     pub auto_restore_session: bool,
     /// 气泡背景色与主背景色一致（扁平效果）
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub flat_bubble: bool,
     /// 思考指示器动画风格
     #[serde(default)]
@@ -220,6 +220,10 @@ fn default_max_context_tokens() -> usize {
 
 fn default_max_tool_rounds() -> usize {
     DEFAULT_MAX_TOOL_ROUNDS
+}
+
+fn default_true() -> bool {
+    true
 }
 
 // ========== 通用文本文件读写辅助 ==========
