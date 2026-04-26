@@ -94,15 +94,32 @@ struct StreamingToolCallPart {
     function_arguments: String,
 }
 
+/// `run_main_agent_loop` 的参数集合（将 6 个独立参数封装为单一结构体）
+pub struct MainAgentLoopParams {
+    /// Agent loop 的静态配置
+    pub config: AgentLoopConfig,
+    /// Agent loop 的共享状态（Arc 引用，跨线程共享）
+    pub shared: AgentLoopSharedState,
+    /// 初始消息列表
+    pub messages: Vec<ChatMessage>,
+    /// 动态 system prompt 构建函数
+    pub system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
+    /// 流式消息发送通道
+    pub tx: mpsc::Sender<StreamMsg>,
+    /// 工具执行结果接收通道
+    pub tool_result_rx: mpsc::Receiver<ToolResultMsg>,
+}
+
 /// 后台 Agent 循环：支持多轮工具调用
-pub async fn run_main_agent_loop(
-    config: AgentLoopConfig,
-    shared: AgentLoopSharedState,
-    mut messages: Vec<ChatMessage>,
-    system_prompt_fn: Arc<dyn Fn() -> Option<String> + Send + Sync>,
-    tx: mpsc::Sender<StreamMsg>,
-    tool_result_rx: mpsc::Receiver<ToolResultMsg>,
-) {
+pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
+    let MainAgentLoopParams {
+        config,
+        shared,
+        mut messages,
+        system_prompt_fn,
+        tx,
+        tool_result_rx,
+    } = params;
     let AgentLoopConfig {
         provider,
         max_llm_rounds,

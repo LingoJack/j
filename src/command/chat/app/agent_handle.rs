@@ -1,6 +1,6 @@
 use super::types::{StreamMsg, ToolResultMsg};
 use crate::command::chat::agent::config::{AgentLoopConfig, AgentLoopSharedState};
-use crate::command::chat::agent::run_main_agent_loop;
+use crate::command::chat::agent::{MainAgentLoopParams, run_main_agent_loop};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ChatMessage;
 use std::sync::{Arc, mpsc};
@@ -44,14 +44,14 @@ impl MainAgentHandle {
                     }
                 };
 
-                runtime.block_on(run_main_agent_loop(
+                runtime.block_on(run_main_agent_loop(MainAgentLoopParams {
                     config,
                     shared,
-                    api_messages,
+                    messages: api_messages,
                     system_prompt_fn,
-                    stream_tx,
+                    tx: stream_tx,
                     tool_result_rx,
-                ));
+                }));
             }));
 
             if let Err(panic_info) = result {

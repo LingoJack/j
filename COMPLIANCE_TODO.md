@@ -125,7 +125,7 @@
 - [ ] `command/chat/tools/computer_use/mouse.rs:drag` — 6参数, 27行
 - [ ] `command/chat/context/window.rs:select_messages` — 6参数, 89行
 - [ ] `command/chat/render/cache/bubble.rs:wrap_md_line_in_bubble` — 6参数, 65行
-- [ ] `command/chat/agent/api.rs:build_request_with_tools` — 6参数, 49行
+- [x] `command/chat/agent/api.rs:build_request_with_tools` — 4参数, 49行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
 - [x] `command/chat/remote/server.rs:handle_connection` — 6参数, 81行 *(已重构：参数 `token`/`expected_origin` 保持，`ws_state` 统一传入 `WsConnectionState`)*
 - [x] `command/chat/remote/server.rs:handle_websocket` — 2参数, 141行 *(已重构：改为传 `&WsConnectionState`，参数从 6 降至 2)*
 - [ ] `command/todo/ui.rs:build_normal_item` — 6参数, 73行
@@ -153,10 +153,10 @@
 - [ ] `command/chat/infra/hook/manager.rs:execute_fire_and_forget` — 5参数, 12行
 - [ ] `command/chat/infra/hook/definition.rs:into_hook_kinds` — 5参数, 47行
 - [ ] `command/chat/tools/classification.rs:get_result_summary_for_tool` — 5参数, 27行
-- [ ] `command/chat/tools/browser.rs:screenshot` — 5参数, 70行
-- [ ] `command/chat/tools/browser.rs:type_text` — 5参数, 96行
-- [ ] `command/chat/tools/browser.rs:exec_browser_async` — 5参数, 92行
-- [ ] `command/chat/tools/sub_agent.rs:run_sub_agent_loop` — 5参数, 318行
+- [x] `command/chat/tools/browser.rs:screenshot` — 3参数, 70行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
+- [x] `command/chat/tools/browser.rs:type_text` — 3参数, 96行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
+- [x] `command/chat/tools/browser.rs:exec_browser_async` — 3参数, 92行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
+- [x] `command/chat/tools/sub_agent.rs:run_sub_agent_loop` — 4参数, 318行 *(已合规：已封装为 `SubAgentLoopParams` struct，TODO 原扫描数据有误)*
 - [ ] `command/chat/tools/computer_use/som.rs:capture_som` — 5参数, 78行
 - [ ] `command/chat/tools/computer_use/ax.rs:query_tree` — 5参数, 22行
 - [ ] `command/chat/tools/computer_use/ax.rs:find_elements` — 5参数, 18行
@@ -168,10 +168,10 @@
 - [ ] `command/chat/render/cache.rs:build_message_lines_incremental` — 5参数, 389行
 - [ ] `command/chat/render/cache/msg_render.rs:render_user_msg` — 5参数, 114行
 - [ ] `command/chat/render/cache/msg_render.rs:render_assistant_msg` — 5参数, 145行
-- [ ] `command/chat/agent/agent_loop.rs:push_compact_tool_messages` — 5参数, 49行
+- [x] `command/chat/agent/agent_loop.rs:push_compact_tool_messages` — 4参数, 49行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
 - [ ] `command/chat/agent/agent_loop.rs:run_main_agent_loop` — 5参数, 1170行
-- [ ] `command/chat/agent/api.rs:call_llm_stream_async` — 5参数, 75行
-- [ ] `command/chat/agent/api.rs:call_llm_stream` — 5参数, 18行
+- [x] `command/chat/agent/api.rs:call_llm_stream_async` — 4参数, 75行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
+- [x] `command/chat/agent/api.rs:call_llm_stream` — 4参数, 18行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
 - [ ] `command/chat/teammate/teammate_loop.rs:build_teammate_system_prompt` — 5参数, 20行
 - [ ] `command/chat/permission/queue.rs:new` — 5参数, 14行
 - [ ] `command/chat/remote/server.rs:serve_error` — 5参数, 27行
