@@ -9,7 +9,7 @@
 
 按行数降序排列。修复方式：按职责拆分为多个子函数。
 
-- [ ] `command/chat/agent/agent_loop.rs:run_main_agent_loop` — 1170行, 5参数
+- [x] `command/chat/agent/agent_loop.rs:run_main_agent_loop` — 1170行, 5参数 *(已拆分为 agent_loop/ 子模块：mod.rs ~371行 + compact_phase.rs ~292行 + stream_reader.rs ~541行 + tool_dispatch.rs ~230行；参数已封装为 MainAgentLoopParams + 各 Context struct)*
 - [ ] `command/chat/markdown/highlight.rs:highlight_code_line` — 853行, 3参数
 - [ ] `command/chat/handler/chat.rs:handle_chat_mode` — 672行, 2参数
 - [ ] `command/chat/oneshot.rs:run_oneshot_agent` — 629行, 7参数
