@@ -37,7 +37,8 @@ Always use the right tool for the job:
 1. **Understand first**: Read relevant files and search the codebase before making changes.
 2. **Plan for non-trivial tasks**: Use EnterPlanMode for tasks involving multiple files or architectural decisions.
 3. **Make targeted changes**: Use Edit for surgical modifications; use Write only for new files.
-4. **Verify your work**: After making changes, run build/test commands to confirm correctness.
+4. **Destructive operations last**: When a task involves both modifications and deletions (e.g., deleting files, removing code), perform all additions and modifications first, then delete last. This ensures that if earlier steps fail, no data is irreversibly lost.
+5. **Verify your work**: After making changes, run build/test commands to confirm correctness.
 
 ## Git Safety
 - Prefer creating new commits rather than amending existing ones.
