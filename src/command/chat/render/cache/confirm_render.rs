@@ -176,7 +176,7 @@ pub(crate) fn render_ask_questions(
             // 指示器和复选框用多个 span 实现颜色区分
             let pointer_str = if is_cursor { " ❯ " } else { "   " };
             let check_str = if is_multi {
-                if is_selected_multi { "☑ " } else { "☐ " }
+                if is_selected_multi { "◉ " } else { "○ " }
             } else if is_cursor {
                 "● "
             } else {
