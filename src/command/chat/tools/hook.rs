@@ -204,7 +204,7 @@ impl RegisterHookTool {
         match self.hook_manager.lock() {
             Ok(mut manager) => {
                 manager.register_session_hook(event, hook_def);
-                let type_str = format!("{}", params.r#type.as_deref().unwrap_or("bash"));
+                let type_str = params.r#type.as_deref().unwrap_or("bash").to_string();
                 ToolResult {
                     output: format!(
                         "已注册 session hook: event={}, type={}, {}, timeout={}s, retry={}, on_error={}",
