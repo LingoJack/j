@@ -354,15 +354,18 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     context.push(context_msg);
                 }
                 // 推送到其他 teammate 的 broadcast_inbox（旁听，不设 wake_flag）
+                // 使用与 broadcast() 一致的 XML 标签格式，让 teammate 侧能清晰识别消息来源
+                let inbox_msg = ChatMessage::text(
+                    MessageRole::User,
+                    format!("<{}>{}</{}>", sender_label, &assistant_text, sender_label),
+                )
+                .with_sender(&sender_label);
                 for (peer_name, handle) in &manager.teammates {
                     if peer_name == &name {
                         continue; // 不给自己发
                     }
                     if let Ok(mut inbox) = handle.broadcast_inbox.lock() {
-                        inbox.push(
-                            ChatMessage::text(MessageRole::User, &assistant_text)
-                                .with_sender(&sender_label),
-                        );
+                        inbox.push(inbox_msg.clone());
                     }
                 }
             }

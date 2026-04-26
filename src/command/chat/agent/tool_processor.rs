@@ -45,8 +45,11 @@ pub(super) fn drain_pending_user_messages(
     let mut pending = safe_lock(pending_user_messages, "agent::drain_pending");
     if !pending.is_empty() {
         // 给每条追加的用户消息添加 [User appended] 标记
+        // 跳过 <system_reminder> 包裹的消息，它们是系统级信号，不需要用户追加标记
         for msg in pending.iter_mut() {
-            if msg.role == MessageRole::User {
+            if msg.role == MessageRole::User
+                && !msg.content.trim_start().starts_with("<system_reminder>")
+            {
                 msg.content = format!("[User appended] {}", msg.content);
             }
         }

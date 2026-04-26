@@ -16,10 +16,6 @@ struct SendMessageParams {
     /// Optional: target agent name (e.g. "@Backend"). If omitted, message is broadcast to all.
     #[serde(default)]
     to: Option<String>,
-    /// Optional: short summary of the message (5-10 words)
-    #[serde(default)]
-    #[allow(dead_code)]
-    summary: Option<String>,
 }
 
 /// SendMessage 工具：在聊天室中发送消息给其他 agent
@@ -44,7 +40,6 @@ impl Tool for SendMessageTool {
         - message: The text content to send
         - to: Optional target agent name. The message is always broadcast to everyone,
               but @mentioning focuses the target agent's attention.
-        - summary: Optional 5-10 word summary
 
         Messages appear in the chat as: <YourName> @Target message
         All agents receive the message, but the @mentioned agent knows it's addressed to them.
