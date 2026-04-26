@@ -61,10 +61,21 @@ Available skills:
 </skill_system>
 
 <current_session_status>
+<session_state>
 {{.session_state}}
+</session_state>
+
+<tasks_status>
 {{.tasks}}
+</tasks_status>
+
+<background_tasks_status>
 {{.background_tasks}}
+</background_tasks_status>
+
+<teammates_status>_
 {{.teammates}}
+</teammates_status>
 </current_session_status>
 
 {{.agent_md}}
