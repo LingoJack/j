@@ -65,9 +65,9 @@ pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     // 占位符逻辑
     let is_empty = chars.is_empty();
     let placeholder = if app.state.is_loading {
-        "补充消息，Enter 发送，Esc 打断，Shift/Alt+Enter 换行"
+        "补充消息，Enter 发送，Esc 打断，Alt+Enter 换行"
     } else {
-        "输入消息，Enter 发送，Esc 退出，Shift/Alt+Enter 换行"
+        "输入消息，Enter 发送，Esc 退出，Alt+Enter 换行"
     };
 
     let full_visible = if is_empty {
