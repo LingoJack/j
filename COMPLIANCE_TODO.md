@@ -22,7 +22,7 @@
 - [ ] `command/chat/handler/config.rs:handle_config_mode` — 336行, 2参数
 - [ ] `command/chat/app/stream_poll.rs:poll_stream_actions` — 330行, 0参数
 - [ ] `command/chat/tools/sub_agent.rs:run_sub_agent_loop` — 318行, 5参数
-- [ ] `command/chat/infra/hook/manager.rs:execute` — 313行, 4参数
+- [ ] `command/chat/infra/hook/manager.rs:execute` — 313行, 4参数 *(🔄 WIP: 计划提取 collect_hooks_for_event / merge_hook_result_into / handle_hook_error)
 - [ ] `command/chat/tools/teammate_tool.rs:execute` — 271行, 2参数
 - [x] `command/chat/tools/grep.rs:execute` — 258行, 2参数 *(已拆分：提取 `build_file_walker` / `search_single_file` / `build_content_line` / `format_grep_output` 等 8 个辅助函数，execute 主体缩减至 ~60 行)*
 - [ ] `command/chat/render/cache/tool_call_render.rs:render_tool_call_request_msg` — 258行, 4参数
@@ -57,14 +57,14 @@
 - [ ] `tui/editor_core/renderer.rs:render_table_rows` — 143行, 6参数
 - [ ] `command/script.rs:handle_script` — 143行, 3参数
 - [ ] `tui/editor_core/editor.rs:render` — 141行, 2参数
-- [ ] `command/chat/remote/server.rs:handle_websocket` — 141行, 6参数
+- [ ] `command/chat/remote/server.rs:handle_websocket` — 141行, 6参数 *(🔄 WIP: 计划改为传 WsConnectionState，减少参数)*
 - [ ] `command/todo/ui.rs:render_status_bar` — 140行, 3参数
 - [ ] `command/chat/oneshot.rs:interactive_confirm` — 138行, 5参数
 - [ ] `command/chat/input/autocomplete.rs:get_filtered_files_for_at` — 135行, 1参数
 - [ ] `command/chat/context/compact.rs:auto_compact` — 134行, 7参数
 - [ ] `tui/editor_core/renderer.rs:render_cursor_visual_line` — 133行, 4参数
 - [x] `command/chat/tools/worktree.rs:execute` — 133行, 2参数 *(同上，EnterWorktreeTool::execute 缩减至 ~60 行)*
-- [ ] `command/chat/tools/web_fetch.rs:exec_fetch` — 130行, 2参数
+- [ ] `command/chat/tools/web_fetch.rs:exec_fetch` — 130行, 2参数 *(🔄 WIP: 计划提取 send_http_request / extract_text_from_response)*
 - [ ] `command/chat/ui/chat.rs:render_image_pass` — 129行, 6参数
 - [x] `command/chat/tools/hook.rs:handle_register` — 127行, 1参数 *(已拆分：提取 `build_hook_def_from_params`，handle_register 缩减至 ~65 行)*
 - [ ] `command/chat/tools/derived_shared.rs:execute_tool_with_permission` — 127行, 7参数
@@ -85,7 +85,7 @@
 
 - [x] `tui/editor_core/editor.rs:open_markdown_editor_on_terminal` — 7参数, 36行 *(已封装为 `MarkdownEditorOpts` struct，theme 改为 owned)*
 - [ ] `command/chat/tools/definition.rs:new` — 8参数, 78行
-- [ ] `command/chat/remote/server.rs:run_server` — 8参数, 38行
+- [ ] `command/chat/remote/server.rs:run_server` — 8参数, 38行 *(🔄 WIP: 计划封装为 ServerOpts struct)*
 - [ ] `command/notebook/app.rs:build_flat_entries_recursive` — 8参数, 79行
 
 ### 7 参数
@@ -127,7 +127,7 @@
 - [ ] `command/chat/render/cache/bubble.rs:wrap_md_line_in_bubble` — 6参数, 65行
 - [ ] `command/chat/agent/api.rs:build_request_with_tools` — 6参数, 49行
 - [ ] `command/chat/remote/server.rs:handle_connection` — 6参数, 81行
-- [ ] `command/chat/remote/server.rs:handle_websocket` — 6参数, 141行
+- [ ] `command/chat/remote/server.rs:handle_websocket` — 6参数, 141行 *(🔄 WIP: 同上，改为传 WsConnectionState)*
 - [ ] `command/todo/ui.rs:build_normal_item` — 6参数, 73行
 - [ ] `command/notebook/ui.rs:build_adding_item` — 6参数, 35行
 - [ ] `command/notebook/ui.rs:build_rename_item` — 6参数, 9行
