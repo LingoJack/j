@@ -3,7 +3,7 @@ use crate::command::chat::render::helpers::{
     config_field_desc_global, config_field_label_global, config_field_value_global,
 };
 use crate::command::chat::ui::components::{
-    RowContext, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
+    GlobalRowCtx, global_preview_row, global_text_row, global_theme_row, global_toggle_row,
 };
 use crate::constants::CONFIG_GLOBAL_FIELDS_TAB;
 use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
@@ -49,7 +49,7 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
             };
 
             list.push(toggle_list_item(&ToggleListItemCtx {
-                name: &label,
+                name: label,
                 enabled: is_exempt,
                 selected,
                 desc: None,
@@ -102,57 +102,35 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
 
             let line = if *field_name == "auto_restore_session" {
                 let toggle_on = app.state.agent_config.auto_restore_session;
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
-                global_toggle_row(label, toggle_on, desc, "Enter \u{5207}\u{6362}", &ctx)
+                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+                global_toggle_row(toggle_on, &ctx)
             } else if *field_name == "flat_bubble" {
                 let toggle_on = app.state.agent_config.flat_bubble;
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
-                global_toggle_row(label, toggle_on, desc, "Enter \u{5207}\u{6362}", &ctx)
+                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+                global_toggle_row(toggle_on, &ctx)
             } else if *field_name == "compact_enabled" {
                 let toggle_on = app.state.agent_config.compact.enabled;
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
-                global_toggle_row(label, toggle_on, desc, "Enter \u{5207}\u{6362}", &ctx)
+                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+                global_toggle_row(toggle_on, &ctx)
             } else if *field_name == "theme" {
                 let theme_name = app.state.agent_config.theme.display_name();
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
-                global_theme_row(label, theme_name, desc, "Enter \u{5207}\u{6362}", &ctx)
+                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+                global_theme_row(theme_name, &ctx)
             } else if *field_name == "thinking_style" {
                 let style_name = app.state.agent_config.thinking_style.display_name();
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
-                global_theme_row(label, style_name, desc, "Enter \u{5207}\u{6362}", &ctx)
+                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+                global_theme_row(style_name, &ctx)
             } else if *field_name == "system_prompt"
                 || *field_name == "agent_md"
                 || *field_name == "style"
             {
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
-                global_preview_row(label, &value, desc, "Enter \u{7f16}\u{8f91}", &ctx)
+                let mut ctx = GlobalRowCtx::new(label, desc, is_selected, t);
+                ctx.hint = "Enter \u{7f16}\u{8f91}".to_string();
+                global_preview_row(&value, &ctx)
             } else {
-                let ctx = RowContext {
-                    selected: is_selected,
-                    theme: t,
-                };
+                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
                 global_text_row(
-                    label,
                     &value,
-                    desc,
                     app.ui.config_editing,
                     app.ui.config_edit_cursor,
                     &ctx,

@@ -93,8 +93,8 @@
 - [ ] `tui/editor_core/renderer.rs:render_visual_line` — 7参数, 207行
 - [x] `tui/editor_core/editor.rs:open_markdown_editor` — 6参数, 28行 *(同上，opts + content 两参数)*
 - [x] `tui/editor_core/editor.rs:open_markdown_editor_with_content` — 6参数, 10行 *(同上，opts + initial_lines 两参数)*
-- [ ] `tui/components/row.rs:text_field_row` — 7参数, 33行
-- [ ] `tui/components/row.rs:toggle_list_item` — 7参数, 44行
+- [x] `tui/components/row.rs:text_field_row` — 7参数, 33行 *(已封装为 `TextFieldRowCtx` struct)*
+- [x] `tui/components/row.rs:toggle_list_item` — 7参数, 44行 *(已封装为 `ToggleListItemCtx` struct)*
 - [ ] `command/chat/oneshot.rs:run_oneshot_agent` — 7参数, 629行
 - [ ] `command/chat/ui/input.rs:build_line_segments` — 7参数, 80行
 - [x] `command/chat/tools/derived_shared.rs:execute_tool_with_permission` — 6参数, 127行 *(已封装为 `ToolExecContext` struct)*
@@ -109,13 +109,13 @@
 - [ ] `tui/editor_core/renderer.rs:render_table_border` — 6参数, 28行
 - [ ] `tui/editor_core/editor.rs:new` — 6参数, 51行
 - [ ] `tui/components/cursor.rs:cursor_wrapped_lines` — 6参数, 65行
-- [ ] `tui/components/row.rs:toggle_row` — 6参数, 34行
+- [x] `tui/components/row.rs:toggle_row` — 6参数, 34行 *(已封装为 `ToggleRowCtx` struct)*
 - [ ] `command/chat/oneshot.rs:run_oneshot_no_tools` — 6参数, 75行
 - [ ] `command/chat/oneshot.rs:handle_tool_call` — 6参数, 87行
 - [ ] `command/chat/oneshot.rs:fire_session_end` — 6参数, 18行
 - [ ] `command/chat/ui/title_bar.rs:draw_title_bar` — 6参数, 338行
-- [ ] `command/chat/ui/components.rs:global_preview_row` — 6参数, 26行
-- [ ] `command/chat/ui/components.rs:global_theme_row` — 6参数, 30行
+- [x] `command/chat/ui/components.rs:global_preview_row` — 6参数, 26行 *(已封装为 `GlobalRowCtx` struct，含 label/desc/hint/selected/theme)*
+- [x] `command/chat/ui/components.rs:global_theme_row` — 6参数, 30行 *(同上 `GlobalRowCtx`)*
 - [ ] `command/chat/ui/chat.rs:render_image_pass` — 6参数, 129行
 - [ ] `command/chat/tools/background.rs:spawn_command` — 6参数, 28行
 - [ ] `command/chat/tools/task/task_manager.rs:create_task` — 6参数, 22行

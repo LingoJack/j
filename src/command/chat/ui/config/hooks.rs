@@ -106,7 +106,7 @@ pub(super) fn draw_tab_hooks_list<'a>(app: &ChatApp) -> ItemList<'a> {
         );
 
         list.push(toggle_list_item(&ToggleListItemCtx {
-            name: &display_name,
+            name: display_name,
             enabled: is_enabled,
             selected: is_selected,
             desc: None,

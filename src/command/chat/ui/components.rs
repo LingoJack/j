@@ -19,6 +19,29 @@ pub struct RowContext<'a> {
     pub theme: &'a Theme,
 }
 
+/// Global tab 行的共享渲染参数（label + desc + hint + selected + theme）
+#[derive(Debug)]
+pub struct GlobalRowCtx<'a> {
+    pub label: String,
+    pub desc: String,
+    pub hint: String,
+    pub selected: bool,
+    pub theme: &'a Theme,
+}
+
+impl<'a> GlobalRowCtx<'a> {
+    /// 从 label/desc/selected/theme 构造，hint 默认 "Enter 切换" 或 "Enter 编辑"
+    pub fn new(label: &str, desc: &str, selected: bool, theme: &'a Theme) -> Self {
+        Self {
+            label: label.to_string(),
+            desc: desc.to_string(),
+            hint: "Enter \u{5207}\u{6362}".to_string(),
+            selected,
+            theme,
+        }
+    }
+}
+
 // ── 预览值（内部）───────────────────────────────────────────
 
 /// 长文本截断预览（替换换行为空格，超 40 字符截断）
@@ -85,12 +108,10 @@ pub(crate) fn secret_field_row<'a>(
 
 /// Global tab 可编辑文本行（三列: label | value | desc）
 pub(crate) fn global_text_row<'a>(
-    label: &str,
     value: &str,
-    desc: &str,
     editing: bool,
     cursor: usize,
-    ctx: &RowContext<'_>,
+    ctx: &GlobalRowCtx<'_>,
 ) -> Line<'a> {
     let selected = ctx.selected;
     let theme = ctx.theme;
@@ -98,7 +119,7 @@ pub(crate) fn global_text_row<'a>(
     if editing && selected {
         let mut spans = vec![
             pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            label_span(&ctx.label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
         ];
         spans.extend(cursor_spans(value, cursor, vs, theme));
@@ -111,22 +132,16 @@ pub(crate) fn global_text_row<'a>(
         };
         Line::from(vec![
             pointer_span(selected, theme),
-            label_span(label, LABEL_WIDTH, selected, theme),
+            label_span(&ctx.label, LABEL_WIDTH, selected, theme),
             Span::styled("  ", Style::default()),
             Span::styled(display_value, vs),
-            desc_span(desc, 30, theme),
+            desc_span(&ctx.desc, 30, theme),
         ])
     }
 }
 
 /// Global tab 开关行（三列: label | toggle | desc）
-pub(crate) fn global_toggle_row<'a>(
-    label: &str,
-    is_on: bool,
-    desc: &str,
-    hint: &str,
-    ctx: &RowContext<'_>,
-) -> Line<'a> {
+pub(crate) fn global_toggle_row<'a>(is_on: bool, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
     let selected = ctx.selected;
     let theme = ctx.theme;
     let toggle_style = if is_on {
@@ -143,13 +158,13 @@ pub(crate) fn global_toggle_row<'a>(
     };
     Line::from(vec![
         pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(toggle_text, toggle_style),
-        desc_span(desc, 30, theme),
+        desc_span(&ctx.desc, 30, theme),
         Span::styled(
             if selected {
-                format!("  ({hint})")
+                format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },
@@ -159,25 +174,19 @@ pub(crate) fn global_toggle_row<'a>(
 }
 
 /// Global tab 预览行（三列: label | preview | desc）
-pub fn global_preview_row<'a>(
-    label: &str,
-    raw: &str,
-    desc: &str,
-    hint: &str,
-    ctx: &RowContext<'_>,
-) -> Line<'a> {
+pub fn global_preview_row<'a>(raw: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
     let selected = ctx.selected;
     let theme = ctx.theme;
     let vs = value_style(selected, false, theme);
     Line::from(vec![
         pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(render_preview_value(raw), vs),
-        desc_span(desc, 30, theme),
+        desc_span(&ctx.desc, 30, theme),
         Span::styled(
             if selected {
-                format!("  ({hint})")
+                format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },
@@ -187,18 +196,12 @@ pub fn global_preview_row<'a>(
 }
 
 /// Global tab 主题行（三列: label | theme | desc）
-pub fn global_theme_row<'a>(
-    label: &str,
-    name: &str,
-    desc: &str,
-    hint: &str,
-    ctx: &RowContext<'_>,
-) -> Line<'a> {
+pub fn global_theme_row<'a>(name: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
     let selected = ctx.selected;
     let theme = ctx.theme;
     Line::from(vec![
         pointer_span(selected, theme),
-        label_span(label, LABEL_WIDTH, selected, theme),
+        label_span(&ctx.label, LABEL_WIDTH, selected, theme),
         Span::styled("  ", Style::default()),
         Span::styled(
             format!("\u{1f3a8} {name}"),
@@ -206,10 +209,10 @@ pub fn global_theme_row<'a>(
                 .fg(theme.config_toggle_on)
                 .add_modifier(Modifier::BOLD),
         ),
-        desc_span(desc, 30, theme),
+        desc_span(&ctx.desc, 30, theme),
         Span::styled(
             if selected {
-                format!("  ({hint})")
+                format!("  ({})", ctx.hint)
             } else {
                 String::new()
             },

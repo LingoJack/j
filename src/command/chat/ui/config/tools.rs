@@ -61,7 +61,7 @@ pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
             .iter()
             .any(|d| d == *name);
         list.push(toggle_list_item(&ToggleListItemCtx {
-            name,
+            name: name.to_string(),
             enabled: is_enabled,
             selected: is_selected,
             desc: None,

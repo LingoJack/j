@@ -280,16 +280,16 @@ pub(super) fn draw_tab_model_list<'a>(app: &ChatApp) -> ItemList<'a> {
                     false
                 };
                 toggle_row(&ToggleRowCtx {
-                    label,
+                    label: label.to_string(),
                     is_on: toggle_on,
                     selected: is_selected,
-                    hint: "Enter \u{5207}\u{6362}",
+                    hint: "Enter \u{5207}\u{6362}".to_string(),
                     theme: t,
                 })
             } else {
                 text_field_row(&TextFieldRowCtx {
-                    label,
-                    value: &value,
+                    label: label.to_string(),
+                    value,
                     selected: is_selected,
                     editing: app.ui.config_editing,
                     cursor: app.ui.config_edit_cursor,
