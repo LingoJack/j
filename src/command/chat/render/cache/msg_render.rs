@@ -141,13 +141,15 @@ pub fn render_user_msg(
     let actual_inner_content_w = actual_bubble_w.saturating_sub(user_pad_lr * 2);
 
     // label 行（独立行，无背景）
+    // 用户标签右对齐，使其位于气泡的右上方
     let label_color = if is_selected {
         theme.label_selected
     } else {
         theme.label_user
     };
     let label = if is_selected { "▶ You " } else { "You " };
-    let left_pad = actual_inner_content_width.saturating_sub(actual_bubble_w);
+    let label_w = display_width(label);
+    let left_pad = actual_inner_content_width.saturating_sub(label_w);
     lines.push(Line::from(vec![
         Span::raw(" ".repeat(left_pad)),
         Span::styled(
