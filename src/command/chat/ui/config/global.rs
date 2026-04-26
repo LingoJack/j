@@ -61,8 +61,8 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
         (0, 3),  // system_prompt, agent_md, style
         (3, 2),  // max_history_messages, max_context_tokens
         (5, 2),  // max_tool_rounds, tool_confirm_timeout
-        (7, 3),  // theme, auto_restore_session, thinking_style
-        (10, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
+        (7, 4),  // theme, auto_restore_session, thinking_style, flat_bubble
+        (11, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
@@ -95,6 +95,13 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
 
             let line = if *field_name == "auto_restore_session" {
                 let toggle_on = app.state.agent_config.auto_restore_session;
+                let ctx = RowContext {
+                    selected: is_selected,
+                    theme: t,
+                };
+                global_toggle_row(label, toggle_on, desc, "Enter \u{5207}\u{6362}", &ctx)
+            } else if *field_name == "flat_bubble" {
+                let toggle_on = app.state.agent_config.flat_bubble;
                 let ctx = RowContext {
                     selected: is_selected,
                     theme: t,
