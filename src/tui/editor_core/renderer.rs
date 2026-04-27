@@ -162,7 +162,7 @@ impl MarkdownRenderer {
         let line_num_style = if is_cursor_line {
             Style::default()
                 .fg(Color::Yellow)
-                .bg(self.theme.bg_input)
+                .bg(self.theme.bg_primary)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
@@ -326,15 +326,15 @@ impl MarkdownRenderer {
             }
 
             // 普通续行
+            let content_style = Style::default()
+                .fg(self.theme.text_normal)
+                .bg(line_num_style.bg.unwrap_or(self.theme.bg_primary));
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
             } else {
-                spans.push(Span::styled(
-                    text.to_string(),
-                    self.style(self.theme.text_normal),
-                ));
-            }
+                spans.push(Span::styled(text.to_string(), content_style));
+            };
             return vec![Line::from(spans)];
         }
 
@@ -414,7 +414,7 @@ impl MarkdownRenderer {
 
         // 计算光标在视觉行内的字符偏移
         // 需要加上行号占用的字符数，因为 overlay_cursor_on_spans 在包含行号的完整 spans 上定位
-        let line_num_chars = if self.show_line_numbers { 5 } else { 0 };
+        let line_num_chars = if self.show_line_numbers { 6 } else { 0 };
         let char_idx_at_cursor = line_num_chars + col.saturating_sub(vl.start_col);
 
         // 对第一个（通常也是唯一一个）渲染行叠加光标
