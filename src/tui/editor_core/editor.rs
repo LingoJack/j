@@ -33,6 +33,16 @@ const EDITOR_POLL_MS: u64 = 16;
 /// 主题画廊项（显示名称 + 主题ID + 主题）
 pub type ThemeGalleryItem = (&'static str, &'static str, EditorTheme);
 
+/// 编辑器初始光标策略
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum CursorPolicy {
+    /// 光标在文件开头（默认，向后兼容）
+    #[default]
+    StartOfFile,
+    /// 光标在文件末尾
+    EndOfFile,
+}
+
 /// 编辑器主结构
 pub struct MarkdownEditor {
     /// 文本缓冲区
@@ -79,13 +89,19 @@ impl MarkdownEditor {
         theme: EditorTheme,
         highlight_fn: HighlightFn,
         theme_gallery: Vec<ThemeGalleryItem>,
+        cursor_policy: CursorPolicy,
     ) -> Self {
-        let buffer = TextBuffer::from_content(content);
+        let mut buffer = TextBuffer::from_content(content);
         let initial_mode = if content.is_empty() {
             Mode::Insert
         } else {
             Mode::Normal
         };
+
+        // 根据策略移动光标
+        if cursor_policy == CursorPolicy::EndOfFile {
+            buffer.move_cursor_bottom();
+        }
 
         let mut vim = Vim::new(initial_mode.clone());
         vim.push_snapshot(Snapshot::new(buffer.snapshot()), buffer.cursor());
@@ -1003,6 +1019,8 @@ pub struct MarkdownEditorOpts<'a> {
     pub theme: EditorTheme,
     pub highlight_fn: HighlightFn,
     pub theme_gallery: Vec<ThemeGalleryItem>,
+    /// 初始光标策略（默认 StartOfFile）
+    pub cursor_policy: CursorPolicy,
 }
 
 /// 打开 Markdown 编辑器（在已有终端上）
@@ -1017,6 +1035,7 @@ pub fn open_markdown_editor_on_terminal(
         opts.theme.clone(),
         opts.highlight_fn,
         opts.theme_gallery.clone(),
+        opts.cursor_policy.clone(),
     );
 
     loop {

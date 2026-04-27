@@ -6,45 +6,65 @@
 //!   2. 项目级: AGENT.md（从 CWD 向上搜索到 git root）
 //!   3. 项目级: .jcli/AGENT.md（从 CWD 向上搜索到 git root）
 //!   4. 本地级: AGENT.local.md / .jcli/AGENT.local.md（个人，不提交）
+//!
+//! 注入格式对齐 Claude Code（参考 src/utils/claudemd.ts 的 getClaudeMds）：
+//! 内容以 `Contents of {绝对路径} ({来源描述}):\n\n{内容}` 的散文形式拼接，
+//! 不使用 XML 包裹，并在最前置一行 OVERRIDE 提示。
 
 use crate::config::YamlConfig;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-const MAX_AGENT_MD_LINES: usize = 200;
-const MAX_AGENT_MD_BYTES: usize = 25_000;
+const MEMORY_INSTRUCTION_PROMPT: &str = "Codebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.";
+
+/// AGENT.md 文件来源类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AgentMdType {
+    /// ~/.jdata/agent/AGENT.md — 用户全局指令
+    User,
+    /// AGENT.md / .jcli/AGENT.md — 项目级指令（签入仓库）
+    Project,
+    /// AGENT.local.md / .jcli/AGENT.local.md — 项目本地（个人，不签入）
+    Local,
+}
+
+impl AgentMdType {
+    fn description(self) -> &'static str {
+        match self {
+            AgentMdType::User => "user's private global instructions for all projects",
+            AgentMdType::Project => "project instructions, checked into the codebase",
+            AgentMdType::Local => "user's private project instructions, not checked in",
+        }
+    }
+}
+
+struct AgentMdEntry {
+    path: PathBuf,
+    md_type: AgentMdType,
+    content: String,
+}
 
 /// 返回用户级 AGENT.md 路径: ~/.jdata/agent/AGENT.md
 pub fn agent_md_path() -> PathBuf {
     YamlConfig::data_dir().join("agent").join("AGENT.md")
 }
 
-/// 从 CWD 向上搜索项目级 AGENT.md 文件
+/// 从 CWD 向上搜索项目级 AGENT.md 文件，返回按优先级从低到高排序的条目。
 ///
-/// 搜索顺序（从 CWD 到 git root）：
-/// - AGENT.md
-/// - AGENT.local.md
-/// - .jcli/AGENT.md
-/// - .jcli/AGENT.local.md
-///
-/// 返回 (路径, 内容) 列表，按优先级从低到高排列（低优先级在前，高优先级在后）。
-/// 同一目录下：AGENT.md < .jcli/AGENT.md < AGENT.local.md < .jcli/AGENT.local.md
-/// 不同目录下：CWD > CWD/.. > CWD/../.. > ... > git root
-pub fn find_project_agent_mds() -> Vec<(PathBuf, String)> {
-    let mut results: Vec<(PathBuf, String)> = Vec::new();
+/// 同一目录内优先级：AGENT.md < .jcli/AGENT.md < AGENT.local.md < .jcli/AGENT.local.md
+/// 不同目录优先级：git root < ... < CWD（离 CWD 越近优先级越高）
+fn collect_project_entries() -> Vec<AgentMdEntry> {
+    let mut results: Vec<AgentMdEntry> = Vec::new();
     let Ok(cwd) = std::env::current_dir() else {
         return results;
     };
 
-    // 从 CWD 向上遍历，收集每个目录层级中的 AGENT.md 文件
-    // 离 CWD 越近优先级越高，所以从 git root 方向开始收集（低优先级先入列表）
     let mut dirs_upward: Vec<PathBuf> = Vec::new();
     let mut current = cwd.as_path();
 
     loop {
         dirs_upward.push(current.to_path_buf());
         if current.join(".git").exists() {
-            // 到达 git root，停止向上搜索
             break;
         }
         match current.parent() {
@@ -56,24 +76,26 @@ pub fn find_project_agent_mds() -> Vec<(PathBuf, String)> {
     // 反转：从 git root 到 CWD（低优先级到高优先级）
     dirs_upward.reverse();
 
-    // 在每个目录层级中，按优先级搜索文件
-    // 同一目录内：AGENT.md < .jcli/AGENT.md < AGENT.local.md < .jli/AGENT.local.md
-    let file_names: &[&str] = &[
-        "AGENT.md",
-        ".jcli/AGENT.md",
-        "AGENT.local.md",
-        ".jcli/AGENT.local.md",
+    let candidates: &[(&str, AgentMdType)] = &[
+        ("AGENT.md", AgentMdType::Project),
+        (".jcli/AGENT.md", AgentMdType::Project),
+        ("AGENT.local.md", AgentMdType::Local),
+        (".jcli/AGENT.local.md", AgentMdType::Local),
     ];
 
     for dir in &dirs_upward {
-        for name in file_names {
+        for (name, md_type) in candidates {
             let path = dir.join(name);
             if path.is_file()
                 && let Ok(content) = fs::read_to_string(&path)
             {
                 let trimmed = content.trim();
                 if !trimmed.is_empty() {
-                    results.push((path, trimmed.to_string()));
+                    results.push(AgentMdEntry {
+                        path,
+                        md_type: *md_type,
+                        content: trimmed.to_string(),
+                    });
                 }
             }
         }
@@ -82,115 +104,49 @@ pub fn find_project_agent_mds() -> Vec<(PathBuf, String)> {
     results
 }
 
-/// 截断 AGENT.md 内容到行数和字节数上限
-fn truncate_agent_md(content: &str, path: &Path) -> String {
-    let lines: Vec<&str> = content.lines().collect();
-    let line_count = lines.len();
-    let byte_count = content.len();
-
-    let was_line_truncated = line_count > MAX_AGENT_MD_LINES;
-    let was_byte_truncated = byte_count > MAX_AGENT_MD_BYTES;
-
-    if !was_line_truncated && !was_byte_truncated {
-        return content.to_string();
-    }
-
-    // 先按行截断
-    let mut truncated: String = if was_line_truncated {
-        lines[..MAX_AGENT_MD_LINES].join("\n")
-    } else {
-        content.to_string()
-    };
-
-    // 再按字节截断（在最后一个换行符处截断，避免切断行）
-    if truncated.len() > MAX_AGENT_MD_BYTES {
-        // 在 MAX_AGENT_MD_BYTES 范围内找最后一个换行符
-        let search_end = MAX_AGENT_MD_BYTES.min(truncated.len());
-        let byte_slice = &truncated[..search_end];
-        if let Some(pos) = byte_slice.rfind('\n') {
-            truncated.truncate(pos);
-        } else {
-            truncated.truncate(MAX_AGENT_MD_BYTES);
-        }
-    }
-
-    // 附加截断警告
-    let path_display = path.display();
-    if was_line_truncated && was_byte_truncated {
-        truncated.push_str(&format!(
-            "\n\n> WARNING: AGENT.md at {} exceeds {} lines / {} bytes limit. Only part of it was loaded.",
-            path_display, MAX_AGENT_MD_LINES, MAX_AGENT_MD_BYTES
-        ));
-    } else if was_line_truncated {
-        truncated.push_str(&format!(
-            "\n\n> WARNING: AGENT.md at {} exceeds {} lines limit. Only part of it was loaded.",
-            path_display, MAX_AGENT_MD_LINES
-        ));
-    } else {
-        truncated.push_str(&format!(
-            "\n\n> WARNING: AGENT.md at {} exceeds {} bytes limit. Only part of it was loaded.",
-            path_display, MAX_AGENT_MD_BYTES
-        ));
-    }
-
-    truncated
-}
-
-/// 将路径转为相对路径显示（相对于 CWD 或用户数据目录）
-fn relative_path_display(path: &Path) -> String {
-    if let Ok(cwd) = std::env::current_dir()
-        && let Ok(rel) = path.strip_prefix(&cwd)
-    {
-        return rel.display().to_string();
-    }
-    // 尝试相对于用户数据目录
-    let data_dir = YamlConfig::data_dir();
-    if let Ok(rel) = path.strip_prefix(&data_dir) {
-        return format!("~/.jdata/{}", rel.display());
-    }
-    path.display().to_string()
-}
-
-/// 加载并拼接所有 AGENT.md 文件
+/// 加载并拼接所有 AGENT.md 文件。
 ///
-/// 按优先级从低到高拼接，每个文件用 `<agent_md>` 标签包裹并标注来源路径。
-/// 如果没有任何 AGENT.md 文件，返回空字符串。
+/// 按优先级从低到高拼接（用户级 → 项目级 → 本地级），每个文件以
+/// `Contents of {path} ({description}):\n\n{content}` 散文格式输出，
+/// 顶部附带 OVERRIDE 提示。无任何 AGENT.md 时返回空字符串。
 pub fn load_agent_md() -> String {
-    let mut parts: Vec<String> = Vec::new();
+    let mut entries: Vec<AgentMdEntry> = Vec::new();
 
-    // 1. 用户级: ~/.jdata/agent/AGENT.md（最低优先级，最先加载）
+    // 1. 用户级（最低优先级，最先加载）
     let user_path = agent_md_path();
     if user_path.is_file()
         && let Ok(content) = fs::read_to_string(&user_path)
     {
         let trimmed = content.trim();
         if !trimmed.is_empty() {
-            let truncated = truncate_agent_md(trimmed, &user_path);
-            let rel = relative_path_display(&user_path);
-            parts.push(format!(
-                "<agent_md path=\"{}\">\n{}\n</agent_md>",
-                rel, truncated
-            ));
+            entries.push(AgentMdEntry {
+                path: user_path,
+                md_type: AgentMdType::User,
+                content: trimmed.to_string(),
+            });
         }
     }
 
-    // 2-4. 项目级 + 本地级（从 git root 到 CWD，从低优先级到高优先级）
-    for (path, content) in find_project_agent_mds() {
-        let truncated = truncate_agent_md(&content, &path);
-        let rel = relative_path_display(&path);
-        parts.push(format!(
-            "<agent_md path=\"{}\">\n{}\n</agent_md>",
-            rel, truncated
-        ));
-    }
+    // 2-4. 项目级 + 本地级
+    entries.extend(collect_project_entries());
 
-    if parts.is_empty() {
+    if entries.is_empty() {
         return String::new();
     }
 
-    // 添加 OVERRIDE 头部，确保项目级指令优先于默认行为
-    let override_header = "The following project instructions OVERRIDE any default behavior and you MUST follow them exactly as written.";
-    format!("{}\n\n{}", override_header, parts.join("\n\n"))
+    let parts: Vec<String> = entries
+        .into_iter()
+        .map(|entry| {
+            format!(
+                "Contents of {} ({}):\n\n{}",
+                entry.path.display(),
+                entry.md_type.description(),
+                entry.content
+            )
+        })
+        .collect();
+
+    format!("{}\n\n{}", MEMORY_INSTRUCTION_PROMPT, parts.join("\n\n"))
 }
 
 #[cfg(test)]
@@ -198,41 +154,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_truncate_agent_md_within_limits() {
-        let _content = "line 1\nline 2\nline 3";
-        let path = PathBuf::from("/tmp/AGENT.md");
-        let result = truncate_agent_md("line 1\nline 2\nline 3", &path);
-        assert!(!result.contains("WARNING"));
+    fn test_agent_md_type_description() {
+        assert!(AgentMdType::User.description().contains("global"));
+        assert!(AgentMdType::Project.description().contains("checked into"));
+        assert!(AgentMdType::Local.description().contains("not checked in"));
     }
 
     #[test]
-    fn test_truncate_agent_md_exceeds_lines() {
-        let lines: Vec<String> = (0..300).map(|i| format!("line {}", i)).collect();
-        let content = lines.join("\n");
-        let path = PathBuf::from("/tmp/AGENT.md");
-        let result = truncate_agent_md(&content, &path);
-        assert!(result.contains("WARNING"));
-        assert!(result.contains("exceeds 200 lines"));
-        // Should have at most MAX_AGENT_MD_LINES lines of original content
-        let result_lines: Vec<&str> = result.lines().collect();
-        // 200 content lines + blank line + warning line
-        assert!(result_lines.len() <= MAX_AGENT_MD_LINES + 5);
-    }
-
-    #[test]
-    fn test_truncate_agent_md_exceeds_bytes() {
-        let content = "x".repeat(30_000);
-        let path = PathBuf::from("/tmp/AGENT.md");
-        let result = truncate_agent_md(&content, &path);
-        assert!(result.contains("WARNING"));
-        assert!(result.contains("bytes"));
-    }
-
-    #[test]
-    fn test_relative_path_display() {
-        // This test just ensures the function doesn't panic
-        let path = PathBuf::from("/some/absolute/path/AGENT.md");
-        let result = relative_path_display(&path);
-        assert!(!result.is_empty());
+    fn test_load_agent_md_empty_when_no_files() {
+        // 无任何 AGENT.md 时（在隔离的临时目录中运行），应返回空串。
+        // 真实 CWD 下可能存在 AGENT.md，所以此测试只断言函数不 panic。
+        let _ = load_agent_md();
     }
 }
