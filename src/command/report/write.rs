@@ -9,6 +9,8 @@ use chrono::{Local, NaiveDate};
 use std::fs;
 use std::path::Path;
 
+use crate::tui::editor_core::CursorPolicy;
+
 use super::io::{
     DATE_FORMAT, append_to_file, get_report_path, get_report_path_silent, get_settings_json_path,
     parse_date, read_last_n_lines, replace_last_n_lines,
@@ -242,12 +244,13 @@ fn handle_report_tui(config: &mut YamlConfig) {
     let date_prefix = format!("- 【{}】 ", today_str);
     initial_lines.push(date_prefix);
 
-    // 打开带初始内容的编辑器（NORMAL 模式）
+    // 打开带初始内容的编辑器（NORMAL 模式，光标在末尾）
     let theme = Theme::from_name(&load_agent_config().theme);
-    match crate::tui::editor_markdown::open_markdown_editor_with_content(
+    match crate::tui::editor_markdown::open_markdown_editor_with_cursor_policy(
         "编辑日报",
         &initial_lines,
         &theme,
+        CursorPolicy::EndOfFile,
     ) {
         Ok((Some(text), _)) => {
             let original_context_count = last_lines.len();
@@ -287,10 +290,11 @@ pub(super) fn handle_open_report(config: &YamlConfig) {
     let lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
 
     let theme = Theme::from_name(&load_agent_config().theme);
-    match crate::tui::editor_markdown::open_markdown_editor_with_content(
+    match crate::tui::editor_markdown::open_markdown_editor_with_cursor_policy(
         "编辑日报文件",
         &lines,
         &theme,
+        CursorPolicy::EndOfFile,
     ) {
         Ok((Some(text), _)) => {
             let mut result = text;
