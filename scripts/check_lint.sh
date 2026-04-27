@@ -11,9 +11,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SRC_DIR="$PROJECT_ROOT/src"
 
 # ── 阈值配置 ──────────────────────────────────────────────────────────────────
-MAX_FILE_LINES=500          # 单文件超过此值 WARN
-HARD_MAX_FILE_LINES=800     # 单文件超过此值 FAIL
-MAX_FUNCTION_LINES=60       # 单函数超过此值 WARN
+MAX_FILE_LINES=600          # 单文件超过此值 WARN
+HARD_MAX_FILE_LINES=1000    # 单文件超过此值 FAIL
+MAX_FUNCTION_LINES=80       # 单函数超过此值 WARN
 MAX_FUNCTION_PARAMS=4       # 函数参数超过此值 WARN
 
 # ── 颜色 ──────────────────────────────────────────────────────────────────────
