@@ -656,6 +656,7 @@ impl MarkdownEditor {
             let cached = self.wrap.get_cached_lines(logical_line);
 
             for vl in cached {
+                let is_insert_mode = *self.vim.mode() == Mode::Insert;
                 let rendered = self.renderer.render_visual_line(
                     vl,
                     is_cursor_line,
@@ -667,6 +668,7 @@ impl MarkdownEditor {
                     &self.search,
                     &self.buffer,
                     wrap_width,
+                    is_insert_mode,
                 );
                 all_visual_lines.extend(rendered);
             }

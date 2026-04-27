@@ -125,7 +125,8 @@ impl MarkdownRenderer {
 
     /// 渲染一个视觉行（Typora 风格）
     ///
-    /// - 光标行：显示原始 Markdown 源码 + 光标
+    /// - Insert 模式光标行：显示原始 Markdown 源码 + 光标
+    /// - Normal 模式光标行：显示渲染后的 Markdown 效果 + 光标块
     /// - 非光标行：显示渲染后的 Markdown 效果（代码块围栏、表格、标题等）
     #[allow(clippy::too_many_arguments)]
     pub fn render_visual_line(
@@ -136,6 +137,7 @@ impl MarkdownRenderer {
         search: &SearchState,
         buffer: &TextBuffer,
         wrap_width: usize,
+        is_insert_mode: bool,
     ) -> Vec<Line<'static>> {
         let lines = buffer.lines();
         let logical_line = vl.logical_line;
@@ -179,7 +181,7 @@ impl MarkdownRenderer {
             None
         };
 
-        if is_cursor_line {
+        if is_cursor_line && is_insert_mode {
             // 判断是否是逻辑行的最后一个视觉行
             let is_last_vl = vl.end_col >= line_content.chars().count();
             return vec![self.render_cursor_visual_line(
@@ -196,15 +198,60 @@ impl MarkdownRenderer {
             )];
         }
 
-        // ---- 非光标行：Typora 风格渲染 ----
+        // ---- 非光标行 / Normal 模式光标行：Typora 风格渲染 ----
+        // Normal 模式光标行也走渲染路径，但需要额外叠加光标
+        let rendered_lines = self.render_non_insert_line(
+            vl,
+            &line_content,
+            &vl_text,
+            search,
+            buffer,
+            wrap_width,
+            line_num_str,
+            line_num_style,
+        );
+
+        // Normal 模式光标行：在渲染结果上叠加光标块
+        if is_cursor_line && !is_insert_mode {
+            return self.overlay_cursor_on_rendered_lines(
+                rendered_lines,
+                vl,
+                cursor_col,
+                &line_content,
+            );
+        }
+
+        rendered_lines
+    }
+
+    /// 渲染非 Insert 模式的视觉行（Typora 风格）
+    ///
+    /// 适用于非光标行和 Normal 模式的光标行。
+    /// Normal 模式光标行的渲染结果会在上层叠加光标。
+    #[allow(clippy::too_many_arguments)]
+    fn render_non_insert_line(
+        &self,
+        vl: &VisualLine,
+        line_content: &str,
+        vl_text: &str,
+        search: &SearchState,
+        buffer: &TextBuffer,
+        wrap_width: usize,
+        line_num_str: String,
+        line_num_style: Style,
+    ) -> Vec<Line<'static>> {
+        let lines = buffer.lines();
+        let logical_line = vl.logical_line;
+        let is_continuation = vl.start_col > 0;
+
         // 续行（折行后的第二行及之后）无法独立渲染 Markdown，
         // 因为 Markdown 标记可能跨越折行边界，所以续行显示源码
         // 但代码块内的续行需要保持 code_bg 样式
         if is_continuation {
-            let text = &vl_text;
+            let text = vl_text;
 
             // 检查续行是否在代码块内（非围栏行）
-            let in_code_block = !Self::is_code_fence_line(&line_content)
+            let in_code_block = !Self::is_code_fence_line(line_content)
                 && self.is_line_in_complete_code_block(logical_line, lines);
 
             if in_code_block {
@@ -221,7 +268,7 @@ impl MarkdownRenderer {
                 ];
                 // 续行用 code_bg 背景显示源码，不语法高亮（续行是折行片段）
                 spans.push(Span::styled(
-                    text.clone(),
+                    text.to_string(),
                     Style::default()
                         .fg(self.theme.text_normal)
                         .bg(self.theme.code_bg),
@@ -243,10 +290,10 @@ impl MarkdownRenderer {
             }
 
             // 表格续行：保持表格边框样式
-            if Self::is_table_row(&line_content) {
-                let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+            if Self::is_table_row(line_content) {
+                let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
                 spans.push(Span::styled(
-                    text.clone(),
+                    text.to_string(),
                     self.style(self.theme.text_normal),
                 ));
                 return vec![Line::from(spans)];
@@ -272,19 +319,19 @@ impl MarkdownRenderer {
                     .fg(self.theme.md_blockquote_text)
                     .bg(self.theme.md_blockquote_bg);
 
-                let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+                let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
                 spans.push(Span::styled(format!("{} ", bar), bar_style));
-                spans.push(Span::styled(text.clone(), text_style));
+                spans.push(Span::styled(text.to_string(), text_style));
                 return vec![Line::from(spans)];
             }
 
             // 普通续行
-            let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+            let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
             } else {
                 spans.push(Span::styled(
-                    text.clone(),
+                    text.to_string(),
                     self.style(self.theme.text_normal),
                 ));
             }
@@ -293,15 +340,15 @@ impl MarkdownRenderer {
 
         // 非续行的非光标行：完整 Markdown 渲染
         // 截断到折行宽度，防止终端二次折行导致重复渲染
-        let truncated = Self::truncate_to_display_width(&line_content, wrap_width);
+        let truncated = Self::truncate_to_display_width(line_content, wrap_width);
 
         // 检查是否是代码块围栏行
-        if Self::is_code_fence_line(&line_content) {
+        if Self::is_code_fence_line(line_content) {
             if self.is_fence_line_paired(logical_line, lines) {
-                return vec![self.render_code_fence_line(&line_content, logical_line, lines)];
+                return vec![self.render_code_fence_line(line_content, logical_line, lines)];
             }
             // 不成对的围栏，渲染为普通文本
-            let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+            let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             if search.is_searching() && search.match_count() > 0 {
                 spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             } else {
@@ -312,13 +359,13 @@ impl MarkdownRenderer {
 
         // 检查是否在完整的代码块内
         if self.is_line_in_complete_code_block(logical_line, lines) {
-            return vec![self.render_code_block_line(&line_content, logical_line, lines)];
+            return vec![self.render_code_block_line(line_content, logical_line, lines)];
         }
 
         // 检查是否在表格内
         if let Some(table_ctx) = self.find_table_context(logical_line, lines) {
             return self.render_table_rows(
-                &line_content,
+                line_content,
                 logical_line,
                 &table_ctx,
                 lines,
@@ -328,12 +375,61 @@ impl MarkdownRenderer {
 
         // 其他行：搜索高亮优先，否则 Markdown 渲染（标题、列表、引用等）
         if search.is_searching() && search.match_count() > 0 {
-            let mut spans = vec![Span::styled(line_num_str, line_num_style)];
+            let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             spans.extend(search.highlight_line(logical_line, &truncated, &self.theme, 0));
             vec![Line::from(spans)]
         } else {
             vec![self.render_single_line_with_number(&truncated, logical_line, wrap_width)]
         }
+    }
+
+    /// 在 Normal 模式渲染后的行上叠加光标块
+    fn overlay_cursor_on_rendered_lines(
+        &self,
+        rendered_lines: Vec<Line<'static>>,
+        vl: &VisualLine,
+        cursor_col: Option<usize>,
+        line_content: &str,
+    ) -> Vec<Line<'static>> {
+        let Some(col) = cursor_col else {
+            return rendered_lines;
+        };
+
+        // 判断光标是否在当前视觉行范围内
+        let is_last_vl = vl.end_col >= line_content.chars().count();
+        let cursor_in_this_vl = if col == vl.end_col {
+            is_last_vl
+        } else {
+            col >= vl.start_col && col < vl.end_col
+        };
+
+        if !cursor_in_this_vl {
+            return rendered_lines;
+        }
+
+        let cursor_style = Style::default()
+            .fg(self.theme.cursor_fg)
+            .bg(self.theme.cursor_bg)
+            .add_modifier(Modifier::BOLD);
+
+        // 计算光标在视觉行内的字符偏移
+        // 需要加上行号占用的字符数，因为 overlay_cursor_on_spans 在包含行号的完整 spans 上定位
+        let line_num_chars = if self.show_line_numbers { 5 } else { 0 };
+        let char_idx_at_cursor = line_num_chars + col.saturating_sub(vl.start_col);
+
+        // 对第一个（通常也是唯一一个）渲染行叠加光标
+        let mut result = Vec::with_capacity(rendered_lines.len());
+        for (i, line) in rendered_lines.into_iter().enumerate() {
+            if i == 0 {
+                let spans: Vec<Span<'static>> = line.spans;
+                let overlaid =
+                    Self::overlay_cursor_on_spans(spans, char_idx_at_cursor, cursor_style);
+                result.push(Line::from(overlaid));
+            } else {
+                result.push(line);
+            }
+        }
+        result
     }
 
     /// 将 tab 替换为空格（宽度为 1，与 char_width('\t') = 1 一致）
