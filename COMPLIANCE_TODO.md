@@ -12,7 +12,6 @@
 - [x] `command/chat/agent/agent_loop.rs:run_main_agent_loop` — 1170行, 5参数 *(已拆分为 agent_loop/ 子模块：mod.rs ~371行 + compact_phase.rs ~292行 + stream_reader.rs ~541行 + tool_dispatch.rs ~230行；参数已封装为 MainAgentLoopParams + 各 Context struct)*
 - [ ] `command/chat/markdown/highlight.rs:highlight_code_line` — 853行, 3参数
 - [ ] `command/chat/handler/chat.rs:handle_chat_mode` — 672行, 2参数
-- [ ] `command/chat/oneshot.rs:run_oneshot_agent` — 629行, 7参数
 - [ ] `command/chat/teammate/teammate_loop.rs:run_teammate_loop` — 539行, 1参数
 - [ ] `command/chat/handler/tui_loop.rs:run_chat_tui_internal` — 503行, 1参数
 - [ ] `command/chat/markdown/parser.rs:markdown_to_lines` — 478行, 3参数
@@ -59,7 +58,6 @@
 - [ ] `tui/editor_core/editor.rs:render` — 141行, 2参数
 - [x] `command/chat/remote/server.rs:handle_websocket` — 141行, 2参数 *(已重构：改为传 `&WsConnectionState`，参数从 6 降至 2)*
 - [ ] `command/todo/ui.rs:render_status_bar` — 140行, 3参数
-- [ ] `command/chat/oneshot.rs:interactive_confirm` — 138行, 5参数
 - [ ] `command/chat/input/autocomplete.rs:get_filtered_files_for_at` — 135行, 1参数
 - [ ] `command/chat/context/compact.rs:auto_compact` — 134行, 7参数
 - [x] `tui/editor_core/renderer.rs:render_cursor_visual_line` — 133行, 4参数 *(已拆分：提取至 renderer/visual_line.rs)*
@@ -95,7 +93,6 @@
 - [x] `tui/editor_core/editor.rs:open_markdown_editor_with_content` — 6参数, 10行 *(同上，opts + initial_lines 两参数)*
 - [x] `tui/components/row.rs:text_field_row` — 7参数, 33行 *(已封装为 `TextFieldRowCtx` struct)*
 - [x] `tui/components/row.rs:toggle_list_item` — 7参数, 44行 *(已封装为 `ToggleListItemCtx` struct)*
-- [ ] `command/chat/oneshot.rs:run_oneshot_agent` — 7参数, 629行
 - [ ] `command/chat/ui/input.rs:build_line_segments` — 7参数, 80行
 - [x] `command/chat/tools/derived_shared.rs:execute_tool_with_permission` — 6参数, 127行 *(已封装为 `ToolExecContext` struct)*
 - [x] `command/chat/context/compact.rs:auto_compact` — 5参数, 134行 *(已封装为 `AutoCompactParams` struct，messages 单独传)*
@@ -110,9 +107,6 @@
 - [ ] `tui/editor_core/editor.rs:new` — 6参数, 51行
 - [ ] `tui/components/cursor.rs:cursor_wrapped_lines` — 6参数, 65行
 - [x] `tui/components/row.rs:toggle_row` — 6参数, 34行 *(已封装为 `ToggleRowCtx` struct)*
-- [ ] `command/chat/oneshot.rs:run_oneshot_no_tools` — 6参数, 75行
-- [ ] `command/chat/oneshot.rs:handle_tool_call` — 6参数, 87行
-- [ ] `command/chat/oneshot.rs:fire_session_end` — 6参数, 18行
 - [ ] `command/chat/ui/title_bar.rs:draw_title_bar` — 6参数, 338行
 - [x] `command/chat/ui/components.rs:global_preview_row` — 6参数, 26行 *(已封装为 `GlobalRowCtx` struct，含 label/desc/hint/selected/theme)*
 - [x] `command/chat/ui/components.rs:global_theme_row` — 6参数, 30行 *(同上 `GlobalRowCtx`)*
@@ -144,7 +138,6 @@
 - [x] `command/report/write.rs:update_config_files_silent` — 5参数, 17行 *(已迁移至 write.rs，参数含 config_path: &Path + week_num + last_day + config: &mut YamlConfig，属配置文件写入辅助函数，5 参数合理，函数仅 17 行无需封装)*
 - [x] `command/report/write.rs:update_config_files` — 5参数, 29行 *(同上，带 info 输出版本，5 参数合理)*
 - [x] `command/report/query.rs:handle_search` — 4参数, 95行 *(已迁移至 query.rs，原 5 参数中的 target 不再封装 SearchParams，实际 4 参数：line_count + target + fuzzy_flag + config，合规)*
-- [ ] `command/chat/oneshot.rs:interactive_confirm` — 5参数, 138行
 - [ ] `command/chat/handler/tui_loop.rs:dispatch_event` — 5参数, 116行
 - [ ] `command/chat/handler/chat.rs:write_agent_dump` — 5参数, 17行
 - [ ] `command/chat/ui/selector.rs:selector_block` — 5参数, 18行
@@ -169,7 +162,6 @@
 - [ ] `command/chat/render/cache/msg_render.rs:render_user_msg` — 5参数, 114行
 - [ ] `command/chat/render/cache/msg_render.rs:render_assistant_msg` — 5参数, 145行
 - [x] `command/chat/agent/agent_loop.rs:push_compact_tool_messages` — 4参数, 49行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
-- [ ] `command/chat/agent/agent_loop.rs:run_main_agent_loop` — 5参数, 1170行
 - [x] `command/chat/agent/api.rs:call_llm_stream_async` — 4参数, 75行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
 - [x] `command/chat/agent/api.rs:call_llm_stream` — 4参数, 18行 *(已合规：实际参数 ≤4，TODO 原扫描数据有误)*
 - [ ] `command/chat/teammate/teammate_loop.rs:build_teammate_system_prompt` — 5参数, 20行
@@ -183,50 +175,53 @@
 按行数降序排列。修复方式：按职责拆分为子模块（独立 .rs 文件）。
 
 - [x] `tui/editor_core/renderer.rs` — 1559行 *(已拆分为 renderer.rs + renderer/ 子模块：code_block.rs ~180行, table.rs ~240行, inline.rs ~160行, line.rs ~200行, visual_line.rs ~160行, renderer.rs ~350行)*
-- [ ] `command/chat/tools/browser.rs` — 1522行
-- [x] `command/notebook/app.rs` — 1440行 *(已拆分为 app/ 子模块：types.rs ~442行 + io.rs ~352行 + flat_entries.rs ~111行 + input.rs ~618行 + app.rs ~27行)*
-- [x] `command/chat/oneshot.rs` — 1381行
-- [X] `command/chat/agent/agent_loop.rs` — 1267行
-- [x] `command/report.rs` — 1246行 *(已拆分为 report/ 子模块：io.rs ~218行 + write.rs ~551行 + git.rs ~388行 + query.rs ~130行 + report.rs ~16行)*
-- [ ] `command/chat/handler/chat.rs` — 1104行
-- [ ] `tui/editor_core/editor.rs` — 1076行
-- [ ] `command/chat/tools/computer_use/tool.rs` — 1046行
-- [X] `command/chat/infra/hook/tests.rs` — 1042行 (测试文件，可豁免)
+- [ ] `command/chat/tools/browser.rs` — 1522行 *(建议拆分：browser/cdp.rs ~835行 + browser/lite.rs + browser/html_utils.rs)*
+- [ ] `command/chat/render/cache/tool_call_render.rs` — 1437行 *(已有 9 个天然分区，建议拆分入口+分发 + tool_expanded.rs + specialized.rs)*
+- [x] `command/chat/agent/agent_loop.rs` — 1292行 *(豁免：核心异步主循环，拆分代价高，状态耦合紧密)*
+- [ ] `command/chat/handler/chat.rs` — 1104行 *(建议拆分：handle_chat_mode 内 6 个弹窗处理提取为子函数 + dump.rs 模块)*
+- [ ] `tui/editor_core/editor.rs` — 1094行 *(可选拆分：渲染方法提取到 editor/render.rs)*
+- [ ] `command/chat/tools/computer_use/tool.rs` — 1046行 *(建议拆分：types.rs + applescript.rs + indicator.rs)*
+- [x] `command/chat/infra/hook/tests.rs` — 1042行 *(豁免：测试文件)*
 - [ ] `command/chat/markdown/highlight.rs` — 969行
 - [ ] `command/update.rs` — 875行
-- [ ] `command/chat/render/cache/confirm_render.rs` — 868行
-- [X] `command/todo/app.rs` — 867行
-- [ ] `theme.rs` — 824行
-- [ ] `command/chat/infra/hook/manager.rs` — 807行
-- [ ] `command/chat/app/chat_app.rs` — 807行
+- [ ] `command/chat/render/cache/confirm_render.rs` — 890行
+- [ ] `theme.rs` — 904行
+- [ ] `command/chat/infra/hook/manager.rs` — 803行
+- [ ] `command/chat/app/chat_app.rs` — 808行
+
+---
 
 ## 四、非 test 代码中的 unwrap/expect
 
-判定标准：前置条件保护的 expect 合理，可能失败的操作应改为 `?` 传播，Mutex::lock().unwrap() 可接受。
+判定标准：前置条件保护的 expect 合理，可能失败的操作应改为 `?` 传播，Mutex::lock().unwrap() 可接受（需 SAFETY 注释）。
 
-### 需改为 ? 传播（可能失败）
+### 需补充 SAFETY 注释（6 处）
 
-- [x] `interactive/run.rs:31` — `.expect("无法初始化编辑器")` — 已有 SAFETY 注释，合理 panic
-- [x] `command/chat/input/input_thread.rs:42` — `.expect("failed to spawn input thread")` — 已有 SAFETY 注释，合理 panic
-- [x] `command/chat/infra/sandbox.rs:188` — `std::env::current_dir().unwrap()` — 在 #[test] 内，可豁免
+- [ ] `command/chat/oneshot/display.rs:190` — `Mutex::lock().unwrap()` 缺少 SAFETY 注释
+- [ ] `command/chat/oneshot/agent_loop.rs:258` — `Mutex::lock().unwrap()` 缺少 SAFETY 注释
+- [ ] `command/chat/oneshot/agent_loop.rs:306` — `Mutex::lock().unwrap()` 缺少 SAFETY 注释
+- [ ] `command/chat/oneshot/agent_loop.rs:341` — `Mutex::lock().unwrap()` 缺少 SAFETY 注释
+- [ ] `command/chat/oneshot/agent_loop.rs:366` — `Mutex::lock().unwrap()` 缺少 SAFETY 注释
+- [ ] `command/chat/oneshot/agent_loop.rs:387` — `Mutex::lock().unwrap()` 缺少 SAFETY 注释
 
-### 需补充 SAFETY 注释
-
-- [x] `llm/stream.rs:109` — 已补充 SAFETY 注释（valid_up_to 保证 UTF-8 边界）
-- [x] `llm/client.rs:65` — 原已有 SAFETY 注释 ✅
-- [x] `command/time.rs:91` — 原已有 SAFETY 注释 ✅
-- [x] `command/help/app.rs:135` — 已改为 `let Some(cache) = ... else { return &[] }` 防御式编程
+> 建议添加：`// SAFETY: Mutex 中毒仅发生在持有锁的线程 panic，此处可安全 unwrap。`
 
 ### 合理使用（可豁免）
 
+- [x] `llm/stream.rs:109` — 已有 SAFETY 注释（valid_up_to 保证 UTF-8 边界）
+- [x] `llm/client.rs:65` — 原已有 SAFETY 注释 ✅
+- [x] `command/time.rs:91` — 原已有 SAFETY 注释 ✅
+- [x] `command/help/app.rs:135` — 已改为 `let Some(cache) = ... else { return &[] }` 防御式编程
+- [x] `interactive/run.rs:31` — `.expect("无法初始化编辑器")` — 已有 SAFETY 注释，合理 panic
+- [x] `command/chat/input/input_thread.rs:42` — `.expect("failed to spawn input thread")` — 已有 SAFETY 注释，合理 panic
 - `util/text.rs:68` — `.expect("正则表达式编译失败…")` — 静态正则模式，注释已说明
 - `command/chat/handler/tui_loop.rs:438` — `.expect("ws_bridge checked…")` — 前置 is_some() 保护
 - `command/chat/ui/config/global.rs:85` — `.expect("checked is_none()…")` — 前置条件检查保护
-- `command/chat/oneshot.rs` 多处 — `Mutex::lock().unwrap()` — 仅在 poison 时失败，安全使用
 - `command/chat/app/chat_app/update_misc.rs:247` — `.expect("browse mode 下…")` — 模式前置检查保证
 - `command/chat/remote/crypto.rs` 两处 — HKDF/AES-GCM 参数硬编码常量，不会失败
 - `command/chat/remote/setup.rs:52` — `.expect("SocketAddr 格式…")` — format! 产出必然合法
-- `command/chat/context/regression_tests.rs` — 测试代码可豁免
+
+---
 
 ## 五、super::super:: 过度层级引用
 
@@ -267,13 +262,133 @@
 - [x] `command/chat/remote/protocol.rs` — 1处 → `crate::command::chat::storage`
 - [x] `command/chat/ui/hint.rs` — 1处 → `crate::command::chat::render::theme`
 
+---
+
 ## 六、TUI 输出规范违规
 
 > 规范：禁止在 TUI 模式下使用 println!/eprintln!/info!/error!/warn!/debug!
 
-当前扫描结果：**TUI 代码中无违规**（原报告中的 `crate::error!` 已修复或不存在）。
+### 需修复（1 处）
+
+- [ ] `command/chat/handler/tui_loop.rs:262` — `crate::error!("远程服务启动失败: {}", e)` 在 TUI 上下文中使用了 eprintln!
+
+> **修复建议**：改为 `crate::util::log::write_error_log("remote_start", &format!("远程服务启动失败: {}", e))` 写入文件日志。
 
 ### 可豁免的 CLI 输出（非 TUI 环境）
 
-- `command/chat/oneshot.rs` — 大量 `println!`/`eprintln!`，但这是 CLI 模式（非 TUI 界面）
+- `command/chat/oneshot/*.rs` — 大量 `println!`/`eprintln!`，但这是 CLI 模式（非 TUI 界面），与 TUI 互斥
 - `command/chat/remote/setup.rs` — 二维码显示和状态提示使用 `println!`，TUI 启动前的 CLI 阶段输出
+- `command/chat/handler/tui_loop.rs:277` — `error!("Chat TUI 启动失败")` 发生在 TUI 已退出（TerminalGuard Drop 后），可接受
+
+---
+
+## 七、内存与性能问题
+
+> 规范：优先使用切片引用（`&str`, `&[T]`）而非包装类型（`String`, `Vec`），避免非必要 `.clone()`。
+
+### 7.1 参数不必要的值传递（needless_pass_by_value）— 18 处
+
+| 文件 | 行号 | 参数 | 建议 |
+|------|------|------|------|
+- [ ] `command/chat/agent/tool_processor.rs:168` — `tool_items: Vec<ToolCallItem>` → `&[ToolCallItem]`
+- [ ] `command/chat/app/chat_app/update_misc.rs:149` — `error: String` → `&str`
+- [ ] `command/chat/app/chat_app/update_session.rs:238` — `name: String` → `&str`
+- [ ] `command/chat/context/plan_state.rs:88` — `req: Arc<PendingPlanApproval>` → `&Arc<...>`
+- [ ] `command/chat/input/input_thread.rs:53` — `tx: Sender`, `quit: Arc`, `pause: Arc` → 改为引用
+- [ ] `command/chat/oneshot/agent_loop.rs:37,38,116` — 多个 String 参数 → `&str`
+- [ ] `command/chat/permission/queue.rs:108` — `Arc` 参数 → 引用
+- [ ] `command/chat/tools/definition.rs:159,160` — `String` 参数 → `&str`
+- [ ] `command/chat/tools/shell.rs:298,299` — `String` 参数 → `&str`
+- [ ] `command/notebook/app/flat_entries.rs:34` — `ctx: FlatEntriesContext` → `&FlatEntriesContext`
+- [ ] `tui/editor_core/vim.rs:399,424` — `String` 参数 → `&str`
+- [ ] `tui/editor_core/editor.rs:92` — `CursorPolicy` → 引用或 derive Copy
+
+### 7.2 隐式 clone（implicit_clone）— 5 处
+
+| 文件 | 行号 | 问题 |
+|------|------|------|
+- [ ] `command/chat/app/chat_app.rs:669` — `.to_string()` → 应改为 `.clone()`
+- [ ] `command/chat/tools/task/task_tool.rs:159` — `.to_string()` → 应改为 `.clone()`
+- [ ] `command/chat/ui/config/commands.rs:57` — `.to_string()` → 应改为 `.clone()`
+- [ ] `command/chat/ui/config/skills.rs:50` — `.to_string()` → 应改为 `.clone()`
+- [ ] `command/system.rs:159` — `.to_vec()` → 应改为 `.clone()`
+
+### 7.3 Arc 的 .clone()（clone_on_ref_ptr）— 1 处
+
+- [ ] `command/chat/oneshot/agent_loop.rs:154` — `invoked_skills.clone()` → 应改为 `Arc::clone(&invoked_skills)` 或 `std::sync::Arc::clone(&invoked_skills)` 以显式语义
+
+---
+
+## 八、模式匹配规范
+
+> 规范：显式处理所有枚举分支，避免过度依赖 `_ => ...`；简单分支判断使用 `if let` 或 `let else`。
+
+### 8.1 业务逻辑枚举的 `_ =>` 通配匹配（需审查）
+
+> TUI 按键处理中使用 `_ =>` 忽略不关心的按键是常见模式，可接受。
+> 但**业务逻辑枚举**（如 Tool 类型、Action 类型、Message 类型）应显式处理所有分支。
+
+- [ ] `command/chat/handler/config.rs` — 11 处 Key 事件匹配，大量 `_ =>`（TUI 按键，可豁免）
+- [ ] `command/chat/handler/chat.rs` — 5 处 KeyEvent/Action 匹配
+- [ ] `command/chat/handler/archive.rs` — 3 处
+- [ ] `command/chat/handler/tool_confirm.rs` — 3 处确认弹窗键位
+- [ ] `command/chat/tools/task/task_manager.rs:29` — Task action 匹配
+- [ ] `command/chat/tools/todo/todo_manager.rs:28` — Todo action 匹配
+- [ ] `tui/editor_core/editor.rs` — 7 处编辑器按键处理（可豁免）
+- [ ] `tui/editor_core/vim.rs` — 8 处 Vim 模式键位处理（可豁免）
+- [ ] `command/notebook/app/input.rs` — 7 处笔记输入处理（可豁免）
+
+### 8.2 可简化为 if let 的 match（约 10 处）
+
+- [ ] `command/chat/handler/config.rs:105`
+- [ ] `command/chat/handler/tui_loop.rs:102,225,227`
+- [ ] `command/chat/handler/archive.rs:39,67,85`
+- [ ] `command/chat/handler/tool_confirm.rs:49,65,91`
+- [ ] `command/notebook/handler.rs:418,441`
+
+---
+
+## 九、文档注释缺失（持续改进）
+
+> 规范：公共 API 和核心类型必须有 `///` 文档注释。
+
+`clippy::missing_docs_in_private_items` 报告 **1482 处**，按类型分布：
+
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| field（字段） | 745 | 多数为私有字段 |
+| module（模块） | 188 | |
+| constant（常量） | 152 | |
+| method（方法） | 135 | **需优先补充 pub method** |
+| variant（枚举变体） | 98 | |
+| function（函数） | 97 | **需优先补充 pub fn** |
+| struct（结构体） | 12 | **需优先补充 pub struct** |
+
+**优先级**：补充 **pub struct/enum/fn/method**（约 250 处），私有项可暂缓。
+
+---
+
+## 十、优先级总结
+
+### P0（必须修复）— 7 处
+
+| # | 类别 | 文件 | 描述 |
+|---|------|------|------|
+| 1 | TUI 规范 | `handler/tui_loop.rs:262` | TUI 模式中使用 `crate::error!`，应改为文件日志 |
+| 2-7 | 错误处理 | `oneshot/display.rs:190` + `oneshot/agent_loop.rs` 5处 | `Mutex::lock().unwrap()` 缺少 SAFETY 注释 |
+
+### P1（建议修复）— 24 处
+
+| # | 类别 | 数量 | 描述 |
+|---|------|------|------|
+| 8 | 内存/性能 | 18 处 | 函数参数不必要的值传递，应改为引用 |
+| 9 | 内存/性能 | 5 处 | 隐式 clone（`.to_string()` / `.to_vec()`）|
+| 10 | 内存/性能 | 1 处 | Arc 的 `.clone()` 应改为 `Arc::clone()` |
+
+### P2（持续改进）
+
+| # | 类别 | 数量/文件 | 描述 |
+|---|------|----------|------|
+| 11 | 文件拆分 | 6 个文件 | 超过 1000 行（browser.rs、tool_call_render.rs、chat.rs、editor.rs、tool.rs、highlight.rs）|
+| 12 | 文档注释 | ~250 处 pub 项 | 公共 API 缺少 `///` 文档注释 |
+| 13 | 模式匹配 | ~10 处 | 可简化为 `if let` 的 match |
