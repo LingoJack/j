@@ -70,7 +70,7 @@ impl MarkdownRenderer {
     /// 生成行号字符串
     fn format_line_number(&self, line_idx: usize) -> String {
         if self.show_line_numbers {
-            format!("{:4} ", line_idx + 1)
+            format!("{:>4}  ", line_idx + 1)
         } else {
             String::new()
         }
@@ -79,7 +79,7 @@ impl MarkdownRenderer {
     /// 生成续行行号字符串（空格或空）
     fn format_continuation_line_number(&self) -> String {
         if self.show_line_numbers {
-            "     ".to_string()
+            "      ".to_string()
         } else {
             String::new()
         }
@@ -155,9 +155,9 @@ impl MarkdownRenderer {
         let line_num_str = if !self.show_line_numbers {
             String::new()
         } else if is_continuation {
-            "     ".to_string()
+            "      ".to_string()
         } else {
-            format!("{:>4} ", logical_line + 1)
+            format!("{:>4}  ", logical_line + 1)
         };
         let line_num_style = if is_cursor_line {
             Style::default()
