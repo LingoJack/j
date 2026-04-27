@@ -27,7 +27,7 @@
 - [x] `command/chat/tools/grep.rs:execute` — 258行, 2参数 *(已拆分：提取 `build_file_walker` / `search_single_file` / `build_content_line` / `format_grep_output` 等 8 个辅助函数，execute 主体缩减至 ~60 行)*
 - [ ] `command/chat/render/cache/tool_call_render.rs:render_tool_call_request_msg` — 258行, 4参数
 - [ ] `interactive/parser.rs:parse_interactive_command` — 230行, 1参数
-- [ ] `command/notebook/app.rs:handle_input_mode` — 229行, 2参数
+- [x] `command/notebook/app/input.rs:handle_input_mode` — 229行, 2参数 *(已拆分：提取 dispatch_enter / enter_adding / enter_renaming / enter_mkdir / enter_mv / enter_search + 辅助函数 delete_char_before / delete_char_at / insert_char，handle_input_mode 缩减至 ~50 行)*
 - [ ] `interactive/completer.rs:complete` — 228行, 5参数
 - [ ] `command/chat/tools/sub_agent.rs:execute` — 216行, 2参数
 - [x] `tui/editor_core/renderer.rs:render_visual_line` — 207行, 7参数 *(已拆分：提取 CursorLineContext + render_cursor_visual_line → visual_line.rs，续行/非光标行逻辑留在 renderer.rs 主文件，render_visual_line 缩减至 ~160 行)*
@@ -86,7 +86,7 @@
 - [x] `tui/editor_core/editor.rs:open_markdown_editor_on_terminal` — 7参数, 36行 *(已封装为 `MarkdownEditorOpts` struct，theme 改为 owned)*
 - [ ] `command/chat/tools/definition.rs:new` — 8参数, 78行
 - [x] `command/chat/remote/server.rs:run_server` — 8参数, 38行 *(已封装为 `ServerOpts` struct，run_server 降至 1 参数)*
-- [ ] `command/notebook/app.rs:build_flat_entries_recursive` — 8参数, 79行
+- [x] `command/notebook/app/flat_entries.rs:build_flat_entries_recursive` — 8参数, 79行 *(已封装为 `FlatEntriesContext` struct，参数降至 4：ctx + prefix + depth + flat)*
 
 ### 7 参数
 
@@ -184,7 +184,7 @@
 
 - [x] `tui/editor_core/renderer.rs` — 1559行 *(已拆分为 renderer.rs + renderer/ 子模块：code_block.rs ~180行, table.rs ~240行, inline.rs ~160行, line.rs ~200行, visual_line.rs ~160行, renderer.rs ~350行)*
 - [ ] `command/chat/tools/browser.rs` — 1522行
-- [ ] `command/notebook/app.rs` — 1440行
+- [x] `command/notebook/app.rs` — 1440行 *(已拆分为 app/ 子模块：types.rs ~442行 + io.rs ~352行 + flat_entries.rs ~111行 + input.rs ~618行 + app.rs ~27行)*
 - [x] `command/chat/oneshot.rs` — 1381行
 - [X] `command/chat/agent/agent_loop.rs` — 1267行
 - [ ] `command/report.rs` — 1246行
