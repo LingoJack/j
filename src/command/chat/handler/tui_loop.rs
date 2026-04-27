@@ -87,6 +87,17 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// 根据当前 ChatMode 将鼠标滚轮事件路由到对应的导航 Action。
+fn mouse_scroll_action(app: &ChatApp, dir: CursorDirection) -> Action {
+    match app.ui.mode {
+        ChatMode::Config if !app.ui.config_editing => Action::ConfigNavigate(dir),
+        ChatMode::SelectModel => Action::ModelSelectNavigate(dir),
+        ChatMode::SelectTheme => Action::ThemeSelectNavigate(dir),
+        ChatMode::ArchiveList => Action::ArchiveListNavigate(dir),
+        _ => Action::Scroll(dir),
+    }
+}
+
 /// 将单个 crossterm Event 分发到对应的 handler / Action。
 /// 返回 true 表示应退出主循环。
 fn dispatch_event(
@@ -191,12 +202,12 @@ fn dispatch_event(
         }
         Event::Mouse(mouse) if *mouse_capture_enabled => match mouse.kind {
             MouseEventKind::ScrollUp => {
-                app.update(Action::Scroll(CursorDirection::Up));
+                app.update(mouse_scroll_action(app, CursorDirection::Up));
                 *needs_redraw = true;
                 false
             }
             MouseEventKind::ScrollDown => {
-                app.update(Action::Scroll(CursorDirection::Down));
+                app.update(mouse_scroll_action(app, CursorDirection::Down));
                 *needs_redraw = true;
                 false
             }
