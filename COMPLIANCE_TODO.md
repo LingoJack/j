@@ -11,7 +11,7 @@
 
 - [x] `command/chat/agent/agent_loop.rs:run_main_agent_loop` — 1170行, 5参数 *(已拆分为 agent_loop/ 子模块：mod.rs ~371行 + compact_phase.rs ~292行 + stream_reader.rs ~541行 + tool_dispatch.rs ~230行；参数已封装为 MainAgentLoopParams + 各 Context struct)*
 - [ ] `command/chat/markdown/highlight.rs:highlight_code_line` — 853行, 3参数
-- [ ] `command/chat/handler/chat.rs:handle_chat_mode` — 672行, 2参数
+- [x] `command/chat/handler/chat.rs:handle_chat_mode` — 672行, 2参数 *(已拆分为 handler/chat/ 子模块：mod.rs ~464行 + popups.rs ~381行 + dump.rs ~230行；handle_chat_mode 主体缩减至 ~40 行，提取 handle_ctrl_shortcut / handle_main_key / handle_enter_key / handle_arrow_vertical / handle_char_input + 5 个弹窗子函数)*
 - [ ] `command/chat/teammate/teammate_loop.rs:run_teammate_loop` — 539行, 1参数
 - [ ] `command/chat/handler/tui_loop.rs:run_chat_tui_internal` — 503行, 1参数
 - [ ] `command/chat/markdown/parser.rs:markdown_to_lines` — 478行, 3参数
@@ -178,7 +178,7 @@
 - [ ] `command/chat/tools/browser.rs` — 1522行 *(建议拆分：browser/cdp.rs ~835行 + browser/lite.rs + browser/html_utils.rs)*
 - [ ] `command/chat/render/cache/tool_call_render.rs` — 1437行 *(已有 9 个天然分区，建议拆分入口+分发 + tool_expanded.rs + specialized.rs)*
 - [x] `command/chat/agent/agent_loop.rs` — 1292行 *(豁免：核心异步主循环，拆分代价高，状态耦合紧密)*
-- [ ] `command/chat/handler/chat.rs` — 1104行 *(建议拆分：handle_chat_mode 内 6 个弹窗处理提取为子函数 + dump.rs 模块)*
+- [x] `command/chat/handler/chat.rs` — 1104行 *(已拆分为 handler/chat/ 子模块：mod.rs ~464行 + popups.rs ~381行 + dump.rs ~230行)*
 - [ ] `tui/editor_core/editor.rs` — 1094行 *(可选拆分：渲染方法提取到 editor/render.rs)*
 - [ ] `command/chat/tools/computer_use/tool.rs` — 1046行 *(建议拆分：types.rs + applescript.rs + indicator.rs)*
 - [x] `command/chat/infra/hook/tests.rs` — 1042行 *(豁免：测试文件)*

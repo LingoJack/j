@@ -126,7 +126,8 @@
       "Bash(cargo clean *)",
       "Bash(cargo fix *)",
       "Bash(j --version)",
-      "Read(//Users/lingojack/.cargo/bin/**)"
+      "Read(//Users/lingojack/.cargo/bin/**)",
+      "Bash(awk '/^pub fn handle_chat_mode/,/^}$/' /Users/lingojack/dev_custom/j/src/command/chat/handler/chat/mod.rs)"
     ]
   },
   "language": "zh-CN",

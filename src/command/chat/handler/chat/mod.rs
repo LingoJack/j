@@ -66,9 +66,9 @@ fn handle_ctrl_shortcut(app: &mut ChatApp, key: KeyEvent) -> bool {
             true
         }
         'b' => {
-            let msg_count = safe_lock(&app.display_messages, "chat_ctrl_b::msg_count").len();
-            if msg_count > 0 {
-                app.ui.browse_msg_index = msg_count - 1;
+            let filtered = app.browse_filtered_indices();
+            if let Some(&last_idx) = filtered.last() {
+                app.ui.browse_msg_index = last_idx;
                 app.ui.browse_scroll_offset = 0;
                 app.ui.msg_lines_cache = None;
                 app.update(Action::EnterMode(ChatMode::Browse));
@@ -400,9 +400,9 @@ pub(super) fn execute_slash_command(app: &mut ChatApp, cmd: &SlashCommand) {
             app.update(Action::OpenLogWindows);
         }
         SlashCommand::Browse => {
-            let msg_count = safe_lock(&app.display_messages, "slash_browse::msg_count").len();
-            if msg_count > 0 {
-                app.ui.browse_msg_index = msg_count - 1;
+            let filtered = app.browse_filtered_indices();
+            if let Some(&last_idx) = filtered.last() {
+                app.ui.browse_msg_index = last_idx;
                 app.ui.browse_scroll_offset = 0;
                 app.ui.msg_lines_cache = None;
                 app.update(Action::EnterMode(ChatMode::Browse));
