@@ -67,6 +67,10 @@ pub const COMMANDS: &[CmdItem] = &[
         name: "no-line-number",
         desc: "隐藏行号",
     },
+    CmdItem {
+        name: "help",
+        desc: "显示帮助指南",
+    },
 ];
 
 /// Vim 模式
@@ -81,6 +85,8 @@ pub enum Mode {
     CommandPanel(String),
     /// 主题选择弹窗
     ThemeSelect,
+    /// 帮助弹窗
+    HelpPopup,
 }
 
 impl fmt::Display for Mode {
@@ -94,6 +100,7 @@ impl fmt::Display for Mode {
             Self::Search(_) => write!(f, "SEARCH"),
             Self::CommandPanel(_) => write!(f, "CMD"),
             Self::ThemeSelect => write!(f, "THEME"),
+            Self::HelpPopup => write!(f, "HELP"),
         }
     }
 }
@@ -111,6 +118,7 @@ impl Mode {
             Self::Search(_) => Color::Magenta,
             Self::CommandPanel(_) => Color::Magenta,
             Self::ThemeSelect => Color::Magenta,
+            Self::HelpPopup => Color::Cyan,
         }
     }
 }
@@ -302,6 +310,7 @@ impl Vim {
             Mode::Visual => self.handle_visual_mode(input, buffer),
             Mode::Operator(c) => self.handle_operator_mode(input, *c, buffer),
             Mode::ThemeSelect => Transition::Nop, // handled by MarkdownEditor
+            Mode::HelpPopup => Transition::Nop,   // handled by MarkdownEditor
         }
     }
 

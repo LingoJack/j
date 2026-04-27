@@ -215,6 +215,11 @@ impl MarkdownEditor {
         // 清除状态消息
         self.status_message = None;
 
+        // 帮助弹窗模式：拦截所有按键
+        if self.vim.mode() == &Mode::HelpPopup {
+            return self.handle_help_popup(input);
+        }
+
         // 主题选择模式：拦截所有按键
         if self.vim.mode() == &Mode::ThemeSelect {
             return self.handle_theme_select(input);
@@ -560,11 +565,21 @@ impl MarkdownEditor {
                 self.vim.set_mode(Mode::Normal);
                 EditorAction::Continue
             }
+            "help" => {
+                self.vim.set_mode(Mode::HelpPopup);
+                EditorAction::Continue
+            }
             _ => {
                 self.vim.set_mode(Mode::Normal);
                 EditorAction::Continue
             }
         }
+    }
+
+    /// 处理帮助弹窗模式按键（任意键关闭）
+    fn handle_help_popup(&mut self, _input: &Input) -> EditorAction {
+        self.vim.set_mode(Mode::Normal);
+        EditorAction::Continue
     }
 
     /// 处理主题选择模式按键
@@ -951,6 +966,11 @@ impl MarkdownEditor {
         if self.vim.mode() == &Mode::ThemeSelect {
             self.render_theme_popup(f, area);
         }
+
+        // 渲染帮助弹窗
+        if self.vim.mode() == &Mode::HelpPopup {
+            self.render_help_popup(f, area);
+        }
     }
 
     /// 渲染状态栏
@@ -1199,6 +1219,196 @@ impl MarkdownEditor {
 
         f.render_widget(Clear, popup_area);
         f.render_stateful_widget(list, popup_area, &mut list_state);
+    }
+
+    /// 渲染帮助弹窗
+    fn render_help_popup(&mut self, f: &mut Frame<'_>, area: Rect) {
+        let popup_width = 52u16.min(area.width.saturating_sub(4));
+        let popup_height = 50u16.min(area.height.saturating_sub(4));
+
+        // 居中显示
+        let x = area.x + (area.width.saturating_sub(popup_width) / 2);
+        let y = area.y + (area.height.saturating_sub(popup_height) / 2);
+        let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+        let accent = self.theme.md_h1;
+        let popup_bg = self.theme.bg_primary;
+        let text_color = self.theme.text_normal;
+        let dim_color = self.theme.text_dim;
+
+        // 帮助内容
+        let help_lines: Vec<Line<'static>> = vec![
+            Line::from(Span::styled(
+                "  Markdown 编辑器帮助指南",
+                Style::default().fg(accent).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 模式切换 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  i      ", Style::default().fg(accent)),
+                Span::styled(
+                    "进入 Insert 模式（编辑文本）",
+                    Style::default().fg(text_color),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("  Esc    ", Style::default().fg(accent)),
+                Span::styled("退出到 Normal 模式", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  v      ", Style::default().fg(accent)),
+                Span::styled(
+                    "进入 Visual 模式（选择文本）",
+                    Style::default().fg(text_color),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 光标移动 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  h/j/k/l", Style::default().fg(accent)),
+                Span::styled("  左/下/上/右", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  w/b/e  ", Style::default().fg(accent)),
+                Span::styled("  下一个词/上一个词/词尾", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  0/$    ", Style::default().fg(accent)),
+                Span::styled("  行首/行尾", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  gg/G   ", Style::default().fg(accent)),
+                Span::styled("  文档开头/结尾", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Ctrl-D/U", Style::default().fg(accent)),
+                Span::styled("  下/上翻半页", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 编辑操作 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  d      ", Style::default().fg(accent)),
+                Span::styled("删除当前行", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  x      ", Style::default().fg(accent)),
+                Span::styled("删除当前字符", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  p      ", Style::default().fg(accent)),
+                Span::styled("粘贴（yank 寄存器）", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  u      ", Style::default().fg(accent)),
+                Span::styled("撤销", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Ctrl-r ", Style::default().fg(accent)),
+                Span::styled("重做", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── Visual 选区 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  y      ", Style::default().fg(accent)),
+                Span::styled("Yank 到内部寄存器", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  c      ", Style::default().fg(accent)),
+                Span::styled("复制到系统剪贴板", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 鼠标操作 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  左键点击", Style::default().fg(accent)),
+                Span::styled("  定位光标", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  左键拖拽", Style::default().fg(accent)),
+                Span::styled("  选择文本（进入 Visual）", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  滚轮    ", Style::default().fg(accent)),
+                Span::styled("  滚动视口", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 搜索 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  /      ", Style::default().fg(accent)),
+                Span::styled("开始搜索", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  n/N    ", Style::default().fg(accent)),
+                Span::styled("下一个/上一个匹配", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 命令面板 (:) ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  wrap   ", Style::default().fg(accent)),
+                Span::styled("启用自动折行", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  nowrap ", Style::default().fg(accent)),
+                Span::styled("禁用折行", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  theme  ", Style::default().fg(accent)),
+                Span::styled("切换主题", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  help   ", Style::default().fg(accent)),
+                Span::styled("显示帮助", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ── 全局快捷键 ──",
+                Style::default().fg(dim_color),
+            )]),
+            Line::from(vec![
+                Span::styled("  Ctrl-s ", Style::default().fg(accent)),
+                Span::styled("保存并退出", Style::default().fg(text_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Ctrl-q ", Style::default().fg(accent)),
+                Span::styled("取消退出", Style::default().fg(text_color)),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  按任意键关闭",
+                Style::default().fg(dim_color),
+            )]),
+        ];
+
+        let paragraph = Paragraph::new(help_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(accent))
+                .style(Style::default().bg(popup_bg)),
+        );
+
+        f.render_widget(Clear, popup_area);
+        f.render_widget(paragraph, popup_area);
     }
 }
 
