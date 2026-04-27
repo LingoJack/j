@@ -185,8 +185,8 @@
 - [x] `tui/editor_core/renderer.rs` — 1559行 *(已拆分为 renderer.rs + renderer/ 子模块：code_block.rs ~180行, table.rs ~240行, inline.rs ~160行, line.rs ~200行, visual_line.rs ~160行, renderer.rs ~350行)*
 - [ ] `command/chat/tools/browser.rs` — 1522行
 - [ ] `command/notebook/app.rs` — 1440行
-- [ ] `command/chat/oneshot.rs` — 1381行
-- [ ] `command/chat/agent/agent_loop.rs` — 1267行
+- [x] `command/chat/oneshot.rs` — 1381行
+- [X] `command/chat/agent/agent_loop.rs` — 1267行
 - [ ] `command/report.rs` — 1246行
 - [ ] `command/chat/handler/chat.rs` — 1104行
 - [ ] `tui/editor_core/editor.rs` — 1076行
