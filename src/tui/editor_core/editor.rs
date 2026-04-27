@@ -13,7 +13,7 @@ use super::{
 };
 
 use crossterm::{
-    event::{self, Event},
+    event::{self, Event, MouseButton, MouseEvent, MouseEventKind},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -79,6 +79,10 @@ pub struct MarkdownEditor {
     selected_theme_id: Option<&'static str>,
     /// 进入搜索前的光标位置，用于 Esc 恢复
     cursor_before_search: Option<(usize, usize)>,
+    /// 鼠标拖拽锚点（左键按下时的逻辑位置）
+    mouse_anchor: Option<(usize, usize)>,
+    /// 滚轮滚动锁定：防止 render() 自动将视口拉回到光标位置
+    scroll_locked: bool,
 }
 
 impl MarkdownEditor {
@@ -138,6 +142,8 @@ impl MarkdownEditor {
             status_message: None,
             selected_theme_id: None,
             cursor_before_search: None,
+            mouse_anchor: None,
+            scroll_locked: false,
         }
     }
 
@@ -203,6 +209,9 @@ impl MarkdownEditor {
 
     /// 处理输入
     pub fn handle_input(&mut self, input: &Input) -> EditorAction {
+        // 键盘输入解除滚动锁定
+        self.scroll_locked = false;
+
         // 清除状态消息
         self.status_message = None;
 
@@ -604,6 +613,125 @@ impl MarkdownEditor {
         }
     }
 
+    // ========== 鼠标操作 ==========
+
+    /// 将屏幕坐标转换为逻辑位置 (logical_row, logical_col)。
+    ///
+    /// 返回 `None` 表示点击在内容区域之外（边框、状态栏等）。
+    fn screen_to_logical(
+        &self,
+        screen_x: u16,
+        screen_y: u16,
+        area: Rect,
+    ) -> Option<(usize, usize)> {
+        // 减去边框偏移，得到内容区域内的坐标
+        let content_x = screen_x.saturating_sub(area.x + 1) as usize; // 左边框 1 列
+        let content_y = screen_y.saturating_sub(area.y + 1) as usize; // 上边框 1 行
+
+        let content_height = area.height.saturating_sub(3) as usize; // 上边框 + 下边框 + 状态栏
+        let line_num_width = if self.renderer.is_show_line_numbers() {
+            6
+        } else {
+            0
+        };
+
+        // 超出内容区域
+        if content_y >= content_height {
+            return None;
+        }
+
+        // 计算视觉行号
+        let visual_row = content_y + self.scroll_offset;
+
+        // 使用 wrap_engine 映射到逻辑行
+        let (logical_row, _start_col) = self.wrap.visual_to_logical(visual_row);
+
+        // 减去行号区域得到内容列
+        let content_col = content_x.saturating_sub(line_num_width);
+
+        // 获取该逻辑行的原始文本
+        let line_text = self.buffer.line(logical_row)?;
+
+        // 获取该逻辑行的所有视觉行，找到当前视觉行的子行偏移
+        let vlines = self.wrap.get_cached_lines(logical_row);
+        let line_visual_offset = self.wrap.visual_offset_of(logical_row);
+        let sub_index = visual_row.saturating_sub(line_visual_offset);
+
+        // 该视觉行的起始字符偏移
+        let vl_start_col = vlines.get(sub_index).map(|vl| vl.start_col).unwrap_or(0);
+
+        // 获取该视觉行实际渲染的文本段（从 start_col 开始的子串）
+        let vl_text: String = line_text.chars().skip(vl_start_col).collect();
+
+        // 将屏幕列转换为字符偏移（考虑宽字符）
+        let logical_col = Self::screen_col_to_char_offset(&vl_text, content_col) + vl_start_col;
+
+        // 限制到行尾
+        let max_col = line_text.chars().count();
+        let logical_col = logical_col.min(max_col);
+
+        Some((logical_row, logical_col))
+    }
+
+    /// 将屏幕列号转换为字符偏移（考虑 CJK 等宽字符）。
+    fn screen_col_to_char_offset(text: &str, screen_col: usize) -> usize {
+        use crate::util::text::char_width;
+
+        let mut acc_width = 0;
+        for (i, ch) in text.chars().enumerate() {
+            if acc_width >= screen_col {
+                return i;
+            }
+            acc_width += char_width(ch);
+        }
+        text.chars().count()
+    }
+
+    /// 处理鼠标事件。
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) {
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
+                    // 如果不在 Visual 模式，先退回 Normal
+                    if *self.vim.mode() != Mode::Visual {
+                        self.vim.set_mode(Mode::Normal);
+                    }
+                    self.buffer.set_cursor(row, col);
+                    self.mouse_anchor = Some((row, col));
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
+                    if let Some(anchor) = self.mouse_anchor
+                        && *self.vim.mode() != Mode::Visual
+                    {
+                        // 进入 Visual 模式，选区起点为按下位置
+                        self.vim.set_mode(Mode::Visual);
+                        self.vim.set_visual_start(anchor);
+                    }
+                    self.buffer.set_cursor(row, col);
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.mouse_anchor = None;
+            }
+            MouseEventKind::ScrollUp => {
+                let step = 3;
+                self.scroll_offset = self.scroll_offset.saturating_sub(step);
+                self.scroll_locked = true;
+            }
+            MouseEventKind::ScrollDown => {
+                let step = 3;
+                let content_height = area.height.saturating_sub(3) as usize;
+                let total_visual = self.wrap.visual_line_count();
+                let max_offset = total_visual.saturating_sub(content_height);
+                self.scroll_offset = (self.scroll_offset + step).min(max_offset);
+                self.scroll_locked = true;
+            }
+            _ => {}
+        }
+    }
+
     // ========== 渲染 ==========
 
     /// 渲染编辑器
@@ -645,8 +773,10 @@ impl MarkdownEditor {
         // 使用前缀和快速计算光标的视觉位置（O(1) 或 O(log n)）
         let cursor_visual_pos = self.wrap.logical_to_visual(cursor_row, cursor_col);
 
-        // 基于视觉位置更新滚动偏移
-        self.update_scroll_from_visual(cursor_visual_pos, content_height);
+        // 基于视觉位置更新滚动偏移（滚轮滚动锁定时跳过）
+        if !self.scroll_locked {
+            self.update_scroll_from_visual(cursor_visual_pos, content_height);
+        }
 
         // 计算视口范围内需要渲染的逻辑行（O(log n)）
         let first_visible_visual = self.scroll_offset;
@@ -1059,6 +1189,8 @@ pub fn open_markdown_editor_on_terminal(
                     EditorAction::Cancel => return Ok((None, editor.selected_theme_id())),
                     EditorAction::Continue => {}
                 }
+            } else if let Event::Mouse(mouse) = evt {
+                editor.handle_mouse(mouse, area);
             }
         }
     }
@@ -1071,7 +1203,11 @@ pub fn open_markdown_editor(
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        event::EnableMouseCapture // 启用鼠标事件捕获
+    )?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -1079,7 +1215,11 @@ pub fn open_markdown_editor(
     let result = open_markdown_editor_on_terminal(&mut terminal, opts, content);
 
     terminal::disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        event::DisableMouseCapture // 禁用鼠标事件捕获
+    )?;
 
     result
 }

@@ -228,6 +228,11 @@ impl Vim {
         self.mode = mode;
     }
 
+    /// 设置 Visual 模式的选区起点
+    pub fn set_visual_start(&mut self, pos: (usize, usize)) {
+        self.visual_start = pos;
+    }
+
     /// 处理输入
     pub fn handle_input(&mut self, input: &Input, buffer: &mut TextBuffer) -> Transition {
         // 先克隆模式以避免借用冲突
