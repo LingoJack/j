@@ -559,4 +559,28 @@ impl ChatApp {
         }
         self.ui.mode = crate::command::chat::app::ui_state::ChatMode::Chat;
     }
+
+    /// Teammates Tab：导航上下移动选中指针
+    pub(super) fn update_teammates_navigate(&mut self, dir: CursorDirection) {
+        let count = self
+            .teammate_manager
+            .lock()
+            .map(|m| m.teammates.len())
+            .unwrap_or(0);
+        if count == 0 {
+            return;
+        }
+        match dir {
+            CursorDirection::Up => {
+                if self.ui.teammate_list_index > 0 {
+                    self.ui.teammate_list_index -= 1;
+                }
+            }
+            CursorDirection::Down => {
+                if self.ui.teammate_list_index < count - 1 {
+                    self.ui.teammate_list_index += 1;
+                }
+            }
+        }
+    }
 }

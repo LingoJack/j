@@ -5,7 +5,7 @@ use super::{
 };
 use crate::command::chat::agent_md;
 use crate::command::chat::app::types::PlanDecision;
-use crate::command::chat::app::{Action, ChatApp, ChatMode, CursorDirection};
+use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
 use crate::command::chat::constants::{TUI_IDLE_POLL_MS, TUI_LOADING_POLL_MS};
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::input_thread::InputThread;
@@ -87,10 +87,21 @@ impl Drop for TerminalGuard {
     }
 }
 
-/// 根据当前 ChatMode 将鼠标滚轮事件路由到对应的导航 Action。
+/// 根据当前 ChatMode (及 ConfigTab) 将鼠标滚轮事件路由到对应的导航 Action。
 fn mouse_scroll_action(app: &ChatApp, dir: CursorDirection) -> Action {
     match app.ui.mode {
-        ChatMode::Config if !app.ui.config_editing => Action::ConfigNavigate(dir),
+        ChatMode::Config if !app.ui.config_editing => {
+            // 不同 ConfigTab 使用各自的导航索引和 Action
+            match app.ui.config_tab {
+                ConfigTab::Session => Action::SessionListNavigate(dir),
+                ConfigTab::Archive => Action::ArchiveListNavigate(dir),
+                ConfigTab::Teammates => Action::TeammatesNavigate(dir),
+                ConfigTab::Tools | ConfigTab::Skills | ConfigTab::Hooks | ConfigTab::Commands => {
+                    Action::ToggleMenuNavigate(dir)
+                }
+                _ => Action::ConfigNavigate(dir),
+            }
+        }
         ChatMode::SelectModel => Action::ModelSelectNavigate(dir),
         ChatMode::SelectTheme => Action::ThemeSelectNavigate(dir),
         ChatMode::ArchiveList => Action::ArchiveListNavigate(dir),

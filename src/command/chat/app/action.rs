@@ -194,6 +194,8 @@ pub enum Action {
     ToggleMenuEnableAll,
     /// 工具/Skill 开关：全部禁用
     ToggleMenuDisableAll,
+    /// Teammates Tab：导航
+    TeammatesNavigate(CursorDirection),
     /// 豁免压缩工具子列表：切换工具豁免状态
     CompactExemptToggle,
 

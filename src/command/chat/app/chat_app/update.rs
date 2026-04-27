@@ -110,6 +110,7 @@ impl ChatApp {
             Action::ToggleMenuToggle => self.update_toggle_menu_toggle(),
             Action::ToggleMenuEnableAll => self.update_toggle_menu_enable_all(),
             Action::ToggleMenuDisableAll => self.update_toggle_menu_disable_all(),
+            Action::TeammatesNavigate(dir) => self.update_teammates_navigate(dir),
             Action::CompactExemptToggle => self.update_compact_exempt_toggle(),
 
             // ========== 模型选择 ==========

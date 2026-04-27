@@ -186,23 +186,8 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Esc => Action::SaveConfig,
             KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
             KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
-            KeyCode::Up | KeyCode::Char('k') => {
-                if app.ui.teammate_list_index > 0 {
-                    app.ui.teammate_list_index -= 1;
-                }
-                return;
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                let count = app
-                    .teammate_manager
-                    .lock()
-                    .map(|m| m.teammates.len())
-                    .unwrap_or(0);
-                if count > 0 && app.ui.teammate_list_index < count - 1 {
-                    app.ui.teammate_list_index += 1;
-                }
-                return;
-            }
+            KeyCode::Up | KeyCode::Char('k') => Action::TeammatesNavigate(CursorDirection::Up),
+            KeyCode::Down | KeyCode::Char('j') => Action::TeammatesNavigate(CursorDirection::Down),
             KeyCode::Char('s') => {
                 // 停止选中的 teammate
                 let snapshots = app
