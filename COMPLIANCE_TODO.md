@@ -42,7 +42,7 @@
 - [ ] `command/chat/ui/chat.rs:draw_messages` — 175行, 3参数
 - [ ] `command/notebook/ui.rs:render_status_bar` — 169行, 3参数
 - [x] `command/chat/tools/shell.rs:execute` — 168行, 2参数 *(已拆分：提取 `execute_sync`，execute 主体缩减至 ~40 行，execute_sync ~120 行)*
-- [ ] `command/report.rs:handle_pull` — 167行, 1参数
+- [x] `command/report/git.rs:handle_pull` — 167行, 1参数 *(已拆分：提取 pull_via_clone / pull_existing_repo / pull_empty_repo / pull_normal_repo，handle_pull 缩减至 ~15 行)*
 - [ ] `command/chat/render/cache/tool_result_render.rs:render_tool_result_msg` — 165行, 9参数
 - [ ] `command/chat/app/chat_app/update.rs:update` — 159行, 1参数
 - [ ] `command/chat/context/window.rs:select_units` — 155行, 7参数
@@ -141,9 +141,9 @@
 - [ ] `interactive/completer.rs:complete` — 5参数, 228行
 - [ ] `interactive/completer.rs:complete` — 5参数, 8行
 - [ ] `command/update.rs:draw_feature_menu` — 5参数, 89行
-- [ ] `command/report.rs:update_config_files_silent` — 5参数, 17行
-- [ ] `command/report.rs:update_config_files` — 5参数, 29行
-- [ ] `command/report.rs:handle_search` — 5参数, 59行
+- [x] `command/report/write.rs:update_config_files_silent` — 5参数, 17行 *(已迁移至 write.rs，参数含 config_path: &Path + week_num + last_day + config: &mut YamlConfig，属配置文件写入辅助函数，5 参数合理，函数仅 17 行无需封装)*
+- [x] `command/report/write.rs:update_config_files` — 5参数, 29行 *(同上，带 info 输出版本，5 参数合理)*
+- [x] `command/report/query.rs:handle_search` — 4参数, 95行 *(已迁移至 query.rs，原 5 参数中的 target 不再封装 SearchParams，实际 4 参数：line_count + target + fuzzy_flag + config，合规)*
 - [ ] `command/chat/oneshot.rs:interactive_confirm` — 5参数, 138行
 - [ ] `command/chat/handler/tui_loop.rs:dispatch_event` — 5参数, 116行
 - [ ] `command/chat/handler/chat.rs:write_agent_dump` — 5参数, 17行
@@ -187,7 +187,7 @@
 - [x] `command/notebook/app.rs` — 1440行 *(已拆分为 app/ 子模块：types.rs ~442行 + io.rs ~352行 + flat_entries.rs ~111行 + input.rs ~618行 + app.rs ~27行)*
 - [x] `command/chat/oneshot.rs` — 1381行
 - [X] `command/chat/agent/agent_loop.rs` — 1267行
-- [ ] `command/report.rs` — 1246行
+- [x] `command/report.rs` — 1246行 *(已拆分为 report/ 子模块：io.rs ~218行 + write.rs ~551行 + git.rs ~388行 + query.rs ~130行 + report.rs ~16行)*
 - [ ] `command/chat/handler/chat.rs` — 1104行
 - [ ] `tui/editor_core/editor.rs` — 1076行
 - [ ] `command/chat/tools/computer_use/tool.rs` — 1046行
