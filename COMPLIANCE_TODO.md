@@ -191,11 +191,11 @@
 - [ ] `command/chat/handler/chat.rs` — 1104行
 - [ ] `tui/editor_core/editor.rs` — 1076行
 - [ ] `command/chat/tools/computer_use/tool.rs` — 1046行
-- [ ] `command/chat/infra/hook/tests.rs` — 1042行 (测试文件，可豁免)
+- [X] `command/chat/infra/hook/tests.rs` — 1042行 (测试文件，可豁免)
 - [ ] `command/chat/markdown/highlight.rs` — 969行
 - [ ] `command/update.rs` — 875行
 - [ ] `command/chat/render/cache/confirm_render.rs` — 868行
-- [ ] `command/todo/app.rs` — 867行
+- [X] `command/todo/app.rs` — 867行
 - [ ] `theme.rs` — 824行
 - [ ] `command/chat/infra/hook/manager.rs` — 807行
 - [ ] `command/chat/app/chat_app.rs` — 807行
