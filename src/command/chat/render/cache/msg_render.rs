@@ -58,10 +58,10 @@ pub(crate) fn render_thinking_block(reasoning: &str, ctx: &mut RenderContext<'_>
         return;
     }
 
-    // 引用块配色（复用 markdown blockquote）
+    // 引用块配色（复用 markdown blockquote 前景，背景使用 bg_primary）
     let bar_color = theme.md_blockquote_bar;
     let text_color = theme.md_blockquote_text;
-    let bg_color = theme.md_blockquote_bg;
+    let bg_color = theme.bg_primary;
 
     // 竖线前缀样式
     let bar_style = Style::default()

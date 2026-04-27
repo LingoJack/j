@@ -391,10 +391,10 @@ pub fn build_message_lines_incremental(
             )
             .clone();
             if !reasoning_str.is_empty() {
-                // 引用块配色（复用 markdown blockquote）
+                // 引用块配色（复用 markdown blockquote 前景，背景使用 bg_primary）
                 let bar_color = t.md_blockquote_bar;
                 let quote_text_color = t.md_blockquote_text;
-                let quote_bg = t.md_blockquote_bg;
+                let quote_bg = t.bg_primary;
 
                 // Thinking 标签行：竖线 + 斜体标签
                 let thinking_label = Line::from(vec![
