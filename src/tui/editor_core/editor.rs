@@ -388,6 +388,14 @@ impl MarkdownEditor {
             Transition::ExecuteCommand(cmd) => {
                 return self.execute_command(&cmd);
             }
+            Transition::ClipboardCopy => {
+                if let Some(text) = self.vim.get_selection_text(&self.buffer) {
+                    self.vim.set_yank_register(&text);
+                    let _ = self.copy_to_clipboard(&text);
+                }
+                self.vim.set_mode(Mode::Normal);
+                self.rebuild_wrap_cache();
+            }
         }
 
         EditorAction::Continue
@@ -692,12 +700,14 @@ impl MarkdownEditor {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if let Some((row, col)) = self.screen_to_logical(mouse.column, mouse.row, area) {
-                    // 如果不在 Visual 模式，先退回 Normal
-                    if *self.vim.mode() != Mode::Visual {
-                        self.vim.set_mode(Mode::Normal);
-                    }
+                    // 点击有效区域：移动光标
+                    self.vim.set_mode(Mode::Normal);
                     self.buffer.set_cursor(row, col);
                     self.mouse_anchor = Some((row, col));
+                } else {
+                    // 点击空白区域（边框、状态栏等）：取消选区
+                    self.vim.set_mode(Mode::Normal);
+                    self.mouse_anchor = None;
                 }
             }
             MouseEventKind::Drag(MouseButton::Left) => {
@@ -730,6 +740,16 @@ impl MarkdownEditor {
             }
             _ => {}
         }
+    }
+
+    /// 复制文本到系统剪贴板
+    fn copy_to_clipboard(&self, text: &str) -> Result<(), String> {
+        use arboard::Clipboard;
+        let mut clipboard = Clipboard::new().map_err(|e| format!("无法访问剪贴板: {e}"))?;
+        clipboard
+            .set_text(text)
+            .map_err(|e| format!("复制到剪贴板失败: {e}"))?;
+        Ok(())
     }
 
     // ========== 渲染 ==========
@@ -796,6 +816,14 @@ impl MarkdownEditor {
         let visual_offset = self.wrap.visual_offset_of(render_start);
 
         let mut all_visual_lines: Vec<Line<'static>> = Vec::new();
+        /// 记录每个已渲染视觉行对应的逻辑行号和起止列（用于选区高亮）
+        #[derive(Clone)]
+        struct RenderedVL {
+            logical_line: usize,
+            start_col: usize,
+            end_col: usize,
+        }
+        let mut all_vl_meta: Vec<RenderedVL> = Vec::new();
 
         for logical_line in render_start..render_end {
             let is_cursor_line = logical_line == cursor_row;
@@ -816,7 +844,51 @@ impl MarkdownEditor {
                     wrap_width,
                     is_insert_mode,
                 );
+                let n = rendered.len();
+                let meta_entry = RenderedVL {
+                    logical_line,
+                    start_col: vl.start_col,
+                    end_col: vl.end_col,
+                };
+                for _ in 0..n {
+                    all_vl_meta.push(meta_entry.clone());
+                }
                 all_visual_lines.extend(rendered);
+            }
+        }
+
+        // Visual 模式：对选区范围内的行应用高亮
+        if *self.vim.mode() == Mode::Visual {
+            let (vs_row, vs_col) = self.vim.visual_start();
+            let (ve_row, ve_col) = (cursor_row, cursor_col);
+            // 确保 start <= end
+            let ((sr, sc), (er, ec)) = if vs_row < ve_row || (vs_row == ve_row && vs_col <= ve_col)
+            {
+                ((vs_row, vs_col), (ve_row, ve_col))
+            } else {
+                ((ve_row, ve_col), (vs_row, vs_col))
+            };
+
+            // 逐视觉行判断并高亮
+            // 注意：一个逻辑行可能产生多个渲染行（render_visual_line 返回 Vec），
+            // 但目前每个视觉行恰好返回 1 个 Line，所以索引一一对应
+            let sel_fg = self.theme.text_normal;
+            let sel_bg = Color::DarkGray;
+            for (idx, meta) in all_vl_meta.iter().enumerate() {
+                // 判断该视觉行是否与选区 [sr,sc)-(er,ec) 有交集
+                let in_selection = meta.logical_line > sr && meta.logical_line < er
+                    || (meta.logical_line == sr
+                        && meta.logical_line == er
+                        && meta.end_col > sc
+                        && meta.start_col < ec)
+                    || (meta.logical_line == sr && meta.logical_line != er && meta.end_col > sc)
+                    || (meta.logical_line == er && meta.logical_line != sr && meta.start_col < ec);
+
+                if in_selection && let Some(line) = all_visual_lines.get_mut(idx) {
+                    for span in line.spans.iter_mut() {
+                        span.style = span.style.patch(Style::default().fg(sel_fg).bg(sel_bg));
+                    }
+                }
             }
         }
 

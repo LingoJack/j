@@ -196,6 +196,8 @@ pub enum Transition {
     ExecuteCommand(String),
     /// 取消搜索，恢复光标到搜索前位置
     SearchAbort,
+    /// Visual 模式：复制选区到系统剪贴板
+    ClipboardCopy,
 }
 
 /// Vim 引擎
@@ -231,6 +233,60 @@ impl Vim {
     /// 设置 Visual 模式的选区起点
     pub fn set_visual_start(&mut self, pos: (usize, usize)) {
         self.visual_start = pos;
+    }
+
+    /// 获取 Visual 模式的选区起点
+    pub fn visual_start(&self) -> (usize, usize) {
+        self.visual_start
+    }
+
+    /// 设置 yank 寄存器内容
+    pub fn set_yank_register(&mut self, text: &str) {
+        self.yank_register = text.to_string();
+    }
+
+    /// 提取 Visual 选区文本（用于复制到剪贴板）
+    pub fn get_selection_text(&self, buffer: &TextBuffer) -> Option<String> {
+        let (start_row, start_col) = self.visual_start;
+        let (end_row, end_col) = buffer.cursor();
+
+        // 确保 start <= end
+        let (sr, sc, er, ec) =
+            if start_row > end_row || (start_row == end_row && start_col > end_col) {
+                (end_row, end_col, start_row, start_col)
+            } else {
+                (start_row, start_col, end_row, end_col)
+            };
+
+        // 检查是否有实际选区（起点和终点不同）
+        if sr == er && sc == ec {
+            return None;
+        }
+
+        let lines = buffer.lines();
+        if sr == er {
+            // 单行选区
+            lines.get(sr).map(|line| {
+                let chars: Vec<char> = line.chars().collect();
+                chars[sc..ec].iter().collect()
+            })
+        } else {
+            // 多行选区
+            let mut yanked = String::new();
+            for (i, line) in lines.iter().enumerate() {
+                let chars: Vec<char> = line.chars().collect();
+                if i == sr {
+                    yanked.push_str(&chars[sc..].iter().collect::<String>());
+                    yanked.push('\n');
+                } else if i == er {
+                    yanked.push_str(&chars[..ec].iter().collect::<String>());
+                } else if i > sr && i < er {
+                    yanked.push_str(line);
+                    yanked.push('\n');
+                }
+            }
+            Some(yanked)
+        }
     }
 
     /// 处理输入
@@ -454,39 +510,13 @@ impl Vim {
         match input.key {
             Key::Esc => Transition::Mode(Mode::Normal),
             Key::Char('y') => {
-                let (start_row, start_col) = self.visual_start;
-                let (end_row, end_col) = buffer.cursor();
-                let (start_row, start_col, end_row, end_col) =
-                    if start_row > end_row || (start_row == end_row && start_col > end_col) {
-                        (end_row, end_col, start_row, start_col)
-                    } else {
-                        (start_row, start_col, end_row, end_col)
-                    };
-
-                let lines = buffer.lines();
-                if start_row == end_row {
-                    if let Some(line) = lines.get(start_row) {
-                        let chars: Vec<char> = line.chars().collect();
-                        self.yank_register = chars[start_col..end_col].iter().collect();
-                    }
-                } else {
-                    let mut yanked = String::new();
-                    for (i, line) in lines.iter().enumerate() {
-                        let chars: Vec<char> = line.chars().collect();
-                        if i == start_row {
-                            yanked.push_str(&chars[start_col..].iter().collect::<String>());
-                            yanked.push('\n');
-                        } else if i == end_row {
-                            yanked.push_str(&chars[..end_col].iter().collect::<String>());
-                        } else if i > start_row && i < end_row {
-                            yanked.push_str(line);
-                            yanked.push('\n');
-                        }
-                    }
-                    self.yank_register = yanked;
+                if let Some(text) = self.get_selection_text(buffer) {
+                    self.yank_register = text;
                 }
                 Transition::Mode(Mode::Normal)
             }
+            // 复制选区到系统剪贴板
+            Key::Char('c') => Transition::ClipboardCopy,
             Key::Char('h') | Key::Left => {
                 buffer.move_cursor_back();
                 Transition::Nop
