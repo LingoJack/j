@@ -144,9 +144,11 @@ fn handle_main_key(app: &mut ChatApp, key: KeyEvent) -> bool {
 
         KeyCode::Backspace => {
             app.ui.input_buffer.backspace();
+            check_and_activate_mention_popup(app);
         }
         KeyCode::Delete => {
             app.ui.input_buffer.delete_char();
+            check_and_activate_mention_popup(app);
         }
 
         KeyCode::F(1) => {
