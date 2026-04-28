@@ -457,35 +457,30 @@ pub(crate) fn render_tool_confirm_content(
     let confirm_bg = t.tool_confirm_bg;
     let border_color = t.tool_confirm_border;
 
-    // 工具名行
+    // 工具名行（使用 bordered_line 确保溢出钳制）
     {
-        let label = "工具: ";
-        let name = &tc.tool_name;
-        let text_content = format!("{}{}", label, name);
-        let fill = content_w.saturating_sub(display_width(&text_content));
-        lines.push(Line::from(vec![
-            Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-            Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
-            Span::styled(
-                label,
-                Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
-            ),
-            Span::styled(
-                name.clone(),
-                Style::default()
-                    .fg(t.tool_confirm_name)
-                    .bg(confirm_bg)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                " ".repeat(fill.saturating_sub(1)),
-                Style::default().bg(confirm_bg),
-            ),
-            Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-        ]));
+        lines.push(bordered_line(
+            vec![
+                Span::styled(" ", Style::default().bg(confirm_bg)),
+                Span::styled(
+                    "工具: ",
+                    Style::default().fg(t.tool_confirm_label).bg(confirm_bg),
+                ),
+                Span::styled(
+                    tc.tool_name.clone(),
+                    Style::default()
+                        .fg(t.tool_confirm_name)
+                        .bg(confirm_bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
     }
 
-    // 确认信息行（折行显示，最多 CONFIRM_MSG_MAX_LINES 行）
+    // 确认信息行（折行显示，最多 CONFIRM_MSG_MAX_LINES 行，使用 bordered_line 确保溢出钳制）
     {
         let max_msg_w = content_w.saturating_sub(2);
         let wrapped = wrap_text(&tc.confirm_message, max_msg_w);
@@ -497,32 +492,29 @@ pub(crate) fn render_tool_confirm_content(
             } else {
                 line_text.clone()
             };
-            let msg_w = display_width(&display_text);
-            let fill = content_w.saturating_sub(msg_w + 2);
-            lines.push(Line::from(vec![
-                Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                Span::styled(" ".to_string(), Style::default().bg(confirm_bg)),
-                Span::styled(
-                    display_text,
-                    Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
-                ),
-                Span::styled(
-                    " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                    Style::default().bg(confirm_bg),
-                ),
-                Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-            ]));
+            lines.push(bordered_line(
+                vec![
+                    Span::styled(" ", Style::default().bg(confirm_bg)),
+                    Span::styled(
+                        display_text,
+                        Style::default().fg(t.tool_confirm_text).bg(confirm_bg),
+                    ),
+                ],
+                bubble_max_width,
+                border_color,
+                confirm_bg,
+            ));
         }
     }
 
-    // 空行 + 选项式交互区域
+    // 空行（使用 bordered_line 保持一致）
     {
-        let fill = bubble_max_width.saturating_sub(4);
-        lines.push(Line::from(vec![
-            Span::styled("  │", Style::default().fg(border_color).bg(confirm_bg)),
-            Span::styled(" ".repeat(fill), Style::default().bg(confirm_bg)),
-            Span::styled("│", Style::default().fg(border_color).bg(confirm_bg)),
-        ]));
+        lines.push(bordered_line(
+            vec![Span::styled(" ", Style::default().bg(confirm_bg))],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
     }
 
     // 工具确认选项
@@ -652,32 +644,26 @@ pub(crate) fn render_tool_confirm_content(
                     }
                 }
             } else {
-                let full_text = format!("{} {}", pointer, option);
-                let text_w = display_width(&full_text);
-                let fill = content_w.saturating_sub(text_w + 2);
+                // 非输入模式的选项行（使用 bordered_line 确保溢出钳制）
+                let pointer_style = if is_selected {
+                    arrow_style.bg(confirm_bg)
+                } else {
+                    Style::default().bg(confirm_bg)
+                };
                 let text_style = if is_selected {
                     arrow_style.bg(confirm_bg)
                 } else {
                     Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
                 };
-                lines.push(Line::from(vec![
-                    Span::styled("  │ ", Style::default().fg(border_color).bg(confirm_bg)),
-                    Span::styled(" ", Style::default().bg(confirm_bg)),
-                    Span::styled(
-                        pointer,
-                        if is_selected {
-                            arrow_style.bg(confirm_bg)
-                        } else {
-                            Style::default().bg(confirm_bg)
-                        },
-                    ),
-                    Span::styled(format!(" {}", option), text_style),
-                    Span::styled(
-                        " ".repeat(fill.saturating_sub(1).saturating_add(2)),
-                        Style::default().bg(confirm_bg),
-                    ),
-                    Span::styled(" │", Style::default().fg(border_color).bg(confirm_bg)),
-                ]));
+                lines.push(bordered_line(
+                    vec![
+                        Span::styled(pointer, pointer_style),
+                        Span::styled(format!(" {}", option), text_style),
+                    ],
+                    bubble_max_width,
+                    border_color,
+                    confirm_bg,
+                ));
             }
         }
     }
@@ -699,10 +685,10 @@ pub(crate) fn render_agent_perm_confirm_area(
         None => return,
     };
 
-    // 顶边框
+    // 顶边框（与 ask 弹窗对齐：带背景色）
     lines.push(Line::from(Span::styled(
         format!("  ╭{}╮", "─".repeat(bubble_max_width.saturating_sub(4))),
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(confirm_bg),
     )));
 
     // 标题行（支持折行）
@@ -770,10 +756,10 @@ pub(crate) fn render_agent_perm_confirm_area(
         confirm_bg,
     ));
 
-    // 底边框
+    // 底边框（与 ask 弹窗对齐：带背景色）
     lines.push(Line::from(Span::styled(
         format!("  ╰{}╯", "─".repeat(bubble_max_width.saturating_sub(4))),
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(confirm_bg),
     )));
 }
 
@@ -793,10 +779,10 @@ pub(crate) fn render_plan_approval_confirm_area(
         None => return,
     };
 
-    // 顶边框
+    // 顶边框（与 ask 弹窗对齐：带背景色）
     lines.push(Line::from(Span::styled(
         format!("  ╭{}╮", "─".repeat(bubble_max_width.saturating_sub(4))),
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(confirm_bg),
     )));
 
     // 标题行（支持折行）
@@ -882,9 +868,9 @@ pub(crate) fn render_plan_approval_confirm_area(
         confirm_bg,
     ));
 
-    // 底边框
+    // 底边框（与 ask 弹窗对齐：带背景色）
     lines.push(Line::from(Span::styled(
         format!("  ╰{}╯", "─".repeat(bubble_max_width.saturating_sub(4))),
-        Style::default().fg(border_color),
+        Style::default().fg(border_color).bg(confirm_bg),
     )));
 }

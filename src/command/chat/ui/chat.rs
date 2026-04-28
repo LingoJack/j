@@ -426,7 +426,10 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     if app.ui.mode != ChatMode::Browse {
-        if app.ui.mode == ChatMode::ToolConfirm {
+        if matches!(
+            app.ui.mode,
+            ChatMode::ToolConfirm | ChatMode::AgentPermConfirm | ChatMode::PlanApprovalConfirm
+        ) {
             if app.ui.auto_scroll
                 || app.ui.scroll_offset == u16::MAX
                 || app.ui.scroll_offset > max_scroll
