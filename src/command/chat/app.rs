@@ -13,6 +13,8 @@ mod tool_executor;
 pub mod types;
 mod ui_state;
 
+pub use ui_state::MouseSelection;
+
 pub use action::*;
 #[allow(unused_imports)]
 pub use agent_handle::*;

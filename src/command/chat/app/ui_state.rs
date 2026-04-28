@@ -7,9 +7,21 @@ use crate::command::chat::tools::plan::PendingPlanApproval;
 use crate::markdown::image_cache::ImageCache;
 use crate::theme::Theme;
 use crate::tui::editor_core::text_buffer::TextBuffer;
+use ratatui::layout::Rect;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::sync::{Arc, Mutex};
+
+// ========== 鼠标选区 ==========
+
+/// 鼠标选区状态（用于消息区拖拽选择文字）
+#[derive(Clone, Debug)]
+pub struct MouseSelection {
+    /// 选区起点（全局行号，行内字符偏移）
+    pub anchor: (usize, usize),
+    /// 选区当前位置（全局行号，行内字符偏移）
+    pub current: (usize, usize),
+}
 
 // ========== 前端状态 ==========
 
@@ -177,6 +189,10 @@ pub struct UIState {
     pub pending_command_create: bool,
     /// 配置界面：命令创建的目标级别
     pub command_create_source: CommandSource,
+    /// 鼠标选区状态（拖拽选择文字时使用）
+    pub mouse_selection: Option<MouseSelection>,
+    /// 消息区域 inner rect（用于鼠标坐标映射，每次渲染时更新）
+    pub msg_area_inner: Option<Rect>,
 }
 
 /// 消息渲染行缓存

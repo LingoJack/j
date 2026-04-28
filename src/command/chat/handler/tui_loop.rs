@@ -4,6 +4,7 @@ use super::{
     handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
 use crate::command::chat::agent_md;
+use crate::command::chat::app::MouseSelection;
 use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
 use crate::command::chat::constants::{TUI_IDLE_POLL_MS, TUI_LOADING_POLL_MS};
@@ -15,13 +16,14 @@ use crate::command::chat::remote::protocol::{WsInbound, WsOutbound};
 use crate::command::chat::storage::{
     load_style, load_system_prompt, save_style, save_system_prompt,
 };
+use crate::command::chat::ui::chat::{copy_selection_to_clipboard, screen_to_text_pos};
 use crate::command::chat::ui::draw_chat_ui;
 use crate::error;
 use crate::util::safe_lock;
 use crossterm::{
     event::{
-        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags, MouseEventKind,
-        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags, MouseButton,
+        MouseEventKind, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
@@ -220,6 +222,40 @@ fn dispatch_event(
             MouseEventKind::ScrollDown => {
                 app.update(mouse_scroll_action(app, CursorDirection::Down));
                 *needs_redraw = true;
+                false
+            }
+            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(inner) = app.ui.msg_area_inner
+                    && let Some(ref cached) = app.ui.msg_lines_cache
+                    && let Some((gline, coff)) = screen_to_text_pos(
+                        mouse.column,
+                        mouse.row,
+                        inner,
+                        app.ui.scroll_offset,
+                        cached,
+                    )
+                {
+                    match app.ui.mouse_selection {
+                        Some(ref mut sel) => {
+                            sel.current = (gline, coff);
+                        }
+                        None => {
+                            app.ui.mouse_selection = Some(MouseSelection {
+                                anchor: (gline, coff),
+                                current: (gline, coff),
+                            });
+                        }
+                    }
+                    *needs_redraw = true;
+                }
+                false
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                if app.ui.mouse_selection.is_some() {
+                    copy_selection_to_clipboard(app);
+                    app.ui.mouse_selection = None;
+                    *needs_redraw = true;
+                }
                 false
             }
             _ => false,

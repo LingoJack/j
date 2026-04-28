@@ -2,11 +2,14 @@ use super::archive::{draw_archive_confirm, draw_archive_list};
 use super::config::draw_config_screen;
 use super::popup;
 use super::title_bar;
-use crate::command::chat::app::{ChatApp, ChatMode, MsgLinesCache};
+use crate::command::chat::app::{ChatApp, ChatMode, MouseSelection, MsgLinesCache};
 use crate::command::chat::render::cache::build_message_lines_incremental;
+use crate::command::chat::render::cache::copy_to_clipboard;
 use crate::markdown::image_cache::ImageState;
 use crate::markdown::image_loader::load_image;
+use crate::tui::components::selection::rebuild_spans_with_selection;
 use crate::util::safe_lock;
+use crate::util::text::char_width;
 
 /// 消息气泡宽度占内部可用宽度的百分比。
 const BUBBLE_WIDTH_PERCENT: usize = 85;
@@ -126,6 +129,158 @@ fn get_line_at(
     }
 }
 
+// ========== 鼠标选区坐标映射 ==========
+
+/// 将屏幕坐标转换为 (全局行号, 行内字符偏移)
+/// 返回 None 表示点击在消息区域外或空白区域
+pub fn screen_to_text_pos(
+    screen_x: u16,
+    screen_y: u16,
+    inner: Rect,
+    scroll_offset: u16,
+    cached: &MsgLinesCache,
+) -> Option<(usize, usize)> {
+    // 1. 计算全局行号
+    let local_y = screen_y.saturating_sub(inner.y);
+    if local_y >= inner.height {
+        return None;
+    }
+    let global_line = scroll_offset as usize + local_y as usize;
+    if global_line >= cached.total_line_count {
+        return None;
+    }
+
+    // 2. 获取该行的 Line
+    let history_total = cached.history_line_count;
+    let line = get_line_at(cached, global_line, history_total)?;
+
+    // 3. 计算行内字符偏移（考虑 CJK 宽字符）
+    let local_x = screen_x.saturating_sub(inner.x) as usize;
+    let char_offset = spans_to_char_offset(&line.spans, local_x);
+
+    Some((global_line, char_offset))
+}
+
+/// 根据 spans 和屏幕 x 坐标计算字符偏移
+fn spans_to_char_offset(spans: &[Span<'static>], screen_col: usize) -> usize {
+    let mut acc_width = 0usize;
+    let mut char_offset = 0usize;
+
+    for span in spans {
+        for ch in span.content.chars() {
+            let w = char_width(ch);
+            if acc_width >= screen_col {
+                return char_offset;
+            }
+            acc_width += w;
+            char_offset += 1;
+        }
+    }
+    char_offset
+}
+
+/// 计算某全局行与选区的交集字符范围
+/// 返回 (start, end)，若无交集返回 (0, 0)
+fn compute_line_selection_range(
+    line_idx: usize,
+    anchor: (usize, usize),
+    current: (usize, usize),
+) -> (usize, usize) {
+    // 确保 start <= end
+    let ((sr, sc), (er, ec)) =
+        if anchor.0 < current.0 || (anchor.0 == current.0 && anchor.1 <= current.1) {
+            (anchor, current)
+        } else {
+            (current, anchor)
+        };
+
+    if line_idx < sr || line_idx > er {
+        return (0, 0); // 无交集
+    }
+
+    let start = if line_idx == sr { sc } else { 0 };
+    // 中间行：end 设为 usize::MAX（表示到行尾）
+    let end = if line_idx == er { ec } else { usize::MAX };
+
+    (start, end)
+}
+
+/// 根据 anchor 和 current 提取选区纯文本
+pub fn extract_selection_text(
+    cached: &MsgLinesCache,
+    anchor: (usize, usize),
+    current: (usize, usize),
+) -> String {
+    // 确保 start <= end
+    let ((sr, sc), (er, ec)) =
+        if anchor.0 < current.0 || (anchor.0 == current.0 && anchor.1 <= current.1) {
+            (anchor, current)
+        } else {
+            (current, anchor)
+        };
+
+    let history_total = cached.history_line_count;
+
+    let mut result = String::new();
+    for gline in sr..=er {
+        let line = match get_line_at(cached, gline, history_total) {
+            Some(l) => l,
+            None => continue,
+        };
+
+        // 跳过图片标记 span
+        let line_text: String = line
+            .spans
+            .iter()
+            .filter(|s| !s.content.starts_with("\x00IMG:"))
+            .map(|s| &*s.content)
+            .collect();
+
+        // 计算该行的截取范围
+        let start_col = if gline == sr { sc } else { 0 };
+        let end_col = if gline == er {
+            ec.min(line_text.chars().count())
+        } else {
+            line_text.chars().count()
+        };
+
+        let chars: Vec<char> = line_text.chars().collect();
+        if start_col < end_col && start_col < chars.len() {
+            let slice_end = end_col.min(chars.len());
+            let slice: String = chars[start_col..slice_end].iter().collect();
+            result.push_str(&slice);
+            if gline < er {
+                result.push('\n');
+            }
+        }
+    }
+    result
+}
+
+/// 复制选区文本到剪贴板，并显示 toast 提示
+pub fn copy_selection_to_clipboard(app: &mut ChatApp) {
+    let cached = match app.ui.msg_lines_cache.as_ref() {
+        Some(c) => c,
+        None => return,
+    };
+
+    let sel = match &app.ui.mouse_selection {
+        Some(s) => s,
+        None => return,
+    };
+
+    let text = extract_selection_text(cached, sel.anchor, sel.current);
+    if text.is_empty() {
+        return;
+    }
+
+    if copy_to_clipboard(&text) {
+        app.show_toast("已复制到剪贴板", false);
+    } else {
+        app.show_toast("复制到剪贴板失败", true);
+    }
+}
+
 /// render_text_pass 的渲染参数（f 单独传）
 struct TextPassParams<'a> {
     inner: Rect,
@@ -138,7 +293,11 @@ struct TextPassParams<'a> {
 
 /// 文字渲染 pass：遍历可见行渲染文字，同时收集图片标记。
 /// 返回 `img_markers`: `(display_row, height, url)` 列表，供后续图片渲染 pass 使用。
-fn render_text_pass(f: &mut ratatui::Frame, params: &TextPassParams) -> Vec<(usize, u16, String)> {
+fn render_text_pass(
+    f: &mut ratatui::Frame,
+    params: &TextPassParams,
+    selection: Option<&MouseSelection>,
+) -> Vec<(usize, u16, String)> {
     let mut img_markers: Vec<(usize, u16, String)> = Vec::new();
     for (i, line_idx) in (params.start..params.end).enumerate() {
         let line = match get_line_at(params.cached, line_idx, params.history_total) {
@@ -169,6 +328,26 @@ fn render_text_pass(f: &mut ratatui::Frame, params: &TextPassParams) -> Vec<(usi
             let p = Paragraph::new(Line::from(visible_spans)).style(params.msg_area_bg);
             f.render_widget(p, line_area);
             img_markers.push((i, height, url));
+        } else if let Some(sel) = selection {
+            // 有选区时：检查该行是否与选区有交集
+            let (sel_start, sel_end) =
+                compute_line_selection_range(line_idx, sel.anchor, sel.current);
+            if sel_start < sel_end {
+                let fg = params.msg_area_bg.fg.unwrap_or(Color::White);
+                let highlighted_spans = rebuild_spans_with_selection(
+                    &line.spans,
+                    0, // Chat UI 无行号
+                    sel_start,
+                    sel_end,
+                    fg,
+                    Color::DarkGray,
+                );
+                let p = Paragraph::new(Line::from(highlighted_spans)).style(params.msg_area_bg);
+                f.render_widget(p, line_area);
+            } else {
+                let p = Paragraph::new(line.clone()).style(params.msg_area_bg);
+                f.render_widget(p, line_area);
+            }
         } else {
             let p = Paragraph::new(line.clone()).style(params.msg_area_bg);
             f.render_widget(p, line_area);
@@ -422,6 +601,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         vertical: 1,
         horizontal: 1,
     });
+    // 缓存 inner rect 供鼠标事件处理使用
+    app.ui.msg_area_inner = Some(inner);
     let visible_height = inner.height;
     let max_scroll = total_lines.saturating_sub(visible_height);
 
@@ -475,6 +656,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         let end = (start + visible_height as usize).min(cached.total_line_count);
         let history_total = cached.history_line_count;
         let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
+        let selection = app.ui.mouse_selection.as_ref();
         let img_markers = render_text_pass(
             f,
             &TextPassParams {
@@ -485,6 +667,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
                 history_total,
                 msg_area_bg,
             },
+            selection,
         );
         (start, img_markers)
     }; // cached 借用在此释放

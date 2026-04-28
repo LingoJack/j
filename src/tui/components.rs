@@ -12,6 +12,7 @@ pub mod label;
 pub mod list;
 pub mod pointer;
 pub mod row;
+pub mod selection;
 pub mod separator;
 pub mod status_input;
 pub mod tab_bar;
