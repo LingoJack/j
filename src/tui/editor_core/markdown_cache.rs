@@ -3,6 +3,12 @@
 //! Editor 按 VisualLine 逐行渲染，但需要知道每个源码行所属的 Block
 //! 以及该 Block 的渲染结果。`MarkdownCache` 缓存全文解析结果和
 //! 按需渲染的 Block，避免每帧重复解析。
+//!
+//! TODO: Step 7 性能优化时启用。当前 editor 采用逐行渲染模式，
+//! 未使用该缓存。如果未来需要 editor 预览模式或全文渲染优化，
+//! 可以启用该缓存来提升性能。
+
+#![allow(dead_code)]
 
 use crate::markdown::ir::{Block, BlockKind, ParsedDocument, SourceRange};
 use crate::markdown::render::render_document_wrapped;
@@ -10,7 +16,6 @@ use crate::markdown::theme::MdStyle;
 use ratatui::text::Line;
 
 /// 渲染后的 Block 结果
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct RenderedBlock {
     /// 渲染输出的行（不含行号前缀）
@@ -22,7 +27,6 @@ pub struct RenderedBlock {
 }
 
 /// Markdown 解析与渲染缓存
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct MarkdownCache {
     /// 缓存版本号（每次 rebuild 递增）
@@ -43,7 +47,6 @@ impl Default for MarkdownCache {
     }
 }
 
-#[allow(dead_code)]
 impl MarkdownCache {
     /// 创建空缓存
     pub fn new() -> Self {
@@ -174,7 +177,6 @@ impl MarkdownCache {
 }
 
 /// 渲染单个 Block（不包含行号前缀）
-#[allow(dead_code)]
 fn render_single_block(block: &Block, theme: &dyn MdStyle, width: usize) -> Vec<Line<'static>> {
     // 构造只包含一个 Block 的临时文档
     let temp_doc = ParsedDocument {
@@ -189,7 +191,6 @@ fn render_single_block(block: &Block, theme: &dyn MdStyle, width: usize) -> Vec<
 ///
 /// 对于简单 Block，渲染行与源码行大致 1:1。
 /// 复杂 Block（表格、代码块）需要特殊处理。
-#[allow(dead_code)]
 fn build_rendered_line_source_mapping(
     block: &Block,
     rendered_lines: &[Line<'static>],

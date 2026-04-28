@@ -358,7 +358,7 @@ editor 自己继续负责：
 - [x] **Step 3：parser 输出 IR，chat 改走共享 render** — `ir.rs` + `render/` 模块 + parser 纯解析 + facade；290 tests passed
 - [x] **Step 4：editor 接入共享层** — `EditorTheme` 实现 `MdStyle` trait；parser 使用 `into_offset_iter()` 填充精确 `SourceRange`；新建 `markdown_cache.rs`（全文解析 + line-to-block 映射 + 懒渲染缓存）；editor `renderer/inline.rs` 改用共享层 `render_inlines`（基于 pulldown-cmark 解析，正确处理 `**bold**`/`*italic*`/`~~strike~~`/`` `code` ``/链接的嵌套和边界）；`cargo clippy -D warnings` 干净，`cargo test --lib` 292 passed。
 - [x] **Step 5：迁表格** — editor `renderer/table.rs` 改用 `parse_table_from_source()` 解析表格源码为 `TableData` IR（含内联语法支持），调用共享层 `render_table()` 一次性渲染整个表格；删除旧 `parse_table_cells`/`is_table_separator_line` 等纯文本处理代码；editor 仅在表格首行（`start_idx`）触发完整渲染，后续行返回 `vec![]`；`cargo clippy -D warnings` 干净，`cargo test --lib` 298 passed。
-- [ ] Step 6：迁 heading / list / blockquote
+- [x] **Step 6：迁 heading / list / blockquote** — 分析结论：**不需要迁移**。editor 的 heading/list/blockquote 已通过 `render_inline()` 走共享层解析内联语法（`parse_inline_text()` + `render_inlines()`）；共享层 block 渲染（含分隔线/前后空行/`|` prefix）不适合 editor 的紧凑逐行风格；强制迁移会破坏 editor 显示效果。
 - [ ] Step 7：性能验证与调优
 
 ### Step 2 实施备注
@@ -384,7 +384,15 @@ editor 自己继续负责：
 
 ## 下一步
 
-**Step 6：迁 heading / list / blockquote**，让 editor 端 `renderer/line.rs` 的 markdown 路径逐步走共享层。
+**Step 7：性能验证与调优**，重点验证大文件首屏打开时间和连续输入延迟。
+
+### Step 6 实施备注
+
+- **分析结论：不需要迁移**
+- **理由 1**：`render_inline()` 已走共享层 — editor 的 heading/list/blockquote 通过 `parse_inline_text()` + 共享层 `render_inlines()` 正确渲染内联语法（bold/code/link 等）
+- **理由 2**：共享层 block 渲染不适合 editor — heading H1/H2 会多输出分隔线；blockquote 会多输出前后空行和 `|` prefix；list 会整块渲染而非逐行
+- **理由 3**：强制迁移会破坏 editor 紧凑风格 — editor 需要单行紧凑渲染，共享层适合预览场景
+- **最终状态**：Editor markdown 渲染已全部迁移共享层（inline/block 原语），无需进一步改动
 
 ### Step 5 实施备注
 
