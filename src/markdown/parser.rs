@@ -683,3 +683,22 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &dyn MdStyle) -> Vec
     let doc = parse_markdown(md, content_width);
     render_document_wrapped(&doc, theme, content_width)
 }
+
+/// 从源码行切片中解析表格为 `TableData`。
+///
+/// 接收 editor 提供的表格行（含 `|` 分隔的行），利用 pulldown-cmark 解析为 IR，
+/// 提取第一个 Table block 的 `TableData`。
+pub fn parse_table_from_source(table_lines: &[&str]) -> Option<TableData> {
+    use crate::markdown::ir::BlockKind;
+
+    let md: String = table_lines.to_vec().join("\n");
+    let doc = parse_markdown(&md, usize::MAX);
+
+    for block in &doc.blocks {
+        if let BlockKind::Table(data) = &block.kind {
+            return Some(data.clone());
+        }
+    }
+
+    None
+}

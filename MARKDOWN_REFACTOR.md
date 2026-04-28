@@ -357,7 +357,7 @@ editor 自己继续负责：
 - [x] **Step 2：抽 `MdStyle` trait** — 新增 `src/markdown/theme.rs` 定义 trait + `impl MdStyle for crate::theme::Theme`；parser/parser-text/parser-table 改为通过 trait method 取色；`markdown_to_lines` 签名改为 `theme: &dyn MdStyle`，5 处调用方零改动（`&Theme` 自动 unsizing coerce）；parser.rs 已彻底切断对 `chat::Theme` 的直接引用；`cargo clippy --lib --bins -D warnings` 干净，`cargo test --lib` 290 passed。
 - [x] **Step 3：parser 输出 IR，chat 改走共享 render** — `ir.rs` + `render/` 模块 + parser 纯解析 + facade；290 tests passed
 - [x] **Step 4：editor 接入共享层** — `EditorTheme` 实现 `MdStyle` trait；parser 使用 `into_offset_iter()` 填充精确 `SourceRange`；新建 `markdown_cache.rs`（全文解析 + line-to-block 映射 + 懒渲染缓存）；editor `renderer/inline.rs` 改用共享层 `render_inlines`（基于 pulldown-cmark 解析，正确处理 `**bold**`/`*italic*`/`~~strike~~`/`` `code` ``/链接的嵌套和边界）；`cargo clippy -D warnings` 干净，`cargo test --lib` 292 passed。
-- [ ] **Step 5：迁表格**（下一步）
+- [x] **Step 5：迁表格** — editor `renderer/table.rs` 改用 `parse_table_from_source()` 解析表格源码为 `TableData` IR（含内联语法支持），调用共享层 `render_table()` 一次性渲染整个表格；删除旧 `parse_table_cells`/`is_table_separator_line` 等纯文本处理代码；editor 仅在表格首行（`start_idx`）触发完整渲染，后续行返回 `vec![]`；`cargo clippy -D warnings` 干净，`cargo test --lib` 298 passed。
 - [ ] Step 6：迁 heading / list / blockquote
 - [ ] Step 7：性能验证与调优
 
@@ -384,4 +384,11 @@ editor 自己继续负责：
 
 ## 下一步
 
-**Step 5：迁表格**，让 editor 的表格渲染走共享层，复用 `render/table.rs` 的边框绘制和 cell wrap 逻辑。
+**Step 6：迁 heading / list / blockquote**，让 editor 端 `renderer/line.rs` 的 markdown 路径逐步走共享层。
+
+### Step 5 实施备注
+
+- **新增 `parse_table_from_source()`**：在 `markdown/parser.rs` 添加公共函数，接收 `&[&str]` 表格源码行，利用 pulldown-cmark 解析为 `TableData` IR（单元格内容为 `Vec<Inline>`，天然支持 bold/code/emphasis 等内联语法）
+- **editor 表格渲染简化**：`render_table_rows()` 仅在表格首行（`start_idx`）时调用 `parse_table_from_source()` + 共享层 `render_table()` 一次性渲染完整表格，后续行返回 `vec![]`
+- **删除旧代码**：`parse_table_cells()`（纯文本 `split('|')` 切分）、`is_table_separator_line()` 等废弃函数已移除
+- **直接修复**：表格单元格内的 `**bold**` / `` `code` `` / 链接现在正确渲染；`split('|')` 误切 code span 内管道符的问题不复存在
