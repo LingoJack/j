@@ -173,6 +173,33 @@ fn table_inline_code_style_preserved() {
     }
 }
 
+#[test]
+fn markdown_tabs_are_normalized_before_rendering() {
+    let theme = Theme::from_name(&ThemeName::default());
+    let lines = markdown_to_lines("foo\tbar\r\nbaz", 20, &theme);
+
+    for line in &lines {
+        for span in &line.spans {
+            assert!(
+                !span.content.contains('\t') && !span.content.contains('\r'),
+                "span should not contain raw control chars: {:?}",
+                span.content
+            );
+        }
+    }
+
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect()
+        })
+        .collect();
+    assert_eq!(rendered, vec!["foo    bar baz".to_string()]);
+}
+
 /// 验证宽终端下行内代码样式正确渲染
 #[test]
 fn table_inline_code_wide_terminal() {

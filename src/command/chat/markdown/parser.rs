@@ -6,7 +6,7 @@ mod text;
 use super::highlight::highlight_code_line;
 use crate::command::chat::render::theme::Theme;
 use crate::tui::editor_core::EditorTheme;
-use crate::util::text::{display_width, wrap_text};
+use crate::util::text::{display_width, normalize_terminal_text, wrap_text};
 use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
 use ratatui::{
     style::{Modifier, Style},
@@ -203,6 +203,14 @@ fn count_pipe_cells(line: &str) -> usize {
 pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<'static>> {
     // 内容区宽度 = max_width - 2（左侧 "  " 缩进由外层负责）
     let content_width = max_width.saturating_sub(2);
+
+    let normalized_md;
+    let md = if md.contains('\t') || md.contains('\r') {
+        normalized_md = normalize_terminal_text(md);
+        normalized_md.as_str()
+    } else {
+        md
+    };
 
     // 预处理：修复 **"text"** 加粗不生效的问题。
     // CommonMark 规范规定：左侧分隔符 ** 后面是标点（如 " U+201C）且前面是字母（如中文字符）时，

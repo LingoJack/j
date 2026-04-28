@@ -1,13 +1,24 @@
+const TAB_REPLACEMENT: &str = "    ";
+
+/// 将终端不会稳定按单列显示的控制字符归一化为可见文本。
+///
+/// - `\t` 展开为 4 个空格，避免 ratatui 跳过 tab 后造成宽度计算与实际渲染不一致
+/// - `\r` 移除，避免覆盖式输出在 TUI 中留下脏字符
+pub fn normalize_terminal_text(s: &str) -> String {
+    s.replace('\t', TAB_REPLACEMENT).replace('\r', "")
+}
+
 /// 按显示宽度对文本进行自动换行
 /// `\n` 字符会在该处断行（产生新的 wrapped line），`\n` 本身不出现在返回的行中
 pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
+    let normalized = normalize_terminal_text(text);
     // 最小宽度保证至少能放下一个字符（中文字符宽度2），避免无限循环或不截断
     let max_width = max_width.max(2);
     let mut result = Vec::new();
     let mut current_line = String::new();
     let mut current_width = 0;
 
-    for ch in text.chars() {
+    for ch in normalized.chars() {
         // 遇到 \n 时断行：push 当前行，开始新行
         if ch == '\n' {
             result.push(current_line.clone());
@@ -34,20 +45,19 @@ pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
 }
 
 /// 计算字符串的显示宽度（使用 unicode-width crate，比手动范围匹配更准确）
-/// 注意：unicode-width 将 tab 视为宽度 0，这里补充处理将其视为宽度 1
+/// 约定：tab 视为 4 列，其他控制字符视为 0 列，与终端归一化策略保持一致
 pub fn display_width(s: &str) -> usize {
-    use unicode_width::UnicodeWidthStr;
-    let base = UnicodeWidthStr::width(s);
-    // 统计 tab 数量，每个 tab 补偿 1 的宽度（unicode-width 视为 0）
-    let tab_count = s.chars().filter(|&c| c == '\t').count();
-    base + tab_count
+    s.chars().map(char_width).sum()
 }
 
 /// 计算单个字符的显示宽度（使用 unicode-width crate）
-/// 注意：unicode-width 将 tab 视为宽度 0，这里补充处理将其视为宽度 1
+/// 约定：tab 视为 4 列，其他控制字符视为 0 列，与终端归一化策略保持一致
 pub fn char_width(c: char) -> usize {
     if c == '\t' {
-        return 1;
+        return TAB_REPLACEMENT.len();
+    }
+    if c.is_control() {
+        return 0;
     }
     use unicode_width::UnicodeWidthChar;
     UnicodeWidthChar::width(c).unwrap_or(0)
@@ -73,7 +83,7 @@ pub fn strip_ansi_codes(s: &str) -> String {
 /// 清理工具输出文本：剥离 ANSI 码 + 将 tab 替换为空格 + 移除 \r
 pub fn sanitize_tool_output(s: &str) -> String {
     let stripped = strip_ansi_codes(s);
-    stripped.replace('\t', "    ").replace('\r', "")
+    normalize_terminal_text(&stripped)
 }
 
 /// 去除字符串两端的引号（单引号或双引号）
@@ -85,4 +95,21 @@ pub fn remove_quotes(s: &str) -> String {
         return s[1..s.len() - 1].to_string();
     }
     s.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_terminal_text, wrap_text};
+
+    #[test]
+    fn normalize_terminal_text_expands_tabs_and_removes_cr() {
+        assert_eq!(normalize_terminal_text("a\tb\r\nc"), "a    b\nc");
+    }
+
+    #[test]
+    fn wrap_text_outputs_spaces_instead_of_tabs() {
+        let wrapped = wrap_text("ab\tcd", 4);
+        assert_eq!(wrapped, vec!["ab  ".to_string(), "  cd".to_string()]);
+        assert!(wrapped.iter().all(|line| !line.contains('\t')));
+    }
 }
