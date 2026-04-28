@@ -56,7 +56,10 @@ impl MarkdownRenderer {
         // 代码块光标行：添加左边框
         if in_code_block {
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
-            spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
+            spans.push(Span::styled(
+                " ",
+                Style::default().bg(self.theme.bg_primary),
+            ));
         }
 
         // 计算显示宽度（在 text 被消费之前）
@@ -151,7 +154,10 @@ impl MarkdownRenderer {
                 " ".repeat(fill_width),
                 Style::default().bg(self.theme.bg_primary),
             ));
-            spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
+            spans.push(Span::styled(
+                " ",
+                Style::default().bg(self.theme.bg_primary),
+            ));
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
         }
 

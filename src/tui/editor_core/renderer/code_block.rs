@@ -290,7 +290,10 @@ impl MarkdownRenderer {
             " ".repeat(fill_width),
             Style::default().bg(self.theme.bg_primary),
         ));
-        spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
+        spans.push(Span::styled(
+            " ",
+            Style::default().bg(self.theme.bg_primary),
+        ));
         spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
 
         Line::from(spans)
