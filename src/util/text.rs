@@ -2,7 +2,12 @@ const TAB_REPLACEMENT: &str = "    ";
 
 /// 将终端不会稳定按单列显示的控制字符归一化为可见文本。
 ///
-/// - `\t` 展开为 4 个空格，避免 ratatui 跳过 tab 后造成宽度计算与实际渲染不一致
+/// 这里处理过一个很隐蔽的 TUI 渲染问题：聊天记录里如果混入原始 `\t` / `\r`
+/// （典型来源是 shell / make 输出），窄屏滚动时右边界会残留上一帧的 `/` 等字符。
+/// 根因不是滚动逻辑本身，而是 ratatui 会跳过 control char，而我们若仍按“有宽度”去参与
+/// wrap / bubble 宽度计算，就会让预计算宽度与实际写入 buffer 的宽度失配。
+///
+/// - `\t` 展开为 4 个空格，确保宽度计算与最终渲染一致
 /// - `\r` 移除，避免覆盖式输出在 TUI 中留下脏字符
 pub fn normalize_terminal_text(s: &str) -> String {
     s.replace('\t', TAB_REPLACEMENT).replace('\r', "")
