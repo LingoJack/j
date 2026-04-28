@@ -4,8 +4,7 @@ mod tests;
 mod text;
 
 use super::highlight::highlight_code_line;
-use crate::command::chat::render::theme::Theme;
-use crate::tui::editor_core::EditorTheme;
+use super::theme::MdStyle;
 use crate::util::text::{display_width, normalize_terminal_text, wrap_text};
 use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
 use ratatui::{
@@ -54,16 +53,16 @@ pub(crate) struct ParserState<'a> {
 
     // Layout
     pub(crate) content_width: usize,
-    pub(crate) theme: &'a Theme,
+    pub(crate) theme: &'a dyn MdStyle,
     pub(crate) base_style: Style,
 }
 
 impl<'a> ParserState<'a> {
-    fn new(content_width: usize, theme: &'a Theme) -> Self {
+    fn new(content_width: usize, theme: &'a dyn MdStyle) -> Self {
         Self {
             lines: Vec::new(),
             current_spans: Vec::new(),
-            style_stack: vec![Style::default().fg(theme.text_normal)],
+            style_stack: vec![Style::default().fg(theme.text_normal())],
             in_code_block: false,
             code_block_content: String::new(),
             code_block_lang: String::new(),
@@ -81,7 +80,7 @@ impl<'a> ParserState<'a> {
             table_alignments: Vec::new(),
             content_width,
             theme,
-            base_style: Style::default().fg(theme.text_normal),
+            base_style: Style::default().fg(theme.text_normal()),
         }
     }
 
@@ -200,7 +199,7 @@ fn count_pipe_cells(line: &str) -> usize {
 // ---------------------------------------------------------------------------
 
 /// 将 Markdown 文本渲染为 TUI 可显示的 `Line` 列表，应用主题着色和自动换行。
-pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<'static>> {
+pub fn markdown_to_lines(md: &str, max_width: usize, theme: &dyn MdStyle) -> Vec<Line<'static>> {
     // 内容区宽度 = max_width - 2（左侧 "  " 缩进由外层负责）
     let content_width = max_width.saturating_sub(2);
 
@@ -268,16 +267,16 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 }
                 let heading_style = match level as u8 {
                     1 => Style::default()
-                        .fg(theme.md_h1)
+                        .fg(theme.md_h1())
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
                     2 => Style::default()
-                        .fg(theme.md_h2)
+                        .fg(theme.md_h2())
                         .add_modifier(Modifier::BOLD),
                     3 => Style::default()
-                        .fg(theme.md_h3)
+                        .fg(theme.md_h3())
                         .add_modifier(Modifier::BOLD),
                     _ => Style::default()
-                        .fg(theme.md_h4)
+                        .fg(theme.md_h4())
                         .add_modifier(Modifier::BOLD),
                 };
                 state.style_stack.push(heading_style);
@@ -287,25 +286,25 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     1 => (
                         "◆ ",
                         Style::default()
-                            .fg(theme.md_h1)
+                            .fg(theme.md_h1())
                             .add_modifier(Modifier::BOLD),
                     ),
                     2 => (
                         "◇ ",
                         Style::default()
-                            .fg(theme.md_h2)
+                            .fg(theme.md_h2())
                             .add_modifier(Modifier::BOLD),
                     ),
                     3 => (
                         "〈",
                         Style::default()
-                            .fg(theme.md_h3)
+                            .fg(theme.md_h3())
                             .add_modifier(Modifier::BOLD),
                     ),
                     _ => (
                         "› ",
                         Style::default()
-                            .fg(theme.md_h4)
+                            .fg(theme.md_h4())
                             .add_modifier(Modifier::BOLD),
                     ),
                 };
@@ -320,7 +319,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     state.current_spans.push(Span::styled(
                         "〉".to_string(),
                         Style::default()
-                            .fg(theme.md_h3)
+                            .fg(theme.md_h3())
                             .add_modifier(Modifier::BOLD),
                     ));
                 }
@@ -330,7 +329,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     let sep_char = if level_u8 == 1 { "━" } else { "─" };
                     state.lines.push(Line::from(Span::styled(
                         sep_char.repeat(content_width),
-                        Style::default().fg(theme.md_heading_sep),
+                        Style::default().fg(theme.md_heading_sep()),
                     )));
                 }
                 state.style_stack.pop();
@@ -342,7 +341,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 let current = *state.style_stack.last().unwrap_or(&state.base_style);
                 state
                     .style_stack
-                    .push(current.add_modifier(Modifier::BOLD).fg(theme.text_bold));
+                    .push(current.add_modifier(Modifier::BOLD).fg(theme.text_bold()));
             }
             Event::End(TagEnd::Strong) => {
                 state.style_stack.pop();
@@ -369,7 +368,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
             // ===== Link =====
             Event::Start(Tag::Link { dest_url, .. }) => {
                 let link_style = Style::default()
-                    .fg(theme.md_link)
+                    .fg(theme.md_link())
                     .add_modifier(Modifier::UNDERLINED);
                 state.style_stack.push(link_style);
                 state.link_url = Some(dest_url.to_string());
@@ -381,7 +380,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         .current_spans
                         .iter()
                         .rev()
-                        .take_while(|s| s.style.fg == Some(theme.md_link))
+                        .take_while(|s| s.style.fg == Some(theme.md_link()))
                         .map(|s| s.content.to_string())
                         .collect::<Vec<_>>()
                         .into_iter()
@@ -391,7 +390,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         state.current_spans.push(Span::styled(
                             format!(" ({})", url),
                             Style::default()
-                                .fg(theme.md_link)
+                                .fg(theme.md_link())
                                 .add_modifier(Modifier::DIM),
                         ));
                     }
@@ -419,7 +418,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 let top_border = format!("┌─{}{}┐", label, "─".repeat(border_fill));
                 state.lines.push(Line::from(Span::styled(
                     top_border,
-                    Style::default().fg(theme.code_border).bg(theme.code_bg),
+                    Style::default().fg(theme.code_border()).bg(theme.code_bg()),
                 )));
             }
             Event::End(TagEnd::CodeBlock) => {
@@ -428,7 +427,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 for code_line in code_content_expanded.lines() {
                     let wrapped = wrap_text(code_line, code_inner_w);
                     for wl in wrapped {
-                        let editor_theme = EditorTheme::from(theme);
+                        let editor_theme = theme.code_syntax_theme();
                         let highlighted =
                             highlight_code_line(&wl, &state.code_block_lang, &editor_theme);
                         let text_w: usize =
@@ -438,19 +437,19 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                         // 左侧边框：│ (2字符，有背景色)
                         spans_vec.push(Span::styled(
                             "│ ",
-                            Style::default().fg(theme.code_border).bg(theme.code_bg),
+                            Style::default().fg(theme.code_border()).bg(theme.code_bg()),
                         ));
                         // 代码内容（有背景色）
                         for hs in highlighted {
                             spans_vec.push(Span::styled(
                                 hs.content.to_string(),
-                                hs.style.bg(theme.code_bg),
+                                hs.style.bg(theme.code_bg()),
                             ));
                         }
                         // 右侧填充 + 边框
                         spans_vec.push(Span::styled(
                             format!("{} │", " ".repeat(fill)),
-                            Style::default().fg(theme.code_border).bg(theme.code_bg),
+                            Style::default().fg(theme.code_border()).bg(theme.code_bg()),
                         ));
                         state.lines.push(Line::from(spans_vec));
                     }
@@ -459,7 +458,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 let bottom_border = format!("└{}┘", "─".repeat(content_width.saturating_sub(2)));
                 state.lines.push(Line::from(Span::styled(
                     bottom_border,
-                    Style::default().fg(theme.code_border).bg(theme.code_bg),
+                    Style::default().fg(theme.code_border()).bg(theme.code_bg()),
                 )));
                 state.in_code_block = false;
                 state.code_block_content.clear();
@@ -487,8 +486,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                             state.current_spans.push(Span::styled(
                                 "| ".to_string(),
                                 Style::default()
-                                    .fg(theme.md_blockquote_bar)
-                                    .bg(theme.md_blockquote_bg)
+                                    .fg(theme.md_blockquote_bar())
+                                    .bg(theme.md_blockquote_bg())
                                     .add_modifier(Modifier::BOLD),
                             ));
                         }
@@ -496,8 +495,8 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     state.current_spans.push(Span::styled(
                         code_str,
                         Style::default()
-                            .fg(theme.md_inline_code_fg)
-                            .bg(theme.md_inline_code_bg),
+                            .fg(theme.md_inline_code_fg())
+                            .bg(theme.md_inline_code_bg()),
                     ));
                 }
             }
@@ -525,7 +524,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 };
                 state.current_spans.push(Span::styled(
                     bullet,
-                    Style::default().fg(theme.md_list_bullet),
+                    Style::default().fg(theme.md_list_bullet()),
                 ));
             }
             Event::End(TagEnd::Item) => {
@@ -545,7 +544,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                     } else {
                         (
                             format!("{}○ ", indent),
-                            Style::default().fg(theme.md_list_bullet),
+                            Style::default().fg(theme.md_list_bullet()),
                         )
                     };
                     *last = Span::styled(symbol, style);
@@ -578,14 +577,14 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 state.in_blockquote = true;
                 state.style_stack.push(
                     Style::default()
-                        .fg(theme.md_blockquote_text)
-                        .bg(theme.md_blockquote_bg),
+                        .fg(theme.md_blockquote_text())
+                        .bg(theme.md_blockquote_bg()),
                 );
                 state.current_spans.push(Span::styled(
                     "| ".to_string(),
                     Style::default()
-                        .fg(theme.md_blockquote_bar)
-                        .bg(theme.md_blockquote_bg)
+                        .fg(theme.md_blockquote_bar())
+                        .bg(theme.md_blockquote_bg())
                         .add_modifier(Modifier::BOLD),
                 ));
             }
@@ -622,7 +621,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
                 state.flush_line();
                 state.lines.push(Line::from(Span::styled(
                     "─".repeat(content_width),
-                    Style::default().fg(theme.md_rule),
+                    Style::default().fg(theme.md_rule()),
                 )));
             }
 

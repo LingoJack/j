@@ -51,8 +51,8 @@ impl<'a> ParserState<'a> {
                 self.current_spans.push(Span::styled(
                     "| ".to_string(),
                     Style::default()
-                        .fg(self.theme.md_blockquote_bar)
-                        .bg(self.theme.md_blockquote_bg)
+                        .fg(self.theme.md_blockquote_bar())
+                        .bg(self.theme.md_blockquote_bg())
                         .add_modifier(Modifier::BOLD),
                 ));
             }
@@ -62,7 +62,7 @@ impl<'a> ParserState<'a> {
         };
 
         let link_style = Style::default()
-            .fg(self.theme.md_link)
+            .fg(self.theme.md_link())
             .add_modifier(Modifier::UNDERLINED);
         let in_link = self.link_url.is_some();
 
@@ -109,8 +109,8 @@ impl<'a> ParserState<'a> {
                     self.current_spans.push(Span::styled(
                         "| ".to_string(),
                         Style::default()
-                            .fg(self.theme.md_blockquote_bar)
-                            .bg(self.theme.md_blockquote_bg)
+                            .fg(self.theme.md_blockquote_bar())
+                            .bg(self.theme.md_blockquote_bg())
                             .add_modifier(Modifier::BOLD),
                     ));
                     cur_line_w = 0;
@@ -148,8 +148,8 @@ impl<'a> ParserState<'a> {
                         self.current_spans.push(Span::styled(
                             "| ".to_string(),
                             Style::default()
-                                .fg(self.theme.md_blockquote_bar)
-                                .bg(self.theme.md_blockquote_bg)
+                                .fg(self.theme.md_blockquote_bar())
+                                .bg(self.theme.md_blockquote_bg())
                                 .add_modifier(Modifier::BOLD),
                         ));
                     }
@@ -161,8 +161,8 @@ impl<'a> ParserState<'a> {
                                 self.current_spans.push(Span::styled(
                                     "| ".to_string(),
                                     Style::default()
-                                        .fg(self.theme.md_blockquote_bar)
-                                        .bg(self.theme.md_blockquote_bg)
+                                        .fg(self.theme.md_blockquote_bar())
+                                        .bg(self.theme.md_blockquote_bg())
                                         .add_modifier(Modifier::BOLD),
                                 ));
                             }

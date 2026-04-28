@@ -1,5 +1,5 @@
 use super::*;
-use crate::command::chat::render::theme::ThemeName;
+use crate::command::chat::render::theme::{Theme, ThemeName};
 use crate::util::text::char_width;
 use ratatui::style::Modifier;
 

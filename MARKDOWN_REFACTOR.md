@@ -354,12 +354,18 @@ editor 自己继续负责：
 
 - [x] 方案确认
 - [x] Step 1：模块落位 / 搬目录
-- [ ] Step 2：抽 `MdStyle` trait
-- [ ] Step 3：parser 输出 IR
+- [x] **Step 2：抽 `MdStyle` trait** — 新增 `src/markdown/theme.rs` 定义 trait + `impl MdStyle for crate::theme::Theme`；parser/parser-text/parser-table 改为通过 trait method 取色；`markdown_to_lines` 签名改为 `theme: &dyn MdStyle`，5 处调用方零改动（`&Theme` 自动 unsizing coerce）；parser.rs 已彻底切断对 `chat::Theme` 的直接引用；`cargo clippy --lib --bins -D warnings` 干净，`cargo test --lib` 290 passed。
+- [ ] **Step 3：parser 输出 IR**（下一步）
 - [ ] Step 4：editor 接入（inline + 段落）
 - [ ] Step 5：迁表格
 - [ ] Step 6：迁 heading / list / blockquote
 - [ ] Step 7：性能验证与调优
+
+### Step 2 实施备注
+
+- **未引入显式 `ChatMdStyle` 包装类型**：因为 `Theme` 是顶层 `crate::theme::Theme`（不属于 chat 模块），直接 `impl MdStyle for Theme` 即可，无需 wrapper struct。这与规划中"chat 侧实现 ChatMdStyle"的语义等价，但避免一层冗余。后续 editor 侧实现 `EditorMdStyle` 时同理：要么 `impl MdStyle for EditorTheme`，要么写专用 struct，按届时需要选择。
+- **残留依赖**：`src/markdown/highlight.rs` 和 `src/markdown/theme.rs` 仍然 `use crate::tui::editor_core::EditorTheme`。Step 3 起会引入独立的 `SyntaxHighlightTheme` 抽象彻底消除该跨模块依赖。
+- **测试依赖修复**：`parser/tests.rs` 之前通过 `use super::*` 隐式继承 parser 的私有 `use Theme`；切断后改为 tests.rs 自己显式 import。
 
 ## 当前建议
 

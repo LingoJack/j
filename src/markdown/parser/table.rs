@@ -68,11 +68,11 @@ impl<'a> ParserState<'a> {
             }
         }
 
-        let table_style = Style::default().fg(self.theme.table_body);
+        let table_style = Style::default().fg(self.theme.table_body());
         let header_style = Style::default()
-            .fg(self.theme.table_header)
+            .fg(self.theme.table_header())
             .add_modifier(Modifier::BOLD);
-        let border_style = Style::default().fg(self.theme.text_dim);
+        let border_style = Style::default().fg(self.theme.text_dim());
 
         let total_col_w_final: usize = col_widths.iter().sum();
         let table_row_w = sep_w + pad_w + total_col_w_final;
@@ -100,8 +100,8 @@ impl<'a> ParserState<'a> {
                 table_style
             };
             let code_style = Style::default()
-                .fg(self.theme.md_inline_code_fg)
-                .bg(self.theme.md_inline_code_bg);
+                .fg(self.theme.md_inline_code_fg())
+                .bg(self.theme.md_inline_code_bg());
 
             // 对每个单元格按显示宽度折行，保留行内代码样式
             let wrapped_cells: Vec<Vec<(Vec<Span<'static>>, usize)>> = col_widths
