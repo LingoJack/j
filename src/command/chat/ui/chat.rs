@@ -458,7 +458,10 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         app.ui.scroll_offset = (msg_start + app.ui.browse_scroll_offset).min(max_scroll);
     }
 
-    // 背景填充 inner 区域
+    // 先清除 inner 区域的旧字符（reset 每个 cell 的 symbol 为空格），
+    // 再用背景色填充。ratatui 的 Block/Paragraph 只调用 set_style（不改 symbol），
+    // 在窄屏滚动时会导致右侧残留上一帧的字符。
+    f.render_widget(ratatui::widgets::Clear, inner);
     let bg_fill = Block::default().style(Style::default().bg(app.ui.theme.bg_primary));
     f.render_widget(bg_fill, inner);
 
