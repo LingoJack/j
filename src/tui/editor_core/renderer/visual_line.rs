@@ -32,12 +32,12 @@ impl MarkdownRenderer {
     ) -> Line<'static> {
         let in_code_block = ctx.code_block_max_width.is_some();
 
-        // 代码块内的光标行：文本用 code_bg，行号保持 bg_input
+        // 代码块内的光标行：文本背景与正文一致（bg_primary），行号保持 bg_input
         let (text_style, line_num_bg) = if in_code_block {
             (
                 Style::default()
                     .fg(self.theme.text_normal)
-                    .bg(self.theme.code_bg),
+                    .bg(self.theme.bg_primary),
                 self.theme.bg_input,
             )
         } else {
@@ -56,7 +56,7 @@ impl MarkdownRenderer {
         // 代码块光标行：添加左边框
         if in_code_block {
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
-            spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
+            spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
         }
 
         // 计算显示宽度（在 text 被消费之前）
@@ -149,9 +149,9 @@ impl MarkdownRenderer {
             let fill_width = max_width.saturating_sub(text_display_width);
             spans.push(Span::styled(
                 " ".repeat(fill_width),
-                Style::default().bg(self.theme.code_bg),
+                Style::default().bg(self.theme.bg_primary),
             ));
-            spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
+            spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
             spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
         }
 

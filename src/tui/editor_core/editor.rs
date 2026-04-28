@@ -1064,18 +1064,28 @@ impl MarkdownEditor {
         let item_count = items.len();
         let popup_height = (item_count as u16 + 2).min(area.height.saturating_sub(4));
 
-        // 计算宽度
-        let max_label_width = items
+        // 宽度计算与渲染保持一致：
+        //   pointer(2) + name(对齐到 max_name_w) + GAP(3) + desc(完整显示)
+        // 旧实现的 bug：max_label_width 假设 name 后 3 空格间隔，但渲染却用
+        // `format!("{:<10}", name)` 把 name 列硬编码为 10 字符——name 短于 10
+        // 时弹窗宽度被低估、desc 被截；name 长于 10 时根本没有间隔，紧贴 desc。
+        const POINTER_W: usize = 2;
+        const GAP: usize = 3;
+        let max_name_w = items
             .iter()
-            .map(|cmd| {
-                2 + unicode_width::UnicodeWidthStr::width(cmd.name)
-                    + 3
-                    + unicode_width::UnicodeWidthStr::width(cmd.desc)
-            })
+            .map(|cmd| unicode_width::UnicodeWidthStr::width(cmd.name))
             .max()
-            .unwrap_or(16)
-            .max(16);
-        let popup_width = (max_label_width as u16 + 2).min(area.width.saturating_sub(4));
+            .unwrap_or(0);
+        let max_desc_w = items
+            .iter()
+            .map(|cmd| unicode_width::UnicodeWidthStr::width(cmd.desc))
+            .max()
+            .unwrap_or(0);
+        let content_w = POINTER_W + max_name_w + GAP + max_desc_w;
+        // +2 给左右边框；保底 16，避免空标题/极短列表时弹窗过窄
+        let popup_width = ((content_w + 2) as u16)
+            .max(16)
+            .min(area.width.saturating_sub(4));
 
         // 位置：编辑区底部偏左
         let x = area.x + 2;
@@ -1100,6 +1110,7 @@ impl MarkdownEditor {
         let popup_bg = self.theme.bg_primary;
         let dim_color = self.theme.text_dim;
         let label_ai = self.theme.label_ai;
+        let gap_str = " ".repeat(GAP);
         let list_items: Vec<ListItem> = items
             .iter()
             .enumerate()
@@ -1112,9 +1123,12 @@ impl MarkdownEditor {
                 };
                 let desc_style = Style::default().fg(dim_color);
                 let pointer = if is_selected { "❯ " } else { "  " };
+                // name 列动态对齐到 max_name_w（命令名都是 ASCII，char 数等于显示宽度）。
+                let name_padded = format!("{:<width$}", cmd.name, width = max_name_w);
                 ListItem::new(Line::from(vec![
                     Span::styled(pointer.to_string(), name_style),
-                    Span::styled(format!("{:<10}", cmd.name), name_style),
+                    Span::styled(name_padded, name_style),
+                    Span::raw(gap_str.clone()),
                     Span::styled(cmd.desc.to_string(), desc_style),
                 ]))
             })

@@ -276,21 +276,21 @@ impl MarkdownRenderer {
                     .bg(self.theme.bg_primary),
             ),
             Span::styled("│", self.style_code(self.theme.text_dim)),
-            Span::styled(" ", Style::default().bg(self.theme.code_bg)),
+            Span::styled(" ", Style::default().bg(self.theme.bg_primary)),
         ];
 
         for span in highlighted_spans {
             spans.push(Span::styled(
                 span.content,
-                span.style.bg(self.theme.code_bg),
+                span.style.bg(self.theme.bg_primary),
             ));
         }
 
         spans.push(Span::styled(
             " ".repeat(fill_width),
-            Style::default().bg(self.theme.code_bg),
+            Style::default().bg(self.theme.bg_primary),
         ));
-        spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
+        spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
         spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
 
         Line::from(spans)

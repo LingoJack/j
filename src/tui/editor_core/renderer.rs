@@ -115,10 +115,11 @@ impl MarkdownRenderer {
             .add_modifier(Modifier::BOLD)
     }
 
-    /// 创建代码块背景色的 Style
+    /// 创建代码块样式（背景统一用 bg_primary，与正文背景一致，
+    /// 避免代码块在编辑器里形成与主背景突兀的色块）。
     #[inline]
     pub fn style_code(&self, fg: Color) -> Style {
-        Style::default().fg(fg).bg(self.theme.code_bg)
+        Style::default().fg(fg).bg(self.theme.bg_primary)
     }
 
     // ========== 视觉行渲染 ==========
@@ -171,7 +172,8 @@ impl MarkdownRenderer {
         };
 
         // ---- 光标行：显示源码 + 光标 ----
-        // 代码块内的光标行使用 code_bg 背景以保持视觉一致性
+        // 代码块内的光标行也复用 bg_primary 背景；保留 code_block_max_width
+        // 以驱动右边框对齐（不再用作色块背景）。
         let code_block_max_width = if !Self::is_code_fence_line(&line_content)
             && self.is_line_in_complete_code_block(logical_line, lines)
         {
@@ -246,7 +248,7 @@ impl MarkdownRenderer {
 
         // 续行（折行后的第二行及之后）无法独立渲染 Markdown，
         // 因为 Markdown 标记可能跨越折行边界，所以续行显示源码
-        // 但代码块内的续行需要保持 code_bg 样式
+        // 但代码块内的续行需要保持代码块的边框样式
         if is_continuation {
             let text = vl_text;
 
@@ -255,7 +257,7 @@ impl MarkdownRenderer {
                 && self.is_line_in_complete_code_block(logical_line, lines);
 
             if in_code_block {
-                // 代码块续行：保持 code_bg 背景 + 边框
+                // 代码块续行：保持左/右 │ 边框；背景统一用 bg_primary
                 let mut spans = vec![
                     Span::styled(
                         line_num_str,
@@ -264,14 +266,14 @@ impl MarkdownRenderer {
                             .bg(self.theme.bg_primary),
                     ),
                     Span::styled("│", self.style_code(self.theme.text_dim)),
-                    Span::styled(" ", Style::default().bg(self.theme.code_bg)),
+                    Span::styled(" ", Style::default().bg(self.theme.bg_primary)),
                 ];
-                // 续行用 code_bg 背景显示源码，不语法高亮（续行是折行片段）
+                // 续行直接显示源码片段，不语法高亮（续行是折行片段）
                 spans.push(Span::styled(
                     text.to_string(),
                     Style::default()
                         .fg(self.theme.text_normal)
-                        .bg(self.theme.code_bg),
+                        .bg(self.theme.bg_primary),
                 ));
                 // 计算填充宽度以对齐右边框
                 let max_width = self
@@ -282,9 +284,9 @@ impl MarkdownRenderer {
                 let fill_width = max_width.saturating_sub(content_width);
                 spans.push(Span::styled(
                     " ".repeat(fill_width),
-                    Style::default().bg(self.theme.code_bg),
+                    Style::default().bg(self.theme.bg_primary),
                 ));
-                spans.push(Span::styled(" ", Style::default().bg(self.theme.code_bg)));
+                spans.push(Span::styled(" ", Style::default().bg(self.theme.bg_primary)));
                 spans.push(Span::styled("│", self.style_code(self.theme.text_dim)));
                 return vec![Line::from(spans)];
             }
