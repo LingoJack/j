@@ -5,7 +5,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use crate::util::text::{display_width, wrap_text};
+use crate::util::text::{char_width, display_width, wrap_text};
 
 use super::MarkdownRenderer;
 
@@ -271,12 +271,38 @@ impl MarkdownRenderer {
             spans.push(Span::styled("│", border_style));
 
             for (i, cw) in col_widths.iter().enumerate() {
-                let cell_line = wrapped_cells
+                let cell_line_raw = wrapped_cells
                     .get(i)
                     .and_then(|lines| lines.get(sub_row))
                     .map(|s| s.as_str())
                     .unwrap_or("");
-                let cell_width = display_width(cell_line);
+
+                // 单元格内容严格截断到 cw 宽度（防御性兜底）。
+                //
+                // 为什么需要：wrap_text 内部用了 `max_width.max(2)` 防止宽度 1 时
+                // 无限循环，但 shrink_col_widths 在极窄终端下可能把列压到 cw=1。
+                // 此时若该列单元格里有中文/全角字符（宽度 2），wrap_text 返回的
+                // 子行宽度仍是 2 > cw=1，渲染出的 cell 块（` <cell> `）实际宽度
+                // = 1+2+1 = 4，与该列边框块（`──...─`）固定宽度 cw+2 = 3 失配。
+                // 多列累加后整行宽度超出 wrap_width，终端把右侧 `│` 折到下一行，
+                // 表现为边框未闭合。
+                //
+                // 与历史修复 8db7333（src/command/chat/markdown/parser.rs）同思路。
+                // 该 bug 在 chat 渲染里早已修过，editor_core 表格是后写的另一套
+                // 渲染，最初没带这个截断保护，是同一个 bug 的回归。
+                let (cell_line, cell_width) = {
+                    let mut buf = String::new();
+                    let mut w = 0;
+                    for ch in cell_line_raw.chars() {
+                        let chw = char_width(ch);
+                        if w + chw > *cw {
+                            break;
+                        }
+                        buf.push(ch);
+                        w += chw;
+                    }
+                    (buf, w)
+                };
                 let fill = cw.saturating_sub(cell_width);
 
                 let align = ctx.alignments.get(i).copied().unwrap_or(TableAlign::Left);

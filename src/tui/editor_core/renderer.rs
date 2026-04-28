@@ -289,14 +289,28 @@ impl MarkdownRenderer {
                 return vec![Line::from(spans)];
             }
 
-            // 表格续行：保持表格边框样式
+            // 表格续行：不渲染（关键修复点，改前请先看完）。
+            //
+            // 背景：当一行表格源码（如 `| col1 | col2 | ... |`）的显示宽度超过
+            // wrap_width 时，wrap_engine 会按宽度把它拆成多个 VisualLine：
+            //   - VL1（start_col=0）：走下方 render_table_rows 分支，产出完整的
+            //     多行表格渲染（边框 + 单元格折行）。
+            //   - VL2..K（start_col>0）：进入这里——is_continuation 分支。
+            //
+            // 历史 bug：此处曾把续行的源码尾段（含原始 `|` 字符）按 line_num + text
+            // 原样塞回输出。结果在屏幕上：渲染好的表格行下面紧跟一段错位的源码片段，
+            // 其中的 `|` 与上方表格的 `│` 位置对不上，视觉上就是"该行右侧边框被挤
+            // 开、没闭合"。窄终端下源码被拆出的续行越多，垃圾文本越长，越像 bug。
+            // 这就是用户描述的"窄变宽情况下表框线右边被挤开"现象。
+            //
+            // 修复：续行直接返回 vec![]。完整表格已由 VL1 渲染，续行不需要再贡献输出。
+            //
+            // 副作用注意：这会让 wrap_engine 给出的视觉行计数 K 与实际渲染行数 T
+            // 不再相等（render_table_rows 自行决定 T）。这种不一致本来就存在，
+            // 此修复只是让"多余的输出"消失，不引入新的不一致。Insert 模式下光标
+            // 行走 render_cursor_visual_line（不经过这里），编辑长表格行的体验不变。
             if Self::is_table_row(line_content) {
-                let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
-                spans.push(Span::styled(
-                    text.to_string(),
-                    self.style(self.theme.text_normal),
-                ));
-                return vec![Line::from(spans)];
+                return vec![];
             }
 
             // 引用块续行：保持引用块样式
