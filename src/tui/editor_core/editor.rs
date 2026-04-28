@@ -831,13 +831,6 @@ impl MarkdownEditor {
         let visual_offset = self.wrap.visual_offset_of(render_start);
 
         let mut all_visual_lines: Vec<Line<'static>> = Vec::new();
-        /// 记录每个已渲染视觉行对应的逻辑行号和起止列（用于选区高亮）
-        #[derive(Clone)]
-        struct RenderedVL {
-            logical_line: usize,
-            start_col: usize,
-            end_col: usize,
-        }
         let mut all_vl_meta: Vec<RenderedVL> = Vec::new();
 
         for logical_line in render_start..render_end {
@@ -872,7 +865,7 @@ impl MarkdownEditor {
             }
         }
 
-        // Visual 模式：对选区范围内的行应用高亮
+        // Visual 模式：对选区范围内的行应用精确字符级高亮
         if *self.vim.mode() == Mode::Visual {
             let (vs_row, vs_col) = self.vim.visual_start();
             let (ve_row, ve_col) = (cursor_row, cursor_col);
@@ -884,25 +877,34 @@ impl MarkdownEditor {
                 ((ve_row, ve_col), (vs_row, vs_col))
             };
 
-            // 逐视觉行判断并高亮
-            // 注意：一个逻辑行可能产生多个渲染行（render_visual_line 返回 Vec），
-            // 但目前每个视觉行恰好返回 1 个 Line，所以索引一一对应
             let sel_fg = self.theme.text_normal;
             let sel_bg = Color::DarkGray;
-            for (idx, meta) in all_vl_meta.iter().enumerate() {
-                // 判断该视觉行是否与选区 [sr,sc)-(er,ec) 有交集
-                let in_selection = meta.logical_line > sr && meta.logical_line < er
-                    || (meta.logical_line == sr
-                        && meta.logical_line == er
-                        && meta.end_col > sc
-                        && meta.start_col < ec)
-                    || (meta.logical_line == sr && meta.logical_line != er && meta.end_col > sc)
-                    || (meta.logical_line == er && meta.logical_line != sr && meta.start_col < ec);
+            let line_num_chars = if self.renderer.is_show_line_numbers() {
+                6usize
+            } else {
+                0usize
+            };
 
-                if in_selection && let Some(line) = all_visual_lines.get_mut(idx) {
-                    for span in line.spans.iter_mut() {
-                        span.style = span.style.patch(Style::default().fg(sel_fg).bg(sel_bg));
-                    }
+            for (idx, meta) in all_vl_meta.iter().enumerate() {
+                // 计算该视觉行与选区 [sr,sc)-(er,ec) 的交集字符范围
+                let (hl_start, hl_end) = visual_line_selection_range(meta, sr, sc, er, ec);
+                if hl_start >= hl_end {
+                    continue; // 无交集
+                }
+
+                // 转为视觉行内的局部字符偏移（相对于 vl.start_col）
+                let local_start = hl_start.saturating_sub(meta.start_col);
+                let local_end = hl_end.saturating_sub(meta.start_col);
+
+                if let Some(line) = all_visual_lines.get_mut(idx) {
+                    line.spans = rebuild_spans_with_selection(
+                        &line.spans,
+                        line_num_chars,
+                        local_start,
+                        local_end,
+                        sel_fg,
+                        sel_bg,
+                    );
                 }
             }
         }
@@ -1445,4 +1447,191 @@ pub fn open_markdown_editor_with_content(
 ) -> io::Result<(Option<String>, Option<&'static str>)> {
     let content = initial_lines.join("\n");
     open_markdown_editor(opts, &content)
+}
+
+// ========== Visual 选区辅助函数 ==========
+
+/// 渲染元数据（记录每个已渲染视觉行对应的逻辑行号和起止列）。
+#[derive(Clone)]
+struct RenderedVL {
+    logical_line: usize,
+    start_col: usize,
+    end_col: usize,
+}
+
+/// 计算视觉行与选区 `[sr,sc)-(er,ec)` 的交集字符范围。
+///
+/// 返回 `(hl_start, hl_end)`——需要高亮的逻辑列范围（闭区间左、开区间右）。
+/// 若无交集，返回 `(0, 0)`。
+fn visual_line_selection_range(
+    meta: &RenderedVL,
+    sr: usize,
+    sc: usize,
+    er: usize,
+    ec: usize,
+) -> (usize, usize) {
+    let ll = meta.logical_line;
+    let vl_start = meta.start_col;
+    let vl_end = meta.end_col;
+
+    // 逻辑行完全在选区中间 → 整个视觉行都高亮
+    if ll > sr && ll < er {
+        return (vl_start, vl_end);
+    }
+
+    // 起始行 == 结束行：视觉行与 [sc, ec) 求交集
+    if ll == sr && ll == er {
+        let hl_start = vl_start.max(sc);
+        let hl_end = vl_end.min(ec);
+        return (hl_start, hl_end);
+    }
+
+    // 仅起始行：高亮 [sc, ∞) ∩ 视觉行范围
+    if ll == sr {
+        let hl_start = vl_start.max(sc);
+        let hl_end = vl_end;
+        if hl_start < vl_end {
+            return (hl_start, hl_end);
+        }
+        return (0, 0);
+    }
+
+    // 仅结束行：高亮 [0, ec) ∩ 视觉行范围
+    if ll == er {
+        let hl_start = vl_start;
+        let hl_end = vl_end.min(ec);
+        if vl_start < hl_end {
+            return (hl_start, hl_end);
+        }
+        return (0, 0);
+    }
+
+    (0, 0)
+}
+
+/// 对已渲染的 spans 列表应用选区高亮（精确到字符级别）。
+///
+/// - `line_num_chars`: 行号占用的字符数（这些字符不参与高亮）
+/// - `local_start` / `local_end`: 视觉行内内容部分的字符偏移（0-based, exclusive end）
+/// - `sel_fg` / `sel_bg`: 选区的文字色和背景色
+fn rebuild_spans_with_selection(
+    spans: &[Span<'static>],
+    line_num_chars: usize,
+    local_start: usize,
+    local_end: usize,
+    sel_fg: Color,
+    sel_bg: Color,
+) -> Vec<Span<'static>> {
+    let ss = SelectionStyle {
+        normal: Style::default(),
+        selected: Style::default().fg(sel_fg).bg(sel_bg),
+        local_start,
+        local_end,
+    };
+    let mut result = Vec::with_capacity(spans.len() + 4);
+    let mut chars_seen = 0usize;
+
+    for span in spans {
+        let span_chars: Vec<char> = span.content.chars().collect();
+        let span_len = span_chars.len();
+        let span_end = chars_seen + span_len;
+
+        // 跳过行号区域
+        if span_end <= line_num_chars {
+            result.push(span.clone());
+            chars_seen = span_end;
+            continue;
+        }
+
+        // 当前 span 跨越行号边界，需分割
+        if chars_seen < line_num_chars && span_end > line_num_chars {
+            let num_part_len = line_num_chars - chars_seen;
+            let num_text: String = span_chars[..num_part_len].iter().collect();
+            result.push(Span::styled(num_text, span.style));
+
+            // 剩余内容作为新 span 处理
+            let content_chars = &span_chars[num_part_len..];
+            let content_len = content_chars.len();
+            // 相对于内容起始的偏移（内容部分从 0 开始计算）
+            let c_start = 0usize;
+            let c_end = content_len;
+            let content_ss = SelectionStyle {
+                normal: span.style,
+                ..ss
+            };
+            append_content_spans(content_chars, c_start, c_end, &content_ss, &mut result);
+            chars_seen = span_end;
+            continue;
+        }
+
+        // 纯内容 span
+        let content_offset = chars_seen - line_num_chars;
+        let c_start = content_offset;
+        let c_end = content_offset + span_len;
+        let content_ss = SelectionStyle {
+            normal: span.style,
+            ..ss
+        };
+        append_content_spans(&span_chars, c_start, c_end, &content_ss, &mut result);
+        chars_seen = span_end;
+    }
+
+    result
+}
+
+/// 选区样式上下文，用于减少辅助函数的参数数量。
+struct SelectionStyle {
+    normal: Style,
+    selected: Style,
+    local_start: usize,
+    local_end: usize,
+}
+
+/// 将内容 span 按 `[local_start, local_end)` 选区范围分割并附加到 result。
+fn append_content_spans(
+    chars: &[char],
+    c_start: usize,
+    c_end: usize,
+    ss: &SelectionStyle,
+    result: &mut Vec<Span<'static>>,
+) {
+    let SelectionStyle {
+        normal,
+        selected,
+        local_start,
+        local_end,
+    } = *ss;
+
+    // 无交集
+    if c_end <= local_start || c_start >= local_end {
+        let text: String = chars.iter().collect();
+        result.push(Span::styled(text, normal));
+        return;
+    }
+
+    // 选中前的部分
+    if c_start < local_start {
+        let before_len = local_start - c_start;
+        let text: String = chars[..before_len].iter().collect();
+        result.push(Span::styled(text, normal));
+    }
+
+    // 选中的部分
+    {
+        let sel_begin = local_start.saturating_sub(c_start);
+        let sel_finish = local_end.min(c_end).saturating_sub(c_start);
+        if sel_begin < sel_finish && sel_finish <= chars.len() {
+            let text: String = chars[sel_begin..sel_finish].iter().collect();
+            result.push(Span::styled(text, selected));
+        }
+    }
+
+    // 选中后的部分
+    if c_end > local_end {
+        let after_begin = local_end.saturating_sub(c_start);
+        if after_begin < chars.len() {
+            let text: String = chars[after_begin..].iter().collect();
+            result.push(Span::styled(text, normal));
+        }
+    }
 }
