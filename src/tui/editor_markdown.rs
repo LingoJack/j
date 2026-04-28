@@ -10,7 +10,7 @@
 use crate::command::chat::storage::{load_agent_config, save_agent_config};
 use std::io;
 
-use crate::command::chat::markdown::highlight::highlight_code_line;
+use crate::markdown::highlight::highlight_code_line;
 use crate::theme::{Theme, ThemeName};
 
 use crate::tui::editor_core::{

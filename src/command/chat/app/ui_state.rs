@@ -1,10 +1,10 @@
 use super::types::{AskAnswer, AskQuestion};
 use crate::command::chat::infra::archive::ChatArchive;
 use crate::command::chat::infra::command::CommandSource;
-use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::queue::PendingAgentPerm;
 use crate::command::chat::storage::SessionMeta;
 use crate::command::chat::tools::plan::PendingPlanApproval;
+use crate::markdown::image_cache::ImageCache;
 use crate::theme::Theme;
 use crate::tui::editor_core::text_buffer::TextBuffer;
 use ratatui::text::Line;

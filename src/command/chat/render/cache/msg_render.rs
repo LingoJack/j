@@ -3,12 +3,12 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::render::cache::bubble::wrap_md_line_in_bubble;
 use crate::command::chat::render::cache::{
     ASSISTANT_BUBBLE_LEFT_MARGIN, BUBBLE_MIN_WIDTH, RenderContext, THINKING_FOLDED_MAX_LINES,
     USER_BUBBLE_PAD_LR,
 };
+use crate::markdown::markdown_to_lines;
 use crate::util::text::{display_width, wrap_text};
 
 /// 解析 teammate 消息的 `<AgentName>` 前缀。

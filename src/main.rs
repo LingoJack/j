@@ -5,6 +5,7 @@ mod config;
 mod constants;
 mod interactive;
 mod llm;
+mod markdown;
 mod theme;
 mod tui;
 mod util;

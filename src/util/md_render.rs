@@ -102,7 +102,7 @@ fn map_color(color: ratatui::style::Color) -> crossterm::style::Color {
 
 /// 渲染 Markdown 文本到终端
 pub fn render_md(text: &str) {
-    use crate::command::chat::markdown::markdown_to_lines;
+    use crate::markdown::markdown_to_lines;
     use crate::theme::Theme;
 
     let width = crossterm::terminal::size()

@@ -26,9 +26,9 @@ pub use tool_result_render::render_tool_result_msg;
 
 use super::theme::Theme;
 use crate::command::chat::app::{ChatApp, ChatMode, MsgLinesCache, PerMsgCache};
-use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::storage::DisplayType;
 use crate::command::chat::storage::config::ThinkingStyle;
+use crate::markdown::markdown_to_lines;
 use crate::util::safe_lock;
 use crate::util::text::wrap_text;
 use ratatui::{

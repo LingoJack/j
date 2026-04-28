@@ -1,6 +1,6 @@
 use crate::assets::{self, HelpTab};
-use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::storage::{load_agent_config, save_agent_config};
+use crate::markdown::markdown_to_lines;
 use crate::theme::{Theme, ThemeName};
 use ratatui::text::Line;
 

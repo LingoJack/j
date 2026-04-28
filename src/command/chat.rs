@@ -7,7 +7,6 @@ pub mod error;
 pub mod handler;
 pub mod infra;
 pub mod input;
-pub mod markdown;
 pub mod oneshot;
 pub mod permission;
 pub mod remote;

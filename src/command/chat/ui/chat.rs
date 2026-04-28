@@ -3,9 +3,9 @@ use super::config::draw_config_screen;
 use super::popup;
 use super::title_bar;
 use crate::command::chat::app::{ChatApp, ChatMode, MsgLinesCache};
-use crate::command::chat::markdown::image_cache::ImageState;
-use crate::command::chat::markdown::image_loader::load_image;
 use crate::command::chat::render::cache::build_message_lines_incremental;
+use crate::markdown::image_cache::ImageState;
+use crate::markdown::image_loader::load_image;
 use crate::util::safe_lock;
 
 /// 消息气泡宽度占内部可用宽度的百分比。

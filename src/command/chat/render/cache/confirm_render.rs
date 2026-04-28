@@ -5,9 +5,9 @@ use ratatui::text::{Line, Span};
 
 use crate::command::chat::app::{ChatApp, ToolCallStatus};
 use crate::command::chat::constants::CONFIRM_MSG_MAX_LINES;
-use crate::command::chat::markdown::markdown_to_lines;
 use crate::command::chat::render::cache::PLAN_DISPLAY_MAX_LINES;
 use crate::command::chat::render::cache::bubble::bordered_line;
+use crate::markdown::markdown_to_lines;
 use crate::util::text::{display_width, wrap_text};
 
 /// 渲染工具确认/Ask 交互区域

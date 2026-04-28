@@ -399,7 +399,7 @@ impl NotebookApp {
         match &self.preview_content {
             Some(content) if !content.is_empty() => {
                 self.preview_lines =
-                    crate::command::chat::markdown::markdown_to_lines(content, width, &self.theme);
+                    crate::markdown::markdown_to_lines(content, width, &self.theme);
             }
             _ => {
                 self.preview_lines.clear();
