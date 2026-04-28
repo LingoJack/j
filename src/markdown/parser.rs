@@ -702,3 +702,47 @@ pub fn parse_table_from_source(table_lines: &[&str]) -> Option<TableData> {
 
     None
 }
+
+#[cfg(test)]
+mod bench_table {
+    use super::*;
+
+    #[test]
+    fn bench_parse_table_from_source() {
+        let table_lines: &[&str] = &[
+            "| 功能 | 状态 | 备注 |",
+            "| --- | --- | --- |",
+            "| **内联语法** | ✓ | `code` 支持 |",
+            "| 表格渲染 | ✓ | 共享层 |",
+            "| 性能优化 | - | 待评估 |",
+        ];
+
+        // 预热
+        let _ = parse_table_from_source(table_lines);
+
+        let iterations = 1000;
+        let start = std::time::Instant::now();
+        for _ in 0..iterations {
+            let _ = parse_table_from_source(table_lines);
+        }
+        let elapsed = start.elapsed();
+        let per_call_us = elapsed.as_micros() as f64 / iterations as f64;
+
+        eprintln!(
+            "\n=== parse_table_from_source 性能 ===\n\
+             总调用: {} 次\n\
+             总耗时: {:.2} ms\n\
+             单次耗时: {:.1} μs",
+            iterations,
+            elapsed.as_millis(),
+            per_call_us,
+        );
+
+        // 性能断言：单次解析应 < 200μs
+        assert!(
+            per_call_us < 200.0,
+            "parse_table_from_source 单次耗时 {:.1}μs 超过 200μs 阈值",
+            per_call_us
+        );
+    }
+}

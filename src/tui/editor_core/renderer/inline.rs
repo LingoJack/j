@@ -229,7 +229,8 @@ mod tests {
     #[test]
     fn parse_inline_bold_in_list_item() {
         // 模拟有序列表项内容：1. **跨模块依赖**：前端组件...
-        let text = "**跨模块依赖**：前端组件、后端接口、数据库表、配置文件之间存在显式或隐式的数据流依赖";
+        let text =
+            "**跨模块依赖**：前端组件、后端接口、数据库表、配置文件之间存在显式或隐式的数据流依赖";
         let inlines = parse_inline_text(text);
 
         // 应该解析出：Strong(["跨模块依赖"]) + Text("：前端组件...")
@@ -257,13 +258,70 @@ mod tests {
         let text = "**模板代码占比高**：在常见企业业务系统中";
         let inlines = parse_inline_text(text);
 
-        let strong_idx = inlines
-            .iter()
-            .position(|i| matches!(i, Inline::Strong(_)));
+        let strong_idx = inlines.iter().position(|i| matches!(i, Inline::Strong(_)));
+        assert!(strong_idx.is_some(), "Should find Strong in: {:?}", inlines);
+    }
+
+    #[test]
+    fn bench_parse_inline_throughput() {
+        // 模拟一屏 50 行的渲染场景
+        let sample_lines: &[&str] = &[
+            "# 项目架构设计",
+            "本文档描述系统的整体架构",
+            "## 核心模块",
+            "**模块 A**：负责数据采集和预处理",
+            "- 使用 `tokio` 异步运行时",
+            "- 支持 **并发** 和 *并行* 处理",
+            "1. 第一步：初始化配置",
+            "2. 第二步：启动 **工作线程**",
+            "> 注意：`config.yaml` 中的参数需要根据环境调整",
+            "普通文本行，没有任何内联语法",
+            "混合行：**加粗**、`代码`、*斜体*、~~删除线~~ 混合出现",
+            "| 列1 | 列2 | 列3 |",
+            "| --- | --- | --- |",
+            "| **A** | `B` | *C* |",
+            "- [ ] 待办事项",
+            "- [x] 已完成事项",
+            "### 子模块",
+            "更多 **详细** 说明",
+            "#### 最小标题",
+            "最后一行普通文本",
+        ];
+
+        // 预热
+        for line in sample_lines {
+            let _ = parse_inline_text(line);
+        }
+
+        // 测量：50 行 × 100 帧 = 5000 次解析
+        let iterations = 100;
+        let start = std::time::Instant::now();
+        for _ in 0..iterations {
+            for line in sample_lines {
+                let _ = parse_inline_text(line);
+            }
+        }
+        let elapsed = start.elapsed();
+        let total_calls = sample_lines.len() * iterations;
+        let per_call_us = elapsed.as_micros() as f64 / total_calls as f64;
+
+        eprintln!(
+            "\n=== parse_inline_text 性能 ===\n\
+             总调用: {} 次\n\
+             总耗时: {:.2} ms\n\
+             单次耗时: {:.1} μs\n\
+             理论帧率(50行): {:.0} fps",
+            total_calls,
+            elapsed.as_millis(),
+            per_call_us,
+            1_000_000.0 / (per_call_us * 50.0),
+        );
+
+        // 性能断言：单次解析应 < 100μs（否则需要优化）
         assert!(
-            strong_idx.is_some(),
-            "Should find Strong in: {:?}",
-            inlines
+            per_call_us < 100.0,
+            "parse_inline_text 单次耗时 {:.1}μs 超过 100μs 阈值",
+            per_call_us
         );
     }
 }

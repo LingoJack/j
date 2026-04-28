@@ -74,10 +74,7 @@ impl MarkdownRenderer {
             return None;
         }
 
-        Some(TableContext {
-            start_idx,
-            end_idx,
-        })
+        Some(TableContext { start_idx, end_idx })
     }
 
     /// 渲染表格行。
@@ -114,7 +111,12 @@ impl MarkdownRenderer {
         };
 
         // 使用共享层渲染表格
-        let table_lines = render_table(&table_data, &table_data.alignments, content_width, &self.theme);
+        let table_lines = render_table(
+            &table_data,
+            &table_data.alignments,
+            content_width,
+            &self.theme,
+        );
 
         // 给每行添加行号前缀
         let mut result = Vec::with_capacity(table_lines.len());
