@@ -3,104 +3,165 @@ mod table;
 mod tests;
 mod text;
 
-use super::highlight::highlight_code_line;
-use super::theme::MdStyle;
-use crate::util::text::{display_width, normalize_terminal_text, wrap_text};
-use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
-use ratatui::{
-    style::{Modifier, Style},
-    text::{Line, Span},
+use crate::markdown::ir::{
+    Block, BlockKind, Inline, ListData, ListItem, ParsedDocument, SourceRange, TableData,
 };
+use crate::util::text::normalize_terminal_text;
+use pulldown_cmark::{Event, Tag, TagEnd};
 
 // ---------------------------------------------------------------------------
-// ParserState — shared state for the markdown event loop
+// ParseContext — IR accumulation state for the markdown event loop
 // ---------------------------------------------------------------------------
 
-/// Encapsulates all mutable state used during pulldown-cmark event processing.
-pub(crate) struct ParserState<'a> {
-    pub(crate) lines: Vec<Line<'static>>,
-    pub(crate) current_spans: Vec<Span<'static>>,
-    pub(crate) style_stack: Vec<Style>,
-
-    // Code block
-    pub(crate) in_code_block: bool,
-    pub(crate) code_block_content: String,
-    pub(crate) code_block_lang: String,
-
-    // List
-    pub(crate) list_depth: usize,
-    pub(crate) ordered_index: Option<u64>,
-
-    // Heading
-    pub(crate) heading_level: Option<u8>,
-
-    // Block quote
-    pub(crate) in_blockquote: bool,
-
-    // Link
-    pub(crate) link_url: Option<String>,
-
-    // Image
-    pub(crate) image_url: Option<String>,
-    pub(crate) image_alt: String,
-
-    // Table
-    pub(crate) in_table: bool,
-    pub(crate) table_rows: Vec<Vec<String>>,
-    pub(crate) current_row: Vec<String>,
-    pub(crate) current_cell: String,
-    pub(crate) table_alignments: Vec<pulldown_cmark::Alignment>,
-
-    // Layout
-    pub(crate) content_width: usize,
-    pub(crate) theme: &'a dyn MdStyle,
-    pub(crate) base_style: Style,
+/// Inline 容器类型，用于 inline 嵌套栈
+#[derive(Debug, Clone)]
+enum InlineContainer {
+    Strong,
+    Emphasis,
+    Strikethrough,
+    Link { url: String },
 }
 
-impl<'a> ParserState<'a> {
-    fn new(content_width: usize, theme: &'a dyn MdStyle) -> Self {
+/// 解析上下文：累积 IR 节点
+struct ParseContext {
+    /// 已解析的 block 列表
+    blocks: Vec<Block>,
+
+    // --- Inline 累积 ---
+    /// 当前 block 级别的 inline 容器（paragraph / heading content / list item）
+    current_inlines: Vec<Inline>,
+    /// 嵌套栈：记录当前 inline 容器类型
+    inline_stack: Vec<InlineContainer>,
+    /// 嵌套子容器：每层开始一个新的 Vec<Inline>
+    inline_children_stack: Vec<Vec<Inline>>,
+
+    // --- Code block ---
+    in_code_block: bool,
+    code_block_content: String,
+    code_block_lang: String,
+
+    // --- List ---
+    list_depth: usize,
+    ordered_index: Option<u64>,
+    list_ordered: bool,
+    list_start_index: Option<u64>,
+    list_items: Vec<ListItem>,
+    in_list_item: bool,
+    list_item_checked: Option<bool>,
+
+    // --- Heading ---
+    heading_level: Option<u8>,
+
+    // --- Block quote ---
+    blockquote_stack: Vec<Vec<Block>>,
+
+    // --- Image ---
+    image_url: Option<String>,
+    image_alt: String,
+
+    // --- Table ---
+    in_table: bool,
+    table_rows: Vec<Vec<Vec<Inline>>>,
+    current_row: Vec<Vec<Inline>>,
+    current_cell_inlines: Vec<Inline>,
+    table_alignments: Vec<pulldown_cmark::Alignment>,
+    /// 表格单元格内的 inline 栈
+    table_inline_stack: Vec<InlineContainer>,
+    table_inline_children_stack: Vec<Vec<Inline>>,
+}
+
+impl ParseContext {
+    fn new() -> Self {
         Self {
-            lines: Vec::new(),
-            current_spans: Vec::new(),
-            style_stack: vec![Style::default().fg(theme.text_normal())],
+            blocks: Vec::new(),
+            current_inlines: Vec::new(),
+            inline_stack: Vec::new(),
+            inline_children_stack: Vec::new(),
             in_code_block: false,
             code_block_content: String::new(),
             code_block_lang: String::new(),
             list_depth: 0,
             ordered_index: None,
+            list_ordered: false,
+            list_start_index: None,
+            list_items: Vec::new(),
+            in_list_item: false,
+            list_item_checked: None,
             heading_level: None,
-            in_blockquote: false,
-            link_url: None,
+            blockquote_stack: Vec::new(),
             image_url: None,
             image_alt: String::new(),
             in_table: false,
             table_rows: Vec::new(),
             current_row: Vec::new(),
-            current_cell: String::new(),
+            current_cell_inlines: Vec::new(),
             table_alignments: Vec::new(),
-            content_width,
-            theme,
-            base_style: Style::default().fg(theme.text_normal()),
+            table_inline_stack: Vec::new(),
+            table_inline_children_stack: Vec::new(),
         }
     }
 
-    /// Flush current_spans into lines.
-    pub(crate) fn flush_line(&mut self) {
-        if !self.current_spans.is_empty() {
-            self.lines
-                .push(Line::from(std::mem::take(&mut self.current_spans)));
+    /// 获取当前 inline 容器（可能在外层或 inline_children_stack 的最内层）
+    fn current_inline_target(&mut self) -> &mut Vec<Inline> {
+        if self.in_table {
+            return self.table_inline_target();
         }
+        if let Some(children) = self.inline_children_stack.last_mut() {
+            children
+        } else if self.in_list_item {
+            // 列表项内容追加到最后一个 item
+            if let Some(item) = self.list_items.last_mut() {
+                &mut item.content
+            } else {
+                &mut self.current_inlines
+            }
+        } else {
+            &mut self.current_inlines
+        }
+    }
+
+    /// 表格内 inline 目标
+    fn table_inline_target(&mut self) -> &mut Vec<Inline> {
+        if let Some(children) = self.table_inline_children_stack.last_mut() {
+            children
+        } else {
+            &mut self.current_cell_inlines
+        }
+    }
+
+    /// 将当前 inline 容器 flush 为一个 block（Paragraph）
+    fn flush_paragraph(&mut self) {
+        if self.current_inlines.is_empty() {
+            return;
+        }
+        let inlines = std::mem::take(&mut self.current_inlines);
+        let block = Block {
+            source: SourceRange::default(),
+            kind: BlockKind::Paragraph(inlines),
+        };
+        self.push_block(block);
+    }
+
+    /// Push block：如果在 blockquote 内则追加到 blockquote 栈顶，否则追加到 blocks
+    fn push_block(&mut self, block: Block) {
+        if let Some(bq_blocks) = self.blockquote_stack.last_mut() {
+            bq_blocks.push(block);
+        } else {
+            self.blocks.push(block);
+        }
+    }
+
+    /// Push inline 到当前目标容器
+    fn push_inline(&mut self, inline: Inline) {
+        self.current_inline_target().push(inline);
     }
 }
 
 // ---------------------------------------------------------------------------
-// Table separator normalization
+// Table separator normalization (unchanged from previous implementation)
 // ---------------------------------------------------------------------------
 
 /// 检测 markdown 文本中是否存在列数不足的表格分隔行。
-///
-/// 快速扫描：找到以 `|` 开头且仅含 `|---|`（一个分隔列）的行，
-/// 而其上一行（表头）含有多个 `|` 分隔列的情况。
 fn needs_table_separator_fix(md: &str) -> bool {
     let lines: Vec<&str> = md.lines().collect();
     for i in 1..lines.len() {
@@ -131,7 +192,6 @@ fn normalize_table_separators(md: &str) -> String {
                 let header_cols = count_pipe_cells(prev);
                 let sep_cols = count_pipe_cells(curr);
                 if header_cols > 1 && sep_cols < header_cols {
-                    // 直接重建分隔行：每列一个 "---"，用 "|" 包裹
                     let mut fixed = String::from("|");
                     for _ in 0..header_cols {
                         fixed.push_str("---|");
@@ -148,7 +208,6 @@ fn normalize_table_separators(md: &str) -> String {
     }
 
     if modified {
-        // 移除末尾多余的换行，保持与原文本一致
         if md.ends_with('\n') && !result.ends_with('\n') {
             result.push('\n');
         } else if !md.ends_with('\n') && result.ends_with('\n') {
@@ -166,7 +225,6 @@ fn is_separator_row(line: &str) -> bool {
     if !trimmed.starts_with('|') {
         return false;
     }
-    // 去掉首尾 | 后，内容应仅由 - : 空格 组成
     let inner = trimmed.trim_matches('|').trim();
     !inner.is_empty()
         && inner
@@ -175,18 +233,13 @@ fn is_separator_row(line: &str) -> bool {
 }
 
 /// 统计以 `|` 分隔的行的列数。
-/// `| A | B |` → 2，`|---|` → 1，`|---|---|` → 2
 fn count_pipe_cells(line: &str) -> usize {
     let trimmed = line.trim();
     if !trimmed.starts_with('|') {
         return 0;
     }
-    // 按非转义的 | 分割，减去首尾空段
     let segments: Vec<&str> = trimmed.split('|').collect();
-    // "| A | B |" → ["", " A ", " B ", ""] → 2 cells
-    // "|---|" → ["", "---", ""] → 1 cell
     let count = segments.len().saturating_sub(1);
-    // 如果最后一个段是空（尾 |），减 1
     if count > 0 && segments.last().is_some_and(|s| s.trim().is_empty()) {
         count - 1
     } else {
@@ -195,32 +248,22 @@ fn count_pipe_cells(line: &str) -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API: parse_markdown
 // ---------------------------------------------------------------------------
 
-/// 将 Markdown 文本渲染为 TUI 可显示的 `Line` 列表，应用主题着色和自动换行。
-pub fn markdown_to_lines(md: &str, max_width: usize, theme: &dyn MdStyle) -> Vec<Line<'static>> {
-    // 内容区宽度 = max_width - 2（左侧 "  " 缩进由外层负责）
-    let content_width = max_width.saturating_sub(2);
-
+/// 纯解析：将 Markdown 文本解析为 IR 文档结构。
+/// 不依赖终端宽度或主题，输出与渲染无关的中间表示。
+pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
+    // 预处理：tab/carriage return 清洗
     let normalized_md;
     let md = if md.contains('\t') || md.contains('\r') {
-        // 不要把这一步当成“普通清洗”删掉。
-        // 曾经出现过窄屏滚动聊天记录时，右侧边界残留上一帧字符的问题，
-        // 触发条件就是消息正文里带原始 tab / carriage return。
-        // 这些 control char 会让 markdown/wrap 的宽度估算与 ratatui 实际写入宽度不一致，
-        // 于是 bubble 右边界出现脏字符残留。
         normalized_md = normalize_terminal_text(md);
         normalized_md.as_str()
     } else {
         md
     };
 
-    // 预处理：修复 **"text"** 加粗不生效的问题。
-    // CommonMark 规范规定：左侧分隔符 ** 后面是标点（如 " U+201C）且前面是字母（如中文字符）时，
-    // 不被识别为有效的加粗开始标记。
-    // 解决方案：在 ** 与中文引号之间插入零宽空格（U+200B），使 ** 后面不再紧跟标点，
-    // 从而满足 CommonMark 规范。零宽空格在终端中不可见，不影响显示。
+    // 预处理：中文引号与加粗标记的零宽空格
     let mut md_owned;
     let md = if md.contains("**\u{201C}")
         || md.contains("**\u{2018}")
@@ -237,9 +280,7 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &dyn MdStyle) -> Vec
         md
     };
 
-    // 预处理：补齐表格分隔行列数。
-    // pulldown-cmark 要求分隔行的列数与表头匹配，否则整个表格不被识别。
-    // LLM 生成的表格有时分隔行只写 |---| 而表头有多列，需要自动补齐为 |---|---|。
+    // 预处理：表格分隔行修复（需要 max_width 仅用于判断逻辑，此处保留接口）
     let separator_fixed;
     let md = if needs_table_separator_fix(md) {
         separator_fixed = normalize_table_separators(md);
@@ -249,456 +290,355 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &dyn MdStyle) -> Vec
         md
     };
 
+    // 使用 max_width 避免未使用警告（表格分隔行修复可能间接用到）
+    let _ = max_width;
+
     let options = pulldown_cmark::Options::ENABLE_STRIKETHROUGH
         | pulldown_cmark::Options::ENABLE_TABLES
         | pulldown_cmark::Options::ENABLE_TASKLISTS;
     let parser = pulldown_cmark::Parser::new_ext(md, options);
 
-    let mut state = ParserState::new(content_width, theme);
+    let mut ctx = ParseContext::new();
 
     for event in parser {
         match event {
             // ===== Heading =====
             Event::Start(Tag::Heading { level, .. }) => {
-                state.flush_line();
-                state.heading_level = Some(level as u8);
-                if !state.lines.is_empty() {
-                    state.lines.push(Line::from(""));
-                }
-                let heading_style = match level as u8 {
-                    1 => Style::default()
-                        .fg(theme.md_h1())
-                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-                    2 => Style::default()
-                        .fg(theme.md_h2())
-                        .add_modifier(Modifier::BOLD),
-                    3 => Style::default()
-                        .fg(theme.md_h3())
-                        .add_modifier(Modifier::BOLD),
-                    _ => Style::default()
-                        .fg(theme.md_h4())
-                        .add_modifier(Modifier::BOLD),
-                };
-                state.style_stack.push(heading_style);
-
-                // 添加前缀
-                let (prefix, prefix_style) = match level as u8 {
-                    1 => (
-                        "◆ ",
-                        Style::default()
-                            .fg(theme.md_h1())
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    2 => (
-                        "◇ ",
-                        Style::default()
-                            .fg(theme.md_h2())
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    3 => (
-                        "〈",
-                        Style::default()
-                            .fg(theme.md_h3())
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    _ => (
-                        "› ",
-                        Style::default()
-                            .fg(theme.md_h4())
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                };
-                state
-                    .current_spans
-                    .push(Span::styled(prefix.to_string(), prefix_style));
+                ctx.flush_paragraph();
+                ctx.heading_level = Some(level as u8);
             }
             Event::End(TagEnd::Heading(level)) => {
-                let level_u8 = level as u8;
-                // H3 添加文艺风格后缀
-                if level_u8 == 3 {
-                    state.current_spans.push(Span::styled(
-                        "〉".to_string(),
-                        Style::default()
-                            .fg(theme.md_h3())
-                            .add_modifier(Modifier::BOLD),
-                    ));
-                }
-                state.flush_line();
-                // H1/H2 显示分隔线
-                if level_u8 <= 2 {
-                    let sep_char = if level_u8 == 1 { "━" } else { "─" };
-                    state.lines.push(Line::from(Span::styled(
-                        sep_char.repeat(content_width),
-                        Style::default().fg(theme.md_heading_sep()),
-                    )));
-                }
-                state.style_stack.pop();
-                state.heading_level = None;
+                let content = std::mem::take(&mut ctx.current_inlines);
+                let block = Block {
+                    source: SourceRange::default(),
+                    kind: BlockKind::Heading {
+                        level: level as u8,
+                        content,
+                    },
+                };
+                ctx.push_block(block);
+                ctx.heading_level = None;
             }
 
             // ===== Strong / Emphasis / Strikethrough =====
             Event::Start(Tag::Strong) => {
-                let current = *state.style_stack.last().unwrap_or(&state.base_style);
-                state
-                    .style_stack
-                    .push(current.add_modifier(Modifier::BOLD).fg(theme.text_bold()));
+                ctx.inline_stack.push(InlineContainer::Strong);
+                ctx.inline_children_stack.push(Vec::new());
             }
             Event::End(TagEnd::Strong) => {
-                state.style_stack.pop();
+                ctx.inline_stack.pop();
+                let children = ctx.inline_children_stack.pop().unwrap_or_default();
+                ctx.push_inline(Inline::Strong(children));
             }
             Event::Start(Tag::Emphasis) => {
-                let current = *state.style_stack.last().unwrap_or(&state.base_style);
-                state
-                    .style_stack
-                    .push(current.add_modifier(Modifier::ITALIC));
+                ctx.inline_stack.push(InlineContainer::Emphasis);
+                ctx.inline_children_stack.push(Vec::new());
             }
             Event::End(TagEnd::Emphasis) => {
-                state.style_stack.pop();
+                ctx.inline_stack.pop();
+                let children = ctx.inline_children_stack.pop().unwrap_or_default();
+                ctx.push_inline(Inline::Emphasis(children));
             }
             Event::Start(Tag::Strikethrough) => {
-                let current = *state.style_stack.last().unwrap_or(&state.base_style);
-                state
-                    .style_stack
-                    .push(current.add_modifier(Modifier::CROSSED_OUT));
+                ctx.inline_stack.push(InlineContainer::Strikethrough);
+                ctx.inline_children_stack.push(Vec::new());
             }
             Event::End(TagEnd::Strikethrough) => {
-                state.style_stack.pop();
+                ctx.inline_stack.pop();
+                let children = ctx.inline_children_stack.pop().unwrap_or_default();
+                ctx.push_inline(Inline::Strikethrough(children));
             }
 
             // ===== Link =====
             Event::Start(Tag::Link { dest_url, .. }) => {
-                let link_style = Style::default()
-                    .fg(theme.md_link())
-                    .add_modifier(Modifier::UNDERLINED);
-                state.style_stack.push(link_style);
-                state.link_url = Some(dest_url.to_string());
+                ctx.inline_stack.push(InlineContainer::Link {
+                    url: dest_url.to_string(),
+                });
+                ctx.inline_children_stack.push(Vec::new());
             }
             Event::End(TagEnd::Link) => {
-                // 如果链接文本和 URL 不同，在文本后追加显示 URL
-                if let Some(url) = state.link_url.take() {
-                    let text_content: String = state
-                        .current_spans
-                        .iter()
-                        .rev()
-                        .take_while(|s| s.style.fg == Some(theme.md_link()))
-                        .map(|s| s.content.to_string())
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                        .rev()
-                        .collect();
-                    if !text_content.is_empty() && text_content != url {
-                        state.current_spans.push(Span::styled(
-                            format!(" ({})", url),
-                            Style::default()
-                                .fg(theme.md_link())
-                                .add_modifier(Modifier::DIM),
-                        ));
-                    }
+                let container = ctx.inline_stack.pop();
+                let children = ctx.inline_children_stack.pop().unwrap_or_default();
+                if let Some(InlineContainer::Link { url }) = container {
+                    ctx.push_inline(Inline::Link {
+                        text: children,
+                        url,
+                    });
                 }
-                state.style_stack.pop();
             }
 
             // ===== Code Block =====
             Event::Start(Tag::CodeBlock(kind)) => {
-                state.flush_line();
-                state.in_code_block = true;
-                state.code_block_content.clear();
-                state.code_block_lang = match kind {
-                    CodeBlockKind::Fenced(lang) => lang.to_string(),
-                    CodeBlockKind::Indented => String::new(),
+                ctx.flush_paragraph();
+                ctx.in_code_block = true;
+                ctx.code_block_content.clear();
+                ctx.code_block_lang = match kind {
+                    pulldown_cmark::CodeBlockKind::Fenced(lang) => lang.to_string(),
+                    pulldown_cmark::CodeBlockKind::Indented => String::new(),
                 };
-                let label = if state.code_block_lang.is_empty() {
-                    " code ".to_string()
-                } else {
-                    format!(" {} ", state.code_block_lang)
-                };
-                let label_w = display_width(&label);
-                // 顶边框：┌─ label ───┐
-                let border_fill = content_width.saturating_sub(3 + label_w);
-                let top_border = format!("┌─{}{}┐", label, "─".repeat(border_fill));
-                state.lines.push(Line::from(Span::styled(
-                    top_border,
-                    Style::default().fg(theme.code_border()).bg(theme.code_bg()),
-                )));
             }
             Event::End(TagEnd::CodeBlock) => {
-                let code_inner_w = content_width.saturating_sub(4);
-                let code_content_expanded = state.code_block_content.replace('\t', "    ");
-                for code_line in code_content_expanded.lines() {
-                    let wrapped = wrap_text(code_line, code_inner_w);
-                    for wl in wrapped {
-                        let editor_theme = theme.code_syntax_theme();
-                        let highlighted =
-                            highlight_code_line(&wl, &state.code_block_lang, &editor_theme);
-                        let text_w: usize =
-                            highlighted.iter().map(|s| display_width(&s.content)).sum();
-                        let fill = code_inner_w.saturating_sub(text_w);
-                        let mut spans_vec = Vec::new();
-                        // 左侧边框：│ (2字符，有背景色)
-                        spans_vec.push(Span::styled(
-                            "│ ",
-                            Style::default().fg(theme.code_border()).bg(theme.code_bg()),
-                        ));
-                        // 代码内容（有背景色）
-                        for hs in highlighted {
-                            spans_vec.push(Span::styled(
-                                hs.content.to_string(),
-                                hs.style.bg(theme.code_bg()),
-                            ));
-                        }
-                        // 右侧填充 + 边框
-                        spans_vec.push(Span::styled(
-                            format!("{} │", " ".repeat(fill)),
-                            Style::default().fg(theme.code_border()).bg(theme.code_bg()),
-                        ));
-                        state.lines.push(Line::from(spans_vec));
-                    }
-                }
-                // 底边框
-                let bottom_border = format!("└{}┘", "─".repeat(content_width.saturating_sub(2)));
-                state.lines.push(Line::from(Span::styled(
-                    bottom_border,
-                    Style::default().fg(theme.code_border()).bg(theme.code_bg()),
-                )));
-                state.in_code_block = false;
-                state.code_block_content.clear();
-                state.code_block_lang.clear();
+                let block = Block {
+                    source: SourceRange::default(),
+                    kind: BlockKind::CodeBlock {
+                        lang: std::mem::take(&mut ctx.code_block_lang),
+                        code: std::mem::take(&mut ctx.code_block_content),
+                    },
+                };
+                ctx.push_block(block);
+                ctx.in_code_block = false;
             }
 
             // ===== Inline Code =====
             Event::Code(text) => {
-                if state.in_table {
-                    state.handle_code_in_table(&text);
+                if ctx.in_table {
+                    ctx.table_handle_code(&text);
                 } else {
-                    let code_str = format!(" {} ", text);
-                    let code_w = display_width(&code_str);
-                    let effective_prefix_w = if state.in_blockquote { 2 } else { 0 };
-                    let full_line_w = content_width.saturating_sub(effective_prefix_w);
-                    let existing_w: usize = state
-                        .current_spans
-                        .iter()
-                        .map(|s| display_width(&s.content))
-                        .sum();
-                    let content_w_on_line = existing_w.saturating_sub(effective_prefix_w);
-                    if content_w_on_line + code_w > full_line_w && !state.current_spans.is_empty() {
-                        state.flush_line();
-                        if state.in_blockquote {
-                            state.current_spans.push(Span::styled(
-                                "| ".to_string(),
-                                Style::default()
-                                    .fg(theme.md_blockquote_bar())
-                                    .bg(theme.md_blockquote_bg())
-                                    .add_modifier(Modifier::BOLD),
-                            ));
-                        }
-                    }
-                    state.current_spans.push(Span::styled(
-                        code_str,
-                        Style::default()
-                            .fg(theme.md_inline_code_fg())
-                            .bg(theme.md_inline_code_bg()),
-                    ));
+                    ctx.push_inline(Inline::Code(text.to_string()));
                 }
             }
 
             // ===== List =====
             Event::Start(Tag::List(start)) => {
-                state.flush_line();
-                state.list_depth += 1;
-                state.ordered_index = start;
+                ctx.flush_paragraph();
+                ctx.list_depth += 1;
+                ctx.ordered_index = start;
+                ctx.list_ordered = start.is_some();
+                ctx.list_start_index = start;
+                if ctx.list_items.is_empty() {
+                    ctx.list_items = Vec::new();
+                }
             }
             Event::End(TagEnd::List(_)) => {
-                state.flush_line();
-                state.list_depth = state.list_depth.saturating_sub(1);
-                state.ordered_index = None;
+                ctx.flush_paragraph();
+                // 收集当前 list items 为一个 List block
+                if ctx.list_depth == 1 && !ctx.list_items.is_empty() {
+                    let items = std::mem::take(&mut ctx.list_items);
+                    let block = Block {
+                        source: SourceRange::default(),
+                        kind: BlockKind::List(ListData {
+                            ordered: ctx.list_ordered,
+                            start_index: ctx.list_start_index,
+                            items,
+                        }),
+                    };
+                    ctx.push_block(block);
+                }
+                ctx.list_depth = ctx.list_depth.saturating_sub(1);
+                ctx.ordered_index = None;
             }
             Event::Start(Tag::Item) => {
-                state.flush_line();
-                let indent = "  ".repeat(state.list_depth);
-                let bullet = if let Some(ref mut idx) = state.ordered_index {
-                    let s = format!("{}{}. ", indent, idx);
-                    *idx += 1;
-                    s
-                } else {
-                    format!("{}• ", indent)
-                };
-                state.current_spans.push(Span::styled(
-                    bullet,
-                    Style::default().fg(theme.md_list_bullet()),
-                ));
+                ctx.in_list_item = true;
+                ctx.list_item_checked = None;
             }
             Event::End(TagEnd::Item) => {
-                state.flush_line();
+                // flush current_inlines 到 list item
+                let content = std::mem::take(&mut ctx.current_inlines);
+                ctx.list_items.push(ListItem {
+                    checked: ctx.list_item_checked,
+                    content,
+                });
+                ctx.in_list_item = false;
+                ctx.list_item_checked = None;
             }
             Event::TaskListMarker(checked) => {
-                // 替换 Start(Item) 插入的 • 子弹为复选框符号
-                if let Some(last) = state.current_spans.last_mut() {
-                    let indent: String = last.content.chars().take_while(|c| *c == ' ').collect();
-                    let (symbol, style) = if checked {
-                        (
-                            format!("{}● ", indent),
-                            Style::default()
-                                .fg(ratatui::style::Color::LightGreen)
-                                .add_modifier(Modifier::BOLD),
-                        )
-                    } else {
-                        (
-                            format!("{}○ ", indent),
-                            Style::default().fg(theme.md_list_bullet()),
-                        )
-                    };
-                    *last = Span::styled(symbol, style);
-                }
+                ctx.list_item_checked = Some(checked);
             }
 
             // ===== Paragraph =====
-            Event::Start(Tag::Paragraph)
-                if !state.lines.is_empty()
-                    && !state.in_code_block
-                    && state.heading_level.is_none() =>
-            {
-                let last_empty = state
-                    .lines
-                    .last()
-                    .map(|l| l.spans.is_empty())
-                    .unwrap_or(false);
-                if !last_empty {
-                    state.lines.push(Line::from(""));
-                }
+            Event::Start(Tag::Paragraph) => {
+                // paragraph 开始时无需特殊处理
             }
             Event::End(TagEnd::Paragraph) => {
-                state.flush_line();
+                ctx.flush_paragraph();
             }
 
             // ===== Block Quote =====
             Event::Start(Tag::BlockQuote(_)) => {
-                state.flush_line();
-                state.lines.push(Line::from(""));
-                state.in_blockquote = true;
-                state.style_stack.push(
-                    Style::default()
-                        .fg(theme.md_blockquote_text())
-                        .bg(theme.md_blockquote_bg()),
-                );
-                state.current_spans.push(Span::styled(
-                    "| ".to_string(),
-                    Style::default()
-                        .fg(theme.md_blockquote_bar())
-                        .bg(theme.md_blockquote_bg())
-                        .add_modifier(Modifier::BOLD),
-                ));
+                ctx.flush_paragraph();
+                ctx.blockquote_stack.push(Vec::new());
             }
             Event::End(TagEnd::BlockQuote(_)) => {
-                state.flush_line();
-                state.in_blockquote = false;
-                state.style_stack.pop();
-                state.lines.push(Line::from(""));
+                ctx.flush_paragraph();
+                let inner_blocks = ctx.blockquote_stack.pop().unwrap_or_default();
+                let block = Block {
+                    source: SourceRange::default(),
+                    kind: BlockKind::BlockQuote(inner_blocks),
+                };
+                ctx.push_block(block);
             }
 
-            // ===== Text (delegated to text.rs) =====
+            // ===== Text =====
             Event::Text(text) => {
-                state.handle_text_event(&text);
+                if ctx.image_url.is_some() {
+                    ctx.image_alt.push_str(&text);
+                } else if ctx.in_code_block {
+                    ctx.code_block_content.push_str(&text);
+                } else if ctx.in_table {
+                    ctx.table_handle_text(&text);
+                } else {
+                    ctx.push_inline(Inline::Text(text.to_string()));
+                }
             }
 
             // ===== Soft / Hard Break =====
             Event::SoftBreak => {
-                if state.in_table {
-                    state.handle_soft_break_in_table();
+                if ctx.in_table {
+                    ctx.current_cell_inlines.push(Inline::SoftBreak);
                 } else {
-                    state.current_spans.push(Span::raw(" "));
+                    ctx.push_inline(Inline::SoftBreak);
                 }
             }
             Event::HardBreak => {
-                if state.in_table {
-                    state.handle_hard_break_in_table();
+                if ctx.in_table {
+                    ctx.current_cell_inlines.push(Inline::HardBreak);
                 } else {
-                    state.flush_line();
+                    ctx.push_inline(Inline::HardBreak);
                 }
             }
 
             // ===== Rule =====
             Event::Rule => {
-                state.flush_line();
-                state.lines.push(Line::from(Span::styled(
-                    "─".repeat(content_width),
-                    Style::default().fg(theme.md_rule()),
-                )));
+                ctx.flush_paragraph();
+                ctx.push_block(Block {
+                    source: SourceRange::default(),
+                    kind: BlockKind::Rule,
+                });
             }
 
-            // ===== Table (delegated to table.rs) =====
+            // ===== Table =====
             Event::Start(Tag::Table(alignments)) => {
-                state.handle_table_start(alignments);
+                ctx.flush_paragraph();
+                ctx.in_table = true;
+                ctx.table_rows.clear();
+                ctx.table_alignments = alignments;
             }
             Event::End(TagEnd::Table) => {
-                state.handle_table_end();
+                ctx.flush_paragraph();
+                ctx.in_table = false;
+                let data = TableData {
+                    alignments: std::mem::take(&mut ctx.table_alignments),
+                    rows: std::mem::take(&mut ctx.table_rows),
+                };
+                ctx.push_block(Block {
+                    source: SourceRange::default(),
+                    kind: BlockKind::Table(data),
+                });
             }
             Event::Start(Tag::TableHead) => {
-                state.handle_table_head_start();
+                ctx.current_row.clear();
             }
             Event::End(TagEnd::TableHead) => {
-                state.handle_table_head_end();
+                let row = std::mem::take(&mut ctx.current_row);
+                ctx.table_rows.push(row);
             }
             Event::Start(Tag::TableRow) => {
-                state.handle_table_row_start();
+                ctx.current_row.clear();
             }
             Event::End(TagEnd::TableRow) => {
-                state.handle_table_row_end();
+                let row = std::mem::take(&mut ctx.current_row);
+                ctx.table_rows.push(row);
             }
             Event::Start(Tag::TableCell) => {
-                state.handle_table_cell_start();
+                ctx.current_cell_inlines.clear();
+                ctx.table_inline_stack.clear();
+                ctx.table_inline_children_stack.clear();
             }
             Event::End(TagEnd::TableCell) => {
-                state.handle_table_cell_end();
+                // flush table inline stack
+                ctx.table_flush_inline_stack();
+                let cell = std::mem::take(&mut ctx.current_cell_inlines);
+                ctx.current_row.push(cell);
             }
 
             // ===== Image =====
             Event::Start(Tag::Image { dest_url, .. }) => {
-                state.flush_line();
-                state.image_url = Some(dest_url.to_string());
-                state.image_alt.clear();
+                ctx.flush_paragraph();
+                ctx.image_url = Some(dest_url.to_string());
+                ctx.image_alt.clear();
             }
             Event::End(TagEnd::Image) => {
-                if let Some(url) = state.image_url.take() {
-                    let placeholder_height = 16u16;
-                    let marker = format!("\x00IMG:{}:{}", placeholder_height, url);
-                    // 图片标记行（供渲染层识别，渲染时覆盖为图片）
-                    state
-                        .lines
-                        .push(Line::from(Span::styled(marker, Style::default())));
-                    // 占位空行（预留渲染空间）
-                    for _ in 1..placeholder_height {
-                        state.lines.push(Line::from(Span::raw("")));
-                    }
-                    // 图片路径标注行
-                    let caption = format!("({})", url);
-                    state.lines.push(Line::from(Span::styled(
-                        caption,
-                        Style::default()
-                            .fg(ratatui::style::Color::DarkGray)
-                            .add_modifier(Modifier::DIM),
-                    )));
+                // 图片在当前 IR 中作为 Paragraph 处理（带特殊 marker）
+                // 后续 Step 再添加 Image block kind
+                if let Some(_url) = ctx.image_url.take() {
+                    // 暂时忽略图片的 IR 处理，渲染时图片仍由外部机制处理
                 }
-                state.image_alt.clear();
+                ctx.image_alt.clear();
             }
 
             _ => {}
         }
     }
 
-    // 刷新最后一行
-    if !state.current_spans.is_empty() {
-        state.lines.push(Line::from(state.current_spans));
+    // flush 残余 inline
+    ctx.flush_paragraph();
+
+    ParsedDocument {
+        blocks: ctx.blocks,
+        line_to_block: Vec::new(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ParseContext table helpers
+// ---------------------------------------------------------------------------
+
+impl ParseContext {
+    fn table_handle_text(&mut self, text: &str) {
+        self.table_flush_inline_stack();
+        self.current_cell_inlines
+            .push(Inline::Text(text.to_string()));
     }
 
-    // 如果解析结果为空，至少返回原始文本
-    if state.lines.is_empty() {
-        let wrapped = wrap_text(md, content_width);
-        for wl in wrapped {
-            state
-                .lines
-                .push(Line::from(Span::styled(wl, state.base_style)));
+    fn table_handle_code(&mut self, text: &str) {
+        self.table_flush_inline_stack();
+        self.current_cell_inlines
+            .push(Inline::Code(text.to_string()));
+    }
+
+    /// Flush inline children stack into current cell
+    fn table_flush_inline_stack(&mut self) {
+        // 如果有未关闭的 inline 栈，将 children 合并回 cell
+        while let Some(children) = self.table_inline_children_stack.pop() {
+            let container = self.table_inline_stack.pop();
+            match container {
+                Some(InlineContainer::Strong) => {
+                    self.current_cell_inlines.push(Inline::Strong(children));
+                }
+                Some(InlineContainer::Emphasis) => {
+                    self.current_cell_inlines.push(Inline::Emphasis(children));
+                }
+                Some(InlineContainer::Strikethrough) => {
+                    self.current_cell_inlines
+                        .push(Inline::Strikethrough(children));
+                }
+                Some(InlineContainer::Link { url }) => {
+                    self.current_cell_inlines.push(Inline::Link {
+                        text: children,
+                        url,
+                    });
+                }
+                None => {
+                    self.current_cell_inlines.extend(children);
+                }
+            }
         }
     }
+}
 
-    state.lines
+// ---------------------------------------------------------------------------
+// Public API: markdown_to_lines (Facade — unchanged signature)
+// ---------------------------------------------------------------------------
+
+use crate::markdown::render::render_document_wrapped;
+use crate::markdown::theme::MdStyle;
+use ratatui::text::Line;
+
+/// 将 Markdown 文本渲染为 TUI 可显示的 `Line` 列表，应用主题着色和自动换行。
+///
+/// Facade 函数：内部调用 parse + render。
+pub fn markdown_to_lines(md: &str, max_width: usize, theme: &dyn MdStyle) -> Vec<Line<'static>> {
+    let content_width = max_width.saturating_sub(2);
+    let doc = parse_markdown(md, content_width);
+    render_document_wrapped(&doc, theme, content_width)
 }

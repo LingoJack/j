@@ -355,8 +355,8 @@ editor 自己继续负责：
 - [x] 方案确认
 - [x] Step 1：模块落位 / 搬目录
 - [x] **Step 2：抽 `MdStyle` trait** — 新增 `src/markdown/theme.rs` 定义 trait + `impl MdStyle for crate::theme::Theme`；parser/parser-text/parser-table 改为通过 trait method 取色；`markdown_to_lines` 签名改为 `theme: &dyn MdStyle`，5 处调用方零改动（`&Theme` 自动 unsizing coerce）；parser.rs 已彻底切断对 `chat::Theme` 的直接引用；`cargo clippy --lib --bins -D warnings` 干净，`cargo test --lib` 290 passed。
-- [ ] **Step 3：parser 输出 IR**（下一步）
-- [ ] Step 4：editor 接入（inline + 段落）
+- [x] **Step 3：parser 输出 IR，chat 改走共享 render** — `ir.rs` + `render/` 模块 + parser 纯解析 + facade；290 tests passed
+- [ ] **Step 4：editor 接入共享层**（下一步）
 - [ ] Step 5：迁表格
 - [ ] Step 6：迁 heading / list / blockquote
 - [ ] Step 7：性能验证与调优
@@ -367,12 +367,13 @@ editor 自己继续负责：
 - **残留依赖**：`src/markdown/highlight.rs` 和 `src/markdown/theme.rs` 仍然 `use crate::tui::editor_core::EditorTheme`。Step 3 起会引入独立的 `SyntaxHighlightTheme` 抽象彻底消除该跨模块依赖。
 - **测试依赖修复**：`parser/tests.rs` 之前通过 `use super::*` 隐式继承 parser 的私有 `use Theme`；切断后改为 tests.rs 自己显式 import。
 
-## 当前建议
 
-下一步优先做 **Step 2：抽 `MdStyle` trait**，但在开始前先把 editor 侧的目标接口定死：
+### Step 3 实施备注
 
-- editor 不直接调用 `render_document_wrapped`
-- editor 需要 `RenderedBlock + source row mapping`
-- Insert 模式必须带 debounce / idle refresh
+- **IR 设计决策**：`SourceRange` 暂用 `0..0` 填充；`line_to_block` 暂为空 Vec；`Alignment` re-export `pulldown_cmark::Alignment`；未包含 `Image` block
+- **模块结构**：`ir.rs`（IR 类型）、`parser.rs`（纯解析）、`render/`（`mod.rs`/`inline.rs`/`block.rs`/`table.rs`/`code_block.rs`）
+- **关键改动**：表格单元格从 `String` 改为 `Vec<Inline>`；`wrap_cell_inlines` 替代旧 `wrap_cell_styled`；`markdown_to_lines` 保持签名不变，内部调用 parse + render
 
-这三个点不先定死，后面很容易又回到“共享了一半，结果为了兼容 editor 再补一套特殊逻辑”的状态。
+## 下一步
+
+**Step 4：editor 接入共享层**，开始让 editor 侧使用 IR 和共享 render 原语。

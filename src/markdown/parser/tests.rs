@@ -1,7 +1,9 @@
 use super::*;
 use crate::command::chat::render::theme::{Theme, ThemeName};
+use crate::markdown::ir::Inline;
+use crate::markdown::render::table::wrap_cell_inlines;
 use crate::util::text::char_width;
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
 
 /// 计算一行 Line 的实际显示宽度（基于 spans 中所有 content 的字符宽度之和）
 fn line_display_width(line: &Line<'_>) -> usize {
@@ -60,24 +62,25 @@ fn very_narrow_terminal_table_no_overflow() {
     }
 }
 
-/// 验证 `wrap_cell_styled` 返回的子行宽度不超过 max_width（允许为 2，因为 max(2) 提升）
+/// 验证 `wrap_cell_inlines` 返回的子行宽度不超过 max_width（允许为 2，因为 max(2) 提升）
 #[test]
 fn wrap_cell_styled_width_constraint() {
+    let theme = Theme::from_name(&ThemeName::default());
     let base = Style::default();
     let code = Style::default();
 
     // 测试纯中文内容，每个字符宽度为 2
-    let cell = "中文字符测试";
+    let inlines = vec![Inline::Text("中文字符测试".to_string())];
     // 极窄列宽（1），会被提升到 max(2)
     let max_width = 1usize;
-    let wrapped = table::wrap_cell_styled(cell, max_width, base, code);
+    let wrapped = wrap_cell_inlines(&inlines, max_width, base, code, &theme);
 
     // 由于 max_width = max(1, 2) = 2，每个子行最多容纳一个中文字符
     for (_spans, w) in &wrapped {
         // 每行最多 2（一个中文字符），但可能截断后更少
         assert!(
             *w <= 2,
-            "wrap_cell_styled 返回的行宽度 {} 超过 max(2): {:?}",
+            "wrap_cell_inlines 返回的行宽度 {} 超过 max(2): {:?}",
             w,
             wrapped
         );
@@ -85,7 +88,7 @@ fn wrap_cell_styled_width_constraint() {
 
     // 验证所有子行的内容拼接后总宽度等于原文本宽度
     let total_w: usize = wrapped.iter().map(|(_, w)| *w).sum();
-    let expected_w: usize = cell.chars().map(char_width).sum();
+    let expected_w: usize = "中文字符测试".chars().map(char_width).sum();
     assert_eq!(
         total_w, expected_w,
         "所有子行宽度之和 {} != 原文本宽度 {}",
