@@ -1,6 +1,6 @@
 mod block;
 mod code_block;
-mod inline;
+pub mod inline;
 pub mod table;
 
 use crate::markdown::ir::ParsedDocument;

@@ -27,6 +27,7 @@ pub struct EditorTheme {
     pub md_h2: Color,
     pub md_h3: Color,
     pub md_h4: Color,
+    pub md_heading_sep: Color,
     pub md_link: Color,
     pub md_list_bullet: Color,
     pub md_blockquote_bar: Color,
@@ -34,6 +35,14 @@ pub struct EditorTheme {
     pub md_blockquote_text: Color,
     pub md_inline_code_fg: Color,
     pub md_inline_code_bg: Color,
+    pub md_rule: Color,
+
+    // ===== 代码块 =====
+    pub code_border: Color,
+
+    // ===== 表格 =====
+    pub table_header: Color,
+    pub table_body: Color,
 
     // ===== 标签 =====
     pub label_ai: Color,
@@ -54,3 +63,80 @@ pub struct EditorTheme {
 
 /// 语法高亮函数类型
 pub type HighlightFn = fn(&str, &str, &EditorTheme) -> Vec<ratatui::text::Span<'static>>;
+
+// ---------------------------------------------------------------------------
+// MdStyle trait 实现：让共享渲染层可以直接使用 EditorTheme
+// ---------------------------------------------------------------------------
+
+impl crate::markdown::theme::MdStyle for EditorTheme {
+    fn text_normal(&self) -> Color {
+        self.text_normal
+    }
+    fn text_bold(&self) -> Color {
+        self.text_bold
+    }
+    fn text_dim(&self) -> Color {
+        self.text_dim
+    }
+
+    fn md_h1(&self) -> Color {
+        self.md_h1
+    }
+    fn md_h2(&self) -> Color {
+        self.md_h2
+    }
+    fn md_h3(&self) -> Color {
+        self.md_h3
+    }
+    fn md_h4(&self) -> Color {
+        self.md_h4
+    }
+    fn md_heading_sep(&self) -> Color {
+        self.md_heading_sep
+    }
+
+    fn md_link(&self) -> Color {
+        self.md_link
+    }
+    fn md_inline_code_fg(&self) -> Color {
+        self.md_inline_code_fg
+    }
+    fn md_inline_code_bg(&self) -> Color {
+        self.md_inline_code_bg
+    }
+
+    fn md_blockquote_bar(&self) -> Color {
+        self.md_blockquote_bar
+    }
+    fn md_blockquote_bg(&self) -> Color {
+        self.md_blockquote_bg
+    }
+    fn md_blockquote_text(&self) -> Color {
+        self.md_blockquote_text
+    }
+
+    fn md_list_bullet(&self) -> Color {
+        self.md_list_bullet
+    }
+    fn md_rule(&self) -> Color {
+        self.md_rule
+    }
+
+    fn code_border(&self) -> Color {
+        self.code_border
+    }
+    fn code_bg(&self) -> Color {
+        self.code_bg
+    }
+
+    fn table_header(&self) -> Color {
+        self.table_header
+    }
+    fn table_body(&self) -> Color {
+        self.table_body
+    }
+
+    fn code_syntax_theme(&self) -> crate::tui::editor_core::EditorTheme {
+        self.clone()
+    }
+}

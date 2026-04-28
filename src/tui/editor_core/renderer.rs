@@ -318,7 +318,7 @@ impl MarkdownRenderer {
                 return vec![];
             }
 
-            // 引用块续行：保持引用块样式
+            // 引用块续行：保持引用块样式，渲染 inline
             let trimmed = line_content.trim_start();
             if trimmed.starts_with('>') {
                 let mut level = 0;
@@ -327,33 +327,58 @@ impl MarkdownRenderer {
                     level += 1;
                     rest = rest[1..].trim_start();
                 }
-                let _ = rest; // 续行不需要 rest
 
                 let bar: String = (0..level).map(|_| "▎").collect::<Vec<_>>().join("");
                 let bar_style = Style::default()
                     .fg(self.theme.md_blockquote_bar)
                     .bg(self.theme.md_blockquote_bg)
                     .add_modifier(Modifier::BOLD);
-                let text_style = Style::default()
+                let bq_text_style = Style::default()
                     .fg(self.theme.md_blockquote_text)
                     .bg(self.theme.md_blockquote_bg);
 
+                // 对引用内容部分渲染 inline，然后提取续行片段
+                let inline_spans = self.render_inline(rest);
+                let vl_start_char = char_idx_at_display_col(line_content, vl.start_col);
+                let vl_end_char = char_idx_at_display_col(line_content, vl.end_col);
+
+                // 计算引用内容在完整行中的字符偏移
+                let prefix_chars = line_content.len() - rest.len();
+                let adjusted_start = vl_start_char.saturating_sub(prefix_chars);
+                let adjusted_end = vl_end_char.saturating_sub(prefix_chars);
+
+                let vl_spans = extract_span_range(&inline_spans, adjusted_start, adjusted_end);
+
                 let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
                 spans.push(Span::styled(format!("{} ", bar), bar_style));
-                spans.push(Span::styled(text.to_string(), text_style));
+                // 应用引用块文本样式
+                for span in vl_spans {
+                    spans.push(Span::styled(span.content, span.style.patch(bq_text_style)));
+                }
                 return vec![Line::from(spans)];
             }
 
-            // 普通续行
-            let content_style = Style::default()
-                .fg(self.theme.text_normal)
-                .bg(line_num_style.bg.unwrap_or(self.theme.bg_primary));
+            // 普通续行：对完整逻辑行渲染 inline，然后提取对应视觉行的片段
+            // 这样可以正确处理跨折行边界的 **bold** 等标记
+            let full_line_spans = self.render_inline(line_content);
+            let vl_start_char = char_idx_at_display_col(line_content, vl.start_col);
+            let vl_end_char = char_idx_at_display_col(line_content, vl.end_col);
+
+            // 从渲染结果中提取对应视觉行的片段
+            let vl_spans = extract_span_range(&full_line_spans, vl_start_char, vl_end_char);
+
             let mut spans = vec![Span::styled(line_num_str.clone(), line_num_style)];
             if search.is_searching() && search.match_count() > 0 {
-                spans.extend(search.highlight_line(logical_line, text, &self.theme, vl.start_col));
+                // 搜索高亮叠加
+                spans.extend(search.highlight_line(
+                    logical_line,
+                    vl_text,
+                    &self.theme,
+                    vl.start_col,
+                ));
             } else {
-                spans.push(Span::styled(text.to_string(), content_style));
-            };
+                spans.extend(vl_spans);
+            }
             return vec![Line::from(spans)];
         }
 
@@ -523,4 +548,66 @@ impl MarkdownRenderer {
 
         result
     }
+}
+
+// ---------------------------------------------------------------------------
+// 续行渲染辅助函数
+// ---------------------------------------------------------------------------
+
+/// 将显示列位置（基于 `char_width` 计算）转换为字符索引（0-based, exclusive）。
+///
+/// 例如：`line="ABCD"`，`display_col=2` → 返回 `2`（第 3 个字符的索引）。
+/// 如果 `display_col` 超出行尾，返回行字符总数。
+fn char_idx_at_display_col(line: &str, display_col: usize) -> usize {
+    let mut width = 0;
+    for (i, ch) in line.chars().enumerate() {
+        if width >= display_col {
+            return i;
+        }
+        width += crate::util::text::char_width(ch);
+    }
+    line.chars().count()
+}
+
+/// 从已渲染的 Span 列表中提取指定字符范围的片段。
+///
+/// `start_char` / `end_char` 是字符索引（0-based）。
+/// 返回的 Span 保留原始样式。
+fn extract_span_range(
+    spans: &[Span<'static>],
+    start_char: usize,
+    end_char: usize,
+) -> Vec<Span<'static>> {
+    let mut result = Vec::with_capacity(spans.len());
+    let mut chars_seen = 0;
+
+    for span in spans {
+        let span_chars: Vec<char> = span.content.chars().collect();
+        let span_len = span_chars.len();
+        let span_end = chars_seen + span_len;
+
+        // 跳过完全在范围之前的 span
+        if span_end <= start_char {
+            chars_seen = span_end;
+            continue;
+        }
+
+        // 超出范围，停止
+        if chars_seen >= end_char {
+            break;
+        }
+
+        // 计算本 span 内的截取范围
+        let local_start = start_char.saturating_sub(chars_seen);
+        let local_end = (end_char - chars_seen).min(span_len);
+
+        if local_start < local_end {
+            let text: String = span_chars[local_start..local_end].iter().collect();
+            result.push(Span::styled(text, span.style));
+        }
+
+        chars_seen = span_end;
+    }
+
+    result
 }

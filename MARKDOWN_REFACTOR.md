@@ -356,8 +356,8 @@ editor 自己继续负责：
 - [x] Step 1：模块落位 / 搬目录
 - [x] **Step 2：抽 `MdStyle` trait** — 新增 `src/markdown/theme.rs` 定义 trait + `impl MdStyle for crate::theme::Theme`；parser/parser-text/parser-table 改为通过 trait method 取色；`markdown_to_lines` 签名改为 `theme: &dyn MdStyle`，5 处调用方零改动（`&Theme` 自动 unsizing coerce）；parser.rs 已彻底切断对 `chat::Theme` 的直接引用；`cargo clippy --lib --bins -D warnings` 干净，`cargo test --lib` 290 passed。
 - [x] **Step 3：parser 输出 IR，chat 改走共享 render** — `ir.rs` + `render/` 模块 + parser 纯解析 + facade；290 tests passed
-- [ ] **Step 4：editor 接入共享层**（下一步）
-- [ ] Step 5：迁表格
+- [x] **Step 4：editor 接入共享层** — `EditorTheme` 实现 `MdStyle` trait；parser 使用 `into_offset_iter()` 填充精确 `SourceRange`；新建 `markdown_cache.rs`（全文解析 + line-to-block 映射 + 懒渲染缓存）；editor `renderer/inline.rs` 改用共享层 `render_inlines`（基于 pulldown-cmark 解析，正确处理 `**bold**`/`*italic*`/`~~strike~~`/`` `code` ``/链接的嵌套和边界）；`cargo clippy -D warnings` 干净，`cargo test --lib` 292 passed。
+- [ ] **Step 5：迁表格**（下一步）
 - [ ] Step 6：迁 heading / list / blockquote
 - [ ] Step 7：性能验证与调优
 
@@ -374,6 +374,14 @@ editor 自己继续负责：
 - **模块结构**：`ir.rs`（IR 类型）、`parser.rs`（纯解析）、`render/`（`mod.rs`/`inline.rs`/`block.rs`/`table.rs`/`code_block.rs`）
 - **关键改动**：表格单元格从 `String` 改为 `Vec<Inline>`；`wrap_cell_inlines` 替代旧 `wrap_cell_styled`；`markdown_to_lines` 保持签名不变，内部调用 parse + render
 
+### Step 4 实施备注
+
+- **EditorTheme 实现 MdStyle**：直接 `impl MdStyle for EditorTheme`，无需 wrapper struct
+- **精确行号映射**：parser 使用 `into_offset_iter()` + `build_line_offsets()` 填充 `SourceRange.start_line/end_line`
+- **markdown_cache.rs**：全文解析 + `line_to_block` 映射 + 按需渲染缓存（为后续 Step 5/6 打基础）
+- **inline 渲染共享化**：editor `renderer/inline.rs` 改用 `parse_inline_text()` + 共享层 `render_inlines`，正确处理嵌套和边界；**修复 heading 行不调用 render_inline 的问题**（`# **bold** heading` 现能正确渲染加粗）
+- **测试覆盖**：`markdown_cache::tests` 新增 `cache_rebuild_basic` 和 `cache_get_rendered_line` 测试
+
 ## 下一步
 
-**Step 4：editor 接入共享层**，开始让 editor 侧使用 IR 和共享 render 原语。
+**Step 5：迁表格**，让 editor 的表格渲染走共享层，复用 `render/table.rs` 的边框绘制和 cell wrap 逻辑。

@@ -27,6 +27,9 @@ struct ParseContext {
     /// 已解析的 block 列表
     blocks: Vec<Block>,
 
+    /// 当前 event 的源码范围（由 offset_iter 填充）
+    current_source: SourceRange,
+
     // --- Inline 累积 ---
     /// 当前 block 级别的 inline 容器（paragraph / heading content / list item）
     current_inlines: Vec<Inline>,
@@ -74,6 +77,7 @@ impl ParseContext {
     fn new() -> Self {
         Self {
             blocks: Vec::new(),
+            current_source: SourceRange::default(),
             current_inlines: Vec::new(),
             inline_stack: Vec::new(),
             inline_children_stack: Vec::new(),
@@ -136,7 +140,7 @@ impl ParseContext {
         }
         let inlines = std::mem::take(&mut self.current_inlines);
         let block = Block {
-            source: SourceRange::default(),
+            source: self.current_source,
             kind: BlockKind::Paragraph(inlines),
         };
         self.push_block(block);
@@ -248,6 +252,30 @@ fn count_pipe_cells(line: &str) -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// Byte offset → line number mapping
+// ---------------------------------------------------------------------------
+
+/// 构建行起始字节偏移表
+fn build_line_offsets(text: &str) -> Vec<usize> {
+    let mut offsets = Vec::with_capacity(64);
+    offsets.push(0);
+    for (i, ch) in text.char_indices() {
+        if ch == '\n' {
+            offsets.push(i + 1);
+        }
+    }
+    offsets
+}
+
+/// 将字节偏移转换为行号（0-based）
+fn byte_to_line(byte: usize, line_offsets: &[usize]) -> usize {
+    match line_offsets.binary_search(&(byte + 1)) {
+        Ok(idx) => idx,
+        Err(idx) => idx.saturating_sub(1),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public API: parse_markdown
 // ---------------------------------------------------------------------------
 
@@ -293,6 +321,9 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
     // 使用 max_width 避免未使用警告（表格分隔行修复可能间接用到）
     let _ = max_width;
 
+    // 构建行偏移表（基于预处理后的文本）
+    let line_offsets = build_line_offsets(md);
+
     let options = pulldown_cmark::Options::ENABLE_STRIKETHROUGH
         | pulldown_cmark::Options::ENABLE_TABLES
         | pulldown_cmark::Options::ENABLE_TASKLISTS;
@@ -300,7 +331,17 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
 
     let mut ctx = ParseContext::new();
 
-    for event in parser {
+    for (event, range) in parser.into_offset_iter() {
+        // 计算当前 event 的源码行范围
+        let source = if !range.is_empty() {
+            SourceRange {
+                start_line: byte_to_line(range.start, &line_offsets),
+                end_line: byte_to_line(range.end.saturating_sub(1), &line_offsets),
+            }
+        } else {
+            SourceRange::default()
+        };
+        ctx.current_source = source;
         match event {
             // ===== Heading =====
             Event::Start(Tag::Heading { level, .. }) => {
@@ -310,7 +351,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
             Event::End(TagEnd::Heading(level)) => {
                 let content = std::mem::take(&mut ctx.current_inlines);
                 let block = Block {
-                    source: SourceRange::default(),
+                    source: ctx.current_source,
                     kind: BlockKind::Heading {
                         level: level as u8,
                         content,
@@ -379,7 +420,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
             }
             Event::End(TagEnd::CodeBlock) => {
                 let block = Block {
-                    source: SourceRange::default(),
+                    source: ctx.current_source,
                     kind: BlockKind::CodeBlock {
                         lang: std::mem::take(&mut ctx.code_block_lang),
                         code: std::mem::take(&mut ctx.code_block_content),
@@ -415,7 +456,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
                 if ctx.list_depth == 1 && !ctx.list_items.is_empty() {
                     let items = std::mem::take(&mut ctx.list_items);
                     let block = Block {
-                        source: SourceRange::default(),
+                        source: ctx.current_source,
                         kind: BlockKind::List(ListData {
                             ordered: ctx.list_ordered,
                             start_index: ctx.list_start_index,
@@ -462,7 +503,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
                 ctx.flush_paragraph();
                 let inner_blocks = ctx.blockquote_stack.pop().unwrap_or_default();
                 let block = Block {
-                    source: SourceRange::default(),
+                    source: ctx.current_source,
                     kind: BlockKind::BlockQuote(inner_blocks),
                 };
                 ctx.push_block(block);
@@ -501,7 +542,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
             Event::Rule => {
                 ctx.flush_paragraph();
                 ctx.push_block(Block {
-                    source: SourceRange::default(),
+                    source: ctx.current_source,
                     kind: BlockKind::Rule,
                 });
             }
@@ -521,7 +562,7 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
                     rows: std::mem::take(&mut ctx.table_rows),
                 };
                 ctx.push_block(Block {
-                    source: SourceRange::default(),
+                    source: ctx.current_source,
                     kind: BlockKind::Table(data),
                 });
             }

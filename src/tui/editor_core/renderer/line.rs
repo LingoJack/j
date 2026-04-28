@@ -34,35 +34,73 @@ impl MarkdownRenderer {
         // 标题
         if let Some(stripped) = trimmed.strip_prefix("# ") {
             let text = stripped.trim();
-            return Line::from(vec![
+            let rendered = self.render_inline(text);
+            let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("◆ {}", text), self.style_bold(self.theme.md_h1)),
-            ]);
+                Span::styled("◆ ", self.style_bold(self.theme.md_h1)),
+            ];
+            // heading 内容应用 md_h1 颜色 + 加粗
+            let heading_style = Style::default()
+                .fg(self.theme.md_h1)
+                .add_modifier(Modifier::BOLD);
+            for span in rendered {
+                spans.push(Span::styled(span.content, span.style.patch(heading_style)));
+            }
+            return Line::from(spans);
         }
         if let Some(stripped) = trimmed.strip_prefix("## ") {
             let text = stripped.trim();
-            return Line::from(vec![
+            let rendered = self.render_inline(text);
+            let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("◇ {}", text), self.style_bold(self.theme.md_h2)),
-            ]);
+                Span::styled("◇ ", self.style_bold(self.theme.md_h2)),
+            ];
+            // heading 内容应用 md_h2 颜色 + 加粗
+            let heading_style = Style::default()
+                .fg(self.theme.md_h2)
+                .add_modifier(Modifier::BOLD);
+            for span in rendered {
+                spans.push(Span::styled(span.content, span.style.patch(heading_style)));
+            }
+            return Line::from(spans);
         }
         if let Some(stripped) = trimmed.strip_prefix("### ") {
             let text = stripped.trim();
-            return Line::from(vec![
+            let rendered = self.render_inline(text);
+            let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("〈 {} 〉", text), self.style_bold(self.theme.md_h3)),
-            ]);
+                Span::styled("〈 ", self.style_bold(self.theme.md_h3)),
+            ];
+            // heading 内容应用 md_h3 颜色 + 加粗
+            let heading_style = Style::default()
+                .fg(self.theme.md_h3)
+                .add_modifier(Modifier::BOLD);
+            for span in rendered {
+                spans.push(Span::styled(span.content, span.style.patch(heading_style)));
+            }
+            spans.push(Span::styled(" 〉", self.style_bold(self.theme.md_h3)));
+            return Line::from(spans);
         }
         if let Some(stripped) = trimmed.strip_prefix("#### ") {
             let text = stripped.trim();
-            return Line::from(vec![
+            let rendered = self.render_inline(text);
+            let mut spans = vec![
                 Span::styled(line_num, self.style(Color::DarkGray)),
                 Span::styled(indent, self.style(self.theme.text_normal)),
-                Span::styled(format!("› {} ", text), self.style_bold(self.theme.md_h4)),
-            ]);
+                Span::styled("› ", self.style_bold(self.theme.md_h4)),
+            ];
+            // heading 内容应用 md_h4 颜色 + 加粗
+            let heading_style = Style::default()
+                .fg(self.theme.md_h4)
+                .add_modifier(Modifier::BOLD);
+            for span in rendered {
+                spans.push(Span::styled(span.content, span.style.patch(heading_style)));
+            }
+            spans.push(Span::styled(" ", self.style(self.theme.text_normal)));
+            return Line::from(spans);
         }
 
         // 水平线

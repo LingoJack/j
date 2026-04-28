@@ -4,7 +4,7 @@
 //! IR 与终端宽度、主题无关，可被多次渲染（不同宽度/主题）。
 
 /// 源码位置范围
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SourceRange {
     /// 源码起始行号（0-based）
     pub start_line: usize,
