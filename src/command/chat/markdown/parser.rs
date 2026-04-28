@@ -206,6 +206,11 @@ pub fn markdown_to_lines(md: &str, max_width: usize, theme: &Theme) -> Vec<Line<
 
     let normalized_md;
     let md = if md.contains('\t') || md.contains('\r') {
+        // 不要把这一步当成“普通清洗”删掉。
+        // 曾经出现过窄屏滚动聊天记录时，右侧边界残留上一帧字符的问题，
+        // 触发条件就是消息正文里带原始 tab / carriage return。
+        // 这些 control char 会让 markdown/wrap 的宽度估算与 ratatui 实际写入宽度不一致，
+        // 于是 bubble 右边界出现脏字符残留。
         normalized_md = normalize_terminal_text(md);
         normalized_md.as_str()
     } else {
