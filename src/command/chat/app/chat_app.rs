@@ -8,13 +8,13 @@ use super::agent_handle::MainAgentHandle;
 use super::chat_state::ChatState;
 use super::tool_executor::ToolExecutor;
 use super::types::AskRequest;
-use super::ui_state::{ChatMode, ConfigTab, UIState};
+use super::ui_state::{ChatMode, CommandsMode, ConfigTab, UIState};
 use crate::command::chat::agent_md;
 use crate::command::chat::constants::TODO_NAG_INTERVAL_ROUNDS;
 use crate::command::chat::context::message_compress::{
     DEFAULT_OTHER_AGENT_TOOLCALL_THRESHOLD, compress_other_agent_toolcalls,
 };
-use crate::command::chat::infra::command;
+use crate::command::chat::infra::command::{self, CommandSource};
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager, HookResult};
 use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::infra::skill;
@@ -545,6 +545,10 @@ impl ChatApp {
                 compact_exempt_sublist: false,
                 compact_exempt_idx: 0,
                 auto_approve: false,
+                commands_mode: CommandsMode::Normal,
+                commands_source_idx: 0,
+                pending_command_create: false,
+                command_create_source: CommandSource::User,
             },
             state: ChatState {
                 agent_config,

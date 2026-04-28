@@ -1,4 +1,4 @@
-use crate::command::chat::app::{Action, ChatApp, ConfigTab, CursorDirection};
+use crate::command::chat::app::{Action, ChatApp, CommandsMode, ConfigTab, CursorDirection};
 use crate::command::chat::storage::save_agent_config;
 use crate::util::safe_lock;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -168,20 +168,42 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Char('d') => Action::ToggleMenuDisableAll,
             _ => return,
         },
-        ConfigTab::Commands => match key.code {
-            KeyCode::Esc => {
-                save_agent_config(&app.state.agent_config);
-                Action::SaveConfig
+        ConfigTab::Commands => {
+            // 选择保存级别模式
+            if app.ui.commands_mode == CommandsMode::SelectSource {
+                match key.code {
+                    KeyCode::Esc => Action::ConfigCreateCommandCancel,
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        Action::ConfigCreateCommandNavigateSource(CursorDirection::Up)
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        Action::ConfigCreateCommandNavigateSource(CursorDirection::Down)
+                    }
+                    KeyCode::Enter => Action::ConfigCreateCommandConfirmSource,
+                    _ => return,
+                }
+            } else {
+                match key.code {
+                    KeyCode::Esc => {
+                        save_agent_config(&app.state.agent_config);
+                        Action::SaveConfig
+                    }
+                    KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
+                    KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        Action::ToggleMenuNavigate(CursorDirection::Up)
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        Action::ToggleMenuNavigate(CursorDirection::Down)
+                    }
+                    KeyCode::Enter | KeyCode::Char(' ') => Action::ToggleMenuToggle,
+                    KeyCode::Char('a') => Action::ToggleMenuEnableAll,
+                    KeyCode::Char('d') => Action::ToggleMenuDisableAll,
+                    KeyCode::Char('c') => Action::ConfigCreateCommandSelectSource,
+                    _ => return,
+                }
             }
-            KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),
-            KeyCode::Right => Action::ConfigSwitchTab(CursorDirection::Down),
-            KeyCode::Up | KeyCode::Char('k') => Action::ToggleMenuNavigate(CursorDirection::Up),
-            KeyCode::Down | KeyCode::Char('j') => Action::ToggleMenuNavigate(CursorDirection::Down),
-            KeyCode::Enter | KeyCode::Char(' ') => Action::ToggleMenuToggle,
-            KeyCode::Char('a') => Action::ToggleMenuEnableAll,
-            KeyCode::Char('d') => Action::ToggleMenuDisableAll,
-            _ => return,
-        },
+        }
         ConfigTab::Teammates => match key.code {
             KeyCode::Esc => Action::SaveConfig,
             KeyCode::Left => Action::ConfigSwitchTab(CursorDirection::Up),

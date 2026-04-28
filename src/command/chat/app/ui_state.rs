@@ -1,5 +1,6 @@
 use super::types::{AskAnswer, AskQuestion};
 use crate::command::chat::infra::archive::ChatArchive;
+use crate::command::chat::infra::command::CommandSource;
 use crate::command::chat::markdown::image_cache::ImageCache;
 use crate::command::chat::permission::queue::PendingAgentPerm;
 use crate::command::chat::storage::SessionMeta;
@@ -168,6 +169,14 @@ pub struct UIState {
     pub compact_exempt_idx: usize,
     /// 是否自动批准所有操作（bypass 模式，per-session 持久化）
     pub auto_approve: bool,
+    /// 配置界面：Commands Tab 的当前模式
+    pub commands_mode: CommandsMode,
+    /// 配置界面：Commands 创建时的来源选择索引（0=用户级, 1=项目级）
+    pub commands_source_idx: usize,
+    /// 配置界面：是否有待处理的命令创建
+    pub pending_command_create: bool,
+    /// 配置界面：命令创建的目标级别
+    pub command_create_source: CommandSource,
 }
 
 /// 消息渲染行缓存
@@ -265,6 +274,16 @@ pub enum ConfigTab {
     Session,
     /// 归档管理
     Archive,
+}
+
+/// Commands Tab 的模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CommandsMode {
+    /// 正常列表浏览
+    #[default]
+    Normal,
+    /// 选择保存级别
+    SelectSource,
 }
 
 impl ConfigTab {

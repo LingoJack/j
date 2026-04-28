@@ -732,6 +732,62 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 input_thread.resume();
                 needs_redraw = true;
             }
+
+            if app.ui.pending_command_create {
+                app.ui.pending_command_create = false;
+                input_thread.pause();
+                input_thread.drain();
+
+                use crate::command::chat::infra::command::CommandSource;
+                let source = app.ui.command_create_source;
+                let title = match source {
+                    CommandSource::User => "创建命令 (用户级)",
+                    CommandSource::Project => "创建命令 (项目级)",
+                };
+                let template = concat!(
+                    "---\n",
+                    "name: my-command\n",
+                    "description: 命令描述\n",
+                    "---\n",
+                    "\n",
+                    "# 命令内容\n",
+                    "\n",
+                    "在这里编写命令的提示词正文...\n",
+                );
+
+                match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
+                    &mut terminal,
+                    title,
+                    template,
+                    &app.ui.theme,
+                ) {
+                    Ok((Some(new_text), _)) => {
+                        match crate::command::chat::infra::command::save_new_command(
+                            source, &new_text,
+                        ) {
+                            Ok((path, name)) => {
+                                app.state.loaded_commands =
+                                    crate::command::chat::infra::command::load_all_commands();
+                                app.update(Action::ShowToast(
+                                    format!("命令 '{}' 已创建: {}", name, path.display()),
+                                    false,
+                                ));
+                            }
+                            Err(e) => {
+                                app.update(Action::ShowToast(format!("创建命令失败: {}", e), true));
+                            }
+                        }
+                    }
+                    Ok((None, _)) => {}
+                    Err(e) => {
+                        app.update(Action::ShowToast(format!("编辑器错误: {}", e), true));
+                    }
+                }
+
+                input_thread.drain();
+                input_thread.resume();
+                needs_redraw = true;
+            }
         }
     }
 

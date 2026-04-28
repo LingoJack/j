@@ -296,6 +296,16 @@ pub enum Action {
     ToggleExpandTools,
     /// 切换自动批准模式（bypass，Tab 键）
     ToggleAutoApprove,
+
+    // ========== Commands 创建 ==========
+    /// 进入选择命令保存级别模式
+    ConfigCreateCommandSelectSource,
+    /// 选择命令保存级别导航
+    ConfigCreateCommandNavigateSource(CursorDirection),
+    /// 确认命令保存级别
+    ConfigCreateCommandConfirmSource,
+    /// 取消命令创建
+    ConfigCreateCommandCancel,
 }
 
 /// 光标移动方向枚举，用于消息浏览中的上下导航

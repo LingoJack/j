@@ -1,6 +1,7 @@
 use super::ChatApp;
 use crate::command::chat::app::action::CursorDirection;
 use crate::command::chat::app::ui_state::ConfigTab;
+use crate::command::chat::infra::command;
 use crate::command::chat::storage::ModelProvider;
 use crate::constants::CONFIG_FIELDS;
 
@@ -582,5 +583,58 @@ impl ChatApp {
                 }
             }
         }
+    }
+
+    // ========== Commands 创建 ==========
+
+    /// 进入选择命令保存级别模式
+    pub(super) fn update_config_command_select_source(&mut self) {
+        use crate::command::chat::app::ui_state::CommandsMode;
+        use crate::command::chat::infra::command::CommandSource;
+
+        if command::project_commands_dir().is_some() {
+            self.ui.commands_mode = CommandsMode::SelectSource;
+            self.ui.commands_source_idx = 0;
+        } else {
+            // 没有项目级目录，直接使用用户级
+            self.ui.command_create_source = CommandSource::User;
+            self.ui.pending_command_create = true;
+        }
+    }
+
+    /// 选择命令保存级别导航
+    pub(super) fn update_config_command_navigate_source(&mut self, dir: CursorDirection) {
+        match dir {
+            CursorDirection::Up => {
+                if self.ui.commands_source_idx > 0 {
+                    self.ui.commands_source_idx -= 1;
+                }
+            }
+            CursorDirection::Down => {
+                if self.ui.commands_source_idx < 1 {
+                    self.ui.commands_source_idx += 1;
+                }
+            }
+        }
+    }
+
+    /// 确认命令保存级别选择
+    pub(super) fn update_config_command_confirm_source(&mut self) {
+        use crate::command::chat::app::ui_state::CommandsMode;
+        use crate::command::chat::infra::command::CommandSource;
+
+        self.ui.command_create_source = if self.ui.commands_source_idx == 0 {
+            CommandSource::User
+        } else {
+            CommandSource::Project
+        };
+        self.ui.commands_mode = CommandsMode::Normal;
+        self.ui.pending_command_create = true;
+    }
+
+    /// 取消命令创建
+    pub(super) fn update_config_command_cancel(&mut self) {
+        use crate::command::chat::app::ui_state::CommandsMode;
+        self.ui.commands_mode = CommandsMode::Normal;
     }
 }

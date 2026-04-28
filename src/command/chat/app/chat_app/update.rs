@@ -169,6 +169,14 @@ impl ChatApp {
             Action::Quit => {}
             Action::ToggleExpandTools => self.update_toggle_expand_tools(),
             Action::ToggleAutoApprove => self.update_toggle_auto_approve(),
+
+            // ========== Commands 创建 ==========
+            Action::ConfigCreateCommandSelectSource => self.update_config_command_select_source(),
+            Action::ConfigCreateCommandNavigateSource(dir) => {
+                self.update_config_command_navigate_source(dir)
+            }
+            Action::ConfigCreateCommandConfirmSource => self.update_config_command_confirm_source(),
+            Action::ConfigCreateCommandCancel => self.update_config_command_cancel(),
         }
     }
 }

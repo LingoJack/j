@@ -158,3 +158,67 @@ pub fn expand_command_mentions(
     }
     result
 }
+
+// ========== 创建与保存 ==========
+
+/// 保存新命令到指定目录
+///
+/// 从 frontmatter 解析 name，保存到对应目录。
+/// 返回保存路径和命令名称。
+pub fn save_new_command(
+    source: CommandSource,
+    content: &str,
+) -> std::io::Result<(PathBuf, String)> {
+    // 解析 frontmatter 获取 name
+    let (fm_str, _body) = super::skill::split_frontmatter(content).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "缺少 YAML frontmatter")
+    })?;
+    let frontmatter: CommandFrontmatter = serde_yaml::from_str(&fm_str).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("解析 frontmatter 失败: {}", e),
+        )
+    })?;
+
+    if frontmatter.name.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "命令 name 不能为空",
+        ));
+    }
+
+    // 验证 name 格式：只允许字母、数字、下划线、连字符
+    let name = &frontmatter.name;
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "命令 name 只允许字母、数字、下划线、连字符",
+        ));
+    }
+
+    // 确定保存目录
+    let dir = commands_dir_for_source(source);
+    let _ = fs::create_dir_all(&dir);
+
+    // 保存为 {name}.md
+    let path = dir.join(format!("{}.md", name));
+    fs::write(&path, content)?;
+
+    Ok((path, name.clone()))
+}
+
+/// 返回指定来源的 commands 目录路径
+pub fn commands_dir_for_source(source: CommandSource) -> PathBuf {
+    match source {
+        CommandSource::User => commands_dir(),
+        CommandSource::Project => {
+            // 项目级：需要确保 .jcli 目录存在
+            let config_dir =
+                JcliConfig::find_config_dir().unwrap_or_else(|| PathBuf::from(".jcli"));
+            config_dir.join("commands")
+        }
+    }
+}

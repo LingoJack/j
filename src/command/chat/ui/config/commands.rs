@@ -1,13 +1,21 @@
-use crate::command::chat::app::ChatApp;
+use crate::command::chat::app::{ChatApp, CommandsMode};
+use crate::command::chat::infra::command;
 use crate::tui::components::{ItemList, ToggleListItemCtx, toggle_list_item};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
 };
 
-/// Commands tab 固定头部（已启用计数）
+/// Commands tab 固定头部（已启用计数 + 操作提示）
 pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
     let t = &app.ui.theme;
+
+    // 选择来源模式：显示选择界面
+    if app.ui.commands_mode == CommandsMode::SelectSource {
+        draw_select_source_ui(lines, app);
+        return;
+    }
+
     let total = app.state.loaded_commands.len();
     let enabled_count = total
         - app
@@ -24,7 +32,7 @@ pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &Chat
             .count();
 
     lines.push(Line::from(vec![Span::styled(
-        format!("  \u{5df2}\u{542f}\u{7528}: {}/{}", enabled_count, total),
+        format!("  已启用: {}/{}", enabled_count, total),
         Style::default()
             .fg(t.config_toggle_on)
             .add_modifier(Modifier::BOLD),
@@ -33,10 +41,88 @@ pub(super) fn draw_tab_commands_header<'a>(lines: &mut Vec<Line<'a>>, app: &Chat
 
     if total == 0 {
         lines.push(Line::from(Span::styled(
-            "  (\u{6ca1}\u{6709}\u{81ea}\u{5b9a}\u{4e49}\u{547d}\u{4ee4}\u{ff0c}\u{5728} ~/.jdata/agent/commands/ \u{6216} .jcli/commands/ \u{4e0b}\u{521b}\u{5efa})",
+            "  (没有自定义命令，按 c 快速创建)",
             Style::default().fg(t.config_dim),
         )));
     }
+}
+
+/// 渲染选择保存级别的界面
+fn draw_select_source_ui<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp) {
+    let t = &app.ui.theme;
+    let has_project_dir = command::project_commands_dir().is_some();
+
+    lines.push(Line::from(Span::styled(
+        "  选择命令保存位置：",
+        Style::default()
+            .fg(t.config_label_selected)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    // 用户级选项
+    let user_selected = app.ui.commands_source_idx == 0;
+    let user_marker = if user_selected {
+        Span::styled(
+            "  > ",
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::styled("    ", Style::default())
+    };
+    let user_label = Span::styled(
+        "用户级 (~/.jdata/agent/commands/)",
+        Style::default()
+            .fg(if user_selected {
+                t.config_label_selected
+            } else {
+                t.text_dim
+            })
+            .add_modifier(if user_selected {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            }),
+    );
+    lines.push(Line::from(vec![user_marker, user_label]));
+
+    // 项目级选项
+    if has_project_dir {
+        let proj_selected = app.ui.commands_source_idx == 1;
+        let proj_marker = if proj_selected {
+            Span::styled(
+                "  > ",
+                Style::default()
+                    .fg(t.config_label_selected)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::styled("    ", Style::default())
+        };
+        let proj_label = Span::styled(
+            "项目级 (.jcli/commands/)",
+            Style::default()
+                .fg(if proj_selected {
+                    t.config_label_selected
+                } else {
+                    t.text_dim
+                })
+                .add_modifier(if proj_selected {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        );
+        lines.push(Line::from(vec![proj_marker, proj_label]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  j/k 或 ↑/↓ 选择，Enter 确认，Esc 取消",
+        Style::default().fg(t.config_dim),
+    )));
 }
 
 /// Commands tab 可滚动列表

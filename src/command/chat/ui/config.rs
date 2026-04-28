@@ -12,7 +12,7 @@ mod skills;
 mod teammates;
 mod tools;
 
-use crate::command::chat::app::{ChatApp, ConfigTab};
+use crate::command::chat::app::{ChatApp, CommandsMode, ConfigTab};
 use crate::tui::components::{separator_line, tab_bar};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -116,10 +116,13 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         }
         ConfigTab::Commands => {
             commands::draw_tab_commands_header(&mut tab_header_lines, app);
-            let list = commands::draw_tab_commands_list(app);
-            let (item_lines, item_indices) = list.into_parts();
-            list_lines.extend(item_lines);
-            field_line_indices.extend(item_indices);
+            // 选择来源模式时不显示列表
+            if app.ui.commands_mode != CommandsMode::SelectSource {
+                let list = commands::draw_tab_commands_list(app);
+                let (item_lines, item_indices) = list.into_parts();
+                list_lines.extend(item_lines);
+                field_line_indices.extend(item_indices);
+            }
         }
         ConfigTab::Teammates => {
             teammates::draw_tab_teammates_header(&mut tab_header_lines, app);
