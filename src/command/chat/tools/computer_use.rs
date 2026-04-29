@@ -1,5 +1,7 @@
+mod actions;
 mod ax;
 mod error;
+mod helper;
 mod keyboard;
 mod keymap;
 mod mouse;
