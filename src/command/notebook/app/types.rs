@@ -178,6 +178,12 @@ pub struct NotebookApp {
     pub flat_entries: Vec<FlatEntry>,
     /// 当前主题
     pub theme: Theme,
+    /// 上次鼠标点击时间（用于双击检测）
+    pub last_click_time: Option<std::time::Instant>,
+    /// 上次点击位置（列，行，用于双击位置判定）
+    pub last_click_pos: Option<(u16, u16)>,
+    /// 上次点击选中的索引（用于双击索引判定）
+    pub last_click_index: Option<usize>,
 }
 
 impl Default for NotebookApp {
@@ -214,6 +220,9 @@ impl NotebookApp {
             expanded_dirs,
             flat_entries: Vec::new(),
             theme,
+            last_click_time: None,
+            last_click_pos: None,
+            last_click_index: None,
         };
         app.build_flat_entries();
         if !app.flat_entries.is_empty() {

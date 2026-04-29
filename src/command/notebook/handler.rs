@@ -1,7 +1,8 @@
 use super::app::{
-    AppMode, NotebookApp, edit_note_on_terminal, edit_note_with_editor, handle_command_popup_mode,
-    handle_confirm_delete, handle_help_mode, handle_input_mode, handle_normal_mode,
-    handle_preview_mode, handle_ratio_input_mode, load_notes, note_file_path, notebook_dir,
+    AppMode, FlatEntryKind, NotebookApp, edit_note_on_terminal, edit_note_with_editor,
+    handle_command_popup_mode, handle_confirm_delete, handle_help_mode, handle_input_mode,
+    handle_normal_mode, handle_preview_mode, handle_ratio_input_mode, load_notes, note_file_path,
+    notebook_dir,
 };
 use super::ui::draw_ui;
 use crate::command::chat::storage::load_agent_config;
@@ -13,12 +14,13 @@ use crate::util::fuzzy;
 const NOTEBOOK_POLL_MS: u64 = 16;
 use crate::{error, info};
 use colored::Colorize;
-use crossterm::event::{KeyCode, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, MouseButton, MouseEvent, MouseEventKind};
 use crossterm::{
     event::{self, Event},
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::layout::Rect;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::fs;
 use std::io::{self, Write};
@@ -408,10 +410,27 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                     }
                 }
                 Event::Mouse(mouse) => {
-                    handle_mouse_event(&mut app, mouse, terminal.get_frame().area());
+                    let frame_area = terminal.get_frame().area();
+                    let layout = compute_mouse_layout(frame_area, &app);
+                    let action = handle_mouse_event(&mut app, mouse, &layout);
+
+                    // 处理双击编辑请求
+                    if let Some(MouseAction::RequestEdit(title)) = action {
+                        let needs_reload = edit_note_on_terminal(&title, &mut terminal);
+                        if needs_reload {
+                            app.reload();
+                        } else {
+                            app.update_preview();
+                        }
+                        while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
+                            let _ = event::read();
+                        }
+                    }
+
+                    // 消费后续鼠标事件（防止拖拽产生的冗余事件）
                     while event::poll(std::time::Duration::from_millis(0)).unwrap_or(false) {
                         if let Ok(Event::Mouse(m)) = event::read() {
-                            handle_mouse_event(&mut app, m, terminal.get_frame().area());
+                            let _ = handle_mouse_event(&mut app, m, &layout);
                         }
                     }
                 }
@@ -430,31 +449,205 @@ fn run_notebook_tui_internal() -> io::Result<()> {
     Ok(())
 }
 
-fn handle_mouse_event(app: &mut NotebookApp, mouse: MouseEvent, frame_area: ratatui::layout::Rect) {
-    if !matches!(app.mode, AppMode::Normal | AppMode::Preview) {
-        return;
-    }
+// ========== 鼠标事件处理 ==========
 
-    let scroll_delta = match mouse.kind {
-        MouseEventKind::ScrollUp => -1i16,
-        MouseEventKind::ScrollDown => 1i16,
-        _ => return,
+/// 鼠标事件处理时需要的布局信息
+struct MouseLayoutInfo {
+    /// 主区域
+    main_area: Rect,
+    /// 笔记列表区域（仅在 Normal 模式有效）
+    list_area: Option<Rect>,
+    /// 预览区域（仅在 Normal 模式有效）
+    preview_area: Option<Rect>,
+}
+
+/// 鼠标动作返回值
+enum MouseAction {
+    /// 需要进入编辑（双击文件条目）
+    RequestEdit(String),
+}
+
+/// 计算鼠标事件处理所需的布局信息
+fn compute_mouse_layout(frame_area: Rect, app: &NotebookApp) -> MouseLayoutInfo {
+    // 主区域：标题栏之后、状态栏之前
+    let main_area = Rect {
+        x: frame_area.x,
+        y: frame_area.y + 3,
+        width: frame_area.width,
+        height: frame_area.height.saturating_sub(7),
     };
 
-    let main_y_start = frame_area.y + 3;
-    let main_y_end = frame_area.y + frame_area.height.saturating_sub(4);
+    // Normal/CommandPopup 模式下计算列表/预览区域
+    let (list_area, preview_area) = if matches!(app.mode, AppMode::Normal | AppMode::CommandPopup) {
+        let list_width = frame_area.width * app.panel_ratio / 100;
+        let preview_width = frame_area.width.saturating_sub(list_width);
+        (
+            Some(Rect {
+                x: frame_area.x,
+                y: main_area.y,
+                width: list_width,
+                height: main_area.height,
+            }),
+            Some(Rect {
+                x: frame_area.x + list_width,
+                y: main_area.y,
+                width: preview_width,
+                height: main_area.height,
+            }),
+        )
+    } else {
+        (None, None)
+    };
 
-    if mouse.row < main_y_start || mouse.row >= main_y_end {
-        return;
+    MouseLayoutInfo {
+        main_area,
+        list_area,
+        preview_area,
+    }
+}
+
+/// 处理鼠标事件，返回可能的双击编辑动作
+fn handle_mouse_event(
+    app: &mut NotebookApp,
+    mouse: MouseEvent,
+    layout: &MouseLayoutInfo,
+) -> Option<MouseAction> {
+    // 仅处理 Normal 和 Preview 模式
+    if !matches!(app.mode, AppMode::Normal | AppMode::Preview) {
+        return None;
     }
 
-    match scroll_delta {
-        -1 => {
-            app.preview_scroll = app.preview_scroll.saturating_sub(5);
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            handle_left_click(app, mouse.column, mouse.row, layout)
         }
-        1 => {
-            app.preview_scroll = app.preview_scroll.saturating_add(5);
+        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+            handle_scroll(app, mouse.column, mouse.row, layout, mouse.kind)
         }
-        _ => {}
+        _ => None,
     }
+}
+
+/// 检查点是否在矩形区域内（含边界）
+fn rect_contains(area: Rect, col: u16, row: u16) -> bool {
+    col >= area.x && col < area.x + area.width && row >= area.y && row < area.y + area.height
+}
+
+/// 处理左键点击
+fn handle_left_click(
+    app: &mut NotebookApp,
+    col: u16,
+    row: u16,
+    layout: &MouseLayoutInfo,
+) -> Option<MouseAction> {
+    // Preview 模式：点击预览区定位滚动
+    if app.mode == AppMode::Preview {
+        if rect_contains(layout.main_area, col, row) {
+            // 计算点击位置对应的预览行索引
+            let relative_y = row.saturating_sub(layout.main_area.y);
+            // 减去顶部边框行
+            app.preview_scroll = relative_y.saturating_sub(1);
+        }
+        return None;
+    }
+
+    // Normal 模式：点击列表区选择
+    if let Some(list_area) = layout.list_area
+        && rect_contains(list_area, col, row)
+    {
+        // 计算点击位置对应的列表项索引
+        let inner_y = row.saturating_sub(list_area.y).saturating_sub(1); // 减去顶部边框
+        let max_visible = list_area.height.saturating_sub(2) as usize; // 减去上下边框
+
+        if (inner_y as usize) < max_visible {
+            let index = inner_y as usize;
+            if index < app.flat_entries.len() {
+                let now = std::time::Instant::now();
+
+                // 双击检测：时间 < 500ms 且索引相同
+                let is_double_click = app
+                    .last_click_time
+                    .map(|t| now.duration_since(t).as_millis() < 500)
+                    .unwrap_or(false)
+                    && app.last_click_index == Some(index);
+
+                // 更新选择
+                app.state.select(Some(index));
+                app.preview_scroll = 0;
+                app.update_preview();
+
+                // 记录本次点击
+                app.last_click_time = Some(now);
+                app.last_click_pos = Some((col, row));
+                app.last_click_index = Some(index);
+
+                // 双击动作
+                if is_double_click {
+                    let entry = &app.flat_entries[index];
+                    match &entry.kind {
+                        FlatEntryKind::File { .. } => {
+                            return app.selected_name().map(MouseAction::RequestEdit);
+                        }
+                        FlatEntryKind::Dir { dir_path, .. } => {
+                            // 展开/折叠目录
+                            app.expanded_dirs.toggle(dir_path);
+                            super::app::io::save_expanded_dirs(&app.expanded_dirs);
+                            app.build_flat_entries();
+                            app.update_preview();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// 处理滚轮滚动
+fn handle_scroll(
+    app: &mut NotebookApp,
+    col: u16,
+    row: u16,
+    layout: &MouseLayoutInfo,
+    kind: MouseEventKind,
+) -> Option<MouseAction> {
+    let direction = match kind {
+        MouseEventKind::ScrollUp => -1i16,
+        MouseEventKind::ScrollDown => 1i16,
+        _ => return None,
+    };
+
+    // Preview 模式：仅滚动预览
+    if app.mode == AppMode::Preview {
+        app.preview_scroll = if direction < 0 {
+            app.preview_scroll.saturating_sub(3)
+        } else {
+            app.preview_scroll.saturating_add(3)
+        };
+        return None;
+    }
+
+    // Normal 模式：根据鼠标位置区分列表区/预览区
+    if let Some(list_area) = layout.list_area
+        && let Some(preview_area) = layout.preview_area
+    {
+        if rect_contains(list_area, col, row) {
+            // 列表区：切换选择项
+            if direction < 0 {
+                app.move_up();
+            } else {
+                app.move_down();
+            }
+        } else if rect_contains(preview_area, col, row) {
+            // 预览区：滚动预览内容
+            app.preview_scroll = if direction < 0 {
+                app.preview_scroll.saturating_sub(3)
+            } else {
+                app.preview_scroll.saturating_add(3)
+            };
+        }
+    }
+
+    None
 }
