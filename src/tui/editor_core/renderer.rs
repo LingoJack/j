@@ -339,11 +339,13 @@ impl MarkdownRenderer {
 
                 // 对引用内容部分渲染 inline，然后提取续行片段
                 let inline_spans = self.render_inline(rest);
-                let vl_start_char = char_idx_at_display_col(line_content, vl.start_col);
-                let vl_end_char = char_idx_at_display_col(line_content, vl.end_col);
+                // vl.start_col / vl.end_col 已经是字符偏移（wrap_engine 使用字符索引）
+                // 无需再用 char_idx_at_display_col 转换（该函数把参数当显示宽度，对中文会出错）
+                let vl_start_char = vl.start_col;
+                let vl_end_char = vl.end_col;
 
-                // 计算引用内容在完整行中的字符偏移
-                let prefix_chars = line_content.len() - rest.len();
+                // 计算引用前缀 "> " 的字符数（字节长度不等于字符数，需用 chars().count()）
+                let prefix_chars = line_content.chars().count() - rest.chars().count();
                 let adjusted_start = vl_start_char.saturating_sub(prefix_chars);
                 let adjusted_end = vl_end_char.saturating_sub(prefix_chars);
 
@@ -361,8 +363,10 @@ impl MarkdownRenderer {
             // 普通续行：对完整逻辑行渲染 inline，然后提取对应视觉行的片段
             // 这样可以正确处理跨折行边界的 **bold** 等标记
             let full_line_spans = self.render_inline(line_content);
-            let vl_start_char = char_idx_at_display_col(line_content, vl.start_col);
-            let vl_end_char = char_idx_at_display_col(line_content, vl.end_col);
+            // vl.start_col / vl.end_col 已经是字符偏移（wrap_engine 使用字符索引）
+            // 无需再用 char_idx_at_display_col 转换（该函数把参数当显示宽度，对中文会出错）
+            let vl_start_char = vl.start_col;
+            let vl_end_char = vl.end_col;
 
             // 从渲染结果中提取对应视觉行的片段
             let vl_spans = extract_span_range(&full_line_spans, vl_start_char, vl_end_char);
@@ -476,13 +480,13 @@ impl MarkdownRenderer {
         result
     }
 
-    /// 将 tab 替换为空格（宽度为 1，与 char_width('\t') = 1 一致）
+    /// 将 tab 替换为空格（宽度为 4，与 char_width('\t') = 4 一致）
     ///
     /// 终端会将 tab 展开到下一个 tab stop（通常占 8 列），
-    /// 但 char_width 计算时 tab = 1，导致显示宽度与计算宽度不一致，
-    /// 引起终端二次折行和字符重复。替换为空格后两者保持一致。
+    /// 但 char_width 计算时 tab = 4，必须用相同数量的空格替换，
+    /// 否则显示宽度与计算宽度不一致，引起折行错位和鼠标点击偏移。
     fn normalize_tabs(text: &str) -> String {
-        text.replace('\t', " ")
+        text.replace('\t', "    ")
     }
 
     /// 将文本截断到指定显示宽度（使用 unicode-width 精确计算）
@@ -556,19 +560,6 @@ impl MarkdownRenderer {
 
 /// 将显示列位置（基于 `char_width` 计算）转换为字符索引（0-based, exclusive）。
 ///
-/// 例如：`line="ABCD"`，`display_col=2` → 返回 `2`（第 3 个字符的索引）。
-/// 如果 `display_col` 超出行尾，返回行字符总数。
-fn char_idx_at_display_col(line: &str, display_col: usize) -> usize {
-    let mut width = 0;
-    for (i, ch) in line.chars().enumerate() {
-        if width >= display_col {
-            return i;
-        }
-        width += crate::util::text::char_width(ch);
-    }
-    line.chars().count()
-}
-
 /// 从已渲染的 Span 列表中提取指定字符范围的片段。
 ///
 /// `start_char` / `end_char` 是字符索引（0-based）。

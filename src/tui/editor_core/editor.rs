@@ -84,6 +84,11 @@ pub struct MarkdownEditor {
     mouse_anchor: Option<(usize, usize)>,
     /// 滚轮滚动锁定：防止 render() 自动将视口拉回到光标位置
     scroll_locked: bool,
+    /// 渲染输出的行元数据映射（每个屏幕行对应一个 RenderedVL）
+    /// 每次渲染时更新，用于鼠标点击定位
+    rendered_vl_map: Vec<RenderedVL>,
+    /// 当前屏幕顶部对应的渲染行索引（在 rendered_vl_map 中的偏移）
+    rendered_vl_map_index: usize,
 }
 
 impl MarkdownEditor {
@@ -145,6 +150,8 @@ impl MarkdownEditor {
             cursor_before_search: None,
             mouse_anchor: None,
             scroll_locked: false,
+            rendered_vl_map: Vec::new(),
+            rendered_vl_map_index: 0,
         }
     }
 
@@ -161,12 +168,14 @@ impl MarkdownEditor {
 
     /// 视觉行上移（折行感知）
     pub fn move_cursor_visual_up(&mut self) {
+        use crate::util::text::char_width;
+
         let current_visual = self.cursor_visual_line();
         if current_visual == 0 {
             return;
         }
         let target_visual = current_visual - 1;
-        let (_, current_col) = self.buffer.cursor();
+        let (current_row, current_col) = self.buffer.cursor();
 
         // 确保目标行的缓存已构建
         let (target_logical, _) = self.wrap.visual_to_logical(target_visual);
@@ -177,20 +186,42 @@ impl MarkdownEditor {
             let logical_line = target_vl.logical_line;
             let end_col = target_vl.end_col;
             let start_col = target_vl.start_col;
-            let new_col = current_col.min(end_col.saturating_sub(1)).max(start_col);
+
+            // 保持视觉列位置：计算当前光标在当前视觉行中的屏幕偏移
+            let current_vl = self.wrap.get_visual_line(current_visual);
+            let current_start_col = current_vl.map(|vl| vl.start_col).unwrap_or(0);
+            let current_line_text = self.buffer.line(current_row).map_or("", |v| v);
+            let visual_x: usize = current_line_text
+                .chars()
+                .skip(current_start_col)
+                .take(current_col.saturating_sub(current_start_col))
+                .map(char_width)
+                .sum();
+
+            // 在目标视觉行中找到最接近该视觉 X 的逻辑列
+            let target_line_text = self.buffer.line(logical_line).map_or("", |v| v);
+            let new_col = if target_line_text.is_empty() {
+                0
+            } else {
+                let segment: String = target_line_text.chars().skip(start_col).collect();
+                Self::screen_col_to_char_offset(&segment, visual_x) + start_col
+            };
+            let new_col = new_col.min(end_col);
             self.buffer.set_cursor(logical_line, new_col);
         }
     }
 
     /// 视觉行下移（折行感知）
     pub fn move_cursor_visual_down(&mut self) {
+        use crate::util::text::char_width;
+
         let current_visual = self.cursor_visual_line();
         let total_visual = self.wrap.visual_line_count();
         if current_visual >= total_visual.saturating_sub(1) {
             return;
         }
         let target_visual = current_visual + 1;
-        let (_, current_col) = self.buffer.cursor();
+        let (current_row, current_col) = self.buffer.cursor();
 
         // 确保目标行的缓存已构建
         let (target_logical, _) = self.wrap.visual_to_logical(target_visual);
@@ -201,7 +232,27 @@ impl MarkdownEditor {
             let logical_line = target_vl.logical_line;
             let end_col = target_vl.end_col;
             let start_col = target_vl.start_col;
-            let new_col = current_col.min(end_col.saturating_sub(1)).max(start_col);
+
+            // 保持视觉列位置：计算当前光标在当前视觉行中的屏幕偏移
+            let current_vl = self.wrap.get_visual_line(current_visual);
+            let current_start_col = current_vl.map(|vl| vl.start_col).unwrap_or(0);
+            let current_line_text = self.buffer.line(current_row).map_or("", |v| v);
+            let visual_x: usize = current_line_text
+                .chars()
+                .skip(current_start_col)
+                .take(current_col.saturating_sub(current_start_col))
+                .map(char_width)
+                .sum();
+
+            // 在目标视觉行中找到最接近该视觉 X 的逻辑列
+            let target_line_text = self.buffer.line(logical_line).map_or("", |v| v);
+            let new_col = if target_line_text.is_empty() {
+                0
+            } else {
+                let segment: String = target_line_text.chars().skip(start_col).collect();
+                Self::screen_col_to_char_offset(&segment, visual_x) + start_col
+            };
+            let new_col = new_col.min(end_col);
             self.buffer.set_cursor(logical_line, new_col);
         }
     }
@@ -664,25 +715,19 @@ impl MarkdownEditor {
             return None;
         }
 
-        // 计算视觉行号
-        let visual_row = content_y + self.scroll_offset;
+        // 使用渲染行元数据映射，将屏幕行号转换为渲染行索引
+        let rendered_row = content_y + self.rendered_vl_map_index;
 
-        // 使用 wrap_engine 映射到逻辑行
-        let (logical_row, _start_col) = self.wrap.visual_to_logical(visual_row);
+        let vl_meta = self.rendered_vl_map.get(rendered_row)?;
+
+        let logical_row = vl_meta.logical_line;
+        let vl_start_col = vl_meta.start_col;
 
         // 减去行号区域得到内容列
         let content_col = content_x.saturating_sub(line_num_width);
 
         // 获取该逻辑行的原始文本
         let line_text = self.buffer.line(logical_row)?;
-
-        // 获取该逻辑行的所有视觉行，找到当前视觉行的子行偏移
-        let vlines = self.wrap.get_cached_lines(logical_row);
-        let line_visual_offset = self.wrap.visual_offset_of(logical_row);
-        let sub_index = visual_row.saturating_sub(line_visual_offset);
-
-        // 该视觉行的起始字符偏移
-        let vl_start_col = vlines.get(sub_index).map(|vl| vl.start_col).unwrap_or(0);
 
         // 获取该视觉行实际渲染的文本段（从 start_col 开始的子串）
         let vl_text: String = line_text.chars().skip(vl_start_col).collect();
@@ -908,6 +953,11 @@ impl MarkdownEditor {
         let scroll_in_rendered = self.scroll_offset.saturating_sub(visual_offset);
         let visible_start = scroll_in_rendered.min(all_visual_lines.len().saturating_sub(1));
         let visible_end = (scroll_in_rendered + content_height).min(all_visual_lines.len());
+
+        // 保存渲染行元数据映射，用于鼠标点击定位
+        // rendered_vl_map_index 是当前屏幕顶部对应的渲染行索引
+        self.rendered_vl_map = all_vl_meta;
+        self.rendered_vl_map_index = visible_start;
 
         let mut lines_to_render: Vec<Line<'static>> = if visible_start < all_visual_lines.len() {
             all_visual_lines[visible_start..visible_end].to_vec()
