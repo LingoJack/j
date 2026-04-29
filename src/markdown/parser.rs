@@ -112,14 +112,9 @@ impl ParseContext {
         }
         if let Some(children) = self.inline_children_stack.last_mut() {
             children
-        } else if self.in_list_item {
-            // 列表项内容追加到最后一个 item
-            if let Some(item) = self.list_items.last_mut() {
-                &mut item.content
-            } else {
-                &mut self.current_inlines
-            }
         } else {
+            // 列表项内的 inline 统一追加到 current_inlines，
+            // 在 End(Item) 时由 std::mem::take 收集到 ListItem.content
             &mut self.current_inlines
         }
     }

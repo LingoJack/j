@@ -474,6 +474,45 @@ fn renders_heading_with_prefix() {
 }
 
 #[test]
+fn renders_ordered_list_with_bold_items() {
+    let theme = Theme::from_name(&ThemeName::default());
+    // 精确复现用户报告的场景：有序列表 + 粗体中文
+    let md = "日报已成功写入。总结一下今天写入的 3 条技术日报：\n\n1. **编辑器中文宽字符鼠标点击定位修复** — 修复 char_idx_at_display_col\n2. **Chat UI 鼠标拖拽选区与复制** — 新增完整的鼠标选区功能\n3. **编辑器鼠标定位重构** — screen_to_logical 改用渲染行元数据映射";
+
+    let lines = markdown_to_lines(md, 80, &theme);
+
+    eprintln!("=== ordered list test ===");
+    for (i, line) in lines.iter().enumerate() {
+        eprintln!(
+            "Line {}: {:?}",
+            i,
+            line.spans.iter().map(|s| &s.content).collect::<Vec<_>>()
+        );
+    }
+
+    // 应有序号 1. 2. 3.
+    let all_text: String = lines
+        .iter()
+        .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+        .collect();
+
+    assert!(all_text.contains("1."), "应有序号 '1.'");
+    assert!(all_text.contains("2."), "应有序号 '2.'");
+    assert!(all_text.contains("3."), "应有序号 '3.'");
+
+    // 应有粗体内容
+    assert!(
+        all_text.contains("编辑器中文宽字符鼠标点击定位修复"),
+        "应有第 1 项内容"
+    );
+    assert!(
+        all_text.contains("Chat UI 鼠标拖拽选区与复制"),
+        "应有第 2 项内容"
+    );
+    assert!(all_text.contains("编辑器鼠标定位重构"), "应有第 3 项内容");
+}
+
+#[test]
 fn renders_list_with_bullet() {
     let theme = Theme::from_name(&ThemeName::default());
     let md = "- item one\n- item two";
