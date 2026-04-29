@@ -8,12 +8,12 @@ mod renderer;
 mod search;
 pub mod text_buffer;
 pub mod theme;
-mod vim;
+pub mod vim;
 mod wrap_engine;
 
 mod editor;
 pub use editor::{
-    CursorPolicy, MarkdownEditorOpts, ThemeGalleryItem, open_markdown_editor,
-    open_markdown_editor_on_terminal, open_markdown_editor_with_content,
+    CursorPolicy, EditorAction, MarkdownEditor, MarkdownEditorOpts, ThemeGalleryItem,
+    open_markdown_editor, open_markdown_editor_on_terminal, open_markdown_editor_with_content,
 };
 pub use theme::{EditorTheme, HighlightFn};

@@ -7,9 +7,9 @@ use super::io::{
     cleanup_empty_dirs, copy_to_clipboard, note_file_path, notebook_dir, open_in_finder,
     parse_ratio, save_expanded_dirs, save_panel_ratio,
 };
-use super::types::{AppMode, FlatEntryKind, NotebookApp};
+use super::types::{AppMode, Focus, NotebookApp};
 
-/// 正常模式按键处理，返回 true 表示退出
+/// 正常模式按键处理（焦点在列表区），返回 true 表示退出
 pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return true;
@@ -29,8 +29,11 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         }
         KeyCode::Char('n') | KeyCode::Down | KeyCode::Char('j') => app.move_down(),
         KeyCode::Char('N') | KeyCode::Up | KeyCode::Char('k') => app.move_up(),
-        KeyCode::Enter | KeyCode::Char('e') if app.selected_name().is_some() => {
-            return false; // 编辑操作在 TUI loop 中处理（需暂停/恢复终端）
+        KeyCode::Tab | KeyCode::Right if app.editor.is_some() => {
+            app.focus = Focus::Editor;
+        }
+        KeyCode::Enter if app.selected_name().is_some() && app.editor.is_some() => {
+            app.focus = Focus::Editor;
         }
         KeyCode::Char('a') => {
             app.mode = AppMode::Adding;
@@ -50,25 +53,6 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
                 app.message = None;
             }
         }
-        KeyCode::Tab => {
-            if let Some(sel) = app.state.selected()
-                && sel < app.flat_entries.len()
-                && let FlatEntryKind::Dir { ref dir_path, .. } = app.flat_entries[sel].kind
-            {
-                app.expanded_dirs.toggle(dir_path);
-                save_expanded_dirs(&app.expanded_dirs);
-                app.build_flat_entries();
-                if sel >= app.flat_entries.len() {
-                    app.state
-                        .select(Some(app.flat_entries.len().saturating_sub(1)));
-                }
-                app.update_preview();
-            }
-        }
-        KeyCode::Char('p') if app.selected_real_index().is_some() => {
-            app.mode = AppMode::Preview;
-            app.preview_scroll = 0;
-        }
         KeyCode::Char('/') => {
             app.mode = AppMode::CommandPopup;
             app.cmd_popup_filter.clear();
@@ -77,7 +61,6 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         }
         KeyCode::Char('[') => {
             app.panel_ratio = app.panel_ratio.saturating_sub(5).max(15);
-            app.preview_width = 0;
             app.message = Some(format!(
                 "面板比例: {}:{}",
                 app.panel_ratio,
@@ -87,7 +70,6 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         }
         KeyCode::Char(']') => {
             app.panel_ratio = app.panel_ratio.saturating_add(5).min(60);
-            app.preview_width = 0;
             app.message = Some(format!(
                 "面板比例: {}:{}",
                 app.panel_ratio,
@@ -110,9 +92,6 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
         KeyCode::Char('s') => {
             app.reload();
         }
-        KeyCode::Char('?') => {
-            app.mode = AppMode::Help;
-        }
         _ => {}
     }
 
@@ -121,28 +100,6 @@ pub fn handle_normal_mode(app: &mut NotebookApp, key: KeyEvent) -> bool {
     }
 
     false
-}
-
-/// 预览模式按键处理
-pub fn handle_preview_mode(app: &mut NotebookApp, key: KeyEvent) {
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('p') | KeyCode::Char('q') => {
-            app.mode = AppMode::Normal;
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
-            app.preview_scroll = app.preview_scroll.saturating_add(1);
-        }
-        KeyCode::Up | KeyCode::Char('k') => {
-            app.preview_scroll = app.preview_scroll.saturating_sub(1);
-        }
-        KeyCode::Char('n') => {
-            app.move_down();
-        }
-        KeyCode::Char('N') => {
-            app.move_up();
-        }
-        _ => {}
-    }
 }
 
 /// 输入模式按键处理（添加/重命名/搜索/目录/移动通用）
@@ -183,12 +140,6 @@ pub fn handle_input_mode(app: &mut NotebookApp, key: KeyEvent) {
         }
         _ => {}
     }
-}
-
-/// 帮助模式按键处理（按任意键返回）
-pub fn handle_help_mode(app: &mut NotebookApp, _key: KeyEvent) {
-    app.mode = AppMode::Normal;
-    app.message = None;
 }
 
 /// 确认删除按键处理
@@ -274,7 +225,6 @@ pub fn handle_ratio_input_mode(app: &mut NotebookApp, key: KeyEvent) {
             match parse_ratio(&app.input) {
                 Some(ratio) => {
                     app.panel_ratio = ratio;
-                    app.preview_width = 0; // 强制重新渲染预览
                     app.message = Some(format!("面板比例已设为 {}:{}", ratio, 100 - ratio));
                     save_panel_ratio(ratio);
                 }
@@ -486,7 +436,7 @@ fn enter_search(app: &mut NotebookApp) {
         } else {
             app.state.select(None);
         }
-        app.update_preview();
+        app.load_editor_for_selected();
         app.message = Some(format!(
             "搜索: {} (匹配 {} 条)",
             app.search_filter.as_deref().unwrap_or(""),
@@ -562,7 +512,7 @@ fn execute_cmd_popup_action(app: &mut NotebookApp) {
             app.message = None;
         }
         "help" => {
-            app.mode = AppMode::Help;
+            app.message = Some("使用 Tab 切换到编辑器 | j/k 选择笔记".to_string());
         }
         _ => {}
     }

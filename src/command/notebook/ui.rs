@@ -1,4 +1,4 @@
-use super::app::{AppMode, FlatEntryKind, NotebookApp};
+use super::app::{AppMode, FlatEntryKind, Focus, NotebookApp};
 use crate::tui::components::{
     CommandItem, CommandPopupConfig, ConfirmDialogConfig, StatusInputParams, cursor_wrapped_lines,
     draw_command_popup as render_command_popup, draw_confirm_dialog, draw_status_input,
@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
 /// 绘制 TUI 界面
@@ -57,21 +57,17 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
     f.render_widget(title_block, chunks[0]);
 
     // ========== 主区域 ==========
-    if app.mode == AppMode::Help {
-        render_help(f, chunks[1], &app.theme);
-    } else if app.mode == AppMode::Preview {
-        render_preview_full(f, app, chunks[1]);
-    } else {
+    {
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(app.panel_ratio),       // 笔记列表
-                Constraint::Percentage(100 - app.panel_ratio), // 预览区
+                Constraint::Percentage(100 - app.panel_ratio), // 编辑器区
             ])
             .split(chunks[1]);
 
         render_list(f, app, main_chunks[0]);
-        render_preview(f, app, main_chunks[1]);
+        render_editor(f, app, main_chunks[1]);
 
         // 命令面板弹窗（浮动在主区域上方）
         if app.mode == AppMode::CommandPopup {
@@ -84,15 +80,16 @@ pub fn draw_ui(f: &mut ratatui::Frame, app: &mut NotebookApp) {
 
     // ========== 帮助栏 ==========
     let help_text = match app.mode {
-        AppMode::Normal => {
-            " n/↓ 下移 | N/↑ 上移 | Enter/e 编辑 | a 新建 | d 删除 | r 重命名 | Tab 展开/折叠 | p 预览 | / 命令面板 | [ ] 调整比例 | y 复制 | o 打开目录 | s 刷新 | ? 帮助 | q 退出"
-        }
-        AppMode::Preview => " ↑↓/jk 滚动 | n/N 切换笔记 | p/Esc 退出预览",
+        AppMode::Normal => match app.focus {
+            Focus::List => {
+                " n/↓ 下移 | N/↑ 上移 | Tab/Enter 编辑 | a 新建 | d 删除 | r 重命名 | / 命令面板 | [ ] 调整比例 | y 复制 | o 打开目录 | s 刷新 | q 退出"
+            }
+            Focus::Editor => " Vim 模式编辑 | Esc 返回列表 | :w 保存 | :q 退出编辑器",
+        },
         AppMode::Adding => " Enter 确认新建 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
         AppMode::Renaming => " Enter 确认重命名 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
         AppMode::Search => " Enter 搜索 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
         AppMode::ConfirmDelete => " y 确认删除 | n/Esc 取消",
-        AppMode::Help => " 按任意键返回",
         AppMode::CommandPopup => " ↑↓/jk 选择 | Enter 确认 | 输入筛选 | Esc 取消",
         AppMode::RatioInput => " Enter 确认 | Esc 取消 | 格式: x:y (如 20:80)",
         AppMode::Mkdir => " Enter 确认创建目录 | Esc 取消 | ←→ 移动光标 | Home/End 行首尾",
@@ -259,115 +256,22 @@ fn build_rename_item(
     build_adding_item(input, cursor_pos, width, selected, theme)
 }
 
-/// 渲染右侧预览区
-fn render_preview(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
-    let inner_width = area.width.saturating_sub(2); // 减边框
-    app.render_preview_with_width(inner_width);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
-
-    let content = if app.preview_lines.is_empty() {
-        match &app.preview_content {
-            Some(_) => Paragraph::new(Line::from(Span::styled(
-                "  (空笔记)",
-                Style::default().fg(Color::DarkGray),
-            )))
-            .block(block),
-            None => Paragraph::new(Line::from(Span::styled(
-                "  选择笔记以预览内容",
-                Style::default().fg(Color::DarkGray),
-            )))
-            .block(block),
-        }
+/// 渲染右侧编辑器区域
+fn render_editor(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
+    if let Some(ref mut editor) = app.editor {
+        editor.render(f, area);
     } else {
-        Paragraph::new(app.preview_lines.clone())
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .scroll((app.preview_scroll, 0))
-    };
-    f.render_widget(content, area);
-}
-
-/// 渲染全屏预览
-fn render_preview_full(f: &mut ratatui::Frame, app: &mut NotebookApp, area: Rect) {
-    let inner_width = area.width.saturating_sub(2);
-    app.render_preview_with_width(inner_width);
-
-    let title = match app.selected_name() {
-        Some(name) => format!(" 预览: {} ", name),
-        None => " 预览 ".to_string(),
-    };
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
-        .title(title);
-
-    if app.preview_lines.is_empty() {
+        // 无内容时显示提示
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray));
         let content = Paragraph::new(Line::from(Span::styled(
-            "  (空)",
+            "  选择笔记以编辑内容",
             Style::default().fg(Color::DarkGray),
         )))
         .block(block);
         f.render_widget(content, area);
-    } else {
-        let scroll = app.preview_scroll as usize;
-        let visible_lines: Vec<Line> = app.preview_lines.iter().skip(scroll).cloned().collect();
-        if visible_lines.is_empty() {
-            let content = Paragraph::new(Line::from(Span::styled(
-                "  (已到末尾)",
-                Style::default().fg(Color::DarkGray),
-            )))
-            .block(block);
-            f.render_widget(content, area);
-        } else {
-            let content = Paragraph::new(visible_lines).block(block);
-            f.render_widget(content, area);
-        }
     }
-}
-
-/// 渲染帮助页
-fn render_help(f: &mut ratatui::Frame, area: Rect, theme: &crate::theme::Theme) {
-    use crate::tui::components::{HelpPageConfig, HelpShortcut, draw_help_page};
-
-    let shortcuts = [
-        HelpShortcut::new("  n / ↓ / j    ", "向下移动"),
-        HelpShortcut::new("  N / ↑ / k    ", "向上移动"),
-        HelpShortcut::new("  Enter / e    ", "编辑笔记（Markdown 编辑器）"),
-        HelpShortcut::new("  a            ", "新建笔记"),
-        HelpShortcut::new("  d            ", "删除笔记（需确认）"),
-        HelpShortcut::new("  r            ", "重命名笔记"),
-        HelpShortcut::new("  Tab          ", "展开/折叠目录"),
-        HelpShortcut::new("  / mkdir      ", "新建目录"),
-        HelpShortcut::new("  / mv         ", "移动笔记到目录"),
-        HelpShortcut::new("  p            ", "全屏预览当前笔记"),
-        HelpShortcut::new("  /            ", "打开命令面板"),
-        HelpShortcut::new("  [            ", "缩小左侧面板 (-5%)"),
-        HelpShortcut::new("  ]            ", "扩大左侧面板 (+5%)"),
-        HelpShortcut::new("  y            ", "复制笔记名到剪切板"),
-        HelpShortcut::new("  o            ", "在 Finder 中打开 notebook 目录"),
-        HelpShortcut::new("  s            ", "刷新笔记列表"),
-        HelpShortcut::new("  Esc          ", "清除搜索 / 退出"),
-        HelpShortcut::new("  q            ", "退出"),
-        HelpShortcut::new("  Ctrl+C       ", "强制退出"),
-        HelpShortcut::new("  ?            ", "显示此帮助"),
-    ];
-
-    draw_help_page(
-        f,
-        area,
-        &HelpPageConfig {
-            title: "快捷键帮助",
-            title_icon: None,
-            block_title: Some(" 帮助 "),
-            shortcuts: &shortcuts,
-            footer_lines: None,
-            theme,
-        },
-    );
 }
 
 /// 渲染状态栏
@@ -474,26 +378,6 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
                 },
             );
         }
-        AppMode::Preview => {
-            let status = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    " 预览模式",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    " — ↑↓/jk 滚动 | p/Esc 退出预览",
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            );
-            f.render_widget(status, area);
-        }
         AppMode::CommandPopup => {
             draw_status_input(
                 f,
@@ -525,8 +409,8 @@ fn render_status_bar(f: &mut ratatui::Frame, app: &NotebookApp, area: Rect) {
             );
         }
         _ => {
-            // Normal / Help
-            let msg = app.message.as_deref().unwrap_or("按 ? 查看完整帮助");
+            // Normal
+            let msg = app.message.as_deref().unwrap_or("");
             let status_widget = Paragraph::new(Line::from(Span::styled(
                 format!(" {}", msg),
                 Style::default().fg(Color::Gray),

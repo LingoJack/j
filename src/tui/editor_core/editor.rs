@@ -160,6 +160,11 @@ impl MarkdownEditor {
         self.selected_theme_id
     }
 
+    /// 获取编辑器当前全部文本内容
+    pub fn content(&self) -> String {
+        self.buffer.lines().join("\n")
+    }
+
     /// 获取光标所在的视觉行
     pub fn cursor_visual_line(&self) -> usize {
         let (row, col) = self.buffer.cursor();
@@ -988,7 +993,7 @@ impl MarkdownEditor {
 
         // 渲染状态栏
         let status_bar = self.render_status_bar(area.width as usize);
-        let status_area = Rect::new(0, area.height - 1, area.width, 1);
+        let status_area = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
         let status_block = Block::default().style(Style::default().bg(self.theme.bg_primary));
         f.render_widget(Paragraph::new(status_bar).block(status_block), status_area);
 
@@ -998,7 +1003,7 @@ impl MarkdownEditor {
             Mode::Command(_) | Mode::Search(_) | Mode::CommandPanel(_)
         ) {
             let cmd_bar = self.render_command_bar();
-            let cmd_area = Rect::new(0, area.height - 2, area.width, 1);
+            let cmd_area = Rect::new(area.x, area.y + area.height - 2, area.width, 1);
             let cmd_block = Block::default().style(Style::default().bg(self.theme.bg_primary));
             f.render_widget(Paragraph::new(cmd_bar).block(cmd_block), cmd_area);
         }

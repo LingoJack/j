@@ -12,16 +12,16 @@ pub mod io;
 pub mod types;
 
 // Re-export 外部模块（handler.rs / ui.rs）实际使用的类型
-pub use types::{AppMode, FlatEntryKind, NotebookApp};
+pub use types::{AppMode, FlatEntryKind, Focus, NotebookApp};
 
 // Re-export I/O 函数供 handler.rs 使用
 pub use io::{
-    cleanup_empty_dirs, edit_note_on_terminal, edit_note_with_editor, format_time, load_notes,
-    note_file_path, notebook_dir,
+    cleanup_empty_dirs, edit_note_with_editor, format_time, load_notes, note_file_path,
+    notebook_dir,
 };
 
 // Re-export input 处理函数供 handler.rs 使用
 pub use input::{
-    handle_command_popup_mode, handle_confirm_delete, handle_help_mode, handle_input_mode,
-    handle_normal_mode, handle_preview_mode, handle_ratio_input_mode,
+    handle_command_popup_mode, handle_confirm_delete, handle_input_mode, handle_normal_mode,
+    handle_ratio_input_mode,
 };

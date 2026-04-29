@@ -1,10 +1,10 @@
 //! Notebook 模块的核心数据类型定义。
 
-use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::collections::{BTreeSet, HashSet};
 
 use crate::theme::Theme;
+use crate::tui::editor_core::MarkdownEditor;
 
 use super::io::load_notes;
 
@@ -98,8 +98,6 @@ pub enum FlatEntryKind {
 pub enum AppMode {
     /// 正常浏览模式
     Normal,
-    /// 全屏预览模式
-    Preview,
     /// 新建笔记（输入标题）
     Adding,
     /// 重命名笔记（输入新标题）
@@ -108,8 +106,6 @@ pub enum AppMode {
     Search,
     /// 确认删除
     ConfirmDelete,
-    /// 帮助页
-    Help,
     /// 命令面板（/ 弹窗）
     CommandPopup,
     /// 比例输入模式（如 20:80）
@@ -118,6 +114,16 @@ pub enum AppMode {
     Mkdir,
     /// 移动笔记（输入目标路径）
     Mv,
+}
+
+/// 焦点位置
+#[derive(PartialEq, Clone, Copy, Default)]
+pub enum Focus {
+    /// 焦点在左侧列表
+    #[default]
+    List,
+    /// 焦点在右侧编辑器
+    Editor,
 }
 
 // ========== 命令面板选项 ==========
@@ -144,6 +150,8 @@ pub struct NotebookApp {
     pub state: ListState,
     /// 当前模式
     pub mode: AppMode,
+    /// 焦点位置
+    pub focus: Focus,
     /// 输入缓冲区（新建/重命名/搜索/比例）
     pub input: String,
     /// 光标位置（字符索引）
@@ -154,14 +162,6 @@ pub struct NotebookApp {
     pub search_filter: Option<String>,
     /// 重命名目标索引
     pub rename_index: Option<usize>,
-    /// 预览区滚动偏移
-    pub preview_scroll: u16,
-    /// 当前预览内容缓存（原始 Markdown）
-    pub preview_content: Option<String>,
-    /// 预览渲染行缓存（Markdown 渲染后的 Lines）
-    pub preview_lines: Vec<Line<'static>>,
-    /// 预览区宽度缓存（用于判断是否需要重新渲染）
-    pub preview_width: u16,
     /// 强制退出输入缓冲
     pub quit_input: String,
     /// 新建笔记确认后，待打开编辑器的标题（TUI loop 消费）
@@ -178,6 +178,12 @@ pub struct NotebookApp {
     pub flat_entries: Vec<FlatEntry>,
     /// 当前主题
     pub theme: Theme,
+    /// 嵌入式 Markdown 编辑器（选中文件时可用）
+    pub editor: Option<MarkdownEditor>,
+    /// 当前编辑的笔记路径
+    pub editing_path: Option<String>,
+    /// 编辑器内容是否已修改（需要保存）
+    pub editor_dirty: bool,
     /// 上次鼠标点击时间（用于双击检测）
     pub last_click_time: Option<std::time::Instant>,
     /// 上次点击位置（列，行，用于双击位置判定）
@@ -205,15 +211,12 @@ impl NotebookApp {
             notes,
             state: ListState::default(),
             mode: AppMode::Normal,
+            focus: Focus::default(),
             input: String::new(),
             cursor_pos: 0,
             message: None,
             search_filter: None,
             rename_index: None,
-            preview_scroll: 0,
-            preview_content: None,
-            preview_lines: Vec::new(),
-            preview_width: 0,
             quit_input: String::new(),
             pending_edit_title: None,
             panel_ratio: super::io::load_panel_ratio().unwrap_or(30),
@@ -222,6 +225,9 @@ impl NotebookApp {
             expanded_dirs,
             flat_entries: Vec::new(),
             theme,
+            editor: None,
+            editing_path: None,
+            editor_dirty: false,
             last_click_time: None,
             last_click_pos: None,
             last_click_index: None,
@@ -231,7 +237,7 @@ impl NotebookApp {
         if !app.flat_entries.is_empty() {
             app.state.select(Some(0));
         }
-        app.update_preview();
+        app.load_editor_for_selected();
         app
     }
 
@@ -247,7 +253,7 @@ impl NotebookApp {
         {
             self.state.select(Some(count - 1));
         }
-        self.update_preview();
+        self.load_editor_for_selected();
         self.message = Some(format!("已刷新，共 {} 篇笔记", self.notes.len()));
     }
 
@@ -344,8 +350,7 @@ impl NotebookApp {
             None => 0,
         };
         self.state.select(Some(i));
-        self.preview_scroll = 0;
-        self.update_preview();
+        self.load_editor_for_selected();
     }
 
     /// 向上移动（不循环）
@@ -359,62 +364,106 @@ impl NotebookApp {
             None => 0,
         };
         self.state.select(Some(i));
-        self.preview_scroll = 0;
-        self.update_preview();
+        self.load_editor_for_selected();
     }
 
-    /// 更新预览内容缓存
-    pub fn update_preview(&mut self) {
+    /// 为选中条目加载编辑器
+    pub fn load_editor_for_selected(&mut self) {
         match self.selected_entry() {
             Some(FlatEntry {
                 kind: FlatEntryKind::File { note_index },
                 ..
             }) => {
-                self.preview_content = super::io::read_note_content(&self.notes[*note_index].path);
+                let path = self.notes[*note_index].path.clone();
+                let content = super::io::read_note_content(&path).unwrap_or_default();
+                self.create_editor(&path, &content);
+                self.editing_path = Some(path);
             }
             Some(FlatEntry {
-                kind:
-                    FlatEntryKind::Dir {
-                        dir_path,
-                        file_count,
-                        ..
-                    },
+                kind: FlatEntryKind::Dir { .. },
                 ..
             }) => {
-                self.preview_content = Some(format!(
-                    "目录: {}\n包含 {} 篇笔记\n\n按 Tab 展开/折叠",
-                    dir_path, file_count
-                ));
+                // 目录条目不加载编辑器
+                self.editor = None;
+                self.editing_path = None;
             }
             None => {
-                self.preview_content = None;
+                self.editor = None;
+                self.editing_path = None;
             }
         }
-        self.render_preview_lines();
+        self.editor_dirty = false;
     }
 
-    /// 渲染 Markdown 预览行（带宽度参数，供 UI 层调用）
-    pub fn render_preview_with_width(&mut self, width: u16) {
-        if width != self.preview_width {
-            self.preview_width = width;
-            self.render_preview_lines();
-        }
-    }
-
-    /// 内部渲染预览行
-    fn render_preview_lines(&mut self) {
-        let width = if self.preview_width > 0 {
-            self.preview_width as usize
-        } else {
-            Self::DEFAULT_PREVIEW_WIDTH
+    /// 创建 Markdown 编辑器
+    fn create_editor(&mut self, title: &str, content: &str) {
+        use crate::markdown::highlight::highlight_code_line;
+        use crate::theme::ThemeName;
+        use crate::tui::editor_core::{
+            EditorTheme, HighlightFn, MarkdownEditorOpts, ThemeGalleryItem,
         };
-        match &self.preview_content {
-            Some(content) if !content.is_empty() => {
-                self.preview_lines =
-                    crate::markdown::markdown_to_lines(content, width, &self.theme);
+
+        // 构建 EditorTheme
+        let editor_theme = EditorTheme::from(&self.theme);
+
+        // 构建主题画廊
+        let theme_gallery: Vec<ThemeGalleryItem> = ThemeName::all()
+            .iter()
+            .map(|name| {
+                let t = Theme::from_name(name);
+                (name.display_name(), name.to_str(), EditorTheme::from(&t))
+            })
+            .collect();
+
+        // 高亮函数
+        fn bridge_highlight(
+            line: &str,
+            lang: &str,
+            theme: &EditorTheme,
+        ) -> Vec<ratatui::text::Span<'static>> {
+            highlight_code_line(line, lang, theme)
+        }
+
+        let opts = MarkdownEditorOpts {
+            title,
+            theme: editor_theme,
+            highlight_fn: bridge_highlight as HighlightFn,
+            theme_gallery,
+            cursor_policy: crate::tui::editor_core::CursorPolicy::default(),
+        };
+
+        self.editor = Some(MarkdownEditor::new(
+            opts.title,
+            content,
+            opts.theme,
+            opts.highlight_fn,
+            opts.theme_gallery,
+            opts.cursor_policy,
+        ));
+    }
+
+    /// 保存当前编辑器内容到磁盘
+    pub fn save_editor_content(&mut self) -> bool {
+        if self.editor.is_none() || self.editing_path.is_none() {
+            return false;
+        }
+
+        let path = self.editing_path.clone().unwrap();
+        let file_path = super::io::note_file_path(&path);
+
+        // 获取编辑器当前内容
+        let content = self.editor.as_ref().unwrap().content();
+
+        // 写入文件
+        match std::fs::write(&file_path, &content) {
+            Ok(()) => {
+                self.editor_dirty = false;
+                self.message = Some(format!("已保存: {}", path));
+                true
             }
-            _ => {
-                self.preview_lines.clear();
+            Err(e) => {
+                self.message = Some(format!("保存失败: {}", e));
+                false
             }
         }
     }
@@ -429,7 +478,7 @@ impl NotebookApp {
         } else {
             self.state.select(None);
         }
-        self.update_preview();
+        self.load_editor_for_selected();
         self.message = Some("已清除搜索过滤".to_string());
     }
 
@@ -449,6 +498,5 @@ impl NotebookApp {
             .collect()
     }
 
-    /// 默认预览宽度
-    const DEFAULT_PREVIEW_WIDTH: usize = 80;
+    // 无额外常量
 }

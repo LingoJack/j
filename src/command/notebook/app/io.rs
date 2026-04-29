@@ -161,6 +161,7 @@ pub fn format_time(time: std::time::SystemTime) -> String {
 // ========== 编辑器操作 ==========
 
 /// 用 Markdown 编辑器编辑笔记（在已有 terminal 上），返回是否有内容变化
+#[allow(dead_code)]
 pub fn edit_note_on_terminal(
     title: &str,
     terminal: &mut ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::Stdout>>,
