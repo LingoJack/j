@@ -134,8 +134,13 @@ impl ParseContext {
     }
 
     /// 将当前 inline 容器 flush 为一个 block（Paragraph）
+    /// 将当前 inline 容器 flush 为一个 block（Paragraph）。
+    /// 在列表项内不 flush，因为列表项的内容应该保留到 `End(Item)` 时收集。
     fn flush_paragraph(&mut self) {
         if self.current_inlines.is_empty() {
+            return;
+        }
+        if self.in_list_item {
             return;
         }
         let inlines = std::mem::take(&mut self.current_inlines);
