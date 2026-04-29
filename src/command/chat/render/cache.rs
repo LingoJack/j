@@ -187,6 +187,7 @@ pub fn build_message_lines_incremental(
                 lines: old_per.lines.clone(),
                 msg_index: idx,
                 is_selected,
+                original_content: old_per.original_content.clone(),
             });
             continue;
         }
@@ -309,6 +310,7 @@ pub fn build_message_lines_incremental(
             lines: tmp_lines,
             msg_index: idx,
             is_selected,
+            original_content: m.content.clone(),
         });
     }
 

@@ -7,7 +7,9 @@ use crate::command::chat::render::cache::build_message_lines_incremental;
 use crate::command::chat::render::cache::copy_to_clipboard;
 use crate::markdown::image_cache::ImageState;
 use crate::markdown::image_loader::load_image;
-use crate::tui::components::selection::rebuild_spans_with_selection;
+use crate::tui::components::selection::{
+    compute_line_selection_range, normalize_selection, rebuild_spans_with_selection,
+};
 use crate::util::safe_lock;
 use crate::util::text::char_width;
 
@@ -132,7 +134,7 @@ fn get_line_at(
 // ========== 鼠标选区坐标映射 ==========
 
 /// 将屏幕坐标转换为 (全局行号, 行内字符偏移)
-/// 返回 None 表示点击在消息区域外或空白区域
+/// 返回 None 表示点击在消息区域外、空白区域或不可选行（边框、label、空行等）
 pub fn screen_to_text_pos(
     screen_x: u16,
     screen_y: u16,
@@ -154,11 +156,35 @@ pub fn screen_to_text_pos(
     let history_total = cached.history_line_count;
     let line = get_line_at(cached, global_line, history_total)?;
 
-    // 3. 计算行内字符偏移（考虑 CJK 宽字符）
+    // 3. 检查该行是否可选（跳过边框、label、空行）
+    if !is_selectable_line(line) {
+        return None;
+    }
+
+    // 4. 计算行内字符偏移（考虑 CJK 宽字符）
     let local_x = screen_x.saturating_sub(inner.x) as usize;
     let char_offset = spans_to_char_offset(&line.spans, local_x);
 
     Some((global_line, char_offset))
+}
+
+/// 判断一个渲染行是否可选（即非边框、非空行、非 label）
+/// 通过检查 spans 内容来区分：边框行只含空格和 box-drawing 字符
+fn is_selectable_line(line: &Line<'static>) -> bool {
+    let full_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+    // 空行不可选
+    if full_text.trim().is_empty() {
+        return false;
+    }
+    // 纯边框行不可选（只含空格 + box-drawing 字符：╭╮╰╯│─┌┐└┘）
+    let trimmed = full_text.trim();
+    if trimmed
+        .chars()
+        .all(|c| "╭╮╰╯│─┌┐└┘┬┴┼┤├".contains(c) || c == ' ')
+    {
+        return false;
+    }
+    true
 }
 
 /// 根据 spans 和屏幕 x 坐标计算字符偏移
@@ -179,82 +205,64 @@ fn spans_to_char_offset(spans: &[Span<'static>], screen_col: usize) -> usize {
     char_offset
 }
 
-/// 计算某全局行与选区的交集字符范围
-/// 返回 (start, end)，若无交集返回 (0, 0)
-fn compute_line_selection_range(
-    line_idx: usize,
-    anchor: (usize, usize),
-    current: (usize, usize),
-) -> (usize, usize) {
-    // 确保 start <= end
-    let ((sr, sc), (er, ec)) =
-        if anchor.0 < current.0 || (anchor.0 == current.0 && anchor.1 <= current.1) {
-            (anchor, current)
-        } else {
-            (current, anchor)
-        };
-
-    if line_idx < sr || line_idx > er {
-        return (0, 0); // 无交集
-    }
-
-    let start = if line_idx == sr { sc } else { 0 };
-    // 中间行：end 设为 usize::MAX（表示到行尾）
-    let end = if line_idx == er { ec } else { usize::MAX };
-
-    (start, end)
-}
-
-/// 根据 anchor 和 current 提取选区纯文本
+/// 根据选区的全局行号范围，提取所覆盖消息的 markdown 原文。
+/// 由于边框/空行不可选中，选区只会落在消息内容区域，
+/// 因此通过全局行号定位到对应的 PerMsgCache，拼接 original_content。
 pub fn extract_selection_text(
     cached: &MsgLinesCache,
     anchor: (usize, usize),
     current: (usize, usize),
 ) -> String {
-    // 确保 start <= end
-    let ((sr, sc), (er, ec)) =
-        if anchor.0 < current.0 || (anchor.0 == current.0 && anchor.1 <= current.1) {
-            (anchor, current)
-        } else {
-            (current, anchor)
-        };
+    let ((sr, _), (er, _)) = normalize_selection(anchor, current);
 
     let history_total = cached.history_line_count;
 
-    let mut result = String::new();
+    // 找出选区覆盖的所有消息索引（去重、保序）
+    let mut msg_indices: Vec<usize> = Vec::new();
     for gline in sr..=er {
-        let line = match get_line_at(cached, gline, history_total) {
-            Some(l) => l,
-            None => continue,
-        };
+        if let Some(msg_idx) = global_line_to_msg_index(cached, gline, history_total)
+            && msg_indices.last() != Some(&msg_idx)
+        {
+            msg_indices.push(msg_idx);
+        }
+    }
 
-        // 跳过图片标记 span
-        let line_text: String = line
-            .spans
-            .iter()
-            .filter(|s| !s.content.starts_with("\x00IMG:"))
-            .map(|s| &*s.content)
-            .collect();
+    if msg_indices.is_empty() {
+        return String::new();
+    }
 
-        // 计算该行的截取范围
-        let start_col = if gline == sr { sc } else { 0 };
-        let end_col = if gline == er {
-            ec.min(line_text.chars().count())
-        } else {
-            line_text.chars().count()
-        };
-
-        let chars: Vec<char> = line_text.chars().collect();
-        if start_col < end_col && start_col < chars.len() {
-            let slice_end = end_col.min(chars.len());
-            let slice: String = chars[start_col..slice_end].iter().collect();
-            result.push_str(&slice);
-            if gline < er {
-                result.push('\n');
+    // 拼接各条消息的 markdown 原文
+    let mut parts: Vec<&str> = Vec::with_capacity(msg_indices.len());
+    for &idx in &msg_indices {
+        if let Some(per) = cached.per_msg_lines.get(idx) {
+            let content = per.original_content.as_str();
+            if !content.is_empty() {
+                parts.push(content);
             }
         }
     }
-    result
+
+    parts.join("\n\n")
+}
+
+/// 将全局行号映射到对应的消息索引
+fn global_line_to_msg_index(
+    cached: &MsgLinesCache,
+    global_line: usize,
+    history_total: usize,
+) -> Option<usize> {
+    // 如果在流式区域，返回最后一条历史消息的索引（或 None）
+    if global_line >= history_total {
+        return cached.per_msg_lines.last().map(|p| p.msg_index);
+    }
+    // 二分查找 msg_start_lines
+    let pos = cached
+        .msg_start_lines
+        .partition_point(|&(_, start)| start <= global_line);
+    if pos == 0 {
+        return None;
+    }
+    Some(cached.msg_start_lines[pos - 1].0)
 }
 
 /// 复制选区文本到剪贴板，并显示 toast 提示
@@ -275,7 +283,7 @@ pub fn copy_selection_to_clipboard(app: &mut ChatApp) {
     }
 
     if copy_to_clipboard(&text) {
-        app.show_toast("已复制到剪贴板", false);
+        app.show_toast("已复制 Markdown 原文", false);
     } else {
         app.show_toast("复制到剪贴板失败", true);
     }
@@ -328,8 +336,10 @@ fn render_text_pass(
             let p = Paragraph::new(Line::from(visible_spans)).style(params.msg_area_bg);
             f.render_widget(p, line_area);
             img_markers.push((i, height, url));
-        } else if let Some(sel) = selection {
-            // 有选区时：检查该行是否与选区有交集
+        } else if let Some(sel) = selection
+            && is_selectable_line(line)
+        {
+            // 有选区且该行可选（非边框/空行）：检查该行是否与选区有交集
             let (sel_start, sel_end) =
                 compute_line_selection_range(line_idx, sel.anchor, sel.current);
             if sel_start < sel_end {

@@ -12,7 +12,7 @@ use super::{
     wrap_engine::WrapEngine,
 };
 
-use crate::tui::components::selection::rebuild_spans_with_selection;
+use crate::tui::components::selection::{normalize_selection, rebuild_spans_with_selection};
 use crossterm::{
     event::{self, Event, MouseButton, MouseEvent, MouseEventKind},
     execute,
@@ -870,13 +870,7 @@ impl MarkdownEditor {
         if *self.vim.mode() == Mode::Visual {
             let (vs_row, vs_col) = self.vim.visual_start();
             let (ve_row, ve_col) = (cursor_row, cursor_col);
-            // 确保 start <= end
-            let ((sr, sc), (er, ec)) = if vs_row < ve_row || (vs_row == ve_row && vs_col <= ve_col)
-            {
-                ((vs_row, vs_col), (ve_row, ve_col))
-            } else {
-                ((ve_row, ve_col), (vs_row, vs_col))
-            };
+            let ((sr, sc), (er, ec)) = normalize_selection((vs_row, vs_col), (ve_row, ve_col));
 
             let sel_fg = self.theme.text_normal;
             let sel_bg = Color::DarkGray;

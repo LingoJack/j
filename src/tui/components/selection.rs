@@ -5,6 +5,43 @@
 use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 
+/// 归一化选区起点和终点，确保 start <= end。
+///
+/// 返回 `((sr, sc), (er, ec))`，其中 `sr <= er`，且当 `sr == er` 时 `sc <= ec`。
+pub fn normalize_selection(
+    anchor: (usize, usize),
+    current: (usize, usize),
+) -> ((usize, usize), (usize, usize)) {
+    if anchor.0 < current.0 || (anchor.0 == current.0 && anchor.1 <= current.1) {
+        (anchor, current)
+    } else {
+        (current, anchor)
+    }
+}
+
+/// 计算某行与选区的交集字符范围（简化版，无视觉行折行概念）。
+///
+/// 适用于 Chat UI 的扁平全局行号体系。
+///
+/// 返回 `(start, end)`，若无交集返回 `(0, 0)`。
+/// 当 `end == usize::MAX` 时表示高亮到行尾。
+pub fn compute_line_selection_range(
+    line_idx: usize,
+    anchor: (usize, usize),
+    current: (usize, usize),
+) -> (usize, usize) {
+    let ((sr, sc), (er, ec)) = normalize_selection(anchor, current);
+
+    if line_idx < sr || line_idx > er {
+        return (0, 0); // 无交集
+    }
+
+    let start = if line_idx == sr { sc } else { 0 };
+    let end = if line_idx == er { ec } else { usize::MAX };
+
+    (start, end)
+}
+
 /// 选区样式上下文，用于减少辅助函数的参数数量。
 pub(crate) struct SelectionStyle {
     normal: Style,
