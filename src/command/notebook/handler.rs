@@ -459,6 +459,8 @@ struct MouseLayoutInfo {
     list_area: Option<Rect>,
     /// 预览区域（仅在 Normal 模式有效）
     preview_area: Option<Rect>,
+    /// 分割线 x 坐标（列表区和预览区的交界列）
+    divider_x: Option<u16>,
 }
 
 /// 鼠标动作返回值
@@ -478,31 +480,34 @@ fn compute_mouse_layout(frame_area: Rect, app: &NotebookApp) -> MouseLayoutInfo 
     };
 
     // Normal/CommandPopup 模式下计算列表/预览区域
-    let (list_area, preview_area) = if matches!(app.mode, AppMode::Normal | AppMode::CommandPopup) {
-        let list_width = frame_area.width * app.panel_ratio / 100;
-        let preview_width = frame_area.width.saturating_sub(list_width);
-        (
-            Some(Rect {
-                x: frame_area.x,
-                y: main_area.y,
-                width: list_width,
-                height: main_area.height,
-            }),
-            Some(Rect {
-                x: frame_area.x + list_width,
-                y: main_area.y,
-                width: preview_width,
-                height: main_area.height,
-            }),
-        )
-    } else {
-        (None, None)
-    };
+    let (list_area, preview_area, divider_x) =
+        if matches!(app.mode, AppMode::Normal | AppMode::CommandPopup) {
+            let list_width = frame_area.width * app.panel_ratio / 100;
+            let preview_width = frame_area.width.saturating_sub(list_width);
+            (
+                Some(Rect {
+                    x: frame_area.x,
+                    y: main_area.y,
+                    width: list_width,
+                    height: main_area.height,
+                }),
+                Some(Rect {
+                    x: frame_area.x + list_width,
+                    y: main_area.y,
+                    width: preview_width,
+                    height: main_area.height,
+                }),
+                Some(frame_area.x + list_width),
+            )
+        } else {
+            (None, None, None)
+        };
 
     MouseLayoutInfo {
         main_area,
         list_area,
         preview_area,
+        divider_x,
     }
 }
 
@@ -521,6 +526,8 @@ fn handle_mouse_event(
         MouseEventKind::Down(MouseButton::Left) => {
             handle_left_click(app, mouse.column, mouse.row, layout)
         }
+        MouseEventKind::Drag(MouseButton::Left) => handle_drag(app, mouse.column, layout),
+        MouseEventKind::Up(MouseButton::Left) => handle_mouse_up(app),
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             handle_scroll(app, mouse.column, mouse.row, layout, mouse.kind)
         }
@@ -548,6 +555,18 @@ fn handle_left_click(
             // 减去顶部边框行
             app.preview_scroll = relative_y.saturating_sub(1);
         }
+        return None;
+    }
+
+    // Normal 模式：检测是否点击分割线（优先级高于列表点击）
+    if let Some(divider_x) = layout.divider_x
+        && col >= divider_x.saturating_sub(2)
+        && col <= divider_x + 2
+        && row >= layout.main_area.y
+        && row < layout.main_area.y + layout.main_area.height
+    {
+        // 点击分割线：开始拖拽
+        app.is_dragging_panel = true;
         return None;
     }
 
@@ -649,5 +668,36 @@ fn handle_scroll(
         }
     }
 
+    None
+}
+
+/// 处理鼠标拖拽（调整面板比例）
+fn handle_drag(app: &mut NotebookApp, col: u16, layout: &MouseLayoutInfo) -> Option<MouseAction> {
+    if !app.is_dragging_panel {
+        return None;
+    }
+
+    // 计算新的比例
+    let frame_width = layout.main_area.width;
+    if frame_width == 0 {
+        return None;
+    }
+
+    let relative_x = col.saturating_sub(layout.main_area.x);
+    let new_ratio = (relative_x as u32 * 100 / frame_width as u32) as u16;
+
+    // 限制范围 15-60
+    app.panel_ratio = new_ratio.clamp(15, 60);
+
+    None
+}
+
+/// 处理鼠标释放（结束拖拽）
+fn handle_mouse_up(app: &mut NotebookApp) -> Option<MouseAction> {
+    if app.is_dragging_panel {
+        app.is_dragging_panel = false;
+        // 保存比例设置
+        super::app::io::save_panel_ratio(app.panel_ratio);
+    }
     None
 }

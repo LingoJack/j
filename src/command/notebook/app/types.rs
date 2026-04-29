@@ -184,6 +184,8 @@ pub struct NotebookApp {
     pub last_click_pos: Option<(u16, u16)>,
     /// 上次点击选中的索引（用于双击索引判定）
     pub last_click_index: Option<usize>,
+    /// 是否正在拖拽分割线调整面板比例
+    pub is_dragging_panel: bool,
 }
 
 impl Default for NotebookApp {
@@ -223,6 +225,7 @@ impl NotebookApp {
             last_click_time: None,
             last_click_pos: None,
             last_click_index: None,
+            is_dragging_panel: false,
         };
         app.build_flat_entries();
         if !app.flat_entries.is_empty() {
