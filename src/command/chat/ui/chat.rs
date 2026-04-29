@@ -187,6 +187,51 @@ fn is_selectable_line(line: &Line<'static>) -> bool {
     true
 }
 
+/// 判断一个 span 是否是装饰性的（边框、padding、图片标记）
+fn is_decorative_span(span: &Span<'static>) -> bool {
+    let content = span.content.as_ref();
+    // 图片标记
+    if content.starts_with("\x00IMG:") {
+        return true;
+    }
+    // 纯空格（padding）
+    if content.chars().all(|c| c == ' ') {
+        return true;
+    }
+    // 纯 box-drawing 字符（边框）
+    if content.chars().all(|c| "╭╮╰╯│─┌┐└┘┬┴┼┤├".contains(c)) {
+        return true;
+    }
+    false
+}
+
+/// 从渲染行的 spans 中提取纯内容文本（去掉装饰 span）
+/// 返回 (内容文本, 内容在渲染行中的起始字符偏移)
+fn extract_content_from_line(line: &Line<'static>) -> (String, usize) {
+    let mut content = String::new();
+    let mut content_start_offset = 0usize;
+    let mut in_content = false;
+
+    for span in &line.spans {
+        let span_chars = span.content.chars().count();
+        if is_decorative_span(span) {
+            if !in_content {
+                // 还在内容之前的装饰区域
+                content_start_offset += span_chars;
+            }
+            // 内容之后的装饰区域，忽略
+        } else {
+            // 内容 span
+            if !in_content {
+                in_content = true;
+            }
+            content.push_str(span.content.as_ref());
+        }
+    }
+
+    (content, content_start_offset)
+}
+
 /// 根据 spans 和屏幕 x 坐标计算字符偏移
 fn spans_to_char_offset(spans: &[Span<'static>], screen_col: usize) -> usize {
     let mut acc_width = 0usize;
@@ -205,64 +250,71 @@ fn spans_to_char_offset(spans: &[Span<'static>], screen_col: usize) -> usize {
     char_offset
 }
 
-/// 根据选区的全局行号范围，提取所覆盖消息的 markdown 原文。
-/// 由于边框/空行不可选中，选区只会落在消息内容区域，
-/// 因此通过全局行号定位到对应的 PerMsgCache，拼接 original_content。
+/// 根据选区范围，从渲染行中提取纯内容文本（去掉边框和 padding）。
+/// anchor/current 的字符偏移是相对于渲染行的，会自动转换为内容偏移。
 pub fn extract_selection_text(
     cached: &MsgLinesCache,
     anchor: (usize, usize),
     current: (usize, usize),
 ) -> String {
-    let ((sr, _), (er, _)) = normalize_selection(anchor, current);
-
+    let ((sr, sc), (er, ec)) = normalize_selection(anchor, current);
     let history_total = cached.history_line_count;
 
-    // 找出选区覆盖的所有消息索引（去重、保序）
-    let mut msg_indices: Vec<usize> = Vec::new();
+    let mut result = String::new();
+
     for gline in sr..=er {
-        if let Some(msg_idx) = global_line_to_msg_index(cached, gline, history_total)
-            && msg_indices.last() != Some(&msg_idx)
-        {
-            msg_indices.push(msg_idx);
+        let line = match get_line_at(cached, gline, history_total) {
+            Some(l) => l,
+            None => continue,
+        };
+
+        // 跳过不可选行
+        if !is_selectable_line(line) {
+            continue;
         }
-    }
 
-    if msg_indices.is_empty() {
-        return String::new();
-    }
+        // 提取纯内容文本和内容起始偏移
+        let (content_text, content_start) = extract_content_from_line(line);
+        if content_text.is_empty() {
+            continue;
+        }
 
-    // 拼接各条消息的 markdown 原文
-    let mut parts: Vec<&str> = Vec::with_capacity(msg_indices.len());
-    for &idx in &msg_indices {
-        if let Some(per) = cached.per_msg_lines.get(idx) {
-            let content = per.original_content.as_str();
-            if !content.is_empty() {
-                parts.push(content);
+        // 将渲染行偏移转换为内容偏移
+        let render_start = if gline == sr { sc } else { 0 };
+        let render_end = if gline == er { ec } else { usize::MAX };
+
+        // 内容区域：[content_start, content_start + content_len)
+        let content_len = content_text.chars().count();
+        let content_end = content_start + content_len;
+
+        // 计算交集：渲染选区 ∩ 内容区域
+        let intersect_start = render_start.max(content_start);
+        let intersect_end = if render_end == usize::MAX {
+            content_end
+        } else {
+            render_end.min(content_end)
+        };
+
+        if intersect_start >= intersect_end {
+            continue;
+        }
+
+        // 转为内容文本内的字符偏移
+        let text_start = intersect_start - content_start;
+        let text_end = intersect_end - content_start;
+
+        let chars: Vec<char> = content_text.chars().collect();
+        let text_end = text_end.min(chars.len());
+        if text_start < text_end {
+            let slice: String = chars[text_start..text_end].iter().collect();
+            if !result.is_empty() {
+                result.push('\n');
             }
+            result.push_str(&slice);
         }
     }
 
-    parts.join("\n\n")
-}
-
-/// 将全局行号映射到对应的消息索引
-fn global_line_to_msg_index(
-    cached: &MsgLinesCache,
-    global_line: usize,
-    history_total: usize,
-) -> Option<usize> {
-    // 如果在流式区域，返回最后一条历史消息的索引（或 None）
-    if global_line >= history_total {
-        return cached.per_msg_lines.last().map(|p| p.msg_index);
-    }
-    // 二分查找 msg_start_lines
-    let pos = cached
-        .msg_start_lines
-        .partition_point(|&(_, start)| start <= global_line);
-    if pos == 0 {
-        return None;
-    }
-    Some(cached.msg_start_lines[pos - 1].0)
+    result
 }
 
 /// 复制选区文本到剪贴板，并显示 toast 提示
@@ -283,7 +335,7 @@ pub fn copy_selection_to_clipboard(app: &mut ChatApp) {
     }
 
     if copy_to_clipboard(&text) {
-        app.show_toast("已复制 Markdown 原文", false);
+        app.show_toast("已复制到剪贴板", false);
     } else {
         app.show_toast("复制到剪贴板失败", true);
     }

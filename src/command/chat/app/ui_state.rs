@@ -240,8 +240,6 @@ pub struct PerMsgCache {
     pub msg_index: usize,
     /// 渲染时此消息是否被选中（用于浏览模式下检测选中状态变化）
     pub is_selected: bool,
-    /// 原始 markdown 内容（用于鼠标选区复制）
-    pub original_content: String,
 }
 
 /// 聊天界面模式枚举，定义 TUI 的不同交互状态
