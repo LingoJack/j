@@ -13,7 +13,7 @@ use crate::util::fuzzy;
 const NOTEBOOK_POLL_MS: u64 = 16;
 use crate::{error, info};
 use colored::Colorize;
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, MouseButton, MouseEvent, MouseEventKind};
 use crossterm::{
     event::{self, Event},
     execute,
@@ -376,23 +376,53 @@ fn run_notebook_tui_internal() -> io::Result<()> {
                                 }
                                 Focus::Editor => {
                                     if let Some(ref mut editor) = app.editor {
-                                        let input =
-                                            crate::tui::editor_core::vim::Input::from_keycode(
-                                                key.code,
-                                                key.modifiers,
-                                            );
-                                        let action = editor.handle_input(&input);
-                                        match action {
-                                            crate::tui::editor_core::EditorAction::Submit(_) => {
-                                                // 用户保存退出
-                                                app.save_editor_content();
-                                                app.focus = Focus::List;
+                                        // Esc 在 Normal 模式下直接切回列表
+                                        if key.code == KeyCode::Esc {
+                                            // 检查编辑器是否在 Normal 模式（通过先处理 Esc，
+                                            // 如果返回 Continue 说明已经在 Normal 模式）
+                                            let input =
+                                                crate::tui::editor_core::vim::Input::from_keycode(
+                                                    key.code,
+                                                    key.modifiers,
+                                                );
+                                            let action = editor.handle_input(&input);
+                                            match action {
+                                                crate::tui::editor_core::EditorAction::Continue => {
+                                                    // Esc 在 Normal 模式无效果 → 切回列表
+                                                    if app.editor_dirty {
+                                                        app.save_editor_content();
+                                                    }
+                                                    app.focus = Focus::List;
+                                                }
+                                                crate::tui::editor_core::EditorAction::Submit(
+                                                    _,
+                                                ) => {
+                                                    app.save_editor_content();
+                                                    app.focus = Focus::List;
+                                                }
+                                                crate::tui::editor_core::EditorAction::Cancel => {
+                                                    app.focus = Focus::List;
+                                                }
                                             }
-                                            crate::tui::editor_core::EditorAction::Cancel => {
-                                                // 用户取消（不保存）
-                                                app.focus = Focus::List;
+                                        } else {
+                                            let input =
+                                                crate::tui::editor_core::vim::Input::from_keycode(
+                                                    key.code,
+                                                    key.modifiers,
+                                                );
+                                            let action = editor.handle_input(&input);
+                                            match action {
+                                                crate::tui::editor_core::EditorAction::Submit(
+                                                    _,
+                                                ) => {
+                                                    app.save_editor_content();
+                                                    app.focus = Focus::List;
+                                                }
+                                                crate::tui::editor_core::EditorAction::Cancel => {
+                                                    app.focus = Focus::List;
+                                                }
+                                                _ => {}
                                             }
-                                            _ => {}
                                         }
                                     }
                                 }
