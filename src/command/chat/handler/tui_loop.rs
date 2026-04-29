@@ -135,6 +135,23 @@ fn dispatch_event(
                 return false;
             }
             *needs_redraw = true;
+
+            // 选区快捷键：c 复制、Esc 取消（优先级高于模式分发）
+            if app.ui.mouse_selection.is_some() {
+                match key.code {
+                    KeyCode::Char('c') => {
+                        copy_selection_to_clipboard(app);
+                        app.ui.mouse_selection = None;
+                        return false;
+                    }
+                    KeyCode::Esc => {
+                        app.ui.mouse_selection = None;
+                        return false;
+                    }
+                    _ => {}
+                }
+            }
+
             match app.ui.mode {
                 ChatMode::Chat => {
                     if handle_chat_mode(app, key) {
@@ -224,7 +241,9 @@ fn dispatch_event(
                 *needs_redraw = true;
                 false
             }
-            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
+            MouseEventKind::Down(MouseButton::Left) => {
+                // 点击消息区域：开始选择
+                // 点击空白区域：清除选区
                 if let Some(inner) = app.ui.msg_area_inner
                     && let Some(ref cached) = app.ui.msg_lines_cache
                     && let Some((gline, coff)) = screen_to_text_pos(
@@ -235,27 +254,41 @@ fn dispatch_event(
                         cached,
                     )
                 {
-                    match app.ui.mouse_selection {
-                        Some(ref mut sel) => {
-                            sel.current = (gline, coff);
-                        }
-                        None => {
-                            app.ui.mouse_selection = Some(MouseSelection {
-                                anchor: (gline, coff),
-                                current: (gline, coff),
-                            });
-                        }
+                    app.ui.mouse_selection = Some(MouseSelection {
+                        anchor: (gline, coff),
+                        current: (gline, coff),
+                    });
+                    *needs_redraw = true;
+                } else {
+                    // 点击空白区域：清除选区
+                    if app.ui.mouse_selection.is_some() {
+                        app.ui.mouse_selection = None;
+                        *needs_redraw = true;
                     }
+                }
+                false
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                // 拖拽：更新选区终点
+                if let Some(inner) = app.ui.msg_area_inner
+                    && let Some(ref cached) = app.ui.msg_lines_cache
+                    && let Some((gline, coff)) = screen_to_text_pos(
+                        mouse.column,
+                        mouse.row,
+                        inner,
+                        app.ui.scroll_offset,
+                        cached,
+                    )
+                    && let Some(ref mut sel) = app.ui.mouse_selection
+                {
+                    sel.current = (gline, coff);
                     *needs_redraw = true;
                 }
                 false
             }
             MouseEventKind::Up(MouseButton::Left) => {
-                if app.ui.mouse_selection.is_some() {
-                    copy_selection_to_clipboard(app);
-                    app.ui.mouse_selection = None;
-                    *needs_redraw = true;
-                }
+                // 松手：保持选区，不自动复制
+                // 用户需要按 c 来复制
                 false
             }
             _ => false,
