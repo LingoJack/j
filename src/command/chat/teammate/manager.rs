@@ -361,15 +361,19 @@ impl TeammateManager {
 
         // Teammate 发出的消息写入 display_messages 以在 TUI 中显示
         // Main agent 的消息不需要（Main 的工具调用本身已通过 agent loop 显示）
-        // ★ 同时写入 context_messages 以注入 Main Agent LLM context（有意为之的设计）
+        // ★ context 通道：XML 包裹文本（Main Agent LLM context 需要 <Name> 标签识别来源）
+        // ★ display 通道：纯文本（sender_name 已标注来源，XML 标签多余）
         if from != "Main" {
-            let display_msg =
+            // context 消息：带 XML 标签包裹
+            let context_msg =
                 ChatMessage::text(MessageRole::Assistant, &broadcast_message).with_sender(from);
-            if let Ok(mut display) = self.display_messages.lock() {
-                display.push(display_msg.clone());
-            }
             if let Ok(mut context) = self.context_messages.lock() {
-                context.push(display_msg);
+                context.push(context_msg);
+            }
+            // display 消息：纯文本（无 XML 包裹）
+            let display_msg = ChatMessage::text(MessageRole::Assistant, text).with_sender(from);
+            if let Ok(mut display) = self.display_messages.lock() {
+                display.push(display_msg);
             }
         }
     }

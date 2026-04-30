@@ -465,29 +465,28 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         }
 
         // 在 TUI 中显示 teammate 的工具调用
-        // - SendMessage：跳过（broadcast 已单独显示消息内容）
-        // - IgnoreMessage：跳过（语义就是"静默"，不应留可见痕迹去打扰其他 agent context）
+        // - SendMessage：display 通道显示工具卡片，context 通道跳过（broadcast 已单独推入消息内容）
+        // - IgnoreMessage：display 通道显示工具卡片，context 通道跳过（语义是"静默"）
         // ★ context 通道：XML 包裹文本（Main Agent LLM context）
         // ★ display 通道：tool_calls 结构体（渲染为工具卡片）
         if let Ok(manager) = teammate_manager.lock() {
             let sender_label = format!("Teammate@{}", name);
             for item in &tool_items {
-                if matches!(item.name.as_str(), "SendMessage" | "IgnoreMessage") {
-                    continue;
+                // context：文本格式（XML 包裹）— SendMessage/IgnoreMessage 跳过
+                if !matches!(item.name.as_str(), "SendMessage" | "IgnoreMessage") {
+                    let context_msg = ChatMessage::text(
+                        MessageRole::Assistant,
+                        format!(
+                            "<{}>[called tool {}]</{}>",
+                            sender_label, item.name, sender_label
+                        ),
+                    )
+                    .with_sender(&sender_label);
+                    if let Ok(mut context) = manager.context_messages.lock() {
+                        context.push(context_msg);
+                    }
                 }
-                // context：文本格式（XML 包裹）
-                let context_msg = ChatMessage::text(
-                    MessageRole::Assistant,
-                    format!(
-                        "<{}>[called tool {}]</{}>",
-                        sender_label, item.name, sender_label
-                    ),
-                )
-                .with_sender(&sender_label);
-                if let Ok(mut context) = manager.context_messages.lock() {
-                    context.push(context_msg);
-                }
-                // display：结构体格式
+                // display：结构体格式 — 所有工具都显示（包括 SendMessage/IgnoreMessage）
                 if let Ok(mut display) = manager.display_messages.lock() {
                     display.push(ChatMessage {
                         role: MessageRole::Assistant,
