@@ -42,14 +42,14 @@ pub struct UIState {
     pub input_buffer: TextBuffer,
     /// 当前模式
     pub mode: ChatMode,
-    /// 消息列表滚动偏移
-    pub scroll_offset: u16,
+    /// 消息列表滚动偏移（usize 支持超过 65535 行）
+    pub scroll_offset: usize,
     /// 流式输出时是否自动滚动到底部
     pub auto_scroll: bool,
     /// 消息浏览模式中选中的消息索引
     pub browse_msg_index: usize,
     /// 浏览模式下当前消息内部的滚动偏移
-    pub browse_scroll_offset: u16,
+    pub browse_scroll_offset: usize,
     /// 浏览模式关键词过滤
     pub browse_filter: String,
     /// 浏览模式角色过滤: None=全部, Some("ai"), Some("user")
@@ -243,7 +243,7 @@ pub struct MsgLinesCache {
 }
 
 /// 单条消息的渲染缓存
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PerMsgCache {
     /// 消息内容长度（用于检测变化）
     pub content_len: usize,

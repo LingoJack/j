@@ -81,7 +81,7 @@ impl ChatApp {
         let user_msg = ChatMessage::text(MessageRole::User, &text);
         self.push_both_channels(user_msg);
         self.ui.auto_scroll = true;
-        self.ui.scroll_offset = u16::MAX;
+        self.ui.scroll_offset = usize::MAX;
 
         // ★ PostSendMessage hook（fire-and-forget，不阻塞主线程）
         {

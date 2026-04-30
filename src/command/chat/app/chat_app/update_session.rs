@@ -179,7 +179,7 @@ impl ChatApp {
             self.rebuild_channels_from_loaded(messages);
             // 恢复目标会话的状态
             self.restore_session_state();
-            self.ui.scroll_offset = u16::MAX;
+            self.ui.scroll_offset = usize::MAX;
             self.ui.msg_lines_cache = None;
             self.ui.session_restore_confirm = false;
             if let Ok(mut ct) = self.context_tokens.lock() {

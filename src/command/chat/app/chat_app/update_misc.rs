@@ -93,7 +93,7 @@ impl ChatApp {
     pub(super) fn update_stream_chunk(&mut self) {
         self.state.retry_hint = None;
         if self.ui.auto_scroll {
-            self.ui.scroll_offset = u16::MAX;
+            self.ui.scroll_offset = usize::MAX;
         }
         if self.ws_bridge.is_some() {
             let content = safe_lock(&self.state.streaming_content, "ws_stream_chunk").clone();
@@ -422,7 +422,7 @@ impl ChatApp {
         self.ui.expand_tools = !self.ui.expand_tools;
         self.ui.msg_lines_cache = None;
         self.ui.auto_scroll = true;
-        self.ui.scroll_offset = u16::MAX;
+        self.ui.scroll_offset = usize::MAX;
         self.show_toast(
             if self.ui.expand_tools {
                 "展开工具详情"

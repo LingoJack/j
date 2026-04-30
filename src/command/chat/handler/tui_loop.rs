@@ -508,7 +508,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
             app.rebuild_channels_from_loaded(messages);
             // 恢复 session 状态（tasks/todos/skills/hooks/teammates 等）
             app.restore_session_state();
-            app.ui.scroll_offset = u16::MAX; // 滚动到底部
+            app.ui.scroll_offset = usize::MAX; // 滚动到底部
             app.ui.msg_lines_cache = None;
         }
     }

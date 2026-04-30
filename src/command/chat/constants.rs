@@ -140,7 +140,7 @@ pub const THINKING_PULSE_MIN_FACTOR: f64 = 0.3;
 pub const PAGE_SCROLL_LINES: usize = 10;
 
 /// 精细滚动行数
-pub const FINE_SCROLL_LINES: u16 = 3;
+pub const FINE_SCROLL_LINES: usize = 3;
 
 /// 工具交互选项上限
 pub const TOOL_INTERACT_MAX_OPTIONS: usize = 3;

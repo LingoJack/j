@@ -36,7 +36,7 @@ impl ChatApp {
                 self.display_read_offset = new_count;
                 self.ui.msg_lines_cache = None;
                 if self.ui.auto_scroll && self.state.is_loading {
-                    self.ui.scroll_offset = u16::MAX;
+                    self.ui.scroll_offset = usize::MAX;
                 }
             }
         }
@@ -490,7 +490,7 @@ impl ChatApp {
             )
             .clear();
             if self.ui.auto_scroll {
-                self.ui.scroll_offset = u16::MAX;
+                self.ui.scroll_offset = usize::MAX;
             }
             self.show_toast("已取消", false);
         } else if !had_error {
@@ -584,7 +584,7 @@ impl ChatApp {
                 self.show_toast("回复完成 ✓", false);
             }
             if self.ui.auto_scroll {
-                self.ui.scroll_offset = u16::MAX;
+                self.ui.scroll_offset = usize::MAX;
             }
         } else {
             safe_lock(

@@ -464,7 +464,7 @@ impl ChatApp {
             ui: UIState {
                 input_buffer: TextBuffer::new(),
                 mode: ChatMode::Chat,
-                scroll_offset: u16::MAX,
+                scroll_offset: usize::MAX,
                 auto_scroll: true,
                 browse_msg_index: 0,
                 browse_scroll_offset: 0,
@@ -715,7 +715,7 @@ impl ChatApp {
             }
             self.ui.msg_lines_cache = None;
             self.ui.auto_scroll = true;
-            self.ui.scroll_offset = u16::MAX;
+            self.ui.scroll_offset = usize::MAX;
         } else {
             self.send_message_internal(text);
         }

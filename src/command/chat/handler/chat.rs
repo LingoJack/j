@@ -206,7 +206,7 @@ fn handle_enter_key(app: &mut ChatApp, key: KeyEvent) {
     app.ui.clear_input();
     app.ui.msg_lines_cache = None;
     app.ui.auto_scroll = true;
-    app.ui.scroll_offset = u16::MAX;
+    app.ui.scroll_offset = usize::MAX;
 }
 
 /// 上下箭头：多行输入或视觉换行时移动光标，否则滚动消息列表

@@ -142,7 +142,7 @@ pub fn screen_to_text_pos(
     screen_x: u16,
     screen_y: u16,
     inner: Rect,
-    scroll_offset: u16,
+    scroll_offset: usize,
     cached: &MsgLinesCache,
 ) -> Option<(usize, usize)> {
     // 1. 计算全局行号
@@ -150,7 +150,7 @@ pub fn screen_to_text_pos(
     if local_y >= inner.height {
         return None;
     }
-    let global_line = scroll_offset as usize + local_y as usize;
+    let global_line = scroll_offset + local_y as usize;
     if global_line >= cached.total_line_count {
         return None;
     }
@@ -356,69 +356,158 @@ struct TextPassParams<'a> {
 
 /// 文字渲染 pass：遍历可见行渲染文字，同时收集图片标记。
 /// 返回 `img_markers`: `(display_row, height, url)` 列表，供后续图片渲染 pass 使用。
+/// P1 优化：通过消息范围预计算，避免逐行二分查找，只遍历可见消息。
 fn render_text_pass(
     f: &mut ratatui::Frame,
     params: &TextPassParams,
     selection: Option<&MouseSelection>,
 ) -> Vec<(usize, u16, String)> {
     let mut img_markers: Vec<(usize, u16, String)> = Vec::new();
-    for (i, line_idx) in (params.start..params.end).enumerate() {
-        let line = match get_line_at(params.cached, line_idx, params.history_total) {
-            Some(l) => l,
-            None => continue,
-        };
-        let y = params.inner.y + i as u16;
-        let line_area = Rect::new(params.inner.x, y, params.inner.width, 1);
+    let cached = params.cached;
+    let history_total = params.history_total;
 
-        // 检查是否有图片标记 span
-        let img_info: Option<(u16, String)> = line.spans.iter().find_map(|span| {
-            span.content.strip_prefix("\x00IMG:").and_then(|rest| {
-                rest.find(':').map(|p| {
-                    let height: u16 = rest[..p].parse().unwrap_or(20);
-                    let url = rest[p + 1..].to_string();
-                    (height, url)
-                })
-            })
-        });
+    // ★ P1 优化：使用二分查找定位第一条可见消息，然后顺序遍历
+    // 只遍历 [start, end) 范围内涉及的 per_msg_lines 和 streaming_lines
+    let visible_start = params.start;
+    let visible_end = params.end;
 
-        if let Some((height, url)) = img_info {
-            let visible_spans: Vec<Span> = line
-                .spans
-                .iter()
-                .filter(|s| !s.content.starts_with("\x00IMG:"))
-                .cloned()
-                .collect();
-            let p = Paragraph::new(Line::from(visible_spans)).style(params.msg_area_bg);
-            f.render_widget(p, line_area);
-            img_markers.push((i, height, url));
-        } else if let Some(sel) = selection
-            && is_selectable_line(line)
-        {
-            // 有选区且该行可选（非边框/空行）：检查该行是否与选区有交集
-            let (sel_start, sel_end) =
-                compute_line_selection_range(line_idx, sel.anchor, sel.current);
-            if sel_start < sel_end {
-                let fg = params.msg_area_bg.fg.unwrap_or(Color::White);
-                let highlighted_spans = rebuild_spans_with_selection(
-                    &line.spans,
-                    0, // Chat UI 无行号
-                    sel_start,
-                    sel_end,
-                    fg,
-                    Color::DarkGray,
-                );
-                let p = Paragraph::new(Line::from(highlighted_spans)).style(params.msg_area_bg);
-                f.render_widget(p, line_area);
-            } else {
-                let p = Paragraph::new(line.clone()).style(params.msg_area_bg);
-                f.render_widget(p, line_area);
+    // 预计算历史消息的范围
+    if visible_start < history_total && !cached.per_msg_lines.is_empty() {
+        // 二分查找第一条可见消息
+        let first_msg_pos = cached
+            .msg_start_lines
+            .partition_point(|&(_, start)| start <= visible_start)
+            .saturating_sub(1);
+        let first_msg_start = cached.msg_start_lines[first_msg_pos].1;
+
+        // 顺序遍历消息，直到超出可见范围
+        let mut line_idx = first_msg_start;
+        for msg_pos in first_msg_pos..cached.per_msg_lines.len() {
+            let per = &cached.per_msg_lines[msg_pos];
+            let msg_line_count = per.lines.len();
+
+            // 此消息的所有行
+            for local in 0..msg_line_count {
+                if line_idx >= visible_end {
+                    break;
+                }
+                if line_idx >= visible_start {
+                    let screen_i = line_idx - visible_start;
+                    let y = params.inner.y + screen_i as u16;
+                    let line_area = Rect::new(params.inner.x, y, params.inner.width, 1);
+                    let line = &per.lines[local];
+
+                    render_single_line(
+                        f,
+                        line,
+                        line_area,
+                        line_idx,
+                        selection,
+                        params.msg_area_bg,
+                        &mut img_markers,
+                        screen_i,
+                    );
+                }
+                line_idx += 1;
             }
-        } else {
-            let p = Paragraph::new(line.clone()).style(params.msg_area_bg);
-            f.render_widget(p, line_area);
+            if line_idx >= visible_end {
+                break;
+            }
         }
     }
+
+    // 流式内容部分
+    if visible_end > history_total {
+        let stream_start = visible_start.saturating_sub(history_total);
+        let stream_end = visible_end - history_total;
+        for (local, line) in cached
+            .streaming_lines
+            .iter()
+            .enumerate()
+            .take(stream_end)
+            .skip(stream_start)
+        {
+            let screen_i = history_total + local - visible_start;
+            if screen_i >= visible_end - visible_start {
+                break;
+            }
+            let y = params.inner.y + screen_i as u16;
+            let line_area = Rect::new(params.inner.x, y, params.inner.width, 1);
+            let global_idx = history_total + local;
+
+            render_single_line(
+                f,
+                line,
+                line_area,
+                global_idx,
+                selection,
+                params.msg_area_bg,
+                &mut img_markers,
+                screen_i,
+            );
+        }
+    }
+
     img_markers
+}
+
+/// 渲染单行（处理图片标记、选区高亮等）
+#[allow(clippy::too_many_arguments)]
+fn render_single_line(
+    f: &mut ratatui::Frame,
+    line: &Line<'static>,
+    line_area: Rect,
+    line_idx: usize,
+    selection: Option<&MouseSelection>,
+    msg_area_bg: Style,
+    img_markers: &mut Vec<(usize, u16, String)>,
+    screen_i: usize,
+) {
+    // 检查是否有图片标记 span
+    let img_info: Option<(u16, String)> = line.spans.iter().find_map(|span| {
+        span.content.strip_prefix("\x00IMG:").and_then(|rest| {
+            rest.find(':').map(|p| {
+                let height: u16 = rest[..p].parse().unwrap_or(20);
+                let url = rest[p + 1..].to_string();
+                (height, url)
+            })
+        })
+    });
+
+    if let Some((height, url)) = img_info {
+        let visible_spans: Vec<Span> = line
+            .spans
+            .iter()
+            .filter(|s| !s.content.starts_with("\x00IMG:"))
+            .cloned()
+            .collect();
+        let p = Paragraph::new(Line::from(visible_spans)).style(msg_area_bg);
+        f.render_widget(p, line_area);
+        img_markers.push((screen_i, height, url));
+    } else if let Some(sel) = selection
+        && is_selectable_line(line)
+    {
+        let (sel_start, sel_end) = compute_line_selection_range(line_idx, sel.anchor, sel.current);
+        if sel_start < sel_end {
+            let fg = msg_area_bg.fg.unwrap_or(Color::White);
+            let highlighted_spans = rebuild_spans_with_selection(
+                &line.spans,
+                0,
+                sel_start,
+                sel_end,
+                fg,
+                Color::DarkGray,
+            );
+            let p = Paragraph::new(Line::from(highlighted_spans)).style(msg_area_bg);
+            f.render_widget(p, line_area);
+        } else {
+            let p = Paragraph::new(line.clone()).style(msg_area_bg);
+            f.render_widget(p, line_area);
+        }
+    } else {
+        let p = Paragraph::new(line.clone()).style(msg_area_bg);
+        f.render_widget(p, line_area);
+    }
 }
 
 /// 图片渲染 pass：根据图片标记处理各状态的图片（Ready/Failed/Loading/Pending），
@@ -607,58 +696,117 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     } else {
         None
     };
-    let cache_hit = if !app.state.is_loading {
-        if let Some(ref cache) = app.ui.msg_lines_cache {
-            cache.msg_count == msg_count
-                && cache.last_msg_len == last_msg_len
-                && cache.streaming_len == streaming_len
-                && cache.bubble_max_width == bubble_max_width
-                && cache.browse_index == current_browse_index
-                && cache.tool_confirm_idx == current_tool_confirm_idx
-                && cache.render_version == RENDER_VERSION
-        } else {
-            false
-        }
+    // === 分离历史缓存和流式缓存的命中判断 ===
+    // 历史缓存：消息数量、内容、气泡宽度变化时才需要重建
+    // 流式缓存：每帧重新渲染，但复用 stable_lines 增量缓存
+    let history_cache_valid = if let Some(ref cache) = app.ui.msg_lines_cache {
+        cache.msg_count == msg_count
+            && cache.bubble_max_width == bubble_max_width
+            && cache.expand_tools == app.ui.expand_tools
+            && cache.browse_index == current_browse_index
+            && cache.render_version == RENDER_VERSION
+            // 验证每条消息内容长度一致（避免遍历全部，只检查数量和最后一条）
+            && cache.per_msg_lines.len() == msg_count
+            && cache.last_msg_len == last_msg_len
     } else {
         false
     };
 
+    // 流式内容需要更新的条件
+    let streaming_needs_update = app.state.is_loading
+        || app
+            .ui
+            .msg_lines_cache
+            .as_ref()
+            .map(|c| c.streaming_len != streaming_len)
+            .unwrap_or(true)
+        || app
+            .ui
+            .msg_lines_cache
+            .as_ref()
+            .map(|c| c.tool_confirm_idx != current_tool_confirm_idx)
+            .unwrap_or(true);
+
+    // 缓存完全命中：历史有效且流式无需更新
+    let cache_hit = history_cache_valid && !streaming_needs_update;
+
     if !cache_hit {
-        let old_cache = app.ui.msg_lines_cache.take();
-        let (
-            new_msg_start_lines,
-            new_per_msg,
-            new_streaming_lines,
-            new_stable_lines,
-            new_stable_offset,
-        ) = build_message_lines_incremental(app, inner_width, bubble_max_width, old_cache.as_ref());
-        let total_line_count: usize =
-            new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>() + new_streaming_lines.len();
-        let history_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum();
-        app.ui.msg_lines_cache = Some(MsgLinesCache {
-            msg_count,
-            last_msg_len,
-            streaming_len,
-            bubble_max_width,
-            browse_index: current_browse_index,
-            tool_confirm_idx: current_tool_confirm_idx,
-            total_line_count,
-            history_line_count,
-            msg_start_lines: new_msg_start_lines,
-            per_msg_lines: new_per_msg,
-            streaming_lines: new_streaming_lines,
-            streaming_stable_lines: new_stable_lines,
-            streaming_stable_offset: new_stable_offset,
-            expand_tools: app.ui.expand_tools,
-            render_version: RENDER_VERSION,
-        });
+        if history_cache_valid {
+            // ★ P3 核心优化：历史缓存有效，只重建流式内容
+            // 避免遍历 1500 条消息、避免 clone Vec<PerMsgCache>
+            let old_cache = app.ui.msg_lines_cache.take();
+            let (new_streaming_lines, new_stable_lines, new_stable_offset) =
+                crate::command::chat::render::cache::rebuild_streaming_only(
+                    app,
+                    inner_width,
+                    bubble_max_width,
+                    old_cache.as_ref(),
+                );
+            let new_streaming_len = new_streaming_lines.len();
+            let old = old_cache.unwrap();
+            // history_line_count 不变，total_line_count = history + streaming
+            let total_line_count = old.history_line_count + new_streaming_len;
+            app.ui.msg_lines_cache = Some(MsgLinesCache {
+                msg_count: old.msg_count,
+                last_msg_len: old.last_msg_len,
+                streaming_len,
+                bubble_max_width: old.bubble_max_width,
+                browse_index: old.browse_index,
+                tool_confirm_idx: current_tool_confirm_idx,
+                total_line_count,
+                history_line_count: old.history_line_count,
+                msg_start_lines: old.msg_start_lines,
+                per_msg_lines: old.per_msg_lines,
+                streaming_lines: new_streaming_lines,
+                streaming_stable_lines: new_stable_lines,
+                streaming_stable_offset: new_stable_offset,
+                expand_tools: old.expand_tools,
+                render_version: old.render_version,
+            });
+        } else {
+            // 历史缓存也失效，完整重建
+            let old_cache = app.ui.msg_lines_cache.take();
+            let (
+                new_msg_start_lines,
+                new_per_msg,
+                new_streaming_lines,
+                new_stable_lines,
+                new_stable_offset,
+            ) = build_message_lines_incremental(
+                app,
+                inner_width,
+                bubble_max_width,
+                old_cache.as_ref(),
+            );
+            let total_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum::<usize>()
+                + new_streaming_lines.len();
+            let history_line_count: usize = new_per_msg.iter().map(|p| p.lines.len()).sum();
+            app.ui.msg_lines_cache = Some(MsgLinesCache {
+                msg_count,
+                last_msg_len,
+                streaming_len,
+                bubble_max_width,
+                browse_index: current_browse_index,
+                tool_confirm_idx: current_tool_confirm_idx,
+                total_line_count,
+                history_line_count,
+                msg_start_lines: new_msg_start_lines,
+                per_msg_lines: new_per_msg,
+                streaming_lines: new_streaming_lines,
+                streaming_stable_lines: new_stable_lines,
+                streaming_stable_offset: new_stable_offset,
+                expand_tools: app.ui.expand_tools,
+                render_version: RENDER_VERSION,
+            });
+        }
     }
 
     let cached = match app.ui.msg_lines_cache.as_ref() {
         Some(c) => c,
         None => return,
     };
-    let total_lines = cached.total_line_count as u16;
+    // 使用 usize 避免超过 65535 行时溢出
+    let total_lines = cached.total_line_count;
 
     f.render_widget(block, area);
 
@@ -668,7 +816,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     });
     // 缓存 inner rect 供鼠标事件处理使用
     app.ui.msg_area_inner = Some(inner);
-    let visible_height = inner.height;
+    let visible_height = inner.height as usize;
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     if app.ui.mode != ChatMode::Browse {
@@ -677,12 +825,12 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             ChatMode::ToolConfirm | ChatMode::AgentPermConfirm | ChatMode::PlanApprovalConfirm
         ) {
             if app.ui.auto_scroll
-                || app.ui.scroll_offset == u16::MAX
+                || app.ui.scroll_offset == usize::MAX
                 || app.ui.scroll_offset > max_scroll
             {
                 app.ui.scroll_offset = max_scroll;
             }
-        } else if app.ui.scroll_offset == u16::MAX || app.ui.scroll_offset >= max_scroll {
+        } else if app.ui.scroll_offset == usize::MAX || app.ui.scroll_offset >= max_scroll {
             app.ui.scroll_offset = max_scroll;
             app.ui.auto_scroll = true;
         }
@@ -690,13 +838,13 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         .msg_start_lines
         .iter()
         .find(|(idx, _)| *idx == app.ui.browse_msg_index)
-        .map(|(_, line)| *line as u16)
+        .map(|(_, line)| *line)
     {
         let msg_line_count = cached
             .per_msg_lines
             .get(app.ui.browse_msg_index)
             .map(|c| c.lines.len())
-            .unwrap_or(1) as u16;
+            .unwrap_or(1);
         let msg_max_scroll = msg_line_count.saturating_sub(visible_height);
         if app.ui.browse_scroll_offset > msg_max_scroll {
             app.ui.browse_scroll_offset = msg_max_scroll;
@@ -717,8 +865,8 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
             Some(c) => c,
             None => return,
         };
-        let start = app.ui.scroll_offset as usize;
-        let end = (start + visible_height as usize).min(cached.total_line_count);
+        let start = app.ui.scroll_offset;
+        let end = (start + visible_height).min(cached.total_line_count);
         let history_total = cached.history_line_count;
         let msg_area_bg = Style::default().bg(app.ui.theme.bg_primary);
         let selection = app.ui.mouse_selection.as_ref();
@@ -743,7 +891,7 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
         inner,
         img_markers,
         start,
-        visible_height,
+        visible_height as u16,
         bubble_max_width,
         app,
     );

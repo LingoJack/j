@@ -57,7 +57,7 @@ impl ChatApp {
                 Ok(messages) => {
                     // 重建双通道（从加载的消息 → display + context）
                     self.rebuild_channels_from_loaded(messages);
-                    self.ui.scroll_offset = u16::MAX;
+                    self.ui.scroll_offset = usize::MAX;
                     self.ui.msg_lines_cache = None;
                     self.ui.clear_input();
                     // context 持久化
