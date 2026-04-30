@@ -210,3 +210,104 @@ fn test_shell_words_mixed() {
         vec!["python3", "-c", "import os; print(os.getcwd())"]
     );
 }
+
+#[test]
+fn test_background_go_run() {
+    // go run ... & 应被拦截
+    assert!(check_blocking_command(
+        "cd /tmp && go run ./cmd/server/... 2>&1 & sleep 4 && curl -s http://localhost:8080/health"
+    )
+    .is_some());
+    // 没有 & 的 go run 不应被拦截（走了正常的 segment 检查）
+    assert!(check_blocking_command("go run ./cmd/server/...").is_none());
+}
+
+#[test]
+fn test_background_npm_start() {
+    assert!(check_blocking_command("npm start &").is_some());
+    assert!(check_blocking_command("npm run dev &").is_some());
+    assert!(check_blocking_command("yarn start &").is_some());
+    // 没有 & 不拦截
+    assert!(check_blocking_command("npm start").is_none());
+}
+
+#[test]
+fn test_background_node_server() {
+    assert!(check_blocking_command("node server.js &").is_some());
+    // node -e '...' 不是服务
+    assert!(check_blocking_command("node -e 'console.log(1)'").is_none());
+}
+
+#[test]
+fn test_background_python_server() {
+    assert!(check_blocking_command("python3 -m http.server 8000 &").is_some());
+    assert!(check_blocking_command("python manage.py runserver &").is_some());
+    // 没有 & 不拦截
+    assert!(check_blocking_command("python3 -m http.server 8000").is_none());
+}
+
+#[test]
+fn test_background_docker_compose() {
+    assert!(check_blocking_command("docker compose up &").is_some());
+    assert!(check_blocking_command("docker-compose up -d &").is_some());
+    // 没有 & 不拦截
+    assert!(check_blocking_command("docker compose up -d").is_none());
+}
+
+#[test]
+fn test_background_redis() {
+    assert!(check_blocking_command("redis-server &").is_some());
+}
+
+#[test]
+fn test_background_java_jar() {
+    assert!(check_blocking_command("java -jar app.jar &").is_some());
+}
+
+#[test]
+fn test_background_dotnet() {
+    assert!(check_blocking_command("dotnet run &").is_some());
+    assert!(check_blocking_command("dotnet watch &").is_some());
+}
+
+#[test]
+fn test_background_normal_command_not_blocked() {
+    // sleep & 不是服务命令，不应拦截
+    assert!(check_blocking_command("sleep 5 &").is_none());
+    // echo & 不是服务命令
+    assert!(check_blocking_command("echo hello &").is_none());
+}
+
+#[test]
+fn test_background_ampersand_vs_logical_and() {
+    // && 不应触发后台检测
+    assert!(check_blocking_command("cd /tmp && ls").is_none());
+    assert!(check_blocking_command("go build ./... && go test ./...").is_none());
+}
+
+#[test]
+fn test_split_command_segments_with_ampersand() {
+    let segs = split_command_segments("cmd1 & cmd2 && cmd3");
+    assert_eq!(segs, vec!["cmd1", "cmd2", "cmd3"]);
+}
+
+#[test]
+fn test_contains_background_ampersand() {
+    assert!(contains_background_ampersand("cmd &"));
+    assert!(contains_background_ampersand("cmd1 & cmd2"));
+    assert!(!contains_background_ampersand("cmd1 && cmd2"));
+    assert!(!contains_background_ampersand("cmd"));
+    // & 在引号内不算
+    assert!(!contains_background_ampersand("echo 'a & b'"));
+    // 重定向 2>&1 不算
+    assert!(!contains_background_ampersand("cmd 2>&1"));
+    assert!(!contains_background_ampersand("go run ./... 2>&1"));
+}
+
+#[test]
+fn test_background_with_redirect() {
+    // 2>&1 重定向不应触发后台检测
+    assert!(check_blocking_command("go run ./cmd/server/... 2>&1 &").is_some());
+    // 没有 & 的重定向不拦截
+    assert!(check_blocking_command("go run ./cmd/server/... 2>&1").is_none());
+}

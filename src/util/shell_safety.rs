@@ -72,6 +72,13 @@ pub fn is_dangerous_command(cmd: &str) -> bool {
 /// 检查命令是否为阻塞式交互命令（vim、top、less 等），返回匹配到的命令名
 pub fn check_blocking_command(cmd: &str) -> Option<&'static str> {
     let cmd_trimmed = cmd.trim();
+
+    // 优先检测"长运行服务 + &"模式：在 shell 中用 & 后台化的服务命令
+    // 应该使用 run_in_background: true 而非 shell 内部 &
+    if let Some(msg) = check_background_service(cmd_trimmed) {
+        return Some(msg);
+    }
+
     let segments = split_command_segments(cmd_trimmed);
 
     for segment in &segments {
@@ -102,11 +109,19 @@ fn split_command_segments(cmd: &str) -> Vec<&str> {
             '&' if !in_single && !in_double => {
                 let rest = &cmd[i + '&'.len_utf8()..];
                 if rest.starts_with('&') {
+                    // && 逻辑 AND 分隔符
                     let seg = cmd[start..i].trim();
                     if !seg.is_empty() {
                         segments.push(seg);
                     }
                     start = i + "&&".len();
+                } else if !cmd[..i].ends_with('&') && !cmd[..i].ends_with('>') {
+                    // 单个 & 后台运行分隔符（排除 && 的第二个 &，以及重定向 >&）
+                    let seg = cmd[start..i].trim();
+                    if !seg.is_empty() {
+                        segments.push(seg);
+                    }
+                    start = i + '&'.len_utf8();
                 }
             }
             '|' if !in_single && !in_double => {
@@ -128,6 +143,250 @@ fn split_command_segments(cmd: &str) -> Vec<&str> {
     }
     if segments.is_empty() {
         segments.push(cmd);
+    }
+    segments
+}
+
+/// 检测"长运行服务命令 + shell & 后台化"模式。
+/// 当用户用 `cmd &` 在 shell 中后台化一个服务进程时，
+/// 应该使用 `run_in_background: true` 让工具层面管理，而非依赖 shell 的 &。
+fn check_background_service(cmd: &str) -> Option<&'static str> {
+    // 需要命令中包含独立的 &（非 &&）后台运行符号
+    if !contains_background_ampersand(cmd) {
+        return None;
+    }
+
+    // 将命令按 & 分割，检查每个后台段是否包含长运行服务命令
+    let bg_segments = split_at_background(cmd);
+    for segment in &bg_segments {
+        // 后台段可能包含 && 或 ; 连接的多条命令，需进一步拆分
+        let sub_segments = split_command_segments(segment);
+        for sub in &sub_segments {
+            let first_cmd = split_at_pipe(sub);
+            let tokens = shell_words(first_cmd);
+            if tokens.is_empty() {
+                continue;
+            }
+            let first = tokens[0].as_str();
+            if is_long_running_server(first, &tokens) {
+                return Some(
+                    "检测到后台启动长运行服务（shell &）。请设置 run_in_background: true \
+                     来启动服务，然后通过单独的 Bash 调用执行健康检查等操作",
+                );
+            }
+        }
+    }
+
+    None
+}
+
+/// 判断命令是否可能是长运行的服务/服务器进程
+fn is_long_running_server(first: &str, tokens: &[String]) -> bool {
+    // 直接的 server 命令
+    if matches!(
+        first,
+        "nginx"
+            | "apache2"
+            | "httpd"
+            | "redis-server"
+            | "redis-cli"
+            | "mongod"
+            | "mysqld"
+            | "postgres"
+            | "pg_ctl"
+            | "elasticsearch"
+            | "rabbitmq-server"
+            | "consul"
+            | "etcd"
+            | "vault"
+            | "minio"
+    ) {
+        return true;
+    }
+
+    // go run / go serve / air（Go 热重载）
+    if first == "go" && tokens.iter().skip(1).any(|t| t == "run" || t == "serve") {
+        return true;
+    }
+
+    // air（Go 热重载工具）
+    if first == "air" {
+        return true;
+    }
+
+    // node/npx 运行服务器
+    if first == "node" || first == "npx" {
+        // node server.js / node app.js 等
+        if tokens.iter().skip(1).any(|t| !t.starts_with('-')) {
+            return true;
+        }
+    }
+
+    // npm/yarn/pnpm/bun run dev/start/serve
+    if matches!(first, "npm" | "yarn" | "pnpm" | "bun")
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t == "run" || t == "start" || t == "serve" || t == "dev")
+    {
+        return true;
+    }
+
+    // python -m http.server / python manage.py runserver / uvicorn / gunicorn
+    if matches!(first, "python" | "python3")
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t == "runserver" || t == "http.server" || t == "uvicorn" || t == "gunicorn")
+    {
+        return true;
+    }
+    if matches!(
+        first,
+        "uvicorn" | "gunicorn" | "flask" | "django-admin" | "celery"
+    ) {
+        return true;
+    }
+
+    // java -jar xxx.jar / mvn spring-boot:run / gradle bootRun
+    if first == "java" {
+        // java -jar app.jar 基本就是启动服务
+        if tokens.iter().any(|t| t == "-jar") {
+            return true;
+        }
+    }
+    // mvn spring-boot:run / gradle bootRun
+    if (first == "mvn" || first == "./mvnw")
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t.contains("spring-boot") || t == "tomcat:run" || t == "jetty:run")
+    {
+        return true;
+    }
+    if (first == "gradle" || first == "./gradlew")
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t == "bootRun" || t.contains("tomcat") || t.contains("jetty"))
+    {
+        return true;
+    }
+
+    // dotnet run/watch
+    if first == "dotnet"
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t == "run" || t == "watch" || t == "serve")
+    {
+        return true;
+    }
+
+    // cargo watch（Rust 热重载）
+    if first == "cargo" && tokens.iter().skip(1).any(|t| t == "watch") {
+        return true;
+    }
+
+    // docker compose up
+    if first == "docker" && tokens.iter().skip(1).any(|t| t == "compose" || t == "up") {
+        return true;
+    }
+    if first == "docker-compose" {
+        return true;
+    }
+
+    // ruby rails server
+    if first == "rails" && tokens.iter().skip(1).any(|t| t == "server" || t == "s") {
+        return true;
+    }
+    if first == "bundle"
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t == "exec" && tokens.iter().any(|t2| t2 == "rails"))
+    {
+        return true;
+    }
+
+    // php artisan serve
+    if first == "php"
+        && tokens
+            .iter()
+            .skip(1)
+            .any(|t| t == "artisan" || t == "serve")
+    {
+        return true;
+    }
+
+    false
+}
+
+/// 检查命令中是否包含独立的后台运行符号 &（非 &&，非重定向 >&）
+fn contains_background_ampersand(cmd: &str) -> bool {
+    let mut in_single = false;
+    let mut in_double = false;
+    let chars: Vec<char> = cmd.chars().collect();
+
+    for i in 0..chars.len() {
+        match chars[i] {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            '\\' if !in_single && !in_double => {
+                // 跳过转义字符
+                continue;
+            }
+            '&' if !in_single && !in_double => {
+                // 检查后面不是 &（排除 &&）
+                let next_is_amp = chars.get(i + 1) == Some(&'&');
+                // 检查前面不是 &（排除被 && 的第二个 &）
+                let prev_is_amp = i > 0 && chars[i - 1] == '&';
+                // 检查前面不是 >（排除重定向 >& 或 2>&1）
+                let prev_is_redirect = i > 0 && chars[i - 1] == '>';
+                if !next_is_amp && !prev_is_amp && !prev_is_redirect {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// 按独立 &（非 &&，非重定向 >&）分割命令，返回被后台化的命令段
+fn split_at_background(cmd: &str) -> Vec<&str> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    let chars: Vec<char> = cmd.chars().collect();
+
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            '\\' if !in_single && !in_double => {
+                // 跳过转义字符
+                i += 1;
+                continue;
+            }
+            '&' if !in_single && !in_double => {
+                let next_is_amp = chars.get(i + 1) == Some(&'&');
+                let prev_is_amp = i > 0 && chars[i - 1] == '&';
+                let prev_is_redirect = i > 0 && chars[i - 1] == '>';
+                if !next_is_amp && !prev_is_amp && !prev_is_redirect {
+                    // 独立的 &，取前面部分作为一个后台段
+                    let seg = cmd[start..i].trim();
+                    if !seg.is_empty() {
+                        segments.push(seg);
+                    }
+                    start = i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
     }
     segments
 }

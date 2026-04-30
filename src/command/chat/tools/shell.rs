@@ -80,7 +80,8 @@ impl Tool for ShellTool {
           - If commands depend on each other, use && to chain them sequentially
           - Use ; only when you don't care if earlier commands fail
           - DO NOT use newlines to separate commands
-        - Set run_in_background: true for long-running commands (builds, servers, etc.) to get a task_id immediately; use TaskOutput to retrieve results. You do not need to poll — you will be notified when it finishes
+        - Set run_in_background: true for long-running commands (builds, servers, watchers, etc.) to get a task_id immediately; use TaskOutput to retrieve results. You do not need to poll — you will be notified when it finishes
+        - IMPORTANT: When starting servers, dev servers, or any long-running process (e.g. `go run`, `npm run dev`, `python -m http.server`, `docker compose up`, `java -jar`), you MUST use run_in_background: true. Do NOT use shell `&` (e.g. `go run ... & sleep 3 && curl ...`). Instead: start the server with run_in_background: true, then use a separate Bash call for health checks or follow-up commands.
         - Avoid unnecessary `sleep` commands: do not sleep between commands, do not retry in a sleep loop — diagnose the root cause instead
         - For git commands:
           - Prefer creating a new commit rather than amending
