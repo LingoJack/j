@@ -233,6 +233,32 @@ make check-frontend
 写到 `docs/backend-design.md` 文档
 通过 `@skill:sql-to-go-struct-and-dao` 生成 model 和 dao 层代码
 
+**数据库设计经验（重要）**：
+
+1. **禁止使用外键约束**
+   - MySQL 初始化 SQL 中不要定义 `FOREIGN KEY` 约束
+   - 外键会导致表创建顺序依赖问题（必须先创建被引用的表）
+   - 外键影响数据删除/更新的灵活性，增加运维复杂度
+   - 应用层通过代码逻辑保证数据一致性即可
+
+2. **中文编码必须显式声明**
+   - `docker/mysql-init/*.sql` 文件头部必须添加：
+     ```sql
+     SET NAMES utf8mb4;
+     SET CHARACTER SET utf8mb4;
+     ```
+   - `docker-compose.yml` 中 MySQL 容器需添加启动参数：
+     ```yaml
+     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+     ```
+   - 否则 MySQL 客户端会以默认 latin1 字符集连接，中文数据被双重编码存储，导致乱码
+
+3. **Schema 文件修改注意事项**
+   - 不要用 `sed` 命令批量修改 SQL 文件，会破坏文件结构（逗号、括号位置）
+   - SQL 文件结构敏感，应使用 `Write` 工具完整重写
+   - 每张表的字段定义之间用逗号分隔，最后一行字段前不要逗号
+   - 索引定义与字段定义同级，最后一项索引前不要逗号
+
 
 ### 后台开发阶段
 实现后台接口以及逻辑
@@ -254,9 +280,82 @@ appuser:apppassword@tcp(127.0.0.1:3306)/appdb?charset=utf8mb4&parseTime=True&loc
 
 清理：`make podman-down`（保留数据卷）或 `make podman-clean`（连数据一起删）。
 
+**后端编码经验（重要）**：
+
+1. **模板代码冲突排查**
+   - 模板自带 `pkg/tool/` 目录下有多个工具文件，部分文件（如 `aes.go`、`conf_loader.go`）声明为 `package tool`，部分声明为 `package conf`
+   - 如果出现 `found packages tool (aes.go) and conf (conf_loader.go) in same directory` 编译错误，需检查包声明是否一致
+   - 模板中 `conf_loader.go` 如果独立为 `package conf`，应将其移到 `pkg/tool/conf/` 子目录，或统一改为 `package tool`
+
+2. **Go Model 定义规范**
+   - 每个数据库表对应一个独立的 `.go` 文件放在 `model/` 目录下
+   - 使用 `gorm` 标签指定列名：`gorm:"column:cover_image;type:varchar(500)"`
+   - 时间字段统一使用 `*time.Time` 指针类型（允许 NULL）
+   - 必须实现 `TableName()` 方法返回表名
+   - 示例：
+     ```go
+     type Shop struct {
+         ID        uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
+         Name      string     `gorm:"type:varchar(100);not null" json:"name"`
+         CreatedAt *time.Time `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"created_at"`
+         UpdatedAt *time.Time `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP" json:"updated_at"`
+         DeletedAt *time.Time `gorm:"column:deleted_at;type:timestamp;default:NULL" json:"deleted_at"`
+     }
+     func (Shop) TableName() string { return "shops" }
+     ```
+
+3. **Wire 依赖注入**
+   - `cmd/server/wire.go` 中声明所有 Provider 和 Injector
+   - 每新增一个 Service/Controller/Repository，都需在 `wire.go` 中添加对应的 `wire.NewSet()`
+   - 修改 `wire.go` 后必须运行 `wire ./cmd/server/` 重新生成 `wire_gen.go`
+   - 如果 Wire 生成失败，检查：参数类型是否匹配、是否有循环依赖、接口绑定是否正确
+
+4. **路由注册**
+   - `router/router.go` 中按模块分组注册路由
+   - 公开路由（无需认证）和私有路由（需 JWT 认证）分开注册
+   - 中间件顺序：`Recovery → Logger → RequestID → CORS → RateLimit → Auth（仅私有路由）`
+
 
 ### 前端开发阶段
 原型修改，替换为调用实际的后台接口
+
+**前端 API 对接经验（重要）**：
+
+1. **字段名大小写映射问题**
+   - 后端 Go+GORM 默认返回 snake_case JSON 字段名（如 `created_at`、`user_id`）
+   - 前端 TypeScript 接口定义和映射函数必须使用 snake_case 接收后端数据
+   - 错误示例：
+     ```typescript
+     // 错误：接口定义用 PascalCase
+     interface BackendUser {
+       Id: number;        // 应该是 id
+       CreatedAt: string; // 应该是 created_at
+     }
+     ```
+   - 正确示例：
+     ```typescript
+     // 正确：接口定义用 snake_case 匹配后端
+     interface BackendUser {
+       id: number;
+       created_at: string;
+     }
+     // 前端内部使用的 camelCase 字段在映射函数中转换
+     function mapUser(raw: BackendUser): User {
+       return { id: raw.id, createdAt: raw.created_at };
+     }
+     ```
+
+2. **API 响应结构统一**
+   - 后端统一响应格式：`{ code: number, message: string, data: T }`
+   - 前端 API 层应统一处理 `code` 判断，非 0 时抛出异常
+   - 分页接口响应：`{ code, message, data: { items: T[], total: number, page: number, page_size: number } }`
+
+3. **前后端联调检查清单**
+   - 启动后端：`cd backend && go run ./cmd/server/`
+   - 启动前端：`cd frontend && npm run dev`
+   - 验证代理：前端 vite.config.ts 的 proxy 应指向 `http://localhost:8080`
+   - 验证接口：`curl http://localhost:8080/api/v1/xxx` 直接测试后端返回
+   - 检查控制台：浏览器开发者工具 Network 面板查看实际请求/响应
 
 
 ### 容器化启动与验收阶段
@@ -282,3 +381,29 @@ make podman-logs      # 跟随查看日志，确认 backend DB 连接成功、�
 - `make podman-down && make podman-up` 能复现一致行为（数据卷持久化生效）
 
 停止：`make podman-down`。彻底清理（含 mysql 数据卷）：`make podman-clean`。
+
+**容器化验收经验（重要）**：
+
+1. **MySQL 初始化顺序**
+   - `docker/mysql-init/` 目录下的 SQL 文件按字母序执行
+   - 命名规范：`01_schema.sql`（建表）、`02_seed_data.sql`（初始数据）
+   - 如果 schema.sql 中引用了其他表（如外键），必须确保被引用的表先创建
+   - 建议不用外键，避免表创建顺序问题
+
+2. **数据卷清理**
+   - 修改了 SQL 初始化脚本后，必须删除旧数据卷重新初始化：
+     ```bash
+     podman rm -f <container_name>
+     podman volume rm <project_name>_mysql_data
+     ```
+   - 否则 MySQL 容器会跳过初始化脚本（数据卷已存在数据）
+
+3. **容器健康检查**
+   - MySQL 容器有 healthcheck，但 backend 启动时不依赖它（depends_on 只保证启动顺序）
+   - 后端启动失败时，检查日志：`podman logs <container_name>`
+   - 常见问题：DSN 配置错误、数据库未完成初始化、端口冲突
+
+4. **前后端容器网络**
+   - `docker-compose.yml` 中服务名即为主机名
+   - backend 连接 MySQL 用服务名 `mysql`（不是 localhost）
+   - frontend 通过 nginx 反代访问 backend，nginx 配置中用 `http://backend:8080`
