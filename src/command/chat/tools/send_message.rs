@@ -34,15 +34,21 @@ impl Tool for SendMessageTool {
 
     fn description(&self) -> &str {
         r#"
-        Send a message to teammates in the chatroom. Messages are visible to all agents.
+        Send a message to teammates. This is the ONLY way to make your words visible to other agents.
+
+        Your plain text output (prose without tool calls) is private thinking — only you and the human user can see it.
+        To communicate with teammates, you MUST use this tool.
 
         Usage:
         - message: The text content to send
-        - to: Optional target agent name. The message is always broadcast to everyone,
-              but @mentioning focuses the target agent's attention.
+        - to: Optional target agent name. The message is broadcast to everyone,
+              but @mentioning wakes the target agent (interrupts their idle state).
 
         Messages appear in the chat as: <YourName> @Target message
         All agents receive the message, but the @mentioned agent knows it's addressed to them.
+
+        Note: If new messages arrive while you're thinking, your SendMessage may be held for
+        re-evaluation. You'll receive a system_reminder and can choose to resend or revise.
 
         Example:
         {"message": "API endpoints are done, check routes/api.js", "to": "Frontend"}

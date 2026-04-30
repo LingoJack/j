@@ -5,7 +5,7 @@ use crate::command::chat::agent::thread_identity::{
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::AgentType;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, ToolCallItem,
+    ChatMessage, DisplayHint, MessageRole, ModelProvider, SessionEvent, SessionPaths, ToolCallItem,
     append_event_to_path,
 };
 use crate::command::chat::tools::derived_shared::{
@@ -435,6 +435,7 @@ fn run_sub_agent_loop(
                 images: None,
                 reasoning_content: None,
                 sender_name: Some(sender.to_string()),
+                display_hint: DisplayHint::Normal,
             });
         }
     };
@@ -450,6 +451,7 @@ fn run_sub_agent_loop(
                     images: None,
                     reasoning_content: None,
                     sender_name: Some(sender.to_string()),
+                    display_hint: DisplayHint::Normal,
                 });
             }
         };
@@ -485,6 +487,7 @@ fn run_sub_agent_loop(
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }];
 
     let sync_messages = |msgs: &Vec<ChatMessage>| {
@@ -654,6 +657,7 @@ fn run_sub_agent_loop(
             images: None,
             reasoning_content,
             sender_name: None,
+            display_hint: DisplayHint::Normal,
         };
         messages.push(assistant_msg);
         if let Some(last) = messages.last() {

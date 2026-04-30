@@ -472,7 +472,13 @@ fn build_history_cache(
                 if let Some(ref reasoning) = m.reasoning_content {
                     render_thinking_block(reasoning, &mut ctx);
                 }
-                render_assistant_msg(m.sender_name.as_deref(), &m.content, is_selected, &mut ctx);
+                render_assistant_msg(
+                    m.sender_name.as_deref(),
+                    &m.content,
+                    is_selected,
+                    m.display_hint,
+                    &mut ctx,
+                );
             }
             DisplayType::ToolCallRequest => {
                 let mut ctx = RenderContext {
@@ -490,6 +496,7 @@ fn build_history_cache(
                         m.sender_name.as_deref(),
                         &m.content,
                         is_selected,
+                        m.display_hint,
                         &mut ctx,
                     );
                 }

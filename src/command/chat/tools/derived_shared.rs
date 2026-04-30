@@ -6,7 +6,9 @@ use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::{PendingAgentPerm, PermissionQueue};
-use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
+use crate::command::chat::storage::{
+    ChatMessage, DisplayHint, MessageRole, ModelProvider, ToolCallItem,
+};
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::{PlanApprovalQueue, PlanModeState};
@@ -558,6 +560,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
             images: None,
             reasoning_content: None,
             sender_name: None,
+            display_hint: DisplayHint::Normal,
         };
     }
 
@@ -577,6 +580,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
             images: None,
             reasoning_content: None,
             sender_name: None,
+            display_hint: DisplayHint::Normal,
         };
     }
 
@@ -611,6 +615,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
                     images: None,
                     reasoning_content: None,
                     sender_name: None,
+                    display_hint: DisplayHint::Normal,
                 };
             }
             // 用户批准 → 继续往下执行
@@ -636,6 +641,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
                 images: None,
                 reasoning_content: None,
                 sender_name: None,
+                display_hint: DisplayHint::Normal,
             };
         }
     }
@@ -671,5 +677,6 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }
 }

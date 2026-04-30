@@ -9,7 +9,7 @@ use crate::command::chat::app::types::{StreamMsg, ToolResultMsg};
 use crate::command::chat::context::compact::{self, AutoCompactParams};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::{HookContext, HookEvent};
-use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{ChatMessage, DisplayHint, MessageRole, ToolCallItem};
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use futures::StreamExt;
@@ -65,6 +65,7 @@ fn push_compact_tool_messages(
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     };
     messages.push(tool_call_msg.clone());
     push_both(display, context, tool_call_msg);
@@ -82,6 +83,7 @@ fn push_compact_tool_messages(
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     };
     messages.push(tool_msg.clone());
     push_both(display, context, tool_msg);

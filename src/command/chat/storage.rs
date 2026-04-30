@@ -22,8 +22,8 @@ pub use session::{
     session_file_path, sessions_dir,
 };
 pub use types::{
-    ChatMessage, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp, SessionOpKind,
-    ToolCallItem,
+    ChatMessage, DisplayHint, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp,
+    SessionOpKind, ToolCallItem,
 };
 
 #[cfg(test)]

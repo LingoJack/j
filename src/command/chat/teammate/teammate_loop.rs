@@ -1,8 +1,8 @@
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{
-    ChatMessage, MessageRole, ModelProvider, SessionEvent, SessionPaths, append_event_to_path,
-    sanitize_filename,
+    ChatMessage, DisplayHint, MessageRole, ModelProvider, SessionEvent, SessionPaths,
+    append_event_to_path, sanitize_filename,
 };
 use crate::command::chat::teammate::{TeammateManager, TeammateStatus};
 use crate::command::chat::tools::ToolRegistry;
@@ -26,6 +26,8 @@ const MAX_CONSECUTIVE_IDLE_POLLS: u32 = 120;
 const POLL_CHECK_INTERVAL: u32 = 10;
 /// 轮询等待期间每次休眠的毫秒数
 const POLL_SLEEP_MILLIS: u64 = 100;
+/// SendMessage gate 最大重试次数（超过后强制执行，防止无限循环）
+const MAX_SEND_GATE_RETRIES: u32 = 2;
 
 /// Teammate agent loop 的配置
 pub struct TeammateLoopConfig {
@@ -153,6 +155,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     });
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
     append_messages(&messages);
@@ -167,6 +170,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
     let mut last_assistant_text = String::new();
     let mut consecutive_idle_polls = 0;
+    let mut send_gate_retries: u32 = 0;
 
     // 创建 AtomicBool 作为取消信号（与 CancellationToken 桥接）
     let cancel_flag = Arc::new(AtomicBool::new(false));
@@ -332,41 +336,16 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
 
         if !assistant_text.is_empty() && !is_ignore_only {
             last_assistant_text = assistant_text.clone();
-            // 将 teammate 的文字回复通过广播显示在聊天室
-            // ★ 此消息通过三通道推送：
-            //   - display + context：同步到 Main Agent 的 LLM 上下文
-            //   - 其他 teammate 的 broadcast_inbox：旁听性质（不唤醒）
+            // Draft: 纯文本视为内部思考，仅推送到 display（用户 TUI 可见），
+            // 不进 context_messages（Main Agent LLM 不可见），不广播到其他 teammate。
+            // 只有 SendMessage 工具调用才会真正广播。
             if let Ok(manager) = teammate_manager.lock() {
                 let sender_label = format!("Teammate@{}", name);
-                // display: 纯文本 + sender_name（UI 渲染靠字段，不解析 content）
                 let display_msg = ChatMessage::text(MessageRole::Assistant, &assistant_text)
-                    .with_sender(&sender_label);
-                // context: XML 包裹（LLM 能清晰看到消息来源）+ sender_name（UI 渲染靠字段，不解析 content）
-                let context_msg = ChatMessage::text(
-                    MessageRole::Assistant,
-                    format!("<{}>{}</{}>", sender_label, &assistant_text, sender_label),
-                )
-                .with_sender(&sender_label);
+                    .with_sender(&sender_label)
+                    .with_display_hint(DisplayHint::Draft);
                 if let Ok(mut display) = manager.display_messages.lock() {
                     display.push(display_msg);
-                }
-                if let Ok(mut context) = manager.context_messages.lock() {
-                    context.push(context_msg);
-                }
-                // 推送到其他 teammate 的 broadcast_inbox（旁听，不设 wake_flag）
-                // 使用与 broadcast() 一致的 XML 标签格式，让 teammate 侧能清晰识别消息来源
-                let inbox_msg = ChatMessage::text(
-                    MessageRole::User,
-                    format!("<{}>{}</{}>", sender_label, &assistant_text, sender_label),
-                )
-                .with_sender(&sender_label);
-                for (peer_name, handle) in &manager.teammates {
-                    if peer_name == &name {
-                        continue; // 不给自己发
-                    }
-                    if let Ok(mut inbox) = handle.broadcast_inbox.lock() {
-                        inbox.push(inbox_msg.clone());
-                    }
                 }
             }
         }
@@ -479,6 +458,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             images: None,
             reasoning_content,
             sender_name: None,
+            display_hint: DisplayHint::Normal,
         });
         if let Some(last) = messages.last() {
             append_messages(std::slice::from_ref(last));
@@ -517,12 +497,16 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                         images: None,
                         reasoning_content: None,
                         sender_name: Some(sender_label.clone()),
+                        display_hint: DisplayHint::Normal,
                     });
                 }
             }
         }
 
-        // 执行工具
+        // 执行工具（SendMessage 有 gate 机制：inbox 有新消息时拦截，让 agent 重新决策）
+        let mut gate_triggered = false;
+        let mut gated_send_content: Option<String> = None;
+
         for item in &tool_items {
             if cancel_token.is_cancelled() {
                 messages.push(ChatMessage {
@@ -533,11 +517,55 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     images: None,
                     reasoning_content: None,
                     sender_name: None,
+                    display_hint: DisplayHint::Normal,
                 });
                 if let Some(last) = messages.last() {
                     append_messages(std::slice::from_ref(last));
                 }
                 continue;
+            }
+
+            // SendMessage gate: 检查 inbox 是否有新消息到达
+            if item.name == "SendMessage" {
+                let inbox_has_new = broadcast_inbox
+                    .lock()
+                    .map(|inbox| !inbox.is_empty())
+                    .unwrap_or(false);
+
+                if inbox_has_new && send_gate_retries < MAX_SEND_GATE_RETRIES {
+                    // Gate 触发：跳过 SendMessage，记录被拦截内容
+                    gate_triggered = true;
+                    gated_send_content = Some(item.arguments.clone());
+                    send_gate_retries += 1;
+
+                    write_info_log(
+                        "TeammateLoop",
+                        &format!(
+                            "{}: SendMessage gated (attempt {}/{}), new messages in inbox",
+                            name, send_gate_retries, MAX_SEND_GATE_RETRIES
+                        ),
+                    );
+
+                    // 返回 tool result 占位（保持 LLM 对话结构完整）
+                    messages.push(ChatMessage {
+                        role: MessageRole::Tool,
+                        content: "[SendMessage held: new messages arrived during your thinking, please re-evaluate]".to_string(),
+                        tool_calls: None,
+                        tool_call_id: Some(item.id.clone()),
+                        images: None,
+                        reasoning_content: None,
+                        sender_name: None,
+                        display_hint: DisplayHint::Normal,
+                    });
+                    if let Some(last) = messages.last() {
+                        append_messages(std::slice::from_ref(last));
+                    }
+                    continue; // 跳过执行，但继续处理其他非 SendMessage 工具
+                } else if !inbox_has_new {
+                    // 无新消息，正常执行并重置计数
+                    send_gate_retries = 0;
+                }
+                // inbox_has_new && retries >= MAX: 强制执行（不 reset，下次仍 force）
             }
 
             // 更新当前工具名 + 切换为 Working（正在执行工具）
@@ -569,6 +597,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     images: None,
                     reasoning_content: None,
                     sender_name: Some(format!("Teammate@{}", name)),
+                    display_hint: DisplayHint::Normal,
                 });
             }
             messages.push(result_msg);
@@ -581,6 +610,32 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                 *ct = None;
             }
             set_status(TeammateStatus::Thinking);
+        }
+
+        // Gate 触发后：drain inbox + 注入 system_reminder 让 agent 重新决策
+        if gate_triggered {
+            let len_before = messages.len();
+            let _ = drain_broadcast_messages(&mut messages, &broadcast_inbox);
+            if messages.len() > len_before {
+                append_messages(&messages[len_before..]);
+            }
+
+            if let Some(ref content) = gated_send_content {
+                let reminder = format!(
+                    "<system_reminder>\
+                    New messages arrived while you were thinking. Your pending SendMessage was held (attempt {}/{}).\n\
+                    Held content: {}\n\n\
+                    The new messages have been injected above. Please review and decide:\n\
+                    - Call SendMessage again (possibly revised) to send\n\
+                    - Or don't call SendMessage to discard the held message\
+                    </system_reminder>",
+                    send_gate_retries, MAX_SEND_GATE_RETRIES, content
+                );
+                messages.push(ChatMessage::text(MessageRole::User, &reminder));
+                if let Some(last) = messages.last() {
+                    append_messages(std::slice::from_ref(last));
+                }
+            }
         }
 
         // 本轮工具结果写入后同步快照

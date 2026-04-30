@@ -64,6 +64,16 @@ pub struct ImageData {
     pub media_type: String,
 }
 
+/// 消息显示提示（运行时 UI 渲染层专用，不持久化）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DisplayHint {
+    /// 正常消息（默认）
+    #[default]
+    Normal,
+    /// 内部思考（teammate 未通过 SendMessage 发出的纯文本，用户可见但 agent 不可见）
+    Draft,
+}
+
 /// 对话消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -88,6 +98,10 @@ pub struct ChatMessage {
     /// 不持久化到 session 文件，仅用于运行时 UI 渲染。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sender_name: Option<String>,
+    /// 显示提示（运行时 UI 渲染层专用，不持久化）。
+    /// Draft 表示 teammate 内部思考，用户可见但其他 agent 不可见。
+    #[serde(skip)]
+    pub display_hint: DisplayHint,
 }
 
 impl ChatMessage {
@@ -101,6 +115,7 @@ impl ChatMessage {
             images: None,
             reasoning_content: None,
             sender_name: None,
+            display_hint: DisplayHint::Normal,
         }
     }
 
@@ -109,6 +124,12 @@ impl ChatMessage {
     /// 用于 teammate/subagent 消息标记发送者，UI 渲染层据此显示气泡标签。
     pub fn with_sender(mut self, name: impl Into<String>) -> Self {
         self.sender_name = Some(name.into());
+        self
+    }
+
+    /// 设置显示提示（Builder 模式）。
+    pub fn with_display_hint(mut self, hint: DisplayHint) -> Self {
+        self.display_hint = hint;
         self
     }
 

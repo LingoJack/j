@@ -2,7 +2,8 @@ use crate::command::chat::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::storage::{
-    ChatMessage, ImageData, MessageRole, SessionOp, SessionOpKind, ToolCallItem, append_session_op,
+    ChatMessage, DisplayHint, ImageData, MessageRole, SessionOp, SessionOpKind, ToolCallItem,
+    append_session_op,
 };
 use crate::command::chat::tools::Tool;
 use crate::command::chat::tools::compact_tool::CompactTool;
@@ -190,6 +191,7 @@ pub(super) fn process_tool_calls(
         images: None,
         reasoning_content,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     };
     messages.push(tool_call_msg.clone());
     push_both(ctx.display_messages, ctx.context_messages, tool_call_msg);
@@ -299,6 +301,7 @@ pub(super) fn process_tool_calls(
             images: None,
             reasoning_content: None,
             sender_name: None,
+            display_hint: DisplayHint::Normal,
         };
         messages.push(tool_msg.clone());
         push_both(ctx.display_messages, ctx.context_messages, tool_msg);
@@ -333,6 +336,7 @@ pub(super) fn process_tool_calls(
                     ),
                     reasoning_content: None,
                     sender_name: None,
+                    display_hint: DisplayHint::Normal,
                 };
                 deferred_image_msgs.push(img_msg);
             } else {

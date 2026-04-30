@@ -23,8 +23,8 @@ use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::MessageRole;
 use crate::command::chat::storage::{
-    ChatMessage, ModelProvider, load_agent_config, memory_path, save_agent_config, save_memory,
-    save_soul, save_system_prompt, soul_path, system_prompt_path,
+    ChatMessage, DisplayHint, ModelProvider, load_agent_config, memory_path, save_agent_config,
+    save_memory, save_soul, save_system_prompt, soul_path, system_prompt_path,
 };
 use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::ToolRegistry;
@@ -358,6 +358,7 @@ impl ChatApp {
                                 images: None,
                                 reasoning_content: None,
                                 sender_name: None,
+                                display_hint: DisplayHint::Normal,
                             });
                         }
                         result.inject_messages = Some(inject);
@@ -427,6 +428,7 @@ impl ChatApp {
                         images: None,
                         reasoning_content: None,
                         sender_name: None,
+                        display_hint: DisplayHint::Normal,
                     }];
                     Some(HookResult {
                         inject_messages: Some(inject),

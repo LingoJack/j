@@ -1,5 +1,6 @@
 //! 基础消息渲染：用户气泡、AI 气泡、思考内容折叠
 
+use crate::command::chat::storage::DisplayHint;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -246,10 +247,12 @@ pub fn render_user_msg(
 /// - `sender_name`: 消息发送者名称（如 `Teammate@Frontend`）。优先使用此字段作为气泡标签。
 ///   若为 None，则尝试从 content 解析 `<Name> ...` 前缀（兼容老 session）。
 /// - `content`: 消息正文（不含 sender_name 前缀）
+/// - `display_hint`: 显示提示（Draft 表示内部思考，渲染为淡化样式）
 pub fn render_assistant_msg(
     sender_name: Option<&str>,
     content: &str,
     is_selected: bool,
+    display_hint: DisplayHint,
     ctx: &mut RenderContext<'_>,
 ) {
     let lines = &mut *ctx.lines;
@@ -263,6 +266,8 @@ pub fn render_assistant_msg(
     let pad_left_w = 3usize;
     let pad_right_w = 3usize;
     let margin = " ".repeat(ASSISTANT_BUBBLE_LEFT_MARGIN);
+
+    let is_draft = display_hint == DisplayHint::Draft;
 
     // 确定 agent_name 和 bubble_content：
     // 优先使用 sender_name 字段；若无则 fallback 解析 content 的 <Name> 前缀（兼容老 session）
@@ -289,21 +294,30 @@ pub fn render_assistant_msg(
     // label 行（独立行，无背景）
     let label_text = if is_selected {
         format!("{}▶ {}", margin, agent_name)
+    } else if is_draft {
+        format!("{}{} [draft]", margin, agent_name)
     } else {
         format!("{}{}", margin, agent_name)
     };
     let label_color = if is_selected {
         theme.label_selected
+    } else if is_draft {
+        theme.text_dim
     } else if is_teammate {
         agent_name_color(&agent_name)
     } else {
         theme.label_ai
     };
+    let label_modifier = if is_draft {
+        Modifier::ITALIC
+    } else {
+        Modifier::BOLD
+    };
     lines.push(Line::from(Span::styled(
         label_text,
         Style::default()
             .fg(label_color)
-            .add_modifier(Modifier::BOLD),
+            .add_modifier(label_modifier),
     )));
 
     // 边框颜色

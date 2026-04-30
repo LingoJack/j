@@ -1,5 +1,5 @@
 use super::*;
-use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{ChatMessage, DisplayHint, MessageRole, ToolCallItem};
 
 fn user_msg(content: &str) -> ChatMessage {
     ChatMessage::text(MessageRole::User, content)
@@ -28,6 +28,7 @@ fn tool_call_msg(names: &[&str]) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }
 }
 
@@ -40,6 +41,7 @@ fn tool_result_msg(call_id: &str, content: &str) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }
 }
 

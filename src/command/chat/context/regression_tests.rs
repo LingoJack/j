@@ -12,7 +12,7 @@ use super::compact::{BUILTIN_EXEMPT_TOOLS, is_exempt_tool, micro_compact};
 use super::plan_state::PLAN_MODE_WHITELIST;
 use super::policy::{ContextTier, RetentionPolicy, is_key_tool, policy_for, tier_for};
 use super::window::select_messages;
-use crate::command::chat::storage::{ChatMessage, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{ChatMessage, DisplayHint, MessageRole, ToolCallItem};
 
 // ========== 辅助构造 ==========
 
@@ -40,6 +40,7 @@ fn tool_call_with_id(id: &str, name: &str) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }
 }
 
@@ -62,6 +63,7 @@ fn tool_call(names: &[&str]) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }
 }
 
@@ -74,6 +76,7 @@ fn tool_result(call_id: &str, content: &str) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        display_hint: DisplayHint::Normal,
     }
 }
 
