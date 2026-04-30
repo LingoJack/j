@@ -23,6 +23,17 @@ pub struct MouseSelection {
     pub current: (usize, usize),
 }
 
+// ========== 右键上下文菜单 ==========
+
+/// 右键上下文菜单状态
+#[derive(Clone, Debug)]
+pub struct ContextMenu {
+    /// 右键点击时的全局行号（用于定位所属消息）
+    pub global_line: usize,
+    /// 菜单显示的屏幕坐标 (col, row)
+    pub screen_pos: (u16, u16),
+}
+
 // ========== 前端状态 ==========
 
 /// UI 前端状态：所有与界面展示相关的字段
@@ -193,6 +204,8 @@ pub struct UIState {
     pub mouse_selection: Option<MouseSelection>,
     /// 消息区域 inner rect（用于鼠标坐标映射，每次渲染时更新）
     pub msg_area_inner: Option<Rect>,
+    /// 右键上下文菜单状态
+    pub context_menu: Option<ContextMenu>,
 }
 
 /// 消息渲染行缓存

@@ -2,6 +2,7 @@ pub mod archive;
 pub mod chat;
 pub mod components;
 pub mod config;
+pub mod context_menu;
 pub mod help;
 pub mod hint;
 pub mod input;

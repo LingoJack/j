@@ -105,6 +105,9 @@ pub fn draw_chat_ui(f: &mut ratatui::Frame, app: &mut ChatApp) {
     if app.ui.slash_popup_active {
         popup::draw_slash_popup(f, chunks[2], app);
     }
+
+    // ========== 右键上下文菜单覆盖层 ==========
+    super::context_menu::draw_context_menu(f, app);
 }
 
 /// 给定全局行号，定位到 per_msg_lines 或 streaming_lines 中对应的行引用

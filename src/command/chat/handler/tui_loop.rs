@@ -4,9 +4,9 @@ use super::{
     handle_select_model, handle_select_theme, handle_tool_confirm_mode,
 };
 use crate::command::chat::agent_md;
-use crate::command::chat::app::MouseSelection;
 use crate::command::chat::app::types::PlanDecision;
 use crate::command::chat::app::{Action, ChatApp, ChatMode, ConfigTab, CursorDirection};
+use crate::command::chat::app::{ContextMenu, MouseSelection};
 use crate::command::chat::constants::{TUI_IDLE_POLL_MS, TUI_LOADING_POLL_MS};
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::input_thread::InputThread;
@@ -17,6 +17,7 @@ use crate::command::chat::storage::{
     load_style, load_system_prompt, save_style, save_system_prompt,
 };
 use crate::command::chat::ui::chat::{copy_selection_to_clipboard, screen_to_text_pos};
+use crate::command::chat::ui::context_menu::is_point_in_menu;
 use crate::command::chat::ui::draw_chat_ui;
 use crate::error;
 use crate::util::safe_lock;
@@ -111,6 +112,63 @@ fn mouse_scroll_action(app: &ChatApp, dir: CursorDirection) -> Action {
     }
 }
 
+/// 执行右键菜单的复制操作。
+///
+/// 优先级：有选区时复制选区内容，无选区时复制整条消息。
+fn execute_context_menu_copy(app: &mut ChatApp) {
+    // 优先复制选区
+    if app.ui.mouse_selection.is_some() {
+        copy_selection_to_clipboard(app);
+        app.ui.mouse_selection = None;
+        return;
+    }
+
+    // 无选区：通过 global_line 定位消息并复制整条消息内容
+    let global_line = match &app.ui.context_menu {
+        Some(m) => m.global_line,
+        None => return,
+    };
+
+    let cached = match app.ui.msg_lines_cache.as_ref() {
+        Some(c) => c,
+        None => return,
+    };
+
+    // 二分查找 global_line 所属消息索引
+    let msg_index = {
+        let mut lo = 0usize;
+        let mut hi = cached.msg_start_lines.len();
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let (_, start) = cached.msg_start_lines[mid];
+            if start <= global_line {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        // lo 是第一个 start > global_line 的位置，所属消息是 lo - 1
+        lo.saturating_sub(1)
+    };
+
+    // 从 display_messages 获取消息内容
+    let content = {
+        let display = crate::util::safe_lock(&app.display_messages, "ContextMenuCopy");
+        display.get(msg_index).map(|msg| msg.content.clone())
+    };
+
+    if let Some(content) = content
+        && !content.is_empty()
+    {
+        use crate::command::chat::render::cache::copy_to_clipboard;
+        if copy_to_clipboard(&content) {
+            app.show_toast("已复制到剪贴板", false);
+        } else {
+            app.show_toast("复制到剪贴板失败", true);
+        }
+    }
+}
+
 /// 将单个 crossterm Event 分发到对应的 handler / Action。
 /// 返回 true 表示应退出主循环。
 fn dispatch_event(
@@ -135,6 +193,22 @@ fn dispatch_event(
                 return false;
             }
             *needs_redraw = true;
+
+            // 右键菜单快捷键拦截（最高优先级）
+            if app.ui.context_menu.is_some() {
+                match key.code {
+                    KeyCode::Enter => {
+                        execute_context_menu_copy(app);
+                        app.ui.context_menu = None;
+                        return false;
+                    }
+                    KeyCode::Esc => {
+                        app.ui.context_menu = None;
+                        return false;
+                    }
+                    _ => {}
+                }
+            }
 
             // 选区快捷键：c 复制、Esc 取消（优先级高于模式分发）
             if app.ui.mouse_selection.is_some() {
@@ -242,6 +316,16 @@ fn dispatch_event(
                 false
             }
             MouseEventKind::Down(MouseButton::Left) => {
+                // 右键菜单激活时：点击菜单内执行复制，点击菜单外关闭菜单
+                if app.ui.context_menu.is_some() {
+                    if is_point_in_menu(app, mouse.column, mouse.row) {
+                        execute_context_menu_copy(app);
+                    }
+                    app.ui.context_menu = None;
+                    *needs_redraw = true;
+                    return false;
+                }
+
                 // 点击消息区域：开始选择
                 // 点击空白区域：清除选区
                 if let Some(inner) = app.ui.msg_area_inner
@@ -263,6 +347,32 @@ fn dispatch_event(
                     // 点击空白区域：清除选区
                     if app.ui.mouse_selection.is_some() {
                         app.ui.mouse_selection = None;
+                        *needs_redraw = true;
+                    }
+                }
+                false
+            }
+            MouseEventKind::Down(MouseButton::Right) => {
+                // 右键点击消息区域：弹出复制菜单
+                if let Some(inner) = app.ui.msg_area_inner
+                    && let Some(ref cached) = app.ui.msg_lines_cache
+                    && let Some((gline, _)) = screen_to_text_pos(
+                        mouse.column,
+                        mouse.row,
+                        inner,
+                        app.ui.scroll_offset,
+                        cached,
+                    )
+                {
+                    app.ui.context_menu = Some(ContextMenu {
+                        global_line: gline,
+                        screen_pos: (mouse.column, mouse.row),
+                    });
+                    *needs_redraw = true;
+                } else {
+                    // 右键点击空白区域：关闭已有菜单
+                    if app.ui.context_menu.is_some() {
+                        app.ui.context_menu = None;
                         *needs_redraw = true;
                     }
                 }

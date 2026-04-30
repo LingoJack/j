@@ -551,6 +551,7 @@ impl ChatApp {
                 command_create_source: CommandSource::User,
                 mouse_selection: None,
                 msg_area_inner: None,
+                context_menu: None,
             },
             state: ChatState {
                 agent_config,
