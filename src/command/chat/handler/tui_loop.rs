@@ -397,8 +397,13 @@ fn dispatch_event(
                 false
             }
             MouseEventKind::Up(MouseButton::Left) => {
-                // 松手：保持选区，不自动复制
-                // 用户需要按 c 来复制
+                // 松手：如果选区范围为空（无拖拽），清除选区
+                // 避免空选区残留导致 Esc 被消费（需要按两次才能退出）
+                if let Some(ref sel) = app.ui.mouse_selection
+                    && sel.anchor == sel.current
+                {
+                    app.ui.mouse_selection = None;
+                }
                 false
             }
             _ => false,
