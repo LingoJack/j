@@ -314,9 +314,9 @@ impl TeammateManager {
     /// 以 user 角色注入（和用户 append 消息走同一个 drain 机制）
     pub fn broadcast(&self, from: &str, text: &str, at_target: Option<&str>) {
         let broadcast_message = if let Some(target) = at_target {
-            format!("<{}> @{} {}", from, target, text)
+            format!("<{}> @{} {} </{}>", from, target, text, from)
         } else {
-            format!("<{}> {}", from, text)
+            format!("<{}> {} </{}>", from, text, from)
         };
 
         write_info_log(
