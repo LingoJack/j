@@ -48,6 +48,8 @@ fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
 
 /// 计算 Tab 栏各 Tab 的点击区域（与 `tab_bar` 布局逻辑保持同步）
 fn compute_tab_hitboxes() -> Vec<ConfigTabHitBox> {
+    use unicode_width::UnicodeWidthStr;
+
     let all_tabs = [
         ConfigTab::Model,
         ConfigTab::Session,
@@ -67,8 +69,8 @@ fn compute_tab_hitboxes() -> Vec<ConfigTabHitBox> {
             // " {SEPARATOR_V} " 分隔符占 3 列
             col += 3;
         }
-        // " {label} " = label宽度 + 2（前后空格）
-        let label_width = tab.label().chars().count() as u16;
+        // " {label} " = label 显示宽度 + 2（前后空格）
+        let label_width = UnicodeWidthStr::width(tab.label()) as u16;
         let start = col;
         let end = col + label_width + 2;
         hitboxes.push(ConfigTabHitBox {
@@ -216,7 +218,8 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             .scroll((app.ui.config_scroll_offset, 0));
         f.render_widget(widget, area);
         // ── 回退模式下也记录布局信息 ──
-        app.ui.config_tab_bar_y = Some(area.y + 1);
+        // 回退模式的 Block 有 Borders::ALL（含 top border），所以 Tab 栏全局 Y = area.y + 1（top border）+ 1（空行）
+        app.ui.config_tab_bar_y = Some(area.y + 2);
         app.ui.config_list_area = None; // 无独立列表区域
         app.ui.config_field_lines = field_line_indices;
         app.ui.config_tab_hitboxes = compute_tab_hitboxes();
@@ -297,8 +300,9 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     f.render_widget(list_widget, chunks[1]);
 
     // ── 记录布局信息供鼠标点击使用 ──
-    // Tab 栏在 header_area 的相对行号为 1（第 0 行空行，第 1 行 Tab 栏）
-    app.ui.config_tab_bar_y = Some(chunks[0].y + 1);
+    // header_block 有 Borders::TOP（占 1 行），然后内容第 0 行是空行，第 1 行是 Tab 栏
+    // 所以 Tab 栏的全局 Y = chunks[0].y + 1（top border） + 1（空行）= chunks[0].y + 2
+    app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
     app.ui.config_list_area = Some(chunks[1]);
     app.ui.config_field_lines = field_line_indices;
     app.ui.config_tab_hitboxes = compute_tab_hitboxes();
