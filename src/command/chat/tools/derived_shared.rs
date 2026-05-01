@@ -456,34 +456,34 @@ struct DerivedRetryPolicy {
 
 /// 根据错误类型确定重试策略
 ///
-/// 策略设计原则（比主 agent 弱一档）：
-/// - 网络瞬断（超时/断连）：基础 2s，最多 2 次
-/// - 5xx 服务端过载（503/504/529）：基础 3s，最多 2 次
-/// - 5xx 服务端错误（500/502）：基础 3s，最多 1 次
-/// - 429：基础 5s，最多 2 次
-/// - 消息中含过载关键词：基础 3s，最多 2 次
+/// 策略设计原则（与主 agent 对齐）：
+/// - 网络瞬断（超时/断连）：基础 2s，最多 5 次
+/// - 5xx 服务端过载（503/504/529）：基础 3s，最多 4 次
+/// - 5xx 服务端错误（500/502）：基础 3s，最多 3 次
+/// - 429：基础 5s，最多 3 次
+/// - 消息中含过载关键词：基础 3s，最多 3 次
 fn derived_retry_policy(error: &ChatError) -> Option<DerivedRetryPolicy> {
     match error {
         ChatError::NetworkTimeout(_) | ChatError::NetworkError(_) => Some(DerivedRetryPolicy {
-            max_attempts: 2,
+            max_attempts: 5,
             base_ms: 2_000,
             cap_ms: 15_000,
         }),
         ChatError::ApiServerError { status, .. } => match status {
             503 | 504 | 529 => Some(DerivedRetryPolicy {
-                max_attempts: 2,
+                max_attempts: 4,
                 base_ms: 3_000,
                 cap_ms: 15_000,
             }),
             500 | 502 => Some(DerivedRetryPolicy {
-                max_attempts: 1,
+                max_attempts: 3,
                 base_ms: 3_000,
                 cap_ms: 15_000,
             }),
             _ => None,
         },
         ChatError::ApiRateLimit { .. } => Some(DerivedRetryPolicy {
-            max_attempts: 2,
+            max_attempts: 3,
             base_ms: 5_000,
             cap_ms: 30_000,
         }),
@@ -491,7 +491,7 @@ fn derived_retry_policy(error: &ChatError) -> Option<DerivedRetryPolicy> {
             if matches!(reason.as_str(), "network_error" | "timeout" | "overloaded") =>
         {
             Some(DerivedRetryPolicy {
-                max_attempts: 2,
+                max_attempts: 4,
                 base_ms: 2_000,
                 cap_ms: 15_000,
             })
@@ -504,7 +504,7 @@ fn derived_retry_policy(error: &ChatError) -> Option<DerivedRetryPolicy> {
                 || msg.contains("1305") =>
         {
             Some(DerivedRetryPolicy {
-                max_attempts: 2,
+                max_attempts: 3,
                 base_ms: 3_000,
                 cap_ms: 15_000,
             })

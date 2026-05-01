@@ -364,14 +364,9 @@ impl TeammateManager {
         // ★ context 通道：XML 包裹文本（Main Agent LLM context 需要 <Name> 标签识别来源）
         // ★ display 通道：纯文本（sender_name 已标注来源，XML 标签多余）
         if from != "Main" {
-            // display 用纯文本（不含 <from> XML 前缀），context 保持 XML 格式供 LLM 识别
-            let display_content = if let Some(target) = at_target {
-                format!("@{} {}", target, text)
-            } else {
-                text.to_string()
-            };
-            let mut display_msg =
-                ChatMessage::text(MessageRole::Assistant, &display_content).with_sender(from);
+            // display 用纯文本（不含 <from> XML 前缀，不重复 @target 前缀）
+            // recipient_name 字段 + label 行 → Target 已标示目标，content 不再冗余
+            let mut display_msg = ChatMessage::text(MessageRole::Assistant, text).with_sender(from);
             if let Some(target) = at_target {
                 display_msg = display_msg.with_recipient(target);
             }

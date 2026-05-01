@@ -245,6 +245,9 @@ impl ChatApp {
             disabled_skills,
             disabled_tools.clone(),
             Arc::clone(&tool_registry_arc),
+            Arc::clone(&self.teammate_manager),
+            Arc::clone(&self.task_manager),
+            Arc::clone(&self.background_manager),
         );
 
         let hook_manager_clone = match self.hook_manager.lock() {

@@ -15,6 +15,7 @@ use crate::command::chat::oneshot::session::{fire_session_end, persist_messages}
 use crate::command::chat::oneshot::tool_exec::handle_tool_call;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::storage::{AgentConfig, ChatMessage, MessageRole, ModelProvider};
+use crate::command::chat::teammate::TeammateManager;
 use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::task::TaskManager;
@@ -165,11 +166,19 @@ pub(crate) fn run_oneshot_agent(
     messages.push(user_msg);
 
     let loaded_skills = skill::load_all_skills();
+    let teammate_manager: Arc<Mutex<TeammateManager>> = Arc::new(Mutex::new(TeammateManager::new(
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(Mutex::new(Vec::new())),
+    )));
     let system_prompt_fn = build_system_prompt_fn(
         loaded_skills,
         agent_config.disabled_skills.clone(),
         agent_config.disabled_tools.clone(),
         Arc::clone(&tool_registry),
+        teammate_manager,
+        Arc::clone(&task_manager),
+        Arc::clone(&background_manager),
     );
 
     let api_messages = select_messages(
