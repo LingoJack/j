@@ -15,7 +15,7 @@ pub struct StaticPlaceholderValues<'a> {
     pub style_text: &'a str,
     pub memory_text: &'a str,
     pub soul_text: &'a str,
-    pub agent_md_text: &'a str,
+    pub project_instructions: &'a str,
     pub current_dir: &'a str,
     pub skill_dir: &'a str,
     pub project_skill_dir: &'a str,
@@ -32,7 +32,7 @@ pub fn apply_static_placeholders(template: &str, values: &StaticPlaceholderValue
         .replace("{{.style}}", values.style_text)
         .replace("{{.memory}}", values.memory_text)
         .replace("{{.soul}}", values.soul_text)
-        .replace("{{.agent_md}}", values.agent_md_text)
+        .replace("{{.project_instructions}}", values.project_instructions)
 }
 
 /// 构建每轮调用的 system_prompt_fn 闭包（TUI 和 oneshot 共用）
@@ -56,7 +56,7 @@ pub fn build_system_prompt_fn(
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
-        let agent_md_text = agent_md::load_agent_md();
+        let project_instructions = agent_md::load_agent_md();
         let current_dir = std::env::current_dir()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| ".".to_string());
@@ -83,7 +83,7 @@ pub fn build_system_prompt_fn(
                     style_text: &style_text,
                     memory_text: &memory_text,
                     soul_text: &soul_text,
-                    agent_md_text: &agent_md_text,
+                    project_instructions: &project_instructions,
                     current_dir: &current_dir,
                     skill_dir: &skill_dir,
                     project_skill_dir: &project_skill_dir,
@@ -113,7 +113,7 @@ impl ChatApp {
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
-        let agent_md_text = agent_md::load_agent_md();
+        let project_instructions = agent_md::load_agent_md();
         let current_dir = std::env::current_dir()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| ".".to_string());
@@ -139,7 +139,7 @@ impl ChatApp {
                 style_text: &style_text,
                 memory_text: &memory_text,
                 soul_text: &soul_text,
-                agent_md_text: &agent_md_text,
+                project_instructions: &project_instructions,
                 current_dir: &current_dir,
                 skill_dir: &skill_dir,
                 project_skill_dir: &project_skill_dir,

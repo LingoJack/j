@@ -332,8 +332,12 @@ impl ToolRegistry {
             let name = t.name();
             md.push_str(&format!("<{}>\n", name));
             md.push_str(&format!("description:\n{}\n", t.description().trim()));
-            md.push_str(&json_schema_to_xml_params(&t.parameters_schema()));
-            md.push_str(&format!("<{}/>\n\n", name));
+            let params = json_schema_to_xml_params(&t.parameters_schema());
+            if !params.is_empty() {
+                md.push('\n');
+                md.push_str(&params);
+            }
+            md.push_str(&format!("</{}>\n\n", name));
         }
         md.trim_end().to_string()
     }
@@ -411,7 +415,7 @@ fn json_schema_to_xml_params(schema: &Value) -> String {
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
         .unwrap_or_default();
 
-    let mut md = String::from("parameter schema:\n");
+    let mut md = String::from("parameters:\n");
     for (name, prop) in properties {
         let type_str = prop
             .get("type")
