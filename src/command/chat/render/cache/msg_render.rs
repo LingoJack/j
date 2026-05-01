@@ -12,10 +12,9 @@ use crate::command::chat::render::cache::{
 use crate::markdown::markdown_to_lines;
 use crate::util::text::{display_width, wrap_text};
 
-/// 解析 teammate 消息的 `<AgentName>` 前缀。
-/// 返回 `Some((name, rest))` 其中 rest 已去除前导空格。
-/// 规则：内容以 `<` 开头，紧跟非 `>` 字符，直到 `>`，后面是消息正文。
-/// 支持 `<Type@Name>` 格式（如 `<Teammate@Frontend>`、`<SubAgent@search_auth>`、`<Teammate@Go Advocate>`）。
+/// 解析并剥离 `<AgentName>content</AgentName>` XML 包裹。
+/// 返回 `Some((name, body))`，body 为去除开闭标签后的干净正文。
+/// 支持 `<Type@Name>` 格式（如 `<Teammate@Frontend>`、`<SubAgent@search_auth>`）。
 pub(crate) fn parse_agent_prefix(content: &str) -> Option<(&str, &str)> {
     if !content.starts_with('<') {
         return None;
@@ -26,7 +25,14 @@ pub(crate) fn parse_agent_prefix(content: &str) -> Option<(&str, &str)> {
         return None;
     }
     let rest = content[end + 1..].trim_start();
-    Some((name, rest))
+    // 剥离闭合标签 </Name>
+    let close_tag = format!("</{}>", name);
+    let body = rest
+        .trim_end()
+        .strip_suffix(&close_tag)
+        .unwrap_or(rest)
+        .trim_end();
+    Some((name, body))
 }
 
 /// 根据 agent 名字哈希出一个固定颜色（深色/浅色主题均有一定对比度）。
@@ -271,8 +277,6 @@ pub fn render_assistant_msg(
 
     let is_draft = display_hint == DisplayHint::Draft;
 
-    // 确定 agent_name 和 bubble_content：
-    // 优先使用 sender_name 字段；若无则 fallback 解析 content 的 <Name> 前缀（兼容老 session）
     let (agent_name, bubble_content): (String, &str) = if let Some(name) = sender_name {
         (name.to_string(), content)
     } else if let Some((name, rest)) = parse_agent_prefix(content) {
