@@ -84,7 +84,7 @@ pub fn render_table(
 
     let code_style = Style::default()
         .fg(theme.md_inline_code_fg())
-        .bg(theme.md_inline_code_bg());
+        .bg(theme.bg_primary());
 
     for (row_idx, row) in data.rows.iter().enumerate() {
         let base_style = if row_idx == 0 {

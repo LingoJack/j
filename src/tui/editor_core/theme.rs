@@ -101,8 +101,9 @@ impl crate::markdown::theme::MdStyle for EditorTheme {
     fn md_inline_code_fg(&self) -> Color {
         self.md_inline_code_fg
     }
-    fn md_inline_code_bg(&self) -> Color {
-        self.md_inline_code_bg
+
+    fn bg_primary(&self) -> Color {
+        self.bg_primary
     }
 
     fn md_blockquote_bar(&self) -> Color {

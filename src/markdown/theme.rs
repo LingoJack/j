@@ -31,7 +31,9 @@ pub trait MdStyle {
     // ===== Inline =====
     fn md_link(&self) -> Color;
     fn md_inline_code_fg(&self) -> Color;
-    fn md_inline_code_bg(&self) -> Color;
+
+    // ===== Global background =====
+    fn bg_primary(&self) -> Color;
 
     // ===== Blockquote =====
     fn md_blockquote_bar(&self) -> Color;
@@ -91,8 +93,9 @@ impl MdStyle for Theme {
     fn md_inline_code_fg(&self) -> Color {
         self.md_inline_code_fg
     }
-    fn md_inline_code_bg(&self) -> Color {
-        self.md_inline_code_bg
+
+    fn bg_primary(&self) -> Color {
+        self.bg_primary
     }
 
     fn md_blockquote_bar(&self) -> Color {

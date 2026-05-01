@@ -385,9 +385,9 @@ pub struct LlmNonStreamRequest<'a> {
 /// LLM API 重试回调：参数为 (attempt, max_attempts, delay_ms, error_message)
 pub type RetryCallback = dyn Fn(u32, u32, u64, &str);
 
-/// 对瞬时错误（网络超时、5xx、429）自动重试，策略比主 agent 更保守：
-/// - 最多 2 次重试（主 agent 最多 5 次）
-/// - 退避上限 15s（主 agent 30s）
+/// 对瞬时错误（网络超时、5xx、429）自动重试，策略针对多 Agent 并发优化：
+/// - 最多 8 次重试（并发 Agent 更易触发 rate limit）
+/// - 退避上限 30–60s（与主 agent 对齐）
 /// - 仍失败则直接返回错误文本
 pub fn call_llm_non_stream(req: &LlmNonStreamRequest) -> Result<Choice, String> {
     let request = build_request_with_tools(
@@ -454,46 +454,42 @@ struct DerivedRetryPolicy {
     cap_ms: u64,
 }
 
-/// 根据错误类型确定重试策略
-///
-/// 策略设计原则（与主 agent 对齐）：
-/// - 网络瞬断（超时/断连）：基础 2s，最多 5 次
-/// - 5xx 服务端过载（503/504/529）：基础 3s，最多 4 次
-/// - 5xx 服务端错误（500/502）：基础 3s，最多 3 次
-/// - 429：基础 5s，最多 3 次
-/// - 消息中含过载关键词：基础 3s，最多 3 次
+/// 派生 Agent 的重试策略（多 Agent 并发场景下更宽容）：
+/// - 最多 8 次重试（并发 Agent 更易触发 rate limit，需更多重试机会）
+/// - 退避上限 30–60s（与主 agent 对齐）
+/// - 仍失败则直接返回错误文本
 fn derived_retry_policy(error: &ChatError) -> Option<DerivedRetryPolicy> {
     match error {
         ChatError::NetworkTimeout(_) | ChatError::NetworkError(_) => Some(DerivedRetryPolicy {
-            max_attempts: 5,
+            max_attempts: 8,
             base_ms: 2_000,
-            cap_ms: 15_000,
+            cap_ms: 30_000,
         }),
         ChatError::ApiServerError { status, .. } => match status {
             503 | 504 | 529 => Some(DerivedRetryPolicy {
-                max_attempts: 4,
+                max_attempts: 8,
                 base_ms: 3_000,
-                cap_ms: 15_000,
+                cap_ms: 30_000,
             }),
             500 | 502 => Some(DerivedRetryPolicy {
-                max_attempts: 3,
+                max_attempts: 8,
                 base_ms: 3_000,
-                cap_ms: 15_000,
+                cap_ms: 30_000,
             }),
             _ => None,
         },
         ChatError::ApiRateLimit { .. } => Some(DerivedRetryPolicy {
-            max_attempts: 3,
+            max_attempts: 8,
             base_ms: 5_000,
-            cap_ms: 30_000,
+            cap_ms: 60_000,
         }),
         ChatError::AbnormalFinish(reason)
             if matches!(reason.as_str(), "network_error" | "timeout" | "overloaded") =>
         {
             Some(DerivedRetryPolicy {
-                max_attempts: 4,
+                max_attempts: 8,
                 base_ms: 2_000,
-                cap_ms: 15_000,
+                cap_ms: 30_000,
             })
         }
         ChatError::Other(msg)
@@ -504,9 +500,9 @@ fn derived_retry_policy(error: &ChatError) -> Option<DerivedRetryPolicy> {
                 || msg.contains("1305") =>
         {
             Some(DerivedRetryPolicy {
-                max_attempts: 3,
+                max_attempts: 8,
                 base_ms: 3_000,
-                cap_ms: 15_000,
+                cap_ms: 30_000,
             })
         }
         _ => None,

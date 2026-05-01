@@ -59,7 +59,7 @@ fn render_inline(
                 code_str,
                 Style::default()
                     .fg(theme.md_inline_code_fg())
-                    .bg(theme.md_inline_code_bg()),
+                    .bg(theme.bg_primary()),
             ));
         }
         Inline::Link { text, url } => {
