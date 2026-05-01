@@ -801,19 +801,20 @@ pub(crate) fn render_plan_approval_confirm_area(
         ));
     }
 
-    // Plan 名称行
-    lines.push(bordered_line(
-        vec![Span::styled(
-            format!(" Plan: {}", req.plan_name),
-            Style::default()
-                .fg(t.tool_confirm_name)
-                .add_modifier(Modifier::BOLD)
-                .bg(confirm_bg),
-        )],
-        bubble_max_width,
-        border_color,
-        confirm_bg,
-    ));
+    // Plan 名称行（支持折行）
+    let plan_name_text = format!(" Plan: {}", req.plan_name);
+    let plan_name_style = Style::default()
+        .fg(t.tool_confirm_name)
+        .add_modifier(Modifier::BOLD)
+        .bg(confirm_bg);
+    for wrapped in wrap_text(&plan_name_text, content_w) {
+        lines.push(bordered_line(
+            vec![Span::styled(wrapped, plan_name_style)],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
+    }
 
     // Plan 内容（折行显示，最多 PLAN_DISPLAY_MAX_LINES 行）
     let plan_lines: Vec<&str> = req
@@ -854,19 +855,20 @@ pub(crate) fn render_plan_approval_confirm_area(
         confirm_bg,
     ));
 
-    // Y/N 提示行
-    lines.push(bordered_line(
-        vec![Span::styled(
-            " [Y/Enter] 批准   [C] 批准并清空   [N/Esc] 拒绝",
-            Style::default()
-                .fg(t.text_dim)
-                .add_modifier(Modifier::BOLD)
-                .bg(confirm_bg),
-        )],
-        bubble_max_width,
-        border_color,
-        confirm_bg,
-    ));
+    // Y/N 提示行（支持折行）
+    let hint_text = " [Y/Enter] 批准   [C] 批准并清空   [N/Esc] 拒绝";
+    let hint_style = Style::default()
+        .fg(t.text_dim)
+        .add_modifier(Modifier::BOLD)
+        .bg(confirm_bg);
+    for wrapped in wrap_text(hint_text, content_w) {
+        lines.push(bordered_line(
+            vec![Span::styled(wrapped, hint_style)],
+            bubble_max_width,
+            border_color,
+            confirm_bg,
+        ));
+    }
 
     // 底边框（与 ask 弹窗对齐：带背景色）
     lines.push(Line::from(Span::styled(

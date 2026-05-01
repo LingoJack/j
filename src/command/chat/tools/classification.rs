@@ -26,6 +26,12 @@ pub enum ToolCategory {
     Teammate,
     /// 压缩类 (Compact)
     Compact,
+    /// 发送消息 (SendMessage)
+    SendMessage,
+    /// 忽略消息 (IgnoreMessage)
+    IgnoreMessage,
+    /// 工作完成 (WorkDone)
+    WorkDone,
     /// 其他类
     Other,
 }
@@ -44,6 +50,9 @@ impl ToolCategory {
             tool_names::AGENT => Self::Agent,
             tool_names::TEAMMATE => Self::Teammate,
             tool_names::COMPACT => Self::Compact,
+            tool_names::SEND_MESSAGE => Self::SendMessage,
+            tool_names::IGNORE_MESSAGE => Self::IgnoreMessage,
+            tool_names::WORK_DONE => Self::WorkDone,
             _ => Self::Other,
         }
     }
@@ -59,6 +68,9 @@ impl ToolCategory {
             Self::Agent => "🤖",
             Self::Teammate => "👥",
             Self::Compact => "📦",
+            Self::SendMessage => "✉️",
+            Self::IgnoreMessage => "💤",
+            Self::WorkDone => "🚩",
             Self::Other => "🔧",
         }
     }
@@ -66,15 +78,18 @@ impl ToolCategory {
     /// 获取工具颜色（从主题）
     pub fn color(&self, theme: &Theme) -> Color {
         match self {
-            Self::File => theme.label_user,       // 蓝色系
-            Self::Search => theme.label_ai,       // 绿色系
-            Self::Execute => theme.title_loading, // 黄/橙色系
-            Self::Network => theme.config_title,  // 青色系
-            Self::Plan => theme.label_ai,         // 绿色系
-            Self::Agent => theme.title_loading,   // 黄/橙色系
-            Self::Teammate => theme.config_title, // 青色系
-            Self::Compact => theme.config_title,  // 青色系
-            Self::Other => theme.text_dim,        // 灰色
+            Self::File => theme.label_user,          // 蓝色系
+            Self::Search => theme.label_ai,          // 绿色系
+            Self::Execute => theme.title_loading,    // 黄/橙色系
+            Self::Network => theme.config_title,     // 青色系
+            Self::Plan => theme.label_ai,            // 绿色系
+            Self::Agent => theme.title_loading,      // 黄/橙色系
+            Self::Teammate => theme.config_title,    // 青色系
+            Self::Compact => theme.config_title,     // 青色系
+            Self::SendMessage => theme.config_title, // 青色系
+            Self::IgnoreMessage => theme.text_dim,   // 灰色
+            Self::WorkDone => theme.label_ai,        // 绿色系
+            Self::Other => theme.text_dim,           // 灰色
         }
     }
 }

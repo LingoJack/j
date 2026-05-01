@@ -314,9 +314,9 @@ impl TeammateManager {
     /// 以 user 角色注入（和用户 append 消息走同一个 drain 机制）
     pub fn broadcast(&self, from: &str, text: &str, at_target: Option<&str>) {
         let broadcast_message = if let Some(target) = at_target {
-            format!("<{}> @{} {}", from, target, text)
+            format!("<{}> @{} {} </{}>", from, target, text, from)
         } else {
-            format!("<{}> {}", from, text)
+            format!("<{}> {} </{}>", from, text, from)
         };
 
         write_info_log(
@@ -361,7 +361,8 @@ impl TeammateManager {
 
         // Teammate 发出的消息写入 display_messages 以在 TUI 中显示
         // Main agent 的消息不需要（Main 的工具调用本身已通过 agent loop 显示）
-        // ★ 同时写入 context_messages 以注入 Main Agent LLM context（有意为之的设计）
+        // ★ context 通道：XML 包裹文本（Main Agent LLM context 需要 <Name> 标签识别来源）
+        // ★ display 通道：纯文本（sender_name 已标注来源，XML 标签多余）
         if from != "Main" {
             // display 用纯文本（不含 <from> XML 前缀），context 保持 XML 格式供 LLM 识别
             let display_content = if let Some(target) = at_target {
@@ -376,11 +377,11 @@ impl TeammateManager {
             }
             let context_msg =
                 ChatMessage::text(MessageRole::Assistant, &broadcast_message).with_sender(from);
-            if let Ok(mut display) = self.display_messages.lock() {
-                display.push(display_msg);
-            }
             if let Ok(mut context) = self.context_messages.lock() {
                 context.push(context_msg);
+            }
+            if let Ok(mut display) = self.display_messages.lock() {
+                display.push(display_msg);
             }
         }
     }
