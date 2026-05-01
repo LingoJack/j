@@ -73,6 +73,8 @@ Available skills:
 </skill_system>
 
 <session_status>
+The following is the live state of the current session (teammates, tasks, background jobs, etc.). Use it to understand what's happening right now.
+
 {{.session_state}}
 {{.tasks}}
 {{.background_tasks}}
@@ -80,6 +82,8 @@ Available skills:
 </session_status>
 
 <project_instructions>
+The following are project-level instructions provided by the user (from AGENT.md files). They define project conventions, constraints, and preferences you must follow.
+
 {{.project_instructions}}
 </project_instructions>
 
