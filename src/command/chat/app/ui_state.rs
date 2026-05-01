@@ -206,6 +206,25 @@ pub struct UIState {
     pub msg_area_inner: Option<Rect>,
     /// 右键上下文菜单状态
     pub context_menu: Option<ContextMenu>,
+    /// 配置面板列表区域（chunks[1]），用于鼠标点击检测
+    pub config_list_area: Option<Rect>,
+    /// 配置面板 Tab 栏的全局 Y 坐标（屏幕行号）
+    pub config_tab_bar_y: Option<u16>,
+    /// 配置面板可交互项的行号列表（每帧更新，与 field_line_indices 同步）
+    pub config_field_lines: Vec<usize>,
+    /// 配置面板 Tab 点击区域（每帧更新）
+    pub config_tab_hitboxes: Vec<ConfigTabHitBox>,
+}
+
+/// 配置面板 Tab 点击检测区域
+#[derive(Clone, Debug)]
+pub struct ConfigTabHitBox {
+    /// Tab 类型
+    pub tab: ConfigTab,
+    /// 起始列号（屏幕坐标）
+    pub start_col: u16,
+    /// 结束列号（屏幕坐标，不含）
+    pub end_col: u16,
 }
 
 /// 消息渲染行缓存

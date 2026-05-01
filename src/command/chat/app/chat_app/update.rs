@@ -106,12 +106,16 @@ impl ChatApp {
             Action::ConfigDeleteProvider => self.update_config_delete_provider(),
             Action::ConfigSetActiveProvider => self.update_config_set_active_provider(),
             Action::ConfigSwitchTab(dir) => self.update_config_switch_tab(dir),
+            Action::ConfigSwitchTabTo(tab) => self.update_config_switch_tab_to(tab),
+            Action::ConfigFieldSelect(idx) => self.update_config_field_select(idx),
             Action::ToggleMenuNavigate(dir) => self.update_toggle_menu_navigate(dir),
             Action::ToggleMenuToggle => self.update_toggle_menu_toggle(),
             Action::ToggleMenuEnableAll => self.update_toggle_menu_enable_all(),
             Action::ToggleMenuDisableAll => self.update_toggle_menu_disable_all(),
             Action::TeammatesNavigate(dir) => self.update_teammates_navigate(dir),
+            Action::TeammatesSelect(idx) => self.update_teammates_select(idx),
             Action::CompactExemptToggle => self.update_compact_exempt_toggle(),
+            Action::CompactExemptSelect(idx) => self.update_compact_exempt_select(idx),
 
             // ========== 模型选择 ==========
             Action::ModelSelectNavigate(dir) => self.update_model_select_navigate(dir),
@@ -135,6 +139,7 @@ impl ChatApp {
             Action::NewSession => self.update_new_session(),
             Action::LoadSessionList => self.update_load_session_list(),
             Action::SessionListNavigate(dir) => self.update_session_list_navigate(dir),
+            Action::SessionListSelect(idx) => self.update_session_list_select(idx),
             Action::RestoreSession => self.update_restore_session(),
             Action::DeleteSession => self.update_delete_session(),
             Action::NewSessionFromList => self.update_new_session_from_list(),
@@ -142,6 +147,7 @@ impl ChatApp {
             Action::SessionStateRestored => self.show_toast("会话状态已恢复".to_string(), false),
             Action::StartArchiveList => self.start_archive_list(),
             Action::ArchiveListNavigate(dir) => self.update_archive_list_navigate(dir),
+            Action::ArchiveListSelect(idx) => self.update_archive_list_select(idx),
             Action::RestoreArchive => self.do_restore(),
             Action::DeleteArchive => self.do_delete_archive(),
 

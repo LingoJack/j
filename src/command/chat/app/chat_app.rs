@@ -556,6 +556,10 @@ impl ChatApp {
                 mouse_selection: None,
                 msg_area_inner: None,
                 context_menu: None,
+                config_list_area: None,
+                config_tab_bar_y: None,
+                config_field_lines: Vec::new(),
+                config_tab_hitboxes: Vec::new(),
             },
             state: ChatState {
                 agent_config,

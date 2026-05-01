@@ -1,4 +1,4 @@
-use super::ui_state::ChatMode;
+use super::ui_state::{ChatMode, ConfigTab};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::ToolCallItem;
 
@@ -186,6 +186,10 @@ pub enum Action {
     ConfigSetActiveProvider,
     /// 配置界面：切换 Tab 分页（Left/Right）
     ConfigSwitchTab(CursorDirection),
+    /// 配置界面：直接跳转到指定 Tab（鼠标点击）
+    ConfigSwitchTabTo(ConfigTab),
+    /// 配置界面：选中指定字段（鼠标点击）
+    ConfigFieldSelect(usize),
     /// 工具/Skill 开关：导航（统一使用 config_field_idx）
     ToggleMenuNavigate(CursorDirection),
     /// 工具/Skill 开关：切换当前项
@@ -196,8 +200,12 @@ pub enum Action {
     ToggleMenuDisableAll,
     /// Teammates Tab：导航
     TeammatesNavigate(CursorDirection),
+    /// Teammates Tab：选中指定索引（鼠标点击）
+    TeammatesSelect(usize),
     /// 豁免压缩工具子列表：切换工具豁免状态
     CompactExemptToggle,
+    /// 豁免压缩工具子列表：选中指定索引（鼠标点击）
+    CompactExemptSelect(usize),
 
     // ========== 模型选择 ==========
     /// 模型选择模式：导航
@@ -240,6 +248,8 @@ pub enum Action {
     LoadSessionList,
     /// Session 列表导航
     SessionListNavigate(CursorDirection),
+    /// Session 列表：选中指定索引（鼠标点击）
+    SessionListSelect(usize),
     /// 恢复选中的 session
     RestoreSession,
     /// 删除选中的 session
@@ -257,6 +267,8 @@ pub enum Action {
     StartArchiveList,
     /// 归档列表：导航
     ArchiveListNavigate(CursorDirection),
+    /// 归档列表：选中指定索引（鼠标点击）
+    ArchiveListSelect(usize),
     /// 归档列表：还原选中的归档
     RestoreArchive,
     /// 归档列表：删除选中的归档

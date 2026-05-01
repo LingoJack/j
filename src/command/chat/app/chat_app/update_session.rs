@@ -257,6 +257,14 @@ impl ChatApp {
         }
     }
 
+    /// Session 列表：鼠标点击选中指定索引
+    pub(super) fn update_session_list_select(&mut self, idx: usize) {
+        let count = self.ui.session_list.len();
+        if count > 0 && idx < count {
+            self.ui.session_list_index = idx;
+        }
+    }
+
     pub(super) fn update_archive_list_navigate(&mut self, dir: CursorDirection) {
         let count = self.ui.archives.len();
         if count > 0 {
@@ -276,6 +284,14 @@ impl ChatApp {
                     };
                 }
             }
+        }
+    }
+
+    /// 归档列表：鼠标点击选中指定索引
+    pub(super) fn update_archive_list_select(&mut self, idx: usize) {
+        let count = self.ui.archives.len();
+        if count > 0 && idx < count {
+            self.ui.archive_list_index = idx;
         }
     }
 }

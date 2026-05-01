@@ -335,6 +335,31 @@ impl ChatApp {
         }
     }
 
+    /// 配置界面：鼠标直接点击跳转到指定 Tab
+    pub(super) fn update_config_switch_tab_to(&mut self, tab: ConfigTab) {
+        use crate::command::chat::infra::archive;
+        self.ui.config_tab = tab;
+        self.ui.config_field_idx = 0;
+        self.ui.config_scroll_offset = 0;
+        self.ui.config_editing = false;
+        if self.ui.config_tab == ConfigTab::Session {
+            self.update_load_session_list();
+        }
+        if self.ui.config_tab == ConfigTab::Archive {
+            self.ui.archives = archive::list_archives();
+            self.ui.archive_list_index = 0;
+            self.ui.restore_confirm_needed = false;
+        }
+    }
+
+    /// 配置界面：鼠标点击选中指定字段索引
+    pub(super) fn update_config_field_select(&mut self, idx: usize) {
+        let total = super::config_tab_field_count(self);
+        if total > 0 && idx < total {
+            self.ui.config_field_idx = idx;
+        }
+    }
+
     pub(super) fn update_toggle_menu_navigate(&mut self, dir: CursorDirection) {
         let total = super::config_tab_field_count(self);
         if total == 0 {
@@ -488,6 +513,14 @@ impl ChatApp {
         }
     }
 
+    /// 豁免压缩工具子列表：鼠标点击选中指定索引
+    pub(super) fn update_compact_exempt_select(&mut self, idx: usize) {
+        let total = self.tool_registry.tool_names().len();
+        if total > 0 && idx < total {
+            self.ui.compact_exempt_idx = idx;
+        }
+    }
+
     // ========== 模型选择 ==========
 
     pub(super) fn update_model_select_navigate(&mut self, dir: CursorDirection) {
@@ -582,6 +615,18 @@ impl ChatApp {
                     self.ui.teammate_list_index += 1;
                 }
             }
+        }
+    }
+
+    /// Teammates Tab：鼠标点击选中指定索引
+    pub(super) fn update_teammates_select(&mut self, idx: usize) {
+        let count = self
+            .teammate_manager
+            .lock()
+            .map(|m| m.teammates.len())
+            .unwrap_or(0);
+        if count > 0 && idx < count {
+            self.ui.teammate_list_index = idx;
         }
     }
 

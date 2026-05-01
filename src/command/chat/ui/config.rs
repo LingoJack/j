@@ -12,7 +12,7 @@ mod skills;
 mod teammates;
 mod tools;
 
-use crate::command::chat::app::{ChatApp, CommandsMode, ConfigTab};
+use crate::command::chat::app::{ChatApp, CommandsMode, ConfigTab, ConfigTabHitBox};
 use crate::tui::components::{separator_line, tab_bar};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -44,6 +44,41 @@ fn draw_tab_bar_line<'a>(app: &ChatApp) -> Line<'a> {
         "\u{2190}\u{2192} \u{5207}\u{6362}\u{6807}\u{7b7e}",
         &app.ui.theme,
     )
+}
+
+/// 计算 Tab 栏各 Tab 的点击区域（与 `tab_bar` 布局逻辑保持同步）
+fn compute_tab_hitboxes() -> Vec<ConfigTabHitBox> {
+    let all_tabs = [
+        ConfigTab::Model,
+        ConfigTab::Session,
+        ConfigTab::Global,
+        ConfigTab::Tools,
+        ConfigTab::Skills,
+        ConfigTab::Hooks,
+        ConfigTab::Commands,
+        ConfigTab::Teammates,
+        ConfigTab::Archive,
+    ];
+    // 起始有 "  "（2 列前缀），与 tab_bar 函数一致
+    let mut col: u16 = 2;
+    let mut hitboxes = Vec::with_capacity(all_tabs.len());
+    for (i, tab) in all_tabs.iter().enumerate() {
+        if i > 0 {
+            // " {SEPARATOR_V} " 分隔符占 3 列
+            col += 3;
+        }
+        // " {label} " = label宽度 + 2（前后空格）
+        let label_width = tab.label().chars().count() as u16;
+        let start = col;
+        let end = col + label_width + 2;
+        hitboxes.push(ConfigTabHitBox {
+            tab: *tab,
+            start_col: start,
+            end_col: end,
+        });
+        col = end;
+    }
+    hitboxes
 }
 
 /// 配置界面主入口（分发器）
@@ -180,6 +215,11 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
             )
             .scroll((app.ui.config_scroll_offset, 0));
         f.render_widget(widget, area);
+        // ── 回退模式下也记录布局信息 ──
+        app.ui.config_tab_bar_y = Some(area.y + 1);
+        app.ui.config_list_area = None; // 无独立列表区域
+        app.ui.config_field_lines = field_line_indices;
+        app.ui.config_tab_hitboxes = compute_tab_hitboxes();
         return;
     }
 
@@ -255,4 +295,11 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
         .block(list_block)
         .scroll((app.ui.config_scroll_offset, 0));
     f.render_widget(list_widget, chunks[1]);
+
+    // ── 记录布局信息供鼠标点击使用 ──
+    // Tab 栏在 header_area 的相对行号为 1（第 0 行空行，第 1 行 Tab 栏）
+    app.ui.config_tab_bar_y = Some(chunks[0].y + 1);
+    app.ui.config_list_area = Some(chunks[1]);
+    app.ui.config_field_lines = field_line_indices;
+    app.ui.config_tab_hitboxes = compute_tab_hitboxes();
 }
