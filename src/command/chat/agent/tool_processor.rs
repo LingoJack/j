@@ -45,16 +45,22 @@ pub(super) fn drain_pending_user_messages(
 ) {
     let mut pending = safe_lock(pending_user_messages, "agent::drain_pending");
     if !pending.is_empty() {
-        // 给每条追加的用户消息添加 [User appended] 标记
-        // 跳过 <system_reminder> 包裹的消息，它们是系统级信号，不需要用户追加标记
-        for msg in pending.iter_mut() {
+        // 过滤掉 <system_reminder> 包裹的消息——它们是纯唤醒信号，不应送 LLM。
+        // teammate 的实际消息内容已通过 context_messages 同步，无需重复注入。
+        // 给剩余的用户消息添加 [User appended] 标记。
+        for msg in pending.drain(..) {
             if msg.role == MessageRole::User
-                && !msg.content.trim_start().starts_with("<system_reminder>")
+                && msg.content.trim_start().starts_with("<system_reminder>")
             {
+                // 唤醒信号，丢弃不送 LLM
+                continue;
+            }
+            let mut msg = msg;
+            if msg.role == MessageRole::User {
                 msg.content = format!("[User appended] {}", msg.content);
             }
+            messages.push(msg);
         }
-        messages.append(&mut *pending);
     }
 }
 
@@ -191,6 +197,7 @@ pub(super) fn process_tool_calls(
         images: None,
         reasoning_content,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     };
     messages.push(tool_call_msg.clone());
@@ -301,6 +308,7 @@ pub(super) fn process_tool_calls(
             images: None,
             reasoning_content: None,
             sender_name: None,
+            recipient_name: None,
             display_hint: DisplayHint::Normal,
         };
         messages.push(tool_msg.clone());
@@ -336,6 +344,7 @@ pub(super) fn process_tool_calls(
                     ),
                     reasoning_content: None,
                     sender_name: None,
+                    recipient_name: None,
                     display_hint: DisplayHint::Normal,
                 };
                 deferred_image_msgs.push(img_msg);

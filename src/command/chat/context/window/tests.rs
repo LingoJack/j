@@ -28,6 +28,7 @@ fn tool_call_msg(names: &[&str]) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     }
 }
@@ -41,6 +42,7 @@ fn tool_result_msg(call_id: &str, content: &str) -> ChatMessage {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     }
 }

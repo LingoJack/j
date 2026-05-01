@@ -155,6 +155,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     });
     // 初始 prompt 也要写入 transcript，便于恢复时重现对话
@@ -458,6 +459,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             images: None,
             reasoning_content,
             sender_name: None,
+            recipient_name: None,
             display_hint: DisplayHint::Normal,
         });
         if let Some(last) = messages.last() {
@@ -497,6 +499,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                         images: None,
                         reasoning_content: None,
                         sender_name: Some(sender_label.clone()),
+                        recipient_name: None,
                         display_hint: DisplayHint::Normal,
                     });
                 }
@@ -517,6 +520,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     images: None,
                     reasoning_content: None,
                     sender_name: None,
+                    recipient_name: None,
                     display_hint: DisplayHint::Normal,
                 });
                 if let Some(last) = messages.last() {
@@ -555,6 +559,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                         images: None,
                         reasoning_content: None,
                         sender_name: None,
+                        recipient_name: None,
                         display_hint: DisplayHint::Normal,
                     });
                     if let Some(last) = messages.last() {
@@ -597,6 +602,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     images: None,
                     reasoning_content: None,
                     sender_name: Some(format!("Teammate@{}", name)),
+                    recipient_name: None,
                     display_hint: DisplayHint::Normal,
                 });
             }

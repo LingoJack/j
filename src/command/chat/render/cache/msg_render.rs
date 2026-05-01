@@ -246,10 +246,12 @@ pub fn render_user_msg(
 /// # 参数
 /// - `sender_name`: 消息发送者名称（如 `Teammate@Frontend`）。优先使用此字段作为气泡标签。
 ///   若为 None，则尝试从 content 解析 `<Name> ...` 前缀（兼容老 session）。
+/// - `recipient_name`: 消息目标接收者名称。若非 None 则在 label 行显示 → Target。
 /// - `content`: 消息正文（不含 sender_name 前缀）
 /// - `display_hint`: 显示提示（Draft 表示内部思考，渲染为淡化样式）
 pub fn render_assistant_msg(
     sender_name: Option<&str>,
+    recipient_name: Option<&str>,
     content: &str,
     is_selected: bool,
     display_hint: DisplayHint,
@@ -292,12 +294,15 @@ pub fn render_assistant_msg(
     lines.push(Line::from(""));
 
     // label 行（独立行，无背景）
+    let recipient_suffix = recipient_name
+        .map(|r| format!(" → {}", r))
+        .unwrap_or_default();
     let label_text = if is_selected {
-        format!("{}▶ {}", margin, agent_name)
+        format!("{}▶ {}{}", margin, agent_name, recipient_suffix)
     } else if is_draft {
         format!("{}{} [draft]", margin, agent_name)
     } else {
-        format!("{}{}", margin, agent_name)
+        format!("{}{}{}", margin, agent_name, recipient_suffix)
     };
     let label_color = if is_selected {
         theme.label_selected

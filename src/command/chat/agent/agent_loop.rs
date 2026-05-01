@@ -65,6 +65,7 @@ fn push_compact_tool_messages(
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     };
     messages.push(tool_call_msg.clone());
@@ -83,6 +84,7 @@ fn push_compact_tool_messages(
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     };
     messages.push(tool_msg.clone());

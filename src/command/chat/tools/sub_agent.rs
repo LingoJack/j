@@ -435,6 +435,7 @@ fn run_sub_agent_loop(
                 images: None,
                 reasoning_content: None,
                 sender_name: Some(sender.to_string()),
+                recipient_name: None,
                 display_hint: DisplayHint::Normal,
             });
         }
@@ -451,6 +452,7 @@ fn run_sub_agent_loop(
                     images: None,
                     reasoning_content: None,
                     sender_name: Some(sender.to_string()),
+                    recipient_name: None,
                     display_hint: DisplayHint::Normal,
                 });
             }
@@ -487,6 +489,7 @@ fn run_sub_agent_loop(
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     }];
 
@@ -657,6 +660,7 @@ fn run_sub_agent_loop(
             images: None,
             reasoning_content,
             sender_name: None,
+            recipient_name: None,
             display_hint: DisplayHint::Normal,
         };
         messages.push(assistant_msg);

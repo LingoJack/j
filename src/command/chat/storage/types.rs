@@ -98,6 +98,11 @@ pub struct ChatMessage {
     /// 不持久化到 session 文件，仅用于运行时 UI 渲染。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sender_name: Option<String>,
+    /// 消息目标接收者名称（如 `Counter2`、`Main`）。
+    /// 仅当消息有明确 @目标时设置；广播给所有人时为 None。
+    /// 不持久化到 session 文件，仅用于运行时 UI 渲染。
+    #[serde(skip)]
+    pub recipient_name: Option<String>,
     /// 显示提示（运行时 UI 渲染层专用，不持久化）。
     /// Draft 表示 teammate 内部思考，用户可见但其他 agent 不可见。
     #[serde(skip)]
@@ -115,6 +120,7 @@ impl ChatMessage {
             images: None,
             reasoning_content: None,
             sender_name: None,
+            recipient_name: None,
             display_hint: DisplayHint::Normal,
         }
     }
@@ -124,6 +130,14 @@ impl ChatMessage {
     /// 用于 teammate/subagent 消息标记发送者，UI 渲染层据此显示气泡标签。
     pub fn with_sender(mut self, name: impl Into<String>) -> Self {
         self.sender_name = Some(name.into());
+        self
+    }
+
+    /// 设置消息目标接收者名称（Builder 模式）。
+    ///
+    /// 仅当消息有明确 @目标时设置，UI 渲染层据此显示 → Target 标识。
+    pub fn with_recipient(mut self, name: impl Into<String>) -> Self {
+        self.recipient_name = Some(name.into());
         self
     }
 

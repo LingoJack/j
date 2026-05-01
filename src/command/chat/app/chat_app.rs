@@ -358,6 +358,7 @@ impl ChatApp {
                                 images: None,
                                 reasoning_content: None,
                                 sender_name: None,
+                                recipient_name: None,
                                 display_hint: DisplayHint::Normal,
                             });
                         }
@@ -428,6 +429,7 @@ impl ChatApp {
                         images: None,
                         reasoning_content: None,
                         sender_name: None,
+                        recipient_name: None,
                         display_hint: DisplayHint::Normal,
                     }];
                     Some(HookResult {

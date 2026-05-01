@@ -51,6 +51,24 @@ fn drain_pending_empty_noop() {
     assert_eq!(messages[0].content, "keep");
 }
 
+#[test]
+fn drain_pending_filters_system_reminder() {
+    let pending: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(vec![
+        ChatMessage::text(
+            MessageRole::User,
+            "<system_reminder>A teammate has sent a new message.</system_reminder>",
+        ),
+        ChatMessage::text(MessageRole::User, "real user message"),
+    ]));
+    let mut messages: Vec<ChatMessage> = vec![];
+
+    drain_pending_user_messages(&mut messages, &pending);
+
+    assert_eq!(messages.len(), 1, "system_reminder 应被过滤，只剩 1 条");
+    assert_eq!(messages[0].content, "[User appended] real user message");
+    assert!(pending.lock().unwrap().is_empty(), "pending 应被清空");
+}
+
 // ════════════════════════════════════════════════════════════════
 // 回归测试：push_both / clear_channels
 // ════════════════════════════════════════════════════════════════

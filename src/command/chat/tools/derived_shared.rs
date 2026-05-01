@@ -560,6 +560,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
             images: None,
             reasoning_content: None,
             sender_name: None,
+            recipient_name: None,
             display_hint: DisplayHint::Normal,
         };
     }
@@ -580,6 +581,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
             images: None,
             reasoning_content: None,
             sender_name: None,
+            recipient_name: None,
             display_hint: DisplayHint::Normal,
         };
     }
@@ -615,6 +617,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
                     images: None,
                     reasoning_content: None,
                     sender_name: None,
+                    recipient_name: None,
                     display_hint: DisplayHint::Normal,
                 };
             }
@@ -641,6 +644,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
                 images: None,
                 reasoning_content: None,
                 sender_name: None,
+                recipient_name: None,
                 display_hint: DisplayHint::Normal,
             };
         }
@@ -677,6 +681,7 @@ pub fn execute_tool_with_permission(item: &ToolCallItem, ctx: &ToolExecContext) 
         images: None,
         reasoning_content: None,
         sender_name: None,
+        recipient_name: None,
         display_hint: DisplayHint::Normal,
     }
 }

@@ -474,6 +474,7 @@ fn build_history_cache(
                 }
                 render_assistant_msg(
                     m.sender_name.as_deref(),
+                    m.recipient_name.as_deref(),
                     &m.content,
                     is_selected,
                     m.display_hint,
@@ -494,6 +495,7 @@ fn build_history_cache(
                 if !m.content.is_empty() {
                     render_assistant_msg(
                         m.sender_name.as_deref(),
+                        m.recipient_name.as_deref(),
                         &m.content,
                         is_selected,
                         m.display_hint,
