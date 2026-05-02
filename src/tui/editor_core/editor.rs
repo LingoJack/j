@@ -44,8 +44,53 @@ pub enum CursorPolicy {
     EndOfFile,
 }
 
+/// 视口/滚动状态
+struct ViewportState {
+    /// 垂直滚动偏移（视觉行级别）
+    scroll_offset: usize,
+    /// 视口高度
+    height: usize,
+    /// 视口宽度
+    width: usize,
+    /// 滚轮滚动锁定：防止 render() 自动将视口拉回到光标位置
+    scroll_locked: bool,
+}
+
+impl Default for ViewportState {
+    fn default() -> Self {
+        Self {
+            scroll_offset: 0,
+            height: 20,
+            width: 80,
+            scroll_locked: false,
+        }
+    }
+}
+
+/// 主题管理状态
+struct ThemeState {
+    /// 主题画廊（名称 + 主题列表）
+    gallery: Vec<ThemeGalleryItem>,
+    /// 当前主题在画廊中的索引
+    current_index: usize,
+    /// 主题选择弹窗选中项索引
+    popup_selected: usize,
+    /// 用户在主题画廊中选择的主题ID（退出时返回）
+    selected_id: Option<&'static str>,
+}
+
+/// 渲染行元数据映射
+#[derive(Default)]
+struct RenderMeta {
+    /// 每个屏幕行对应一个 RenderedVL（每次渲染时更新，用于鼠标点击定位）
+    vl_map: Vec<RenderedVL>,
+    /// 当前屏幕顶部对应的渲染行索引（在 vl_map 中的偏移）
+    map_index: usize,
+}
+
 /// 编辑器主结构
 pub struct MarkdownEditor {
+    // ---- 核心引擎 ----
     /// 文本缓冲区
     buffer: TextBuffer,
     /// 折行引擎
@@ -58,37 +103,26 @@ pub struct MarkdownEditor {
     renderer: MarkdownRenderer,
     /// 主题
     theme: EditorTheme,
+
+    // ---- 分组状态 ----
+    /// 视口/滚动状态
+    viewport: ViewportState,
+    /// 主题管理状态
+    themes: ThemeState,
+    /// 渲染行元数据映射
+    render_meta: RenderMeta,
+
+    // ---- UI 杂项 ----
     /// 标题
     title: String,
-    /// 视口垂直滚动偏移（视觉行级别）
-    scroll_offset: usize,
-    /// 视口高度
-    viewport_height: usize,
-    /// 视口宽度
-    viewport_width: usize,
     /// 命令面板选中项索引
     cmd_popup_selected: usize,
-    /// 主题画廊（名称 + 主题列表）
-    theme_gallery: Vec<ThemeGalleryItem>,
-    /// 当前主题在画廊中的索引
-    theme_index: usize,
-    /// 主题选择弹窗选中项索引
-    theme_popup_selected: usize,
     /// 状态消息（短暂显示，下次按键清除）
     status_message: Option<String>,
-    /// 用户在主题画廊中选择的主题ID（退出时返回）
-    selected_theme_id: Option<&'static str>,
     /// 进入搜索前的光标位置，用于 Esc 恢复
     cursor_before_search: Option<(usize, usize)>,
     /// 鼠标拖拽锚点（左键按下时的逻辑位置）
     mouse_anchor: Option<(usize, usize)>,
-    /// 滚轮滚动锁定：防止 render() 自动将视口拉回到光标位置
-    scroll_locked: bool,
-    /// 渲染输出的行元数据映射（每个屏幕行对应一个 RenderedVL）
-    /// 每次渲染时更新，用于鼠标点击定位
-    rendered_vl_map: Vec<RenderedVL>,
-    /// 当前屏幕顶部对应的渲染行索引（在 rendered_vl_map 中的偏移）
-    rendered_vl_map_index: usize,
 }
 
 impl MarkdownEditor {
@@ -137,27 +171,25 @@ impl MarkdownEditor {
             search: SearchState::new(),
             renderer,
             theme,
+            viewport: ViewportState::default(),
+            themes: ThemeState {
+                gallery: theme_gallery,
+                current_index: theme_index,
+                popup_selected: theme_index,
+                selected_id: None,
+            },
+            render_meta: RenderMeta::default(),
             title: title.to_string(),
-            scroll_offset: 0,
-            viewport_height: 20,
-            viewport_width,
             cmd_popup_selected: 0,
-            theme_gallery,
-            theme_index,
-            theme_popup_selected: theme_index,
             status_message: None,
-            selected_theme_id: None,
             cursor_before_search: None,
             mouse_anchor: None,
-            scroll_locked: false,
-            rendered_vl_map: Vec::new(),
-            rendered_vl_map_index: 0,
         }
     }
 
     /// 获取用户选择的主题ID（退出时读取）
     pub fn selected_theme_id(&self) -> Option<&'static str> {
-        self.selected_theme_id
+        self.themes.selected_id
     }
 
     /// 获取编辑器当前全部文本内容
@@ -267,7 +299,7 @@ impl MarkdownEditor {
     /// 处理输入
     pub fn handle_input(&mut self, input: &Input) -> EditorAction {
         // 键盘输入解除滚动锁定
-        self.scroll_locked = false;
+        self.viewport.scroll_locked = false;
 
         // 清除状态消息
         self.status_message = None;
@@ -608,7 +640,7 @@ impl MarkdownEditor {
                 EditorAction::Continue
             }
             "theme" => {
-                self.theme_popup_selected = self.theme_index;
+                self.themes.popup_selected = self.themes.current_index;
                 self.vim.set_mode(Mode::ThemeSelect);
                 EditorAction::Continue
             }
@@ -641,33 +673,33 @@ impl MarkdownEditor {
 
     /// 处理主题选择模式按键
     fn handle_theme_select(&mut self, input: &Input) -> EditorAction {
-        let count = self.theme_gallery.len();
+        let count = self.themes.gallery.len();
         match input.key {
             Key::Esc => {
                 self.vim.set_mode(Mode::Normal);
             }
             Key::Up => {
-                if self.theme_popup_selected > 0 {
-                    self.theme_popup_selected -= 1;
+                if self.themes.popup_selected > 0 {
+                    self.themes.popup_selected -= 1;
                 } else {
-                    self.theme_popup_selected = count - 1;
+                    self.themes.popup_selected = count - 1;
                 }
             }
             Key::Down => {
-                if self.theme_popup_selected < count - 1 {
-                    self.theme_popup_selected += 1;
+                if self.themes.popup_selected < count - 1 {
+                    self.themes.popup_selected += 1;
                 } else {
-                    self.theme_popup_selected = 0;
+                    self.themes.popup_selected = 0;
                 }
             }
             Key::Enter => {
-                let idx = self.theme_popup_selected;
+                let idx = self.themes.popup_selected;
                 if idx < count {
-                    self.theme_index = idx;
-                    let (name, theme_id, new_theme) = &self.theme_gallery[idx];
+                    self.themes.current_index = idx;
+                    let (name, theme_id, new_theme) = &self.themes.gallery[idx];
                     self.theme = new_theme.clone();
                     self.renderer.set_theme(new_theme.clone());
-                    self.selected_theme_id = Some(theme_id);
+                    self.themes.selected_id = Some(theme_id);
                     self.status_message = Some(format!("主题: {}", name));
                 }
                 self.vim.set_mode(Mode::Normal);
@@ -686,10 +718,10 @@ impl MarkdownEditor {
 
     /// 更新滚动偏移（基于视觉位置）
     fn update_scroll_from_visual(&mut self, visual_pos: usize, viewport_height: usize) {
-        if visual_pos < self.scroll_offset {
-            self.scroll_offset = visual_pos;
-        } else if visual_pos >= self.scroll_offset + viewport_height {
-            self.scroll_offset = visual_pos - viewport_height + 1;
+        if visual_pos < self.viewport.scroll_offset {
+            self.viewport.scroll_offset = visual_pos;
+        } else if visual_pos >= self.viewport.scroll_offset + viewport_height {
+            self.viewport.scroll_offset = visual_pos - viewport_height + 1;
         }
     }
 
@@ -721,9 +753,9 @@ impl MarkdownEditor {
         }
 
         // 使用渲染行元数据映射，将屏幕行号转换为渲染行索引
-        let rendered_row = content_y + self.rendered_vl_map_index;
+        let rendered_row = content_y + self.render_meta.map_index;
 
-        let vl_meta = self.rendered_vl_map.get(rendered_row)?;
+        let vl_meta = self.render_meta.vl_map.get(rendered_row)?;
 
         let logical_row = vl_meta.logical_line;
         let vl_start_col = vl_meta.start_col;
@@ -793,16 +825,16 @@ impl MarkdownEditor {
             }
             MouseEventKind::ScrollUp => {
                 let step = 3;
-                self.scroll_offset = self.scroll_offset.saturating_sub(step);
-                self.scroll_locked = true;
+                self.viewport.scroll_offset = self.viewport.scroll_offset.saturating_sub(step);
+                self.viewport.scroll_locked = true;
             }
             MouseEventKind::ScrollDown => {
                 let step = 3;
                 let content_height = area.height.saturating_sub(3) as usize;
                 let total_visual = self.wrap.visual_line_count();
                 let max_offset = total_visual.saturating_sub(content_height);
-                self.scroll_offset = (self.scroll_offset + step).min(max_offset);
-                self.scroll_locked = true;
+                self.viewport.scroll_offset = (self.viewport.scroll_offset + step).min(max_offset);
+                self.viewport.scroll_locked = true;
             }
             _ => {}
         }
@@ -826,8 +858,8 @@ impl MarkdownEditor {
         let content_height = area.height.saturating_sub(3) as usize; // 边框 + 状态栏
         let content_width = area.width.saturating_sub(2) as usize; // 左右边框
 
-        self.viewport_height = content_height;
-        self.viewport_width = content_width;
+        self.viewport.height = content_height;
+        self.viewport.width = content_width;
         let line_num_width = if self.renderer.is_show_line_numbers() {
             6
         } else {
@@ -860,13 +892,13 @@ impl MarkdownEditor {
         let cursor_visual_pos = self.wrap.logical_to_visual(cursor_row, cursor_col);
 
         // 基于视觉位置更新滚动偏移（滚轮滚动锁定时跳过）
-        if !self.scroll_locked {
+        if !self.viewport.scroll_locked {
             self.update_scroll_from_visual(cursor_visual_pos, content_height);
         }
 
         // 计算视口范围内需要渲染的逻辑行（O(log n)）
-        let first_visible_visual = self.scroll_offset;
-        let last_visible_visual = self.scroll_offset + content_height;
+        let first_visible_visual = self.viewport.scroll_offset;
+        let last_visible_visual = self.viewport.scroll_offset + content_height;
         let (start_logical, _) = self.wrap.visual_to_logical(first_visible_visual);
         let (end_logical, _) = self.wrap.visual_to_logical(last_visible_visual);
 
@@ -955,14 +987,14 @@ impl MarkdownEditor {
         }
 
         // 提取可见范围
-        let scroll_in_rendered = self.scroll_offset.saturating_sub(visual_offset);
+        let scroll_in_rendered = self.viewport.scroll_offset.saturating_sub(visual_offset);
         let visible_start = scroll_in_rendered.min(all_visual_lines.len().saturating_sub(1));
         let visible_end = (scroll_in_rendered + content_height).min(all_visual_lines.len());
 
         // 保存渲染行元数据映射，用于鼠标点击定位
         // rendered_vl_map_index 是当前屏幕顶部对应的渲染行索引
-        self.rendered_vl_map = all_vl_meta;
-        self.rendered_vl_map_index = visible_start;
+        self.render_meta.vl_map = all_vl_meta;
+        self.render_meta.map_index = visible_start;
 
         let mut lines_to_render: Vec<Line<'static>> = if visible_start < all_visual_lines.len() {
             all_visual_lines[visible_start..visible_end].to_vec()
@@ -1214,7 +1246,7 @@ impl MarkdownEditor {
 
     /// 渲染主题选择弹窗
     fn render_theme_popup(&mut self, f: &mut Frame<'_>, area: Rect) {
-        let item_count = self.theme_gallery.len();
+        let item_count = self.themes.gallery.len();
         if item_count == 0 {
             return;
         }
@@ -1231,7 +1263,7 @@ impl MarkdownEditor {
         let popup_area = Rect::new(x, y, popup_width, popup_height);
 
         // 确保选中项在范围内
-        self.theme_popup_selected = self.theme_popup_selected.min(item_count.saturating_sub(1));
+        self.themes.popup_selected = self.themes.popup_selected.min(item_count.saturating_sub(1));
 
         // 构建列表项
         let accent = self.theme.md_h1;
@@ -1239,12 +1271,13 @@ impl MarkdownEditor {
         let text_color = self.theme.text_normal;
         let current_color = self.theme.md_link;
         let list_items: Vec<ListItem> = self
-            .theme_gallery
+            .themes
+            .gallery
             .iter()
             .enumerate()
             .map(|(i, (name, _, _))| {
-                let is_selected = i == self.theme_popup_selected;
-                let is_current = i == self.theme_index;
+                let is_selected = i == self.themes.popup_selected;
+                let is_current = i == self.themes.current_index;
                 let pointer = if is_selected { "❯ " } else { "  " };
                 let check = if is_current { " ●" } else { "" };
                 let name_style = if is_selected {
@@ -1262,7 +1295,7 @@ impl MarkdownEditor {
             .collect();
 
         let mut list_state = ListState::default();
-        list_state.select(Some(self.theme_popup_selected));
+        list_state.select(Some(self.themes.popup_selected));
 
         let list = List::new(list_items)
             .block(
