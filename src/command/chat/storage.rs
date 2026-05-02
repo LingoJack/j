@@ -19,11 +19,11 @@ pub use session::{
     SessionMeta, SessionPaths, append_event_to_path, append_session_event, append_session_op,
     delete_session, find_latest_session_id, generate_session_id, list_sessions,
     load_display_session, load_session, load_session_meta_file, save_session_meta_file,
-    session_file_path, sessions_dir,
+    session_file_path, sessions_dir, write_session_metrics,
 };
 pub use types::{
-    ChatMessage, DisplayHint, DisplayType, ImageData, MessageRole, SessionEvent, SessionOp,
-    SessionOpKind, ToolCallItem,
+    ChatMessage, DisplayHint, DisplayType, ImageData, MessageRole, SessionEvent, SessionMetrics,
+    SessionOp, SessionOpKind, ToolCallItem,
 };
 
 #[cfg(test)]

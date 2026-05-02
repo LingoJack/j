@@ -195,6 +195,35 @@ pub enum SessionEvent {
     Clear,
     /// 归档还原（messages 为还原后的完整消息列表）
     Restore { messages: Vec<ChatMessage> },
+    /// 会话级性能指标（session 结束时追加一次）
+    Metrics { metrics: SessionMetrics },
+}
+
+/// 会话级性能/质量指标（session 结束时写入）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SessionMetrics {
+    /// LLM API 调用次数（每轮 round 一次）
+    pub total_llm_calls: u32,
+    /// 工具调用次数（tool_calls 数组元素总数）
+    pub total_tool_calls: u32,
+    /// 真实 input tokens（来自 API usage，0 表示未获取到）
+    pub total_input_tokens: u64,
+    /// 真实 output tokens（来自 API usage，0 表示未获取到）
+    pub total_output_tokens: u64,
+    /// 上下文 token 峰值（estimated_context_tokens 各轮最大值）
+    pub estimated_context_tokens_peak: usize,
+    /// auto_compact（含 CompactTool）触发次数
+    pub auto_compact_count: u32,
+    /// micro_compact 触发次数
+    pub micro_compact_count: u32,
+    /// 本次 session 加载的 skill 名称列表
+    pub skill_loads: Vec<String>,
+    /// 每次 LLM 调用的首字延迟（毫秒）；流式路径精确，fallback 路径为整个调用耗时
+    pub ttft_ms_per_call: Vec<u64>,
+    /// session 开始时间（epoch ms）
+    pub session_start_ms: u64,
+    /// session 结束时间（epoch ms）
+    pub session_end_ms: u64,
 }
 
 /// Session 操作审计记录，追加到 sessions/<id>/ops.jsonl

@@ -1,8 +1,8 @@
 use crate::command::chat::error::ChatError;
 use crate::command::chat::storage::{ChatMessage, MessageRole, ModelProvider, ToolCallItem};
 use crate::llm::{
-    ChatRequest, Content, ContentPart, FunctionCall, ImageUrl, LlmClient, Message, Role, ToolCall,
-    ToolDefinition,
+    ChatRequest, Content, ContentPart, FunctionCall, ImageUrl, LlmClient, Message, Role,
+    TokenUsage, ToolCall, ToolDefinition,
 };
 use crate::util::log::{write_error_log, write_info_log};
 use futures::StreamExt;
@@ -401,6 +401,7 @@ pub struct FallbackResult {
     pub tool_calls: Option<Vec<ToolCallItem>>,
     pub finish_reason: Option<String>,
     pub reasoning_content: Option<String>,
+    pub usage: Option<TokenUsage>,
 }
 
 impl FallbackResult {
@@ -435,6 +436,7 @@ pub async fn call_llm_non_stream(
                 tool_calls: None,
                 finish_reason: None,
                 reasoning_content: None,
+                usage: response.usage,
             });
         }
     };
@@ -483,6 +485,7 @@ pub async fn call_llm_non_stream(
         tool_calls: tool_items,
         finish_reason: choice.finish_reason.clone(),
         reasoning_content: choice.message.reasoning_content.clone(),
+        usage: response.usage,
     })
 }
 

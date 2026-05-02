@@ -1,5 +1,5 @@
 use super::config::agent_data_dir;
-use super::types::{ChatMessage, MessageRole, SessionEvent, SessionOp};
+use super::types::{ChatMessage, MessageRole, SessionEvent, SessionMetrics, SessionOp};
 use crate::command::chat::constants::MESSAGE_PREVIEW_MAX_LEN;
 use crate::error;
 use serde::{Deserialize, Serialize};
@@ -143,6 +143,11 @@ impl SessionPaths {
         self.dir.join("ops.jsonl")
     }
 
+    /// 性能指标文件：sessions/<id>/metrics.json
+    pub fn metrics_file(&self) -> PathBuf {
+        self.dir.join("metrics.json")
+    }
+
     pub fn ensure_dir(&self) -> std::io::Result<()> {
         fs::create_dir_all(&self.dir)
     }
@@ -253,6 +258,7 @@ fn update_session_meta_on_event(session_id: &str, event: &SessionEvent) {
                     .collect();
             }
         }
+        SessionEvent::Metrics { .. } => {}
     }
     let _ = save_session_meta_file(&meta);
 }
@@ -305,6 +311,7 @@ pub fn load_session(session_id: &str) -> Vec<ChatMessage> {
                 SessionEvent::Msg { message, .. } => messages.push(message),
                 SessionEvent::Clear => messages.clear(),
                 SessionEvent::Restore { messages: restored } => messages = restored,
+                SessionEvent::Metrics { .. } => {}
             },
             Err(_) => {
                 // 损坏行直接跳过，继续处理剩余行
@@ -350,6 +357,7 @@ pub fn load_display_session(session_id: &str) -> Vec<ChatMessage> {
                 SessionEvent::Msg { message, .. } => messages.push(message),
                 SessionEvent::Clear => messages.clear(),
                 SessionEvent::Restore { messages: restored } => messages = restored,
+                SessionEvent::Metrics { .. } => {}
             }
         }
     }
@@ -552,6 +560,7 @@ fn derive_session_meta_from_transcript(session_id: &str) -> Option<SessionMetaFi
                         .find(|m| m.role == MessageRole::User && !m.content.is_empty())
                         .map(|m| m.content.chars().take(MESSAGE_PREVIEW_MAX_LEN).collect());
                 }
+                SessionEvent::Metrics { .. } => {}
             }
         }
     }
@@ -661,4 +670,14 @@ pub fn delete_session(session_id: &str) -> bool {
         return false;
     }
     true
+}
+
+/// 将 SessionMetrics 写入 sessions/<id>/metrics.json（覆盖写，JSON pretty）
+pub fn write_session_metrics(session_id: &str, metrics: &SessionMetrics) -> bool {
+    let paths = SessionPaths::new(session_id);
+    let path = paths.metrics_file();
+    match serde_json::to_string_pretty(metrics) {
+        Ok(json) => fs::write(&path, json).is_ok(),
+        Err(_) => false,
+    }
 }

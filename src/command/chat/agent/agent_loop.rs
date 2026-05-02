@@ -9,7 +9,10 @@ use crate::command::chat::app::types::{StreamMsg, ToolResultMsg};
 use crate::command::chat::context::compact::{self, AutoCompactParams};
 use crate::command::chat::error::ChatError;
 use crate::command::chat::infra::hook::{HookContext, HookEvent};
-use crate::command::chat::storage::{ChatMessage, DisplayHint, MessageRole, ToolCallItem};
+use crate::command::chat::storage::{
+    ChatMessage, DisplayHint, MessageRole, SessionEvent, SessionMetrics, ToolCallItem,
+    append_session_event, write_session_metrics,
+};
 use crate::util::log::{write_error_log, write_info_log};
 use crate::util::safe_lock;
 use futures::StreamExt;
@@ -18,7 +21,7 @@ use std::collections::BTreeMap;
 use std::env::current_dir;
 use std::mem::take;
 use std::sync::{Arc, Mutex, mpsc};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// 调试日志中记录的最大 chunk 数量
 const DEBUG_LOG_CHUNK_LIMIT: u32 = 3;
@@ -151,6 +154,16 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
 
     let client = create_llm_client(&provider);
 
+    // ── 指标采集局部变量 ──
+    let mut metrics = SessionMetrics {
+        session_start_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        ..Default::default()
+    };
+    let mut context_tokens_peak: usize = 0;
+
     let tool_ctx = ToolCallContext {
         stream_msg_sender: &tx,
         tool_result_receiver: &tool_result_rx,
@@ -250,6 +263,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     compact_config.keep_recent,
                     &compact_config.micro_compact_exempt_tools,
                 );
+                metrics.micro_compact_count += 1;
 
                 // ★ PostMicroCompact hook
                 if hook_manager.has_hooks_for(HookEvent::PostMicroCompact) {
@@ -325,6 +339,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                                     &context_messages,
                                     &result,
                                 );
+                                metrics.auto_compact_count += 1;
                                 let _ = tx.send(StreamMsg::Compacted {
                                     messages_before: result.messages_before,
                                 });
@@ -457,6 +472,9 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
             if let Ok(mut ct) = estimated_context_tokens.lock() {
                 *ct = tokens;
             }
+            if tokens > context_tokens_peak {
+                context_tokens_peak = tokens;
+            }
         }
 
         // 记录本轮请求的消息统计
@@ -513,6 +531,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
 
         'api_retry: loop {
             retry_attempt += 1;
+            let call_start = Instant::now();
 
             // ── 创建流式请求（可重试）──
             write_info_log(
@@ -580,6 +599,14 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                         match result {
                             Some(Ok(response)) => {
                                 received_chunks += 1;
+                                if received_chunks == 1 {
+                                    metrics.ttft_ms_per_call.push(call_start.elapsed().as_millis() as u64);
+                                }
+                                // 累计 API 返回的 token usage（流末 chunk 通常携带）
+                                if let Some(ref usage) = response.usage {
+                                    metrics.total_input_tokens += usage.prompt_tokens;
+                                    metrics.total_output_tokens += usage.completion_tokens;
+                                }
                                 // 记录前几个 chunk 的原始信息，便于调试
                                 if received_chunks <= DEBUG_LOG_CHUNK_LIMIT {
                                     let choices_debug: Vec<String> = response.choices.iter().map(|choice| {
@@ -748,6 +775,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                                 &context_messages,
                                 &result,
                             );
+                            metrics.auto_compact_count += 1;
                             let _ = tx.send(StreamMsg::Compacted {
                                 messages_before: result.messages_before,
                             });
@@ -872,7 +900,17 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                         }
                     };
                     match result {
-                        Ok(r) => break r,
+                        Ok(r) => {
+                            metrics
+                                .ttft_ms_per_call
+                                .push(call_start.elapsed().as_millis() as u64);
+                            if let Some(ref usage) = r.usage {
+                                metrics.total_input_tokens += usage.prompt_tokens;
+                                metrics.total_output_tokens += usage.completion_tokens;
+                            }
+                            metrics.total_llm_calls += 1;
+                            break r;
+                        }
                         Err(e) => {
                             write_error_log("Sprite API fallback 非流式", &e.to_string());
                             if let Some(policy) = retry_policy_for(&e)
@@ -933,6 +971,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     }
                     let assistant_text: String =
                         fallback_result.content.clone().unwrap_or_default();
+                    metrics.total_tool_calls += tool_items.len() as u32;
                     match process_tool_calls(
                         tool_items,
                         assistant_text,
@@ -962,6 +1001,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                                         &context_messages,
                                         &compact_result,
                                     );
+                                    metrics.auto_compact_count += 1;
                                     let _ = tx.send(StreamMsg::Compacted {
                                         messages_before: compact_result.messages_before,
                                     });
@@ -1106,6 +1146,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
 
                 if tool_items.is_empty() {
                     write_info_log("agent_loop", "流式 tool_items 转换后为空，break 'round");
+                    metrics.total_llm_calls += 1;
                     break 'round;
                 }
 
@@ -1125,6 +1166,8 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     let r: String = take(&mut assistant_reasoning);
                     if r.is_empty() { None } else { Some(r) }
                 };
+                metrics.total_llm_calls += 1;
+                metrics.total_tool_calls += tool_items.len() as u32;
                 match process_tool_calls(
                     tool_items,
                     assistant_text,
@@ -1274,6 +1317,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                         assistant_text.len()
                     ),
                 );
+                metrics.total_llm_calls += 1;
                 break 'round;
             }
 
@@ -1292,5 +1336,23 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
             final_round_idx + 1
         ),
     );
+
+    // ── 写出 session metrics ──
+    metrics.session_end_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    metrics.estimated_context_tokens_peak = context_tokens_peak;
+    metrics.skill_loads = {
+        if let Ok(skills) = invoked_skills.lock() {
+            skills.keys().cloned().collect()
+        } else {
+            vec![]
+        }
+    };
+    let _ = write_session_metrics(&session_id, &metrics);
+    let metrics_event = SessionEvent::Metrics { metrics };
+    let _ = append_session_event(&session_id, &metrics_event);
+
     let _ = tx.send(StreamMsg::Done);
 }

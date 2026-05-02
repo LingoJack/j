@@ -105,10 +105,24 @@ pub struct ChatRequest {
 
 // ── Response types (non-streaming) ──
 
+/// Token usage reported by the API.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct TokenUsage {
+    #[serde(default)]
+    pub prompt_tokens: u64,
+    #[serde(default)]
+    pub completion_tokens: u64,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub total_tokens: u64,
+}
+
 /// Non-streaming chat completion response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatResponse {
     pub choices: Vec<Choice>,
+    #[serde(default)]
+    pub usage: Option<TokenUsage>,
 }
 
 /// A single choice in a completion response.
@@ -141,6 +155,8 @@ pub struct ResponseMessage {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatStreamChunk {
     pub choices: Vec<StreamChoice>,
+    #[serde(default)]
+    pub usage: Option<TokenUsage>,
 }
 
 /// A single choice within a streaming chunk.
