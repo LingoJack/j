@@ -284,6 +284,7 @@ impl ChatApp {
             tool_registry: tool_registry_arc,
             disabled_tools,
             tools_enabled,
+            sub_agent_metrics: Arc::clone(&self.sub_agent_metrics),
         };
         let (handle, tool_result_tx) =
             MainAgentHandle::spawn(agent_config, agent_shared, api_messages, system_prompt_fn);

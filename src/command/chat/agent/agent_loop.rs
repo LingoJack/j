@@ -150,6 +150,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         tool_registry,
         disabled_tools,
         tools_enabled,
+        sub_agent_metrics,
     } = shared;
 
     let client = create_llm_client(&provider);
@@ -1359,6 +1360,20 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
             vec![]
         }
     };
+
+    // 合并子 Agent（SubAgent/Teammate）metrics
+    if let Ok(sub) = sub_agent_metrics.lock() {
+        metrics.total_llm_calls += sub.total_llm_calls;
+        metrics.total_tool_calls += sub.total_tool_calls;
+        metrics.total_input_tokens += sub.total_input_tokens;
+        metrics.total_output_tokens += sub.total_output_tokens;
+        metrics.total_llm_elapsed_ms += sub.total_llm_elapsed_ms;
+        metrics.total_tool_elapsed_ms += sub.total_tool_elapsed_ms;
+        metrics
+            .ttft_ms_per_call
+            .extend(&sub.llm_elapsed_ms_per_call);
+    }
+
     let _ = write_session_metrics(&session_id, &metrics);
     let metrics_event = SessionEvent::Metrics { metrics };
     let _ = append_session_event(&session_id, &metrics_event);

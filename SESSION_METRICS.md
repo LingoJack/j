@@ -37,12 +37,16 @@
 
 `metrics.json` 在会话正常结束时写入，记录本次会话的性能和质量指标。
 
+> **统计范围**：metrics 包含 Main Agent、SubAgent（子 Agent）和 Teammate（协作 Agent）
+> 三种 Agent 类型的 LLM 调用和工具调用统计数据。SubAgent 和 Teammate 通过共享的
+> `Arc<Mutex<SubAgentMetrics>>` 累加器实时累加，session 结束时由 Main Agent 合并写入。
+
 | 字段 | 类型 | 含义 |
 |---|---|---|
-| `total_llm_calls` | `u32` | LLM API 调用次数（每轮对话算一次） |
-| `total_tool_calls` | `u32` | 工具调用次数（所有 LLM 返回的 `tool_calls` 数组元素总数） |
-| `total_input_tokens` | `u64` | 累计输入 token 数（来自 API 响应的 `usage.prompt_tokens`，未获取到则为 0） |
-| `total_output_tokens` | `u64` | 累计输出 token 数（来自 API 响应的 `usage.completion_tokens`，未获取到则为 0） |
+| `total_llm_calls` | `u32` | LLM API 调用次数（Main Agent + SubAgent + Teammate 合计，每轮对话算一次） |
+| `total_tool_calls` | `u32` | 工具调用次数（Main Agent + SubAgent + Teammate 合计，所有 LLM 返回的 `tool_calls` 数组元素总数） |
+| `total_input_tokens` | `u64` | 累计输入 token 数（Main Agent + SubAgent + Teammate 合计，来自 API 响应的 `usage.prompt_tokens`，未获取到则为 0） |
+| `total_output_tokens` | `u64` | 累计输出 token 数（Main Agent + SubAgent + Teammate 合计，来自 API 响应的 `usage.completion_tokens`，未获取到则为 0） |
 | `estimated_context_tokens_peak` | `usize` | 上下文 token 峰值（各轮对话中估算上下文 token 数的最大值） |
 | `auto_compact_count` | `u32` | 自动压缩触发次数（含 `CompactTool` 手动触发） |
 | `micro_compact_count` | `u32` | 微压缩（`micro_compact`）触发次数 |

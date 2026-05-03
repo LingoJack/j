@@ -67,6 +67,8 @@ pub struct TeammateLoopConfig {
     pub disabled_hooks: Arc<Mutex<Vec<String>>>,
     /// 父 agent 的上下文配置快照（供 select_messages + micro_compact 复用）
     pub context_config: Arc<Mutex<AgentContextConfig>>,
+    /// 子 Agent metrics 累加器（与 DerivedAgentShared.sub_agent_metrics 共享）
+    pub sub_agent_metrics: Arc<Mutex<crate::command::chat::tools::derived_shared::SubAgentMetrics>>,
 }
 
 /// Teammate 专用的 agent loop
@@ -101,6 +103,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         hook_manager,
         disabled_hooks,
         context_config,
+        sub_agent_metrics,
     } = config;
 
     // 定位当前 teammate 的 transcript JSONL 路径（按 session_id 实时解析，切换 session 也能落到正确位置）
@@ -305,7 +308,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             }
         };
 
-        let response_choice = match call_llm_non_stream(&LlmNonStreamRequest {
+        let response = match call_llm_non_stream(&LlmNonStreamRequest {
             rt: &rt,
             client: &client,
             provider: &provider,
@@ -314,12 +317,28 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
             system_prompt: Some(&effective_system_prompt),
             on_retry: Some(&retry_callback),
         }) {
-            Ok(c) => c,
+            Ok(r) => r,
             Err(e) => {
                 set_status(TeammateStatus::Error(e.clone()));
                 return format!("{}\n{}", last_assistant_text, e);
             }
         };
+
+        // 提取第一个 choice（非流式调用保证有且仅有一个）
+        let response_choice = response
+            .choices
+            .into_iter()
+            .next()
+            .expect("call_llm_non_stream validates non-empty choices");
+
+        // 累加 LLM metrics（usage 可能为空，某些 provider 不返回）
+        if let Some(usage) = response.usage
+            && let Ok(mut m) = sub_agent_metrics.lock()
+        {
+            m.total_llm_calls += 1;
+            m.total_input_tokens += usage.prompt_tokens;
+            m.total_output_tokens += usage.completion_tokens;
+        }
 
         let assistant_text = response_choice.message.content.clone().unwrap_or_default();
         let reasoning_content = response_choice.message.reasoning_content.clone();
@@ -589,6 +608,12 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
                     verbose: false,
                 },
             );
+
+            // 累加工具调用 metrics
+            if let Ok(mut m) = sub_agent_metrics.lock() {
+                m.total_tool_calls += 1;
+            }
+
             // 工具结果推入 display only（完整内容，渲染为工具结果卡片）
             if let Ok(manager) = teammate_manager.lock()
                 && let Ok(mut display) = manager.display_messages.lock()

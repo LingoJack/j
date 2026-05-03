@@ -222,6 +222,9 @@ pub(crate) fn run_oneshot_agent(
         tool_registry: Arc::clone(&tool_registry),
         disabled_tools: agent_config.disabled_tools.clone(),
         tools_enabled: agent_config.tools_enabled,
+        sub_agent_metrics: Arc::new(Mutex::new(
+            crate::command::chat::tools::derived_shared::SubAgentMetrics::default(),
+        )),
     };
 
     // Ctrl+C → cancel

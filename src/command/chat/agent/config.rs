@@ -3,6 +3,7 @@ use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::storage::{ChatMessage, ModelProvider};
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::definition::ToolRegistry;
+use crate::command::chat::tools::derived_shared::SubAgentMetrics;
 use crate::command::chat::tools::todo::TodoManager;
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -56,4 +57,7 @@ pub struct AgentLoopSharedState {
     pub disabled_tools: Vec<String>,
     /// 工具是否启用
     pub tools_enabled: bool,
+    /// 子 Agent metrics 累加器（SubAgent/Teammate 的 LLM/tool 统计）
+    /// Main agent loop 结束时读取并合并到 `SessionMetrics`
+    pub sub_agent_metrics: Arc<Mutex<SubAgentMetrics>>,
 }

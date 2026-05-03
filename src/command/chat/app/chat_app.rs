@@ -116,6 +116,8 @@ pub struct ChatApp {
     pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（Teammate ExitPlanMode 和 TUI 共享同一个 Arc）
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
+    /// 子 Agent metrics 累加器（SubAgent/Teammate 的 LLM/tool 统计，传递给 AgentLoopSharedState）
+    pub sub_agent_metrics: Arc<Mutex<crate::command::chat::tools::derived_shared::SubAgentMetrics>>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
     pub invoked_skills: crate::command::chat::context::compact::InvokedSkillsMap,
 }
@@ -258,6 +260,9 @@ impl ChatApp {
         let shared_disabled_hooks = Arc::new(Mutex::new(agent_config.disabled_hooks.clone()));
 
         // 构建 DerivedAgentShared（SubAgentTool / TeammateTool 共用）
+        let shared_sub_agent_metrics = Arc::new(Mutex::new(
+            crate::command::chat::tools::derived_shared::SubAgentMetrics::default(),
+        ));
         let derived_agent_shared = DerivedAgentShared {
             background_manager: Arc::clone(&background_manager),
             provider: Arc::clone(&agent_provider),
@@ -275,6 +280,7 @@ impl ChatApp {
             plan_mode_state: Arc::clone(&tool_registry.plan_mode_state),
             agent_context_config: Arc::clone(&agent_context_config),
             disabled_hooks: Arc::clone(&shared_disabled_hooks),
+            sub_agent_metrics: Arc::clone(&shared_sub_agent_metrics),
         };
         tool_registry.register(Box::new(
             crate::command::chat::tools::sub_agent::SubAgentTool {
@@ -602,6 +608,7 @@ impl ChatApp {
             sub_agent_tracker,
             permission_queue,
             plan_approval_queue,
+            sub_agent_metrics: shared_sub_agent_metrics,
             invoked_skills,
         };
 

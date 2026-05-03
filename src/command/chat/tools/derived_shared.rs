@@ -13,9 +13,10 @@ use crate::command::chat::tools::ToolRegistry;
 use crate::command::chat::tools::background::BackgroundManager;
 use crate::command::chat::tools::plan::{PlanApprovalQueue, PlanModeState};
 use crate::command::chat::tools::task::TaskManager;
-use crate::llm::{Choice, ToolCall, ToolDefinition};
+use crate::llm::{ChatResponse, ToolCall, ToolDefinition};
 use crate::util::log::write_info_log;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
@@ -275,6 +276,30 @@ impl Default for SubAgentTracker {
     }
 }
 
+// ========== SubAgentMetrics ==========
+
+/// 子 Agent（SubAgent / Teammate）的 metrics 累加器
+///
+/// 每个子 Agent loop 内部累加，Main agent loop 结束时读取并合并到 `SessionMetrics`。
+/// 使用 `Arc<Mutex<SubAgentMetrics>>` 实现多 Agent 并发安全写入。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SubAgentMetrics {
+    /// LLM API 调用次数
+    pub total_llm_calls: u32,
+    /// 工具调用次数
+    pub total_tool_calls: u32,
+    /// 输入 token 总数
+    pub total_input_tokens: u64,
+    /// 输出 token 总数
+    pub total_output_tokens: u64,
+    /// LLM 调用总耗时（毫秒）
+    pub total_llm_elapsed_ms: u64,
+    /// 工具执行总耗时（毫秒）
+    pub total_tool_elapsed_ms: u64,
+    /// 每次非流式 LLM 调用的耗时（等同于整次调用耗时，非流式无 TTFT 概念）
+    pub llm_elapsed_ms_per_call: Vec<u64>,
+}
+
 // ========== DerivedAgentShared ==========
 
 // NOTE: Cannot derive Debug - contains PermissionQueue, PlanApprovalQueue, SubAgentTracker
@@ -311,6 +336,9 @@ pub struct DerivedAgentShared {
     pub agent_context_config: Arc<Mutex<AgentContextConfig>>,
     /// 父 agent 禁用的 hook 列表（Teammate 走 PreLlmRequest hook 链时需要）。
     pub disabled_hooks: Arc<Mutex<Vec<String>>>,
+    /// 子 Agent metrics 累加器（SubAgent/Teammate 的 LLM/tool 统计）
+    /// Main agent loop 结束时读取并合并到 `SessionMetrics`
+    pub sub_agent_metrics: Arc<Mutex<SubAgentMetrics>>,
 }
 
 /// 子 agent 调用 LLM 前用到的上下文配置（从父 AgentConfig 抽取）
@@ -389,7 +417,10 @@ pub type RetryCallback = dyn Fn(u32, u32, u64, &str);
 /// - 最多 8 次重试（并发 Agent 更易触发 rate limit）
 /// - 退避上限 30–60s（与主 agent 对齐）
 /// - 仍失败则直接返回错误文本
-pub fn call_llm_non_stream(req: &LlmNonStreamRequest) -> Result<Choice, String> {
+///
+/// 返回完整的 `ChatResponse`（包含 `choices` 和 `usage`），
+/// 调用方需自行提取第一个 choice 并按需读取 usage。
+pub fn call_llm_non_stream(req: &LlmNonStreamRequest) -> Result<ChatResponse, String> {
     let request = build_request_with_tools(
         req.provider,
         req.messages,
@@ -406,11 +437,11 @@ pub fn call_llm_non_stream(req: &LlmNonStreamRequest) -> Result<Choice, String> 
             .block_on(async { req.client.chat_completion(&request).await })
         {
             Ok(response) => {
-                return response
-                    .choices
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| "[No response from API]".to_string());
+                // 保留空 choice 校验，但返回完整 response（含 usage）
+                if response.choices.is_empty() {
+                    return Err("[No response from API]".to_string());
+                }
+                return Ok(response);
             }
             Err(e) => {
                 let chat_err = ChatError::from(e);

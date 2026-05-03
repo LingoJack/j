@@ -77,6 +77,8 @@ struct SubAgentLoopParams {
     transcript_path: Option<std::path::PathBuf>,
     /// 父 agent 的上下文配置快照（供 select_messages + micro_compact 复用）
     context_config: crate::command::chat::tools::derived_shared::AgentContextConfig,
+    /// 子 Agent metrics 累加器（与 DerivedAgentShared.sub_agent_metrics 共享）
+    sub_agent_metrics: Arc<Mutex<crate::command::chat::tools::derived_shared::SubAgentMetrics>>,
 }
 
 /// 将任意描述转为适合作为 <前缀> 显示的名字（去空白，限长度）
@@ -267,6 +269,7 @@ impl Tool for SubAgentTool {
             let _sub_id_for_thread = sub_id.clone();
             let context_config_clone = context_config.clone();
             let agent_identity = format!("SubAgent@{}", sanitize_agent_name(&description));
+            let sub_agent_metrics_clone = Arc::clone(&self.shared.sub_agent_metrics);
             std::thread::spawn(move || {
                 // 设置线程的 agent 身份（含类型前缀，与广播 <SubAgent@Name> 格式一致）
                 set_current_agent_name(&agent_identity);
@@ -289,6 +292,7 @@ impl Tool for SubAgentTool {
                         description: description_clone.clone(),
                         transcript_path: Some(transcript_path),
                         context_config: context_config_clone,
+                        sub_agent_metrics: sub_agent_metrics_clone,
                     },
                     &cancelled_clone,
                     &display_clone,
@@ -358,6 +362,7 @@ impl Tool for SubAgentTool {
                     description,
                     transcript_path: Some(subagent_transcript_path),
                     context_config,
+                    sub_agent_metrics: Arc::clone(&self.shared.sub_agent_metrics),
                 },
                 &cancelled_clone,
                 &self.shared.display_messages,
@@ -568,7 +573,7 @@ fn run_sub_agent_loop(
             );
         }
 
-        let choice = match call_llm_non_stream(&LlmNonStreamRequest {
+        let response = match call_llm_non_stream(&LlmNonStreamRequest {
             rt: &rt,
             client: &client,
             provider: &params.provider,
@@ -577,9 +582,9 @@ fn run_sub_agent_loop(
             system_prompt: params.system_prompt.as_deref(),
             on_retry: Some(&retry_callback),
         }) {
-            Ok(c) => {
+            Ok(r) => {
                 // LLM 调用成功，保持 Thinking（等待工具执行时切换为 Working）
-                c
+                r
             }
             Err(e) => {
                 if let Some(ref refs) = params.snapshot {
@@ -589,6 +594,22 @@ fn run_sub_agent_loop(
                 return format!("{}\n{}", final_text, e);
             }
         };
+
+        // 提取第一个 choice（非流式调用保证有且仅有一个）
+        let choice = response
+            .choices
+            .into_iter()
+            .next()
+            .expect("call_llm_non_stream validates non-empty choices");
+
+        // 累加 LLM metrics（usage 可能为空，某些 provider 不返回）
+        if let Some(usage) = response.usage
+            && let Ok(mut m) = params.sub_agent_metrics.lock()
+        {
+            m.total_llm_calls += 1;
+            m.total_input_tokens += usage.prompt_tokens;
+            m.total_output_tokens += usage.completion_tokens;
+        }
 
         let assistant_text = choice.message.content.clone().unwrap_or_default();
         let reasoning_content = choice.message.reasoning_content.clone();
@@ -685,6 +706,12 @@ fn run_sub_agent_loop(
                     verbose: true,
                 },
             );
+
+            // 累加工具调用 metrics
+            if let Ok(mut m) = params.sub_agent_metrics.lock() {
+                m.total_tool_calls += 1;
+            }
+
             // 工具结果推入 display only（完整内容，渲染为工具结果卡片）
             push_tool_result_to_display(
                 result_msg.content.clone(),

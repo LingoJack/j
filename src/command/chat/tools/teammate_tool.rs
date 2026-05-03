@@ -232,6 +232,7 @@ impl Tool for TeammateTool {
         let hook_manager_clone = Arc::clone(&self.shared.hook_manager);
         let disabled_hooks_clone = Arc::clone(&self.shared.disabled_hooks);
         let context_config_clone = Arc::clone(&self.shared.agent_context_config);
+        let sub_agent_metrics_clone = Arc::clone(&self.shared.sub_agent_metrics);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份（含类型前缀，与广播 <Teammate@Name> 格式一致）
@@ -279,6 +280,7 @@ impl Tool for TeammateTool {
                 hook_manager: hook_manager_clone,
                 disabled_hooks: disabled_hooks_clone,
                 context_config: context_config_clone,
+                sub_agent_metrics: sub_agent_metrics_clone,
             });
 
             // 清理 worktree
