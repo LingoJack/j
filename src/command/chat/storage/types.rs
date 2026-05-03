@@ -220,6 +220,12 @@ pub struct SessionMetrics {
     pub skill_loads: Vec<String>,
     /// 每次 LLM 调用的首字延迟（毫秒）；流式路径精确，fallback 路径为整个调用耗时
     pub ttft_ms_per_call: Vec<u64>,
+    /// LLM 调用总耗时（毫秒）—— 仅计算 LLM API 等待时间（含流式读取），不含工具执行时间
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub total_llm_elapsed_ms: u64,
+    /// 工具执行总耗时（毫秒）—— 仅计算工具调用执行时间
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub total_tool_elapsed_ms: u64,
     /// session 开始时间（epoch ms）
     pub session_start_ms: u64,
     /// session 结束时间（epoch ms）

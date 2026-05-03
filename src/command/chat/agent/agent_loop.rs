@@ -909,6 +909,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                                 metrics.total_output_tokens += usage.completion_tokens;
                             }
                             metrics.total_llm_calls += 1;
+                            metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
                             break r;
                         }
                         Err(e) => {
@@ -972,6 +973,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     let assistant_text: String =
                         fallback_result.content.clone().unwrap_or_default();
                     metrics.total_tool_calls += tool_items.len() as u32;
+                    let tool_start = Instant::now();
                     match process_tool_calls(
                         tool_items,
                         assistant_text,
@@ -980,6 +982,8 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                         fallback_result.reasoning_content.clone(),
                     ) {
                         Ok(result) => {
+                            metrics.total_tool_elapsed_ms +=
+                                tool_start.elapsed().as_millis() as u64;
                             // ── Layer 3: compact tool 触发 ──
                             if result.compact_requested && compact_config.enabled {
                                 let _ = tx.send(StreamMsg::Compacting);
@@ -1147,6 +1151,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                 if tool_items.is_empty() {
                     write_info_log("agent_loop", "流式 tool_items 转换后为空，break 'round");
                     metrics.total_llm_calls += 1;
+                    metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
                     break 'round;
                 }
 
@@ -1167,7 +1172,9 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     if r.is_empty() { None } else { Some(r) }
                 };
                 metrics.total_llm_calls += 1;
+                metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
                 metrics.total_tool_calls += tool_items.len() as u32;
+                let tool_start = Instant::now();
                 match process_tool_calls(
                     tool_items,
                     assistant_text,
@@ -1176,6 +1183,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     reasoning_opt,
                 ) {
                     Ok(result) => {
+                        metrics.total_tool_elapsed_ms += tool_start.elapsed().as_millis() as u64;
                         // ── Layer 3: compact tool 触发 ──
                         if result.compact_requested && compact_config.enabled {
                             let _ = tx.send(StreamMsg::Compacting);
@@ -1318,6 +1326,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     ),
                 );
                 metrics.total_llm_calls += 1;
+                metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
                 break 'round;
             }
 
