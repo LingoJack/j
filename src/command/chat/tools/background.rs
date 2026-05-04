@@ -119,6 +119,37 @@ impl BackgroundManager {
         (task_id, output_buffer)
     }
 
+    /// 接管已运行中的子进程，注册为 running 后台任务
+    /// 返回 task_id 和共享输出缓冲区；调用方负责在独立线程中继续读取 child 输出并写入 buffer，
+    /// 进程结束后调用 complete_task() 完成任务
+    pub fn adopt_process(
+        &self,
+        command: &str,
+        pid: u32,
+        started_at: Instant,
+    ) -> (String, Arc<Mutex<String>>) {
+        let task_id = self.gen_id();
+        let output_buffer = Arc::new(Mutex::new(String::new()));
+
+        let bg_task = BgTask {
+            task_id: task_id.clone(),
+            command: command.to_string(),
+            status: "running".to_string(),
+            output_buffer: Arc::clone(&output_buffer),
+            result: None,
+            started_at,
+            child_pid: Some(pid),
+            is_thread_running: None,
+        };
+
+        {
+            let mut tasks = safe_lock(&self.tasks, "BackgroundManager::adopt_process");
+            tasks.insert(task_id.clone(), bg_task);
+        }
+
+        (task_id, output_buffer)
+    }
+
     /// 更新子进程 PID（执行线程在 spawn 成功后调用）
     pub fn update_child_pid(&self, task_id: &str, pid: u32) {
         let mut tasks = safe_lock(&self.tasks, "BackgroundManager::update_child_pid");

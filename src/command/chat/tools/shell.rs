@@ -2,7 +2,7 @@ use super::ToolResult;
 use super::background::BackgroundManager;
 use crate::command::chat::agent::thread_identity::thread_cwd;
 use crate::command::chat::constants::{
-    SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
+    SHELL_AUTO_BG_SECS, SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
 };
 use crate::command::chat::tools::{
     PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::io::BufRead;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
@@ -87,6 +87,7 @@ impl Tool for ShellTool {
           - Prefer creating a new commit rather than amending
           - Before running destructive operations (git reset --hard, git push --force), consider safer alternatives
           - Never skip hooks (--no-verify) unless the user explicitly asks
+        - Commands that may run longer than a few seconds (builds, deploys, container ops, custom scripts, make targets) should use run_in_background: true — even if the command has its own detach flag (e.g. `podman compose up -d` or `docker compose up -d` still blocks during image build). If unsure, prefer run_in_background: true; the tool will auto-promote to background after 30s regardless, returning a task_id you can use with TaskOutput.
         "#
     }
 
@@ -163,6 +164,8 @@ impl Tool for ShellTool {
 
 impl ShellTool {
     /// 同步执行命令：spawn → 轮询等待 → 收集输出
+    /// 超过 SHELL_AUTO_BG_SECS 仍未结束时，自动将进程移交给 BackgroundManager，
+    /// 不杀进程，立即返回 task_id，进程在后台继续运行
     fn execute_sync(
         &self,
         command: &str,
@@ -205,28 +208,41 @@ impl ShellTool {
             }
         };
 
-        // 先取走 stdout/stderr 句柄，在独立线程中读取，避免管道缓冲区满导致死锁
+        let pid = child.id();
+
+        // 用 Arc<Mutex<String>> 逐行写入，升级时可直接将 buffer 移交 BackgroundManager
         let stdout_handle = child.stdout.take();
         let stderr_handle = child.stderr.take();
+        let output_buffer: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+        let stdout_buf = Arc::clone(&output_buffer);
+        let stderr_buf = Arc::clone(&output_buffer);
 
         let stdout_thread = std::thread::spawn(move || {
-            stdout_handle.map(|mut r| {
-                let mut buf = Vec::new();
-                std::io::Read::read_to_end(&mut r, &mut buf).ok();
-                buf
-            })
+            if let Some(r) = stdout_handle {
+                let reader = std::io::BufReader::new(r);
+                for line in reader.lines().map_while(Result::ok) {
+                    if let Ok(mut buf) = stdout_buf.lock() {
+                        buf.push_str(&line);
+                        buf.push('\n');
+                    }
+                }
+            }
         });
         let stderr_thread = std::thread::spawn(move || {
-            stderr_handle.map(|mut r| {
-                let mut buf = Vec::new();
-                std::io::Read::read_to_end(&mut r, &mut buf).ok();
-                buf
-            })
+            if let Some(r) = stderr_handle {
+                let reader = std::io::BufReader::new(r);
+                for line in reader.lines().map_while(Result::ok) {
+                    if let Ok(mut buf) = stderr_buf.lock() {
+                        buf.push_str(&line);
+                        buf.push('\n');
+                    }
+                }
+            }
         });
 
-        // 轮询等待子进程完成，同时检测取消信号和超时
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);
+        let auto_bg_threshold = Duration::from_secs(SHELL_AUTO_BG_SECS);
 
         let status = loop {
             if cancelled.load(Ordering::Relaxed) {
@@ -240,12 +256,79 @@ impl ShellTool {
                 };
             }
 
+            // 自动升级：超过阈值仍未结束，不杀进程，移交后台
+            if start.elapsed() >= auto_bg_threshold {
+                let (task_id, bg_buffer) = self.manager.adopt_process(command, pid, start);
+
+                // 把当前已缓冲内容复制到 bg_buffer，随后 reader 线程继续写 output_buffer，
+                // 但 output_buffer 和 bg_buffer 是两个独立 Arc，需要在后台监控线程中桥接
+                let current_output = output_buffer
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                if !current_output.is_empty() {
+                    if let Ok(mut buf) = bg_buffer.lock() {
+                        buf.push_str(&current_output);
+                    }
+                }
+
+                // 启动后台监控线程：等待子进程结束，持续从 output_buffer 同步到 bg_buffer，
+                // 最终调用 complete_task
+                let manager = Arc::clone(&self.manager);
+                let tid = task_id.clone();
+                let cmd_str = command.to_string();
+                let src_buf = Arc::clone(&output_buffer);
+                let dst_buf = Arc::clone(&bg_buffer);
+                std::thread::spawn(move || {
+                    // 等待 reader 线程写完（child 进程结束时 pipe 关闭，reader 自然退出）
+                    let _ = stdout_thread.join();
+                    let _ = stderr_thread.join();
+
+                    // 最终同步完整输出
+                    let final_output = src_buf.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    {
+                        let mut buf = dst_buf.lock().unwrap_or_else(|e| e.into_inner());
+                        *buf = final_output.clone();
+                    }
+
+                    let result = if final_output.is_empty() {
+                        "(无输出)".to_string()
+                    } else {
+                        final_output
+                    };
+                    manager.complete_task(&tid, "completed", result);
+                    crate::util::log::write_info_log(
+                        "ShellTool::auto_bg",
+                        &format!("自动后台任务 {} 已完成: {}", tid, cmd_str),
+                    );
+                });
+
+                return ToolResult {
+                    output: json!({
+                        "task_id": task_id,
+                        "command": command,
+                        "status": "running",
+                        "message": format!(
+                            "命令运行超过 {}s 仍未结束，已自动转为后台任务。使用 TaskOutput 查询结果。",
+                            SHELL_AUTO_BG_SECS
+                        )
+                    })
+                    .to_string(),
+                    is_error: false,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+
             if start.elapsed() > timeout {
                 let _ = child.kill();
                 let _ = child.wait();
-                let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
-                let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
-                let partial = build_output(&stdout_bytes, &stderr_bytes);
+                let _ = stdout_thread.join();
+                let _ = stderr_thread.join();
+                let partial = output_buffer
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
                 let timeout_msg = format!(
                     "[超时] 命令执行超过 {}s 已自动终止。可能原因：命令等待交互输入（尝试加 --yes 等非交互标志）或命令长时间运行（尝试增大 timeout 值）。",
                     timeout_secs
@@ -276,9 +359,13 @@ impl ShellTool {
             }
         };
 
-        let stdout_bytes = stdout_thread.join().ok().flatten().unwrap_or_default();
-        let stderr_bytes = stderr_thread.join().ok().flatten().unwrap_or_default();
-        let result = build_output(&stdout_bytes, &stderr_bytes);
+        let _ = stdout_thread.join();
+        let _ = stderr_thread.join();
+        let raw = output_buffer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let result = crate::util::text::sanitize_tool_output(&raw);
 
         let is_error = !status.success();
         ToolResult {
@@ -446,25 +533,4 @@ impl ShellTool {
             plan_decision: PlanDecision::None,
         }
     }
-}
-
-/// 将 stdout 和 stderr 字节拼接为最终输出字符串（剥离 ANSI 转义码 + 清理控制字符）
-pub(super) fn build_output(stdout_bytes: &[u8], stderr_bytes: &[u8]) -> String {
-    use crate::util::text::sanitize_tool_output;
-    let mut result = String::new();
-    let stdout = String::from_utf8_lossy(stdout_bytes);
-    let stderr = String::from_utf8_lossy(stderr_bytes);
-
-    if !stdout.is_empty() {
-        result.push_str(&stdout);
-    }
-    if !stderr.is_empty() {
-        if !result.is_empty() {
-            result.push_str("\n[stderr]\n");
-        } else {
-            result.push_str("[stderr]\n");
-        }
-        result.push_str(&stderr);
-    }
-    sanitize_tool_output(&result)
 }

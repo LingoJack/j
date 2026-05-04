@@ -296,6 +296,14 @@ fn is_long_running_server(first: &str, tokens: &[String]) -> bool {
         return true;
     }
 
+    // podman compose up
+    if first == "podman" && tokens.iter().skip(1).any(|t| t == "compose") {
+        return true;
+    }
+    if first == "podman-compose" {
+        return true;
+    }
+
     // ruby rails server
     if first == "rails" && tokens.iter().skip(1).any(|t| t == "server" || t == "s") {
         return true;

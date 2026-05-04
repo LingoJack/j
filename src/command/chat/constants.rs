@@ -20,6 +20,10 @@ pub const SHELL_MAX_TIMEOUT_SECS: u64 = 600;
 /// Shell 命令轮询间隔（毫秒）
 pub const SHELL_POLL_INTERVAL_MS: u64 = 50;
 
+/// 前台 Shell 命令自动升级为后台任务的阈值（秒）
+/// 超过此时间未结束，自动 adopt 到 BackgroundManager 并返回 task_id
+pub const SHELL_AUTO_BG_SECS: u64 = 30;
+
 // ========== Web 请求相关 ==========
 
 /// Web 请求默认超时时间（秒）
