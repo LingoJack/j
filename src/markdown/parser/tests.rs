@@ -661,3 +661,94 @@ fn table_in_tail_after_stable_boundary_cut() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn nested_list_preserves_ordered_and_indentation() {
+    // 回归用例：外层有序列表 + 嵌套无序子列表。
+    // 修复前的 bug 表现：
+    //   1. 外层 1./2. 被渲染为 • （order 标志被内层覆盖）
+    //   2. 子项未缩进，与外层项同级
+    //   3. 出现空的 "• " 幻影行
+    //   4. 父项尾部内容（如 "字段"）被吞入并与子项拼接
+    let md = "1. **路由未注册** - 文件: `router/router.go`\n   - Controllers 结构体中缺少 `SearchHistory *controller.SearchHistoryController` 字段\n   - private 路由组中缺少 4 条搜索历史路由\n\n2. **Wire 依赖注入未更新** - 文件: `cmd/server/wire.go`\n   - 缺少 `service.NewSearchHistoryService`\n";
+    let theme = Theme::from_name(&ThemeName::default());
+    let lines = markdown_to_lines(md, 80, &theme);
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
+        .collect();
+
+    // 外层序号 1./2. 必须出现
+    assert!(
+        rendered.iter().any(|l| l.starts_with("1. ")),
+        "外层首项应以 '1. ' 开头，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered.iter().any(|l| l.starts_with("2. ")),
+        "外层第二项应以 '2. ' 开头，实际: {:?}",
+        rendered
+    );
+
+    // 不应出现未指定序号的 "• " 顶级项（即嵌套子项不能冒泡到顶级）
+    assert!(
+        !rendered.iter().any(|l| l.starts_with("• ")),
+        "顶级不应出现 '• '（嵌套冒泡 bug），实际: {:?}",
+        rendered
+    );
+
+    // 子项必须带 2 空格缩进 + '•'
+    assert!(
+        rendered
+            .iter()
+            .any(|l| l.starts_with("  • ") && l.contains("Controllers 结构体中缺少")),
+        "嵌套子项应缩进 2 空格，实际: {:?}",
+        rendered
+    );
+
+    // 不应出现纯 "• " 空 bullet 行（幻影项）
+    assert!(
+        !rendered.iter().any(|l| l.trim() == "•"),
+        "不应产生空 bullet 幻影行，实际: {:?}",
+        rendered
+    );
+
+    // 父项尾部 "字段" 必须归属于子项而非混入父项
+    let first_outer = rendered
+        .iter()
+        .find(|l| l.starts_with("1. "))
+        .expect("存在外层 1. 项");
+    assert!(
+        !first_outer.contains("Controllers 结构体中缺少"),
+        "父项内容不应吞掉子项文本，实际外层首项: {:?}",
+        first_outer
+    );
+}
+
+#[test]
+fn deeply_nested_list_indentation() {
+    // 深度 3 的列表应按 0 / 2 / 4 空格递增缩进
+    let md = "- a\n  - b\n    - c\n";
+    let theme = Theme::from_name(&ThemeName::default());
+    let lines = markdown_to_lines(md, 80, &theme);
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
+        .collect();
+
+    assert!(
+        rendered.iter().any(|l| l.starts_with("• a")),
+        "第 1 层无缩进，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered.iter().any(|l| l.starts_with("  • b")),
+        "第 2 层缩进 2 空格，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered.iter().any(|l| l.starts_with("    • c")),
+        "第 3 层缩进 4 空格，实际: {:?}",
+        rendered
+    );
+}

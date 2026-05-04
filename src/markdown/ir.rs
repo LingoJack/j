@@ -76,8 +76,10 @@ pub struct ListData {
 pub struct ListItem {
     /// Task list 标记：`Some(true)` = `[x]`，`Some(false)` = `[ ]`，`None` = 非 task list
     pub checked: Option<bool>,
-    /// 列表项内容
+    /// 列表项的 inline 内容（item 自身的文本）
     pub content: Vec<Inline>,
+    /// 嵌套 block（子列表、代码块、引用等），用于支持多级嵌套列表
+    pub children: Vec<Block>,
 }
 
 /// Inline 级元素

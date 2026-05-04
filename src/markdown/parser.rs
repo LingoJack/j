@@ -22,6 +22,22 @@ enum InlineContainer {
     Link { url: String },
 }
 
+/// 列表栈帧：记录一个 `Tag::List` 所需的状态
+#[derive(Debug)]
+struct ListFrame {
+    ordered: bool,
+    start_index: Option<u64>,
+    items: Vec<ListItem>,
+}
+
+/// 列表项栈帧：记录一个 `Tag::Item` 所需的状态
+#[derive(Debug, Default)]
+struct ItemFrame {
+    checked: Option<bool>,
+    content: Vec<Inline>,
+    children: Vec<Block>,
+}
+
 /// 解析上下文：累积 IR 节点
 struct ParseContext {
     /// 已解析的 block 列表
@@ -43,14 +59,11 @@ struct ParseContext {
     code_block_content: String,
     code_block_lang: String,
 
-    // --- List ---
-    list_depth: usize,
-    ordered_index: Option<u64>,
-    list_ordered: bool,
-    list_start_index: Option<u64>,
-    list_items: Vec<ListItem>,
-    in_list_item: bool,
-    list_item_checked: Option<bool>,
+    // --- List (栈式，支持嵌套) ---
+    /// 列表栈：每进入一个 `Tag::List` push 一帧，`End` 时 pop
+    list_stack: Vec<ListFrame>,
+    /// 列表项栈：每进入一个 `Tag::Item` push 一帧，`End` 时 pop
+    item_stack: Vec<ItemFrame>,
 
     // --- Heading ---
     heading_level: Option<u8>,
@@ -84,13 +97,8 @@ impl ParseContext {
             in_code_block: false,
             code_block_content: String::new(),
             code_block_lang: String::new(),
-            list_depth: 0,
-            ordered_index: None,
-            list_ordered: false,
-            list_start_index: None,
-            list_items: Vec::new(),
-            in_list_item: false,
-            list_item_checked: None,
+            list_stack: Vec::new(),
+            item_stack: Vec::new(),
             heading_level: None,
             blockquote_stack: Vec::new(),
             image_url: None,
@@ -111,12 +119,13 @@ impl ParseContext {
             return self.table_inline_target();
         }
         if let Some(children) = self.inline_children_stack.last_mut() {
-            children
-        } else {
-            // 列表项内的 inline 统一追加到 current_inlines，
-            // 在 End(Item) 时由 std::mem::take 收集到 ListItem.content
-            &mut self.current_inlines
+            return children;
         }
+        // 在列表项内：inline 直接追加到当前 item 的 content
+        if let Some(item) = self.item_stack.last_mut() {
+            return &mut item.content;
+        }
+        &mut self.current_inlines
     }
 
     /// 表格内 inline 目标
@@ -128,14 +137,13 @@ impl ParseContext {
         }
     }
 
-    /// 将当前 inline 容器 flush 为一个 block（Paragraph）
     /// 将当前 inline 容器 flush 为一个 block（Paragraph）。
-    /// 在列表项内不 flush，因为列表项的内容应该保留到 `End(Item)` 时收集。
+    /// 列表项内不 flush（item 的 inline 已直接写入 item.content）。
     fn flush_paragraph(&mut self) {
         if self.current_inlines.is_empty() {
             return;
         }
-        if self.in_list_item {
+        if !self.item_stack.is_empty() {
             return;
         }
         let inlines = std::mem::take(&mut self.current_inlines);
@@ -146,8 +154,13 @@ impl ParseContext {
         self.push_block(block);
     }
 
-    /// Push block：如果在 blockquote 内则追加到 blockquote 栈顶，否则追加到 blocks
+    /// Push block：优先级为 item_stack 顶 > blockquote_stack 顶 > blocks。
+    /// 列表项内产生的 block（如嵌套 List、CodeBlock）成为该 item 的 child。
     fn push_block(&mut self, block: Block) {
+        if let Some(item) = self.item_stack.last_mut() {
+            item.children.push(block);
+            return;
+        }
         if let Some(bq_blocks) = self.blockquote_stack.last_mut() {
             bq_blocks.push(block);
         } else {
@@ -442,48 +455,48 @@ pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
             // ===== List =====
             Event::Start(Tag::List(start)) => {
                 ctx.flush_paragraph();
-                ctx.list_depth += 1;
-                ctx.ordered_index = start;
-                ctx.list_ordered = start.is_some();
-                ctx.list_start_index = start;
-                if ctx.list_items.is_empty() {
-                    ctx.list_items = Vec::new();
-                }
+                ctx.list_stack.push(ListFrame {
+                    ordered: start.is_some(),
+                    start_index: start,
+                    items: Vec::new(),
+                });
             }
             Event::End(TagEnd::List(_)) => {
                 ctx.flush_paragraph();
-                // 收集当前 list items 为一个 List block
-                if ctx.list_depth == 1 && !ctx.list_items.is_empty() {
-                    let items = std::mem::take(&mut ctx.list_items);
-                    let block = Block {
-                        source: ctx.current_source,
-                        kind: BlockKind::List(ListData {
-                            ordered: ctx.list_ordered,
-                            start_index: ctx.list_start_index,
-                            items,
-                        }),
-                    };
-                    ctx.push_block(block);
-                }
-                ctx.list_depth = ctx.list_depth.saturating_sub(1);
-                ctx.ordered_index = None;
+                let Some(frame) = ctx.list_stack.pop() else {
+                    continue;
+                };
+                let block = Block {
+                    source: ctx.current_source,
+                    kind: BlockKind::List(ListData {
+                        ordered: frame.ordered,
+                        start_index: frame.start_index,
+                        items: frame.items,
+                    }),
+                };
+                // push_block 会自动处理嵌套：item_stack 顶优先（成为父 item 的 child）
+                ctx.push_block(block);
             }
             Event::Start(Tag::Item) => {
-                ctx.in_list_item = true;
-                ctx.list_item_checked = None;
+                ctx.item_stack.push(ItemFrame::default());
             }
             Event::End(TagEnd::Item) => {
-                // flush current_inlines 到 list item
-                let content = std::mem::take(&mut ctx.current_inlines);
-                ctx.list_items.push(ListItem {
-                    checked: ctx.list_item_checked,
-                    content,
-                });
-                ctx.in_list_item = false;
-                ctx.list_item_checked = None;
+                let Some(frame) = ctx.item_stack.pop() else {
+                    continue;
+                };
+                let item = ListItem {
+                    checked: frame.checked,
+                    content: frame.content,
+                    children: frame.children,
+                };
+                if let Some(list) = ctx.list_stack.last_mut() {
+                    list.items.push(item);
+                }
             }
             Event::TaskListMarker(checked) => {
-                ctx.list_item_checked = Some(checked);
+                if let Some(item) = ctx.item_stack.last_mut() {
+                    item.checked = Some(checked);
+                }
             }
 
             // ===== Paragraph =====

@@ -16,7 +16,7 @@ pub fn render_block(block: &Block, ctx: &RenderContext) -> Vec<Line<'static>> {
         BlockKind::Heading { level, content } => render_heading(*level, content, ctx),
         BlockKind::CodeBlock { lang, code } => render_code_block(lang, code, ctx.width, ctx.theme),
         BlockKind::Table(data) => render_table(data, &data.alignments, ctx.width, ctx.theme),
-        BlockKind::List(data) => render_list(data, ctx),
+        BlockKind::List(data) => render_list(data, ctx, 0),
         BlockKind::BlockQuote(blocks) => render_blockquote(blocks, ctx),
         BlockKind::Rule => render_rule(ctx),
     }
@@ -172,31 +172,73 @@ fn render_heading(level: u8, content: &[Inline], ctx: &RenderContext) -> Vec<Lin
     lines
 }
 
-/// 渲染列表
-fn render_list(data: &ListData, ctx: &RenderContext) -> Vec<Line<'static>> {
+/// 渲染列表（递归，支持嵌套）
+/// `depth`: 嵌套层级，0 为最外层；每一级缩进 2 空格
+fn render_list(data: &ListData, ctx: &RenderContext, depth: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     let base_style = Style::default().fg(ctx.theme.text_normal());
-    let list_depth = 0; // 当前 IR 不支持嵌套列表深度跟踪，暂用 0
+    let indent_str = "  ".repeat(depth);
+    let child_indent_str = "  ".repeat(depth + 1);
 
     for (idx, item) in data.items.iter().enumerate() {
-        let indent = "  ".repeat(list_depth);
         let bullet = if data.ordered {
             let num = data
                 .start_index
                 .map(|s| s + idx as u64)
                 .unwrap_or(idx as u64 + 1);
-            format!("{}{}. ", indent, num)
+            format!("{}{}. ", indent_str, num)
         } else {
-            format!("{}{} ", indent, task_list_marker(item.checked, ctx.theme))
+            format!(
+                "{}{} ",
+                indent_str,
+                task_list_marker(item.checked, ctx.theme)
+            )
         };
 
         let bullet_style = Style::default().fg(ctx.theme.md_list_bullet());
-        let mut line_spans = vec![Span::styled(bullet, bullet_style)];
-        line_spans.extend(render_inlines(&item.content, base_style, ctx.theme));
-        lines.push(Line::from(line_spans));
+
+        // item 自身 inline 为空且没有 children 时仍输出一行空 bullet，
+        // 但更常见的是有 inline 或 children；这里只要任一非空即输出 bullet 行
+        let has_inline = !item.content.is_empty();
+        let has_children = !item.children.is_empty();
+        if has_inline || !has_children {
+            let mut line_spans = vec![Span::styled(bullet, bullet_style)];
+            line_spans.extend(render_inlines(&item.content, base_style, ctx.theme));
+            lines.push(Line::from(line_spans));
+        } else {
+            // 没有 inline 只有 children：仍然输出 bullet 作为视觉锚点
+            lines.push(Line::from(Span::styled(bullet, bullet_style)));
+        }
+
+        // 递归渲染 children
+        for child in &item.children {
+            let child_lines = match &child.kind {
+                BlockKind::List(sub) => render_list(sub, ctx, depth + 1),
+                _ => {
+                    // 其他 block：用 render_block 渲染后统一加缩进
+                    let rendered = render_block(child, ctx);
+                    rendered
+                        .into_iter()
+                        .map(|line| prepend_indent(line, &child_indent_str))
+                        .collect()
+                }
+            };
+            lines.extend(child_lines);
+        }
     }
 
     lines
+}
+
+/// 在 Line 的开头插入一段缩进 span
+fn prepend_indent(line: Line<'static>, indent: &str) -> Line<'static> {
+    if indent.is_empty() {
+        return line;
+    }
+    let mut spans: Vec<Span<'static>> = Vec::with_capacity(line.spans.len() + 1);
+    spans.push(Span::raw(indent.to_string()));
+    spans.extend(line.spans);
+    Line::from(spans)
 }
 
 /// 获取 task list 标记符号
