@@ -24,6 +24,10 @@ pub const SHELL_POLL_INTERVAL_MS: u64 = 50;
 /// 超过此时间未结束，自动 adopt 到 BackgroundManager 并返回 task_id
 pub const SHELL_AUTO_BG_SECS: u64 = 30;
 
+/// 自动升级前的"疑似交互式"静默阈值（秒）
+/// 进程最近这么久都没有任何 stdout/stderr 输出，视为可能在等待交互输入，不升级
+pub const SHELL_INTERACTIVE_SILENCE_SECS: u64 = 10;
+
 // ========== Web 请求相关 ==========
 
 /// Web 请求默认超时时间（秒）

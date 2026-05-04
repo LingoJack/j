@@ -2,7 +2,8 @@ use super::ToolResult;
 use super::background::BackgroundManager;
 use crate::command::chat::agent::thread_identity::thread_cwd;
 use crate::command::chat::constants::{
-    SHELL_AUTO_BG_SECS, SHELL_DEFAULT_TIMEOUT_SECS, SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
+    SHELL_AUTO_BG_SECS, SHELL_DEFAULT_TIMEOUT_SECS, SHELL_INTERACTIVE_SILENCE_SECS,
+    SHELL_MAX_TIMEOUT_SECS, SHELL_POLL_INTERVAL_MS,
 };
 use crate::command::chat::tools::{
     PlanDecision, Tool, check_blocking_command, is_dangerous_command, parse_tool_args,
@@ -211,11 +212,15 @@ impl ShellTool {
         let pid = child.id();
 
         // 用 Arc<Mutex<String>> 逐行写入，升级时可直接将 buffer 移交 BackgroundManager
+        // last_write_at 追踪最近一次有输出的时刻，用于自动升级前的"疑似交互式"静默检测
         let stdout_handle = child.stdout.take();
         let stderr_handle = child.stderr.take();
         let output_buffer: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+        let last_write_at: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
         let stdout_buf = Arc::clone(&output_buffer);
         let stderr_buf = Arc::clone(&output_buffer);
+        let stdout_write_ts = Arc::clone(&last_write_at);
+        let stderr_write_ts = Arc::clone(&last_write_at);
 
         let stdout_thread = std::thread::spawn(move || {
             if let Some(r) = stdout_handle {
@@ -224,6 +229,9 @@ impl ShellTool {
                     if let Ok(mut buf) = stdout_buf.lock() {
                         buf.push_str(&line);
                         buf.push('\n');
+                    }
+                    if let Ok(mut ts) = stdout_write_ts.lock() {
+                        *ts = Instant::now();
                     }
                 }
             }
@@ -235,6 +243,9 @@ impl ShellTool {
                     if let Ok(mut buf) = stderr_buf.lock() {
                         buf.push_str(&line);
                         buf.push('\n');
+                    }
+                    if let Ok(mut ts) = stderr_write_ts.lock() {
+                        *ts = Instant::now();
                     }
                 }
             }
@@ -258,6 +269,44 @@ impl ShellTool {
 
             // 自动升级：超过阈值仍未结束，不杀进程，移交后台
             if start.elapsed() >= auto_bg_threshold {
+                // 升级前的"疑似交互式"静默检测：若最近 SHELL_INTERACTIVE_SILENCE_SECS 秒
+                // 完全没有任何 stdout/stderr 输出，判定为可能在等待交互输入
+                // （交互式命令通常会先打 prompt 然后静默等 stdin；构建/部署类命令持续有输出）
+                let silence_elapsed = last_write_at
+                    .lock()
+                    .ok()
+                    .map(|ts| ts.elapsed())
+                    .unwrap_or(Duration::ZERO);
+
+                if silence_elapsed >= Duration::from_secs(SHELL_INTERACTIVE_SILENCE_SECS) {
+                    // 疑似交互式：kill 进程，返回提示，让 agent 重新发起并加非交互标志
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_thread.join();
+                    let _ = stderr_thread.join();
+                    let partial = output_buffer
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .clone();
+                    let hint = format!(
+                        "[疑似交互式命令] 命令运行 {}s 后最近 {}s 无任何输出，判定为可能在等待交互输入，已自动终止。\
+                         请检查命令是否需要 stdin 交互：加上非交互标志（-y / --yes / --noconfirm / --no-input 等），\
+                         或使用 here-string/echo 管道提供预设输入，然后重新执行。",
+                        start.elapsed().as_secs(),
+                        SHELL_INTERACTIVE_SILENCE_SECS
+                    );
+                    return ToolResult {
+                        output: if partial.is_empty() {
+                            hint
+                        } else {
+                            format!("{}\n{}", partial, hint)
+                        },
+                        is_error: true,
+                        images: vec![],
+                        plan_decision: PlanDecision::None,
+                    };
+                }
+
                 let (task_id, bg_buffer) = self.manager.adopt_process(command, pid, start);
 
                 // 把当前已缓冲内容复制到 bg_buffer，随后 reader 线程继续写 output_buffer，
