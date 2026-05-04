@@ -160,8 +160,9 @@ api 设计
 根据最终原型完善api设计和前端设计
 开始后端设计
 后端编码实现
+接口黑盒测试（scripts/api-test.sh 覆盖所有接口，本地环境先过一遍）
 前端编码实现
-容器化启动与验收（podman compose，最终一项）
+容器化启动与验收（podman compose，跑完再用黑盒脚本验证容器环境，最终一项）
 ```
 
 ### 容器化原则
@@ -242,16 +243,17 @@ make check-frontend
    - 应用层通过代码逻辑保证数据一致性即可
 
 2. **中文编码必须显式声明**
-   - `docker/mysql-init/*.sql` 文件头部必须添加：
+   - `docker/mysql-init/*.sql` 文件**头部必须第一行**加：
      ```sql
      SET NAMES utf8mb4;
      SET CHARACTER SET utf8mb4;
      ```
+     **原因**：MySQL 容器 `--init-connect` 参数**对初始化脚本不生效**（只对后续客户端连接生效）。初始化脚本由 mysqld 内部以默认字符集执行，若不在 SQL 开头显式 `SET NAMES utf8mb4`，中文 INSERT 会按 latin1 解释 → 再以 utf8mb4 存储，导致**双重编码**（查询出来是 `鏂囧瓧` 这种乱码）。
    - `docker-compose.yml` 中 MySQL 容器需添加启动参数：
      ```yaml
      command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
      ```
-   - 否则 MySQL 客户端会以默认 latin1 字符集连接，中文数据被双重编码存储，导致乱码
+   - 踩坑复现：如果已经写入了双重编码的数据，仅修复配置不会让旧数据变正常——必须 `podman volume rm <project>_mysql_data` 清掉数据卷重新初始化。
 
 3. **Schema 文件修改注意事项**
    - 不要用 `sed` 命令批量修改 SQL 文件，会破坏文件结构（逗号、括号位置）
@@ -314,6 +316,34 @@ appuser:apppassword@tcp(127.0.0.1:3306)/appdb?charset=utf8mb4&parseTime=True&loc
    - `router/router.go` 中按模块分组注册路由
    - 公开路由（无需认证）和私有路由（需 JWT 认证）分开注册
    - 中间件顺序：`Recovery → Logger → RequestID → CORS → RateLimit → Auth（仅私有路由）`
+
+5. **接口黑盒测试脚本（必须交付）**
+   后台接口写完后，**必须**在项目根目录下写一个端到端黑盒测试脚本（`scripts/api-test.sh` 或 `scripts/api-test.py`），覆盖所有实现的后端接口，验证部署链路真的能用。
+
+   脚本要求：
+   - 纯 HTTP 调用（`curl` 或 `requests`），不依赖任何 Go 代码，验证的是**已部署的服务**
+   - **覆盖完整 CRUD**：每个资源的 create → read → update → delete 一条龙，带中文数据（验证字符集）
+   - **覆盖鉴权**：未登录访问私有接口应 401；登录后拿 token，带 token 访问应 200
+   - **覆盖边界**：非法参数返回 400，查不存在资源返回 404
+   - **断言响应结构**：`code`、`message`、`data` 字段存在，`code == 0` 为成功
+   - 失败时打印完整请求/响应，exit code 非 0，便于 CI 集成
+   - 脚本开头支持 `BASE_URL` 环境变量，默认 `http://localhost:8080`，这样可以**针对不同环境跑同一份测试**
+
+   验证矩阵（三种环境都要过一遍，避免"本地好好的，容器里炸了"）：
+   ```bash
+   # 环境 1：本地 go run + podman mysql
+   make podman-mysql-up && make run-backend &
+   BASE_URL=http://localhost:8080 bash scripts/api-test.sh
+
+   # 环境 2：全栈 podman compose
+   make podman-down && make podman-up
+   BASE_URL=http://localhost:8080 bash scripts/api-test.sh
+
+   # 环境 3：清掉数据卷从零初始化后再跑一次（验证 init.sql 正确性）
+   make podman-clean && make podman-up
+   BASE_URL=http://localhost:8080 bash scripts/api-test.sh
+   ```
+   任何一个环境不通过，就是该环境的配置问题（DSN、字符集、网络别名、端口映射），必须修到三个环境都过才算完成。
 
 
 ### 前端开发阶段
