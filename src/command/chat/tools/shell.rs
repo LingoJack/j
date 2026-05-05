@@ -315,10 +315,10 @@ impl ShellTool {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .clone();
-                if !current_output.is_empty() {
-                    if let Ok(mut buf) = bg_buffer.lock() {
-                        buf.push_str(&current_output);
-                    }
+                if !current_output.is_empty()
+                    && let Ok(mut buf) = bg_buffer.lock()
+                {
+                    buf.push_str(&current_output);
                 }
 
                 // 启动后台监控线程：等待子进程结束，持续从 output_buffer 同步到 bg_buffer，

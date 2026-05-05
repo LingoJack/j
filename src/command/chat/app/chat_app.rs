@@ -777,8 +777,12 @@ impl ChatApp {
     /// 取消当前流式请求
     ///
     /// 立即执行 finish_loading() 清除加载状态，不等 agent 线程响应取消信号。
-    /// 这确保 Esc 按键后 UI 瞬间恢复可交互状态。
+    /// 同时停止所有 teammates，确保 Esc 按键后 UI 瞬间恢复可交互状态。
     pub fn cancel_stream(&mut self) {
+        // 停止所有 teammates
+        if let Ok(mut mgr) = self.teammate_manager.lock() {
+            mgr.stop_all();
+        }
         self.finish_loading(false, true);
     }
 

@@ -160,7 +160,7 @@ pub fn render_tool_result_msg(params: &ToolResultRenderParams, lines: &mut Vec<L
     } else if tool_name == tool_names::TODO_READ || tool_name == tool_names::TODO_WRITE {
         // TodoRead/TodoWrite 结果：折叠和展开都显示 todo 列表
         render_todo_result(
-            content,
+            &clean,
             &mut ContentContext {
                 content_w,
                 lines,

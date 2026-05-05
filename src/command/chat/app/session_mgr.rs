@@ -317,7 +317,11 @@ impl ChatApp {
     pub fn clear_runtime_state(&mut self) {
         if let Ok(mut mgr) = self.teammate_manager.lock() {
             mgr.stop_all();
+            // 给 teammate 线程短暂时间响应取消信号
+            std::thread::sleep(std::time::Duration::from_millis(50));
             mgr.cleanup_finished();
+            // 强制清除所有未及时结束的 teammates（detach 线程，不阻塞）
+            mgr.clear_all();
             mgr.clear_recovered_teammates();
         }
 

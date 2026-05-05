@@ -495,6 +495,24 @@ impl TeammateManager {
         }
     }
 
+    /// 强制清除所有 teammates（发送取消信号后立即移除，不等待线程结束）
+    ///
+    /// 用于 /clear 等场景：需要立即清空 teammate 列表，
+    /// 线程会在检测到 cancel_token 后自行退出。
+    pub fn clear_all(&mut self) {
+        for (name, mut handle) in self.teammates.drain() {
+            handle.cancel();
+            // detach 线程（不 join），线程会在 cancel_token 响应后自行退出
+            if let Some(thread) = handle.thread_handle.take() {
+                drop(thread);
+            }
+            write_info_log(
+                "TeammateManager",
+                &format!("force cleared teammate: {}", name),
+            );
+        }
+    }
+
     /// 注册一个 teammate（由 TeammateTool 或 teammate_loop 调用）
     pub fn register_teammate(&mut self, handle: TeammateHandle) {
         write_info_log(

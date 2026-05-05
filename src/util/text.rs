@@ -8,9 +8,19 @@ const TAB_REPLACEMENT: &str = "    ";
 /// wrap / bubble 宽度计算，就会让预计算宽度与实际写入 buffer 的宽度失配。
 ///
 /// - `\t` 展开为 4 个空格，确保宽度计算与最终渲染一致
-/// - `\r` 移除，避免覆盖式输出在 TUI 中留下脏字符
+/// - `\r` / 其他控制字符（BEL、BS、ESC、DEL 等）全部移除
+/// - `\n` 保留，由调用方按行切分
 pub fn normalize_terminal_text(s: &str) -> String {
-    s.replace('\t', TAB_REPLACEMENT).replace('\r', "")
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\t' => result.push_str(TAB_REPLACEMENT),
+            '\n' => result.push('\n'),
+            c if c.is_control() => { /* 跳过 BEL/BS/CR/ESC/DEL 等控制字符 */ }
+            c => result.push(c),
+        }
+    }
+    result
 }
 
 /// 按显示宽度对文本进行自动换行
@@ -104,11 +114,40 @@ pub fn remove_quotes(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_terminal_text, wrap_text};
+    use super::{normalize_terminal_text, sanitize_tool_output, wrap_text};
 
     #[test]
     fn normalize_terminal_text_expands_tabs_and_removes_cr() {
         assert_eq!(normalize_terminal_text("a\tb\r\nc"), "a    b\nc");
+    }
+
+    #[test]
+    fn normalize_terminal_text_strips_control_chars() {
+        // BEL (\x07), BS (\x08), ESC (\x1b), DEL (\x7f) 等控制字符应被移除
+        assert_eq!(
+            normalize_terminal_text("hello\x07world\x1b[0m"),
+            "helloworld[0m"
+        );
+        assert_eq!(normalize_terminal_text("\x00\x01\x02"), "");
+        assert_eq!(normalize_terminal_text("a\x7fb"), "ab");
+    }
+
+    #[test]
+    fn normalize_terminal_text_preserves_newline() {
+        // \n 应被保留
+        assert_eq!(normalize_terminal_text("line1\nline2"), "line1\nline2");
+    }
+
+    #[test]
+    fn normalize_terminal_text_preserves_tab_expansion() {
+        // \t 应展开为 4 个空格
+        assert_eq!(normalize_terminal_text("\titem"), "    item");
+    }
+
+    #[test]
+    fn sanitize_tool_output_strips_ansi_and_controls() {
+        // ANSI 码 + 控制字符应同时被清理
+        assert_eq!(sanitize_tool_output("\x1b[32mok\x1b[0m\x07"), "ok");
     }
 
     #[test]
