@@ -478,6 +478,7 @@ pub(crate) fn extract_tool_description_from_args(
         tool_names::IGNORE_MESSAGE => Some("忽略消息".to_string()),
 
         // ── ComputerUse ──
+        #[cfg(target_os = "macos")]
         tool_names::COMPUTER_USE => parsed
             .get("action")
             .and_then(|v| v.as_str())
@@ -901,6 +902,7 @@ fn render_specialized_tool_call(
         tool_names::IGNORE_MESSAGE => {
             render_ignore_message_call_request_expanded(content_w, lines, theme)
         }
+        #[cfg(target_os = "macos")]
         tool_names::COMPUTER_USE => {
             render_computer_use_call_request_expanded(arguments, content_w, lines, theme)
         }
@@ -1414,6 +1416,7 @@ fn render_ignore_message_call_request_expanded(
 }
 
 /// ComputerUse 工具展开渲染
+#[cfg(target_os = "macos")]
 fn render_computer_use_call_request_expanded(
     arguments: &str,
     content_w: usize,

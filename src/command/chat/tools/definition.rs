@@ -169,57 +169,65 @@ impl ToolRegistry {
         let worktree_state = Arc::new(super::worktree::WorktreeState::new());
         let plan_approval_queue = Arc::new(super::plan::PlanApprovalQueue::new());
 
+        let tools: Vec<Box<dyn Tool>> = vec![
+            #[cfg(unix)]
+            Box::new(super::shell::ShellTool {
+                manager: Arc::clone(&background_manager),
+            }),
+            #[cfg(windows)]
+            Box::new(super::powershell::PowerShellTool {
+                manager: Arc::clone(&background_manager),
+            }),
+            Box::new(super::file::ReadFileTool),
+            Box::new(super::file::WriteFileTool),
+            Box::new(super::file::EditFileTool),
+            Box::new(super::file::GlobTool),
+            Box::new(super::grep::GrepTool),
+            Box::new(super::web_fetch::WebFetchTool),
+            Box::new(super::web_search::WebSearchTool),
+            Box::new(super::browser::BrowserTool),
+            Box::new(super::ask::AskTool {
+                ask_tx: ask_tx.clone(),
+            }),
+            Box::new(super::background::TaskOutputTool {
+                manager: Arc::clone(&background_manager),
+            }),
+            Box::new(super::task::TaskTool {
+                manager: Arc::clone(&task_manager),
+            }),
+            Box::new(super::todo::TodoWriteTool {
+                manager: Arc::clone(&todo_manager),
+            }),
+            Box::new(super::todo::TodoReadTool {
+                manager: Arc::clone(&todo_manager),
+            }),
+            Box::new(super::compact_tool::CompactTool),
+            Box::new(super::hook::RegisterHookTool { hook_manager }),
+            #[cfg(target_os = "macos")]
+            Box::new(super::computer_use::ComputerUseTool::new()),
+            Box::new(super::plan::EnterPlanModeTool {
+                plan_state: Arc::clone(&plan_mode_state),
+            }),
+            Box::new(super::plan::ExitPlanModeTool {
+                plan_state: Arc::clone(&plan_mode_state),
+                ask_tx,
+                plan_approval_queue: Some(Arc::clone(&plan_approval_queue)),
+            }),
+            Box::new(super::worktree::EnterWorktreeTool {
+                state: Arc::clone(&worktree_state),
+            }),
+            Box::new(super::worktree::ExitWorktreeTool {
+                state: Arc::clone(&worktree_state),
+            }),
+        ];
+
         let mut registry = Self {
             todo_manager: Arc::clone(&todo_manager),
             plan_mode_state: Arc::clone(&plan_mode_state),
             worktree_state: Arc::clone(&worktree_state),
             permission_queue: None,
             plan_approval_queue: None,
-            tools: vec![
-                Box::new(super::shell::ShellTool {
-                    manager: Arc::clone(&background_manager),
-                }),
-                Box::new(super::file::ReadFileTool),
-                Box::new(super::file::WriteFileTool),
-                Box::new(super::file::EditFileTool),
-                Box::new(super::file::GlobTool),
-                Box::new(super::grep::GrepTool),
-                Box::new(super::web_fetch::WebFetchTool),
-                Box::new(super::web_search::WebSearchTool),
-                Box::new(super::browser::BrowserTool),
-                Box::new(super::ask::AskTool {
-                    ask_tx: ask_tx.clone(),
-                }),
-                Box::new(super::background::TaskOutputTool {
-                    manager: Arc::clone(&background_manager),
-                }),
-                Box::new(super::task::TaskTool {
-                    manager: Arc::clone(&task_manager),
-                }),
-                Box::new(super::todo::TodoWriteTool {
-                    manager: Arc::clone(&todo_manager),
-                }),
-                Box::new(super::todo::TodoReadTool {
-                    manager: Arc::clone(&todo_manager),
-                }),
-                Box::new(super::compact_tool::CompactTool),
-                Box::new(super::hook::RegisterHookTool { hook_manager }),
-                Box::new(super::computer_use::ComputerUseTool::new()),
-                Box::new(super::plan::EnterPlanModeTool {
-                    plan_state: Arc::clone(&plan_mode_state),
-                }),
-                Box::new(super::plan::ExitPlanModeTool {
-                    plan_state: Arc::clone(&plan_mode_state),
-                    ask_tx,
-                    plan_approval_queue: Some(Arc::clone(&plan_approval_queue)),
-                }),
-                Box::new(super::worktree::EnterWorktreeTool {
-                    state: Arc::clone(&worktree_state),
-                }),
-                Box::new(super::worktree::ExitWorktreeTool {
-                    state: Arc::clone(&worktree_state),
-                }),
-            ],
+            tools,
         };
 
         if !skills.is_empty() {
