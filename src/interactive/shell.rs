@@ -32,7 +32,7 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
 
         if is_zsh {
             let pid = std::process::id();
-            let tmp_dir = std::path::PathBuf::from(format!("/tmp/j_shell_zsh_{}", pid));
+            let tmp_dir = std::env::temp_dir().join(format!("j_shell_zsh_{}", pid));
             let _ = std::fs::create_dir_all(&tmp_dir);
 
             let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
@@ -62,7 +62,7 @@ pub fn enter_interactive_shell(config: &YamlConfig) {
             }
         } else if is_bash {
             let pid = std::process::id();
-            let tmp_rc = std::path::PathBuf::from(format!("/tmp/j_shell_bashrc_{}", pid));
+            let tmp_rc = std::env::temp_dir().join(format!("j_shell_bashrc_{}", pid));
 
             let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
             let bashrc_content = format!(

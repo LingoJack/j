@@ -262,10 +262,11 @@ pub(crate) fn execute_shell_hook(
     // 目录布局下，将 hook 目录前置到 PATH，脚本可直接用文件名调用
     if let Some(ref hook_dir) = hook.dir_path {
         let existing_path = std::env::var("PATH").unwrap_or_default();
+        let separator = if cfg!(windows) { ";" } else { ":" };
         let new_path = if existing_path.is_empty() {
             hook_dir.display().to_string()
         } else {
-            format!("{}:{}", hook_dir.display(), existing_path)
+            format!("{}{}{}", hook_dir.display(), separator, existing_path)
         };
         cmd.env("PATH", new_path);
     }
@@ -333,11 +334,20 @@ pub(crate) fn execute_shell_hook(
         }
         Ok(Err(e)) => Err(format!("等待 hook 进程失败: {}", e)),
         Err(_) => {
-            // 超时：通过 PID 发送 SIGKILL 终止进程
-            let _ = nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(pid as i32),
-                nix::sys::signal::Signal::SIGKILL,
-            );
+            // 超时：终止进程
+            #[cfg(unix)]
+            {
+                let _ = nix::sys::signal::kill(
+                    nix::unistd::Pid::from_raw(pid as i32),
+                    nix::sys::signal::Signal::SIGKILL,
+                );
+            }
+            #[cfg(windows)]
+            {
+                let _ = Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .status();
+            }
             Err(format!("Hook 超时 ({}s): {}", hook.timeout, hook.command))
         }
     }

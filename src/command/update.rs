@@ -144,9 +144,17 @@ fn perform_update(interactive: bool) {
     #[cfg(all(target_arch = "x86_64", target_os = "macos"))]
     let target = "darwin-x64";
 
+    #[cfg(all(target_arch = "x86_64", target_os = "windows"))]
+    let target = "windows-x64";
+
+    #[cfg(all(target_arch = "aarch64", target_os = "windows"))]
+    let target = "windows-arm64";
+
     #[cfg(not(any(
         all(target_arch = "aarch64", target_os = "macos"),
-        all(target_arch = "x86_64", target_os = "macos")
+        all(target_arch = "x86_64", target_os = "macos"),
+        all(target_arch = "x86_64", target_os = "windows"),
+        all(target_arch = "aarch64", target_os = "windows")
     )))]
     let target = {
         println!("{}", "当前平台暂不支持自动更新，请手动更新".red());
@@ -201,43 +209,62 @@ fn perform_update(interactive: bool) {
         return;
     }
 
-    // 没有写入权限，需要使用 sudo 重新执行
-    println!(
-        "{}",
-        "需要管理员权限来更新 j（安装目录需要 root 权限）".yellow()
-    );
-    println!("{}", "正在请求管理员权限...".cyan());
+    // 没有写入权限，需要提升权限
+    #[cfg(target_os = "macos")]
+    {
+        println!(
+            "{}",
+            "需要管理员权限来更新 j（安装目录需要 root 权限）".yellow()
+        );
+        println!("{}", "正在请求管理员权限...".cyan());
 
-    // 使用 osascript 弹出图形化授权对话框
-    let exe_str = exe_path.to_string_lossy();
-    let script = format!(
-        r#"do shell script "{} update" with administrator privileges"#,
-        exe_str
-    );
+        // 使用 osascript 弹出图形化授权对话框
+        let exe_str = exe_path.to_string_lossy();
+        let script = format!(
+            r#"do shell script "{} update" with administrator privileges"#,
+            exe_str
+        );
 
-    let result = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .status();
+        let result = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .status();
 
-    match result {
-        Ok(status) if status.success() => {
-            println!("{}", "更新完成！".green());
+        match result {
+            Ok(status) if status.success() => {
+                println!("{}", "更新完成！".green());
+            }
+            Ok(status) => {
+                println!(
+                    "{} 退出码: {}",
+                    "更新失败".red(),
+                    status.code().unwrap_or(-1)
+                );
+                println!("请尝试手动更新:");
+                println!("  {}", "sudo j update".cyan());
+            }
+            Err(e) => {
+                println!("{} {}", "请求权限失败:".red(), e);
+                println!("请尝试手动更新:");
+                println!("  {}", "sudo j update".cyan());
+            }
         }
-        Ok(status) => {
-            println!(
-                "{} 退出码: {}",
-                "更新失败".red(),
-                status.code().unwrap_or(-1)
-            );
-            println!("请尝试手动更新:");
-            println!("  {}", "sudo j update".cyan());
-        }
-        Err(e) => {
-            println!("{} {}", "请求权限失败:".red(), e);
-            println!("请尝试手动更新:");
-            println!("  {}", "sudo j update".cyan());
-        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("{}", "需要管理员权限来更新 j".yellow());
+        println!("请以管理员身份运行: {}", "j update".cyan());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        println!(
+            "{}",
+            "需要管理员权限来更新 j（安装目录需要 root 权限）".yellow()
+        );
+        println!("请尝试手动更新:");
+        println!("  {}", "sudo j update".cyan());
     }
 }
 
@@ -273,7 +300,8 @@ fn perform_update_internal(target: &str, interactive: bool) {
                     "更新成功！".green(),
                     format!("版本: {}", status.version()).cyan()
                 );
-                // 尝试同步安装 j-indicator
+                // 尝试同步安装 j-indicator（仅 macOS）
+                #[cfg(target_os = "macos")]
                 install_indicator_from_release(status.version());
                 if interactive {
                     restart_self();
@@ -591,8 +619,16 @@ fn perform_update_curl(target: &str, interactive: bool) {
     };
 
     let asset_name = format!("j-{}", target);
+
+    #[cfg(unix)]
     let url = format!(
         "https://github.com/LingoJack/j/releases/download/{}/{}.tar.gz",
+        tag, asset_name
+    );
+
+    #[cfg(windows)]
+    let url = format!(
+        "https://github.com/LingoJack/j/releases/download/{}/{}.zip",
         tag, asset_name
     );
 
@@ -601,13 +637,18 @@ fn perform_update_curl(target: &str, interactive: bool) {
     // 创建临时目录
     let tmp_dir = std::env::temp_dir().join("j-update-curl");
     let _ = std::fs::create_dir_all(&tmp_dir);
-    let tmp_tar = tmp_dir.join(format!("{}.tar.gz", asset_name));
+
+    #[cfg(unix)]
+    let tmp_archive = tmp_dir.join(format!("{}.tar.gz", asset_name));
+
+    #[cfg(windows)]
+    let tmp_archive = tmp_dir.join(format!("{}.zip", asset_name));
 
     // 用 curl 下载
     println!("{}", "正在下载...".yellow());
     let download = std::process::Command::new("curl")
         .args(["-fsSL", "--progress-bar", "-o"])
-        .arg(&tmp_tar)
+        .arg(&tmp_archive)
         .arg(&url)
         .status();
 
@@ -631,14 +672,29 @@ fn perform_update_curl(target: &str, interactive: bool) {
 
     // 解压
     println!("{}", "正在解压...".yellow());
-    let extract = std::process::Command::new("tar")
+
+    #[cfg(unix)]
+    let extract_result = std::process::Command::new("tar")
         .args(["-xzf"])
-        .arg(&tmp_tar)
+        .arg(&tmp_archive)
         .args(["-C"])
         .arg(&tmp_dir)
         .status();
 
-    match extract {
+    #[cfg(windows)]
+    let extract_result = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                tmp_archive.display(),
+                tmp_dir.display()
+            ),
+        ])
+        .status();
+
+    match extract_result {
         Ok(status) if status.success() => {}
         Ok(status) => {
             println!(
@@ -657,7 +713,11 @@ fn perform_update_curl(target: &str, interactive: bool) {
     }
 
     // 替换二进制文件
+    #[cfg(unix)]
     let src_bin = tmp_dir.join("j");
+
+    #[cfg(windows)]
+    let src_bin = tmp_dir.join("j.exe");
     let dst_bin = exe_dir.join("j");
 
     if !src_bin.exists() {
@@ -682,7 +742,8 @@ fn perform_update_curl(target: &str, interactive: bool) {
                 format!("版本: {}", version_display).cyan()
             );
 
-            // 尝试同步安装 j-indicator
+            // 尝试同步安装 j-indicator（仅 macOS）
+            #[cfg(target_os = "macos")]
             install_indicator_from_release(&version);
 
             if interactive {
@@ -751,6 +812,7 @@ fn get_latest_version_curl() -> Option<String> {
 
 /// 从 GitHub Release 下载并安装 j-indicator 到 j 同目录
 /// 这是 best-effort 的：失败只打印警告，不影响主更新
+#[cfg(target_os = "macos")]
 fn install_indicator_from_release(version: &str) {
     // 确定 j 所在目录
     let j_dir = match std::env::current_exe() {
@@ -859,17 +921,33 @@ fn restart_self() {
 
     println!("{}", "正在重启 j 以加载新版本...".cyan());
 
-    let exe_cstr = match std::ffi::CString::new(exe.to_string_lossy().as_bytes()) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("{} {}", "路径包含非法字符:".red(), e);
-            println!("请手动重启 j 以使用新版本。");
-            return;
-        }
-    };
+    // Unix: 使用 execv 替换当前进程（进程号不变）
+    #[cfg(unix)]
+    {
+        let exe_cstr = match std::ffi::CString::new(exe.to_string_lossy().as_bytes()) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("{} {}", "路径包含非法字符:".red(), e);
+                println!("请手动重启 j 以使用新版本。");
+                return;
+            }
+        };
 
-    let err = nix::unistd::execv(&exe_cstr, &[&exe_cstr]);
-    // execv 成功时不会返回；到这里说明失败了
-    println!("{} {:?}", "重启失败:".red(), err);
-    println!("请手动重启 j 以使用新版本。");
+        let err = nix::unistd::execv(&exe_cstr, &[&exe_cstr]);
+        // execv 成功时不会返回；到这里说明失败了
+        println!("{} {:?}", "重启失败:".red(), err);
+        println!("请手动重启 j 以使用新版本。");
+    }
+
+    // Windows: 启动新进程后退出当前进程
+    #[cfg(windows)]
+    {
+        match std::process::Command::new(&exe).spawn() {
+            Ok(_) => std::process::exit(0),
+            Err(e) => {
+                println!("{} {}", "重启失败:".red(), e);
+                println!("请手动重启 j 以使用新版本。");
+            }
+        }
+    }
 }

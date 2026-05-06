@@ -69,8 +69,15 @@ pub fn handle_script(name: &str, content: &[String], config: &mut YamlConfig) {
     // 获取脚本内容：有参数则直接使用，无参数则打开编辑器
     let script_content = if content.is_empty() {
         // 无内容参数：打开 TUI 编辑器
+        // 根据平台选择默认 shebang
+        #[cfg(unix)]
+        let shebang = "#!/bin/bash";
+
+        #[cfg(windows)]
+        let shebang = ""; // Windows 不支持 shebang
+
         let initial_lines = vec![
-            "#!/bin/bash".to_string(),
+            shebang.to_string(),
             "".to_string(),
             "# 在此编写脚本内容...".to_string(),
             "".to_string(),
