@@ -145,8 +145,12 @@ pub fn install_default_scripts(config: &mut YamlConfig) -> Result<(), Box<dyn st
 
         // 注册到 config: [path] 和 [script]
         let path_str = dst_path.to_string_lossy().to_string();
-        config.set_property(section::PATH, &entry.name, &path_str);
-        config.set_property(section::SCRIPT, &entry.name, &path_str);
+        config
+            .set_property(section::PATH, &entry.name, &path_str)
+            .map_err(|e| format!("注册 {} 到 PATH 失败: {}", entry.name, e))?;
+        config
+            .set_property(section::SCRIPT, &entry.name, &path_str)
+            .map_err(|e| format!("注册 {} 到 SCRIPT 失败: {}", entry.name, e))?;
     }
 
     Ok(())

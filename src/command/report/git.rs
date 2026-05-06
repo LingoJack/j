@@ -19,7 +19,9 @@ pub fn handle_set_url(url: Option<&str>, config: &mut YamlConfig) {
             let old = config
                 .get_property(section::REPORT, config_key::GIT_REPO)
                 .cloned();
-            config.set_property(section::REPORT, config_key::GIT_REPO, u);
+            config
+                .set_property(section::REPORT, config_key::GIT_REPO, u)
+                .unwrap_or_else(|e| error!("保存配置失败: {}", e));
 
             // 如果日报目录已有 .git，同步更新 remote origin
             if let Some(dir) = get_report_dir(config) {

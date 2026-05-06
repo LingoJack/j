@@ -43,18 +43,28 @@ pub fn handle_remove(alias: &str, config: &mut YamlConfig) {
                 }
             }
         }
-        config.remove_property(section::PATH, alias);
+        if let Err(e) = config.remove_property(section::PATH, alias) {
+            error!("✖️ 保存配置失败: {}", e);
+            return;
+        }
         // 同时清理关联的 category
         for s in REMOVE_CLEANUP_SECTIONS {
-            config.remove_property(s, alias);
+            if let Err(e) = config.remove_property(s, alias) {
+                error!("✖️ 保存配置失败: {}", e);
+                return;
+            }
         }
         info!("成功从 PATH 中移除别名 {} ☑️", alias);
     } else if config.contains(section::INNER_URL, alias) {
-        config.remove_property(section::INNER_URL, alias);
-        info!("成功从 INNER_URL 中移除别名 {} ☑️", alias);
+        match config.remove_property(section::INNER_URL, alias) {
+            Ok(()) => info!("成功从 INNER_URL 中移除别名 {} ☑️", alias),
+            Err(e) => error!("✖️ 保存配置失败: {}", e),
+        }
     } else if config.contains(section::OUTER_URL, alias) {
-        config.remove_property(section::OUTER_URL, alias);
-        info!("成功从 OUTER_URL 中移除别名 {} ☑️", alias);
+        match config.remove_property(section::OUTER_URL, alias) {
+            Ok(()) => info!("成功从 OUTER_URL 中移除别名 {} ☑️", alias),
+            Err(e) => error!("✖️ 保存配置失败: {}", e),
+        }
     } else {
         error!("别名 {} 不存在 ✖️", alias);
     }
@@ -70,10 +80,16 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
             .get_property(section::PATH, alias)
             .cloned()
             .unwrap_or_default();
-        config.rename_property(section::PATH, alias, new_alias);
+        if let Err(e) = config.rename_property(section::PATH, alias, new_alias) {
+            error!("✖️ 保存配置失败: {}", e);
+            return;
+        }
         // 同时重命名关联的 category
         for s in RENAME_SYNC_SECTIONS {
-            config.rename_property(s, alias, new_alias);
+            if let Err(e) = config.rename_property(s, alias, new_alias) {
+                error!("✖️ 保存配置失败: {}", e);
+                return;
+            }
         }
         updated = true;
         info!(
@@ -88,7 +104,10 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
             .get_property(section::INNER_URL, alias)
             .cloned()
             .unwrap_or_default();
-        config.rename_property(section::INNER_URL, alias, new_alias);
+        if let Err(e) = config.rename_property(section::INNER_URL, alias, new_alias) {
+            error!("✖️ 保存配置失败: {}", e);
+            return;
+        }
         updated = true;
         info!(
             "☑️ 重命名 {} -> {} 成功! Inner URL: {} 🚀",
@@ -102,7 +121,10 @@ pub fn handle_rename(alias: &str, new_alias: &str, config: &mut YamlConfig) {
             .get_property(section::OUTER_URL, alias)
             .cloned()
             .unwrap_or_default();
-        config.rename_property(section::OUTER_URL, alias, new_alias);
+        if let Err(e) = config.rename_property(section::OUTER_URL, alias, new_alias) {
+            error!("✖️ 保存配置失败: {}", e);
+            return;
+        }
         updated = true;
         info!(
             "☑️ 重命名 {} -> {} 成功! Outer URL: {} 🌐",
@@ -131,7 +153,10 @@ pub fn handle_modify(alias: &str, path_parts: &[String], config: &mut YamlConfig
     // 依次检查各个 section 并更新
     for s in MODIFY_SECTIONS {
         if config.contains(s, alias) {
-            config.set_property(s, alias, &path);
+            if let Err(e) = config.set_property(s, alias, &path) {
+                error!("✖️ 保存配置失败: {}", e);
+                return;
+            }
             has_modified = true;
             info!("修改 {} 在 {} 下的值为 {{{}}} 成功 ☑️", alias, s, path);
         }
@@ -165,8 +190,10 @@ fn add_as_path(alias: &str, path: &str, config: &mut YamlConfig) {
                 .map_or("(未知)", |v| v)
         );
     } else {
-        config.set_property(section::PATH, alias, path);
-        info!("☑️ 添加别名 {} -> {{{}}} 成功! 🎉", alias, path);
+        match config.set_property(section::PATH, alias, path) {
+            Ok(()) => info!("☑️ 添加别名 {} -> {{{}}} 成功! 🎉", alias, path),
+            Err(e) => error!("✖️ 添加别名失败: {}", e),
+        }
     }
 }
 
@@ -175,7 +202,9 @@ fn add_as_url(alias: &str, url: &str, config: &mut YamlConfig) {
     if config.contains(section::INNER_URL, alias) || config.contains(section::OUTER_URL, alias) {
         error!("别名 {} 已存在。 😢 请使用 `mf` 命令修改", alias);
     } else {
-        config.set_property(section::INNER_URL, alias, url);
-        info!("☑️ 添加别名 {} -> {{{}}} 成功! 🚀", alias, url);
+        match config.set_property(section::INNER_URL, alias, url) {
+            Ok(()) => info!("☑️ 添加别名 {} -> {{{}}} 成功! 🚀", alias, url),
+            Err(e) => error!("✖️ 添加别名失败: {}", e),
+        }
     }
 }

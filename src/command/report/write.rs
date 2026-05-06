@@ -459,8 +459,12 @@ fn update_config_files(
 ) {
     let last_day_str = last_day.format(DATE_FORMAT).to_string();
 
-    config.set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string());
-    config.set_property(section::REPORT, config_key::LAST_DAY, &last_day_str);
+    config
+        .set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string())
+        .unwrap_or_else(|e| error!("保存周数配置失败: {}", e));
+    config
+        .set_property(section::REPORT, config_key::LAST_DAY, &last_day_str)
+        .unwrap_or_else(|e| error!("保存日期配置失败: {}", e));
     info!(
         "更新YAML配置文件成功：周数 = {}, 周结束日期 = {}",
         week_num, last_day_str
@@ -488,8 +492,12 @@ fn update_config_files_silent(
 ) {
     let last_day_str = last_day.format(DATE_FORMAT).to_string();
 
-    config.set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string());
-    config.set_property(section::REPORT, config_key::LAST_DAY, &last_day_str);
+    config
+        .set_property(section::REPORT, config_key::WEEK_NUM, &week_num.to_string())
+        .unwrap_or_else(|e| error!("保存周数配置失败: {}", e));
+    config
+        .set_property(section::REPORT, config_key::LAST_DAY, &last_day_str)
+        .unwrap_or_else(|e| error!("保存日期配置失败: {}", e));
 
     let json = serde_json::json!({
         "week_num": week_num,

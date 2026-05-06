@@ -30,8 +30,14 @@ pub fn handle_tag(alias: &str, category: &str, config: &mut YamlConfig) {
         c if c == section::OUTER_URL => {
             // outer_url 特殊处理：从 inner_url 移到 outer_url
             if let Some(url) = config.get_property(section::INNER_URL, alias).cloned() {
-                config.set_property(section::OUTER_URL, alias, &url);
-                config.remove_property(section::INNER_URL, alias);
+                if let Err(e) = config.set_property(section::OUTER_URL, alias, &url) {
+                    error!("✖️ 保存配置失败: {}", e);
+                    return;
+                }
+                if let Err(e) = config.remove_property(section::INNER_URL, alias) {
+                    error!("✖️ 保存配置失败: {}", e);
+                    return;
+                }
                 info!("☑️ 将别名 {} 标记为 OUTER_URL 成功", alias);
             } else {
                 error!("✖️ 别名 {} 不在 INNER_URL 中，无法标记为 OUTER_URL", alias);
@@ -40,7 +46,10 @@ pub fn handle_tag(alias: &str, category: &str, config: &mut YamlConfig) {
         _ => {
             // 其他分类：将 path 中的值复制到对应分类
             if let Some(path) = config.get_property(section::PATH, alias).cloned() {
-                config.set_property(category, alias, &path);
+                if let Err(e) = config.set_property(category, alias, &path) {
+                    error!("✖️ 保存配置失败: {}", e);
+                    return;
+                }
                 info!(
                     "☑️ 将别名 {} 标记为 {} 成功",
                     alias,
@@ -70,7 +79,10 @@ pub fn handle_untag(alias: &str, category: &str, config: &mut YamlConfig) {
         return;
     }
 
-    config.remove_property(category, alias);
+    if let Err(e) = config.remove_property(category, alias) {
+        error!("✖️ 保存配置失败: {}", e);
+        return;
+    }
     info!(
         "☑️ 已将别名 {} 从 {} 中移除",
         alias,

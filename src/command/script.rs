@@ -160,8 +160,14 @@ pub fn handle_script(name: &str, content: &[String], config: &mut YamlConfig) {
     }
 
     // 注册到 path 和 script
-    config.set_property(section::PATH, name, &script_path_str);
-    config.set_property(section::SCRIPT, name, &script_path_str);
+    if let Err(e) = config.set_property(section::PATH, name, &script_path_str) {
+        error!("✖️ 保存配置失败: {}", e);
+        return;
+    }
+    if let Err(e) = config.set_property(section::SCRIPT, name, &script_path_str) {
+        error!("✖️ 保存配置失败: {}", e);
+        return;
+    }
 
     info!("☑️ 成功创建脚本 {{{}}}，路径: {}", name, script_path_str);
 }

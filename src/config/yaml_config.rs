@@ -166,13 +166,13 @@ impl YamlConfig {
     ///   4. 写回磁盘
     ///   5. 释放锁（fd drop 时自动释放）
     ///   6. 更新 self 与磁盘保持一致
-    pub fn save(&mut self) {
+    ///
+    /// 返回 Ok(()) 表示成功，Err 包含错误信息
+    pub fn save(&mut self) -> Result<(), String> {
         let path = Self::config_path();
 
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).unwrap_or_else(|e| {
-                eprintln!("[ERROR] 创建配置目录失败: {}", e);
-            });
+            fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {}", e))?;
         }
 
         // 1. 打开文件并获取独占锁
@@ -182,14 +182,11 @@ impl YamlConfig {
             .create(true)
             .truncate(false)
             .open(&path)
-            .unwrap_or_else(|e| {
-                eprintln!("[ERROR] 打开配置文件失败: {}", e);
-                panic!("无法打开配置文件");
-            });
+            .map_err(|e| format!("打开配置文件失败: {}", e))?;
 
-        lock_file.lock_exclusive().unwrap_or_else(|e| {
-            eprintln!("[ERROR] 获取文件锁失败: {}", e);
-        });
+        lock_file
+            .lock_exclusive()
+            .map_err(|e| format!("获取文件锁失败: {}", e))?;
 
         // 2. 锁内读取最新内容
         let content = fs::read_to_string(&path).unwrap_or_default();
@@ -210,19 +207,17 @@ impl YamlConfig {
         // extra 保留 fresh 的值（不覆盖其他进程写入的未知字段）
 
         // 4. 序列化并写回磁盘
-        let output = serde_yaml::to_string(&fresh).unwrap_or_else(|e| {
-            eprintln!("[ERROR] 序列化配置失败: {}", e);
-            String::new()
-        });
+        let output = serde_yaml::to_string(&fresh).map_err(|e| format!("序列化配置失败: {}", e))?;
 
-        fs::write(&path, output).unwrap_or_else(|e| {
-            eprintln!("[ERROR] 保存配置文件失败: {}, 路径: {:?}", e, path);
-        });
+        fs::write(&path, output)
+            .map_err(|e| format!("保存配置文件失败: {}, 路径: {:?}", e, path))?;
 
         // 5. lock_file drop 时自动释放锁
 
         // 6. 同步 extra 回内存
         self.extra = fresh.extra;
+
+        Ok(())
     }
 
     /// 创建默认配置
@@ -306,29 +301,72 @@ impl YamlConfig {
     }
 
     /// 设置某个 section 中的键值对并保存
-    pub fn set_property(&mut self, section: &str, key: &str, value: &str) {
+    /// 如果保存失败，回滚内存中的修改并返回错误
+    pub fn set_property(&mut self, section: &str, key: &str, value: &str) -> Result<(), String> {
         if let Some(map) = self.get_section_mut(section) {
+            // 先记录旧值用于回滚
+            let old_value = map.get(key).cloned();
             map.insert(key.to_string(), value.to_string());
-            self.save();
+
+            if let Err(e) = self.save() {
+                // 回滚内存修改
+                if let Some(old) = old_value {
+                    if let Some(map) = self.get_section_mut(section) {
+                        map.insert(key.to_string(), old);
+                    }
+                } else if let Some(map) = self.get_section_mut(section) {
+                    map.remove(key);
+                }
+                return Err(e);
+            }
         }
+        Ok(())
     }
 
     /// 删除某个 section 中的键并保存
-    pub fn remove_property(&mut self, section: &str, key: &str) {
+    /// 如果保存失败，回滚内存中的修改并返回错误
+    pub fn remove_property(&mut self, section: &str, key: &str) -> Result<(), String> {
         if let Some(map) = self.get_section_mut(section) {
-            map.remove(key);
-            self.save();
+            // 先记录旧值用于回滚
+            let old_value = map.remove(key);
+
+            if let Err(e) = self.save() {
+                // 回滚内存修改
+                if let Some(old) = old_value
+                    && let Some(map) = self.get_section_mut(section)
+                {
+                    map.insert(key.to_string(), old);
+                }
+                return Err(e);
+            }
         }
+        Ok(())
     }
 
     /// 重命名某个 section 中的键
-    pub fn rename_property(&mut self, section: &str, old_key: &str, new_key: &str) {
+    /// 如果保存失败，回滚内存中的修改并返回错误
+    pub fn rename_property(
+        &mut self,
+        section: &str,
+        old_key: &str,
+        new_key: &str,
+    ) -> Result<(), String> {
         if let Some(map) = self.get_section_mut(section)
             && let Some(value) = map.remove(old_key)
         {
             map.insert(new_key.to_string(), value);
-            self.save();
+
+            if let Err(e) = self.save() {
+                // 回滚内存修改
+                if let Some(map) = self.get_section_mut(section)
+                    && let Some(v) = map.remove(new_key)
+                {
+                    map.insert(old_key.to_string(), v);
+                }
+                return Err(e);
+            }
         }
+        Ok(())
     }
 
     /// 获取所有已知的 section 名称

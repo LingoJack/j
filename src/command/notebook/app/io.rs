@@ -37,11 +37,13 @@ pub fn load_panel_ratio() -> Option<u16> {
 /// 保存面板比例到 YamlConfig setting section
 pub fn save_panel_ratio(ratio: u16) {
     let mut config = YamlConfig::load();
-    config.set_property(
+    if let Err(e) = config.set_property(
         section::SETTING,
         config_key::NOTEBOOK_PANEL_RATIO,
         &ratio.to_string(),
-    );
+    ) {
+        crate::util::log::write_error_log("保存面板比例", &e);
+    }
 }
 
 /// 从 YamlConfig setting section 加载展开目录列表
@@ -56,7 +58,11 @@ pub fn load_expanded_dirs() -> ExpandedDirs {
 pub fn save_expanded_dirs(dirs: &ExpandedDirs) {
     if let Ok(json) = serde_json::to_string(dirs) {
         let mut config = YamlConfig::load();
-        config.set_property(section::SETTING, config_key::NOTEBOOK_EXPANDED_DIRS, &json);
+        if let Err(e) =
+            config.set_property(section::SETTING, config_key::NOTEBOOK_EXPANDED_DIRS, &json)
+        {
+            crate::util::log::write_error_log("保存展开目录", &e);
+        }
     }
 }
 

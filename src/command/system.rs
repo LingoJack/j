@@ -35,8 +35,10 @@ pub fn handle_log(key: &str, value: &str, config: &mut YamlConfig) {
         } else {
             config_key::CONCISE
         };
-        config.set_property(section::LOG, config_key::MODE, mode);
-        info!("☑️ 日志模式已切换为: {}", mode);
+        match config.set_property(section::LOG, config_key::MODE, mode) {
+            Ok(()) => info!("☑️ 日志模式已切换为: {}", mode),
+            Err(e) => error!("✖️ 保存配置失败: {}", e),
+        }
     } else {
         usage!("j log mode <verbose|concise>");
     }
@@ -90,17 +92,21 @@ pub fn handle_config(part: &str, field: &str, value: &str, config: &mut YamlConf
     }
 
     let old_value = config.get_property(part, field).cloned();
-    config.set_property(part, field, value);
-
-    match old_value {
-        Some(old) => {
-            info!(
-                "☑️ 已修改 {}.{} 的值为 {}，旧值为 {}",
-                part, field, value, old
-            );
-        }
-        None => {
-            info!("☑️ 已新增 {}.{} = {}", part, field, value);
+    match config.set_property(part, field, value) {
+        Ok(()) => match old_value {
+            Some(old) => {
+                info!(
+                    "☑️ 已修改 {}.{} 的值为 {}，旧值为 {}",
+                    part, field, value, old
+                );
+            }
+            None => {
+                info!("☑️ 已新增 {}.{} = {}", part, field, value);
+            }
+        },
+        Err(e) => {
+            error!("✖️ 保存配置失败: {}", e);
+            return;
         }
     }
     info!(
