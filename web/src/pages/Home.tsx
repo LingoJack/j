@@ -11,18 +11,25 @@ import { Footer } from '../components/home/Footer'
 import { i18n } from '../data/i18n'
 import type { Language } from '../types'
 
-const installCmd = 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | bash'
+export type Platform = 'unix' | 'windows'
+
+const installCommands: Record<Platform, string> = {
+  unix: 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | bash',
+  windows: 'irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex',
+}
 
 export default function Home() {
   const [lang, setLang] = useState<Language>('zh')
+  const [platform, setPlatform] = useState<Platform>('unix')
   const t = i18n[lang]
+  const installCmd = installCommands[platform]
   
   return (
     <div className="min-h-screen bg-[#faf9f6]">
       <Nav lang={lang} t={t} onLangChange={setLang} />
-      <HeroSection t={t} installCmd={installCmd} />
+      <HeroSection t={t} installCmd={installCmd} platform={platform} onPlatformChange={setPlatform} />
       <FeaturesSection t={t} />
-      <QuickStartSection t={t} installCmd={installCmd} />
+      <QuickStartSection t={t} installCmd={installCmd} platform={platform} onPlatformChange={setPlatform} />
       <MoreFeaturesSection t={t} />
       <BestPracticesSection lang={lang} t={t} />
       <TechStackSection t={t} />

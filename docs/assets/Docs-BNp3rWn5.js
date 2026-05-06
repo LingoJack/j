@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CyIWy8bh.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CQ9SpSmk.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -515,6 +515,8 @@ During chain execution, the previous hook's output updates the context for the n
 - When removing hooks, use the \`session_idx\` from list output as the \`index\` parameter
 `,S=e({default:()=>C}),C=`## One-click Install (Recommended)
 
+### macOS / Linux
+
 \`\`\`bash
 # Install latest version
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
@@ -522,6 +524,18 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 # Install specific version
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
 \`\`\`
+
+### Windows
+
+\`\`\`powershell
+# Install latest version
+irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+
+# Install specific version
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+\`\`\`
+
+> Windows install location: \`%LOCALAPPDATA%\\j-cli\\j.exe\`, automatically added to user PATH
 
 ## Install from crates.io
 
@@ -565,6 +579,8 @@ cargo install j-cli
 
 ## Uninstall
 
+### macOS / Linux
+
 \`\`\`bash
 # Using install script (recommended)
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
@@ -579,6 +595,31 @@ rm ~/.cargo/bin/j          # Cargo install
 # (Optional) Remove data directory
 rm -rf ~/.jdata
 \`\`\`
+
+### Windows
+
+\`\`\`powershell
+# Using install script (recommended)
+powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+
+# Or manual removal
+Remove-Item "$env:LOCALAPPDATA\\j-cli" -Recurse -Force
+
+# (Optional) Remove data directory
+Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
+\`\`\`
+
+## Platform Differences
+
+| Feature | macOS / Linux | Windows |
+|---------|---------------|---------|
+| AI Shell Tool | Bash | PowerShell |
+| Default Script | \`.sh\` + bash shebang | \`.cmd\` |
+| Auto Update | \`.tar.gz\` extract | \`.zip\` extract |
+| Data Directory | \`~/.jdata/\` | \`%USERPROFILE%\\.jdata\\\` |
+| Install Location | \`/usr/local/bin/j\` | \`%LOCALAPPDATA%\\j-cli\\j.exe\` |
+| Computer Use | Supported | Not supported |
+| j-indicator | Menu bar indicator | Not supported |
 `,w=e({default:()=>T}),T=`## Overview
 
 The built-in Markdown editor is a Typora-like terminal editor with line-level rendering toggle and full Vim mode support.
@@ -800,11 +841,23 @@ allow:
 \`\`\`
 `,O=e({default:()=>k}),k=`## Register App Aliases
 
+### macOS / Linux
+
 \`\`\`bash
 j set chrome "/Applications/Google Chrome.app"
 j set vscode "/Applications/Visual Studio Code.app"
 
 # Register URL aliases (auto-detected as inner_url)
+j set github https://github.com
+\`\`\`
+
+### Windows
+
+\`\`\`powershell
+j set notepad "C:\\Windows\\notepad.exe"
+j set vscode "C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+
+# Register URL aliases
 j set github https://github.com
 \`\`\`
 
@@ -817,11 +870,21 @@ j note vscode editor
 
 ## Open Apps
 
+### macOS / Linux
+
 \`\`\`bash
 j chrome                  # Open Chrome
 j chrome github           # Open github URL with Chrome
 j chrome "rust lang"      # Search "rust lang" with Chrome
 j vscode ./src            # Open src directory with VSCode
+\`\`\`
+
+### Windows
+
+\`\`\`powershell
+j notepad                 # Open Notepad
+j vscode .\\src            # Open src directory with VSCode
+j github                  # Open github URL
 \`\`\`
 
 ## Daily Reports
@@ -850,8 +913,7 @@ j chat Hello              # Quick question
 
 \`\`\`bash
 j                         # Enter interactive mode with Tab completion
-\`\`\`
-`,A=e({default:()=>j}),j=`## Overview
+\`\`\``,A=e({default:()=>j}),j=`## Overview
 
 Control AI chat from mobile devices via WebSocket, started with \`j chat --remote\`.
 
@@ -970,18 +1032,41 @@ j rm <name>        # Remove alias (also deletes script file)
 
 ## Script Storage
 
-Scripts are stored in \`~/.jdata/scripts/\` directory:
+Scripts are stored in platform-specific directories:
+
+| Platform | Storage Path |
+|----------|-------------|
+| macOS / Linux | \`~/.jdata/scripts/\` |
+| Windows | \`%USERPROFILE%\\.jdata\\scripts\\\` |
 
 \`\`\`
+# macOS / Linux
 ~/.jdata/scripts/
 ├── deploy.sh
 ├── build.sh
 └── test.sh
+
+# Windows
+%USERPROFILE%\\.jdata\\scripts\\
+├── deploy.cmd
+├── build.cmd
+└── test.cmd
 \`\`\`
 
 Scripts are automatically registered as aliases after creation, executable via \`j <name>\`.
 
+## Platform Differences
+
+| Feature | macOS / Linux | Windows |
+|---------|---------------|---------|
+| Script extension | \`.sh\` | \`.cmd\` |
+| Default shebang | \`#!/bin/bash\` | (none) |
+| Shell | Bash | cmd.exe |
+| PATH separator | \`:\` | \`;\` |
+
 ## Example
+
+### macOS / Linux
 
 \`\`\`bash
 # Create deploy script
@@ -996,7 +1081,49 @@ rsync -avz dist/ user@server:/var/www/
 # Run script
 j deploy
 \`\`\`
-`,I=e({default:()=>L}),L=`## Overview
+
+### Windows
+
+\`\`\`powershell
+# Create deploy script
+j concat deploy
+
+# In editor, input:
+@echo off
+npm run build
+xcopy dist\\ \\\\server\\www\\ /E /I /Y
+
+# Run script
+j deploy
+\`\`\`
+
+## Environment Variables
+
+All registered alias paths are automatically injected as environment variables when executing scripts. Naming rule: \`J_<ALIAS_UPPERCASE>\` (hyphens converted to underscores).
+
+### macOS / Linux (.sh)
+
+\`\`\`bash
+#!/bin/bash
+# Registered: chrome -> /Applications/Google Chrome.app
+# Registered: my-tool -> /usr/local/bin/my-tool
+
+open -a "$J_CHROME" https://example.com
+"$J_MY_TOOL" --version
+\`\`\`
+
+### Windows (.cmd)
+
+\`\`\`cmd
+@echo off
+REM Registered: notepad -> C:\\Windows\\notepad.exe
+REM Registered: vscode -> C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe
+
+start "" "%J_VSCODE%" .\\src
+"%J_NOTEPAD%" readme.txt
+\`\`\`
+
+> Paths with spaces must be wrapped in double quotes: \`"$J_CHROME"\` / \`"%J_VSCODE%"\``,I=e({default:()=>L}),L=`## Overview
 
 Skills are specialized prompt modules that extend AI capabilities, loaded via the \`LoadSkill\` tool.
 
@@ -1188,11 +1315,33 @@ Regex search in file contents.
 
 ### Bash
 
-Execute shell commands.
+Execute shell commands (macOS / Linux only).
 
 | Parameter | Type | Required | Description |
 |------|------|------|------|
 | command | string | Yes | Shell command (executes in bash -c) |
+| cwd | string | No | Working directory |
+| timeout | uint | No | Timeout in seconds (default 120, max 600) |
+| run_in_background | bool | No | Run in background (returns task_id) |
+
+**Notes:**
+- Interactive commands not supported
+- Build commands: recommended timeout 300-600
+- Background tasks: use \`TaskOutput\` to get results
+
+\`\`\`json
+{"command": "cargo build --release", "timeout": 300}
+{"command": "npm run dev", "run_in_background": true}
+\`\`\`
+
+### PowerShell
+
+Execute PowerShell commands (Windows only).
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| command | string | Yes | PowerShell command (executes in powershell.exe -NoProfile -Command) |
+| description | string | No | Command description |
 | cwd | string | No | Working directory |
 | timeout | uint | No | Timeout in seconds (default 120, max 600) |
 | run_in_background | bool | No | Run in background (returns task_id) |
@@ -1398,7 +1547,7 @@ Compress conversation context to free up context window.
 
 ## ComputerUse Tool
 
-macOS desktop control tool supporting screenshots, clicks, typing, etc.
+macOS desktop control tool supporting screenshots, clicks, typing, etc. (macOS only).
 
 ### Screenshot Operations
 
@@ -2053,6 +2202,8 @@ Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
 - 移除 hook 时，使用 \`list\` 输出中的 \`session_idx\` 作为 \`index\` 参数
 `,pe=e({default:()=>me}),me=`## 一键安装（推荐）
 
+### macOS / Linux
+
 \`\`\`bash
 # 安装最新版本
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
@@ -2060,6 +2211,18 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 # 安装指定版本
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
 \`\`\`
+
+### Windows
+
+\`\`\`powershell
+# 安装最新版本
+irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+
+# 安装指定版本
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+\`\`\`
+
+> Windows 安装位置: \`%LOCALAPPDATA%\\j-cli\\j.exe\`，自动添加到用户 PATH
 
 ## 从 crates.io 安装
 
@@ -2103,6 +2266,8 @@ cargo install j-cli
 
 ## 卸载
 
+### macOS / Linux
+
 \`\`\`bash
 # 使用安装脚本（推荐）
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
@@ -2117,6 +2282,31 @@ rm ~/.cargo/bin/j          # Cargo 安装
 # （可选）删除数据目录
 rm -rf ~/.jdata
 \`\`\`
+
+### Windows
+
+\`\`\`powershell
+# 使用安装脚本（推荐）
+powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+
+# 或手动删除
+Remove-Item "$env:LOCALAPPDATA\\j-cli" -Recurse -Force
+
+# （可选）删除数据目录
+Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
+\`\`\`
+
+## 平台差异说明
+
+| 功能 | macOS / Linux | Windows |
+|------|---------------|---------|
+| AI Shell 工具 | Bash | PowerShell |
+| 默认脚本 | \`.sh\` + bash shebang | \`.cmd\` |
+| 自动更新 | \`.tar.gz\` 解压 | \`.zip\` 解压 |
+| 数据目录 | \`~/.jdata/\` | \`%USERPROFILE%\\.jdata\\\` |
+| 安装位置 | \`/usr/local/bin/j\` | \`%LOCALAPPDATA%\\j-cli\\j.exe\` |
+| Computer Use | 支持 | 不支持 |
+| j-indicator | 菜单栏指示灯 | 不支持 |
 `,he=e({default:()=>ge}),ge=`## 概述
 
 内置 Markdown 编辑器是一个类 Typora 的终端编辑器，支持行级渲染切换和完整 Vim 模式。
@@ -2338,11 +2528,23 @@ allow:
 \`\`\`
 `,ye=e({default:()=>be}),be=`## 注册应用别名
 
+### macOS / Linux
+
 \`\`\`bash
 j set chrome "/Applications/Google Chrome.app"
 j set vscode "/Applications/Visual Studio Code.app"
 
 # 注册 URL 别名（自动识别为 inner_url）
+j set github https://github.com
+\`\`\`
+
+### Windows
+
+\`\`\`powershell
+j set notepad "C:\\Windows\\notepad.exe"
+j set vscode "C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+
+# 注册 URL 别名
 j set github https://github.com
 \`\`\`
 
@@ -2355,11 +2557,21 @@ j note vscode editor
 
 ## 打开应用
 
+### macOS / Linux
+
 \`\`\`bash
 j chrome                  # 打开 Chrome
 j chrome github           # 用 Chrome 打开 github URL
 j chrome "rust lang"      # 用 Chrome 搜索 "rust lang"
 j vscode ./src            # 用 VSCode 打开 src 目录
+\`\`\`
+
+### Windows
+
+\`\`\`powershell
+j notepad                 # 打开记事本
+j vscode .\\src            # 用 VSCode 打开 src 目录
+j github                  # 打开 github URL
 \`\`\`
 
 ## 日报
@@ -2388,8 +2600,7 @@ j chat 你好               # 快速提问
 
 \`\`\`bash
 j                         # 进入交互模式，支持 Tab 补全
-\`\`\`
-`,xe=e({default:()=>Se}),Se=`## 概述
+\`\`\``,xe=e({default:()=>Se}),Se=`## 概述
 
 通过 WebSocket 从移动设备控制 AI 对话，使用 \`j chat --remote\` 启动。
 
@@ -2508,18 +2719,41 @@ j rm <name>        # 删除别名（同时删除脚本文件）
 
 ## 脚本存储
 
-脚本统一存储在 \`~/.jdata/scripts/\` 目录：
+脚本按平台存储在不同目录：
+
+| 平台 | 存储路径 |
+|------|---------|
+| macOS / Linux | \`~/.jdata/scripts/\` |
+| Windows | \`%USERPROFILE%\\.jdata\\scripts\\\` |
 
 \`\`\`
+# macOS / Linux
 ~/.jdata/scripts/
 ├── deploy.sh
 ├── build.sh
 └── test.sh
+
+# Windows
+%USERPROFILE%\\.jdata\\scripts\\
+├── deploy.cmd
+├── build.cmd
+└── test.cmd
 \`\`\`
 
 脚本创建后自动注册为别名，可直接通过 \`j <name>\` 执行。
 
+## 平台差异
+
+| 功能 | macOS / Linux | Windows |
+|------|---------------|---------|
+| 脚本扩展名 | \`.sh\` | \`.cmd\` |
+| 默认 shebang | \`#!/bin/bash\` | 无 |
+| 执行 shell | Bash | cmd.exe |
+| PATH 分隔符 | \`:\` | \`;\` |
+
 ## 示例
+
+### macOS / Linux
 
 \`\`\`bash
 # 创建部署脚本
@@ -2534,6 +2768,49 @@ rsync -avz dist/ user@server:/var/www/
 # 运行脚本
 j deploy
 \`\`\`
+
+### Windows
+
+\`\`\`powershell
+# 创建部署脚本
+j concat deploy
+
+# 在编辑器中输入：
+@echo off
+npm run build
+xcopy dist\\ \\\\server\\www\\ /E /I /Y
+
+# 运行脚本
+j deploy
+\`\`\`
+
+## 环境变量注入
+
+执行脚本时，所有已注册的别名路径会自动注入为环境变量，命名规则为 \`J_<别名大写>\`（\`-\` 转为 \`_\`）。
+
+### macOS / Linux（.sh 脚本）
+
+\`\`\`bash
+#!/bin/bash
+# 已注册: chrome -> /Applications/Google Chrome.app
+# 已注册: my-tool -> /usr/local/bin/my-tool
+
+open -a "$J_CHROME" https://example.com
+"$J_MY_TOOL" --version
+\`\`\`
+
+### Windows（.cmd 脚本）
+
+\`\`\`cmd
+@echo off
+REM 已注册: notepad -> C:\\Windows\\notepad.exe
+REM 已注册: vscode -> C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe
+
+start "" "%J_VSCODE%" .\\src
+"%J_NOTEPAD%" readme.txt
+\`\`\`
+
+> 路径含空格时，脚本中必须用双引号包裹变量：\`"$J_CHROME"\` / \`"%J_VSCODE%"\`
 `,De=e({default:()=>Oe}),Oe=`## 概述
 
 Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具加载。
@@ -2726,11 +3003,33 @@ j todo add "完成文档"     # 快速添加待办
 
 ### Bash
 
-执行 shell 命令。
+执行 shell 命令（仅 macOS / Linux）。
 
 | 参数 | 类型 | 必填 | 描述 |
 |------|------|------|------|
 | command | string | 是 | Shell 命令（在 bash -c 中执行） |
+| cwd | string | 否 | 工作目录 |
+| timeout | uint | 否 | 超时秒数（默认 120，最大 600） |
+| run_in_background | bool | 否 | 后台执行（返回 task_id） |
+
+**注意事项：**
+- 不支持交互式命令
+- 构建命令建议 timeout 设为 300-600
+- 后台任务使用 \`TaskOutput\` 获取结果
+
+\`\`\`json
+{"command": "cargo build --release", "timeout": 300}
+{"command": "npm run dev", "run_in_background": true}
+\`\`\`
+
+### PowerShell
+
+执行 PowerShell 命令（仅 Windows）。
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| command | string | 是 | PowerShell 命令（在 powershell.exe -NoProfile -Command 中执行） |
+| description | string | 否 | 命令描述 |
 | cwd | string | 否 | 工作目录 |
 | timeout | uint | 否 | 超时秒数（默认 120，最大 600） |
 | run_in_background | bool | 否 | 后台执行（返回 task_id） |
@@ -2936,7 +3235,7 @@ j todo add "完成文档"     # 快速添加待办
 
 ## ComputerUse 工具
 
-macOS 桌面控制工具，支持截图、点击、输入等操作。
+macOS 桌面控制工具，支持截图、点击、输入等操作（仅 macOS）。
 
 ### 截图操作
 

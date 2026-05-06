@@ -85,11 +85,33 @@
 
 ### Bash
 
-执行 shell 命令。
+执行 shell 命令（仅 macOS / Linux）。
 
 | 参数 | 类型 | 必填 | 描述 |
 |------|------|------|------|
 | command | string | 是 | Shell 命令（在 bash -c 中执行） |
+| cwd | string | 否 | 工作目录 |
+| timeout | uint | 否 | 超时秒数（默认 120，最大 600） |
+| run_in_background | bool | 否 | 后台执行（返回 task_id） |
+
+**注意事项：**
+- 不支持交互式命令
+- 构建命令建议 timeout 设为 300-600
+- 后台任务使用 `TaskOutput` 获取结果
+
+```json
+{"command": "cargo build --release", "timeout": 300}
+{"command": "npm run dev", "run_in_background": true}
+```
+
+### PowerShell
+
+执行 PowerShell 命令（仅 Windows）。
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| command | string | 是 | PowerShell 命令（在 powershell.exe -NoProfile -Command 中执行） |
+| description | string | 否 | 命令描述 |
 | cwd | string | 否 | 工作目录 |
 | timeout | uint | 否 | 超时秒数（默认 120，最大 600） |
 | run_in_background | bool | 否 | 后台执行（返回 task_id） |
@@ -295,7 +317,7 @@
 
 ## ComputerUse 工具
 
-macOS 桌面控制工具，支持截图、点击、输入等操作。
+macOS 桌面控制工具，支持截图、点击、输入等操作（仅 macOS）。
 
 ### 截图操作
 

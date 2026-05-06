@@ -2,13 +2,16 @@ import { Section } from '../common/Section'
 import { CodeBlock } from '../common/CodeBlock'
 import { CommandExample } from '../common/CommandExample'
 import type { I18nData } from '../../types'
+import type { Platform } from '../../pages/Home'
 
 interface QuickStartSectionProps {
   t: I18nData
   installCmd: string
+  platform: Platform
+  onPlatformChange: (platform: Platform) => void
 }
 
-export function QuickStartSection({ t, installCmd }: QuickStartSectionProps) {
+export function QuickStartSection({ t, installCmd, platform, onPlatformChange }: QuickStartSectionProps) {
   return (
     <Section id="quick-start">
       <div className="mb-12">
@@ -28,6 +31,29 @@ export function QuickStartSection({ t, installCmd }: QuickStartSectionProps) {
           </h3>
           <div className="space-y-3">
             <div>
+              {/* Platform selector */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => onPlatformChange('unix')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    platform === 'unix'
+                      ? 'bg-stone-900 text-white'
+                      : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                  }`}
+                >
+                  macOS / Linux
+                </button>
+                <button
+                  onClick={() => onPlatformChange('windows')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    platform === 'windows'
+                      ? 'bg-stone-900 text-white'
+                      : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                  }`}
+                >
+                  Windows
+                </button>
+              </div>
               <p className="text-xs text-stone-400 mb-2">{t.quickStart.oneLineInstall}</p>
               <CodeBlock>{installCmd}</CodeBlock>
             </div>

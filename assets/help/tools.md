@@ -9,7 +9,8 @@ order: 7
 
 | 工具名 | 功能 | 需确认 |
 |--------|------|--------|
-| `Bash` | 执行 shell 命令；`run_in_background: true` 时后台执行并返回 task_id | Yes |
+| `Bash` | 执行 shell 命令；`run_in_background: true` 时后台执行并返回 task_id（仅 macOS/Linux） | Yes |
+| `PowerShell` | 执行 PowerShell 命令；`run_in_background: true` 时后台执行并返回 task_id（仅 Windows） | Yes |
 | `Read` | 读取本地文件（支持行号范围，可读取图片） | |
 | `Write` | 写入文件（自动创建目录） | Yes |
 | `Edit` | 编辑文件（精确字符串替换） | Yes |
@@ -19,7 +20,7 @@ order: 7
 | `WebFetch` | 获取网页内容并转为 Markdown/纯文本 | |
 | `WebSearch` | 使用 Exa Search API 搜索网络 | |
 | `Browser` | 浏览器自动化（CDP + Lite fallback） | |
-| `ComputerUse` | 控制 macOS 桌面（截图、点击、输入、滚动、AX 查询） | Yes |
+| `ComputerUse` | 控制 macOS 桌面（截图、点击、输入、滚动、AX 查询）（仅 macOS） | Yes |
 | `TaskOutput` | 查询后台任务输出（`Bash run_in_background` 产生的任务），支持阻塞等待 | |
 | `LoadSkill` | 加载指定技能到上下文 | |
 | `Compact` | 触发对话压缩以释放上下文窗口 | |

@@ -1,12 +1,15 @@
 import { CodeBlock } from '../common/CodeBlock'
 import type { I18nData } from '../../types'
+import type { Platform } from '../../pages/Home'
 
 interface HeroSectionProps {
   t: I18nData
   installCmd: string
+  platform: Platform
+  onPlatformChange: (platform: Platform) => void
 }
 
-export function HeroSection({ t, installCmd }: HeroSectionProps) {
+export function HeroSection({ t, installCmd, platform, onPlatformChange }: HeroSectionProps) {
   return (
     <section className="pt-32 pb-16 px-6">
       <div className="max-w-4xl mx-auto">
@@ -27,6 +30,30 @@ export function HeroSection({ t, installCmd }: HeroSectionProps) {
           <br className="hidden sm:block" />
           {t.hero.subtitleExtra}
         </p>
+        
+        {/* Platform selector */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => onPlatformChange('unix')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              platform === 'unix'
+                ? 'bg-stone-900 text-white'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            macOS / Linux
+          </button>
+          <button
+            onClick={() => onPlatformChange('windows')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              platform === 'windows'
+                ? 'bg-stone-900 text-white'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            Windows
+          </button>
+        </div>
         
         <div className="max-w-lg mb-8">
           <CodeBlock>{installCmd}</CodeBlock>

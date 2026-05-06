@@ -1,5 +1,7 @@
 ## 一键安装（推荐）
 
+### macOS / Linux
+
 ```bash
 # 安装最新版本
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
@@ -7,6 +9,18 @@ curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
 # 安装指定版本
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
 ```
+
+### Windows
+
+```powershell
+# 安装最新版本
+irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+
+# 安装指定版本
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+```
+
+> Windows 安装位置: `%LOCALAPPDATA%\j-cli\j.exe`，自动添加到用户 PATH
 
 ## 从 crates.io 安装
 
@@ -50,6 +64,8 @@ cargo install j-cli
 
 ## 卸载
 
+### macOS / Linux
+
 ```bash
 # 使用安装脚本（推荐）
 curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
@@ -64,3 +80,28 @@ rm ~/.cargo/bin/j          # Cargo 安装
 # （可选）删除数据目录
 rm -rf ~/.jdata
 ```
+
+### Windows
+
+```powershell
+# 使用安装脚本（推荐）
+powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+
+# 或手动删除
+Remove-Item "$env:LOCALAPPDATA\j-cli" -Recurse -Force
+
+# （可选）删除数据目录
+Remove-Item "$env:USERPROFILE\.jdata" -Recurse -Force
+```
+
+## 平台差异说明
+
+| 功能 | macOS / Linux | Windows |
+|------|---------------|---------|
+| AI Shell 工具 | Bash | PowerShell |
+| 默认脚本 | `.sh` + bash shebang | `.cmd` |
+| 自动更新 | `.tar.gz` 解压 | `.zip` 解压 |
+| 数据目录 | `~/.jdata/` | `%USERPROFILE%\.jdata\` |
+| 安装位置 | `/usr/local/bin/j` | `%LOCALAPPDATA%\j-cli\j.exe` |
+| Computer Use | 支持 | 不支持 |
+| j-indicator | 菜单栏指示灯 | 不支持 |

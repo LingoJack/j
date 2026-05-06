@@ -85,11 +85,33 @@ Regex search in file contents.
 
 ### Bash
 
-Execute shell commands.
+Execute shell commands (macOS / Linux only).
 
 | Parameter | Type | Required | Description |
 |------|------|------|------|
 | command | string | Yes | Shell command (executes in bash -c) |
+| cwd | string | No | Working directory |
+| timeout | uint | No | Timeout in seconds (default 120, max 600) |
+| run_in_background | bool | No | Run in background (returns task_id) |
+
+**Notes:**
+- Interactive commands not supported
+- Build commands: recommended timeout 300-600
+- Background tasks: use `TaskOutput` to get results
+
+```json
+{"command": "cargo build --release", "timeout": 300}
+{"command": "npm run dev", "run_in_background": true}
+```
+
+### PowerShell
+
+Execute PowerShell commands (Windows only).
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| command | string | Yes | PowerShell command (executes in powershell.exe -NoProfile -Command) |
+| description | string | No | Command description |
 | cwd | string | No | Working directory |
 | timeout | uint | No | Timeout in seconds (default 120, max 600) |
 | run_in_background | bool | No | Run in background (returns task_id) |
@@ -295,7 +317,7 @@ Compress conversation context to free up context window.
 
 ## ComputerUse Tool
 
-macOS desktop control tool supporting screenshots, clicks, typing, etc.
+macOS desktop control tool supporting screenshots, clicks, typing, etc. (macOS only).
 
 ### Screenshot Operations
 

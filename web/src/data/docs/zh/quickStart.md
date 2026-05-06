@@ -1,10 +1,22 @@
 ## 注册应用别名
 
+### macOS / Linux
+
 ```bash
 j set chrome "/Applications/Google Chrome.app"
 j set vscode "/Applications/Visual Studio Code.app"
 
 # 注册 URL 别名（自动识别为 inner_url）
+j set github https://github.com
+```
+
+### Windows
+
+```powershell
+j set notepad "C:\Windows\notepad.exe"
+j set vscode "C:\Users\%USERNAME%\AppData\Local\Programs\Microsoft VS Code\Code.exe"
+
+# 注册 URL 别名
 j set github https://github.com
 ```
 
@@ -17,11 +29,21 @@ j note vscode editor
 
 ## 打开应用
 
+### macOS / Linux
+
 ```bash
 j chrome                  # 打开 Chrome
 j chrome github           # 用 Chrome 打开 github URL
 j chrome "rust lang"      # 用 Chrome 搜索 "rust lang"
 j vscode ./src            # 用 VSCode 打开 src 目录
+```
+
+### Windows
+
+```powershell
+j notepad                 # 打开记事本
+j vscode .\src            # 用 VSCode 打开 src 目录
+j github                  # 打开 github URL
 ```
 
 ## 日报
