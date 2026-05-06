@@ -5,10 +5,17 @@ Skill 是扩展 AI 能力的专用提示词模块，通过 `LoadSkill` 工具加
 ## Skill 结构
 
 ```
+# macOS / Linux
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill 定义（必需）
 ├── references/       # 参考文档（AI 按需 Read 读取）
-└── scripts/          # 脚本文件（AI 按需 Bash 执行）
+└── scripts/          # 脚本文件（AI 按需 Bash/PowerShell 执行）
+
+# Windows
+%USERPROFILE%\.jdata\agent\skills\<skill_name>\
+├── SKILL.md          # Skill 定义（必需）
+├── references\       # 参考文档（AI 按需 Read 读取）
+└── scripts\          # 脚本文件（AI 按需 PowerShell 执行）
 ```
 
 ## 创建 Skill
@@ -44,14 +51,19 @@ AI 通过 `LoadSkill` 工具加载 skill：
 
 ## Skill 来源
 
-| 来源 | 路径 | 优先级 |
-|------|------|--------|
-| 用户级 | `~/.jdata/agent/skills/` | 低 |
-| 项目级 | `.jcli/skills/` | 高（覆盖用户级） |
+| 来源 | macOS / Linux | Windows | 优先级 |
+|------|---------------|---------|--------|
+| 用户级 | `~/.jdata/agent/skills/` | `%USERPROFILE%\.jdata\agent\skills\` | 低 |
+| 项目级 | `.jcli/skills/` | `.jcli\skills\` | 高（覆盖用户级） |
 
 ## 禁用 Skill
 
-在 TUI 配置界面中禁用特定 skill，配置保存在 `~/.jdata/agent/data/agent_config.json`：
+在 TUI 配置界面中禁用特定 skill，配置保存在数据目录下：
+
+| 平台 | 配置路径 |
+|------|---------|
+| macOS / Linux | `~/.jdata/agent/data/agent_config.json` |
+| Windows | `%USERPROFILE%\.jdata\agent\data\agent_config.json` |
 
 ```json
 {

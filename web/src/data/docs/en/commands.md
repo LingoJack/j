@@ -29,8 +29,12 @@ Reference a command with `@command:<name>` in the input box:
 
 #### Directory Locations
 
-- **User-level**: `~/.jdata/agent/commands/` - Available across all projects
-- **Project-level**: `.jcli/commands/` - Only available in current project (higher priority)
+| Level | macOS / Linux | Windows |
+|-------|---------------|---------|
+| User-level | `~/.jdata/agent/commands/` | `%USERPROFILE%\.jdata\agent\commands\` |
+| Project-level | `.jcli/commands/` | `.jcli\commands\` |
+
+Project-level commands have higher priority.
 
 #### File Format
 

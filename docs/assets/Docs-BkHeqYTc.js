@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-CQ9SpSmk.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-DpfVOBYi.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -62,9 +62,25 @@ Type \`@\` in the input box to trigger completion:
 AI chat has built-in Agent capabilities for autonomous multi-step task execution:
 
 - **Autonomous Reasoning**: AI plans and executes multi-step tasks
-- **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
+- **Tool Integration**: Automatically uses available tools (Read, Write, Bash/PowerShell, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
 - **Plan Mode**: Explore codebase before making a plan
+
+### Available Tools
+
+| Tool | macOS / Linux | Windows | Description |
+|------|:---:|:---:|-------------|
+| Read | ✅ | ✅ | Read files |
+| Write | ✅ | ✅ | Write files |
+| Edit | ✅ | ✅ | Edit files |
+| Glob | ✅ | ✅ | File name search |
+| Grep | ✅ | ✅ | Content search |
+| Bash | ✅ | ❌ | Shell command execution |
+| PowerShell | ❌ | ✅ | PowerShell command execution |
+| WebFetch | ✅ | ✅ | Web page fetching |
+| WebSearch | ✅ | ✅ | Web search |
+| ComputerUse | ✅ | ❌ | Screen capture & interaction |
+| Browser | ✅ | ✅ | Browser automation |
 
 ### Plan Mode
 
@@ -92,7 +108,8 @@ permissions:
     - Grep
     - Glob
   deny:
-    - Bash
+    - Bash          # macOS / Linux
+    - PowerShell    # Windows
     - Write
 \`\`\`
 
@@ -157,20 +174,46 @@ j gh-issues # Open in browser
 
 ## Alias Storage
 
-Aliases are stored in \`~/.jdata/config.yaml\`:
+Aliases are stored in the configuration file under the data directory:
+
+| Platform | Config File Path |
+|----------|-----------------|
+| macOS / Linux | \`~/.jdata/alias.yaml\` |
+| Windows | \`%USERPROFILE%\\.jdata\\alias.yaml\` |
 
 \`\`\`yaml
+# macOS / Linux
 path:
+  chrome: "/Applications/Google Chrome.app"
+  vscode: "/Applications/Visual Studio Code.app"
   work: /Users/user/Projects/work
-  notes: /Users/user/Documents/notes
 
 inner_url:
   gh: https://github.com
   gh-issues: https://github.com/issues
+
+# Windows
+path:
+  notepad: "C:\\\\Windows\\\\notepad.exe"
+  vscode: "C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Programs\\\\Microsoft VS Code\\\\Code.exe"
+  work: "C:\\\\Users\\\\user\\\\Projects\\\\work"
+
+inner_url:
+  gh: https://github.com
 \`\`\`
 `,ne=e({default:()=>re}),re=`## Overview
 
 Browser is a tool in AI chat for web browsing, interaction, and content extraction.
+
+## Platform Support
+
+| Platform | Lite Mode | CDP Mode |
+|----------|:---:|:---:|
+| macOS | ✅ | ✅ |
+| Linux | ✅ | ✅ |
+| Windows | ✅ | ✅ |
+
+> **Note**: CDP mode on Windows requires Chrome or Edge browser to be installed.
 
 ## Modes
 
@@ -280,8 +323,12 @@ Reference a command with \`@command:<name>\` in the input box:
 
 #### Directory Locations
 
-- **User-level**: \`~/.jdata/agent/commands/\` - Available across all projects
-- **Project-level**: \`.jcli/commands/\` - Only available in current project (higher priority)
+| Level | macOS / Linux | Windows |
+|-------|---------------|---------|
+| User-level | \`~/.jdata/agent/commands/\` | \`%USERPROFILE%\\.jdata\\agent\\commands\\\` |
+| Project-level | \`.jcli/commands/\` | \`.jcli\\commands\\\` |
+
+Project-level commands have higher priority.
 
 #### File Format
 
@@ -342,177 +389,255 @@ Usage:
 ### Managing Commands
 
 Press \`Ctrl+E\` in the TUI to open the configuration panel, switch to the Commands tab to enable or disable commands.
-`,oe=e({default:()=>y}),y="All data is stored in `~/.jdata/` (customizable via `J_DATA_PATH` environment variable):\n\n```\n~/.jdata/\n├── config.yaml          # Main config (aliases, categories, settings)\n├── history.txt          # Command history\n├── agent/               # AI Agent data\n│   ├── data/            # Agent data directory\n│   │   ├── agent_config.yaml   # Agent config (model, API)\n│   │   ├── sessions/           # Chat sessions storage\n│   │   ├── archives/           # Archived conversations\n│   │   ├── system_prompt.md    # System prompt\n│   │   ├── memory.md           # Memory file\n│   │   └── soul.md             # Soul file\n│   ├── logs/            # Agent logs\n│   │   ├── info.log\n│   │   └── error.log\n│   ├── skills/          # User-level skills directory\n│   ├── commands/        # User-level custom commands\n│   └── hooks.yaml       # User-level hooks config\n├── report/              # Daily reports\n│   ├── week_report.md   # Week report file\n│   ├── settings.json    # Report settings\n│   ├── todo.json        # Todo data\n│   └── .git/            # Git repository\n└── scripts/             # Scripts created via j concat\n```\n\n## Project-level Config\n\nCreate `.jcli/` in project directory for project-level configuration:\n\n```\n.jcli/\n├── config.yaml          # Project-level config\n├── permissions.yaml     # Tool permissions\n├── hooks.yaml           # Project-level hooks\n├── skills/              # Project-level skills (override user-level)\n└── commands/            # Project-level custom commands\n```\n\n## Config File Structure (`config.yaml`)\n\n| Section | Description | Example |\n|---------|-------------|---------|\n| `path` | Local app/file paths | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL links | `github: https://github.com` |\n| `outer_url` | URLs requiring VPN | `docs: https://internal.example.com` |\n| `browser` | Browser list | `chrome: chrome` |\n| `editor` | Editor list | `vscode: vscode` |\n| `vpn` | VPN application | |\n| `script` | Registered scripts | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | Report system config | `git_repo: https://github.com/xxx/report` |\n| `setting` | Global settings | `search-engine: bing` |\n| `log` | Log settings | `mode: concise` |\n\n## Agent Config (`agent_config.yaml`)\n\n| Setting | Description | Default |\n|---------|-------------|---------|\n| `providers` | Model provider list | - |\n| `active_index` | Current active provider index | 0 |\n| `system_prompt` | System prompt | - |\n| `stream_mode` | Stream output | true |\n| `max_history_messages` | Max history messages sent to API | 20 |\n| `tools_enabled` | Enable tool calling | false |\n| `max_tool_rounds` | Max tool call rounds | 100 |\n| `tool_confirm_timeout` | Tool confirm timeout seconds | 0 (no timeout) |\n| `disabled_tools` | Disabled tools list | [] |\n| `disabled_skills` | Disabled skills list | [] |\n| `disabled_commands` | Disabled commands list | [] |\n| `auto_restore_session` | Auto restore last session on startup | false |\n",b=e({default:()=>x}),x=`## Overview
+`,oe=e({default:()=>y}),y=`## Overview
 
-Hooks allow running custom scripts on specific events, managed via the \`RegisterHook\` tool or config files.
+All j-cli data is stored in a unified user data directory, with support for custom paths via environment variable.
 
-## Hook Events
+## Data Directory Path
 
-| Event | When Triggered | Readable Fields | Writable Fields |
-|-------|----------------|-----------------|-----------------|
-| \`pre_send_message\` | Before sending user message | user_input, messages | user_input, abort |
-| \`post_send_message\` | After sending user message | user_input, messages | Notification only |
-| \`pre_llm_request\` | Before LLM request | messages, system_prompt, model | messages, system_prompt, inject_messages, abort |
-| \`post_llm_response\` | After LLM response | assistant_output, messages | assistant_output |
-| \`pre_tool_execution\` | Before tool execution | tool_name, tool_arguments | tool_arguments, abort |
-| \`post_tool_execution\` | After tool execution | tool_name, tool_result | tool_result |
-| \`session_start\` | Session starts | messages | Notification only |
-| \`session_end\` | Session ends | messages | Notification only |
+| Platform | Default Path | Environment Variable Override |
+|----------|-------------|------------------------------|
+| macOS / Linux | \`~/.jdata/\` | \`J_DATA_PATH=/custom/path\` |
+| Windows | \`%USERPROFILE%\\.jdata\\\` | \`$env:J_DATA_PATH="C:\\custom\\path"\` |
 
-## Using RegisterHook Tool
+### Environment Variable Override
 
-Manage session-level hooks via tool in AI chat:
+\`\`\`bash
+# macOS / Linux
+export J_DATA_PATH=/custom/path
+j chat  # Data will be stored in /custom/path/
+
+# Windows (PowerShell)
+$env:J_DATA_PATH="C:\\custom\\path"
+j chat  # Data will be stored in C:\\custom\\path\\
+\`\`\`
+
+## Directory Structure
 
 \`\`\`
-# View protocol documentation
-RegisterHook action="help"
-
-# List registered hooks
-RegisterHook action="list"
-
-# Register a hook
-RegisterHook event="pre_send_message" command="echo '{\\"user_input\\": \\"[modified]\\"}'" timeout=10
-
-# Register a hook (abort on failure)
-RegisterHook event="pre_tool_execution" command="./guard.sh" on_error="abort"
-
-# Remove a hook (use session_idx from list output)
-RegisterHook action="remove" event="pre_send_message" index=0
+~/.jdata/                          # macOS / Linux
+%USERPROFILE%\\.jdata\\              # Windows
+├── config.yaml                    # Main configuration
+├── alias.yaml                     # Alias definitions
+├── report/                        # Daily/weekly reports
+│   ├── report.md                  # Report file
+│   ├── todo.json                  # Todo data
+│   └── settings.json              # Week metadata
+├── scripts/                       # User scripts
+│   ├── deploy.sh                  # macOS / Linux
+│   └── deploy.cmd                 # Windows
+├── agent/                         # AI Agent data
+│   ├── data/                      # Agent runtime data
+│   │   ├── messages/              # Chat history
+│   │   └── agent_config.json      # Agent configuration
+│   └── skills/                    # User-defined skills
+│       └── <skill_name>/
+│           └── SKILL.md
+└── hooks/                         # Hook scripts
+    └── pre_chat/
+        └── my_hook.sh             # macOS / Linux
+        └── my_hook.cmd            # Windows
 \`\`\`
 
 ## Configuration Files
 
-Manage persistent hooks via YAML files:
+### config.yaml
+
+Main configuration file for global settings:
 
 \`\`\`yaml
-# User level: ~/.jdata/agent/hooks.yaml
-# Project level: .jcli/hooks.yaml
+# API Configuration
+api_key: "your-api-key"
+base_url: "https://api.openai.com/v1"
+model: "gpt-4"
 
-pre_send_message:
-  - command: "echo '{\\"user_input\\": \\"[timestamp] \\" + $(cat | jq -r .user_input)}'"
-    timeout: 5
+# Report Configuration
+report_file_path: "~/.jdata/report/report.md"
 
-pre_tool_execution:
-  - command: |
-      input=$(cat)
-      tool=$(echo "$input" | jq -r .tool_name)
-      if [ "$tool" = "Bash" ]; then
-        echo '{"abort": true}'
-      else
-        echo '{}'
-      fi
-    timeout: 10
-    on_error: abort  # Abort the chain if this hook fails (default: skip)
-    filter:          # Conditional filter (optional)
-      tool_name: Bash        # Only run for Bash tool
-      # model_prefix: gpt-4  # Only run for gpt-4 model family
+# Browser Configuration
+settings:
+  browser_headless: true
 \`\`\`
 
-## Script Protocol
+### alias.yaml
 
-### Execution Environment
+Alias definitions for apps and URLs:
 
-| Item | Description |
-|------|-------------|
-| Execution | \`sh -c "<command>"\` |
-| Working Directory | User's current directory |
-| Environment Variables | \`JCLI_HOOK_EVENT\` (event name), \`JCLI_CWD\` (current directory) |
+\`\`\`yaml
+# macOS / Linux
+chrome:
+  path: "/Applications/Google Chrome.app"
+  note: "browser"
 
-### stdin/stdout
+# Windows
+notepad:
+  path: "C:\\\\Windows\\\\notepad.exe"
+  note: "editor"
 
-| Item | Description |
-|------|-------------|
-| stdin | HookContext JSON |
-| stdout | HookResult JSON (empty or \`{}\` means no modification) |
-| exit 0 | Success |
-| exit non-zero | Handled per \`on_error\` strategy (default \`skip\`: log and continue; \`abort\`: stop chain) |
-
-### stdin HookContext Example
-
-\`\`\`json
-{
-  "event": "pre_send_message",
-  "cwd": "/path/to/project",
-  "session_id": "20260418_143022_abc",
-  "user_input": "User input text",
-  "messages": [{"role": "user", "content": "..."}],
-  "system_prompt": "System prompt",
-  "model": "gpt-4o",
-  "assistant_output": "AI response text",
-  "tool_name": "Bash",
-  "tool_arguments": "{\\"command\\": \\"ls\\"}",
-  "tool_result": "Tool execution result"
-}
+# URL Alias
+github:
+  path: "https://github.com"
+  type: "inner_url"
 \`\`\`
 
-### stdout HookResult Example
+## Data Migration
 
-\`\`\`json
-{
-  "user_input": "Modified user message",
-  "assistant_output": "Modified AI response",
-  "messages": [{"role": "user", "content": "..."}],
-  "system_prompt": "Modified prompt",
-  "tool_arguments": "Modified tool arguments",
-  "tool_result": "Modified tool result",
-  "inject_messages": [{"role": "user", "content": "Injected message"}],
-  "abort": false
-}
-\`\`\`
-
-## Script Examples
-
-### Add Timestamp to User Message
+### Backup
 
 \`\`\`bash
-#!/bin/bash
-input=$(cat)
-msg=$(echo "$input" | jq -r .user_input)
-echo "{\\"user_input\\": \\"[$(date '+%H:%M')] $msg\\"}"
+# macOS / Linux
+cp -r ~/.jdata ~/.jdata.backup
+
+# Windows
+Copy-Item "$env:USERPROFILE\\.jdata" "$env:USERPROFILE\\.jdata.backup" -Recurse
 \`\`\`
 
-### Block Dangerous Commands
+### Restore
 
 \`\`\`bash
-#!/bin/bash
-input=$(cat)
-tool=$(echo "$input" | jq -r .tool_name)
-args=$(echo "$input" | jq -r .tool_arguments)
+# macOS / Linux
+cp -r ~/.jdata.backup ~/.jdata
 
-if [ "$tool" = "Bash" ] && echo "$args" | grep -q "rm -rf"; then
-  echo '{"abort": true}'
-else
-  echo '{}'
-fi
+# Windows
+Copy-Item "$env:USERPROFILE\\.jdata.backup" "$env:USERPROFILE\\.jdata" -Recurse
 \`\`\`
 
-### Notification-only Hook
+### Cross-platform Migration
+
+The data directory structure is consistent across all platforms. You can copy it directly:
+
+1. Back up the source platform's data directory
+2. Copy to the target platform's corresponding location
+3. Adjust script file extensions (\`.sh\` → \`.cmd\`)
+4. Update paths in alias.yaml to the target platform's format
+`,b=e({default:()=>x}),x=`## Overview
+
+The Hook system allows custom scripts to execute automatically at specific points during the AI chat lifecycle.
+
+## Hook Types
+
+| Hook | Trigger | Use Case |
+|------|---------|----------|
+| \`pre_chat\` | Before chat starts | Inject system prompts, set up environment |
+| \`post_chat\` | After chat ends | Cleanup, notifications |
+| \`pre_tool\` | Before tool execution | Security checks, parameter modification |
+| \`post_tool\` | After tool execution | Logging, result processing |
+| \`on_error\` | On error | Error notification, graceful degradation |
+
+## Hook Configuration
+
+Hooks are defined in \`.jcli/config.yaml\`:
+
+\`\`\`yaml
+hooks:
+  pre_chat:
+    - name: load_project_context
+      command: "cat AGENT.md 2>/dev/null || echo 'No AGENT.md found'"
+      timeout: 5
+    - name: check_env
+      command: "echo 'Environment ready'"
+      timeout: 3
+  post_tool:
+    - name: log_tool_usage
+      command: "echo 'Tool executed at $(date)' >> ~/.jdata/tool.log"
+      timeout: 5
+\`\`\`
+
+## Execution
+
+### macOS / Linux
+
+Hook commands execute via \`sh -c\`:
 
 \`\`\`bash
-#!/bin/bash
-cat > /dev/null  # Must read stdin to avoid SIGPIPE
+sh -c "<hook_command>"
 \`\`\`
 
-## Three-Level Hook Priority
+Supports all standard shell commands including pipes, redirection, and command substitution.
 
-Hooks exist at three levels, executed in order: User → Project → Session
+### Windows
 
-| Level | Config Location | Lifecycle |
-|-------|-----------------|-----------|
-| User | \`~/.jdata/agent/hooks.yaml\` | Persistent |
-| Project | \`.jcli/hooks.yaml\` | Persistent within project |
-| Session | RegisterHook tool | Current session only |
+Hook commands execute via \`cmd /c\`:
 
-During chain execution, the previous hook's output updates the context for the next hook. Any \`abort\` immediately stops the entire chain.
+\`\`\`cmd
+cmd /c "<hook_command>"
+\`\`\`
+
+Supports cmd built-in commands and external programs. Pipe \`|\`, redirection \`>\`, etc. are available.
+
+> **Note**: Windows hooks do not support bash syntax (e.g., \`$(date)\`, \`2>/dev/null\`). Use cmd equivalents (e.g., \`%DATE%\`, \`2>NUL\`).
+
+## Timeout Handling
+
+- Default timeout: 10 seconds
+- Process is killed on timeout:
+  - macOS / Linux: SIGKILL signal
+  - Windows: \`taskkill /F /T /PID\`
+- Timeout does not block the chat flow; the current hook is simply skipped
+
+## Environment Variables
+
+Hooks have access to the following environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| \`J_DATA_PATH\` | Data directory path |
+| \`J_<ALIAS>\` | App path for the alias (uppercase, \`-\` → \`_\`) |
+
+### macOS / Linux Example
+
+\`\`\`yaml
+hooks:
+  pre_chat:
+    - name: open_project
+      command: "cat $J_DATA_PATH/agent/data/context.txt"
+      timeout: 5
+\`\`\`
+
+### Windows Example
+
+\`\`\`yaml
+hooks:
+  pre_chat:
+    - name: open_project
+      command: "type %J_DATA_PATH%\\agent\\data\\context.txt"
+      timeout: 5
+\`\`\`
+
+## PATH Injection
+
+The hook directory is automatically prepended to PATH:
+- macOS / Linux: uses \`:\` separator
+- Windows: uses \`;\` separator
+
+## Hook Script Files
+
+In addition to inline commands, you can create standalone script files:
+
+### macOS / Linux
+
+\`\`\`bash
+# ~/.jdata/hooks/pre_chat/my_hook.sh
+#!/bin/bash
+echo "Loading project context..."
+cat AGENT.md 2>/dev/null
+\`\`\`
+
+### Windows
+
+\`\`\`cmd
+@echo off
+REM %USERPROFILE%\\.jdata\\hooks\\pre_chat\\my_hook.cmd
+echo Loading project context...
+type AGENT.md 2>NUL
+\`\`\`
 
 ## Notes
 
-- Create script files with Write/Bash tools first, then register with RegisterHook
-- Scripts must read from stdin (at least \`cat > /dev/null\`) to avoid SIGPIPE
-- Default timeout is 10 seconds; scripts are killed on timeout
-- \`on_error\` defaults to \`skip\` (log and continue); set to \`abort\` to stop the hook chain on failure
-- Only session-level hooks can be managed via tool; user/project levels require manual config editing
-- When removing hooks, use the \`session_idx\` from list output as the \`index\` parameter
+- Hook failures do not block the conversation
+- Command output is injected as a system message into the chat context
+- Avoid long-running operations in hooks
+- Do not output sensitive information through hooks
 `,S=e({default:()=>C}),C=`## One-click Install (Recommended)
 
 ### macOS / Linux
@@ -807,28 +932,61 @@ deny > allow > default requires confirmation
 
 ## Tool-Specific Rules
 
-### Bash Command Matching
+### Platform Differences
+
+| Tool | macOS / Linux | Windows |
+|------|---------------|---------|
+| Shell | \`Bash(...)\` | \`PowerShell(...)\` |
+| Computer Use | \`ComputerUse(...)\` | Not available |
+
+> **Note**: On Windows, use \`PowerShell(...)\` rules instead of \`Bash(...)\`.
+
+### Bash / PowerShell Command Matching
+
+macOS / Linux:
 
 \`\`\`yaml
 allow:
   - "Bash(cargo:*)"        # cargo build, cargo test, etc.
   - "Bash(git status:*)"   # git status
   - "Bash(ls:*)"           # ls, ls -la, etc.
-  
+
 deny:
   - "Bash(rm -rf:*)"       # Block rm -rf
   - "Bash(/.*sudo.*/)"     # Block all sudo commands
 \`\`\`
 
-### File Path Matching (Write/Edit/Read)
+Windows:
 
 \`\`\`yaml
 allow:
+  - "PowerShell(cargo:*)"        # cargo build, cargo test, etc.
+  - "PowerShell(git status:*)"   # git status
+  - "PowerShell(dir:*)"          # dir, dir /s, etc.
+
+deny:
+  - "PowerShell(Remove-Item -Recurse -Force:*)"  # Block recursive force delete
+  - "PowerShell(/.*Format-.*/)"                   # Block format commands
+\`\`\`
+
+### File Path Matching (Write/Edit/Read)
+
+\`\`\`yaml
+# macOS / Linux
+allow:
   - "Write(path:/src/*)"   # Allow writes to /src directory
   - "Edit(path:/lib/*)"    # Allow edits to /lib directory
-  
+
 deny:
   - "Write(path:/etc/*)"   # Block writes to /etc
+
+# Windows
+allow:
+  - "Write(path:C:\\\\Projects\\\\myapp\\\\src\\\\*)"  # Allow writes to project src directory
+  - "Edit(path:C:\\\\Projects\\\\myapp\\\\lib\\\\*)"   # Allow edits to project lib directory
+
+deny:
+  - "Write(path:C:\\\\Windows\\\\System32\\\\*)"     # Block writes to system directory
 \`\`\`
 
 ### URL Domain Matching (WebFetch)
@@ -988,10 +1146,15 @@ j reportctl pull
 
 Report settings are stored in two locations:
 
+| File | macOS / Linux | Windows |
+|------|---------------|---------|
+| Main config | \`~/.jdata/config.yaml\` | \`%USERPROFILE%\\.jdata\\config.yaml\` |
+| Week metadata | \`<report_dir>/settings.json\` | \`<report_dir>\\settings.json\` |
+
 | File | Description |
 |------|-------------|
-| \`~/.jdata/config.yaml\` | Main config (report_file_path, git_repo) |
-| \`<report_dir>/settings.json\` | Week metadata (week_num, last_day) |
+| Main config | report_file_path, git_repo settings |
+| Week metadata | week_num, last_day info |
 
 ## Auto Week Switch
 
@@ -1130,10 +1293,17 @@ Skills are specialized prompt modules that extend AI capabilities, loaded via th
 ## Skill Structure
 
 \`\`\`
+# macOS / Linux
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill definition (required)
 ├── references/       # Reference documents (AI reads on demand via Read tool)
-└── scripts/          # Script files (AI executes on demand via Bash tool)
+└── scripts/          # Script files (AI executes on demand via Bash/PowerShell tool)
+
+# Windows
+%USERPROFILE%\\.jdata\\agent\\skills\\<skill_name>\\
+├── SKILL.md          # Skill definition (required)
+├── references\\       # Reference documents (AI reads on demand via Read tool)
+└── scripts\\          # Script files (AI executes on demand via PowerShell tool)
 \`\`\`
 
 ## Creating a Skill
@@ -1169,14 +1339,19 @@ After loading, AI will:
 
 ## Skill Sources
 
-| Source | Path | Priority |
-|--------|------|----------|
-| User level | \`~/.jdata/agent/skills/\` | Low |
-| Project level | \`.jcli/skills/\` | High (overrides user level) |
+| Source | macOS / Linux | Windows | Priority |
+|--------|---------------|---------|----------|
+| User level | \`~/.jdata/agent/skills/\` | \`%USERPROFILE%\\.jdata\\agent\\skills\\\` | Low |
+| Project level | \`.jcli/skills/\` | \`.jcli\\skills\\\` | High (overrides user level) |
 
 ## Disabling Skills
 
-Disable specific skills via the TUI configuration interface. Settings are saved in \`~/.jdata/agent/data/agent_config.json\`:
+Disable specific skills via the TUI configuration interface. Settings are saved in the data directory:
+
+| Platform | Config Path |
+|----------|-------------|
+| macOS / Linux | \`~/.jdata/agent/data/agent_config.json\` |
+| Windows | \`%USERPROFILE%\\.jdata\\agent\\data\\agent_config.json\` |
 
 \`\`\`json
 {
@@ -1227,7 +1402,12 @@ j todo add "Finish docs"  # Quick add todo
 
 ## Data Storage
 
-Todo data is stored in \`~/.jdata/report/todo.json\`.
+Todo data is stored in the data directory:
+
+| Platform | Path |
+|----------|------|
+| macOS / Linux | \`~/.jdata/report/todo.json\` |
+| Windows | \`%USERPROFILE%\\.jdata\\report\\todo.json\` |
 `,B=e({default:()=>V}),V=`## File Tools
 
 ### Read
@@ -1749,9 +1929,25 @@ j chat --session <id>  # 恢复指定会话
 AI 对话内置 Agent 能力，可自主规划并执行多步骤任务：
 
 - **自主推理**：AI 规划并执行多步任务
-- **工具集成**：自动使用可用工具（Read、Write、Bash 等）
+- **工具集成**：自动使用可用工具（Read、Write、Bash/PowerShell 等）
 - **任务管理**：Task 和 Todo 工具管理复杂任务
 - **计划模式**：先探索代码库再制定计划
+
+### 可用工具
+
+| 工具 | macOS / Linux | Windows | 描述 |
+|------|:---:|:---:|------|
+| Read | ✅ | ✅ | 读取文件 |
+| Write | ✅ | ✅ | 写入文件 |
+| Edit | ✅ | ✅ | 编辑文件 |
+| Glob | ✅ | ✅ | 文件名搜索 |
+| Grep | ✅ | ✅ | 内容搜索 |
+| Bash | ✅ | ❌ | Shell 命令执行 |
+| PowerShell | ❌ | ✅ | PowerShell 命令执行 |
+| WebFetch | ✅ | ✅ | 网页抓取 |
+| WebSearch | ✅ | ✅ | 网页搜索 |
+| ComputerUse | ✅ | ❌ | 屏幕截图与操作 |
+| Browser | ✅ | ✅ | 浏览器自动化 |
 
 ### 计划模式
 
@@ -1779,7 +1975,8 @@ permissions:
     - Grep
     - Glob
   deny:
-    - Bash
+    - Bash          # macOS / Linux
+    - PowerShell    # Windows
     - Write
 \`\`\`
 
@@ -1844,20 +2041,46 @@ j gh-issues # 在浏览器中打开
 
 ## 别名存储
 
-别名单独存放在 \`~/.jdata/config.yaml\`：
+别名单独存放在数据目录下的配置文件中：
+
+| 平台 | 配置文件路径 |
+|------|-------------|
+| macOS / Linux | \`~/.jdata/alias.yaml\` |
+| Windows | \`%USERPROFILE%\\.jdata\\alias.yaml\` |
 
 \`\`\`yaml
+# macOS / Linux
 path:
+  chrome: "/Applications/Google Chrome.app"
+  vscode: "/Applications/Visual Studio Code.app"
   work: /Users/user/Projects/work
-  notes: /Users/user/Documents/notes
 
 inner_url:
   gh: https://github.com
   gh-issues: https://github.com/issues
+
+# Windows
+path:
+  notepad: "C:\\\\Windows\\\\notepad.exe"
+  vscode: "C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Programs\\\\Microsoft VS Code\\\\Code.exe"
+  work: "C:\\\\Users\\\\user\\\\Projects\\\\work"
+
+inner_url:
+  gh: https://github.com
 \`\`\`
 `,K=e({default:()=>q}),q=`## 概述
 
 Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取。
+
+## 平台支持
+
+| 平台 | Lite 模式 | CDP 模式 |
+|------|:---:|:---:|
+| macOS | ✅ | ✅ |
+| Linux | ✅ | ✅ |
+| Windows | ✅ | ✅ |
+
+> **注意**：Windows 上 CDP 模式需要 Chrome 或 Edge 浏览器已安装。
 
 ## 模式
 
@@ -1967,8 +2190,12 @@ Commands 是可复用的提示词片段，帮助快速调用预设的提示词�
 
 #### 目录位置
 
-- **用户级**: \`~/.jdata/agent/commands/\` - 所有项目可用
-- **项目级**: \`.jcli/commands/\` - 仅当前项目可用（优先级更高）
+| 级别 | macOS / Linux | Windows |
+|------|---------------|---------|
+| 用户级 | \`~/.jdata/agent/commands/\` | \`%USERPROFILE%\\.jdata\\agent\\commands\\\` |
+| 项目级 | \`.jcli/commands/\` | \`.jcli\\commands\\\` |
+
+项目级命令优先级更高。
 
 #### 文件格式
 
@@ -2029,177 +2256,255 @@ description: 进入 PLAN 模式
 ### 管理命令
 
 在 TUI 中按 \`Ctrl+E\` 打开配置界面，切换到 Commands 标签页，可以启用或禁用命令。
-`,le=e({default:()=>ue}),ue="所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：\n\n```\n~/.jdata/\n├── config.yaml          # 主配置（别名、分类、设置）\n├── history.txt          # 命令历史\n├── agent/               # AI Agent 数据\n│   ├── data/            # Agent 数据目录\n│   │   ├── agent_config.yaml   # Agent 配置（模型、API）\n│   │   ├── sessions/           # 对话会话存储\n│   │   ├── archives/           # 归档对话\n│   │   ├── system_prompt.md    # 系统提示词\n│   │   ├── memory.md           # 记忆文件\n│   │   └── soul.md             # 灵魂文件\n│   ├── logs/            # Agent 日志\n│   │   ├── info.log\n│   │   └── error.log\n│   ├── skills/          # 用户级技能目录\n│   ├── commands/        # 用户级自定义命令\n│   └── hooks.yaml       # 用户级钩子配置\n├── report/              # 日报数据\n│   ├── week_report.md   # 周报文件\n│   ├── settings.json    # 报告设置\n│   ├── todo.json        # 待办数据\n│   └── .git/            # Git 仓库\n└── scripts/             # 通过 j concat 创建的脚本\n```\n\n## 项目级配置\n\n项目目录下可创建 `.jcli/` 存放项目级配置：\n\n```\n.jcli/\n├── config.yaml          # 项目级配置\n├── permissions.yaml     # 工具权限配置\n├── hooks.yaml           # 项目级钩子\n├── skills/              # 项目级技能（覆盖用户级）\n└── commands/            # 项目级自定义命令\n```\n\n## 配置文件结构（`config.yaml`）\n\n| 配置项 | 描述 | 示例 |\n|--------|------|------|\n| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |\n| `inner_url` | URL 链接 | `github: https://github.com` |\n| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |\n| `browser` | 浏览器列表 | `chrome: chrome` |\n| `editor` | 编辑器列表 | `vscode: vscode` |\n| `vpn` | VPN 应用 | |\n| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |\n| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |\n| `setting` | 全局设置 | `search-engine: bing` |\n| `log` | 日志设置 | `mode: concise` |\n\n## Agent 配置（`agent_config.yaml`）\n\n| 配置项 | 描述 | 默认值 |\n|--------|------|--------|\n| `providers` | 模型提供方列表 | - |\n| `active_index` | 当前选中的 provider 索引 | 0 |\n| `system_prompt` | 系统提示词 | - |\n| `stream_mode` | 流式输出 | true |\n| `max_history_messages` | 发送给 API 的历史消息数量限制 | 20 |\n| `tools_enabled` | 启用工具调用 | false |\n| `max_tool_rounds` | 工具调用最大轮数 | 100 |\n| `tool_confirm_timeout` | 工具确认超时秒数 | 0（不超时） |\n| `disabled_tools` | 禁用的工具列表 | [] |\n| `disabled_skills` | 禁用的 skill 列表 | [] |\n| `disabled_commands` | 禁用的 command 列表 | [] |\n| `auto_restore_session` | 启动时自动恢复最近的 session | false |\n",de=e({default:()=>fe}),fe=`## 概述
+`,le=e({default:()=>ue}),ue=`## 概述
 
-Hook 允许在特定事件时运行自定义脚本，通过 \`RegisterHook\` 工具或配置文件管理。
+j-cli 的所有数据存储在统一的用户数据目录中，支持通过环境变量自定义路径。
 
-## Hook 事件
+## 数据目录路径
 
-| 事件 | 触发时机 | 可读字段 | 可写字段 |
-|------|----------|----------|----------|
-| \`pre_send_message\` | 用户消息发送前 | user_input, messages | user_input, abort |
-| \`post_send_message\` | 用户消息发送后 | user_input, messages | 仅通知，返回值忽略 |
-| \`pre_llm_request\` | LLM 请求前 | messages, system_prompt, model | messages, system_prompt, inject_messages, abort |
-| \`post_llm_response\` | LLM 回复后 | assistant_output, messages | assistant_output |
-| \`pre_tool_execution\` | 工具执行前 | tool_name, tool_arguments | tool_arguments, abort |
-| \`post_tool_execution\` | 工具执行后 | tool_name, tool_result | tool_result |
-| \`session_start\` | 会话开始 | messages | 仅通知 |
-| \`session_end\` | 会话结束 | messages | 仅通知 |
+| 平台 | 默认路径 | 环境变量覆盖 |
+|------|---------|-------------|
+| macOS / Linux | \`~/.jdata/\` | \`J_DATA_PATH=/custom/path\` |
+| Windows | \`%USERPROFILE%\\.jdata\\\` | \`$env:J_DATA_PATH="C:\\custom\\path"\` |
 
-## 使用 RegisterHook 工具
+### 环境变量覆盖
 
-在 AI 对话中通过工具管理 session 级 hook：
+\`\`\`bash
+# macOS / Linux
+export J_DATA_PATH=/custom/path
+j chat  # 数据将存储在 /custom/path/
 
-\`\`\`
-# 查看协议文档
-RegisterHook action="help"
-
-# 列出已注册的 hook
-RegisterHook action="list"
-
-# 注册 hook
-RegisterHook event="pre_send_message" command="echo '{\\"user_input\\": \\"[modified]\\"}'" timeout=10
-
-# 注册 hook（失败时中止链）
-RegisterHook event="pre_tool_execution" command="./guard.sh" on_error="abort"
-
-# 移除 hook（使用 list 中的 session_idx）
-RegisterHook action="remove" event="pre_send_message" index=0
+# Windows (PowerShell)
+$env:J_DATA_PATH="C:\\custom\\path"
+j chat  # 数据将存储在 C:\\custom\\path\\
 \`\`\`
 
-## 配置文件
+## 目录结构
 
-通过 YAML 文件管理持久化 hook：
+\`\`\`
+~/.jdata/                          # macOS / Linux
+%USERPROFILE%\\.jdata\\              # Windows
+├── config.yaml                    # 主配置文件
+├── alias.yaml                     # 别名定义
+├── report/                        # 日报/周报
+│   ├── report.md                  # 日报文件
+│   ├── todo.json                  # 待办数据
+│   └── settings.json              # 周报元数据
+├── scripts/                       # 用户脚本
+│   ├── deploy.sh                  # macOS / Linux
+│   └── deploy.cmd                 # Windows
+├── agent/                         # AI Agent 数据
+│   ├── data/                      # Agent 运行时数据
+│   │   ├── messages/              # 对话历史
+│   │   └── agent_config.json      # Agent 配置
+│   └── skills/                    # 用户自定义 Skill
+│       └── <skill_name>/
+│           └── SKILL.md
+└── hooks/                         # Hook 脚本
+    └── pre_chat/
+        └── my_hook.sh             # macOS / Linux
+        └── my_hook.cmd            # Windows
+\`\`\`
+
+## 配置文件说明
+
+### config.yaml
+
+主配置文件，存储全局设置：
 
 \`\`\`yaml
-# 用户级: ~/.jdata/agent/hooks.yaml
-# 项目级: .jcli/hooks.yaml
+# API 配置
+api_key: "your-api-key"
+base_url: "https://api.openai.com/v1"
+model: "gpt-4"
 
-pre_send_message:
-  - command: "echo '{\\"user_input\\": \\"[timestamp] \\" + $(cat | jq -r .user_input)}'"
-    timeout: 5
+# 报表配置
+report_file_path: "~/.jdata/report/report.md"
 
-pre_tool_execution:
-  - command: |
-      input=$(cat)
-      tool=$(echo "$input" | jq -r .tool_name)
-      if [ "$tool" = "Bash" ]; then
-        echo '{"abort": true}'
-      else
-        echo '{}'
-      fi
-    timeout: 10
-    on_error: abort  # 此 hook 失败时中止操作（默认为 skip）
-    filter:          # 条件过滤（可选）
-      tool_name: Bash        # 仅对 Bash 工具生效
-      # model_prefix: gpt-4  # 仅对 gpt-4 系列模型生效
+# 浏览器配置
+settings:
+  browser_headless: true
 \`\`\`
 
-## 脚本协议
+### alias.yaml
 
-### 执行环境
+别名定义，存储应用和 URL 别名：
 
-| 项目 | 说明 |
+\`\`\`yaml
+# macOS / Linux
+chrome:
+  path: "/Applications/Google Chrome.app"
+  note: "browser"
+
+# Windows
+notepad:
+  path: "C:\\\\Windows\\\\notepad.exe"
+  note: "editor"
+
+# URL 别名
+github:
+  path: "https://github.com"
+  type: "inner_url"
+\`\`\`
+
+## 数据迁移
+
+### 备份
+
+\`\`\`bash
+# macOS / Linux
+cp -r ~/.jdata ~/.jdata.backup
+
+# Windows
+Copy-Item "$env:USERPROFILE\\.jdata" "$env:USERPROFILE\\.jdata.backup" -Recurse
+\`\`\`
+
+### 恢复
+
+\`\`\`bash
+# macOS / Linux
+cp -r ~/.jdata.backup ~/.jdata
+
+# Windows
+Copy-Item "$env:USERPROFILE\\.jdata.backup" "$env:USERPROFILE\\.jdata" -Recurse
+\`\`\`
+
+### 跨平台迁移
+
+数据目录结构在所有平台上一致，可以直接复制迁移：
+
+1. 备份源平台数据目录
+2. 复制到目标平台对应位置
+3. 调整脚本文件扩展名（\`.sh\` → \`.cmd\`）
+4. 更新 alias.yaml 中的路径格式
+`,de=e({default:()=>fe}),fe=`## 概述
+
+Hook 系统允许在 AI 对话生命周期的特定节点自动执行自定义脚本。
+
+## Hook 类型
+
+| Hook | 触发时机 | 用途 |
+|------|---------|------|
+| \`pre_chat\` | 对话开始前 | 注入系统提示、设置环境 |
+| \`post_chat\` | 对话结束后 | 清理、通知 |
+| \`pre_tool\` | 工具执行前 | 安全检查、参数修改 |
+| \`post_tool\` | 工具执行后 | 日志、结果处理 |
+| \`on_error\` | 发生错误时 | 错误通知、降级处理 |
+
+## Hook 配置
+
+Hook 在 \`.jcli/config.yaml\` 中定义：
+
+\`\`\`yaml
+hooks:
+  pre_chat:
+    - name: load_project_context
+      command: "cat AGENT.md 2>/dev/null || echo 'No AGENT.md found'"
+      timeout: 5
+    - name: check_env
+      command: "echo 'Environment ready'"
+      timeout: 3
+  post_tool:
+    - name: log_tool_usage
+      command: "echo 'Tool executed at $(date)' >> ~/.jdata/tool.log"
+      timeout: 5
+\`\`\`
+
+## 执行方式
+
+### macOS / Linux
+
+Hook 命令通过 \`sh -c\` 执行：
+
+\`\`\`bash
+sh -c "<hook_command>"
+\`\`\`
+
+支持所有标准 shell 命令，包括管道、重定向、命令替换等。
+
+### Windows
+
+Hook 命令通过 \`cmd /c\` 执行：
+
+\`\`\`cmd
+cmd /c "<hook_command>"
+\`\`\`
+
+支持 cmd 内置命令和外部程序，管道 \`|\`、重定向 \`>\` 等语法可用。
+
+> **注意**：Windows hook 不支持 bash 语法（如 \`$(date)\`、\`2>/dev/null\`），需使用对应的 cmd 语法（如 \`%DATE%\`、\`2>NUL\`）。
+
+## 超时处理
+
+- 默认超时 10 秒
+- 超时后自动终止进程：
+  - macOS / Linux：发送 SIGKILL 信号
+  - Windows：使用 \`taskkill /F /T /PID\` 终止
+- 超时不会阻断对话流程，仅跳过当前 hook
+
+## 环境变量
+
+Hook 执行时可访问以下环境变量：
+
+| 变量 | 描述 |
 |------|------|
-| 执行方式 | \`sh -c "<command>"\` |
-| 工作目录 | 用户当前目录 |
-| 环境变量 | \`JCLI_HOOK_EVENT\`（事件名）、\`JCLI_CWD\`（当前目录） |
+| \`J_DATA_PATH\` | 数据目录路径 |
+| \`J_<ALIAS>\` | 别名对应的应用路径（大写，\`-\` 转 \`_\`） |
 
-### stdin/stdout
+### macOS / Linux 示例
 
-| 项目 | 说明 |
-|------|------|
-| stdin | HookContext JSON |
-| stdout | HookResult JSON（空或 \`{}\` 表示无修改） |
-| exit 0 | 成功 |
-| exit 非 0 | 按 \`on_error\` 策略处理（默认 \`skip\`：记录日志继续；\`abort\`：中止链） |
-
-### stdin HookContext 示例
-
-\`\`\`json
-{
-  "event": "pre_send_message",
-  "cwd": "/path/to/project",
-  "session_id": "20260418_143022_abc",
-  "user_input": "用户输入文本",
-  "messages": [{"role": "user", "content": "..."}],
-  "system_prompt": "系统提示词",
-  "model": "gpt-4o",
-  "assistant_output": "AI 回复文本",
-  "tool_name": "Bash",
-  "tool_arguments": "{\\"command\\": \\"ls\\"}",
-  "tool_result": "工具执行结果"
-}
+\`\`\`yaml
+hooks:
+  pre_chat:
+    - name: open_project
+      command: "cat $J_DATA_PATH/agent/data/context.txt"
+      timeout: 5
 \`\`\`
 
-### stdout HookResult 示例
+### Windows 示例
 
-\`\`\`json
-{
-  "user_input": "修改后的用户消息",
-  "assistant_output": "修改后的 AI 回复",
-  "messages": [{"role": "user", "content": "..."}],
-  "system_prompt": "修改后的提示词",
-  "tool_arguments": "修改后的工具参数",
-  "tool_result": "修改后的工具结果",
-  "inject_messages": [{"role": "user", "content": "注入消息"}],
-  "abort": false
-}
+\`\`\`yaml
+hooks:
+  pre_chat:
+    - name: open_project
+      command: "type %J_DATA_PATH%\\agent\\data\\context.txt"
+      timeout: 5
 \`\`\`
 
-## 脚本示例
+## PATH 注入
 
-### 给用户消息加时间戳
+Hook 目录会自动注入到 PATH 环境变量中：
+- macOS / Linux：使用 \`:\` 分隔符
+- Windows：使用 \`;\` 分隔符
+
+## Hook 脚本文件
+
+除了内联命令，也可以创建独立的脚本文件：
+
+### macOS / Linux
 
 \`\`\`bash
+# ~/.jdata/hooks/pre_chat/my_hook.sh
 #!/bin/bash
-input=$(cat)
-msg=$(echo "$input" | jq -r .user_input)
-echo "{\\"user_input\\": \\"[$(date '+%H:%M')] $msg\\"}"
+echo "Loading project context..."
+cat AGENT.md 2>/dev/null
 \`\`\`
 
-### 拦截危险命令
+### Windows
 
-\`\`\`bash
-#!/bin/bash
-input=$(cat)
-tool=$(echo "$input" | jq -r .tool_name)
-args=$(echo "$input" | jq -r .tool_arguments)
-
-if [ "$tool" = "Bash" ] && echo "$args" | grep -q "rm -rf"; then
-  echo '{"abort": true}'
-else
-  echo '{}'
-fi
+\`\`\`cmd
+@echo off
+REM %USERPROFILE%\\.jdata\\hooks\\pre_chat\\my_hook.cmd
+echo Loading project context...
+type AGENT.md 2>NUL
 \`\`\`
-
-### 纯通知 hook
-
-\`\`\`bash
-#!/bin/bash
-cat > /dev/null  # 必须读取 stdin，否则可能 SIGPIPE
-\`\`\`
-
-## 三级 Hook 优先级
-
-Hook 分三个级别，执行顺序：用户级 → 项目级 → Session 级
-
-| 级别 | 配置位置 | 生命周期 |
-|------|----------|----------|
-| 用户级 | \`~/.jdata/agent/hooks.yaml\` | 持久化 |
-| 项目级 | \`.jcli/hooks.yaml\` | 项目内持久化 |
-| Session 级 | RegisterHook 工具 | 仅当前会话 |
-
-链式执行时，前一个 hook 的输出会更新到 context 中，成为下一个 hook 的输入。任何 \`abort\` 立即中止整条链。
 
 ## 注意事项
 
-- 先用 Write/Bash 工具创建脚本文件，再用 RegisterHook 注册
-- 脚本必须从 stdin 读取（至少 \`cat > /dev/null\`），否则可能 SIGPIPE
-- timeout 默认 10 秒，超时后脚本被 kill
-- \`on_error\` 默认 \`skip\`（记录日志继续），设为 \`abort\` 则脚本失败时中止整条 hook 链
-- 只有 session 级 hook 可通过工具管理；用户级/项目级需手动编辑配置文件
-- 移除 hook 时，使用 \`list\` 输出中的 \`session_idx\` 作为 \`index\` 参数
+- Hook 执行失败不会阻断对话
+- 命令输出会作为系统消息注入到对话上下文中
+- 避免在 hook 中执行耗时操作
+- 敏感信息不要通过 hook 输出
 `,pe=e({default:()=>me}),me=`## 一键安装（推荐）
 
 ### macOS / Linux
@@ -2494,28 +2799,61 @@ deny > allow > 默认需要确认
 
 ## 工具特定规则
 
-### Bash 命令匹配
+### 平台差异
+
+| 工具 | macOS / Linux | Windows |
+|------|---------------|---------|
+| Shell | \`Bash(...)\` | \`PowerShell(...)\` |
+| Computer Use | \`ComputerUse(...)\` | 不可用 |
+
+> **注意**：Windows 上使用 \`PowerShell(...)\` 规则匹配，而非 \`Bash(...)\`。
+
+### Bash / PowerShell 命令匹配
+
+macOS / Linux:
 
 \`\`\`yaml
 allow:
   - "Bash(cargo:*)"        # cargo build, cargo test 等
   - "Bash(git status:*)"   # git status
   - "Bash(ls:*)"           # ls, ls -la 等
-  
+
 deny:
   - "Bash(rm -rf:*)"       # 阻止 rm -rf
   - "Bash(/.*sudo.*/)"     # 阻止所有 sudo 命令
 \`\`\`
 
-### 文件路径匹配（Write/Edit/Read）
+Windows:
 
 \`\`\`yaml
 allow:
+  - "PowerShell(cargo:*)"        # cargo build, cargo test 等
+  - "PowerShell(git status:*)"   # git status
+  - "PowerShell(dir:*)"          # dir, dir /s 等
+
+deny:
+  - "PowerShell(Remove-Item -Recurse -Force:*)"  # 阻止递归强制删除
+  - "PowerShell(/.*Format-.*/)"                   # 阻止格式化命令
+\`\`\`
+
+### 文件路径匹配（Write/Edit/Read）
+
+\`\`\`yaml
+# macOS / Linux
+allow:
   - "Write(path:/src/*)"   # 允许写入 /src 目录
   - "Edit(path:/lib/*)"    # 允许编辑 /lib 目录
-  
+
 deny:
   - "Write(path:/etc/*)"   # 阻止写入 /etc
+
+# Windows
+allow:
+  - "Write(path:C:\\\\Projects\\\\myapp\\\\src\\\\*)"  # 允许写入项目 src 目录
+  - "Edit(path:C:\\\\Projects\\\\myapp\\\\lib\\\\*)"   # 允许编辑项目 lib 目录
+
+deny:
+  - "Write(path:C:\\\\Windows\\\\System32\\\\*)"     # 阻止写入系统目录
 \`\`\`
 
 ### URL 域名匹配（WebFetch）
@@ -2675,10 +3013,15 @@ j reportctl pull
 
 日报配置存储在两个位置：
 
+| 文件 | macOS / Linux | Windows |
+|------|---------------|---------|
+| 主配置 | \`~/.jdata/config.yaml\` | \`%USERPROFILE%\\.jdata\\config.yaml\` |
+| 周报元数据 | \`<report_dir>/settings.json\` | \`<report_dir>\\settings.json\` |
+
 | 文件 | 描述 |
 |------|------|
-| \`~/.jdata/config.yaml\` | 主配置（report_file_path、git_repo） |
-| \`<report_dir>/settings.json\` | 周报元数据（week_num、last_day） |
+| 主配置 | report_file_path、git_repo 等设置 |
+| 周报元数据 | week_num、last_day 等周报信息 |
 
 ## 自动周切换
 
@@ -2818,10 +3161,17 @@ Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具�
 ## Skill 结构
 
 \`\`\`
+# macOS / Linux
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill 定义（必需）
 ├── references/       # 参考文档（AI 按需 Read 读取）
-└── scripts/          # 脚本文件（AI 按需 Bash 执行）
+└── scripts/          # 脚本文件（AI 按需 Bash/PowerShell 执行）
+
+# Windows
+%USERPROFILE%\\.jdata\\agent\\skills\\<skill_name>\\
+├── SKILL.md          # Skill 定义（必需）
+├── references\\       # 参考文档（AI 按需 Read 读取）
+└── scripts\\          # 脚本文件（AI 按需 PowerShell 执行）
 \`\`\`
 
 ## 创建 Skill
@@ -2857,14 +3207,19 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
 
 ## Skill 来源
 
-| 来源 | 路径 | 优先级 |
-|------|------|--------|
-| 用户级 | \`~/.jdata/agent/skills/\` | 低 |
-| 项目级 | \`.jcli/skills/\` | 高（覆盖用户级） |
+| 来源 | macOS / Linux | Windows | 优先级 |
+|------|---------------|---------|--------|
+| 用户级 | \`~/.jdata/agent/skills/\` | \`%USERPROFILE%\\.jdata\\agent\\skills\\\` | 低 |
+| 项目级 | \`.jcli/skills/\` | \`.jcli\\skills\\\` | 高（覆盖用户级） |
 
 ## 禁用 Skill
 
-在 TUI 配置界面中禁用特定 skill，配置保存在 \`~/.jdata/agent/data/agent_config.json\`：
+在 TUI 配置界面中禁用特定 skill，配置保存在数据目录下：
+
+| 平台 | 配置路径 |
+|------|---------|
+| macOS / Linux | \`~/.jdata/agent/data/agent_config.json\` |
+| Windows | \`%USERPROFILE%\\.jdata\\agent\\data\\agent_config.json\` |
 
 \`\`\`json
 {
@@ -2915,7 +3270,12 @@ j todo add "完成文档"     # 快速添加待办
 
 ## 数据存储
 
-待办数据存储在 \`~/.jdata/report/todo.json\`。
+待办数据存储在数据目录下：
+
+| 平台 | 路径 |
+|------|------|
+| macOS / Linux | \`~/.jdata/report/todo.json\` |
+| Windows | \`%USERPROFILE%\\.jdata\\report\\todo.json\` |
 `,je=e({default:()=>Me}),Me=`## 文件工具
 
 ### Read

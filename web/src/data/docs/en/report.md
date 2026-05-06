@@ -51,10 +51,15 @@ j reportctl pull
 
 Report settings are stored in two locations:
 
+| File | macOS / Linux | Windows |
+|------|---------------|---------|
+| Main config | `~/.jdata/config.yaml` | `%USERPROFILE%\.jdata\config.yaml` |
+| Week metadata | `<report_dir>/settings.json` | `<report_dir>\settings.json` |
+
 | File | Description |
 |------|-------------|
-| `~/.jdata/config.yaml` | Main config (report_file_path, git_repo) |
-| `<report_dir>/settings.json` | Week metadata (week_num, last_day) |
+| Main config | report_file_path, git_repo settings |
+| Week metadata | week_num, last_day info |
 
 ## Auto Week Switch
 

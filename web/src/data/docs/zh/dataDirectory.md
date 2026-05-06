@@ -1,72 +1,121 @@
-所有数据存储在 `~/.jdata/` 目录（可通过 `J_DATA_PATH` 环境变量自定义）：
+## 概述
 
-```
-~/.jdata/
-├── config.yaml          # 主配置（别名、分类、设置）
-├── history.txt          # 命令历史
-├── agent/               # AI Agent 数据
-│   ├── data/            # Agent 数据目录
-│   │   ├── agent_config.yaml   # Agent 配置（模型、API）
-│   │   ├── sessions/           # 对话会话存储
-│   │   ├── archives/           # 归档对话
-│   │   ├── system_prompt.md    # 系统提示词
-│   │   ├── memory.md           # 记忆文件
-│   │   └── soul.md             # 灵魂文件
-│   ├── logs/            # Agent 日志
-│   │   ├── info.log
-│   │   └── error.log
-│   ├── skills/          # 用户级技能目录
-│   ├── commands/        # 用户级自定义命令
-│   └── hooks.yaml       # 用户级钩子配置
-├── report/              # 日报数据
-│   ├── week_report.md   # 周报文件
-│   ├── settings.json    # 报告设置
-│   ├── todo.json        # 待办数据
-│   └── .git/            # Git 仓库
-└── scripts/             # 通过 j concat 创建的脚本
+j-cli 的所有数据存储在统一的用户数据目录中，支持通过环境变量自定义路径。
+
+## 数据目录路径
+
+| 平台 | 默认路径 | 环境变量覆盖 |
+|------|---------|-------------|
+| macOS / Linux | `~/.jdata/` | `J_DATA_PATH=/custom/path` |
+| Windows | `%USERPROFILE%\.jdata\` | `$env:J_DATA_PATH="C:\custom\path"` |
+
+### 环境变量覆盖
+
+```bash
+# macOS / Linux
+export J_DATA_PATH=/custom/path
+j chat  # 数据将存储在 /custom/path/
+
+# Windows (PowerShell)
+$env:J_DATA_PATH="C:\custom\path"
+j chat  # 数据将存储在 C:\custom\path\
 ```
 
-## 项目级配置
-
-项目目录下可创建 `.jcli/` 存放项目级配置：
+## 目录结构
 
 ```
-.jcli/
-├── config.yaml          # 项目级配置
-├── permissions.yaml     # 工具权限配置
-├── hooks.yaml           # 项目级钩子
-├── skills/              # 项目级技能（覆盖用户级）
-└── commands/            # 项目级自定义命令
+~/.jdata/                          # macOS / Linux
+%USERPROFILE%\.jdata\              # Windows
+├── config.yaml                    # 主配置文件
+├── alias.yaml                     # 别名定义
+├── report/                        # 日报/周报
+│   ├── report.md                  # 日报文件
+│   ├── todo.json                  # 待办数据
+│   └── settings.json              # 周报元数据
+├── scripts/                       # 用户脚本
+│   ├── deploy.sh                  # macOS / Linux
+│   └── deploy.cmd                 # Windows
+├── agent/                         # AI Agent 数据
+│   ├── data/                      # Agent 运行时数据
+│   │   ├── messages/              # 对话历史
+│   │   └── agent_config.json      # Agent 配置
+│   └── skills/                    # 用户自定义 Skill
+│       └── <skill_name>/
+│           └── SKILL.md
+└── hooks/                         # Hook 脚本
+    └── pre_chat/
+        └── my_hook.sh             # macOS / Linux
+        └── my_hook.cmd            # Windows
 ```
 
-## 配置文件结构（`config.yaml`）
+## 配置文件说明
 
-| 配置项 | 描述 | 示例 |
-|--------|------|------|
-| `path` | 本地应用/文件路径 | `chrome: /Applications/Google Chrome.app` |
-| `inner_url` | URL 链接 | `github: https://github.com` |
-| `outer_url` | 需要 VPN 的 URL | `docs: https://internal.example.com` |
-| `browser` | 浏览器列表 | `chrome: chrome` |
-| `editor` | 编辑器列表 | `vscode: vscode` |
-| `vpn` | VPN 应用 | |
-| `script` | 注册脚本 | `deploy: ~/.jdata/scripts/deploy.sh` |
-| `report` | 日报系统配置 | `git_repo: https://github.com/xxx/report` |
-| `setting` | 全局设置 | `search-engine: bing` |
-| `log` | 日志设置 | `mode: concise` |
+### config.yaml
 
-## Agent 配置（`agent_config.yaml`）
+主配置文件，存储全局设置：
 
-| 配置项 | 描述 | 默认值 |
-|--------|------|--------|
-| `providers` | 模型提供方列表 | - |
-| `active_index` | 当前选中的 provider 索引 | 0 |
-| `system_prompt` | 系统提示词 | - |
-| `stream_mode` | 流式输出 | true |
-| `max_history_messages` | 发送给 API 的历史消息数量限制 | 20 |
-| `tools_enabled` | 启用工具调用 | false |
-| `max_tool_rounds` | 工具调用最大轮数 | 100 |
-| `tool_confirm_timeout` | 工具确认超时秒数 | 0（不超时） |
-| `disabled_tools` | 禁用的工具列表 | [] |
-| `disabled_skills` | 禁用的 skill 列表 | [] |
-| `disabled_commands` | 禁用的 command 列表 | [] |
-| `auto_restore_session` | 启动时自动恢复最近的 session | false |
+```yaml
+# API 配置
+api_key: "your-api-key"
+base_url: "https://api.openai.com/v1"
+model: "gpt-4"
+
+# 报表配置
+report_file_path: "~/.jdata/report/report.md"
+
+# 浏览器配置
+settings:
+  browser_headless: true
+```
+
+### alias.yaml
+
+别名定义，存储应用和 URL 别名：
+
+```yaml
+# macOS / Linux
+chrome:
+  path: "/Applications/Google Chrome.app"
+  note: "browser"
+
+# Windows
+notepad:
+  path: "C:\\Windows\\notepad.exe"
+  note: "editor"
+
+# URL 别名
+github:
+  path: "https://github.com"
+  type: "inner_url"
+```
+
+## 数据迁移
+
+### 备份
+
+```bash
+# macOS / Linux
+cp -r ~/.jdata ~/.jdata.backup
+
+# Windows
+Copy-Item "$env:USERPROFILE\.jdata" "$env:USERPROFILE\.jdata.backup" -Recurse
+```
+
+### 恢复
+
+```bash
+# macOS / Linux
+cp -r ~/.jdata.backup ~/.jdata
+
+# Windows
+Copy-Item "$env:USERPROFILE\.jdata.backup" "$env:USERPROFILE\.jdata" -Recurse
+```
+
+### 跨平台迁移
+
+数据目录结构在所有平台上一致，可以直接复制迁移：
+
+1. 备份源平台数据目录
+2. 复制到目标平台对应位置
+3. 调整脚本文件扩展名（`.sh` → `.cmd`）
+4. 更新 alias.yaml 中的路径格式

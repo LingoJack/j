@@ -51,10 +51,15 @@ j reportctl pull
 
 日报配置存储在两个位置：
 
+| 文件 | macOS / Linux | Windows |
+|------|---------------|---------|
+| 主配置 | `~/.jdata/config.yaml` | `%USERPROFILE%\.jdata\config.yaml` |
+| 周报元数据 | `<report_dir>/settings.json` | `<report_dir>\settings.json` |
+
 | 文件 | 描述 |
 |------|------|
-| `~/.jdata/config.yaml` | 主配置（report_file_path、git_repo） |
-| `<report_dir>/settings.json` | 周报元数据（week_num、last_day） |
+| 主配置 | report_file_path、git_repo 等设置 |
+| 周报元数据 | week_num、last_day 等周报信息 |
 
 ## 自动周切换
 

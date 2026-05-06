@@ -52,9 +52,25 @@ j chat --session <id>  # 恢复指定会话
 AI 对话内置 Agent 能力，可自主规划并执行多步骤任务：
 
 - **自主推理**：AI 规划并执行多步任务
-- **工具集成**：自动使用可用工具（Read、Write、Bash 等）
+- **工具集成**：自动使用可用工具（Read、Write、Bash/PowerShell 等）
 - **任务管理**：Task 和 Todo 工具管理复杂任务
 - **计划模式**：先探索代码库再制定计划
+
+### 可用工具
+
+| 工具 | macOS / Linux | Windows | 描述 |
+|------|:---:|:---:|------|
+| Read | ✅ | ✅ | 读取文件 |
+| Write | ✅ | ✅ | 写入文件 |
+| Edit | ✅ | ✅ | 编辑文件 |
+| Glob | ✅ | ✅ | 文件名搜索 |
+| Grep | ✅ | ✅ | 内容搜索 |
+| Bash | ✅ | ❌ | Shell 命令执行 |
+| PowerShell | ❌ | ✅ | PowerShell 命令执行 |
+| WebFetch | ✅ | ✅ | 网页抓取 |
+| WebSearch | ✅ | ✅ | 网页搜索 |
+| ComputerUse | ✅ | ❌ | 屏幕截图与操作 |
+| Browser | ✅ | ✅ | 浏览器自动化 |
 
 ### 计划模式
 
@@ -82,7 +98,8 @@ permissions:
     - Grep
     - Glob
   deny:
-    - Bash
+    - Bash          # macOS / Linux
+    - PowerShell    # Windows
     - Write
 ```
 

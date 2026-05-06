@@ -5,10 +5,17 @@ Skills are specialized prompt modules that extend AI capabilities, loaded via th
 ## Skill Structure
 
 ```
+# macOS / Linux
 ~/.jdata/agent/skills/<skill_name>/
 ├── SKILL.md          # Skill definition (required)
 ├── references/       # Reference documents (AI reads on demand via Read tool)
-└── scripts/          # Script files (AI executes on demand via Bash tool)
+└── scripts/          # Script files (AI executes on demand via Bash/PowerShell tool)
+
+# Windows
+%USERPROFILE%\.jdata\agent\skills\<skill_name>\
+├── SKILL.md          # Skill definition (required)
+├── references\       # Reference documents (AI reads on demand via Read tool)
+└── scripts\          # Script files (AI executes on demand via PowerShell tool)
 ```
 
 ## Creating a Skill
@@ -44,14 +51,19 @@ After loading, AI will:
 
 ## Skill Sources
 
-| Source | Path | Priority |
-|--------|------|----------|
-| User level | `~/.jdata/agent/skills/` | Low |
-| Project level | `.jcli/skills/` | High (overrides user level) |
+| Source | macOS / Linux | Windows | Priority |
+|--------|---------------|---------|----------|
+| User level | `~/.jdata/agent/skills/` | `%USERPROFILE%\.jdata\agent\skills\` | Low |
+| Project level | `.jcli/skills/` | `.jcli\skills\` | High (overrides user level) |
 
 ## Disabling Skills
 
-Disable specific skills via the TUI configuration interface. Settings are saved in `~/.jdata/agent/data/agent_config.json`:
+Disable specific skills via the TUI configuration interface. Settings are saved in the data directory:
+
+| Platform | Config Path |
+|----------|-------------|
+| macOS / Linux | `~/.jdata/agent/data/agent_config.json` |
+| Windows | `%USERPROFILE%\.jdata\agent\data\agent_config.json` |
 
 ```json
 {

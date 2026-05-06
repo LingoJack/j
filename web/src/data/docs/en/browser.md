@@ -2,6 +2,16 @@
 
 Browser is a tool in AI chat for web browsing, interaction, and content extraction.
 
+## Platform Support
+
+| Platform | Lite Mode | CDP Mode |
+|----------|:---:|:---:|
+| macOS | ✅ | ✅ |
+| Linux | ✅ | ✅ |
+| Windows | ✅ | ✅ |
+
+> **Note**: CDP mode on Windows requires Chrome or Edge browser to be installed.
+
 ## Modes
 
 | Mode | Description |

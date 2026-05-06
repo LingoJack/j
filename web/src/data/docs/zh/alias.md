@@ -53,14 +53,30 @@ j gh-issues # 在浏览器中打开
 
 ## 别名存储
 
-别名单独存放在 `~/.jdata/config.yaml`：
+别名单独存放在数据目录下的配置文件中：
+
+| 平台 | 配置文件路径 |
+|------|-------------|
+| macOS / Linux | `~/.jdata/alias.yaml` |
+| Windows | `%USERPROFILE%\.jdata\alias.yaml` |
 
 ```yaml
+# macOS / Linux
 path:
+  chrome: "/Applications/Google Chrome.app"
+  vscode: "/Applications/Visual Studio Code.app"
   work: /Users/user/Projects/work
-  notes: /Users/user/Documents/notes
 
 inner_url:
   gh: https://github.com
   gh-issues: https://github.com/issues
+
+# Windows
+path:
+  notepad: "C:\\Windows\\notepad.exe"
+  vscode: "C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+  work: "C:\\Users\\user\\Projects\\work"
+
+inner_url:
+  gh: https://github.com
 ```

@@ -44,28 +44,61 @@ deny > allow > 默认需要确认
 
 ## 工具特定规则
 
-### Bash 命令匹配
+### 平台差异
+
+| 工具 | macOS / Linux | Windows |
+|------|---------------|---------|
+| Shell | `Bash(...)` | `PowerShell(...)` |
+| Computer Use | `ComputerUse(...)` | 不可用 |
+
+> **注意**：Windows 上使用 `PowerShell(...)` 规则匹配，而非 `Bash(...)`。
+
+### Bash / PowerShell 命令匹配
+
+macOS / Linux:
 
 ```yaml
 allow:
   - "Bash(cargo:*)"        # cargo build, cargo test 等
   - "Bash(git status:*)"   # git status
   - "Bash(ls:*)"           # ls, ls -la 等
-  
+
 deny:
   - "Bash(rm -rf:*)"       # 阻止 rm -rf
   - "Bash(/.*sudo.*/)"     # 阻止所有 sudo 命令
 ```
 
-### 文件路径匹配（Write/Edit/Read）
+Windows:
 
 ```yaml
 allow:
+  - "PowerShell(cargo:*)"        # cargo build, cargo test 等
+  - "PowerShell(git status:*)"   # git status
+  - "PowerShell(dir:*)"          # dir, dir /s 等
+
+deny:
+  - "PowerShell(Remove-Item -Recurse -Force:*)"  # 阻止递归强制删除
+  - "PowerShell(/.*Format-.*/)"                   # 阻止格式化命令
+```
+
+### 文件路径匹配（Write/Edit/Read）
+
+```yaml
+# macOS / Linux
+allow:
   - "Write(path:/src/*)"   # 允许写入 /src 目录
   - "Edit(path:/lib/*)"    # 允许编辑 /lib 目录
-  
+
 deny:
   - "Write(path:/etc/*)"   # 阻止写入 /etc
+
+# Windows
+allow:
+  - "Write(path:C:\\Projects\\myapp\\src\\*)"  # 允许写入项目 src 目录
+  - "Edit(path:C:\\Projects\\myapp\\lib\\*)"   # 允许编辑项目 lib 目录
+
+deny:
+  - "Write(path:C:\\Windows\\System32\\*)"     # 阻止写入系统目录
 ```
 
 ### URL 域名匹配（WebFetch）

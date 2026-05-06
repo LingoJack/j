@@ -42,4 +42,9 @@ j todo add "Finish docs"  # Quick add todo
 
 ## Data Storage
 
-Todo data is stored in `~/.jdata/report/todo.json`.
+Todo data is stored in the data directory:
+
+| Platform | Path |
+|----------|------|
+| macOS / Linux | `~/.jdata/report/todo.json` |
+| Windows | `%USERPROFILE%\.jdata\report\todo.json` |

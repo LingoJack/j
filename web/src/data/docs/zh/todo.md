@@ -42,4 +42,9 @@ j todo add "完成文档"     # 快速添加待办
 
 ## 数据存储
 
-待办数据存储在 `~/.jdata/report/todo.json`。
+待办数据存储在数据目录下：
+
+| 平台 | 路径 |
+|------|------|
+| macOS / Linux | `~/.jdata/report/todo.json` |
+| Windows | `%USERPROFILE%\.jdata\report\todo.json` |

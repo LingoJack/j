@@ -52,9 +52,25 @@ Type `@` in the input box to trigger completion:
 AI chat has built-in Agent capabilities for autonomous multi-step task execution:
 
 - **Autonomous Reasoning**: AI plans and executes multi-step tasks
-- **Tool Integration**: Automatically uses available tools (Read, Write, Bash, etc.)
+- **Tool Integration**: Automatically uses available tools (Read, Write, Bash/PowerShell, etc.)
 - **Task Management**: Task and Todo tools manage complex tasks
 - **Plan Mode**: Explore codebase before making a plan
+
+### Available Tools
+
+| Tool | macOS / Linux | Windows | Description |
+|------|:---:|:---:|-------------|
+| Read | ✅ | ✅ | Read files |
+| Write | ✅ | ✅ | Write files |
+| Edit | ✅ | ✅ | Edit files |
+| Glob | ✅ | ✅ | File name search |
+| Grep | ✅ | ✅ | Content search |
+| Bash | ✅ | ❌ | Shell command execution |
+| PowerShell | ❌ | ✅ | PowerShell command execution |
+| WebFetch | ✅ | ✅ | Web page fetching |
+| WebSearch | ✅ | ✅ | Web search |
+| ComputerUse | ✅ | ❌ | Screen capture & interaction |
+| Browser | ✅ | ✅ | Browser automation |
 
 ### Plan Mode
 
@@ -82,7 +98,8 @@ permissions:
     - Grep
     - Glob
   deny:
-    - Bash
+    - Bash          # macOS / Linux
+    - PowerShell    # Windows
     - Write
 ```
 

@@ -44,28 +44,61 @@ deny > allow > default requires confirmation
 
 ## Tool-Specific Rules
 
-### Bash Command Matching
+### Platform Differences
+
+| Tool | macOS / Linux | Windows |
+|------|---------------|---------|
+| Shell | `Bash(...)` | `PowerShell(...)` |
+| Computer Use | `ComputerUse(...)` | Not available |
+
+> **Note**: On Windows, use `PowerShell(...)` rules instead of `Bash(...)`.
+
+### Bash / PowerShell Command Matching
+
+macOS / Linux:
 
 ```yaml
 allow:
   - "Bash(cargo:*)"        # cargo build, cargo test, etc.
   - "Bash(git status:*)"   # git status
   - "Bash(ls:*)"           # ls, ls -la, etc.
-  
+
 deny:
   - "Bash(rm -rf:*)"       # Block rm -rf
   - "Bash(/.*sudo.*/)"     # Block all sudo commands
 ```
 
-### File Path Matching (Write/Edit/Read)
+Windows:
 
 ```yaml
 allow:
+  - "PowerShell(cargo:*)"        # cargo build, cargo test, etc.
+  - "PowerShell(git status:*)"   # git status
+  - "PowerShell(dir:*)"          # dir, dir /s, etc.
+
+deny:
+  - "PowerShell(Remove-Item -Recurse -Force:*)"  # Block recursive force delete
+  - "PowerShell(/.*Format-.*/)"                   # Block format commands
+```
+
+### File Path Matching (Write/Edit/Read)
+
+```yaml
+# macOS / Linux
+allow:
   - "Write(path:/src/*)"   # Allow writes to /src directory
   - "Edit(path:/lib/*)"    # Allow edits to /lib directory
-  
+
 deny:
   - "Write(path:/etc/*)"   # Block writes to /etc
+
+# Windows
+allow:
+  - "Write(path:C:\\Projects\\myapp\\src\\*)"  # Allow writes to project src directory
+  - "Edit(path:C:\\Projects\\myapp\\lib\\*)"   # Allow edits to project lib directory
+
+deny:
+  - "Write(path:C:\\Windows\\System32\\*)"     # Block writes to system directory
 ```
 
 ### URL Domain Matching (WebFetch)

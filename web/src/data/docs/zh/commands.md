@@ -29,8 +29,12 @@ Commands 是可复用的提示词片段，帮助快速调用预设的提示词�
 
 #### 目录位置
 
-- **用户级**: `~/.jdata/agent/commands/` - 所有项目可用
-- **项目级**: `.jcli/commands/` - 仅当前项目可用（优先级更高）
+| 级别 | macOS / Linux | Windows |
+|------|---------------|---------|
+| 用户级 | `~/.jdata/agent/commands/` | `%USERPROFILE%\.jdata\agent\commands\` |
+| 项目级 | `.jcli/commands/` | `.jcli\commands\` |
+
+项目级命令优先级更高。
 
 #### 文件格式
 
