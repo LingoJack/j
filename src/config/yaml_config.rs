@@ -184,9 +184,37 @@ impl YamlConfig {
             .open(&path)
             .map_err(|e| format!("打开配置文件失败: {}", e))?;
 
-        lock_file
-            .lock_exclusive()
-            .map_err(|e| format!("获取文件锁失败: {}", e))?;
+        // Windows 上文件锁可能因杀毒软件/索引服务等暂时不可用，增加重试
+        #[cfg(windows)]
+        {
+            const MAX_RETRIES: u32 = 5;
+            const RETRY_DELAY_MS: u64 = 50;
+
+            for attempt in 0..MAX_RETRIES {
+                match lock_file.lock_exclusive() {
+                    Ok(()) => break,
+                    Err(e) if attempt < MAX_RETRIES - 1 => {
+                        eprintln!(
+                            "[WARN] 获取文件锁失败 (尝试 {}/{}), 稍后重试: {}",
+                            attempt + 1,
+                            MAX_RETRIES,
+                            e
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+                    }
+                    Err(e) => {
+                        return Err(format!("获取文件锁失败: {}", e));
+                    }
+                }
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            lock_file
+                .lock_exclusive()
+                .map_err(|e| format!("获取文件锁失败: {}", e))?;
+        }
 
         // 2. 锁内读取最新内容
         let content = fs::read_to_string(&path).unwrap_or_default();
