@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "j-cli"
-version = "12.10.4"
+version = "12.10.5"
 edition = "2024"
 rust-version = "1.93.1"
 authors = ["lingojack@qq.com"]
@@ -47,7 +47,6 @@ tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
 pulldown-cmark = "0.13.0"
 unicode-width = "0.2"
-self_update = { version = "0.42", default-features = false, features = ["archive-tar", "compression-flate2", "rustls"] }
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "json", "stream"] }
 urlencoding = "2.1"
 html2text = "0.16"
@@ -74,6 +73,16 @@ supports-color = "3"
 ansi_colours = "1.2"
 arboard = { version = "3.6.1", default-features = false }
 
+[target.'cfg(unix)'.dependencies.self_update]
+version = "0.42"
+default-features = false
+features = ["archive-tar", "compression-flate2", "rustls"]
+
+[target.'cfg(windows)'.dependencies.self_update]
+version = "0.42"
+default-features = false
+features = ["archive-zip", "rustls"]
+
 # Unix-only dependencies
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["process", "signal"] }
@@ -87,5 +96,6 @@ core-foundation = "0.10"
 [features]
 default = []
 browser_cdp = ["dep:chromiumoxide"]
+
 
 

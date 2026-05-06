@@ -718,7 +718,12 @@ fn perform_update_curl(target: &str, interactive: bool) {
 
     #[cfg(windows)]
     let src_bin = tmp_dir.join("j.exe");
+
+    #[cfg(unix)]
     let dst_bin = exe_dir.join("j");
+
+    #[cfg(windows)]
+    let dst_bin = exe_dir.join("j.exe");
 
     if !src_bin.exists() {
         println!("{}", "解压后未找到 j 二进制文件".red());
@@ -752,8 +757,12 @@ fn perform_update_curl(target: &str, interactive: bool) {
         }
         Err(e) => {
             println!("{} {}", "安装失败:".red(), e);
+            #[cfg(unix)]
             println!("可能需要管理员权限，请尝试:");
+            #[cfg(unix)]
             println!("  {}", "sudo j update".cyan());
+            #[cfg(windows)]
+            println!("请尝试以管理员身份运行 PowerShell 后重新执行更新");
         }
     }
 

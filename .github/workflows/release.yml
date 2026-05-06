@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-macos:
     name: Build macOS ARM64
     runs-on: macos-latest
     steps:
@@ -27,7 +27,6 @@ jobs:
       - name: Build
         run: cargo build --release --target aarch64-apple-darwin
         env:
-          # 标记安装来源为 github，用于 j update 命令识别
           INSTALL_SOURCE: github
 
       - name: Build j-indicator
@@ -51,9 +50,79 @@ jobs:
             target/aarch64-apple-darwin/release/j-darwin-arm64.tar.gz
             target/aarch64-apple-darwin/release/j-darwin-arm64.tar.gz.sha256
 
+  build-windows-x64:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies
+        run: choco install cmake --installargs '"ADD_CMakeToPath=system"' -y
+
+      - name: Build
+        run: cargo build --release
+        env:
+          INSTALL_SOURCE: github
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $releaseDir = "target/release"
+          Compress-Archive -Path "$releaseDir/j.exe" -DestinationPath "$releaseDir/j-windows-x64.zip"
+          $hash = (Get-FileHash -Path "$releaseDir/j-windows-x64.zip" -Algorithm SHA256).Hash
+          "$hash  j-windows-x64.zip" | Out-File -FilePath "$releaseDir/j-windows-x64.zip.sha256" -Encoding ASCII
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: j-windows-x64
+          path: |
+            target/release/j-windows-x64.zip
+            target/release/j-windows-x64.zip.sha256
+
+  build-windows-arm64:
+    name: Build Windows ARM64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      - name: Install build dependencies
+        run: choco install cmake --installargs '"ADD_CMakeToPath=system"' -y
+
+      - name: Build
+        run: cargo build --release --target aarch64-pc-windows-msvc
+        env:
+          INSTALL_SOURCE: github
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $releaseDir = "target/aarch64-pc-windows-msvc/release"
+          Compress-Archive -Path "$releaseDir/j.exe" -DestinationPath "$releaseDir/j-windows-arm64.zip"
+          $hash = (Get-FileHash -Path "$releaseDir/j-windows-arm64.zip" -Algorithm SHA256).Hash
+          "$hash  j-windows-arm64.zip" | Out-File -FilePath "$releaseDir/j-windows-arm64.zip.sha256" -Encoding ASCII
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: j-windows-arm64
+          path: |
+            target/aarch64-pc-windows-msvc/release/j-windows-arm64.zip
+            target/aarch64-pc-windows-msvc/release/j-windows-arm64.zip.sha256
+
   release:
     name: Create Release
-    needs: build
+    needs: [build-macos, build-windows-x64, build-windows-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -61,10 +130,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download artifact
+      - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
           name: j-darwin-arm64
+          path: artifacts
+
+      - name: Download Windows x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: j-windows-x64
+          path: artifacts
+
+      - name: Download Windows ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: j-windows-arm64
           path: artifacts
 
       - name: Create Release
