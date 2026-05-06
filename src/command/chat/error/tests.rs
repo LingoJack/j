@@ -185,6 +185,10 @@ fn from_api_error_message_rate_limit_heuristics() {
         "concurrency limit reached",
         "请求频率过高",
         "busy",
+        "channel:rpm_exceeded",
+        "channel:tpm_exceeded",
+        "rpm exceeded",
+        "tpm exceeded",
     ];
     for kw in rate_keywords {
         let err = ChatError::from_api_error(None, kw);

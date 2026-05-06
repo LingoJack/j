@@ -496,6 +496,32 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         }
 
         // broadcast 压缩已由内置 PreLlmRequest hook (broadcast_compress) 处理
+
+        // ── 一次性清理孤立 tool_call/tool_result 配对 ──
+        // sanitize_messages 内部也会做同样的清理（防御兜底），但只作用于 API 请求 body，
+        // 不会回写到 messages。如果 messages 中确实存在孤立项，每一轮都会再触发一次相同警告。
+        // 在这里就地替换，让孤立项被永久移除，避免日志反复刷屏。
+        {
+            let cleaned = super::api::sanitize_messages(&messages);
+            let changed = cleaned.len() != messages.len()
+                || cleaned.iter().zip(messages.iter()).any(|(a, b)| {
+                    let a_count = a.tool_calls.as_ref().map(|tc| tc.len()).unwrap_or(0);
+                    let b_count = b.tool_calls.as_ref().map(|tc| tc.len()).unwrap_or(0);
+                    a_count != b_count
+                });
+            if changed {
+                write_info_log(
+                    "agent_loop",
+                    &format!(
+                        "已就地修复孤立 tool_call/tool_result：{} → {} 条消息",
+                        messages.len(),
+                        cleaned.len()
+                    ),
+                );
+                messages = cleaned;
+            }
+        }
+
         let request = match build_request_with_tools(
             &provider,
             &messages,

@@ -218,6 +218,12 @@ impl ChatError {
                 message: message.to_string(),
                 retry_after_secs: None,
             },
+            Some(code) if code.contains("rpm_exceeded") || code.contains("tpm_exceeded") => {
+                ChatError::ApiRateLimit {
+                    message: message.to_string(),
+                    retry_after_secs: None,
+                }
+            }
             _ => {
                 let msg_lower = message.to_lowercase();
                 if msg_lower.contains("api key")
@@ -238,6 +244,12 @@ impl ChatError {
                     || msg_lower.contains("concurrency limit")
                     || msg_lower.contains("请求频率")
                     || msg_lower.contains("busy")
+                    || msg_lower.contains("rpm_exceeded")
+                    || msg_lower.contains("rpm exceeded")
+                    || msg_lower.contains("tpm_exceeded")
+                    || msg_lower.contains("tpm exceeded")
+                    || msg_lower.contains("channel:rpm")
+                    || msg_lower.contains("channel:tpm")
                 {
                     ChatError::ApiRateLimit {
                         message: message.to_string(),

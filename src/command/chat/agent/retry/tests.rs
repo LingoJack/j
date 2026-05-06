@@ -215,6 +215,10 @@ fn retry_other_overloaded_keywords() {
         "server overloaded now",
         "too busy to handle",
         "Error code: 1305",
+        "channel:rpm_exceeded",
+        "channel:tpm_exceeded",
+        "rpm exceeded",
+        "tpm exceeded",
     ];
     for kw in keywords {
         assert_policy(

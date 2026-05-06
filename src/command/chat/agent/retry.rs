@@ -169,7 +169,13 @@ pub(super) fn retry_policy_for(error: &ChatError) -> Option<RetryPolicy> {
                 || msg.contains("过载")
                 || msg.contains("overloaded")
                 || msg.contains("too busy")
-                || msg.contains("1305") =>
+                || msg.contains("1305")
+                || msg.contains("rpm_exceeded")
+                || msg.contains("rpm exceeded")
+                || msg.contains("tpm_exceeded")
+                || msg.contains("tpm exceeded")
+                || msg.contains("channel:rpm")
+                || msg.contains("channel:tpm") =>
         {
             Some(RetryPolicy::fallback_overloaded())
         }
