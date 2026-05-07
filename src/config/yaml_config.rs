@@ -3,10 +3,10 @@ use crate::constants::{
     DATA_DIR, DATA_PATH_ENV, DEFAULT_SEARCH_ENGINE, EMAIL, NOTEBOOK_DIR, REPORT_DEFAULT_FILE,
     REPORT_DIR, SCRIPTS_DIR, VERSION, config_key, section,
 };
-use fs2::FileExt;
+use crate::util::LockFileGuard;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::path::PathBuf;
 
 /// YAML 配置文件的完整结构
@@ -157,17 +157,10 @@ impl YamlConfig {
         });
     }
 
-    /// 并发安全保存：用文件锁保护整个 load → modify → write 临界区
+    /// 保存配置到文件
     ///
-    /// 流程：
-    ///   1. 打开（或创建）配置文件，获取独占锁（阻塞直到获得）
-    ///   2. 读取文件系统最新内容（锁内读，保证一致性）
-    ///   3. 将 self 的修改应用到最新内容上
-    ///   4. 写回磁盘
-    ///   5. 释放锁（fd drop 时自动释放）
-    ///   6. 更新 self 与磁盘保持一致
-    ///
-    /// 返回 Ok(()) 表示成功，Err 包含错误信息
+    /// 使用独立的 `.lock` 文件做互斥：存在即锁定，结束即删除。
+    /// 简单可靠，跨平台无兼容问题。
     pub fn save(&mut self) -> Result<(), String> {
         let path = Self::config_path();
 
@@ -175,75 +168,15 @@ impl YamlConfig {
             fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {}", e))?;
         }
 
-        // 1. 打开文件并获取独占锁
-        let lock_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
-            .map_err(|e| format!("打开配置文件失败: {}", e))?;
+        // 用独立 lock 文件做互斥
+        let lock_path = path.with_extension("yaml.lock");
+        let _lock_guard = LockFileGuard::acquire(&lock_path)?;
 
-        // Windows 上文件锁可能因杀毒软件/索引服务等暂时不可用，增加重试
-        #[cfg(windows)]
-        {
-            const MAX_RETRIES: u32 = 5;
-            const RETRY_DELAY_MS: u64 = 50;
-
-            for attempt in 0..MAX_RETRIES {
-                match lock_file.lock_exclusive() {
-                    Ok(()) => break,
-                    Err(e) if attempt < MAX_RETRIES - 1 => {
-                        eprintln!(
-                            "[WARN] 获取文件锁失败 (尝试 {}/{}), 稍后重试: {}",
-                            attempt + 1,
-                            MAX_RETRIES,
-                            e
-                        );
-                        std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
-                    }
-                    Err(e) => {
-                        return Err(format!("获取文件锁失败: {}", e));
-                    }
-                }
-            }
-        }
-
-        #[cfg(not(windows))]
-        {
-            lock_file
-                .lock_exclusive()
-                .map_err(|e| format!("获取文件锁失败: {}", e))?;
-        }
-
-        // 2. 锁内读取最新内容
-        let content = fs::read_to_string(&path).unwrap_or_default();
-        let mut fresh: YamlConfig = serde_yaml::from_str(&content).unwrap_or_default();
-
-        // 3. 将 self 的所有 section 应用到 fresh（self 优先）
-        fresh.path = self.path.clone();
-        fresh.inner_url = self.inner_url.clone();
-        fresh.outer_url = self.outer_url.clone();
-        fresh.editor = self.editor.clone();
-        fresh.browser = self.browser.clone();
-        fresh.vpn = self.vpn.clone();
-        fresh.script = self.script.clone();
-        fresh.version = self.version.clone();
-        fresh.setting = self.setting.clone();
-        fresh.log = self.log.clone();
-        fresh.report = self.report.clone();
-        // extra 保留 fresh 的值（不覆盖其他进程写入的未知字段）
-
-        // 4. 序列化并写回磁盘
-        let output = serde_yaml::to_string(&fresh).map_err(|e| format!("序列化配置失败: {}", e))?;
+        // 序列化并写回
+        let output = serde_yaml::to_string(self).map_err(|e| format!("序列化配置失败: {}", e))?;
 
         fs::write(&path, output)
             .map_err(|e| format!("保存配置文件失败: {}, 路径: {:?}", e, path))?;
-
-        // 5. lock_file drop 时自动释放锁
-
-        // 6. 同步 extra 回内存
-        self.extra = fresh.extra;
 
         Ok(())
     }
