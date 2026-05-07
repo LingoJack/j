@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { CopyButton } from '../common/CopyButton'
+import type { Platform } from '../common/TerminalWindow'
 
 // Language mapping for syntax highlighting
 const langMap: Record<string, string> = {
@@ -9,6 +10,8 @@ const langMap: Record<string, string> = {
   'shell': 'bash',
   'sh': 'bash',
   'zsh': 'bash',
+  'powershell': 'powershell',
+  'ps1': 'powershell',
   'typescript': 'typescript',
   'ts': 'typescript',
   'javascript': 'javascript',
@@ -123,24 +126,192 @@ function renderInlineMarkdown(text: string, baseKey: string): React.ReactNode {
   return parts.length > 0 ? parts : text
 }
 
+// ---------------------------------------------------------------------------
+// PlatformCodeBlock: renders paired macOS/Linux + Windows code blocks
+// inside a terminal-style window with tab switching.
+// ---------------------------------------------------------------------------
+
+interface CodeBlockData {
+  lang: string
+  content: string
+}
+
+function PlatformCodeBlock({
+  unixCode,
+  windowsCode,
+  blockKey,
+}: {
+  unixCode: CodeBlockData
+  windowsCode: CodeBlockData
+  blockKey: string
+}) {
+  const [platform, setPlatform] = useState<Platform>('unix')
+  const activeCode = platform === 'unix' ? unixCode : windowsCode
+  const lang = langMap[activeCode.lang.toLowerCase()] || activeCode.lang || 'text'
+
+  const handlePlatformChange = useCallback((p: Platform) => setPlatform(p), [])
+
+  return (
+    <div key={blockKey} className="my-4 rounded-xl overflow-hidden shadow-lg shadow-stone-900/8 border border-stone-200">
+      {/* Title bar */}
+      <div className="flex items-center px-4 py-2 bg-[#e8e6e1]">
+        <div className="flex gap-2 mr-4">
+          <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+          <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+          <span className="w-3 h-3 rounded-full bg-[#28c840]" />
+        </div>
+        <span className="text-xs font-medium text-stone-500">Terminal</span>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 px-4 py-2 border-b bg-[#f5f4f0] border-stone-200">
+        <button
+          onClick={() => handlePlatformChange('unix')}
+          className={`
+            flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all
+            ${platform === 'unix'
+              ? 'bg-white text-stone-800 shadow-sm'
+              : 'text-stone-500 hover:text-stone-700'
+            }
+          `}
+        >
+          <span>{'\u2318'}</span>
+          <span className="hidden sm:inline">macOS / Linux</span>
+          <span className="sm:hidden">Mac</span>
+        </button>
+        <button
+          onClick={() => handlePlatformChange('windows')}
+          className={`
+            flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all
+            ${platform === 'windows'
+              ? 'bg-white text-stone-800 shadow-sm'
+              : 'text-stone-500 hover:text-stone-700'
+            }
+          `}
+        >
+          <span>{'\u229E'}</span>
+          <span className="hidden sm:inline">Windows</span>
+          <span className="sm:hidden">Win</span>
+        </button>
+      </div>
+
+      {/* Code content */}
+      <div className="relative group">
+        <SyntaxHighlighter
+          language={lang}
+          style={oneLight}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: '0.875rem',
+            backgroundColor: '#faf9f6',
+            border: 'none',
+          }}
+          codeTagProps={{
+            style: {
+              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+            }
+          }}
+        >
+          {activeCode.content}
+        </SyntaxHighlighter>
+        <CopyButton text={activeCode.content} />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Pre-processing: identify platform heading + code block pairs
+// ---------------------------------------------------------------------------
+
+type Segment =
+  | { type: 'raw'; lines: string[] }
+  | { type: 'platform-pair'; unixCode: CodeBlockData; windowsCode: CodeBlockData }
+
+const PLATFORM_UNIX_RE = /^###\s+(macOS\s*\/\s*Linux|macOS|Linux)\s*$/
+const PLATFORM_WIN_RE = /^###\s+Windows\s*$/
+
+function extractSegments(lines: string[]): Segment[] {
+  const segments: Segment[] = []
+  let i = 0
+
+    // Accumulate raw lines so multi-line structures (tables, code blocks) stay intact
+    let rawBuf: string[] = []
+    const flushRaw = () => {
+      if (rawBuf.length > 0) {
+        segments.push({ type: 'raw', lines: rawBuf })
+        rawBuf = []
+      }
+    }
+
+    while (i < lines.length) {
+      // Look for: ### macOS / Linux -> ```lang -> code -> ``` -> ### Windows -> ```lang -> code -> ```
+      if (PLATFORM_UNIX_RE.test(lines[i])) {
+        const unixBlock = tryExtractCodeBlock(lines, i + 1)
+        if (unixBlock) {
+          // Skip blank lines between unix code block and Windows heading
+          let winHeadingIdx = unixBlock.endIdx + 1
+          while (winHeadingIdx < lines.length && lines[winHeadingIdx].trim() === '') winHeadingIdx++
+          if (winHeadingIdx < lines.length && PLATFORM_WIN_RE.test(lines[winHeadingIdx])) {
+            const winBlock = tryExtractCodeBlock(lines, winHeadingIdx + 1)
+            if (winBlock) {
+              flushRaw()
+              segments.push({
+                type: 'platform-pair',
+                unixCode: { lang: unixBlock.lang, content: unixBlock.content },
+                windowsCode: { lang: winBlock.lang, content: winBlock.content },
+              })
+              i = winBlock.endIdx + 1
+              continue
+            }
+          }
+        }
+      }
+      rawBuf.push(lines[i])
+      i++
+    }
+
+    flushRaw()
+    return segments
+}
+
+function tryExtractCodeBlock(lines: string[], startIdx: number): { lang: string; content: string; endIdx: number } | null {
+  // Skip blank lines between heading and code block
+  let idx = startIdx
+  while (idx < lines.length && lines[idx].trim() === '') idx++
+  if (idx >= lines.length || !lines[idx].startsWith('```')) return null
+
+  const lang = lines[idx].slice(3).trim() || 'text'
+  let content = ''
+  idx++
+
+  while (idx < lines.length && !lines[idx].startsWith('```')) {
+    content += (content ? '\n' : '') + lines[idx]
+    idx++
+  }
+
+  if (idx >= lines.length) return null // unclosed code block
+  return { lang, content, endIdx: idx }
+}
+
+// ---------------------------------------------------------------------------
+// Main Markdown component
+// ---------------------------------------------------------------------------
+
 interface MarkdownProps {
   content: string
 }
 
 export function Markdown({ content }: MarkdownProps) {
-  // Use content hash as key prefix to force re-render on content change
   const elements = useMemo(() => {
     const lines = content.split('\n')
+    const segments = extractSegments(lines)
     const result: React.JSX.Element[] = []
-    let inCodeBlock = false
-    let codeContent = ''
-    let codeLang = ''
-    let inTable = false
-    let tableRows: string[][] = []
     let blockCounter = 0
     const usedIds = new Set<string>()
-    
-    const flushTable = () => {
+
+    const flushTable = (tableRows: string[][]) => {
       if (tableRows.length > 0) {
         const maxCols = Math.max(...tableRows.map(row => row.length))
         const tableKey = `table-${blockCounter++}`
@@ -170,156 +341,188 @@ export function Markdown({ content }: MarkdownProps) {
             </table>
           </div>
         )
-        tableRows = []
       }
     }
-    
-    lines.forEach((line) => {
-      const lineKey = `line-${blockCounter++}`
-      
-      // Code blocks
-      if (line.startsWith('```')) {
-        if (!inCodeBlock) {
-          flushTable()
-          inCodeBlock = true
-          codeLang = line.slice(3).trim() || 'text'
-          codeContent = ''
-        } else {
-          inCodeBlock = false
-          const lang = langMap[codeLang.toLowerCase()] || codeLang || 'text'
-          
-          result.push(
-            <div key={`code-${blockCounter++}`} className="relative group my-4">
-              <SyntaxHighlighter
-                language={lang}
-                style={oneLight}
-                customStyle={{
-                  margin: 0,
-                  borderRadius: '0.5rem',
-                  fontSize: '0.875rem',
-                  backgroundColor: '#faf9f6',
-                  border: '1px solid #e7e5e4',
-                }}
-                codeTagProps={{
-                  style: {
-                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
-                  }
-                }}
-              >
-                {codeContent}
-              </SyntaxHighlighter>
-              <CopyButton text={codeContent} />
-            </div>
-          )
-        }
-        return
-      }
-      
-      if (inCodeBlock) {
-        codeContent += (codeContent ? '\n' : '') + line
-        return
-      }
-      
-      // Tables
-      if (line.startsWith('|')) {
-        if (!inTable) {
-          inTable = true
+
+    // Render a batch of raw markdown lines (same logic as before)
+    function renderRawLines(rawLines: string[]) {
+      let inCodeBlock = false
+      let codeContent = ''
+      let codeLang = ''
+      let inTable = false
+      let tableRows: string[][] = []
+
+      const closeTable = () => {
+        if (inTable) {
+          inTable = false
+          flushTable(tableRows)
           tableRows = []
         }
-        const cells = line.split('|').slice(1, -1).map(c => c.trim())
-        if (!line.includes('---')) {
-          tableRows.push(cells)
+      }
+
+      rawLines.forEach((line) => {
+        const lineKey = `line-${blockCounter++}`
+
+        // Code blocks
+        if (line.startsWith('```')) {
+          if (!inCodeBlock) {
+            closeTable()
+            inCodeBlock = true
+            codeLang = line.slice(3).trim() || 'text'
+            codeContent = ''
+          } else {
+            inCodeBlock = false
+            const lang = langMap[codeLang.toLowerCase()] || codeLang || 'text'
+
+            result.push(
+              <div key={`code-${blockCounter++}`} className="relative group my-4">
+                <SyntaxHighlighter
+                  language={lang}
+                  style={oneLight}
+                  customStyle={{
+                    margin: 0,
+                    borderRadius: '0.5rem',
+                    fontSize: '0.875rem',
+                    backgroundColor: '#faf9f6',
+                    border: '1px solid #e7e5e4',
+                  }}
+                  codeTagProps={{
+                    style: {
+                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
+                    }
+                  }}
+                >
+                  {codeContent}
+                </SyntaxHighlighter>
+                <CopyButton text={codeContent} />
+              </div>
+            )
+          }
+          return
         }
-        return
-      } else if (inTable) {
-        inTable = false
-        flushTable()
-      }
-      
-      // Blockquotes
-      if (line.startsWith('> ')) {
-        result.push(
-          <blockquote key={lineKey} className="border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic">
-            {renderInlineMarkdown(line.slice(2), `${lineKey}-q`)}
-          </blockquote>
-        )
-        return
-      }
-      
-      // Headings
-      if (line.startsWith('## ')) {
-        const text = line.slice(3).trim()
-        let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
-        let counter = 1
-        while (usedIds.has(id)) {
-          id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
-          counter++
+
+        if (inCodeBlock) {
+          codeContent += (codeContent ? '\n' : '') + line
+          return
         }
-        usedIds.add(id)
-        result.push(<h2 key={lineKey} id={id} className="text-2xl font-light text-stone-900 mt-12 mb-5">{renderInlineMarkdown(text, `${lineKey}-h2`)}</h2>)
-        return
-      }
-      if (line.startsWith('### ')) {
-        const text = line.slice(4).trim()
-        let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
-        let counter = 1
-        while (usedIds.has(id)) {
-          id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
-          counter++
+
+        // Tables
+        if (line.startsWith('|')) {
+          if (!inTable) {
+            inTable = true
+            tableRows = []
+          }
+          const cells = line.split('|').slice(1, -1).map(c => c.trim())
+          if (!line.includes('---')) {
+            tableRows.push(cells)
+          }
+          return
+        } else if (inTable) {
+          closeTable()
         }
-        usedIds.add(id)
-        result.push(<h3 key={lineKey} id={id} className="text-lg font-medium text-stone-900 mt-8 mb-4">{renderInlineMarkdown(text, `${lineKey}-h3`)}</h3>)
-        return
-      }
-      if (line.startsWith('#### ')) {
-        const text = line.slice(5).trim()
-        let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
-        let counter = 1
-        while (usedIds.has(id)) {
-          id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
-          counter++
+
+        // Blockquotes
+        if (line.startsWith('> ')) {
+          result.push(
+            <blockquote key={lineKey} className="border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic">
+              {renderInlineMarkdown(line.slice(2), `${lineKey}-q`)}
+            </blockquote>
+          )
+          return
         }
-        usedIds.add(id)
-        result.push(<h4 key={lineKey} id={id} className="text-base font-semibold text-stone-800 mt-6 mb-3">{renderInlineMarkdown(text, `${lineKey}-h4`)}</h4>)
-        return
+
+        // Headings
+        if (line.startsWith('## ')) {
+          const text = line.slice(3).trim()
+          let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
+          let counter = 1
+          while (usedIds.has(id)) {
+            id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
+            counter++
+          }
+          usedIds.add(id)
+          result.push(<h2 key={lineKey} id={id} className="text-2xl font-light text-stone-900 mt-12 mb-5">{renderInlineMarkdown(text, `${lineKey}-h2`)}</h2>)
+          return
+        }
+        if (line.startsWith('### ')) {
+          const text = line.slice(4).trim()
+          let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
+          let counter = 1
+          while (usedIds.has(id)) {
+            id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
+            counter++
+          }
+          usedIds.add(id)
+          result.push(<h3 key={lineKey} id={id} className="text-lg font-medium text-stone-900 mt-8 mb-4">{renderInlineMarkdown(text, `${lineKey}-h3`)}</h3>)
+          return
+        }
+        if (line.startsWith('#### ')) {
+          const text = line.slice(5).trim()
+          let id = slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))
+          let counter = 1
+          while (usedIds.has(id)) {
+            id = `${slugify(text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'))}-${counter}`
+            counter++
+          }
+          usedIds.add(id)
+          result.push(<h4 key={lineKey} id={id} className="text-base font-semibold text-stone-800 mt-6 mb-3">{renderInlineMarkdown(text, `${lineKey}-h4`)}</h4>)
+          return
+        }
+
+        // Lists
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          result.push(
+            <li key={lineKey} className="text-stone-600 text-sm ml-4 mb-1 list-disc">
+              {renderInlineMarkdown(line.slice(2), `${lineKey}-li`)}
+            </li>
+          )
+          return
+        }
+
+        // Numbered lists
+        const numMatch = line.match(/^(\d+)\.\s/)
+        if (numMatch) {
+          result.push(
+            <li key={lineKey} className="text-stone-600 text-sm ml-4 mb-1 list-decimal">
+              {renderInlineMarkdown(line.slice(numMatch[0].length), `${lineKey}-nli`)}
+            </li>
+          )
+          return
+        }
+
+        // Paragraphs
+        if (line.trim()) {
+          result.push(
+            <p key={lineKey} className="text-stone-600 text-sm leading-relaxed mb-3">
+              {renderInlineMarkdown(line, `${lineKey}-p`)}
+            </p>
+          )
+        }
+      })
+
+      // Flush any remaining open table
+      if (inTable) {
+        closeTable()
       }
-      
-      // Lists
-      if (line.startsWith('- ') || line.startsWith('* ')) {
-        result.push(
-          <li key={lineKey} className="text-stone-600 text-sm ml-4 mb-1 list-disc">
-            {renderInlineMarkdown(line.slice(2), `${lineKey}-li`)}
-          </li>
-        )
-        return
-      }
-      
-      // Numbered lists
-      const numMatch = line.match(/^(\d+)\.\s/)
-      if (numMatch) {
-        result.push(
-          <li key={lineKey} className="text-stone-600 text-sm ml-4 mb-1 list-decimal">
-            {renderInlineMarkdown(line.slice(numMatch[0].length), `${lineKey}-nli`)}
-          </li>
-        )
-        return
-      }
-      
-      // Paragraphs
-      if (line.trim()) {
-        result.push(
-          <p key={lineKey} className="text-stone-600 text-sm leading-relaxed mb-3">
-            {renderInlineMarkdown(line, `${lineKey}-p`)}
-          </p>
-        )
-      }
-    })
-    
-    // Handle any remaining open blocks after loop ends
-    if (inTable) {
-      flushTable()
     }
-    
+
+    // Process all segments
+    for (const seg of segments) {
+      if (seg.type === 'platform-pair') {
+        const pairKey = `platform-${blockCounter++}`
+        result.push(
+          <PlatformCodeBlock
+            key={pairKey}
+            blockKey={pairKey}
+            unixCode={seg.unixCode}
+            windowsCode={seg.windowsCode}
+          />
+        )
+      } else {
+        renderRawLines(seg.lines)
+      }
+    }
+
     return result
   }, [content])
   
