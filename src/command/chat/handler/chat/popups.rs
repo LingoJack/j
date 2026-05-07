@@ -98,18 +98,27 @@ pub(super) fn handle_slash_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResul
 }
 
 /// 处理 @ 补全弹窗
+///
+/// **性能关键**：`get_filtered_all_items()` 会递归扫描项目目录（max_depth=8），
+/// 在大项目中单次调用可达 100-500ms。必须延迟求值——只在 Up/Down/Tab/Enter
+/// 等真正需要过滤列表的分支内调用，绝不能提前到 match 之前。
+/// 否则每次按键（包括最终走 PassThrough 的普通字符）都会阻塞主循环，
+/// 导致输入卡顿/吞字符。
 pub(super) fn handle_at_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResult {
-    let filtered = get_filtered_all_items(app);
+    let filtered;
     match key.code {
         KeyCode::Up => {
+            filtered = get_filtered_all_items(app);
             move_up(&mut app.ui.at_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Down => {
+            filtered = get_filtered_all_items(app);
             move_down(&mut app.ui.at_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Tab | KeyCode::Enter => {
+            filtered = get_filtered_all_items(app);
             if !filtered.is_empty() {
                 let sel = app.ui.at_popup_selected.min(filtered.len() - 1);
                 let item = filtered[sel].clone();
@@ -196,18 +205,24 @@ fn replace_at_with_prefix(app: &mut ChatApp, replacement: &str) {
 }
 
 /// 处理文件补全弹窗
+///
+/// **性能关键**：同 handle_at_popup，`get_filtered_files()` 会递归扫描项目目录，
+/// 必须延迟求值，不能提前到 match 之前调用。
 pub(super) fn handle_file_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResult {
-    let filtered = get_filtered_files(app);
+    let filtered;
     match key.code {
         KeyCode::Up => {
+            filtered = get_filtered_files(app);
             move_up(&mut app.ui.file_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Down => {
+            filtered = get_filtered_files(app);
             move_down(&mut app.ui.file_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Tab | KeyCode::Enter => {
+            filtered = get_filtered_files(app);
             if !filtered.is_empty() {
                 let sel = app.ui.file_popup_selected.min(filtered.len() - 1);
                 let entry = filtered[sel].clone();
@@ -271,18 +286,24 @@ pub(super) fn handle_file_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResult
 }
 
 /// 处理技能补全弹窗
+///
+/// **性能注意**：`get_filtered_skill_names()` 开销较小，但为保持一致性仍延迟求值。
+/// 若将来 skill 列表变大，此模式同样避免不必要的计算。
 pub(super) fn handle_skill_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResult {
-    let filtered = get_filtered_skill_names(app);
+    let filtered;
     match key.code {
         KeyCode::Up => {
+            filtered = get_filtered_skill_names(app);
             move_up(&mut app.ui.skill_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Down => {
+            filtered = get_filtered_skill_names(app);
             move_down(&mut app.ui.skill_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Tab | KeyCode::Enter => {
+            filtered = get_filtered_skill_names(app);
             if !filtered.is_empty() {
                 let sel = app.ui.skill_popup_selected.min(filtered.len() - 1);
                 let entry = filtered[sel].clone();
@@ -325,18 +346,23 @@ pub(super) fn handle_skill_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResul
 }
 
 /// 处理命令补全弹窗
+///
+/// **性能注意**：同 handle_skill_popup，延迟求值保持一致性。
 pub(super) fn handle_command_popup(app: &mut ChatApp, key: KeyEvent) -> PopupResult {
-    let filtered = get_filtered_command_names(app);
+    let filtered;
     match key.code {
         KeyCode::Up => {
+            filtered = get_filtered_command_names(app);
             move_up(&mut app.ui.command_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Down => {
+            filtered = get_filtered_command_names(app);
             move_down(&mut app.ui.command_popup_selected, filtered.len());
             PopupResult::Handled
         }
         KeyCode::Tab | KeyCode::Enter => {
+            filtered = get_filtered_command_names(app);
             if !filtered.is_empty() {
                 let sel = app.ui.command_popup_selected.min(filtered.len() - 1);
                 let entry = filtered[sel].clone();
