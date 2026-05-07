@@ -152,7 +152,7 @@ function PlatformCodeBlock({
   const handlePlatformChange = useCallback((p: Platform) => setPlatform(p), [])
 
   return (
-    <div key={blockKey} className="my-4 rounded-xl overflow-hidden shadow-lg shadow-stone-900/8 border border-stone-200">
+    <div key={blockKey} className="my-4 rounded-lg overflow-hidden border border-stone-200">
       {/* Tab bar */}
       <div className="flex items-center gap-1 px-4 py-2 border-b bg-[#f5f4f0] border-stone-200">
         <button
