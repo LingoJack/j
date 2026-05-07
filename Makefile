@@ -183,19 +183,23 @@ bump-version: ## 递增版本号（最后一位 patch）
 	fi; \
 	echo "☑️ 版本号已更新为 $$new_version"
 
-publish: ## 发布到 crates.io（自动递增版本号，AI 生成 Release Note）
+publish: ## 发布到 crates.io（make publish NOTE="release notes" 或自动 AI 生成）
 	@echo "📦 开始发布流程..."
 	@$(MAKE) bump-version
 	@$(MAKE) release
 	@git add .
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
-	last_tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
-	if [ -n "$$last_tag" ]; then \
-		log=$$(git log --oneline "$$last_tag"..HEAD); \
+	if [ -n "$(NOTE)" ]; then \
+		release_note="$(NOTE)"; \
 	else \
-		log=$$(git log --oneline -20); \
+		last_tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
+		if [ -n "$$last_tag" ]; then \
+			log=$$(git log --oneline "$$last_tag"..HEAD); \
+		else \
+			log=$$(git log --oneline -20); \
+		fi; \
+		release_note=$$(timeout 60 j ai --bypass -- "根据以下 git log 生成版本 v$$version 的中文发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。请用 <result>...</result> 包裹你的输出。Git Log: $$log" 2>/dev/null | $(J_AI_EXTRACT) || echo "Release v$$version"); \
 	fi; \
-	release_note=$$(timeout 60 j ai --bypass -- "根据以下 git log 生成版本 v$$version 的中文发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。请用 <result>...</result> 包裹你的输出。Git Log: $$log" 2>/dev/null | $(J_AI_EXTRACT) || echo "Release v$$version"); \
 	git commit -m "chore: bump version to v$$version"; \
 	git tag -a "v$$version" -m "$$release_note"; \
 	git push origin $(GIT_BRANCH); \
