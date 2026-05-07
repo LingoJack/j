@@ -152,36 +152,28 @@ function PlatformCodeBlock({
   const handlePlatformChange = useCallback((p: Platform) => setPlatform(p), [])
 
   return (
-    <div key={blockKey} className="my-4 rounded-lg overflow-hidden border border-stone-200">
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b bg-[#f5f4f0] border-stone-200">
+    <div key={blockKey} className="my-4">
+      {/* Platform tabs */}
+      <div className="flex gap-2 mb-3">
         <button
           onClick={() => handlePlatformChange('unix')}
-          className={`
-            flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all
-            ${platform === 'unix'
-              ? 'bg-white text-stone-800 shadow-sm'
-              : 'text-stone-500 hover:text-stone-700'
-            }
-          `}
+          className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+            platform === 'unix'
+              ? 'bg-stone-900 text-white'
+              : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+          }`}
         >
-          <span>{'\u2318'}</span>
-          <span className="hidden sm:inline">macOS / Linux</span>
-          <span className="sm:hidden">Mac</span>
+          macOS / Linux
         </button>
         <button
           onClick={() => handlePlatformChange('windows')}
-          className={`
-            flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all
-            ${platform === 'windows'
-              ? 'bg-white text-stone-800 shadow-sm'
-              : 'text-stone-500 hover:text-stone-700'
-            }
-          `}
+          className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+            platform === 'windows'
+              ? 'bg-stone-900 text-white'
+              : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+          }`}
         >
-          <span>{'\u229E'}</span>
-          <span className="hidden sm:inline">Windows</span>
-          <span className="sm:hidden">Win</span>
+          Windows
         </button>
       </div>
 
@@ -192,10 +184,10 @@ function PlatformCodeBlock({
           style={oneLight}
           customStyle={{
             margin: 0,
-            borderRadius: 0,
+            borderRadius: '0.5rem',
             fontSize: '0.875rem',
             backgroundColor: '#faf9f6',
-            border: 'none',
+            border: '1px solid #e7e5e4',
           }}
           codeTagProps={{
             style: {
