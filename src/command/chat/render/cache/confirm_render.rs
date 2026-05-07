@@ -551,8 +551,9 @@ pub(crate) fn render_tool_confirm_content(
             let pointer = if is_selected { "❯" } else { " " };
 
             if i == 3 && app.ui.tool_interact_typing {
-                // 前缀 " ❯ type: " 的显示宽度
-                let prefix = " ❯ type: ";
+                // 输入模式：显示带光标的输入框
+                // 前缀 "❯ ✏ " 的显示宽度（与普通选项前缀 "❯ " 对齐，✏ 替代 type:）
+                let prefix = "❯ ✏ ";
                 let prefix_w = display_width(prefix);
                 // 续行缩进宽度（与前缀对齐）
                 let indent_w = prefix_w;
@@ -643,8 +644,53 @@ pub(crate) fn render_tool_confirm_content(
                         ));
                     }
                 }
+            } else if i == 3 {
+                // "type something..." 行：非输入状态下显示提示或预览
+                let pointer_str = if is_selected { "❯ " } else { "  " };
+                let pointer_style = if is_selected {
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .bg(confirm_bg)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().bg(confirm_bg)
+                };
+                // 显示已输入内容的预览或提示
+                let input = &app.ui.tool_interact_input;
+                let label_text = if input.is_empty() {
+                    "✏ type something...".to_string()
+                } else {
+                    // 截断过长的预览
+                    let max_preview = 30;
+                    let preview: String = input.chars().take(max_preview).collect();
+                    if input.chars().count() > max_preview {
+                        format!("✏ 已输入: {}...", preview)
+                    } else {
+                        format!("✏ 已输入: {}", preview)
+                    }
+                };
+                let text_style = if is_selected {
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .bg(confirm_bg)
+                        .add_modifier(Modifier::BOLD)
+                } else if input.is_empty() {
+                    Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
+                } else {
+                    // 有输入内容时用稍亮的颜色提示
+                    Style::default().fg(t.tool_confirm_label).bg(confirm_bg)
+                };
+                lines.push(bordered_line(
+                    vec![
+                        Span::styled(pointer_str, pointer_style),
+                        Span::styled(label_text, text_style),
+                    ],
+                    bubble_max_width,
+                    border_color,
+                    confirm_bg,
+                ));
             } else {
-                // 非输入模式的选项行（使用 bordered_line 确保溢出钳制）
+                // 非输入模式的普通选项行（使用 bordered_line 确保溢出钳制）
                 let pointer_style = if is_selected {
                     arrow_style.bg(confirm_bg)
                 } else {

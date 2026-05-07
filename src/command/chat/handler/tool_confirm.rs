@@ -20,6 +20,13 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
                 app.ui.msg_lines_cache = None;
                 return;
             }
+            KeyCode::Up => {
+                // 退回选项列表，保留已输入内容
+                app.ui.tool_interact_typing = false;
+                app.ui.tool_interact_selected = 2;
+                app.ui.msg_lines_cache = None;
+                return;
+            }
             KeyCode::Enter => {
                 let input_text = app.ui.tool_interact_input.trim().to_string();
                 app.update(Action::RejectPendingToolWithReason(input_text));
@@ -29,7 +36,16 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
                 app.ui.msg_lines_cache = None;
                 return;
             }
-            KeyCode::Backspace => Action::ToolInteractDeleteChar,
+            KeyCode::Backspace => {
+                if app.ui.tool_interact_cursor == 0 {
+                    // 光标在行首按 Backspace：退回选项列表
+                    app.ui.tool_interact_typing = false;
+                    app.ui.tool_interact_selected = 2;
+                    app.ui.msg_lines_cache = None;
+                    return;
+                }
+                Action::ToolInteractDeleteChar
+            }
             KeyCode::Left => {
                 if app.ui.tool_interact_cursor > 0 {
                     app.ui.tool_interact_cursor -= 1;
@@ -57,17 +73,45 @@ pub fn handle_tool_confirm_mode(app: &mut ChatApp, key: KeyEvent) {
     }
 
     // 工具确认选项模式
-    let action = match key.code {
-        KeyCode::Up => Action::ToolInteractNavigate(CursorDirection::Up),
-        KeyCode::Down => Action::ToolInteractNavigate(CursorDirection::Down),
-        KeyCode::Enter => Action::ToolInteractConfirm,
-        KeyCode::Esc => Action::RejectPendingTool,
+    match key.code {
+        KeyCode::Up => {
+            // 输入模式下按 Up：退回选项列表
+            if app.ui.tool_interact_selected == 3 {
+                app.ui.tool_interact_selected = 2;
+                app.ui.msg_lines_cache = None;
+                return;
+            }
+            app.update(Action::ToolInteractNavigate(CursorDirection::Up));
+        }
+        KeyCode::Down => {
+            app.update(Action::ToolInteractNavigate(CursorDirection::Down));
+        }
+        KeyCode::Enter => {
+            if app.ui.tool_interact_selected == 3 {
+                // "type something..." 选项：直接进入输入模式
+                app.ui.tool_interact_typing = true;
+                app.ui.tool_interact_input.clear();
+                app.ui.tool_interact_cursor = 0;
+            } else {
+                app.update(Action::ToolInteractConfirm);
+            }
+        }
+        KeyCode::Esc => {
+            app.update(Action::RejectPendingTool);
+        }
+        KeyCode::Char(c) => {
+            // 无论光标在哪个选项上，直接输入字符时自动跳到输入行并开始输入
+            app.ui.tool_interact_selected = 3;
+            app.ui.tool_interact_typing = true;
+            app.ui.tool_interact_input.clear();
+            app.ui.tool_interact_cursor = 0;
+            app.update(Action::ToolInteractInputChar(c));
+        }
         _ => {
             app.ui.msg_lines_cache = None;
             return;
         }
     };
-    app.update(action);
     app.ui.msg_lines_cache = None;
 }
 

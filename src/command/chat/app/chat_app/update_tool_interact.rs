@@ -194,6 +194,7 @@ impl ChatApp {
     // ========== 工具交互区 ==========
 
     pub(super) fn update_tool_interact_navigate(&mut self, dir: CursorDirection) {
+        let prev = self.ui.tool_interact_selected;
         match dir {
             CursorDirection::Up => {
                 if self.ui.tool_interact_selected > 0 {
@@ -204,6 +205,17 @@ impl ChatApp {
                 if self.ui.tool_interact_selected < TOOL_INTERACT_MAX_OPTIONS {
                     self.ui.tool_interact_selected += 1;
                 }
+            }
+        }
+        let cur = self.ui.tool_interact_selected;
+        if cur != prev {
+            if cur == 3 {
+                // 进入 "type something..." 行：自动切换到输入模式
+                self.ui.tool_interact_typing = true;
+                self.ui.tool_interact_cursor = self.ui.tool_interact_input.chars().count();
+            } else {
+                // 离开输入行：退出输入模式，保留已输入内容
+                self.ui.tool_interact_typing = false;
             }
         }
     }

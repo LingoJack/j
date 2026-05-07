@@ -151,4 +151,5 @@ allow:
 - Bash(cat -A:*)
 - Bash(cat -e:*)
 - Bash(xxd /Users/lingojack/dev_custom/j/src/command/chat/oneshot.rs:*)
+- Bash(git branch:*)
 deny: []
