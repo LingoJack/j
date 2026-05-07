@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-DpfVOBYi.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-tuPIJiZ8.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -6,9 +6,16 @@ import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}f
       `,children:(0,d.jsx)(`nav`,{className:`p-4`,children:Object.entries(e).map(([e,r],a,o)=>(0,d.jsxs)(`div`,{className:`mb-6 ${a<o.length-1?`pb-6 border-b border-stone-200/50`:``}`,children:[(0,d.jsxs)(`h3`,{className:`flex items-center gap-2 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3 px-3`,children:[(0,d.jsx)(`span`,{className:`w-1 h-4 bg-stone-300 rounded-full flex-shrink-0`}),r.title]}),(0,d.jsx)(`ul`,{className:`space-y-0.5`,children:Object.entries(r.children).map(([e,r])=>(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>{n(e),i()},className:`
                         relative w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-200
                         ${t===e?`text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-stone-900 before:rounded-full`:`text-stone-500 hover:text-stone-700 hover:bg-stone-50`}
-                      `,children:r})},e))})]},e))})})]})}var p={bash:`bash`,shell:`bash`,sh:`bash`,zsh:`bash`,typescript:`typescript`,ts:`typescript`,javascript:`javascript`,js:`javascript`,python:`python`,py:`python`,rust:`rust`,rs:`rust`,go:`go`,golang:`go`,java:`java`,c:`c`,cpp:`cpp`,"c++":`cpp`,csharp:`csharp`,"c#":`csharp`,ruby:`ruby`,rb:`ruby`,sql:`sql`,json:`json`,yaml:`yaml`,yml:`yaml`,toml:`toml`,markdown:`markdown`,md:`markdown`,html:`html`,css:`css`,scss:`scss`};function m(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function h(e,t){let n=[],r=e,i=0;for(;r.length>0;){let e=r.match(/`([^`]+)`/),a=r.match(/\*\*([^*]+)\*\*/),o=r.match(/\*([^*]+)\*/),s=r.match(/~~([^~]+)~~/),c=[];if(e&&e.index!==void 0&&c.push({type:`code`,match:e,index:e.index}),a&&a.index!==void 0&&c.push({type:`bold`,match:a,index:a.index}),o&&o.index!==void 0&&c.push({type:`italic`,match:o,index:o.index}),s&&s.index!==void 0&&c.push({type:`strike`,match:s,index:s.index}),c.length===0){n.push((0,d.jsx)(`span`,{children:r},`${t}-txt-${i++}`));break}c.sort((e,t)=>e.index-t.index);let l=c[0],u=r.slice(0,l.index);u&&n.push((0,d.jsx)(`span`,{children:u},`${t}-txt-${i++}`)),l.type===`code`?n.push((0,d.jsx)(`code`,{className:`bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono`,children:l.match[1]},`${t}-code-${i++}`)):l.type===`bold`?n.push((0,d.jsx)(`strong`,{className:`font-medium text-stone-900`,children:l.match[1]},`${t}-bold-${i++}`)):l.type===`italic`?n.push((0,d.jsx)(`em`,{className:`italic`,children:l.match[1]},`${t}-italic-${i++}`)):l.type===`strike`&&n.push((0,d.jsx)(`del`,{className:`line-through text-stone-400`,children:l.match[1]},`${t}-strike-${i++}`)),r=r.slice(l.index+l.match[0].length)}return n.length>0?n:e}function g({content:e}){return(0,d.jsx)(d.Fragment,{children:(0,u.useMemo)(()=>{let t=e.split(`
-`),n=[],r=!1,i=``,a=``,l=!1,u=[],f=0,g=new Set,_=()=>{if(u.length>0){let e=Math.max(...u.map(e=>e.length)),t=`table-${f++}`;n.push((0,d.jsx)(`div`,{className:`overflow-x-auto my-4`,children:(0,d.jsxs)(`table`,{className:`min-w-full border-collapse`,children:[(0,d.jsx)(`thead`,{children:(0,d.jsx)(`tr`,{children:u[0]?.map((e,n)=>(0,d.jsx)(`th`,{className:`border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium`,children:h(e,`${t}-h${n}`)},`th-${n}`))})}),(0,d.jsx)(`tbody`,{children:u.slice(1).map((n,r)=>(0,d.jsx)(`tr`,{children:Array.from({length:e}).map((e,i)=>(0,d.jsx)(`td`,{className:`border border-stone-200 px-4 py-2 text-sm`,children:h(n[i]||``,`${t}-r${r}c${i}`)},`td-${i}`))},`tr-${r}`))})]})},t)),u=[]}};return t.forEach(e=>{let t=`line-${f++}`;if(e.startsWith("```")){if(!r)_(),r=!0,a=e.slice(3).trim()||`text`,i=``;else{r=!1;let e=p[a.toLowerCase()]||a||`text`;n.push((0,d.jsxs)(`div`,{className:`relative group my-4`,children:[(0,d.jsx)(o,{language:e,style:s,customStyle:{margin:0,borderRadius:`0.5rem`,fontSize:`0.875rem`,backgroundColor:`#faf9f6`,border:`1px solid #e7e5e4`},codeTagProps:{style:{fontFamily:`ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace`}},children:i}),(0,d.jsx)(c,{text:i})]},`code-${f++}`))}return}if(r){i+=(i?`
-`:``)+e;return}if(e.startsWith(`|`)){l||(l=!0,u=[]);let t=e.split(`|`).slice(1,-1).map(e=>e.trim());e.includes(`---`)||u.push(t);return}else l&&(l=!1,_());if(e.startsWith(`> `)){n.push((0,d.jsx)(`blockquote`,{className:`border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic`,children:h(e.slice(2),`${t}-q`)},t));return}if(e.startsWith(`## `)){let r=e.slice(3).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h2`,{id:i,className:`text-2xl font-light text-stone-900 mt-12 mb-5`,children:h(r,`${t}-h2`)},t));return}if(e.startsWith(`### `)){let r=e.slice(4).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h3`,{id:i,className:`text-lg font-medium text-stone-900 mt-8 mb-4`,children:h(r,`${t}-h3`)},t));return}if(e.startsWith(`#### `)){let r=e.slice(5).trim(),i=m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),a=1;for(;g.has(i);)i=`${m(r.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${a}`,a++;g.add(i),n.push((0,d.jsx)(`h4`,{id:i,className:`text-base font-semibold text-stone-800 mt-6 mb-3`,children:h(r,`${t}-h4`)},t));return}if(e.startsWith(`- `)||e.startsWith(`* `)){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-disc`,children:h(e.slice(2),`${t}-li`)},t));return}let v=e.match(/^(\d+)\.\s/);if(v){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-decimal`,children:h(e.slice(v[0].length),`${t}-nli`)},t));return}e.trim()&&n.push((0,d.jsx)(`p`,{className:`text-stone-600 text-sm leading-relaxed mb-3`,children:h(e,`${t}-p`)},t))}),l&&_(),n},[e])})}var _=e({default:()=>v}),v=`## Overview
+                      `,children:r})},e))})]},e))})})]})}var p={bash:`bash`,shell:`bash`,sh:`bash`,zsh:`bash`,powershell:`powershell`,ps1:`powershell`,typescript:`typescript`,ts:`typescript`,javascript:`javascript`,js:`javascript`,python:`python`,py:`python`,rust:`rust`,rs:`rust`,go:`go`,golang:`go`,java:`java`,c:`c`,cpp:`cpp`,"c++":`cpp`,csharp:`csharp`,"c#":`csharp`,ruby:`ruby`,rb:`ruby`,sql:`sql`,json:`json`,yaml:`yaml`,yml:`yaml`,toml:`toml`,markdown:`markdown`,md:`markdown`,html:`html`,css:`css`,scss:`scss`};function m(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function h(e,t){let n=[],r=e,i=0;for(;r.length>0;){let e=r.match(/`([^`]+)`/),a=r.match(/\*\*([^*]+)\*\*/),o=r.match(/\*([^*]+)\*/),s=r.match(/~~([^~]+)~~/),c=[];if(e&&e.index!==void 0&&c.push({type:`code`,match:e,index:e.index}),a&&a.index!==void 0&&c.push({type:`bold`,match:a,index:a.index}),o&&o.index!==void 0&&c.push({type:`italic`,match:o,index:o.index}),s&&s.index!==void 0&&c.push({type:`strike`,match:s,index:s.index}),c.length===0){n.push((0,d.jsx)(`span`,{children:r},`${t}-txt-${i++}`));break}c.sort((e,t)=>e.index-t.index);let l=c[0],u=r.slice(0,l.index);u&&n.push((0,d.jsx)(`span`,{children:u},`${t}-txt-${i++}`)),l.type===`code`?n.push((0,d.jsx)(`code`,{className:`bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded text-xs font-mono`,children:l.match[1]},`${t}-code-${i++}`)):l.type===`bold`?n.push((0,d.jsx)(`strong`,{className:`font-medium text-stone-900`,children:l.match[1]},`${t}-bold-${i++}`)):l.type===`italic`?n.push((0,d.jsx)(`em`,{className:`italic`,children:l.match[1]},`${t}-italic-${i++}`)):l.type===`strike`&&n.push((0,d.jsx)(`del`,{className:`line-through text-stone-400`,children:l.match[1]},`${t}-strike-${i++}`)),r=r.slice(l.index+l.match[0].length)}return n.length>0?n:e}function g({unixCode:e,windowsCode:t,blockKey:n}){let[r,i]=(0,u.useState)(`unix`),a=r===`unix`?e:t,l=p[a.lang.toLowerCase()]||a.lang||`text`,f=(0,u.useCallback)(e=>i(e),[]);return(0,d.jsxs)(`div`,{className:`my-4 rounded-xl overflow-hidden shadow-lg shadow-stone-900/8 border border-stone-200`,children:[(0,d.jsxs)(`div`,{className:`flex items-center px-4 py-2 bg-[#e8e6e1]`,children:[(0,d.jsxs)(`div`,{className:`flex gap-2 mr-4`,children:[(0,d.jsx)(`span`,{className:`w-3 h-3 rounded-full bg-[#ff5f57]`}),(0,d.jsx)(`span`,{className:`w-3 h-3 rounded-full bg-[#febc2e]`}),(0,d.jsx)(`span`,{className:`w-3 h-3 rounded-full bg-[#28c840]`})]}),(0,d.jsx)(`span`,{className:`text-xs font-medium text-stone-500`,children:`Terminal`})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-1 px-4 py-2 border-b bg-[#f5f4f0] border-stone-200`,children:[(0,d.jsxs)(`button`,{onClick:()=>f(`unix`),className:`
+            flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all
+            ${r===`unix`?`bg-white text-stone-800 shadow-sm`:`text-stone-500 hover:text-stone-700`}
+          `,children:[(0,d.jsx)(`span`,{children:`⌘`}),(0,d.jsx)(`span`,{className:`hidden sm:inline`,children:`macOS / Linux`}),(0,d.jsx)(`span`,{className:`sm:hidden`,children:`Mac`})]}),(0,d.jsxs)(`button`,{onClick:()=>f(`windows`),className:`
+            flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all
+            ${r===`windows`?`bg-white text-stone-800 shadow-sm`:`text-stone-500 hover:text-stone-700`}
+          `,children:[(0,d.jsx)(`span`,{children:`⊞`}),(0,d.jsx)(`span`,{className:`hidden sm:inline`,children:`Windows`}),(0,d.jsx)(`span`,{className:`sm:hidden`,children:`Win`})]})]}),(0,d.jsxs)(`div`,{className:`relative group`,children:[(0,d.jsx)(o,{language:l,style:s,customStyle:{margin:0,borderRadius:0,fontSize:`0.875rem`,backgroundColor:`#faf9f6`,border:`none`},codeTagProps:{style:{fontFamily:`ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace`}},children:a.content}),(0,d.jsx)(c,{text:a.content})]})]},n)}var _=/^###\s+(macOS\s*\/\s*Linux|macOS|Linux)\s*$/,v=/^###\s+Windows\s*$/;function ee(e){let t=[],n=0,r=[],i=()=>{r.length>0&&(t.push({type:`raw`,lines:r}),r=[])};for(;n<e.length;){if(_.test(e[n])){let r=y(e,n+1);if(r){let a=r.endIdx+1;for(;a<e.length&&e[a].trim()===``;)a++;if(a<e.length&&v.test(e[a])){let o=y(e,a+1);if(o){i(),t.push({type:`platform-pair`,unixCode:{lang:r.lang,content:r.content},windowsCode:{lang:o.lang,content:o.content}}),n=o.endIdx+1;continue}}}}r.push(e[n]),n++}return i(),t}function y(e,t){let n=t;for(;n<e.length&&e[n].trim()===``;)n++;if(n>=e.length||!e[n].startsWith("```"))return null;let r=e[n].slice(3).trim()||`text`,i=``;for(n++;n<e.length&&!e[n].startsWith("```");)i+=(i?`
+`:``)+e[n],n++;return n>=e.length?null:{lang:r,content:i,endIdx:n}}function te({content:e}){return(0,d.jsx)(d.Fragment,{children:(0,u.useMemo)(()=>{let t=ee(e.split(`
+`)),n=[],r=0,i=new Set,a=e=>{if(e.length>0){let t=Math.max(...e.map(e=>e.length)),i=`table-${r++}`;n.push((0,d.jsx)(`div`,{className:`overflow-x-auto my-4`,children:(0,d.jsxs)(`table`,{className:`min-w-full border-collapse`,children:[(0,d.jsx)(`thead`,{children:(0,d.jsx)(`tr`,{children:e[0]?.map((e,t)=>(0,d.jsx)(`th`,{className:`border border-stone-200 px-4 py-2 text-left bg-stone-50 text-sm font-medium`,children:h(e,`${i}-h${t}`)},`th-${t}`))})}),(0,d.jsx)(`tbody`,{children:e.slice(1).map((e,n)=>(0,d.jsx)(`tr`,{children:Array.from({length:t}).map((t,r)=>(0,d.jsx)(`td`,{className:`border border-stone-200 px-4 py-2 text-sm`,children:h(e[r]||``,`${i}-r${n}c${r}`)},`td-${r}`))},`tr-${n}`))})]})},i))}};function l(e){let t=!1,l=``,u=``,f=!1,g=[],_=()=>{f&&(f=!1,a(g),g=[])};e.forEach(e=>{let a=`line-${r++}`;if(e.startsWith("```")){if(!t)_(),t=!0,u=e.slice(3).trim()||`text`,l=``;else{t=!1;let e=p[u.toLowerCase()]||u||`text`;n.push((0,d.jsxs)(`div`,{className:`relative group my-4`,children:[(0,d.jsx)(o,{language:e,style:s,customStyle:{margin:0,borderRadius:`0.5rem`,fontSize:`0.875rem`,backgroundColor:`#faf9f6`,border:`1px solid #e7e5e4`},codeTagProps:{style:{fontFamily:`ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace`}},children:l}),(0,d.jsx)(c,{text:l})]},`code-${r++}`))}return}if(t){l+=(l?`
+`:``)+e;return}if(e.startsWith(`|`)){f||(f=!0,g=[]);let t=e.split(`|`).slice(1,-1).map(e=>e.trim());e.includes(`---`)||g.push(t);return}else f&&_();if(e.startsWith(`> `)){n.push((0,d.jsx)(`blockquote`,{className:`border-l-4 border-stone-300 pl-4 py-1 my-3 text-stone-600 text-sm italic`,children:h(e.slice(2),`${a}-q`)},a));return}if(e.startsWith(`## `)){let t=e.slice(3).trim(),r=m(t.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),o=1;for(;i.has(r);)r=`${m(t.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${o}`,o++;i.add(r),n.push((0,d.jsx)(`h2`,{id:r,className:`text-2xl font-light text-stone-900 mt-12 mb-5`,children:h(t,`${a}-h2`)},a));return}if(e.startsWith(`### `)){let t=e.slice(4).trim(),r=m(t.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),o=1;for(;i.has(r);)r=`${m(t.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${o}`,o++;i.add(r),n.push((0,d.jsx)(`h3`,{id:r,className:`text-lg font-medium text-stone-900 mt-8 mb-4`,children:h(t,`${a}-h3`)},a));return}if(e.startsWith(`#### `)){let t=e.slice(5).trim(),r=m(t.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`)),o=1;for(;i.has(r);)r=`${m(t.replace(/\*\*([^*]+)\*\*/g,`$1`).replace(/`([^`]+)`/g,`$1`))}-${o}`,o++;i.add(r),n.push((0,d.jsx)(`h4`,{id:r,className:`text-base font-semibold text-stone-800 mt-6 mb-3`,children:h(t,`${a}-h4`)},a));return}if(e.startsWith(`- `)||e.startsWith(`* `)){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-disc`,children:h(e.slice(2),`${a}-li`)},a));return}let v=e.match(/^(\d+)\.\s/);if(v){n.push((0,d.jsx)(`li`,{className:`text-stone-600 text-sm ml-4 mb-1 list-decimal`,children:h(e.slice(v[0].length),`${a}-nli`)},a));return}e.trim()&&n.push((0,d.jsx)(`p`,{className:`text-stone-600 text-sm leading-relaxed mb-3`,children:h(e,`${a}-p`)},a))}),f&&_()}for(let e of t)if(e.type===`platform-pair`){let t=`platform-${r++}`;n.push((0,d.jsx)(g,{blockKey:t,unixCode:e.unixCode,windowsCode:e.windowsCode},t))}else l(e.lines);return n},[e])})}var ne=e({default:()=>re}),re=`## Overview
 
 AI chat system with multi-model support, context references, and autonomous agent execution.
 
@@ -119,7 +126,7 @@ permissions:
 j chat --remote     # Enable remote control (scan QR code with phone)
 j chat --remote --port 9390  # Custom port
 \`\`\`
-`,ee=e({default:()=>te}),te=`## Overview
+`,ie=e({default:()=>ae}),ae=`## Overview
 
 Alias system for creating short aliases to paths and URLs for quick access.
 
@@ -201,7 +208,7 @@ path:
 inner_url:
   gh: https://github.com
 \`\`\`
-`,ne=e({default:()=>re}),re=`## Overview
+`,oe=e({default:()=>b}),b=`## Overview
 
 Browser is a tool in AI chat for web browsing, interaction, and content extraction.
 
@@ -292,7 +299,7 @@ Or override via parameter: \`{ "action": "start", "headless": false }\`
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,ie=e({default:()=>ae}),ae=`## Overview
+`,x=e({default:()=>S}),S=`## Overview
 
 Commands are reusable prompt snippets that help you quickly invoke preset prompts.
 
@@ -389,7 +396,7 @@ Usage:
 ### Managing Commands
 
 Press \`Ctrl+E\` in the TUI to open the configuration panel, switch to the Commands tab to enable or disable commands.
-`,oe=e({default:()=>y}),y=`## Overview
+`,C=e({default:()=>w}),w=`## Overview
 
 All j-cli data is stored in a unified user data directory, with support for custom paths via environment variable.
 
@@ -510,7 +517,7 @@ The data directory structure is consistent across all platforms. You can copy it
 2. Copy to the target platform's corresponding location
 3. Adjust script file extensions (\`.sh\` → \`.cmd\`)
 4. Update paths in alias.yaml to the target platform's format
-`,b=e({default:()=>x}),x=`## Overview
+`,T=e({default:()=>E}),E=`## Overview
 
 The Hook system allows custom scripts to execute automatically at specific points during the AI chat lifecycle.
 
@@ -638,7 +645,7 @@ type AGENT.md 2>NUL
 - Command output is injected as a system message into the chat context
 - Avoid long-running operations in hooks
 - Do not output sensitive information through hooks
-`,S=e({default:()=>C}),C=`## One-click Install (Recommended)
+`,D=e({default:()=>O}),O=`## One-click Install (Recommended)
 
 ### macOS / Linux
 
@@ -745,7 +752,7 @@ Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
 | Install Location | \`/usr/local/bin/j\` | \`%LOCALAPPDATA%\\j-cli\\j.exe\` |
 | Computer Use | Supported | Not supported |
 | j-indicator | Menu bar indicator | Not supported |
-`,w=e({default:()=>T}),T=`## Overview
+`,k=e({default:()=>A}),A=`## Overview
 
 The built-in Markdown editor is a Typora-like terminal editor with line-level rendering toggle and full Vim mode support.
 
@@ -886,7 +893,7 @@ Auto-aligned column widths, rendered as a formatted table:
 - Code snippet editing
 
 The editor returns the edited content on save, and returns empty on cancel.
-`,E=e({default:()=>D}),D=`## Permission Configuration File
+`,j=e({default:()=>M}),M=`## Permission Configuration File
 
 Permissions are configured in \`.jcli/permissions.yaml\` in your project directory:
 
@@ -997,7 +1004,7 @@ allow:
   - "WebFetch(domain:github.com)"
   - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # Regex match all google subdomains
 \`\`\`
-`,O=e({default:()=>k}),k=`## Register App Aliases
+`,N=e({default:()=>P}),P=`## Register App Aliases
 
 ### macOS / Linux
 
@@ -1071,7 +1078,7 @@ j chat Hello              # Quick question
 
 \`\`\`bash
 j                         # Enter interactive mode with Tab completion
-\`\`\``,A=e({default:()=>j}),j=`## Overview
+\`\`\``,F=e({default:()=>I}),I=`## Overview
 
 Control AI chat from mobile devices via WebSocket, started with \`j chat --remote\`.
 
@@ -1093,7 +1100,7 @@ A QR code will be displayed for phone scanning.
 ## Client
 
 - **Web**: Scan QR code to connect
-`,M=e({default:()=>N}),N=`## Overview
+`,L=e({default:()=>R}),R=`## Overview
 
 Daily/weekly report system with quick logging, week management, and Git sync.
 
@@ -1161,7 +1168,7 @@ Report settings are stored in two locations:
 When current date exceeds \`last_day\`, writing to report automatically:
 1. Generates new week title \`# WeekN[start_date - end_date]\`
 2. Updates week_num and last_day
-`,P=e({default:()=>F}),F=`## Overview
+`,z=e({default:()=>B}),B=`## Overview
 
 Script system for creating and managing executable scripts via \`concat\` command.
 
@@ -1286,7 +1293,7 @@ start "" "%J_VSCODE%" .\\src
 "%J_NOTEPAD%" readme.txt
 \`\`\`
 
-> Paths with spaces must be wrapped in double quotes: \`"$J_CHROME"\` / \`"%J_VSCODE%"\``,I=e({default:()=>L}),L=`## Overview
+> Paths with spaces must be wrapped in double quotes: \`"$J_CHROME"\` / \`"%J_VSCODE%"\``,V=e({default:()=>H}),H=`## Overview
 
 Skills are specialized prompt modules that extend AI capabilities, loaded via the \`LoadSkill\` tool.
 
@@ -1358,7 +1365,7 @@ Disable specific skills via the TUI configuration interface. Settings are saved 
   "disabled_skills": ["skill-name-1", "skill-name-2"]
 }
 \`\`\`
-`,R=e({default:()=>z}),z=`## Overview
+`,U=e({default:()=>W}),W=`## Overview
 
 Todo management system with status transitions and TUI interface.
 
@@ -1408,7 +1415,7 @@ Todo data is stored in the data directory:
 |----------|------|
 | macOS / Linux | \`~/.jdata/report/todo.json\` |
 | Windows | \`%USERPROFILE%\\.jdata\\report\\todo.json\` |
-`,B=e({default:()=>V}),V=`## File Tools
+`,G=e({default:()=>K}),K=`## File Tools
 
 ### Read
 
@@ -1875,7 +1882,7 @@ permissions:
 |------|------|
 | \`@file:path\` | Include file content (auto-read and inject into context) |
 | \`@skill:name\` | Load and activate specified skill |
-`,H=e({default:()=>U}),U=`## 概述
+`,q=e({default:()=>se}),se=`## 概述
 
 AI 对话系统，支持多模型、上下文引用和 Agent 自主执行。
 
@@ -1986,7 +1993,7 @@ permissions:
 j chat --remote     # 启用远程控制（手机扫码）
 j chat --remote --port 9390  # 指定端口
 \`\`\`
-`,W=e({default:()=>G}),G=`## 概述
+`,ce=e({default:()=>le}),le=`## 概述
 
 别名系统，为路径和网址创建简短别名以便快速访问。
 
@@ -2068,7 +2075,7 @@ path:
 inner_url:
   gh: https://github.com
 \`\`\`
-`,K=e({default:()=>q}),q=`## 概述
+`,ue=e({default:()=>de}),de=`## 概述
 
 Browser 是 AI 对话中的工具，支持网页浏览、交互和内容提取。
 
@@ -2159,7 +2166,7 @@ settings:
 \`\`\`bash
 cargo build --features browser_cdp
 \`\`\`
-`,se=e({default:()=>ce}),ce=`## 概述
+`,fe=e({default:()=>pe}),pe=`## 概述
 
 Commands 是可复用的提示词片段，帮助快速调用预设的提示词。
 
@@ -2256,7 +2263,7 @@ description: 进入 PLAN 模式
 ### 管理命令
 
 在 TUI 中按 \`Ctrl+E\` 打开配置界面，切换到 Commands 标签页，可以启用或禁用命令。
-`,le=e({default:()=>ue}),ue=`## 概述
+`,me=e({default:()=>he}),he=`## 概述
 
 j-cli 的所有数据存储在统一的用户数据目录中，支持通过环境变量自定义路径。
 
@@ -2377,7 +2384,7 @@ Copy-Item "$env:USERPROFILE\\.jdata.backup" "$env:USERPROFILE\\.jdata" -Recurse
 2. 复制到目标平台对应位置
 3. 调整脚本文件扩展名（\`.sh\` → \`.cmd\`）
 4. 更新 alias.yaml 中的路径格式
-`,de=e({default:()=>fe}),fe=`## 概述
+`,ge=e({default:()=>_e}),_e=`## 概述
 
 Hook 系统允许在 AI 对话生命周期的特定节点自动执行自定义脚本。
 
@@ -2505,7 +2512,7 @@ type AGENT.md 2>NUL
 - 命令输出会作为系统消息注入到对话上下文中
 - 避免在 hook 中执行耗时操作
 - 敏感信息不要通过 hook 输出
-`,pe=e({default:()=>me}),me=`## 一键安装（推荐）
+`,ve=e({default:()=>ye}),ye=`## 一键安装（推荐）
 
 ### macOS / Linux
 
@@ -2612,7 +2619,7 @@ Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
 | 安装位置 | \`/usr/local/bin/j\` | \`%LOCALAPPDATA%\\j-cli\\j.exe\` |
 | Computer Use | 支持 | 不支持 |
 | j-indicator | 菜单栏指示灯 | 不支持 |
-`,he=e({default:()=>ge}),ge=`## 概述
+`,be=e({default:()=>xe}),xe=`## 概述
 
 内置 Markdown 编辑器是一个类 Typora 的终端编辑器，支持行级渲染切换和完整 Vim 模式。
 
@@ -2753,7 +2760,7 @@ Remove-Item "$env:USERPROFILE\\.jdata" -Recurse -Force
 - 代码片段编辑
 
 编辑器会在保存时返回编辑后的内容，取消时返回空。
-`,_e=e({default:()=>ve}),ve=`## 权限配置文件
+`,Se=e({default:()=>Ce}),Ce=`## 权限配置文件
 
 权限配置位于项目目录 \`.jcli/permissions.yaml\`：
 
@@ -2864,7 +2871,7 @@ allow:
   - "WebFetch(domain:github.com)"
   - "WebFetch(domain:/.*\\\\.google\\\\.com$/)"  # 正则匹配所有 google 子域名
 \`\`\`
-`,ye=e({default:()=>be}),be=`## 注册应用别名
+`,we=e({default:()=>Te}),Te=`## 注册应用别名
 
 ### macOS / Linux
 
@@ -2938,7 +2945,7 @@ j chat 你好               # 快速提问
 
 \`\`\`bash
 j                         # 进入交互模式，支持 Tab 补全
-\`\`\``,xe=e({default:()=>Se}),Se=`## 概述
+\`\`\``,Ee=e({default:()=>De}),De=`## 概述
 
 通过 WebSocket 从移动设备控制 AI 对话，使用 \`j chat --remote\` 启动。
 
@@ -2960,7 +2967,7 @@ j chat --remote --port 9390  # 指定端口
 ## 客户端
 
 - **Web**：扫描二维码连接
-`,Ce=e({default:()=>we}),we=`## 概述
+`,Oe=e({default:()=>ke}),ke=`## 概述
 
 日报/周报系统，支持快速记录、周报管理和 Git 同步。
 
@@ -3028,7 +3035,7 @@ j reportctl pull
 当当前日期超过 \`last_day\` 时，写入日报会自动：
 1. 生成新周标题 \`# WeekN[开始日期 - 结束日期]\`
 2. 更新 week_num 和 last_day
-`,Te=e({default:()=>Ee}),Ee=`## 概述
+`,Ae=e({default:()=>je}),je=`## 概述
 
 脚本系统，通过 \`concat\` 命令创建和管理可执行脚本。
 
@@ -3154,7 +3161,7 @@ start "" "%J_VSCODE%" .\\src
 \`\`\`
 
 > 路径含空格时，脚本中必须用双引号包裹变量：\`"$J_CHROME"\` / \`"%J_VSCODE%"\`
-`,De=e({default:()=>Oe}),Oe=`## 概述
+`,Me=e({default:()=>Ne}),Ne=`## 概述
 
 Skill 是扩展 AI 能力的专用提示词模块，通过 \`LoadSkill\` 工具加载。
 
@@ -3226,7 +3233,7 @@ AI 通过 \`LoadSkill\` 工具加载 skill：
   "disabled_skills": ["skill-name-1", "skill-name-2"]
 }
 \`\`\`
-`,ke=e({default:()=>Ae}),Ae=`## 概述
+`,Pe=e({default:()=>Fe}),Fe=`## 概述
 
 待办管理系统，支持任务状态流转和 TUI 交互界面。
 
@@ -3276,7 +3283,7 @@ j todo add "完成文档"     # 快速添加待办
 |------|------|
 | macOS / Linux | \`~/.jdata/report/todo.json\` |
 | Windows | \`%USERPROFILE%\\.jdata\\report\\todo.json\` |
-`,je=e({default:()=>Me}),Me=`## 文件工具
+`,Ie=e({default:()=>Le}),Le=`## 文件工具
 
 ### Read
 
@@ -3743,9 +3750,9 @@ permissions:
 |------|------|
 | \`@file:路径\` | 包含文件内容（自动读取并注入上下文） |
 | \`@skill:名称\` | 加载并激活指定 skill |
-`,Ne={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},Pe={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function Fe(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`markdownEditor`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Ie=Object.assign({"./en/aiChat.md":_,"./en/alias.md":ee,"./en/browser.md":ne,"./en/commands.md":ie,"./en/dataDirectory.md":oe,"./en/hooks.md":b,"./en/installation.md":S,"./en/markdown-editor.md":w,"./en/permissions.md":E,"./en/quickStart.md":O,"./en/remote.md":A,"./en/report.md":M,"./en/script.md":P,"./en/skills.md":I,"./en/todo.md":R,"./en/tools.md":B}),Le=Object.assign({"./zh/aiChat.md":H,"./zh/alias.md":W,"./zh/browser.md":K,"./zh/commands.md":se,"./zh/dataDirectory.md":le,"./zh/hooks.md":de,"./zh/installation.md":pe,"./zh/markdown-editor.md":he,"./zh/permissions.md":_e,"./zh/quickStart.md":ye,"./zh/remote.md":xe,"./zh/report.md":Ce,"./zh/script.md":Te,"./zh/skills.md":De,"./zh/todo.md":ke,"./zh/tools.md":je});function Re(){let e={en:{},zh:{}},t=e=>e.replace(/-([a-z])/g,(e,t)=>t.toUpperCase());for(let[n,r]of Object.entries(Ie)){let i=n.match(/\.\/en\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.en[n]=r.default}}for(let[n,r]of Object.entries(Le)){let i=n.match(/\.\/zh\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.zh[n]=r.default}}return e}var Y=Re();function X(e,t){return Y[e]?.[t]||Y.en[t]||``}function ze(e,t){return J[e]?.[t]||J.en[t]||t}var Z={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Be({lang:e,activeSection:t,onNavigate:n}){let r=Fe(),i=J[e],a=Z[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Ve={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function He(e){let t=e.split(`
-`),n=[],r=new Set,i=!1;return t.forEach(e=>{if(e.startsWith("```")){i=!i;return}if(i)return;let t,a;if(e.startsWith(`## `))t=e.slice(3).trim(),a=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),a=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),a=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let o=$(t),s=1;for(;r.has(o);)o=`${$(t)}-${s}`,s++;r.add(o),n.push({id:o,text:t,level:a})}),n}function Ue({content:e,lang:t}){let n=(0,u.useMemo)(()=>He(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Ve[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
+`,Re={en:{gettingStarted:{title:`Getting Started`,children:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`}},coreFeatures:{title:`Core Features`,children:{alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`}},aiFeatures:{title:`AI Features`,children:{aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`Advanced`,children:{browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`}}},zh:{gettingStarted:{title:`快速开始`,children:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`}},coreFeatures:{title:`核心功能`,children:{alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`}},aiFeatures:{title:`AI 功能`,children:{aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`}},advanced:{title:`进阶功能`,children:{browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}}}},ze={en:{back:`← Back to Home`,github:`GitHub`,menu:`Menu`},zh:{back:`← 返回首页`,github:`GitHub`,menu:`菜单`}},J={en:{installation:`Installation`,quickStart:`Quick Start`,dataDirectory:`Data Directory`,alias:`Alias Management`,report:`Daily Reports`,todo:`Todo Management`,script:`Script System`,markdownEditor:`Markdown Editor`,aiChat:`AI Chat`,tools:`AI Tools`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`Browser Automation`,remote:`Remote Control`,permissions:`Permissions`},zh:{installation:`安装`,quickStart:`快速上手`,dataDirectory:`数据目录`,alias:`别名管理`,report:`日报系统`,todo:`待办管理`,script:`脚本系统`,markdownEditor:`Markdown 编辑器`,aiChat:`AI 对话`,tools:`AI 工具`,commands:`Command`,skills:`Skill`,hooks:`Hook`,browser:`浏览器自动化`,remote:`远程控制`,permissions:`权限配置`}};function Be(){return[`installation`,`quickStart`,`dataDirectory`,`alias`,`report`,`todo`,`script`,`markdownEditor`,`aiChat`,`tools`,`commands`,`skills`,`hooks`,`browser`,`remote`,`permissions`]}var Ve=Object.assign({"./en/aiChat.md":ne,"./en/alias.md":ie,"./en/browser.md":oe,"./en/commands.md":x,"./en/dataDirectory.md":C,"./en/hooks.md":T,"./en/installation.md":D,"./en/markdown-editor.md":k,"./en/permissions.md":j,"./en/quickStart.md":N,"./en/remote.md":F,"./en/report.md":L,"./en/script.md":z,"./en/skills.md":V,"./en/todo.md":U,"./en/tools.md":G}),He=Object.assign({"./zh/aiChat.md":q,"./zh/alias.md":ce,"./zh/browser.md":ue,"./zh/commands.md":fe,"./zh/dataDirectory.md":me,"./zh/hooks.md":ge,"./zh/installation.md":ve,"./zh/markdown-editor.md":be,"./zh/permissions.md":Se,"./zh/quickStart.md":we,"./zh/remote.md":Ee,"./zh/report.md":Oe,"./zh/script.md":Ae,"./zh/skills.md":Me,"./zh/todo.md":Pe,"./zh/tools.md":Ie});function Ue(){let e={en:{},zh:{}},t=e=>e.replace(/-([a-z])/g,(e,t)=>t.toUpperCase());for(let[n,r]of Object.entries(Ve)){let i=n.match(/\.\/en\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.en[n]=r.default}}for(let[n,r]of Object.entries(He)){let i=n.match(/\.\/zh\/([\w-]+)\.md$/);if(i&&r?.default){let n=t(i[1]);e.zh[n]=r.default}}return e}var Y=Ue();function X(e,t){return Y[e]?.[t]||Y.en[t]||``}function Z(e,t){return J[e]?.[t]||J.en[t]||t}var We={en:{prev:`Previous`,next:`Next`},zh:{prev:`上一页`,next:`下一页`}};function Ge({lang:e,activeSection:t,onNavigate:n}){let r=Be(),i=J[e],a=We[e],o=r.indexOf(t),s=o>0?r[o-1]:null,c=o<r.length-1?r[o+1]:null;return(0,d.jsxs)(`div`,{className:`flex items-center justify-between py-8 mt-8 border-t border-stone-200`,children:[(0,d.jsx)(`div`,{className:`flex-1`,children:s&&(0,d.jsxs)(`button`,{onClick:()=>n(s),className:`group flex flex-col items-start text-left hover:bg-stone-100 rounded-lg p-3 -ml-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M15 19l-7-7 7-7`})}),a.prev]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[s]})]})}),(0,d.jsx)(`div`,{className:`flex-1 flex justify-end`,children:c&&(0,d.jsxs)(`button`,{onClick:()=>n(c),className:`group flex flex-col items-end text-right hover:bg-stone-100 rounded-lg p-3 -mr-3 transition-colors`,children:[(0,d.jsxs)(`span`,{className:`text-xs text-stone-400 mb-1 flex items-center gap-1`,children:[a.next,(0,d.jsx)(`svg`,{className:`w-4 h-4`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M9 5l7 7-7 7`})})]}),(0,d.jsx)(`span`,{className:`text-sm font-medium text-stone-700 group-hover:text-stone-900 transition-colors`,children:i[c]})]})})]})}var Ke={en:`On This Page`,zh:`本文目录`},Q=70;function $(e){return e.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g,`-`).replace(/^-+|-+$/g,``).slice(0,50)}function qe(e){let t=e.split(`
+`),n=[],r=new Set,i=!1;return t.forEach(e=>{if(e.startsWith("```")){i=!i;return}if(i)return;let t,a;if(e.startsWith(`## `))t=e.slice(3).trim(),a=2;else if(e.startsWith(`### `))t=e.slice(4).trim(),a=3;else if(e.startsWith(`#### `))t=e.slice(5).trim(),a=4;else return;t=t.replace(/\*\*([^*]+)\*\*/g,`$1`),t=t.replace(/\*([^*]+)\*/g,`$1`),t=t.replace(/`([^`]+)`/g,`$1`);let o=$(t),s=1;for(;r.has(o);)o=`${$(t)}-${s}`,s++;r.add(o),n.push({id:o,text:t,level:a})}),n}function Je({content:e,lang:t}){let n=(0,u.useMemo)(()=>qe(e),[e]),[r,i]=(0,u.useState)(null),a=(0,u.useRef)(!1),o=(0,u.useCallback)(e=>{let t=document.getElementById(e);if(!t)return;i(e),a.current=!0;let n=t.offsetTop-Q;window.scrollTo({top:n,behavior:`smooth`}),setTimeout(()=>{a.current=!1},500)},[]);return(0,u.useEffect)(()=>{if(n.length===0)return;let e=()=>{if(a.current)return;let e=window.scrollY+Q+20,t=null;for(let r of n){let n=document.getElementById(r.id);n&&n.offsetTop<=e&&(t=r.id)}t&&t!==r&&i(t)};return e(),window.addEventListener(`scroll`,e,{passive:!0}),()=>window.removeEventListener(`scroll`,e)},[n,r]),n.length===0?null:(0,d.jsxs)(`nav`,{className:`hidden xl:block fixed right-0 top-[65px] w-52 h-[calc(100vh-65px)] border-l border-stone-200/70 bg-[#faf9f6]/95 backdrop-blur-sm`,children:[(0,d.jsx)(`div`,{className:`sticky top-0 px-4 py-3 border-b border-stone-200/50 bg-[#faf9f6]`,children:(0,d.jsx)(`span`,{className:`text-xs font-semibold text-stone-400 uppercase tracking-wider`,children:Ke[t]})}),(0,d.jsx)(`ul`,{className:`py-2 px-1 overflow-y-auto max-h-[calc(100vh-120px)]`,children:n.map(({id:e,text:t,level:n})=>{let i=r===e,a=n===3,s=n===4;return(0,d.jsx)(`li`,{children:(0,d.jsx)(`button`,{onClick:()=>o(e),className:`
                   relative w-full text-left py-1.5 px-3 rounded-lg transition-all duration-200
                   ${s?`pl-8 text-xs`:a?`pl-6 text-xs`:`text-sm mt-1`}
                   ${i?s?`text-stone-700 font-medium bg-stone-50 before:absolute before:left-5 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-400 before:rounded-full`:a?`text-stone-800 font-medium bg-stone-50 before:absolute before:left-3 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-1 before:bg-stone-500 before:rounded-full`:`text-stone-900 font-medium bg-stone-100 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-4 before:bg-stone-900 before:rounded-full`:s?`text-stone-400 hover:text-stone-500 hover:bg-stone-50`:a?`text-stone-400 hover:text-stone-600 hover:bg-stone-50`:`text-stone-500 hover:text-stone-700 hover:bg-stone-50`}
-                `,children:t})},e)})})]})}function We(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=Pe[n],m=Ne[n],h=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline`,children:n===`zh`?`首页`:`Home`}),(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:h,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-64 xl:mr-52 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=X(n,c),t=ze(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(g,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Be,{lang:n,activeSection:c,onNavigate:h})]})}),(0,d.jsx)(Ue,{content:X(n,c)||``,lang:n}),(0,d.jsx)(`footer`,{className:`lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{We as default};
+                `,children:t})},e)})})]})}function Ye(){let[e,t]=i(),[n,r]=(0,u.useState)(`zh`),[o,s]=(0,u.useState)(!1),c=e.get(`section`)||`installation`,p=ze[n],m=Re[n],h=e=>{t({section:e})};return(0,u.useEffect)(()=>{let e=document.getElementById(c);e&&e.scrollIntoView({behavior:`smooth`,block:`start`})},[c]),(0,d.jsxs)(`div`,{className:`min-h-screen bg-[#faf9f6] text-stone-800`,children:[(0,d.jsx)(`nav`,{className:`fixed top-0 left-0 right-0 z-50 bg-[#faf9f6]/95 backdrop-blur-sm border-b border-stone-200/50`,children:(0,d.jsxs)(`div`,{className:`px-4 sm:px-6 py-4 flex items-center justify-between`,children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3`,children:[(0,d.jsx)(`button`,{onClick:()=>s(!o),className:`lg:hidden p-2 -ml-2 text-stone-500 hover:text-stone-900 transition-colors`,children:(0,d.jsx)(`svg`,{className:`w-6 h-6`,fill:`none`,stroke:`currentColor`,viewBox:`0 0 24 24`,strokeWidth:2,children:o?(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M6 18L18 6M6 6l12 12`}):(0,d.jsx)(`path`,{strokeLinecap:`round`,strokeLinejoin:`round`,d:`M4 6h16M4 12h16M4 18h16`})})}),(0,d.jsxs)(a,{to:`/`,className:`flex items-center gap-2`,children:[(0,d.jsx)(`span`,{className:`text-2xl font-bold text-stone-900`,children:`j`}),(0,d.jsx)(`span`,{className:`text-stone-400 text-sm hidden sm:inline`,children:`docs`})]})]}),(0,d.jsxs)(`div`,{className:`flex items-center gap-3 sm:gap-5`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors text-sm hidden sm:inline`,children:n===`zh`?`首页`:`Home`}),(0,d.jsx)(l,{lang:n,onChange:r}),(0,d.jsxs)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors`,children:[(0,d.jsx)(`svg`,{className:`w-5 h-5`,fill:`currentColor`,viewBox:`0 0 24 24`,children:(0,d.jsx)(`path`,{fillRule:`evenodd`,clipRule:`evenodd`,d:`M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85v2.74c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z`})}),(0,d.jsx)(`span`,{className:`text-sm hidden sm:inline`,children:p.github})]})]})]})}),(0,d.jsx)(f,{tree:m,activeSection:c,onNavigate:h,isOpen:o,onClose:()=>s(!1)}),(0,d.jsx)(`main`,{className:`lg:ml-64 xl:mr-52 pt-[65px]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto px-6 pb-16`,children:[(()=>{let e=X(n,c),t=Z(n,c);return e?(0,d.jsxs)(`div`,{id:c,className:`py-8`,children:[(0,d.jsx)(`h1`,{className:`text-3xl font-light text-stone-900 mb-6`,children:t}),(0,d.jsx)(te,{content:e})]},`${n}-${c}`):null})(),(0,d.jsx)(Ge,{lang:n,activeSection:c,onNavigate:h})]})}),(0,d.jsx)(Je,{content:X(n,c)||``,lang:n}),(0,d.jsx)(`footer`,{className:`lg:ml-64 xl:mr-52 border-t border-stone-200 py-8 px-6 bg-[#faf9f6]`,children:(0,d.jsxs)(`div`,{className:`max-w-3xl mx-auto flex items-center justify-between text-sm`,children:[(0,d.jsx)(a,{to:`/`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:p.back}),(0,d.jsxs)(`div`,{className:`flex items-center gap-6`,children:[(0,d.jsx)(`a`,{href:`https://github.com/LingoJack/j`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`GitHub`}),(0,d.jsx)(`a`,{href:`https://crates.io/crates/j-cli`,target:`_blank`,rel:`noopener noreferrer`,className:`text-stone-500 hover:text-stone-900 transition-colors`,children:`crates.io`})]})]})})]})}export{Ye as default};
