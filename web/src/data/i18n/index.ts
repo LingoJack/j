@@ -34,17 +34,27 @@ export const i18n: Record<Language, I18nData> = {
       installation: 'Installation',
       oneLineInstall: 'One-line install (recommended)',
       cratesInstall: 'Or install from crates.io',
-      usageExamples: 'Usage Examples (macOS/Linux)',
-      examples: [
-        { cmd: 'j set chrome "/Applications/Google Chrome.app"', description: 'Register app alias (macOS)' },
-        { cmd: 'j set vscode "C:\\...\\Code.exe"', description: 'Register app alias (Windows)' },
-        { cmd: 'j set github https://github.com', description: 'Register URL alias' },
-        { cmd: 'j chrome', description: 'Open Chrome' },
-        { cmd: 'j chrome "search query"', description: 'Search with Chrome' },
-        { cmd: 'j report "Completed feature"', description: 'Write to daily report' },
-        { cmd: 'j todo add Buy milk', description: 'Quick add todo' },
-        { cmd: 'j chat', description: 'Enter AI chat' }
-      ]
+      usageExamples: 'Usage Examples',
+      examples: {
+        unix: [
+          { cmd: 'j set chrome "/Applications/Google Chrome.app"', description: 'Register app alias' },
+          { cmd: 'j set github https://github.com', description: 'Register URL alias' },
+          { cmd: 'j chrome', description: 'Open Chrome' },
+          { cmd: 'j chrome "search query"', description: 'Search with Chrome' },
+          { cmd: 'j report "Completed feature"', description: 'Write to daily report' },
+          { cmd: 'j todo add Buy milk', description: 'Quick add todo' },
+          { cmd: 'j chat', description: 'Enter AI chat' }
+        ],
+        windows: [
+          { cmd: 'j set chrome "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"', description: 'Register app alias' },
+          { cmd: 'j set github https://github.com', description: 'Register URL alias' },
+          { cmd: 'j chrome', description: 'Open Chrome' },
+          { cmd: 'j chrome "search query"', description: 'Search with Chrome' },
+          { cmd: 'j report "Completed feature"', description: 'Write to daily report' },
+          { cmd: 'j todo add Buy milk', description: 'Quick add todo' },
+          { cmd: 'j chat', description: 'Enter AI chat' }
+        ]
+      }
     },
     more: {
       title: 'And More',
@@ -164,17 +174,27 @@ export const i18n: Record<Language, I18nData> = {
       installation: '安装',
       oneLineInstall: '一键安装（推荐）',
       cratesInstall: '或从 crates.io 安装',
-      usageExamples: '使用示例 (macOS/Linux)',
-      examples: [
-        { cmd: 'j set chrome "/Applications/Google Chrome.app"', description: '注册应用别名 (macOS)' },
-        { cmd: 'j set vscode "C:\\...\\Code.exe"', description: '注册应用别名 (Windows)' },
-        { cmd: 'j set github https://github.com', description: '注册 URL 别名' },
-        { cmd: 'j chrome', description: '打开 Chrome' },
-        { cmd: 'j chrome "搜索内容"', description: '用 Chrome 搜索' },
-        { cmd: 'j report "完成功能开发"', description: '写入日报' },
-        { cmd: 'j todo add 买牛奶', description: '快速添加待办' },
-        { cmd: 'j chat', description: '进入 AI 对话' }
-      ]
+      usageExamples: '使用示例',
+      examples: {
+        unix: [
+          { cmd: 'j set chrome "/Applications/Google Chrome.app"', description: '注册应用别名' },
+          { cmd: 'j set github https://github.com', description: '注册 URL 别名' },
+          { cmd: 'j chrome', description: '打开 Chrome' },
+          { cmd: 'j chrome "搜索内容"', description: '用 Chrome 搜索' },
+          { cmd: 'j report "完成功能开发"', description: '写入日报' },
+          { cmd: 'j todo add 买牛奶', description: '快速添加待办' },
+          { cmd: 'j chat', description: '进入 AI 对话' }
+        ],
+        windows: [
+          { cmd: 'j set chrome "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"', description: '注册应用别名' },
+          { cmd: 'j set github https://github.com', description: '注册 URL 别名' },
+          { cmd: 'j chrome', description: '打开 Chrome' },
+          { cmd: 'j chrome "搜索内容"', description: '用 Chrome 搜索' },
+          { cmd: 'j report "完成功能开发"', description: '写入日报' },
+          { cmd: 'j todo add 买牛奶', description: '快速添加待办' },
+          { cmd: 'j chat', description: '进入 AI 对话' }
+        ]
+      }
     },
     more: {
       title: '更多特性',

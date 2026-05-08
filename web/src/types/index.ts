@@ -61,7 +61,10 @@ export interface I18nData {
     oneLineInstall: string
     cratesInstall: string
     usageExamples: string
-    examples: CommandExample[]
+    examples: {
+      unix: CommandExample[]
+      windows: CommandExample[]
+    }
   }
   more: {
     title: string

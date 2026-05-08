@@ -70,7 +70,7 @@ export function QuickStartSection({ t, installCmd, platform, onPlatformChange }:
             {t.quickStart.usageExamples}
           </h3>
           <div className="space-y-0">
-            {t.quickStart.examples.map((item, index) => (
+            {t.quickStart.examples[platform].map((item, index) => (
               <CommandExample key={index} {...item} />
             ))}
           </div>
