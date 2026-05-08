@@ -1,3 +1,13 @@
+# v12.10.19
+
+### Bug 修复
+- **修复 Notebook 列表鼠标点击偏移错误**: 滚动后点击列表项时未累加 scroll offset，导致点击到错误条目
+
+### 改进
+- **README 全面重写**: 更新功能定位描述（Agent 工作台、别名打开、脚本工作流等），新增 6 张功能截图及说明，添加 j-gui 引导入口
+- **文档站点截图展示组件**: 新增 FeaturesWithScreenshots 和 ScreenshotsSection 组件，按功能分类展示终端截图，更新 i18n 内容
+- **清理冗余文件**: 移除 README.old.md
+
 # v12.10.18
 
 ### Bug 修复
