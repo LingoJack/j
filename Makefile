@@ -188,15 +188,17 @@ publish: ## 发布到 crates.io（make publish NOTE="release notes" 或从 CHANG
 	@$(MAKE) bump-version
 	@$(MAKE) release
 	@git add .
+	$(if $(NOTE),$(file >.note_tmp,$(NOTE)))
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	note_file=$$(mktemp); \
 	changelog_tmp=$$(mktemp); \
 	trap 'rm -f "$$note_file" "$$changelog_tmp"' EXIT; \
-	if [ -n "$(NOTE)" ]; then \
-		printf '# v%s\n\n%s\n' "$$version" "$(NOTE)" > "$$changelog_tmp"; \
-		if [ -f CHANGELOG.md ]; then cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
+	if [ -f .note_tmp ]; then \
+		{ echo "# v$$version"; echo ""; cat .note_tmp; } > "$$changelog_tmp"; \
+		if [ -f CHANGELOG.md ]; then echo "" >> "$$changelog_tmp"; cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
 		mv "$$changelog_tmp" CHANGELOG.md; \
-		printf '%s\n' "$(NOTE)" > "$$note_file"; \
+		cp .note_tmp "$$note_file"; \
+		rm -f .note_tmp; \
 	else \
 		awk '/^# v/{if(p++)exit}p' CHANGELOG.md > "$$note_file"; \
 	fi; \
