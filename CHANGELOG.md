@@ -1,3 +1,10 @@
+# v12.10.13
+
+### 改进
+- **引入 CHANGELOG.md 管理 release notes**: 发布记录统一由 CHANGELOG.md 维护，make publish 自动读写
+- **修复 make publish 多行 NOTE 解析失败**: 改用环境变量传递 NOTE，避免 Make 变量展开问题
+- **make release-note 改为预览 CHANGELOG.md**: 不再依赖 AI 生成，直接从文件读取最新段落
+
 # v12.10.11
 
 ### Bug 修复
