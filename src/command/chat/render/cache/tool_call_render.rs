@@ -495,8 +495,9 @@ pub(crate) fn extract_tool_description_from_args(
 
 /// 将字符串截断到最大字符数，超出时加 "…"
 fn truncate_str(s: &str, max_chars: usize) -> String {
+    let s = sanitize_single_line_text(s);
     if s.chars().count() <= max_chars {
-        s.to_string()
+        s
     } else {
         let truncated: String = s.chars().take(max_chars).collect();
         format!("{}…", truncated)
@@ -927,11 +928,13 @@ fn render_kv_line(
     lines: &mut Vec<Line<'static>>,
     theme: &Theme,
 ) {
+    let key = sanitize_single_line_text(key);
+    let value = sanitize_single_line_text(value);
     let max_val_chars = content_w.saturating_sub(key.chars().count() + 7);
     let display = if value.chars().count() > max_val_chars {
         format!("{}…", truncate_str(value, max_val_chars))
     } else {
-        value.to_string()
+        value
     };
     for wrapped in wrap_text(&display, content_w) {
         lines.push(Line::from(vec![
@@ -945,7 +948,8 @@ fn render_kv_line(
 
 /// 渲染标签行（如 `[background]`、`[worktree]` 等）
 fn render_tag_line(tag: &str, content_w: usize, lines: &mut Vec<Line<'static>>, theme: &Theme) {
-    for wrapped in wrap_text(tag, content_w) {
+    let tag = sanitize_single_line_text(tag);
+    for wrapped in wrap_text(&tag, content_w) {
         lines.push(Line::from(vec![
             Span::styled("    ", Style::default()),
             Span::styled(wrapped, Style::default().fg(theme.text_dim)),
