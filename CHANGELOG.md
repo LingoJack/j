@@ -1,3 +1,13 @@
+# v12.10.18
+
+### Bug 修复
+- **修复 GitHub Release 页面不显示 release notes**: CI workflow 现在从 CHANGELOG.md 提取对应版本段落写入 release body
+- **修复 Markdown 分类标题被 git tag 吞掉**: 添加 --cleanup=verbatim 保留 # 开头的行
+
+### 改进
+- **引入 CHANGELOG.md 管理 release notes**: 发布记录统一由 CHANGELOG.md 维护，make publish 自动读写
+- **make publish 支持 NOTE 参数**: 通过环境变量传入 release notes，自动追加到 CHANGELOG.md 顶部
+
 # v12.10.17
 
 ### Bug 修复
