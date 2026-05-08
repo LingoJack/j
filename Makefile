@@ -3,8 +3,8 @@ SHELL := /bin/bash
 # ============================================
 # 变量定义
 # ============================================
-CARGO_BIN_DIR := $(shell echo $${CARGO_HOME:-$$HOME/.cargo}/bin)
-BIN_PATH := $(CARGO_BIN_DIR)/j
+INSTALL_DIR := /usr/local/bin
+REPO := LingoJack/jcli
 TARGET_DIR := target/release
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -134,34 +134,51 @@ release: ## 构建发布版本（release）
 # ============================================
 # 安装相关
 # ============================================
-install: test release build-indicator build-ax ## 安装到系统（cargo bin 目录）
-	@echo "📦 安装到系统..."
-	@mkdir -p $(CARGO_BIN_DIR)
-	@rm -f $(BIN_PATH)
-	@cp $(TARGET_DIR)/j $(BIN_PATH)
-	@chmod +x $(BIN_PATH)
-	@codesign --force --sign - $(BIN_PATH) 2>/dev/null || true
-	@if [ -f $(TARGET_DIR)/j-indicator ]; then \
-		rm -f $(CARGO_BIN_DIR)/j-indicator; \
-		cp $(TARGET_DIR)/j-indicator $(CARGO_BIN_DIR)/j-indicator && chmod +x $(CARGO_BIN_DIR)/j-indicator && codesign --force --sign - $(CARGO_BIN_DIR)/j-indicator 2>/dev/null; \
-		echo "☑️ j-indicator 已安装到 $(CARGO_BIN_DIR)/j-indicator"; \
+install: ## 从 GitHub Releases 下载并安装到 /usr/local/bin
+	@echo "📦 从 GitHub Releases 安装 j-cli..."
+	@platform="darwin-arm64"; \
+	version="v$(VERSION)"; \
+	asset_name="j-$$platform"; \
+	download_url="https://github.com/$(REPO)/releases/download/$$version/$$asset_name.tar.gz"; \
+	echo "   版本: $$version  平台: $$platform"; \
+	echo "   下载: $$download_url"; \
+	tmp_dir=$$(mktemp -d); \
+	trap "rm -rf $$tmp_dir" EXIT; \
+	if ! curl -fsSL --progress-bar -H "User-Agent: j-cli-installer" -o "$$tmp_dir/j.tar.gz" "$$download_url"; then \
+		echo "✖️ 下载失败，请检查版本号或网络连接"; exit 1; \
+	fi; \
+	echo "   正在解压..."; \
+	tar -xzf "$$tmp_dir/j.tar.gz" -C "$$tmp_dir"; \
+	if [ ! -d "$(INSTALL_DIR)" ]; then \
+		echo "   创建安装目录 $(INSTALL_DIR)..."; \
+		sudo mkdir -p "$(INSTALL_DIR)"; \
+	fi; \
+	if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+	echo "   正在安装到 $(INSTALL_DIR)..."; \
+	$$SUDO rm -f "$(INSTALL_DIR)/j"; \
+	$$SUDO mv "$$tmp_dir/j" "$(INSTALL_DIR)/j"; \
+	$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
+	for helper in j-indicator j-ax; do \
+		if [ -f "$$tmp_dir/$$helper" ]; then \
+			$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
+			$$SUDO mv "$$tmp_dir/$$helper" "$(INSTALL_DIR)/$$helper"; \
+			$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
+			echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
+		fi; \
+	done; \
+	if [ -x "$(INSTALL_DIR)/j" ]; then \
+		echo "☑️ 安装成功！"; \
+		echo "   安装位置: $(INSTALL_DIR)/j"; \
+		echo "   版本: $$version"; \
 	else \
-		echo "⚠️ j-indicator 未构建，跳过安装"; \
+		echo "✖️ 安装失败"; exit 1; \
 	fi
-	@if [ -f $(TARGET_DIR)/j-ax ]; then \
-		rm -f $(CARGO_BIN_DIR)/j-ax; \
-		cp $(TARGET_DIR)/j-ax $(CARGO_BIN_DIR)/j-ax && chmod +x $(CARGO_BIN_DIR)/j-ax && codesign --force --sign - $(CARGO_BIN_DIR)/j-ax 2>/dev/null; \
-		echo "☑️ j-ax 已安装到 $(CARGO_BIN_DIR)/j-ax"; \
-	else \
-		echo "⚠️ j-ax 未构建，跳过安装"; \
-	fi
-	@echo "☑️ j 已安装到 $(BIN_PATH)"
-	@echo "   版本: $(VERSION)"
 
 uninstall: ## 卸载
 	@echo "🗑️  卸载..."
-	@rm -f $(BIN_PATH)
-	@echo "☑️ j 已卸载"
+	@if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
+	$$SUDO rm -f "$(INSTALL_DIR)/j" "$(INSTALL_DIR)/j-indicator" "$(INSTALL_DIR)/j-ax"; \
+	echo "☑️ j 及 helpers 已从 $(INSTALL_DIR) 卸载"
 
 # ============================================
 # 发布相关
