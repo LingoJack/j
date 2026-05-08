@@ -53,7 +53,7 @@
 <td>
 
 ### 🖋️ Markdown 终端预览
-`j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENT.md
+`j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENTS.md
 
 </td>
 <td>
@@ -102,7 +102,7 @@
 
 <div align="center">
 <img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/5.png" width="80%" alt="Markdown 终端编辑与预览" />
-<p><em>图 5：Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENT.md、日报周报、笔记和其他 Markdown 文档。</em></p>
+<p><em>图 5：Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENTS.md、日报周报、笔记和其他 Markdown 文档。</em></p>
 </div>
 
 <div align="center">

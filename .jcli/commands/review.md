@@ -2,7 +2,7 @@
 name: code-review
 description: 根据规范进行 code review
 ---
-请根据 AGENT.md 规范检查是否有不符合规范的地方。
+请根据 AGENTS.md 规范检查是否有不符合规范的地方。
 
 ## 辅助工具
 
@@ -16,4 +16,4 @@ make check-lint
 bash scripts/check_lint.sh --fix
 ```
 
-建议流程：先执行 `make check-lint` 拿到基础报告，再针对报告中的 WARN/FAIL 项结合 AGENT.md 软性规范（单一职责、类型设计、模式匹配偏好等）做补充审查。
+建议流程：先执行 `make check-lint` 拿到基础报告，再针对报告中的 WARN/FAIL 项结合 AGENTS.md 软性规范（单一职责、类型设计、模式匹配偏好等）做补充审查。

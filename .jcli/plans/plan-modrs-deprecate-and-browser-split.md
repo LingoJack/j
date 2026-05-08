@@ -2,7 +2,7 @@
 
 ## 任务概述
 
-根据 AGENT.md 第6条规范，将两个模块从 `mod.rs` 模式改为 `name.rs` + `name/` 子目录模式。
+根据 AGENTS.md 第6条规范，将两个模块从 `mod.rs` 模式改为 `name.rs` + `name/` 子目录模式。
 
 ---
 

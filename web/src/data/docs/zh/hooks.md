@@ -20,7 +20,7 @@ Hook 在 `.jcli/config.yaml` 中定义：
 hooks:
   pre_chat:
     - name: load_project_context
-      command: "cat AGENT.md 2>/dev/null || echo 'No AGENT.md found'"
+      command: "cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md found'"
       timeout: 5
     - name: check_env
       command: "echo 'Environment ready'"
@@ -108,7 +108,7 @@ Hook 目录会自动注入到 PATH 环境变量中：
 # ~/.jdata/hooks/pre_chat/my_hook.sh
 #!/bin/bash
 echo "Loading project context..."
-cat AGENT.md 2>/dev/null
+cat AGENTS.md 2>/dev/null
 ```
 
 ### Windows
@@ -117,7 +117,7 @@ cat AGENT.md 2>/dev/null
 @echo off
 REM %USERPROFILE%\.jdata\hooks\pre_chat\my_hook.cmd
 echo Loading project context...
-type AGENT.md 2>NUL
+type AGENTS.md 2>NUL
 ```
 
 ## 注意事项

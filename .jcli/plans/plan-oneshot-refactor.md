@@ -32,7 +32,7 @@
 
 ## 拆分方案
 
-按照 AGENT.md 的"弃用 mod.rs，采用 `name.rs` + `name/` 子目录"规范，将 `oneshot.rs` 拆为目录结构：
+按照 AGENTS.md 的"弃用 mod.rs，采用 `name.rs` + `name/` 子目录"规范，将 `oneshot.rs` 拆为目录结构：
 
 ```
 src/command/chat/oneshot.rs      →  src/command/chat/oneshot/mod.rs   (入口 + handle_chat)

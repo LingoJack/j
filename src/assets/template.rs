@@ -44,9 +44,9 @@ pub fn default_soul() -> Cow<'static, str> {
         .unwrap_or_else(|| Cow::Borrowed(""))
 }
 
-/// 默认 AGENT.md 模板
+/// 默认 AGENTS.md 模板
 ///
-/// 用途: 首次运行时写入 `~/.jdata/agent/AGENT.md`
+/// 用途: 首次运行时写入 `~/.jdata/agent/AGENTS.md`
 /// 格式: Markdown
 pub fn default_agent_md() -> Cow<'static, str> {
     Assets::get("agent_md_default.md")

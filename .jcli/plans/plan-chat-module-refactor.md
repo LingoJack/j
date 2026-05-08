@@ -1,6 +1,6 @@
 # Chat 模块代码规范重构计划
 
-> 对照 `AGENT.md` 8 大规范维度，对 `src/command/chat/` 进行合规性重构。
+> 对照 `AGENTS.md` 8 大规范维度，对 `src/command/chat/` 进行合规性重构。
 > 按优先级分批次执行，每批完成后运行 `cargo check` + `cargo clippy` 验证。
 
 ---

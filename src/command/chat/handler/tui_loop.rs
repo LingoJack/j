@@ -978,7 +978,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     std::fs::read_to_string(agent_md::agent_md_path()).unwrap_or_default();
                 match crate::tui::editor_markdown::open_markdown_editor_on_terminal(
                     &mut terminal,
-                    "编辑项目指令 (AGENT.md)",
+                    "编辑项目指令 (AGENTS.md)",
                     &current_agent_md,
                     &app.ui.theme,
                 ) {

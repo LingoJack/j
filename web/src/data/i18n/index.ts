@@ -75,7 +75,7 @@ export const i18n: Record<Language, I18nData> = {
         { src: '/jcli/pics/jcli-ai/2.png', alt: 'Model configuration', caption: 'Model configuration page. Manage providers, models, sessions and global settings without leaving the terminal.', label: 'Model Config' },
         { src: '/jcli/pics/jcli-ai/3.png', alt: 'Tool toggles', caption: 'Tool toggle page. Control whether Bash, Read, Write, WebSearch, Todo and other tools are available per session.', label: 'Tool Toggle' },
         { src: '/jcli/pics/jcli-ai/4.png', alt: 'Agent multi-turn analysis', caption: 'Agent multi-turn workflow. Replies, code snippets, Grep/Read/Bash results all unfold in the same terminal session — ideal for code review and troubleshooting.', label: 'Multi-turn Analysis' },
-        { src: '/jcli/pics/jcli-ai/5.png', alt: 'Markdown terminal editor', caption: 'Markdown terminal editor. Typora-like live-preview experience for AGENT.md, daily reports, notes and other Markdown documents.', label: 'Markdown Editor' },
+        { src: '/jcli/pics/jcli-ai/5.png', alt: 'Markdown terminal editor', caption: 'Markdown terminal editor. Typora-like live-preview experience for AGENTS.md, daily reports, notes and other Markdown documents.', label: 'Markdown Editor' },
         { src: '/jcli/pics/jcli-ai/6.png', alt: 'Alias list and quick open', caption: 'Alias list view. Manage apps, scripts and path entries in one place, paired with j <alias> for a lightweight personal command workflow.', label: 'Alias Management' }
       ]
     },
@@ -215,7 +215,7 @@ export const i18n: Record<Language, I18nData> = {
         { src: '/jcli/pics/jcli-ai/2.png', alt: '模型配置界面', caption: '模型配置页。可以在终端里维护 Provider、模型、Session 与全局配置，不必离开当前工作台。', label: '模型配置' },
         { src: '/jcli/pics/jcli-ai/3.png', alt: '工具开关界面', caption: '工具开关页。按会话控制 Bash、Read、Write、WebSearch、Todo 等工具是否可用，方便收紧或放开 Agent 权限。', label: '工具开关' },
         { src: '/jcli/pics/jcli-ai/4.png', alt: 'Agent 多轮分析与工具结果', caption: 'Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。', label: '多轮分析' },
-        { src: '/jcli/pics/jcli-ai/5.png', alt: 'Markdown 终端编辑与预览', caption: 'Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENT.md、日报周报、笔记和其他 Markdown 文档。', label: 'Markdown 编辑' },
+        { src: '/jcli/pics/jcli-ai/5.png', alt: 'Markdown 终端编辑与预览', caption: 'Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENTS.md、日报周报、笔记和其他 Markdown 文档。', label: 'Markdown 编辑' },
         { src: '/jcli/pics/jcli-ai/6.png', alt: '别名列表与快捷打开', caption: '别名列表视图。统一管理应用、脚本和路径入口，配合 j <alias> 形成很轻的个人命令工作流。', label: '别名管理' }
       ]
     },

@@ -82,7 +82,7 @@ The following is the live state of the current session (teammates, tasks, backgr
 </session_status>
 
 <project_instructions>
-The following are project-level instructions provided by the user (from AGENT.md files). They define project conventions, constraints, and preferences you must follow.
+The following are project-level instructions provided by the user (from AGENTS.md files). They define project conventions, constraints, and preferences you must follow.
 
 {{.project_instructions}}
 </project_instructions>

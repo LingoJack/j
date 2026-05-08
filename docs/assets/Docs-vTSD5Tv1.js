@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-dBWFu1hL.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-D8DAfcC8.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -535,7 +535,7 @@ Hooks are defined in \`.jcli/config.yaml\`:
 hooks:
   pre_chat:
     - name: load_project_context
-      command: "cat AGENT.md 2>/dev/null || echo 'No AGENT.md found'"
+      command: "cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md found'"
       timeout: 5
     - name: check_env
       command: "echo 'Environment ready'"
@@ -623,7 +623,7 @@ In addition to inline commands, you can create standalone script files:
 # ~/.jdata/hooks/pre_chat/my_hook.sh
 #!/bin/bash
 echo "Loading project context..."
-cat AGENT.md 2>/dev/null
+cat AGENTS.md 2>/dev/null
 \`\`\`
 
 ### Windows
@@ -632,7 +632,7 @@ cat AGENT.md 2>/dev/null
 @echo off
 REM %USERPROFILE%\\.jdata\\hooks\\pre_chat\\my_hook.cmd
 echo Loading project context...
-type AGENT.md 2>NUL
+type AGENTS.md 2>NUL
 \`\`\`
 
 ## Notes
@@ -2404,7 +2404,7 @@ Hook 在 \`.jcli/config.yaml\` 中定义：
 hooks:
   pre_chat:
     - name: load_project_context
-      command: "cat AGENT.md 2>/dev/null || echo 'No AGENT.md found'"
+      command: "cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md found'"
       timeout: 5
     - name: check_env
       command: "echo 'Environment ready'"
@@ -2492,7 +2492,7 @@ Hook 目录会自动注入到 PATH 环境变量中：
 # ~/.jdata/hooks/pre_chat/my_hook.sh
 #!/bin/bash
 echo "Loading project context..."
-cat AGENT.md 2>/dev/null
+cat AGENTS.md 2>/dev/null
 \`\`\`
 
 ### Windows
@@ -2501,7 +2501,7 @@ cat AGENT.md 2>/dev/null
 @echo off
 REM %USERPROFILE%\\.jdata\\hooks\\pre_chat\\my_hook.cmd
 echo Loading project context...
-type AGENT.md 2>NUL
+type AGENTS.md 2>NUL
 \`\`\`
 
 ## 注意事项

@@ -123,7 +123,7 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
     };
     match *field_name {
         "system_prompt" => "系统提示词",
-        "agent_md" => "AGENT.md",
+        "agent_md" => "AGENTS.md",
         "style" => "回复风格",
         "max_history_messages" => "历史消息数",
         "max_context_tokens" => "窗口Token",
