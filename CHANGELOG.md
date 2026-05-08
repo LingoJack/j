@@ -1,3 +1,11 @@
+# v12.10.20
+
+### 新功能
+- **j md 支持标准输入渲染**: 管道输入 Markdown 文本时自动渲染为 ANSI 彩色输出到标准输出，支持 `echo "# Hello" | j md`、`cat README.md | j md` 等管道用法，复用已有的 md_render 渲染能力
+
+### 改进
+- **Notebook 列表鼠标点击修复**: 滚动后点击列表项时正确累加 scroll offset，不再选中错误条目
+
 # v12.10.19
 
 ### Bug 修复
