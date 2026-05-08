@@ -578,7 +578,7 @@ fn handle_left_click(
         let max_visible = list_area.height.saturating_sub(2) as usize;
 
         if (inner_y as usize) < max_visible {
-            let index = inner_y as usize;
+            let index = app.state.offset() + inner_y as usize;
             if index < app.flat_entries.len() {
                 let now = std::time::Instant::now();
 
