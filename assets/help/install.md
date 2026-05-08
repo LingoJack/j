@@ -7,22 +7,22 @@ order: 10
 
 ### macOS / Linux 一键安装（推荐）
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 ```
 
 指定版本安装：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v1.0.0
 ```
 
 ### Windows 一键安装（推荐）
 ```powershell
-irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 ```
 
 指定版本安装：
 ```powershell
-$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 ```
 
 > Windows 安装位置: `%LOCALAPPDATA%\j-cli\j.exe`，自动添加到用户 PATH
@@ -44,7 +44,7 @@ j update --check       # 仅检查是否有新版本
 ### macOS / Linux
 ```bash
 # 使用安装脚本卸载（推荐）
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- --uninstall
 
 # 或通过 cargo 卸载
 cargo uninstall j-cli
@@ -56,7 +56,7 @@ rm -rf ~/.jdata
 ### Windows
 ```powershell
 # 使用安装脚本卸载
-powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex" -Uninstall
+powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex" -Uninstall
 
 # 或直接删除
 Remove-Item "$env:LOCALAPPDATA\j-cli" -Recurse -Force

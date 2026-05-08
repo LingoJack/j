@@ -4,20 +4,20 @@
 
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v1.0.0
 ```
 
 ### Windows
 
 ```powershell
 # Install latest version
-irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 
 # Install specific version
-$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 ```
 
 > Windows install location: `%LOCALAPPDATA%\j-cli\j.exe`, automatically added to user PATH
@@ -35,7 +35,7 @@ cargo install j-cli --features browser_cdp
 ## Build from Source
 
 ```bash
-git clone https://github.com/LingoJack/j.git
+git clone https://github.com/LingoJack/jcli.git
 cd j && cargo install --path .
 
 # With full browser automation
@@ -68,7 +68,7 @@ cargo install j-cli
 
 ```bash
 # Using install script (recommended)
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- --uninstall
 
 # Or via cargo
 cargo uninstall j-cli

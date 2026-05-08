@@ -81,7 +81,7 @@ export default function Docs() {
             </Link>
             <LanguageSwitcher lang={lang} onChange={setLang} />
             <a 
-              href="https://github.com/LingoJack/j" 
+              href="https://github.com/LingoJack/jcli" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors"
@@ -123,7 +123,7 @@ export default function Docs() {
           </Link>
           <div className="flex items-center gap-6">
             <a 
-              href="https://github.com/LingoJack/j" 
+              href="https://github.com/LingoJack/jcli" 
               target="_blank" 
               rel="noopener noreferrer"
               className="text-stone-500 hover:text-stone-900 transition-colors"

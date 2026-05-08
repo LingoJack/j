@@ -14,8 +14,8 @@ import type { Language } from '../types'
 export type Platform = 'unix' | 'windows'
 
 const installCommands: Record<Platform, string> = {
-  unix: 'curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | bash',
-  windows: 'irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex',
+  unix: 'curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | bash',
+  windows: 'irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex',
 }
 
 export default function Home() {

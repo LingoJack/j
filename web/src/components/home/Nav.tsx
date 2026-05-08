@@ -33,7 +33,7 @@ export function Nav({ lang, t, onLangChange }: NavProps) {
             {t.nav.quickStart}
           </a>
           <a 
-            href="https://github.com/LingoJack/j" 
+            href="https://github.com/LingoJack/jcli" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors"
@@ -90,7 +90,7 @@ export function Nav({ lang, t, onLangChange }: NavProps) {
             {t.nav.quickStart}
           </a>
           <a 
-            href="https://github.com/LingoJack/j" 
+            href="https://github.com/LingoJack/jcli" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors text-sm py-2"

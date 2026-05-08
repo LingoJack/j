@@ -122,7 +122,7 @@ fn check_for_update() {
                 println!("{} {}", "检查更新失败:".red(), e);
                 println!("请尝试手动更新:");
                 println!(
-                    "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
+                    "  curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh"
                 );
             }
         },
@@ -320,7 +320,7 @@ fn perform_update_internal(target: &str, interactive: bool) {
                     println!("{} {}", "更新失败:".red(), e);
                     println!("请尝试手动更新:");
                     println!(
-                        "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
+                        "  curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh"
                     );
                 }
             }
@@ -590,7 +590,7 @@ fn perform_update_curl(target: &str, interactive: bool) {
             println!("{}", "无法获取最新版本号".red());
             println!("请尝试手动更新:");
             println!(
-                "  curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh"
+                "  curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh"
             );
             return;
         }
@@ -622,13 +622,13 @@ fn perform_update_curl(target: &str, interactive: bool) {
 
     #[cfg(unix)]
     let url = format!(
-        "https://github.com/LingoJack/j/releases/download/{}/{}.tar.gz",
+        "https://github.com/LingoJack/jcli/releases/download/{}/{}.tar.gz",
         tag, asset_name
     );
 
     #[cfg(windows)]
     let url = format!(
-        "https://github.com/LingoJack/j/releases/download/{}/{}.zip",
+        "https://github.com/LingoJack/jcli/releases/download/{}/{}.zip",
         tag, asset_name
     );
 
@@ -781,7 +781,7 @@ fn get_latest_version_curl() -> Option<String> {
     if let Some(ref token) = auth_token {
         api_cmd.args(["-H", &format!("Authorization: token {}", token)]);
     }
-    api_cmd.arg("https://api.github.com/repos/LingoJack/j/releases/latest");
+    api_cmd.arg("https://api.github.com/repos/LingoJack/jcli/releases/latest");
 
     if let Ok(output) = api_cmd.output()
         && output.status.success()
@@ -802,12 +802,12 @@ fn get_latest_version_curl() -> Option<String> {
     // 方法2: 从 releases 页面解析重定向
     if let Ok(output) = std::process::Command::new("curl")
         .args(["-fsSL", "-o", "/dev/null", "-w", "%{url_effective}"])
-        .arg("https://github.com/LingoJack/j/releases/latest")
+        .arg("https://github.com/LingoJack/jcli/releases/latest")
         .output()
         && output.status.success()
     {
         let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        // 重定向 URL 格式: https://github.com/LingoJack/j/releases/tag/v12.8.10
+        // 重定向 URL 格式: https://github.com/LingoJack/jcli/releases/tag/v12.8.10
         let re = regex::Regex::new(r#"v[0-9]+\.[0-9]+\.[0-9]+"#).ok();
         if let Some(re) = re
             && let Some(m) = re.find(&url)
@@ -838,7 +838,7 @@ fn install_indicator_from_release(version: &str) {
         format!("v{}", version)
     };
     let url = format!(
-        "https://github.com/LingoJack/j/releases/download/{}/j-darwin-arm64.tar.gz",
+        "https://github.com/LingoJack/jcli/releases/download/{}/j-darwin-arm64.tar.gz",
         tag
     );
 

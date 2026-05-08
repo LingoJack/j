@@ -12,7 +12,7 @@ export function Footer({ t }: { t: I18nData }) {
         </div>
         <div className="flex items-center gap-6">
           <a 
-            href="https://github.com/LingoJack/j" 
+            href="https://github.com/LingoJack/jcli" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-stone-400 hover:text-stone-900 transition-colors text-sm"

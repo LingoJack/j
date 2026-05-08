@@ -67,7 +67,7 @@ export function HeroSection({ t, installCmd, platform, onPlatformChange }: HeroS
             {t.hero.getStarted}
           </a>
           <a 
-            href="https://github.com/LingoJack/j"
+            href="https://github.com/LingoJack/jcli"
             target="_blank"
             rel="noopener noreferrer"
             className="px-5 py-2.5 text-stone-600 hover:text-stone-900 font-medium text-sm transition-colors"
