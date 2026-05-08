@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Nav } from '../components/home/Nav'
 import { HeroSection } from '../components/home/HeroSection'
-import { FeaturesSection } from '../components/home/FeaturesSection'
-import { ScreenshotsSection } from '../components/home/ScreenshotsSection'
+import { FeaturesWithScreenshots } from '../components/home/FeaturesWithScreenshots'
 import { QuickStartSection } from '../components/home/QuickStartSection'
 import { MoreFeaturesSection } from '../components/home/MoreFeaturesSection'
 import { BestPracticesSection } from '../components/home/BestPracticesSection'
@@ -29,8 +28,7 @@ export default function Home() {
     <div className="min-h-screen bg-[#faf9f6]">
       <Nav lang={lang} t={t} onLangChange={setLang} />
       <HeroSection t={t} installCmd={installCmd} platform={platform} onPlatformChange={setPlatform} />
-      <FeaturesSection t={t} />
-      <ScreenshotsSection t={t} />
+      <FeaturesWithScreenshots t={t} />
       <QuickStartSection t={t} installCmd={installCmd} platform={platform} onPlatformChange={setPlatform} />
       <MoreFeaturesSection t={t} />
       <BestPracticesSection lang={lang} t={t} />
