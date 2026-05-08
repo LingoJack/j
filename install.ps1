@@ -1,7 +1,7 @@
 # j-cli Windows 安装脚本
 # 使用方式:
-#   irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
-#   或者指定版本: $v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
+#   或者指定版本: $v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 #
 # 也可直接下载后执行:
 #   powershell -ExecutionPolicy Bypass -File install.ps1
@@ -17,7 +17,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 配置
-$Repo = "LingoJack/j"
+$Repo = "LingoJack/jcli"
 $BinaryName = "j"
 $InstallDir = "$env:LOCALAPPDATA\j-cli"
 $DataDir = "$env:USERPROFILE\.jdata"

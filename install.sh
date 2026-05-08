@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # j-cli 安装脚本
-# 使用方式: curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
-# 或者指定版本: curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+# 使用方式: curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
+# 或者指定版本: curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v1.0.0
 
 set -e
 
 # 配置
-REPO="LingoJack/j"
+REPO="LingoJack/jcli"
 BINARY_NAME="j"
 INSTALL_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"

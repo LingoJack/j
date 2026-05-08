@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-8VznMOJv.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-dBWFu1hL.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -2516,20 +2516,20 @@ type AGENT.md 2>NUL
 
 \`\`\`bash
 # 安装最新版本
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 
 # 安装指定版本
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v1.0.0
 \`\`\`
 
 ### Windows
 
 \`\`\`powershell
 # 安装最新版本
-irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 
 # 安装指定版本
-$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 \`\`\`
 
 > Windows 安装位置: \`%LOCALAPPDATA%\\j-cli\\j.exe\`，自动添加到用户 PATH
@@ -2547,7 +2547,7 @@ cargo install j-cli --features browser_cdp
 ## 从源码构建
 
 \`\`\`bash
-git clone https://github.com/LingoJack/j.git
+git clone https://github.com/LingoJack/jcli.git
 cd j && cargo install --path .
 
 # 包含完整浏览器自动化功能
@@ -2580,7 +2580,7 @@ cargo install j-cli
 
 \`\`\`bash
 # 使用安装脚本（推荐）
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- --uninstall
 
 # 或通过 cargo
 cargo uninstall j-cli

@@ -218,7 +218,7 @@ open -a "$J_CHROME" https://example.com
 ### 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 ```
 
 ### 从 crates.io 安装
@@ -231,7 +231,7 @@ cargo install j-cli
 
 ```bash
 # 一键更新
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 
 # 从 crates.io 更新
 cargo install j-cli
@@ -241,7 +241,7 @@ cargo install j-cli
 
 ```bash
 # 一键卸载
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- --uninstall
 
 # cargo 安装的用户
 cargo uninstall j-cli

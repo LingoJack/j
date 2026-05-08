@@ -8,13 +8,13 @@
 
 [![Rust](https://img.shields.io/badge/Rust-1.93%2B-orange?logo=rust)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-12.10.7-green.svg)](https://github.com/LingoJack/j)
+[![Version](https://img.shields.io/badge/version-12.10.7-green.svg)](https://github.com/LingoJack/jcli)
 
-[在线文档](https://lingojack.github.io/j/) · [快速开始](#-快速开始) · [功能一览](#-功能一览) · [安装](#-安装) · [GUI 版本](https://github.com/LingoJack/j-gui)
+[在线文档](https://lingojack.github.io/j/) · [快速开始](#-快速开始) · [功能一览](#-功能一览) · [安装](#-安装) · [GUI 版本](https://github.com/LingoJack/jcli-gui)
 
 </div>
 
-> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
+> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/jcli-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
 
 ---
 
@@ -81,32 +81,32 @@
 ## 📸 截图
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/1.png" width="80%" alt="Agent 对话与工具调用界面" />
+<img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/1.png" width="80%" alt="Agent 对话与工具调用界面" />
 <p><em>图 1：Agent 对话主界面。在终端里直接查看上下文、读取文件、调用工具，并对 Bash 等高风险操作做权限确认。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/2.png" width="80%" alt="模型配置界面" />
+<img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/2.png" width="80%" alt="模型配置界面" />
 <p><em>图 2：模型配置页。可以在终端里维护 Provider、模型、Session 与全局配置，不必离开当前工作台。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/3.png" width="80%" alt="工具开关界面" />
+<img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/3.png" width="80%" alt="工具开关界面" />
 <p><em>图 3：工具开关页。按会话控制 Bash、Read、Write、WebSearch、Todo 等工具是否可用，方便收紧或放开 Agent 权限。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/4.png" width="80%" alt="Agent 多轮分析与工具结果" />
+<img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/4.png" width="80%" alt="Agent 多轮分析与工具结果" />
 <p><em>图 4：Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/5.png" width="80%" alt="Markdown 终端编辑与预览" />
+<img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/5.png" width="80%" alt="Markdown 终端编辑与预览" />
 <p><em>图 5：Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENT.md、日报周报、笔记和其他 Markdown 文档。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/6.png" width="80%" alt="别名列表与快捷打开" />
+<img src="https://raw.githubusercontent.com/LingoJack/jcli/main/web/public/pics/jcli-ai/6.png" width="80%" alt="别名列表与快捷打开" />
 <p><em>图 6：别名列表视图。统一管理应用、脚本和路径入口，配合 `j &lt;alias&gt;` 形成很轻的个人命令工作流。</em></p>
 </div>
 
@@ -119,13 +119,13 @@
 **macOS / Linux：**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 ```
 
 **Windows (PowerShell)：**
 
 ```powershell
-irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 ```
 
 **从 crates.io 安装：**
@@ -140,7 +140,7 @@ cargo install j-cli
 **从源码编译：**
 
 ```bash
-git clone https://github.com/LingoJack/j.git
+git clone https://github.com/LingoJack/jcli.git
 cd j && cargo install --path .
 ```
 
@@ -218,10 +218,10 @@ j
 
 ## 🖥️ GUI 版本
 
-如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/j-gui) 提供了基于 Tauri 的桌面客户端（**目前正在研发中**），支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
+如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/jcli-gui) 提供了基于 Tauri 的桌面客户端（**目前正在研发中**），支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
 
 <div align="center">
-<a href="https://github.com/LingoJack/j-gui">
+<a href="https://github.com/LingoJack/jcli-gui">
 <img src="https://img.shields.io/badge/GUI-j--gui-blue?logo=tauri" alt="j-gui" />
 </a>
 </div>

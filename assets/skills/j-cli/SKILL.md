@@ -20,7 +20,7 @@ If the script is unavailable, check manually:
 ```bash
 command -v j && j version
 # Install if missing:
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 ```
 
 ## Core Workflows

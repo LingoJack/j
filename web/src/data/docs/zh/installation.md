@@ -4,20 +4,20 @@
 
 ```bash
 # 安装最新版本
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh
 
 # 安装指定版本
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- v1.0.0
 ```
 
 ### Windows
 
 ```powershell
 # 安装最新版本
-irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 
 # 安装指定版本
-$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/j/main/install.ps1 | iex
+$v="v1.0.0"; irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex
 ```
 
 > Windows 安装位置: `%LOCALAPPDATA%\j-cli\j.exe`，自动添加到用户 PATH
@@ -35,7 +35,7 @@ cargo install j-cli --features browser_cdp
 ## 从源码构建
 
 ```bash
-git clone https://github.com/LingoJack/j.git
+git clone https://github.com/LingoJack/jcli.git
 cd j && cargo install --path .
 
 # 包含完整浏览器自动化功能
@@ -68,7 +68,7 @@ cargo install j-cli
 
 ```bash
 # 使用安装脚本（推荐）
-curl -fsSL https://raw.githubusercontent.com/LingoJack/j/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh -s -- --uninstall
 
 # 或通过 cargo
 cargo uninstall j-cli
