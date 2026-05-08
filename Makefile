@@ -80,32 +80,10 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	fi; \
 	prompt_file=$$(mktemp); \
 	trap 'rm -f "$$prompt_file"' EXIT; \
-	{ echo "你是一个自动化的 commit message 生成器。根据代码变更生成一个 commit message。"; \
-	  echo ""; \
-	  echo "## 输出要求"; \
-	  echo "- 格式：<类型>: <中文描述>，类型可选 feat/fix/refactor/docs/style/test/chore/perf"; \
-	  echo "- 描述不超过 30 字"; \
-	  echo "- 用 <result>...</result> 包裹你的输出，不要输出任何其他内容"; \
-	  echo ""; \
-	  echo "## 行为规则（必须遵守）"; \
-	  echo "- 必须通过查看具体代码变更内容（diff）来判断改了什么，不要依赖 commit message 或文件名猜测"; \
-	  echo "- 不要向用户提问，不要要求确认，直接根据已有信息生成最佳结果"; \
-	  echo "- 如果提供的上下文不完整，主动执行 shell 命令补充信息，而不是停下来"; \
-	  echo "- 如果变更太多无法归类，选择最主要的变更类型概括"; \
-	  echo ""; \
-	  echo "## 提供的上下文"; \
-	  echo "变更概览:"; \
-	  echo "$$diff_stat"; \
-	  echo ""; \
-	  echo "详细变更（截断）:"; \
-	  (git diff 2>/dev/null || git diff --cached 2>/dev/null) | head -200; \
-	  echo ""; \
-	  echo "## 补充上下文（按需执行）"; \
-	  echo "以上信息可能被截断。你必须执行 shell 命令查看具体代码内容，而不是仅凭文件名或 commit message 判断："; \
-	  echo "- git diff / git diff --cached（查看完整变更）"; \
-	  echo "- git diff -- <file>（查看特定文件的具体代码变更）"; \
-	  echo "- git status（查看工作区状态）"; \
-	} > "$$prompt_file"; \
+	diff_content=$$((git diff 2>/dev/null || git diff --cached 2>/dev/null) | head -200); \
+	sed -e "s|{{diff_stat}}|$$diff_stat|g" \
+	    -e "s|{{diff}}|$$diff_content|g" \
+	    prompts/commit-message.md > "$$prompt_file"; \
 	ai_out=$$(mktemp); \
 	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
 	echo ""; \
@@ -253,48 +231,23 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 		else \
 			log_range="HEAD~10..HEAD"; \
 		fi; \
-		{ echo "你是一个自动化的 release notes 生成器。根据 git 历史生成 release notes。"; \
-		  echo ""; \
-		  echo "## 输出要求"; \
-		  echo "- 第一行不要标题，直接从分类开始"; \
-		  echo "- 使用 Markdown 格式，分类用三级标题如 ### 新功能、### 改进、### Bug 修复"; \
-		  echo "- 每个条目格式：- **功能名**: 描述"; \
-		  echo "- 只包含有意义的变更，忽略 minor 重构"; \
-		  echo "- 用 <result>...</result> 包裹你的输出，不要输出任何其他内容"; \
-		  echo ""; \
-		  echo "## 行为规则（必须遵守）"; \
-		  echo "- 不要向用户提问，不要要求确认，直接根据已有信息生成最佳结果"; \
-		  echo "- 如果提供的 git log 为空或 HEAD 与上个 tag 相同，说明这是 bump-version 后的自动提交"; \
-		  echo "  此时应该回退到更早的 tag（如倒数第二个 tag）来获取变更范围，或者用 HEAD~10..HEAD"; \
-		  echo "- 如果 commit message 不够详细，主动执行 shell 命令查看 diff，而不是停下来"; \
-		  echo "- 如果实在无法获取足够的变更信息，基于仅有的信息生成简洁的 release notes，宁可简短也不要提问"; \
-		  echo ""; \
-		  echo "## 提供的上下文"; \
-		  echo "当前版本: $$version"; \
-		  echo "上一个 tag: $${last_tag:-无}"; \
-		  echo "Log 范围: $$log_range"; \
-		  echo ""; \
-		  echo "Git log ($$log_range):"; \
-		  git log $$log_range --oneline --no-decorate 2>/dev/null | head -20; \
-		  echo ""; \
-		  echo "## 补充上下文（按需执行）"; \
-		  echo "你可以执行 shell 命令获取更多信息："; \
-		  echo "- git log $$log_range --stat（查看每次提交涉及的文件）"; \
-		  echo "- git log $$log_range -p（查看每次提交的完整 diff）"; \
-		  echo "- git show <commit>（查看某次提交的详细变更）"; \
-		  echo "- git diff $${last_tag:-HEAD~10}..HEAD（查看与上个标签之间的完整差异）"; \
-		  echo "- git tag -l | sort -V | tail -5（查看最近的标签列表）"; \
-		  echo "- git log $$last_tag~1..$$last_tag --oneline（回退查看上个 tag 的变更）"; \
-		} > "$$prompt_file"; \
+		prompt_file=$$(mktemp); \
+		trap 'rm -f "$$prompt_file"' EXIT; \
+		git_log=$$(git log $$log_range --oneline --no-decorate 2>/dev/null | head -20); \
+		sed -e "s|{{version}}|$$version|g" \
+		    -e "s|{{last_tag}}|$${last_tag:-HEAD~10}|g" \
+		    -e "s|{{log_range}}|$$log_range|g" \
+		    -e "s|{{git_log}}|$$git_log|g" \
+		    prompts/release-notes.md > "$$prompt_file"; \
 		ai_out=$$(mktemp); \
-	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | tee "$$ai_out"; \
-	echo ""; \
-	echo "📄 AI 原始输出:"; \
-	echo "----------------------------------------"; \
-	cat "$$ai_out"; \
-	echo "----------------------------------------"; \
-	ai_note=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
-	rm -f "$$ai_out"; \
+		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | tee "$$ai_out"; \
+		echo ""; \
+		echo "📄 AI 原始输出:"; \
+		echo "----------------------------------------"; \
+		cat "$$ai_out"; \
+		echo "----------------------------------------"; \
+		ai_note=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
+		rm -f "$$ai_out"; \
 		if [ -z "$$ai_note" ]; then \
 			echo "⚠️ AI 生成失败，请手动指定 NOTE 参数"; \
 			exit 1; \
@@ -428,4 +381,4 @@ watch-test: ## 监视文件变化并运行测试
 coverage: ## 生成代码覆盖率报告
 	@echo "📊 生成代码覆盖率报告..."
 	@cargo tarpaulin --out Html
-	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"�️ 覆盖率报告生成完成: tarpaulin-report.html"
+	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"️ 覆盖率报告生成完成: tarpaulin-report.html"

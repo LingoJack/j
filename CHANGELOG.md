@@ -1,3 +1,10 @@
+# v12.10.36
+
+
+### 改进
+
+- **Makefile 重构**: 将内嵌的 AI prompt 模板提取为独立文件 (prompts/commit-message.md, prompts/release-notes.md)，提高可维护性和可读性
+
 # v12.10.35
 
 
