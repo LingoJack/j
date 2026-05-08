@@ -22,6 +22,7 @@ use crate::command::chat::oneshot::agent_loop::{run_oneshot_agent, run_oneshot_n
 use crate::command::chat::oneshot::session::generate_oneshot_session_id;
 use crate::command::chat::storage::{find_latest_session_id, load_agent_config, load_session};
 use crate::config::YamlConfig;
+use crate::util::log::write_info_log;
 use crate::{error, info};
 
 /// oneshot chat 启动参数
@@ -61,6 +62,11 @@ pub fn handle_chat(args: ChatArgs<'_>) {
 
     let message = content.join(" ");
     let message = message.trim().to_string();
+    // DEBUG: 打印接收到的完整 prompt（用于排查 Makefile 传参问题）
+    write_info_log(
+        "oneshot",
+        &format!("接收到的 prompt ({} 字节):\n{}", message.len(), message),
+    );
     if message.is_empty() && !cont && session_id_opt.is_none() {
         error!("消息内容为空");
         return;

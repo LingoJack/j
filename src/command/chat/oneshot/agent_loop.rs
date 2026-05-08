@@ -50,7 +50,12 @@ pub(crate) fn run_oneshot_no_tools(
     messages.push(user_msg.clone());
 
     let thinking_style = agent_config.thinking_style;
-    let _stop_anim = start_thinking_animation(thinking_style);
+    let _stop_anim = if no_render {
+        // no_render 模式下跳过动画（避免 stdout 噪音）
+        Arc::new(AtomicBool::new(true))
+    } else {
+        start_thinking_animation(thinking_style)
+    };
 
     let tw = term_width();
     let mut cur_col: usize = 0;

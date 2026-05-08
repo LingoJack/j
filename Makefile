@@ -139,50 +139,39 @@ build-ax: ## 构建 j-ax (macOS Accessibility API helper)
 # ============================================
 # 构建相关（续）
 # ============================================
-release: ## 构建发布版本（release）
+release: ## 构建发布版本（release, INSTALL_SOURCE=github）
 	@echo "🏗️  构建 release 版本..."
-	@cargo build --release
+	@INSTALL_SOURCE=github cargo build --release
 	@echo "☑️ release 构建完成"
 
 # ============================================
 # 安装相关
 # ============================================
-install: ## 从 GitHub Releases 下载并安装到 /usr/local/bin
-	@echo "📦 从 GitHub Releases 安装 j-cli..."
-	@platform="darwin-arm64"; \
-	version="v$(VERSION)"; \
-	asset_name="j-$$platform"; \
-	download_url="https://github.com/$(REPO)/releases/download/$$version/$$asset_name.tar.gz"; \
-	echo "   版本: $$version  平台: $$platform"; \
-	echo "   下载: $$download_url"; \
-	tmp_dir=$$(mktemp -d); \
-	trap "rm -rf $$tmp_dir" EXIT; \
-	if ! curl -fsSL --progress-bar -H "User-Agent: j-cli-installer" -o "$$tmp_dir/j.tar.gz" "$$download_url"; then \
-		echo "✖️ 下载失败，请检查版本号或网络连接"; exit 1; \
-	fi; \
-	echo "   正在解压..."; \
-	tar -xzf "$$tmp_dir/j.tar.gz" -C "$$tmp_dir"; \
-	if [ ! -d "$(INSTALL_DIR)" ]; then \
+install: ## 从本地 cargo build --release 安装到 /usr/local/bin（与 GitHub 安装路径一致）
+	@echo "📦 从本地构建安装 j-cli..."
+	@$(MAKE) release
+	@if [ ! -d "$(INSTALL_DIR)" ]; then \
 		echo "   创建安装目录 $(INSTALL_DIR)..."; \
 		sudo mkdir -p "$(INSTALL_DIR)"; \
 	fi; \
 	if [ ! -w "$(INSTALL_DIR)" ]; then SUDO="sudo"; else SUDO=""; fi; \
 	echo "   正在安装到 $(INSTALL_DIR)..."; \
 	$$SUDO rm -f "$(INSTALL_DIR)/j"; \
-	$$SUDO mv "$$tmp_dir/j" "$(INSTALL_DIR)/j"; \
+	$$SUDO cp "$(TARGET_DIR)/j" "$(INSTALL_DIR)/j"; \
 	$$SUDO chmod +x "$(INSTALL_DIR)/j"; \
 	for helper in j-indicator j-ax; do \
-		if [ -f "$$tmp_dir/$$helper" ]; then \
+		if [ -f "$(TARGET_DIR)/$$helper" ]; then \
 			$$SUDO rm -f "$(INSTALL_DIR)/$$helper"; \
-			$$SUDO mv "$$tmp_dir/$$helper" "$(INSTALL_DIR)/$$helper"; \
+			$$SUDO cp "$(TARGET_DIR)/$$helper" "$(INSTALL_DIR)/$$helper"; \
 			$$SUDO chmod +x "$(INSTALL_DIR)/$$helper"; \
 			echo "   ☑️ $$helper 已安装到 $(INSTALL_DIR)/$$helper"; \
 		fi; \
 	done; \
+	version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	if [ -x "$(INSTALL_DIR)/j" ]; then \
 		echo "☑️ 安装成功！"; \
 		echo "   安装位置: $(INSTALL_DIR)/j"; \
-		echo "   版本: $$version"; \
+		echo "   版本: v$$version (本地构建)"; \
 	else \
 		echo "✖️ 安装失败"; exit 1; \
 	fi
