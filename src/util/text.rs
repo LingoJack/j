@@ -1,5 +1,16 @@
 const TAB_REPLACEMENT: &str = "    ";
 
+/// 快速判断字符串是否包含需要为终端/TUI 渲染做清洗的字符。
+///
+/// 覆盖：
+/// - ANSI/OSC 转义起始字节 `ESC`
+/// - `\t` / `\r`
+/// - 其他会扰乱终端渲染的控制字符（保留 `\n`）
+pub fn needs_terminal_sanitization(s: &str) -> bool {
+    s.chars()
+        .any(|c| matches!(c, '\t' | '\r' | '\x1b') || (c.is_control() && c != '\n'))
+}
+
 /// 将终端不会稳定按单列显示的控制字符归一化为可见文本。
 ///
 /// 这里处理过一个很隐蔽的 TUI 渲染问题：聊天记录里如果混入原始 `\t` / `\r`
@@ -23,17 +34,32 @@ pub fn normalize_terminal_text(s: &str) -> String {
     result
 }
 
+/// 清理终端/TUI 展示文本：剥离 ANSI 码，再归一化控制字符。
+///
+/// 与 `normalize_terminal_text()` 的区别是这里会先移除完整 ANSI/OSC 转义序列，
+/// 避免只删除 `ESC` 后留下裸露的 `[31m` / `]0;...` 等残片。
+pub fn sanitize_terminal_text(s: &str) -> String {
+    let stripped = strip_ansi_codes(s);
+    normalize_terminal_text(&stripped)
+}
+
 /// 按显示宽度对文本进行自动换行
 /// `\n` 字符会在该处断行（产生新的 wrapped line），`\n` 本身不出现在返回的行中
 pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
-    let normalized = normalize_terminal_text(text);
+    let normalized;
+    let text = if needs_terminal_sanitization(text) {
+        normalized = sanitize_terminal_text(text);
+        normalized.as_str()
+    } else {
+        text
+    };
     // 最小宽度保证至少能放下一个字符（中文字符宽度2），避免无限循环或不截断
     let max_width = max_width.max(2);
     let mut result = Vec::new();
     let mut current_line = String::new();
     let mut current_width = 0;
 
-    for ch in normalized.chars() {
+    for ch in text.chars() {
         // 遇到 \n 时断行：push 当前行，开始新行
         if ch == '\n' {
             result.push(current_line.clone());
@@ -97,8 +123,7 @@ pub fn strip_ansi_codes(s: &str) -> String {
 
 /// 清理工具输出文本：剥离 ANSI 码 + 将 tab 替换为空格 + 移除 \r
 pub fn sanitize_tool_output(s: &str) -> String {
-    let stripped = strip_ansi_codes(s);
-    normalize_terminal_text(&stripped)
+    sanitize_terminal_text(s)
 }
 
 /// 去除字符串两端的引号（单引号或双引号）
@@ -114,7 +139,18 @@ pub fn remove_quotes(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_terminal_text, sanitize_tool_output, wrap_text};
+    use super::{
+        needs_terminal_sanitization, normalize_terminal_text, sanitize_terminal_text,
+        sanitize_tool_output, wrap_text,
+    };
+
+    #[test]
+    fn needs_terminal_sanitization_detects_ansi_and_control_chars() {
+        assert!(needs_terminal_sanitization("a\tb"));
+        assert!(needs_terminal_sanitization("a\r\nb"));
+        assert!(needs_terminal_sanitization("\x1b[31mred\x1b[0m"));
+        assert!(!needs_terminal_sanitization("plain\ntext"));
+    }
 
     #[test]
     fn normalize_terminal_text_expands_tabs_and_removes_cr() {
@@ -151,9 +187,20 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_terminal_text_strips_full_ansi_sequences() {
+        assert_eq!(sanitize_terminal_text("a\x1b[31mred\x1b[0m\x07b"), "aredb");
+    }
+
+    #[test]
     fn wrap_text_outputs_spaces_instead_of_tabs() {
         let wrapped = wrap_text("ab\tcd", 4);
         assert_eq!(wrapped, vec!["ab  ".to_string(), "  cd".to_string()]);
         assert!(wrapped.iter().all(|line| !line.contains('\t')));
+    }
+
+    #[test]
+    fn wrap_text_strips_ansi_sequences_instead_of_leaking_fragments() {
+        let wrapped = wrap_text("x\x1b[31mred\x1b[0my", 80);
+        assert_eq!(wrapped, vec!["xredy".to_string()]);
     }
 }

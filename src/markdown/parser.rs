@@ -6,7 +6,7 @@ mod text;
 use crate::markdown::ir::{
     Block, BlockKind, Inline, ListData, ListItem, ParsedDocument, SourceRange, TableData,
 };
-use crate::util::text::normalize_terminal_text;
+use crate::util::text::{needs_terminal_sanitization, sanitize_terminal_text};
 use pulldown_cmark::{Event, Tag, TagEnd};
 
 // ---------------------------------------------------------------------------
@@ -295,10 +295,10 @@ fn byte_to_line(byte: usize, line_offsets: &[usize]) -> usize {
 /// 纯解析：将 Markdown 文本解析为 IR 文档结构。
 /// 不依赖终端宽度或主题，输出与渲染无关的中间表示。
 pub fn parse_markdown(md: &str, max_width: usize) -> ParsedDocument {
-    // 预处理：tab/carriage return 清洗
+    // 预处理：ANSI/OSC/tab/carriage return/控制字符清洗
     let normalized_md;
-    let md = if md.contains('\t') || md.contains('\r') {
-        normalized_md = normalize_terminal_text(md);
+    let md = if needs_terminal_sanitization(md) {
+        normalized_md = sanitize_terminal_text(md);
         normalized_md.as_str()
     } else {
         md

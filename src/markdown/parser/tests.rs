@@ -203,6 +203,36 @@ fn markdown_tabs_are_normalized_before_rendering() {
     assert_eq!(rendered, vec!["foo    bar baz".to_string()]);
 }
 
+#[test]
+fn markdown_ansi_and_control_chars_are_sanitized_before_rendering() {
+    let theme = Theme::from_name(&ThemeName::default());
+    let lines = markdown_to_lines("foo\x1b[31mbar\x1b[0m\x07baz", 40, &theme);
+
+    for line in &lines {
+        for span in &line.spans {
+            assert!(
+                !span.content.contains('\x1b')
+                    && !span.content.contains('\x07')
+                    && !span.content.contains("[31m")
+                    && !span.content.contains("[0m"),
+                "span should not contain leaked ANSI/control fragments: {:?}",
+                span.content
+            );
+        }
+    }
+
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect()
+        })
+        .collect();
+    assert_eq!(rendered, vec!["foobarbaz".to_string()]);
+}
+
 /// 验证宽终端下行内代码样式正确渲染
 #[test]
 fn table_inline_code_wide_terminal() {
