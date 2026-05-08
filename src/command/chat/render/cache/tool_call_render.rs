@@ -932,7 +932,7 @@ fn render_kv_line(
     let value = sanitize_single_line_text(value);
     let max_val_chars = content_w.saturating_sub(key.chars().count() + 7);
     let display = if value.chars().count() > max_val_chars {
-        format!("{}…", truncate_str(value, max_val_chars))
+        format!("{}…", truncate_str(&value, max_val_chars))
     } else {
         value
     };

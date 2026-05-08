@@ -3,7 +3,7 @@ use crate::command::chat::context::compact::estimate_tokens;
 use crate::command::chat::teammate::TeammateStatus;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use crate::util::safe_lock;
-use crate::util::text::display_width;
+use crate::util::text::{display_width, sanitize_single_line_text};
 
 /// 标题栏模型名最大显示字符数。
 const TITLE_MODEL_NAME_MAX_CHARS: usize = 20;
@@ -48,7 +48,7 @@ pub fn draw_title_bar(
     let loading = if app.state.is_loading {
         // 优先级：重试提示 > 工具执行 > 工具等待确认 > 默认思考中
         if let Some(ref hint) = app.state.retry_hint {
-            format!(" {}", hint)
+            format!(" {}", sanitize_single_line_text(hint))
         } else {
             let tool_info = app
                 .tool_executor
@@ -57,7 +57,11 @@ pub fn draw_title_bar(
                 .find(|tc| matches!(tc.status, ToolExecStatus::Executing))
                 .map(|tc| {
                     if let Some(ref desc) = tc.tool_description {
-                        format!(" ⚙ 执行 {} - {}...", tc.tool_name, desc)
+                        format!(
+                            " ⚙ 执行 {} - {}...",
+                            tc.tool_name,
+                            sanitize_single_line_text(desc)
+                        )
                     } else {
                         format!(" ⚙ 执行 {}...", tc.tool_name)
                     }
@@ -69,7 +73,11 @@ pub fn draw_title_bar(
                         .find(|tc| matches!(tc.status, ToolExecStatus::PendingConfirm))
                         .map(|tc| {
                             if let Some(ref desc) = tc.tool_description {
-                                format!(" ⚙ 调用 {} - {}...", tc.tool_name, desc)
+                                format!(
+                                    " ⚙ 调用 {} - {}...",
+                                    tc.tool_name,
+                                    sanitize_single_line_text(desc)
+                                )
                             } else {
                                 format!(" ⚙ 调用 {}...", tc.tool_name)
                             }
@@ -228,9 +236,15 @@ pub fn draw_title_bar(
                     TeammateStatus::Retrying { .. } => t.title_loading,
                 };
 
+                let safe_name = sanitize_single_line_text(&snap.name);
                 let status_text = if snap.status == TeammateStatus::Working {
                     if let Some(ref tool) = snap.current_tool {
-                        format!("{} {}: {}", snap.status.icon(), snap.status.label(), tool)
+                        format!(
+                            "{} {}: {}",
+                            snap.status.icon(),
+                            snap.status.label(),
+                            sanitize_single_line_text(tool)
+                        )
                     } else {
                         format!("{} {}", snap.status.icon(), snap.status.label())
                     }
@@ -238,14 +252,14 @@ pub fn draw_title_bar(
                     format!("{} {}", snap.status.icon(), snap.status.label())
                 };
 
-                let entry_width = snap.name.len() + 2 + status_text.len() + 1;
+                let entry_width = safe_name.chars().count() + 2 + status_text.chars().count() + 1;
                 if current_width + entry_width > max_width {
                     tm_spans.push(Span::styled(" …", Style::default().fg(t.text_dim)));
                     break;
                 }
 
                 tm_spans.push(Span::styled(
-                    snap.name.clone(),
+                    safe_name,
                     Style::default()
                         .fg(t.text_white)
                         .add_modifier(Modifier::BOLD),
@@ -303,7 +317,12 @@ pub fn draw_title_bar(
                     }
                     SubAgentStatus::Working => {
                         if let Some(ref tool) = snap.current_tool {
-                            format!("{} R{} {}", snap.status.icon(), snap.current_round, tool)
+                            format!(
+                                "{} R{} {}",
+                                snap.status.icon(),
+                                snap.current_round,
+                                sanitize_single_line_text(tool)
+                            )
                         } else {
                             format!(
                                 "{} R{}/t{}",
@@ -365,7 +384,7 @@ pub fn draw_title_bar(
 
 /// 将 subagent description 转为紧凑标签（<=20 字符，空白转 _）
 fn short_subagent_label(description: &str) -> String {
-    let cleaned: String = description
+    let cleaned: String = sanitize_single_line_text(description)
         .chars()
         .map(|c| if c.is_whitespace() { '_' } else { c })
         .collect();
@@ -380,9 +399,10 @@ fn short_subagent_label(description: &str) -> String {
 /// 截断字符串到指定显示宽度，超长时加 "..."
 pub(crate) fn truncate_str(s: &str, max_w: usize) -> String {
     use crate::util::text::{char_width, display_width};
-    let w = display_width(s);
+    let s = sanitize_single_line_text(s);
+    let w = display_width(&s);
     if w <= max_w {
-        return s.to_string();
+        return s;
     }
     let ellipsis = "...";
     let target = max_w.saturating_sub(3);
