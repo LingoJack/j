@@ -286,7 +286,7 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 		  echo "- git log $$last_tag~1..$$last_tag --oneline（回退查看上个 tag 的变更）"; \
 		} > "$$prompt_file"; \
 		ai_out=$$(mktemp); \
-	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | tee "$$ai_out"; \
 	echo ""; \
 	echo "📄 AI 原始输出:"; \
 	echo "----------------------------------------"; \
