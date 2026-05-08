@@ -88,6 +88,7 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	  echo "- 用 <result>...</result> 包裹你的输出，不要输出任何其他内容"; \
 	  echo ""; \
 	  echo "## 行为规则（必须遵守）"; \
+	  echo "- 必须通过查看具体代码变更内容（diff）来判断改了什么，不要依赖 commit message 或文件名猜测"; \
 	  echo "- 不要向用户提问，不要要求确认，直接根据已有信息生成最佳结果"; \
 	  echo "- 如果提供的上下文不完整，主动执行 shell 命令补充信息，而不是停下来"; \
 	  echo "- 如果变更太多无法归类，选择最主要的变更类型概括"; \
@@ -100,9 +101,9 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	  (git diff 2>/dev/null || git diff --cached 2>/dev/null) | head -200; \
 	  echo ""; \
 	  echo "## 补充上下文（按需执行）"; \
-	  echo "以上信息可能被截断。你可以执行 shell 命令获取更多信息："; \
+	  echo "以上信息可能被截断。你必须执行 shell 命令查看具体代码内容，而不是仅凭文件名或 commit message 判断："; \
 	  echo "- git diff / git diff --cached（查看完整变更）"; \
-	  echo "- git diff -- <file>（查看特定文件）"; \
+	  echo "- git diff -- <file>（查看特定文件的具体代码变更）"; \
 	  echo "- git status（查看工作区状态）"; \
 	} > "$$prompt_file"; \
 	ai_out=$$(mktemp); \
@@ -427,4 +428,4 @@ watch-test: ## 监视文件变化并运行测试
 coverage: ## 生成代码覆盖率报告
 	@echo "📊 生成代码覆盖率报告..."
 	@cargo tarpaulin --out Html
-	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"
+	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"�️ 覆盖率报告生成完成: tarpaulin-report.html"
