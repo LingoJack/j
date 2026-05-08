@@ -328,6 +328,8 @@ impl ChatApp {
         self.permission_queue.deny_all();
         self.plan_approval_queue.deny_all();
 
+        self.sub_agent_tracker.clear_all();
+
         self.task_manager.replace_all(Vec::new());
         self.todo_manager.replace_all(Vec::new());
 

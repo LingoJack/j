@@ -268,6 +268,19 @@ impl SubAgentTracker {
             });
         }
     }
+
+    /// 清除所有子 Agent（session 切换/clear 时调用）。
+    ///
+    /// 将所有仍在运行的子 Agent 标记为非运行，然后清空追踪列表。
+    pub fn clear_all(&self) {
+        if let Ok(mut list) = self.agents.lock() {
+            for s in list.iter() {
+                s.is_running.store(false, Ordering::Relaxed);
+            }
+            list.clear();
+        }
+        self.counter.store(1, Ordering::Relaxed);
+    }
 }
 
 impl Default for SubAgentTracker {
