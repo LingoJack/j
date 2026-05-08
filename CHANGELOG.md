@@ -1,3 +1,11 @@
+# v12.10.35
+
+
+### 改进
+- **AGENT.md 重命名为 AGENTS.md**: 将项目级指令文件从 `AGENT.md` 统一更名为 `AGENTS.md`（含 `.local` 变体），涉及搜索加载逻辑、帮助文档、系统提示词模板、lint 脚本及 TUI 配置界面等全链路更新
+- **Makefile push 智能提示增强**: AI 生成 commit message 的 prompt 中新增"必须查看具体 diff 判断变更内容"的行为规则，避免 AI 仅凭文件名或 commit message 猜测变更
+- **Makefile publish 输出修复**: 将 `j ai` 命令输出
+
 # v12.10.32
 
 
