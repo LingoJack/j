@@ -57,6 +57,18 @@ export const i18n: Record<Language, I18nData> = {
         { title: 'Multiple Themes', desc: 'Dark, Light, Dracula, Gruvbox, Monokai, Nord.' }
       ]
     },
+    screenshots: {
+      title: 'Screenshots',
+      subtitle: 'See jcli in action across different workflows.',
+      list: [
+        { src: '/j/pics/jcli-ai/1.png', alt: 'Agent chat with tool calling', caption: 'Agent chat interface. View context, read files, call tools, and confirm high-risk operations like Bash — all in the terminal.', label: 'Agent Chat' },
+        { src: '/j/pics/jcli-ai/2.png', alt: 'Model configuration', caption: 'Model configuration page. Manage providers, models, sessions and global settings without leaving the terminal.', label: 'Model Config' },
+        { src: '/j/pics/jcli-ai/3.png', alt: 'Tool toggles', caption: 'Tool toggle page. Control whether Bash, Read, Write, WebSearch, Todo and other tools are available per session.', label: 'Tool Toggle' },
+        { src: '/j/pics/jcli-ai/4.png', alt: 'Agent multi-turn analysis', caption: 'Agent multi-turn workflow. Replies, code snippets, Grep/Read/Bash results all unfold in the same terminal session — ideal for code review and troubleshooting.', label: 'Multi-turn Analysis' },
+        { src: '/j/pics/jcli-ai/5.png', alt: 'Markdown terminal editor', caption: 'Markdown terminal editor. Typora-like live-preview experience for AGENT.md, daily reports, notes and other Markdown documents.', label: 'Markdown Editor' },
+        { src: '/j/pics/jcli-ai/6.png', alt: 'Alias list and quick open', caption: 'Alias list view. Manage apps, scripts and path entries in one place, paired with j <alias> for a lightweight personal command workflow.', label: 'Alias Management' }
+      ]
+    },
     bestPractices: {
       title: 'Best Practices',
       subtitle: 'Practical tips to maximize your productivity with jcli.',
@@ -173,6 +185,18 @@ export const i18n: Record<Language, I18nData> = {
         { title: 'Agent 模式', desc: '自主多步推理，自动调用工具完成复杂任务。' },
         { title: '对话压缩', desc: '三层压缩机制，智能管理上下文窗口。' },
         { title: '多主题支持', desc: 'Dark、Light、Dracula、Gruvbox、Monokai、Nord。' }
+      ]
+    },
+    screenshots: {
+      title: '界面截图',
+      subtitle: '不同工作场景下的 jcli 实机展示。',
+      list: [
+        { src: '/j/pics/jcli-ai/1.png', alt: 'Agent 对话与工具调用界面', caption: 'Agent 对话主界面。在终端里直接查看上下文、读取文件、调用工具，并对 Bash 等高风险操作做权限确认。', label: 'Agent 对话' },
+        { src: '/j/pics/jcli-ai/2.png', alt: '模型配置界面', caption: '模型配置页。可以在终端里维护 Provider、模型、Session 与全局配置，不必离开当前工作台。', label: '模型配置' },
+        { src: '/j/pics/jcli-ai/3.png', alt: '工具开关界面', caption: '工具开关页。按会话控制 Bash、Read、Write、WebSearch、Todo 等工具是否可用，方便收紧或放开 Agent 权限。', label: '工具开关' },
+        { src: '/j/pics/jcli-ai/4.png', alt: 'Agent 多轮分析与工具结果', caption: 'Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。', label: '多轮分析' },
+        { src: '/j/pics/jcli-ai/5.png', alt: 'Markdown 终端编辑与预览', caption: 'Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENT.md、日报周报、笔记和其他 Markdown 文档。', label: 'Markdown 编辑' },
+        { src: '/j/pics/jcli-ai/6.png', alt: '别名列表与快捷打开', caption: '别名列表视图。统一管理应用、脚本和路径入口，配合 j <alias> 形成很轻的个人命令工作流。', label: '别名管理' }
       ]
     },
     bestPractices: {

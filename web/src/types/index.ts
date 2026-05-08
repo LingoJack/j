@@ -27,6 +27,13 @@ export interface MoreFeature {
   desc: string
 }
 
+export interface ScreenshotItem {
+  src: string
+  alt: string
+  caption: string
+  label: string
+}
+
 export interface I18nData {
   nav: {
     features: string
@@ -59,6 +66,11 @@ export interface I18nData {
   more: {
     title: string
     list: MoreFeature[]
+  }
+  screenshots: {
+    title: string
+    subtitle: string
+    list: ScreenshotItem[]
   }
   bestPractices: {
     title: string
