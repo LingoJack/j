@@ -14,6 +14,21 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
   const offsetRef = useRef(0)
   const rafRef = useRef(0)
 
+  // Sync left height to right
+  const leftRef = useRef<HTMLDivElement>(null)
+  const rightRef = useRef<HTMLDivElement>(null)
+  const [leftH, setLeftH] = useState<number | undefined>(undefined)
+
+  useEffect(() => {
+    const right = rightRef.current
+    if (!right) return
+    const sync = () => setLeftH(right.offsetHeight)
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(right)
+    return () => ro.disconnect()
+  }, [])
+
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -50,13 +65,16 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
           </p>
         </div>
 
-        {/* Two-column layout — grid 默认 items-stretch，两列等高 */}
-        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 lg:gap-10">
+        {/* Two-column — items-start 让左列不撑高 grid 行 */}
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 lg:gap-10 items-start">
 
           {/* Left: smooth infinite scrolling feature list */}
-          <div className="hidden lg:flex flex-col min-h-0">
-            <div className="flex-1 overflow-hidden min-h-0">
-              <div ref={scrollRef}>
+          <div
+            ref={leftRef}
+            className="hidden lg:block overflow-hidden"
+            style={leftH != null ? { height: `${leftH}px` } : undefined}
+          >
+            <div ref={scrollRef}>
               {[...features, ...features].map((feature, index) => (
                 <div key={index} className="py-2">
                   <div className="p-4 bg-stone-50 rounded-lg border border-stone-200">
@@ -68,13 +86,12 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
                   </div>
                 </div>
               ))}
-              </div>
             </div>
           </div>
 
-          {/* Right: screenshot carousel — 这列的高度决定 grid 行高 */}
-          <div className="flex flex-col">
-            {/* Main image with overlay arrows */}
+          {/* Right: screenshot carousel */}
+          <div ref={rightRef} className="flex flex-col">
+            {/* Main image */}
             <div className="relative group rounded-lg shadow-md overflow-hidden border border-stone-300">
               <img
                 src={screenshots[shotIndex].src}
