@@ -1,3 +1,11 @@
+# v12.10.32
+
+
+
+### Bug 修复
+
+- **publish AI 输出**: 修复 `make publish` 时 AI 生成的 release notes 内容不可见的问题，改用 `tee` 同时输出到终端和文件
+
 # v12.10.31
 
 
