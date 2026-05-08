@@ -9,7 +9,7 @@ export default defineConfig({
     host: '0.0.0.0', // 允许局域网访问
     port: 5173, // 端口号
   },
-  base: '/j/',
+  base: '/jcli/',
   build: {
     outDir: '../docs',
     emptyOutDir: true,
