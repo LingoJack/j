@@ -1,3 +1,17 @@
+# v12.10.22
+
+### 改进
+- **文本清洗体系重构**: 新增 `sanitize_terminal_text()` / `sanitize_single_line_text()` / `needs_terminal_sanitization()` 三层 API，完整剥离 ANSI/OSC 转义序列与控制字符，替代原有的 `normalize_terminal_text` 逐字符替换方案
+- **wrap_text 防 ANSI 残片**: `wrap_text()` 现在先剥离 ANSI 转义序列再换行，避免 `[31m` / `[0m` 等残片泄漏到 TUI 渲染结果中
+- **Markdown 解析预处理增强**: Markdown 解析器预处理从 `normalize_terminal_text` 升级为 `sanitize_terminal_text`，增加对 ANSI 转义序列的完整剥离
+
+### Bug 修复
+- **TUI 渲染安全加固**: 全面对外部输入文本（工具名、参数预览、teammate 名称/角色/描述、subagent 错误消息、浏览过滤器、重试提示、title bar 工具描述等）使用 `sanitize_single_line_text` 清洗，防止 ANSI 码和控制字符泄漏到 TUI 界面导致显示异常
+
+### 其他
+- **Makefile install 重构**: `make install` 改为从 GitHub Releases 下载预编译二进制安装到 `/usr/local/bin`，不再本地编译；配套更新 `make uninstall`
+- **install.sh**: 更新内置 fallback 版本号为 v12.10.21
+
 # v12.10.21
 
 ### Bug 修复
