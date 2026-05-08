@@ -200,7 +200,7 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或从 CHANGELOG.md �
 	{ echo "Release v$$version"; echo ""; awk 'NR==1{next} /^# v/{exit} {print}' CHANGELOG.md; } > "$$note_file"; \
 	git add CHANGELOG.md; \
 	git commit -m "chore: bump version to v$$version"; \
-	git tag -a "v$$version" -F "$$note_file"; \
+	git tag -a --cleanup=verbatim "v$$version" -F "$$note_file"; \
 	git push origin $(GIT_BRANCH); \
 	git push origin "v$$version"; \
 	echo "📤 发布到 crates.io..."; \
