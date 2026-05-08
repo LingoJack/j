@@ -76,7 +76,10 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 		diff_stat="$$(git diff --cached --stat 2>/dev/null)"; \
 	fi; \
 	if [ -z "$$diff_stat" ]; then \
-		echo "ℹ️ 没有检测到变更"; exit 0; \
+		echo "ℹ️ 没有检测到本地变更，直接 push 已有 commits..."; \
+		git push origin $(GIT_BRANCH); \
+		echo "✅ 已 push"; \
+		exit 0; \
 	fi; \
 	prompt_file=$$(mktemp); \
 	trap 'rm -f "$$prompt_file"' EXIT; \
