@@ -85,7 +85,11 @@ push-ai: current_dir fmt build-web ## AI 生成 commit message 并推送
 	if [ -z "$$diff_stat" ]; then \
 		echo "ℹ️ 没有检测到变更"; exit 0; \
 	fi; \
-	msg=$$(timeout 30 j ai --bypass -- "根据以下代码变更生成一个 commit message。格式：<类型>: <中文描述>，类型可选 feat/fix/refactor/docs/style/test/chore/perf，描述不超过 30 字。请用 <result>...</result> 包裹你的输出。变更: $$diff_stat" 2>/dev/null | $(J_AI_EXTRACT)); \
+	diff_detail="$$(git diff 2>/dev/null)"; \
+	if [ -z "$$diff_detail" ]; then \
+		diff_detail="$$(git diff --cached 2>/dev/null)"; \
+	fi; \
+	msg=$$(timeout 60 j ai --bypass --no-render -- "根据以下代码变更生成一个 commit message。格式：<类型>: <中文描述>，类型可选 feat/fix/refactor/docs/style/test/chore/perf，描述不超过 30 字。请用 <result>...</result> 包裹你的输出，不要输出其他内容。变更概览: $$diff_stat\n详细变更:\n$$diff_detail" 2>/dev/null | $(J_AI_EXTRACT)); \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
 	echo "✅ 已推送: $$msg"

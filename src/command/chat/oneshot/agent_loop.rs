@@ -38,6 +38,7 @@ pub(crate) fn run_oneshot_no_tools(
     message: String,
     prior_messages: Vec<ChatMessage>,
     session_id: &str,
+    no_render: bool,
 ) {
     use crate::command::chat::agent::api::call_llm_stream;
     use crate::command::chat::oneshot::animation::start_thinking_animation;
@@ -94,7 +95,12 @@ pub(crate) fn run_oneshot_no_tools(
     ) {
         Ok(full_text) => {
             if !full_text.is_empty() {
-                redraw_markdown(raw_lines, cur_col, &full_text);
+                if !no_render {
+                    redraw_markdown(raw_lines, cur_col, &full_text);
+                } else {
+                    // no_render 模式下，流式文本已经 print 到 stdout，补一个换行即可
+                    println!();
+                }
                 persist_messages(session_id, &[user_msg], 0);
                 persist_messages(
                     session_id,
@@ -118,6 +124,7 @@ pub(crate) fn run_oneshot_agent(
     prior_messages: Vec<ChatMessage>,
     session_id: &str,
     bypass: bool,
+    no_render: bool,
 ) {
     let thinking_style = agent_config.thinking_style;
 
@@ -309,12 +316,16 @@ pub(crate) fn run_oneshot_agent(
                         anim_running = false;
                     }
                     // 先重绘已输出的流式文本
-                    if last_streaming_len > 0 {
+                    if last_streaming_len > 0 && !no_render {
                         redraw_streaming_as_markdown(
                             &streaming_content,
                             &mut raw_lines,
                             &mut cur_col,
                         );
+                        last_streaming_len = streaming_content.lock().unwrap().len();
+                    } else if last_streaming_len > 0 {
+                        // no_render 模式下补一个换行
+                        println!();
                         last_streaming_len = streaming_content.lock().unwrap().len();
                     }
 
@@ -343,12 +354,15 @@ pub(crate) fn run_oneshot_agent(
                     if anim_running {
                         stop_thinking_animation(&anim_stop);
                     }
-                    if last_streaming_len > 0 {
+                    if last_streaming_len > 0 && !no_render {
                         redraw_streaming_as_markdown(
                             &streaming_content,
                             &mut raw_lines,
                             &mut cur_col,
                         );
+                    } else if last_streaming_len > 0 {
+                        // no_render 模式下补一个换行
+                        println!();
                     }
                     let ctx_msgs = context_messages.lock().unwrap();
                     let persist_from = if prior_len < ctx_msgs.len() {

@@ -156,6 +156,9 @@ pub enum SubCmd {
         /// 跳过工具执行确认（管道/脚本场景）
         #[arg(long)]
         bypass: bool,
+        /// 禁用 Markdown 渲染，直接输出原始文本
+        #[arg(long)]
+        no_render: bool,
         /// 消息内容（支持多个参数拼接）
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         content: Vec<String>,

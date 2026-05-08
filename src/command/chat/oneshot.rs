@@ -33,6 +33,7 @@ pub struct ChatArgs<'a> {
     pub remote: bool,
     pub port: u16,
     pub bypass: bool,
+    pub no_render: bool,
     pub config: &'a YamlConfig,
 }
 
@@ -45,6 +46,7 @@ pub fn handle_chat(args: ChatArgs<'_>) {
         remote,
         port,
         bypass,
+        no_render,
         config: _config,
     } = args;
     let agent_config = load_agent_config();
@@ -101,6 +103,7 @@ pub fn handle_chat(args: ChatArgs<'_>) {
             prior_messages,
             &session_id,
             bypass,
+            no_render,
         );
     } else {
         run_oneshot_no_tools(
@@ -109,6 +112,7 @@ pub fn handle_chat(args: ChatArgs<'_>) {
             message,
             prior_messages,
             &session_id,
+            no_render,
         );
     }
 }

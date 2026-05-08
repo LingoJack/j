@@ -13,6 +13,7 @@ order: 6
 | `j ai --remote --port 8080` | 指定远程控制端口（默认 9390） |
 | `j ai -c` | 延续上一个会话（oneshot 模式） |
 | `j ai --session <id>` | 指定会话 ID 继续 |
+| `j ai --no-render 你好` | 禁用 Markdown 渲染，直接输出原始文本 |
 
 > **提示**：oneshot 模式下，提问内容如果包含 `|`、`>`、`<`、`&` 等 shell 特殊字符，需要用引号包裹，否则会被 shell 解释为管道/重定向。例如：`j ai "请解释 ls | grep rs 的含义"`
 
