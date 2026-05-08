@@ -14,7 +14,7 @@
 
 </div>
 
-> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Electron 的 GUI 版本，提供可视化操作体验。
+> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
 
 ---
 
@@ -218,11 +218,11 @@ j
 
 ## 🖥️ GUI 版本
 
-如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/j-gui) 提供了基于 Electron 的桌面客户端，支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
+如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/j-gui) 提供了基于 Tauri 的桌面客户端（**目前正在研发中**），支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
 
 <div align="center">
 <a href="https://github.com/LingoJack/j-gui">
-<img src="https://img.shields.io/badge/GUI-j--gui-blue?logo=electron" alt="j-gui" />
+<img src="https://img.shields.io/badge/GUI-j--gui-blue?logo=tauri" alt="j-gui" />
 </a>
 </div>
 
