@@ -51,7 +51,7 @@
         "@type": "Person",
         "name": "LingoJack"
       },
-      "codeRepository": "https://github.com/LingoJack/j"
+      "codeRepository": "https://github.com/LingoJack/jcli"
     }
     </script>
 
@@ -61,8 +61,8 @@
         var redirect = sessionStorage.getItem('spa:redirect');
         if (redirect) {
           sessionStorage.removeItem('spa:redirect');
-          // 恢复完整路径，包含基础路径 /j/
-          history.replaceState(null, '', '/j' + redirect);
+          // 恢复完整路径，包含基础路径 /jcli/
+          history.replaceState(null, '', '/jcli' + redirect);
         }
       })();
     </script>
@@ -79,7 +79,7 @@
         <li>AI 对话 - 与 AI 助手交互</li>
         <li>浏览器自动化 - 自动化浏览器操作</li>
       </ul>
-      <p>访问 <a href="https://github.com/LingoJack/j">GitHub 仓库</a> 了解更多。</p>
+      <p>访问 <a href="https://github.com/LingoJack/jcli">GitHub 仓库</a> 了解更多。</p>
     </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
