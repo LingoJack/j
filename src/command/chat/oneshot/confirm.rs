@@ -147,9 +147,12 @@ pub(crate) fn interactive_confirm(
         make_args_preview(arguments)
     };
 
-    // 截断描述
-    let desc_display = if desc.len() > bw.saturating_sub(8) {
-        format!("{}...", &desc[..bw.saturating_sub(11)])
+    // 截断描述（按字符边界截断，避免 UTF-8 多字节字符中间切割导致 panic）
+    let max_char_width = bw.saturating_sub(8);
+    let desc_display = if desc.chars().count() > max_char_width {
+        let trunc_len = bw.saturating_sub(11);
+        let truncated: String = desc.chars().take(trunc_len).collect();
+        format!("{}...", truncated)
     } else {
         desc.clone()
     };

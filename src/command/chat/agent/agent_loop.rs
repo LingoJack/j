@@ -1120,6 +1120,16 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                     continue 'round;
                 }
                 write_info_log("agent_loop", "无用户增量消息，break 'round (fallback 路径)");
+
+                // ★ break 'round 前，将 fallback 最后一轮 assistant 文本刷新到 context_messages
+                flush_streaming_as_message(
+                    &streaming_content,
+                    &streaming_reasoning_content,
+                    &mut messages,
+                    &display_messages,
+                    &context_messages,
+                    fallback_result.reasoning_content.clone(),
+                );
                 break 'round;
             }
 
@@ -1352,6 +1362,22 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
                         assistant_text.len()
                     ),
                 );
+
+                // ★ break 'round 前，将最后一轮 assistant 文本刷新到 context_messages，
+                //   避免 oneshot persist 时丢失最终的 AI 回复
+                let reasoning_for_flush: Option<String> = {
+                    let r = take(&mut assistant_reasoning);
+                    if r.is_empty() { None } else { Some(r) }
+                };
+                flush_streaming_as_message(
+                    &streaming_content,
+                    &streaming_reasoning_content,
+                    &mut messages,
+                    &display_messages,
+                    &context_messages,
+                    reasoning_for_flush,
+                );
+
                 metrics.total_llm_calls += 1;
                 metrics.total_llm_elapsed_ms += call_start.elapsed().as_millis() as u64;
                 break 'round;

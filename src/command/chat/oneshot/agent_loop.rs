@@ -99,6 +99,9 @@ pub(crate) fn run_oneshot_no_tools(
         },
     ) {
         Ok(full_text) => {
+            // ★ 无论回复是否为空，都持久化 user message，避免产生空会话记录
+            persist_messages(session_id, &[user_msg], 0);
+
             if !full_text.is_empty() {
                 if !no_render {
                     redraw_markdown(raw_lines, cur_col, &full_text);
@@ -106,16 +109,17 @@ pub(crate) fn run_oneshot_no_tools(
                     // no_render 模式下，流式文本已经 print 到 stdout，补一个换行即可
                     println!();
                 }
-                persist_messages(session_id, &[user_msg], 0);
                 persist_messages(
                     session_id,
                     &[ChatMessage::text(MessageRole::Assistant, &full_text)],
                     0,
                 );
-                eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
             }
+            eprintln!("{} {}", "会话 ID:".dimmed(), session_id.dimmed());
         }
         Err(e) => {
+            // ★ LLM 调用失败时也持久化 user message，保留用户输入记录
+            persist_messages(session_id, &[user_msg], 0);
             error!("\n{}", e.display_message());
         }
     }
@@ -174,8 +178,8 @@ pub(crate) fn run_oneshot_agent(
     // 构建消息
     let user_msg = ChatMessage::text(MessageRole::User, &message);
     let prior_len = prior_messages.len();
-    let mut messages = prior_messages;
-    messages.push(user_msg);
+    let mut messages = prior_messages.clone();
+    messages.push(user_msg.clone());
 
     let loaded_skills = skill::load_all_skills();
     let teammate_manager: Arc<Mutex<TeammateManager>> = Arc::new(Mutex::new(TeammateManager::new(
@@ -208,6 +212,15 @@ pub(crate) fn run_oneshot_agent(
     let pending_user_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(vec![]));
     let display_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(vec![]));
     let context_messages: Arc<Mutex<Vec<ChatMessage>>> = Arc::new(Mutex::new(vec![]));
+
+    // ★ 将 prior_messages + user_msg 同步到 context_messages，
+    //   这样 agent loop 中的 push_both 会在此基础上追加 assistant/tool 消息，
+    //   最终 persist_messages 能拿到完整的消息序列。
+    {
+        let mut ctx = context_messages.lock().unwrap();
+        ctx.extend(prior_messages.iter().cloned());
+        ctx.push(user_msg.clone());
+    }
     let estimated_context_tokens: Arc<Mutex<usize>> = Arc::new(Mutex::new(0));
     let derived_system_prompt: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 

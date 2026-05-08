@@ -339,7 +339,7 @@ pub const WELCOME_MESSAGE: &str = r###"
   ║      https://github.com/LingoJack/kitty_conf                              ║
   ║                                                                           ║
   ║   🚉 Github Repo:                                                         ║
-  ║      https://github.com/LingoJack/jcli.git                                   ║
+  ║      https://github.com/LingoJack/jcli.git                                ║
   ║                                                                           ║
   ╠═══════════════════════════════════════════════════════════════════════════╣
   ║                                                                           ║
