@@ -13,17 +13,17 @@ Release notes 统一由 `CHANGELOG.md` 管理。每个版本用 `# v12.10.12` �
 ### 1. 手动指定 Release Notes（推荐）
 
 ```bash
-make publish NOTE='### 新功能
+NOTE='### 新功能
 - **功能名称**: 描述
 
 ### 改进
 - **改进内容**: 描述
 
 ### Bug 修复
-- **修复内容**: 描述'
+- **修复内容**: 描述' make publish
 ```
 
-传入 `NOTE` 时，会自动在 `CHANGELOG.md` 顶部插入 `# v版本号` 标题 + NOTE 内容，同时用作 git tag message。
+NOTE 通过环境变量传递，会自动在 `CHANGELOG.md` 顶部插入 `# v版本号` 标题 + NOTE 内容，同时用作 git tag message。
 
 ### 2. 从 CHANGELOG.md 读取
 

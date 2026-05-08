@@ -183,22 +183,20 @@ bump-version: ## 递增版本号（最后一位 patch）
 	fi; \
 	echo "☑️ 版本号已更新为 $$new_version"
 
-publish: ## 发布到 crates.io（make publish NOTE="release notes" 或从 CHANGELOG.md 读取）
+publish: ## 发布到 crates.io（NOTE='xxx' make publish 或从 CHANGELOG.md 读取）
 	@echo "📦 开始发布流程..."
 	@$(MAKE) bump-version
 	@$(MAKE) release
 	@git add .
-	$(if $(NOTE),$(file >.note_tmp,$(NOTE)))
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	note_file=$$(mktemp); \
 	changelog_tmp=$$(mktemp); \
 	trap 'rm -f "$$note_file" "$$changelog_tmp"' EXIT; \
-	if [ -f .note_tmp ]; then \
-		{ echo "# v$$version"; echo ""; cat .note_tmp; } > "$$changelog_tmp"; \
+	if [ -n "$${NOTE:-}" ]; then \
+		{ echo "# v$$version"; echo ""; printf '%s\n' "$$NOTE"; } > "$$changelog_tmp"; \
 		if [ -f CHANGELOG.md ]; then echo "" >> "$$changelog_tmp"; cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
 		mv "$$changelog_tmp" CHANGELOG.md; \
-		cp .note_tmp "$$note_file"; \
-		rm -f .note_tmp; \
+		printf '%s\n' "$$NOTE" > "$$note_file"; \
 	else \
 		awk '/^# v/{if(p++)exit}p' CHANGELOG.md > "$$note_file"; \
 	fi; \
