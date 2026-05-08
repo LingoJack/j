@@ -82,11 +82,15 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 		exit 0; \
 	fi; \
 	prompt_file=$$(mktemp); \
-	trap 'rm -f "$$prompt_file"' EXIT; \
-	diff_content=$$((git diff 2>/dev/null || git diff --cached 2>/dev/null) | head -200); \
-	sed -e "s|{{diff_stat}}|$$diff_stat|g" \
-	    -e "s|{{diff}}|$$diff_content|g" \
-	    prompts/commit-message.md > "$$prompt_file"; \
+	stat_file=$$(mktemp); \
+	diff_file=$$(mktemp); \
+	trap 'rm -f "$$prompt_file" "$$stat_file" "$$diff_file"' EXIT; \
+	printf '%s\n' "$$diff_stat" > "$$stat_file"; \
+	(git diff 2>/dev/null || git diff --cached 2>/dev/null) | head -200 > "$$diff_file"; \
+	awk -v stat_file="$$stat_file" -v diff_file="$$diff_file" '\
+		/\{\{diff_stat\}\}/ { while ((getline l < stat_file) > 0) print l; close(stat_file); next } \
+		/\{\{diff\}\}/      { while ((getline l < diff_file) > 0) print l; close(diff_file); next } \
+		{ print }' prompts/commit-message.md > "$$prompt_file"; \
 	ai_out=$$(mktemp); \
 	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
 	echo ""; \
@@ -95,7 +99,7 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	cat "$$ai_out"; \
 	echo "----------------------------------------"; \
 	msg=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
-	rm -f "$$ai_out" "$$prompt_file"; \
+	rm -f "$$ai_out"; \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
 	echo "✅ 已推送: $$msg"
@@ -235,13 +239,20 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 			log_range="HEAD~10..HEAD"; \
 		fi; \
 		prompt_file=$$(mktemp); \
-		trap 'rm -f "$$prompt_file"' EXIT; \
-		git_log=$$(git log $$log_range --oneline --no-decorate 2>/dev/null | head -20); \
-		sed -e "s|{{version}}|$$version|g" \
-		    -e "s|{{last_tag}}|$${last_tag:-HEAD~10}|g" \
-		    -e "s|{{log_range}}|$$log_range|g" \
-		    -e "s|{{git_log}}|$$git_log|g" \
-		    prompts/release-notes.md > "$$prompt_file"; \
+		log_file=$$(mktemp); \
+		trap 'rm -f "$$prompt_file" "$$log_file"' EXIT; \
+		git log $$log_range --oneline --no-decorate 2>/dev/null | head -20 > "$$log_file"; \
+		awk -v version="$$version" \
+		    -v last_tag="$${last_tag:-HEAD~10}" \
+		    -v log_range="$$log_range" \
+		    -v log_file="$$log_file" '\
+			{ \
+				gsub(/\{\{version\}\}/, version); \
+				gsub(/\{\{last_tag\}\}/, last_tag); \
+				gsub(/\{\{log_range\}\}/, log_range); \
+				if (/\{\{git_log\}\}/) { while ((getline l < log_file) > 0) print l; close(log_file); next } \
+				print \
+			}' prompts/release-notes.md > "$$prompt_file"; \
 		ai_out=$$(mktemp); \
 		j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | tee "$$ai_out"; \
 		echo ""; \
