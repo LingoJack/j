@@ -1,6 +1,6 @@
 <div align="center">
 
-# j
+# jcli
 
 **AI 驱动的命令行工作台**
 
