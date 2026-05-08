@@ -88,8 +88,10 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	  echo "详细变更:"; \
 	  (git diff 2>/dev/null || git diff --cached 2>/dev/null) | head -200; \
 	} > "$$prompt_file"; \
-	msg=$$(j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | $(J_AI_EXTRACT)); \
-	rm -f "$$prompt_file"; \
+	ai_out=$$(mktemp); \
+	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+	msg=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
+	rm -f "$$ai_out" "$$prompt_file"; \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
 	echo "✅ 已推送: $$msg"
@@ -249,7 +251,10 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 		  echo "Git log ($$log_range):"; \
 		  git log $$log_range --oneline --no-decorate 2>/dev/null | head -20; \
 		} > "$$prompt_file"; \
-		ai_note=$$(j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | $(J_AI_EXTRACT)); \
+		ai_out=$$(mktemp); \
+	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+	ai_note=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
+	rm -f "$$ai_out"; \
 		if [ -z "$$ai_note" ]; then \
 			echo "⚠️ AI 生成失败，请手动指定 NOTE 参数"; \
 			exit 1; \
