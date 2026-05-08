@@ -13,7 +13,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # 伪目标声明
 # ============================================
 .PHONY: help \
-        current_dir push push-ai pull status \
+        current_dir push push-non-ai pull status \
         build release debug build-indicator build-ax \
         install uninstall reinstall \
         publish publish-check tag tags bump-version set-version \
@@ -61,13 +61,6 @@ current_dir: ## 显示当前目录信息
 	@echo "分支: $(GIT_BRANCH)"
 	@echo "======================================"
 
-push: current_dir fmt build-web ## 提交并推送代码
-	@echo "📤 推送代码到远程仓库..."
-	@git add .\
-	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
-	&& git push origin $(GIT_BRANCH)
-	@echo "☑️ 代码已推送"
-
 # --- j ai 输出提取辅助函数 ---
 # prompt 中要求 AI 用 <result>...</result> 包裹输出
 # 管道中直接用 awk 抓取标签内容，无需过滤任何噪音
@@ -76,7 +69,7 @@ define J_AI_EXTRACT
 awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'
 endef
 
-push-ai: current_dir fmt build-web ## AI 生成 commit message 并推送
+push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	@echo "🤖 AI 生成变更说明..."
 	@diff_stat="$$(git diff --stat 2>/dev/null)"; \
 	if [ -z "$$diff_stat" ]; then \
@@ -100,6 +93,13 @@ push-ai: current_dir fmt build-web ## AI 生成 commit message 并推送
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
 	echo "✅ 已推送: $$msg"
+
+push-non-ai: current_dir fmt build-web ## 提交并推送代码（手动 commit message）
+	@echo "📤 推送代码到远程仓库..."
+	@git add .\
+	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
+	&& git push origin $(GIT_BRANCH)
+	@echo "☑️ 代码已推送"
 
 pull: current_dir ## 拉取最新代码
 	@echo "📥 拉取最新代码..."
