@@ -23,36 +23,38 @@ export function ScreenshotsSection({ t }: ScreenshotsSectionProps) {
       </div>
 
       {/* Main screenshot display */}
-      <div className="relative mb-6">
-        <div className="bg-stone-100 rounded-xl border border-stone-200 overflow-hidden shadow-sm">
-          <div className="aspect-[16/10] flex items-center justify-center bg-stone-950 p-2">
-            <img
-              src={current.src}
-              alt={current.alt}
-              className="w-full h-full object-contain rounded"
-            />
-          </div>
-        </div>
-        {/* Navigation arrows */}
+      <div className="flex items-center gap-4 mb-6">
+        {/* Left arrow — outside image area */}
         <button
           onClick={() => setActiveIndex((prev) => (prev - 1 + screenshots.length) % screenshots.length)}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-10 h-10 flex items-center justify-center
+          className="flex-shrink-0 w-10 h-10 flex items-center justify-center
                      bg-white border border-stone-200 rounded-full shadow-sm
-                     text-stone-500 hover:text-stone-900 hover:border-stone-300 transition-colors"
+                     text-stone-400 hover:text-stone-900 hover:border-stone-300 transition-colors"
           aria-label="Previous"
         >
-          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
+
+        {/* Image — no extra frame, just a subtle shadow */}
+        <div className="flex-1 overflow-hidden rounded-lg shadow-md">
+          <img
+            src={current.src}
+            alt={current.alt}
+            className="w-full h-auto block"
+          />
+        </div>
+
+        {/* Right arrow — outside image area */}
         <button
           onClick={() => setActiveIndex((prev) => (prev + 1) % screenshots.length)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-10 h-10 flex items-center justify-center
+          className="flex-shrink-0 w-10 h-10 flex items-center justify-center
                      bg-white border border-stone-200 rounded-full shadow-sm
-                     text-stone-500 hover:text-stone-900 hover:border-stone-300 transition-colors"
+                     text-stone-400 hover:text-stone-900 hover:border-stone-300 transition-colors"
           aria-label="Next"
         >
-          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </button>
@@ -72,8 +74,8 @@ export function ScreenshotsSection({ t }: ScreenshotsSectionProps) {
             className={`
               relative overflow-hidden rounded-lg border-2 transition-all duration-200 w-20 h-14 flex-shrink-0
               ${i === activeIndex
-                ? 'border-stone-900 shadow-sm ring-1 ring-stone-900/10'
-                : 'border-stone-200 hover:border-stone-400 opacity-60 hover:opacity-100'
+                ? 'border-stone-900 shadow-sm'
+                : 'border-stone-200 hover:border-stone-400 opacity-50 hover:opacity-100'
               }
             `}
           >
