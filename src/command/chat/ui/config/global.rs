@@ -17,46 +17,8 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let mut list = ItemList::new(t.bg_primary);
 
-    // compact_exempt_tools 子列表模式
     if app.ui.compact_exempt_sublist {
-        // 标题行 + 空行
-        list.push_raw(Line::from(vec![
-            Span::styled(
-                "  豁免压缩工具  ",
-                Style::default().fg(t.config_label_selected),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                "Enter/空格 切换 | Esc 返回",
-                Style::default().fg(t.config_dim),
-            ),
-        ]));
-        list.push_raw(Line::from(""));
-
-        use crate::command::chat::context::compact::BUILTIN_EXEMPT_TOOLS;
-        let tool_names = app.tool_registry.tool_names();
-        let exempt = &app.state.agent_config.compact.micro_compact_exempt_tools;
-
-        for (i, name) in tool_names.iter().enumerate() {
-            let is_builtin = BUILTIN_EXEMPT_TOOLS.contains(name);
-            let is_exempt = is_builtin || exempt.iter().any(|t| t == name);
-            let selected = i == app.ui.compact_exempt_idx;
-
-            let label = if is_builtin {
-                format!("{} (内置)", name)
-            } else {
-                name.to_string()
-            };
-
-            list.push(toggle_list_item(&ToggleListItemCtx {
-                name: label,
-                enabled: is_exempt,
-                selected,
-                desc: None,
-                tag: None,
-                theme: t,
-            }));
-        }
+        draw_compact_exempt_sublist(app, t, &mut list);
         return list;
     }
 
@@ -84,12 +46,9 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
         }
 
         for i in start..start + count {
-            let field = CONFIG_GLOBAL_FIELDS_TAB.get(i);
-            if field.is_none() {
+            let Some(field_name) = CONFIG_GLOBAL_FIELDS_TAB.get(i) else {
                 continue;
-            }
-            // is_none() 已在上方判断并 continue，此处 field 必为 Some
-            let field_name = field.expect("checked is_none() above with continue");
+            };
 
             let is_selected = app.ui.config_field_idx == i;
             let label = config_field_label_global(i);
@@ -99,45 +58,80 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                 config_field_value_global(app, i)
             };
             let desc = config_field_desc_global(i);
+            let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
 
-            let line = if *field_name == "auto_restore_session" {
-                let toggle_on = app.state.agent_config.auto_restore_session;
-                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                global_toggle_row(toggle_on, &ctx)
-            } else if *field_name == "flat_bubble" {
-                let toggle_on = app.state.agent_config.flat_bubble;
-                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                global_toggle_row(toggle_on, &ctx)
-            } else if *field_name == "compact_enabled" {
-                let toggle_on = app.state.agent_config.compact.enabled;
-                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                global_toggle_row(toggle_on, &ctx)
-            } else if *field_name == "theme" {
-                let theme_name = app.state.agent_config.theme.display_name();
-                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                global_theme_row(theme_name, &ctx)
-            } else if *field_name == "thinking_style" {
-                let style_name = app.state.agent_config.thinking_style.display_name();
-                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                global_theme_row(style_name, &ctx)
-            } else if *field_name == "system_prompt"
-                || *field_name == "agent_md"
-                || *field_name == "style"
-            {
-                let mut ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                ctx.hint = "Enter \u{7f16}\u{8f91}".to_string();
-                global_preview_row(&value, &ctx)
-            } else {
-                let ctx = GlobalRowCtx::new(label, desc, is_selected, t);
-                global_text_row(
+            let line = match *field_name {
+                "auto_restore_session" => {
+                    global_toggle_row(app.state.agent_config.auto_restore_session, &ctx)
+                }
+                "flat_bubble" => global_toggle_row(app.state.agent_config.flat_bubble, &ctx),
+                "compact_enabled" => {
+                    global_toggle_row(app.state.agent_config.compact.enabled, &ctx)
+                }
+                "theme" => global_theme_row(app.state.agent_config.theme.display_name(), &ctx),
+                "thinking_style" => {
+                    global_theme_row(app.state.agent_config.thinking_style.display_name(), &ctx)
+                }
+                "system_prompt" | "agent_md" | "style" => {
+                    let mut preview_ctx = ctx;
+                    preview_ctx.hint = "Enter 编辑".to_string();
+                    global_preview_row(&value, &preview_ctx)
+                }
+                _ => global_text_row(
                     &value,
                     app.ui.config_editing,
                     app.ui.config_edit_cursor,
                     &ctx,
-                )
+                ),
             };
             list.push(line);
         }
     }
     list
+}
+
+/// 绘制 compact_exempt_tools 子列表模式
+fn draw_compact_exempt_sublist<'a>(
+    app: &ChatApp,
+    t: &crate::theme::Theme,
+    list: &mut ItemList<'a>,
+) {
+    use crate::command::chat::context::compact::BUILTIN_EXEMPT_TOOLS;
+
+    // 标题行 + 空行
+    list.push_raw(Line::from(vec![
+        Span::styled(
+            "  豁免压缩工具  ",
+            Style::default().fg(t.config_label_selected),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            "Enter/空格 切换 | Esc 返回",
+            Style::default().fg(t.config_dim),
+        ),
+    ]));
+    list.push_raw(Line::from(""));
+
+    let tool_names = app.tool_registry.tool_names();
+    let exempt = &app.state.agent_config.compact.micro_compact_exempt_tools;
+
+    for (i, name) in tool_names.iter().enumerate() {
+        let is_builtin = BUILTIN_EXEMPT_TOOLS.contains(name);
+        let is_exempt = is_builtin || exempt.iter().any(|t| t == name);
+        let selected = i == app.ui.compact_exempt_idx;
+        let label = if is_builtin {
+            format!("{} (内置)", name)
+        } else {
+            name.to_string()
+        };
+
+        list.push(toggle_list_item(&ToggleListItemCtx {
+            name: label,
+            enabled: is_exempt,
+            selected,
+            desc: None,
+            tag: None,
+            theme: t,
+        }));
+    }
 }
