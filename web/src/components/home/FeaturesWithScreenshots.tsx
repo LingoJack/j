@@ -5,21 +5,24 @@ interface FeaturesWithScreenshotsProps {
   t: I18nData
 }
 
+const CARD_H = 130 // px per card
+const VISIBLE = 3  // cards visible at once
+
 export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
   const features = t.features.list
   const screenshots = t.screenshots.list
 
-  // Left: feature auto-scroll, one item at a time
+  // Left: list auto-scroll
   const [featureIndex, setFeatureIndex] = useState(0)
   const featureNext = useCallback(() => {
     setFeatureIndex((prev) => (prev + 1) % features.length)
   }, [features.length])
   useEffect(() => {
-    const timer = setInterval(featureNext, 4000)
+    const timer = setInterval(featureNext, 3000)
     return () => clearInterval(timer)
   }, [featureNext])
 
-  // Right: screenshot manual carousel
+  // Right: screenshot carousel
   const [shotIndex, setShotIndex] = useState(0)
   const shotPrev = () => setShotIndex((prev) => (prev - 1 + screenshots.length) % screenshots.length)
   const shotNext = () => setShotIndex((prev) => (prev + 1) % screenshots.length)
@@ -38,20 +41,22 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
         </div>
 
         {/* Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-10 items-start">
-          {/* Left: vertical auto-scrolling feature list */}
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8 items-start">
+          {/* Left: scrolling feature list */}
           <div className="flex flex-col">
-            <div className="relative overflow-hidden h-[400px]">
+            <div className="overflow-hidden" style={{ height: CARD_H * VISIBLE }}>
               <div
                 className="transition-transform duration-500 ease-in-out"
-                style={{ transform: `translateY(-${featureIndex * 400}px)` }}
+                style={{ transform: `translateY(-${featureIndex * CARD_H}px)` }}
               >
                 {features.map((feature, index) => (
-                  <div key={index} className="h-[400px] flex items-start pt-4">
-                    <div className="p-6 bg-stone-50 rounded-xl border border-stone-200 w-full">
-                      <div className="text-2xl mb-3">{feature.icon}</div>
-                      <h3 className="text-lg font-medium text-stone-900 mb-2">{feature.title}</h3>
-                      <p className="text-stone-600 text-sm leading-relaxed">{feature.description}</p>
+                  <div key={index} style={{ height: CARD_H }} className="flex items-center py-2">
+                    <div className="p-4 bg-stone-50 rounded-lg border border-stone-200 w-full h-full flex flex-col justify-center">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-xl">{feature.icon}</span>
+                        <h3 className="text-base font-medium text-stone-900">{feature.title}</h3>
+                      </div>
+                      <p className="text-stone-500 text-sm leading-relaxed line-clamp-2">{feature.description}</p>
                     </div>
                   </div>
                 ))}
@@ -59,15 +64,15 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
             </div>
 
             {/* Dot indicators */}
-            <div className="flex gap-2 justify-center mt-4">
+            <div className="flex gap-1.5 justify-center mt-4">
               {features.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setFeatureIndex(i)}
-                  className={`h-2 rounded-full transition-all duration-300 ${
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
                     i === featureIndex
-                      ? 'bg-stone-900 w-6'
-                      : 'bg-stone-300 w-2 hover:bg-stone-400'
+                      ? 'bg-stone-800 w-5'
+                      : 'bg-stone-300 w-1.5 hover:bg-stone-400'
                   }`}
                   aria-label={`Go to feature ${i + 1}`}
                 />
@@ -77,13 +82,21 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
 
           {/* Right: screenshot carousel */}
           <div>
-            {/* Main image with arrows */}
-            <div className="flex items-center gap-3">
+            {/* Main image with overlay arrows */}
+            <div className="relative group rounded-lg shadow-md overflow-hidden">
+              <img
+                src={screenshots[shotIndex].src}
+                alt={screenshots[shotIndex].alt}
+                className="w-full h-auto block"
+              />
+
+              {/* Left arrow overlay */}
               <button
                 onClick={shotPrev}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center
-                           bg-white border border-stone-200 rounded-full shadow-sm
-                           text-stone-400 hover:text-stone-900 hover:border-stone-300 transition-colors"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center
+                           bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-full shadow-sm
+                           text-stone-500 hover:text-stone-900 hover:bg-white transition-all
+                           opacity-0 group-hover:opacity-100"
                 aria-label="Previous screenshot"
               >
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -91,19 +104,13 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
                 </svg>
               </button>
 
-              <div className="flex-1 overflow-hidden rounded-lg shadow-md">
-                <img
-                  src={screenshots[shotIndex].src}
-                  alt={screenshots[shotIndex].alt}
-                  className="w-full h-auto block"
-                />
-              </div>
-
+              {/* Right arrow overlay */}
               <button
                 onClick={shotNext}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center
-                           bg-white border border-stone-200 rounded-full shadow-sm
-                           text-stone-400 hover:text-stone-900 hover:border-stone-300 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center
+                           bg-white/80 backdrop-blur-sm border border-stone-200/60 rounded-full shadow-sm
+                           text-stone-500 hover:text-stone-900 hover:bg-white transition-all
+                           opacity-0 group-hover:opacity-100"
                 aria-label="Next screenshot"
               >
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -112,32 +119,33 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
               </button>
             </div>
 
-            {/* Caption */}
-            <p className="text-stone-500 text-sm leading-relaxed mt-4">
-              {screenshots[shotIndex].caption}
-            </p>
+            {/* Caption + thumbnails */}
+            <div className="mt-4">
+              <p className="text-stone-500 text-sm leading-relaxed mb-3">
+                {screenshots[shotIndex].caption}
+              </p>
 
-            {/* Thumbnail strip */}
-            <div className="flex gap-2 mt-4">
-              {screenshots.map((item, i) => (
-                <button
-                  key={i}
-                  onClick={() => setShotIndex(i)}
-                  className={`
-                    relative overflow-hidden rounded-md border-2 transition-all duration-200 flex-1 aspect-video
-                    ${i === shotIndex
-                      ? 'border-stone-900 shadow-sm'
-                      : 'border-stone-200 hover:border-stone-400 opacity-50 hover:opacity-100'
-                    }
-                  `}
-                >
-                  <img
-                    src={item.src}
-                    alt={item.alt}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+              <div className="flex gap-2">
+                {screenshots.map((item, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setShotIndex(i)}
+                    className={`
+                      relative overflow-hidden rounded-md border-2 transition-all duration-200 flex-1 aspect-video
+                      ${i === shotIndex
+                        ? 'border-stone-800 shadow-sm'
+                        : 'border-stone-200 hover:border-stone-400 opacity-40 hover:opacity-80'
+                      }
+                    `}
+                  >
+                    <img
+                      src={item.src}
+                      alt={item.alt}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
