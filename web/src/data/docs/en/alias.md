@@ -2,6 +2,8 @@
 
 Alias system for creating short aliases to paths and URLs for quick access.
 
+> **Tip**: Press **Tab** to auto-complete file paths. Supports `~` expansion. E.g., `j set work ~/Pro<Tab>`.
+
 ## Basic Usage
 
 ### Add Alias

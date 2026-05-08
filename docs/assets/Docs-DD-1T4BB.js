@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-RI52fxzM.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-JDpSoabH.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -123,6 +123,8 @@ j chat --remote --port 9390  # Custom port
 `,ie=e({default:()=>ae}),ae=`## Overview
 
 Alias system for creating short aliases to paths and URLs for quick access.
+
+> **Tip**: Press **Tab** to auto-complete file paths. Supports \`~\` expansion. E.g., \`j set work ~/Pro<Tab>\`.
 
 ## Basic Usage
 
@@ -1990,6 +1992,8 @@ j chat --remote --port 9390  # 指定端口
 `,ce=e({default:()=>le}),le=`## 概述
 
 别名系统，为路径和网址创建简短别名以便快速访问。
+
+> **提示**：输入路径时按 **Tab** 键可自动补全，支持 \`~\` 展开。如 \`j set work ~/Pro<Tab>\`。
 
 ## 基本用法
 
