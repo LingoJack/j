@@ -4,7 +4,7 @@
 
 **AI 驱动的命令行工作台**
 
-别名管理 · 日报周报 · 待办备忘 · AI 对话 · 脚本管理 · 浏览器自动化
+别名打开 · Agent 工作台 · 日报周报 · 待办备忘 · Markdown 预览 · 脚本工作流
 
 [![Rust](https://img.shields.io/badge/Rust-1.93%2B-orange?logo=rust)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -22,14 +22,14 @@
 <tr>
 <td width="50%">
 
-### 🤖 AI 对话
-内置 TUI 对话界面，多模型支持、流式输出、Markdown 渲染、工具调用、Agent 自主推理
+### 🤖 Agent 工作台
+内置终端 Agent，支持多模型、流式输出、多步推理、工具调用、权限确认，适合直接在仓库里分析、修改、执行任务
 
 </td>
 <td width="50%">
 
-### 🏷️ 别名管理
-`j set chrome "/Applications/Google Chrome.app"` 一键注册，`j chrome` 秒开应用、URL、脚本
+### 🏷️ 别名打开
+`j set chrome "/Applications/Google Chrome.app"` 一次注册后，`j chrome`、`j chrome github`、`j vscode ./src`、`j deploy` 都能直接作为统一入口使用
 
 </td>
 </tr>
@@ -37,27 +37,27 @@
 <td>
 
 ### 📝 日报周报
-`j report "完成功能开发"` 快速记录，自动周数管理，支持 Git 同步与团队周报
+`j report "完成功能开发"` 快速记录，支持整篇 Markdown 编辑、自动周数管理，以及 `reportctl push/pull` 做 Git 同步
 
 </td>
 <td>
 
 ### ✅ 待办备忘
-`j todo` 进入全屏 TUI 管理，支持 Markdown checkbox，完成时可联动写入日报
+`j todo` 进入全屏 TUI 管理，支持 Markdown checkbox、筛选排序、长内容预览，完成事项时还能顺手写入日报
 
 </td>
 </tr>
 <tr>
 <td>
 
-### 🔧 脚本系统
-`j script deploy "npm run build"` 创建脚本，别名环境变量自动注入，支持新窗口执行
+### 🖋️ Markdown 终端预览
+`j md`、`j reportctl open` 等入口可直接进入终端 Markdown 编辑器，边写边看渲染效果，适合日报、笔记和 AGENT.md
 
 </td>
 <td>
 
-### 🌐 浏览器自动化
-Lite 模式（零依赖）和 CDP 模式（完整浏览器控制），AI 可直接操作网页
+### 🔧 脚本工作流
+`j script deploy "npm run build"` 创建脚本后自动注册为别名，执行时会注入 `J_<ALIAS>` 环境变量，也支持新窗口运行
 
 </td>
 </tr>
@@ -68,6 +68,7 @@ Lite 模式（零依赖）和 CDP 模式（完整浏览器控制），AI 可直�
 
 - **Skill 技能系统** — 可扩展的 AI 技能，按需加载，支持 `@skill` 触发
 - **Hook 系统** — 三级 Hook（用户/项目/Session），灵活扩展 AI 行为
+- **浏览器自动化** — Lite 模式（零依赖）和 CDP 模式（完整浏览器控制），AI 可直接操作网页
 - **移动端远程控制** — 扫码连接手机，远程操作 AI 对话
 - **交互模式** — `j` 回车即进入 REPL，Tab 补全 + 历史建议 + Shell 穿透
 
@@ -78,28 +79,33 @@ Lite 模式（零依赖）和 CDP 模式（完整浏览器控制），AI 可直�
 ## 📸 截图
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/1.png" width="80%" alt="AI Chat Interface" />
-<p><em>AI 对话界面 — 流式输出、Markdown 渲染、工具调用</em></p>
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/1.png" width="80%" alt="Agent 对话与工具调用界面" />
+<p><em>图 1：Agent 对话主界面。在终端里直接查看上下文、读取文件、调用工具，并对 Bash 等高风险操作做权限确认。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/2.png" width="80%" alt="AI Chat Interface 2" />
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/2.png" width="80%" alt="模型配置界面" />
+<p><em>图 2：模型配置页。可以在终端里维护 Provider、模型、Session 与全局配置，不必离开当前工作台。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/3.png" width="80%" alt="AI Chat Interface 3" />
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/3.png" width="80%" alt="工具开关界面" />
+<p><em>图 3：工具开关页。按会话控制 Bash、Read、Write、WebSearch、Todo 等工具是否可用，方便收紧或放开 Agent 权限。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/4.png" width="80%" alt="AI Agent Tool Call" />
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/4.png" width="80%" alt="Agent 多轮分析与工具结果" />
+<p><em>图 4：Agent 多轮工作流。回复内容、代码片段、Grep/Read/Bash 结果都在同一终端会话里连续展开，适合代码审查和问题排查。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/5.png" width="80%" alt="AI Chat Multi-turn" />
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/5.png" width="80%" alt="Markdown 终端编辑与预览" />
+<p><em>图 5：Markdown 终端编辑器。类 Typora 的边写边渲染体验，适合维护 AGENT.md、日报周报、笔记和其他 Markdown 文档。</em></p>
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/6.png" width="80%" alt="AI Chat Interface 6" />
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/6.png" width="80%" alt="别名列表与快捷打开" />
+<p><em>图 6：别名列表视图。统一管理应用、脚本和路径入口，配合 `j &lt;alias&gt;` 形成很轻的个人命令工作流。</em></p>
 </div>
 
 ---
