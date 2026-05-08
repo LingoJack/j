@@ -62,8 +62,17 @@ pub(crate) fn run_oneshot_no_tools(
     let mut raw_lines: usize = 0;
     let interrupted = Arc::new(AtomicBool::new(false));
     let interrupted2 = Arc::clone(&interrupted);
+    let ctrlc_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let ctrlc_count_for_handler = Arc::clone(&ctrlc_count);
     let _ = ctrlc::set_handler(move || {
-        interrupted2.store(true, Ordering::Relaxed);
+        let prev = ctrlc_count_for_handler.fetch_add(1, Ordering::SeqCst);
+        if prev == 0 {
+            interrupted2.store(true, Ordering::Relaxed);
+            eprintln!("\n  {}", "⏹ 已中断".dimmed());
+        } else {
+            let _ = crossterm::terminal::disable_raw_mode();
+            std::process::exit(130);
+        }
     });
 
     let send_messages = select_messages(
@@ -252,10 +261,29 @@ pub(crate) fn run_oneshot_agent(
         )),
     };
 
-    // Ctrl+C → cancel
+    // Ctrl+C → cancel + cancelled；第二次 Ctrl+C 强制退出
     let cancel_for_ctrlc = cancel_token.clone();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancelled_for_ctrlc = Arc::clone(&cancelled);
+    let ctrlc_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let ctrlc_count_for_handler = Arc::clone(&ctrlc_count);
     let _ = ctrlc::set_handler(move || {
-        cancel_for_ctrlc.cancel();
+        let prev = ctrlc_count_for_handler.fetch_add(1, Ordering::SeqCst);
+        if prev == 0 {
+            // 第一次：尝试优雅取消
+            cancel_for_ctrlc.cancel();
+            cancelled_for_ctrlc.store(true, Ordering::Relaxed);
+            eprintln!(
+                "\n  {}",
+                "⏹ 收到中断信号，清理中... (再按 Ctrl+C 强制退出)".dimmed()
+            );
+        } else {
+            // 第二次及以后：强制退出
+            eprintln!("\n  {}", "⏹ 强制退出".red().bold());
+            // 尝试恢复终端
+            let _ = crossterm::terminal::disable_raw_mode();
+            std::process::exit(130);
+        }
     });
 
     // spawn agent loop
@@ -279,7 +307,6 @@ pub(crate) fn run_oneshot_agent(
     let mut cur_col: usize = 0;
     let tw = term_width();
     let jcli_config = JcliConfig::load();
-    let cancelled = Arc::new(AtomicBool::new(false));
     let mut round: usize = 0;
     let mut first_content = true;
 
@@ -302,21 +329,26 @@ pub(crate) fn run_oneshot_agent(
                         // 打印 AI 标签（首次文本到来时）
                         if first_content {
                             let theme = Theme::terminal();
+                            eprintln!();
                             eprintln!(
                                 "  {}",
                                 crate::util::color_adapt::apply_fg("Sprite", theme.label_ai).bold()
                             );
+                            // 首次输出前先打印缩进
+                            print!("  ");
+                            let _ = io::stdout().flush();
                             first_content = false;
                         }
 
                         let delta = &content[last_streaming_len..];
-                        print!("{}", delta);
-                        let _ = io::stdout().flush();
+                        // 缩进输出：每个换行后加 "  " 缩进
                         for ch in delta.chars() {
                             if ch == '\n' {
+                                print!("\n  ");
                                 raw_lines += 1;
-                                cur_col = 0;
+                                cur_col = 2; // 缩进算入 cur_col
                             } else {
+                                print!("{}", ch);
                                 cur_col += 1;
                                 if cur_col >= tw {
                                     raw_lines += 1;
@@ -324,6 +356,7 @@ pub(crate) fn run_oneshot_agent(
                                 }
                             }
                         }
+                        let _ = io::stdout().flush();
                         last_streaming_len = content.len();
                     }
                 }

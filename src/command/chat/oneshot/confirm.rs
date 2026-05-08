@@ -2,110 +2,202 @@
 
 use crate::command::chat::oneshot::display::{box_width, extract_bash_command, make_args_preview};
 use crate::command::chat::tools::classification::ToolCategory;
+use crate::util::text::display_width;
 use colored::Colorize;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::{cursor, execute, terminal};
 use std::io::{self, Write};
 
 // ─────────────────────────────────────────────────────────────
-//  公共边框绘制工具（┌──┐ 直角边框样式）
+//  公共边框绘制工具（┌──┐ 直角边框样式，左右闭合）
 // ─────────────────────────────────────────────────────────────
+
+/// 计算内容区宽度（去掉左右 `│` 各 1 字符）
+fn inner_width(bw: usize) -> usize {
+    bw.saturating_sub(2)
+}
 
 /// 绘制顶边框: `┌─ {title} ─────┐`
 pub(crate) fn draw_top_border(stdout: &mut io::Stdout, bw: usize, title: &str) -> io::Result<()> {
     let title_text = format!(" {} ", title);
-    let inner_w = bw.saturating_sub(2);
-    let dash_fill = inner_w.saturating_sub(title_text.chars().count() + 2);
-    let dash_tail = "─".repeat(dash_fill);
+    let iw = inner_width(bw);
+    let title_w = display_width(&title_text);
+    // 左侧固定 1 个 ─，右侧填充剩余
+    let dash_fill = iw.saturating_sub(title_w + 1);
+    let dashes = "─".repeat(dash_fill);
     writeln!(
         stdout,
         "  {}{}{}{}{}\r",
         "┌".yellow().bold(),
         "─".yellow(),
         title_text.white().bold(),
-        "─".yellow(),
-        format!("{}{}", dash_tail, "┐").yellow().bold(),
+        dashes.yellow(),
+        "┐".yellow().bold(),
     )
 }
 
-/// 绘制内容行: `│ {content}`
-pub(crate) fn draw_content_line(stdout: &mut io::Stdout, content: &str) -> io::Result<()> {
-    writeln!(stdout, "  {}  {}\r", "│".yellow(), content.white())
+/// 绘制内容行: `│ {content} {pad}│`（右对齐闭合，左 1 空格起、右紧贴边框）
+pub(crate) fn draw_content_line(
+    stdout: &mut io::Stdout,
+    bw: usize,
+    content: &str,
+) -> io::Result<()> {
+    let iw = inner_width(bw);
+    let w = display_width(content);
+    let padding = iw.saturating_sub(w + 1); // 1 = 左侧 1 个空格
+    let pad_str = " ".repeat(padding);
+    writeln!(
+        stdout,
+        "  {} {}{}{}\r",
+        "│".yellow(),
+        content.white(),
+        pad_str,
+        "│".yellow(),
+    )
 }
 
-/// 绘制空行: `│`
-pub(crate) fn draw_empty_line(stdout: &mut io::Stdout) -> io::Result<()> {
-    writeln!(stdout, "  {}\r", "│".yellow())
+/// 绘制空行: `│          │`
+pub(crate) fn draw_empty_line(stdout: &mut io::Stdout, bw: usize) -> io::Result<()> {
+    let iw = inner_width(bw);
+    let spaces = " ".repeat(iw);
+    writeln!(stdout, "  {}{}{}\r", "│".yellow(), spaces, "│".yellow())
 }
 
-/// 绘制提示行: `│ {hint}`
-pub(crate) fn draw_hint_line(stdout: &mut io::Stdout, hint: &str) -> io::Result<()> {
-    writeln!(stdout, "  {}  {}\r", "│".yellow(), hint.dimmed())
+/// 绘制提示行: `│ {hint} {pad}│`
+pub(crate) fn draw_hint_line(stdout: &mut io::Stdout, bw: usize, hint: &str) -> io::Result<()> {
+    let iw = inner_width(bw);
+    let w = display_width(hint);
+    let padding = iw.saturating_sub(w + 1);
+    let pad_str = " ".repeat(padding);
+    writeln!(
+        stdout,
+        "  {} {}{}{}\r",
+        "│".yellow(),
+        hint.dimmed(),
+        pad_str,
+        "│".yellow(),
+    )
 }
 
 /// 绘制底边框: `└────────────┘`
 pub(crate) fn draw_bottom_border(stdout: &mut io::Stdout, bw: usize) -> io::Result<()> {
+    let iw = inner_width(bw);
     writeln!(
         stdout,
         "  {}{}{}\r",
         "└".yellow().bold(),
-        "─".repeat(bw.saturating_sub(3)).yellow(),
+        "─".repeat(iw).yellow(),
         "┘".yellow().bold(),
     )?;
     stdout.flush()
 }
 
-/// 绘制选项行（选中态）: `│  ❯ {label}`
-pub(crate) fn draw_selected_option(stdout: &mut io::Stdout, label: &str) -> io::Result<()> {
+/// 绘制选项行（选中态）: `│ ❯ {label}{pad}│`
+pub(crate) fn draw_selected_option(
+    stdout: &mut io::Stdout,
+    bw: usize,
+    label: &str,
+) -> io::Result<()> {
+    let iw = inner_width(bw);
+    let content = format!(" ❯ {}", label);
+    let w = display_width(&content);
+    let padding = iw.saturating_sub(w);
+    let pad_str = " ".repeat(padding);
     writeln!(
         stdout,
-        "  {}  {} {}\r",
+        "  {}{}{}{}\r",
         "│".yellow(),
-        "❯".cyan().bold(),
-        label.white().bold()
+        content.white().bold(),
+        pad_str,
+        "│".yellow(),
     )
 }
 
-/// 绘制选项行（未选中态）: `│    {label}`
-pub(crate) fn draw_unselected_option(stdout: &mut io::Stdout, label: &str) -> io::Result<()> {
-    writeln!(stdout, "  {}    {}\r", "│".yellow(), label.dimmed())
+/// 绘制选项行（未选中态）: `│   {label}{pad}│`
+pub(crate) fn draw_unselected_option(
+    stdout: &mut io::Stdout,
+    bw: usize,
+    label: &str,
+) -> io::Result<()> {
+    let iw = inner_width(bw);
+    let content = format!("   {}", label);
+    let w = display_width(&content);
+    let padding = iw.saturating_sub(w);
+    let pad_str = " ".repeat(padding);
+    writeln!(
+        stdout,
+        "  {}{}{}{}\r",
+        "│".yellow(),
+        content.dimmed(),
+        pad_str,
+        "│".yellow(),
+    )
 }
 
-/// 绘制选项描述行: `│    {description}`
-pub(crate) fn draw_option_description(stdout: &mut io::Stdout, desc: &str) -> io::Result<()> {
-    writeln!(stdout, "  {}    {}\r", "│".yellow(), desc.dimmed())
+/// 绘制选项描述行: `│     {description}{pad}│`
+pub(crate) fn draw_option_description(
+    stdout: &mut io::Stdout,
+    bw: usize,
+    desc: &str,
+) -> io::Result<()> {
+    let iw = inner_width(bw);
+    let content = format!("     {}", desc);
+    let w = display_width(&content);
+    let padding = iw.saturating_sub(w);
+    let pad_str = " ".repeat(padding);
+    writeln!(
+        stdout,
+        "  {}{}{}{}\r",
+        "│".yellow(),
+        content.dimmed(),
+        pad_str,
+        "│".yellow(),
+    )
 }
 
-/// 绘制多选选项行（选中态）
+/// 绘制多选选项行（选中态）: `│ ❯ ◉ {label}{pad}│`
 pub(crate) fn draw_multi_selected_option(
     stdout: &mut io::Stdout,
+    bw: usize,
     checked: bool,
     label: &str,
 ) -> io::Result<()> {
+    let iw = inner_width(bw);
     let check = if checked { "◉" } else { "○" };
+    let content = format!(" ❯ {} {}", check, label);
+    let w = display_width(&content);
+    let padding = iw.saturating_sub(w);
+    let pad_str = " ".repeat(padding);
     writeln!(
         stdout,
-        "  {}  {} {} {}\r",
+        "  {}{}{}{}\r",
         "│".yellow(),
-        "❯".cyan().bold(),
-        check.cyan().bold(),
-        label.cyan().bold()
+        content.cyan().bold(),
+        pad_str,
+        "│".yellow(),
     )
 }
 
-/// 绘制多选选项行（未选中态）
+/// 绘制多选选项行（未选中态）: `│   {◉/○} {label}{pad}│`
 pub(crate) fn draw_multi_unselected_option(
     stdout: &mut io::Stdout,
+    bw: usize,
     checked: bool,
     label: &str,
 ) -> io::Result<()> {
+    let iw = inner_width(bw);
     let check = if checked { "◉" } else { "○" };
+    let content = format!("   {} {}", check, label);
+    let w = display_width(&content);
+    let padding = iw.saturating_sub(w);
+    let pad_str = " ".repeat(padding);
     writeln!(
         stdout,
-        "  {}   {} {}\r",
+        "  {}{}{}{}\r",
         "│".yellow(),
-        check.white(),
-        label.white()
+        content.white(),
+        pad_str,
+        "│".yellow(),
     )
 }
 
@@ -148,9 +240,9 @@ pub(crate) fn interactive_confirm(
     };
 
     // 截断描述（按字符边界截断，避免 UTF-8 多字节字符中间切割导致 panic）
-    let max_char_width = bw.saturating_sub(8);
+    let max_char_width = inner_width(bw).saturating_sub(4);
     let desc_display = if desc.chars().count() > max_char_width {
-        let trunc_len = bw.saturating_sub(11);
+        let trunc_len = inner_width(bw).saturating_sub(7);
         let truncated: String = desc.chars().take(trunc_len).collect();
         format!("{}...", truncated)
     } else {
@@ -170,22 +262,22 @@ pub(crate) fn interactive_confirm(
         draw_top_border(stdout, bw, &title)?;
 
         // 描述行
-        draw_content_line(stdout, &desc_display)?;
+        draw_content_line(stdout, bw, &desc_display)?;
 
-        draw_empty_line(stdout)?;
+        draw_empty_line(stdout, bw)?;
 
         // 选项列表
         for (i, opt) in options.iter().enumerate() {
             if cursor_pos == i {
-                draw_selected_option(stdout, opt)?;
+                draw_selected_option(stdout, bw, opt)?;
             } else {
-                draw_unselected_option(stdout, opt)?;
+                draw_unselected_option(stdout, bw, opt)?;
             }
         }
 
-        draw_empty_line(stdout)?;
+        draw_empty_line(stdout, bw)?;
 
-        draw_hint_line(stdout, "• ↑↓ 移动  Enter 确认")?;
+        draw_hint_line(stdout, bw, "• ↑↓ 移动  Enter 确认")?;
 
         draw_bottom_border(stdout, bw)?;
 
@@ -201,6 +293,16 @@ pub(crate) fn interactive_confirm(
 
     let result = loop {
         if let Ok(Event::Key(key)) = event::read() {
+            // Ctrl+C：恢复终端并退出整个进程
+            if key.code == KeyCode::Char('c')
+                && key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+            {
+                let _ = terminal::disable_raw_mode();
+                eprintln!("\n  {}", "⏹ 已中断".dimmed());
+                std::process::exit(130);
+            }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     cursor_pos = cursor_pos.saturating_sub(1);

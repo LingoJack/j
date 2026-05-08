@@ -76,21 +76,21 @@ fn handle_multi_select(
 
         draw_top_border(stdout, bw, title)?;
         for line in question_lines {
-            draw_content_line(stdout, line)?;
+            draw_content_line(stdout, bw, line)?;
         }
-        draw_empty_line(stdout)?;
+        draw_empty_line(stdout, bw)?;
 
         for (i, opt) in q.options.iter().enumerate() {
             if cursor_pos == i {
-                draw_multi_selected_option(stdout, selected[i], &opt.label)?;
+                draw_multi_selected_option(stdout, bw, selected[i], &opt.label)?;
             } else {
-                draw_multi_unselected_option(stdout, selected[i], &opt.label)?;
+                draw_multi_unselected_option(stdout, bw, selected[i], &opt.label)?;
             }
-            draw_option_description(stdout, &opt.description)?;
+            draw_option_description(stdout, bw, &opt.description)?;
         }
 
-        draw_empty_line(stdout)?;
-        draw_hint_line(stdout, "• ↑↓ 移动  Space 切换  Enter 确认")?;
+        draw_empty_line(stdout, bw)?;
+        draw_hint_line(stdout, bw, "• ↑↓ 移动  Space 切换  Enter 确认")?;
         draw_bottom_border(stdout, bw)?;
         Ok(())
     };
@@ -101,6 +101,15 @@ fn handle_multi_select(
 
     loop {
         if let Ok(Event::Key(key)) = event::read() {
+            if key.code == KeyCode::Char('c')
+                && key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+            {
+                let _ = terminal::disable_raw_mode();
+                eprintln!("\n  {}", "⏹ 已中断".dimmed());
+                std::process::exit(130);
+            }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     cursor_pos = cursor_pos.saturating_sub(1);
@@ -157,21 +166,21 @@ fn handle_single_select(
 
         draw_top_border(stdout, bw, title)?;
         for line in question_lines {
-            draw_content_line(stdout, line)?;
+            draw_content_line(stdout, bw, line)?;
         }
-        draw_empty_line(stdout)?;
+        draw_empty_line(stdout, bw)?;
 
         for (i, opt) in q.options.iter().enumerate() {
             if cursor_pos == i {
-                draw_selected_option(stdout, &opt.label)?;
+                draw_selected_option(stdout, bw, &opt.label)?;
             } else {
-                draw_unselected_option(stdout, &opt.label)?;
+                draw_unselected_option(stdout, bw, &opt.label)?;
             }
-            draw_option_description(stdout, &opt.description)?;
+            draw_option_description(stdout, bw, &opt.description)?;
         }
 
-        draw_empty_line(stdout)?;
-        draw_hint_line(stdout, "• ↑↓ 移动  Enter 确认")?;
+        draw_empty_line(stdout, bw)?;
+        draw_hint_line(stdout, bw, "• ↑↓ 移动  Enter 确认")?;
         draw_bottom_border(stdout, bw)?;
         Ok(())
     };
@@ -182,6 +191,15 @@ fn handle_single_select(
 
     loop {
         if let Ok(Event::Key(key)) = event::read() {
+            if key.code == KeyCode::Char('c')
+                && key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL)
+            {
+                let _ = terminal::disable_raw_mode();
+                eprintln!("\n  {}", "⏹ 已中断".dimmed());
+                std::process::exit(130);
+            }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     cursor_pos = cursor_pos.saturating_sub(1);

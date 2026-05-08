@@ -73,7 +73,7 @@ pub(crate) fn term_width() -> usize {
 
 /// 计算交互框宽度
 pub(crate) fn box_width() -> usize {
-    term_width().saturating_sub(4).clamp(20, 56)
+    term_width().saturating_sub(4).clamp(40, 80)
 }
 
 /// 思考动画脉冲颜色（与 TUI thinking_pulse_color 对齐）。
