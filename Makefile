@@ -197,7 +197,7 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或从 CHANGELOG.md �
 		if [ -f CHANGELOG.md ]; then cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
 		mv "$$changelog_tmp" CHANGELOG.md; \
 	fi; \
-	awk '/^# v/{if(p++)exit}p' CHANGELOG.md | awk 'NR>1' > "$$note_file"; \
+	{ echo "Release v$$version"; echo ""; awk 'NR==1{next} /^# v/{exit} {print}' CHANGELOG.md; } > "$$note_file"; \
 	git add CHANGELOG.md; \
 	git commit -m "chore: bump version to v$$version"; \
 	git tag -a "v$$version" -F "$$note_file"; \
