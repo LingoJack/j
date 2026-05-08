@@ -11,6 +11,7 @@ REPO="LingoJack/jcli"
 BINARY_NAME="j"
 INSTALL_DIR="/usr/local/bin"
 DATA_DIR="$HOME/.jdata"
+FALLBACK_VERSION="v12.10.22"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -65,24 +66,24 @@ get_latest_version() {
         latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "$api_url" 2>/dev/null | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v[0-9]+\.[0-9]+\.[0-9]+"' | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
     fi
     
-    # 方法3: 从 releases 页面解析（更精确的匹配）
+    # 方法3: 跟随 releases/latest 重定向，直接从最终 URL 提取 tag
     if [ -z "$latest" ]; then
         info "尝试从 releases 页面获取..." >&2
-        latest=$(curl -fsSL -H "User-Agent: j-cli-installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -oE '/releases/download/v[0-9]+\.[0-9]+\.[0-9]+/' | head -1 | sed -E 's#/releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/#\1#')
+        latest=$(curl -fsSL -o /dev/null -w "%{url_effective}" -H "User-Agent: j-cli-installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
     fi
     
     # 方法4: 使用已知最新版本
     if [ -z "$latest" ]; then
         warn "无法从网络获取最新版本"
-        info "使用内置版本: v12.10.21" >&2
-        latest="v12.10.21"
+        info "使用内置版本: ${FALLBACK_VERSION}" >&2
+        latest="${FALLBACK_VERSION}"
     fi
     
     # 验证版本号格式
     if ! echo "$latest" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
         warn "获取到的版本号格式不正确: $latest"
-        info "使用内置版本: v12.10.21" >&2
-        latest="v12.10.21"
+        info "使用内置版本: ${FALLBACK_VERSION}" >&2
+        latest="${FALLBACK_VERSION}"
     fi
     
     echo "$latest"

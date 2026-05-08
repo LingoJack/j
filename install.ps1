@@ -21,6 +21,7 @@ $Repo = "LingoJack/jcli"
 $BinaryName = "j"
 $InstallDir = "$env:LOCALAPPDATA\j-cli"
 $DataDir = "$env:USERPROFILE\.jdata"
+$FallbackVersion = "v12.10.22"
 
 function Write-Info($msg) {
     Write-Host "[INFO] $msg" -ForegroundColor Green
@@ -71,11 +72,12 @@ function Get-LatestVersion {
         Write-Warn "GitHub API 访问失败: $($_.Exception.Message)"
     }
 
-    # 方法2: 从 releases 页面解析
+    # 方法2: 跟随 releases/latest 重定向，直接从最终 URL 提取 tag
     try {
         Write-Info "正在从 releases 页面获取版本..."
-        $page = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -Headers @{ "User-Agent" = "j-cli-installer" } -TimeoutSec 15 -UseBasicParsing
-        if ($page.Content -match '/releases/download/(v\d+\.\d+\.\d+)/') {
+        $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -Headers @{ "User-Agent" = "j-cli-installer" } -TimeoutSec 15 -UseBasicParsing
+        $finalUrl = $response.BaseResponse.ResponseUri.AbsoluteUri
+        if ($finalUrl -match '(v\d+\.\d+\.\d+)$') {
             return $Matches[1]
         }
     }
@@ -84,8 +86,8 @@ function Get-LatestVersion {
     }
 
     # 方法3: 内置版本
-    Write-Warn "无法从网络获取最新版本，使用内置版本: v12.10.3"
-    return "v12.10.3"
+    Write-Warn "无法从网络获取最新版本，使用内置版本: $FallbackVersion"
+    return $FallbackVersion
 }
 
 # 下载并安装
