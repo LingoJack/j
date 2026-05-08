@@ -22,11 +22,17 @@ use crossterm::{
 use ratatui::layout::Rect;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::Command;
 
 /// 处理 notebook 命令入口：无参数启动 TUI，有参数按子命令分发
 pub fn handle_notebook(args: &[String]) {
+    // 优先检测 stdin 管道输入：非终端时读取并渲染 Markdown 到 stdout
+    if !std::io::stdin().is_terminal() {
+        handle_stdin_render();
+        return;
+    }
+
     if args.is_empty() {
         run_notebook_tui();
         return;
@@ -80,6 +86,21 @@ pub fn handle_notebook(args: &[String]) {
             }
         }
     }
+}
+
+/// 从 stdin 读取 Markdown 文本，渲染为 ANSI 彩色输出到 stdout
+fn handle_stdin_render() {
+    use std::io::Read;
+
+    let mut input = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut input) {
+        eprintln!("读取 stdin 失败: {e}");
+        std::process::exit(1);
+    }
+    if input.trim().is_empty() {
+        return;
+    }
+    crate::util::md_render::render_md(&input);
 }
 
 fn is_file_path(s: &str) -> bool {
