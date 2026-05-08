@@ -1,3 +1,8 @@
+# v12.10.17
+
+### Bug 修复
+- **修复 GitHub Release 不渲染 Markdown 分类标题**: git tag 默认 strip # 开头的行，添加 --cleanup=verbatim 保留 Markdown 标题
+
 # v12.10.16
 
 ### Bug 修复
