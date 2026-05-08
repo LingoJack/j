@@ -4,16 +4,59 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="jcli - 高效命令行工具，别名管理、日报系统、待办备忘录、AI 对话、浏览器自动化，提升开发效率" />
-    <meta name="keywords" content="jcli, cli, command-line, productivity, ai, automation, rust, 命令行工具, 别名管理, 日报, 待办" />
-    <meta name="author" content="LingoJack" />
-    <meta property="og:title" content="jcli - 高效命令行生产力工具" />
-    <meta property="og:description" content="jcli 是一个强大的命令行工具，集成别名管理、日报系统、待办备忘录、AI 对话、浏览器自动化等功能，助你提升开发效率" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://github.com/LingoJack/j" />
+
+    <!-- Primary Meta Tags -->
     <title>jcli - 高效命令行生产力工具 | 别名管理·日报·AI对话</title>
+    <meta name="title" content="jcli - 高效命令行生产力工具" />
+    <meta name="description" content="jcli 是一个强大的命令行工具，集成别名管理、日报系统、待办备忘录、AI 对话、浏览器自动化等功能，助你提升开发效率。基于 Rust 构建，速度快、体积小。" />
+    <meta name="keywords" content="jcli, j cli, 命令行工具, CLI tool, productivity, 别名管理, alias manager, 日报系统, daily report, 待办, todo, AI对话, AI chat, 浏览器自动化, browser automation, Rust, 开发效率工具, terminal, shell, 命令行别名, 工作流自动化" />
+    <meta name="author" content="LingoJack" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://lingojack.github.io/j/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lingojack.github.io/j/" />
+    <meta property="og:title" content="jcli - 高效命令行生产力工具" />
+    <meta property="og:description" content="jcli 是一个强大的命令行工具，集成别名管理、日报系统、待办备忘录、AI 对话、浏览器自动化等功能，助你提升开发效率。基于 Rust 构建。" />
+    <meta property="og:image" content="https://lingojack.github.io/j/pics/jcli-ai/1.png" />
+    <meta property="og:site_name" content="jcli" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://lingojack.github.io/j/" />
+    <meta name="twitter:title" content="jcli - 高效命令行生产力工具" />
+    <meta name="twitter:description" content="jcli 是一个强大的命令行工具，集成别名管理、日报系统、待办备忘录、AI 对话、浏览器自动化等功能，助你提升开发效率。" />
+    <meta name="twitter:image" content="https://lingojack.github.io/j/pics/jcli-ai/1.png" />
+
+    <!-- Structured Data (JSON-LD) for SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "jcli",
+      "description": "jcli 是一个强大的命令行生产力工具，集成别名管理、日报系统、待办备忘录、AI 对话、浏览器自动化等功能，基于 Rust 构建。",
+      "url": "https://lingojack.github.io/j/",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS",
+      "programmingLanguage": "Rust",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "LingoJack"
+      },
+      "codeRepository": "https://github.com/LingoJack/j"
+    }
+    </script>
+
+    <!-- SPA 路由恢复：必须在 React 加载前执行 -->
     <script>
-      // SPA 路由恢复：必须在 React 加载前执行，这样 BrowserRouter 才能正确读取路由
       (function() {
         var redirect = sessionStorage.getItem('spa:redirect');
         if (redirect) {
@@ -25,6 +68,19 @@
     </script>
   </head>
   <body>
+    <!-- SSR 预渲染内容：为搜索引擎爬虫提供可索引的内容 -->
+    <noscript>
+      <h1>jcli - 高效命令行生产力工具</h1>
+      <p>jcli 是一个强大的命令行工具，基于 Rust 构建，集成以下功能：</p>
+      <ul>
+        <li>别名管理 - 快速打开应用和网站</li>
+        <li>日报系统 - 管理每日/每周工作报告</li>
+        <li>待办备忘录 - 管理任务和待办事项</li>
+        <li>AI 对话 - 与 AI 助手交互</li>
+        <li>浏览器自动化 - 自动化浏览器操作</li>
+      </ul>
+      <p>访问 <a href="https://github.com/LingoJack/j">GitHub 仓库</a> 了解更多。</p>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
