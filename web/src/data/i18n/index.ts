@@ -149,8 +149,8 @@ export const i18n: Record<Language, I18nData> = {
     },
     hero: {
       badge: '命令行工具',
-      title: '你的终端工作站，',
-      titleHighlight: '简单快速。',
+      title: '你的终端工作站',
+      titleHighlight: '少打几个字，多省一点事。',
       subtitle: '别名管理、日报系统、待办备忘、AI 对话、浏览器自动化。',
       subtitleExtra: '一个命令，效率翻倍。',
       getStarted: '快速开始',
