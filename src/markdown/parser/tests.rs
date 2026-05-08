@@ -560,6 +560,42 @@ fn renders_list_with_bullet() {
 }
 
 #[test]
+fn long_list_items_wrap_and_keep_continuation_indent() {
+    let theme = Theme::from_name(&ThemeName::default());
+    let md = "1. **draw_tab_global_lines** 函数 - 渲染全局配置页面的所有字段";
+    let max_width = 20;
+    let lines = markdown_to_lines(md, max_width, &theme);
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
+        .collect();
+
+    assert!(
+        rendered.len() >= 2,
+        "长列表项应至少折成 2 行，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered.first().is_some_and(|line| line.starts_with("1. ")),
+        "首行应保留有序列表序号，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered
+            .iter()
+            .skip(1)
+            .all(|line| line.starts_with("   ") && !line.starts_with("1. ")),
+        "续行应以 bullet 宽度的空格缩进对齐，实际: {:?}",
+        rendered
+    );
+    assert!(
+        lines.iter().all(|line| line.width() <= max_width),
+        "所有列表渲染行都应受宽度限制，实际: {:?}",
+        rendered
+    );
+}
+
+#[test]
 fn handles_chinese_quotes_bold() {
     let theme = Theme::from_name(&ThemeName::default());
     // \u{201C} = " \u{201D} = "

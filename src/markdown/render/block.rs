@@ -1,6 +1,6 @@
 use crate::markdown::ir::{Block, BlockKind, Inline, ListData};
 use crate::markdown::theme::MdStyle;
-use crate::util::text::{display_width, wrap_text};
+use crate::util::text::display_width;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -8,6 +8,7 @@ use super::RenderContext;
 use super::code_block::render_code_block;
 use super::inline::render_inlines;
 use super::table::render_table;
+use super::wrap::wrap_spans_with_prefix;
 
 /// 渲染单个 block 元素
 pub fn render_block(block: &Block, ctx: &RenderContext) -> Vec<Line<'static>> {
@@ -24,79 +25,13 @@ pub fn render_block(block: &Block, ctx: &RenderContext) -> Vec<Line<'static>> {
 
 /// 渲染段落
 fn render_paragraph(inlines: &[Inline], ctx: &RenderContext) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-
     if inlines.is_empty() {
-        return lines;
+        return Vec::new();
     }
 
     let base_style = Style::default().fg(ctx.theme.text_normal());
-    let full_line_w = ctx.width;
-
-    // 先渲染所有 inline 为 spans
     let spans = render_inlines(inlines, base_style, ctx.theme);
-
-    // 按 \n 拆分 spans
-    let mut segments_by_newline: Vec<Vec<Span<'static>>> = Vec::new();
-    let mut current_seg: Vec<Span<'static>> = Vec::new();
-    for span in spans {
-        if span.content.as_ref() == "\n" {
-            segments_by_newline.push(current_seg);
-            current_seg = Vec::new();
-        } else {
-            current_seg.push(span);
-        }
-    }
-    segments_by_newline.push(current_seg);
-
-    // 对每个 segment 进行 wrap
-    let mut cur_line_spans: Vec<Span<'static>> = Vec::new();
-    let mut cur_line_w: usize = 0;
-
-    for seg in segments_by_newline {
-        if seg.is_empty() {
-            // 空的 segment 表示 \n，flush 当前行
-            if !cur_line_spans.is_empty() {
-                lines.push(Line::from(std::mem::take(&mut cur_line_spans)));
-                cur_line_w = 0;
-            }
-            continue;
-        }
-
-        let seg_w: usize = seg.iter().map(|s| display_width(&s.content)).sum();
-        let avail = full_line_w.saturating_sub(cur_line_w);
-
-        if seg_w <= avail {
-            cur_line_spans.extend(seg);
-            cur_line_w += seg_w;
-        } else {
-            // 需要 wrap 这个 segment
-            let seg_text: String = seg.iter().map(|s| s.content.to_string()).collect();
-            let first_wrap_w = avail.max(1);
-            let first_wrapped = wrap_text(&seg_text, first_wrap_w);
-            // 第一段放入当前行
-            let first_style = seg.first().map(|s| s.style).unwrap_or(base_style);
-            cur_line_spans.push(Span::styled(first_wrapped[0].clone(), first_style));
-            if first_wrapped.len() > 1 {
-                let rest: String = first_wrapped[1..].join("");
-                lines.push(Line::from(std::mem::take(&mut cur_line_spans)));
-                let rest_wrapped = wrap_text(&rest, full_line_w.max(1));
-                for wl in rest_wrapped {
-                    lines.push(Line::from(Span::styled(wl, first_style)));
-                }
-                cur_line_w = 0;
-            } else {
-                cur_line_w = display_width(&first_wrapped[0]);
-            }
-        }
-    }
-
-    // flush 最后一行
-    if !cur_line_spans.is_empty() {
-        lines.push(Line::from(cur_line_spans));
-    }
-
-    lines
+    wrap_spans_with_prefix(spans, ctx.width, Vec::new(), Vec::new())
 }
 
 /// 渲染标题
@@ -202,9 +137,15 @@ fn render_list(data: &ListData, ctx: &RenderContext, depth: usize) -> Vec<Line<'
         let has_inline = !item.content.is_empty();
         let has_children = !item.children.is_empty();
         if has_inline || !has_children {
-            let mut line_spans = vec![Span::styled(bullet, bullet_style)];
-            line_spans.extend(render_inlines(&item.content, base_style, ctx.theme));
-            lines.push(Line::from(line_spans));
+            let bullet_width = display_width(&bullet);
+            let content_spans = render_inlines(&item.content, base_style, ctx.theme);
+            let wrapped_lines = wrap_spans_with_prefix(
+                content_spans,
+                ctx.width,
+                vec![Span::styled(bullet, bullet_style)],
+                vec![Span::raw(" ".repeat(bullet_width))],
+            );
+            lines.extend(wrapped_lines);
         } else {
             // 没有 inline 只有 children：仍然输出 bullet 作为视觉锚点
             lines.push(Line::from(Span::styled(bullet, bullet_style)));
@@ -229,7 +170,6 @@ fn render_list(data: &ListData, ctx: &RenderContext, depth: usize) -> Vec<Line<'
 
     lines
 }
-
 /// 在 Line 的开头插入一段缩进 span
 fn prepend_indent(line: Line<'static>, indent: &str) -> Line<'static> {
     if indent.is_empty() {

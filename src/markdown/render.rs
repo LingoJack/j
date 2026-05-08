@@ -2,6 +2,7 @@ mod block;
 mod code_block;
 pub mod inline;
 pub mod table;
+mod wrap;
 
 use crate::markdown::ir::ParsedDocument;
 use crate::markdown::theme::MdStyle;
