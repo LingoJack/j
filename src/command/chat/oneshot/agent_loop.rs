@@ -316,31 +316,51 @@ pub(crate) fn run_oneshot_agent(
                         }
                         // 打印 AI 标签（首次文本到来时）
                         if first_content {
-                            let theme = Theme::terminal();
-                            eprintln!();
-                            eprintln!(
-                                "  {}",
-                                crate::util::color_adapt::apply_fg("Sprite", theme.label_ai).bold()
-                            );
-                            // 首次输出前先打印缩进
-                            print!("  ");
-                            let _ = io::stdout().flush();
+                            if !no_render {
+                                let theme = Theme::terminal();
+                                eprintln!();
+                                eprintln!(
+                                    "  {}",
+                                    crate::util::color_adapt::apply_fg("Sprite", theme.label_ai)
+                                        .bold()
+                                );
+                                // 首次输出前先打印缩进
+                                print!("  ");
+                                let _ = io::stdout().flush();
+                            }
                             first_content = false;
                         }
 
                         let delta = &content[last_streaming_len..];
-                        // 缩进输出：每个换行后加 "  " 缩进
-                        for ch in delta.chars() {
-                            if ch == '\n' {
-                                print!("\n  ");
-                                raw_lines += 1;
-                                cur_col = 2; // 缩进算入 cur_col
-                            } else {
-                                print!("{}", ch);
-                                cur_col += 1;
-                                if cur_col >= tw {
+                        if no_render {
+                            // no_render 模式：原样输出，避免污染重定向到文件的内容
+                            print!("{}", delta);
+                            for ch in delta.chars() {
+                                if ch == '\n' {
                                     raw_lines += 1;
                                     cur_col = 0;
+                                } else {
+                                    cur_col += 1;
+                                    if cur_col >= tw {
+                                        raw_lines += 1;
+                                        cur_col = 0;
+                                    }
+                                }
+                            }
+                        } else {
+                            // 缩进输出：每个换行后加 "  " 缩进（仅终端显示）
+                            for ch in delta.chars() {
+                                if ch == '\n' {
+                                    print!("\n  ");
+                                    raw_lines += 1;
+                                    cur_col = 2;
+                                } else {
+                                    print!("{}", ch);
+                                    cur_col += 1;
+                                    if cur_col >= tw {
+                                        raw_lines += 1;
+                                        cur_col = 0;
+                                    }
                                 }
                             }
                         }
