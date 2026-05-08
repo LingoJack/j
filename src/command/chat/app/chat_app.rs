@@ -812,6 +812,8 @@ impl ChatApp {
     pub fn execute_pending_tool(&mut self) {
         if let Some(new_mode) = self.tool_executor.execute_current(&self.tool_registry) {
             self.ui.mode = new_mode;
+        } else {
+            self.reset_tool_confirm_interact_state();
         }
     }
 
@@ -819,6 +821,8 @@ impl ChatApp {
     pub fn reject_pending_tool(&mut self, reason: &str) {
         if let Some(new_mode) = self.tool_executor.reject_current(reason) {
             self.ui.mode = new_mode;
+        } else {
+            self.reset_tool_confirm_interact_state();
         }
     }
 
@@ -829,6 +833,81 @@ impl ChatApp {
             .allow_and_execute(&self.tool_registry, &mut self.jcli_config)
         {
             self.ui.mode = new_mode;
+        } else {
+            self.reset_tool_confirm_interact_state();
         }
+    }
+
+    fn reset_tool_confirm_interact_state(&mut self) {
+        self.ui.tool_interact_selected = 0;
+        self.ui.tool_interact_typing = false;
+        self.ui.tool_interact_input.clear();
+        self.ui.tool_interact_cursor = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ChatApp;
+    use crate::command::chat::app::types::{ToolCallStatus, ToolExecStatus};
+    use crate::command::chat::app::ui_state::ChatMode;
+
+    #[test]
+    fn reject_with_reason_resets_tool_confirm_ui_for_next_pending_tool() {
+        let mut app = ChatApp::new("test-reject-next-tool".to_string());
+        app.ui.mode = ChatMode::ToolConfirm;
+        app.ui.tool_interact_selected = 3;
+        app.ui.tool_interact_typing = true;
+        app.ui.tool_interact_input = "不要执行".to_string();
+        app.ui.tool_interact_cursor = app.ui.tool_interact_input.chars().count();
+        app.tool_executor.active_tool_calls = vec![
+            ToolCallStatus {
+                tool_call_id: "tool-1".to_string(),
+                tool_name: "Write".to_string(),
+                arguments: "{}".to_string(),
+                confirm_message: "first".to_string(),
+                status: ToolExecStatus::PendingConfirm,
+                tool_description: None,
+            },
+            ToolCallStatus {
+                tool_call_id: "tool-2".to_string(),
+                tool_name: "Edit".to_string(),
+                arguments: "{}".to_string(),
+                confirm_message: "second".to_string(),
+                status: ToolExecStatus::PendingConfirm,
+                tool_description: None,
+            },
+        ];
+
+        app.reject_pending_tool("不要执行");
+
+        assert!(matches!(app.ui.mode, ChatMode::ToolConfirm));
+        assert_eq!(app.tool_executor.pending_tool_idx, 1);
+        assert_eq!(app.ui.tool_interact_selected, 0);
+        assert!(!app.ui.tool_interact_typing);
+        assert!(app.ui.tool_interact_input.is_empty());
+        assert_eq!(app.ui.tool_interact_cursor, 0);
+    }
+
+    #[test]
+    fn reject_last_pending_tool_exits_tool_confirm_mode() {
+        let mut app = ChatApp::new("test-reject-last-tool".to_string());
+        app.ui.mode = ChatMode::ToolConfirm;
+        app.ui.tool_interact_selected = 3;
+        app.ui.tool_interact_typing = true;
+        app.ui.tool_interact_input = "不要执行".to_string();
+        app.ui.tool_interact_cursor = app.ui.tool_interact_input.chars().count();
+        app.tool_executor.active_tool_calls = vec![ToolCallStatus {
+            tool_call_id: "tool-1".to_string(),
+            tool_name: "Write".to_string(),
+            arguments: "{}".to_string(),
+            confirm_message: "only".to_string(),
+            status: ToolExecStatus::PendingConfirm,
+            tool_description: None,
+        }];
+
+        app.reject_pending_tool("不要执行");
+
+        assert!(matches!(app.ui.mode, ChatMode::Chat));
     }
 }
