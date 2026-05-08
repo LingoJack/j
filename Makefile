@@ -183,25 +183,24 @@ bump-version: ## 递增版本号（最后一位 patch）
 	fi; \
 	echo "☑️ 版本号已更新为 $$new_version"
 
-publish: ## 发布到 crates.io（make publish NOTE="release notes" 或自动 AI 生成）
+publish: ## 发布到 crates.io（make publish NOTE="release notes" 或从 CHANGELOG.md 读取）
 	@echo "📦 开始发布流程..."
 	@$(MAKE) bump-version
 	@$(MAKE) release
 	@git add .
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	note_file=$$(mktemp); \
-	trap 'rm -f "$$note_file"' EXIT; \
+	changelog_tmp=$$(mktemp); \
+	trap 'rm -f "$$note_file" "$$changelog_tmp"' EXIT; \
 	if [ -n "$(NOTE)" ]; then \
+		printf '# v%s\n\n%s\n' "$$version" "$(NOTE)" > "$$changelog_tmp"; \
+		if [ -f CHANGELOG.md ]; then cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
+		mv "$$changelog_tmp" CHANGELOG.md; \
 		printf '%s\n' "$(NOTE)" > "$$note_file"; \
 	else \
-		last_tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
-		if [ -n "$$last_tag" ]; then \
-			log=$$(git log --oneline "$$last_tag"..HEAD); \
-		else \
-			log=$$(git log --oneline -20); \
-		fi; \
-		timeout 60 j ai --bypass -- "根据以下 git log 生成版本 v$$version 的中文发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。请用 <result>...</result> 包裹你的输出。Git Log: $$log" 2>/dev/null | $(J_AI_EXTRACT) > "$$note_file" || echo "Release v$$version" > "$$note_file"; \
+		awk '/^# v/{if(p++)exit}p' CHANGELOG.md > "$$note_file"; \
 	fi; \
+	git add CHANGELOG.md; \
 	git commit -m "chore: bump version to v$$version"; \
 	git tag -a "v$$version" -F "$$note_file"; \
 	git push origin $(GIT_BRANCH); \
@@ -210,17 +209,8 @@ publish: ## 发布到 crates.io（make publish NOTE="release notes" 或自动 AI
 	cargo publish --registry crates-io --allow-dirty; \
 	echo "☑️ 已发布 v$$version! 验证: cargo search j-cli"
 
-release-note: ## 生成自上次 tag 以来的 Release Note
-	@last_tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
-	if [ -z "$$last_tag" ]; then \
-		log=$$(git log --oneline -20); \
-	else \
-		log=$$(git log --oneline "$$last_tag"..HEAD); \
-	fi; \
-	if [ -z "$$log" ]; then echo "没有新的提交"; exit 0; fi; \
-	echo "📋 自 $$last_tag 以来的变更:"; \
-	echo ""; \
-	j ai --bypass -- "根据以下 git log 生成中文版本发布说明，按类型分组（新功能/Bug修复/改进/其他），Markdown 格式，简洁明了。请用 <result>...</result> 包裹你的输出。Git Log: $$log" 2>/dev/null | $(J_AI_EXTRACT)
+release-note: ## 预览 CHANGELOG.md 中最新版本的 release notes
+	@awk '/^# v/{if(p++)exit}p' CHANGELOG.md | awk 'NR>1 || /^./'
 
 publish-check: ## 发布前检查（dry-run）
 	@echo "🔍 发布前检查（dry-run）..."
