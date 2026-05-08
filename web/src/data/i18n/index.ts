@@ -151,7 +151,7 @@ export const i18n: Record<Language, I18nData> = {
       badge: '命令行工具',
       title: '你的终端工作站',
       titleHighlight: '少打几个字，多省一点事。',
-      subtitle: '别名管理、日报系统、待办备忘、AI 对话、浏览器自动化。',
+      subtitle: '别名管理、日报系统、待办备忘、AI 对话、Markdown 编辑渲染。',
       subtitleExtra: '一个命令，效率翻倍。',
       getStarted: '快速开始',
       viewGithub: '查看源码 →'
@@ -164,7 +164,7 @@ export const i18n: Record<Language, I18nData> = {
         { icon: '■', title: '日报系统', description: '快速写入、查看、搜索日报，自动周数管理，支持 Git 同步。' },
         { icon: '✓', title: '待办备忘', description: '内置 TUI 待办管理，支持 Markdown checkbox，完成时可联动写入日报。' },
         { icon: '◉', title: 'AI 对话', description: 'TUI AI 对话，多模型支持、流式输出、工具调用，支持远程控制。' },
-        { icon: '◐', title: '浏览器自动化', description: 'Lite 模式轻量级 HTTP 控制，CDP 模式完整浏览器自动化，支持截图。' },
+        { icon: '◐', title: 'Markdown 编辑', description: '内置 Markdown 编辑器，实时渲染预览，支持表格、代码高亮。' },
         { icon: '◈', title: '脚本系统', description: '创建脚本并注册为别名，支持环境变量注入、新窗口执行。' }
       ]
     },
