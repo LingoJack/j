@@ -12,7 +12,7 @@ use ratatui::{
 };
 
 use crate::command::chat::app::{ChatApp, ChatMode};
-use crate::util::text::{char_width, wrap_text};
+use crate::util::text::{char_width, sanitize_single_line_text, wrap_text};
 
 /// 绘制输入框（支持多行、光标、@mention 高亮）
 pub fn draw_input(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
@@ -405,7 +405,7 @@ fn draw_browse_filter(f: &mut ratatui::Frame, area: Rect, app: &ChatApp) {
 
     if !app.ui.browse_filter.is_empty() {
         spans.push(Span::styled(
-            format!("过滤: {}", app.ui.browse_filter),
+            format!("过滤: {}", sanitize_single_line_text(&app.ui.browse_filter)),
             Style::default().fg(t.label_user),
         ));
         spans.push(Span::styled(

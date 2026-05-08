@@ -2,6 +2,7 @@ use crate::command::chat::app::ChatApp;
 use crate::command::chat::teammate::TeammateStatus;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
 use crate::tui::components::ItemList;
+use crate::util::text::sanitize_single_line_text;
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -191,9 +192,15 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
             TeammateStatus::Retrying { .. } => t.title_loading,
         };
 
+        let safe_name = sanitize_single_line_text(&snap.name);
         let status_text = if snap.status == TeammateStatus::Working {
             if let Some(ref tool) = snap.current_tool {
-                format!("{} {}: {}", snap.status.icon(), snap.status.label(), tool)
+                format!(
+                    "{} {}: {}",
+                    snap.status.icon(),
+                    snap.status.label(),
+                    sanitize_single_line_text(tool)
+                )
             } else {
                 format!("{} {}", snap.status.icon(), snap.status.label())
             }
@@ -202,11 +209,12 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
         };
 
         // 截断角色描述
-        let role_display: String = if snap.role.chars().count() > 20 {
-            let truncated: String = snap.role.chars().take(20).collect();
+        let safe_role = sanitize_single_line_text(&snap.role);
+        let role_display: String = if safe_role.chars().count() > 20 {
+            let truncated: String = safe_role.chars().take(20).collect();
             format!("{truncated}…")
         } else {
-            snap.role.clone()
+            safe_role
         };
 
         let pointer_style = if is_selected {
@@ -229,7 +237,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
 
         list.push(Line::from(vec![
             Span::styled(pointer.to_string(), pointer_style),
-            Span::styled(format!("{:<12}", snap.name), name_style),
+            Span::styled(format!("{:<12}", safe_name), name_style),
             Span::styled(
                 format!("{:<22}", role_display),
                 Style::default().fg(t.config_dim),
@@ -277,7 +285,7 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                             "{} 工作中 R{} · {}",
                             snap.status.icon(),
                             snap.current_round,
-                            tool
+                            sanitize_single_line_text(tool)
                         )
                     } else {
                         format!("{} 工作中 R{}", snap.status.icon(), snap.current_round)
@@ -291,8 +299,13 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                     format!("{} 重试 {}/{}", snap.status.icon(), attempt, max_attempts)
                 }
                 SubAgentStatus::Error(msg) => {
-                    let short: String = msg.chars().take(28).collect();
-                    let suffix = if msg.chars().count() > 28 { "…" } else { "" };
+                    let safe_msg = sanitize_single_line_text(msg);
+                    let short: String = safe_msg.chars().take(28).collect();
+                    let suffix = if safe_msg.chars().count() > 28 {
+                        "…"
+                    } else {
+                        ""
+                    };
                     format!("{} 错误: {}{}", snap.status.icon(), short, suffix)
                 }
                 // 这些状态使用默认 icon + label 展示
@@ -303,11 +316,12 @@ pub(super) fn draw_tab_teammates_list<'a>(app: &ChatApp) -> ItemList<'a> {
                 }
             };
 
-            let desc_display: String = if snap.description.chars().count() > 22 {
-                let truncated: String = snap.description.chars().take(22).collect();
+            let safe_desc = sanitize_single_line_text(&snap.description);
+            let desc_display: String = if safe_desc.chars().count() > 22 {
+                let truncated: String = safe_desc.chars().take(22).collect();
                 format!("{truncated}…")
             } else {
-                snap.description.clone()
+                safe_desc
             };
 
             // 时长（秒）显示
