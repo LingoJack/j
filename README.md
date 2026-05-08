@@ -90,6 +90,18 @@ Lite 模式（零依赖）和 CDP 模式（完整浏览器控制），AI 可直�
 <img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/3.png" width="80%" alt="AI Chat Interface 3" />
 </div>
 
+<div align="center">
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/4.png" width="80%" alt="AI Agent Tool Call" />
+</div>
+
+<div align="center">
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/5.png" width="80%" alt="AI Chat Multi-turn" />
+</div>
+
+<div align="center">
+<img src="https://raw.githubusercontent.com/LingoJack/j/main/web/public/pics/jcli-ai/6.png" width="80%" alt="AI Chat Interface 6" />
+</div>
+
 ---
 
 ## 🚀 快速开始
