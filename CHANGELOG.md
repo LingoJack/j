@@ -1,3 +1,25 @@
+# v12.10.21
+
+### Bug 修复
+- **修复仓库名变更导致的页面空白**: GitHub 仓库名从 j 改为 jcli 后，React Router basename 不匹配导致页面无法渲染
+
+### 改进
+- **全面更新仓库引用路径**: 将所有源码、配置、文档、安装脚本中的 LingoJack/j 引用更新为 LingoJack/jcli，涉及以下文件：
+  - vite.config.ts: base path 从 /j/ 改为 /jcli/
+  - web/index.html: 页面 URL、仓库 URL、SPA 重定向路径
+  - web/src/data/i18n/index.ts: 12 处图片路径
+  - web/src/pages/Home.tsx: 安装命令
+  - web/src/pages/Docs.tsx: GitHub 链接
+  - web/src/components/home/: Nav、Footer、HeroSection 的 GitHub 链接
+  - web/src/data/docs/: 中英文安装文档
+  - src/command/update.rs: 更新检查 API URL
+  - src/constants.rs: 版本信息中的仓库 URL
+  - Cargo.toml: repository 和 homepage 字段
+  - README.md: 安装命令和仓库链接
+  - install.sh / install.ps1: REPO 变量和下载 URL
+  - assets/help/install.md: 安装命令
+  - assets/skills/j-cli/: SKILL.md、commands.md、ensure_j.sh
+
 # v12.10.20
 
 ### 新功能
