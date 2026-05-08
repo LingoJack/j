@@ -4,7 +4,7 @@ use crate::command::chat::constants::{AGENT_CALL_PROMPT_MAX_LINES, TOOL_ARG_PREV
 use crate::command::chat::storage::ToolCallItem;
 use crate::command::chat::tools::classification::{ToolCategory, format_json_value};
 use crate::command::chat::tools::tool_names;
-use crate::util::text::wrap_text;
+use crate::util::text::{sanitize_single_line_text, wrap_text};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -67,6 +67,7 @@ pub fn render_tool_call_request_msg(
             } else {
                 tc.name.clone()
             };
+            let display_name = sanitize_single_line_text(&display_name);
             let mut spans = sender_prefix_spans.clone();
             spans.push(Span::styled(icon, Style::default().fg(tool_color)));
             spans.push(Span::styled(" ", Style::default()));
@@ -129,7 +130,7 @@ pub fn render_tool_call_request_msg(
                     };
                     desc_parts.push(preview);
                 }
-                let desc_text = desc_parts.join("  ");
+                let desc_text = sanitize_single_line_text(&desc_parts.join("  "));
                 let mut spans = sender_prefix_spans.clone();
                 spans.push(Span::styled(icon, Style::default().fg(tool_color)));
                 spans.push(Span::styled(" ", Style::default()));
@@ -165,7 +166,7 @@ pub fn render_tool_call_request_msg(
                     cw
                 };
                 desc_parts.push(preview);
-                let desc_text = desc_parts.join("  ");
+                let desc_text = sanitize_single_line_text(&desc_parts.join("  "));
                 let mut spans = sender_prefix_spans.clone();
                 spans.push(Span::styled(icon, Style::default().fg(tool_color)));
                 spans.push(Span::styled(" ", Style::default()));
@@ -184,6 +185,7 @@ pub fn render_tool_call_request_msg(
             let tool_desc = extract_tool_description_from_args(&tc.name, &tc.arguments);
 
             if let Some(desc) = tool_desc {
+                let desc = sanitize_single_line_text(&desc);
                 // 有 description 时优先展示，替代 raw arguments
                 let mut spans = sender_prefix_spans.clone();
                 spans.push(Span::styled(icon, Style::default().fg(tool_color)));
@@ -222,6 +224,7 @@ pub fn render_tool_call_request_msg(
                 };
 
                 let args_preview: String = tc.arguments.chars().take(preview_len).collect();
+                let args_preview = sanitize_single_line_text(&args_preview);
 
                 let suffix = if truncated {
                     if let Some(bracket) = closing_bracket {
@@ -274,6 +277,8 @@ pub(crate) fn render_json_params_enhanced(
             } else {
                 value_str
             };
+            let key = sanitize_single_line_text(key);
+            let value_display = sanitize_single_line_text(&value_display);
 
             lines.push(Line::from(vec![
                 Span::styled("    ", Style::default()),

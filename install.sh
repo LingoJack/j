@@ -74,15 +74,15 @@ get_latest_version() {
     # 方法4: 使用已知最新版本
     if [ -z "$latest" ]; then
         warn "无法从网络获取最新版本"
-        info "使用内置版本: v12.7.53" >&2
-        latest="v12.7.53"
+        info "使用内置版本: v12.10.21" >&2
+        latest="v12.10.21"
     fi
     
     # 验证版本号格式
     if ! echo "$latest" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
         warn "获取到的版本号格式不正确: $latest"
-        info "使用内置版本: v12.7.53" >&2
-        latest="v12.7.53"
+        info "使用内置版本: v12.10.21" >&2
+        latest="v12.10.21"
     fi
     
     echo "$latest"

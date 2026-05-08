@@ -43,6 +43,14 @@ pub fn sanitize_terminal_text(s: &str) -> String {
     normalize_terminal_text(&stripped)
 }
 
+/// 清理单行终端展示文本：剥离 ANSI/控制字符，并将换行压平为空格。
+pub fn sanitize_single_line_text(s: &str) -> String {
+    sanitize_terminal_text(s)
+        .chars()
+        .map(|c| if c == '\n' { ' ' } else { c })
+        .collect()
+}
+
 /// 按显示宽度对文本进行自动换行
 /// `\n` 字符会在该处断行（产生新的 wrapped line），`\n` 本身不出现在返回的行中
 pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
@@ -140,8 +148,8 @@ pub fn remove_quotes(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        needs_terminal_sanitization, normalize_terminal_text, sanitize_terminal_text,
-        sanitize_tool_output, wrap_text,
+        needs_terminal_sanitization, normalize_terminal_text, sanitize_single_line_text,
+        sanitize_terminal_text, sanitize_tool_output, wrap_text,
     };
 
     #[test]
@@ -189,6 +197,14 @@ mod tests {
     #[test]
     fn sanitize_terminal_text_strips_full_ansi_sequences() {
         assert_eq!(sanitize_terminal_text("a\x1b[31mred\x1b[0m\x07b"), "aredb");
+    }
+
+    #[test]
+    fn sanitize_single_line_text_flattens_newlines() {
+        assert_eq!(
+            sanitize_single_line_text("a\x1b[31mred\x1b[0m\nb"),
+            "ared b"
+        );
     }
 
     #[test]
