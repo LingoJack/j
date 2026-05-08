@@ -80,8 +80,8 @@ fn render_heading(level: u8, content: &[Inline], ctx: &RenderContext) -> Vec<Lin
         ),
     };
 
-    let mut content_spans = vec![Span::styled(prefix.to_string(), prefix_style)];
-    content_spans.extend(render_inlines(content, heading_style, ctx.theme));
+    let prefix_width = display_width(prefix);
+    let mut content_spans = render_inlines(content, heading_style, ctx.theme);
 
     // H3 添加文艺风格后缀
     if level == 3 {
@@ -93,7 +93,12 @@ fn render_heading(level: u8, content: &[Inline], ctx: &RenderContext) -> Vec<Lin
         ));
     }
 
-    lines.push(Line::from(content_spans));
+    lines.extend(wrap_spans_with_prefix(
+        content_spans,
+        ctx.width,
+        vec![Span::styled(prefix.to_string(), prefix_style)],
+        vec![Span::raw(" ".repeat(prefix_width))],
+    ));
 
     // H1/H2 显示分隔线
     if level <= 2 {

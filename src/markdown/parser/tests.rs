@@ -504,6 +504,40 @@ fn renders_heading_with_prefix() {
 }
 
 #[test]
+fn long_heading_wraps_and_keeps_continuation_indent() {
+    let theme = Theme::from_name(&ThemeName::default());
+    let max_width = 18;
+    let lines = markdown_to_lines("# Heading wrap regression case", max_width, &theme);
+    let rendered: Vec<String> = lines
+        .iter()
+        .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
+        .collect();
+
+    assert!(
+        rendered.len() >= 3,
+        "长标题应折成至少 2 行标题 + 1 行分隔线，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered.first().is_some_and(|line| line.starts_with("◆ ")),
+        "标题首行应保留前缀，实际: {:?}",
+        rendered
+    );
+    assert!(
+        rendered[1].starts_with("  "),
+        "标题续行应按前缀宽度缩进，实际: {:?}",
+        rendered
+    );
+    assert!(
+        lines[..lines.len() - 1]
+            .iter()
+            .all(|line| line.width() <= max_width),
+        "标题内容行都应受宽度限制，实际: {:?}",
+        rendered
+    );
+}
+
+#[test]
 fn renders_ordered_list_with_bold_items() {
     let theme = Theme::from_name(&ThemeName::default());
     // 精确复现用户报告的场景：有序列表 + 粗体中文
