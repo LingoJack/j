@@ -1,35 +1,45 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { I18nData } from '../../types'
 
 interface FeaturesWithScreenshotsProps {
   t: I18nData
 }
 
-const CARD_H = 130 // px per card
-const VISIBLE = 3  // cards visible at once
-
 export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
   const features = t.features.list
   const screenshots = t.screenshots.list
 
-  // Left: list auto-scroll
-  const [featureIndex, setFeatureIndex] = useState(0)
-  const featureNext = useCallback(() => {
-    setFeatureIndex((prev) => (prev + 1) % features.length)
-  }, [features.length])
-  useEffect(() => {
-    const timer = setInterval(featureNext, 3000)
-    return () => clearInterval(timer)
-  }, [featureNext])
+  // --- Left: smooth infinite vertical scroll via requestAnimationFrame ---
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const offsetRef = useRef(0)
+  const rafRef = useRef(0)
 
-  // Right: screenshot carousel
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const speed = 0.4
+
+    const tick = () => {
+      offsetRef.current += speed
+      const halfH = el.scrollHeight / 2
+      if (offsetRef.current >= halfH) {
+        offsetRef.current -= halfH
+      }
+      el.style.transform = `translateY(-${offsetRef.current}px)`
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [])
+
+  // --- Right: screenshot carousel ---
   const [shotIndex, setShotIndex] = useState(0)
   const shotPrev = () => setShotIndex((prev) => (prev - 1 + screenshots.length) % screenshots.length)
   const shotNext = () => setShotIndex((prev) => (prev + 1) % screenshots.length)
 
   return (
     <section id="features" className="py-16 md:py-24 px-6 bg-white border-y border-stone-200">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Title */}
         <div className="mb-12">
           <h2 className="text-3xl sm:text-4xl font-light text-stone-900 mb-4">
@@ -41,47 +51,27 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
         </div>
 
         {/* Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8 items-start">
-          {/* Left: scrolling feature list */}
-          <div className="flex flex-col">
-            <div className="overflow-hidden" style={{ height: CARD_H * VISIBLE }}>
-              <div
-                className="transition-transform duration-500 ease-in-out"
-                style={{ transform: `translateY(-${featureIndex * CARD_H}px)` }}
-              >
-                {features.map((feature, index) => (
-                  <div key={index} style={{ height: CARD_H }} className="flex items-center py-2">
-                    <div className="p-4 bg-stone-50 rounded-lg border border-stone-200 w-full h-full flex flex-col justify-center">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xl">{feature.icon}</span>
-                        <h3 className="text-base font-medium text-stone-900">{feature.title}</h3>
-                      </div>
-                      <p className="text-stone-500 text-sm leading-relaxed line-clamp-2">{feature.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 lg:gap-10">
 
-            {/* Dot indicators */}
-            <div className="flex gap-1.5 justify-center mt-4">
-              {features.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setFeatureIndex(i)}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    i === featureIndex
-                      ? 'bg-stone-800 w-5'
-                      : 'bg-stone-300 w-1.5 hover:bg-stone-400'
-                  }`}
-                  aria-label={`Go to feature ${i + 1}`}
-                />
+          {/* Left: smooth infinite scrolling feature list */}
+          <div className="hidden lg:block overflow-hidden h-[520px]">
+            <div ref={scrollRef}>
+              {[...features, ...features].map((feature, index) => (
+                <div key={index} className="py-2">
+                  <div className="p-4 bg-stone-50 rounded-lg border border-stone-200">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xl">{feature.icon}</span>
+                      <h3 className="text-base font-medium text-stone-900">{feature.title}</h3>
+                    </div>
+                    <p className="text-stone-500 text-sm leading-relaxed line-clamp-2">{feature.description}</p>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
 
           {/* Right: screenshot carousel */}
-          <div>
+          <div className="flex flex-col">
             {/* Main image with overlay arrows */}
             <div className="relative group rounded-lg shadow-md overflow-hidden">
               <img
@@ -90,7 +80,6 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
                 className="w-full h-auto block"
               />
 
-              {/* Left arrow overlay */}
               <button
                 onClick={shotPrev}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center
@@ -104,7 +93,6 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
                 </svg>
               </button>
 
-              {/* Right arrow overlay */}
               <button
                 onClick={shotNext}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center
@@ -148,6 +136,7 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </section>

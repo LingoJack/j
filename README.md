@@ -10,9 +10,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-12.10.7-green.svg)](https://github.com/LingoJack/j)
 
-[在线文档](https://lingojack.github.io/j/) · [快速开始](#-快速开始) · [功能一览](#-功能一览) · [安装](#-安装)
+[在线文档](https://lingojack.github.io/j/) · [快速开始](#-快速开始) · [功能一览](#-功能一览) · [安装](#-安装) · [GUI 版本](https://github.com/LingoJack/j-gui)
 
 </div>
+
+> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Electron 的 GUI 版本，提供可视化操作体验。
 
 ---
 
@@ -211,6 +213,18 @@ j
 | [rustyline](https://github.com/kkawakam/rustyline) | REPL 交互 |
 | [async-openai](https://github.com/64bit/async-openai) | OpenAI API 客户端 |
 | [serde](https://github.com/serde-rs/serde) | 序列化框架 |
+
+---
+
+## 🖥️ GUI 版本
+
+如果你更偏好图形界面操作，[j-gui](https://github.com/LingoJack/j-gui) 提供了基于 Electron 的桌面客户端，支持别名管理、日报周报、AI 对话等核心功能，适合不想在终端中操作的场景。
+
+<div align="center">
+<a href="https://github.com/LingoJack/j-gui">
+<img src="https://img.shields.io/badge/GUI-j--gui-blue?logo=electron" alt="j-gui" />
+</a>
+</div>
 
 ---
 
