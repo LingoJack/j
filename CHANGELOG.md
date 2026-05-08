@@ -1,3 +1,19 @@
+# v12.10.30
+
+
+### 新功能
+- **make publish**: 支持 AI 自动生成 release notes，基于 git log 自动提取变更摘要
+
+### 改进
+- **Makefile install**: 重构为从本地构建安装，提升开发迭代效率
+- **AI 响应提取**: 改用 awk 解析 result 标签，提升稳定性
+- **oneshot prompt**: 添加调试日志，便于排查 Makefile 传参问题
+
+### Bug 修复
+- **oneshot 消息持久化**: 修复 AI 回复丢失问题，确保流式输出结束后正确持久化到 context_messages
+- **oneshot 空会话问题**: 修复 LLM 无响应或调用失败时用户消息丢失的问题，现在会正确保留用户输入记录
+- **文本截断**: 修复 UTF-8 多字节字符截断导致的 panic，改用字符边界安全截断
+
 # v12.10.28
 
 
