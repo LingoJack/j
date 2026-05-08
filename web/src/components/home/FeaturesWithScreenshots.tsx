@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { I18nData } from '../../types'
 
 interface FeaturesWithScreenshotsProps {
@@ -13,16 +13,6 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const offsetRef = useRef(0)
   const rafRef = useRef(0)
-
-  // Refs to sync left height with right
-  const leftRef = useRef<HTMLDivElement>(null)
-  const rightRef = useRef<HTMLDivElement>(null)
-
-  const syncHeight = useCallback(() => {
-    if (leftRef.current && rightRef.current) {
-      leftRef.current.style.height = `${rightRef.current.offsetHeight}px`
-    }
-  }, [])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -42,14 +32,6 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [])
 
-  // Sync left height to right after mount and on resize
-  useEffect(() => {
-    syncHeight()
-    const observer = new ResizeObserver(syncHeight)
-    if (rightRef.current) observer.observe(rightRef.current)
-    return () => observer.disconnect()
-  }, [syncHeight])
-
   // --- Right: screenshot carousel ---
   const [shotIndex, setShotIndex] = useState(0)
   const shotPrev = () => setShotIndex((prev) => (prev - 1 + screenshots.length) % screenshots.length)
@@ -68,12 +50,13 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
           </p>
         </div>
 
-        {/* Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 lg:gap-10 items-start">
+        {/* Two-column layout — grid 默认 items-stretch，两列等高 */}
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 lg:gap-10">
 
           {/* Left: smooth infinite scrolling feature list */}
-          <div ref={leftRef} className="hidden lg:block overflow-hidden">
-            <div ref={scrollRef}>
+          <div className="hidden lg:flex flex-col min-h-0">
+            <div className="flex-1 overflow-hidden min-h-0">
+              <div ref={scrollRef}>
               {[...features, ...features].map((feature, index) => (
                 <div key={index} className="py-2">
                   <div className="p-4 bg-stone-50 rounded-lg border border-stone-200">
@@ -85,11 +68,12 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           </div>
 
-          {/* Right: screenshot carousel */}
-          <div ref={rightRef} className="flex flex-col">
+          {/* Right: screenshot carousel — 这列的高度决定 grid 行高 */}
+          <div className="flex flex-col">
             {/* Main image with overlay arrows */}
             <div className="relative group rounded-lg shadow-md overflow-hidden border border-stone-300">
               <img
@@ -137,10 +121,10 @@ export function FeaturesWithScreenshots({ t }: FeaturesWithScreenshotsProps) {
                     key={i}
                     onClick={() => setShotIndex(i)}
                     className={`
-                      relative overflow-hidden rounded-md border-2 transition-all duration-200 flex-1 aspect-video
+                      relative overflow-hidden rounded transition-all duration-200 flex-1 aspect-video
                       ${i === shotIndex
-                        ? 'border-stone-800 shadow-sm'
-                        : 'border-stone-200 hover:border-stone-400 opacity-40 hover:opacity-80'
+                        ? 'ring-1 ring-stone-700 shadow-sm'
+                        : 'ring-1 ring-stone-200 hover:ring-stone-400 opacity-40 hover:opacity-80'
                       }
                     `}
                   >
