@@ -1,3 +1,8 @@
+# v12.10.15
+
+### Bug 修复
+- **修复 GitHub Release 不渲染 Markdown 的问题**: 提取 tag message 时跳过版本标题行，让 Release body 从分类标题开始，确保正确渲染
+
 # v12.10.14
 
 ### 改进
