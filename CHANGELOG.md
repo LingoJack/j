@@ -1,3 +1,13 @@
+# v12.10.27
+
+
+### 新功能
+- **make publish**: 支持 AI 自动生成 release notes
+
+### 改进
+- **AI 响应提取**: 优化解析逻辑，改用 awk 解析 result 标签
+- **Makefile install**: 重构为本地构建安装
+
 # v12.10.25
 
 ### Bug 修复
