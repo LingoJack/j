@@ -61,18 +61,10 @@ pub(crate) fn run_oneshot_no_tools(
     let mut cur_col: usize = 0;
     let mut raw_lines: usize = 0;
     let interrupted = Arc::new(AtomicBool::new(false));
-    let interrupted2 = Arc::clone(&interrupted);
-    let ctrlc_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let ctrlc_count_for_handler = Arc::clone(&ctrlc_count);
+    let interrupted_for_handler = Arc::clone(&interrupted);
     let _ = ctrlc::set_handler(move || {
-        let prev = ctrlc_count_for_handler.fetch_add(1, Ordering::SeqCst);
-        if prev == 0 {
-            interrupted2.store(true, Ordering::Relaxed);
-            eprintln!("\n  {}", "⏹ 已中断".dimmed());
-        } else {
-            let _ = crossterm::terminal::disable_raw_mode();
-            std::process::exit(130);
-        }
+        let _ = crossterm::terminal::disable_raw_mode();
+        interrupted_for_handler.store(true, Ordering::Relaxed);
     });
 
     let send_messages = select_messages(
@@ -261,29 +253,17 @@ pub(crate) fn run_oneshot_agent(
         )),
     };
 
-    // Ctrl+C → cancel + cancelled；第二次 Ctrl+C 强制退出
+    // Ctrl+C → 设标志，让主 loop 优雅退回（不杀进程，REPL 仍可继续）
     let cancel_for_ctrlc = cancel_token.clone();
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancelled_for_ctrlc = Arc::clone(&cancelled);
-    let ctrlc_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let ctrlc_count_for_handler = Arc::clone(&ctrlc_count);
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let interrupted_for_handler = Arc::clone(&interrupted);
     let _ = ctrlc::set_handler(move || {
-        let prev = ctrlc_count_for_handler.fetch_add(1, Ordering::SeqCst);
-        if prev == 0 {
-            // 第一次：尝试优雅取消
-            cancel_for_ctrlc.cancel();
-            cancelled_for_ctrlc.store(true, Ordering::Relaxed);
-            eprintln!(
-                "\n  {}",
-                "⏹ 收到中断信号，清理中... (再按 Ctrl+C 强制退出)".dimmed()
-            );
-        } else {
-            // 第二次及以后：强制退出
-            eprintln!("\n  {}", "⏹ 强制退出".red().bold());
-            // 尝试恢复终端
-            let _ = crossterm::terminal::disable_raw_mode();
-            std::process::exit(130);
-        }
+        let _ = crossterm::terminal::disable_raw_mode();
+        cancel_for_ctrlc.cancel();
+        cancelled_for_ctrlc.store(true, Ordering::Relaxed);
+        interrupted_for_handler.store(true, Ordering::Relaxed);
     });
 
     // spawn agent loop
@@ -311,6 +291,14 @@ pub(crate) fn run_oneshot_agent(
     let mut first_content = true;
 
     loop {
+        // 优先检查中断标志：用户按 Ctrl+C 后立即退出，回到 REPL
+        if interrupted.load(Ordering::Relaxed) {
+            if anim_running {
+                stop_thinking_animation(&anim_stop);
+            }
+            eprintln!("\n  {}", "⏹ 已中断".dimmed());
+            return;
+        }
         let msgs = handle.poll();
         if msgs.is_empty() {
             std::thread::sleep(Duration::from_millis(ONESHOT_POLL_MS));
@@ -390,12 +378,22 @@ pub(crate) fn run_oneshot_agent(
                     for item in items.iter() {
                         let tool_result = handle_tool_call(
                             item,
-                            tool_registry.as_ref(),
+                            Arc::clone(&tool_registry),
                             &jcli_config,
                             &cancelled,
+                            &interrupted,
                             bypass,
                         );
-                        let _ = tool_result_tx.send(tool_result);
+                        match tool_result {
+                            Some(r) => {
+                                let _ = tool_result_tx.send(r);
+                            }
+                            None => {
+                                // 用户中断：放弃后续工具，退回 REPL
+                                eprintln!("\n  {}", "⏹ 已中断".dimmed());
+                                return;
+                            }
+                        }
                     }
 
                     // 下一轮工具调用结束后，重置 first_content 标记

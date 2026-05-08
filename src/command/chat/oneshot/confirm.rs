@@ -293,15 +293,16 @@ pub(crate) fn interactive_confirm(
 
     let result = loop {
         if let Ok(Event::Key(key)) = event::read() {
-            // Ctrl+C：恢复终端并退出整个进程
+            // Ctrl+C：恢复终端 + 返回 None；外层 handle_tool_call 会读到
+            // interrupted 标志并退回 REPL
             if key.code == KeyCode::Char('c')
                 && key
                     .modifiers
                     .contains(crossterm::event::KeyModifiers::CONTROL)
             {
                 let _ = terminal::disable_raw_mode();
-                eprintln!("\n  {}", "⏹ 已中断".dimmed());
-                std::process::exit(130);
+                let _ = clear_drawn_lines(&mut stdout, total_lines);
+                return None;
             }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {

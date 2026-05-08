@@ -107,8 +107,8 @@ fn handle_multi_select(
                     .contains(crossterm::event::KeyModifiers::CONTROL)
             {
                 let _ = terminal::disable_raw_mode();
-                eprintln!("\n  {}", "⏹ 已中断".dimmed());
-                std::process::exit(130);
+                let _ = clear_drawn_lines(&mut stdout, total_lines);
+                return String::new();
             }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -197,8 +197,8 @@ fn handle_single_select(
                     .contains(crossterm::event::KeyModifiers::CONTROL)
             {
                 let _ = terminal::disable_raw_mode();
-                eprintln!("\n  {}", "⏹ 已中断".dimmed());
-                std::process::exit(130);
+                let _ = clear_drawn_lines(&mut stdout, total_lines);
+                return String::new();
             }
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
