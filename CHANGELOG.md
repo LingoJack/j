@@ -1,3 +1,8 @@
+# v12.10.16
+
+### Bug 修复
+- **修复 GitHub Release 不渲染 Markdown 的问题**: tag message 增加独立 subject 行，body 从分类标题开始完整渲染
+
 # v12.10.15
 
 ### Bug 修复
