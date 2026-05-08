@@ -90,6 +90,11 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	} > "$$prompt_file"; \
 	ai_out=$$(mktemp); \
 	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+	echo ""; \
+	echo "📄 AI 原始输出:"; \
+	echo "----------------------------------------"; \
+	cat "$$ai_out"; \
+	echo "----------------------------------------"; \
 	msg=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
 	rm -f "$$ai_out" "$$prompt_file"; \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
@@ -242,6 +247,11 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 		} > "$$prompt_file"; \
 		ai_out=$$(mktemp); \
 	j ai --bypass --no-render -- "$$(cat "$$prompt_file")" > "$$ai_out" 2>/dev/null; \
+	echo ""; \
+	echo "📄 AI 原始输出:"; \
+	echo "----------------------------------------"; \
+	cat "$$ai_out"; \
+	echo "----------------------------------------"; \
 	ai_note=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
 	rm -f "$$ai_out"; \
 		if [ -z "$$ai_note" ]; then \
