@@ -211,17 +211,50 @@ bump-version: ## 递增版本号（最后一位 patch）
 	fi; \
 	echo "☑️ 版本号已更新为 $$new_version"
 
-publish: ## 发布到 crates.io（NOTE='xxx' make publish 或从 CHANGELOG.md 读取）
+publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 	@echo "📦 开始发布流程..."
+	@$(MAKE) fmt
 	@$(MAKE) bump-version
 	@$(MAKE) release
 	@git add .
 	@version=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
 	note_file=$$(mktemp); \
 	changelog_tmp=$$(mktemp); \
-	trap 'rm -f "$$note_file" "$$changelog_tmp"' EXIT; \
+	prompt_file=$$(mktemp); \
+	trap 'rm -f "$$note_file" "$$changelog_tmp" "$$prompt_file"' EXIT; \
+	current_tag="v$$version"; \
+	changelog_top=$$(awk '/^# v/{print; exit}' CHANGELOG.md 2>/dev/null); \
 	if [ -n "$${NOTE:-}" ]; then \
+		echo "📝 使用手动指定的 release notes..."; \
 		{ echo "# v$$version"; echo ""; printf '%s\n' "$$NOTE"; echo ""; } > "$$changelog_tmp"; \
+		if [ -f CHANGELOG.md ]; then cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
+		mv "$$changelog_tmp" CHANGELOG.md; \
+	elif [ "$$changelog_top" = "# $$current_tag" ]; then \
+		echo "📝 使用 CHANGELOG.md 中已有的 release notes..."; \
+	else \
+		echo "🤖 AI 生成 release notes..."; \
+		last_tag=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
+		if [ -n "$$last_tag" ]; then \
+			log_range="$$last_tag..HEAD"; \
+		else \
+			log_range="HEAD~10..HEAD"; \
+		fi; \
+		{ echo "根据以下 git log 生成 release notes。格式要求："; \
+		  echo "1. 第一行不要标题，直接从分类开始"; \
+		  echo "2. 使用 Markdown 格式，分类用三级标题如 ### 新功能、### 改进、### Bug 修复"; \
+		  echo "3. 每个条目格式：- **功能名**: 描述"; \
+		  echo "4. 只包含有意义的变更，忽略 minor 重构"; \
+		  echo "5. 用 <result>...</result> 包裹你的输出，不要输出其他内容。"; \
+		  echo ""; \
+		  echo "Git log ($$log_range):"; \
+		  git log $$log_range --oneline --no-decorate 2>/dev/null | head -20; \
+		} > "$$prompt_file"; \
+		ai_note=$$(j ai --bypass --no-render -- "$$(cat "$$prompt_file")" 2>/dev/null | $(J_AI_EXTRACT)); \
+		if [ -z "$$ai_note" ]; then \
+			echo "⚠️ AI 生成失败，请手动指定 NOTE 参数"; \
+			exit 1; \
+		fi; \
+		{ echo "# v$$version"; echo ""; echo "$$ai_note"; echo ""; } > "$$changelog_tmp"; \
 		if [ -f CHANGELOG.md ]; then cat CHANGELOG.md >> "$$changelog_tmp"; fi; \
 		mv "$$changelog_tmp" CHANGELOG.md; \
 	fi; \
