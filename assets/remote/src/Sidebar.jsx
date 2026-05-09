@@ -2,6 +2,7 @@ import SidebarNav from './SidebarNav'
 import SessionSection from './SessionSection'
 import ConfigSection from './ConfigSection'
 import ArchiveSection from './ArchiveSection'
+import FileSection from './FileSection'
 import HelpSection from './HelpSection'
 
 export default function Sidebar({
@@ -14,6 +15,9 @@ export default function Sidebar({
   modelList,
   themeList,
   archives,
+  fileEntries,
+  fileContent,
+  fileWriteResult,
   send,
   onSelectSection,
   onSwitchSession,
@@ -52,6 +56,15 @@ export default function Sidebar({
           />
         )
       case 'files':
+        return (
+          <FileSection
+            fileEntries={fileEntries}
+            fileContent={fileContent}
+            fileWriteResult={fileWriteResult}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
+        )
       case 'terminal':
       case 'browser':
         // 这些使用全屏面板，侧边栏只显示占位提示

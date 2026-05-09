@@ -9,7 +9,7 @@ import AgentPermModal from './AgentPermModal'
 import PlanApprovalModal from './PlanApprovalModal'
 import Sidebar from './Sidebar'
 import TerminalPanel from './TerminalPanel'
-import FilePanel from './FilePanel'
+import FileViewer from './FileViewer'
 import BrowserPanel from './BrowserPanel'
 
 const params = new URLSearchParams(location.search)
@@ -663,18 +663,17 @@ export default function App() {
             send={send}
             onBack={() => handleSelectSection('sessions')}
           />
-        ) : activeSection === 'files' && !showSidebar ? (
-          <FilePanel
-            fileEntries={fileEntries}
-            fileContent={fileContent}
-            fileWriteResult={fileWriteResult}
-            send={send}
-            onBack={() => handleSelectSection('sessions')}
-          />
         ) : activeSection === 'browser' && !showSidebar ? (
           <BrowserPanel
             send={send}
             onBack={() => handleSelectSection('sessions')}
+          />
+        ) : fileContent && activeSection === 'files' ? (
+          <FileViewer
+            fileContent={fileContent}
+            fileWriteResult={fileWriteResult}
+            send={send}
+            onBack={() => setFileContent(null)}
           />
         ) : (
         <>
