@@ -1,8 +1,7 @@
-use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_ERROR, AGENT_LOG_INFO, DATA_DIR};
+use crate::constants::{AGENT_DIR, AGENT_LOG_DIR, AGENT_LOG_ERROR, AGENT_LOG_INFO};
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
 
 /// 打印普通信息
 #[macro_export]

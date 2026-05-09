@@ -119,16 +119,9 @@ pub(super) fn exec_browser_stub(args: &Value, action: &str) -> ToolResult {
 
 #[cfg(feature = "browser_cdp")]
 fn read_headless_config() -> bool {
-    // TODO(human): 当前每次调用都从磁盘读取 config.yaml，
-    // 可考虑用 OnceLock 缓存 headless 值以避免重复 I/O，
-    // 但缓存意味着修改 config 后需重启才能生效。
-    // 请决定保留当前实现或改为缓存方案。
-    use crate::config::yaml_config::YamlConfig;
-    use crate::constants::{config_key, section};
-
-    let config = YamlConfig::load();
-    config
-        .get_property(section::SETTING, config_key::BROWSER_HEADLESS)
+    // 默认 headless；具体配置由 j-cli 通过 feature-cfg 外的注入点覆盖
+    // TODO: 添加 ConfigProvider trait 让 j-cli 注入配置读取逻辑
+    std::env::var("J_BROWSER_HEADLESS")
         .map(|v| v != "false")
-        .unwrap_or(true) // 默认 headless
+        .unwrap_or(true)
 }

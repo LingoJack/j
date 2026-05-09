@@ -149,6 +149,7 @@ impl RegisterHookTool {
     }
 
     /// 去掉 YAML frontmatter（`---` ... `---`），返回 body 部分
+    #[allow(dead_code)]
     fn strip_frontmatter(content: &str) -> &str {
         let trimmed = content.trim_start();
         if !trimmed.starts_with("---") {
