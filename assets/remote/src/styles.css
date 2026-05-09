@@ -277,6 +277,44 @@
     @apply bg-bg3;
   }
 
+  /* 桌面侧边栏导航条 */
+  .sidebar-nav {
+    @apply flex flex-col items-center shrink-0 bg-bg2 border-r border-border;
+    width: 48px;
+  }
+
+  .sidebar-nav-item {
+    @apply w-9 h-9 rounded-lg flex items-center justify-center text-fg3
+           hover:bg-bg3 hover:text-fg transition-colors cursor-pointer;
+  }
+
+  .sidebar-nav-item.active {
+    @apply bg-accent/15 text-accent;
+  }
+
+  /* 桌面侧边栏分区面板 */
+  .sidebar-section {
+    @apply flex flex-col bg-bg2 border-r border-border;
+    width: 260px;
+    transition: width 200ms ease-out, opacity 200ms ease-out;
+    overflow: hidden;
+  }
+
+  .sidebar-section.collapsed {
+    width: 0;
+    border-right-width: 0;
+    opacity: 0;
+  }
+
+  .sidebar-section-header {
+    @apply flex items-center justify-between px-3 py-2.5 border-b border-border shrink-0;
+  }
+
+  /* 占位分区 */
+  .sidebar-placeholder {
+    @apply flex-1 flex flex-col items-center justify-center text-fg3 px-4;
+  }
+
   /* 状态指示器 */
   .status-dot {
     @apply w-2 h-2 rounded-full;

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWebSocket } from './useWebSocket'
-import { truncate } from './utils'
+import { truncate, formatRelativeTime } from './utils'
 import Markdown from './Markdown'
 import MessageDetailModal from './MessageDetailModal'
 import ToolModal from './ToolModal'
 import AskModal from './AskModal'
+import Sidebar from './Sidebar'
 
 const params = new URLSearchParams(location.search)
 const token = params.get('token') || ''
@@ -14,8 +15,8 @@ const wsUrl = `${wsProto}//${location.host}/ws?token=${token}`
 function Message({ role, content, streaming, onDetail }) {
   const isUser = role === 'user'
   const widthCls = isUser
-    ? 'w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[75%]'
-    : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%]'
+    ? 'w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[70%]'
+    : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'
   const base = `${widthCls} px-4 py-3 rounded-2xl leading-relaxed break-words text-sm`
   const cls = isUser
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
@@ -56,7 +57,7 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
 
   return (
     <div
-      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -92,7 +93,6 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
   const iconCls = isError ? 'text-err' : 'text-ok'
   const hasOutput = output && output.trim()
 
-  // 生成预览文本（最多 50 字符）
   const preview = hasOutput
     ? (output.length > 50 ? output.slice(0, 50) + '...' : output)
     : ''
@@ -107,7 +107,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
 
   return (
     <div
-      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[75%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -120,13 +120,11 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
           </>
         )}
       </div>
-      {/* 收起状态显示预览 */}
       {!expanded && hasOutput && (
         <div className="px-3 pb-2 text-[11px] text-fg3 border-t border-border pt-2 truncate">
           {preview}
         </div>
       )}
-      {/* 展开状态显示完整内容 */}
       {expanded && hasOutput && (
         <div className="px-3 pb-2 text-[11px] text-fg2 border-t border-border pt-2 whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto">
           {output}
@@ -141,32 +139,15 @@ function isNearBottom(el) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
-function formatRelativeTime(ts) {
-  if (!ts) return ''
-  const now = Math.floor(Date.now() / 1000)
-  const diff = now - ts
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`
-  const d = new Date(ts * 1000)
-  return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
-function SessionSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }) {
+/* 手机端 overlay 侧边栏（仅会话列表） */
+function MobileSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }) {
   return (
     <div className="sidebar-overlay" onClick={onClose}>
       <div className="sidebar-panel" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="font-bold text-[15px]">会话列表</span>
-          <button
-            className="text-fg3 hover:text-fg text-xl leading-none px-1"
-            onClick={onClose}
-          >×</button>
+          <button className="text-fg3 hover:text-fg text-xl leading-none px-1" onClick={onClose}>×</button>
         </div>
-
-        {/* Session list */}
         <div className="flex-1 overflow-y-auto">
           {sessions.map(s => {
             const isCurrent = s.id === currentSessionId
@@ -194,8 +175,6 @@ function SessionSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }
             <div className="text-center text-fg3 text-sm py-8">暂无会话</div>
           )}
         </div>
-
-        {/* New session button */}
         <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border">
           <button
             className="w-full py-2.5 rounded-xl bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
@@ -224,6 +203,10 @@ export default function App() {
   const [showSidebar, setShowSidebar] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+  const [activeSection, setActiveSection] = useState('sessions')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('sidebar_collapsed') === 'true'
+  )
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
@@ -237,6 +220,14 @@ export default function App() {
 
   const toggleTheme = useCallback(() => {
     setTheme(t => t === 'dark' ? 'light' : 'dark')
+  }, [])
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('sidebar_collapsed', String(next))
+      return next
+    })
   }, [])
 
   const scrollToBottom = useCallback(() => {
@@ -255,7 +246,6 @@ export default function App() {
   const onMessage = useCallback((msg) => {
     switch (msg.type) {
       case 'stream_chunk':
-        // Skip empty chunks to avoid empty bubbles
         if (!msg.content) break
         streamContentRef.current = msg.content
         setMessages(prev => {
@@ -276,7 +266,6 @@ export default function App() {
             if (last?.streaming) {
               return [...prev.slice(0, -1), { role: 'assistant', content: msg.content, streaming: false }]
             }
-            // Skip empty messages
             if (!msg.content) return prev
             return [...prev, { role: 'assistant', content: msg.content }]
           })
@@ -301,7 +290,6 @@ export default function App() {
         break
 
       case 'tool_call':
-        // Add tool call to history (don't replace)
         setMessages(prev => [...prev, {
           role: 'tool_call',
           name: msg.name,
@@ -313,7 +301,6 @@ export default function App() {
 
       case 'tool_result': {
         setMessages(prev => {
-          // Mark corresponding tool_call as completed, add result
           return prev.map(m => {
             if (m.role === 'tool_call' && m.name === msg.name && !m.completed) {
               return { ...m, completed: true }
@@ -348,8 +335,6 @@ export default function App() {
 
       case 'session_sync':
         streamContentRef.current = ''
-        // 转换后端消息为前端格式，正确处理 tool_calls 和 tool_result
-        // 先建立 tool_call_id -> tool_name 映射
         const toolNameMap = {}
         for (const m of msg.messages) {
           if (m.tool_calls) {
@@ -362,29 +347,26 @@ export default function App() {
         const syncedMsgs = []
         for (const m of msg.messages) {
           if (m.tool_calls && m.tool_calls.length > 0) {
-            // assistant 消息带有 tool_calls：生成 tool_call 消息，默认折叠
             for (const tc of m.tool_calls) {
               syncedMsgs.push({
                 role: 'tool_call',
                 name: tc.name,
                 arguments: tc.arguments,
                 id: tc.id,
-                completed: true, // 断线重连后默认已完成
-                collapsed: true, // 默认折叠
+                completed: true,
+                collapsed: true,
               })
             }
           } else if (m.role === 'tool' && m.tool_call_id) {
-            // tool 消息：生成 tool_result 消息，默认折叠
             const toolName = toolNameMap[m.tool_call_id] || 'tool'
             syncedMsgs.push({
               role: 'tool_result',
               toolName: toolName,
               output: m.content,
               isError: false,
-              collapsed: true, // 默认折叠
+              collapsed: true,
             })
           } else if (m.content) {
-            // 普通消息
             syncedMsgs.push({ role: m.role, content: m.content })
           }
         }
@@ -501,135 +483,158 @@ export default function App() {
           : '已连接'
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full max-w-[100vw] lg:max-w-[900px] xl:max-w-[1100px] mx-auto">
-      {/* Header */}
-      <div className="bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
-        {/* 状态栏 - 放在最上面 */}
-        <div className={`px-4 py-1 text-[11px] flex items-center justify-center gap-1.5 border-b border-border/50 ${!connected ? 'text-err' : isLoading ? 'text-warn' : 'text-fg3'}`}>
-          {isLoading && connected && <span className="w-1.5 h-1.5 rounded-full bg-warn animate-[pulse_1.2s_ease-in-out_infinite]" />}
-          {statusText}
-        </div>
-        {/* 导航栏 */}
-        <div className="flex items-center gap-3 px-4 pt-2.5 pb-2.5">
-          <button
-            className="text-fg3 hover:text-fg text-[18px] leading-none px-0.5 transition-colors"
-            onClick={openSidebar}
-            title="会话列表"
-          >☰</button>
-          <div className="flex items-center gap-2">
-            <span className="text-[20px] leading-none">🦞</span>
-            <span className="font-bold text-[16px] tracking-wide">Sprite</span>
-          </div>
-          <span className="w-px h-4 bg-border" />
-          <span className="text-label-ai text-[12px] font-medium">{modelName}</span>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={toggleTheme}
-              className="text-fg3 hover:text-fg text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 transition-colors cursor-pointer"
-              title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-            >
-              {theme === 'dark' ? (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              )}
-            </button>
-            <span className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
-            <span className="text-fg3 text-[11px]">{msgCount} 条消息</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div
-        className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5 [-webkit-overflow-scrolling:touch]"
-        ref={messagesRef}
-        onScroll={handleScroll}
-      >
-        {messages.length === 0 && (
-          <div className="text-center text-fg3 mt-[40%] text-sm">发送消息开始对话</div>
-        )}
-        {messages.map((m, i) =>
-          m.role === 'tool_call' ? (
-            <ToolCallMsg
-              key={`tc-${i}-${m.id || ''}`}
-              name={m.name}
-              arguments={m.arguments}
-              completed={m.completed}
-              collapsed={m.collapsed}
-              onDetail={() => setDetailMessage(m)}
-            />
-          ) : m.role === 'tool_result' ? (
-            <ToolResultMsg
-              key={`tr-${i}`}
-              toolName={m.toolName}
-              output={m.output}
-              isError={m.isError}
-              collapsed={m.collapsed}
-              onDetail={() => setDetailMessage(m)}
-            />
-          ) : (
-            <Message
-              key={i}
-              role={m.role}
-              content={m.content}
-              streaming={m.streaming}
-              onDetail={() => setDetailMessage(m)}
-            />
-          )
-        )}
-      </div>
-
-      {/* Toast */}
-      {toast && (
-        <div className="px-5 py-2 text-center text-[13px] text-err bg-err/10 border-t border-err/30 shrink-0">{toast}</div>
-      )}
-
-      {/* Input Area */}
-      <div className="flex gap-2 items-end px-4 pt-3.5 pb-[max(16px,env(safe-area-inset-bottom))] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0">
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          placeholder={isLoading ? '追加消息...' : '输入消息...'}
-          autoComplete="off"
-          value={inputText}
-          onChange={e => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className={`flex-1 bg-bg3 border-2 rounded-2xl px-5 py-3.5 text-fg text-[16px] resize-none outline-none max-h-[140px] font-[inherit] leading-relaxed transition-colors duration-200 placeholder:text-fg3 ${isLoading ? 'border-[#786432]' : 'border-[#3c6450] focus:border-accent'}`}
-        />
-        <button
-          className="w-[48px] h-[48px] rounded-full border-none text-2xl cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-label-user text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.92]"
-          onClick={sendMessage}
-          disabled={!inputText.trim()}
-          title="发送"
-        >↑</button>
-        {isLoading && (
-          <button
-            className="w-[48px] h-[48px] rounded-full border-none text-lg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-err text-white active:scale-[0.92]"
-            onClick={cancelStream}
-            title="取消"
-          >■</button>
-        )}
-      </div>
-
-      <ToolModal tools={toolConfirm} currentIndex={toolConfirmIdx} onConfirm={confirmTool} />
-      <AskModal questions={askQuestions} onSubmit={submitAsk} />
-      <MessageDetailModal message={detailMessage} onClose={() => setDetailMessage(null)} />
-
-      {/* Session Sidebar */}
-      {showSidebar && (
-        <SessionSidebar
+    <div className="flex h-[100dvh] w-full">
+      {/* 桌面端侧边栏 */}
+      <div className="hidden md:flex h-full shrink-0">
+        <Sidebar
+          activeSection={activeSection}
+          sidebarCollapsed={sidebarCollapsed}
           sessions={sessions}
           currentSessionId={currentSessionId}
-          onSwitch={switchSession}
-          onNew={newSession}
-          onClose={() => setShowSidebar(false)}
+          theme={theme}
+          onSelectSection={setActiveSection}
+          onSwitchSession={switchSession}
+          onNewSession={newSession}
+          onToggleCollapse={toggleSidebarCollapsed}
+          onToggleTheme={toggleTheme}
         />
+      </div>
+
+      {/* 手机端 overlay 侧边栏 */}
+      {showSidebar && (
+        <div className="md:hidden">
+          <MobileSidebar
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSwitch={switchSession}
+            onNew={newSession}
+            onClose={() => setShowSidebar(false)}
+          />
+        </div>
       )}
+
+      {/* 聊天区 */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Header */}
+        <div className="bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
+          {/* 状态栏 */}
+          <div className={`px-4 py-1 text-[11px] flex items-center justify-center gap-1.5 border-b border-border/50 ${!connected ? 'text-err' : isLoading ? 'text-warn' : 'text-fg3'}`}>
+            {isLoading && connected && <span className="w-1.5 h-1.5 rounded-full bg-warn animate-[pulse_1.2s_ease-in-out_infinite]" />}
+            {statusText}
+          </div>
+          {/* 导航栏 */}
+          <div className="flex items-center gap-3 px-4 pt-2.5 pb-2.5">
+            {/* 手机端 hamburger */}
+            <button
+              className="md:hidden text-fg3 hover:text-fg text-[18px] leading-none px-0.5 transition-colors"
+              onClick={openSidebar}
+              title="会话列表"
+            >☰</button>
+            <div className="flex items-center gap-2">
+              <span className="text-[20px] leading-none md:hidden">🦞</span>
+              <span className="font-bold text-[16px] tracking-wide md:hidden">Sprite</span>
+            </div>
+            <span className="w-px h-4 bg-border" />
+            <span className="text-label-ai text-[12px] font-medium">{modelName}</span>
+            <div className="ml-auto flex items-center gap-2">
+              {/* 手机端主题切换 */}
+              <button
+                onClick={toggleTheme}
+                className="md:hidden text-fg3 hover:text-fg text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 transition-colors cursor-pointer"
+                title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+              >
+                {theme === 'dark' ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+              <span className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
+              <span className="text-fg3 text-[11px]">{msgCount} 条消息</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div
+          className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5 [-webkit-overflow-scrolling:touch]"
+          ref={messagesRef}
+          onScroll={handleScroll}
+        >
+          {messages.length === 0 && (
+            <div className="text-center text-fg3 mt-[40%] text-sm">发送消息开始对话</div>
+          )}
+          {messages.map((m, i) =>
+            m.role === 'tool_call' ? (
+              <ToolCallMsg
+                key={`tc-${i}-${m.id || ''}`}
+                name={m.name}
+                arguments={m.arguments}
+                completed={m.completed}
+                collapsed={m.collapsed}
+                onDetail={() => setDetailMessage(m)}
+              />
+            ) : m.role === 'tool_result' ? (
+              <ToolResultMsg
+                key={`tr-${i}`}
+                toolName={m.toolName}
+                output={m.output}
+                isError={m.isError}
+                collapsed={m.collapsed}
+                onDetail={() => setDetailMessage(m)}
+              />
+            ) : (
+              <Message
+                key={i}
+                role={m.role}
+                content={m.content}
+                streaming={m.streaming}
+                onDetail={() => setDetailMessage(m)}
+              />
+            )
+          )}
+        </div>
+
+        {/* Toast */}
+        {toast && (
+          <div className="px-5 py-2 text-center text-[13px] text-err bg-err/10 border-t border-err/30 shrink-0">{toast}</div>
+        )}
+
+        {/* Input Area */}
+        <div className="flex gap-2 items-end px-4 pt-3.5 pb-[max(16px,env(safe-area-inset-bottom))] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            placeholder={isLoading ? '追加消息...' : '输入消息...'}
+            autoComplete="off"
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className={`flex-1 bg-bg3 border-2 rounded-2xl px-5 py-3.5 text-fg text-[16px] resize-none outline-none max-h-[140px] font-[inherit] leading-relaxed transition-colors duration-200 placeholder:text-fg3 ${isLoading ? 'border-[#786432]' : 'border-[#3c6450] focus:border-accent'}`}
+          />
+          <button
+            className="w-[48px] h-[48px] rounded-full border-none text-2xl cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-label-user text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.92]"
+            onClick={sendMessage}
+            disabled={!inputText.trim()}
+            title="发送"
+          >↑</button>
+          {isLoading && (
+            <button
+              className="w-[48px] h-[48px] rounded-full border-none text-lg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-err text-white active:scale-[0.92]"
+              onClick={cancelStream}
+              title="取消"
+            >■</button>
+          )}
+        </div>
+
+        <ToolModal tools={toolConfirm} currentIndex={toolConfirmIdx} onConfirm={confirmTool} />
+        <AskModal questions={askQuestions} onSubmit={submitAsk} />
+        <MessageDetailModal message={detailMessage} onClose={() => setDetailMessage(null)} />
+      </div>
     </div>
   )
 }

@@ -17,3 +17,15 @@ export function renderMd(text) {
 export function truncate(s, n) {
   return s && s.length > n ? s.substring(0, n) + '...' : (s || '')
 }
+
+export function formatRelativeTime(ts) {
+  if (!ts) return ''
+  const now = Math.floor(Date.now() / 1000)
+  const diff = now - ts
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`
+  const d = new Date(ts * 1000)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
