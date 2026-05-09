@@ -5,6 +5,8 @@ import Markdown from './Markdown'
 import MessageDetailModal from './MessageDetailModal'
 import ToolModal from './ToolModal'
 import AskModal from './AskModal'
+import AgentPermModal from './AgentPermModal'
+import PlanApprovalModal from './PlanApprovalModal'
 import Sidebar from './Sidebar'
 
 const params = new URLSearchParams(location.search)
@@ -29,9 +31,6 @@ function Message({ role, content, streaming, onDetail }) {
       <div className={cls}>
         {isUser ? content : <Markdown content={content || ''} />}
       </div>
-      <span className={`text-[10px] text-fg3 ${isUser ? 'self-end' : 'self-start'} mt-0.5 opacity-0 hover:opacity-100 transition-opacity`}>
-        点击查看详情
-      </span>
     </div>
   )
 }
@@ -87,12 +86,11 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
   )
 }
 
-function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, onDetail }) {
+function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, paired, onDetail }) {
   const [expanded, setExpanded] = useState(!initCollapsed)
   const icon = isError ? '✗' : '✓'
   const iconCls = isError ? 'text-err' : 'text-ok'
   const hasOutput = output && output.trim()
-
   const preview = hasOutput
     ? (output.length > 50 ? output.slice(0, 50) + '...' : output)
     : ''
@@ -107,7 +105,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, on
 
   return (
     <div
-      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5' : 'border-border bg-bg2'}`}
+      className={`self-start rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${paired ? 'w-[88%] sm:w-[83%] md:w-[78%] lg:w-[68%] ml-4 border-l-2' : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'} ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5 border-l-err/40' : 'border-border bg-bg2 border-l-ok/30'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -139,7 +137,7 @@ function isNearBottom(el) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
-/* 手机端 overlay 侧边栏（仅会话列表） */
+/* 手机端 overlay 侧边栏 */
 function MobileSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose }) {
   return (
     <div className="sidebar-overlay" onClick={onClose}>
@@ -188,14 +186,45 @@ function MobileSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose })
   )
 }
 
+/* Hint bar: contextual hints like TUI */
+function HintBar({ state, autoApprove }) {
+  const hints = []
+  if (autoApprove) hints.push('Bypass 开启')
+  if (state === 'loading') {
+    hints.push('■ 取消')
+  } else if (state === 'tool_confirm') {
+    hints.push('Allow │ Always │ Reject')
+  } else if (state === 'ask') {
+    hints.push('回答问题')
+  } else if (state === 'agent_perm_confirm') {
+    hints.push('Y 允许 │ N 拒绝')
+  } else if (state === 'plan_approval') {
+    hints.push('Y 批准 │ N 拒绝 │ C 批准+清空')
+  } else {
+    hints.push('Enter=发送 │ Shift+Enter=换行')
+  }
+  if (hints.length === 0) return null
+  return (
+    <div className="px-4 py-1 text-[10px] text-fg3 bg-bg2/80 border-t border-border/50 flex items-center gap-2 shrink-0">
+      {hints.map((h, i) => (
+        <span key={i}>{i > 0 && <span className="text-border mx-1">│</span>}{h}</span>
+      ))}
+    </div>
+  )
+}
+
 export default function App() {
   const [messages, setMessages] = useState([])
   const [state, setState] = useState('idle')
   const [connected, setConnected] = useState(false)
   const [modelName, setModelName] = useState('--')
+  const [contextTokens, setContextTokens] = useState(0)
+  const [autoApprove, setAutoApprove] = useState(false)
   const [toolConfirm, setToolConfirm] = useState(null)
   const [toolConfirmIdx, setToolConfirmIdx] = useState(0)
   const [askQuestions, setAskQuestions] = useState(null)
+  const [agentPerm, setAgentPerm] = useState(null)
+  const [planApproval, setPlanApproval] = useState(null)
   const [toast, setToast] = useState(null)
   const [inputText, setInputText] = useState('')
   const [detailMessage, setDetailMessage] = useState(null)
@@ -207,12 +236,15 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('sidebar_collapsed') === 'true'
   )
+  const [configData, setConfigData] = useState(null)
+  const [modelList, setModelList] = useState(null)
+  const [themeList, setThemeList] = useState(null)
+  const [archives, setArchives] = useState([])
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
   const autoScrollRef = useRef(true)
 
-  // 主题切换
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
@@ -289,12 +321,22 @@ export default function App() {
         setAskQuestions(msg.questions)
         break
 
+      case 'agent_perm_request':
+        setState('agent_perm_confirm')
+        setAgentPerm(msg)
+        break
+
+      case 'plan_approval_request':
+        setState('plan_approval')
+        setPlanApproval(msg)
+        break
+
       case 'tool_call':
         setMessages(prev => [...prev, {
           role: 'tool_call',
           name: msg.name,
           arguments: msg.arguments,
-          id: msg.id || Date.now()
+          id: msg.id,
         }])
         scrollToBottom()
         break
@@ -302,15 +344,17 @@ export default function App() {
       case 'tool_result': {
         setMessages(prev => {
           return prev.map(m => {
-            if (m.role === 'tool_call' && m.name === msg.name && !m.completed) {
+            if (m.role === 'tool_call' && m.id === msg.id && !m.completed) {
               return { ...m, completed: true }
             }
             return m
           }).concat({
             role: 'tool_result',
+            id: msg.id,
             toolName: msg.name || 'tool',
             output: msg.output,
             isError: msg.is_error,
+            paired: true,
           })
         })
         scrollToBottom()
@@ -347,6 +391,9 @@ export default function App() {
         const syncedMsgs = []
         for (const m of msg.messages) {
           if (m.tool_calls && m.tool_calls.length > 0) {
+            if (m.content) {
+              syncedMsgs.push({ role: m.role, content: m.content })
+            }
             for (const tc of m.tool_calls) {
               syncedMsgs.push({
                 role: 'tool_call',
@@ -361,10 +408,12 @@ export default function App() {
             const toolName = toolNameMap[m.tool_call_id] || 'tool'
             syncedMsgs.push({
               role: 'tool_result',
+              id: m.tool_call_id,
               toolName: toolName,
               output: m.content,
               isError: false,
               collapsed: true,
+              paired: true,
             })
           } else if (m.content) {
             syncedMsgs.push({ role: m.role, content: m.content })
@@ -372,6 +421,8 @@ export default function App() {
         }
         setMessages(syncedMsgs)
         setModelName(msg.model || '--')
+        setContextTokens(msg.context_tokens || 0)
+        setAutoApprove(msg.auto_approve || false)
         setState(msg.status)
         autoScrollRef.current = true
         scrollToBottom()
@@ -386,6 +437,22 @@ export default function App() {
         if (msg.session_id) {
           setCurrentSessionId(msg.session_id)
         }
+        break
+
+      case 'config_data':
+        setConfigData(msg)
+        break
+
+      case 'model_list':
+        setModelList(msg)
+        break
+
+      case 'theme_list':
+        setThemeList(msg)
+        break
+
+      case 'archive_list':
+        setArchives(msg.archives || [])
         break
 
       case 'error':
@@ -432,6 +499,18 @@ export default function App() {
     setState('loading')
   }, [send])
 
+  const confirmAgentPerm = useCallback((approve) => {
+    send({ type: 'agent_perm_confirm', approve })
+    setAgentPerm(null)
+    setState('loading')
+  }, [send])
+
+  const submitPlanApproval = useCallback((approve, content) => {
+    send({ type: 'plan_approval', approve, content })
+    setPlanApproval(null)
+    setState('loading')
+  }, [send])
+
   const cancelStream = useCallback(() => {
     send({ type: 'cancel' })
   }, [send])
@@ -452,6 +531,16 @@ export default function App() {
     fetchSessions()
     setShowSidebar(true)
   }, [fetchSessions])
+
+  const handleSelectSection = useCallback((section) => {
+    setActiveSection(section)
+    // 请求对应数据
+    if (section === 'config') {
+      send({ type: 'request_config', tab: 'model' })
+    } else if (section === 'archive') {
+      send({ type: 'start_archive_list' })
+    }
+  }, [send])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -480,7 +569,11 @@ export default function App() {
         ? '等待工具确认...'
         : state === 'ask'
           ? '等待回答问题...'
-          : '已连接'
+          : state === 'agent_perm_confirm'
+            ? '等待 Agent 权限确认...'
+            : state === 'plan_approval'
+              ? '等待 Plan 审批...'
+              : '已连接'
 
   return (
     <div className="flex h-[100dvh] w-full">
@@ -492,7 +585,12 @@ export default function App() {
           sessions={sessions}
           currentSessionId={currentSessionId}
           theme={theme}
-          onSelectSection={setActiveSection}
+          configData={configData}
+          modelList={modelList}
+          themeList={themeList}
+          archives={archives}
+          send={send}
+          onSelectSection={handleSelectSection}
           onSwitchSession={switchSession}
           onNewSession={newSession}
           onToggleCollapse={toggleSidebarCollapsed}
@@ -524,7 +622,6 @@ export default function App() {
           </div>
           {/* 导航栏 */}
           <div className="flex items-center gap-3 px-4 pt-2.5 pb-2.5">
-            {/* 手机端 hamburger */}
             <button
               className="md:hidden text-fg3 hover:text-fg text-[18px] leading-none px-0.5 transition-colors"
               onClick={openSidebar}
@@ -536,8 +633,8 @@ export default function App() {
             </div>
             <span className="w-px h-4 bg-border" />
             <span className="text-label-ai text-[12px] font-medium">{modelName}</span>
+            {autoApprove && <span className="text-warn text-[11px] font-bold">&gt;&gt;</span>}
             <div className="ml-auto flex items-center gap-2">
-              {/* 手机端主题切换 */}
               <button
                 onClick={toggleTheme}
                 className="md:hidden text-fg3 hover:text-fg text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 transition-colors cursor-pointer"
@@ -554,7 +651,8 @@ export default function App() {
                 )}
               </button>
               <span className={`w-2 h-2 rounded-full shrink-0 transition-colors duration-300 ${connected ? 'bg-ok shadow-[0_0_6px_var(--color-ok)]' : 'bg-fg3'}`} />
-              <span className="text-fg3 text-[11px]">{msgCount} 条消息</span>
+              <span className="text-fg3 text-[11px]">{msgCount} 条</span>
+              {contextTokens > 0 && <span className="text-fg3 text-[10px]">· {(contextTokens / 1000).toFixed(1)}k tok</span>}
             </div>
           </div>
         </div>
@@ -580,11 +678,12 @@ export default function App() {
               />
             ) : m.role === 'tool_result' ? (
               <ToolResultMsg
-                key={`tr-${i}`}
+                key={`tr-${i}-${m.id || ''}`}
                 toolName={m.toolName}
                 output={m.output}
                 isError={m.isError}
                 collapsed={m.collapsed}
+                paired={m.paired}
                 onDetail={() => setDetailMessage(m)}
               />
             ) : (
@@ -603,6 +702,9 @@ export default function App() {
         {toast && (
           <div className="px-5 py-2 text-center text-[13px] text-err bg-err/10 border-t border-err/30 shrink-0">{toast}</div>
         )}
+
+        {/* Hint Bar */}
+        <HintBar state={state} autoApprove={autoApprove} />
 
         {/* Input Area */}
         <div className="flex gap-2 items-end px-4 pt-3.5 pb-[max(16px,env(safe-area-inset-bottom))] bg-bg2/95 backdrop-blur-sm border-t border-border shrink-0">
@@ -633,6 +735,8 @@ export default function App() {
 
         <ToolModal tools={toolConfirm} currentIndex={toolConfirmIdx} onConfirm={confirmTool} />
         <AskModal questions={askQuestions} onSubmit={submitAsk} />
+        <AgentPermModal request={agentPerm} onConfirm={confirmAgentPerm} />
+        <PlanApprovalModal request={planApproval} onConfirm={submitPlanApproval} />
         <MessageDetailModal message={detailMessage} onClose={() => setDetailMessage(null)} />
       </div>
     </div>

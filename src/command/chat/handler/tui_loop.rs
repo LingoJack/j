@@ -830,6 +830,176 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     }
                     // KeyExchange 在 server.rs 层处理，不会到达 TUI 层
                     WsInbound::KeyExchange { .. } => {}
+                    WsInbound::SelectModel { index } => {
+                        app.ui.model_list_state.select(Some(index));
+                        app.update(Action::ModelSelectConfirm);
+                    }
+                    WsInbound::SelectTheme { index } => {
+                        app.ui.theme_list_state.select(Some(index));
+                        app.update(Action::ThemeSelectConfirm);
+                    }
+                    WsInbound::RequestConfig { tab } => {
+                        let config_tab = match tab.as_str() {
+                            "session" => ConfigTab::Session,
+                            "global" => ConfigTab::Global,
+                            "tools" => ConfigTab::Tools,
+                            "skills" => ConfigTab::Skills,
+                            "hooks" => ConfigTab::Hooks,
+                            "commands" => ConfigTab::Commands,
+                            "teammates" => ConfigTab::Teammates,
+                            "archive" => ConfigTab::Archive,
+                            _ => ConfigTab::Model,
+                        };
+                        app.update(Action::ConfigSwitchTabTo(config_tab));
+                        app.broadcast_config_state();
+                    }
+                    WsInbound::ConfigEditSubmit { value } => {
+                        // 直接写入当前编辑字段并提交
+                        app.ui.config_edit_buf = value.clone();
+                        app.ui.config_edit_cursor = value.chars().count();
+                        app.update(Action::ConfigEditSubmit);
+                        app.broadcast_config_state();
+                    }
+                    WsInbound::ConfigToggle { index } => {
+                        // 远程 toggle：根据当前 tab 直接操作配置
+                        match app.ui.config_tab {
+                            ConfigTab::Tools => {
+                                let all_tools: Vec<String> = app
+                                    .tool_registry
+                                    .tool_names()
+                                    .into_iter()
+                                    .map(|s| s.to_string())
+                                    .collect();
+                                if let Some(name) = all_tools.get(index) {
+                                    if app.state.agent_config.disabled_tools.contains(name) {
+                                        app.state.agent_config.disabled_tools.retain(|n| n != name);
+                                    } else {
+                                        app.state.agent_config.disabled_tools.push(name.clone());
+                                    }
+                                    let _ = crate::command::chat::storage::save_agent_config(
+                                        &app.state.agent_config,
+                                    );
+                                }
+                                app.broadcast_config_state();
+                            }
+                            ConfigTab::Skills => {
+                                let names: Vec<String> = app
+                                    .state
+                                    .loaded_skills
+                                    .iter()
+                                    .map(|s| s.frontmatter.name.clone())
+                                    .collect();
+                                if let Some(name) = names.get(index) {
+                                    if app.state.agent_config.disabled_skills.contains(name) {
+                                        app.state
+                                            .agent_config
+                                            .disabled_skills
+                                            .retain(|n| n != name);
+                                    } else {
+                                        app.state.agent_config.disabled_skills.push(name.clone());
+                                    }
+                                    let _ = crate::command::chat::storage::save_agent_config(
+                                        &app.state.agent_config,
+                                    );
+                                }
+                                app.broadcast_config_state();
+                            }
+                            ConfigTab::Global => {
+                                // 远程切换全局布尔设置
+                                let fields =
+                                    ["tools_enabled", "auto_restore_session", "flat_bubble"];
+                                if index < fields.len() {
+                                    match fields[index] {
+                                        "tools_enabled" => {
+                                            app.state.agent_config.tools_enabled =
+                                                !app.state.agent_config.tools_enabled
+                                        }
+                                        "auto_restore_session" => {
+                                            app.state.agent_config.auto_restore_session =
+                                                !app.state.agent_config.auto_restore_session
+                                        }
+                                        "flat_bubble" => {
+                                            app.state.agent_config.flat_bubble =
+                                                !app.state.agent_config.flat_bubble
+                                        }
+                                        _ => {}
+                                    }
+                                    let _ = crate::command::chat::storage::save_agent_config(
+                                        &app.state.agent_config,
+                                    );
+                                }
+                                app.broadcast_config_state();
+                            }
+                            _ => {}
+                        }
+                    }
+                    WsInbound::StartArchive => {
+                        app.start_archive_confirm();
+                        app.broadcast_archive_confirm_state();
+                    }
+                    WsInbound::ArchiveWithDefault => {
+                        app.do_archive(&app.ui.archive_default_name.clone());
+                        let sync = app.build_sync_outbound();
+                        app.broadcast_ws(sync);
+                    }
+                    WsInbound::ArchiveWithCustom { name } => {
+                        app.do_archive(&name);
+                        let sync = app.build_sync_outbound();
+                        app.broadcast_ws(sync);
+                    }
+                    WsInbound::ClearSession => {
+                        app.clear_session();
+                        let sync = app.build_sync_outbound();
+                        app.broadcast_ws(sync);
+                    }
+                    WsInbound::StartArchiveList => {
+                        app.start_archive_list();
+                        app.broadcast_archive_list_state();
+                    }
+                    WsInbound::RestoreArchive { index } => {
+                        app.ui.archive_list_index = index;
+                        app.do_restore();
+                        let sync = app.build_sync_outbound();
+                        app.broadcast_ws(sync);
+                    }
+                    WsInbound::DeleteArchive { index } => {
+                        app.ui.archive_list_index = index;
+                        app.do_delete_archive();
+                        app.broadcast_archive_list_state();
+                    }
+                    WsInbound::DeleteSession { index } => {
+                        if index < app.ui.session_list.len() {
+                            app.ui.session_list_index = index;
+                            app.update(Action::DeleteSession);
+                            app.broadcast_session_list_state();
+                        }
+                    }
+                    WsInbound::AgentPermConfirm { approve } => {
+                        if let Some(req) = app.ui.pending_agent_perm.take() {
+                            req.resolve(approve);
+                        }
+                        app.ui.mode = ChatMode::Chat;
+                        app.ui.msg_lines_cache = None;
+                    }
+                    WsInbound::PlanApproval { approve, content } => {
+                        use crate::command::chat::app::types::PlanDecision;
+                        if let Some(req) = app.ui.pending_plan_approval.take() {
+                            let decision = if approve {
+                                match content.as_deref() {
+                                    Some("clear") => PlanDecision::ApproveAndClearContext,
+                                    _ => PlanDecision::Approve,
+                                }
+                            } else {
+                                PlanDecision::Reject
+                            };
+                            req.resolve(decision);
+                        }
+                        app.ui.mode = ChatMode::Chat;
+                        app.ui.msg_lines_cache = None;
+                    }
+                    WsInbound::ToggleAutoApprove => {
+                        app.update(Action::ToggleAutoApprove);
+                    }
                 }
             }
         }

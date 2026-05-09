@@ -52,8 +52,8 @@ impl ToolExecutor {
 
     /// 轮询后台工具执行结果，更新 UI 状态。
     /// Worker 已直接发 ToolResultMsg 给 Agent，这里只更新 active_tool_calls 的显示状态。
-    /// 返回新完成的工具信息 (tool_name, summary, is_error)（供 broadcast_ws 使用）。
-    pub fn poll_results(&mut self) -> Vec<(String, String, bool)> {
+    /// 返回新完成的工具信息 (tool_call_id, tool_name, summary, is_error)（供 broadcast_ws 使用）。
+    pub fn poll_results(&mut self) -> Vec<(String, String, String, bool)> {
         let done_items: Vec<CompletedToolResult> = {
             if let Ok(mut results) = self.completed_results.lock() {
                 results.drain(..).collect()
@@ -92,7 +92,12 @@ impl ToolExecutor {
                     ToolExecStatus::Done(done.summary.clone())
                 };
             }
-            completed.push((tool_name, done.summary, done.is_error));
+            completed.push((
+                done.tool_call_id.clone(),
+                tool_name,
+                done.summary,
+                done.is_error,
+            ));
             self.tools_executing_count = self.tools_executing_count.saturating_sub(1);
             if self.tools_executing_count == 0 {
                 // 本批工具全部完成，重置取消标志

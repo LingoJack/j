@@ -48,8 +48,9 @@ impl ChatApp {
         // 如果在 ToolConfirm 模式，仍然需要轮询工具执行结果
         if self.ui.mode == ChatMode::ToolConfirm {
             let completed = self.tool_executor.poll_results();
-            for (name, output, is_error) in completed {
+            for (id, name, output, is_error) in completed {
                 self.broadcast_ws(WsOutbound::ToolResult {
+                    id,
                     name,
                     output,
                     is_error,
@@ -71,6 +72,7 @@ impl ChatApp {
             if self.ws_bridge.is_some() {
                 for tc in &self.tool_executor.active_tool_calls {
                     self.broadcast_ws(WsOutbound::ToolCall {
+                        id: tc.tool_call_id.clone(),
                         name: tc.tool_name.clone(),
                         arguments: tc.arguments.clone(),
                     });
@@ -170,8 +172,9 @@ impl ChatApp {
 
         // 轮询后台工具执行结果
         let completed = self.tool_executor.poll_results();
-        for (name, output, is_error) in completed {
+        for (id, name, output, is_error) in completed {
             self.broadcast_ws(WsOutbound::ToolResult {
+                id,
                 name,
                 output,
                 is_error,

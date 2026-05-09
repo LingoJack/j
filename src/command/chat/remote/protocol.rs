@@ -45,6 +45,58 @@ pub enum WsInbound {
     /// 新建会话
     #[serde(rename = "new_session")]
     NewSession,
+    /// 选择模型（按索引）
+    #[serde(rename = "select_model")]
+    SelectModel { index: usize },
+    /// 选择主题（按索引）
+    #[serde(rename = "select_theme")]
+    SelectTheme { index: usize },
+    /// 请求配置数据
+    #[serde(rename = "request_config")]
+    RequestConfig { tab: String },
+    /// 配置编辑提交
+    #[serde(rename = "config_edit_submit")]
+    ConfigEditSubmit { value: String },
+    /// 配置项切换（toggle enabled/disabled）
+    #[serde(rename = "config_toggle")]
+    ConfigToggle { index: usize },
+    /// 开始归档确认
+    #[serde(rename = "start_archive")]
+    StartArchive,
+    /// 使用默认名称归档
+    #[serde(rename = "archive_with_default")]
+    ArchiveWithDefault,
+    /// 使用自定义名称归档
+    #[serde(rename = "archive_with_custom")]
+    ArchiveWithCustom { name: String },
+    /// 不归档，直接清空会话
+    #[serde(rename = "clear_session")]
+    ClearSession,
+    /// 请求归档列表
+    #[serde(rename = "start_archive_list")]
+    StartArchiveList,
+    /// 恢复归档（按索引）
+    #[serde(rename = "restore_archive")]
+    RestoreArchive { index: usize },
+    /// 删除归档（按索引）
+    #[serde(rename = "delete_archive")]
+    DeleteArchive { index: usize },
+    /// 删除会话（按索引，在会话列表中）
+    #[serde(rename = "delete_session")]
+    DeleteSession { index: usize },
+    /// Agent 权限确认
+    #[serde(rename = "agent_perm_confirm")]
+    AgentPermConfirm { approve: bool },
+    /// Plan 审批
+    #[serde(rename = "plan_approval")]
+    PlanApproval {
+        approve: bool,
+        #[serde(default)]
+        content: Option<String>,
+    },
+    /// 切换自动审批
+    #[serde(rename = "toggle_auto_approve")]
+    ToggleAutoApprove,
 }
 
 /// 服务端 → 客户端 消息
@@ -66,10 +118,15 @@ pub enum WsOutbound {
     AskRequest { questions: Vec<AskQuestionInfo> },
     /// 工具开始执行
     #[serde(rename = "tool_call")]
-    ToolCall { name: String, arguments: String },
+    ToolCall {
+        id: String,
+        name: String,
+        arguments: String,
+    },
     /// 工具执行结果
     #[serde(rename = "tool_result")]
     ToolResult {
+        id: String,
         name: String,
         output: String,
         is_error: bool,
@@ -83,6 +140,12 @@ pub enum WsOutbound {
         messages: Vec<SyncMessage>,
         status: String,
         model: String,
+        #[serde(default)]
+        context_tokens: usize,
+        #[serde(default)]
+        message_count: usize,
+        #[serde(default)]
+        auto_approve: bool,
     },
     /// 心跳 pong
     #[serde(rename = "pong")]
@@ -102,6 +165,40 @@ pub enum WsOutbound {
     /// 会话已切换
     #[serde(rename = "session_switched")]
     SessionSwitched { session_id: String },
+    /// 模型列表
+    #[serde(rename = "model_list")]
+    ModelList {
+        models: Vec<ModelInfo>,
+        active_index: usize,
+    },
+    /// 主题列表
+    #[serde(rename = "theme_list")]
+    ThemeList {
+        themes: Vec<ThemeInfo>,
+        active_index: usize,
+    },
+    /// 配置数据
+    #[serde(rename = "config_data")]
+    ConfigData {
+        tab: String,
+        fields: Vec<ConfigField>,
+    },
+    /// 归档列表
+    #[serde(rename = "archive_list")]
+    ArchiveList { archives: Vec<ArchiveInfo> },
+    /// Agent 权限确认请求
+    #[serde(rename = "agent_perm_request")]
+    AgentPermRequest {
+        agent_name: String,
+        tool_name: String,
+        arguments: String,
+    },
+    /// Plan 审批请求
+    #[serde(rename = "plan_approval_request")]
+    PlanApprovalRequest {
+        agent_name: String,
+        plan_summary: String,
+    },
 }
 
 /// 工具确认信息
@@ -147,4 +244,42 @@ pub struct SyncMessage {
     pub tool_calls: Option<Vec<SyncToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+}
+
+/// 模型信息
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelInfo {
+    pub name: String,
+    pub model: String,
+    pub provider: String,
+    pub supports_vision: bool,
+}
+
+/// 主题信息
+#[derive(Debug, Clone, Serialize)]
+pub struct ThemeInfo {
+    pub name: String,
+    pub display_name: String,
+}
+
+/// 配置字段
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigField {
+    pub key: String,
+    pub label: String,
+    pub value: String,
+    /// "text" | "bool" | "select" | "action"
+    pub field_type: String,
+    pub editable: bool,
+    /// select 类型的选项列表
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
+}
+
+/// 归档信息
+#[derive(Debug, Clone, Serialize)]
+pub struct ArchiveInfo {
+    pub name: String,
+    pub created_at: String,
+    pub message_count: usize,
 }

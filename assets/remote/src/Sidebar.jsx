@@ -1,8 +1,8 @@
 import SidebarNav from './SidebarNav'
 import SessionSection from './SessionSection'
-import GitSection from './GitSection'
-import RemoteSection from './RemoteSection'
-import FilePreviewSection from './FilePreviewSection'
+import ConfigSection from './ConfigSection'
+import ArchiveSection from './ArchiveSection'
+import HelpSection from './HelpSection'
 
 export default function Sidebar({
   activeSection,
@@ -10,6 +10,11 @@ export default function Sidebar({
   sessions,
   currentSessionId,
   theme,
+  configData,
+  modelList,
+  themeList,
+  archives,
+  send,
   onSelectSection,
   onSwitchSession,
   onNewSession,
@@ -28,12 +33,26 @@ export default function Sidebar({
             onCollapse={onToggleCollapse}
           />
         )
-      case 'git':
-        return <GitSection onCollapse={onToggleCollapse} />
-      case 'remote':
-        return <RemoteSection onCollapse={onToggleCollapse} />
-      case 'files':
-        return <FilePreviewSection onCollapse={onToggleCollapse} />
+      case 'config':
+        return (
+          <ConfigSection
+            configData={configData}
+            modelList={modelList}
+            themeList={themeList}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
+        )
+      case 'archive':
+        return (
+          <ArchiveSection
+            archives={archives}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
+        )
+      case 'help':
+        return <HelpSection onCollapse={onToggleCollapse} />
       default:
         return null
     }

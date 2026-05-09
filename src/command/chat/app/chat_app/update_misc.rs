@@ -196,6 +196,33 @@ impl ChatApp {
                 state: "tool_confirm".to_string(),
             });
         }
+        // 广播 Agent 权限确认请求到远程
+        if mode == ChatMode::AgentPermConfirm
+            && self.ws_bridge.is_some()
+            && let Some(ref req) = self.ui.pending_agent_perm
+        {
+            self.broadcast_ws(WsOutbound::AgentPermRequest {
+                agent_name: req.name.clone(),
+                tool_name: req.tool_name.clone(),
+                arguments: req.confirm_msg.clone(),
+            });
+            self.broadcast_ws(WsOutbound::Status {
+                state: "agent_perm_confirm".to_string(),
+            });
+        }
+        // 广播 Plan 审批请求到远程
+        if mode == ChatMode::PlanApprovalConfirm
+            && self.ws_bridge.is_some()
+            && let Some(ref req) = self.ui.pending_plan_approval
+        {
+            self.broadcast_ws(WsOutbound::PlanApprovalRequest {
+                agent_name: req.agent_name.clone(),
+                plan_summary: req.plan_content.clone(),
+            });
+            self.broadcast_ws(WsOutbound::Status {
+                state: "plan_approval".to_string(),
+            });
+        }
         if mode == ChatMode::Browse {
             self.ui.browse_filter.clear();
             self.ui.browse_role_filter = None;
