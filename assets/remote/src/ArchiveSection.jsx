@@ -75,7 +75,7 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
           )}
           <button
             className="w-full mt-2 px-2 py-1.5 rounded-lg bg-err/10 text-err text-[11px] hover:bg-err/20 active:bg-err/30 active:scale-[0.98] transition-all duration-100 select-none"
-            onClick={handleClear}
+            onClick={() => { if (confirm('确认清空当前会话？此操作不可恢复。')) handleClear() }}
           >
             不归档，清空会话
           </button>
@@ -115,7 +115,7 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
                     </button>
                     <button
                       className="px-2 py-0.5 rounded text-[10px] bg-err/10 text-err hover:bg-err/20 active:bg-err/30 active:scale-[0.95] transition-all duration-100 select-none"
-                      onClick={() => send({ type: 'delete_archive', index: i })}
+                      onClick={() => { if (confirm('确认删除此归档？此操作不可恢复。')) send({ type: 'delete_archive', index: i }) }}
                     >
                       删除
                     </button>

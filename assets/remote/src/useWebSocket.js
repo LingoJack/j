@@ -97,6 +97,9 @@ export function useWebSocket(url, onMessage, onStatusChange) {
   useEffect(() => {
     let reconnectTimer = null
     let pingInterval = null
+    let retryCount = 0
+    const MAX_RETRIES = 20
+    const BASE_DELAY = 1000
     let destroyed = false
 
     function connect() {
@@ -119,8 +122,10 @@ export function useWebSocket(url, onMessage, onStatusChange) {
         readyRef.current = false
         aesKeyRef.current = null
         clearInterval(pingInterval)
-        if (!destroyed) {
-          reconnectTimer = setTimeout(connect, 1500)
+        if (!destroyed && retryCount < MAX_RETRIES) {
+          const delay = Math.min(BASE_DELAY * Math.pow(1.5, retryCount), 30000)
+          retryCount++
+          reconnectTimer = setTimeout(connect, delay)
         }
       }
 
@@ -144,6 +149,7 @@ export function useWebSocket(url, onMessage, onStatusChange) {
               const msg = JSON.parse(text)
               if (msg.type === 'key_exchange_ok') {
                 readyRef.current = true
+                retryCount = 0
                 onStatusChange(true)
 
                 // 发送排队的消息

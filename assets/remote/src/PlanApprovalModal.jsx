@@ -10,7 +10,7 @@ export default function PlanApprovalModal({ request, onConfirm }) {
   const handleReject = () => onConfirm(false, undefined)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/50" onClick={handleReject}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay bg-black/50">
       <div className="modal-content bg-bg2 rounded-lg border border-border w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 py-4 border-b border-border">

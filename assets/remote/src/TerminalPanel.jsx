@@ -1,6 +1,23 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 
-export default function TerminalPanel({ terminalHistory, send, onBack }) {
+const THEMES = {
+  dark: {
+    bg: '#0d1117', bar: '#161b22', border: '#30363d',
+    muted: '#8b949e', dim: '#484f58',
+    prompt: '#3fb950', cmd: '#58a6ff', output: '#c9d1d9', err: '#ff7b72',
+    running: '#d29922', input: '#e6edf3',
+    dot1: '#ff5f57', dot2: '#febc2e', dot3: '#28c840',
+  },
+  light: {
+    bg: '#f6f8fa', bar: '#eaeef2', border: '#d0d7de',
+    muted: '#656d76', dim: '#8b949e',
+    prompt: '#1a7f37', cmd: '#0969da', output: '#24292f', err: '#cf222e',
+    running: '#9a6700', input: '#24292f',
+    dot1: '#ff5f57', dot2: '#febc2e', dot3: '#28c840',
+  },
+}
+
+export default function TerminalPanel({ terminalHistory, send, onBack, theme }) {
   const [command, setCommand] = useState('')
   const [history, setHistory] = useState([])
   const [cmdHistory, setCmdHistory] = useState([])
@@ -9,12 +26,10 @@ export default function TerminalPanel({ terminalHistory, send, onBack }) {
   const inputRef = useRef(null)
   const scrollRef = useRef(null)
   const lastConsumedIdx = useRef(-1)
+  const c = THEMES[theme === 'light' ? 'light' : 'dark']
 
-  // 自动滚到底部
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [history])
 
   const handleExec = useCallback(() => {
@@ -49,10 +64,14 @@ export default function TerminalPanel({ terminalHistory, send, onBack }) {
         setCmdHistoryIdx(-1)
         setCommand('')
       }
+    } else if (e.key === 'c' && e.ctrlKey && executing) {
+      e.preventDefault()
+      send({ type: 'terminal_interrupt' })
+      setExecuting(false)
+      setHistory(prev => [...prev, { type: 'output', text: '^C', exitCode: 130 }])
     }
-  }, [handleExec, cmdHistory, cmdHistoryIdx])
+  }, [handleExec, cmdHistory, cmdHistoryIdx, executing, send])
 
-  // 接收终端输出 — 逐条消费，不丢消息
   useEffect(() => {
     if (!terminalHistory || terminalHistory.length === 0) return
     const newOutputs = []
@@ -69,67 +88,63 @@ export default function TerminalPanel({ terminalHistory, send, onBack }) {
     }
   }, [terminalHistory])
 
-  // 点击聚焦输入
-  const handleAreaClick = useCallback(() => {
-    inputRef.current?.focus()
-  }, [])
+  const handleAreaClick = useCallback(() => { inputRef.current?.focus() }, [])
 
-  // 输入变化时滚到底
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [command])
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1117]">
+    <div className="flex flex-col h-full" style={{ background: c.bg }}>
       {/* 顶栏 */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#161b22] border-b border-[#30363d] shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2 shrink-0" style={{ background: c.bar, borderBottom: `1px solid ${c.border}` }}>
         <button
-          className="text-[#8b949e] hover:text-[#c9d1d9] active:text-white active:scale-[0.92] text-[12px] px-2 py-1 rounded transition-all duration-100 select-none"
+          className="text-[12px] px-2 py-1 rounded transition-all duration-100 select-none active:scale-[0.92]"
+          style={{ color: c.muted }}
           onClick={onBack}
+          onMouseEnter={e => e.target.style.color = c.output}
+          onMouseLeave={e => e.target.style.color = c.muted}
         >← 聊天</button>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.dot1 }} />
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.dot2 }} />
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: c.dot3 }} />
         </div>
-        <span className="text-[#8b949e] text-[12px] font-mono">j — terminal</span>
+        <span className="text-[12px] font-mono" style={{ color: c.muted }}>j — terminal</span>
         <div className="ml-auto">
-          {executing && (
-            <span className="text-[#d29922] text-[11px] font-mono">● running</span>
-          )}
+          {executing && <span className="text-[11px] font-mono" style={{ color: c.running }}>● running</span>}
         </div>
       </div>
 
-      {/* 终端主体：输出 + 输入在一起 */}
+      {/* 终端主体 */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[13px] leading-[1.5] cursor-text"
+        style={{ background: c.bg }}
         onClick={handleAreaClick}
       >
         {history.length === 0 && !executing && (
-          <div className="text-[#484f58] mb-2">Type a command and press Enter.</div>
+          <div className="mb-2" style={{ color: c.dim }}>Type a command and press Enter. (Ctrl+C to interrupt)</div>
         )}
         {history.map((item, i) => (
           <div key={i}>
             {item.type === 'input' ? (
-              <div className="text-[#58a6ff]">
-                <span className="text-[#3fb950] select-none">$ </span>{item.text}
+              <div style={{ color: c.cmd }}>
+                <span className="select-none" style={{ color: c.prompt }}>$ </span>{item.text}
               </div>
             ) : (
-              <div className={`whitespace-pre ${item.exitCode != null && item.exitCode !== 0 ? 'text-[#ff7b72]' : 'text-[#c9d1d9]'}`}>
+              <div className="whitespace-pre" style={{ color: item.exitCode != null && item.exitCode !== 0 ? c.err : c.output }}>
                 {item.text}
               </div>
             )}
           </div>
         ))}
-        {/* 当前输入行 — 内嵌在输出区底部 */}
         <div className="flex items-center text-[13px]">
-          <span className="text-[#3fb950] shrink-0 select-none">$&nbsp;</span>
+          <span className="shrink-0 select-none" style={{ color: c.prompt }}>$&nbsp;</span>
           <input
             ref={inputRef}
-            className="flex-1 bg-transparent border-none text-[#e6edf3] font-mono outline-none min-w-0"
+            className="flex-1 bg-transparent border-none font-mono outline-none min-w-0"
+            style={{ color: c.input }}
             placeholder={executing ? '...' : ''}
             value={command}
             onChange={e => setCommand(e.target.value)}

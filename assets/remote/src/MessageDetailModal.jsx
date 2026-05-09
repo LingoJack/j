@@ -125,7 +125,7 @@ export default function MessageDetailModal({ message, onClose }) {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

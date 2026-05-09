@@ -38,14 +38,17 @@ export default function Sidebar({
           />
         )
       case 'config':
+      case 'terminal':
+      case 'browser':
+        // 这些使用主内容区，侧边栏只显示占位提示
         return (
-          <ConfigSection
-            configData={configData}
-            modelList={modelList}
-            themeList={themeList}
-            send={send}
-            onCollapse={onToggleCollapse}
-          />
+          <div className="flex flex-col items-center justify-center h-full text-fg3 px-4 text-center">
+            <div className="text-[12px]">使用主内容区</div>
+            <button
+              className="mt-2 text-accent text-[11px] hover:underline active:scale-[0.92] transition-transform duration-100 select-none"
+              onClick={onToggleCollapse}
+            >收起侧边栏</button>
+          </div>
         )
       case 'archive':
         return (
@@ -64,18 +67,6 @@ export default function Sidebar({
             send={send}
             onCollapse={onToggleCollapse}
           />
-        )
-      case 'terminal':
-      case 'browser':
-        // 这些使用全屏面板，侧边栏只显示占位提示
-        return (
-          <div className="flex flex-col items-center justify-center h-full text-fg3 px-4 text-center">
-            <div className="text-[12px]">使用主内容区</div>
-            <button
-              className="mt-2 text-accent text-[11px] hover:underline active:scale-[0.92] transition-transform duration-100 select-none"
-              onClick={onToggleCollapse}
-            >收起侧边栏</button>
-          </div>
         )
       case 'help':
         return <HelpSection onCollapse={onToggleCollapse} />
