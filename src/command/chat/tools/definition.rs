@@ -346,7 +346,7 @@ impl ToolRegistry {
         {
             let name = t.name();
             md.push_str(&format!("<{}>\n", name));
-            let mut desc = t.description().trim().to_string();
+            let mut desc = dedent(t.description().trim());
             if name == tool_names::LOAD_TOOL {
                 desc.push_str(&format_deferred_suffix(deferred));
             }
@@ -376,7 +376,7 @@ impl ToolRegistry {
             .filter(|t| t.is_available())
             .filter(|t| !deferred.iter().any(|d| d == t.name()))
             .map(|t| {
-                let mut desc = t.description().trim().to_string();
+                let mut desc = dedent(t.description().trim());
                 if t.name() == tool_names::LOAD_TOOL {
                     desc.push_str(&format_deferred_suffix(deferred));
                 }
@@ -407,7 +407,7 @@ impl ToolRegistry {
                 .iter()
                 .any(|t| t.function.name == tool_names::LOAD_TOOL)
         {
-            let mut desc = load_tool.description().trim().to_string();
+            let mut desc = dedent(load_tool.description().trim());
             desc.push_str(&format_deferred_suffix(deferred));
             tools.push(ToolDefinition {
                 tool_type: "function".to_string(),
@@ -465,6 +465,38 @@ impl ToolRegistry {
         }
         parts.join("\n")
     }
+}
+
+/// 去除多行字符串每行的公共缩进，保留相对缩进结构。
+/// 空行或仅含空白字符的行被忽略在缩进计算中。
+fn dedent(s: &str) -> String {
+    let lines: Vec<&str> = s.lines().collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    // 找出非空行的最小公共缩进
+    let min_indent = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.chars().take_while(|c| c.is_whitespace()).count())
+        .min()
+        .unwrap_or(0);
+
+    // 移除每行的公共缩进，空行保持为空
+    lines
+        .iter()
+        .map(|line| {
+            if line.trim().is_empty() {
+                String::new()
+            } else if line.len() >= min_indent {
+                line[min_indent..].to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn json_schema_to_xml_params(schema: &Value) -> String {
