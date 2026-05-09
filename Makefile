@@ -98,7 +98,7 @@ push: current_dir fmt build-web ## AI 生成 commit message 并推送
 	echo "----------------------------------------"; \
 	cat "$$ai_out"; \
 	echo "----------------------------------------"; \
-	msg=$$(awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}' "$$ai_out"); \
+	msg=$$(perl -0777 -pe 's/<\s*\/\s*result\s*>/<\/result>/g' "$$ai_out" | awk '/<result>/{in_r=1;gsub(/.*<result>/,"")}/<\/result>/{gsub(/<\/result>.*/,"");in_r=0;print;next}in_r{print}'); \
 	rm -f "$$ai_out"; \
 	if [ -z "$$msg" ]; then msg="更新: $$(date +'%Y-%m-%d %H:%M:%S')"; fi; \
 	git add . && git commit -m "$$msg" && git push origin $(GIT_BRANCH); \
