@@ -5,7 +5,6 @@ pub mod cli;
 pub mod command;
 pub mod config;
 pub mod constants;
-pub mod llm;
 pub mod markdown;
 pub mod theme;
 pub mod tui;
@@ -16,3 +15,6 @@ pub mod util;
 
 // 重导出核心类型
 pub use config::YamlConfig;
+
+// Re-export j-cli-core llm for external use
+pub use j_cli_core::llm;

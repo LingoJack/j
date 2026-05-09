@@ -23,9 +23,6 @@ pub use j_cli_core::tools;
 // Re-export types
 pub use j_cli_core::chat_error as error;
 pub use j_cli_core::constants;
-pub use j_cli_core::message_types;
-pub use j_cli_core::theme_name;
-pub use j_cli_core::template;
 
 #[cfg(test)]
 mod regression_tests;

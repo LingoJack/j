@@ -546,6 +546,12 @@ fn restore_terminal() {
 
 /// Chat TUI 入口函数：初始化 panic hook，按需启动远程 WS 服务，然后进入主循环
 pub fn run_chat_tui(remote_mode: bool, port: u16) {
+    // 注入 Hook 帮助文档到 j-cli-core（供 RegisterHookTool 使用）
+    if let Some(asset) = crate::assets::Assets::get("help/hook.md") {
+        let content = String::from_utf8_lossy(&asset.data).into_owned();
+        crate::command::chat::tools::hook::set_hook_help_content(content);
+    }
+
     // 设置 panic hook，确保 panic 时也能恢复终端状态
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {

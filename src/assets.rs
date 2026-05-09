@@ -36,5 +36,5 @@ pub use help::{HelpTab, load_help_tabs};
 pub use install::{install_default_commands, install_default_scripts, install_default_skills};
 pub use template::{
     default_agent_md, default_memory, default_soul, default_system_prompt, quotes_text,
-    sub_agent_system_prompt_template, teammate_system_prompt_template, version_template,
+    version_template,
 };

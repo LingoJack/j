@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use crate::constants::HOOK_LOG_DESC_MAX_LEN;
 use crate::infra::hook::{
     HookDef, HookEvent, HookFilter, HookManager, HookType, OnError,
@@ -8,6 +10,14 @@ use crate::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+
+/// 全局 Hook 帮助内容（由 j-cli 在启动时通过 set_hook_help_content 注入）
+static HOOK_HELP_CONTENT: OnceLock<String> = OnceLock::new();
+
+/// 设置 Hook 帮助文档内容（j-cli 启动时调用）
+pub fn set_hook_help_content(content: String) {
+    let _ = HOOK_HELP_CONTENT.set(content);
+}
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
@@ -135,10 +145,9 @@ impl Tool for RegisterHookTool {
 
 impl RegisterHookTool {
     fn handle_help() -> ToolResult {
-        // TODO: AssetProvider 需由调用方注入，暂时返回占位内容
-        let content = option_env!("HOOK_HELP_CONTENT")
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "Hook 文档加载失败（需要注入 AssetProvider）".to_string());
+        let content = HOOK_HELP_CONTENT.get()
+            .map(|s| Self::strip_frontmatter(s).to_string())
+            .unwrap_or_else(|| "Hook 文档加载失败（需要调用 set_hook_help_content 注入）".to_string());
 
         ToolResult {
             output: content,

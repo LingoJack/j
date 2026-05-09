@@ -54,27 +54,8 @@ pub fn default_agent_md() -> Cow<'static, str> {
         .unwrap_or_else(|| Cow::Borrowed(""))
 }
 
-/// Teammate system prompt 模板
-///
-/// 用途: 构建 teammate 专用的 system prompt
-/// 占位符: `{{.base_prompt}}`, `{{.name}}`, `{{.role}}`, `{{.team_summary}}`
-/// 格式: Markdown
-pub fn teammate_system_prompt_template() -> Cow<'static, str> {
-    Assets::get("teammate_system_prompt.md")
-        .map(|f| String::from_utf8_lossy(&f.data).into_owned().into())
-        .unwrap_or_else(|| Cow::Borrowed(""))
-}
-
-/// SubAgent system prompt 模板
-///
-/// 用途: 构建 SubAgent 专用的 system prompt（替代直接复用父 agent prompt）
-/// 占位符: `{{.base_prompt}}`
-/// 格式: Markdown
-pub fn sub_agent_system_prompt_template() -> Cow<'static, str> {
-    Assets::get("sub_agent_system_prompt.md")
-        .map(|f| String::from_utf8_lossy(&f.data).into_owned().into())
-        .unwrap_or_else(|| Cow::Borrowed(""))
-}
+// Note: teammate_system_prompt_template and sub_agent_system_prompt_template
+// are now provided by j_cli_core::template (using include_str!). Removed from here.
 
 /// 诗句语录文本
 ///
