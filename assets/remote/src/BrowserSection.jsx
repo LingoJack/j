@@ -61,7 +61,7 @@ export default function BrowserSection({ send, onCollapse }) {
       <div className="sidebar-section-header">
         <span className="font-semibold text-[13px]">浏览器</span>
         <button
-          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 transition-colors"
+          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 active:bg-bg3 active:scale-[0.9] transition-all duration-100 select-none"
           onClick={onCollapse}
           title="收起侧边栏"
         >
@@ -75,12 +75,12 @@ export default function BrowserSection({ send, onCollapse }) {
       <div className="px-3 py-2 border-b border-border shrink-0 space-y-2">
         <div className="flex items-center gap-1">
           <button
-            className="text-fg3 hover:text-fg text-[12px] px-1.5 py-1 rounded hover:bg-bg3 transition-colors shrink-0"
+            className="text-fg3 hover:text-fg active:text-accent active:scale-[0.9] text-[12px] px-1.5 py-1 rounded hover:bg-bg3 active:bg-bg3 transition-all duration-100 shrink-0 select-none"
             onClick={goBack}
             title="后退"
           >←</button>
           <button
-            className="text-fg3 hover:text-fg text-[12px] px-1.5 py-1 rounded hover:bg-bg3 transition-colors shrink-0"
+            className="text-fg3 hover:text-fg active:text-accent active:scale-[0.9] text-[12px] px-1.5 py-1 rounded hover:bg-bg3 active:bg-bg3 transition-all duration-100 shrink-0 select-none"
             onClick={refresh}
             title="刷新"
           >↻</button>
@@ -92,8 +92,9 @@ export default function BrowserSection({ send, onCollapse }) {
             onKeyDown={handleKeyDown}
           />
           <button
-            className="text-accent text-[11px] px-2 py-1 rounded hover:bg-accent/10 transition-colors shrink-0"
+            className={`text-accent text-[11px] px-2 py-1 rounded transition-all duration-100 shrink-0 select-none ${url.trim() ? 'hover:bg-accent/10 active:bg-accent/20 active:scale-[0.95]' : 'opacity-30 cursor-default'}`}
             onClick={() => navigate(url)}
+            disabled={!url.trim()}
           >前往</button>
         </div>
         {/* Quick links */}
@@ -101,7 +102,7 @@ export default function BrowserSection({ send, onCollapse }) {
           {QUICK_LINKS.map(link => (
             <button
               key={link.url}
-              className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${currentUrl === link.url ? 'bg-accent/20 text-accent' : 'bg-bg3 text-fg3 hover:text-fg hover:bg-border'}`}
+              className={`text-[10px] px-1.5 py-0.5 rounded transition-all duration-100 select-none active:scale-[0.93] ${currentUrl === link.url ? 'bg-accent/20 text-accent' : 'bg-bg3 text-fg3 hover:text-fg hover:bg-border active:bg-border-light'}`}
               onClick={() => navigate(link.url)}
             >
               {link.label}

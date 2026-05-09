@@ -50,7 +50,7 @@ export default function ConfigSection({ configData, modelList, themeList, send, 
       <div className="sidebar-section-header">
         <span className="font-semibold text-[13px]">配置</span>
         <button
-          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 transition-colors"
+          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 active:bg-bg3 active:scale-[0.9] transition-all duration-100 select-none"
           onClick={onCollapse}
           title="收起侧边栏"
         >
@@ -65,7 +65,7 @@ export default function ConfigSection({ configData, modelList, themeList, send, 
         {TABS.map(t => (
           <button
             key={t.key}
-            className={`flex-1 px-2 py-2 text-[11px] font-medium transition-colors ${activeTab === t.key ? 'text-accent border-b-2 border-accent bg-accent/5' : 'text-fg3 hover:text-fg'}`}
+            className={`flex-1 px-2 py-2 text-[11px] font-medium transition-all duration-100 select-none ${activeTab === t.key ? 'text-accent border-b-2 border-accent bg-accent/5' : 'text-fg3 hover:text-fg active:text-accent active:scale-[0.95]'}`}
             onClick={() => requestTab(t.key)}
           >
             {t.label}
@@ -85,7 +85,7 @@ export default function ConfigSection({ configData, modelList, themeList, send, 
                 {modelList.models.map((m, i) => (
                   <button
                     key={i}
-                    className={`w-full text-left px-3 py-2 rounded-lg mb-1 text-[12px] transition-colors ${i === modelList.active_index ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-bg3/50 text-fg hover:bg-bg3 border border-transparent'}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg mb-1 text-[12px] transition-all duration-100 select-none active:scale-[0.97] ${i === modelList.active_index ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-bg3/50 text-fg hover:bg-bg3 active:bg-border border border-transparent'}`}
                     onClick={() => selectModel(i)}
                   >
                     <div className="font-medium">{m.name}</div>
@@ -102,7 +102,7 @@ export default function ConfigSection({ configData, modelList, themeList, send, 
                 {themeList.themes.map((t, i) => (
                   <button
                     key={i}
-                    className={`w-full text-left px-3 py-2 rounded-lg mb-1 text-[12px] transition-colors ${i === themeList.active_index ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-bg3/50 text-fg hover:bg-bg3 border border-transparent'}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg mb-1 text-[12px] transition-all duration-100 select-none active:scale-[0.97] ${i === themeList.active_index ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-bg3/50 text-fg hover:bg-bg3 active:bg-border border border-transparent'}`}
                     onClick={() => selectTheme(i)}
                   >
                     {t.display_name}
@@ -127,7 +127,7 @@ export default function ConfigSection({ configData, modelList, themeList, send, 
                 <div key={f.key} className="mb-2">
                   {f.field_type === 'bool' ? (
                     <div
-                      className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-bg3/50 cursor-pointer hover:bg-bg3 transition-colors"
+                      className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-bg3/50 cursor-pointer hover:bg-bg3 active:bg-border active:scale-[0.98] transition-all duration-100 select-none"
                       onClick={() => toggleField(i)}
                     >
                       <span className="text-[12px] text-fg">{f.label}</span>
@@ -146,13 +146,13 @@ export default function ConfigSection({ configData, modelList, themeList, send, 
                           onKeyDown={e => e.key === 'Enter' && submitEdit()}
                           autoFocus
                         />
-                        <button className="px-2 py-1 rounded bg-accent text-white text-[11px]" onClick={submitEdit}>确定</button>
-                        <button className="px-2 py-1 rounded bg-bg3 text-fg3 text-[11px]" onClick={() => setEditingField(null)}>取消</button>
+                        <button className="px-2 py-1 rounded bg-accent text-white text-[11px] active:scale-[0.95] transition-transform duration-100 select-none" onClick={submitEdit}>确定</button>
+                        <button className="px-2 py-1 rounded bg-bg3 text-fg3 text-[11px] active:scale-[0.95] transition-transform duration-100 select-none" onClick={() => setEditingField(null)}>取消</button>
                       </div>
                     </div>
                   ) : (
                     <div
-                      className={`px-3 py-2 rounded-lg bg-bg3/50 ${f.editable ? 'cursor-pointer hover:bg-bg3 transition-colors' : ''}`}
+                      className={`px-3 py-2 rounded-lg bg-bg3/50 transition-all duration-100 select-none ${f.editable ? 'cursor-pointer hover:bg-bg3 active:bg-border active:scale-[0.98]' : ''}`}
                       onClick={() => f.editable && startEdit(f)}
                     >
                       <div className="text-[11px] text-fg3">{f.label}</div>

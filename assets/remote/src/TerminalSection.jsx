@@ -5,6 +5,7 @@ export default function TerminalSection({ terminalHistory, send, onCollapse }) {
   const [history, setHistory] = useState([])
   const [cmdHistory, setCmdHistory] = useState([])
   const [cmdHistoryIdx, setCmdHistoryIdx] = useState(-1)
+  const [executing, setExecuting] = useState(false)
   const inputRef = useRef(null)
   const scrollRef = useRef(null)
 
@@ -16,13 +17,14 @@ export default function TerminalSection({ terminalHistory, send, onCollapse }) {
 
   const handleExec = useCallback(() => {
     const cmd = command.trim()
-    if (!cmd) return
+    if (!cmd || executing) return
+    setExecuting(true)
     setHistory(prev => [...prev, { type: 'input', text: `$ ${cmd}` }])
     setCmdHistory(prev => [cmd, ...prev])
     setCmdHistoryIdx(-1)
     setCommand('')
     send({ type: 'terminal_exec', command: cmd })
-  }, [command, send])
+  }, [command, send, executing])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -55,6 +57,7 @@ export default function TerminalSection({ terminalHistory, send, onCollapse }) {
       if (last.type === 'output' && !last._consumed) {
         setHistory(prev => [...prev, { type: 'output', text: last.text, exitCode: last.exitCode }])
         last._consumed = true
+        setExecuting(false)
       }
     }
   }, [terminalHistory])
@@ -65,7 +68,7 @@ export default function TerminalSection({ terminalHistory, send, onCollapse }) {
       <div className="sidebar-section-header">
         <span className="font-semibold text-[13px]">终端</span>
         <button
-          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 transition-colors"
+          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 active:bg-bg3 active:scale-[0.9] transition-all duration-100 select-none"
           onClick={onCollapse}
           title="收起侧边栏"
         >
@@ -106,10 +109,10 @@ export default function TerminalSection({ terminalHistory, send, onCollapse }) {
             autoFocus
           />
           <button
-            className="text-accent text-[11px] px-2 py-1 rounded hover:bg-accent/10 transition-colors"
+            className={`text-accent text-[11px] px-2 py-1 rounded transition-all duration-100 select-none ${command.trim() && !executing ? 'hover:bg-accent/10 active:bg-accent/20 active:scale-[0.95]' : 'opacity-30 cursor-default'}`}
             onClick={handleExec}
-            disabled={!command.trim()}
-          >执行</button>
+            disabled={!command.trim() || executing}
+          >{executing ? '执行中...' : '执行'}</button>
         </div>
       </div>
     </div>

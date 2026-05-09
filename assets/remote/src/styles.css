@@ -276,7 +276,7 @@
   }
 
   .session-item:active {
-    @apply bg-bg3;
+    @apply bg-bg3 scale-[0.98];
   }
 
   /* 桌面侧边栏导航条 */
@@ -287,7 +287,8 @@
 
   .sidebar-nav-item {
     @apply w-9 h-9 rounded-lg flex items-center justify-center text-fg3
-           hover:bg-bg3 hover:text-fg transition-colors cursor-pointer;
+           hover:bg-bg3 hover:text-fg active:scale-[0.92] active:bg-bg3 active:text-fg
+           transition-all duration-100 cursor-pointer select-none;
   }
 
   .sidebar-nav-item.active {

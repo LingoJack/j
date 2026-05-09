@@ -27,7 +27,7 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
       <div className="sidebar-section-header">
         <span className="font-semibold text-[13px]">归档</span>
         <button
-          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 transition-colors"
+          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 active:bg-bg3 active:scale-[0.9] transition-all duration-100 select-none"
           onClick={onCollapse}
           title="收起侧边栏"
         >
@@ -43,13 +43,13 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
           <div className="text-[11px] text-fg3 mb-2">归档当前会话</div>
           <div className="flex gap-1.5 mb-2">
             <button
-              className="flex-1 px-2 py-2 rounded-lg bg-accent/15 text-accent text-[12px] font-medium hover:bg-accent/25 transition-colors"
+              className="flex-1 px-2 py-2 rounded-lg bg-accent/15 text-accent text-[12px] font-medium hover:bg-accent/25 active:bg-accent/35 active:scale-[0.97] transition-all duration-100 select-none"
               onClick={handleArchiveDefault}
             >
               默认归档
             </button>
             <button
-              className="flex-1 px-2 py-2 rounded-lg bg-bg3 text-fg text-[12px] font-medium hover:bg-border transition-colors"
+              className="flex-1 px-2 py-2 rounded-lg bg-bg3 text-fg text-[12px] font-medium hover:bg-border active:bg-border-light active:scale-[0.97] transition-all duration-100 select-none"
               onClick={() => setShowNameInput(v => !v)}
             >
               自定义名称
@@ -66,7 +66,7 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
                 autoFocus
               />
               <button
-                className="px-3 py-1.5 rounded-lg bg-accent text-white text-[12px] font-medium"
+                className="px-3 py-1.5 rounded-lg bg-accent text-white text-[12px] font-medium active:scale-[0.95] transition-transform duration-100 select-none"
                 onClick={handleArchiveCustom}
               >
                 确定
@@ -74,7 +74,7 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
             </div>
           )}
           <button
-            className="w-full mt-2 px-2 py-1.5 rounded-lg bg-err/10 text-err text-[11px] hover:bg-err/20 transition-colors"
+            className="w-full mt-2 px-2 py-1.5 rounded-lg bg-err/10 text-err text-[11px] hover:bg-err/20 active:bg-err/30 active:scale-[0.98] transition-all duration-100 select-none"
             onClick={handleClear}
           >
             不归档，清空会话
@@ -86,7 +86,7 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] text-fg3">已归档的会话</span>
             <button
-              className="text-accent text-[11px] hover:underline"
+              className="text-accent text-[11px] hover:underline active:scale-[0.92] transition-transform duration-100 select-none"
               onClick={() => send({ type: 'start_archive_list' })}
             >
               刷新
@@ -108,13 +108,13 @@ export default function ArchiveSection({ archives, send, onCollapse }) {
                   <span className="text-[10px] text-fg3">{formatRelativeTime(a.created_at)}</span>
                   <div className="flex gap-1">
                     <button
-                      className="px-2 py-0.5 rounded text-[10px] bg-accent/15 text-accent hover:bg-accent/25 transition-colors"
+                      className="px-2 py-0.5 rounded text-[10px] bg-accent/15 text-accent hover:bg-accent/25 active:bg-accent/35 active:scale-[0.95] transition-all duration-100 select-none"
                       onClick={() => send({ type: 'restore_archive', index: i })}
                     >
                       恢复
                     </button>
                     <button
-                      className="px-2 py-0.5 rounded text-[10px] bg-err/10 text-err hover:bg-err/20 transition-colors"
+                      className="px-2 py-0.5 rounded text-[10px] bg-err/10 text-err hover:bg-err/20 active:bg-err/30 active:scale-[0.95] transition-all duration-100 select-none"
                       onClick={() => send({ type: 'delete_archive', index: i })}
                     >
                       删除

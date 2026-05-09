@@ -8,11 +8,11 @@ export default function SessionSection({ sessions, currentSessionId, onSwitch, o
         <span className="font-semibold text-[13px]">会话</span>
         <div className="flex items-center gap-1">
           <button
-            className="text-accent hover:bg-accent/10 text-[13px] px-2 py-1 rounded-md transition-colors"
+            className="text-accent hover:bg-accent/10 active:bg-accent/20 active:scale-[0.97] text-[13px] px-2 py-1 rounded-md transition-all duration-100 select-none"
             onClick={onNew}
           >+ 新建</button>
           <button
-            className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 transition-colors"
+            className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 active:bg-bg3 active:scale-[0.9] transition-all duration-100 select-none"
             onClick={onCollapse}
             title="收起侧边栏"
           >
@@ -30,7 +30,7 @@ export default function SessionSection({ sessions, currentSessionId, onSwitch, o
           return (
             <div
               key={s.id}
-              className={`px-3 py-2.5 border-b border-border/50 cursor-pointer transition-colors ${isCurrent ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-bg3'}`}
+              className={`px-3 py-2.5 border-b border-border/50 cursor-pointer transition-all duration-100 select-none ${isCurrent ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-bg3 active:bg-bg3 active:scale-[0.98]'}`}
               onClick={() => onSwitch(s.id)}
             >
               <div className="flex items-center justify-between mb-0.5">

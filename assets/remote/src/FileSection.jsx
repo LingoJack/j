@@ -1,9 +1,15 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 export default function FileSection({ fileEntries, fileContent, fileWriteResult, send, onCollapse }) {
   const [currentPath, setCurrentPath] = useState('.')
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // 保存完成后重置 saving 状态
+  useEffect(() => {
+    if (fileWriteResult) setSaving(false)
+  }, [fileWriteResult])
 
   const handleFileList = useCallback((path) => {
     setCurrentPath(path)
@@ -16,9 +22,10 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
   }, [send])
 
   const handleFileWrite = useCallback(() => {
-    if (!fileContent) return
+    if (!fileContent || saving) return
+    setSaving(true)
     send({ type: 'file_write', path: fileContent.path, content: editContent })
-  }, [send, fileContent, editContent])
+  }, [send, fileContent, editContent, saving])
 
   const handleEntryClick = useCallback((entry) => {
     const newPath = currentPath === '.' ? entry.name : `${currentPath}/${entry.name}`
@@ -49,7 +56,7 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
       <div className="sidebar-section-header">
         <span className="font-semibold text-[13px]">文件</span>
         <button
-          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 transition-colors"
+          className="text-fg3 hover:text-fg p-1 rounded-md hover:bg-bg3 active:bg-bg3 active:scale-[0.9] transition-all duration-100 select-none"
           onClick={onCollapse}
           title="收起侧边栏"
         >
@@ -63,13 +70,13 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
       <div className="px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-1">
           <button
-            className="text-fg3 hover:text-fg text-[12px] px-1.5 py-1 rounded hover:bg-bg3 transition-colors"
+            className="text-fg3 hover:text-fg active:text-accent active:scale-[0.9] text-[12px] px-1.5 py-1 rounded hover:bg-bg3 active:bg-bg3 transition-all duration-100 select-none"
             onClick={goUp}
             disabled={currentPath === '.'}
             title="上级目录"
           >↑</button>
           <button
-            className="text-fg3 hover:text-fg text-[12px] px-1.5 py-1 rounded hover:bg-bg3 transition-colors"
+            className="text-fg3 hover:text-fg active:text-accent active:scale-[0.9] text-[12px] px-1.5 py-1 rounded hover:bg-bg3 active:bg-bg3 transition-all duration-100 select-none"
             onClick={() => handleFileList('.')}
             title="当前目录"
           >⌂</button>
@@ -80,7 +87,7 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
             onKeyDown={e => e.key === 'Enter' && handleFileList(currentPath)}
           />
           <button
-            className="text-accent text-[11px] px-2 py-1 rounded hover:bg-accent/10 transition-colors"
+            className="text-accent text-[11px] px-2 py-1 rounded hover:bg-accent/10 active:bg-accent/20 active:scale-[0.95] transition-all duration-100 select-none"
             onClick={() => handleFileList(currentPath)}
           >刷新</button>
         </div>
@@ -93,23 +100,24 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
           <div className="flex flex-col h-full">
             <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border shrink-0">
               <button
-                className="text-fg3 hover:text-fg text-[11px] px-1.5 py-0.5 rounded hover:bg-bg3 transition-colors"
+                className="text-fg3 hover:text-fg active:text-accent active:scale-[0.92] text-[11px] px-1.5 py-0.5 rounded hover:bg-bg3 active:bg-bg3 transition-all duration-100 select-none"
                 onClick={() => send({ type: 'file_list', path: currentPath })}
               >← 返回</button>
               <span className="text-[11px] text-fg3 truncate flex-1">{fileContent.path}</span>
               {!editing ? (
                 <button
-                  className="text-accent text-[11px] px-2 py-0.5 rounded hover:bg-accent/10 transition-colors"
+                  className="text-accent text-[11px] px-2 py-0.5 rounded hover:bg-accent/10 active:bg-accent/20 active:scale-[0.95] transition-all duration-100 select-none"
                   onClick={startEditing}
                 >编辑</button>
               ) : (
                 <div className="flex gap-1">
                   <button
-                    className="text-ok text-[11px] px-2 py-0.5 rounded hover:bg-ok/10 transition-colors"
+                    className={`text-ok text-[11px] px-2 py-0.5 rounded hover:bg-ok/10 active:bg-ok/20 active:scale-[0.95] transition-all duration-100 select-none ${saving ? 'opacity-50 pointer-events-none' : ''}`}
                     onClick={handleFileWrite}
-                  >保存</button>
+                    disabled={saving}
+                  >{saving ? '保存中...' : '保存'}</button>
                   <button
-                    className="text-fg3 text-[11px] px-2 py-0.5 rounded hover:bg-bg3 transition-colors"
+                    className="text-fg3 text-[11px] px-2 py-0.5 rounded hover:bg-bg3 active:bg-border active:scale-[0.95] transition-all duration-100 select-none"
                     onClick={() => setEditing(false)}
                   >取消</button>
                 </div>
@@ -142,7 +150,7 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
             {fileEntries.length === 0 && (
               <div className="text-center text-fg3 text-[12px] py-4">
                 <button
-                  className="text-accent hover:underline"
+                  className="text-accent hover:underline active:scale-[0.95] transition-transform duration-100 select-none"
                   onClick={() => handleFileList('.')}
                 >点击加载当前目录</button>
               </div>
@@ -150,7 +158,7 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
             {fileEntries.map((entry, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg3 cursor-pointer transition-colors border-b border-border/30"
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg3 active:bg-bg3 active:scale-[0.98] cursor-pointer transition-all duration-100 select-none border-b border-border/30"
                 onClick={() => handleEntryClick(entry)}
               >
                 <span className="text-[12px] shrink-0 text-fg3">{entry.is_dir ? '▸' : '─'}</span>

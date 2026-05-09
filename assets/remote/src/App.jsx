@@ -8,6 +8,9 @@ import AskModal from './AskModal'
 import AgentPermModal from './AgentPermModal'
 import PlanApprovalModal from './PlanApprovalModal'
 import Sidebar from './Sidebar'
+import TerminalPanel from './TerminalPanel'
+import FilePanel from './FilePanel'
+import BrowserPanel from './BrowserPanel'
 
 const params = new URLSearchParams(location.search)
 const token = params.get('token') || ''
@@ -24,7 +27,7 @@ function Message({ role, content, streaming, onDetail }) {
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
   return (
-    <div className="flex flex-col gap-0.5 cursor-pointer active:opacity-80 transition-opacity" onClick={onDetail}>
+    <div className="flex flex-col gap-0.5 cursor-pointer active:opacity-70 active:scale-[0.98] transition-all duration-100" onClick={onDetail}>
       <span className={`text-[11px] font-medium ${isUser ? 'self-end text-label-user' : 'self-start text-label-ai'}`}>
         {isUser ? '你' : 'Sprite'}
       </span>
@@ -56,14 +59,14 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
 
   return (
     <div
-      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-lg border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-lg border overflow-hidden cursor-pointer active:opacity-70 active:scale-[0.98] transition-all duration-100 shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
         {statusIcon}
         <span className={`font-semibold ${statusCls}`}>{name}</span>
         <span className={`text-[11px] ml-auto ${completed ? 'text-ok/70' : 'text-fg3'}`}>{statusText}</span>
-        <button className="expand-btn text-fg3 hover:text-fg px-1" onClick={e => e.stopPropagation()}>
+        <button className="expand-btn text-fg3 hover:text-fg active:text-accent active:scale-[0.92] px-1 transition-all duration-100 select-none" onClick={e => e.stopPropagation()}>
           {expanded ? '收起' : '展开'}
         </button>
       </div>
@@ -105,7 +108,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, pa
 
   return (
     <div
-      className={`self-start rounded-lg border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${paired ? 'w-[88%] sm:w-[83%] md:w-[78%] lg:w-[68%] ml-4 border-l-2' : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'} ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5 border-l-err/40' : 'border-border bg-bg2 border-l-ok/30'}`}
+      className={`self-start rounded-lg border overflow-hidden transition-all duration-100 shrink-0 min-h-[44px] ${paired ? 'w-[88%] sm:w-[83%] md:w-[78%] lg:w-[68%] ml-4 border-l-2' : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'} ${hasOutput ? 'cursor-pointer active:opacity-70 active:scale-[0.98]' : ''} ${isError ? 'border-err/40 bg-err/5 border-l-err/40' : 'border-border bg-bg2 border-l-ok/30'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -114,7 +117,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, pa
         {hasOutput && (
           <>
             <span className="text-fg3 text-[11px] ml-auto">{expanded ? '收起' : '展开'}</span>
-            <button className="expand-btn text-accent text-[11px] hover:underline">详情</button>
+            <button className="expand-btn text-accent text-[11px] hover:underline active:scale-[0.92] transition-transform duration-100 select-none">详情</button>
           </>
         )}
       </div>
@@ -144,7 +147,7 @@ function MobileSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose })
       <div className="sidebar-panel" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="font-bold text-[15px]">会话列表</span>
-          <button className="text-fg3 hover:text-fg text-xl leading-none px-1" onClick={onClose}>×</button>
+          <button className="text-fg3 hover:text-fg active:text-accent active:scale-[0.9] text-xl leading-none px-1 transition-all duration-100 select-none" onClick={onClose}>×</button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {sessions.map(s => {
@@ -175,7 +178,7 @@ function MobileSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose })
         </div>
         <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border">
           <button
-            className="w-full py-2.5 rounded-lg bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
+            className="w-full py-2.5 rounded-lg bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 active:bg-accent/35 active:scale-[0.98] transition-all duration-100 select-none"
             onClick={onNew}
           >
             + 新建会话
@@ -652,8 +655,29 @@ export default function App() {
         </div>
       )}
 
-      {/* 聊天区 */}
+      {/* 聊天区 / 全屏面板 */}
       <div className="flex flex-col flex-1 min-w-0">
+        {activeSection === 'terminal' && !showSidebar ? (
+          <TerminalPanel
+            terminalHistory={terminalHistory}
+            send={send}
+            onBack={() => handleSelectSection('sessions')}
+          />
+        ) : activeSection === 'files' && !showSidebar ? (
+          <FilePanel
+            fileEntries={fileEntries}
+            fileContent={fileContent}
+            fileWriteResult={fileWriteResult}
+            send={send}
+            onBack={() => handleSelectSection('sessions')}
+          />
+        ) : activeSection === 'browser' && !showSidebar ? (
+          <BrowserPanel
+            send={send}
+            onBack={() => handleSelectSection('sessions')}
+          />
+        ) : (
+        <>
         {/* Header */}
         <div className="bg-bg2/95 backdrop-blur-sm border-b border-border shrink-0">
           {/* 状态栏 */}
@@ -664,7 +688,7 @@ export default function App() {
           {/* 导航栏 */}
           <div className="flex items-center gap-3 px-4 pt-2.5 pb-2.5">
             <button
-              className="md:hidden text-fg3 hover:text-fg text-[18px] leading-none px-0.5 transition-colors"
+              className="md:hidden text-fg3 hover:text-fg active:text-accent active:scale-[0.92] text-[18px] leading-none px-0.5 transition-all duration-100 select-none"
               onClick={openSidebar}
               title="会话列表"
             >☰</button>
@@ -678,7 +702,7 @@ export default function App() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={toggleTheme}
-                className="md:hidden text-fg3 hover:text-fg text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 transition-colors cursor-pointer"
+                className="md:hidden text-fg3 hover:text-fg active:text-accent active:scale-[0.92] text-[14px] leading-none p-1.5 rounded-md hover:bg-bg3 active:bg-bg3 transition-all duration-100 cursor-pointer select-none"
                 title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
               >
                 {theme === 'dark' ? (
@@ -779,6 +803,8 @@ export default function App() {
         <AgentPermModal request={agentPerm} onConfirm={confirmAgentPerm} />
         <PlanApprovalModal request={planApproval} onConfirm={submitPlanApproval} />
         <MessageDetailModal message={detailMessage} onClose={() => setDetailMessage(null)} />
+        </>
+        )}
       </div>
     </div>
   )
