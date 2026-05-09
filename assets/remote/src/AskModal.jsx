@@ -121,7 +121,7 @@ export default function AskModal({ questions, onSubmit }) {
               </button>
               {q.multi_select && (
                 <button
-                  className="px-5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-accent text-[#111] disabled:opacity-30"
+                  className="px-5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-accent text-bg disabled:opacity-30"
                   onClick={submitMulti}
                   disabled={!selected.some(Boolean)}
                 >
@@ -153,7 +153,7 @@ export default function AskModal({ questions, onSubmit }) {
                 返回
               </button>
               <button
-                className="px-4.5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-accent text-[#111] disabled:opacity-30"
+                className="px-4.5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-accent text-bg disabled:opacity-30"
                 onClick={submitFreeText}
                 disabled={!freeText.trim()}
               >

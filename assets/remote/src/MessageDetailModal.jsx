@@ -166,7 +166,7 @@ export default function MessageDetailModal({ message, onClose }) {
             {copied ? '✓ 已复制' : '复制内容'}
           </button>
           <button
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-[#111] hover:opacity-90 transition-opacity"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-bg hover:opacity-90 transition-opacity"
             onClick={onClose}
           >
             关闭

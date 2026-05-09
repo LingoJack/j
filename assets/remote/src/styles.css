@@ -1,28 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
-/* 深色主题（默认） */
+/* 深色主题（默认） — stone 暖调色系 */
 @theme {
-  --color-bg:           #16161e;
-  --color-bg2:          #1c1c28;
-  --color-bg3:          #1a1a26;
-  --color-fg:           #dcdce6;
-  --color-fg2:          #8c8caa;
-  --color-fg3:          #505064;
-  --color-accent:       #64b4ff;
-  --color-accent-dim:   #5064c8;
-  --color-ok:           #78dca0;
-  --color-err:          #c84646;
-  --color-warn:         #ffc850;
-  --color-border:       #32374a;
-  --color-border-light: #506480;
-  --color-bubble-user:  #284678;
-  --color-bubble-ai:    #1c1c26;
-  --color-label-ai:     #78dca0;
-  --color-label-user:   #64a0ff;
-  --color-tool-confirm: #ffc850;
-  --color-code-bg:      rgba(45,45,60,0.8);
-  --color-link:         #569cd6;
+  --color-bg:           #0c0a09;
+  --color-bg2:          #1c1917;
+  --color-bg3:          #292524;
+  --color-fg:           #f5f5f4;
+  --color-fg2:          #a8a29e;
+  --color-fg3:          #57534e;
+  --color-accent:       #f5f5f4;
+  --color-accent-dim:   #a8a29e;
+  --color-ok:           #4ade80;
+  --color-err:          #f87171;
+  --color-warn:         #fb923c;
+  --color-border:       #292524;
+  --color-border-light: #44403c;
+  --color-bubble-user:  #292524;
+  --color-bubble-ai:    #1c1917;
+  --color-label-ai:     #4ade80;
+  --color-label-user:   #f5f5f4;
+  --color-tool-confirm: #fb923c;
+  --color-code-bg:      rgba(41,37,36,0.8);
+  --color-link:         #d6d3d1;
 
   /* 动画定义 */
   --animate-blink: blink 1s infinite;
@@ -252,7 +252,7 @@
 
   /* 输入框焦点效果 */
   .input-glow:focus {
-    box-shadow: 0 0 0 2px rgba(100, 180, 255, 0.2);
+    box-shadow: 0 0 0 2px rgba(245, 245, 244, 0.15);
   }
 
   /* 模态框动画 */
@@ -324,12 +324,12 @@
 
   .status-dot.connected {
     @apply bg-ok;
-    box-shadow: 0 0 8px rgba(120, 220, 160, 0.5);
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
   }
 
   .status-dot.disconnected {
     @apply bg-err;
-    box-shadow: 0 0 8px rgba(200, 70, 70, 0.5);
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
   }
 
   .status-dot.loading {
