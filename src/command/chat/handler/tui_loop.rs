@@ -1000,6 +1000,35 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                     WsInbound::ToggleAutoApprove => {
                         app.update(Action::ToggleAutoApprove);
                     }
+                    // ── 文件操作 ──
+                    WsInbound::FileList { path } => {
+                        let entries = ChatApp::handle_file_list(&path);
+                        app.broadcast_ws(WsOutbound::FileListResult { path, entries });
+                    }
+                    WsInbound::FileRead { path } => {
+                        let (content, error) = ChatApp::handle_file_read(&path);
+                        app.broadcast_ws(WsOutbound::FileReadResult {
+                            path,
+                            content,
+                            error,
+                        });
+                    }
+                    WsInbound::FileWrite { path, content } => {
+                        let (success, error) = ChatApp::handle_file_write(&path, &content);
+                        app.broadcast_ws(WsOutbound::FileWriteResult {
+                            path,
+                            success,
+                            error,
+                        });
+                    }
+                    // ── 终端操作 ──
+                    WsInbound::TerminalExec { command } => {
+                        let (output, exit_code) = ChatApp::handle_terminal_exec(&command);
+                        app.broadcast_ws(WsOutbound::TerminalOutput { output, exit_code });
+                    }
+                    WsInbound::TerminalInterrupt => {
+                        // 终端中断暂不实现（需要进程管理）
+                    }
                 }
             }
         }

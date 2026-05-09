@@ -240,6 +240,10 @@ export default function App() {
   const [modelList, setModelList] = useState(null)
   const [themeList, setThemeList] = useState(null)
   const [archives, setArchives] = useState([])
+  const [fileEntries, setFileEntries] = useState([])
+  const [fileContent, setFileContent] = useState(null) // { path, content, error }
+  const [fileWriteResult, setFileWriteResult] = useState(null) // { success, error }
+  const [terminalHistory, setTerminalHistory] = useState([]) // [{type, text, exitCode}]
   const streamContentRef = useRef('')
   const messagesRef = useRef(null)
   const textareaRef = useRef(null)
@@ -455,6 +459,24 @@ export default function App() {
         setArchives(msg.archives || [])
         break
 
+      case 'file_list_result':
+        setFileEntries(msg.entries || [])
+        setFileContent(null)
+        break
+
+      case 'file_read_result':
+        setFileContent({ path: msg.path, content: msg.content, error: msg.error })
+        setFileWriteResult(null)
+        break
+
+      case 'file_write_result':
+        setFileWriteResult({ success: msg.success, error: msg.error })
+        break
+
+      case 'terminal_output':
+        setTerminalHistory(prev => [...prev, { type: 'output', text: msg.output, exitCode: msg.exit_code }])
+        break
+
       case 'error':
         setToast(msg.message || '发生错误')
         setTimeout(() => setToast(null), 4000)
@@ -589,6 +611,10 @@ export default function App() {
           modelList={modelList}
           themeList={themeList}
           archives={archives}
+          fileEntries={fileEntries}
+          fileContent={fileContent}
+          fileWriteResult={fileWriteResult}
+          terminalHistory={terminalHistory}
           send={send}
           onSelectSection={handleSelectSection}
           onSwitchSession={switchSession}

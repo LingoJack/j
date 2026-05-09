@@ -2,6 +2,8 @@ import SidebarNav from './SidebarNav'
 import SessionSection from './SessionSection'
 import ConfigSection from './ConfigSection'
 import ArchiveSection from './ArchiveSection'
+import FileSection from './FileSection'
+import TerminalSection from './TerminalSection'
 import HelpSection from './HelpSection'
 
 export default function Sidebar({
@@ -14,6 +16,10 @@ export default function Sidebar({
   modelList,
   themeList,
   archives,
+  fileEntries,
+  fileContent,
+  fileWriteResult,
+  terminalHistory,
   send,
   onSelectSection,
   onSwitchSession,
@@ -47,6 +53,24 @@ export default function Sidebar({
         return (
           <ArchiveSection
             archives={archives}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
+        )
+      case 'files':
+        return (
+          <FileSection
+            fileEntries={fileEntries}
+            fileContent={fileContent}
+            fileWriteResult={fileWriteResult}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
+        )
+      case 'terminal':
+        return (
+          <TerminalSection
+            terminalHistory={terminalHistory}
             send={send}
             onCollapse={onToggleCollapse}
           />

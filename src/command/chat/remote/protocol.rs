@@ -97,6 +97,23 @@ pub enum WsInbound {
     /// 切换自动审批
     #[serde(rename = "toggle_auto_approve")]
     ToggleAutoApprove,
+    // ── 文件操作 ──
+    /// 列出目录内容
+    #[serde(rename = "file_list")]
+    FileList { path: String },
+    /// 读取文件内容
+    #[serde(rename = "file_read")]
+    FileRead { path: String },
+    /// 写入文件内容
+    #[serde(rename = "file_write")]
+    FileWrite { path: String, content: String },
+    // ── 终端操作 ──
+    /// 执行终端命令
+    #[serde(rename = "terminal_exec")]
+    TerminalExec { command: String },
+    /// 终端中断 (Ctrl-C)
+    #[serde(rename = "terminal_interrupt")]
+    TerminalInterrupt,
 }
 
 /// 服务端 → 客户端 消息
@@ -199,6 +216,36 @@ pub enum WsOutbound {
         agent_name: String,
         plan_summary: String,
     },
+    // ── 文件操作 ──
+    /// 目录列表结果
+    #[serde(rename = "file_list_result")]
+    FileListResult {
+        path: String,
+        entries: Vec<FileEntry>,
+    },
+    /// 文件内容结果
+    #[serde(rename = "file_read_result")]
+    FileReadResult {
+        path: String,
+        content: String,
+        #[serde(default)]
+        error: Option<String>,
+    },
+    /// 文件写入结果
+    #[serde(rename = "file_write_result")]
+    FileWriteResult {
+        path: String,
+        success: bool,
+        #[serde(default)]
+        error: Option<String>,
+    },
+    // ── 终端操作 ──
+    /// 终端命令输出
+    #[serde(rename = "terminal_output")]
+    TerminalOutput {
+        output: String,
+        exit_code: Option<i32>,
+    },
 }
 
 /// 工具确认信息
@@ -282,4 +329,13 @@ pub struct ArchiveInfo {
     pub name: String,
     pub created_at: String,
     pub message_count: usize,
+}
+
+/// 文件条目
+#[derive(Debug, Clone, Serialize)]
+pub struct FileEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub modified: String,
 }
