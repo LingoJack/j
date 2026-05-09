@@ -4,6 +4,7 @@ import ConfigSection from './ConfigSection'
 import ArchiveSection from './ArchiveSection'
 import FileSection from './FileSection'
 import TerminalSection from './TerminalSection'
+import BrowserSection from './BrowserSection'
 import HelpSection from './HelpSection'
 
 export default function Sidebar({
@@ -71,6 +72,13 @@ export default function Sidebar({
         return (
           <TerminalSection
             terminalHistory={terminalHistory}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
+        )
+      case 'browser':
+        return (
+          <BrowserSection
             send={send}
             onCollapse={onToggleCollapse}
           />
