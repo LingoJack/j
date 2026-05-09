@@ -142,8 +142,6 @@ pub struct ToolRegistry {
     pub permission_queue: Option<Arc<PermissionQueue>>,
     /// 计划审批队列
     pub plan_approval_queue: Option<Arc<super::plan::PlanApprovalQueue>>,
-    /// 延迟加载的工具名称列表
-    deferred_tools: Vec<String>,
 }
 
 impl std::fmt::Debug for ToolRegistry {
@@ -232,7 +230,6 @@ impl ToolRegistry {
             permission_queue: None,
             plan_approval_queue: None,
             tools,
-            deferred_tools: Vec::new(),
         };
 
         if !skills.is_empty() {
@@ -333,11 +330,6 @@ impl ToolRegistry {
         }
     }
 
-    /// 设置延迟加载的工具列表
-    pub fn set_deferred_tools(&mut self, tools: Vec<String>) {
-        self.deferred_tools = tools;
-    }
-
     /// 构建工具摘要（排除 disabled 和 deferred 工具），用于 system prompt
     pub fn build_tools_summary_non_deferred(
         &self,
@@ -402,6 +394,9 @@ impl ToolRegistry {
 
         // LoadTool 始终加入列表（即使被列入 deferred 也保留入口，防止用户误配）。
         // 描述末尾由调用方传入的 deferred 列表动态拼装。
+        // 若 registry 中无 LoadTool（如子 agent registry），此 if let 静默跳过——
+        // 子 agent 不支持动态加载，这是有意为之的降级行为。
+
         if let Some(load_tool) = self
             .tools
             .iter()

@@ -308,8 +308,6 @@ impl ChatApp {
                 teammate_manager: Some(Arc::clone(&teammate_manager)),
             },
         ));
-        // 将 deferred_tools 设置同步到 ToolRegistry
-        tool_registry.set_deferred_tools(agent_config.deferred_tools.clone());
         // 注册 LoadTool，它持有 deferred_tools 的共享引用以便在运行时加载 deferred 工具
         tool_registry.register(Box::new(
             crate::command::chat::tools::load_tool::LoadTool::new(Arc::clone(&deferred_tools_arc)),

@@ -394,13 +394,6 @@ impl DerivedAgentShared {
         registry.plan_approval_queue = Some(Arc::clone(&self.plan_approval_queue));
         // 共享主 agent 的 plan mode 状态，子 agent 据此继承只读限制
         registry.plan_mode_state = Arc::clone(&self.plan_mode_state);
-        // 继承父 agent 的 deferred_tools 设置
-        let deferred = match self.deferred_tools.lock() {
-            Ok(guard) => guard,
-            Err(e) => e.into_inner(),
-        }
-        .clone();
-        registry.set_deferred_tools(deferred);
         (registry, ask_rx)
     }
 } // ========== Derived Agent Loop 共享 Helper ==========
