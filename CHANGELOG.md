@@ -1,3 +1,12 @@
+# v12.10.40
+
+
+### 改进
+
+- **ToolRegistry 清理**: 移除 `ToolRegistry` 中冗余的 `deferred_tools` 字段及 `set_deferred_tools()` 方法，deferred 工具管理已由 `LoadTool` 和 `Arc<Mutex<Vec<String>>>` 共享引用独立承担，无需在 registry 层重复存储
+- **子 agent 行为明确化**: 补充子 agent 不支持动态 LoadTool 的设计说明，子 agent 仅继承父 agent 的 deferred 快照作为初始工具过滤，避免后续维护者误判为缺失功能
+</result
+
 # v12.10.39
 
 
