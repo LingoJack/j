@@ -1,7 +1,5 @@
 use crate::command::chat::app::ChatApp;
-use crate::tui::components::{
-    ItemList, TOGGLE_OFF, TOGGLE_ON, ToggleListItemCtx, toggle_list_item,
-};
+use crate::tui::components::{ItemList, TOGGLE_OFF, TOGGLE_ON, pointer_span};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -46,10 +44,11 @@ pub(super) fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp
     lines.push(Line::from(""));
 }
 
-/// Tools tab 可滚动列表（层级导航模式）
+/// Tools tab 工具列表（左侧面板）
 ///
-/// 列表竖直排列所有工具名，当前选中的工具下方展开两个选项（启用/defer）。
-/// Tab 键在工具列表层级和选项层级之间切换。
+/// 每个工具占一行，使用 pointer_span 指示选中项（与其他 Tab 一致），不带 toggle 圆点。
+/// 选中项加粗，非选中项右侧显示 [defer] tag。
+/// 选项详情在右侧面板渲染。
 pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
@@ -70,103 +69,140 @@ pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
             .any(|d| d == *name);
         let is_deferred = deferred_tools.iter().any(|d| d == name);
 
-        if is_selected {
-            // 选中工具：显示工具名 + 展开选项
-            let name_style = Style::default()
-                .fg(t.config_section)
-                .add_modifier(Modifier::BOLD);
-            let marker = "▸";
-            list.push(Line::from(vec![
-                Span::styled(format!("  {marker} "), name_style),
-                Span::styled(name.to_string(), name_style),
-            ]));
-
-            // 展开选项（启用 / defer）
-            let opt_on_style = |focused: bool| {
-                if focused {
-                    Style::default()
-                        .fg(t.config_toggle_on)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(t.config_toggle_on)
-                }
-            };
-            let opt_off_style = |focused: bool| {
-                if focused {
-                    Style::default()
-                        .fg(t.config_toggle_off)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(t.config_toggle_off)
-                }
-            };
-            let dim_style = Style::default().fg(t.config_dim);
-
-            // 选项1：启用
-            let enable_focused = app.ui.tools_in_options && app.ui.tools_option_idx == 0;
-            let enable_marker = if enable_focused { "›" } else { " " };
-            let enable_toggle = if is_enabled {
-                Span::styled(TOGGLE_ON.to_string(), opt_on_style(enable_focused))
-            } else {
-                Span::styled(TOGGLE_OFF.to_string(), opt_off_style(enable_focused))
-            };
-            list.push(Line::from(vec![
-                Span::styled(format!("    {enable_marker} "), dim_style),
-                Span::styled(
-                    "启用 ",
-                    if enable_focused {
-                        Style::default()
-                            .fg(t.config_section)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        dim_style
-                    },
-                ),
-                enable_toggle,
-            ]));
-
-            // 选项2：defer
-            let defer_focused = app.ui.tools_in_options && app.ui.tools_option_idx == 1;
-            let defer_marker = if defer_focused { "›" } else { " " };
-            // 禁用的工具 defer 选项置灰
-            let defer_effective = is_enabled;
-            let defer_toggle = if is_deferred && defer_effective {
-                Span::styled(TOGGLE_ON.to_string(), opt_on_style(defer_focused))
-            } else if defer_effective {
-                Span::styled(TOGGLE_OFF.to_string(), opt_off_style(defer_focused))
-            } else {
-                // 禁用状态下 defer 无意义，置灰
-                Span::styled(TOGGLE_OFF.to_string(), Style::default().fg(t.config_dim))
-            };
-            list.push(Line::from(vec![
-                Span::styled(format!("    {defer_marker} "), dim_style),
-                Span::styled(
-                    "defer ",
-                    if defer_focused {
-                        Style::default()
-                            .fg(t.config_section)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        dim_style
-                    },
-                ),
-                defer_toggle,
-            ]));
+        let name_style = if is_selected && app.ui.tools_in_options {
+            // Tab 进入选项模式：用不同颜色表示正在编辑选项
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD)
+        } else if is_selected {
+            Style::default()
+                .fg(t.config_label_selected)
+                .add_modifier(Modifier::BOLD)
         } else {
-            // 非选中工具：只显示工具名
-            list.push(toggle_list_item(&ToggleListItemCtx {
-                name: name.to_string(),
-                enabled: is_enabled,
-                selected: false,
-                desc: None,
-                tag: if is_deferred && is_enabled {
-                    Some("defer".to_string())
-                } else {
-                    None
-                },
-                theme: t,
-            }));
+            Style::default().fg(t.config_label)
+        };
+
+        let mut spans = vec![
+            pointer_span(is_selected, t),
+            Span::styled(name.to_string(), name_style),
+        ];
+
+        if is_deferred && is_enabled {
+            spans.push(Span::styled(
+                " [defer]".to_string(),
+                Style::default().fg(t.config_dim),
+            ));
         }
+
+        // 非启用的工具名称置灰
+        if !is_enabled && !is_selected {
+            spans[1] = Span::styled(name.to_string(), Style::default().fg(t.config_dim));
+        }
+
+        list.push(Line::from(spans));
     }
     list
+}
+
+/// Tools tab 选中工具详情（右侧面板）
+///
+/// 显示当前选中工具的名称和两个选项（启用 / defer）。
+/// `tools_in_options` 控制焦点指示器，`tools_option_idx` 控制哪个选项高亮。
+pub(super) fn draw_tab_tools_detail<'a>(app: &ChatApp) -> Vec<Line<'a>> {
+    let t = &app.ui.theme;
+    let tool_names = app.tool_registry.tool_names();
+    let mut lines = Vec::new();
+
+    let selected_idx = app.ui.config_field_idx;
+    let name = match tool_names.get(selected_idx) {
+        Some(n) => *n,
+        None => return lines,
+    };
+
+    let is_enabled = !app
+        .state
+        .agent_config
+        .disabled_tools
+        .iter()
+        .any(|d| d == name);
+    let deferred_tools = match app.deferred_tools.lock() {
+        Ok(guard) => guard,
+        Err(e) => e.into_inner(),
+    };
+    let is_deferred = deferred_tools.iter().any(|d| d == name);
+
+    let dim_style = Style::default().fg(t.config_dim);
+
+    // 工具名与选项之间空行
+    lines.push(Line::from(""));
+
+    let opt_on_style = |focused: bool| {
+        if focused {
+            Style::default()
+                .fg(t.config_toggle_on)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_toggle_on)
+        }
+    };
+    let opt_off_style = |focused: bool| {
+        if focused {
+            Style::default()
+                .fg(t.config_toggle_off)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.config_toggle_off)
+        }
+    };
+
+    // 选项1：启用
+    let enable_focused = app.ui.tools_in_options && app.ui.tools_option_idx == 0;
+    let enable_toggle = if is_enabled {
+        Span::styled(TOGGLE_ON.to_string(), opt_on_style(enable_focused))
+    } else {
+        Span::styled(TOGGLE_OFF.to_string(), opt_off_style(enable_focused))
+    };
+    lines.push(Line::from(vec![
+        pointer_span(enable_focused, t),
+        Span::styled(
+            "启用 ",
+            if enable_focused {
+                Style::default()
+                    .fg(t.config_section)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                dim_style
+            },
+        ),
+        enable_toggle,
+    ]));
+
+    lines.push(Line::from("")); // 选项间空行
+
+    // 选项2：defer
+    let defer_focused = app.ui.tools_in_options && app.ui.tools_option_idx == 1;
+    let defer_effective = is_enabled;
+    let defer_toggle = if is_deferred && defer_effective {
+        Span::styled(TOGGLE_ON.to_string(), opt_on_style(defer_focused))
+    } else if defer_effective {
+        Span::styled(TOGGLE_OFF.to_string(), opt_off_style(defer_focused))
+    } else {
+        Span::styled(TOGGLE_OFF.to_string(), Style::default().fg(t.config_dim))
+    };
+    lines.push(Line::from(vec![
+        pointer_span(defer_focused, t),
+        Span::styled(
+            "defer ",
+            if defer_focused {
+                Style::default()
+                    .fg(t.config_section)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                dim_style
+            },
+        ),
+        defer_toggle,
+    ]));
+
+    lines
 }

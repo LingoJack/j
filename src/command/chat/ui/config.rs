@@ -261,7 +261,75 @@ pub fn draw_config_screen(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp)
     let header_widget = Paragraph::new(header_lines).block(header_block);
     f.render_widget(header_widget, chunks[0]);
 
-    // ── 可滚动列表区域 ──
+    // ── Tools Tab 特殊处理：左右分栏 ──
+    let is_tools_split = app.ui.config_tab == ConfigTab::Tools;
+
+    if is_tools_split {
+        // ── 可滚动列表区域 → 左右分栏 ──
+        let left_w = (area.width as usize * 45 / 100).max(20) as u16;
+        let right_w = area.width.saturating_sub(left_w);
+
+        let h_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(left_w), Constraint::Min(right_w)])
+            .split(chunks[1]);
+
+        // ── 左侧：工具列表（可滚动）──
+        let inner_height = h_chunks[0].height.saturating_sub(1) as usize;
+        let selected_idx = app.ui.config_field_idx;
+        if let Some(&selected_line) = field_line_indices.get(selected_idx) {
+            let scroll = app.ui.config_scroll_offset as usize;
+            let new_scroll = if selected_line < scroll {
+                selected_line
+            } else if inner_height > 0 && selected_line >= scroll + inner_height {
+                selected_line.saturating_sub(inner_height - 1)
+            } else {
+                scroll
+            };
+            app.ui.config_scroll_offset = new_scroll as u16;
+        }
+
+        let left_block = Block::default()
+            .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_config))
+            .style(Style::default().bg(bg));
+        let left_widget = Paragraph::new(list_lines)
+            .block(left_block)
+            .scroll((app.ui.config_scroll_offset, 0));
+        f.render_widget(left_widget, h_chunks[0]);
+
+        // ── 右侧：选中工具详情 ──
+        let detail_lines = tools::draw_tab_tools_detail(app);
+        let selected_tool_name = app
+            .tool_registry
+            .tool_names()
+            .get(app.ui.config_field_idx)
+            .copied()
+            .unwrap_or("");
+        let right_block = Block::default()
+            .borders(Borders::BOTTOM | Borders::RIGHT)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::default().fg(t.border_config))
+            .title(Span::styled(
+                format!(" {selected_tool_name} "),
+                Style::default()
+                    .fg(t.config_label_selected)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(bg));
+        let right_widget = Paragraph::new(detail_lines).block(right_block);
+        f.render_widget(right_widget, h_chunks[1]);
+
+        // ── 记录布局信息 ──
+        app.ui.config_tab_bar_y = Some(chunks[0].y + 2);
+        app.ui.config_list_area = Some(h_chunks[0]);
+        app.ui.config_field_lines = field_line_indices;
+        app.ui.config_tab_hitboxes = compute_tab_hitboxes();
+        return;
+    }
+
+    // ── 可滚动列表区域（非 Tools Tab 的通用路径）──
     // 可见高度 = list_area_h - 1（底部 border）
     let inner_height = list_area_h.saturating_sub(1) as usize;
     let selected_idx = match app.ui.config_tab {
