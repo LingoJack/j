@@ -19,7 +19,7 @@ function Message({ role, content, streaming, onDetail }) {
   const widthCls = isUser
     ? 'w-auto max-w-[90%] sm:max-w-[85%] md:max-w-[80%] lg:max-w-[70%]'
     : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'
-  const base = `${widthCls} px-4 py-3 rounded-2xl leading-relaxed break-words text-sm`
+  const base = `${widthCls} px-4 py-3 rounded-lg leading-relaxed break-words text-sm`
   const cls = isUser
     ? `${base} self-end bg-bubble-user text-white rounded-br-md whitespace-pre-wrap`
     : `${base} self-start bg-bubble-ai rounded-bl-md border border-border md-msg${streaming ? ' streaming' : ''}`
@@ -742,17 +742,17 @@ export default function App() {
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            className={`flex-1 bg-bg3 border-2 rounded-2xl px-5 py-3.5 text-fg text-[16px] resize-none outline-none max-h-[140px] font-[inherit] leading-relaxed transition-colors duration-200 placeholder:text-fg3 ${isLoading ? 'border-[#786432]' : 'border-[#3c6450] focus:border-accent'}`}
+            className={`flex-1 bg-bg3 border rounded-lg px-4 py-3 text-fg text-[15px] resize-none outline-none max-h-[140px] font-[inherit] leading-relaxed transition-colors duration-200 placeholder:text-fg3 focus:border-accent`}
           />
           <button
-            className="w-[48px] h-[48px] rounded-full border-none text-2xl cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-label-user text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.92]"
+            className="px-4 py-3 rounded-lg border-none text-sm font-medium cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-accent text-white disabled:opacity-30 disabled:cursor-default enabled:active:scale-[0.97]"
             onClick={sendMessage}
             disabled={!inputText.trim()}
             title="发送"
-          >↑</button>
+          >发送</button>
           {isLoading && (
             <button
-              className="w-[48px] h-[48px] rounded-full border-none text-lg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-err text-white active:scale-[0.92]"
+              className="px-4 py-3 rounded-lg border-none text-sm font-medium cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 bg-err text-white active:scale-[0.97]"
               onClick={cancelStream}
               title="取消"
             >■</button>
