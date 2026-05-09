@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 /// SendMessage 参数
@@ -32,7 +33,7 @@ impl Tool for SendMessageTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Send a message to teammates. This is the ONLY way to make your words visible to other agents.
 
@@ -54,7 +55,7 @@ impl Tool for SendMessageTool {
         {"message": "API endpoints are done, check routes/api.js", "to": "Frontend"}
         {"message": "All frontend pages are complete", "to": "Main"}
         {"message": "Heads up: database schema has been updated"}
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

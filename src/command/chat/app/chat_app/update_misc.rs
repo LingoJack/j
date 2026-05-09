@@ -363,6 +363,13 @@ impl ChatApp {
     // ========== UI 管理 ==========
 
     pub(super) fn update_save_config(&mut self) {
+        // 同步 deferred_tools 到 agent_config
+        let deferred = match self.deferred_tools.lock() {
+            Ok(guard) => guard,
+            Err(e) => e.into_inner(),
+        }
+        .clone();
+        self.state.agent_config.deferred_tools = deferred;
         let _ = save_agent_config(&self.state.agent_config);
         self.ui.mode = ChatMode::Chat;
     }

@@ -663,6 +663,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 style: None,
                 tool_confirm_timeout: 0,
                 disabled_tools: Vec::new(),
+                deferred_tools: Vec::new(),
                 disabled_skills: Vec::new(),
                 disabled_commands: Vec::new(),
                 disabled_hooks: Vec::new(),

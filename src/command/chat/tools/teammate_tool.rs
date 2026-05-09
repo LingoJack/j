@@ -19,6 +19,7 @@ use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -63,7 +64,7 @@ impl Tool for TeammateTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Create a new teammate agent that runs independently in the chatroom.
         Each teammate has its own LLM connection and conversation context.
@@ -85,6 +86,7 @@ impl Tool for TeammateTool {
           "prompt": "Create a React Todo app with components in src/components/..."
         }
         "#
+        .into()
     }
 
     fn parameters_schema(&self) -> Value {
@@ -233,6 +235,7 @@ impl Tool for TeammateTool {
         let disabled_hooks_clone = Arc::clone(&self.shared.disabled_hooks);
         let context_config_clone = Arc::clone(&self.shared.agent_context_config);
         let sub_agent_metrics_clone = Arc::clone(&self.shared.sub_agent_metrics);
+        let deferred_tools_clone = Arc::clone(&self.shared.deferred_tools);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份（含类型前缀，与广播 <Teammate@Name> 格式一致）
@@ -265,6 +268,7 @@ impl Tool for TeammateTool {
                 base_system_prompt: system_prompt,
                 session_id: session_id_clone,
                 disabled_tools,
+                deferred_tools: deferred_tools_clone,
                 registry: child_registry,
                 jcli_config,
                 teammate_manager,

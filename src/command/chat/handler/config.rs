@@ -127,6 +127,7 @@ pub fn handle_config_mode(app: &mut ChatApp, key: KeyEvent) {
             KeyCode::Enter | KeyCode::Char(' ') => Action::ToggleMenuToggle,
             KeyCode::Char('a') => Action::ToggleMenuEnableAll,
             KeyCode::Char('d') => Action::ToggleMenuDisableAll,
+            KeyCode::Tab => Action::ToolsToggleLevel,
             KeyCode::Char('t') => {
                 // 切换总开关
                 app.state.agent_config.tools_enabled = !app.state.agent_config.tools_enabled;

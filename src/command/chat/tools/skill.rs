@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 
 /// LoadSkillTool 参数
@@ -38,8 +39,8 @@ impl Tool for LoadSkillTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
-        "Load the full content of a specified skill into context for more information, helping you better complete the task. Check the skills list for available skill names and directory paths."
+    fn description(&self) -> Cow<'_, str> {
+        "Load the full content of a specified skill into context for more information, helping you better complete the task. Check the skills list for available skill names and directory paths.".into()
     }
 
     fn parameters_schema(&self) -> Value {

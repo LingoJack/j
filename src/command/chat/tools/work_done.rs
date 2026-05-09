@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -38,7 +39,7 @@ impl Tool for WorkDoneTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Declare that you have finished your assigned work and exit the chat loop.
 
@@ -53,7 +54,7 @@ impl Tool for WorkDoneTool {
 
         Usage:
         {"summary": "Frontend pages complete, all components in src/components/"}
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

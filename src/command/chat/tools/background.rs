@@ -6,6 +6,7 @@ use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{
     Arc, Mutex,
@@ -470,12 +471,12 @@ impl Tool for TaskOutputTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Retrieves output from a running or completed background task (started via Bash with run_in_background: true).
         Use block=true (default) to wait for task completion; use block=false for a non-blocking status check.
         Returns the task output along with status information.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

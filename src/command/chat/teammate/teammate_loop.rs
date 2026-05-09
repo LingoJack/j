@@ -38,8 +38,10 @@ pub struct TeammateLoopConfig {
     pub base_system_prompt: Option<String>,
     /// 共享的当前 session id 槽（session 切换时会被主线程更新）
     pub session_id: Arc<Mutex<String>>,
-    /// 禁用工具名列表（每轮动态调用 to_llm_tools_filtered）
+    /// 禁用工具名列表
     pub disabled_tools: Vec<String>,
+    /// 延迟加载的工具列表（与主 agent 共享同一 Arc）
+    pub deferred_tools: Arc<Mutex<Vec<String>>>,
     pub registry: Arc<ToolRegistry>,
     pub jcli_config: Arc<JcliConfig>,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
@@ -88,6 +90,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         base_system_prompt,
         session_id,
         disabled_tools,
+        deferred_tools,
         registry,
         jcli_config,
         teammate_manager,
@@ -182,7 +185,11 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
     for round in 0..MAX_TEAMMATE_ROUNDS {
         // 每轮开始时动态获取可用工具（与 Main Agent 对齐），
         // 确保 SendMessage 等依赖 is_available() 的工具在 teammate 注册后立即可见。
-        let tools = registry.to_llm_tools_filtered(&disabled_tools);
+        let deferred_snapshot = match deferred_tools.lock() {
+            Ok(guard) => guard.clone(),
+            Err(e) => e.into_inner().clone(),
+        };
+        let tools = registry.to_llm_tools_non_deferred(&disabled_tools, &deferred_snapshot);
 
         // 检查取消
         if cancel_token.is_cancelled() || cancel_flag.load(Ordering::Relaxed) {

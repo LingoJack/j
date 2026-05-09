@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, atomic::AtomicBool};
@@ -167,7 +168,7 @@ impl Tool for EditFileTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Performs exact string replacements in files.
 
@@ -181,7 +182,7 @@ impl Tool for EditFileTool {
         - Bulk replacement is a two-step protocol enforced by a one-time token:
           (1) Call with replace_all=true (no confirm_token) — the tool returns a preview of every match AND a confirm_token. The file is NOT modified.
           (2) After inspecting the preview, call again with replace_all=true and confirm_token set to the exact token value from step 1. The token cannot be guessed without seeing the preview, and becomes invalid if the file changes between steps (forcing a fresh preview)
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

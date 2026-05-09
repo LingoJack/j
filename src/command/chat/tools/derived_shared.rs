@@ -330,6 +330,8 @@ pub struct DerivedAgentShared {
     pub hook_manager: Arc<Mutex<HookManager>>,
     pub task_manager: Arc<TaskManager>,
     pub disabled_tools: Arc<Vec<String>>,
+    /// 延迟加载的工具列表（子 agent 需继承父 agent 的 defer 设置）
+    pub deferred_tools: Arc<Mutex<Vec<String>>>,
     /// 子 agent 权限请求队列（与主 TUI 共享同一个实例）
     pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（与主 TUI 共享同一个实例，teammate ExitPlanMode 走此队列）
@@ -376,6 +378,7 @@ impl DerivedAgentShared {
         todos_file_path: std::path::PathBuf,
     ) -> (ToolRegistry, mpsc::Receiver<AskRequest>) {
         let (ask_tx, ask_rx) = mpsc::channel::<AskRequest>();
+
         let mut registry = ToolRegistry::new(
             vec![], // 不传 skills
             ask_tx,
@@ -391,11 +394,16 @@ impl DerivedAgentShared {
         registry.plan_approval_queue = Some(Arc::clone(&self.plan_approval_queue));
         // 共享主 agent 的 plan mode 状态，子 agent 据此继承只读限制
         registry.plan_mode_state = Arc::clone(&self.plan_mode_state);
+        // 继承父 agent 的 deferred_tools 设置
+        let deferred = match self.deferred_tools.lock() {
+            Ok(guard) => guard,
+            Err(e) => e.into_inner(),
+        }
+        .clone();
+        registry.set_deferred_tools(deferred);
         (registry, ask_rx)
     }
-}
-
-// ========== Derived Agent Loop 共享 Helper ==========
+} // ========== Derived Agent Loop 共享 Helper ==========
 
 /// 创建 tokio runtime 和 LlmClient
 ///

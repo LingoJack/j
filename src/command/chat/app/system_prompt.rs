@@ -39,10 +39,12 @@ pub fn apply_static_placeholders(template: &str, values: &StaticPlaceholderValue
 ///
 /// 每轮 agent loop 调用此闭包时，动态读取最新的 teammate 状态、task 列表等信息，
 /// 确保 main agent 的 system prompt 始终反映当前团队状态。
+#[allow(clippy::too_many_arguments)]
 pub fn build_system_prompt_fn(
     loaded_skills: Vec<skill::Skill>,
     disabled_skills: Vec<String>,
     disabled_tools: Vec<String>,
+    deferred_tools: Arc<Mutex<Vec<String>>>,
     tool_registry: Arc<ToolRegistry>,
     teammate_manager: Arc<Mutex<TeammateManager>>,
     task_manager: Arc<TaskManager>,
@@ -52,7 +54,13 @@ pub fn build_system_prompt_fn(
         use crate::command::chat::agent_md;
         let template = load_system_prompt()?;
         let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
-        let tools_summary = tool_registry.build_tools_summary(&disabled_tools);
+        // 排除 deferred 工具，只将非 deferred 的工具摘要拼入 system prompt
+        let deferred = match deferred_tools.lock() {
+            Ok(guard) => guard,
+            Err(e) => e.into_inner(),
+        };
+        let tools_summary =
+            tool_registry.build_tools_summary_non_deferred(&disabled_tools, &deferred);
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();
@@ -107,9 +115,13 @@ impl ChatApp {
             &self.state.loaded_skills,
             &self.state.agent_config.disabled_skills,
         );
+        let deferred = match self.deferred_tools.lock() {
+            Ok(guard) => guard,
+            Err(e) => e.into_inner(),
+        };
         let tools_summary = self
             .tool_registry
-            .build_tools_summary(&self.state.agent_config.disabled_tools);
+            .build_tools_summary_non_deferred(&self.state.agent_config.disabled_tools, &deferred);
         let style_text = load_style().unwrap_or_else(|| "（未设置）".to_string());
         let memory_text = load_memory().unwrap_or_default();
         let soul_text = load_soul().unwrap_or_default();

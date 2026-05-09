@@ -198,6 +198,8 @@ pub enum Action {
     ToggleMenuEnableAll,
     /// 工具/Skill 开关：全部禁用
     ToggleMenuDisableAll,
+    /// Tools tab：Tab 键切换层级（工具列表 ↔ 选项区）
+    ToolsToggleLevel,
     /// Teammates Tab：导航
     TeammatesNavigate(CursorDirection),
     /// Teammates Tab：选中指定索引（鼠标点击）

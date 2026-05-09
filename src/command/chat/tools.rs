@@ -11,6 +11,7 @@ mod file;
 mod grep;
 pub mod hook;
 pub mod ignore_message;
+pub mod load_tool;
 pub mod plan;
 #[cfg(windows)]
 mod powershell;
@@ -60,6 +61,7 @@ pub mod tool_names {
     pub const ENTER_WORKTREE: &str = super::worktree::EnterWorktreeTool::NAME;
     pub const EXIT_WORKTREE: &str = super::worktree::ExitWorktreeTool::NAME;
     pub const LOAD_SKILL: &str = super::skill::LoadSkillTool::NAME;
+    pub const LOAD_TOOL: &str = super::load_tool::LoadTool::NAME;
     pub const AGENT: &str = super::sub_agent::SubAgentTool::NAME;
     pub const TEAMMATE: &str = super::teammate_tool::TeammateTool::NAME;
     pub const SEND_MESSAGE: &str = super::send_message::SendMessageTool::NAME;

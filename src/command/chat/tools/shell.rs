@@ -12,6 +12,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::io::BufRead;
 use std::sync::{
     Arc, Mutex,
@@ -56,7 +57,7 @@ impl Tool for ShellTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Execute shell commands on the current system, returning stdout and stderr. Each call creates a new process; state does not persist.
 
@@ -89,7 +90,7 @@ impl Tool for ShellTool {
           - Before running destructive operations (git reset --hard, git push --force), consider safer alternatives
           - Never skip hooks (--no-verify) unless the user explicitly asks
         - Commands that may run longer than a few seconds (builds, deploys, container ops, custom scripts, make targets) should use run_in_background: true — even if the command has its own detach flag (e.g. `podman compose up -d` or `docker compose up -d` still blocks during image build). If unsure, prefer run_in_background: true; the tool will auto-promote to background after 30s regardless, returning a task_id you can use with TaskOutput.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

@@ -8,6 +8,7 @@ use regex::RegexBuilder;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -62,7 +63,7 @@ impl Tool for GrepTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r###"
         A powerful regex-based search tool for searching within file contents.
 
@@ -81,6 +82,7 @@ impl Tool for GrepTool {
         - Multiple tools can be called in a single response. For independent patterns, run searches in parallel
         - Important: if no path is needed, omit the field entirely — do not enter "undefined", "null", or empty string
         "###
+        .into()
     }
 
     fn parameters_schema(&self) -> Value {

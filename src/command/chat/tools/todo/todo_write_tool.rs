@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 
 /// Todo 项参数
@@ -52,7 +53,7 @@ impl Tool for TodoWriteTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Create and manage a structured todo list to maintain state across long turns.
 
@@ -61,7 +62,7 @@ impl Tool for TodoWriteTool {
         2. For updates, always use 'merge=true' and only provide the specific items being modified.
         3. Support batch updates: efficiently transition states by marking a task 'completed' and the next 'in_progress' in a single call.
         4. Use this to demonstrate progress and ensure complex requirements are not missed.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

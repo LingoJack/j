@@ -3,6 +3,7 @@ use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 
 /// TodoReadTool 参数（无参数）
@@ -25,8 +26,8 @@ impl Tool for TodoReadTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
-        "Read and list all current todo items. Returns the full todo list with id, content, and status for each item. Use this to check progress or review the current state of your task list."
+    fn description(&self) -> Cow<'_, str> {
+        "Read and list all current todo items. Returns the full todo list with id, content, and status for each item. Use this to check progress or review the current state of your task list.".into()
     }
 
     fn parameters_schema(&self) -> Value {

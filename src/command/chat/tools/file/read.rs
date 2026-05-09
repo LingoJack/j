@@ -4,6 +4,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::{Arc, atomic::AtomicBool};
 
@@ -66,7 +67,7 @@ impl Tool for ReadFileTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Reads a file from the local filesystem. You can access any file directly by using this tool.
 
@@ -79,7 +80,7 @@ impl Tool for ReadFileTool {
         - This tool can only read files, not directories. To list a directory, use `ls` via the Bash tool
         - You will regularly be asked to read screenshots. If the user provides a path to a screenshot, ALWAYS use this tool to view the file
         - You can call multiple tools in a single response. It is always better to speculatively read multiple potentially useful files in parallel
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

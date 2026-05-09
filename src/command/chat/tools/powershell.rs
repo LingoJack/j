@@ -1,4 +1,3 @@
-#[cfg(windows)]
 use super::ToolResult;
 #[cfg(windows)]
 use super::background::BackgroundManager;
@@ -20,6 +19,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 #[cfg(windows)]
 use serde_json::{Value, json};
+#[cfg(windows)]
+use std::borrow::Cow;
 #[cfg(windows)]
 use std::io::BufRead;
 #[cfg(windows)]
@@ -71,7 +72,7 @@ impl Tool for PowerShellTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Execute PowerShell commands on the current Windows system, returning stdout and stderr. Each call creates a new process; state does not persist.
 
@@ -103,7 +104,7 @@ impl Tool for PowerShellTool {
           - Before running destructive operations (git reset --hard, git push --force), consider safer alternatives
           - Never skip hooks (--no-verify) unless the user explicitly asks
         - Commands that may run longer than a few seconds should use run_in_background: true. If unsure, prefer run_in_background: true; the tool will auto-promote to background after 30s regardless.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

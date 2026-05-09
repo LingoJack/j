@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 
 /// WriteFileTool 参数
@@ -30,7 +31,7 @@ impl Tool for WriteFileTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Writes a file to the local filesystem.
 
@@ -41,7 +42,7 @@ impl Tool for WriteFileTool {
         - NEVER create documentation files (*.md) or README files unless explicitly requested by the User
         - Only use emojis if the user explicitly requests it
         - Auto-creates parent directories if they don't exist
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

@@ -163,7 +163,7 @@ pub(crate) fn run_oneshot_agent(
     let hook_manager_for_registry = hook_manager_loaded.clone();
     let invoked_skills = new_invoked_skills_map();
 
-    let tool_registry = Arc::new(ToolRegistry::new(
+    let mut tool_registry = ToolRegistry::new(
         vec![],
         ask_tx,
         Arc::clone(&background_manager),
@@ -171,7 +171,14 @@ pub(crate) fn run_oneshot_agent(
         Arc::new(Mutex::new(hook_manager_for_registry)),
         invoked_skills.clone(),
         crate::command::chat::storage::SessionPaths::new(session_id).todos_file(),
+    );
+    // 注册 LoadTool
+    let deferred_tools_for_load = Arc::new(Mutex::new(agent_config.deferred_tools.clone()));
+    tool_registry.set_deferred_tools(agent_config.deferred_tools.clone());
+    tool_registry.register(Box::new(
+        crate::command::chat::tools::load_tool::LoadTool::new(Arc::clone(&deferred_tools_for_load)),
     ));
+    let tool_registry = Arc::new(tool_registry);
 
     // 启动 Ask 请求处理线程
     spawn_ask_handler(ask_rx);
@@ -192,6 +199,7 @@ pub(crate) fn run_oneshot_agent(
         loaded_skills,
         agent_config.disabled_skills.clone(),
         agent_config.disabled_tools.clone(),
+        Arc::clone(&deferred_tools_for_load),
         Arc::clone(&tool_registry),
         teammate_manager,
         Arc::clone(&task_manager),
@@ -247,6 +255,7 @@ pub(crate) fn run_oneshot_agent(
         derived_system_prompt,
         tool_registry: Arc::clone(&tool_registry),
         disabled_tools: agent_config.disabled_tools.clone(),
+        deferred_tools: Arc::clone(&deferred_tools_for_load),
         tools_enabled: agent_config.tools_enabled,
         sub_agent_metrics: Arc::new(Mutex::new(
             crate::command::chat::tools::derived_shared::SubAgentMetrics::default(),

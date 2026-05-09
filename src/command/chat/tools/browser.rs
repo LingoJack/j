@@ -2,6 +2,7 @@
 //!
 //! 启用 `browser_cdp` feature 时，使用 chromiumoxide 进行真实 CDP 浏览器控制。
 //! 未启用时，退化为基于 reqwest 的 Lite 模式（HTTP 抓取 + HTML 解析）。
+use std::borrow::Cow;
 
 use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
@@ -63,7 +64,7 @@ impl Tool for BrowserTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         "Browser automation tool for web browsing, interaction, and content extraction. Available actions:\n\
          - status: Check browser running status and number of open tabs\n\
          - start: Launch a browser instance (use headless param to control window visibility)\n\
@@ -80,7 +81,7 @@ impl Tool for BrowserTool {
          - press: Simulate a key press (requires key, e.g. Enter, Tab, Escape)\n\
          - evaluate: Execute JavaScript in the page context (requires script)\n\
          Typical flow: open a page → use snapshot to discover elements → use the selector field from snapshot (e.g. [data-jref=\"e3\"]) with click/type/press to interact → use content to get results.\
-         Note: snapshot injects a data-jref attribute on each element and returns the corresponding selector; always use that selector for click/type instead of constructing your own."
+         Note: snapshot injects a data-jref attribute on each element and returns the corresponding selector; always use that selector for click/type instead of constructing your own.".into()
     }
 
     fn parameters_schema(&self) -> Value {

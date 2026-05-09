@@ -190,6 +190,10 @@ pub struct UIState {
     pub compact_exempt_sublist: bool,
     /// 豁免压缩工具子列表选中索引
     pub compact_exempt_idx: usize,
+    /// Tools tab：是否在选项层级（选中工具的启用/defer 选项）
+    pub tools_in_options: bool,
+    /// Tools tab：选项层级中的焦点索引（0=启用, 1=defer）
+    pub tools_option_idx: usize,
     /// 是否自动批准所有操作（bypass 模式，per-session 持久化）
     pub auto_approve: bool,
     /// 配置界面：Commands Tab 的当前模式

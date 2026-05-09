@@ -5,6 +5,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool, mpsc};
 
 /// 选项参数
@@ -57,7 +58,7 @@ impl Tool for AskTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Present structured questions to the user with single-select or multi-select options. Supports 1-4 questions per call, each with 2-4 options.
 
@@ -99,7 +100,7 @@ impl Tool for AskTool {
         }
         ```
         For multi-select, multiple labels are comma-separated.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

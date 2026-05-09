@@ -187,6 +187,9 @@ pub struct AgentConfig {
     /// 被禁用的工具名称列表（tools_enabled=true 时，此列表中的工具不会发送给 LLM）
     #[serde(default)]
     pub disabled_tools: Vec<String>,
+    /// 延迟加载的工具名称列表（需要 LoadTool 加载后才可用）
+    #[serde(default)]
+    pub deferred_tools: Vec<String>,
     /// 被禁用的 skill 名称列表（列表中的 skill 不会包含在系统提示词中）
     #[serde(default)]
     pub disabled_skills: Vec<String>,
@@ -240,6 +243,7 @@ impl Default for AgentConfig {
             style: None,
             tool_confirm_timeout: 0,
             disabled_tools: Vec::new(),
+            deferred_tools: Vec::new(),
             disabled_skills: Vec::new(),
             disabled_commands: Vec::new(),
             disabled_hooks: Vec::new(),

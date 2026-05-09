@@ -2,6 +2,7 @@ use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 
 /// CompactTool 参数
@@ -27,13 +28,13 @@ impl Tool for CompactTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Trigger conversation compression to free up context window.
         Use when 
         - the conversation is getting long and you want to summarize and compress the history to continue working efficiently.
         - when you try to solve a issue but fail too many time, this tool help you free down your mind and help you solve clearly.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

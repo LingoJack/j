@@ -6,6 +6,7 @@ use crate::command::chat::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool, mpsc};
 
 // Re-export plan state types from context module
@@ -48,7 +49,7 @@ impl Tool for EnterPlanModeTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Enter plan mode to explore the codebase and design an implementation approach before writing code.
         In plan mode, only read-only tools (Read, Glob, Grep, WebFetch, WebSearch, Ask, etc.) are available.
@@ -66,7 +67,7 @@ impl Tool for EnterPlanModeTool {
         The `description` parameter is used as the plan file name (e.g. "add-auth" → plan-add-auth.md).
         If a plan file with the same name already exists, you will be warned so you can choose a different name.
         Plan files are preserved after exiting plan mode for future reference.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {
@@ -195,13 +196,14 @@ impl Tool for ExitPlanModeTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Exit plan mode and submit the plan for user approval.
         Reads the plan file and presents it to the user for review.
         If approved, plan mode is deactivated and write tools become available again.
         If rejected, plan mode remains active so you can revise the plan.
         "#
+        .into()
     }
 
     fn parameters_schema(&self) -> Value {

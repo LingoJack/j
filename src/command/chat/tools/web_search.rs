@@ -8,6 +8,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
 
@@ -50,7 +51,7 @@ impl Tool for WebSearchTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Search the web for up-to-date information. Requires the EXA_API_KEY environment variable.
 
@@ -58,7 +59,7 @@ impl Tool for WebSearchTool {
         - Use this tool for accessing information beyond your knowledge cutoff
         - After answering the user's question with search results, you SHOULD include a "Sources:" section listing relevant URLs
         - Returns search results with titles, URLs, and highlighted snippets
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

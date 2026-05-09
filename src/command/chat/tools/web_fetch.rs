@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use scraper::Html;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::Duration;
@@ -55,7 +56,7 @@ impl Tool for WebFetchTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Fetches content from a specified URL, converts HTML to Markdown or plain text.
 
@@ -65,7 +66,7 @@ impl Tool for WebFetchTool {
         - Results may be truncated if the content is very large
         - Supports custom headers and authorization for authenticated APIs
         - For GitHub URLs, prefer using the `gh` CLI via Bash instead (e.g., gh pr view, gh issue view, gh api)
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

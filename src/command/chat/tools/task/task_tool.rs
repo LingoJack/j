@@ -5,6 +5,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::sync::{Arc, atomic::AtomicBool};
 
 /// TaskTool 参数
@@ -60,7 +61,7 @@ impl Tool for TaskTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Manage tasks (create / get / list / update). Use the `action` field to choose the operation.
 
@@ -93,7 +94,7 @@ impl Tool for TaskTool {
         Status flow: pending → in_progress → completed. Use "deleted" to remove a task entirely.
         When a task is completed or deleted, it is automatically removed from other tasks' blockedBy lists.
         Required fields: taskId
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

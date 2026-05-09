@@ -55,6 +55,8 @@ pub struct AgentLoopSharedState {
     pub tool_registry: Arc<ToolRegistry>,
     /// 用户禁用的工具列表
     pub disabled_tools: Vec<String>,
+    /// 延迟加载的工具列表（LoadTool 加载后才可用）
+    pub deferred_tools: Arc<Mutex<Vec<String>>>,
     /// 工具是否启用
     pub tools_enabled: bool,
     /// 子 Agent metrics 累加器（SubAgent/Teammate 的 LLM/tool 统计）

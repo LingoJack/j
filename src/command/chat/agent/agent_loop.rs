@@ -151,6 +151,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         disabled_tools,
         tools_enabled,
         sub_agent_metrics,
+        deferred_tools,
     } = shared;
 
     let client = create_llm_client(&provider);
@@ -183,8 +184,13 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         final_round_idx = round_idx;
 
         // 每轮开始时动态获取可用工具（检查 is_available，如 SendMessage/IgnoreMessage）
+        // 同时排除 deferred 工具（需要 LoadTool 加载后才可用）
         let tools = if tools_enabled {
-            tool_registry.to_llm_tools_filtered(&disabled_tools)
+            let deferred = match deferred_tools.lock() {
+                Ok(guard) => guard,
+                Err(e) => e.into_inner(),
+            };
+            tool_registry.to_llm_tools_non_deferred(&disabled_tools, &deferred)
         } else {
             vec![]
         };

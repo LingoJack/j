@@ -23,6 +23,7 @@ use crate::util::safe_lock;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -145,7 +146,7 @@ impl Tool for SubAgentTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Launch a sub-agent to handle complex, multi-step tasks autonomously.
         The sub-agent runs with a fresh context (system prompt + your prompt as user message).
@@ -163,7 +164,7 @@ impl Tool for SubAgentTool {
         - Use background when you have genuinely independent work to do in parallel
         - Clearly tell the agent whether you expect it to write code or just do research (search, file reads, web fetches, etc.)
         - Provide clear, detailed prompts so the agent can work autonomously — explain what you're trying to accomplish, what you've already learned, and give enough context for the agent to make judgment calls
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {
@@ -220,7 +221,12 @@ impl Tool for SubAgentTool {
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push(Self::NAME.to_string());
-        let tools = child_registry.to_llm_tools_filtered(&disabled);
+        let deferred = match self.shared.deferred_tools.lock() {
+            Ok(guard) => guard,
+            Err(e) => e.into_inner(),
+        }
+        .clone();
+        let tools = child_registry.to_llm_tools_non_deferred(&disabled, &deferred);
 
         // inherit_permissions：复制 JcliConfig 并启用 allow_all
         let jcli_config = if params.inherit_permissions {

@@ -118,6 +118,8 @@ pub struct ChatApp {
     pub plan_approval_queue: Arc<PlanApprovalQueue>,
     /// 子 Agent metrics 累加器（SubAgent/Teammate 的 LLM/tool 统计，传递给 AgentLoopSharedState）
     pub sub_agent_metrics: Arc<Mutex<crate::command::chat::tools::derived_shared::SubAgentMetrics>>,
+    /// 延迟加载的工具列表（与 DerivedAgentShared 共享，UI 可修改）
+    pub deferred_tools: Arc<Mutex<Vec<String>>>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
     pub invoked_skills: crate::command::chat::context::compact::InvokedSkillsMap,
 }
@@ -237,6 +239,8 @@ impl ChatApp {
         }
 
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
+        let deferred_tools_arc: Arc<Mutex<Vec<String>>> =
+            Arc::new(Mutex::new(agent_config.deferred_tools.clone()));
 
         // 子 agent 权限请求队列（TUI 和所有 agent 共享同一个 Arc）
         let permission_queue = Arc::new(PermissionQueue::new());
@@ -271,6 +275,7 @@ impl ChatApp {
             hook_manager: Arc::clone(&hook_manager),
             task_manager: Arc::clone(&task_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
+            deferred_tools: Arc::clone(&deferred_tools_arc),
             permission_queue: Arc::clone(&permission_queue),
             plan_approval_queue: Arc::clone(&plan_approval_queue),
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
@@ -302,6 +307,12 @@ impl ChatApp {
             crate::command::chat::tools::ignore_message::IgnoreMessageTool {
                 teammate_manager: Some(Arc::clone(&teammate_manager)),
             },
+        ));
+        // 将 deferred_tools 设置同步到 ToolRegistry
+        tool_registry.set_deferred_tools(agent_config.deferred_tools.clone());
+        // 注册 LoadTool，它持有 deferred_tools 的共享引用以便在运行时加载 deferred 工具
+        tool_registry.register(Box::new(
+            crate::command::chat::tools::load_tool::LoadTool::new(Arc::clone(&deferred_tools_arc)),
         ));
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
@@ -554,6 +565,8 @@ impl ChatApp {
                 pending_plan_approval: None,
                 compact_exempt_sublist: false,
                 compact_exempt_idx: 0,
+                tools_in_options: false,
+                tools_option_idx: 0,
                 auto_approve: false,
                 commands_mode: CommandsMode::Normal,
                 commands_source_idx: 0,
@@ -609,6 +622,7 @@ impl ChatApp {
             permission_queue,
             plan_approval_queue,
             sub_agent_metrics: shared_sub_agent_metrics,
+            deferred_tools: deferred_tools_arc,
             invoked_skills,
         };
 

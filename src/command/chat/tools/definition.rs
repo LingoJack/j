@@ -3,10 +3,12 @@ use crate::command::chat::context::compact::InvokedSkillsMap;
 use crate::command::chat::infra::hook::HookManager;
 use crate::command::chat::infra::skill::Skill;
 use crate::command::chat::permission::queue::PermissionQueue;
+use crate::command::chat::tools::tool_names;
 use crate::llm::{FunctionObject, ToolDefinition};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== 核心类型 ==========
@@ -39,8 +41,8 @@ pub struct ToolResult {
 pub trait Tool: Send + Sync {
     /// 返回工具名称
     fn name(&self) -> &str;
-    /// 返回工具功能描述
-    fn description(&self) -> &str;
+    /// 返回工具功能描述，静态描述返回 `Cow::Borrowed`，动态描述返回 `Cow::Owned`
+    fn description(&self) -> Cow<'_, str>;
     /// 返回工具参数的 JSON Schema
     fn parameters_schema(&self) -> Value;
     /// 执行工具，传入参数字符串和取消信号，返回执行结果
@@ -140,6 +142,8 @@ pub struct ToolRegistry {
     pub permission_queue: Option<Arc<PermissionQueue>>,
     /// 计划审批队列
     pub plan_approval_queue: Option<Arc<super::plan::PlanApprovalQueue>>,
+    /// 延迟加载的工具名称列表
+    deferred_tools: Vec<String>,
 }
 
 impl std::fmt::Debug for ToolRegistry {
@@ -228,6 +232,7 @@ impl ToolRegistry {
             permission_queue: None,
             plan_approval_queue: None,
             tools,
+            deferred_tools: Vec::new(),
         };
 
         if !skills.is_empty() {
@@ -328,14 +333,24 @@ impl ToolRegistry {
         }
     }
 
-    /// 构建工具摘要，以 XML 格式展示所有未禁用且可用的工具的名称、描述和参数
-    pub fn build_tools_summary(&self, disabled: &[String]) -> String {
+    /// 设置延迟加载的工具列表
+    pub fn set_deferred_tools(&mut self, tools: Vec<String>) {
+        self.deferred_tools = tools;
+    }
+
+    /// 构建工具摘要（排除 disabled 和 deferred 工具），用于 system prompt
+    pub fn build_tools_summary_non_deferred(
+        &self,
+        disabled: &[String],
+        deferred: &[String],
+    ) -> String {
         let mut md = String::new();
         for t in self
             .tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
             .filter(|t| t.is_available())
+            .filter(|t| !deferred.iter().any(|d| d == t.name()))
         {
             let name = t.name();
             md.push_str(&format!("<{}>\n", name));
@@ -347,15 +362,23 @@ impl ToolRegistry {
             }
             md.push_str(&format!("</{}>\n\n", name));
         }
+
         md.trim_end().to_string()
     }
 
-    /// 将未禁用且可用的工具转换为 OpenAI 函数调用格式的工具列表
-    pub fn to_llm_tools_filtered(&self, disabled: &[String]) -> Vec<ToolDefinition> {
-        self.tools
+    /// 将未禁用、可用且非 deferred 的工具转换为 LLM 工具定义列表
+    /// LoadTool 始终包含在列表中，其 description 动态包含当前 deferred 工具名
+    pub fn to_llm_tools_non_deferred(
+        &self,
+        disabled: &[String],
+        deferred: &[String],
+    ) -> Vec<ToolDefinition> {
+        let mut tools: Vec<ToolDefinition> = self
+            .tools
             .iter()
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
             .filter(|t| t.is_available())
+            .filter(|t| !deferred.iter().any(|d| d == t.name()))
             .map(|t| ToolDefinition {
                 tool_type: "function".to_string(),
                 function: FunctionObject {
@@ -365,7 +388,31 @@ impl ToolRegistry {
                     strict: None,
                 },
             })
-            .collect()
+            .collect();
+
+        // LoadTool 始终加入列表，description 已动态包含 deferred 工具列表
+        if let Some(load_tool) = self
+            .tools
+            .iter()
+            .find(|t| t.name() == tool_names::LOAD_TOOL)
+            && load_tool.is_available()
+            && !disabled.iter().any(|d| d == load_tool.name())
+            && !tools
+                .iter()
+                .any(|t| t.function.name == tool_names::LOAD_TOOL)
+        {
+            tools.push(ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionObject {
+                    name: tool_names::LOAD_TOOL.to_string(),
+                    description: Some(load_tool.description().trim().to_string()),
+                    parameters: Some(load_tool.parameters_schema()),
+                    strict: None,
+                },
+            });
+        }
+
+        tools
     }
 
     /// 返回所有已注册工具的名称列表

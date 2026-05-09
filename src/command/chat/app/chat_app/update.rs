@@ -112,6 +112,7 @@ impl ChatApp {
             Action::ToggleMenuToggle => self.update_toggle_menu_toggle(),
             Action::ToggleMenuEnableAll => self.update_toggle_menu_enable_all(),
             Action::ToggleMenuDisableAll => self.update_toggle_menu_disable_all(),
+            Action::ToolsToggleLevel => self.update_tools_toggle_level(),
             Action::TeammatesNavigate(dir) => self.update_teammates_navigate(dir),
             Action::TeammatesSelect(idx) => self.update_teammates_select(idx),
             Action::CompactExemptToggle => self.update_compact_exempt_toggle(),

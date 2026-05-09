@@ -6,6 +6,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
@@ -46,7 +47,7 @@ impl Tool for GlobTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r###"
         - Fast file pattern matching tool, works with any codebase size
         - Supports glob patterns like "**/*.js" or "src/**/*.tsx"
@@ -56,6 +57,7 @@ impl Tool for GlobTool {
         - You can call multiple tools in a single response. If multiple file patterns may be useful, run glob searches in parallel
         - Important: if no path is needed, omit the field entirely — do not enter "undefined", "null", or empty string
         "###
+        .into()
     }
 
     fn parameters_schema(&self) -> Value {

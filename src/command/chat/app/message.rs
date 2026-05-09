@@ -244,6 +244,7 @@ impl ChatApp {
             loaded_skills,
             disabled_skills,
             disabled_tools.clone(),
+            Arc::clone(&self.deferred_tools),
             Arc::clone(&tool_registry_arc),
             Arc::clone(&self.teammate_manager),
             Arc::clone(&self.task_manager),
@@ -283,6 +284,7 @@ impl ChatApp {
             derived_system_prompt: Arc::clone(&self.derived_agent_system_prompt),
             tool_registry: tool_registry_arc,
             disabled_tools,
+            deferred_tools: Arc::clone(&self.deferred_tools),
             tools_enabled,
             sub_agent_metrics: Arc::clone(&self.sub_agent_metrics),
         };

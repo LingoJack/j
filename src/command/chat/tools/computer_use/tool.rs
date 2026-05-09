@@ -2,6 +2,7 @@ use crate::command::chat::tools::{PlanDecision, Tool, ToolResult, schema_to_tool
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -95,8 +96,8 @@ impl Tool for ComputerUseTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
-        "Control the macOS desktop: take screenshots, click/type/scroll, query accessibility tree, focus apps. Use screenshot with SoM (Set-of-Mark) to get numbered interactive elements, then reference by element number. Always take a screenshot first to understand the screen state. Element clicks use Accessibility API when possible (no mouse cursor movement)."
+    fn description(&self) -> Cow<'_, str> {
+        "Control the macOS desktop: take screenshots, click/type/scroll, query accessibility tree, focus apps. Use screenshot with SoM (Set-of-Mark) to get numbered interactive elements, then reference by element number. Always take a screenshot first to understand the screen state. Element clicks use Accessibility API when possible (no mouse cursor movement).".into()
     }
 
     fn parameters_schema(&self) -> Value {

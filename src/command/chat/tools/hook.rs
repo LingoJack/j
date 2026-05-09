@@ -9,6 +9,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 /// RegisterHookTool 参数
@@ -65,13 +66,13 @@ impl Tool for RegisterHookTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Register, list, remove session-level hooks, or view the full protocol documentation.
         Actions: register (requires event+command or event+prompt), list, remove (requires event+index), help (view stdin/stdout JSON schema and script examples).
         Supports two hook types: "bash" (shell command, default) and "llm" (LLM prompt template).
         Call action="help" first to learn the script protocol before registering hooks.
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {

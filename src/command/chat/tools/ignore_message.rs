@@ -5,6 +5,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 #[derive(Deserialize, JsonSchema)]
@@ -37,7 +38,7 @@ impl Tool for IgnoreMessageTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Acknowledge incoming broadcasts without producing any reply.
 
@@ -59,6 +60,7 @@ impl Tool for IgnoreMessageTool {
         - If a real response is needed, use SendMessage instead.
         - You will remain idle until @mentioned again or until the chat is closed.
         "#
+        .into()
     }
 
     fn parameters_schema(&self) -> Value {

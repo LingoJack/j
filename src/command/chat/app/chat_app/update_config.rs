@@ -361,6 +361,45 @@ impl ChatApp {
     }
 
     pub(super) fn update_toggle_menu_navigate(&mut self, dir: CursorDirection) {
+        // Tools tab 使用层级导航
+        if self.ui.config_tab == ConfigTab::Tools {
+            if self.ui.tools_in_options {
+                // 选项层级：上下切换启用/defer
+                match dir {
+                    CursorDirection::Up => {
+                        if self.ui.tools_option_idx > 0 {
+                            self.ui.tools_option_idx -= 1;
+                        }
+                    }
+                    CursorDirection::Down => {
+                        if self.ui.tools_option_idx < 1 {
+                            self.ui.tools_option_idx += 1;
+                        }
+                    }
+                }
+            } else {
+                // 工具列表层级：上下切换工具
+                let total = self.tool_registry.tool_names().len();
+                if total == 0 {
+                    return;
+                }
+                match dir {
+                    CursorDirection::Up => {
+                        if self.ui.config_field_idx == 0 {
+                            self.ui.config_field_idx = total - 1;
+                        } else {
+                            self.ui.config_field_idx -= 1;
+                        }
+                    }
+                    CursorDirection::Down => {
+                        self.ui.config_field_idx = (self.ui.config_field_idx + 1) % total;
+                    }
+                }
+            }
+            return;
+        }
+
+        // 其他 Tab 保持原有逻辑
         let total = super::config_tab_field_count(self);
         if total == 0 {
             return;
@@ -379,24 +418,85 @@ impl ChatApp {
         }
     }
 
+    /// Tools tab：Tab 键切换层级（工具列表 ↔ 选项区）
+    pub(super) fn update_tools_toggle_level(&mut self) {
+        if self.ui.config_tab != ConfigTab::Tools {
+            return;
+        }
+        if self.ui.tools_in_options {
+            // 从选项区返回工具列表
+            self.ui.tools_in_options = false;
+        } else {
+            // 进入选中工具的选项区
+            self.ui.tools_in_options = true;
+            self.ui.tools_option_idx = 0; // 默认焦点在"启用"
+        }
+    }
+
     pub(super) fn update_toggle_menu_toggle(&mut self) {
         if self.ui.config_tab == ConfigTab::Tools {
-            let tool_names = self.tool_registry.tool_names();
-            if let Some(name) = tool_names.get(self.ui.config_field_idx) {
-                let name = name.to_string();
-                if let Some(pos) = self
-                    .state
-                    .agent_config
-                    .disabled_tools
-                    .iter()
-                    .position(|d| d == &name)
-                {
-                    self.state.agent_config.disabled_tools.remove(pos);
-                } else {
-                    self.state.agent_config.disabled_tools.push(name);
+            // 根据当前层级和焦点决定 toggle 哪个选项
+            if self.ui.tools_in_options {
+                let tool_names = self.tool_registry.tool_names();
+                if let Some(name) = tool_names.get(self.ui.config_field_idx) {
+                    let name = name.to_string();
+                    if self.ui.tools_option_idx == 0 {
+                        // toggle 启用状态
+                        if let Some(pos) = self
+                            .state
+                            .agent_config
+                            .disabled_tools
+                            .iter()
+                            .position(|d| d == &name)
+                        {
+                            self.state.agent_config.disabled_tools.remove(pos);
+                        } else {
+                            self.state.agent_config.disabled_tools.push(name);
+                        }
+                    } else {
+                        // toggle defer 状态（仅对启用的工具有效）
+                        let is_enabled = !self
+                            .state
+                            .agent_config
+                            .disabled_tools
+                            .iter()
+                            .any(|d| d == &name);
+                        if is_enabled {
+                            let mut deferred = match self.deferred_tools.lock() {
+                                Ok(guard) => guard,
+                                Err(e) => e.into_inner(),
+                            };
+                            if let Some(pos) = deferred.iter().position(|d| d == &name) {
+                                deferred.remove(pos);
+                            } else {
+                                deferred.push(name);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 工具列表层级，Enter 也 toggle 启用状态
+                let tool_names = self.tool_registry.tool_names();
+                if let Some(name) = tool_names.get(self.ui.config_field_idx) {
+                    let name = name.to_string();
+                    if let Some(pos) = self
+                        .state
+                        .agent_config
+                        .disabled_tools
+                        .iter()
+                        .position(|d| d == &name)
+                    {
+                        self.state.agent_config.disabled_tools.remove(pos);
+                    } else {
+                        self.state.agent_config.disabled_tools.push(name);
+                    }
                 }
             }
-        } else if self.ui.config_tab == ConfigTab::Skills
+            return;
+        }
+
+        // 其他 Tab 保持原有逻辑
+        if self.ui.config_tab == ConfigTab::Skills
             && let Some(skill) = self.state.loaded_skills.get(self.ui.config_field_idx)
         {
             let name = skill.frontmatter.name.clone();
@@ -450,6 +550,13 @@ impl ChatApp {
     pub(super) fn update_toggle_menu_enable_all(&mut self) {
         if self.ui.config_tab == ConfigTab::Tools {
             self.state.agent_config.disabled_tools.clear();
+            // 启用全部时同时清除 deferred 状态
+            let mut deferred = match self.deferred_tools.lock() {
+                Ok(guard) => guard,
+                Err(e) => e.into_inner(),
+            };
+            deferred.clear();
+            drop(deferred);
             self.show_toast("已启用全部工具", false);
         } else if self.ui.config_tab == ConfigTab::Skills {
             self.state.agent_config.disabled_skills.clear();
@@ -471,6 +578,13 @@ impl ChatApp {
                 .iter()
                 .map(|n| n.to_string())
                 .collect();
+            // 禁用全部时清除 deferred 状态（禁用的工具无需 deferred）
+            let mut deferred = match self.deferred_tools.lock() {
+                Ok(guard) => guard,
+                Err(e) => e.into_inner(),
+            };
+            deferred.clear();
+            drop(deferred);
             self.show_toast("已禁用全部工具", false);
         } else if self.ui.config_tab == ConfigTab::Skills {
             self.state.agent_config.disabled_skills = self

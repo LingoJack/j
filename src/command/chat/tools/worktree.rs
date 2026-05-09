@@ -5,6 +5,7 @@ use crate::command::chat::tools::{
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
@@ -249,7 +250,7 @@ impl Tool for EnterWorktreeTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Creates an isolated git worktree and switches the session into it.
         Use this when you need to work on code in isolation — for example, when multiple
@@ -260,6 +261,7 @@ impl Tool for EnterWorktreeTool {
 
         Use ExitWorktree to leave the worktree (keep or remove it).
         "#
+        .into()
     }
 
     fn parameters_schema(&self) -> Value {
@@ -441,12 +443,12 @@ impl Tool for ExitWorktreeTool {
         Self::NAME
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         r#"
         Exit the current worktree session created by EnterWorktree.
         - action "keep": preserves the worktree directory and branch for later use
         - action "remove": deletes the worktree and its branch (requires discard_changes: true if there are uncommitted changes or new commits)
-        "#
+        "#.into()
     }
 
     fn parameters_schema(&self) -> Value {
