@@ -555,14 +555,29 @@ export default function App() {
   }, [fetchSessions])
 
   const handleSelectSection = useCallback((section) => {
-    setActiveSection(section)
+    // 点已激活的图标 = 收起/展开切换；点其它图标 = 切换并强制展开
+    if (section === activeSection) {
+      setSidebarCollapsed(prev => {
+        const next = !prev
+        localStorage.setItem('sidebar_collapsed', String(next))
+        return next
+      })
+    } else {
+      setActiveSection(section)
+      if (sidebarCollapsed) {
+        setSidebarCollapsed(false)
+        localStorage.setItem('sidebar_collapsed', 'false')
+      }
+    }
     // 请求对应数据
     if (section === 'config') {
       send({ type: 'request_config', tab: 'model' })
     } else if (section === 'archive') {
       send({ type: 'start_archive_list' })
+    } else if (section === 'sessions') {
+      send({ type: 'list_sessions' })
     }
-  }, [send])
+  }, [send, activeSection, sidebarCollapsed])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
