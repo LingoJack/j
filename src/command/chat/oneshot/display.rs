@@ -1,6 +1,7 @@
 //! oneshot 终端显示工具：工具参数预览、工具调用/结果打印、Markdown 重绘
 
 use crate::command::chat::constants::{THINKING_PULSE_MIN_FACTOR, THINKING_PULSE_PERIOD_MS};
+use crate::command::chat::render::theme::ToolCategoryColor;
 use crate::command::chat::tools::classification::ToolCategory;
 use crate::theme::Theme;
 use std::io;

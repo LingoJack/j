@@ -54,3 +54,62 @@ impl std::fmt::Display for ThemeName {
         }
     }
 }
+
+impl ThemeName {
+    /// 获取所有主题名称列表
+    pub fn all() -> &'static [ThemeName] {
+        &[
+            ThemeName::Dark,
+            ThemeName::Light,
+            ThemeName::Midnight,
+            ThemeName::Nord,
+            ThemeName::Monokai,
+            ThemeName::AnthropicLight,
+            ThemeName::AnthropicDark,
+        ]
+    }
+
+    /// 切换到下一个主题
+    pub fn next(&self) -> ThemeName {
+        match self {
+            ThemeName::Dark => ThemeName::Light,
+            ThemeName::Light => ThemeName::Midnight,
+            ThemeName::Midnight => ThemeName::Nord,
+            ThemeName::Nord => ThemeName::Monokai,
+            ThemeName::Monokai => ThemeName::AnthropicLight,
+            ThemeName::AnthropicLight => ThemeName::AnthropicDark,
+            ThemeName::AnthropicDark => ThemeName::Dark,
+        }
+    }
+
+    /// 显示名称
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ThemeName::Dark => "Dark",
+            ThemeName::Light => "Light",
+            ThemeName::Midnight => "Midnight（默认）",
+            ThemeName::Nord => "Nord",
+            ThemeName::Monokai => "Monokai",
+            ThemeName::AnthropicLight => "Anthropic Light（米白赭陶）",
+            ThemeName::AnthropicDark => "Anthropic Dark（深夜月蓝）",
+        }
+    }
+
+    /// 从字符串解析
+    pub fn parse(s: &str) -> ThemeName {
+        s.parse().unwrap_or_default()
+    }
+
+    /// 转为字符串
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            ThemeName::Dark => "dark",
+            ThemeName::Light => "light",
+            ThemeName::Midnight => "midnight",
+            ThemeName::Nord => "nord",
+            ThemeName::Monokai => "monokai",
+            ThemeName::AnthropicLight => "anthropic_light",
+            ThemeName::AnthropicDark => "anthropic_dark",
+        }
+    }
+}

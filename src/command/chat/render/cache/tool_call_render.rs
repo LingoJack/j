@@ -1,6 +1,7 @@
 //! 工具调用请求渲染：展开/折叠模式、各类工具专用渲染
 
 use crate::command::chat::constants::{AGENT_CALL_PROMPT_MAX_LINES, TOOL_ARG_PREVIEW_MAX_CHARS};
+use crate::command::chat::render::theme::ToolCategoryColor;
 use crate::command::chat::storage::ToolCallItem;
 use crate::command::chat::tools::classification::{ToolCategory, format_json_value};
 use crate::command::chat::tools::tool_names;

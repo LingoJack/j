@@ -1,109 +1,10 @@
 use ratatui::style::Color;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::assets::Assets;
 
-/// 主题名称枚举
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub enum ThemeName {
-    #[serde(rename = "dark")]
-    Dark,
-    #[serde(rename = "light")]
-    Light,
-    #[serde(rename = "midnight")]
-    #[default]
-    Midnight,
-    #[serde(rename = "nord")]
-    Nord,
-    #[serde(rename = "monokai")]
-    Monokai,
-    #[serde(rename = "anthropic_light")]
-    AnthropicLight,
-    #[serde(rename = "anthropic_dark")]
-    AnthropicDark,
-}
-
-impl std::str::FromStr for ThemeName {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "dark" => Ok(ThemeName::Dark),
-            "light" => Ok(ThemeName::Light),
-            "midnight" => Ok(ThemeName::Midnight),
-            "nord" => Ok(ThemeName::Nord),
-            "monokai" => Ok(ThemeName::Monokai),
-            "anthropic_light" => Ok(ThemeName::AnthropicLight),
-            "anthropic_dark" => Ok(ThemeName::AnthropicDark),
-            _ => Ok(ThemeName::default()),
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl ThemeName {
-    /// 获取所有主题名称列表（用于配置界面循环切换）
-    pub fn all() -> &'static [ThemeName] {
-        &[
-            ThemeName::Dark,
-            ThemeName::Light,
-            ThemeName::Midnight,
-            ThemeName::Nord,
-            ThemeName::Monokai,
-            ThemeName::AnthropicLight,
-            ThemeName::AnthropicDark,
-        ]
-    }
-
-    /// 切换到下一个主题
-    pub fn next(&self) -> ThemeName {
-        match self {
-            ThemeName::Dark => ThemeName::Light,
-            ThemeName::Light => ThemeName::Midnight,
-            ThemeName::Midnight => ThemeName::Nord,
-            ThemeName::Nord => ThemeName::Monokai,
-            ThemeName::Monokai => ThemeName::AnthropicLight,
-            ThemeName::AnthropicLight => ThemeName::AnthropicDark,
-            ThemeName::AnthropicDark => ThemeName::Dark,
-        }
-    }
-
-    /// 显示名称
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            ThemeName::Dark => "Dark",
-            ThemeName::Light => "Light",
-            ThemeName::Midnight => "Midnight（默认）",
-            ThemeName::Nord => "Nord",
-            ThemeName::Monokai => "Monokai",
-            ThemeName::AnthropicLight => "Anthropic Light（米白赭陶）",
-            ThemeName::AnthropicDark => "Anthropic Dark（深夜月蓝）",
-        }
-    }
-
-    /// 从字符串解析
-    pub fn parse(s: &str) -> ThemeName {
-        s.parse().unwrap_or_default()
-    }
-
-    /// 转为字符串
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            ThemeName::Dark => "dark",
-            ThemeName::Light => "light",
-            ThemeName::Midnight => "midnight",
-            ThemeName::Nord => "nord",
-            ThemeName::Monokai => "monokai",
-            ThemeName::AnthropicLight => "anthropic_light",
-            ThemeName::AnthropicDark => "anthropic_dark",
-        }
-    }
-
-    /// 对应的 assets 主题文件名（不含扩展名）
-    fn asset_filename(&self) -> &'static str {
-        self.to_str()
-    }
-}
+// Re-export ThemeName from j-cli-core
+pub use j_cli_core::theme_name::ThemeName;
 
 /// 主题配色方案
 /// 将所有 UI 颜色归类为语义化字段，方便统一管理
@@ -750,7 +651,7 @@ fn parse_color(s: &str) -> Result<Color, String> {
 impl Theme {
     /// 根据主题名称从嵌入资源加载主题
     pub fn from_name(name: &ThemeName) -> Self {
-        let filename = format!("themes/{}.json", name.asset_filename());
+        let filename = format!("themes/{}.json", name.to_str());
         match Self::load_from_assets(&filename) {
             Ok(theme) => theme,
             Err(_) => {

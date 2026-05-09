@@ -2,16 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 会话元数据（同步到前端显示会话列表）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionMeta {
-    pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub message_count: usize,
-    pub first_message_preview: Option<String>,
-    pub updated_at: u64,
-}
+// Re-export SessionMeta from storage to avoid duplication
+pub use crate::storage::SessionMeta;
 
 /// 客户端 → 服务端 消息
 #[derive(Debug, Deserialize)]

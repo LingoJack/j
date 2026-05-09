@@ -8,6 +8,7 @@ use crate::command::chat::constants::{
 };
 use crate::command::chat::render::cache::bubble::bordered_line;
 use crate::command::chat::render::cache::msg_render::agent_name_color;
+use crate::command::chat::render::theme::{ToolCategoryColor, ToolStatusColor};
 use crate::command::chat::render::cache::{ContentContext, TOOL_RESULT_DISPLAY_MAX_LINES};
 use crate::command::chat::render::theme::Theme;
 use crate::command::chat::tools::classification::{
