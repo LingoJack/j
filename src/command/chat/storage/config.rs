@@ -188,7 +188,7 @@ pub struct AgentConfig {
     #[serde(default)]
     pub disabled_tools: Vec<String>,
     /// 延迟加载的工具名称列表（需要 LoadTool 加载后才可用）
-    #[serde(default)]
+    #[serde(default = "default_deferred_tools")]
     pub deferred_tools: Vec<String>,
     /// 被禁用的 skill 名称列表（列表中的 skill 不会包含在系统提示词中）
     #[serde(default)]
@@ -229,6 +229,15 @@ fn default_true() -> bool {
     true
 }
 
+fn default_deferred_tools() -> Vec<String> {
+    vec![
+        "Task".to_string(),
+        "RegisterHook".to_string(),
+        "ComputerUse".to_string(),
+        "Browser".to_string(),
+    ]
+}
+
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
@@ -243,7 +252,7 @@ impl Default for AgentConfig {
             style: None,
             tool_confirm_timeout: 0,
             disabled_tools: Vec::new(),
-            deferred_tools: Vec::new(),
+            deferred_tools: default_deferred_tools(),
             disabled_skills: Vec::new(),
             disabled_commands: Vec::new(),
             disabled_hooks: Vec::new(),
