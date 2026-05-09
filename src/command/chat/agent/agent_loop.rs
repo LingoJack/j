@@ -184,11 +184,13 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         final_round_idx = round_idx;
 
         // 每轮开始时动态获取可用工具（检查 is_available，如 SendMessage/IgnoreMessage）
-        // 同时排除 deferred 工具（需要 LoadTool 加载后才可用）
+        // 同时排除 deferred 工具（需要 LoadTool 加载后才可用）。
+        // 注意：必须 clone 成 Vec 后 drop guard，否则 to_llm_tools_non_deferred 内部
+        // 会调用 LoadTool::description() 二次 lock 同一 Mutex，造成自死锁。
         let tools = if tools_enabled {
-            let deferred = match deferred_tools.lock() {
-                Ok(guard) => guard,
-                Err(e) => e.into_inner(),
+            let deferred: Vec<String> = match deferred_tools.lock() {
+                Ok(guard) => guard.clone(),
+                Err(e) => e.into_inner().clone(),
             };
             tool_registry.to_llm_tools_non_deferred(&disabled_tools, &deferred)
         } else {

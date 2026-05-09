@@ -1,3 +1,18 @@
+# v12.10.39
+
+
+### 新功能
+- **Deferred Tools**: 新增工具延迟加载机制，允许将工具标记为 "deferred" 状态，需通过 LoadTool 显式加载后才对 Agent 可用；Tools Tab UI 改造为层级导航模式，支持 Tab 键在工具列表层级与选项层级（启用/defer）之间切换
+
+### 改进
+- **Markdown 折行**: 新增前缀感知的 span 折行模块，修复长标题、长列表项折行后续行缩进对齐问题
+- **ANSI 清洗**: 改进终端文本清洗，剥离完整 ANSI/OSC 序列而非仅删除 ESC 字节，避免渲染时泄漏 `[31m` 等残片
+- **oneshot 确认框**: 边框改为左右闭合样式（右侧加 `│`），交互框宽度从 20-56 扩展至 40-80，新增 Ctrl+C 退出支持
+
+### Bug 修复
+- **oneshot 消息丢失**: 修复 agent loop 在 break 'round 前未将 streaming 内容刷新到 context_messages，导致 oneshot persist 时丢失最终 AI 回复的问题
+</result
+
 # v12.10.38
 
 

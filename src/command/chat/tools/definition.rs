@@ -354,7 +354,11 @@ impl ToolRegistry {
         {
             let name = t.name();
             md.push_str(&format!("<{}>\n", name));
-            md.push_str(&format!("description:\n{}\n", t.description().trim()));
+            let mut desc = t.description().trim().to_string();
+            if name == tool_names::LOAD_TOOL {
+                desc.push_str(&format_deferred_suffix(deferred));
+            }
+            md.push_str(&format!("description:\n{}\n", desc));
             let params = json_schema_to_xml_params(&t.parameters_schema());
             if !params.is_empty() {
                 md.push('\n');
@@ -367,7 +371,7 @@ impl ToolRegistry {
     }
 
     /// 将未禁用、可用且非 deferred 的工具转换为 LLM 工具定义列表
-    /// LoadTool 始终包含在列表中，其 description 动态包含当前 deferred 工具名
+    /// LoadTool 始终包含在列表中，由调用方注入当前 deferred 工具列表到其描述末尾
     pub fn to_llm_tools_non_deferred(
         &self,
         disabled: &[String],
@@ -379,18 +383,25 @@ impl ToolRegistry {
             .filter(|t| !disabled.iter().any(|d| d == t.name()))
             .filter(|t| t.is_available())
             .filter(|t| !deferred.iter().any(|d| d == t.name()))
-            .map(|t| ToolDefinition {
-                tool_type: "function".to_string(),
-                function: FunctionObject {
-                    name: t.name().to_string(),
-                    description: Some(t.description().trim().to_string()),
-                    parameters: Some(t.parameters_schema()),
-                    strict: None,
-                },
+            .map(|t| {
+                let mut desc = t.description().trim().to_string();
+                if t.name() == tool_names::LOAD_TOOL {
+                    desc.push_str(&format_deferred_suffix(deferred));
+                }
+                ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionObject {
+                        name: t.name().to_string(),
+                        description: Some(desc),
+                        parameters: Some(t.parameters_schema()),
+                        strict: None,
+                    },
+                }
             })
             .collect();
 
-        // LoadTool 始终加入列表，description 已动态包含 deferred 工具列表
+        // LoadTool 始终加入列表（即使被列入 deferred 也保留入口，防止用户误配）。
+        // 描述末尾由调用方传入的 deferred 列表动态拼装。
         if let Some(load_tool) = self
             .tools
             .iter()
@@ -401,11 +412,13 @@ impl ToolRegistry {
                 .iter()
                 .any(|t| t.function.name == tool_names::LOAD_TOOL)
         {
+            let mut desc = load_tool.description().trim().to_string();
+            desc.push_str(&format_deferred_suffix(deferred));
             tools.push(ToolDefinition {
                 tool_type: "function".to_string(),
                 function: FunctionObject {
                     name: tool_names::LOAD_TOOL.to_string(),
-                    description: Some(load_tool.description().trim().to_string()),
+                    description: Some(desc),
                     parameters: Some(load_tool.parameters_schema()),
                     strict: None,
                 },
@@ -488,6 +501,24 @@ fn json_schema_to_xml_params(schema: &Value) -> String {
         md.push_str(&format!("- `{}` ({}{}) — {}\n", name, type_str, req, desc));
     }
     md
+}
+
+/// 把当前 deferred 工具列表格式化成 LoadTool 描述末尾的动态后缀。
+///
+/// 这部分文本本来是 `LoadTool::description()` 内部 lock `deferred_tools`
+/// 自己拼出来的，但那样会让一个本应静态的 trait 方法依赖运行时锁，
+/// 在外层 `build_tools_summary_non_deferred` / `to_llm_tools_non_deferred`
+/// 已经持锁的调用栈里再次 lock 同一 Mutex 时触发自死锁。
+///
+/// 现在的设计：调用方（已经持有 deferred 列表的副本）直接把后缀拼到
+/// LoadTool 的 description 输出末尾，`LoadTool::description()` 本身保持
+/// 静态、廉价、纯查询。
+fn format_deferred_suffix(deferred: &[String]) -> String {
+    if deferred.is_empty() {
+        "\n\nNo deferred tools available.".to_string()
+    } else {
+        format!("\n\nCurrently deferred tools: {}", deferred.join(", "))
+    }
 }
 
 #[cfg(test)]

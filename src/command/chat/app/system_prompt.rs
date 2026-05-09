@@ -54,10 +54,12 @@ pub fn build_system_prompt_fn(
         use crate::command::chat::agent_md;
         let template = load_system_prompt()?;
         let skills_summary = skill::build_skills_summary(&loaded_skills, &disabled_skills);
-        // 排除 deferred 工具，只将非 deferred 的工具摘要拼入 system prompt
-        let deferred = match deferred_tools.lock() {
-            Ok(guard) => guard,
-            Err(e) => e.into_inner(),
+        // 排除 deferred 工具，只将非 deferred 的工具摘要拼入 system prompt。
+        // 注意：此处必须 clone 成 Vec 后 drop guard，否则下一行调用 LoadTool::description()
+        // 会在同一线程上对 deferred_tools 二次 lock，造成自死锁。
+        let deferred: Vec<String> = match deferred_tools.lock() {
+            Ok(guard) => guard.clone(),
+            Err(e) => e.into_inner().clone(),
         };
         let tools_summary =
             tool_registry.build_tools_summary_non_deferred(&disabled_tools, &deferred);
@@ -115,9 +117,9 @@ impl ChatApp {
             &self.state.loaded_skills,
             &self.state.agent_config.disabled_skills,
         );
-        let deferred = match self.deferred_tools.lock() {
-            Ok(guard) => guard,
-            Err(e) => e.into_inner(),
+        let deferred: Vec<String> = match self.deferred_tools.lock() {
+            Ok(guard) => guard.clone(),
+            Err(e) => e.into_inner().clone(),
         };
         let tools_summary = self
             .tool_registry

@@ -46,3 +46,11 @@
 * **禁止在 TUI 模式下使用 `println!` / `eprintln!` / `crate::info!` / `crate::error!`**：这些宏输出到 stdout/stderr，会溢出到 TUI 界面（输入区、消息区等），造成显示异常。
 * 后台线程、工具执行线程、agent 线程中的日志必须使用 `crate::util::log::write_info_log()` / `write_error_log()` 写入日志文件。
 * `crate::debug_log!` 同理，仅在 verbose 模式下输出但也会污染 TUI；TUI 模式下的调试信息应走文件日志。
+
+**10. 锁与不可重入陷阱 (Locks & Non-Reentrancy)**
+* `std::sync::Mutex` / `RwLock` **不可重入**。同一线程对同一把锁二次 `lock()` 会永久阻塞（self-deadlock），表现是整个 TUI 卡死、键盘事件失灵。**严禁**通过引入 `parking_lot::ReentrantMutex` 或 `RefCell` 套娃来"修"这种死锁——它会把响亮的失败转成沉默的数据污染（详见 `notes/锁与不变量.md`）。
+* **trait 方法保持纯查询**：实现 `Tool::description()` / `Tool::parameters_schema()` / `fmt::Display` / `Hash` 等"看起来廉价"的 trait 方法时，**禁止**在内部 `lock()` 任何共享 `Mutex`。这些方法会被持锁的外层调用栈遍历（如 `build_tools_summary_non_deferred`），二次 lock 必然自死锁。动态信息由调用方从外部注入。
+* **临界区不出锁**：持有 `MutexGuard` 时，不要调用 trait 方法、虚函数、用户回调、未知模块函数。要么把调用挪到 `drop(guard)` 之后，要么先把所需数据 clone 出来再释放锁。
+* **持锁透传副作用 → 改 clone**：若必须把锁内数据传给下层函数，优先 `let v: Vec<T> = guard.clone(); drop(guard); call(&v)`，而不是 `call(&guard)`。`MutexGuard` 透传到下层调用是死锁高发模式。
+* `safe_lock()` 包装的依然是不可重入的 `std::sync::Mutex`，仅处理 poison，不解决重入。
+* 出现"想要重入锁就好了"的念头时，按 `notes/锁与不变量.md` 第十二节自检清单逐项检查；99% 的情况下是结构问题（粒度过粗 / 临界区出锁 / trait 契约对不齐），不是锁选错。
