@@ -64,7 +64,7 @@ export default function AskModal({ questions, onSubmit }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-100 p-[calc(env(safe-area-inset-top)+8px)_calc(env(safe-area-inset-right)+8px)_calc(env(safe-area-inset-bottom)+8px)_calc(env(safe-area-inset-left)+8px)]">
+    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-[100] p-[calc(env(safe-area-inset-top)+8px)_calc(env(safe-area-inset-right)+8px)_calc(env(safe-area-inset-bottom)+8px)_calc(env(safe-area-inset-left)+8px)]">
       <div className="bg-bg2 border border-border rounded-lg p-5 w-[92%] max-w-[420px] shadow-xl">
         {/* Header */}
         <div className="flex items-center gap-2 text-base font-bold mb-4">

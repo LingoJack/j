@@ -250,6 +250,15 @@
     @apply bg-fg3;
   }
 
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* 输入框焦点效果 */
   .input-glow:focus {
     box-shadow: 0 0 0 2px rgba(245, 245, 244, 0.15);
@@ -292,7 +301,8 @@
   }
 
   .sidebar-nav-item.active {
-    @apply bg-accent/15 text-accent;
+    @apply bg-fg/15 text-fg;
+    box-shadow: inset 2px 0 0 var(--color-fg);
   }
 
   /* 桌面侧边栏分区面板 */

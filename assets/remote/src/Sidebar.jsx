@@ -2,6 +2,7 @@ import SidebarNav from './SidebarNav'
 import SessionSection from './SessionSection'
 import ConfigSection from './ConfigSection'
 import ArchiveSection from './ArchiveSection'
+import FileSection from './FileSection'
 import HelpSection from './HelpSection'
 
 export default function Sidebar({
@@ -14,6 +15,9 @@ export default function Sidebar({
   modelList,
   themeList,
   archives,
+  fileEntries,
+  fileContent,
+  fileWriteResult,
   send,
   onSelectSection,
   onSwitchSession,
@@ -34,14 +38,17 @@ export default function Sidebar({
           />
         )
       case 'config':
+      case 'terminal':
+      case 'browser':
+        // 这些使用主内容区，侧边栏只显示占位提示
         return (
-          <ConfigSection
-            configData={configData}
-            modelList={modelList}
-            themeList={themeList}
-            send={send}
-            onCollapse={onToggleCollapse}
-          />
+          <div className="flex flex-col items-center justify-center h-full text-fg3 px-4 text-center">
+            <div className="text-[12px]">使用主内容区</div>
+            <button
+              className="mt-2 text-accent text-[11px] hover:underline active:scale-[0.92] transition-transform duration-100 select-none"
+              onClick={onToggleCollapse}
+            >收起侧边栏</button>
+          </div>
         )
       case 'archive':
         return (
@@ -52,17 +59,14 @@ export default function Sidebar({
           />
         )
       case 'files':
-      case 'terminal':
-      case 'browser':
-        // 这些使用全屏面板，侧边栏只显示占位提示
         return (
-          <div className="flex flex-col items-center justify-center h-full text-fg3 px-4 text-center">
-            <div className="text-[12px]">使用主内容区</div>
-            <button
-              className="mt-2 text-accent text-[11px] hover:underline active:scale-[0.92] transition-transform duration-100 select-none"
-              onClick={onToggleCollapse}
-            >收起侧边栏</button>
-          </div>
+          <FileSection
+            fileEntries={fileEntries}
+            fileContent={fileContent}
+            fileWriteResult={fileWriteResult}
+            send={send}
+            onCollapse={onToggleCollapse}
+          />
         )
       case 'help':
         return <HelpSection onCollapse={onToggleCollapse} />

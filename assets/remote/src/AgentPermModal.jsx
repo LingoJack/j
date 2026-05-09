@@ -2,7 +2,7 @@ export default function AgentPermModal({ request, onConfirm }) {
   if (!request) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/50" onClick={() => onConfirm(false)}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay bg-black/50">
       <div className="modal-content bg-bg2 rounded-lg border border-border w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 py-4 border-b border-border">
