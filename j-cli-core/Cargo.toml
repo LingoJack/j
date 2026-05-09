@@ -1,0 +1,67 @@
+[package]
+name = "j-cli-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93.1"
+description = "Core chat engine library for j-cli"
+license = "MIT"
+
+[lib]
+name = "j_cli_core"
+path = "src/lib.rs"
+
+[dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+schemars = "0.8"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+futures = "0.3"
+
+# HTTP client (for LLM API calls and web tools)
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "gzip", "brotli", "deflate", "json", "stream"] }
+
+# Error handling
+thiserror = "2"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Text processing
+pulldown-cmark = "0.13.0"
+unicode-width = "0.2"
+regex = "1.12.3"
+url = "2"
+urlencoding = "2.1"
+html2text = "0.16"
+scraper = "0.26"
+html2md = "0.2"
+glob = "0.3"
+ignore = "0.4.25"
+base64 = "0.22"
+
+# Crypto (for remote protocol)
+p256 = { version = "0.13", features = ["ecdh"] }
+aes-gcm = "0.10"
+hkdf = "0.13"
+sha2 = "0.11"
+rand = "0.8"
+
+# File system
+dirs = "6"
+
+# Clipboard
+arboard = { version = "3.6.1", default-features = false }
+
+# PTY (for terminal tool)
+portable-pty = "0.8"
+
+# Optional: browser automation
+chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"], optional = true }
+
+[features]
+default = []
+browser_cdp = ["dep:chromiumoxide"]

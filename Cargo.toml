@@ -1,5 +1,5 @@
 [workspace]
-members = ["."]
+members = [".", "j-cli-core"]
 resolver = "2"
 
 [package]
@@ -25,6 +25,7 @@ name = "j"
 path = "src/main.rs"
 
 [dependencies]
+j-cli-core = { path = "j-cli-core" }
 clap = { version = "4", features = ["derive"] }
 rust-embed = { version = "8", features = ["include-exclude"] }
 rustyline = "17.0.2"

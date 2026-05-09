@@ -589,6 +589,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -2465,6 +2466,7 @@ dependencies = [
  "ignore",
  "image",
  "indicatif 0.18.4",
+ "j-cli-core",
  "libc",
  "nix 0.31.2",
  "p256",
@@ -2495,6 +2497,41 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "j-cli-core"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "arboard",
+ "base64",
+ "chromiumoxide",
+ "chrono",
+ "dirs",
+ "futures",
+ "glob",
+ "hkdf 0.13.0",
+ "html2md",
+ "html2text",
+ "ignore",
+ "p256",
+ "portable-pty",
+ "pulldown-cmark",
+ "rand 0.8.5",
+ "regex",
+ "reqwest 0.13.2",
+ "schemars",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.11.0",
+ "thiserror 2.0.18",
+ "tokio",
+ "unicode-width 0.2.0",
+ "url",
+ "urlencoding",
 ]
 
 [[package]]
