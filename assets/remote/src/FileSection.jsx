@@ -72,7 +72,7 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
             className="text-fg3 hover:text-fg text-[12px] px-1.5 py-1 rounded hover:bg-bg3 transition-colors"
             onClick={() => handleFileList('.')}
             title="当前目录"
-          >🏠</button>
+          >⌂</button>
           <input
             className="flex-1 bg-bg border border-border rounded px-2 py-1 text-[11px] text-fg outline-none focus:border-accent"
             value={currentPath}
@@ -153,7 +153,7 @@ export default function FileSection({ fileEntries, fileContent, fileWriteResult,
                 className="flex items-center gap-2 px-3 py-1.5 hover:bg-bg3 cursor-pointer transition-colors border-b border-border/30"
                 onClick={() => handleEntryClick(entry)}
               >
-                <span className="text-[14px] shrink-0">{entry.is_dir ? '📁' : '📄'}</span>
+                <span className="text-[12px] shrink-0 text-fg3">{entry.is_dir ? '▸' : '─'}</span>
                 <span className={`text-[12px] truncate flex-1 ${entry.is_dir ? 'text-fg font-medium' : 'text-fg2'}`}>{entry.name}</span>
                 {!entry.is_dir && (
                   <span className="text-[10px] text-fg3 shrink-0">

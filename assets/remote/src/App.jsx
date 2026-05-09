@@ -56,7 +56,7 @@ function ToolCallMsg({ name, arguments: args, completed, collapsed: initCollapse
 
   return (
     <div
-      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-xl border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
+      className={`self-start w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%] rounded-lg border overflow-hidden cursor-pointer active:opacity-80 transition-opacity shrink-0 min-h-[44px] ${completed ? 'border-ok/30 bg-ok/5' : 'border-border bg-bg2'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -105,7 +105,7 @@ function ToolResultMsg({ toolName, output, isError, collapsed: initCollapsed, pa
 
   return (
     <div
-      className={`self-start rounded-xl border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${paired ? 'w-[88%] sm:w-[83%] md:w-[78%] lg:w-[68%] ml-4 border-l-2' : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'} ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5 border-l-err/40' : 'border-border bg-bg2 border-l-ok/30'}`}
+      className={`self-start rounded-lg border overflow-hidden transition-opacity shrink-0 min-h-[44px] ${paired ? 'w-[88%] sm:w-[83%] md:w-[78%] lg:w-[68%] ml-4 border-l-2' : 'w-[90%] sm:w-[85%] md:w-[80%] lg:w-[70%]'} ${hasOutput ? 'cursor-pointer active:opacity-80' : ''} ${isError ? 'border-err/40 bg-err/5 border-l-err/40' : 'border-border bg-bg2 border-l-ok/30'}`}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2 text-xs">
@@ -175,7 +175,7 @@ function MobileSidebar({ sessions, currentSessionId, onSwitch, onNew, onClose })
         </div>
         <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border">
           <button
-            className="w-full py-2.5 rounded-xl bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
+            className="w-full py-2.5 rounded-lg bg-accent/15 text-accent text-[13px] font-medium hover:bg-accent/25 transition-colors"
             onClick={onNew}
           >
             + 新建会话
@@ -654,8 +654,8 @@ export default function App() {
               title="会话列表"
             >☰</button>
             <div className="flex items-center gap-2">
-              <span className="text-[20px] leading-none md:hidden">🦞</span>
-              <span className="font-bold text-[16px] tracking-wide md:hidden">Sprite</span>
+              <span className="text-[18px] leading-none md:hidden font-bold">j</span>
+              <span className="font-semibold text-[14px] tracking-wide md:hidden">remote</span>
             </div>
             <span className="w-px h-4 bg-border" />
             <span className="text-label-ai text-[12px] font-medium">{modelName}</span>

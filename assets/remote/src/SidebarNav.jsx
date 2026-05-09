@@ -70,7 +70,7 @@ export default function SidebarNav({ activeSection, onSelect, theme, toggleTheme
     <div className="sidebar-nav">
       <div className="flex flex-col items-center gap-1 py-2">
         {/* Logo */}
-        <div className="text-[18px] leading-none mb-2 px-0.5 cursor-default select-none" title="Sprite">🦞</div>
+        <div className="text-[18px] leading-none mb-2 px-0.5 cursor-default select-none font-bold" title="j">j</div>
 
         {sections.map(s => (
           <button

@@ -3,11 +3,11 @@ export default function AgentPermModal({ request, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/50" onClick={() => onConfirm(false)}>
-      <div className="modal-content bg-bg2 rounded-2xl border border-border w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="modal-content bg-bg2 rounded-lg border border-border w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <span className="text-warn text-lg">⚠</span>
+            <span className="text-warn text-lg">◉</span>
             <span className="font-bold text-fg text-[15px]">Agent 权限请求</span>
           </div>
         </div>
@@ -33,13 +33,13 @@ export default function AgentPermModal({ request, onConfirm }) {
         {/* Actions */}
         <div className="px-5 py-3 border-t border-border flex gap-2">
           <button
-            className="flex-1 py-2.5 rounded-xl bg-bg3 text-fg text-[13px] font-medium hover:bg-border transition-colors"
+            className="flex-1 py-2.5 rounded-lg bg-bg3 text-fg text-[13px] font-medium hover:bg-border transition-colors"
             onClick={() => onConfirm(false)}
           >
             拒绝
           </button>
           <button
-            className="flex-1 py-2.5 rounded-xl bg-accent text-white text-[13px] font-medium hover:bg-accent-dim transition-colors"
+            className="flex-1 py-2.5 rounded-lg bg-accent text-white text-[13px] font-medium hover:bg-accent-dim transition-colors"
             onClick={() => onConfirm(true)}
           >
             允许

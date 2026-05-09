@@ -65,15 +65,15 @@ export default function AskModal({ questions, onSubmit }) {
 
   return (
     <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-100 p-[calc(env(safe-area-inset-top)+8px)_calc(env(safe-area-inset-right)+8px)_calc(env(safe-area-inset-bottom)+8px)_calc(env(safe-area-inset-left)+8px)]">
-      <div className="bg-[#1a1e2e] border border-[#3060a0] rounded-[20px] p-5.5 w-[92%] max-w-[420px] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+      <div className="bg-bg2 border border-border rounded-lg p-5 w-[92%] max-w-[420px] shadow-xl">
         {/* Header */}
         <div className="flex items-center gap-2 text-base font-bold mb-4">
-          <span className="text-xl">❓</span>
+          <span className="text-accent text-lg">◉</span>
           <span className="text-accent">
             {q.header || '请回答'}
           </span>
           {total > 1 && (
-            <span className="ml-auto text-[11px] font-medium bg-accent/20 text-accent px-2 py-0.5 rounded-[10px]">
+            <span className="ml-auto text-[11px] font-medium bg-accent/20 text-accent px-2 py-0.5 rounded-lg">
               {currentIdx + 1} / {total}
             </span>
           )}
@@ -89,7 +89,7 @@ export default function AskModal({ questions, onSubmit }) {
               {q.options.map((opt, i) => (
                 <button
                   key={i}
-                  className={`flex items-start gap-2.5 px-4 py-3 border rounded-xl bg-transparent text-sm cursor-pointer transition-all duration-150 text-left active:scale-[0.98] ${
+                  className={`flex items-start gap-2.5 px-4 py-3 border rounded-lg bg-transparent text-sm cursor-pointer transition-all duration-150 text-left active:scale-[0.98] ${
                     selected[i]
                       ? 'border-accent text-accent bg-accent/10'
                       : 'border-border text-fg hover:bg-accent/5'
@@ -114,14 +114,14 @@ export default function AskModal({ questions, onSubmit }) {
             {/* Actions */}
             <div className="flex gap-2 justify-between items-center">
               <button
-                className="px-4 py-2 border-none rounded-[10px] text-[13px] font-medium cursor-pointer bg-bg3 text-fg2 hover:text-fg"
+                className="px-4 py-2 border-none rounded-lg text-[13px] font-medium cursor-pointer bg-bg3 text-fg2 hover:text-fg"
                 onClick={() => { setMode('input'); setFreeText('') }}
               >
                 ✎ 自由输入
               </button>
               {q.multi_select && (
                 <button
-                  className="px-5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-accent text-[#111] disabled:opacity-30"
+                  className="px-5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-accent text-[#111] disabled:opacity-30"
                   onClick={submitMulti}
                   disabled={!selected.some(Boolean)}
                 >
@@ -135,7 +135,7 @@ export default function AskModal({ questions, onSubmit }) {
           <div className="flex flex-col gap-2.5">
             <input
               type="text"
-              className="w-full px-4 py-3 border border-accent/30 rounded-xl bg-bg text-fg text-sm outline-none font-[inherit] focus:border-accent"
+              className="w-full px-4 py-3 border border-accent/30 rounded-lg bg-bg text-fg text-sm outline-none font-[inherit] focus:border-accent"
               placeholder="输入你的回答..."
               value={freeText}
               onChange={e => setFreeText(e.target.value)}
@@ -147,13 +147,13 @@ export default function AskModal({ questions, onSubmit }) {
             />
             <div className="flex gap-2 justify-end">
               <button
-                className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-bg3 text-fg2"
+                className="px-4.5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-bg3 text-fg2"
                 onClick={() => setMode('select')}
               >
                 返回
               </button>
               <button
-                className="px-4.5 py-2 border-none rounded-[10px] text-[13px] font-semibold cursor-pointer bg-accent text-[#111] disabled:opacity-30"
+                className="px-4.5 py-2 border-none rounded-lg text-[13px] font-semibold cursor-pointer bg-accent text-[#111] disabled:opacity-30"
                 onClick={submitFreeText}
                 disabled={!freeText.trim()}
               >

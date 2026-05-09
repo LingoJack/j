@@ -11,11 +11,11 @@ export default function PlanApprovalModal({ request, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/50" onClick={handleReject}>
-      <div className="modal-content bg-bg2 rounded-2xl border border-border w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="modal-content bg-bg2 rounded-lg border border-border w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <span className="text-accent text-lg">📋</span>
+            <span className="text-accent text-lg">◈</span>
             <span className="font-bold text-fg text-[15px]">Plan 审批请求</span>
           </div>
         </div>
@@ -37,19 +37,19 @@ export default function PlanApprovalModal({ request, onConfirm }) {
         {/* Actions */}
         <div className="px-5 py-3 border-t border-border flex gap-2">
           <button
-            className="flex-1 py-2.5 rounded-xl bg-err/15 text-err text-[13px] font-medium hover:bg-err/25 transition-colors"
+            className="flex-1 py-2.5 rounded-lg bg-err/15 text-err text-[13px] font-medium hover:bg-err/25 transition-colors"
             onClick={handleReject}
           >
             拒绝
           </button>
           <button
-            className="flex-1 py-2.5 rounded-xl bg-accent text-white text-[13px] font-medium hover:bg-accent-dim transition-colors"
+            className="flex-1 py-2.5 rounded-lg bg-accent text-white text-[13px] font-medium hover:bg-accent-dim transition-colors"
             onClick={handleApprove}
           >
             批准
           </button>
           <button
-            className="py-2.5 px-3 rounded-xl bg-warn/15 text-warn text-[12px] font-medium hover:bg-warn/25 transition-colors"
+            className="py-2.5 px-3 rounded-lg bg-warn/15 text-warn text-[12px] font-medium hover:bg-warn/25 transition-colors"
             onClick={handleApproveAndClear}
             title="批准并清空上下文"
           >

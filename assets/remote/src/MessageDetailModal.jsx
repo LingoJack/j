@@ -21,11 +21,11 @@ export default function MessageDetailModal({ message, onClose }) {
   const isToolResult = message.role === 'tool_result'
 
   const getRoleInfo = () => {
-    if (isUser) return { icon: '👤', label: '用户消息', color: 'text-accent' }
-    if (isAssistant) return { icon: '🦞', label: '助手回复', color: 'text-ok' }
-    if (isToolCall) return { icon: '🔧', label: `工具调用: ${message.name}`, color: 'text-warn' }
-    if (isToolResult) return { icon: '📋', label: `工具结果: ${message.toolName}`, color: message.isError ? 'text-err' : 'text-fg2' }
-    return { icon: '💬', label: '消息', color: 'text-fg' }
+    if (isUser) return { icon: '◉', label: '用户消息', color: 'text-accent' }
+    if (isAssistant) return { icon: '◈', label: '助手回复', color: 'text-ok' }
+    if (isToolCall) return { icon: '◐', label: `工具调用: ${message.name}`, color: 'text-warn' }
+    if (isToolResult) return { icon: '→', label: `工具结果: ${message.toolName}`, color: message.isError ? 'text-err' : 'text-fg2' }
+    return { icon: '■', label: '消息', color: 'text-fg' }
   }
 
   const roleInfo = getRoleInfo()
@@ -130,7 +130,7 @@ export default function MessageDetailModal({ message, onClose }) {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="bg-bg3 border border-border rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
+      <div className="bg-bg3 border border-border rounded-lg w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
@@ -163,7 +163,7 @@ export default function MessageDetailModal({ message, onClose }) {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${copied ? 'bg-ok/20 text-ok' : 'bg-bg3 text-fg2 hover:text-fg'}`}
             onClick={handleCopy}
           >
-            {copied ? '✓ 已复制' : '📋 复制内容'}
+            {copied ? '✓ 已复制' : '复制内容'}
           </button>
           <button
             className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-[#111] hover:opacity-90 transition-opacity"
