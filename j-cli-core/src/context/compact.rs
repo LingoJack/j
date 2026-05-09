@@ -1,0 +1,475 @@
+use crate::agent::api::create_llm_client;
+use crate::constants::{
+    COMPACT_KEEP_RECENT, COMPACT_KEEP_RECENT_USER_MESSAGES, COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET,
+    COMPACT_SKILL_TOKEN_BUDGET, COMPACT_SUMMARY_MAX_TOKENS, COMPACT_TOKEN_THRESHOLD,
+    COMPACT_TRUNCATE_MAX_CHARS, MICRO_COMPACT_BYTES_THRESHOLD,
+};
+use crate::context::policy;
+use crate::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
+use crate::llm::{ChatRequest, Content, Message, Role};
+use crate::util::log::{write_error_log, write_info_log};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// 粗略估算：每 4 个字符 ≈ 1 token
+const CHARS_PER_TOKEN_ESTIMATE: usize = 4;
+
+// ========== InvokedSkills 追踪 ==========
+
+/// 记录一次技能调用的完整信息（用于 auto_compact 后恢复）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvokedSkill {
+    /// 技能名称
+    pub name: String,
+    /// 技能目录路径
+    pub dir_path: String,
+    /// 完整的解析后内容（含 $ARGUMENTS 替换、references/scripts 列表）
+    pub resolved_content: String,
+    /// 调用时间戳，单位：秒（用于 LRU 排序，最近调用的优先保留）
+    pub invoked_at_secs: u64,
+}
+
+/// 会话内已调用技能的共享状态（Agent 线程写入，auto_compact 读取）
+/// 使用 Arc<Mutex<HashMap>> 以便跨线程共享
+pub type InvokedSkillsMap = Arc<Mutex<HashMap<String, InvokedSkill>>>;
+
+/// 创建空的 InvokedSkillsMap
+pub fn new_invoked_skills_map() -> InvokedSkillsMap {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
+/// 记录一次技能调用（由 LoadSkill 工具执行后调用）
+pub fn record_skill_invocation(
+    map: &InvokedSkillsMap,
+    name: String,
+    dir_path: String,
+    content: String,
+) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if let Ok(mut skills) = map.lock() {
+        let log_name = name.clone();
+        skills.insert(
+            name.clone(),
+            InvokedSkill {
+                name,
+                dir_path,
+                resolved_content: content,
+                invoked_at_secs: now,
+            },
+        );
+        write_info_log("invoked_skills", &format!("记录技能调用: {}", log_name));
+    }
+}
+
+/// 构建 auto_compact 后需恢复的技能附件内容
+/// 按最近调用时间排序，总预算 COMPACT_SKILL_TOKEN_BUDGET tokens，
+/// 每个技能截断到 COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET tokens
+pub fn build_invoked_skills_attachment(map: &InvokedSkillsMap) -> Option<String> {
+    let skills = map.lock().ok()?;
+    if skills.is_empty() {
+        return None;
+    }
+
+    // 按最近调用时间排序（新→旧）
+    let mut sorted_by_recency: Vec<&InvokedSkill> = skills.values().collect();
+    sorted_by_recency.sort_by_key(|b| std::cmp::Reverse(b.invoked_at_secs));
+
+    let mut result =
+        String::from("Skills invoked in this session (preserved across compaction):\n\n");
+    let mut total_tokens = 0usize;
+    let per_skill_budget = COMPACT_SKILL_PER_SKILL_TOKEN_BUDGET;
+    let total_budget = COMPACT_SKILL_TOKEN_BUDGET;
+
+    for skill in sorted_by_recency {
+        let skill_tokens = skill.resolved_content.len() / CHARS_PER_TOKEN_ESTIMATE; // 粗略估算
+        let available = if total_tokens + per_skill_budget > total_budget {
+            total_budget.saturating_sub(total_tokens)
+        } else {
+            per_skill_budget
+        };
+        if available == 0 {
+            break;
+        }
+
+        result.push_str(&format!("### Skill: {}\n", skill.name));
+        result.push_str(&format!("Path: {}\n", skill.dir_path));
+
+        if skill_tokens <= available {
+            result.push_str(&skill.resolved_content);
+            total_tokens += skill_tokens;
+        } else {
+            // 截断到 available tokens (~4 chars/token)，保留头部（通常包含最关键的使用说明）
+            let char_cutoff = available * 4;
+            let truncated: String = skill.resolved_content.chars().take(char_cutoff).collect();
+            result.push_str(&truncated);
+            result.push_str("\n\n[... skill content truncated for compaction ...]");
+            total_tokens += available;
+        }
+        result.push_str("\n\n---\n\n");
+    }
+
+    Some(result)
+}
+
+// ========== Compact 结果 ==========
+
+/// auto_compact 执行结果
+#[derive(Debug, Clone)]
+pub struct CompactResult {
+    /// 压缩前的消息数量
+    pub messages_before: usize,
+    /// 保存的 transcript 文件路径
+    pub transcript_path: String,
+    /// LLM 生成的摘要文本（供 tool result 显示）
+    pub summary: String,
+    /// 保留的最近 user 消息原文（供 UI 显示）
+    pub recent_user_messages: Vec<ChatMessage>,
+}
+
+// ========== Compact 配置 ==========
+
+/// Context compact 配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactConfig {
+    /// 是否启用 context compact
+    #[serde(default = "default_compact_enabled")]
+    pub enabled: bool,
+    /// 触发 auto_compact 的 token 阈值
+    #[serde(default = "default_token_threshold")]
+    pub token_threshold: usize,
+    /// micro_compact 保留最近几个 tool result 不替换
+    #[serde(default = "default_keep_recent")]
+    pub keep_recent: usize,
+    /// micro_compact 中不压缩的工具名称列表（用户可扩展，与内置 EXEMPT_TOOLS 合并）
+    #[serde(default)]
+    pub micro_compact_exempt_tools: Vec<String>,
+}
+
+fn default_compact_enabled() -> bool {
+    true
+}
+
+fn default_token_threshold() -> usize {
+    COMPACT_TOKEN_THRESHOLD
+}
+
+fn default_keep_recent() -> usize {
+    COMPACT_KEEP_RECENT
+}
+
+impl Default for CompactConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_compact_enabled(),
+            token_threshold: default_token_threshold(),
+            keep_recent: default_keep_recent(),
+            micro_compact_exempt_tools: Vec::new(),
+        }
+    }
+}
+
+impl CompactConfig {
+    /// 返回有效的压缩阈值；若用户未设置（=0）则使用编译期默认值。
+    pub fn effective_token_threshold(&self) -> usize {
+        if self.token_threshold == 0 {
+            COMPACT_TOKEN_THRESHOLD
+        } else {
+            self.token_threshold
+        }
+    }
+}
+
+/// 粗略估算 messages 的 token 数（~4 chars per token）
+pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
+    serde_json::to_string(messages).unwrap_or_default().len() / CHARS_PER_TOKEN_ESTIMATE
+}
+
+/// 提取最近 N 条 user 消息原文（不限于未被回复的）。
+/// 从末尾向前扫描，取最后 `count` 条 role=user 的消息，保留原始顺序。
+/// 用于 auto_compact 场景：压缩后必须保留用户最近的消息原文，
+/// 否则 LLM 只能看到摘要而丢失用户的精确措辞和当前任务意图。
+pub fn extract_recent_user_messages(messages: &[ChatMessage], count: usize) -> Vec<ChatMessage> {
+    let mut recent: Vec<ChatMessage> = Vec::with_capacity(count);
+    for m in messages.iter().rev() {
+        if m.role == MessageRole::User {
+            recent.push(m.clone());
+            if recent.len() >= count {
+                break;
+            }
+        }
+    }
+    recent.reverse();
+    recent
+}
+
+/// 内置豁免工具列表（从 `context::policy` 统一源头派生）
+///
+/// 这里是对 `policy::KEY_TOOL_NAMES` 的重新导出，保留原公共名便于 UI 引用。
+/// 新增 KeyTool 时应修改 `policy::policy_for` + `policy::KEY_TOOL_NAMES`，本常量自动跟随。
+pub use super::policy::KEY_TOOL_NAMES as BUILTIN_EXEMPT_TOOLS;
+
+/// 判断工具名是否应被豁免（KeyTool + 用户扩展清单）
+///
+/// 内部统一走 `policy::is_key_tool`，用户扩展清单作为附加覆盖。
+pub fn is_exempt_tool(tool_name: &str, extra_exempt_tools: &[String]) -> bool {
+    policy::is_key_tool(tool_name) || extra_exempt_tools.iter().any(|t| t == tool_name)
+}
+
+/// Layer 1: micro_compact - 替换旧 tool result 为占位符，保留最近 keep_recent 个
+///
+/// 纯内存操作，零 API 成本。
+/// 将较早的 role="tool" 消息中内容长度 > MICRO_COMPACT_BYTES_THRESHOLD 的替换为 "[Previous: used {tool_name}]"
+pub fn micro_compact(
+    messages: &mut [ChatMessage],
+    keep_recent: usize,
+    extra_exempt_tools: &[String],
+) {
+    // 1. 从 assistant 消息的 tool_calls 构建 tool_call_id → tool_name 映射
+    let mut tool_call_id_to_name: HashMap<String, String> = HashMap::new();
+    for msg in messages.iter() {
+        if msg.role == MessageRole::Assistant
+            && let Some(ref tool_calls) = msg.tool_calls
+        {
+            for tool_call in tool_calls {
+                tool_call_id_to_name.insert(tool_call.id.clone(), tool_call.name.clone());
+            }
+        }
+    }
+
+    // 2. 找出所有 role="tool" 的消息索引
+    let tool_indices: Vec<usize> = messages
+        .iter()
+        .enumerate()
+        .filter(|(_, msg)| msg.role == MessageRole::Tool)
+        .map(|(i, _)| i)
+        .collect();
+
+    if tool_indices.len() <= keep_recent {
+        return;
+    }
+
+    // 3. 除最近 keep_recent 个外，content.len() > MICRO_COMPACT_BYTES_THRESHOLD 的替换为占位符
+    let indices_to_compact = &tool_indices[..tool_indices.len() - keep_recent];
+    let mut compacted_count = 0;
+
+    for &idx in indices_to_compact {
+        let msg = &messages[idx];
+        if msg.content.chars().count() > MICRO_COMPACT_BYTES_THRESHOLD {
+            let tool_call_id = msg.tool_call_id.clone().unwrap_or_default();
+            let tool_name = tool_call_id_to_name
+                .get(&tool_call_id)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            if is_exempt_tool(&tool_name, extra_exempt_tools) {
+                continue;
+            }
+            messages[idx].content = format!("[Previous: used {}]", tool_name);
+            compacted_count += 1;
+        }
+    }
+
+    if compacted_count > 0 {
+        write_info_log(
+            "micro_compact",
+            &format!(
+                "压缩了 {} 个旧 tool result（保留最近 {} 个）",
+                compacted_count, keep_recent
+            ),
+        );
+    }
+}
+
+/// 保存完整 transcript 到 `sessions/<id>/.transcripts/` 目录
+fn save_transcript(messages: &[ChatMessage], session_id: &str) -> Option<String> {
+    let paths = SessionPaths::new(session_id);
+    let transcript_dir = paths.transcripts_dir();
+    if let Err(e) = fs::create_dir_all(&transcript_dir) {
+        write_error_log(
+            "save_transcript",
+            &format!("创建 .transcripts 目录失败: {}", e),
+        );
+        return None;
+    }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let path = transcript_dir.join(format!("transcript_{}.jsonl", timestamp));
+
+    let mut content = String::new();
+    for msg in messages {
+        if let Ok(line) = serde_json::to_string(msg) {
+            content.push_str(&line);
+            content.push('\n');
+        }
+    }
+
+    match fs::write(&path, &content) {
+        Ok(_) => {
+            let path_str = path.display().to_string();
+            write_info_log(
+                "save_transcript",
+                &format!("Transcript saved: {}", path_str),
+            );
+            Some(path_str)
+        }
+        Err(e) => {
+            write_error_log("save_transcript", &format!("保存 transcript 失败: {}", e));
+            None
+        }
+    }
+}
+
+/// auto_compact 的只读参数（messages 作为被操作对象单独传递）
+pub struct AutoCompactParams<'a> {
+    pub provider: &'a ModelProvider,
+    pub invoked_skills: &'a InvokedSkillsMap,
+    pub session_id: &'a str,
+    pub protected_context: Option<&'a str>,
+}
+
+/// Layer 2: auto_compact - 保存 transcript + LLM 摘要 + 替换消息
+///
+/// 需要调用 LLM（非流式，max_tokens=20000）。
+/// 失败时 graceful degradation：log 错误，返回 Err，调用方可继续用原消息。
+///
+/// `invoked_skills`: 会话内已调用技能的共享状态，auto_compact 后将技能指令作为附件重新注入，
+/// 确保模型在压缩后仍能遵循正在执行的技能/工作流。
+pub async fn auto_compact(
+    messages: &mut Vec<ChatMessage>,
+    params: &AutoCompactParams<'_>,
+) -> Result<CompactResult, String> {
+    // 记录压缩前的消息数（用于 UI 提示）
+    let messages_before = messages.len();
+
+    // 1. 保存 transcript 到 session 级 .transcripts/ 目录
+    let transcript_path =
+        save_transcript(messages, params.session_id).unwrap_or_else(|| "(unsaved)".to_string());
+
+    // 2. 构建结构化摘要请求（9 段式模板，确保技能/工作流进度被保留）
+    let conversation_text = serde_json::to_string(messages).unwrap_or_default();
+    // 截断到 80000 chars
+    let truncated_conversation_text: String = conversation_text
+        .chars()
+        .take(COMPACT_TRUNCATE_MAX_CHARS)
+        .collect();
+
+    let summary_prompt = format!(
+        "Summarize this conversation for continuity. Use this structured format:\n\
+         1) **Primary Request**: What the user originally asked for.\n\
+         2) **Key Concepts**: Important technical concepts, domain knowledge, or constraints discovered.\n\
+         3) **Files and Code**: Key files read or modified, with important code snippets or decisions.\n\
+         4) **Errors and Fixes**: Any errors encountered and how they were resolved.\n\
+         5) **Problem Solving**: Reasoning steps and approach taken.\n\
+         6) **Active Skills/Workflows**: If a skill or workflow was being followed, list its name, key steps, and current progress. Include direct quotes showing exactly where you left off.\n\
+         7) **Pending Tasks**: Things that still need to be done.\n\
+         8) **Current Work**: What was being worked on most recently. Include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off.\n\
+         9) **Next Step**: What should happen next to continue the work.\n\
+         \n\
+         Be concise but preserve critical details. Section 6 (Active Skills/Workflows) is especially important — preserve all skill instructions and progress so the model can continue following them without re-loading.\n\n\
+         {}",
+        truncated_conversation_text
+    );
+
+    // 追加保护指令（来自 PreAutoCompact hook 的 additional_context）
+    let summary_prompt_with_context = if let Some(protected) = params.protected_context {
+        format!(
+            "{}\n\n[Protected Context — MUST preserve in full]:\n{}",
+            summary_prompt, protected
+        )
+    } else {
+        summary_prompt
+    };
+
+    let request = ChatRequest {
+        model: params.provider.model.clone(),
+        messages: vec![Message {
+            role: Role::User,
+            content: Some(Content::Text(summary_prompt_with_context)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+            reasoning_content: None,
+        }],
+        tools: None,
+        stream: None,
+        max_tokens: Some(COMPACT_SUMMARY_MAX_TOKENS),
+        extra: serde_json::Map::new(),
+    };
+
+    // 3. 调用 LLM（非流式）
+    let client = create_llm_client(params.provider);
+    let response = client
+        .chat_completion(&request)
+        .await
+        .map_err(|e| format!("auto_compact LLM 请求失败: {}", e))?;
+
+    let summary = response
+        .choices
+        .first()
+        .and_then(|c| c.message.content.clone())
+        .unwrap_or_else(|| "(empty summary)".to_string());
+
+    write_info_log(
+        "auto_compact",
+        &format!("摘要完成，长度: {} chars", summary.len()),
+    );
+
+    // 4. 替换 messages 为 [summary_user_msg, understood_assistant_msg, ...recent_user_msgs]
+    //    保留最近 N 条 user 消息原文，确保 LLM 下一轮能看到用户的精确措辞和当前任务
+    let recent_user = extract_recent_user_messages(messages, COMPACT_KEEP_RECENT_USER_MESSAGES);
+    messages.clear();
+    let mut summary_content = format!(
+        "[Conversation compressed. Transcript: {}]\n\n{}",
+        transcript_path, summary
+    );
+
+    // 注入已调用技能附件（结构化保留，类似 Claude Code 的 invoked_skills 机制）
+    if let Some(skills_attachment) = build_invoked_skills_attachment(params.invoked_skills) {
+        summary_content.push_str(&format!(
+            "\n\n<system-reminder>\n{}\n</system-reminder>",
+            skills_attachment
+        ));
+        write_info_log(
+            "auto_compact",
+            "已注入 invoked_skills 附件，确保压缩后技能指令可继续遵循",
+        );
+    }
+
+    // 先追加最近 N 条 user 消息原文（确保 UI 中 user 消息在 compact 摘要之前），
+    // 再追加 summary + understood，这样 LLM 上下文中 summary 在 user msgs 之后，
+    // 且 UI 渲染顺序也正确
+    let recent_user_clone = recent_user.clone();
+    if !recent_user.is_empty() {
+        write_info_log(
+            "auto_compact",
+            &format!(
+                "保留最近 {} 条 user 消息原文，确保压缩后任务意图不丢失",
+                recent_user.len()
+            ),
+        );
+        for msg in recent_user {
+            messages.push(msg);
+        }
+    }
+
+    messages.push(ChatMessage::text(MessageRole::User, summary_content));
+    messages.push(ChatMessage::text(
+        MessageRole::Assistant,
+        "Understood. I have the context from the summary and any active skill instructions. Continuing to follow them.",
+    ));
+
+    Ok(CompactResult {
+        messages_before,
+        transcript_path,
+        summary,
+        recent_user_messages: recent_user_clone,
+    })
+}
