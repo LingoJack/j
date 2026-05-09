@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -30,6 +31,8 @@ pub(super) struct BgTask {
     pub child_pid: Option<u32>,
     /// 线程类任务的存活标记（SubAgent 等非进程任务使用 AtomicBool 标记存活）
     pub is_thread_running: Option<Arc<AtomicBool>>,
+    /// PTY writer 句柄（仅交互式会话有值），用于 stdin 写入
+    pub pty_writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
 }
 
 /// 后台任务完成通知
@@ -110,6 +113,7 @@ impl BackgroundManager {
             started_at: Instant::now(),
             child_pid: None,
             is_thread_running,
+            pty_writer: None,
         };
 
         {
@@ -141,6 +145,7 @@ impl BackgroundManager {
             started_at,
             child_pid: Some(pid),
             is_thread_running: None,
+            pty_writer: None,
         };
 
         {
@@ -161,6 +166,91 @@ impl BackgroundManager {
                 &format!("后台任务 {} 已关联子进程 PID: {}", task_id, pid),
             );
         }
+    }
+
+    /// 设置 PTY writer 句柄（交互式会话使用）
+    pub fn set_pty_writer(&self, task_id: &str, writer: Box<dyn Write + Send>) {
+        let mut tasks = safe_lock(&self.tasks, "BackgroundManager::set_pty_writer");
+        if let Some(task) = tasks.get_mut(task_id) {
+            task.pty_writer = Some(Arc::new(Mutex::new(writer)));
+            crate::util::log::write_info_log(
+                "BgTask::set_pty_writer",
+                &format!("后台任务 {} 已设置 PTY writer", task_id),
+            );
+        }
+    }
+
+    /// 向交互式会话写入 stdin
+    pub fn session_stdin(&self, task_id: &str, text: &str) -> Result<(), String> {
+        let tasks = safe_lock(&self.tasks, "BackgroundManager::session_stdin");
+        let task = tasks
+            .get(task_id)
+            .ok_or_else(|| "session not found or process already exited".to_string())?;
+        let writer = task
+            .pty_writer
+            .as_ref()
+            .ok_or_else(|| "not an interactive session".to_string())?;
+        let mut w = safe_lock(writer, "session_stdin::pty_writer");
+        w.write_all(text.as_bytes())
+            .and_then(|_| w.flush())
+            .map_err(|e: std::io::Error| e.to_string())
+    }
+
+    /// 读取交互式会话的当前输出（从 output_buffer 读取，可选等待）
+    pub fn session_stdout(&self, task_id: &str, timeout_ms: u64) -> Result<String, String> {
+        let tasks = safe_lock(&self.tasks, "BackgroundManager::session_stdout");
+        let task = tasks
+            .get(task_id)
+            .ok_or_else(|| "session not found or process already exited".to_string())?;
+        if task.pty_writer.is_none() {
+            return Err("not an interactive session".to_string());
+        }
+        // 记录当前 output_buffer 长度，等待新内容
+        let buf = safe_lock(&task.output_buffer, "session_stdout::buf");
+        let start_len = buf.len();
+        drop(buf);
+        drop(tasks);
+
+        // 等待新输出或超时
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        while Instant::now() < deadline {
+            let tasks = safe_lock(&self.tasks, "session_stdout::poll");
+            if let Some(task) = tasks.get(task_id) {
+                let buf = safe_lock(&task.output_buffer, "session_stdout::poll_buf");
+                if buf.len() > start_len {
+                    // 返回新增部分
+                    return Ok(buf[start_len..].to_string());
+                }
+                // 进程已退出
+                if task.status != "running" {
+                    let output = buf[start_len..].to_string();
+                    return Ok(output);
+                }
+            } else {
+                return Err("session not found".to_string());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        // 超时，返回已有的新增内容（可能为空）
+        let tasks = safe_lock(&self.tasks, "session_stdout::timeout");
+        if let Some(task) = tasks.get(task_id) {
+            let buf = safe_lock(&task.output_buffer, "session_stdout::timeout_buf");
+            return Ok(buf[start_len..].to_string());
+        }
+        Ok(String::new())
+    }
+
+    /// 终止交互式会话（drop PTY 句柄，进程收到 SIGHUP 自然退出）
+    pub fn session_quit(&self, task_id: &str) -> Result<(), String> {
+        let mut tasks = safe_lock(&self.tasks, "BackgroundManager::session_quit");
+        if let Some(task) = tasks.get_mut(task_id) {
+            task.pty_writer = None; // drop writer → SIGHUP
+            task.status = "completed".to_string();
+            task.result = Some("session quit by user".to_string());
+        } else {
+            return Err("session not found".to_string());
+        }
+        Ok(())
     }
 
     /// 内部方法：标记任务完成并添加通知

@@ -194,6 +194,9 @@ impl ToolRegistry {
             Box::new(super::background::TaskOutputTool {
                 manager: Arc::clone(&background_manager),
             }),
+            Box::new(super::session::SessionTool {
+                manager: Arc::clone(&background_manager),
+            }),
             Box::new(super::task::TaskTool {
                 manager: Arc::clone(&task_manager),
             }),

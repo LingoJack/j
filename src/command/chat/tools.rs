@@ -16,6 +16,7 @@ pub mod plan;
 #[cfg(windows)]
 mod powershell;
 pub mod send_message;
+mod session;
 mod shell;
 pub mod skill;
 pub mod sub_agent;
@@ -67,4 +68,5 @@ pub mod tool_names {
     pub const SEND_MESSAGE: &str = super::send_message::SendMessageTool::NAME;
     pub const WORK_DONE: &str = super::work_done::WorkDoneTool::NAME;
     pub const IGNORE_MESSAGE: &str = super::ignore_message::IgnoreMessageTool::NAME;
+    pub const SESSION: &str = super::session::SessionTool::NAME;
 }

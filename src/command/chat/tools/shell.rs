@@ -38,6 +38,9 @@ struct ShellParams {
     /// If true, run the command in background and return a task_id immediately. Use TaskOutput to retrieve results.
     #[serde(default)]
     run_in_background: bool,
+    /// If true, spawn the command with a PTY so that it can accept stdin via the Session tool. Use this for interactive programs (e.g. python REPL, node REPL, mysql, ssh). Returns a sid (same as task_id) that can be used with the Session tool.
+    #[serde(default)]
+    interactive: bool,
 }
 
 // ========== ShellTool ==========
@@ -90,6 +93,7 @@ impl Tool for ShellTool {
           - Before running destructive operations (git reset --hard, git push --force), consider safer alternatives
           - Never skip hooks (--no-verify) unless the user explicitly asks
         - Commands that may run longer than a few seconds (builds, deploys, container ops, custom scripts, make targets) should use run_in_background: true — even if the command has its own detach flag (e.g. `podman compose up -d` or `docker compose up -d` still blocks during image build). If unsure, prefer run_in_background: true; the tool will auto-promote to background after 30s regardless, returning a task_id you can use with TaskOutput.
+        - For interactive programs (REPLs, ssh, mysql, python -i, node -i), set interactive: true. This spawns the command with a PTY and returns a sid. Use the Session tool to send stdin and read stdout. The sid is the same as the task_id.
         "#.into()
     }
 
@@ -132,6 +136,10 @@ impl Tool for ShellTool {
 
         if params.run_in_background {
             return self.execute_background(params.command, params.cwd, timeout_secs);
+        }
+
+        if params.interactive {
+            return self.execute_interactive(&params.command, params.cwd.as_deref(), timeout_secs);
         }
 
         self.execute_sync(
@@ -576,6 +584,121 @@ impl ShellTool {
                 "command": command,
                 "status": "running",
                 "message": "命令已在后台启动，使用 TaskOutput 查询状态和结果"
+            })
+            .to_string(),
+            is_error: false,
+            images: vec![],
+            plan_decision: PlanDecision::None,
+        }
+    }
+
+    /// 使用 PTY 启动交互式命令，立即返回 sid
+    fn execute_interactive(
+        &self,
+        command: &str,
+        cwd: Option<&str>,
+        _timeout_secs: u64,
+    ) -> ToolResult {
+        use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+
+        let effective_cwd = cwd
+            .map(|s| s.to_string())
+            .or_else(|| thread_cwd().map(|p| p.to_string_lossy().to_string()));
+
+        let pty_system = NativePtySystem::default();
+        let pair = match pty_system.openpty(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        }) {
+            Ok(p) => p,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("创建 PTY 失败: {}", e),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+
+        let mut builder = CommandBuilder::new("bash");
+        builder.arg("-c");
+        builder.arg(command);
+        if let Some(ref dir) = effective_cwd {
+            builder.cwd(dir);
+        }
+
+        let _child = match pair.slave.spawn_command(builder) {
+            Ok(c) => c,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("PTY 启动命令失败: {}", e),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+
+        // 注册后台任务
+        let (task_id, output_buffer) =
+            self.manager
+                .spawn_command(command, effective_cwd.clone(), 0, None);
+
+        // 在移动 master 之前先 clone reader 和获取 writer
+        let reader = match pair.master.try_clone_reader() {
+            Ok(r) => r,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("PTY reader 克隆失败: {}", e),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+
+        let writer = match pair.master.take_writer() {
+            Ok(w) => w,
+            Err(e) => {
+                return ToolResult {
+                    output: format!("PTY writer 获取失败: {}", e),
+                    is_error: true,
+                    images: vec![],
+                    plan_decision: PlanDecision::None,
+                };
+            }
+        };
+
+        // 保存 PTY writer 句柄（master 保持存活直到 writer drop）
+        let _master = pair.master; // 保持 master 活着，drop 在 writer 之后
+        self.manager.set_pty_writer(&task_id, writer);
+
+        let buf = Arc::clone(&output_buffer);
+        let tid = task_id.clone();
+        let mgr = Arc::clone(&self.manager);
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(reader);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Ok(mut b) = buf.lock() {
+                    b.push_str(&line);
+                    b.push('\n');
+                }
+            }
+            // PTY reader 结束意味着进程已退出
+            mgr.complete_task(&tid, "completed", "交互式会话已结束".to_string());
+        });
+
+        ToolResult {
+            output: json!({
+                "sid": task_id,
+                "task_id": task_id,
+                "command": command,
+                "status": "running",
+                "message": "交互式会话已启动，使用 Session 工具的 stdin/stdout 操作"
             })
             .to_string(),
             is_error: false,
