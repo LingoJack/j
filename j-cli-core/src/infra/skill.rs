@@ -1,5 +1,4 @@
 use crate::permission::JcliConfig;
-use crate::config::YamlConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -49,7 +48,7 @@ pub struct Skill {
 
 /// 返回用户级 skills 目录: ~/.jdata/agent/skills/
 pub fn skills_dir() -> PathBuf {
-    let dir = YamlConfig::data_dir().join("agent").join("skills");
+    let dir = crate::constants::data_root().join("agent").join("skills");
     let _ = fs::create_dir_all(&dir);
     dir
 }

@@ -19,10 +19,11 @@ schemars = "0.8"
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
 
 # HTTP client (for LLM API calls and web tools)
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "gzip", "brotli", "deflate", "json", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "gzip", "brotli", "deflate", "json", "stream", "blocking"] }
 
 # Error handling
 thiserror = "2"
@@ -58,6 +59,13 @@ arboard = { version = "3.6.1", default-features = false }
 
 # PTY (for terminal tool)
 portable-pty = "0.8"
+
+# Image processing (for computer use / multi-modal)
+image = "0.25"
+
+# macOS-specific (for computer use keyboard/mouse)
+core-graphics = "0.25"
+nix = { version = "0.31", features = ["process", "signal"] }
 
 # Optional: browser automation
 chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"], optional = true }

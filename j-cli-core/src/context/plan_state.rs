@@ -6,7 +6,7 @@
 //! - `PendingPlanApproval`: 单条审批请求（Condvar 阻塞等待）
 //! - `PLAN_MODE_WHITELIST`: Plan mode 允许的工具白名单
 
-use crate::app::types::PlanDecision;
+use crate::message_types::PlanDecision;
 use crate::tools::tool_names;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};

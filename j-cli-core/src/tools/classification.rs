@@ -2,8 +2,6 @@ use crate::constants::{
     CLASSIFY_SIZE_THRESHOLD_BYTES, CLASSIFY_SIZE_THRESHOLD_CHARS, CLASSIFY_TITLE_TRUNCATE_LEN,
     CLASSIFY_TRUNCATE_LEN, HOOK_LOG_DESC_MAX_LEN,
 };
-use crate::theme::Theme;
-use ratatui::style::Color;
 
 use super::tool_names;
 
@@ -74,24 +72,6 @@ impl ToolCategory {
             Self::Other => "🔧",
         }
     }
-
-    /// 获取工具颜色（从主题）
-    pub fn color(&self, theme: &Theme) -> Color {
-        match self {
-            Self::File => theme.label_user,          // 蓝色系
-            Self::Search => theme.label_ai,          // 绿色系
-            Self::Execute => theme.title_loading,    // 黄/橙色系
-            Self::Network => theme.config_title,     // 青色系
-            Self::Plan => theme.label_ai,            // 绿色系
-            Self::Agent => theme.title_loading,      // 黄/橙色系
-            Self::Teammate => theme.config_title,    // 青色系
-            Self::Compact => theme.config_title,     // 青色系
-            Self::SendMessage => theme.config_title, // 青色系
-            Self::IgnoreMessage => theme.text_dim,   // 灰色
-            Self::WorkDone => theme.label_ai,        // 绿色系
-            Self::Other => theme.text_dim,           // 灰色
-        }
-    }
 }
 
 /// 工具执行状态
@@ -109,14 +89,6 @@ impl ToolStatus {
         match self {
             Self::Success => "✓",
             Self::Failed => "✗",
-        }
-    }
-
-    /// 状态颜色
-    pub fn color(&self, theme: &Theme) -> Color {
-        match self {
-            Self::Success => theme.label_ai,
-            Self::Failed => theme.toast_error_border,
         }
     }
 }

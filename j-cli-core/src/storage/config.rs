@@ -2,8 +2,7 @@ use crate::constants::{
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS,
 };
 use crate::context::compact::CompactConfig;
-use crate::config::YamlConfig;
-use crate::theme::ThemeName;
+use crate::theme_name::ThemeName;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -280,7 +279,7 @@ fn load_text_file(path: &Path) -> Option<String> {
             }
         }
         Err(e) => {
-            error!("✖️ 读取 {} 失败: {}", path.display(), e);
+            eprintln!("[ERROR] ✖️ 读取 {} 失败: {}", path.display(), e);
             None
         }
     }
@@ -298,7 +297,7 @@ fn save_text_file(path: &Path, content: &str) -> bool {
             Ok(_) => true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
             Err(e) => {
-                error!("✖️ 删除 {} 失败: {}", path.display(), e);
+                eprintln!("[ERROR] ✖️ 删除 {} 失败: {}", path.display(), e);
                 false
             }
         };
@@ -307,7 +306,7 @@ fn save_text_file(path: &Path, content: &str) -> bool {
     match fs::write(path, trimmed) {
         Ok(_) => true,
         Err(e) => {
-            error!("✖️ 保存 {} 失败: {}", path.display(), e);
+            eprintln!("[ERROR] ✖️ 保存 {} 失败: {}", path.display(), e);
             false
         }
     }
@@ -315,7 +314,7 @@ fn save_text_file(path: &Path, content: &str) -> bool {
 
 /// 获取 agent 数据目录: ~/.jdata/agent/data/
 pub fn agent_data_dir() -> PathBuf {
-    let dir = YamlConfig::data_dir().join("agent").join("data");
+    let dir = crate::constants::data_root().join("agent").join("data");
     let _ = fs::create_dir_all(&dir);
     dir
 }
@@ -353,11 +352,11 @@ pub fn load_agent_config() -> AgentConfig {
     }
     match fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            error!("✖️ 解析 agent_config.json 失败: {}", e);
+            eprintln!("[ERROR] ✖️ 解析 agent_config.json 失败: {}", e);
             AgentConfig::default()
         }),
         Err(e) => {
-            error!("✖️ 读取 agent_config.json 失败: {}", e);
+            eprintln!("[ERROR] ✖️ 读取 agent_config.json 失败: {}", e);
             AgentConfig::default()
         }
     }
@@ -377,12 +376,12 @@ pub fn save_agent_config(config: &AgentConfig) -> bool {
         Ok(json) => match fs::write(&path, json) {
             Ok(_) => true,
             Err(e) => {
-                error!("✖️ 保存 agent_config.json 失败: {}", e);
+                eprintln!("[ERROR] ✖️ 保存 agent_config.json 失败: {}", e);
                 false
             }
         },
         Err(e) => {
-            error!("✖️ 序列化 agent 配置失败: {}", e);
+            eprintln!("[ERROR] ✖️ 序列化 agent 配置失败: {}", e);
             false
         }
     }
@@ -427,7 +426,7 @@ pub fn save_memory(content: &str) -> bool {
     match fs::write(path, content) {
         Ok(_) => true,
         Err(e) => {
-            error!("✖️ 保存 memory.md 失败: {}", e);
+            eprintln!("[ERROR] ✖️ 保存 memory.md 失败: {}", e);
             false
         }
     }
@@ -442,7 +441,7 @@ pub fn save_soul(content: &str) -> bool {
     match fs::write(path, content) {
         Ok(_) => true,
         Err(e) => {
-            error!("✖️ 保存 soul.md 失败: {}", e);
+            eprintln!("[ERROR] ✖️ 保存 soul.md 失败: {}", e);
             false
         }
     }

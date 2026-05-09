@@ -62,7 +62,7 @@ pub fn list_archives() -> Vec<ChatArchive> {
                 match serde_json::from_str::<ChatArchive>(&content) {
                     Ok(archive) => archives.push(archive),
                     Err(e) => {
-                        error!("[list_archives] 解析归档文件失败: {:?}, 错误: {}", path, e);
+                        eprintln!("[ERROR] [list_archives] 解析归档文件失败: {:?}, 错误: {}", path, e);
                     }
                 }
             }

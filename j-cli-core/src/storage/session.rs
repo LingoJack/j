@@ -670,7 +670,7 @@ pub fn delete_session(session_id: &str) -> bool {
     if dir.exists()
         && let Err(e) = fs::remove_dir_all(&dir)
     {
-        error!("✖️ 删除 session 目录失败: {}", e);
+        eprintln!("[ERROR] ✖️ 删除 session 目录失败: {}", e);
         return false;
     }
     true

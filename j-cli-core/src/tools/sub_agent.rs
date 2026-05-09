@@ -102,9 +102,9 @@ fn sanitize_agent_name(description: &str) -> String {
 /// 从嵌入模板加载，将 `{{.base_prompt}}` 替换为父 agent 的 system prompt，
 /// 使 SubAgent 继承基础能力同时拥有独立的身份和限制说明。
 fn build_sub_agent_system_prompt(base_prompt: Option<&str>) -> String {
-    let template = crate::assets::sub_agent_system_prompt_template();
+    let template = crate::template::sub_agent_system_prompt_template();
     let base = base_prompt.unwrap_or("You are a helpful assistant.");
-    template.as_ref().replace("{{.base_prompt}}", base)
+    template.replace("{{.base_prompt}}", base)
 }
 
 /// SubAgentTool 参数

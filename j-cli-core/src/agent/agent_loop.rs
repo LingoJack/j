@@ -5,7 +5,7 @@ use super::tool_processor::{
     ToolCallContext, clear_channels, drain_pending_user_messages, flush_streaming_as_message,
     process_tool_calls, push_both, sync_context_full,
 };
-use crate::app::types::{StreamMsg, ToolResultMsg};
+use crate::message_types::{StreamMsg, ToolResultMsg};
 use crate::context::compact::{self, AutoCompactParams};
 use crate::chat_error::ChatError;
 use crate::infra::hook::{HookContext, HookEvent};

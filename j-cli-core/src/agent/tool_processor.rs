@@ -1,4 +1,4 @@
-use crate::app::types::{PlanDecision, StreamMsg, ToolResultMsg};
+use crate::message_types::{PlanDecision, StreamMsg, ToolResultMsg};
 use crate::chat_error::ChatError;
 use crate::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::storage::{

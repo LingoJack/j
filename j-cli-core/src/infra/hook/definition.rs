@@ -1,6 +1,5 @@
 use crate::infra::hook::types::*;
 use crate::permission::JcliConfig;
-use crate::config::YamlConfig;
 use crate::util::log::{write_error_log, write_info_log};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -303,7 +302,7 @@ impl HookDirDef {
 
 /// 返回用户级 hooks 目录: ~/.jdata/agent/hooks/
 pub fn hooks_dir() -> PathBuf {
-    let dir = YamlConfig::data_dir().join("agent").join("hooks");
+    let dir = crate::constants::data_root().join("agent").join("hooks");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }

@@ -1,5 +1,4 @@
 use crate::permission::JcliConfig;
-use crate::config::YamlConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -52,7 +51,7 @@ pub struct CustomCommand {
 
 /// 返回用户级 commands 目录: ~/.jdata/agent/commands/
 pub fn commands_dir() -> PathBuf {
-    let dir = YamlConfig::data_dir().join("agent").join("commands");
+    let dir = crate::constants::data_root().join("agent").join("commands");
     let _ = fs::create_dir_all(&dir);
     dir
 }

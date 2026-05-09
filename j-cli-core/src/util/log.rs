@@ -16,8 +16,7 @@ macro_rules! info {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {{
-        use colored::Colorize;
-        eprint!("{}", "[ERROR] ".red());
+        eprint!("[ERROR] ");
         eprintln!($($arg)*)
     }};
 }
@@ -26,8 +25,7 @@ macro_rules! error {
 #[macro_export]
 macro_rules! usage {
     ($($arg:tt)*) => {{
-        use colored::Colorize;
-        print!("{}", "💡 Usage: ".green());
+        print!("Usage: ");
         println!($($arg)*)
     }};
 }
@@ -54,9 +52,7 @@ pub fn capitalize_first_letter(s: &str) -> String {
 /// 写入信息日志到文件
 /// 日志文件位置：~/.jdata/agent/logs/info.log
 pub fn write_info_log(context: &str, content: &str) {
-    let log_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(DATA_DIR)
+    let log_dir = crate::constants::data_root()
         .join(AGENT_DIR)
         .join(AGENT_LOG_DIR);
 
@@ -87,9 +83,7 @@ pub fn write_info_log(context: &str, content: &str) {
 /// 写入错误日志到文件
 /// 日志文件位置：~/.jdata/agent/logs/error.log
 pub fn write_error_log(context: &str, error: &str) {
-    let log_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(DATA_DIR)
+    let log_dir = crate::constants::data_root()
         .join(AGENT_DIR)
         .join(AGENT_LOG_DIR);
 

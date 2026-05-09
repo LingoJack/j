@@ -1,6 +1,6 @@
 use crate::agent::thread_identity::current_agent_name;
-use crate::app::types::PlanDecision;
-use crate::app::{AskOption, AskQuestion, AskRequest};
+use crate::message_types::PlanDecision;
+use crate::message_types::{AskOption, AskQuestion, AskRequest};
 use crate::permission::JcliConfig;
 use crate::tools::{Tool, ToolResult, schema_to_tool_params};
 use schemars::JsonSchema;

@@ -32,7 +32,7 @@ impl TodoManager {
             }
             None => {
                 // 极端 fallback：使用全局目录
-                let data_dir = crate::config::YamlConfig::data_dir();
+                let data_dir = crate::constants::data_root();
                 let dir = data_dir.join("agent").join("data");
                 let _ = fs::create_dir_all(&dir);
                 dir.join("todos.json")

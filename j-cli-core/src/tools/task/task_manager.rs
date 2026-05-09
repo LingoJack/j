@@ -30,7 +30,7 @@ impl TaskManager {
             Some(dir) => dir.join("tasks"),
             None => {
                 // 极端 fallback：使用全局目录
-                let data_dir = crate::config::YamlConfig::data_dir();
+                let data_dir = crate::constants::data_root();
                 data_dir.join("agent").join("data").join("tasks")
             }
         };

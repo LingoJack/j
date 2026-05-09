@@ -729,7 +729,7 @@ fn build_teammate_system_prompt(
     base_prompt: Option<&str>,
     teammate_manager: &Arc<Mutex<TeammateManager>>,
 ) -> String {
-    let template = crate::assets::teammate_system_prompt_template();
+    let template = crate::template::teammate_system_prompt_template();
     let base = base_prompt.unwrap_or("You are a helpful assistant.");
     let team_summary = teammate_manager
         .lock()
@@ -737,7 +737,6 @@ fn build_teammate_system_prompt(
         .unwrap_or_default();
 
     template
-        .as_ref()
         .replace("{{.base_prompt}}", base)
         .replace("{{.name}}", name)
         .replace("{{.role}}", role)

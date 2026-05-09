@@ -1,6 +1,6 @@
 use crate::agent::api::{build_request_with_tools, create_llm_client};
 use crate::agent::thread_identity::{current_agent_name, current_agent_type};
-use crate::app::AskRequest;
+use crate::message_types::AskRequest;
 use crate::context::compact::{CompactConfig, new_invoked_skills_map};
 use crate::chat_error::ChatError;
 use crate::infra::hook::HookManager;

@@ -1,4 +1,4 @@
-use crate::app::AskRequest;
+use crate::message_types::AskRequest;
 use crate::context::compact::InvokedSkillsMap;
 use crate::infra::hook::HookManager;
 use crate::infra::skill::Skill;
@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
 
 // ========== 核心类型 ==========
 
-pub use crate::app::types::PlanDecision;
+pub use crate::message_types::PlanDecision;
 
 /// 图片数据，以 base64 编码存储
 #[derive(Debug, Clone)]

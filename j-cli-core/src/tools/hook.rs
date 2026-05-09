@@ -1,4 +1,3 @@
-use crate::assets::Assets;
 use crate::constants::HOOK_LOG_DESC_MAX_LEN;
 use crate::infra::hook::{
     HookDef, HookEvent, HookFilter, HookManager, HookType, OnError,
@@ -136,13 +135,10 @@ impl Tool for RegisterHookTool {
 
 impl RegisterHookTool {
     fn handle_help() -> ToolResult {
-        let content = Assets::get("help/hook.md")
-            .map(|asset| {
-                let raw = String::from_utf8_lossy(&asset.data);
-                // 去掉 frontmatter（---...---），只返回 body
-                Self::strip_frontmatter(&raw).to_string()
-            })
-            .unwrap_or_else(|| "Hook 文档加载失败".to_string());
+        // TODO: AssetProvider 需由调用方注入，暂时返回占位内容
+        let content = option_env!("HOOK_HELP_CONTENT")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "Hook 文档加载失败（需要注入 AssetProvider）".to_string());
 
         ToolResult {
             output: content,
