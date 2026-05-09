@@ -319,7 +319,10 @@ impl BackgroundManager {
 
     /// 列出当前所有 status == "running" 的任务，用于注入 LLM 上下文
     /// 返回 (task_id, command 摘要, 已运行秒数) 的列表，按 task_id 排序
-    pub fn list_running(&self) -> Vec<(String, String, u64)> {
+    /// 返回 (task_id, command_summary, elapsed_secs, is_interactive)。
+    /// is_interactive = true 表示该任务持有 PTY writer，是交互式会话（sid），
+    /// 应当使用 Session 工具 stdin/stdout 操作，而不是 TaskOutput。
+    pub fn list_running(&self) -> Vec<(String, String, u64, bool)> {
         let tasks = safe_lock(&self.tasks, "BackgroundManager::list_running");
         let now = Instant::now();
         let mut out: Vec<_> = tasks
@@ -338,7 +341,8 @@ impl BackgroundManager {
                 } else {
                     t.command.clone()
                 };
-                (t.task_id.clone(), cmd_summary, elapsed)
+                let is_interactive = t.pty_writer.is_some();
+                (t.task_id.clone(), cmd_summary, elapsed, is_interactive)
             })
             .collect();
         out.sort_by(|a, b| a.0.cmp(&b.0));
@@ -496,21 +500,50 @@ pub fn build_running_summary(manager: &Arc<BackgroundManager>) -> String {
     if running.is_empty() {
         return String::new();
     }
-    let mut md = String::from(
-        "## Background Tasks\n\n\
-         The following background tasks are still running. \
-         Use TaskOutput to wait for or check their results when needed. \
-         Do not re-spawn these commands.\n",
-    );
-    for (id, cmd, elapsed) in &running {
-        md.push_str(&format!(
-            "- {} (running {}): {}\n",
-            id,
-            format_elapsed(*elapsed),
-            cmd
-        ));
+    let (sessions, bg_jobs): (Vec<_>, Vec<_>) = running
+        .into_iter()
+        .partition(|(_, _, _, interactive)| *interactive);
+
+    let mut out = String::new();
+
+    if !bg_jobs.is_empty() {
+        out.push_str(
+            "## Background Tasks\n\n\
+             The following background tasks are still running. \
+             Use TaskOutput to wait for or check their results when needed. \
+             Do not re-spawn these commands.\n",
+        );
+        for (id, cmd, elapsed, _) in &bg_jobs {
+            out.push_str(&format!(
+                "- {} (running {}): {}\n",
+                id,
+                format_elapsed(*elapsed),
+                cmd
+            ));
+        }
     }
-    md.trim_end().to_string()
+
+    if !sessions.is_empty() {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(
+            "## Interactive Sessions\n\n\
+             The following interactive PTY sessions are alive (started via Bash/Powershell with interactive: true). \
+             Use the Session tool (action=stdin/stdout/quit) with the sid below to interact with them. \
+             Do NOT use TaskOutput and do NOT re-spawn these processes — they are still running and waiting for input.\n",
+        );
+        for (id, cmd, elapsed, _) in &sessions {
+            out.push_str(&format!(
+                "- sid={} (alive {}): {}\n",
+                id,
+                format_elapsed(*elapsed),
+                cmd
+            ));
+        }
+    }
+
+    out.trim_end().to_string()
 }
 
 fn format_elapsed(secs: u64) -> String {
