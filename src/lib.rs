@@ -17,4 +17,4 @@ pub mod util;
 pub use config::YamlConfig;
 
 // Re-export j-cli-core llm for external use
-pub use j_cli_core::llm;
+pub use j_agent::llm;

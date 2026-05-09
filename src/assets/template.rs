@@ -55,7 +55,7 @@ pub fn default_agent_md() -> Cow<'static, str> {
 }
 
 // Note: teammate_system_prompt_template and sub_agent_system_prompt_template
-// are now provided by j_cli_core::template (using include_str!). Removed from here.
+// are now provided by j_agent::template (using include_str!). Removed from here.
 
 /// 诗句语录文本
 ///

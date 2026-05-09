@@ -11,18 +11,18 @@ pub mod render;
 pub mod ui;
 
 // Re-exports from j-cli-core
-pub use j_cli_core::agent;
-pub use j_cli_core::agent_md;
-pub use j_cli_core::context;
-pub use j_cli_core::infra;
-pub use j_cli_core::permission;
-pub use j_cli_core::storage;
-pub use j_cli_core::teammate;
-pub use j_cli_core::tools;
+pub use j_agent::agent;
+pub use j_agent::agent_md;
+pub use j_agent::context;
+pub use j_agent::infra;
+pub use j_agent::permission;
+pub use j_agent::storage;
+pub use j_agent::teammate;
+pub use j_agent::tools;
 
 // Re-export types
-pub use j_cli_core::chat_error as error;
-pub use j_cli_core::constants;
+pub use j_agent::chat_error as error;
+pub use j_agent::constants;
 
 #[cfg(test)]
 mod regression_tests;

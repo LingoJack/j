@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::assets::Assets;
 
 // Re-export ThemeName from j-cli-core
-pub use j_cli_core::theme_name::ThemeName;
+pub use j_agent::theme_name::ThemeName;
 
 /// 主题配色方案
 /// 将所有 UI 颜色归类为语义化字段，方便统一管理

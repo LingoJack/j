@@ -1,13 +1,13 @@
 [package]
-name = "j-cli-core"
+name = "j-agent"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.93.1"
-description = "Core chat engine library for j-cli"
+description = "Agent engine library for j-cli and j-gui"
 license = "MIT"
 
 [lib]
-name = "j_cli_core"
+name = "j_agent"
 path = "src/lib.rs"
 
 [dependencies]

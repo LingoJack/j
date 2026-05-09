@@ -5,7 +5,7 @@
 
 #![allow(clippy::single_component_path_imports)]
 pub use crate::theme::{Theme, ThemeName};
-use j_cli_core::tools::classification::{ToolCategory, ToolStatus};
+use j_agent::tools::classification::{ToolCategory, ToolStatus};
 use ratatui::style::Color;
 
 /// 工具分类颜色扩展 trait
