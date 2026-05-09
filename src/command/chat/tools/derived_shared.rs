@@ -332,6 +332,8 @@ pub struct DerivedAgentShared {
     pub disabled_tools: Arc<Vec<String>>,
     /// 延迟加载的工具列表（子 agent 需继承父 agent 的 defer 设置）
     pub deferred_tools: Arc<Mutex<Vec<String>>>,
+    /// 本会话 LoadTool 已加载的 deferred 工具（子 agent 需继承以保持一致）
+    pub session_loaded_deferred: Arc<Mutex<Vec<String>>>,
     /// 子 agent 权限请求队列（与主 TUI 共享同一个实例）
     pub permission_queue: Arc<PermissionQueue>,
     /// Plan 审批请求队列（与主 TUI 共享同一个实例，teammate ExitPlanMode 走此队列）

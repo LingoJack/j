@@ -285,6 +285,7 @@ impl ChatApp {
             tool_registry: tool_registry_arc,
             disabled_tools,
             deferred_tools: Arc::clone(&self.deferred_tools),
+            session_loaded_deferred: Arc::clone(&self.session_loaded_deferred),
             tools_enabled,
             sub_agent_metrics: Arc::clone(&self.sub_agent_metrics),
         };

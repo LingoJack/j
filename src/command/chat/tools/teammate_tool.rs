@@ -236,6 +236,7 @@ impl Tool for TeammateTool {
         let context_config_clone = Arc::clone(&self.shared.agent_context_config);
         let sub_agent_metrics_clone = Arc::clone(&self.shared.sub_agent_metrics);
         let deferred_tools_clone = Arc::clone(&self.shared.deferred_tools);
+        let session_loaded_deferred_clone = Arc::clone(&self.shared.session_loaded_deferred);
 
         let thread_handle = std::thread::spawn(move || {
             // 设置线程的 agent 身份（含类型前缀，与广播 <Teammate@Name> 格式一致）
@@ -269,6 +270,7 @@ impl Tool for TeammateTool {
                 session_id: session_id_clone,
                 disabled_tools,
                 deferred_tools: deferred_tools_clone,
+                session_loaded_deferred: session_loaded_deferred_clone,
                 registry: child_registry,
                 jcli_config,
                 teammate_manager,

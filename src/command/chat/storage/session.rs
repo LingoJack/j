@@ -138,6 +138,11 @@ impl SessionPaths {
         self.dir.join("sandbox.json")
     }
 
+    /// LoadTool 已加载的 deferred 工具：`sessions/<id>/loaded_deferred.json`
+    pub fn loaded_deferred_file(&self) -> PathBuf {
+        self.dir.join("loaded_deferred.json")
+    }
+
     /// 操作审计文件：sessions/<id>/ops.jsonl
     pub fn ops_file(&self) -> PathBuf {
         self.dir.join("ops.jsonl")

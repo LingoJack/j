@@ -47,14 +47,15 @@ pub(super) fn draw_tab_tools_header<'a>(lines: &mut Vec<Line<'a>>, app: &ChatApp
 /// Tools tab 工具列表（左侧面板）
 ///
 /// 每个工具占一行，使用 pointer_span 指示选中项（与其他 Tab 一致），不带 toggle 圆点。
-/// 选中项加粗，非选中项右侧显示 [defer] tag。
+/// 选中项加粗，非选中项右侧显示 [defer] / [defer·已加载] tag。
 /// 选项详情在右侧面板渲染。
 pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
     let t = &app.ui.theme;
     let tool_names = app.tool_registry.tool_names();
     let mut list = ItemList::new(t.bg_primary);
 
-    let deferred_tools = match app.deferred_tools.lock() {
+    // 运行时 deferred 状态（LoadTool 可能已从中移除）
+    let runtime_deferred = match app.deferred_tools.lock() {
         Ok(guard) => guard,
         Err(e) => e.into_inner(),
     };
@@ -67,7 +68,15 @@ pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
             .disabled_tools
             .iter()
             .any(|d| d == *name);
-        let is_deferred = deferred_tools.iter().any(|d| d == name);
+        // 读配置态（用户配置的 defer 设置）
+        let is_config_deferred = app
+            .state
+            .agent_config
+            .deferred_tools
+            .iter()
+            .any(|d| d == name);
+        // 运行时已加载（配置 defer 但运行时不在 deferred_tools 中）
+        let is_session_loaded = is_config_deferred && !runtime_deferred.iter().any(|d| d == name);
 
         let name_style = if is_selected && app.ui.tools_in_options {
             // Tab 进入选项模式：用不同颜色表示正在编辑选项
@@ -87,11 +96,18 @@ pub(super) fn draw_tab_tools_list<'a>(app: &ChatApp) -> ItemList<'a> {
             Span::styled(name.to_string(), name_style),
         ];
 
-        if is_deferred && is_enabled {
-            spans.push(Span::styled(
-                " [defer]".to_string(),
-                Style::default().fg(t.config_dim),
-            ));
+        if is_config_deferred && is_enabled {
+            if is_session_loaded {
+                spans.push(Span::styled(
+                    " [defer·已加载]".to_string(),
+                    Style::default().fg(t.config_toggle_on),
+                ));
+            } else {
+                spans.push(Span::styled(
+                    " [defer]".to_string(),
+                    Style::default().fg(t.config_dim),
+                ));
+            }
         }
 
         // 非启用的工具名称置灰
@@ -125,11 +141,19 @@ pub(super) fn draw_tab_tools_detail<'a>(app: &ChatApp) -> Vec<Line<'a>> {
         .disabled_tools
         .iter()
         .any(|d| d == name);
-    let deferred_tools = match app.deferred_tools.lock() {
+    // 配置态 defer（用户配置的持久化设置）
+    let is_config_deferred = app
+        .state
+        .agent_config
+        .deferred_tools
+        .iter()
+        .any(|d| d == name);
+    // 运行时已加载（配置 defer 但运行时不在 deferred_tools 中）
+    let runtime_deferred = match app.deferred_tools.lock() {
         Ok(guard) => guard,
         Err(e) => e.into_inner(),
     };
-    let is_deferred = deferred_tools.iter().any(|d| d == name);
+    let is_session_loaded = is_config_deferred && !runtime_deferred.iter().any(|d| d == name);
 
     let dim_style = Style::default().fg(t.config_dim);
 
@@ -182,14 +206,14 @@ pub(super) fn draw_tab_tools_detail<'a>(app: &ChatApp) -> Vec<Line<'a>> {
     // 选项2：defer
     let defer_focused = app.ui.tools_in_options && app.ui.tools_option_idx == 1;
     let defer_effective = is_enabled;
-    let defer_toggle = if is_deferred && defer_effective {
+    let defer_toggle = if is_config_deferred && defer_effective {
         Span::styled(TOGGLE_ON.to_string(), opt_on_style(defer_focused))
     } else if defer_effective {
         Span::styled(TOGGLE_OFF.to_string(), opt_off_style(defer_focused))
     } else {
         Span::styled(TOGGLE_OFF.to_string(), Style::default().fg(t.config_dim))
     };
-    lines.push(Line::from(vec![
+    let mut defer_spans = vec![
         pointer_span(defer_focused, t),
         Span::styled(
             "defer ",
@@ -202,7 +226,15 @@ pub(super) fn draw_tab_tools_detail<'a>(app: &ChatApp) -> Vec<Line<'a>> {
             },
         ),
         defer_toggle,
-    ]));
+    ];
+    // 本会话已加载提示
+    if is_session_loaded {
+        defer_spans.push(Span::styled(
+            "  本会话已加载".to_string(),
+            Style::default().fg(t.config_toggle_on),
+        ));
+    }
+    lines.push(Line::from(defer_spans));
 
     lines
 }

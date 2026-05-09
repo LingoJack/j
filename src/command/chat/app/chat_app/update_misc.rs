@@ -363,13 +363,8 @@ impl ChatApp {
     // ========== UI 管理 ==========
 
     pub(super) fn update_save_config(&mut self) {
-        // 同步 deferred_tools 到 agent_config
-        let deferred = match self.deferred_tools.lock() {
-            Ok(guard) => guard,
-            Err(e) => e.into_inner(),
-        }
-        .clone();
-        self.state.agent_config.deferred_tools = deferred;
+        // UI 已直接修改 agent_config，直接持久化即可
+        // （不再从 deferred_tools 同步，因为 deferred_tools 包含 LoadTool 的会话级修改）
         let _ = save_agent_config(&self.state.agent_config);
         self.ui.mode = ChatMode::Chat;
     }

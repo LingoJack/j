@@ -4,11 +4,12 @@ use crate::command::chat::remote::protocol::WsOutbound;
 use crate::command::chat::storage::{
     ChatMessage, MessageRole, PlanStatePersist, SandboxStatePersist, SessionEvent, SessionPaths,
     SubAgentSnapshotPersist, TeammateSnapshotPersist, append_event_to_path, append_session_event,
-    generate_session_id, load_display_session, load_hooks_state, load_plan_state,
-    load_sandbox_state, load_session_meta_file, load_skills_state, load_tasks_state,
-    load_teammates_state, load_todos_state, save_hooks_state, save_plan_state, save_sandbox_state,
-    save_session_meta_file, save_skills_state, save_subagents_state, save_tasks_state,
-    save_teammates_state, save_todos_state,
+    generate_session_id, load_display_session, load_hooks_state, load_loaded_deferred_state,
+    load_plan_state, load_sandbox_state, load_session_meta_file, load_skills_state,
+    load_tasks_state, load_teammates_state, load_todos_state, save_hooks_state,
+    save_loaded_deferred_state, save_plan_state, save_sandbox_state, save_session_meta_file,
+    save_skills_state, save_subagents_state, save_tasks_state, save_teammates_state,
+    save_todos_state,
 };
 use crate::command::chat::teammate::TeammateStatusPersist;
 use crate::command::chat::tools::derived_shared::SubAgentStatus;
@@ -167,7 +168,12 @@ impl ChatApp {
             },
         );
 
-        // 9. auto_approve → session.json
+        // 9. LoadTool 已加载的 deferred 工具
+        if let Ok(loaded) = self.session_loaded_deferred.lock() {
+            save_loaded_deferred_state(sid, &loaded.clone());
+        }
+
+        // 10. auto_approve → session.json
         if let Some(mut meta) = load_session_meta_file(sid)
             && meta.auto_approve != self.ui.auto_approve
         {
@@ -305,6 +311,21 @@ impl ChatApp {
             && let Ok(mut mgr) = self.teammate_manager.lock()
         {
             mgr.set_recovered_teammates(teammates);
+        }
+
+        // 8. LoadTool 已加载的 deferred 工具
+        if let Some(loaded) = load_loaded_deferred_state(sid) {
+            // 从 deferred_tools 移除（运行时生效）+ 填充 session_loaded_deferred
+            if let Ok(mut deferred) = self.deferred_tools.lock() {
+                for name in &loaded {
+                    if let Some(pos) = deferred.iter().position(|d| d == name) {
+                        deferred.remove(pos);
+                    }
+                }
+            }
+            if let Ok(mut session_loaded) = self.session_loaded_deferred.lock() {
+                *session_loaded = loaded;
+            }
         }
 
         // Teammates 状态已通过 set_recovered_teammates 恢复，无需额外处理 transcript。

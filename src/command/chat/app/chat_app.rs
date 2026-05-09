@@ -120,6 +120,8 @@ pub struct ChatApp {
     pub sub_agent_metrics: Arc<Mutex<crate::command::chat::tools::derived_shared::SubAgentMetrics>>,
     /// 延迟加载的工具列表（与 DerivedAgentShared 共享，UI 可修改）
     pub deferred_tools: Arc<Mutex<Vec<String>>>,
+    /// 本会话通过 LoadTool 加载的 deferred 工具（会话级，不写入用户配置）
+    pub session_loaded_deferred: Arc<Mutex<Vec<String>>>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
     pub invoked_skills: crate::command::chat::context::compact::InvokedSkillsMap,
 }
@@ -241,6 +243,7 @@ impl ChatApp {
         let disabled_tools_arc = Arc::new(agent_config.disabled_tools.clone());
         let deferred_tools_arc: Arc<Mutex<Vec<String>>> =
             Arc::new(Mutex::new(agent_config.deferred_tools.clone()));
+        let session_loaded_deferred_arc: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
         // 子 agent 权限请求队列（TUI 和所有 agent 共享同一个 Arc）
         let permission_queue = Arc::new(PermissionQueue::new());
@@ -276,6 +279,7 @@ impl ChatApp {
             task_manager: Arc::clone(&task_manager),
             disabled_tools: Arc::clone(&disabled_tools_arc),
             deferred_tools: Arc::clone(&deferred_tools_arc),
+            session_loaded_deferred: Arc::clone(&session_loaded_deferred_arc),
             permission_queue: Arc::clone(&permission_queue),
             plan_approval_queue: Arc::clone(&plan_approval_queue),
             sub_agent_tracker: Arc::clone(&sub_agent_tracker),
@@ -308,9 +312,12 @@ impl ChatApp {
                 teammate_manager: Some(Arc::clone(&teammate_manager)),
             },
         ));
-        // 注册 LoadTool，它持有 deferred_tools 的共享引用以便在运行时加载 deferred 工具
+        // 注册 LoadTool，它持有 deferred_tools + session_loaded_deferred 的共享引用
         tool_registry.register(Box::new(
-            crate::command::chat::tools::load_tool::LoadTool::new(Arc::clone(&deferred_tools_arc)),
+            crate::command::chat::tools::load_tool::LoadTool::new(
+                Arc::clone(&deferred_tools_arc),
+                Arc::clone(&session_loaded_deferred_arc),
+            ),
         ));
         let tool_registry = Arc::new(tool_registry);
         let jcli_config = Arc::new(JcliConfig::load());
@@ -621,6 +628,7 @@ impl ChatApp {
             plan_approval_queue,
             sub_agent_metrics: shared_sub_agent_metrics,
             deferred_tools: deferred_tools_arc,
+            session_loaded_deferred: session_loaded_deferred_arc,
             invoked_skills,
         };
 

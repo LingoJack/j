@@ -17,10 +17,13 @@ struct LoadToolParams {
 ///
 /// 当工具被设置为 defer 时，它不会出现在初始的工具列表中。
 /// 模型可以通过调用 LoadTool 来加载这些工具，加载后该工具在后续轮次中可用。
+/// 加载操作只影响当前会话的运行时状态，不修改用户的持久化配置。
 #[derive(Debug)]
 pub struct LoadTool {
-    /// 延迟加载的工具列表（加载后从中移除）
+    /// 延迟加载的工具列表（加载后从中移除，运行时生效）
     deferred_tools: Arc<Mutex<Vec<String>>>,
+    /// 本会话已加载的 deferred 工具（追踪记录，会话持久化）
+    session_loaded_deferred: Arc<Mutex<Vec<String>>>,
 }
 
 impl LoadTool {
@@ -37,8 +40,14 @@ impl LoadTool {
          Use this when you need a tool that is not currently available in your tool list. \
          The tool name must match exactly. After loading, the tool will be available in the next turn.";
 
-    pub fn new(deferred_tools: Arc<Mutex<Vec<String>>>) -> Self {
-        Self { deferred_tools }
+    pub fn new(
+        deferred_tools: Arc<Mutex<Vec<String>>>,
+        session_loaded_deferred: Arc<Mutex<Vec<String>>>,
+    ) -> Self {
+        Self {
+            deferred_tools,
+            session_loaded_deferred,
+        }
     }
 }
 
@@ -93,6 +102,12 @@ impl Tool for LoadTool {
         match idx {
             Some(i) => {
                 deferred.remove(i);
+                // 记录到 session_loaded_deferred（会话级追踪，不影响用户配置）
+                if let Ok(mut loaded) = self.session_loaded_deferred.lock()
+                    && !loaded.iter().any(|n| n == &tool_name)
+                {
+                    loaded.push(tool_name.clone());
+                }
                 ToolResult {
                     output: format!(
                         "Tool '{}' has been loaded successfully. It will be available in the next turn.",

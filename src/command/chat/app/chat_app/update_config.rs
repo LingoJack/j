@@ -464,14 +464,30 @@ impl ChatApp {
                             .iter()
                             .any(|d| d == &name);
                         if is_enabled {
+                            // 双写：同时修改 agent_config（持久化）和 deferred_tools（运行时）
                             let mut deferred = match self.deferred_tools.lock() {
                                 Ok(guard) => guard,
                                 Err(e) => e.into_inner(),
                             };
                             if let Some(pos) = deferred.iter().position(|d| d == &name) {
                                 deferred.remove(pos);
+                                // 同步移除 agent_config 中的对应项
+                                if let Some(pos2) = self
+                                    .state
+                                    .agent_config
+                                    .deferred_tools
+                                    .iter()
+                                    .position(|d| d == &name)
+                                {
+                                    self.state.agent_config.deferred_tools.remove(pos2);
+                                }
+                                // 同步移除 session_loaded_deferred 中的记录
+                                if let Ok(mut loaded) = self.session_loaded_deferred.lock() {
+                                    loaded.retain(|n| n != &name);
+                                }
                             } else {
-                                deferred.push(name);
+                                deferred.push(name.clone());
+                                self.state.agent_config.deferred_tools.push(name);
                             }
                         }
                     }
@@ -552,13 +568,17 @@ impl ChatApp {
     pub(super) fn update_toggle_menu_enable_all(&mut self) {
         if self.ui.config_tab == ConfigTab::Tools {
             self.state.agent_config.disabled_tools.clear();
-            // 启用全部时同时清除 deferred 状态
+            // 启用全部时同时清除 deferred 状态（双写）
+            self.state.agent_config.deferred_tools.clear();
             let mut deferred = match self.deferred_tools.lock() {
                 Ok(guard) => guard,
                 Err(e) => e.into_inner(),
             };
             deferred.clear();
             drop(deferred);
+            if let Ok(mut loaded) = self.session_loaded_deferred.lock() {
+                loaded.clear();
+            }
             self.show_toast("已启用全部工具", false);
         } else if self.ui.config_tab == ConfigTab::Skills {
             self.state.agent_config.disabled_skills.clear();
@@ -580,13 +600,17 @@ impl ChatApp {
                 .iter()
                 .map(|n| n.to_string())
                 .collect();
-            // 禁用全部时清除 deferred 状态（禁用的工具无需 deferred）
+            // 禁用全部时清除 deferred 状态（双写）
+            self.state.agent_config.deferred_tools.clear();
             let mut deferred = match self.deferred_tools.lock() {
                 Ok(guard) => guard,
                 Err(e) => e.into_inner(),
             };
             deferred.clear();
             drop(deferred);
+            if let Ok(mut loaded) = self.session_loaded_deferred.lock() {
+                loaded.clear();
+            }
             self.show_toast("已禁用全部工具", false);
         } else if self.ui.config_tab == ConfigTab::Skills {
             self.state.agent_config.disabled_skills = self

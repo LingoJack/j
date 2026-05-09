@@ -152,6 +152,7 @@ pub async fn run_main_agent_loop(params: MainAgentLoopParams) {
         tools_enabled,
         sub_agent_metrics,
         deferred_tools,
+        session_loaded_deferred: _,
     } = shared;
 
     let client = create_llm_client(&provider);

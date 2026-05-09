@@ -212,3 +212,15 @@ pub fn load_sandbox_state(session_id: &str) -> Option<SandboxStatePersist> {
     let paths = SessionPaths::new(session_id);
     load_session_json(&paths.sandbox_file())
 }
+
+/// 保存 LoadTool 已加载的 deferred 工具列表
+pub fn save_loaded_deferred_state(session_id: &str, data: &[String]) -> bool {
+    let paths = SessionPaths::new(session_id);
+    save_session_json(&paths.loaded_deferred_file(), data)
+}
+
+/// 加载 LoadTool 已加载的 deferred 工具列表
+pub fn load_loaded_deferred_state(session_id: &str) -> Option<Vec<String>> {
+    let paths = SessionPaths::new(session_id);
+    load_session_json(&paths.loaded_deferred_file())
+}

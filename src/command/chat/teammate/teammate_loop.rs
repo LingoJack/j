@@ -42,6 +42,9 @@ pub struct TeammateLoopConfig {
     pub disabled_tools: Vec<String>,
     /// 延迟加载的工具列表（与主 agent 共享同一 Arc）
     pub deferred_tools: Arc<Mutex<Vec<String>>>,
+    /// 本会话 LoadTool 已加载的 deferred 工具（与主 agent 共享同一 Arc）
+    #[allow(dead_code)]
+    pub session_loaded_deferred: Arc<Mutex<Vec<String>>>,
     pub registry: Arc<ToolRegistry>,
     pub jcli_config: Arc<JcliConfig>,
     pub teammate_manager: Arc<Mutex<TeammateManager>>,
@@ -91,6 +94,7 @@ pub fn run_teammate_loop(config: TeammateLoopConfig) -> String {
         session_id,
         disabled_tools,
         deferred_tools,
+        session_loaded_deferred: _,
         registry,
         jcli_config,
         teammate_manager,
