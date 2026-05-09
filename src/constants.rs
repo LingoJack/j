@@ -266,12 +266,16 @@ pub mod cmd {
     // 笔记本
     pub const NOTEBOOK: &[&str] = &["notebook", "nb"];
 
+    // 文件加密/解密
+    pub const LOCK: &[&str] = &["lock", "lk"];
+    pub const UNLOCK: &[&str] = &["unlock", "uk"];
+
     /// 获取所有内置命令关键字的扁平列表（用于判断别名冲突等）
     pub fn all_keywords() -> Vec<&'static str> {
         let groups: &[&[&str]] = &[
             SET, REMOVE, RENAME, MODIFY, TAG, UNTAG, LIST, CONTAIN, REPORT, REPORTCTL, CHECK,
             SEARCH, TODO, CHAT, SCRIPT, TIME, LOG, CONFIG, CLEAR, VERSION, HELP, EXIT, COMPLETION,
-            AGENT, SYSTEM, UPDATE, MD, NOTEBOOK,
+            AGENT, SYSTEM, UPDATE, MD, NOTEBOOK, LOCK, UNLOCK,
         ];
         groups.iter().flat_map(|g| g.iter().copied()).collect()
     }

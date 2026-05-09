@@ -4,6 +4,7 @@ pub mod chat;
 pub mod handler;
 pub mod help;
 pub mod list;
+pub mod lock;
 pub mod notebook;
 pub mod open;
 pub mod report;

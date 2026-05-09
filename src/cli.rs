@@ -255,4 +255,23 @@ pub enum SubCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+
+    // ========== 文件加密/解密 ==========
+    /// 加密文件（AES-256-GCM，密码不存储）
+    #[command(alias = "lk")]
+    Lock {
+        /// 加密密码（不存储，仅用于派生密钥）
+        password: String,
+        /// 目标文件或目录路径（默认当前目录 .）
+        target: Option<String>,
+    },
+
+    /// 解密文件（需要加密时的密码）
+    #[command(alias = "uk")]
+    Unlock {
+        /// 解密密码
+        password: String,
+        /// 目标 .lock 文件或目录路径（默认当前目录 .）
+        target: Option<String>,
+    },
 }
