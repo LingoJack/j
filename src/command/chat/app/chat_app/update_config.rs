@@ -418,7 +418,9 @@ impl ChatApp {
         }
     }
 
-    /// Tools tab：Tab 键切换层级（工具列表 ↔ 选项区）
+    /// Tools tab：Tab 键切换层级（工具列表 ↔ 选项区）。
+    /// 选项区包含 2 个选项：索引 0 = 启用/禁用，索引 1 = defer 开关。
+    /// 详见 `config/tools.rs` 中的渲染逻辑。
     pub(super) fn update_tools_toggle_level(&mut self) {
         if self.ui.config_tab != ConfigTab::Tools {
             return;

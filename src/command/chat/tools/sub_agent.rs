@@ -221,6 +221,8 @@ impl Tool for SubAgentTool {
 
         let mut disabled = self.shared.disabled_tools.as_ref().clone();
         disabled.push(Self::NAME.to_string());
+        // 子 agent 继承父 agent 的 deferred 快照作为初始工具过滤，
+        // 但不支持动态 LoadTool（子 agent 是一次性执行，每轮不重建工具列表）
         let deferred = match self.shared.deferred_tools.lock() {
             Ok(guard) => guard,
             Err(e) => e.into_inner(),

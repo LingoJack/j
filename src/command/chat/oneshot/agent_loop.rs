@@ -174,7 +174,6 @@ pub(crate) fn run_oneshot_agent(
     );
     // 注册 LoadTool
     let deferred_tools_for_load = Arc::new(Mutex::new(agent_config.deferred_tools.clone()));
-    tool_registry.set_deferred_tools(agent_config.deferred_tools.clone());
     tool_registry.register(Box::new(
         crate::command::chat::tools::load_tool::LoadTool::new(Arc::clone(&deferred_tools_for_load)),
     ));

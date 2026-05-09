@@ -64,6 +64,7 @@ impl Tool for LoadTool {
     }
 
     fn execute(&self, arguments: &str, _cancelled: &Arc<AtomicBool>) -> ToolResult {
+        // 1. 解析参数获取工具名
         let params: LoadToolParams = match serde_json::from_str(arguments) {
             Ok(p) => p,
             Err(e) => {
@@ -86,6 +87,9 @@ impl Tool for LoadTool {
             };
         }
 
+        // 2. 获取 deferred 列表的写锁，将工具名从中移除
+        // 安全性：deferred_tools 仅在 execute 和 UI 配置中被修改，
+        // execute 由 agent loop 单线程调用，UI 在主线程，Mutex 保证互斥。
         let mut deferred = match self.deferred_tools.lock() {
             Ok(guard) => guard,
             Err(e) => {
