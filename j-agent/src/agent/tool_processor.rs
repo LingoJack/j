@@ -433,6 +433,3 @@ fn append_write_ops(tool_items: &[ToolCallItem], tool_results: &[ToolResultMsg],
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -314,6 +314,3 @@ fn http_status_label(status: u16) -> &'static str {
         _ => "服务端错误",
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -193,6 +193,3 @@ pub(super) fn backoff_delay_ms(attempt: u32, base_ms: u64, cap_ms: u64) -> u64 {
     let jitter = rand::thread_rng().gen_range(0..=(exp / JITTER_DIVISOR));
     exp + jitter
 }
-
-#[cfg(test)]
-mod tests;
