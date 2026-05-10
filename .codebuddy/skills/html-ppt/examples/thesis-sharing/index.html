@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-themes="academic-paper,editorial-serif,minimal-white,blueprint,nord">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>毕业设计分享 · 基于多Agent协同的LLM驱动复杂业务软件自动化生成</title>
+<link rel="stylesheet" href="../../../assets/fonts.css">
+<link rel="stylesheet" href="../../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../../assets/themes/academic-paper.css">
+<link rel="stylesheet" href="../../../assets/animations/animations.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-presenter-mode-reveal">
+<div class="deck">
+
+  <!-- ============ 1. COVER ============ -->
+  <section class="slide" data-title="Cover">
+    <p class="kicker">毕业设计分享 / 2026</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">从 Chatbot 到 Agent<br><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">多协同</span>的自动化代码生成</h1>
+    <p class="lede mt-m">基于多 Agent 协同的 LLM 驱动复杂业务软件自动化生成的研究与实现</p>
+    <div class="speaker">
+      <div class="av"></div>
+      <div><b>温俊杰</b><span>软件工程 · 华南理工大学 · ~35 min</span></div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#毕业设计 #Agent #多Agent协同</span>
+      <span class="slide-number" data-current="1" data-total="16"></span>
+    </div>
+    <aside class="notes">
+      <p>大家好，我是温俊杰，今天来跟大家分享我的毕业设计工作。我的课题是<strong>基于多 Agent 协同的 LLM 驱动复杂业务软件自动化生成</strong>。</p>
+      <p>这个标题可能看起来有点长，其实用一句话概括就是——<strong>怎么让 AI 不只是聊天，而是能真正帮你写出一个完整的软件系统</strong>。</p>
+      <p>今天的分享大概 35 分钟，我会从大家最熟悉的 Chatbot 出发，讲清楚它跟 Agent 之间到底差了什么，然后一路讲到多 Agent 怎么协同、上下文怎么管理、工具怎么设计，最后介绍一下我实现的 j-cli 这个工具。</p>
+      <p>这份幻灯片支持演讲者模式——按 <code>S</code> 键可以打开，里面有逐字稿和计时器。我自己讲的时候就会开着。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 2. AGENDA ============ -->
+  <section class="slide" data-title="Agenda">
+    <p class="kicker">agenda</p>
+    <h2 class="h2">今天的路线图</h2>
+    <div class="stack mt-l">
+      <div class="agenda-row"><span class="num">01</span><span class="t">Chatbot → Agent：差了什么？</span><span class="d">~4min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Function Calling + ReAct + Reflexion</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Agent 的三道坎：上下文 / 协同 / 代码</span><span class="d">~4min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">j-cli 系统设计与实现</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">多 Agent 协同：聊天室重点讲</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">06</span><span class="t">总结 + Q&A</span><span class="d">~3min</span></div>
+    </div>
+    <aside class="notes">
+      <p>先过一下今天的议程，一共 6 个部分。</p>
+      <p>第一部分我先回答一个最基本的问题——<strong>Chatbot 和 Agent 到底差在哪</strong>？很多人觉得 Agent 不就是加了个工具调用嘛，其实不止。</p>
+      <p>第二部分我讲 Agent 背后的两个核心范式——<strong>ReAct 和 Reflexion</strong>，理解了这两个，你就理解了现在所有 Agent 系统的基本设计。</p>
+      <p>第三部分讲<strong>Agent 面临的三道坎</strong>——上下文窗口、多 Agent 协同、代码处理短板，这些也是我做这个课题的出发点。</p>
+      <p>第四部分是今天的<strong>重头戏</strong>，介绍 j-cli 的系统设计——三通道消息、上下文管理、Skill 加载、工具增强。</p>
+      <p>第五部分<strong>重点讲聊天室型协同</strong>，这是我觉得最有意思的部分。</p>
+      <p>最后总结 + 答疑。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 3. CHATBOT vs AGENT ============ -->
+  <section class="slide" data-title="Chatbot vs Agent">
+    <p class="kicker">// part 01 · chatbot → agent</p>
+    <h2 class="h2">Chatbot 和 Agent 的区别：<br><span class="accent">谁来跨越现实与逻辑的鸿沟</span>？</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div class="card card-accent">
+        <h4>Chatbot</h4>
+        <p class="dim">模型活在<strong>逻辑世界</strong>里，只输出文本。你需要自己把现实世界的信息搬过去——复制代码让模型看、把报错粘贴给它；模型说改哪行，你自己去改；模型说跑命令，你自己去跑。</p>
+        <p class="dim mt-s" style="color:var(--accent)"><b>你</b>是现实与逻辑之间的桥梁。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>Agent</h4>
+        <p class="dim">模型通过<strong>工具</strong>直接触达现实世界——自己读文件、改代码、跑命令、搜网页。模型不再是孤岛，它可以自己去拿上下文、自己验证结果。</p>
+        <p class="dim mt-s" style="color:var(--accent)"><b>工具</b>是现实与逻辑之间的桥梁。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>先聊最根本的问题——Chatbot 和 Agent 到底差在哪？</p>
+      <p>我有一个理解方式：<strong>区别在于"谁来跨越现实与逻辑的鸿沟"</strong>。</p>
+      <p>Chatbot 活在逻辑世界里——它只产出文本。但软件工程是发生在现实世界的——文件在磁盘上、代码有编译结果、命令有输出。所以你用 Chatbot 的时候，<strong>你</strong>就是那座桥——你得自己把代码复制粘贴给模型看、把报错信息贴给它，模型说"改第 42 行"，你自己去改。</p>
+      <p>而 Agent 不一样。Agent 通过<strong>工具</strong>——读文件、改代码、跑命令——直接触达现实世界。<strong>工具取代了你，成了现实与逻辑之间的桥梁</strong>。模型不再需要你搬运信息，它可以自己去拿上下文、自己验证结果。</p>
+      <p>所以不是"Agent 加了个工具调用"这么简单——<strong>是桥梁从人变成了工具，是信息流转方式的根本改变</strong>。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 4. FUNCTION CALLING ============ -->
+  <section class="slide" data-title="Function Calling">
+    <p class="kicker">// part 02 · function calling</p>
+    <h2 class="h2">Function Calling：<br><span class="accent">模型不执行，只输出参数</span>。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">核心思路：模型输出一个结构化的 <span class="mono">tool_call</span>（工具名 + JSON 参数），由<strong>调用方在受控环境</strong>中执行后回传结果。</p>
+        <div class="stack mt-m">
+          <div class="feature-row"><span class="num blue">①</span><div><b>推理与执行解耦</b><p class="dim">模型不会真的去删你的文件，它只是说"我想调用 DeleteTool(path=/tmp/x)"。</p></div></div>
+          <div class="feature-row"><span class="num green">②</span><div><b>权限可拦截</b><p class="dim">执行方可以拒绝、弹确认框、记录审计日志——安全边界在执行侧。</p></div></div>
+          <div class="feature-row"><span class="num orange">③</span><div><b>多轮闭环</b><p class="dim">工具结果回传后，模型继续推理——形成"推理→行动→观察"的循环。</p></div></div>
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>tool_call example</span></div>
+<pre><span style="color:#8b949e">// LLM 输出：</span>
+{
+  <span style="color:#79c0ff">"tool_calls"</span>: [{
+    <span style="color:#79c0ff">"name"</span>: <span style="color:#a5d6ff">"Read"</span>,
+    <span style="color:#79c0ff">"arguments"</span>: <span style="color:#a5d6ff">"{\"path\":\"/src/main.rs\"}"</span>
+  }]
+}
+
+<span style="color:#8b949e">// 系统执行后回传：</span>
+{
+  <span style="color:#79c0ff">"role"</span>: <span style="color:#a5d6ff">"tool"</span>,
+  <span style="color:#79c0ff">"content"</span>: <span style="color:#a5d6ff">"fn main() { ... }"</span>
+}</pre>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>那 Agent 是怎么获得行动能力的？答案就是 <strong>Function Calling</strong>——函数调用协议。</p>
+      <p>这个协议的核心思路特别巧妙：<strong>模型自己不执行任何操作</strong>。它只是输出一个结构化的 tool_call，说"我想调用 Read 工具，参数是 path 等于 /src/main.rs"。然后由<strong>系统侧的执行环境</strong>去真正执行这个操作，再把结果回传给模型。</p>
+      <p>这样设计有三个好处。第一，<strong>推理和执行解耦</strong>——模型不会真的去删你文件，它只是"想"删，你可以在执行前拦住它。第二，<strong>权限可拦截</strong>——你可以配置哪些工具需要人工确认、哪些可以自动放行。第三，<strong>多轮闭环</strong>——工具结果回传后模型继续推理，这就形成了一个循环。</p>
+      <p>这个循环就是我们接下来要讲的 ReAct 范式的基础。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 5. ReAct 范式 ============ -->
+  <section class="slide" data-title="ReAct">
+    <p class="kicker">// part 02 · react paradigm</p>
+    <h2 class="h2">ReAct：让 AI 自己去<br><span class="accent">找上下文</span>。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">用 Chatbot 时，<strong>你</strong>负责把信息搬运给模型。ReAct 让 Agent 自己去拿——通过工具读文件、跑命令、搜网页，<strong>从现实世界获取观察</strong>，再基于真实信息继续推理。</p>
+        <div class="stack mt-m">
+          <div class="feature-row"><span class="num blue">Thought</span><div><b>推理</b><p class="dim">分析当前状态，决定下一步做什么。</p></div></div>
+          <div class="feature-row"><span class="num green">Action</span><div><b>行动</b><p class="dim">调用工具，从现实世界获取信息或施加影响。</p></div></div>
+          <div class="feature-row"><span class="num orange">Observation</span><div><b>观察</b><p class="dim">工具返回的真实结果——不再是模型凭空猜测。</p></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="mt-m" style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
+          <div class="flow-box"><span style="color:var(--accent)">Thought</span></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><span style="color:#3fb950">Action</span></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><span style="color:#f0883e">Observation</span></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box" style="border-style:dashed">🔄</div>
+        </div>
+        <div class="terminal mt-m">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>react_loop</span></div>
+<pre><span style="color:#8b949e"># ReAct 抽象循环</span>
+<span style="color:#ff7b72">loop</span>:
+    observation ← env.feedback()
+    thought, action ← LLM(history, observation)
+    <span style="color:#ff7b72">if</span> action == DONE: <span style="color:#ff7b72">break</span>
+    result ← execute(action)
+    history.append(thought, action, result)</pre>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>有了 Function Calling 之后，自然就会形成这样一个循环。但我想从另一个角度来理解 ReAct——<strong>它是让 AI 自己去找上下文的机制</strong>。</p>
+      <p>用 Chatbot 的时候，你得自己把信息搬给模型——复制代码、粘贴报错。但有了工具之后，Agent 可以<strong>自己去读文件、跑命令、搜网页</strong>，从现实世界获取观察，再基于真实信息继续推理。</p>
+      <p>所以 ReAct 的 Thought→Action→Observation 循环，本质上就是——<strong>Agent 不再靠人喂信息，而是自己去现实世界拿</strong>。工具是它伸向现实世界的手。</p>
+      <p>举个例子。你说"帮我把这个 bug 修了"，Agent 不是直接给你一段代码。它先想"我得先看看报错信息"，然后调用 Read 工具去看日志文件——拿到真实的报错行号，再想"这是空指针的问题"，再调用 Edit 工具改代码，再调用 Bash 跑测试看结果……<strong>每一步都建立在真实观察之上，而不是凭空猜测</strong>。</p>
+      <p>但 ReAct 有个问题——它只关注当前这一轮的决策，如果反复失败，可能会一遍一遍犯同样的错。这就引出了下一个范式。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 6. Reflexion 范式 ============ -->
+  <section class="slide" data-title="Reflexion">
+    <p class="kicker">// part 02 · reflexion paradigm</p>
+    <h2 class="h2">Reflexion：失败之后<br><span class="accent">写一段反思</span>，下次不踩同一个坑。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">ReAct 擅长"当下怎么决策"，但不擅长"上次为什么失败"。Reflexion 在一次尝试结束后，对失败原因进行<strong>语言化总结</strong>，注入下一轮上下文。</p>
+        <div class="stack mt-m">
+          <div class="feature-row"><span class="num blue">①</span><div><b>尝试</b><p class="dim">Agent 正常执行一次完整任务。</p></div></div>
+          <div class="feature-row"><span class="num green">②</span><div><b>评估</b><p class="dim">检查结果是否满足约束。</p></div></div>
+          <div class="feature-row"><span class="num orange">③</span><div><b>反思</b><p class="dim">生成自然语言 reflection，记录错误与改进方向。</p></div></div>
+          <div class="feature-row"><span class="num purple">④</span><div><b>重试</b><p class="dim">把反思注入上下文，开始下一轮尝试。</p></div></div>
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>reflexion_loop.py</span></div>
+<pre><span style="color:#8b949e"># Reflexion 抽象循环</span>
+<span style="color:#ff7b72">loop</span>:
+    candidate ← solve(task, memory)
+    feedback ← evaluate(candidate)
+    <span style="color:#ff7b72">if</span> feedback == PASS: <span style="color:#ff7b72">break</span>
+    reflection ← generate_reflection(
+        task, candidate, feedback
+    )
+    memory.append(reflection)</pre>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>ReAct 有个明显的短板——<strong>它没有记忆</strong>。如果这一轮修 bug 失败了，下一轮它可能还是先去读同一个文件、犯同样的错。</p>
+      <p>Reflexion 就是来解决这个问题的。它的核心思想是：<strong>在每次尝试结束后，让 Agent 对失败原因做一段语言化的总结</strong>，然后把这个总结注入到下一轮的上下文里。这样下一轮开始的时候，模型就知道"上次为什么失败了"。</p>
+      <p>注意，这里的学习<strong>不是更新模型参数</strong>——模型权重不变。它是一种<strong>测试时</strong>（test-time）的语言反馈机制：把"上一次为什么失败、下一次应避免什么问题"显式写入记忆。</p>
+      <p>举个例子：Agent 第一次生成代码后，测试没通过，它反思说"我忘了处理空指针的情况，下次应该先做空值检查"。第二次再试的时候，这个反思就在上下文里了，所以它会先做空值检查。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 7. 混合范式 ============ -->
+  <section class="slide" data-title="混合范式">
+    <p class="kicker">// part 02 · 本文采用的混合范式</p>
+    <h2 class="h2"><span class="accent">局部 ReAct</span> + <span class="accent">全局 Reflexion</span>。</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent">
+        <h4>局部：ReAct</h4>
+        <p class="dim">各 Agent 围绕当前子任务进行<strong>推理→行动→观察</strong>的循环。读文件、改代码、跑测试——每一步都建立在真实信息上。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>全局：Reflexion</h4>
+        <p class="dim">阶段任务结束后，对需求满足度、代码质量、测试结果进行<strong>反思总结</strong>，沉淀到计划文档和记忆中。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>为什么组合？</h4>
+        <p class="dim">ReAct 保留<strong>灵活性</strong>（复杂交互中持续调整），Reflexion 吸收<strong>纠错能力</strong>（不在同一个坑里反复踩）。更符合真实软件工程的迭代特征。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>所以我的系统用的是两者的<strong>组合</strong>。一句话概括就是——<strong>局部 ReAct，全局 Reflexion</strong>。</p>
+      <p>在局部执行层面，每个 Agent 都在做典型的 ReAct 循环——读文件、改代码、跑测试，每一步都根据环境反馈调整策略。</p>
+      <p>在全局优化层面，当一个阶段性任务结束后——比如后端 API 写完了——系统会对需求满足度、代码质量、测试结果做一次<strong>反思</strong>，把结论写到计划文档里。这样下一轮迭代的时候，Agent 就知道上一轮的问题在哪。</p>
+      <p>为什么不能只用一个？ReAct 灵活但没有经验积累，容易反复犯错；Reflexion 有纠错能力但不够灵活，不能处理"正在修代码突然发现另一个 bug"这种实时场景。所以<strong>组合起来最接近真实软件工程的迭代过程</strong>。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 8. Agent 的三道坎 ============ -->
+  <section class="slide" data-title="三道坎">
+    <p class="kicker">// part 03 · agent 的三道坎</p>
+    <h2 class="h2">从 Chatbot 衍生出来的 Agent，<br>面临<span class="accent">三道坎</span>。</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent">
+        <h4>1 · 上下文窗口</h4>
+        <p class="dim">一个中型业务系统涉及数十个文件、数千行代码，<strong>远超模型有效上下文长度</strong>。"最大窗口"≠"有效上下文"，Lost in the Middle 现象让长上下文中部信息利用率骤降。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>2 · 多 Agent 协同</h4>
+        <p class="dim">单个 Agent 把所有任务压在一个对话线程里，会导致<strong>上下文污染、目标漂移</strong>。需要多角色分工，但协同又会引入通信、权限、一致性问题。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>3 · 代码处理短板</h4>
+        <p class="dim">业务系统中有大量<strong>模板代码</strong>（PO/DTO/DAO），让 LLM 逐字生成既慢又易错——字段名漂移、跨层不一致、Token 浪费。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>讲完了 Agent 的基本原理，现在来讲为什么光有 Chatbot + Function Calling 还不够。</p>
+      <p>从 Chatbot 衍生出来的 Agent，在真正去写复杂业务软件的时候，会遇到<strong>三道坎</strong>。</p>
+      <p><strong>第一道坎：上下文窗口。</strong>一个中型业务系统涉及几十个文件、几千行代码，远远超出模型的有效上下文长度。而且"最大窗口"不等于"有效上下文"——有研究指出，关键信息放在长上下文中部时，模型性能会明显下降，这就是所谓的 Lost in the Middle 现象。</p>
+      <p><strong>第二道坎：多 Agent 协同。</strong>单个 Agent 把所有任务——需求分析、前端、后端、测试——都压在一个对话线程里，很容易上下文污染、目标漂移。需要多角色分工，但多 Agent 之间又有通信、权限、一致性的问题。</p>
+      <p><strong>第三道坎：代码处理短板。</strong>业务系统中有大量模板代码——实体类、DAO、CRUD 接口——让 LLM 逐字生成既慢又容易字段名漂移、跨层不一致。</p>
+      <p>这三道坎就是我的课题要解决的核心问题。接下来我就围绕这三个问题，介绍 j-cli 的设计。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 9. j-cli 系统架构 ============ -->
+  <section class="slide" data-title="j-cli 架构">
+    <p class="kicker">// part 04 · j-cli 系统架构</p>
+    <h2 class="h2">j-cli：<span class="accent">CLI + REPL + Chat + 持久化</span>。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">整体采用四段式架构。Chat 核心是重点——内部包含消息存储、Agent 运行时、工具系统与能力扩展。</p>
+        <div class="stack mt-m">
+          <div class="feature-row"><span class="num blue">①</span><div><b>CLI 入口</b><p class="dim">clap 命令解析，28 个子命令。</p></div></div>
+          <div class="feature-row"><span class="num green">②</span><div><b>REPL 交互层</b><p class="dim">rustyline + Tab 补全 + 历史记录。</p></div></div>
+          <div class="feature-row"><span class="num orange">③</span><div><b>Chat 核心</b><p class="dim">消息存储 · Agent 运行时 · 工具系统 · 能力扩展。</p></div></div>
+          <div class="feature-row"><span class="num purple">④</span><div><b>持久化层</b><p class="dim">会话 · 任务 · 技能 · 协作记录。</p></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="img-placeholder mt-m">
+          [图 3-1 系统总体架构图]<br><br>最外层：CLI 入口 + REPL<br>中间层：Chat 核心<br>最底层：持久化
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>先整体看一下 j-cli 的架构。它是一个 Rust 写的命令行工具，整体采用<strong>四段式架构</strong>。</p>
+      <p>最外层是 <strong>CLI 入口</strong>，用 clap 解析命令，支持 28 个子命令——比如 <code>j open</code> 打开别名、<code>j report</code> 写日报、<code>j chat</code> 进入 AI 对话。如果你直接输入 <code>j</code> 不带参数，它会进入<strong>REPL 交互模式</strong>，有 Tab 补全和历史记录。</p>
+      <p>中间层是 <strong>Chat 核心</strong>，这是整个系统最核心的部分，也是我论文重点研究的对象。它内部包含消息存储、Agent 运行时、工具系统和能力扩展四个子模块。</p>
+      <p>最底层是<strong>持久化层</strong>，负责把会话、任务、技能和协作记录保存到磁盘，支持崩溃后恢复。</p>
+      <p>接下来我重点讲 Chat 核心里的几个关键设计。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 10. 三通道消息架构 ============ -->
+  <section class="slide" data-title="三通道">
+    <p class="kicker">// part 04 · 三通道消息架构</p>
+    <h2 class="h2">一条消息，<span class="accent">三种形态</span>。</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent">
+        <h4><span class="blue">Display</span> 通道</h4>
+        <p class="dim">面向<strong>终端界面</strong>。用户看到的干净气泡——去除 XML 标签，只显示有用的内容。</p>
+        <div class="mt-s"><span class="tag">用户可读</span></div>
+      </div>
+      <div class="card card-accent">
+        <h4><span class="green">Context</span> 通道</h4>
+        <p class="dim">面向 <strong>LLM 输入</strong>。保留 <span class="mono">&lt;Sender&gt;</span> 标签、工具完整结果——帮助模型区分不同角色发言。</p>
+        <div class="mt-s"><span class="tag">模型可理解</span></div>
+      </div>
+      <div class="card card-accent">
+        <h4><span class="orange">Session</span> 通道</h4>
+        <p class="dim">面向<strong>持久化</strong>。保证崩溃后可恢复——只在"所有 tool_calls 都配齐 tool_result"的安全切点才写磁盘。</p>
+        <div class="mt-s"><span class="tag">可重放</span></div>
+      </div>
+    </div>
+    <div class="img-placeholder mt-m">
+      [图 3-2 三通道消息架构与核心数据流]<br>用户输入 → 双通道写入 → 上下文选择 → Agent Loop → 安全切点 → Session 持久化
+    </div>
+    <aside class="notes">
+      <p>第一个关键设计是<strong>三通道消息架构</strong>。这是整个 Chat 核心的基础。</p>
+      <p>直觉上你可能觉得，消息不就是一条列表嘛，干嘛要分三个通道？其实当你引入多 Agent 之后，问题就来了——<strong>同一件事，UI、LLM、持久化三方需要的信息是不一样的</strong>。</p>
+      <p>比如 Teammate 的内部思考，用户不需要看到全部细节，但模型需要知道"谁说了什么"来区分角色。再比如工具的原始输出，可能有好几 KB，用户不需要全看，但模型在下一轮推理时可能需要引用。还有持久化，如果在流式生成中途崩溃，你不能把半截消息写进磁盘，否则重启后加载出一个不合法的会话。</p>
+      <p>所以我把消息拆成三个通道：<strong>Display 给用户看、Context 给模型读、Session 给磁盘存</strong>。同一个消息，三条不同的"投影"。</p>
+      <p>其中 Session 通道有个精巧的设计——<strong>安全切点</strong>。它只在"所有 tool_calls 都配齐了对应的 tool_result"的时候才写磁盘。这样即使崩溃，磁盘上的数据也一定是合法的。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 11. 上下文管理 ============ -->
+  <section class="slide" data-title="上下文管理">
+    <p class="kicker">// part 04 · 上下文窗口管理</p>
+    <h2 class="h2">有限窗口里，<span class="accent">保留什么</span>、<span class="accent">丢弃什么</span>？</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <h4 style="color:var(--accent)">优先级窗口 · 4 阶段选择</h4>
+        <div class="stack mt-s">
+          <div class="feature-row"><span class="num blue">S1</span><div><b>时间保底</b><p class="dim">最近 K 个单元无条件保留。</p></div></div>
+          <div class="feature-row"><span class="num green">S2</span><div><b>豁免保底</b><p class="dim">Skill、Task 等关键工具结果按时间倒序保留——<strong>不能被截断</strong>。</p></div></div>
+          <div class="feature-row"><span class="num orange">S3</span><div><b>比例配额</b><p class="dim">User:Assistant:Tool = 1:3:4，按时间倒序。</p></div></div>
+          <div class="feature-row"><span class="num purple">S4</span><div><b>溢出贪心</b><p class="dim">剩余预算按时间倒序贪心填充。</p></div></div>
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--accent)">三级 Compact · 逐级压缩</h4>
+        <table class="compare-table mt-s">
+          <tr><th>级别</th><th>触发器</th><th>Token 开销</th></tr>
+          <tr><td><b>Micro</b></td><td>每轮 Agent Loop</td><td>0（替换旧工具结果为占位符）</td></tr>
+          <tr><td><b>Auto</b></td><td>Token 触发阈值</td><td>一次 LLM 调用（摘要整段历史）</td></tr>
+          <tr><td><b>Manual</b></td><td>用户/Agent 主动</td><td>一次 LLM 调用</td></tr>
+        </table>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>有了三通道架构之后，下一个问题就是——<strong>上下文窗口怎么管理</strong>？</p>
+      <p>前面说过，"最大窗口"不等于"有效上下文"。一个中型业务系统很容易超出 100K tokens，所以必须有选择地保留信息。我的方案分两层——<strong>优先级窗口</strong>和<strong>多级 Compact</strong>。</p>
+      <p>优先级窗口是一个 4 阶段选择算法。第一阶段是<strong>时间保底</strong>——最近 K 个消息肯定保留，这是底线。第二阶段是<strong>豁免保底</strong>——Skill 加载结果、Task 状态这类"关键能力上下文"不能被截断。第三阶段是<strong>比例配额</strong>——用户消息、助手消息、工具结果按 1:3:4 分配预算。第四阶段是<strong>溢出贪心</strong>——还剩多少空间就再按时间倒序塞。</p>
+      <p>但光选还不够，会话太长时还得<strong>压缩</strong>。我设计了三级 Compact：<strong>Micro</strong> 是零成本的轻量替换，把旧的、大段的工具结果替换成占位符；<strong>Auto</strong> 是真正的摘要，用一次 LLM 调用把整段历史压成一段话；<strong>Manual</strong> 是用户或 Agent 主动触发的压缩。</p>
+      <p>这三层组合起来，就能在"完整保留上下文"和"控制成本"之间取得平衡。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 12. Skill 渐进式加载 ============ -->
+  <section class="slide" data-title="Skill 加载">
+    <p class="kicker">// part 04 · skill 渐进式加载</p>
+    <h2 class="h2">能力不是一开始全塞进去，<br><span class="accent">用到再加载</span>。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">传统方式把所有能力写进 system prompt，导致<strong>两个问题</strong>：prompt 线性膨胀，LLM 每轮都要扫描全部细节。</p>
+        <div class="stack mt-m">
+          <div class="rule-row">
+            <span class="num blue">①</span>
+            <div>
+              <b>启动时：只暴露元信息</b>
+              <p class="dim">System prompt 中只列出 skill 的 <span class="mono">name + description</span>，比如"jen：根据 SQL 生成 Go DAO"。</p>
+            </div>
+          </div>
+          <div class="rule-row">
+            <span class="num green">②</span>
+            <div>
+              <b>需要时：LoadSkill 全量注入</b>
+              <p class="dim">Agent 判断需要某 skill，调用 <span class="mono">LoadSkill(name)</span>，完整 SKILL.md 内容注入 Context 通道。</p>
+            </div>
+          </div>
+          <div class="rule-row">
+            <span class="num orange">③</span>
+            <div>
+              <b>压缩后：自动恢复</b>
+              <p class="dim">Auto Compact 后 skill 内容可能丢失，系统记录 <span class="mono">InvokedSkillsMap</span>，在下一轮自动重新加载。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>~/.jdata/agent/skills/</span></div>
+<pre><span style="color:#8b949e"># skills/ 目录结构</span>
+sql-to-go-struct-and-dao/
+├── SKILL.md        <span style="color:#8b949e"># 完整工作流说明</span>
+├── references/     <span style="color:#8b949e"># 参考文档</span>
+└── scripts/        <span style="color:#8b949e"># 辅助脚本</span>
+
+webapp-gen/
+├── SKILL.md
+├── references/
+└── scripts/</pre>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>下一个设计是<strong>Skill 渐进式加载</strong>。这个设计的出发点很简单——如果你把所有能力都写进 system prompt，两个问题：一是 prompt 膨胀，二是模型每轮都要扫描全部细节才能找到相关的。</p>
+      <p>我的方案是<strong>按需加载</strong>。启动时 system prompt 里只有每个 skill 的名字和一句话描述——比如"jen：根据 SQL 生成 Go DAO"。只有当 Agent 判断需要用到某个 skill 的时候，才通过 <code>LoadSkill</code> 工具把完整的 SKILL.md 注入上下文。</p>
+      <p>这个设计还有一个容易被忽略的细节——<strong>Auto Compact 后的恢复</strong>。因为 Auto Compact 可能会把 skill 的内容压缩掉，但 skill 又是"关键能力上下文"，不能丢。所以我维护了一个 <code>InvokedSkillsMap</code>，记录哪些 skill 已经加载过。Compact 之后，下一轮会自动重新加载这些 skill。</p>
+      <p>所以 Skill 机制不只是在做上下文优化——它也试图<strong>改善 Agent 对工作流的遵循能力</strong>。传统方式下，模型可能"知道"某个能力存在，但因为上下文太长而被淹没。显式触发 + 完整加载，让 Agent 在合适时机遵循对应步骤的概率更高。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 13. 工具增强 ============ -->
+  <section class="slide" data-title="工具增强">
+    <p class="kicker">// part 04 · 工具增强</p>
+    <h2 class="h2">工具不是"能用就行"，<br><span class="accent">得安全、可恢复、受约束</span>。</h2>
+    <div class="grid g2 mt-l">
+      <div class="card card-accent">
+        <h4><span class="blue">Edit</span> · 增强型编辑工具</h4>
+        <p class="dim"><b>预览-确认协议</b>：<span class="mono">replace_all</span> 时先返回匹配预览 + confirm_token，必须携带 token 才执行替换——<strong>模型无法跳过预览</strong>。</p>
+        <p class="dim mt-s"><b>文件级互斥锁</b>：多 Agent 并发时，同一文件只能被一个 Agent 编辑，避免覆盖。</p>
+        <p class="dim mt-s"><b>诊断性反馈</b>：匹配失败时返回行号 + 上下文，引导模型修正，而非简单报错。</p>
+      </div>
+      <div class="card card-accent">
+        <h4><span class="green">Plan</span> · 先规划后实施</h4>
+        <p class="dim">进入只读模式——Bash/Write/Edit 全部拦截，只放行 Read/Glob/Grep 等只读工具。规划不再是隐式思维，而是<strong>受工具约束、可审查的中间工件</strong>。</p>
+      </div>
+      <div class="card card-accent">
+        <h4><span class="orange">Hook</span> · 工具调用前后拦截</h4>
+        <p class="dim">在工具调用前/后插入自定义命令——比如每次写文件后自动跑 <span class="mono">cargo fmt</span>，或禁止在生产分支执行 git push。</p>
+      </div>
+      <div class="card card-accent">
+        <h4><span class="purple">Permission</span> · 工具白/黑名单</h4>
+        <p class="dim">基于 <span class="mono">.jcli</span> 文件的权限规则——Bash(prefix:*)、Write(path:dir/*)、WebFetch(domain:x)。Deny 优先于 Allow。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>讲完上下文管理，接下来聊<strong>工具增强</strong>。这部分我想穿插一些个人的理解。</p>
+      <p>传统 code agent 的 Edit 工具就是"字符串匹配后直接替换"——在单 Agent 单轮修改时够用，但多 Agent 场景下就容易出问题。我做了三项增强。</p>
+      <p><strong>第一，预览-确认协议</strong>。当 <code>replace_all=true</code> 做批量替换时，工具第一次调用只返回匹配预览和一个 confirm_token，不真正修改文件。第二次调用必须携带对应 token 才会执行。因为 token 跟文件内容绑定，模型无法跳过预览，也无法在文件变化后复用旧 token。</p>
+      <p><strong>第二，文件级互斥锁</strong>。多个 Agent 同时改同一个文件怎么办？Edit 和 Write 在执行前会尝试获取文件锁，如果已被其他 Agent 占用就直接失败并返回占用方信息。</p>
+      <p><strong>第三，Plan 模式</strong>。这是一个我特别想强调的设计——<strong>先规划后实施</strong>。进入 Plan 模式后，所有写工具都被拦截，Agent 只能用只读工具来了解代码库。规划不再是模型脑子里的事情，而是变成了一份可审查的文件。</p>
+      <p>还有 Hook 和 Permission——<strong>Hook 是在工具调用前后插入自定义逻辑，Permission 是控制工具能不能调</strong>。两者结合，让工具接口从"模型能否调用"扩展为"模型在什么条件下、以何种审计方式调用"。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 14. 多 Agent 协同 - SubAgent ============ -->
+  <section class="slide" data-title="SubAgent">
+    <p class="kicker">// part 05 · 多 agent 协同</p>
+    <h2 class="h2">两种协同范式：<br><span class="accent">委派</span> vs <span class="accent">聊天室</span>。</h2>
+    <table class="compare-table mt-l">
+      <tr><th>维度</th><th>SubAgent（委派型）</th><th>Teammate（聊天室型）</th></tr>
+      <tr><td><b>生命周期</b></td><td>一次性，完成即销毁</td><td>长期共存，与主 Agent 同寿</td></tr>
+      <tr><td><b>上下文</b></td><td>独立 transcript，与主 Agent 隔离</td><td>共享对话，全员可见</td></tr>
+      <tr><td><b>通信</b></td><td>启动参数 + 单条结果消息</td><td>SendMessage 广播 + @mention</td></tr>
+      <tr><td><b>工作目录</b></td><td>独立 git worktree（可选）</td><td>与主 Agent 同目录</td></tr>
+      <tr><td><b>适用场景</b></td><td>并行子任务、不污染主对话</td><td>角色化协作、跨 Agent 联调</td></tr>
+    </table>
+    <aside class="notes">
+      <p>进入第五部分——<strong>多 Agent 协同</strong>。这是我想重点讲的内容。</p>
+      <p>我的系统提供了两种互补的协同范式。<strong>SubAgent 是任务委派型</strong>——主 Agent 把一个子任务派给一个临时 Agent，它跑完就销毁，只回传一条结果消息。好处是上下文隔离，子任务的过程不会污染主对话。</p>
+      <p><strong>Teammate 是聊天室型</strong>——多个角色 Agent 长期共存，共享对话流，可以互相发消息、@对方。适合需要频繁沟通、不断对齐中间状态的任务。</p>
+      <p>这两种范式不是互斥的。比如主 Agent 可以先用 SubAgent 并行收集信息，再创建 Teammate 做长期协作。</p>
+      <p>接下来我<strong>重点讲聊天室型</strong>，因为它背后的设计问题更多，也更有意思。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 15. Teammate 聊天室型 ============ -->
+  <section class="slide" data-title="Teammate">
+    <p class="kicker">// part 05 · 聊天室型协同（重点）</p>
+    <h2 class="h2">Teammate 的核心问题：<br><span class="accent">谁说了什么，别人怎么知道？</span></h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <h4 style="color:var(--accent)">SendMessage · 显式提交</h4>
+        <p class="lede mt-s">Teammate 的普通文本输出不会自动广播——只有调用 <span class="mono">SendMessage</span> 的内容才进入共享协作空间。</p>
+        <div class="stack mt-s">
+          <div class="feature-row"><span class="num blue">①</span><div><b>显式提交</b><p class="dim">普通输出只是内部思考（Draft），SendMessage 才是 Commit。</p></div></div>
+          <div class="feature-row"><span class="num green">②</span><div><b>来源标记</b><p class="dim">Context 通道保留 <span class="mono">&lt;Sender&gt;</span> 标签，帮助 LLM 区分不同角色。</p></div></div>
+          <div class="feature-row"><span class="num orange">③</span><div><b>全员可见</b><p class="dim">@Target 只是聚焦注意力，不改变广播属性——避免信息孤岛。</p></div></div>
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--accent)">SendMessage Gate · 乐观锁</h4>
+        <p class="lede mt-s">执行 SendMessage 前检查收件箱——如果有新消息到达，说明当前输出可能基于<strong>过期上下文</strong>。</p>
+        <div class="stack mt-s">
+          <div class="feature-row"><span class="num purple">✓</span><div><b>收件箱为空</b><p class="dim">正常广播。</p></div></div>
+          <div class="feature-row"><span class="num red">✗</span><div><b>收件箱非空</b><p class="dim">暂缓发送，注入新消息，追加 system reminder 要求重新评估。</p></div></div>
+          <div class="feature-row"><span class="num orange">⚠</span><div><b>连续暂缓达上限</b><p class="dim">强制提交，避免死循环。</p></div></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>聊天室型协同最核心的问题是——<strong>谁说了什么，别人怎么知道？</strong></p>
+      <p>直觉上可能觉得，每个 Agent 的输出都自动广播给其他人就好了。但这样会有一个大问题——<strong>"边想边说"的噪声扩散</strong>。一个 Agent 还没看到最新消息，就基于过期信息发了一段判断，其他 Agent 又基于这个过期判断继续推理，最终形成连锁误导。</p>
+      <p>所以我的设计是<strong>Draft/Commit 二阶段</strong>。Agent 的普通文本输出只是 Draft——用户能看到，但不会进入其他 Agent 的上下文。只有 Agent 主动调用 SendMessage，才算是 Commit——真正进入共享协作空间。</p>
+      <p>但这还不够。就算 Agent 决定发送消息，发送之前还有一个<strong>Gate</strong>——类似乐观锁。Gate 检查这个 Agent 的收件箱里有没有新消息。如果有，说明它刚才思考的时候错过了新信息，当前输出可能基于过期上下文——那就<strong>暂缓发送，先把新消息注入，让它重新评估</strong>。</p>
+      <p>这个设计本质上是一个<strong>轻量级二阶段提交</strong>——LLM 生成只是候选消息，通过 Gate 后才成为共享事实。它降低了并发对话中"旧上下文发言"的风险。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 16. 唤醒与旁听 ============ -->
+  <section class="slide" data-title="唤醒与旁听">
+    <p class="kicker">// part 05 · 唤醒与旁听</p>
+    <h2 class="h2">不是每条消息都要<span class="accent">立即响应</span>，<br>但最终都<span class="accent">可见</span>。</h2>
+    <div class="grid g2 mt-l">
+      <div class="card card-accent">
+        <h4>消息可见性</h4>
+        <p class="dim">广播消息会进入所有 Teammate 的收件箱，在后续 drain 到消息历史中——<strong>保证信息最终可见</strong>。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>执行唤醒</h4>
+        <p class="dim">只有来自 Main 的消息或 <span class="mono">@target</span> 才设置唤醒标记——<strong>不被无关消息频繁打断</strong>。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>工具调用摘要化</h4>
+        <p class="dim">自己的工具结果保留完整内容；其他 Agent 的工具调用只保留"谁调了什么"的摘要——<strong>区分原始观察和协作结论</strong>。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>统一治理</h4>
+        <p class="dim">同一份 <span class="mono">.jcli</span> 权限规则、同一个工具注册表、同一套 Hook——主 Agent、SubAgent、Teammate <strong>同一条安全边界</strong>。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>最后补充两个聊天室型的关键设计——<strong>唤醒与旁听</strong>和<strong>工具调用摘要化</strong>。</p>
+      <p>如果每条广播都立即唤醒所有 Teammate，系统会出现频繁互相打扰、空转发言、上下文膨胀。所以我区分了"消息可见性"和"执行唤醒"——<strong>消息最终都对所有人可见，但只有相关消息才会唤醒你</strong>。来自 Main 的消息和 @你的消息才会让你开始新一轮推理。</p>
+      <p>另一个问题是工具调用。每个 Teammate 都会频繁调用 Read、Grep、Edit 这些工具。如果把每个工具的完整结果都广播，上下文会迅速膨胀。所以我的策略是<strong>摘要化可见</strong>——你自己的工具结果保留完整内容，其他 Agent 的工具调用只保留"谁调了什么工具"的摘要。需要显式共享的结论，要求 Agent 通过 SendMessage 主动提交。</p>
+      <p>这把"原始观察"和"协作结论"区分开了——工具输出是局部证据，SendMessage 是经过 Agent 筛选的协作事实。</p>
+      <p>还有一点：所有 Agent——主 Agent、SubAgent、Teammate——都受同一份 <code>.jcli</code> 权限规则和同一套 Hook 约束。<strong>统一治理面</strong>，避免角色越权。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 17. 模板代码生成 ============ -->
+  <section class="slide" data-title="模板代码生成">
+    <p class="kicker">// part 04 · 模板代码工程化生成</p>
+    <h2 class="h2">模板代码：<span class="accent">不让 LLM 逐字猜</span>，<br>让生成器确定性输出。</h2>
+    <div class="grid g2 mt-l">
+      <div class="card card-accent">
+        <h4><span class="blue">jen</span> · SQL → Go DAO 层</h4>
+        <p class="dim">MySQL 建表语句作为唯一事实源 → 解析字段、索引、类型 → 模板渲染生成 PO、DTO、VO、DAO。</p>
+        <p class="dim mt-s"><b>核心收益</b>：字段一致性↑、Token 消耗↓、可迭代性↑（改 schema 重新生成即可）。</p>
+      </div>
+      <div class="card card-accent">
+        <h4><span class="green">webapp-gen</span> · 全栈生成工作流</h4>
+        <p class="dim">将"一句话需求→可运行全栈应用"组织为阶段化工作流：需求分析 → 前端设计 → 原型 → 后端设计 → 编码 → 容器化验收。</p>
+        <p class="dim mt-s"><b>关键机制</b>：文档化中间产物、前后端契约传导、三态容器化验证。</p>
+      </div>
+    </div>
+    <div class="mt-m" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
+      <div class="flow-box" style="border-color:#3fb950">LLM 语义理解</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="border-color:#f0883e">准备参数 / Schema</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="border-color:#bc8cff">确定性生成器输出</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="border-color:#58a6ff">LLM 校验集成</div>
+    </div>
+    <aside class="notes">
+      <p>最后讲一下<strong>模板代码生成</strong>，这是解决"代码处理短板"这道坎的方案。</p>
+      <p>业务系统中有大量"机械代码"——实体类、DAO、CRUD 接口——结构稳定、规则明确。让 LLM 逐字生成这些代码，既慢又容易字段名漂移。我的方案是<strong>LLM 负责语义理解和流程调度，确定性生成器负责输出</strong>。</p>
+      <p>具体实现了两个工具。<strong>jen</strong> 是基于 SQL 的 Go DAO 层生成器——你给它建表语句，它解析出字段、索引、类型映射，然后通过模板渲染生成 PO、DTO、VO、DAO 四层代码。好处是字段跨层一致、Token 消耗大幅降低、改了 schema 直接重新生成。</p>
+      <p><strong>webapp-gen</strong> 是面向全栈生成的阶段化工作流——把"一句话需求到可运行全栈应用"组织成多个阶段，每个阶段有文档化的中间产物、有验收条件。关键机制是"前后端契约传导"——API 设计文档定义接口契约，前端和后端都从这个契约生成，避免字段名漂移。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 18. 总结 ============ -->
+  <section class="slide" data-title="总结">
+    <p class="kicker">// takeaways</p>
+    <h2 class="h2">带回去的<span class="accent">三件事</span>。</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent">
+        <h4>1 · Agent：工具取代人成为桥梁</h4>
+        <p class="dim">Chatbot 时代你搬运信息，Agent 时代工具取代你成为现实与逻辑之间的桥梁——AI 自己去找上下文。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>2 · 单 Agent 要跑得远，靠治理</h4>
+        <p class="dim">三通道消息、优先级窗口 + 多级 Compact、Skill 按需加载、工具增强（Edit/Plan/Hook/Permission）。</p>
+      </div>
+      <div class="card card-accent">
+        <h4>3 · 多 Agent 要跑得稳，靠机制</h4>
+        <p class="dim">Draft/Commit 二阶段提交、SendMessage Gate 乐观锁、唤醒旁听分离、统一治理面。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>最后总结一下，希望大家带走三件事。</p>
+      <p><strong>第一，Agent 的本质：工具取代人成为桥梁</strong>。Chatbot 时代，是你自己搬运信息——复制代码给模型看、把报错贴给它。Agent 时代，工具取代你成为现实与逻辑之间的桥梁——AI 可以自己去读文件、跑命令、搜网页，自己去找上下文。Function Calling 解耦了推理与执行，ReAct 让 AI 自己去找上下文，Reflexion 补上了经验积累。</p>
+      <p><strong>第二，单 Agent 要跑得远，靠的是治理</strong>。三通道消息架构解决了信息对不同消费者的适配问题；优先级窗口 + 多级 Compact 在有限窗口内保留最有价值的信息；Skill 按需加载避免了 prompt 膨胀；Edit 的预览确认、Plan 的只读模式、Hook 的拦截能力、Permission 的权限控制——这些工具增强让 Agent 的行为更安全、更可控。</p>
+      <p><strong>第三，多 Agent 要跑得稳，靠的是机制</strong>。Draft/Commit 二阶段提交避免了"边想边说"的噪声扩散；SendMessage Gate 用乐观锁降低了并发中"旧上下文发言"的风险；唤醒与旁听分离避免了频繁互相打断；统一治理面确保所有 Agent 在同一安全边界内运作。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 19. Q&A ============ -->
+  <section class="slide center tc" data-title="Q and A">
+    <div>
+      <div class="mono" style="font-size:120px;color:var(--accent);font-weight:800;letter-spacing:-.04em">?</div>
+      <h2 class="h2">Questions?</h2>
+      <p class="lede" style="margin:14px auto">温俊杰 · 华南理工大学软件学院</p>
+      <div class="row mt-l" style="justify-content:center;gap:10px;flex-wrap:wrap">
+        <span class="tag">github.com/LingoJack/j</span>
+        <span class="tag">j-cli</span>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>好，我的分享就到这里。总结一下今天讲了什么——从 Chatbot 和 Agent 的区别开始，介绍了 Function Calling、ReAct 和 Reflexion 两个核心范式，然后讲了 Agent 面临的三道坎以及 j-cli 是怎么逐一解决的。重点讲了聊天室型多 Agent 协同的设计，特别是 Draft/Commit 二阶段提交和 SendMessage Gate。</p>
+      <p>如果大家对哪个部分感兴趣，或者有什么问题，现在可以开始提问。谢谢大家！</p>
+    </aside>
+  </section>
+
+</div>
+
+<div style="position:fixed;bottom:12px;left:12px;font-size:11px;color:#484f5866;z-index:100;pointer-events:none">
+  S 演讲者视图 · T 切换主题 · ← → 翻页 · F 全屏 · O 总览 · R 重置计时
+</div>
+
+<script src="../../../assets/runtime.js"></script>
+</body>
+</html>
