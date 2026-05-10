@@ -5,9 +5,7 @@
 use super::ComputerUseTool;
 use super::helper;
 use super::tool::{SOM_STALE_SECONDS, SomEntry, SomState};
-use crate::constants::{
-    APP_FOCUS_WAIT_MS, AX_TREE_OUTPUT_MAX_CHARS, DRAG_DEFAULT_DURATION_MS,
-};
+use crate::constants::{APP_FOCUS_WAIT_MS, AX_TREE_OUTPUT_MAX_CHARS, DRAG_DEFAULT_DURATION_MS};
 use crate::tools::{ImageData, PlanDecision, ToolResult};
 use serde_json::{Value, json};
 use std::process::Command;

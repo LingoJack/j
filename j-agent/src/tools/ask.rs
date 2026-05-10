@@ -1,7 +1,5 @@
 use crate::message_types::{AskOption, AskQuestion, AskRequest};
-use crate::tools::{
-    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;

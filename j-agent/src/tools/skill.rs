@@ -1,8 +1,6 @@
 use crate::context::compact::{InvokedSkillsMap, record_skill_invocation};
 use crate::infra::skill::{Skill, resolve_skill_content};
-use crate::tools::{
-    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;

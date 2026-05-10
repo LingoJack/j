@@ -11,9 +11,7 @@ use crate::tools::send_message::SendMessageTool;
 use crate::tools::sub_agent::SubAgentTool;
 use crate::tools::work_done::WorkDoneTool;
 use crate::tools::worktree::{create_agent_worktree, remove_agent_worktree};
-use crate::tools::{
-    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use schemars::JsonSchema;

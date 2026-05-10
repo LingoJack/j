@@ -5,8 +5,8 @@ use crate::constants::{
     COMPACT_TRUNCATE_MAX_CHARS, MICRO_COMPACT_BYTES_THRESHOLD,
 };
 use crate::context::policy;
-use crate::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
 use crate::llm::{ChatRequest, Content, Message, Role};
+use crate::storage::{ChatMessage, MessageRole, ModelProvider, SessionPaths};
 use crate::util::log::{write_error_log, write_info_log};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

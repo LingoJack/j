@@ -2,9 +2,7 @@ use crate::constants::{
     WEB_REQUEST_TIMEOUT_SECS, WEB_SEARCH_DEFAULT_COUNT, WEB_SEARCH_HIGHLIGHTS_MAX_CHARS,
     WEB_SEARCH_MAX_COUNT,
 };
-use crate::tools::{
-    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};

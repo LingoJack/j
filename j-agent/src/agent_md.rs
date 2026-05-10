@@ -11,7 +11,6 @@
 //! 内容以 `Contents of {绝对路径} ({来源描述}):\n\n{内容}` 的散文形式拼接，
 //! 不使用 XML 包裹，并在最前置一行 OVERRIDE 提示。
 
-
 use std::fs;
 use std::path::PathBuf;
 
@@ -46,7 +45,9 @@ struct AgentMdEntry {
 
 /// 返回用户级 AGENTS.md 路径: ~/.jdata/agent/AGENTS.md
 pub fn agent_md_path() -> PathBuf {
-    crate::constants::data_root().join("agent").join("AGENTS.md")
+    crate::constants::data_root()
+        .join("agent")
+        .join("AGENTS.md")
 }
 
 /// 从 CWD 向上搜索项目级 AGENTS.md 文件，返回按优先级从低到高排序的条目。

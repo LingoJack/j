@@ -5,10 +5,10 @@ use super::tool_processor::{
     ToolCallContext, clear_channels, drain_pending_user_messages, flush_streaming_as_message,
     process_tool_calls, push_both, sync_context_full,
 };
-use crate::message_types::{StreamMsg, ToolResultMsg};
-use crate::context::compact::{self, AutoCompactParams};
 use crate::chat_error::ChatError;
+use crate::context::compact::{self, AutoCompactParams};
 use crate::infra::hook::{HookContext, HookEvent};
+use crate::message_types::{StreamMsg, ToolResultMsg};
 use crate::storage::{
     ChatMessage, DisplayHint, MessageRole, SessionEvent, SessionMetrics, ToolCallItem,
     append_session_event, write_session_metrics,

@@ -1,9 +1,7 @@
 use crate::constants::{
     WEB_REQUEST_TIMEOUT_SECS, WEB_RESPONSE_DEFAULT_MAX_CHARS, WEB_RESPONSE_MAX_BYTES,
 };
-use crate::tools::{
-    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use crate::util::html_extract;
 use schemars::JsonSchema;
 use scraper::Html;

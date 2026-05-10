@@ -1,19 +1,17 @@
 use crate::agent::api::{build_request_with_tools, create_llm_client};
 use crate::agent::thread_identity::{current_agent_name, current_agent_type};
-use crate::message_types::AskRequest;
-use crate::context::compact::{CompactConfig, new_invoked_skills_map};
 use crate::chat_error::ChatError;
+use crate::context::compact::{CompactConfig, new_invoked_skills_map};
 use crate::infra::hook::HookManager;
+use crate::llm::{ChatResponse, ToolCall, ToolDefinition};
+use crate::message_types::AskRequest;
 use crate::permission::JcliConfig;
 use crate::permission::queue::{PendingAgentPerm, PermissionQueue};
-use crate::storage::{
-    ChatMessage, DisplayHint, MessageRole, ModelProvider, ToolCallItem,
-};
+use crate::storage::{ChatMessage, DisplayHint, MessageRole, ModelProvider, ToolCallItem};
 use crate::tools::ToolRegistry;
 use crate::tools::background::BackgroundManager;
 use crate::tools::plan::{PlanApprovalQueue, PlanModeState};
 use crate::tools::task::TaskManager;
-use crate::llm::{ChatResponse, ToolCall, ToolDefinition};
 use crate::util::log::write_info_log;
 use rand::Rng;
 use serde::{Deserialize, Serialize};

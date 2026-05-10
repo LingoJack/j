@@ -1,12 +1,8 @@
 use std::sync::OnceLock;
 
 use crate::constants::HOOK_LOG_DESC_MAX_LEN;
-use crate::infra::hook::{
-    HookDef, HookEvent, HookFilter, HookManager, HookType, OnError,
-};
-use crate::tools::{
-    PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params,
-};
+use crate::infra::hook::{HookDef, HookEvent, HookFilter, HookManager, HookType, OnError};
+use crate::tools::{PlanDecision, Tool, ToolResult, parse_tool_args, schema_to_tool_params};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -145,9 +141,12 @@ impl Tool for RegisterHookTool {
 
 impl RegisterHookTool {
     fn handle_help() -> ToolResult {
-        let content = HOOK_HELP_CONTENT.get()
+        let content = HOOK_HELP_CONTENT
+            .get()
             .map(|s| Self::strip_frontmatter(s).to_string())
-            .unwrap_or_else(|| "Hook 文档加载失败（需要调用 set_hook_help_content 注入）".to_string());
+            .unwrap_or_else(|| {
+                "Hook 文档加载失败（需要调用 set_hook_help_content 注入）".to_string()
+            });
 
         ToolResult {
             output: content,

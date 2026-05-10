@@ -3,9 +3,7 @@
 //! 所有 chat 核心链路中的错误统一使用 `ChatError`，按语义分类，
 //! 便于 UI 层给出差异化提示（认证失败 vs 网络超时 vs 服务端错误等）。
 
-use crate::constants::{
-    TEAMMATE_LOG_RESULT_MAX_CHARS, TEAMMATE_PROMPT_PREVIEW_MAX_CHARS,
-};
+use crate::constants::{TEAMMATE_LOG_RESULT_MAX_CHARS, TEAMMATE_PROMPT_PREVIEW_MAX_CHARS};
 use crate::llm::LlmError;
 
 /// Chat 模块类型化错误

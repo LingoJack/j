@@ -208,10 +208,7 @@ impl HookManager {
     }
 
     /// 从持久化快照恢复 session 级 hook
-    pub fn restore_session_hooks(
-        &mut self,
-        hooks: &[crate::storage::SessionHookPersist],
-    ) {
+    pub fn restore_session_hooks(&mut self, hooks: &[crate::storage::SessionHookPersist]) {
         self.session_hooks.clear();
         for hook in hooks {
             self.register_session_hook(hook.event, hook.definition.clone());
@@ -225,10 +222,7 @@ impl HookManager {
     }
 
     /// 注入 LLM provider（用于 LLM hook 执行）
-    pub fn set_provider(
-        &mut self,
-        provider: Arc<Mutex<crate::storage::ModelProvider>>,
-    ) {
+    pub fn set_provider(&mut self, provider: Arc<Mutex<crate::storage::ModelProvider>>) {
         self.provider = Some(provider);
     }
 
@@ -719,8 +713,7 @@ pub(crate) fn hook_label(kind: &HookKind) -> String {
                 .lines()
                 .find(|l| !l.trim().is_empty())
                 .unwrap_or(&llm.prompt);
-            let prompt_preview = if first_line.len()
-                > crate::constants::HOOK_PROMPT_PREVIEW_MAX_LEN
+            let prompt_preview = if first_line.len() > crate::constants::HOOK_PROMPT_PREVIEW_MAX_LEN
             {
                 format!(
                     "{}...",

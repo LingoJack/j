@@ -2,6 +2,7 @@ use crate::agent::thread_identity::{
     clear_thread_cwd, current_agent_name, set_current_agent_name, set_current_agent_type,
     set_thread_cwd, thread_cwd,
 };
+use crate::llm::ToolDefinition;
 use crate::permission::JcliConfig;
 use crate::permission::queue::AgentType;
 use crate::storage::{
@@ -17,7 +18,6 @@ use crate::tools::worktree::{create_agent_worktree, remove_agent_worktree};
 use crate::tools::{
     PlanDecision, Tool, ToolRegistry, ToolResult, parse_tool_args, schema_to_tool_params,
 };
-use crate::llm::ToolDefinition;
 use crate::util::log::write_info_log;
 use crate::util::safe_lock;
 use schemars::JsonSchema;
