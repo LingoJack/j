@@ -30,7 +30,8 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         docker-build docker-run \
         pre-commit \
         build-remote \
-        gui-dev gui-build gui-install gui-clean
+        gui-dev gui-build gui-install gui-clean \
+        ppt-serve ppt-stop
 
 # ============================================
 # 帮助信息
@@ -401,3 +402,33 @@ coverage: ## 生成代码覆盖率报告
 	@echo "📊 生成代码覆盖率报告..."
 	@cargo tarpaulin --out Html
 	@echo "☑️ 覆盖率报告生成完成: tarpaulin-report.html"️ 覆盖率报告生成完成: tarpaulin-report.html"
+
+# ============================================
+# PPT 演示
+# ============================================
+PPT_PORT := 8765
+PPT_PATH := docs/thesis-ppt/
+
+ppt-serve: ## 启动毕业设计 PPT 本地服务（http://localhost:$(PPT_PORT)/$(PPT_PATH)）
+	@echo "🎤 启动 PPT 服务..."
+	@if lsof -ti:$(PPT_PORT) >/dev/null 2>&1; then \
+		echo "ℹ️ 端口 $(PPT_PORT) 已被占用，先停止旧服务..."; \
+		lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
+		sleep 0.5; \
+	fi
+	@cd $(CURDIR) && python3 -m http.server $(PPT_PORT) >/dev/null 2>&1 &
+	@sleep 1
+	@url="http://localhost:$(PPT_PORT)/$(PPT_PATH)"; \
+	echo "☑️ PPT 已启动: $$url"; \
+	echo "   按键: ← → 翻页 · S 演讲者视图 · T 切换主题 · F 全屏"; \
+	echo "   停止: make ppt-stop"; \
+	open "$$url"
+
+ppt-stop: ## 停止 PPT 本地服务
+	@echo "🛑 停止 PPT 服务..."
+	@if lsof -ti:$(PPT_PORT) >/dev/null 2>&1; then \
+		lsof -ti:$(PPT_PORT) | xargs kill -9 2>/dev/null || true; \
+		echo "☑️ 已停止端口 $(PPT_PORT) 上的服务"; \
+	else \
+		echo "ℹ️ 端口 $(PPT_PORT) 未在运行"; \
+	fi
