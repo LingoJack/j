@@ -1,3 +1,34 @@
+# v12.10.47
+
+
+### 新功能
+
+- **文件加密解密**: 新增 `j lock` / `j unlock` 命令，使用 AES-256-GCM 对文件进行对称加密，支持单文件或目录批量加密
+- **j-agent 核心库**: 创建独立 workspace crate，将 chat 引擎核心模块（agent、storage、tools、infra 等）从 j-cli 抽离，消除代码重复
+- **Session 工具**: 新增交互式进程会话工具，支持 stdin 写入、stdout 读取、quit 终止，配合 Bash/Powershell 的 interactive 模式
+- **RegisterHook 工具**: LLM 可动态注册/管理 session 级 hook，支持 bash（shell 命令）和 llm（prompt 模板）两种类型
+- **Shell 交互模式**: Bash 工具新增 interactive 参数，启动 PTY 子进程并返回 sid，支持 REPL/ssh/mysql 等交互式程序
+- **远程控制面板**: 大幅增强远程 Web UI，新增配置管理（模型/会话/全局/工具/技能/Hooks）、文件浏览器、浏览器自动化面板、终端面板、归档管理、侧边栏导航等组件
+- **BackgroundManager 增强**: 支持线程类任务（is_thread_running）、PTY writer、adopt_process 接管已运行进程
+
+### 改进
+
+- **远程协议扩展**: SessionSync 增加 context_tokens、message_count、auto_approve 字段；新增 ModelList/ThemeList/ConfigState 等广播消息
+- **Hook 系统**: HookKind 扩展为 Shell/Llm/Builtin 三种类型，支持 prompt 模板调用 LLM API
+- **代码架构**: j-cli 通过 re-export j-agent 模块消除重复，保持 TUI 依赖分离
+
+### Bug 修复
+
+- **Clippy 清理**: 清除所有 clippy 警告，j-cli 和 j-agent 均达到 0 error 0 warning
+- **空测试声明**: 移除 retry/tool_processor/chat_error 中空的 `mod tests` 声明
+- **编译修复**: browser_cdp 模块编译问题修复
+
+### 重构
+
+- **命名规范**: j-cli-core 重命名为 j-agent，更准确反映其定位
+- **文档清理**: 删除过时的重构文档，格式化 j-agent 代码
+</result
+
 # v12.10.44
 
 
