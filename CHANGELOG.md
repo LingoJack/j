@@ -1,3 +1,20 @@
+# v12.10.44
+
+
+### 新功能
+
+- **文件加密解密命令**: 新增 `j lock` 和 `j unlock` 命令，使用 AES-256-GCM 对称加密文件内容，支持单文件或目录批量加密/解密
+- **Session 工具**: 新增交互式会话管理工具，支持 PTY 进程的 stdin 写入、stdout 读取、quit 终止操作，适用于 REPL、SSH、mysql 等交互式程序
+- **LoadTool 延迟加载机制**: 新增工具延迟加载功能，默认将 Task、RegisterHook、ComputerUse、Browser 设为 deferred 状态，模型可按需动态加载
+- **Shell 工具 interactive 模式**: Bash 工具新增 `interactive` 参数，可启动 PTY 交互式会话并返回 sid，配合 Session 工具使用
+
+### 改进
+
+- **后台任务与交互式会话分离**: 区分后台任务和交互式会话，生成独立的上下文摘要，避免误用 TaskOutput 操作交互式进程
+- **远程 UI 风格优化**: 重构 remote UI 为 Inter + stone 色系简约风格
+- **远程配置管理**: 远程界面支持配置管理、归档操作与权限审批功能
+</result
+
 # v12.10.41
 
 

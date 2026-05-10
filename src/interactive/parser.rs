@@ -273,6 +273,24 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         ParseResult::Matched(SubCmd::Notebook {
             args: rest.to_vec(),
         })
+    } else if is(cmd::LOCK) {
+        if rest.is_empty() {
+            crate::usage!("lock <password> [file_or_dir]");
+            return ParseResult::Handled;
+        }
+        ParseResult::Matched(SubCmd::Lock {
+            password: rest[0].clone(),
+            target: rest.get(1).cloned(),
+        })
+    } else if is(cmd::UNLOCK) {
+        if rest.is_empty() {
+            crate::usage!("unlock <password> [file_or_dir]");
+            return ParseResult::Handled;
+        }
+        ParseResult::Matched(SubCmd::Unlock {
+            password: rest[0].clone(),
+            target: rest.get(1).cloned(),
+        })
     } else {
         ParseResult::NotFound
     }

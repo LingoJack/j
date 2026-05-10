@@ -151,6 +151,17 @@ command_handlers! {
     NotebookCmd { args: Vec<String> } => |self, _config| {
         crate::command::notebook::handle_notebook(&self.args);
     },
+
+    // ========== 文件加密/解密 ==========
+    LockCmd { password: String, target: Option<String> } => |self, _config| {
+        let target = self.target.as_deref().unwrap_or(".");
+        crate::command::lock::handle_lock(&self.password, target);
+    },
+
+    UnlockCmd { password: String, target: Option<String> } => |self, _config| {
+        let target = self.target.as_deref().unwrap_or(".");
+        crate::command::lock::handle_unlock(&self.password, target);
+    },
 }
 
 /// 将 SubCmd 枚举变体转换为 Box<dyn CommandHandler>
@@ -229,6 +240,10 @@ impl SubCmd {
 
             // 笔记本
             SubCmd::Notebook { args } => Box::new(NotebookCmd { args }),
+
+            // 文件加密/解密
+            SubCmd::Lock { password, target } => Box::new(LockCmd { password, target }),
+            SubCmd::Unlock { password, target } => Box::new(UnlockCmd { password, target }),
         }
     }
 }
