@@ -276,7 +276,9 @@ publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 	git tag -a --cleanup=verbatim "v$$version" -F "$$note_file"; \
 	git push origin $(GIT_BRANCH); \
 	git push origin "v$$version"; \
-	echo "📤 发布到 crates.io..."; \
+	echo "📤 发布 j-agent 到 crates.io..."; \
+	cd j-agent && cargo publish --registry crates-io --allow-dirty && cd ..; \
+	echo "📤 发布 j-cli 到 crates.io..."; \
 	cargo publish --registry crates-io --allow-dirty; \
 	echo "☑️ 已发布 v$$version! 验证: cargo search j-cli"
 
@@ -285,6 +287,9 @@ release-note: ## 预览 CHANGELOG.md 中最新版本的 release notes
 
 publish-check: ## 发布前检查（dry-run）
 	@echo "🔍 发布前检查（dry-run）..."
+	@echo "📦 检查 j-agent..."
+	@cd j-agent && cargo publish --registry crates-io --dry-run && cd ..
+	@echo "📦 检查 j-cli..."
 	@cargo publish --registry crates-io --dry-run
 	@echo "☑️ 检查通过"
 
