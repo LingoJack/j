@@ -1,3 +1,16 @@
+# v12.10.48
+
+
+### 改进
+
+- **发布流程**: Makefile 的 `publish` 和 `publish-check` 目标现在支持先发布 `j-agent` 子包到 crates.io，再发布主包 `j-cli`，确保依赖顺序正确
+- **依赖声明**: `j-agent` 在主包 `Cargo.toml` 中补充了 `version = "0.1.0"` 字段，满足 crates.io 发布要求
+
+### 内部变更
+
+- **版本号**: 从 `12.10.47` 升级至 `12.10.48`
+</result
+
 # v12.10.47
 
 
