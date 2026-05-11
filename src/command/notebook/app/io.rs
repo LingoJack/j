@@ -188,7 +188,9 @@ pub fn edit_note_on_terminal(
         &content,
         &theme,
     ) {
-        Ok((Some(new_content), _)) => save_if_changed(&file_path, title, &content, &new_content),
+        Ok((Some(new_content), _)) => {
+            save_if_changed(&file_path, title, &content, &new_content, is_new)
+        }
         Ok((None, _)) => {
             info!("已取消编辑");
             false
@@ -213,7 +215,9 @@ pub fn edit_note_with_editor(title: &str) -> bool {
 
     let theme = Theme::from_name(&load_agent_config().theme);
     match crate::tui::editor_markdown::open_markdown_editor(&editor_title, &content, &theme) {
-        Ok((Some(new_content), _)) => save_if_changed(&file_path, title, &content, &new_content),
+        Ok((Some(new_content), _)) => {
+            save_if_changed(&file_path, title, &content, &new_content, is_new)
+        }
         Ok((None, _)) => {
             info!("已取消编辑");
             false
@@ -240,14 +244,22 @@ fn read_note_content_or_new(path: &std::path::Path) -> (String, bool) {
     }
 }
 
-/// 仅当内容变化时才写入文件
+/// 仅当内容变化时才写入文件；新文件（文件不存在）时始终写入
 fn save_if_changed(
     file_path: &std::path::Path,
     title: &str,
     old_content: &str,
     new_content: &str,
+    is_new: bool,
 ) -> bool {
-    if new_content != old_content {
+    if is_new || new_content != old_content {
+        if let Some(parent) = file_path.parent()
+            && !parent.exists()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            error!("创建目录失败: {} - {}", parent.display(), e);
+            return false;
+        }
         match fs::write(file_path, new_content) {
             Ok(()) => {
                 info!("笔记已保存: {}", title);

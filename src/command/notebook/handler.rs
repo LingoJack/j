@@ -143,7 +143,7 @@ fn edit_file_with_editor(file_str: &str) {
 
     match crate::tui::editor_markdown::open_markdown_editor(&title, &content, &theme) {
         Ok((Some(new_content), _)) => {
-            if new_content != content {
+            if is_new_file || new_content != content {
                 if let Some(parent) = path.parent()
                     && !parent.exists()
                     && let Err(e) = std::fs::create_dir_all(parent)
