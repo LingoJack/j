@@ -1,0 +1,62 @@
+/* scoped styles for presenter-mode-reveal deck */
+.speaker{display:flex;align-items:center;gap:14px;margin-top:40px}
+.speaker .av{width:44px;height:44px;border-radius:50%;background:var(--grad)}
+.speaker b{display:block;font-size:16px}
+.speaker span{font-size:13px;color:var(--text-3);margin-left:6px}
+
+/* agenda rows */
+.agenda-row{display:flex;align-items:center;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border);font-size:17px}
+.agenda-row .num{font-weight:800;font-size:20px;color:var(--accent);width:36px;text-align:center;flex-shrink:0}
+.agenda-row .t{flex:1}
+.agenda-row .d{font-size:13px;color:var(--text-3);font-family:var(--font-mono)}
+
+/* vs layout */
+.vs{display:grid;grid-template-columns:1fr 90px 1fr;gap:28px;align-items:stretch}
+.vs .side{padding:28px}
+.vs .mid{font-size:56px;font-weight:800;color:var(--text-3);display:flex;align-items:center;justify-content:center}
+.vs .bad-side{border-top:3px solid var(--bad)}
+.vs .good-side{border-top:3px solid var(--good)}
+.vs h3{font-size:22px;margin-bottom:12px}
+.vs ul{padding-left:20px;font-size:14px;line-height:1.9;color:var(--text-2);margin:0}
+.vs li::marker{color:var(--bad)}
+.vs .good-side li::marker{color:var(--good)}
+
+/* arch diagram */
+.arch{margin-top:16px;display:grid;grid-template-rows:auto auto auto;gap:18px}
+.arch .tier{display:grid;grid-template-columns:110px 1fr;align-items:stretch;gap:18px}
+.arch .tname{display:flex;align-items:center;justify-content:center;background:var(--surface-2);border-radius:var(--radius);padding:14px;font-weight:600;font-size:12px;color:var(--text-2);text-transform:uppercase;letter-spacing:.1em;text-align:center}
+.arch .cells{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.arch .cells.three{grid-template-columns:repeat(3,1fr)}
+.arch .cell{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;box-shadow:var(--shadow)}
+.arch .cell .ic{font-size:22px}
+.arch .cell h4{font-size:13px;margin:5px 0 2px}
+.arch .cell p{font-size:10px;color:var(--text-3);margin:0}
+.arch .tier.hl .cell{border-top:3px solid var(--accent)}
+
+/* rule rows */
+.rule-row{display:flex;gap:16px;align-items:flex-start;padding:18px 0;border-bottom:1px solid var(--border)}
+.rule-row .num{flex-shrink:0}
+.rule-row b{font-size:16px;display:block;margin-bottom:4px}
+.rule-row p{margin:0;font-size:14px;line-height:1.6}
+
+/* feature rows */
+.feature-row{display:flex;gap:14px;align-items:flex-start}
+.feature-row .num{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}
+.feature-row .num.blue{background:var(--accent)}
+.feature-row .num.green{background:var(--good)}
+.feature-row .num.orange{background:var(--warn)}
+.feature-row .num.purple{background:var(--accent-2)}
+.feature-row b{font-size:15px;display:block;margin-bottom:4px}
+.feature-row p{margin:0;font-size:13px;line-height:1.6}
+
+/* flow nodes */
+.flow{display:flex;align-items:center;gap:14px;max-width:1200px}
+.flow .node{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;box-shadow:var(--shadow);position:relative}
+.flow .node .ic{font-size:28px;margin-bottom:6px}
+.flow .node h4{font-size:15px;margin:0}
+.flow .node p{font-size:11px;color:var(--text-3);margin:4px 0 0}
+.flow .arr{color:var(--text-3);font-size:24px;flex-shrink:0}
+.flow .node.hl{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent),var(--shadow)}
+
+/* accent helper */
+.accent{color:var(--accent)}
