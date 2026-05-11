@@ -10,4 +10,4 @@
 - Agent 设计的核心是「上下文」和「沟通物理世界和逻辑世界的桥梁」，例如在 ChatBot 时代（2024，2023 的 gpt 等），我们有问题，是自己收集 copy 代码、报错日志、运行日志、配置信息、操作系统环境等任务的上下文信息给 chatbot，然后 chatbot 给出的可能的原因和代码，我们再去改程序代码；这个事情的本质，我们主动承担了上下文收集和沟通物理世界（程序代码）和逻辑世界（LLM 思考）的任务，而 Agent 则通过对上下文窗口的治理、工具的使用去承担这些任务，将人抽离了出来
 - 关于 PPT 设计和演说，我建议从实际代（j-agent，chat 模块）出发，以我的论文作为辅助参考信息，结合丰富的图文去表现；例如 ReAct 的过程大概是怎么样的，一个 Agent 跑的过程中上下文窗口都发生了什么（执行 Tool call，我们解析，塞回窗口
 - LLM 的上下文窗口有限，所以我们需要有一个滚动窗口的机制；这个滚动窗口采取了智能的分优先级填充的策略，我们认为这部分和推荐系统或许有一定的关联，例如，这个滚动窗口的最优效果肯定就是把最有价值、最推荐的上下文信息装入，然后提供给 Agent 决策
-- 
+- 项目的 github 地址：https://github.com/LingoJack/jcli，生成制品的 github 地址：https://github.com/LingoJack/gradiation_artifact_demo.git, 代码生成工具的地址：https://github.com/LingoJack/model_infrax.git
