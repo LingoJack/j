@@ -5,12 +5,15 @@
 - plan 工具又是为了解决什么问题？LLM 有时候没有想清楚就开始做，这样导致的问题就是需要变更的地方改不全，且调研过程占用了大量上下文（因此还提供了一个 clear and approval 的选项）
 -  压缩 compact 系统的设计为什么要豁免一些工具？因为这些是关键的，例如 Read、Edit、Bash 这些就不豁免，因为 Agent 调用这个信息的价值随着轮次进行下降很快；而采用多级压缩 micro, auto 就是兼顾了速度和准确率，让整个 context window 可以处在健康低幻觉的状态，大大提高了 agent 的长期运行的能力。高价值的消息包括：用户消息、Agent 语言消息、System 提醒消息（TODO、Teammate）、Plan、Skill、TODOWrite、TODOREAD、SubAgent；豁免是因为你不可能把全部都塞给窗口，这样不仅会大大提高token消耗还会增加幻觉效率；所以我们要控制窗口在合适的大小并且尽量把最有价值的信息放进窗口，价值较低的信息少放，决策信息多放、指导方向信息多放、执行中间过程信息少放
 - system prompt 是尾部 append 动态的，就会一些状态信息和队友信息随着被需要而被附加进去，让 Agent 感知当前正在发生一些持续性任务，例如它之前启动跑的后台任务（Tool call 已经被 compact）、之前拉起的 Teammate 和 Subagent、当前很久没有更新过的 TODO 项目、当前进行的 Task、当前进行的交互任务 Session （例如 npm install 什么东西，可能还会要求输入 y 确认，这里我们设计了一套流转的方法，后文会讲到）
-- 关于 Teammate 的协作能力，设置了三个实验去判断，一个是轮流报数，一个是续写接龙，还有就是第3个协作测试开发的场景。然后这个场景的话，它主要是参考了Anthropic的那个论文，就是模型总是容易对自己的工作感到满意，或者是偏袒，然后对，然后再结合那个聊天室来做到对 Agent 工作结果的相对客观的评估，以及长期自动
+- 关于 Teammate 的协作能力，设置了三个实验去判断，一个是轮流报数，一个是续写接龙，还有就是第 3 个协作测试开发的场景。然后这个场景的话，它主要是参考了 Anthropic 的那个文章（https://www.anthropic.com/engineering/harness-design-long-running-apps），就是模型总是容易对自己的工作感到满意，或者是偏袒，然后对，然后再结合那个聊天室来做到对 Agent 工作结果的相对客观的评估，以及长期运行
 - 错误处理与重试，健壮性方面的工作也要讲一下的，就是现在大模型 API 遇到问题，报错是在所难免，所以就有指数退避的机制去处理这个问题；轮流报数是暂时剥离上下文检测 Agent 之间的协调能力，也就是解决最基本的由于 Agent Loop 的长时序导致的重复消息问题，这里我们设计了 SendMessage Tool 和 message inbox 的 two-staged commit 的机制，在整个 Agent Team 系统对外时不再有不一致的重复消息的体验，而对内，也减少了上下文消耗以及重复消息干扰带来的效率问题
 - Agent 设计的核心是「上下文」和「沟通物理世界和逻辑世界的桥梁」，例如在 ChatBot 时代（2024，2023 的 gpt 等），我们有问题，是自己收集 copy 代码、报错日志、运行日志、配置信息、操作系统环境等任务的上下文信息给 chatbot，然后 chatbot 给出的可能的原因和代码，我们再去改程序代码；这个事情的本质，我们主动承担了上下文收集和沟通物理世界（程序代码）和逻辑世界（LLM 思考）的任务，而 Agent 则通过对上下文窗口的治理、工具的使用去承担这些任务，将人抽离了出来
 - 关于 PPT 设计和演说，我建议从实际代（j-agent，chat 模块）出发，以我的论文作为辅助参考信息，结合丰富的图文去表现；例如 ReAct 的过程大概是怎么样的，一个 Agent 跑的过程中上下文窗口都发生了什么（执行 Tool call，我们解析，塞回窗口
 - LLM 的上下文窗口有限，所以我们需要有一个滚动窗口的机制；这个滚动窗口采取了智能的分优先级填充的策略，我们认为这部分和推荐系统或许有一定的关联，例如，这个滚动窗口的最优效果肯定就是把最有价值、最推荐的上下文信息装入，然后提供给 Agent 决策
-- 项目的 github 地址：https://github.com/LingoJack/jcli，生成制品的 github 地址：https://github.com/LingoJack/gradiation_artifact_demo.git, 代码生成工具的地址：https://github.com/LingoJack/model_infrax.git
+- 项目的 github 地址：https://github.com/LingoJack/jcli，生成制品的 github 地址：https://github.com/LingoJack/gradiation_artifact_demo.git, 代码生成工具 jen 的地址：https://github.com/LingoJack/model_infrax.git
 - hook 系统用作回归的测试，以及一些硬性的工程规范，例如项目目录结构是否引入了 mod.rs，而我们实际要求的是 name.rs + name/ 的模式，例如可能导致 panic 的 except() 函数不允许被使用，变更内容沉淀为文档用于后续追溯维护等
 - AI 在执行 Bash 命令的过程中可能会触发一些交互式的选项，例如安装 React 框架的模板，可能会要求输入 y 表示确认，为了应对这一场景，我们把要执行的命令的 stdin/stdout 打通，封装为一个特殊的工具（Session）提供，以此和 Bash 命令区分开来。鉴于 AI 未必能完全能在运行前就清楚是否存在交互场景，故设计了一套自动流转的机制；Bash 命令执行超过 timeout 自动转为后台任务（也可以有 BackgroundTask 主动产生），TaskOutput 用于获取任务的当前产物，Session 工具提供 action 用于操作 stdin/stdout 完成交互操作
--  
+- 开题或许可以从 chatbot 出发，结合到最基础的 Agent （只有 Read, Write, Bash, LoadSkill) 几个工具，然后一步步说明其他工具的引入如何增强了 Agent 的能力，以及一些为 Coding 特化的工具。例如 Grep 提供更强的搜索匹配的能力，是 Agent 在面对未知项目的时候主动构建上下文的关键工具（如果没有 Grep，那么 Agent 只能通过 Bash 去进行匹配，质量不稳定且慢），Ask 提供了一个要求用户澄清意图的入口，帮助用户扩展明确需求，以及在一些关键决策点征询用户的意见（如果没有，最终实现产物与用户预期产物可能漂移，导致反工）。Plan 帮助明确计划以及上下文的高效利用（提前收集信息制定自包含的执行计划然后 clear context），并且产生的文档可用于追溯变更。WebFetch, WebSearch 增强 agent 网络搜索的能力，可以模范一些成熟网站的 UI 风格（通过读网站css）以及搜索同步最新的知识。ToDoWrite/ToDoRead 则帮助 agent 避免有遗漏变更或者忘记目标的作用，并且设计了 <system_remminder> 用于传递一些系统提示，在 agent 长期没有进行 todo 任务的更新时进行提醒，及时将任务拉回正确方向。SubAgent 则用于委派一个子 Agent 去收集上下文，完成一些调研性质的工作（Agent 只可见 SubAgent 的最终调研结果，以此以较低的上下文成本了解调研目标），或者分组进行并行开发，提高效率。其他的工具也类似。
+- 关于自动化代码生成，gen-struct-and-dao-code-from-sql 这个 skill，核心是我开发了一个从 sql 语法解析出关键变量的程序，并且基于模板语法去自动生成 dao 层和 model 层的代码即 jen，以此包装成 skill 供 agent 调用。这一点的核心考量是，dao 和 model 层代码十分模板化、通用且庞大，类似基础设施，不侵入业务逻辑，如果有 ai 生成，质量无法保证而且耗时拉长，通过工程化的方法生成则大大规避了这些问题。jen 最终生成一个个原子的 CRUD 以及 事务方法，普通索引、唯一索引的查询、列表查询、模糊查询、自定义条件查询等。
+- 关于 webapp-gen 这个 skill，
+ 
