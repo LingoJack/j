@@ -111,13 +111,21 @@ body{
 .agenda-row .d{font-size:13px;color:var(--text-3);font-family:var(--font-mono)}
 
 /* ---------- vs layout ---------- */
-.vs{display:grid;grid-template-columns:1fr 60px 1fr;gap:24px;align-items:stretch;flex:1 1 auto}
-.vs .side{padding:28px;display:flex;flex-direction:column}
+.vs{
+  display:grid;
+  grid-template-columns:1fr 60px 1fr;
+  gap:24px;
+  align-items:stretch;
+  flex:0 0 auto;
+  margin:auto 0;
+}
+.vs .side{padding:28px 32px;display:flex;flex-direction:column;gap:14px}
 .vs .mid{font-size:34px;font-weight:300;color:var(--text-3);display:flex;align-items:center;justify-content:center}
 .vs .bad-side{border-top:2px solid var(--bad)}
 .vs .good-side{border-top:2px solid var(--accent)}
-.vs h3{font-size:20px;margin-bottom:12px;font-weight:600;color:var(--text-1)}
-.vs ul{padding-left:22px;font-size:16px;line-height:2;color:var(--text-2);margin:0}
+.vs h3{font-size:22px;margin:0 0 10px;font-weight:600;color:var(--text-1)}
+.vs ul{padding-left:22px;font-size:17px;line-height:2;color:var(--text-2);margin:0}
+.vs li{margin:8px 0}
 .vs li::marker{color:var(--text-3)}
 
 /* ---------- arch diagram ---------- */
@@ -578,6 +586,23 @@ code{
 .tpl-presenter-mode-reveal .slide{
   padding:96px 72px 72px;
   justify-content:flex-start;
+}
+
+/* slide 主体内容：填充剩余空间 + 内部自然分布 */
+.tpl-presenter-mode-reveal .slide > .stack,
+.tpl-presenter-mode-reveal .slide > .vs,
+.tpl-presenter-mode-reveal .slide > .arch,
+.tpl-presenter-mode-reveal .slide > .priority-funnel,
+.tpl-presenter-mode-reveal .slide > .cw-evolution,
+.tpl-presenter-mode-reveal .slide > .plan-flow,
+.tpl-presenter-mode-reveal .slide > .grid,
+.tpl-presenter-mode-reveal .slide > .hook-timeline,
+.tpl-presenter-mode-reveal .slide > .repo-grid,
+.tpl-presenter-mode-reveal .slide > .exp3,
+.tpl-presenter-mode-reveal .slide > .subtree,
+.tpl-presenter-mode-reveal .slide > .jen-flow,
+.tpl-presenter-mode-reveal .slide > .flow{
+  margin:auto 0;
 }
 
 /* 封面/感谢页：没有 title-bar 时垂直居中 */
