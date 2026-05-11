@@ -24,7 +24,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack/jcli</span>
-      <span class="slide-number" data-current="1" data-total="27"></span>
+      <span class="slide-number" data-current="1" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>各位老师、同学们好，我是温俊杰，今天给大家分享我的本科毕设——<strong>基于 LLM Agent 的编程辅助工具设计与实现</strong>。</p>
@@ -36,8 +36,10 @@
 
   <!-- ============ 2. AGENDA ============ -->
   <section class="slide" data-title="Agenda">
-    <p class="kicker">agenda</p>
-    <h2 class="h2">今天要讲的 6 个部分</h2>
+    <div class="title-bar">
+      <span class="part">AGENDA</span>
+      <h2>今天要讲的 6 个部分</h2>
+    </div>
     <div class="stack mt-l">
       <div class="agenda-row"><span class="num">01</span><span class="t">背景与动机：从 ChatBot 到 Agent</span><span class="d">~4min</span></div>
       <div class="agenda-row"><span class="num">02</span><span class="t">Agent 核心设计：上下文窗口治理</span><span class="d">~6min</span></div>
@@ -59,8 +61,10 @@
 
   <!-- ============ 3. BACKGROUND: ChatBot vs Agent ============ -->
   <section class="slide" data-title="ChatBot vs Agent">
-    <p class="kicker">// part 01 · background</p>
-    <h2 class="h2">从 ChatBot 到 Agent：<br><span class="accent">谁在承担上下文成本？</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 01 · BACKGROUND</span>
+      <h2>从 ChatBot 到 Agent：<br><span class="accent">谁在承担上下文成本？</span></h2>
+    </div>
     <div class="vs mt-l">
       <div class="card bad-side side">
         <h3>ChatBot 时代</h3>
@@ -93,58 +97,392 @@
     </aside>
   </section>
 
-  <!-- ============ 3.5. ReAct LOOP ============ -->
-  <section class="slide" data-title="ReAct Loop">
-    <p class="kicker">// part 01 · how it works</p>
-    <h2 class="h2">Agent 的心脏：<span class="accent">ReAct 循环</span></h2>
-    <div class="react-circle anim-fade-up" data-anim="fade-up">
-      <div class="rc-node n1">
-        <h4>Thought</h4>
-        <p>分析当前上下文<br>决定下一步动作</p>
-      </div>
-      <div class="rc-node n2">
-        <h4>Action</h4>
-        <p>生成 Tool Call<br>(JSON Schema)</p>
-      </div>
-      <div class="rc-node n3">
-        <h4>Observation</h4>
-        <p>工具执行结果<br>解析后回灌窗口</p>
-      </div>
-      <div class="rc-node n4">
-        <h4>Update</h4>
-        <p>窗口更新<br>进入下一轮 Thought</p>
-      </div>
-      <svg class="rc-svg" viewBox="0 0 520 420">
-        <defs>
-          <marker id="arrh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-            <path d="M0,0 L10,5 L0,10 z"/>
-          </marker>
-        </defs>
-        <path d="M340,80 Q450,160 440,220" marker-end="url(#arrh)"/>
-        <path d="M380,300 Q310,380 260,360" marker-end="url(#arrh)"/>
-        <path d="M170,360 Q80,310 80,240" marker-end="url(#arrh)"/>
-        <path d="M120,150 Q160,80 230,70" marker-end="url(#arrh)"/>
-      </svg>
-      <div class="rc-center"><div><b>ReAct</b><span>Reasoning<br>+ Acting</span></div></div>
+  <!-- ============ 4.1 ReAct: 概念 ============ -->
+  <section class="slide" data-title="ReAct · concept">
+    <div class="title-bar">
+      <span class="part">PART 01 · ReAct</span>
+      <h2>Agent 的心脏：Thought → Action → Observation</h2>
+      <span class="sub">1 / 6</span>
     </div>
-    <p class="dim mt-m tc" style="text-align:center;font-size:13px">每一轮 Tool Call 的结果都会被<strong>解析、序列化、塞回上下文窗口</strong>——窗口越填越满，这就是后面所有问题的源头。</p>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">Agent 不是一次推理出全部答案。它<span class="accent">逐轮思考、调工具、读结果、再思考</span>。</p>
+        <ul>
+          <li><strong>Thought</strong> · 读当前上下文，决定下一步</li>
+          <li><strong>Action</strong> · 输出符合 JSON Schema 的 tool call</li>
+          <li><strong>Observation</strong> · 运行时执行工具，把结果序列化回灌窗口</li>
+          <li><strong>Update</strong> · 窗口变大，进入下一轮 Thought</li>
+        </ul>
+        <p class="note">接下来六页用一个真实任务演示这个循环 —— 同时观察上下文窗口是怎么被填满的。</p>
+      </div>
+      <div class="col-visual">
+        <div class="fig" data-fig="图 1 · ReAct 单轮循环">
+          <svg viewBox="0 0 360 280" style="width:100%;height:auto;font-family:var(--font-mono);font-size:11px">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+              </marker>
+            </defs>
+            <!-- 四个节点 -->
+            <rect x="130" y="10" width="100" height="42" fill="#fff" stroke="#1e3a8a" stroke-width="1.5"/>
+            <text x="180" y="36" text-anchor="middle" fill="#0d1b2a" font-weight="600">Thought</text>
+
+            <rect x="250" y="115" width="100" height="42" fill="#fff" stroke="#1e3a8a" stroke-width="1.5"/>
+            <text x="300" y="141" text-anchor="middle" fill="#0d1b2a" font-weight="600">Action</text>
+
+            <rect x="130" y="220" width="100" height="42" fill="#fff" stroke="#1e3a8a" stroke-width="1.5"/>
+            <text x="180" y="246" text-anchor="middle" fill="#0d1b2a" font-weight="600">Observation</text>
+
+            <rect x="10" y="115" width="100" height="42" fill="#fff" stroke="#1e3a8a" stroke-width="1.5"/>
+            <text x="60" y="141" text-anchor="middle" fill="#0d1b2a" font-weight="600">Update</text>
+
+            <!-- 箭头：Thought → Action → Observation → Update → Thought -->
+            <path d="M225,52 Q280,80 285,115" stroke="#1e3a8a" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+            <path d="M295,160 Q260,200 225,222" stroke="#1e3a8a" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+            <path d="M135,225 Q90,200 75,160" stroke="#1e3a8a" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+            <path d="M75,115 Q90,80 130,52" stroke="#1e3a8a" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+
+            <!-- 中心标签 -->
+            <text x="180" y="135" text-anchor="middle" fill="#6b7a8f" font-size="10">window grows</text>
+            <text x="180" y="150" text-anchor="middle" fill="#6b7a8f" font-size="10">each round</text>
+          </svg>
+        </div>
+      </div>
+    </div>
     <div class="deck-footer">
-      <span class="mono">#react #thought-action-observation</span>
-      <span class="slide-number" data-current="4" data-total="27"></span>
+      <span class="mono">#react #loop</span>
+      <span class="slide-number" data-current="4" data-total="35"></span>
     </div>
     <aside class="notes">
-      <p>讲 Agent 之前，必须先讲清楚它<strong>怎么运转</strong>的。Agent 的心脏，就是这个 <strong>ReAct 循环</strong>——Reasoning + Acting 的简称。</p>
-      <p>每一轮，Agent 先做 <strong>Thought</strong>，看着当前上下文窗口里的内容思考"我下一步该干什么"。然后做 <strong>Action</strong>——按照工具的 JSON Schema 格式生成一个 Tool Call。</p>
-      <p>这个 Tool Call 会被我们的运行时拿去<strong>真正执行</strong>——可能是读一个文件、可能是跑一条 Bash 命令、可能是搜代码。执行的结果就是 <strong>Observation</strong>，我们把这个结果<strong>解析、序列化，再塞回上下文窗口</strong>。</p>
-      <p>然后 Agent 看到这个新的窗口内容，进入下一轮 Thought。如此循环。</p>
-      <p>这里有一个非常关键的副作用——每一轮工具结果都在<strong>占用窗口空间</strong>。一个文件可能上千行，一个搜索结果可能十几个匹配。跑十几轮之后，窗口就满了。这就是我后面所有上下文治理工作的<strong>问题源头</strong>。</p>
+      <p>Agent 的心脏是 ReAct 循环 —— Reasoning + Acting 的合写。</p>
+      <p>每一轮分四步：<strong>Thought</strong> 看上下文决定动作；<strong>Action</strong> 生成结构化的 tool call；<strong>Observation</strong> 运行时真正执行工具、把结果回灌窗口；<strong>Update</strong> 进入下一轮。</p>
+      <p>这页讲的是<strong>概念</strong>。后面六页我会用一个真实任务，逐帧演示这个循环到底怎么跑、窗口怎么变化。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 4.2 ReAct frame 1: 用户提问 ============ -->
+  <section class="slide" data-title="ReAct · user">
+    <div class="title-bar">
+      <span class="part">PART 01 · ReAct</span>
+      <h2>第一帧：用户发起一个开放性问题</h2>
+      <span class="sub">2 / 6</span>
+    </div>
+    <div class="split s64">
+      <div class="col-text">
+        <p class="lead">用户的需求<span class="accent">不是机器指令</span>。Agent 需要先把它<span class="accent">翻译</span>成可执行的工具调用。</p>
+        <ul>
+          <li>"总结" → 需要看目录结构</li>
+          <li>"可优化的模块划分" → 需要读关键源文件</li>
+          <li>用户没说去哪儿看，Agent 自己定位</li>
+        </ul>
+        <p class="note">此时窗口里只有：System prompt + 用户这一句话。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>jcli chat · session #42</span><span>~/dev/j</span></div>
+          <div class="term-body">
+            <div class="bubble user is-new">
+              <div class="who"><span>USER</span><span class="tag">@me</span></div>
+              <div class="body">总结一下 src/command/chat 目录的结构，以及可以优化的模块划分。</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill" style="width:6%"></div></div>
+          <span>6%</span>
+        </div>
+        <div class="react-state">
+          <span>state:</span>
+          <span class="step active">Thought</span>
+          <span class="step">Action</span>
+          <span class="step">Observation</span>
+          <span class="step">Update</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#react #user-intent</span>
+      <span class="slide-number" data-current="5" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>第一帧 —— 用户给一个开放性需求："总结一下 src/command/chat 目录的结构和可优化的模块划分"。</p>
+      <p>注意这句话<strong>不是指令</strong>。用户没说"跑 ls"也没说"读哪个文件"。Agent 要把这句模糊的需求翻译成<strong>一连串具体的工具调用</strong>。</p>
+      <p>这时候窗口里只有系统提示和这一行用户输入，占用 6%。下一帧 Agent 开始思考。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 4.3 ReAct frame 2: Agent Thought + Bash ============ -->
+  <section class="slide" data-title="ReAct · action">
+    <div class="title-bar">
+      <span class="part">PART 01 · ReAct</span>
+      <h2>第二帧：Agent 思考后调出第一个工具</h2>
+      <span class="sub">3 / 6</span>
+    </div>
+    <div class="split s64">
+      <div class="col-text">
+        <p class="lead">Agent 先<span class="accent">列目录</span>看全貌 —— 这是面对未知项目最常见的第一步。</p>
+        <ul>
+          <li>选择工具 <code>Bash</code>，因为要枚举文件</li>
+          <li>参数符合 JSON Schema，运行时能直接解析</li>
+          <li>用 <code>ls -F</code> 区分文件与目录</li>
+        </ul>
+        <p class="note">注意：Agent 的"想法"也被写进上下文窗口 —— 它是后续轮次的决策依据。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>jcli chat · session #42</span><span>~/dev/j</span></div>
+          <div class="term-body">
+            <div class="bubble user is-dim">
+              <div class="who"><span>USER</span></div>
+              <div class="body">总结一下 src/command/chat 目录的结构……</div>
+            </div>
+            <div class="bubble agent is-new">
+              <div class="who"><span>AGENT</span><span class="tag">thought</span></div>
+              <div class="body">用户要总结目录结构，先列出 chat/ 下的文件分布。</div>
+            </div>
+            <div class="bubble tool is-new">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Bash</span></div>
+<div class="body"><span class="k">command</span>: <span class="v">ls -F src/command/chat</span>
+<span class="k">description</span>: <span class="v">List chat module entries</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill" style="width:9%"></div></div>
+          <span>9%</span>
+        </div>
+        <div class="react-state">
+          <span>state:</span>
+          <span class="step done">Thought</span>
+          <span class="step active">Action</span>
+          <span class="step">Observation</span>
+          <span class="step">Update</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#react #bash</span>
+      <span class="slide-number" data-current="6" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>第二帧 —— Agent 想了一下。它的思考过程也会被记录进窗口，这条 thought 写得很短："先列出 chat/ 下的文件分布"。</p>
+      <p>然后它生成一个 <strong>tool call</strong>。注意这不是简单的"我想跑这个命令"，而是一个<strong>结构化的 JSON</strong>，运行时能直接拿去执行。参数明确包含 command 和 description 两个字段。</p>
+      <p>窗口从 6% 涨到 9% —— thought 加 tool call 占了 3%。这个增长很小，因为消息很短。但你想，跑十几轮之后会怎样？这就是上下文压力的来源。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 4.4 ReAct frame 3: Bash 结果 ============ -->
+  <section class="slide" data-title="ReAct · observation">
+    <div class="title-bar">
+      <span class="part">PART 01 · ReAct</span>
+      <h2>第三帧：运行时执行 → 结果回灌窗口</h2>
+      <span class="sub">4 / 6</span>
+    </div>
+    <div class="split s64">
+      <div class="col-text">
+        <p class="lead">运行时<span class="accent">在真实 shell 里执行</span> tool call，把 stdout 序列化为 tool-result 消息，写回上下文。</p>
+        <ul>
+          <li>12 个条目，足够建立粗略地图</li>
+          <li>Agent 在下一轮能看见这些文件名</li>
+          <li>结果以 <strong>文本形式</strong> 永久落在窗口里</li>
+        </ul>
+        <p class="note">这是 ReAct 的关键：tool 输出是会<span class="accent">长期占用 token</span> 的，不是临时变量。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>jcli chat · session #42</span><span>~/dev/j</span></div>
+          <div class="term-body">
+            <div class="bubble agent is-dim">
+              <div class="who"><span>AGENT</span><span class="tag">thought</span></div>
+              <div class="body">用户要总结目录结构，先列出 chat/ 下的文件分布。</div>
+            </div>
+            <div class="bubble tool is-dim">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Bash</span></div>
+              <div class="body"><span class="k">command</span>: <span class="v">ls -F src/command/chat</span></div>
+            </div>
+            <div class="bubble tool-result is-new">
+              <div class="who"><span>TOOL RESULT</span><span class="tag">stdout</span></div>
+<div class="body">agent.rs        handler/
+api.rs          input_thread.rs
+app.rs          markdown/
+archive.rs      mod.rs
+autocomplete.rs permission.rs
+compact.rs      render_cache.rs
+constants.rs    skill.rs
+hook.rs         storage.rs
+                theme.rs
+                tools/
+                ui/
+                ui_helpers.rs</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill" style="width:14%"></div></div>
+          <span>14%</span>
+        </div>
+        <div class="react-state">
+          <span>state:</span>
+          <span class="step done">Thought</span>
+          <span class="step done">Action</span>
+          <span class="step active">Observation</span>
+          <span class="step">Update</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#react #tool-result</span>
+      <span class="slide-number" data-current="7" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>第三帧 —— 运行时执行 ls，把结果<strong>原样写回</strong>到对话上下文，作为一条新消息。</p>
+      <p>这是 ReAct 最关键的一步 —— <strong>tool 的输出不是临时变量，是会一直占着 token 的消息</strong>。你看 22 个条目就占了 5%。如果是 Read 一个 500 行的文件，就可能占 8-12%。</p>
+      <p>这就解释了为什么<strong>上下文窗口治理是核心问题</strong> —— ReAct 的本质决定了窗口必然被工具结果撑满。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 4.5 ReAct frame 4: 下一轮 Read ============ -->
+  <section class="slide" data-title="ReAct · next round">
+    <div class="title-bar">
+      <span class="part">PART 01 · ReAct</span>
+      <h2>第四帧：进入下一轮 —— Read 关键源文件</h2>
+      <span class="sub">5 / 6</span>
+    </div>
+    <div class="split s64">
+      <div class="col-text">
+        <p class="lead">Agent 看完目录，决定<span class="accent">深入 app.rs</span> —— 它是名字最像入口的文件。</p>
+        <ul>
+          <li>选 Read 而非 Bash cat —— 结构化输出、自动行号</li>
+          <li>用 offset/limit 控量，<strong>不读全文</strong></li>
+          <li>结果会很长，是窗口压力的主要来源</li>
+        </ul>
+        <p class="note">真实 Read 一次大约带回 60 行源码（800-1500 tokens）。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>jcli chat · session #42</span><span>~/dev/j</span></div>
+          <div class="term-body">
+            <div class="bubble tool-result is-dim">
+              <div class="who"><span>TOOL RESULT</span></div>
+              <div class="body">agent.rs  app.rs  compact.rs  hook.rs  ...</div>
+            </div>
+            <div class="bubble agent is-new">
+              <div class="who"><span>AGENT</span><span class="tag">thought</span></div>
+              <div class="body">app.rs 看起来是顶层入口，先读它的 struct 定义。</div>
+            </div>
+            <div class="bubble tool is-new">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Read</span></div>
+<div class="body"><span class="k">file_path</span>: <span class="v">src/command/chat/app.rs</span>
+<span class="k">limit</span>: <span class="v">60</span></div>
+            </div>
+            <div class="bubble tool-result is-new">
+              <div class="who"><span>TOOL RESULT</span><span class="tag">60 lines</span></div>
+<div class="body">pub struct ChatApp {
+    pub ui: UIState,           // 55 fields
+    pub state: ChatState,      // 7 fields
+    pub tool_executor: ToolExecutor,
+    pub agent: Option&lt;AgentHandle&gt;,
+    pub tool_registry: Arc&lt;ToolRegistry&gt;,
+    pub jcli_config: Arc&lt;JcliConfig&gt;,
+    ...
+}</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill" style="width:24%"></div></div>
+          <span>24%</span>
+        </div>
+        <div class="react-state">
+          <span>state:</span>
+          <span class="step done">Thought</span>
+          <span class="step done">Action</span>
+          <span class="step done">Observation</span>
+          <span class="step active">Update</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#react #read-tool</span>
+      <span class="slide-number" data-current="8" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>第四帧 —— 第二轮 ReAct 开始。Agent 看完目录列表，决定深入 <code>app.rs</code>。它注意到这是入口文件。</p>
+      <p>这里 Agent 用的是 <strong>Read 工具而不是 Bash cat</strong>。为什么？Read 工具返回带行号的结构化输出，Agent 后面想做 Edit 替换的时候能精确定位。另外 Read 有 limit 参数能控量 —— 不读全文。</p>
+      <p>结果回灌之后，窗口跳到 24%。两轮工具调用就用掉接近四分之一，这就是 ReAct 的真实压力。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 4.6 ReAct frame 5: 总结 ============ -->
+  <section class="slide" data-title="ReAct · summary">
+    <div class="title-bar">
+      <span class="part">PART 01 · ReAct</span>
+      <h2>第五帧：信息够了，Agent 给出结论</h2>
+      <span class="sub">6 / 6</span>
+    </div>
+    <div class="split s64">
+      <div class="col-text">
+        <p class="lead">经过 <span class="accent">3 轮工具调用</span>（ls + Read app.rs + Grep "pub struct"），Agent 拼出全貌。</p>
+        <ul>
+          <li>窗口最终占用 <strong>38%</strong></li>
+          <li>原始用户问题仅 1 行，结论却用了几千 token 才得到</li>
+          <li>价值密度低 —— 大量字符是 <strong>中间产物</strong></li>
+        </ul>
+        <p class="note">下一节 · 上下文窗口治理：怎么让这些"中间产物"不污染长程任务。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>jcli chat · session #42</span><span>round 3 done</span></div>
+          <div class="term-body">
+            <div class="bubble tool-result is-dim">
+              <div class="who"><span>TOOL RESULT</span><span class="tag">round 2 · Read</span></div>
+              <div class="body">pub struct ChatApp { ... } · 55+7+9+2 fields ...</div>
+            </div>
+            <div class="bubble tool-result is-dim">
+              <div class="who"><span>TOOL RESULT</span><span class="tag">round 3 · Grep "pub struct"</span></div>
+              <div class="body">app.rs:24 ChatApp · app.rs:108 UIState · app.rs:312 ChatState · ...</div>
+            </div>
+            <div class="bubble agent is-new">
+              <div class="who"><span>AGENT</span><span class="tag">final</span></div>
+              <div class="body">src/command/chat 共 27 个文件，按职责分四层：<br>1. <strong>入口</strong> · mod.rs / app.rs / agent.rs<br>2. <strong>状态</strong> · UIState（55 字段） + ChatState（7 字段）<br>3. <strong>I/O</strong> · handler/ · input_thread · render_cache<br>4. <strong>扩展</strong> · tools/ · skill · hook · compact<br><br>可优化点：UIState 字段过多，可按"输入/popup/缓存"再切分。</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill warn" style="width:38%"></div></div>
+          <span>38%</span>
+        </div>
+        <div class="react-state">
+          <span>state:</span>
+          <span class="step done">round 1</span>
+          <span class="step done">round 2</span>
+          <span class="step done">round 3</span>
+          <span class="step active">summarize</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#react #close-loop</span>
+      <span class="slide-number" data-current="9" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>最后一帧 —— Agent 把三轮工具调用的结果<strong>拼起来</strong>，给出真正回答用户问题的总结。</p>
+      <p>注意几个数字：<strong>3 轮工具调用</strong>、窗口最终 <strong>38%</strong>。但用户的原始问题只有一行字。中间几千个 token 几乎全是<strong>中间产物</strong> —— 目录列表、源码片段、grep 匹配 —— 这些信息在结论给出之后<strong>价值就大幅下降</strong>。</p>
+      <p>如果接下来用户继续问问题，这些中间产物就会一直占着窗口。这就是下一节要解决的问题 —— <strong>上下文窗口治理</strong>。</p>
     </aside>
   </section>
 
   <!-- ============ 4. CORE: Context Window ============ -->
   <section class="slide" data-title="Context Window Challenge">
-    <p class="kicker">// part 02 · context window</p>
-    <h2 class="h2">核心挑战：<span class="accent">上下文窗口有限</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 02 · CONTEXT WINDOW</span>
+      <h2>核心挑战：<span class="accent">上下文窗口有限</span></h2>
+    </div>
     <div class="grid g2 mt-l">
       <div class="card card-accent">
         <h4>Problem</h4>
@@ -159,7 +497,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#context-window #scrolling</span>
-      <span class="slide-number" data-current="5" data-total="27"></span>
+      <span class="slide-number" data-current="5" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>现在进入第二部分，整个项目最核心的设计——<strong>上下文窗口治理</strong>。</p>
@@ -171,8 +509,10 @@
 
   <!-- ============ 4.5. WINDOW EVOLUTION ============ -->
   <section class="slide" data-title="Window Evolution">
-    <p class="kicker">// part 02 · pain point</p>
-    <h2 class="h2">不治理会怎样？<span class="accent">窗口爆炸</span>实录</h2>
+    <div class="title-bar">
+      <span class="part">PART 02 · PAIN POINT</span>
+      <h2>不治理会怎样？<span class="accent">窗口爆炸</span>实录</h2>
+    </div>
     <p class="dim mt-s">一个真实的 Agent 任务，五轮工具调用之后……</p>
     <div class="cw-evolution">
       <span class="lbl">round 1</span>
@@ -207,7 +547,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#token-pressure #hallucination</span>
-      <span class="slide-number" data-current="6" data-total="27"></span>
+      <span class="slide-number" data-current="6" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>给大家直观感受一下，<strong>不治理</strong>会发生什么。这是我跑一个真实任务的窗口占用变化。</p>
@@ -222,8 +562,10 @@
 
   <!-- ============ 5. Compaction System ============ -->
   <section class="slide" data-title="Compaction System">
-    <p class="kicker">// part 02 · compaction</p>
-    <h2 class="h2">多级压缩：<span class="accent">micro</span> 与 <span class="accent">auto</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 02 · COMPACTION</span>
+      <h2>多级压缩：<span class="accent">micro</span> 与 <span class="accent">auto</span></h2>
+    </div>
     <div class="stack mt-l">
       <div class="rule-row">
         <span class="num blue">豁免</span>
@@ -258,8 +600,10 @@
 
   <!-- ============ 5.5. PRIORITY FUNNEL ============ -->
   <section class="slide" data-title="Priority Funnel">
-    <p class="kicker">// part 02 · scrolling window</p>
-    <h2 class="h2">滚动窗口：<span class="accent">把上下文当作推荐系统</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 02 · SCROLLING WINDOW</span>
+      <h2>滚动窗口：<span class="accent">把上下文当作推荐系统</span></h2>
+    </div>
     <p class="lede mt-s" style="font-size:15px">窗口空间 = 推荐位；候选消息 = 物料；价值评分 = CTR 预估</p>
     <div class="priority-funnel mt-m">
       <div class="lane">
@@ -297,7 +641,7 @@
     <p class="dim mt-m" style="font-size:12px;text-align:center">核心洞察：<strong>决策信息多放、指导方向信息多放、执行中间过程信息少放</strong></p>
     <div class="deck-footer">
       <span class="mono">#scrolling-window #rec-sys-analogy</span>
-      <span class="slide-number" data-current="8" data-total="27"></span>
+      <span class="slide-number" data-current="8" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>这里我想分享一个比较有意思的<strong>跨领域类比</strong>——上下文窗口治理和<strong>推荐系统</strong>非常像。</p>
@@ -309,8 +653,10 @@
 
   <!-- ============ 6. Dynamic System Prompt ============ -->
   <section class="slide" data-title="Dynamic System Prompt">
-    <p class="kicker">// part 02 · dynamic prompt</p>
-    <h2 class="h2">动态 System Prompt：<br><span class="accent">尾部追加</span>的状态感知</h2>
+    <div class="title-bar">
+      <span class="part">PART 02 · DYNAMIC PROMPT</span>
+      <h2>动态 System Prompt：<br><span class="accent">尾部追加</span>的状态感知</h2>
+    </div>
     <div class="arch mt-m">
       <div class="tier"><div class="tname">静态基础</div>
         <div class="cells"><div class="cell"><h4>项目规范</h4><p>AGENTS.md</p></div>
@@ -337,8 +683,10 @@
 
   <!-- ============ 7. TOOL SYSTEM OVERVIEW ============ -->
   <section class="slide" data-title="Tool System">
-    <p class="kicker">// part 03 · tool system</p>
-    <h2 class="h2">工具体系：<span class="accent">渐进增强</span>的设计哲学</h2>
+    <div class="title-bar">
+      <span class="part">PART 03 · TOOL SYSTEM</span>
+      <h2>工具体系：<span class="accent">渐进增强</span>的设计哲学</h2>
+    </div>
     <div class="arch mt-m">
       <div class="tier"><div class="tname">基础层</div>
         <div class="cells"><div class="cell"><h4>Read</h4><p>读取文件</p></div>
@@ -372,8 +720,10 @@
 
   <!-- ============ 8. TOOL: Grep + Ask ============ -->
   <section class="slide" data-title="Grep & Ask">
-    <p class="kicker">// part 03 · why new tools</p>
-    <h2 class="h2">为什么需要 <span class="accent">Grep</span> 和 <span class="accent">Ask</span>？</h2>
+    <div class="title-bar">
+      <span class="part">PART 03 · WHY NEW TOOLS</span>
+      <h2>为什么需要 <span class="accent">Grep</span> 和 <span class="accent">Ask</span>？</h2>
+    </div>
     <div class="grid g2 mt-l">
       <div class="card card-accent">
         <h4>Grep：构建上下文的关键工具</h4>
@@ -400,8 +750,10 @@
 
   <!-- ============ 9. TOOL: Plan + Edit ============ -->
   <section class="slide" data-title="Plan & Edit">
-    <p class="kicker">// part 03 · plan & edit</p>
-    <h2 class="h2">Plan + Edit：<span class="accent">想清楚再动手</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 03 · PLAN & EDIT</span>
+      <h2>Plan + Edit：<span class="accent">想清楚再动手</span></h2>
+    </div>
     <div class="stack mt-l">
       <div class="rule-row">
         <span class="num" style="background:var(--accent);color:#fff;border-radius:2px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0;font-family:var(--font-mono)">P</span>
@@ -429,63 +781,257 @@
   </section>
 
   <!-- ============ 9.5. PLAN WORKFLOW ============ -->
-  <section class="slide" data-title="Plan Workflow">
-    <p class="kicker">// part 03 · plan workflow</p>
-    <h2 class="h2">Plan 三阶段：<span class="accent">调研 → 清空 → 执行</span></h2>
-    <div class="plan-flow mt-l">
-      <div class="phase research">
-        <h4>① 调研阶段</h4>
-        <p>只读模式，Agent 通过工具收集理解项目所需的全部信息。</p>
-        <div class="tools">
-          <span class="t">Read</span><span class="t">Grep</span>
-          <span class="t">Glob</span><span class="t">WebFetch</span>
-        </div>
-      </div>
-      <div class="arrow"><span class="a">→</span><span class="lbl">输出<br>Plan.md</span></div>
-      <div class="phase plan">
-        <h4>② 计划 + 审批</h4>
-        <p>生成<strong>自包含执行计划</strong>，明确每一步的目标、文件、改动点。用户审批通过。</p>
-        <div class="tools">
-          <span class="t">Plan.md</span><span class="t">Approval</span>
-        </div>
-      </div>
-      <div class="arrow"><span class="a">→</span><span class="lbl">CLEAR<br>CONTEXT</span></div>
-      <div class="phase exec">
-        <h4>③ 执行阶段</h4>
-        <p>窗口被<strong>清空</strong>，只保留 Plan 文档。Agent 在干净窗口里按计划高效执行。</p>
-        <div class="tools">
-          <span class="t">Edit</span><span class="t">Write</span>
-          <span class="t">Bash</span><span class="t">Test</span>
-        </div>
-      </div>
+  <section class="slide" data-title="Plan · concept">
+    <div class="title-bar">
+      <span class="part">PART 03 · PLAN</span>
+      <h2>Plan 工作流：先调研，写计划，<span class="accent">清空，再执行</span></h2>
+      <span class="sub">1 / 4</span>
     </div>
-    <div class="grid g2 mt-l">
-      <div class="card card-soft">
-        <h4 style="color:var(--bad)">反例 · 无 Plan</h4>
-        <p class="dim" style="font-size:13px;margin:6px 0">调研过程读了 30 个文件，把窗口塞满。开始改代码时窗口已经无空间，Agent 改完 A 漏了 B、忘了用户的原始约束。</p>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">问题：LLM 习惯<span class="accent">边想边改</span>。调研读了 30 个文件，写代码时窗口已无空间。</p>
+        <ul>
+          <li>调研阶段读的源码 ≠ 执行阶段要写的代码</li>
+          <li>但都挤在<strong>同一个</strong>窗口里</li>
+          <li>导致 Agent 改一处忘一处、忘记原始约束</li>
+        </ul>
+        <h4>方案：把调研和执行<span class="accent">物理隔离</span></h4>
+        <p class="note">三阶段：① 只读调研 → ② 写 plan.md + 用户审批 → ③ 清空窗口，只留 plan.md，开始改代码</p>
       </div>
-      <div class="card card-soft">
-        <h4 style="color:var(--good)">正例 · 有 Plan</h4>
-        <p class="dim" style="font-size:13px;margin:6px 0">调研窗口被丢弃，执行窗口干净。Plan 文档承载所有调研结论，<strong>变更可追溯、不漂移</strong>。</p>
+      <div class="col-visual">
+        <div class="fig" data-fig="图 2 · Plan 工作流的三阶段，窗口在 ② 和 ③ 之间被清空">
+          <svg viewBox="0 0 480 220" style="width:100%;height:auto;font-family:var(--font-mono);font-size:11px">
+            <defs>
+              <marker id="pa1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/></marker>
+            </defs>
+            <!-- 三阶段框 -->
+            <rect x="10" y="40" width="130" height="120" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5"/>
+            <text x="75" y="60" text-anchor="middle" font-weight="600" fill="#0d1b2a">① 调研</text>
+            <text x="75" y="80" text-anchor="middle" fill="#6b7a8f" font-size="10">Read · Grep · Glob</text>
+            <text x="75" y="100" text-anchor="middle" fill="#6b7a8f" font-size="10">只读模式</text>
+            <text x="75" y="140" text-anchor="middle" fill="#7a1f1f" font-size="10">window: 60%</text>
+
+            <rect x="175" y="40" width="130" height="120" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.5"/>
+            <text x="240" y="60" text-anchor="middle" font-weight="600" fill="#0d1b2a">② 写 plan.md</text>
+            <text x="240" y="80" text-anchor="middle" fill="#6b7a8f" font-size="10">自包含执行计划</text>
+            <text x="240" y="100" text-anchor="middle" fill="#6b7a8f" font-size="10">用户审批</text>
+            <text x="240" y="140" text-anchor="middle" fill="#7a5b00" font-size="10">window: 65%</text>
+
+            <rect x="340" y="40" width="130" height="120" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.5"/>
+            <text x="405" y="60" text-anchor="middle" font-weight="600" fill="#0d1b2a">③ 执行</text>
+            <text x="405" y="80" text-anchor="middle" fill="#6b7a8f" font-size="10">Edit · Write · Test</text>
+            <text x="405" y="100" text-anchor="middle" fill="#6b7a8f" font-size="10">仅保留 plan.md</text>
+            <text x="405" y="140" text-anchor="middle" fill="#1e5e3a" font-size="10">window: 12%</text>
+
+            <!-- 箭头 -->
+            <path d="M140,100 L170,100" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
+            <path d="M305,100 L335,100" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
+            <!-- CLEAR 标记 -->
+            <text x="320" y="180" text-anchor="middle" fill="#7a1f1f" font-weight="600" font-size="10">CLEAR ↑</text>
+            <text x="320" y="195" text-anchor="middle" fill="#7a1f1f" font-size="9">调研窗口丢弃</text>
+          </svg>
+        </div>
       </div>
     </div>
     <div class="deck-footer">
-      <span class="mono">#plan #clear-and-approve</span>
-      <span class="slide-number" data-current="13" data-total="27"></span>
+      <span class="mono">#plan #three-phases</span>
+      <span class="slide-number" data-current="14" data-total="35"></span>
     </div>
     <aside class="notes">
-      <p>Plan 工具不只是"先想再做"，它的核心机制是<strong>三阶段 + 中间清空</strong>。这一页详细讲讲。</p>
-      <p><strong>第一阶段，调研</strong>。Agent 进入只读模式，能用的工具受限——只有 Read、Grep、Glob、WebFetch 这些<strong>不修改任何东西</strong>的工具。这个阶段它做的事是建立对项目的完整理解。</p>
-      <p><strong>第二阶段，计划 + 审批</strong>。Agent 把调研结论写成一份自包含的 Plan.md——明确写出每一步要改哪个文件、加什么函数、删什么逻辑。用户看 Plan，确认方向对，approve。</p>
-      <p><strong>第三阶段是关键</strong>——上下文<strong>清空</strong>。调研阶段读的 30 个文件、几万 token 的内容，全部丢弃。<strong>只把 Plan 文档保留下来</strong>。Agent 在一个干净的窗口里，对照 Plan 一步步执行。</p>
-      <p>这样做的好处太明显了——执行阶段不再被调研垃圾信息干扰，Plan 还能作为<strong>变更文档</strong>留下来追溯。这是 idea 里说的"clear and approval"机制。</p>
+      <p>Plan 工作流要解决的核心问题是：<strong>LLM 习惯边想边改</strong>。它读了 30 个文件理解项目，然后直接开始改代码 —— 但这时候窗口里全是调研产生的源码片段，根本没空间装新的改动。</p>
+      <p>方案是把调研和执行<strong>物理隔离</strong>，关键是中间那一步<strong>清空窗口</strong> —— 把几十 K 的调研结果全丢掉，只留下一份用户审批过的 plan.md。</p>
+      <p>接下来三页用一个真实重构需求演示这个过程。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Plan · research">
+    <div class="title-bar">
+      <span class="part">PART 03 · PLAN</span>
+      <h2>第一阶段：进入 Plan 模式，<span class="accent">只读调研</span></h2>
+      <span class="sub">2 / 4</span>
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">用户提出重构需求 → Agent 进入 Plan 模式 → 工具集被<span class="accent">限制为只读</span>。</p>
+        <ul>
+          <li>能用 Read / Grep / Glob / WebFetch</li>
+          <li><strong>不能</strong> Edit / Write / Bash 写命令</li>
+          <li>目的：让窗口装满"理解"，但不产生副作用</li>
+        </ul>
+        <p class="note">窗口已涨到 60% —— 这是 Plan 阶段的正常代价。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>jcli plan-mode · session #78</span><span>read-only</span></div>
+          <div class="term-body">
+            <div class="bubble user is-new">
+              <div class="who"><span>USER</span></div>
+              <div class="body">把 ChatApp 拆分成 UIState 和 ChatState，55 个字段太挤了，难维护。</div>
+            </div>
+            <div class="bubble agent is-new">
+              <div class="who"><span>AGENT</span><span class="tag">enter plan-mode</span></div>
+              <div class="body">进入 Plan 模式。先调研：app.rs 当前结构、所有引用 ChatApp 字段的位置、handler 模块依赖。</div>
+            </div>
+            <div class="bubble tool">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Read · app.rs</span></div>
+              <div class="body">取 1..300 行（结构定义与方法）</div>
+            </div>
+            <div class="bubble tool">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Grep · "app.ui_"</span></div>
+              <div class="body">76 处匹配，集中在 handler/ ui/</div>
+            </div>
+            <div class="bubble tool">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Grep · "app.state_"</span></div>
+              <div class="body">23 处匹配，集中在 agent.rs · compact.rs</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill warn" style="width:60%"></div></div>
+          <span>60% · plan-mode</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#plan #research</span>
+      <span class="slide-number" data-current="15" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>用户说 "把 ChatApp 拆分成 UIState 和 ChatState"。这是个跨越多个文件的重构。</p>
+      <p>Agent 进入 Plan 模式，<strong>工具集被自动限制为只读</strong> —— Edit、Write、Bash 写命令全被禁用。Agent 只能 Read、Grep、Glob、WebFetch。</p>
+      <p>它跑了三个 Grep 把所有引用点定位出来：76 处 ui_ 字段、23 处 state_ 字段。窗口涨到 60% —— 看起来很多，但<strong>下一步就要丢掉了</strong>。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Plan · approve">
+    <div class="title-bar">
+      <span class="part">PART 03 · PLAN</span>
+      <h2>第二阶段：输出 plan.md，<span class="accent">用户审批</span></h2>
+      <span class="sub">3 / 4</span>
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">调研结论<span class="accent">沉淀</span>为一份 plan.md —— 每一步改哪个文件、加什么、删什么，写得自包含。</p>
+        <ul>
+          <li>plan.md 是<strong>变更契约</strong>，可追溯</li>
+          <li>用户审批 = approve / reject + 修改建议</li>
+          <li>若 reject 则回到 ①，不进 ③</li>
+        </ul>
+        <p class="note">审批通过 → 触发 clear context，进入第三阶段。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>plan.md · 待审批</span><span>~/.jdata/plans/p-78.md</span></div>
+          <div class="term-body" style="font-family:var(--font-mono);font-size:11px;line-height:1.7;color:var(--text-1);background:#fbfbfb;padding:14px;max-height:none">
+<pre style="margin:0;white-space:pre-wrap;font-family:inherit">## Plan · 拆分 ChatApp
+
+### 1. 新文件 src/command/chat/ui_state.rs
+   - struct UIState { 55 字段 }
+   - impl UIState { from_chat_app() }
+
+### 2. 新文件 src/command/chat/chat_state.rs
+   - struct ChatState { 7 字段 }
+   - impl ChatState { new() · merge() }
+
+### 3. 修改 src/command/chat/app.rs
+   - 删除原 55+7 字段
+   - 改为 ui: UIState · state: ChatState
+   - 76 处 self.ui_x → self.ui.x
+   - 23 处 self.state_x → self.state.x
+
+### 4. 修改 src/command/chat/handler/*.rs
+   - 替换字段引用 (机械替换)
+
+### 5. cargo build · cargo test 验证</pre>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill warn" style="width:65%"></div></div>
+          <span>65% · awaiting approval</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#plan #approval</span>
+      <span class="slide-number" data-current="16" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>第二阶段 —— Agent 把调研结论<strong>沉淀</strong>成一份 plan.md。注意几个特点：每一步都写明<strong>动哪个文件、加什么删什么</strong>，<strong>包含验证步骤</strong>（cargo build 和 test）。</p>
+      <p>plan.md 此时是个<strong>变更契约</strong> —— 用户可以审批、可以驳回、可以提修改意见。这一步是<strong>对齐预期的最后一道闸</strong>。</p>
+      <p>一旦 approve，下一步就是关键 —— 清空上下文。</p>
+    </aside>
+  </section>
+
+  <section class="slide" data-title="Plan · execute">
+    <div class="title-bar">
+      <span class="part">PART 03 · PLAN</span>
+      <h2>第三阶段：<span class="accent">清空窗口</span>，只留 plan.md，开干</h2>
+      <span class="sub">4 / 4</span>
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">窗口从 65% <span class="accent">回到 12%</span>：调研产生的 30+ 工具结果全部丢弃。</p>
+        <ul>
+          <li>Agent 重新启动，上下文只含 plan.md</li>
+          <li>工具集恢复为<strong>完整集</strong>（Edit / Write / Bash）</li>
+          <li>不再有调研中间产物干扰决策</li>
+        </ul>
+        <h4>这就是 idea 里说的 <span class="accent">clear & approve</span> 机制</h4>
+        <p class="note">代价：忘掉调研细节 / 收益：执行阶段窗口干净，错误率显著下降</p>
+      </div>
+      <div class="col-visual">
+        <div class="term">
+          <div class="term-bar"><span>execute-mode · session #78 (new ctx)</span><span>full tools</span></div>
+          <div class="term-body">
+            <div class="bubble agent is-new">
+              <div class="who"><span>SYSTEM</span><span class="tag">context cleared</span></div>
+              <div class="body">上下文已清空。仅保留 plan.md (~1.2K tokens)。可使用完整工具集。</div>
+            </div>
+            <div class="bubble agent is-new">
+              <div class="who"><span>AGENT</span><span class="tag">step 1/5</span></div>
+              <div class="body">按 plan.md step 1：创建 ui_state.rs。</div>
+            </div>
+            <div class="bubble tool">
+              <div class="who"><span>TOOL CALL</span><span class="tag">Write</span></div>
+<div class="body"><span class="k">file_path</span>: src/command/chat/ui_state.rs
+<span class="k">content</span>: pub struct UIState { /* 55 fields */ }</div>
+            </div>
+            <div class="bubble tool-result">
+              <div class="who"><span>TOOL RESULT</span></div>
+              <div class="body">created 89 lines</div>
+            </div>
+            <div class="bubble agent is-new">
+              <div class="who"><span>AGENT</span><span class="tag">step 2/5</span></div>
+              <div class="body">step 1 done. 进行 step 2：创建 chat_state.rs。</div>
+            </div>
+          </div>
+        </div>
+        <div class="ctx-meter">
+          <span>context</span>
+          <div class="track"><div class="fill" style="width:12%"></div></div>
+          <span>12% · clean window</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#plan #clear-context</span>
+      <span class="slide-number" data-current="17" data-total="35"></span>
+    </div>
+    <aside class="notes">
+      <p>第三阶段 —— 关键操作。<strong>窗口被清空</strong>。原本 65% 的调研产物全部丢弃。新的上下文里只有一份 plan.md，1.2K token 左右。窗口占用回到 12%。</p>
+      <p>Agent 重新启动，工具集恢复完整。它<strong>对照 plan 一步一步做</strong>：step 1 创建 ui_state.rs、step 2 创建 chat_state.rs ……</p>
+      <p>这个机制的代价是 Agent <strong>忘掉了调研细节</strong>。但收益更大 —— 执行阶段窗口干净，不被中间产物干扰，错误率显著下降。这就是 clear and approve 的本质。</p>
     </aside>
   </section>
 
   <!-- ============ 10. BASH / SESSION / BACKGROUND ============ -->
   <section class="slide" data-title="Bash / Session / Background">
-    <p class="kicker">// part 03 · execution model</p>
-    <h2 class="h2">执行模型的<span class="accent">三种形态</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 03 · EXECUTION MODEL</span>
+      <h2>执行模型的<span class="accent">三种形态</span></h2>
+    </div>
     <div class="flow mt-l">
       <div class="node hl">
         <h4>Bash</h4><p>同步执行<br>timeout → 自动转后台</p>
@@ -521,8 +1067,10 @@
 
   <!-- ============ 11. MULTI-AGENT COLLABORATION ============ -->
   <section class="slide" data-title="Multi-Agent Collaboration">
-    <p class="kicker">// part 04 · multi-agent</p>
-    <h2 class="h2">多 Agent 协作：<br><span class="accent">聊天室 + 客观评估</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · MULTI-AGENT</span>
+      <h2>多 Agent 协作：<br><span class="accent">聊天室 + 客观评估</span></h2>
+    </div>
     <div class="grid g2 mt-l">
       <div>
         <div class="feature-row"><span class="num blue">①</span><div><b>Teammate</b><p class="dim">独立 Agent 实例，各有专属上下文和工具，通过 SendMessage 广播 + @提及 通信。</p></div></div>
@@ -544,8 +1092,10 @@
 
   <!-- ============ 11.5. TWO-STAGED COMMIT ============ -->
   <section class="slide" data-title="Two-Staged Commit">
-    <p class="kicker">// part 04 · message consistency</p>
-    <h2 class="h2">Two-Staged Commit：<br><span class="accent">消除 Agent Loop 长时序的重复消息</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · MESSAGE CONSISTENCY</span>
+      <h2>Two-Staged Commit：<br><span class="accent">消除 Agent Loop 长时序的重复消息</span></h2>
+    </div>
     <div class="grid g2 mt-m">
       <div>
         <h4 style="font-size:14px;color:var(--bad);margin-bottom:8px">反例 · 无 2PC：Agent Loop 长时序的灾难</h4>
@@ -575,7 +1125,7 @@
     <p class="dim mt-m" style="font-size:12px;text-align:center">对外：用户体验一致，无重复消息。对内：上下文不被冗余消息污染。</p>
     <div class="deck-footer">
       <span class="mono">#2pc #message-inbox</span>
-      <span class="slide-number" data-current="16" data-total="27"></span>
+      <span class="slide-number" data-current="16" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>讲一个比较工程化的细节——<strong>Two-Staged Commit</strong>。这个问题大家可能不直观，我先描述一下场景。</p>
@@ -587,8 +1137,10 @@
 
   <!-- ============ 11.7. TEAMMATE EXPERIMENTS ============ -->
   <section class="slide" data-title="Teammate Experiments">
-    <p class="kicker">// part 04 · collaboration eval</p>
-    <h2 class="h2">三个实验：<span class="accent">验证 Teammate 协作能力</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · COLLABORATION EVAL</span>
+      <h2>三个实验：<span class="accent">验证 Teammate 协作能力</span></h2>
+    </div>
     <div class="exp3 mt-m">
       <div class="e-card">
         <span class="e-num">EXPERIMENT · 01</span>
@@ -617,7 +1169,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#teammate #experiments</span>
-      <span class="slide-number" data-current="17" data-total="27"></span>
+      <span class="slide-number" data-current="17" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>多 Agent 协作能力到底行不行？我设计了<strong>三个递进的实验</strong>来回答这个问题。</p>
@@ -630,8 +1182,10 @@
 
   <!-- ============ 11.8. SUBAGENT DELEGATION ============ -->
   <section class="slide" data-title="SubAgent Delegation">
-    <p class="kicker">// part 04 · subagent</p>
-    <h2 class="h2">SubAgent：<span class="accent">低上下文成本</span>的调研委派</h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · SUBAGENT</span>
+      <h2>SubAgent：<span class="accent">低上下文成本</span>的调研委派</h2>
+    </div>
     <div class="subtree mt-m">
       <div class="root">
         <b>主 Agent</b>
@@ -664,7 +1218,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#subagent #parallel-research</span>
-      <span class="slide-number" data-current="18" data-total="27"></span>
+      <span class="slide-number" data-current="18" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>SubAgent 和 Teammate 不一样——Teammate 是平等的协作者，SubAgent 是<strong>临时雇用的调研员</strong>。</p>
@@ -677,8 +1231,10 @@
 
   <!-- ============ 12. ROBUSTNESS ============ -->
   <section class="slide" data-title="Robustness">
-    <p class="kicker">// part 04 · robustness</p>
-    <h2 class="h2">健壮性设计：<span class="accent">错误处理</span>与 Hook 系统</h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · ROBUSTNESS</span>
+      <h2>健壮性设计：<span class="accent">错误处理</span>与 Hook 系统</h2>
+    </div>
     <div class="grid g2 mt-l">
       <div class="card card-accent">
         <h4>指数退避重试</h4>
@@ -707,8 +1263,10 @@
 
   <!-- ============ 12.5. TODOWRITE + SYSTEM REMINDER ============ -->
   <section class="slide" data-title="TodoWrite Reminder">
-    <p class="kicker">// part 04 · todo + reminder</p>
-    <h2 class="h2">TodoWrite + <span class="accent">&lt;system_reminder&gt;</span>：防遗忘机制</h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · TODO + REMINDER</span>
+      <h2>TodoWrite + <span class="accent">&lt;system_reminder&gt;</span>：防遗忘机制</h2>
+    </div>
     <div class="grid g2 mt-l">
       <div>
         <h4 style="font-size:14px;margin-bottom:6px">TodoWrite/TodoRead</h4>
@@ -737,7 +1295,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#todo #system-reminder</span>
-      <span class="slide-number" data-current="20" data-total="27"></span>
+      <span class="slide-number" data-current="20" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>讲一个特别有用的小工具——<strong>TodoWrite + system_reminder</strong>。这看着简单，但对 Agent 长期运行有奇效。</p>
@@ -750,8 +1308,10 @@
 
   <!-- ============ 12.7. HOOK SYSTEM EVENTS ============ -->
   <section class="slide" data-title="Hook System Events">
-    <p class="kicker">// part 04 · hook system</p>
-    <h2 class="h2">Hook 系统：<span class="accent">14 个事件钩子</span>覆盖 Agent 生命周期</h2>
+    <div class="title-bar">
+      <span class="part">PART 04 · HOOK SYSTEM</span>
+      <h2>Hook 系统：<span class="accent">14 个事件钩子</span>覆盖 Agent 生命周期</h2>
+    </div>
     <p class="dim mt-s" style="font-size:14px">每个事件可挂载 Shell / Prompt 类型的 Hook —— 用作<strong>回归测试 + 工程规范 + 变更沉淀</strong></p>
     <div class="hook-timeline">
       <span class="ev session">session_start</span>
@@ -792,7 +1352,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#hook #14-events</span>
-      <span class="slide-number" data-current="21" data-total="27"></span>
+      <span class="slide-number" data-current="21" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>Hook 系统是 Agent 真正能"用于生产"的关键。它<strong>把工程规范固化成自动执行的脚本</strong>，跑在 Agent 整个生命周期的各个事件点上。</p>
@@ -806,8 +1366,10 @@
 
   <!-- ============ 13. SKILL SYSTEM ============ -->
   <section class="slide" data-title="Skill System">
-    <p class="kicker">// part 05 · skill system</p>
-    <h2 class="h2">Skill 系统：<span class="accent">工程化能力</span>的按需封装</h2>
+    <div class="title-bar">
+      <span class="part">PART 05 · SKILL SYSTEM</span>
+      <h2>Skill 系统：<span class="accent">工程化能力</span>的按需封装</h2>
+    </div>
     <div class="grid g2 mt-l">
       <div class="card card-accent">
         <h4>jen — SQL → Go 代码生成</h4>
@@ -834,8 +1396,10 @@
 
   <!-- ============ 13.5. JEN DETAIL ============ -->
   <section class="slide" data-title="jen Code Gen">
-    <p class="kicker">// part 05 · skill detail</p>
-    <h2 class="h2">jen：<span class="accent">SQL → Go DAO/Model</span> 工程化生成</h2>
+    <div class="title-bar">
+      <span class="part">PART 05 · SKILL DETAIL</span>
+      <h2>jen：<span class="accent">SQL → Go DAO/Model</span> 工程化生成</h2>
+    </div>
     <div class="jen-flow mt-m">
       <div class="step">
         <h5>1. 输入 SQL</h5>
@@ -875,7 +1439,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#jen #code-gen #model_infrax</span>
-      <span class="slide-number" data-current="23" data-total="27"></span>
+      <span class="slide-number" data-current="23" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>Skill 系统的第一个深入案例是 <strong>jen</strong>——一个 SQL 到 Go 代码的工程化生成工具。</p>
@@ -887,8 +1451,10 @@
 
   <!-- ============ 13.7. WEBAPP-GEN ============ -->
   <section class="slide" data-title="webapp-gen">
-    <p class="kicker">// part 05 · skill detail</p>
-    <h2 class="h2">webapp-gen：<span class="accent">原型驱动</span>逐步填充</h2>
+    <div class="title-bar">
+      <span class="part">PART 05 · SKILL DETAIL</span>
+      <h2>webapp-gen：<span class="accent">原型驱动</span>逐步填充</h2>
+    </div>
     <div class="grid g2 mt-l">
       <div>
         <h4 style="font-size:14px;color:var(--bad);margin-bottom:8px">反例 · 一次性生成</h4>
@@ -923,7 +1489,7 @@
     <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>核心优势：</strong>项目<strong>结构完整性</strong>有脚手架保证；用户预期通过<strong>逐步可见的原型</strong>校准，减少"做完发现不对"的反工。</p>
     <div class="deck-footer">
       <span class="mono">#webapp-gen #prototype-driven</span>
-      <span class="slide-number" data-current="24" data-total="27"></span>
+      <span class="slide-number" data-current="24" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>Skill 系统的第二个深入案例是 <strong>webapp-gen</strong>——生成完整 Web App 的工作流。</p>
@@ -938,8 +1504,10 @@
 
   <!-- ============ 13.9. REPO GALLERY ============ -->
   <section class="slide" data-title="Repo Gallery">
-    <p class="kicker">// project artifacts</p>
-    <h2 class="h2">项目仓库与<span class="accent">交付制品</span></h2>
+    <div class="title-bar">
+      <span class="part">PROJECT ARTIFACTS</span>
+      <h2>项目仓库与<span class="accent">交付制品</span></h2>
+    </div>
     <div class="repo-grid">
       <div class="repo-card">
         <div class="icon"></div>
@@ -966,7 +1534,7 @@
     <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>所有代码开源</strong>，欢迎 Star / Issue / PR · MIT License</p>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack</span>
-      <span class="slide-number" data-current="25" data-total="27"></span>
+      <span class="slide-number" data-current="25" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>讲完了所有设计，给大家看一下整个毕设的<strong>产出</strong>——三个 GitHub 仓库。</p>
@@ -979,8 +1547,10 @@
 
   <!-- ============ 14. SUMMARY ============ -->
   <section class="slide" data-title="Summary">
-    <p class="kicker">// part 06 · summary</p>
-    <h2 class="h2">总结：<span class="accent">三个核心贡献</span></h2>
+    <div class="title-bar">
+      <span class="part">PART 06 · SUMMARY</span>
+      <h2>总结：<span class="accent">三个核心贡献</span></h2>
+    </div>
     <div class="grid g3 mt-l">
       <div class="card card-accent card-hover">
         <h4>上下文窗口治理</h4>
@@ -997,7 +1567,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack/jcli</span>
-      <span class="slide-number" data-current="26" data-total="27"></span>
+      <span class="slide-number" data-current="26" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>好，做个总结。我这个毕设的核心贡献有三个。</p>
@@ -1021,7 +1591,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">温俊杰 · 2025</span>
-      <span class="slide-number" data-current="27" data-total="27"></span>
+      <span class="slide-number" data-current="27" data-total="35"></span>
     </div>
     <aside class="notes">
       <p>好，今天就分享到这里。做一个简单的收尾。</p>
