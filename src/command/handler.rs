@@ -79,8 +79,9 @@ command_handlers! {
     CheckCmd { line_count: Option<String> } => |self, config| {
         crate::command::report::handle_check(self.line_count.as_deref(), config);
     },
-    SearchCmd { line_count: String, target: String, fuzzy: Option<String> } => |self, config| {
-        crate::command::report::handle_search(&self.line_count, &self.target, self.fuzzy.as_deref(), config);
+    SearchCmd { line_count: String, target: Vec<String>, fuzzy: bool } => |self, config| {
+        let target = self.target.join(" ");
+        crate::command::report::handle_search(&self.line_count, &target, self.fuzzy, config);
     },
 
     // ========== 待办备忘录 ==========

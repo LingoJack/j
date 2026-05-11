@@ -213,10 +213,8 @@ fn collect_files_recursive(dir: &Path, for_decrypt: bool) -> Vec<PathBuf> {
                 if filename.ends_with(LOCK_EXTENSION) {
                     result.push(path);
                 }
-            } else {
-                if !filename.ends_with(LOCK_EXTENSION) {
-                    result.push(path);
-                }
+            } else if !filename.ends_with(LOCK_EXTENSION) {
+                result.push(path);
             }
         }
     }

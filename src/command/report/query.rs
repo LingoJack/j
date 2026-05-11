@@ -1,7 +1,7 @@
 //! 日报查询：check / search 命令。
 
 use crate::config::YamlConfig;
-use crate::constants::{DEFAULT_CHECK_LINES, search_flag};
+use crate::constants::DEFAULT_CHECK_LINES;
 use crate::util::fuzzy;
 use crate::{error, info};
 use colored::Colorize;
@@ -52,13 +52,8 @@ pub fn handle_check(line_count: Option<&str>, config: &YamlConfig) {
 
 // ========== search 命令 ==========
 
-/// 处理 search 命令: j search <line_count|all> <target> [-f|-fuzzy]
-pub fn handle_search(
-    line_count: &str,
-    target: &str,
-    fuzzy_flag: Option<&str>,
-    config: &YamlConfig,
-) {
+/// 处理 search 命令: j search <line_count|all> <target...> [-f|--fuzzy]
+pub fn handle_search(line_count: &str, target: &str, is_fuzzy: bool, config: &YamlConfig) {
     let num = parse_line_count(line_count);
 
     let report_path = match get_report_path(config) {
@@ -74,7 +69,6 @@ pub fn handle_search(
         return;
     }
 
-    let is_fuzzy = is_fuzzy_flag(fuzzy_flag);
     if is_fuzzy {
         info!("启用模糊匹配...");
     }
@@ -100,14 +94,6 @@ fn parse_line_count(line_count: &str) -> usize {
             .filter(|&n| n > 0)
             .unwrap_or(DEFAULT_CHECK_LINES)
     }
-}
-
-/// 判断是否启用模糊匹配
-fn is_fuzzy_flag(fuzzy_flag: Option<&str>) -> bool {
-    matches!(
-        fuzzy_flag,
-        Some(f) if f == search_flag::FUZZY_SHORT || f == search_flag::FUZZY
-    )
 }
 
 /// 在行列表中搜索匹配项并输出，返回匹配总数

@@ -121,11 +121,12 @@ pub enum SubCmd {
     Search {
         /// 行数或 "all"
         line_count: String,
-        /// 搜索关键字
-        target: String,
-        /// 可选: -f 或 -fuzzy 启用模糊匹配
-        #[arg(allow_hyphen_values = true)]
-        fuzzy: Option<String>,
+        /// 搜索关键字（多个词会自动拼接为一个搜索词）
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        target: Vec<String>,
+        /// 启用模糊匹配
+        #[arg(long = "fuzzy", short = 'f')]
+        fuzzy: bool,
     },
 
     // ========== 待办备忘录 ==========

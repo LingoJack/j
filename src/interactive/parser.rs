@@ -159,13 +159,26 @@ pub fn parse_interactive_command(args: &[String]) -> ParseResult {
         })
     } else if is(cmd::SEARCH) {
         if rest.len() < 2 {
-            crate::usage!("search <line_count|all> <target> [-f|-fuzzy]");
+            crate::usage!("search <line_count|all> <target...> [-f|--fuzzy]");
+            return ParseResult::Handled;
+        }
+        let mut is_fuzzy = false;
+        let mut target_parts: Vec<String> = Vec::new();
+        for part in &rest[1..] {
+            if part == "-f" || part == "--fuzzy" {
+                is_fuzzy = true;
+            } else {
+                target_parts.push(part.clone());
+            }
+        }
+        if target_parts.is_empty() {
+            crate::usage!("search <line_count|all> <target...> [-f|--fuzzy]");
             return ParseResult::Handled;
         }
         ParseResult::Matched(SubCmd::Search {
             line_count: rest[0].clone(),
-            target: rest[1].clone(),
-            fuzzy: rest.get(2).cloned(),
+            target: target_parts,
+            fuzzy: is_fuzzy,
         })
     } else if is(cmd::TODO) {
         ParseResult::Matched(SubCmd::Todo {

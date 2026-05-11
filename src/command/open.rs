@@ -66,13 +66,18 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
         // 直接打开浏览器
         open_alias(alias, config);
     } else {
-        // j <browser_alias> <url_alias_or_search_text> [engine]
-        let url_alias_or_text = &args[1];
+        // 用法: j <browser_alias> <url_alias_or_search_words...> [engine]
+        // 将 args[1..] 中的参数按顺序尝试匹配:
+        //   1. inner_url / outer_url 别名 → 直接用对应 URL
+        //   2. URL 格式 (http/https) → 直接用
+        //   3. 全部拼接到搜索引擎查询
 
-        // 尝试从 inner_url 或 outer_url 获取 URL
-        let url = if let Some(u) = config.get_property(section::INNER_URL, url_alias_or_text) {
+        // 先尝试用第一个参数匹配 URL 别名或直接 URL
+        let first_arg = &args[1];
+
+        let url = if let Some(u) = config.get_property(section::INNER_URL, first_arg) {
             u.clone()
-        } else if let Some(u) = config.get_property(section::OUTER_URL, url_alias_or_text) {
+        } else if let Some(u) = config.get_property(section::OUTER_URL, first_arg) {
             // outer_url 需要先启动 VPN
             if let Some(vpn_map) = config.get_section(section::VPN)
                 && let Some(vpn_alias) = vpn_map.keys().next()
@@ -80,24 +85,49 @@ fn handle_open_browser(args: &[String], config: &YamlConfig) {
                 open_alias(vpn_alias, config);
             }
             u.clone()
-        } else if is_url_like(url_alias_or_text) {
+        } else if is_url_like(first_arg) {
             // 直接是 URL
-            url_alias_or_text.clone()
+            first_arg.clone()
         } else {
-            // 搜索引擎搜索
-            let engine = if args.len() >= 3 {
-                args[2].as_str()
-            } else {
-                config
-                    .get_property(section::SETTING, config_key::SEARCH_ENGINE)
-                    .map(|s| s.as_str())
-                    .unwrap_or(DEFAULT_SEARCH_ENGINE)
-            };
-            get_search_url(url_alias_or_text, engine)
+            // 不匹配别名或 URL → 把 args[1..] 拼接为搜索词
+            // 检查最后一个参数是否为搜索引擎名称
+            let (query_parts, engine) = resolve_search_query_and_engine(&args[1..], config);
+            let query = query_parts.join("+");
+            get_search_url(&query, engine)
         };
 
         open_with_path(alias, Some(&url), config);
     }
+}
+
+/// 从参数列表中分离搜索词和搜索引擎
+/// 策略：最后一个参数如果是已知的搜索引擎名(google/bing/baidu)，则作为引擎；
+/// 否则全部作为搜索词，使用默认引擎。
+fn resolve_search_query_and_engine<'a>(
+    args: &'a [String],
+    config: &YamlConfig,
+) -> (Vec<&'a str>, &'a str) {
+    if args.len() >= 2 {
+        let last = args.last().expect("args non-empty");
+        if is_known_engine(last) {
+            return (
+                args[..args.len() - 1].iter().map(|s| s.as_str()).collect(),
+                last.as_str(),
+            );
+        }
+    }
+
+    // 全部作为搜索词，使用默认引擎
+    let default_engine = config
+        .get_property(section::SETTING, config_key::SEARCH_ENGINE)
+        .map(|s| s.as_str())
+        .unwrap_or(DEFAULT_SEARCH_ENGINE);
+    (args.iter().map(|s| s.as_str()).collect(), default_engine)
+}
+
+/// 判断字符串是否为已知的搜索引擎名称
+fn is_known_engine(s: &str) -> bool {
+    matches!(s.to_lowercase().as_str(), "google" | "bing" | "baidu")
 }
 
 /// 运行脚本
