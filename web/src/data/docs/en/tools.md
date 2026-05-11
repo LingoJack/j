@@ -40,6 +40,10 @@ String replacement editing. `old_string` must uniquely match content in the file
 | path | string | Yes | File path |
 | old_string | string | Yes | Original string to replace (must be unique) |
 | new_string | string | No | Replacement string (empty deletes) |
+| replace_all | bool | No | Replace all matches (skip uniqueness check) |
+| confirm_token | string | No | One-time confirmation token for bulk replacement |
+
+**Bulk replacement flow:** When `replace_all=true`, two calls are required: first call returns match preview and `confirm_token`, second call carries the token to confirm execution.
 
 ```json
 {"path": "src/main.rs", "old_string": "fn main() {}", "new_string": "fn main() { println!(\"Hello\"); }"}
@@ -55,6 +59,7 @@ Find files by pattern.
 | path | string | No | Search directory (defaults to current) |
 | excludePattern | string | No | Exclude pattern (e.g., `**/node_modules/**`) |
 | limit | uint | No | Max results (default 100) |
+| offset | uint | No | Skip first N results (for pagination) |
 
 ```json
 {"pattern": "**/*.rs"}
@@ -90,9 +95,11 @@ Execute shell commands (macOS / Linux only).
 | Parameter | Type | Required | Description |
 |------|------|------|------|
 | command | string | Yes | Shell command (executes in bash -c) |
+| description | string | No | Command description (shown in UI) |
 | cwd | string | No | Working directory |
 | timeout | uint | No | Timeout in seconds (default 120, max 600) |
 | run_in_background | bool | No | Run in background (returns task_id) |
+| interactive | bool | No | Interactive mode (returns sid, use with Session) |
 
 **Notes:**
 - Interactive commands not supported
@@ -278,9 +285,17 @@ Load specified skill into context.
 
 | Skill | Description |
 |------|------|
-| j-cli | CLI workflow automation |
+| chat-module-guide | j-cli Chat module architecture quick reference |
+| fullstack-team | Multi-agent collaborative full-stack development |
+| html-ppt | HTML PPT Studio — professional static HTML presentations |
+| hyperframes | Video composition, animation, captions, audio-reactive visuals |
+| j-cli | CLI workflow automation (reports, todos, aliases, scripts) |
+| jcli-dev-guide | j-cli project developer guide (structure, workflow) |
 | skill-creator | Guide for creating skills |
+| sql-to-go-struct-and-dao | SQL to Go struct and DAO code generation (gorm-based) |
 | swift-ios-app-gen | iOS native app development |
+| ui-ux-pro-max | UI/UX design and frontend implementation guidance |
+| webapp-gen | One-sentence full web app generation |
 
 ### Agent
 
@@ -291,6 +306,8 @@ Launch sub-agent for complex multi-step tasks. Sub-agent uses fresh context, can
 | prompt | string | Yes | Task description for sub-agent |
 | description | string | No | Brief description (3-5 words) |
 | run_in_background | bool | No | Run in background |
+| worktree | bool | No | Create isolated git worktree |
+| inherit_permissions | bool | No | Inherit all tool permissions (no confirmation needed) |
 
 ### RegisterHook
 
@@ -304,6 +321,82 @@ Register, list, remove session-level hooks.
 | list | List all hooks |
 | remove | Remove hook (requires event + index) |
 | help | View protocol documentation |
+
+## Session Process Tools
+
+### Session
+
+Operate on interactive process session's stdin/stdout. Returns sid (session ID) when Bash starts with `interactive: true`.
+
+**Actions:**
+
+| action | Description |
+|--------|------|
+| stdin | Write to process (`\n` for newline) |
+| stdout | Read process output (blocks for new output) |
+| quit | Terminate session (process receives SIGHUP) |
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| sid | string | Yes | Session ID (Bash task_id) |
+| action | string | Yes | Operation: stdin/stdout/quit |
+| text | string | No | Content to write (action=stdin, `\n` for newline) |
+| timeout_ms | uint | No | Max wait ms for stdout (default 500) |
+
+## Collaboration Tools
+
+### Teammate
+
+Create independent teammate Agent with separate LLM connection and context. Teammates communicate via `SendMessage` tool.
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| name | string | Yes | Teammate name (e.g., "Frontend", "Backend") |
+| prompt | string | Yes | Initial task/instructions |
+| role | string | No | Role description (shown in team summary) |
+| inherit_permissions | bool | No | Inherit all tool permissions (no confirmation) |
+| worktree | bool | No | Create isolated git worktree |
+
+### SendMessage
+
+Send message to teammate Agent. Supports `@mention` broadcast.
+
+### IgnoreMessage
+
+Ignore teammate Agent message.
+
+## Tool Loading
+
+### LoadTool
+
+Load deferred tool to make it available in subsequent turns.
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| name | string | Yes | Tool name to load |
+
+**Currently deferred tools:** RegisterHook, Browser, ComputerUse, Task
+
+## Git Worktree Tools
+
+### EnterWorktree
+
+Create isolated git worktree and switch session into it. Useful when multiple sessions edit the same repository simultaneously.
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| name | string | No | Worktree name (letters, digits, dots, underscores, dashes only) |
+
+**Location:** `.jcli/worktrees/{name}` with branch `worktree-{name}`
+
+### ExitWorktree
+
+Exit current git worktree session.
+
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| action | string | Yes | "keep" preserves worktree / "remove" deletes worktree and branch |
+| discard_changes | bool | No | Required true when action=remove with uncommitted changes |
 
 ## Session Tools
 

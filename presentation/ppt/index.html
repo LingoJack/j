@@ -14,7 +14,7 @@
 <div class="deck">
 
   <!-- ============ 1. COVER ============ -->
-  <section class="slide" data-title="Cover">
+  <section class="slide cover" data-title="Cover">
     <p class="kicker">本科毕业设计 · 2025</p>
     <h1 class="h1 anim-fade-up" data-anim="fade-up">基于 LLM Agent 的<br><span class="accent">编程辅助工具</span>设计与实现</h1>
     <p class="lede mt-m">从 ChatBot 到 Agent：让 AI 真正参与软件工程全流程</p>
@@ -24,7 +24,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack/jcli</span>
-      <span class="slide-number" data-current="1" data-total="35"></span>
+      <span class="slide-number" data-current="1" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>各位老师、同学们好，我是温俊杰，今天给大家分享我的本科毕设——<strong>基于 LLM Agent 的编程辅助工具设计与实现</strong>。</p>
@@ -34,10 +34,71 @@
     </aside>
   </section>
 
+  <!-- ============ 1.5 PROJECT INTRO ============ -->
+  <section class="slide" data-title="项目">
+    <div class="title-bar">
+      <h2>项目：<span class="accent">jcli</span> · 一个 AI 驱动的命令行工作台</h2>
+      <span class="sub">先看看做出了什么</span>
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">用 Rust 写的<span class="accent">终端 Agent</span>，目标是把 AI 真正塞进开发者的命令行里。</p>
+        <ul>
+          <li><strong>Agent 工作台</strong> · 多模型、流式输出、工具调用、权限确认</li>
+          <li><strong>别名打开</strong> · <code>j chrome</code> · <code>j vscode ./src</code></li>
+          <li><strong>日报周报</strong> · TUI 编辑、自动周数管理、Git 同步</li>
+          <li><strong>待办备忘</strong> · Markdown checkbox · 长内容预览</li>
+          <li><strong>脚本工作流</strong> · 工程化的 Skill / Hook</li>
+        </ul>
+        <h4>三个开源仓库</h4>
+        <p class="note">
+          jcli · github.com/LingoJack/jcli<br>
+          model_infrax · github.com/LingoJack/model_infrax<br>
+          演示站点 · lingojack.github.io/jcli
+        </p>
+      </div>
+      <div class="col-visual">
+        <div class="stack-figs">
+          <a class="sf sf-1" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
+            <img src="pics/github-jcli.png" alt="jcli GitHub 仓库">
+            <div class="caption">
+              <span class="name">jcli · 主项目</span>
+              <span class="url">github.com/LingoJack/jcli</span>
+            </div>
+          </a>
+          <a class="sf sf-2" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
+            <img src="pics/github-model-infrax.png" alt="model_infrax 仓库">
+            <div class="caption">
+              <span class="name">model_infrax · jen 代码生成器</span>
+              <span class="url">github.com/LingoJack/model_infrax</span>
+            </div>
+          </a>
+          <a class="sf sf-3" href="https://lingojack.github.io/jcli/" target="_blank" rel="noopener">
+            <img src="pics/jcli-github-pages-introduce.png" alt="jcli GitHub Pages 演示站点">
+            <div class="caption">
+              <span class="name">演示站点</span>
+              <span class="url">lingojack.github.io/jcli</span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">jcli · model_infrax · pages</span>
+      <span class="slide-number" data-current="2" data-total="36"></span>
+    </div>
+    <aside class="notes">
+      <p>先把项目长什么样给大家看一下，等会讲设计的时候才有具体的对象。</p>
+      <p>这个项目叫 <strong>jcli</strong>，是一个用 Rust 写的命令行工作台。最核心的功能是右上那张图里的<strong>终端 Agent</strong>——多模型、流式输出、工具调用、权限确认，可以直接在仓库里读代码、改代码、跑命令。</p>
+      <p>除了 Agent，它还有几个比较实用的工具：<strong>别名打开</strong>，注册一次之后 j chrome、j vscode 这些都直接可用；<strong>日报周报</strong>，配 git 自动同步；<strong>待办备忘</strong>，TUI 界面 + Markdown checkbox。</p>
+      <p>右边这三张叠起来的图是项目的三个仓库 + 演示站点，<strong>都是开源的</strong>。鼠标点上去能直接跳过去。</p>
+      <p>下一页我会从最朴素的问题讲起：为什么要做 Agent，而不是直接用 ChatGPT。</p>
+    </aside>
+  </section>
+
   <!-- ============ 2. AGENDA ============ -->
   <section class="slide" data-title="Agenda">
     <div class="title-bar">
-      <span class="part">AGENDA</span>
       <h2>今天要讲的 6 个部分</h2>
     </div>
     <div class="stack mt-l">
@@ -62,7 +123,6 @@
   <!-- ============ 3. BACKGROUND: ChatBot vs Agent ============ -->
   <section class="slide" data-title="ChatBot vs Agent">
     <div class="title-bar">
-      <span class="part">PART 01 · BACKGROUND</span>
       <h2>从 ChatBot 到 Agent：<br><span class="accent">谁在承担上下文成本？</span></h2>
     </div>
     <div class="vs mt-l">
@@ -100,9 +160,8 @@
   <!-- ============ 4.1 ReAct: 概念 ============ -->
   <section class="slide" data-title="ReAct · concept">
     <div class="title-bar">
-      <span class="part">PART 01 · ReAct</span>
       <h2>Agent 的心脏：Thought → Action → Observation</h2>
-      <span class="sub">1 / 6</span>
+      <span class="sub">第 1 帧 / 共 6 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -151,7 +210,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#react #loop</span>
-      <span class="slide-number" data-current="4" data-total="35"></span>
+      <span class="slide-number" data-current="4" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>Agent 的心脏是 ReAct 循环 —— Reasoning + Acting 的合写。</p>
@@ -163,9 +222,8 @@
   <!-- ============ 4.2 ReAct frame 1: 用户提问 ============ -->
   <section class="slide" data-title="ReAct · user">
     <div class="title-bar">
-      <span class="part">PART 01 · ReAct</span>
       <h2>第一帧：用户发起一个开放性问题</h2>
-      <span class="sub">2 / 6</span>
+      <span class="sub">第 2 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -203,7 +261,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#react #user-intent</span>
-      <span class="slide-number" data-current="5" data-total="35"></span>
+      <span class="slide-number" data-current="5" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>第一帧 —— 用户给一个开放性需求："总结一下 src/command/chat 目录的结构和可优化的模块划分"。</p>
@@ -215,9 +273,8 @@
   <!-- ============ 4.3 ReAct frame 2: Agent Thought + Bash ============ -->
   <section class="slide" data-title="ReAct · action">
     <div class="title-bar">
-      <span class="part">PART 01 · ReAct</span>
       <h2>第二帧：Agent 思考后调出第一个工具</h2>
-      <span class="sub">3 / 6</span>
+      <span class="sub">第 3 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -264,7 +321,7 @@
     </div>
     <div class="deck-footer">
       <span class="mono">#react #bash</span>
-      <span class="slide-number" data-current="6" data-total="35"></span>
+      <span class="slide-number" data-current="6" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>第二帧 —— Agent 想了一下。它的思考过程也会被记录进窗口，这条 thought 写得很短："先列出 chat/ 下的文件分布"。</p>
@@ -276,9 +333,8 @@
   <!-- ============ 4.4 ReAct frame 3: Bash 结果 ============ -->
   <section class="slide" data-title="ReAct · observation">
     <div class="title-bar">
-      <span class="part">PART 01 · ReAct</span>
       <h2>第三帧：运行时执行 → 结果回灌窗口</h2>
-      <span class="sub">4 / 6</span>
+      <span class="sub">第 4 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -335,7 +391,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#react #tool-result</span>
-      <span class="slide-number" data-current="7" data-total="35"></span>
+      <span class="slide-number" data-current="7" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>第三帧 —— 运行时执行 ls，把结果<strong>原样写回</strong>到对话上下文，作为一条新消息。</p>
@@ -347,9 +403,8 @@ hook.rs         storage.rs
   <!-- ============ 4.5 ReAct frame 4: 下一轮 Read ============ -->
   <section class="slide" data-title="ReAct · next round">
     <div class="title-bar">
-      <span class="part">PART 01 · ReAct</span>
       <h2>第四帧：进入下一轮 —— Read 关键源文件</h2>
-      <span class="sub">5 / 6</span>
+      <span class="sub">第 5 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -408,7 +463,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#react #read-tool</span>
-      <span class="slide-number" data-current="8" data-total="35"></span>
+      <span class="slide-number" data-current="8" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>第四帧 —— 第二轮 ReAct 开始。Agent 看完目录列表，决定深入 <code>app.rs</code>。它注意到这是入口文件。</p>
@@ -420,9 +475,8 @@ hook.rs         storage.rs
   <!-- ============ 4.6 ReAct frame 5: 总结 ============ -->
   <section class="slide" data-title="ReAct · summary">
     <div class="title-bar">
-      <span class="part">PART 01 · ReAct</span>
       <h2>第五帧：信息够了，Agent 给出结论</h2>
-      <span class="sub">6 / 6</span>
+      <span class="sub">第 6 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -468,7 +522,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#react #close-loop</span>
-      <span class="slide-number" data-current="9" data-total="35"></span>
+      <span class="slide-number" data-current="9" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>最后一帧 —— Agent 把三轮工具调用的结果<strong>拼起来</strong>，给出真正回答用户问题的总结。</p>
@@ -480,7 +534,6 @@ hook.rs         storage.rs
   <!-- ============ 4. CORE: Context Window ============ -->
   <section class="slide" data-title="Context Window Challenge">
     <div class="title-bar">
-      <span class="part">PART 02 · CONTEXT WINDOW</span>
       <h2>核心挑战：<span class="accent">上下文窗口有限</span></h2>
     </div>
     <div class="grid g2 mt-l">
@@ -497,7 +550,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#context-window #scrolling</span>
-      <span class="slide-number" data-current="5" data-total="35"></span>
+      <span class="slide-number" data-current="5" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>现在进入第二部分，整个项目最核心的设计——<strong>上下文窗口治理</strong>。</p>
@@ -510,7 +563,6 @@ hook.rs         storage.rs
   <!-- ============ 4.5. WINDOW EVOLUTION ============ -->
   <section class="slide" data-title="Window Evolution">
     <div class="title-bar">
-      <span class="part">PART 02 · PAIN POINT</span>
       <h2>不治理会怎样？<span class="accent">窗口爆炸</span>实录</h2>
     </div>
     <p class="dim mt-s">一个真实的 Agent 任务，五轮工具调用之后……</p>
@@ -547,7 +599,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#token-pressure #hallucination</span>
-      <span class="slide-number" data-current="6" data-total="35"></span>
+      <span class="slide-number" data-current="6" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>给大家直观感受一下，<strong>不治理</strong>会发生什么。这是我跑一个真实任务的窗口占用变化。</p>
@@ -563,7 +615,6 @@ hook.rs         storage.rs
   <!-- ============ 5. Compaction System ============ -->
   <section class="slide" data-title="Compaction System">
     <div class="title-bar">
-      <span class="part">PART 02 · COMPACTION</span>
       <h2>多级压缩：<span class="accent">micro</span> 与 <span class="accent">auto</span></h2>
     </div>
     <div class="stack mt-l">
@@ -601,7 +652,6 @@ hook.rs         storage.rs
   <!-- ============ 5.5. PRIORITY FUNNEL ============ -->
   <section class="slide" data-title="Priority Funnel">
     <div class="title-bar">
-      <span class="part">PART 02 · SCROLLING WINDOW</span>
       <h2>滚动窗口：<span class="accent">把上下文当作推荐系统</span></h2>
     </div>
     <p class="lede mt-s" style="font-size:15px">窗口空间 = 推荐位；候选消息 = 物料；价值评分 = CTR 预估</p>
@@ -641,7 +691,7 @@ hook.rs         storage.rs
     <p class="dim mt-m" style="font-size:12px;text-align:center">核心洞察：<strong>决策信息多放、指导方向信息多放、执行中间过程信息少放</strong></p>
     <div class="deck-footer">
       <span class="mono">#scrolling-window #rec-sys-analogy</span>
-      <span class="slide-number" data-current="8" data-total="35"></span>
+      <span class="slide-number" data-current="8" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>这里我想分享一个比较有意思的<strong>跨领域类比</strong>——上下文窗口治理和<strong>推荐系统</strong>非常像。</p>
@@ -654,7 +704,6 @@ hook.rs         storage.rs
   <!-- ============ 6. Dynamic System Prompt ============ -->
   <section class="slide" data-title="Dynamic System Prompt">
     <div class="title-bar">
-      <span class="part">PART 02 · DYNAMIC PROMPT</span>
       <h2>动态 System Prompt：<br><span class="accent">尾部追加</span>的状态感知</h2>
     </div>
     <div class="arch mt-m">
@@ -684,7 +733,6 @@ hook.rs         storage.rs
   <!-- ============ 7. TOOL SYSTEM OVERVIEW ============ -->
   <section class="slide" data-title="Tool System">
     <div class="title-bar">
-      <span class="part">PART 03 · TOOL SYSTEM</span>
       <h2>工具体系：<span class="accent">渐进增强</span>的设计哲学</h2>
     </div>
     <div class="arch mt-m">
@@ -721,7 +769,6 @@ hook.rs         storage.rs
   <!-- ============ 8. TOOL: Grep + Ask ============ -->
   <section class="slide" data-title="Grep & Ask">
     <div class="title-bar">
-      <span class="part">PART 03 · WHY NEW TOOLS</span>
       <h2>为什么需要 <span class="accent">Grep</span> 和 <span class="accent">Ask</span>？</h2>
     </div>
     <div class="grid g2 mt-l">
@@ -751,7 +798,6 @@ hook.rs         storage.rs
   <!-- ============ 9. TOOL: Plan + Edit ============ -->
   <section class="slide" data-title="Plan & Edit">
     <div class="title-bar">
-      <span class="part">PART 03 · PLAN & EDIT</span>
       <h2>Plan + Edit：<span class="accent">想清楚再动手</span></h2>
     </div>
     <div class="stack mt-l">
@@ -783,9 +829,8 @@ hook.rs         storage.rs
   <!-- ============ 9.5. PLAN WORKFLOW ============ -->
   <section class="slide" data-title="Plan · concept">
     <div class="title-bar">
-      <span class="part">PART 03 · PLAN</span>
       <h2>Plan 工作流：先调研，写计划，<span class="accent">清空，再执行</span></h2>
-      <span class="sub">1 / 4</span>
+      <span class="sub">第 1 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -835,7 +880,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#plan #three-phases</span>
-      <span class="slide-number" data-current="14" data-total="35"></span>
+      <span class="slide-number" data-current="14" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>Plan 工作流要解决的核心问题是：<strong>LLM 习惯边想边改</strong>。它读了 30 个文件理解项目，然后直接开始改代码 —— 但这时候窗口里全是调研产生的源码片段，根本没空间装新的改动。</p>
@@ -846,9 +891,8 @@ hook.rs         storage.rs
 
   <section class="slide" data-title="Plan · research">
     <div class="title-bar">
-      <span class="part">PART 03 · PLAN</span>
       <h2>第一阶段：进入 Plan 模式，<span class="accent">只读调研</span></h2>
-      <span class="sub">2 / 4</span>
+      <span class="sub">第 2 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -895,7 +939,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#plan #research</span>
-      <span class="slide-number" data-current="15" data-total="35"></span>
+      <span class="slide-number" data-current="15" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>用户说 "把 ChatApp 拆分成 UIState 和 ChatState"。这是个跨越多个文件的重构。</p>
@@ -906,56 +950,34 @@ hook.rs         storage.rs
 
   <section class="slide" data-title="Plan · approve">
     <div class="title-bar">
-      <span class="part">PART 03 · PLAN</span>
       <h2>第二阶段：输出 plan.md，<span class="accent">用户审批</span></h2>
-      <span class="sub">3 / 4</span>
+      <span class="sub">第 3 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
-        <p class="lead">调研结论<span class="accent">沉淀</span>为一份 plan.md —— 每一步改哪个文件、加什么、删什么，写得自包含。</p>
+        <p class="lead">调研结论<span class="accent">沉淀</span>为一份执行计划，由用户在终端里直接<span class="accent">三选一</span>。</p>
         <ul>
-          <li>plan.md 是<strong>变更契约</strong>，可追溯</li>
-          <li>用户审批 = approve / reject + 修改建议</li>
-          <li>若 reject 则回到 ①，不进 ③</li>
+          <li><strong>批准计划</strong>：保留当前上下文，开始实施</li>
+          <li><strong>批准并清空上下文</strong>：仅保留计划，丢弃所有调研产物</li>
+          <li><strong>驳回计划</strong>：留在 Plan Mode 修改方案</li>
         </ul>
-        <p class="note">审批通过 → 触发 clear context，进入第三阶段。</p>
+        <p class="note">右图是真实运行时的审批界面 —— 注意顶部 SubAgents 行（已派子 Agent 做调研）和 context 计数。</p>
       </div>
       <div class="col-visual">
-        <div class="term">
-          <div class="term-bar"><span>plan.md · 待审批</span><span>~/.jdata/plans/p-78.md</span></div>
-          <div class="term-body" style="font-family:var(--font-mono);font-size:11px;line-height:1.7;color:var(--text-1);background:#fbfbfb;padding:14px;max-height:none">
-<pre style="margin:0;white-space:pre-wrap;font-family:inherit">## Plan · 拆分 ChatApp
-
-### 1. 新文件 src/command/chat/ui_state.rs
-   - struct UIState { 55 字段 }
-   - impl UIState { from_chat_app() }
-
-### 2. 新文件 src/command/chat/chat_state.rs
-   - struct ChatState { 7 字段 }
-   - impl ChatState { new() · merge() }
-
-### 3. 修改 src/command/chat/app.rs
-   - 删除原 55+7 字段
-   - 改为 ui: UIState · state: ChatState
-   - 76 处 self.ui_x → self.ui.x
-   - 23 处 self.state_x → self.state.x
-
-### 4. 修改 src/command/chat/handler/*.rs
-   - 替换字段引用 (机械替换)
-
-### 5. cargo build · cargo test 验证</pre>
-          </div>
+        <div class="fig-shot">
+          <img src="pics/plan-mode-clear-and-approval.png" alt="plan-mode 真实截图：审批界面与 clear-and-approval 选项">
+          <div class="shot-caption">jcli plan-mode 真实截图 · 含 SubAgent 调研、计划清单、批准/清空上下文 / 驳回三选项</div>
         </div>
         <div class="ctx-meter">
           <span>context</span>
           <div class="track"><div class="fill warn" style="width:65%"></div></div>
-          <span>65% · awaiting approval</span>
+          <span>36K tokens · 等待审批</span>
         </div>
       </div>
     </div>
     <div class="deck-footer">
       <span class="mono">#plan #approval</span>
-      <span class="slide-number" data-current="16" data-total="35"></span>
+      <span class="slide-number" data-current="16" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>第二阶段 —— Agent 把调研结论<strong>沉淀</strong>成一份 plan.md。注意几个特点：每一步都写明<strong>动哪个文件、加什么删什么</strong>，<strong>包含验证步骤</strong>（cargo build 和 test）。</p>
@@ -966,9 +988,8 @@ hook.rs         storage.rs
 
   <section class="slide" data-title="Plan · execute">
     <div class="title-bar">
-      <span class="part">PART 03 · PLAN</span>
       <h2>第三阶段：<span class="accent">清空窗口</span>，只留 plan.md，开干</h2>
-      <span class="sub">4 / 4</span>
+      <span class="sub">第 4 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1017,7 +1038,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#plan #clear-context</span>
-      <span class="slide-number" data-current="17" data-total="35"></span>
+      <span class="slide-number" data-current="17" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>第三阶段 —— 关键操作。<strong>窗口被清空</strong>。原本 65% 的调研产物全部丢弃。新的上下文里只有一份 plan.md，1.2K token 左右。窗口占用回到 12%。</p>
@@ -1029,7 +1050,6 @@ hook.rs         storage.rs
   <!-- ============ 10. BASH / SESSION / BACKGROUND ============ -->
   <section class="slide" data-title="Bash / Session / Background">
     <div class="title-bar">
-      <span class="part">PART 03 · EXECUTION MODEL</span>
       <h2>执行模型的<span class="accent">三种形态</span></h2>
     </div>
     <div class="flow mt-l">
@@ -1068,7 +1088,6 @@ hook.rs         storage.rs
   <!-- ============ 11. MULTI-AGENT COLLABORATION ============ -->
   <section class="slide" data-title="Multi-Agent Collaboration">
     <div class="title-bar">
-      <span class="part">PART 04 · MULTI-AGENT</span>
       <h2>多 Agent 协作：<br><span class="accent">聊天室 + 客观评估</span></h2>
     </div>
     <div class="grid g2 mt-l">
@@ -1093,7 +1112,6 @@ hook.rs         storage.rs
   <!-- ============ 11.5. TWO-STAGED COMMIT ============ -->
   <section class="slide" data-title="Two-Staged Commit">
     <div class="title-bar">
-      <span class="part">PART 04 · MESSAGE CONSISTENCY</span>
       <h2>Two-Staged Commit：<br><span class="accent">消除 Agent Loop 长时序的重复消息</span></h2>
     </div>
     <div class="grid g2 mt-m">
@@ -1125,7 +1143,7 @@ hook.rs         storage.rs
     <p class="dim mt-m" style="font-size:12px;text-align:center">对外：用户体验一致，无重复消息。对内：上下文不被冗余消息污染。</p>
     <div class="deck-footer">
       <span class="mono">#2pc #message-inbox</span>
-      <span class="slide-number" data-current="16" data-total="35"></span>
+      <span class="slide-number" data-current="16" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>讲一个比较工程化的细节——<strong>Two-Staged Commit</strong>。这个问题大家可能不直观，我先描述一下场景。</p>
@@ -1138,7 +1156,6 @@ hook.rs         storage.rs
   <!-- ============ 11.7. TEAMMATE EXPERIMENTS ============ -->
   <section class="slide" data-title="Teammate Experiments">
     <div class="title-bar">
-      <span class="part">PART 04 · COLLABORATION EVAL</span>
       <h2>三个实验：<span class="accent">验证 Teammate 协作能力</span></h2>
     </div>
     <div class="exp3 mt-m">
@@ -1169,7 +1186,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#teammate #experiments</span>
-      <span class="slide-number" data-current="17" data-total="35"></span>
+      <span class="slide-number" data-current="17" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>多 Agent 协作能力到底行不行？我设计了<strong>三个递进的实验</strong>来回答这个问题。</p>
@@ -1183,7 +1200,6 @@ hook.rs         storage.rs
   <!-- ============ 11.8. SUBAGENT DELEGATION ============ -->
   <section class="slide" data-title="SubAgent Delegation">
     <div class="title-bar">
-      <span class="part">PART 04 · SUBAGENT</span>
       <h2>SubAgent：<span class="accent">低上下文成本</span>的调研委派</h2>
     </div>
     <div class="subtree mt-m">
@@ -1218,7 +1234,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#subagent #parallel-research</span>
-      <span class="slide-number" data-current="18" data-total="35"></span>
+      <span class="slide-number" data-current="18" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>SubAgent 和 Teammate 不一样——Teammate 是平等的协作者，SubAgent 是<strong>临时雇用的调研员</strong>。</p>
@@ -1232,7 +1248,6 @@ hook.rs         storage.rs
   <!-- ============ 12. ROBUSTNESS ============ -->
   <section class="slide" data-title="Robustness">
     <div class="title-bar">
-      <span class="part">PART 04 · ROBUSTNESS</span>
       <h2>健壮性设计：<span class="accent">错误处理</span>与 Hook 系统</h2>
     </div>
     <div class="grid g2 mt-l">
@@ -1264,7 +1279,6 @@ hook.rs         storage.rs
   <!-- ============ 12.5. TODOWRITE + SYSTEM REMINDER ============ -->
   <section class="slide" data-title="TodoWrite Reminder">
     <div class="title-bar">
-      <span class="part">PART 04 · TODO + REMINDER</span>
       <h2>TodoWrite + <span class="accent">&lt;system_reminder&gt;</span>：防遗忘机制</h2>
     </div>
     <div class="grid g2 mt-l">
@@ -1295,7 +1309,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#todo #system-reminder</span>
-      <span class="slide-number" data-current="20" data-total="35"></span>
+      <span class="slide-number" data-current="20" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>讲一个特别有用的小工具——<strong>TodoWrite + system_reminder</strong>。这看着简单，但对 Agent 长期运行有奇效。</p>
@@ -1309,7 +1323,6 @@ hook.rs         storage.rs
   <!-- ============ 12.7. HOOK SYSTEM EVENTS ============ -->
   <section class="slide" data-title="Hook System Events">
     <div class="title-bar">
-      <span class="part">PART 04 · HOOK SYSTEM</span>
       <h2>Hook 系统：<span class="accent">14 个事件钩子</span>覆盖 Agent 生命周期</h2>
     </div>
     <p class="dim mt-s" style="font-size:14px">每个事件可挂载 Shell / Prompt 类型的 Hook —— 用作<strong>回归测试 + 工程规范 + 变更沉淀</strong></p>
@@ -1352,7 +1365,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#hook #14-events</span>
-      <span class="slide-number" data-current="21" data-total="35"></span>
+      <span class="slide-number" data-current="21" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>Hook 系统是 Agent 真正能"用于生产"的关键。它<strong>把工程规范固化成自动执行的脚本</strong>，跑在 Agent 整个生命周期的各个事件点上。</p>
@@ -1367,7 +1380,6 @@ hook.rs         storage.rs
   <!-- ============ 13. SKILL SYSTEM ============ -->
   <section class="slide" data-title="Skill System">
     <div class="title-bar">
-      <span class="part">PART 05 · SKILL SYSTEM</span>
       <h2>Skill 系统：<span class="accent">工程化能力</span>的按需封装</h2>
     </div>
     <div class="grid g2 mt-l">
@@ -1397,7 +1409,6 @@ hook.rs         storage.rs
   <!-- ============ 13.5. JEN DETAIL ============ -->
   <section class="slide" data-title="jen Code Gen">
     <div class="title-bar">
-      <span class="part">PART 05 · SKILL DETAIL</span>
       <h2>jen：<span class="accent">SQL → Go DAO/Model</span> 工程化生成</h2>
     </div>
     <div class="jen-flow mt-m">
@@ -1439,7 +1450,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">#jen #code-gen #model_infrax</span>
-      <span class="slide-number" data-current="23" data-total="35"></span>
+      <span class="slide-number" data-current="23" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>Skill 系统的第一个深入案例是 <strong>jen</strong>——一个 SQL 到 Go 代码的工程化生成工具。</p>
@@ -1452,7 +1463,6 @@ hook.rs         storage.rs
   <!-- ============ 13.7. WEBAPP-GEN ============ -->
   <section class="slide" data-title="webapp-gen">
     <div class="title-bar">
-      <span class="part">PART 05 · SKILL DETAIL</span>
       <h2>webapp-gen：<span class="accent">原型驱动</span>逐步填充</h2>
     </div>
     <div class="grid g2 mt-l">
@@ -1489,7 +1499,7 @@ hook.rs         storage.rs
     <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>核心优势：</strong>项目<strong>结构完整性</strong>有脚手架保证；用户预期通过<strong>逐步可见的原型</strong>校准，减少"做完发现不对"的反工。</p>
     <div class="deck-footer">
       <span class="mono">#webapp-gen #prototype-driven</span>
-      <span class="slide-number" data-current="24" data-total="35"></span>
+      <span class="slide-number" data-current="24" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>Skill 系统的第二个深入案例是 <strong>webapp-gen</strong>——生成完整 Web App 的工作流。</p>
@@ -1505,7 +1515,6 @@ hook.rs         storage.rs
   <!-- ============ 13.9. REPO GALLERY ============ -->
   <section class="slide" data-title="Repo Gallery">
     <div class="title-bar">
-      <span class="part">PROJECT ARTIFACTS</span>
       <h2>项目仓库与<span class="accent">交付制品</span></h2>
     </div>
     <div class="repo-grid">
@@ -1534,7 +1543,7 @@ hook.rs         storage.rs
     <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>所有代码开源</strong>，欢迎 Star / Issue / PR · MIT License</p>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack</span>
-      <span class="slide-number" data-current="25" data-total="35"></span>
+      <span class="slide-number" data-current="25" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>讲完了所有设计，给大家看一下整个毕设的<strong>产出</strong>——三个 GitHub 仓库。</p>
@@ -1548,7 +1557,6 @@ hook.rs         storage.rs
   <!-- ============ 14. SUMMARY ============ -->
   <section class="slide" data-title="Summary">
     <div class="title-bar">
-      <span class="part">PART 06 · SUMMARY</span>
       <h2>总结：<span class="accent">三个核心贡献</span></h2>
     </div>
     <div class="grid g3 mt-l">
@@ -1567,7 +1575,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack/jcli</span>
-      <span class="slide-number" data-current="26" data-total="35"></span>
+      <span class="slide-number" data-current="26" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>好，做个总结。我这个毕设的核心贡献有三个。</p>
@@ -1578,7 +1586,7 @@ hook.rs         storage.rs
   </section>
 
   <!-- ============ 15. THANKS ============ -->
-  <section class="slide" data-title="Thanks">
+  <section class="slide cover" data-title="Thanks">
     <div class="center" style="flex-direction:column;height:100%">
       <p class="kicker">thanks</p>
       <h1 class="h1 anim-fade-up" data-anim="fade-up" style="text-align:center">谢谢聆听<br><span class="accent">Q &amp; A</span></h1>
@@ -1591,7 +1599,7 @@ hook.rs         storage.rs
     </div>
     <div class="deck-footer">
       <span class="mono">温俊杰 · 2025</span>
-      <span class="slide-number" data-current="27" data-total="35"></span>
+      <span class="slide-number" data-current="27" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>好，今天就分享到这里。做一个简单的收尾。</p>

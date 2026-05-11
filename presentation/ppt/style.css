@@ -573,43 +573,55 @@ code{
    左上角标题栏 + 左文右图布局
    ============================================ */
 
-/* 学术风幻灯片整体留白 */
+/* 学术风幻灯片整体留白：顶部预留 128px 给标题栏占位 */
 .tpl-presenter-mode-reveal .slide{
-  padding:48px 64px 56px;
+  padding:128px 64px 60px;
   display:flex;
   flex-direction:column;
+  position:relative;
 }
 
-/* 标题栏：紧凑、左对齐、占顶部一条 */
+/* 封面/感谢页：没有 title-bar 时垂直居中 */
+.tpl-presenter-mode-reveal .slide.cover{
+  padding:80px 80px 60px;
+  justify-content:center;
+}
+.tpl-presenter-mode-reveal .slide:not(:has(.title-bar)):not(.cover){
+  padding:80px 80px 60px;
+  justify-content:center;
+}
+
+/* 标题栏：绝对定位 —— 每页顶部硬对齐，仅内容变换 */
 .title-bar{
+  position:absolute;
+  top:48px;
+  left:64px;
+  right:64px;
+  height:62px;
   display:flex;
-  align-items:baseline;
+  align-items:flex-end;
   gap:14px;
-  padding-bottom:10px;
-  margin-bottom:24px;
+  padding-bottom:14px;
+  margin:0;
   border-bottom:1px solid var(--border);
 }
-.title-bar .part{
-  font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  color:var(--text-3);
-  flex-shrink:0;
-}
 .title-bar h2{
-  font-size:22px;
+  font-size:24px;
   font-weight:600;
   margin:0;
   color:var(--text-1);
   letter-spacing:-0.005em;
-  line-height:1.3;
+  line-height:1.25;
+  flex:1;
+  min-width:0;
 }
 .title-bar .sub{
-  font-size:13px;
+  font-size:12px;
   color:var(--text-3);
-  margin-left:auto;
   font-family:var(--font-mono);
+  letter-spacing:.02em;
+  flex-shrink:0;
+  white-space:nowrap;
 }
 
 /* 左文右图：60/40, 50/50 两种 */
@@ -820,4 +832,108 @@ code{
   border-radius:50%;
 }
 .frame-pill .dot.on{background:var(--accent);border-color:var(--accent)}
+
+/* ============================================
+   项目展示：叠图卡片
+   ============================================ */
+.stack-figs{
+  position:relative;
+  width:100%;
+  aspect-ratio:16/10;
+  margin-top:8px;
+}
+.stack-figs .sf{
+  position:absolute;
+  width:78%;
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:
+    0 1px 2px rgba(20,40,80,.06),
+    0 8px 24px rgba(20,40,80,.10);
+  transition:transform .25s ease, box-shadow .25s ease;
+  text-decoration:none;
+  color:inherit;
+  display:block;
+}
+.stack-figs .sf img{
+  width:100%;
+  height:auto;
+  display:block;
+}
+.stack-figs .sf .caption{
+  position:absolute;
+  bottom:0;left:0;right:0;
+  background:linear-gradient(to top, rgba(13,27,42,.85), rgba(13,27,42,0));
+  color:#fff;
+  padding:18px 14px 10px;
+  font-size:11px;
+  font-family:var(--font-mono);
+  letter-spacing:.02em;
+}
+.stack-figs .sf .caption .name{
+  display:block;
+  font-size:13px;
+  font-weight:600;
+  margin-bottom:2px;
+}
+.stack-figs .sf .caption .url{
+  color:#aee1ff;
+  word-break:break-all;
+}
+
+/* 三张错位叠放 */
+.stack-figs .sf-1{
+  top:0;
+  left:0;
+  transform:rotate(-2.5deg);
+  z-index:1;
+}
+.stack-figs .sf-2{
+  top:6%;
+  left:11%;
+  transform:rotate(1deg);
+  z-index:2;
+}
+.stack-figs .sf-3{
+  top:14%;
+  left:22%;
+  transform:rotate(-1deg);
+  z-index:3;
+}
+
+/* hover 抬起效果 */
+.stack-figs .sf:hover{
+  transform:translateY(-6px) rotate(0deg);
+  z-index:10;
+  box-shadow:
+    0 4px 8px rgba(20,40,80,.10),
+    0 20px 48px rgba(20,40,80,.20);
+}
+
+/* 单图变种（用于真实截图替代终端） */
+.fig-shot{
+  border:1px solid var(--border);
+  border-radius:6px;
+  overflow:hidden;
+  box-shadow:0 4px 16px rgba(20,40,80,.08);
+  background:#fff;
+}
+.fig-shot img{
+  width:100%;
+  height:auto;
+  display:block;
+}
+.fig-shot .shot-caption{
+  padding:8px 12px;
+  font-size:11px;
+  font-family:var(--font-mono);
+  color:var(--text-3);
+  background:var(--surface-2);
+  border-top:1px solid var(--border);
+  letter-spacing:.02em;
+}
+.fig-shot .shot-caption a{color:var(--accent);text-decoration:none}
+.fig-shot .shot-caption a:hover{text-decoration:underline}
 

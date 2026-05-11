@@ -285,9 +285,17 @@
 
 | 技能 | 描述 |
 |------|------|
-| j-cli | 命令行工具工作流自动化 |
+| chat-module-guide | j-cli Chat 模块架构速查（目录职责、核心数据流、关键结构体） |
+| fullstack-team | 多 Agent 协作全栈应用开发 |
+| html-ppt | HTML PPT Studio — 制作专业静态 HTML 演示文稿 |
+| hyperframes | 视频合成、动画、字幕、音频响应视觉效果 |
+| j-cli | 命令行工具工作流自动化（日报/周报/todo/别名/脚本） |
+| jcli-dev-guide | j-cli 项目开发者入门指南（项目结构、开发流程） |
 | skill-creator | 创建新技能指南 |
+| sql-to-go-struct-and-dao | SQL 生成 Go 结构体和 DAO 层代码（基于 gorm） |
 | swift-ios-app-gen | iOS 原生应用开发 |
+| ui-ux-pro-max | UI/UX 设计和前端实现指导 |
+| webapp-gen | 一句话生成完整 Web 应用 |
 
 ### Agent
 
@@ -298,6 +306,8 @@
 | prompt | string | 是 | 子代理任务描述 |
 | description | string | 否 | 简短描述（3-5 词） |
 | run_in_background | bool | 否 | 后台运行 |
+| worktree | bool | 否 | 创建隔离的 git worktree |
+| inherit_permissions | bool | 否 | 继承所有工具权限（无需确认） |
 
 ### RegisterHook
 
@@ -311,6 +321,82 @@
 | list | 列出所有钩子 |
 | remove | 移除钩子（需要 event + index） |
 | help | 查看协议文档 |
+
+## 会话进程工具
+
+### Session
+
+操作交互进程会话的 stdin/stdout。当 Bash 以 `interactive: true` 启动时返回 sid（会话 ID）。
+
+**操作类型：**
+
+| action | 描述 |
+|--------|------|
+| stdin | 向进程写入内容（`\n` 表示换行） |
+| stdout | 读取进程输出（阻塞等待新输出） |
+| quit | 终止会话（进程收到 SIGHUP） |
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| sid | string | 是 | 会话 ID（即 Bash 返回的 task_id） |
+| action | string | 是 | 操作类型：stdin/stdout/quit |
+| text | string | 否 | action=stdin 时写入的内容（`\n` 为换行） |
+| timeout_ms | uint | 否 | action=stdout 时等待输出的最大毫秒（默认 500） |
+
+## 协作工具
+
+### Teammate
+
+创建独立运行的队友 Agent，每个队友有独立的 LLM 连接和对话上下文。队友间通过 `SendMessage` 工具通信。
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| name | string | 是 | 队友名称（如 "Frontend"、"Backend"） |
+| prompt | string | 是 | 队友的初始任务/指令 |
+| role | string | 否 | 角色描述（显示在团队摘要中） |
+| inherit_permissions | bool | 否 | 继承所有工具权限（无需确认） |
+| worktree | bool | 否 | 创建隔离的 git worktree |
+
+### SendMessage
+
+向队友 Agent 发送消息。支持 `@mention` 广播。
+
+### IgnoreMessage
+
+忽略队友 Agent 的消息。
+
+## 工具加载
+
+### LoadTool
+
+加载延迟加载的工具，使其在后续回合中可用。
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| name | string | 是 | 要加载的工具名称 |
+
+**当前延迟加载的工具：** RegisterHook、Browser、ComputerUse、Task
+
+## Git Worktree 工具
+
+### EnterWorktree
+
+创建隔离的 git worktree 并切换会话到其中。适用于多个会话同时编辑同一仓库的场景。
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| name | string | 否 | worktree 名称（仅允许字母、数字、点、下划线、连字符） |
+
+**创建位置：** `.jcli/worktrees/{name}`，分支名 `worktree-{name}`
+
+### ExitWorktree
+
+退出当前 git worktree 会话。
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| action | string | 是 | "keep" 保留 worktree / "remove" 删除 worktree 和分支 |
+| discard_changes | bool | 否 | action=remove 且有未提交更改时必须设为 true |
 
 ## 会话工具
 
