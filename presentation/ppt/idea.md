@@ -11,3 +11,4 @@
 - 关于 PPT 设计和演说，我建议从实际代（j-agent，chat 模块）出发，以我的论文作为辅助参考信息，结合丰富的图文去表现；例如 ReAct 的过程大概是怎么样的，一个 Agent 跑的过程中上下文窗口都发生了什么（执行 Tool call，我们解析，塞回窗口
 - LLM 的上下文窗口有限，所以我们需要有一个滚动窗口的机制；这个滚动窗口采取了智能的分优先级填充的策略，我们认为这部分和推荐系统或许有一定的关联，例如，这个滚动窗口的最优效果肯定就是把最有价值、最推荐的上下文信息装入，然后提供给 Agent 决策
 - 项目的 github 地址：https://github.com/LingoJack/jcli，生成制品的 github 地址：https://github.com/LingoJack/gradiation_artifact_demo.git, 代码生成工具的地址：https://github.com/LingoJack/model_infrax.git
+- hook 系统用作回归的测试，以及一些硬性的工程规范，例如项目目录结构是否引入了 mod.rs，而我们实际要求的是 name.rs + name/ 的模式，例如可能导致 panic 的 except() 函数不允许被使用，变更内容沉淀为文档用于后续追溯维护等
