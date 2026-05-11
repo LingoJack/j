@@ -10,7 +10,9 @@ use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager};
 use crate::command::chat::infra::skill;
 use crate::command::chat::oneshot::animation::{start_thinking_animation, stop_thinking_animation};
 use crate::command::chat::oneshot::ask_ui::spawn_ask_handler;
-use crate::command::chat::oneshot::display::{redraw_streaming_as_markdown, term_width};
+use crate::command::chat::oneshot::display::{
+    redraw_streaming_as_markdown, save_cursor_row, term_width,
+};
 use crate::command::chat::oneshot::session::{fire_session_end, persist_messages};
 use crate::command::chat::oneshot::tool_exec::handle_tool_call;
 use crate::command::chat::permission::JcliConfig;
@@ -296,12 +298,11 @@ pub(crate) fn run_oneshot_agent(
 
     // 消费循环
     let mut last_streaming_len: usize = 0;
-    let mut raw_lines: usize = 0;
-    let mut cur_col: usize = 0;
-    let tw = term_width();
     let jcli_config = JcliConfig::load();
     let mut round: usize = 0;
     let mut first_content = true;
+    // 保存流式内容开始前的终端行号，用于 Markdown 重绘时精确定位
+    let mut content_start_row: Option<u16> = None;
 
     loop {
         // 优先检查中断标志：用户按 Ctrl+C 后立即退出，回到 REPL
@@ -337,6 +338,8 @@ pub(crate) fn run_oneshot_agent(
                                     crate::util::color_adapt::apply_fg("Sprite", theme.label_ai)
                                         .bold()
                                 );
+                                // 保存内容开始前的光标行号
+                                content_start_row = save_cursor_row();
                                 // 首次输出前先打印缩进
                                 print!("  ");
                                 let _ = io::stdout().flush();
@@ -348,32 +351,13 @@ pub(crate) fn run_oneshot_agent(
                         if no_render {
                             // no_render 模式：原样输出，避免污染重定向到文件的内容
                             print!("{}", delta);
-                            for ch in delta.chars() {
-                                if ch == '\n' {
-                                    raw_lines += 1;
-                                    cur_col = 0;
-                                } else {
-                                    cur_col += 1;
-                                    if cur_col >= tw {
-                                        raw_lines += 1;
-                                        cur_col = 0;
-                                    }
-                                }
-                            }
                         } else {
                             // 缩进输出：每个换行后加 "  " 缩进（仅终端显示）
                             for ch in delta.chars() {
                                 if ch == '\n' {
                                     print!("\n  ");
-                                    raw_lines += 1;
-                                    cur_col = 2;
                                 } else {
                                     print!("{}", ch);
-                                    cur_col += 1;
-                                    if cur_col >= tw {
-                                        raw_lines += 1;
-                                        cur_col = 0;
-                                    }
                                 }
                             }
                         }
@@ -389,11 +373,9 @@ pub(crate) fn run_oneshot_agent(
                     }
                     // 先重绘已输出的流式文本
                     if last_streaming_len > 0 && !no_render {
-                        redraw_streaming_as_markdown(
-                            &streaming_content,
-                            &mut raw_lines,
-                            &mut cur_col,
-                        );
+                        if let Some(row) = content_start_row {
+                            redraw_streaming_as_markdown(&streaming_content, row);
+                        }
                         last_streaming_len = streaming_content.lock().unwrap().len();
                     } else if last_streaming_len > 0 {
                         // no_render 模式下补一个换行
@@ -437,11 +419,9 @@ pub(crate) fn run_oneshot_agent(
                         stop_thinking_animation(&anim_stop);
                     }
                     if last_streaming_len > 0 && !no_render {
-                        redraw_streaming_as_markdown(
-                            &streaming_content,
-                            &mut raw_lines,
-                            &mut cur_col,
-                        );
+                        if let Some(row) = content_start_row {
+                            redraw_streaming_as_markdown(&streaming_content, row);
+                        }
                     } else if last_streaming_len > 0 {
                         // no_render 模式下补一个换行
                         println!();
