@@ -82,7 +82,7 @@ features = ["archive-tar", "compression-flate2", "rustls"]
 [target.'cfg(windows)'.dependencies.self_update]
 version = "0.42"
 default-features = false
-features = ["archive-zip", "rustls"]
+features = ["archive-zip", "compression-zip-deflate", "rustls"]
 
 # Unix-only dependencies
 [target.'cfg(unix)'.dependencies]
