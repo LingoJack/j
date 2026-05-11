@@ -573,12 +573,11 @@ code{
    左上角标题栏 + 左文右图布局
    ============================================ */
 
-/* 学术风幻灯片整体留白：顶部预留 128px 给标题栏占位 */
+/* 覆盖 base.css 默认：内容从顶部排列，预留标题栏空间 */
 .tpl-presenter-mode-reveal .slide{
-  padding:128px 64px 60px;
-  display:flex;
-  flex-direction:column;
-  position:relative;
+  padding:120px 64px 64px;
+  justify-content:flex-start;
+  /* 保留 base.css 的 position:absolute; inset:0; overflow:hidden */
 }
 
 /* 封面/感谢页：没有 title-bar 时垂直居中 */
@@ -586,26 +585,22 @@ code{
   padding:80px 80px 60px;
   justify-content:center;
 }
-.tpl-presenter-mode-reveal .slide:not(:has(.title-bar)):not(.cover){
-  padding:80px 80px 60px;
-  justify-content:center;
-}
 
 /* 标题栏：绝对定位 —— 每页顶部硬对齐，仅内容变换 */
-.title-bar{
+.tpl-presenter-mode-reveal .title-bar{
   position:absolute;
   top:48px;
   left:64px;
   right:64px;
-  height:62px;
+  height:60px;
   display:flex;
   align-items:flex-end;
   gap:14px;
-  padding-bottom:14px;
+  padding-bottom:12px;
   margin:0;
   border-bottom:1px solid var(--border);
 }
-.title-bar h2{
+.tpl-presenter-mode-reveal .title-bar h2{
   font-size:24px;
   font-weight:600;
   margin:0;
@@ -615,7 +610,7 @@ code{
   flex:1;
   min-width:0;
 }
-.title-bar .sub{
+.tpl-presenter-mode-reveal .title-bar .sub{
   font-size:12px;
   color:var(--text-3);
   font-family:var(--font-mono);
@@ -628,9 +623,11 @@ code{
 .split{
   display:grid;
   gap:36px;
-  flex:1;
+  flex:1 1 auto;
   min-height:0;
+  width:100%;
   align-items:start;
+  overflow:hidden;
 }
 .split.s64{grid-template-columns:38% 1fr}
 .split.s55{grid-template-columns:1fr 1fr}
