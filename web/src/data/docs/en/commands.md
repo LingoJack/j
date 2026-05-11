@@ -14,6 +14,12 @@ Type `/` in the input box to trigger slash commands:
 | `/config` | Open the configuration panel |
 | `/model` | Switch model |
 | `/archive` | Archive current conversation |
+| `/clear` | New conversation |
+| `/theme` | Switch theme |
+| `/resume` | Resume historical session |
+| `/dump` | Export raw session messages |
+| `/dump-processed` | Export processed session data |
+| `/teammate` | Teammate panel |
 
 ## Custom Commands
 

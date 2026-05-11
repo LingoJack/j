@@ -1,4 +1,4 @@
-import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-D8DAfcC8.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
+import{n as e,r as t}from"./rolldown-runtime-Dw2cE7zH.js";import{r as n,t as r}from"./react-vendor-CTSggWdF.js";import{n as i,t as a}from"./index-BgSdA4E4.js";import{n as o,t as s}from"./syntax-highlight-DDfxEX0b.js";import{n as c,t as l}from"./LanguageSwitcher-BoZx07nq.js";var u=t(n(),1),d=r();function f({tree:e,activeSection:t,onNavigate:n,isOpen:r,onClose:i}){return(0,d.jsxs)(d.Fragment,{children:[r&&(0,d.jsx)(`div`,{className:`fixed inset-0 bg-black/20 z-40 lg:hidden`,onClick:i}),(0,d.jsx)(`aside`,{className:`
         fixed top-[65px] left-0 bottom-0 w-64 bg-[#faf9f6] border-r border-stone-200/70
         overflow-y-auto z-50 transition-transform duration-300
         lg:translate-x-0 scrollbar-thin
@@ -311,6 +311,12 @@ Type \`/\` in the input box to trigger slash commands:
 | \`/config\` | Open the configuration panel |
 | \`/model\` | Switch model |
 | \`/archive\` | Archive current conversation |
+| \`/clear\` | New conversation |
+| \`/theme\` | Switch theme |
+| \`/resume\` | Resume historical session |
+| \`/dump\` | Export raw session messages |
+| \`/dump-processed\` | Export processed session data |
+| \`/teammate\` | Teammate panel |
 
 ## Custom Commands
 
@@ -2180,6 +2186,12 @@ Commands 是可复用的提示词片段，帮助快速调用预设的提示词�
 | \`/config\` | 打开配置界面 |
 | \`/model\` | 切换模型 |
 | \`/archive\` | 归档当前对话 |
+| \`/clear\` | 新建对话 |
+| \`/theme\` | 切换主题 |
+| \`/resume\` | 恢复历史会话 |
+| \`/dump\` | 导出原始会话消息 |
+| \`/dump-processed\` | 导出处理后的会话数据 |
+| \`/teammate\` | Teammate 面板 |
 
 ## 自定义命令
 
@@ -3323,6 +3335,10 @@ j todo add "完成文档"     # 快速添加待办
 | path | string | 是 | 文件路径 |
 | old_string | string | 是 | 要替换的原始字符串（必须唯一匹配） |
 | new_string | string | 否 | 替换后的字符串（空则删除） |
+| replace_all | bool | 否 | 替换所有匹配项（跳过唯一性检查） |
+| confirm_token | string | 否 | 批量替换的一次性确认 token |
+
+**批量替换流程：** \`replace_all=true\` 时需两步调用：首次返回匹配预览和 \`confirm_token\`，再次携带 token 确认执行。
 
 \`\`\`json
 {"path": "src/main.rs", "old_string": "fn main() {}", "new_string": "fn main() { println!(\\"Hello\\"); }"}
@@ -3338,6 +3354,7 @@ j todo add "完成文档"     # 快速添加待办
 | path | string | 否 | 搜索目录（默认当前目录） |
 | excludePattern | string | 否 | 排除模式（如 \`**/node_modules/**\`） |
 | limit | uint | 否 | 最大结果数（默认 100） |
+| offset | uint | 否 | 跳过前 N 个结果（用于分页） |
 
 \`\`\`json
 {"pattern": "**/*.rs"}
@@ -3373,9 +3390,11 @@ j todo add "完成文档"     # 快速添加待办
 | 参数 | 类型 | 必填 | 描述 |
 |------|------|------|------|
 | command | string | 是 | Shell 命令（在 bash -c 中执行） |
+| description | string | 否 | 命令描述（显示在 UI 中） |
 | cwd | string | 否 | 工作目录 |
 | timeout | uint | 否 | 超时秒数（默认 120，最大 600） |
 | run_in_background | bool | 否 | 后台执行（返回 task_id） |
+| interactive | bool | 否 | 交互模式（返回 sid，配合 Session 使用） |
 
 **注意事项：**
 - 不支持交互式命令

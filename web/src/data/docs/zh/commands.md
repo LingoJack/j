@@ -14,6 +14,12 @@ Commands 是可复用的提示词片段，帮助快速调用预设的提示词�
 | `/config` | 打开配置界面 |
 | `/model` | 切换模型 |
 | `/archive` | 归档当前对话 |
+| `/clear` | 新建对话 |
+| `/theme` | 切换主题 |
+| `/resume` | 恢复历史会话 |
+| `/dump` | 导出原始会话消息 |
+| `/dump-processed` | 导出处理后的会话数据 |
+| `/teammate` | Teammate 面板 |
 
 ## 自定义命令
 

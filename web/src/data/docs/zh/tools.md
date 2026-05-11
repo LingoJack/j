@@ -40,6 +40,10 @@
 | path | string | 是 | 文件路径 |
 | old_string | string | 是 | 要替换的原始字符串（必须唯一匹配） |
 | new_string | string | 否 | 替换后的字符串（空则删除） |
+| replace_all | bool | 否 | 替换所有匹配项（跳过唯一性检查） |
+| confirm_token | string | 否 | 批量替换的一次性确认 token |
+
+**批量替换流程：** `replace_all=true` 时需两步调用：首次返回匹配预览和 `confirm_token`，再次携带 token 确认执行。
 
 ```json
 {"path": "src/main.rs", "old_string": "fn main() {}", "new_string": "fn main() { println!(\"Hello\"); }"}
@@ -55,6 +59,7 @@
 | path | string | 否 | 搜索目录（默认当前目录） |
 | excludePattern | string | 否 | 排除模式（如 `**/node_modules/**`） |
 | limit | uint | 否 | 最大结果数（默认 100） |
+| offset | uint | 否 | 跳过前 N 个结果（用于分页） |
 
 ```json
 {"pattern": "**/*.rs"}
@@ -90,9 +95,11 @@
 | 参数 | 类型 | 必填 | 描述 |
 |------|------|------|------|
 | command | string | 是 | Shell 命令（在 bash -c 中执行） |
+| description | string | 否 | 命令描述（显示在 UI 中） |
 | cwd | string | 否 | 工作目录 |
 | timeout | uint | 否 | 超时秒数（默认 120，最大 600） |
 | run_in_background | bool | 否 | 后台执行（返回 task_id） |
+| interactive | bool | 否 | 交互模式（返回 sid，配合 Session 使用） |
 
 **注意事项：**
 - 不支持交互式命令
