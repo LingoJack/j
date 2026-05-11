@@ -121,8 +121,13 @@ fn check_for_update() {
             Err(e) => {
                 println!("{} {}", "检查更新失败:".red(), e);
                 println!("请尝试手动更新:");
+                #[cfg(unix)]
                 println!(
                     "  curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh"
+                );
+                #[cfg(windows)]
+                println!(
+                    "  irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex"
                 );
             }
         },
@@ -319,8 +324,13 @@ fn perform_update_internal(target: &str, interactive: bool) {
                 } else {
                     println!("{} {}", "更新失败:".red(), e);
                     println!("请尝试手动更新:");
+                    #[cfg(unix)]
                     println!(
                         "  curl -fsSL https://raw.githubusercontent.com/LingoJack/jcli/main/install.sh | sh"
+                    );
+                    #[cfg(windows)]
+                    println!(
+                        "  irm https://raw.githubusercontent.com/LingoJack/jcli/main/install.ps1 | iex"
                     );
                 }
             }
@@ -682,17 +692,34 @@ fn perform_update_curl(target: &str, interactive: bool) {
         .status();
 
     #[cfg(windows)]
-    let extract_result = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-                tmp_archive.display(),
-                tmp_dir.display()
-            ),
-        ])
-        .status();
+    let extract_result = {
+        // Windows 10+ 自带 tar 命令，优先使用 tar（解压由 7z 创建的 zip 可靠性更高）
+        // 回退使用 PowerShell Expand-Archive
+        let tar_result = std::process::Command::new("tar")
+            .args(["-xf"])
+            .arg(&tmp_archive)
+            .args(["-C"])
+            .arg(&tmp_dir)
+            .status();
+
+        match tar_result {
+            Ok(status) if status.success() => Ok(status),
+            _ => {
+                // tar 解压 zip 失败，回退到 PowerShell
+                std::process::Command::new("powershell.exe")
+                    .args([
+                        "-NoProfile",
+                        "-Command",
+                        &format!(
+                            "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                            tmp_archive.display(),
+                            tmp_dir.display()
+                        ),
+                    ])
+                    .status()
+            }
+        }
+    };
 
     match extract_result {
         Ok(status) if status.success() => {}
@@ -731,6 +758,24 @@ fn perform_update_curl(target: &str, interactive: bool) {
         return;
     }
 
+    // Windows 上替换正在运行的 exe 需要先重命名旧文件
+    #[cfg(windows)]
+    let rename_backup = if dst_bin.exists() {
+        let backup = dst_bin.with_extension("exe.bak");
+        let _ = std::fs::remove_file(&backup);
+        match std::fs::rename(&dst_bin, &backup) {
+            Ok(_) => Some(backup),
+            Err(e) => {
+                println!("{} {}", "无法重命名旧版本文件:".red(), e);
+                println!("请尝试关闭所有 j 进程后重新执行更新");
+                let _ = std::fs::remove_dir_all(&tmp_dir);
+                return;
+            }
+        }
+    } else {
+        None
+    };
+
     match std::fs::copy(&src_bin, &dst_bin) {
         Ok(_) => {
             // 设置可执行权限
@@ -746,6 +791,25 @@ fn perform_update_curl(target: &str, interactive: bool) {
                 "更新成功！".green(),
                 format!("版本: {}", version_display).cyan()
             );
+
+            // Windows: 清理备份文件（延迟删除，因为旧进程可能还在运行）
+            #[cfg(windows)]
+            if let Some(ref backup) = rename_backup {
+                let backup_str = backup.to_string_lossy().to_string();
+                let cleanup_script = format!(
+                    "Start-Sleep -Seconds 3; Remove-Item '{}' -Force -ErrorAction SilentlyContinue",
+                    backup_str
+                );
+                let _ = std::process::Command::new("powershell.exe")
+                    .args([
+                        "-NoProfile",
+                        "-WindowStyle",
+                        "Hidden",
+                        "-Command",
+                        &cleanup_script,
+                    ])
+                    .spawn();
+            }
 
             // 尝试同步安装 j-indicator（仅 macOS）
             #[cfg(target_os = "macos")]
@@ -763,6 +827,12 @@ fn perform_update_curl(target: &str, interactive: bool) {
             println!("  {}", "sudo j update".cyan());
             #[cfg(windows)]
             println!("请尝试以管理员身份运行 PowerShell 后重新执行更新");
+
+            // Windows: 恢复备份
+            #[cfg(windows)]
+            if let Some(backup) = rename_backup {
+                let _ = std::fs::rename(&backup, &dst_bin);
+            }
         }
     }
 

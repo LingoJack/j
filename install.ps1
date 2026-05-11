@@ -144,7 +144,46 @@ function Install-JCli {
             $srcExe = $srcExe.FullName
         }
 
-        Copy-Item -Path $srcExe -Destination (Join-Path $InstallDir "$BinaryName.exe") -Force
+        $dstExe = Join-Path $InstallDir "$BinaryName.exe"
+
+        # 如果目标 j.exe 正在运行，先尝试关闭占用进程
+        if (Test-Path $dstExe) {
+            try {
+                # 尝试复制，如果成功则无需特殊处理
+                Copy-Item -Path $srcExe -Destination $dstExe -Force -ErrorAction Stop
+            }
+            catch {
+                # 复制失败（文件被占用），先关闭 j.exe 进程
+                Write-Warn "检测到 $BinaryName.exe 正在运行，正在尝试关闭..."
+                $procs = Get-Process -Name $BinaryName -ErrorAction SilentlyContinue
+                if ($procs) {
+                    $procs | Stop-Process -Force
+                    Start-Sleep -Milliseconds 500
+                    Write-Info "已关闭旧进程"
+                }
+
+                # 关闭进程后重试复制
+                try {
+                    Copy-Item -Path $srcExe -Destination $dstExe -Force -ErrorAction Stop
+                }
+                catch {
+                    # 如果仍然失败，使用重命名策略：先重命名旧文件，再复制新文件
+                    Write-Warn "文件仍被占用，使用重命名策略..."
+                    $backupExe = "$dstExe.bak"
+                    if (Test-Path $backupExe) { Remove-Item -Path $backupExe -Force -ErrorAction SilentlyContinue }
+                    Rename-Item -Path $dstExe -NewName "$BinaryName.exe.bak" -Force
+                    Copy-Item -Path $srcExe -Destination $dstExe -Force
+                    Write-Info "旧版本已备份为 $BinaryName.exe.bak"
+                    # 延迟清理备份文件（当前进程退出后）
+                    $cleanupScript = "Start-Sleep -Seconds 3; Remove-Item '$backupExe' -Force -ErrorAction SilentlyContinue"
+                    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-WindowStyle", "Hidden", "-Command", $cleanupScript -WindowStyle Hidden
+                }
+            }
+        }
+        else {
+            Copy-Item -Path $srcExe -Destination $dstExe -Force
+        }
+
         Write-Info "已安装到: $InstallDir\$BinaryName.exe"
 
         # 添加到 PATH（用户级）
@@ -192,8 +231,27 @@ function Uninstall-JCli {
 
     $exePath = Join-Path $InstallDir "$BinaryName.exe"
     if (Test-Path $exePath) {
-        Remove-Item -Path $exePath -Force
-        Write-Info "已删除 $exePath"
+        # 先尝试关闭 j 进程
+        $procs = Get-Process -Name $BinaryName -ErrorAction SilentlyContinue
+        if ($procs) {
+            Write-Warn "检测到 $BinaryName.exe 正在运行，正在关闭..."
+            $procs | Stop-Process -Force
+            Start-Sleep -Milliseconds 500
+        }
+
+        try {
+            Remove-Item -Path $exePath -Force -ErrorAction Stop
+            Write-Info "已删除 $exePath"
+        }
+        catch {
+            # 文件仍被占用，使用重命名策略
+            Write-Warn "文件被占用，使用重命名策略..."
+            Rename-Item -Path $exePath -NewName "$BinaryName.exe.bak" -Force
+            Write-Info "已重命名 $exePath 为 $BinaryName.exe.bak"
+            # 延迟清理
+            $cleanupScript = "Start-Sleep -Seconds 3; Remove-Item '$exePath.bak' -Force -ErrorAction SilentlyContinue"
+            Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-WindowStyle", "Hidden", "-Command", $cleanupScript -WindowStyle Hidden
+        }
     }
     else {
         Write-Warn "程序未安装在 $InstallDir"

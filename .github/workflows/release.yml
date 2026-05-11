@@ -72,7 +72,8 @@ jobs:
         shell: pwsh
         run: |
           $releaseDir = "target/release"
-          Compress-Archive -Path "$releaseDir/j.exe" -DestinationPath "$releaseDir/j-windows-x64.zip"
+          # 使用 7z 创建 zip（确保使用标准 Deflate 压缩，而非 PowerShell Compress-Archive 的 Deflate64）
+          7z a -tzip "$releaseDir/j-windows-x64.zip" "$releaseDir/j.exe"
           $hash = (Get-FileHash -Path "$releaseDir/j-windows-x64.zip" -Algorithm SHA256).Hash
           "$hash  j-windows-x64.zip" | Out-File -FilePath "$releaseDir/j-windows-x64.zip.sha256" -Encoding ASCII
 
@@ -108,7 +109,8 @@ jobs:
         shell: pwsh
         run: |
           $releaseDir = "target/aarch64-pc-windows-msvc/release"
-          Compress-Archive -Path "$releaseDir/j.exe" -DestinationPath "$releaseDir/j-windows-arm64.zip"
+          # 使用 7z 创建 zip（确保使用标准 Deflate 压缩，而非 PowerShell Compress-Archive 的 Deflate64）
+          7z a -tzip "$releaseDir/j-windows-arm64.zip" "$releaseDir/j.exe"
           $hash = (Get-FileHash -Path "$releaseDir/j-windows-arm64.zip" -Algorithm SHA256).Hash
           "$hash  j-windows-arm64.zip" | Out-File -FilePath "$releaseDir/j-windows-arm64.zip.sha256" -Encoding ASCII
 
