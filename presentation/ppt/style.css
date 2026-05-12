@@ -721,6 +721,51 @@ code{
   letter-spacing:.04em;
 }
 
+/* 真实代码片段卡片（配合 SVG 图示使用） */
+.code-card{
+  border:1px solid var(--border);
+  background:#fbfbfb;
+  border-radius:var(--radius);
+  margin-top:12px;
+  overflow:hidden;
+  font-family:var(--font-mono);
+}
+.code-card .cc-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:5px 10px;
+  background:#f0f3f8;
+  border-bottom:1px solid var(--border);
+  font-size:10.5px;
+  color:var(--text-3);
+  letter-spacing:.02em;
+}
+.code-card .cc-head .cc-path{color:var(--accent);font-weight:600}
+.code-card .cc-head .cc-tag{
+  font-size:9.5px;
+  padding:1px 6px;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:2px;
+  color:var(--text-2);
+}
+.code-card pre{
+  margin:0;
+  padding:8px 10px;
+  font-size:10.5px;
+  line-height:1.55;
+  color:var(--text-1);
+  overflow-x:auto;
+  white-space:pre;
+}
+.code-card pre .kw{color:#7a1f6b;font-weight:600}
+.code-card pre .fn{color:#1e3a8a;font-weight:600}
+.code-card pre .str{color:#1e5e3a}
+.code-card pre .num{color:#7a5b00}
+.code-card pre .cm{color:#6b7a8f;font-style:italic}
+.code-card pre .hl{background:rgba(122,91,0,.10);display:inline-block;padding:0 2px;border-radius:2px}
+
 /* ============================================
    终端 / 对话气泡（真实 j-cli 风格）
    ============================================ */

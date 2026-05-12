@@ -1048,40 +1048,133 @@ hook.rs         storage.rs
   </section>
 
   <!-- ============ 10. BASH / SESSION / BACKGROUND ============ -->
-  <section class="slide" data-title="Bash / Session / Background">
+  <section class="slide" data-title="执行三态">
     <div class="title-bar">
       <h2>执行模型的<span class="accent">三种形态</span></h2>
+      <span class="sub">同步 · 异步 · 交互 —— 由运行时智能流转</span>
     </div>
-    <div class="flow mt-l">
-      <div class="node hl">
-        <h4>Bash</h4><p>同步执行<br>timeout → 自动转后台</p>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">一条命令怎么跑，取决于它<span class="accent">跑多久</span>、<span class="accent">要不要 stdin</span>。<br>Agent 不必预判 —— 入口都是 <code>Bash</code>，运行时自动落到对的形态。</p>
+        <ul>
+          <li><strong>Bash · 同步</strong> · 默认 120s（最大 600s）阻塞返回 stdout/stderr。<code>ls</code> · <code>cargo check</code> · 短命令首选。</li>
+          <li><strong>BackgroundTask · 异步</strong> · <code>run_in_background:true</code> 立即返回 task_id；用 <code>TaskOutput</code> 阻塞等待或非阻塞查询，可读中间输出。<code>cargo build</code> · <code>npm install</code> · dev server。</li>
+          <li><strong>Session · 交互</strong> · <code>interactive:true</code> 走 PTY 启动，返回 sid；用 <code>Session</code> 工具的 <code>stdin / stdout / quit</code> 双向操作。REPL · <code>mysql</code> · 需 y 确认的安装。</li>
+        </ul>
+        <h4>两个让 Agent 不用猜的细节</h4>
+        <p class="note"><strong>① 超时自动升级（adopt_process）</strong> · 同步跑过 <code>SHELL_AUTO_BG_SECS</code> 仍未结束 —— <span class="accent">不 kill</span>，原进程连同 reader 线程一起移交 BackgroundManager，立即返回 task_id，Agent 继续做别的事。<br><strong>② 静默判交互</strong> · 升级前若最近 <code>SHELL_INTERACTIVE_SILENCE_SECS</code> 秒完全无输出，判定疑似在等 stdin —— 此时 kill 并提示 Agent 加 <code>-y / --yes / --no-input</code> 重跑，或改用 <code>interactive:true</code>。</p>
       </div>
-      <div class="arr">→</div>
-      <div class="node">
-        <h4>BackgroundTask</h4><p>异步执行<br>TaskOutput 获取产物</p>
-      </div>
-      <div class="arr">→</div>
-      <div class="node hl">
-        <h4>Session</h4><p>交互式执行<br>stdin/stdout 双向通道</p>
+      <div class="col-visual">
+        <div class="fig" data-fig="图 · 执行三态：横轴时间，纵向三泳道，虚线箭头为自动流转">
+          <svg viewBox="0 0 400 240" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+            <defs>
+              <marker id="ah-e1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+              </marker>
+              <marker id="ah-e2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#7a5b00"/>
+              </marker>
+            </defs>
+
+            <text x="200" y="12" text-anchor="middle" fill="#6b7a8f" font-size="9">time →</text>
+
+            <!-- Lane 1: Bash sync -->
+            <text x="6" y="42" font-weight="600" fill="#0d1b2a" font-size="11">Bash · sync</text>
+            <rect x="98" y="28" width="56" height="22" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
+            <text x="126" y="43" text-anchor="middle">spawn</text>
+            <line x1="154" y1="39" x2="170" y2="39" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
+            <rect x="170" y="28" width="108" height="22" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
+            <text x="224" y="43" text-anchor="middle">poll · ≤ 120s</text>
+            <line x1="278" y1="39" x2="296" y2="39" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
+            <rect x="296" y="28" width="80" height="22" fill="#f3faf5" stroke="#1e5e3a" stroke-width="1.2"/>
+            <text x="336" y="43" text-anchor="middle" fill="#1e5e3a">stdout/err</text>
+
+            <!-- Auto-promote -->
+            <path d="M224,50 Q224,80 224,108" stroke="#7a5b00" stroke-width="1.4" stroke-dasharray="3,2" fill="none" marker-end="url(#ah-e2)"/>
+            <text x="232" y="72" fill="#7a5b00" font-size="9">&gt; 30s</text>
+            <text x="232" y="84" fill="#7a5b00" font-size="9">adopt_process</text>
+            <text x="232" y="96" fill="#7a5b00" font-size="9">(不 kill)</text>
+
+            <!-- Lane 2: Background -->
+            <text x="6" y="122" font-weight="600" fill="#0d1b2a" font-size="11">Background</text>
+            <rect x="98" y="108" width="76" height="22" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
+            <text x="136" y="123" text-anchor="middle">spawn → tid</text>
+            <line x1="174" y1="119" x2="216" y2="119" stroke="#1e3a8a" stroke-width="1" stroke-dasharray="2,2"/>
+            <rect x="216" y="108" width="62" height="22" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
+            <text x="247" y="123" text-anchor="middle">running</text>
+            <line x1="278" y1="119" x2="296" y2="119" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
+            <rect x="296" y="108" width="80" height="22" fill="#f3faf5" stroke="#1e5e3a" stroke-width="1.2"/>
+            <text x="336" y="123" text-anchor="middle" fill="#1e5e3a">TaskOutput</text>
+            <text x="247" y="144" text-anchor="middle" fill="#6b7a8f" font-size="9">reader 线程实时写 buffer</text>
+
+            <!-- Lane 3: Session PTY -->
+            <text x="6" y="172" font-weight="600" fill="#0d1b2a" font-size="11">Session · PTY</text>
+            <rect x="98" y="158" width="76" height="22" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
+            <text x="136" y="173" text-anchor="middle">PTY → sid</text>
+            <line x1="174" y1="169" x2="190" y2="169" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
+            <rect x="190" y="158" width="130" height="22" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.2"/>
+            <text x="255" y="173" text-anchor="middle" fill="#7a5b00">stdin ⇄ stdout · loop</text>
+            <line x1="320" y1="169" x2="334" y2="169" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-e1)"/>
+            <rect x="334" y="158" width="42" height="22" fill="#fdf6f6" stroke="#7a1f1f" stroke-width="1.2"/>
+            <text x="355" y="173" text-anchor="middle" fill="#7a1f1f">quit</text>
+            <text x="355" y="194" text-anchor="middle" fill="#6b7a8f" font-size="9">drop → SIGHUP</text>
+
+            <line x1="10" y1="210" x2="390" y2="210" stroke="#e5e9f2" stroke-width="0.8"/>
+            <text x="10" y="224" fill="#6b7a8f" font-size="9">— 实线 · 显式调用    --- 虚线 · 自动流转</text>
+            <text x="10" y="236" fill="#6b7a8f" font-size="9">constants: SHELL_DEFAULT_TIMEOUT_SECS=120 · AUTO_BG_SECS=30 · INTERACTIVE_SILENCE_SECS</text>
+          </svg>
+        </div>
+
+        <div class="code-card">
+          <div class="cc-head">
+            <span><span class="cc-path">j-agent/src/tools/shell.rs</span> · execute_sync 的自动升级循环</span>
+            <span class="cc-tag">real code</span>
+          </div>
+<pre><span class="cm">// 超过阈值仍未结束，不 kill 进程，移交后台</span>
+<span class="kw">if</span> start.elapsed() &gt;= auto_bg_threshold {
+    <span class="cm">// 静默判交互：若最近 N 秒无任何输出，判定疑似在等 stdin</span>
+    <span class="kw">if</span> silence_elapsed &gt;= Duration::from_secs(SHELL_INTERACTIVE_SILENCE_SECS) {
+        <span class="kw">let</span> _ = child.<span class="fn">kill</span>();  <span class="cm">// 疑似交互 → kill + 提示加 --yes</span>
+        <span class="kw">return</span> ToolResult { output: hint, is_error: <span class="kw">true</span>, .. };
+    }
+    <span class="cm">// 真正升级：adopt 当前进程，立即返回 task_id</span>
+    <span class="kw">let</span> (task_id, bg_buffer) = <span class="hl">self.manager.<span class="fn">adopt_process</span>(command, pid, start)</span>;
+    std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {          <span class="cm">// 后台监控线程</span>
+        <span class="kw">let</span> _ = stdout_thread.<span class="fn">join</span>();       <span class="cm">// 等 reader 写完</span>
+        manager.<span class="fn">complete_task</span>(&amp;tid, <span class="str">"completed"</span>, final_output);
+    });
+    <span class="kw">return</span> ToolResult { output: json!({ <span class="str">"task_id"</span>: task_id, .. }), .. };
+}</pre>
+        </div>
+
+        <div class="code-card">
+          <div class="cc-head">
+            <span><span class="cc-path">j-agent/src/tools/shell.rs</span> · execute_interactive 起 PTY</span>
+            <span class="cc-tag">real code</span>
+          </div>
+<pre><span class="kw">let</span> pty_system = <span class="fn">NativePtySystem::default</span>();
+<span class="kw">let</span> pair = pty_system.<span class="fn">openpty</span>(PtySize { rows: <span class="num">24</span>, cols: <span class="num">80</span>, .. })?;
+<span class="kw">let</span> _child = pair.slave.<span class="fn">spawn_command</span>(builder)?;
+
+<span class="kw">let</span> reader = pair.master.<span class="fn">try_clone_reader</span>()?;   <span class="cm">// Session stdout 用</span>
+<span class="kw">let</span> writer = pair.master.<span class="fn">take_writer</span>()?;         <span class="cm">// Session stdin 用</span>
+<span class="hl">self.manager.<span class="fn">set_pty_writer</span>(&amp;task_id, writer)</span>;  <span class="cm">// 注册到 BgTask</span>
+
+<span class="cm">// 随后 Session 工具通过 sid 调 session_stdin / session_stdout / session_quit</span></pre>
+        </div>
       </div>
     </div>
-    <div class="grid g3 mt-l">
-      <div class="card card-soft">
-        <p class="dim" style="font-size:13px"><strong>自动流转：</strong>Bash 超时自动升级为后台任务，Agent 无需预判命令是否会耗时。</p>
-      </div>
-      <div class="card card-soft">
-        <p class="dim" style="font-size:13px"><strong>交互能力：</strong>npm install 需要 y 确认？Session 工具打通 stdin/stdout，支持实时交互。</p>
-      </div>
-      <div class="card card-soft">
-        <p class="dim" style="font-size:13px"><strong>结果获取：</strong>TaskOutput 非阻塞检查任务状态，完成即取，未完成则继续等待。</p>
-      </div>
+    <div class="deck-footer">
+      <span class="mono">#bash #background #session</span>
+      <span class="slide-number" data-current="19" data-total="36"></span>
     </div>
     <aside class="notes">
-      <p>AI 执行命令的时候，会遇到三种场景，所以我设计了三种执行形态。</p>
-      <p>第一种是<strong>同步 Bash</strong>——执行一条快命令，比如 <code>ls</code>、<code>cargo build</code>，等它跑完返回结果就行。</p>
-      <p>但有些命令会跑很久，比如 <code>npm install</code> 可能耗时几分钟。这时候如果 Bash 超过预设的 timeout，它就会<strong>自动流转为后台任务</strong>。Agent 不需要提前预判这个命令会不会跑很久——它会自动升级。后台任务可以通过 TaskOutput 非阻塞地获取当前状态和产物。</p>
-      <p>第三种是<strong>Session</strong>——有些命令是交互式的，比如安装 React 框架模板时会问你"确认安装吗？"需要输入 y。为了处理这种场景，我把命令的 stdin/stdout 打通，封装为一个独立的 Session 工具。Agent 可以通过 Session 发送输入、读取输出，完成交互操作。</p>
-      <p>这三种形态覆盖了 Agent 执行命令的几乎所有场景，而且流转是自动的，Agent 不用操心。</p>
+      <p>这一页讲 Agent 的命令执行模型。<strong>三种形态：同步 Bash、异步 Background、交互 Session</strong>。</p>
+      <p>关键设计是<strong>入口统一</strong> —— Agent 调用的都是 <code>Bash</code> 工具，只是参数不同：什么都不加是同步；加 <code>run_in_background:true</code> 走异步；加 <code>interactive:true</code> 走 PTY。Agent 不用预判命令会跑多久。</p>
+      <p>右图三条泳道是横轴时间。重点看<strong>那条虚线箭头</strong> —— 同步 Bash 跑过 30 秒还没结束，运行时<strong>不会 kill 进程</strong>，而是把这个已经在跑的进程连同 reader 线程一起<strong>移交</strong>给 BackgroundManager，返回 task_id。这是 shell.rs 里的 adopt_process 函数。Agent 拿到 task_id 之后可以先去做别的事，过一会儿用 TaskOutput 取结果。这避免了"我以为是快命令但其实是慢命令"导致的窗口阻塞。</p>
+      <p>但这又引入新问题：<strong>命令是慢、还是在等用户输入？</strong>外面看都是"没输出"。所以升级前我加了一道<strong>静默检测</strong> —— 如果最近 N 秒一点输出都没有，那大概率不是慢，是在等 stdin。这时候不该升级，而是 kill 掉，提示 Agent 加上 <code>-y</code> 之类的非交互标志重跑，或者改用 <code>interactive:true</code> 走 Session。</p>
+      <p>Session 这一态用的是 <strong>portable_pty</strong> 库分配真正的伪终端，Agent 通过 Session 工具的 stdin/stdout/quit 跟进程交互。quit 的实现是 drop 掉 PTY writer，进程收到 SIGHUP 自然退出，比 kill -9 干净。</p>
+      <p>三态加上自动流转 + 静默检测，覆盖了 Agent 在终端里几乎所有的执行场景。</p>
     </aside>
   </section>
 
