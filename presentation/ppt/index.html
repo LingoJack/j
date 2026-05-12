@@ -51,21 +51,23 @@
           <li><strong>脚本工作流</strong> · 工程化的 Skill / Hook</li>
         </ul>
         <h4>本项目制品分别位于三个开源仓库</h4>
-        <p class="note">
-          jcli · github.com/LingoJack/jcli<br>
-          model_infrax · github.com/LingoJack/model_infrax<br>
-          jcli github pages · lingojack.github.io/jcli
-        </p>
+        <ul class="repo-list">
+          <li>
+            <span class="rl-label">jcli</span>
+            <span class="rl-url">github.com/LingoJack/jcli</span>
+          </li>
+          <li>
+            <span class="rl-label">model_infrax</span>
+            <span class="rl-url">github.com/LingoJack/model_infrax</span>
+          </li>
+          <li>
+            <span class="rl-label">jcli github pages</span>
+            <span class="rl-url">lingojack.github.io/jcli</span>
+          </li>
+        </ul>
       </div>
       <div class="col-visual">
         <div class="stack-figs">
-          <a class="sf sf-1" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
-            <img src="pics/github-jcli.png" alt="jcli GitHub 仓库">
-            <div class="caption">
-              <span class="name">jcli · 主项目</span>
-              <span class="url">github.com/LingoJack/jcli</span>
-            </div>
-          </a>
           <a class="sf sf-2" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
             <img src="pics/github-model-infrax.png" alt="model_infrax 仓库">
             <div class="caption">
@@ -73,11 +75,18 @@
               <span class="url">github.com/LingoJack/model_infrax</span>
             </div>
           </a>
-          <a class="sf sf-3" href="https://lingojack.github.io/jcli/" target="_blank" rel="noopener">
-            <img src="pics/jcli-github-pages-introduce.png" alt="jcli GitHub Pages 演示站点">
+          <a class="sf sf-3" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
+            <img src="pics/github-jcli.png" alt="jcli GitHub Pages 演示站点">
             <div class="caption">
               <span class="name">演示站点</span>
               <span class="url">lingojack.github.io/jcli</span>
+            </div>
+          </a>
+          <a class="sf sf-1" href="https://lingojack.github.io/jcli/" target="_blank" rel="noopener">
+            <img src="pics/jcli-github-pages-introduce.png" alt="jcli GitHub 仓库">
+            <div class="caption">
+              <span class="name">jcli · 主项目</span>
+              <span class="url">github.com/LingoJack/jcli</span>
             </div>
           </a>
         </div>
@@ -102,11 +111,12 @@
       <h2>今天要讲的 6 个部分</h2>
     </div>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">背景与动机：从 ChatBot 到 Agent</span><span class="d">~4min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">Agent 核心设计：上下文窗口治理</span><span class="d">~6min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">工具体系：从基础到特化的渐进增强</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">多 Agent 协作与健壮性</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">05</span><span class="t">Skill 系统：工程化能力封装</span><span class="d">~4min</span></div>
+      <!-- 这个是我敲定的大纲，不要改 -->
+      <div class="agenda-row"><span class="num">01</span><span class="t">项目与背景</span><span class="d">~4min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">上下文窗口与压缩</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t"></span>面向场景强化的工具<span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">多 Agent 协作试验</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t"></span>模板代码生成引擎<span class="d">~4min</span></div>
       <div class="agenda-row"><span class="num">06</span><span class="t">总结与展望</span><span class="d">~3min</span></div>
     </div>
     <aside class="notes">
@@ -1600,10 +1610,10 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>webapp-gen：<span class="accent">原型驱动</span>逐步填充</h2>
     </div>
-    <div class="grid g2 mt-l">
-      <div>
-        <h4 style="font-size:14px;color:var(--bad);margin-bottom:8px">反例 · 一次性生成</h4>
-        <div class="dialog" style="font-size:11px">
+    <div class="grid g2 mt-l" style="align-items:stretch">
+      <div style="display:flex;flex-direction:column">
+        <h4 style="font-size:16px;color:var(--bad);margin:0 0 10px">反例 · 一次性生成</h4>
+        <div class="dialog" style="font-size:14px;flex:1;margin-top:0">
           <div class="line"><span class="role user">用户:</span> 帮我做一个待办应用</div>
           <div class="line"><span class="role agent">Agent:</span> 一次性生成 50 个文件……</div>
           <div class="line dim">5 分钟后</div>
@@ -1611,27 +1621,27 @@ hook.rs         storage.rs
           <div class="line"><span class="role user">用户:</span> 整个项目跑不起来。</div>
         </div>
       </div>
-      <div>
-        <h4 style="font-size:14px;color:var(--good);margin-bottom:8px">√ 原型驱动：脚手架 + 填充</h4>
-        <div class="jen-flow" style="flex-direction:row">
-          <div class="step" style="text-align:left">
+      <div style="display:flex;flex-direction:column">
+        <h4 style="font-size:16px;color:var(--good);margin:0 0 10px">√ 原型驱动：脚手架 + 填充</h4>
+        <div class="jen-flow webapp-flow" style="flex:1;margin-top:0;align-items:stretch">
+          <div class="step" style="text-align:left;display:flex;flex-direction:column;justify-content:center">
             <h5>① 脚手架</h5>
             <p>用成熟模板搭出可跑的最小项目（含路由、状态、样式系统）</p>
           </div>
           <div class="arr">→</div>
-          <div class="step" style="text-align:left">
+          <div class="step" style="text-align:left;display:flex;flex-direction:column;justify-content:center">
             <h5>② 原型替换</h5>
             <p>逐页用 mock 数据填充<br>用户先看视觉效果</p>
           </div>
           <div class="arr">→</div>
-          <div class="step" style="text-align:left">
+          <div class="step" style="text-align:left;display:flex;flex-direction:column;justify-content:center">
             <h5>③ 接入真实数据</h5>
             <p>mock 替换为真实 API<br>逐步加入业务逻辑</p>
           </div>
         </div>
       </div>
     </div>
-    <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>核心优势：</strong>项目<strong>结构完整性</strong>有脚手架保证；用户预期通过<strong>逐步可见的原型</strong>校准，减少"做完发现不对"的反工。</p>
+    <p class="dim mt-l" style="font-size:15px;text-align:center;line-height:1.7"><strong>核心优势：</strong>项目<strong>结构完整性</strong>有脚手架保证；用户预期通过<strong>逐步可见的原型</strong>校准，减少"做完发现不对"的反工。</p>
     <div class="deck-footer">
       <span class="mono">#webapp-gen #prototype-driven</span>
       <span class="slide-number" data-current="24" data-total="36"></span>

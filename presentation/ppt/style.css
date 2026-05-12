@@ -554,6 +554,46 @@ code{
   color:var(--text-2);
 }
 
+/* webapp-gen 三步流程：在 jen-flow 基础上放大字号、加内边距 */
+.jen-flow.webapp-flow{gap:10px}
+.jen-flow.webapp-flow .step{padding:18px 16px}
+.jen-flow.webapp-flow .step h5{font-size:15px;margin:0 0 8px}
+.jen-flow.webapp-flow .step p{font-size:13px;line-height:1.65;color:var(--text-2)}
+.jen-flow.webapp-flow .arr{font-size:22px}
+
+/* 三个开源仓库 · 卡片式列表（slide 2） */
+.repo-list{
+  list-style:none;
+  margin:10px 0 0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.repo-list li{
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+  padding:9px 14px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-left:2px solid var(--accent);
+  border-radius:var(--radius);
+}
+.repo-list .rl-label{
+  font-size:13px;
+  font-weight:600;
+  color:var(--text-1);
+  min-width:130px;
+  letter-spacing:.01em;
+}
+.repo-list .rl-url{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--accent);
+  word-break:break-all;
+}
+
 /* ---------- Experiment grid ---------- */
 .exp3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px}
 .exp3 .e-card{
