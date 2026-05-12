@@ -115,12 +115,12 @@ body{
   display:grid;
   grid-template-columns:1fr 60px 1fr;
   gap:24px;
-  align-items:stretch;
+  align-items:start;
   flex:0 0 auto;
   margin:auto 0;
 }
 .vs .side{padding:28px 32px;display:flex;flex-direction:column;gap:14px}
-.vs .mid{font-size:34px;font-weight:300;color:var(--text-3);display:flex;align-items:center;justify-content:center}
+.vs .mid{font-size:34px;font-weight:300;color:var(--text-3);display:flex;align-items:center;justify-content:center;align-self:stretch}
 .vs .bad-side{border-top:2px solid var(--bad)}
 .vs .good-side{border-top:2px solid var(--accent)}
 .vs h3{font-size:22px;margin:0 0 10px;font-weight:600;color:var(--text-1)}
