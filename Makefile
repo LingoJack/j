@@ -13,7 +13,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # 伪目标声明
 # ============================================
 .PHONY: help \
-        current_dir push push-non-ai pull status \
+        current_dir push push-non-ai commit pull status \
         build release debug build-indicator build-ax \
         install uninstall reinstall \
         publish publish-check tag tags bump-version set-version \
@@ -111,6 +111,24 @@ push-non-ai: current_dir fmt build-web ## 提交并推送代码（手动 commit 
 	&& (git commit -m "更新: $(shell date +'%Y-%m-%d %H:%M:%S')" || exit 0) \
 	&& git push origin $(GIT_BRANCH)
 	@echo "☑️ 代码已推送"
+
+commit: current_dir fmt build-web ## 自动提交（基于变更生成 message，不调用 AI）
+	@echo "📝 自动生成 commit message..."
+	@git add .; \
+	staged_files=$$(git diff --cached --name-only 2>/dev/null); \
+	if [ -z "$$staged_files" ]; then \
+		echo "ℹ️ 没有检测到变更，无需提交"; \
+		exit 0; \
+	fi; \
+	file_count=$$(echo "$$staged_files" | wc -l | tr -d ' '); \
+	if [ "$$file_count" -eq 1 ]; then \
+		msg="update: $$(echo "$$staged_files" | head -1)"; \
+	else \
+		first=$$(echo "$$staged_files" | head -1); \
+		msg="update: $$first and $$((file_count - 1)) other file(s)"; \
+	fi; \
+	git commit -m "$$msg"; \
+	echo "✅ 已提交: $$msg"
 
 pull: current_dir ## 拉取最新代码
 	@echo "📥 拉取最新代码..."
