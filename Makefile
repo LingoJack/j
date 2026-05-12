@@ -31,7 +31,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
         pre-commit \
         build-remote \
         gui-dev gui-build gui-install gui-clean \
-        ppt-serve ppt-stop
+        ppt-serve ppt-stop ppt-build ppt-render ppt-deps ppt-clean
 
 # ============================================
 # 帮助信息
@@ -432,3 +432,50 @@ ppt-stop: ## 停止 PPT 本地服务
 	else \
 		echo "ℹ️ 端口 $(PPT_PORT) 未在运行"; \
 	fi
+
+# ============================================
+# PPT 一键导出 .pptx（图片版 · 与 HTML 视觉 100% 一致 + 内嵌逐字稿）
+# ============================================
+PPT_DECK_DIR  := presentation/ppt
+PPT_SCRIPT_DIR := $(PPT_DECK_DIR)/scripts
+PPT_VENV      := $(PPT_SCRIPT_DIR)/.venv
+PPT_PY        := $(PPT_VENV)/bin/python3
+PPT_OUT       := $(PPT_DECK_DIR)/jcli-thesis.pptx
+
+ppt-deps: ## 安装 PPT 导出依赖（puppeteer + python-pptx，幂等）
+	@echo "📦 检查 PPT 导出依赖..."
+	@if [ ! -d "$(PPT_SCRIPT_DIR)/node_modules/puppeteer" ]; then \
+		echo "  安装 puppeteer..."; \
+		cd $(PPT_SCRIPT_DIR) && npm install --silent; \
+	else \
+		echo "  ✓ puppeteer 已安装"; \
+	fi
+	@if [ ! -x "$(PPT_PY)" ]; then \
+		echo "  创建 venv..."; \
+		python3 -m venv $(PPT_VENV); \
+	fi
+	@if ! $(PPT_PY) -c "import pptx, bs4" 2>/dev/null; then \
+		echo "  安装 python-pptx + beautifulsoup4..."; \
+		$(PPT_VENV)/bin/pip install --quiet python-pptx beautifulsoup4 lxml Pillow; \
+	else \
+		echo "  ✓ python-pptx 已安装"; \
+	fi
+	@echo "☑️ 依赖就绪"
+
+ppt-render: ppt-deps ## 渲染 HTML 每页为高清 PNG（2560×1440）
+	@echo "🖼️ 渲染 HTML → PNG..."
+	@cd $(PPT_SCRIPT_DIR) && node render-png.mjs
+
+ppt-build: ppt-render ## 一键导出 .pptx（图片版 + 逐字稿）
+	@echo "📑 打包 PNG → pptx..."
+	@$(PPT_PY) $(PPT_SCRIPT_DIR)/png-to-pptx.py
+	@echo ""
+	@echo "✅ 完成！文件: $(PPT_OUT)"
+	@du -h $(PPT_OUT) | awk '{print "   大小: "$$1}'
+	@open $(PPT_OUT) 2>/dev/null || true
+
+ppt-clean: ## 清理 PPT 导出产物
+	@echo "🧹 清理 PPT 导出产物..."
+	@rm -rf $(PPT_DECK_DIR)/ppt-png
+	@rm -f $(PPT_OUT)
+	@echo "☑️ 已清理 ppt-png/ 与 $(notdir $(PPT_OUT))"

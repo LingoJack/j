@@ -1,0 +1,14 @@
+{
+  "name": "jcli-ppt-build",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build scripts: render j-cli HTML deck to .pptx",
+  "type": "module",
+  "scripts": {
+    "render": "node render-png.mjs",
+    "build": "node render-png.mjs && python3 png-to-pptx.py"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  }
+}
