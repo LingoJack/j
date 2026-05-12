@@ -37,9 +37,7 @@
   <!-- ============ 1.5 PROJECT INTRO ============ -->
   <section class="slide" data-title="项目">
     <div class="title-bar">
-      <span class="sec-tag">§01 项目与背景</span>
-      <h2>项目：<span class="accent">jcli</span> · AI 终端工作站</h2>
-      <span class="sub">先看看做出了什么</span>
+      <h2>01 · 项目与背景 — jcli · AI 终端工作站
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -109,7 +107,7 @@
   <!-- ============ 2. AGENDA ============ -->
   <section class="slide" data-title="Agenda">
     <div class="title-bar">
-      <h2>今天要讲的 6 个部分</h2>
+      <h2>01 · 项目与背景 — 今天要讲的 6 个部分
     </div>
     <div class="stack mt-l">
       <!-- 这个是我敲定的大纲，不要改 -->
@@ -134,7 +132,7 @@
   <!-- ============ 3. BACKGROUND: ChatBot vs Agent ============ -->
   <section class="slide" data-title="ChatBot vs Agent">
     <div class="title-bar">
-      <h2>从 ChatBot 到 Agent：<br><span class="accent">谁在承担上下文成本？</span></h2>
+      <h2>01 · 项目与背景 — 从 ChatBot 到 Agent：谁在承担上下文成本？
     </div>
     <div class="vs mt-l">
       <div class="card bad-side side">
@@ -171,7 +169,7 @@
   <!-- ============ 4.1 ReAct: 概念 ============ -->
   <section class="slide" data-title="ReAct · concept">
     <div class="title-bar">
-      <h2>Agent 的心脏：Thought → Action → Observation</h2>
+      <h2>01 · 项目与背景 — Agent 的心脏：Thought → Action → Observation
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -232,7 +230,7 @@
   <!-- ============ 4.2 ReAct frame 1: 用户提问 ============ -->
   <section class="slide" data-title="ReAct · user">
     <div class="title-bar">
-      <h2>第一帧：用户发起一个开放性问题</h2>
+      <h2>01 · 项目与背景 — 用户发起开放性问题
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -282,7 +280,7 @@
   <!-- ============ 4.3 ReAct frame 2: Agent Thought + Bash ============ -->
   <section class="slide" data-title="ReAct · action">
     <div class="title-bar">
-      <h2>第二帧：Agent 思考后调出第一个工具</h2>
+      <h2>01 · 项目与背景 — Agent 思考后调出工具
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -341,7 +339,7 @@
   <!-- ============ 4.4 ReAct frame 3: Bash 结果 ============ -->
   <section class="slide" data-title="ReAct · observation">
     <div class="title-bar">
-      <h2>第三帧：运行时执行 → 结果回灌窗口</h2>
+      <h2>01 · 项目与背景 — 执行结果回灌窗口
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -410,7 +408,7 @@ hook.rs         storage.rs
   <!-- ============ 4.5 ReAct frame 4: 下一轮 Read ============ -->
   <section class="slide" data-title="ReAct · next round">
     <div class="title-bar">
-      <h2>第四帧：进入下一轮 —— Read 关键源文件</h2>
+      <h2>01 · 项目与背景 — 多轮迭代读取源文件
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -481,7 +479,7 @@ hook.rs         storage.rs
   <!-- ============ 4.6 ReAct frame 5: 总结 ============ -->
   <section class="slide" data-title="ReAct · summary">
     <div class="title-bar">
-      <h2>第五帧：信息够了，Agent 给出结论</h2>
+      <h2>01 · 项目与背景 — Agent 给出结论
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -539,7 +537,7 @@ hook.rs         storage.rs
   <!-- ============ 4. CORE: Context Window ============ -->
   <section class="slide" data-title="Context Window Challenge">
     <div class="title-bar">
-      <h2>第二章 · 起点：<span class="accent">上下文窗口是稀缺资源</span></h2>
+      <h2>02 · 上下文窗口与压缩 — 上下文窗口是稀缺资源
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -638,7 +636,7 @@ hook.rs         storage.rs
   <!-- ============ 4.5. WINDOW EVOLUTION ============ -->
   <section class="slide" data-title="Window Evolution">
     <div class="title-bar">
-      <h2>不治理会怎样？<span class="accent">窗口爆炸</span>实录</h2>
+      <h2>02 · 上下文窗口与压缩 — 不治理会怎样？窗口爆炸实录
     </div>
     <p class="dim mt-s">一个真实的 Agent 任务，五轮工具调用之后……</p>
     <div class="cw-evolution">
@@ -690,7 +688,7 @@ hook.rs         storage.rs
   <!-- ============ 5. Compaction System ============ -->
   <section class="slide" data-title="Compaction System">
     <div class="title-bar">
-      <h2>多级压缩：<span class="accent">micro</span> 与 <span class="accent">auto</span></h2>
+      <h2>02 · 上下文窗口与压缩 — 多级压缩：micro 与 auto
     </div>
     <div class="stack mt-l">
       <div class="rule-row">
@@ -727,7 +725,7 @@ hook.rs         storage.rs
   <!-- ============ 5.5. PRIORITY FUNNEL ============ -->
   <section class="slide" data-title="Priority Funnel">
     <div class="title-bar">
-      <h2>滚动窗口：<span class="accent">把上下文当作推荐系统</span></h2>
+      <h2>02 · 上下文窗口与压缩 — 滚动窗口：把上下文当作推荐系统
     </div>
     <p class="lede mt-s" style="font-size:15px">窗口空间 = 推荐位；候选消息 = 物料；价值评分 = CTR 预估</p>
     <div class="priority-funnel mt-m">
@@ -779,7 +777,7 @@ hook.rs         storage.rs
   <!-- ============ 6. Dynamic System Prompt ============ -->
   <section class="slide" data-title="Dynamic System Prompt">
     <div class="title-bar">
-      <h2>动态 System Prompt：<br><span class="accent">尾部追加</span>的状态感知</h2>
+      <h2>02 · 上下文窗口与压缩 — 动态 System Prompt：尾部追加的状态感知
     </div>
     <div class="arch mt-m">
       <div class="tier"><div class="tname">静态基础</div>
@@ -808,7 +806,7 @@ hook.rs         storage.rs
   <!-- ============ 7. TOOL SYSTEM OVERVIEW ============ -->
   <section class="slide" data-title="Tool System">
     <div class="title-bar">
-      <h2>工具体系：<span class="accent">渐进增强</span>的设计哲学</h2>
+      <h2>03 · 面向场景强化的工具 — 渐进增强的设计哲学
     </div>
     <div class="arch mt-m">
       <div class="tier"><div class="tname">基础层</div>
@@ -844,7 +842,7 @@ hook.rs         storage.rs
   <!-- ============ 8. TOOL: Grep + Ask ============ -->
   <section class="slide" data-title="Grep & Ask">
     <div class="title-bar">
-      <h2>为什么需要 <span class="accent">Grep</span> 和 <span class="accent">Ask</span>？</h2>
+      <h2>03 · 面向场景强化的工具 — 为什么需要 Grep 和 Ask？
     </div>
     <div class="grid g2 mt-l">
       <div class="card card-accent">
@@ -873,7 +871,7 @@ hook.rs         storage.rs
   <!-- ============ 9. TOOL: Plan + Edit ============ -->
   <section class="slide" data-title="Plan & Edit">
     <div class="title-bar">
-      <h2>Plan + Edit：<span class="accent">想清楚再动手</span></h2>
+      <h2>03 · 面向场景强化的工具 — Plan + Edit：想清楚再动手
     </div>
     <div class="stack mt-l">
       <div class="rule-row">
@@ -904,7 +902,7 @@ hook.rs         storage.rs
   <!-- ============ 9.5. PLAN WORKFLOW ============ -->
   <section class="slide" data-title="Plan · concept">
     <div class="title-bar">
-      <h2>Plan 工作流：先调研，写计划，<span class="accent">清空，再执行</span></h2>
+      <h2>03 · 面向场景强化的工具 — Plan 工作流全貌
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -965,7 +963,7 @@ hook.rs         storage.rs
 
   <section class="slide" data-title="Plan · research">
     <div class="title-bar">
-      <h2>第一阶段：进入 Plan 模式，<span class="accent">只读调研</span></h2>
+      <h2>03 · 面向场景强化的工具 — Plan 模式只读调研
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1023,7 +1021,7 @@ hook.rs         storage.rs
 
   <section class="slide" data-title="Plan · approve">
     <div class="title-bar">
-      <h2>第二阶段：输出 plan.md，<span class="accent">用户审批</span></h2>
+      <h2>03 · 面向场景强化的工具 — 输出计划并审批
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1060,7 +1058,7 @@ hook.rs         storage.rs
 
   <section class="slide" data-title="Plan · execute">
     <div class="title-bar">
-      <h2>第三阶段：<span class="accent">清空窗口</span>，只留 plan.md，开干</h2>
+      <h2>03 · 面向场景强化的工具 — 清空窗口按计划执行
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1122,8 +1120,7 @@ hook.rs         storage.rs
   <!-- ============ 10a. 执行三态 · 概念 ============ -->
   <section class="slide" data-title="执行三态 · concept">
     <div class="title-bar">
-      <h2>执行模型的<span class="accent">三种形态</span></h2>
-      <span class="sub">同步 · 异步 · 交互 —— 由运行时智能流转</span>
+      <h2>03 · 面向场景强化的工具 — 执行三态概览
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1214,8 +1211,7 @@ hook.rs         storage.rs
   <!-- ============ 10b. 执行三态 · 实现 ============ -->
   <section class="slide" data-title="执行三态 · impl">
     <div class="title-bar">
-      <h2>执行三态 · <span class="accent">真实代码</span></h2>
-      <span class="sub">adopt_process 自动升级 + PTY Session 启动</span>
+      <h2>03 · 面向场景强化的工具 — 执行三态实现
     </div>
     <div class="split s46">
       <div class="col-text">
@@ -1291,7 +1287,7 @@ hook.rs         storage.rs
   <!-- ============ 12.5. TODOWRITE + SYSTEM REMINDER ============ -->
   <section class="slide" data-title="TodoWrite Reminder">
     <div class="title-bar">
-      <h2>TodoWrite + <span class="accent">&lt;system_reminder&gt;</span>：防遗忘机制</h2>
+      <h2>03 · 面向场景强化的工具 — 防遗忘机制
     </div>
     <div class="grid g2 mt-l">
       <div>
@@ -1335,7 +1331,7 @@ hook.rs         storage.rs
   <!-- ============ 12.7. HOOK SYSTEM EVENTS ============ -->
   <section class="slide" data-title="Hook System Events">
     <div class="title-bar">
-      <h2>Hook 系统：<span class="accent">14 个事件钩子</span>覆盖 Agent 生命周期</h2>
+      <h2>03 · 面向场景强化的工具 — Hook 系统：14 个事件钩子覆盖 Agent 生命周期
     </div>
     <p class="dim mt-s" style="font-size:14px">每个事件可挂载 Shell / Prompt 类型的 Hook —— 用作<strong>回归测试 + 工程规范 + 变更沉淀</strong></p>
     <div class="hook-timeline">
@@ -1392,7 +1388,7 @@ hook.rs         storage.rs
   <!-- ============ 11. MULTI-AGENT COLLABORATION ============ -->
   <section class="slide" data-title="Multi-Agent Collaboration">
     <div class="title-bar">
-      <h2>多 Agent 协作：<br><span class="accent">聊天室 + 客观评估</span></h2>
+      <h2>04 · 多 Agent 协作试验 — 聊天室与客观评估
     </div>
     <div class="grid g2 mt-l">
       <div>
@@ -1416,7 +1412,7 @@ hook.rs         storage.rs
   <!-- ============ 11.5. TWO-STAGED COMMIT ============ -->
   <section class="slide" data-title="Two-Staged Commit">
     <div class="title-bar">
-      <h2>Two-Staged Commit：<br><span class="accent">消除 Agent Loop 长时序的重复消息</span></h2>
+      <h2>04 · 多 Agent 协作试验 — Two-Staged Commit：消除重复消息
     </div>
     <div class="grid g2 mt-m">
       <div>
@@ -1460,7 +1456,7 @@ hook.rs         storage.rs
   <!-- ============ 11.7. EXPERIMENT 01 — 轮流报数 ============ -->
   <section class="slide" data-title="Exp1 · 轮流报数">
     <div class="title-bar">
-      <h2>实验 ①：<span class="accent">轮流报数</span> · 消息传递与唤醒</h2>
+      <h2>04 · 多 Agent 协作试验 — 轮流报数
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1496,7 +1492,7 @@ hook.rs         storage.rs
   <!-- ============ 11.7b. EXPERIMENT 02 — 续写接龙 ============ -->
   <section class="slide" data-title="Exp2 · 续写接龙">
     <div class="title-bar">
-      <h2>实验 ②：<span class="accent">续写接龙</span> · 共享上下文一致性</h2>
+      <h2>04 · 多 Agent 协作试验 — 续写接龙
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1531,7 +1527,7 @@ hook.rs         storage.rs
   <!-- ============ 11.7c. EXPERIMENT 03 — 开发-测试协作 ============ -->
   <section class="slide" data-title="Exp3 · 协作开发">
     <div class="title-bar">
-      <h2>实验 ③：<span class="accent">开发—测试协作</span> · 工程闭环</h2>
+      <h2>04 · 多 Agent 协作试验 — 开发-测试协作
     </div>
     <div class="split s46">
       <div class="col-text">
@@ -1570,7 +1566,7 @@ hook.rs         storage.rs
   <!-- ============ 11.8. SUBAGENT DELEGATION ============ -->
   <section class="slide" data-title="SubAgent Delegation">
     <div class="title-bar">
-      <h2>SubAgent：<span class="accent">低上下文成本</span>的调研委派</h2>
+      <h2>04 · 多 Agent 协作试验 — SubAgent：低上下文成本的调研委派
     </div>
     <div class="subtree mt-m">
       <div class="root">
@@ -1622,7 +1618,7 @@ hook.rs         storage.rs
   <!-- ============ §5.1 模板代码生成引擎：为什么需要它 ============ -->
   <section class="slide" data-title="Template Engine · why">
     <div class="title-bar">
-      <h2>模板代码生成引擎：<span class="accent">把确定性还给确定的代码</span></h2>
+      <h2>05 · 模板代码生成引擎 — 把确定性还给确定的代码
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1694,7 +1690,7 @@ hook.rs         storage.rs
   <!-- ============ §5.2 jen 架构 ============ -->
   <section class="slide" data-title="jen Architecture">
     <div class="title-bar">
-      <h2>jen 架构：<span class="accent">SQL → 结构化模型 → 多层模板</span></h2>
+      <h2>05 · 模板代码生成引擎 — jen 架构
     </div>
     <div class="jen-arch mt-m">
       <div class="ja-stage">
@@ -1751,8 +1747,7 @@ hook.rs         storage.rs
   <!-- ============ §5.3 jen 实测对比 ============ -->
   <section class="slide" data-title="jen Benchmark">
     <div class="title-bar">
-      <h2>jen 实测对比：<span class="accent">51 张表 DAO 全生成</span></h2>
-      <span class="sub">论文表 7-8 / 7-9</span>
+      <h2>05 · 模板代码生成引擎 — jen 实测对比
     </div>
     <div class="jen-bench">
       <table class="bench-table">
@@ -1795,7 +1790,7 @@ hook.rs         storage.rs
   <!-- ============ §5.4 webapp-gen 完整工作流 ============ -->
   <section class="slide" data-title="webapp-gen Flow">
     <div class="title-bar">
-      <h2>webapp-gen：<span class="accent">脚手架 + 原型驱动</span>的全栈工作流</h2>
+      <h2>05 · 模板代码生成引擎 — webapp-gen 全栈工作流
     </div>
     <div class="webapp-pipe mt-m">
       <div class="wp-row">
@@ -1890,7 +1885,7 @@ hook.rs         storage.rs
   <!-- ============ 13.9. REPO GALLERY ============ -->
   <section class="slide" data-title="Repo Gallery">
     <div class="title-bar">
-      <h2>项目仓库与<span class="accent">交付制品</span></h2>
+      <h2>06 · 总结与展望 — 项目仓库与交付制品
     </div>
     <div class="repo-grid">
       <div class="repo-card">
@@ -1932,7 +1927,7 @@ hook.rs         storage.rs
   <!-- ============ 14. SUMMARY ============ -->
   <section class="slide" data-title="Summary">
     <div class="title-bar">
-      <h2>总结：<span class="accent">四大贡献</span></h2>
+      <h2>06 · 总结与展望 — 四大贡献
     </div>
     <div class="grid g4 mt-l" style="gap:14px">
       <div class="card card-accent card-hover">
