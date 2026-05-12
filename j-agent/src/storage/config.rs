@@ -209,6 +209,9 @@ pub struct AgentConfig {
     /// 思考指示器动画风格
     #[serde(default)]
     pub thinking_style: ThinkingStyle,
+    /// 欢迎界面是否显示诗句
+    #[serde(default = "default_true")]
+    pub welcome_quote: bool,
 }
 
 fn default_max_history_messages() -> usize {
@@ -258,6 +261,7 @@ impl Default for AgentConfig {
             auto_restore_session: false,
             flat_bubble: true,
             thinking_style: ThinkingStyle::default(),
+            welcome_quote: true,
         }
     }
 }

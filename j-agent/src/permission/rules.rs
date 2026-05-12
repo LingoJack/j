@@ -69,8 +69,7 @@ impl JcliConfig {
             let _ = std::fs::create_dir_all(&example_dir);
             let example_yaml = example_dir.join("HOOK.yaml.example");
             if !example_yaml.exists() {
-                const HOOK_YAML_EXAMPLE: &str =
-                    include_str!("../../../assets/hook_yaml_example.yaml");
+                const HOOK_YAML_EXAMPLE: &str = include_str!("../../assets/hook_yaml_example.yaml");
                 let _ = std::fs::write(&example_yaml, HOOK_YAML_EXAMPLE);
             }
         }

@@ -228,8 +228,156 @@ pub fn global_theme_row<'a>(name: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
 /// 渐变色从 Theme.welcome_gradient_start/mid/end 读取，
 /// 并基于 quote_idx 做正弦偏移产生变体，保证每次启动略有不同
 /// 但不偏离主题基调。
-pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<'a>> {
+pub fn welcome_box<'a>(
+    width: u16,
+    theme: &Theme,
+    quote_idx: usize,
+    show_quote: bool,
+) -> Vec<Line<'a>> {
     use unicode_width::UnicodeWidthStr;
+
+    // ── 关闭诗句时显示 J-CLI ASCII Art 欢迎框 ──
+    if !show_quote {
+        let inner = ((width as usize) / 2).clamp(30, 55);
+        let box_w = inner + 2;
+        let total_w = width as usize;
+        let left_pad = if total_w > box_w {
+            (total_w - box_w) / 2
+        } else {
+            0
+        };
+        let pad: String = " ".repeat(left_pad);
+        let border_style = Style::default().fg(theme.welcome_border);
+
+        // ── 渐变色 ──
+        use super::palette;
+        let triple = palette::get_gradient(theme.welcome_palette, quote_idx);
+        let (start_c, mid_c, end_c) = triple;
+
+        // ── 顶部边框：嵌入 ◈ 装饰符 ──
+        let ornament = " ◈ ";
+        let orn_w = UnicodeWidthStr::width(ornament);
+        let bar_sides = inner.saturating_sub(orn_w);
+        let left_h = bar_sides / 2;
+        let right_h = bar_sides - left_h;
+        let h_bar_top = format!(
+            "\u{256d}{}{}{}\u{256e}",
+            "\u{2500}".repeat(left_h),
+            ornament,
+            "\u{2500}".repeat(right_h),
+        );
+        let h_bar_bot = format!("\u{2570}{}\u{256f}", "\u{2500}".repeat(inner));
+        let empty_row = format!("\u{2502}{}\u{2502}", " ".repeat(inner));
+
+        // ── J-CLI ASCII Art（6行，与启动页一致） ──
+        let art_lines: &[&str] = &[
+            "                        ██╗        ██████╗ ██╗      ██╗",
+            "                        ██║       ██╔════╝ ██║      ██║",
+            "                        ██║ █████╗██║      ██║      ██║",
+            "                    ██  ██║ ╚════╝██║      ██║      ██║",
+            "                    ╚█████╔╝      ╚██████╗ ███████╗ ██║",
+            "                      ╚════╝        ╚═════╝ ╚══════╝ ╚═╝",
+        ];
+
+        // 保留各行间相对缩进：减去最小前导空格数
+        let min_leading = art_lines
+            .iter()
+            .map(|l| l.len() - l.trim_start().len())
+            .min()
+            .unwrap_or(0);
+        let trimmed: Vec<String> = art_lines
+            .iter()
+            .map(|l| {
+                if l.len() > min_leading {
+                    &l[min_leading..]
+                } else {
+                    l
+                }
+                .to_string()
+            })
+            .collect();
+        let art_max_w = trimmed
+            .iter()
+            .map(|l| UnicodeWidthStr::width(l.as_str()))
+            .max()
+            .unwrap_or(0);
+        let content_area = inner.saturating_sub(2);
+        let block_pl = if content_area > art_max_w {
+            (content_area - art_max_w) / 2 + 1
+        } else {
+            1
+        };
+
+        let make_art_line = |line: &str| -> Line<'a> {
+            let line_w = UnicodeWidthStr::width(line);
+            let (display_line, display_w) = if line_w > content_area {
+                let mut w = 0usize;
+                let chars: Vec<char> = line
+                    .chars()
+                    .take_while(|c| {
+                        w += UnicodeWidthStr::width(c.to_string().as_str());
+                        w <= content_area
+                    })
+                    .collect();
+                (chars.into_iter().collect::<String>(), w)
+            } else {
+                (line.to_string(), line_w)
+            };
+            let pr = inner.saturating_sub(display_w + block_pl);
+
+            // 对 art 内容逐字符渐变着色
+            let chars: Vec<char> = display_line.chars().collect();
+            let total_n = chars.len().max(2);
+            let mut spans: Vec<Span<'a>> = vec![Span::styled(
+                format!("{}\u{2502}{}", pad, " ".repeat(block_pl)),
+                border_style,
+            )];
+
+            for (i, &ch) in chars.iter().enumerate() {
+                let t = i as f32 / (total_n - 1) as f32;
+                let (from, to, local_t) = if t <= 0.5 {
+                    (start_c, mid_c, t * 2.0)
+                } else {
+                    (mid_c, end_c, (t - 0.5) * 2.0)
+                };
+                let r = (from.0 as f32 * (1.0 - local_t) + to.0 as f32 * local_t).round() as u8;
+                let g = (from.1 as f32 * (1.0 - local_t) + to.1 as f32 * local_t).round() as u8;
+                let b = (from.2 as f32 * (1.0 - local_t) + to.2 as f32 * local_t).round() as u8;
+                spans.push(Span::styled(
+                    ch.to_string(),
+                    Style::default().fg(ratatui::style::Color::Rgb(r, g, b)),
+                ));
+            }
+
+            spans.push(Span::styled(
+                format!("{}\u{2502}", " ".repeat(pr)),
+                border_style,
+            ));
+            Line::from(spans)
+        };
+
+        let mut result: Vec<Line<'a>> = vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(Span::styled(format!("{pad}{h_bar_top}"), border_style)),
+            Line::from(Span::styled(format!("{pad}{empty_row}"), border_style)),
+        ];
+
+        for art_line in &trimmed {
+            result.push(make_art_line(art_line));
+        }
+
+        result.push(Line::from(Span::styled(
+            format!("{pad}{empty_row}"),
+            border_style,
+        )));
+        result.push(Line::from(Span::styled(
+            format!("{pad}{h_bar_bot}"),
+            border_style,
+        )));
+
+        return result;
+    }
 
     // 框体内部宽度：取终端内宽的一半，最少 30，最多 55
     let inner = ((width as usize) / 2).clamp(30, 55);

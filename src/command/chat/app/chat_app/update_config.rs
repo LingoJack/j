@@ -121,6 +121,17 @@ impl ChatApp {
                         self.ui.msg_lines_cache = None;
                         return;
                     }
+                    if field == "welcome_quote" {
+                        self.state.agent_config.welcome_quote =
+                            !self.state.agent_config.welcome_quote;
+                        let status = if self.state.agent_config.welcome_quote {
+                            "开启"
+                        } else {
+                            "关闭"
+                        };
+                        self.show_toast(format!("欢迎诗句已{}", status), false);
+                        return;
+                    }
                     if field == "thinking_style" {
                         let next = self.state.agent_config.thinking_style.next();
                         self.state.agent_config.thinking_style = next;

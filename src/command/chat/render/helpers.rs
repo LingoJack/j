@@ -132,6 +132,8 @@ pub fn config_field_label_global(idx: usize) -> &'static str {
         "tool_confirm_timeout" => "确认超时",
         "auto_restore_session" => "自动恢复会话",
         "thinking_style" => "思考动画",
+        "flat_bubble" => "气泡背景",
+        "welcome_quote" => "欢迎诗句",
         "compact_enabled" => "上下文压缩",
         "compact_token_threshold" => "压缩阈值(K)",
         "compact_keep_recent" => "保留最近轮数",
@@ -156,6 +158,7 @@ pub fn config_field_desc_global(idx: usize) -> &'static str {
         "tool_confirm_timeout" => "工具确认等待秒数，0=关闭自动确认",
         "auto_restore_session" => "启动时自动恢复上次会话",
         "flat_bubble" => "开启后气泡背景色与主背景色一致",
+        "welcome_quote" => "欢迎界面显示诗句引言",
         "thinking_style" => "AI 思考时的加载动画风格",
         "compact_enabled" => "开启后自动压缩过长的上下文",
         "compact_token_threshold" => "上下文 Token 数超过此值时触发压缩(K)，0=使用默认值",
@@ -348,6 +351,12 @@ pub fn config_field_set_global(app: &mut ChatApp, idx: usize, value: &str) {
                 "true" | "1" | "开启" | "on" | "yes"
             );
             app.ui.msg_lines_cache = None;
+        }
+        "welcome_quote" => {
+            app.state.agent_config.welcome_quote = matches!(
+                value.trim().to_lowercase().as_str(),
+                "true" | "1" | "开启" | "on" | "yes"
+            );
         }
         "thinking_style" => {
             app.state.agent_config.thinking_style =

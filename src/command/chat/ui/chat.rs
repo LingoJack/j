@@ -659,7 +659,12 @@ pub fn draw_messages(f: &mut ratatui::Frame, area: Rect, app: &mut ChatApp) {
     };
     if is_empty && !app.state.is_loading {
         let inner_width = area.width.saturating_sub(4);
-        let welcome_lines = super::components::welcome_box(inner_width, t, app.ui.quote_idx);
+        let welcome_lines = super::components::welcome_box(
+            inner_width,
+            t,
+            app.ui.quote_idx,
+            app.state.agent_config.welcome_quote,
+        );
         let empty = Paragraph::new(welcome_lines).block(block);
         f.render_widget(empty, area);
         return;

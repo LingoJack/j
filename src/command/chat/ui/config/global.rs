@@ -30,8 +30,8 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
         (0, 3),  // system_prompt, agent_md, style
         (3, 2),  // max_history_messages, max_context_tokens
         (5, 2),  // max_tool_rounds, tool_confirm_timeout
-        (7, 4),  // theme, auto_restore_session, thinking_style, flat_bubble
-        (11, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
+        (7, 5),  // theme, auto_restore_session, thinking_style, flat_bubble, welcome_quote
+        (12, 4), // compact_enabled, compact_token_threshold, compact_keep_recent, compact_exempt_tools
     ];
 
     for (gi, &(start, count)) in groups.iter().enumerate() {
@@ -65,6 +65,7 @@ pub(super) fn draw_tab_global_lines<'a>(app: &ChatApp) -> ItemList<'a> {
                     global_toggle_row(app.state.agent_config.auto_restore_session, &ctx)
                 }
                 "flat_bubble" => global_toggle_row(app.state.agent_config.flat_bubble, &ctx),
+                "welcome_quote" => global_toggle_row(app.state.agent_config.welcome_quote, &ctx),
                 "compact_enabled" => {
                     global_toggle_row(app.state.agent_config.compact.enabled, &ctx)
                 }
