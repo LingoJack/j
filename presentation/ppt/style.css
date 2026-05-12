@@ -864,6 +864,44 @@ code{
 .mini-table td.lvl-h{color:var(--accent);font-weight:600}
 .mini-table td.lvl-l{color:var(--text-3)}
 
+/* 章节分隔页 */
+.slide.sec-divider{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:80px 100px !important;
+}
+.sec-divider .sec-num{
+  font-family:var(--font-mono);
+  font-size:64px;
+  font-weight:700;
+  color:var(--accent);
+  line-height:1;
+  letter-spacing:-0.02em;
+  opacity:.18;
+}
+.sec-divider .sec-title{
+  font-size:36px;
+  font-weight:600;
+  color:var(--text-1);
+  margin-top:12px;
+  line-height:1.3;
+}
+.sec-divider .sec-sub{
+  font-size:15px;
+  color:var(--text-3);
+  margin-top:8px;
+  font-family:var(--font-mono);
+  letter-spacing:.04em;
+}
+.sec-divider .sec-line{
+  width:48px;
+  height:3px;
+  background:var(--accent);
+  border-radius:2px;
+  margin-top:18px;
+}
+
 /* deck-footer 收敛 */
 .deck-footer{display:none}
 .slide-number{color:var(--text-3)}
@@ -932,6 +970,23 @@ code{
   letter-spacing:.02em;
   flex-shrink:0;
   white-space:nowrap;
+}
+
+/* 章节标签：标题栏左侧的 §编号 + 章名 */
+.tpl-presenter-mode-reveal .title-bar .sec-tag{
+  flex-shrink:0;
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:#fff;
+  background:var(--accent);
+  padding:3px 10px;
+  border-radius:2px;
+  white-space:nowrap;
+  line-height:1.5;
+  margin-bottom:1px;
 }
 
 /* 左文右图：60/40, 50/50 两种 */
