@@ -596,6 +596,7 @@ code{
   color:var(--text-3);
   font-size:13px;
 }
+.deck-footer .mono{display:none}
 .slide-number{color:var(--text-3)}
 
 /* ============================================
