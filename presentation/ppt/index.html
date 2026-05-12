@@ -1146,88 +1146,63 @@ hook.rs         storage.rs
       <h2>执行三态 · <span class="accent">真实代码</span></h2>
       <span class="sub">adopt_process 自动升级 + PTY Session 启动</span>
     </div>
-    <div class="split s55">
+    <div class="split s46">
       <div class="col-text">
-        <h4>① 超时自动升级（adopt_process）</h4>
-        <p class="dim">同步 Bash 跑过 <code>SHELL_AUTO_BG_SECS</code>（30s）仍未结束：</p>
-        <ul>
-          <li>先检查<strong>静默检测</strong> —— 最近 <code>SHELL_INTERACTIVE_SILENCE_SECS</code> 无输出 → 疑似交互 → kill + 提示</li>
-          <li>非静默 → <span class="accent">不 kill</span>，调用 <code>adopt_process</code> 把当前进程 + reader 线程一起移交 BackgroundManager</li>
-          <li>立即返回 task_id，Agent 可以先去做别的事</li>
-          <li>后台监控线程等 reader 写完后调 <code>complete_task</code> 结束任务</li>
+        <h4 style="font-size:14px;margin-top:0">① 超时自动升级</h4>
+        <p class="dim" style="font-size:12px;line-height:1.55;margin:4px 0 6px">同步 Bash 跑过 <code>SHELL_AUTO_BG_SECS</code>（30s）仍未结束：</p>
+        <ul style="font-size:11.5px;line-height:1.6;margin:0;padding-left:18px">
+          <li>静默检测 — N 秒无输出 → 疑似交互 → kill + 提示</li>
+          <li>非静默 → <span class="accent">不 kill</span>，<code>adopt_process</code> 移交 BackgroundManager</li>
+          <li>立即返回 <code>task_id</code>，Agent 继续做别的事</li>
+          <li>后台监控线程等 reader 写完后调 <code>complete_task</code></li>
         </ul>
-        <h4 class="mt-m">② PTY 交互式会话（Session）</h4>
-        <p class="dim">用 <code>portable_pty</code> 分配伪终端：</p>
-        <ul>
-          <li><code>openpty</code> → <code>slave.spawn_command</code> 启动进程</li>
-          <li><code>master.try_clone_reader</code> → 供 Session stdout 读取</li>
-          <li><code>master.take_writer</code> → 通过 <code>set_pty_writer</code> 注册到 BgTask</li>
+        <h4 style="font-size:14px;margin-top:14px">② PTY 交互式会话</h4>
+        <p class="dim" style="font-size:12px;line-height:1.55;margin:4px 0 6px">用 <code>portable_pty</code> 分配伪终端：</p>
+        <ul style="font-size:11.5px;line-height:1.6;margin:0;padding-left:18px">
+          <li><code>openpty</code> → <code>spawn_command</code> 启动进程</li>
+          <li><code>try_clone_reader</code> → Session stdout</li>
+          <li><code>take_writer</code> → <code>set_pty_writer</code> 注册到 BgTask</li>
           <li>Session 工具的 <code>stdin/stdout/quit</code> 直接操作 PTY 句柄</li>
-          <li>quit = drop writer → 进程收到 SIGHUP 自然退出</li>
+          <li>quit = drop writer → SIGHUP 自然退出</li>
         </ul>
       </div>
       <div class="col-visual">
-        <div class="code-card">
+        <div class="code-card" style="margin-top:0">
           <div class="cc-head">
-            <span><span class="cc-path">j-agent/src/tools/shell.rs</span> · execute_sync 自动升级</span>
+            <span><span class="cc-path">shell.rs</span> · execute_sync 自动升级</span>
             <span class="cc-tag">real code</span>
           </div>
-<pre><span class="cm">// 超过阈值仍未结束，不 kill 进程，移交后台</span>
+<pre style="font-size:9px;line-height:1.35;padding:5px 8px"><span class="cm">// 超过阈值仍未结束，不 kill，移交后台</span>
 <span class="kw">if</span> start.elapsed() &gt;= auto_bg_threshold {
-    <span class="cm">// 静默判交互：若最近 N 秒无任何输出，判定疑似在等 stdin</span>
-    <span class="kw">let</span> silence_elapsed = last_write_at
-        .<span class="fn">lock</span>().<span class="fn">map</span>(|ts| ts.<span class="fn">elapsed</span>())
-        .<span class="fn">unwrap_or</span>(Duration::ZERO);
-
-    <span class="kw">if</span> silence_elapsed &gt;= Duration::<span class="fn">from_secs</span>(SHELL_INTERACTIVE_SILENCE_SECS) {
-        <span class="kw">let</span> _ = child.<span class="fn">kill</span>();  <span class="cm">// 疑似交互 → kill + 提示加 --yes</span>
+    <span class="cm">// 静默判交互：最近 N 秒无输出 → 等 stdin</span>
+    <span class="kw">if</span> silence_elapsed &gt;= Duration::<span class="fn">from_secs</span>(SILENCE) {
+        <span class="kw">let</span> _ = child.<span class="fn">kill</span>();  <span class="cm">// 提示加 --yes</span>
         <span class="kw">return</span> ToolResult { output: hint, is_error: <span class="kw">true</span>, .. };
     }
-
     <span class="cm">// 真正升级：adopt 当前进程，立即返回 task_id</span>
     <span class="kw">let</span> (task_id, bg_buffer) =
         <span class="hl">self.manager.<span class="fn">adopt_process</span>(command, pid, start)</span>;
-
-    <span class="cm">// 把当前已缓冲内容复制到 bg_buffer</span>
-    <span class="kw">let</span> current_output = output_buffer.<span class="fn">lock</span>()..<span class="fn">clone</span>();
-    <span class="kw">if</span> !current_output.<span class="fn">is_empty</span>() {
-        bg_buffer.<span class="fn">lock</span>()..<span class="fn">push_str</span>(&amp;current_output);
-    }
-
-    <span class="cm">// 后台监控线程：等 reader 写完 → complete_task</span>
+    <span class="cm">// 后台监控：等 reader 写完 → complete_task</span>
     std::thread::<span class="fn">spawn</span>(<span class="kw">move</span> || {
         <span class="kw">let</span> _ = stdout_thread.<span class="fn">join</span>();
-        <span class="kw">let</span> _ = stderr_thread.<span class="fn">join</span>();
-        manager.<span class="fn">complete_task</span>(&amp;tid, <span class="str">"completed"</span>, final_output);
+        manager.<span class="fn">complete_task</span>(&amp;tid, <span class="str">"completed"</span>, out);
     });
-
-    <span class="kw">return</span> ToolResult {
-        output: json!({ <span class="str">"task_id"</span>: task_id, <span class="str">"status"</span>: <span class="str">"running"</span> }),
-        ..
-    };
+    <span class="kw">return</span> ToolResult { output: json!({ <span class="str">"task_id"</span>: task_id }), .. };
 }</pre>
         </div>
 
         <div class="code-card">
           <div class="cc-head">
-            <span><span class="cc-path">j-agent/src/tools/shell.rs</span> · execute_interactive 起 PTY</span>
+            <span><span class="cc-path">shell.rs</span> · execute_interactive 起 PTY</span>
             <span class="cc-tag">real code</span>
           </div>
-<pre><span class="kw">let</span> pty_system = <span class="fn">NativePtySystem::default</span>();
-<span class="kw">let</span> pair = pty_system.<span class="fn">openpty</span>(PtySize {
-    rows: <span class="num">24</span>, cols: <span class="num">80</span>, pixel_width: <span class="num">0</span>, pixel_height: <span class="num">0</span>
-})?;
-
+<pre style="font-size:9px;line-height:1.35;padding:5px 8px"><span class="kw">let</span> pty = <span class="fn">NativePtySystem::default</span>();
+<span class="kw">let</span> pair = pty.<span class="fn">openpty</span>(PtySize { rows: <span class="num">24</span>, cols: <span class="num">80</span>, .. })?;
 <span class="kw">let</span> _child = pair.slave.<span class="fn">spawn_command</span>(builder)?;
-
-<span class="kw">let</span> reader = pair.master.<span class="fn">try_clone_reader</span>()?;   <span class="cm">// Session stdout</span>
-<span class="kw">let</span> writer = pair.master.<span class="fn">take_writer</span>()?;         <span class="cm">// Session stdin</span>
-<span class="hl">self.manager.<span class="fn">set_pty_writer</span>(&amp;task_id, writer)</span>;  <span class="cm">// 注册到 BgTask</span>
-
-<span class="cm">// 随后 Session 工具通过 sid 调用:</span>
-<span class="cm">//   session_stdin(sid, text)  → PTY writer.write_all</span>
-<span class="cm">//   session_stdout(sid, ms)   → 读 output_buffer 新增部分</span>
-<span class="cm">//   session_quit(sid)         → drop writer → SIGHUP</span></pre>
+<span class="kw">let</span> reader = pair.master.<span class="fn">try_clone_reader</span>()?;   <span class="cm">// stdout</span>
+<span class="kw">let</span> writer = pair.master.<span class="fn">take_writer</span>()?;         <span class="cm">// stdin</span>
+<span class="hl">self.manager.<span class="fn">set_pty_writer</span>(&amp;task_id, writer)</span>;
+<span class="cm">// Session 工具通过 sid 调 stdin / stdout / quit</span></pre>
         </div>
       </div>
     </div>
@@ -1364,7 +1339,10 @@ hook.rs         storage.rs
         <b>主 Agent</b>
         <span>context: 38%</span>
       </div>
-      <div class="conn"></div>
+      <div class="conn-bidir">
+        <span class="dir-down">↓ 派遣调研任务</span>
+        <span class="dir-up">↑ 仅回灌精简摘要 (~1.5K tokens)</span>
+      </div>
       <div class="branches">
         <div class="branch">
           <span class="tag">SubAgent A</span>
@@ -1386,7 +1364,7 @@ hook.rs         storage.rs
         </div>
       </div>
       <div class="summary">
-        ↑ 三份调研只回灌主 Agent <strong>三段精简摘要</strong> (~1.5K tokens)，主窗口仅微增 4%
+        三份调研合计 ~71K tokens 在 SubAgent 独立窗口里消耗，主 Agent 仅微增 <strong>4%</strong>
       </div>
     </div>
     <div class="deck-footer">

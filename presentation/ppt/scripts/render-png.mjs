@@ -33,18 +33,36 @@ async function main() {
   await page.evaluate(() => document.fonts.ready);
   await new Promise(r => setTimeout(r, 1000));
 
+  // Disable slide CSS transitions so screenshot reflects current state immediately
+  await page.addStyleTag({
+    content: `.deck > section.slide { transition: none !important; }`,
+  });
+
   const total = await page.evaluate(() =>
     document.querySelectorAll('.deck > section.slide').length
   );
   console.log(`Found ${total} slides, rendering each at ${W}x${H} (${SCALE}x DPI = ${W*SCALE}x${H*SCALE}px output)...`);
 
   for (let i = 1; i <= total; i++) {
-    // Use the runtime's hash-based deep link
+    // Directly toggle .is-active instead of relying on hash + runtime listener
+    // (hash-based dispatch has subtle timing issues during rapid switches)
     await page.evaluate((idx) => {
+      const slides = document.querySelectorAll('.deck > section.slide');
+      slides.forEach((s, j) => {
+        s.classList.toggle('is-active', j === idx - 1);
+        s.classList.remove('is-prev');
+      });
+      // Also update hash for runtime state consistency
       window.location.hash = '#/' + idx;
     }, i);
-    // Allow runtime to switch slides + animations to settle
-    await new Promise(r => setTimeout(r, 350));
+    // Wait for the target slide to be visibly active
+    await page.waitForFunction((idx) => {
+      const target = document.querySelectorAll('.deck > section.slide')[idx - 1];
+      return target && target.classList.contains('is-active') &&
+             getComputedStyle(target).opacity === '1';
+    }, { timeout: 5000 }, i);
+    // Small buffer for any image / font swap to settle
+    await new Promise(r => setTimeout(r, 100));
 
     const filename = `slide_${String(i).padStart(2, '0')}.png`;
     const outPath = path.join(OUT_DIR, filename);
