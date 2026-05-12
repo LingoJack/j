@@ -49,42 +49,53 @@
           <li><strong>待办备忘</strong> · Markdown checkbox · 长内容预览</li>
           <li><strong>脚本工作流</strong> · 工程化的 Skill / Hook</li>
         </ul>
-        <h4>本项目制品分别位于三个开源仓库</h4>
+        <h4>本项目制品分别位于四个开源仓库</h4>
         <ul class="repo-list">
           <li>
-            <span class="rl-label">jcli</span>
+            <span class="rl-label">JCLI 主项目</span>
             <span class="rl-url">github.com/LingoJack/jcli</span>
           </li>
           <li>
-            <span class="rl-label">model_infrax</span>
+            <span class="rl-label">模板代码引擎 model_infrax</span>
             <span class="rl-url">github.com/LingoJack/model_infrax</span>
           </li>
           <li>
-            <span class="rl-label">jcli github pages</span>
+            <span class="rl-label">生成效果演示</span>
+            <span class="rl-url">github.com/LingoJack/gradiation_artifact_demo</span>
+          </li>
+          <li>
+            <span class="rl-label">JCLI Github Pages</span>
             <span class="rl-url">lingojack.github.io/jcli</span>
           </li>
         </ul>
       </div>
       <div class="col-visual">
         <div class="stack-figs">
-          <a class="sf sf-2" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
-            <img src="pics/github-model-infrax.png" alt="model_infrax 仓库">
+          <a class="sf sf-1" href="https://lingojack.github.io/jcli/" target="_blank" rel="noopener">
+            <img src="pics/jcli-github-pages-introduce.png" alt="jcli 演示站点">
             <div class="caption">
-              <span class="name">model_infrax · jen 代码生成器</span>
-              <span class="url">github.com/LingoJack/model_infrax</span>
-            </div>
-          </a>
-          <a class="sf sf-3" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
-            <img src="pics/github-jcli.png" alt="jcli GitHub Pages 演示站点">
-            <div class="caption">
-              <span class="name">演示站点</span>
+              <span class="name">jcli · 在线演示站点</span>
               <span class="url">lingojack.github.io/jcli</span>
             </div>
           </a>
-          <a class="sf sf-1" href="https://lingojack.github.io/jcli/" target="_blank" rel="noopener">
-            <img src="pics/jcli-github-pages-introduce.png" alt="jcli GitHub 仓库">
+          <a class="sf sf-2" href="https://github.com/LingoJack/model_infrax" target="_blank" rel="noopener">
+            <img src="pics/github-model-infrax.png" alt="model_infrax 仓库">
             <div class="caption">
-              <span class="name">jcli · 主项目</span>
+              <span class="name">model_infrax · 模板代码引擎</span>
+              <span class="url">github.com/LingoJack/model_infrax</span>
+            </div>
+          </a>
+          <a class="sf sf-3" href="https://github.com/LingoJack/gradiation_artifact_demo" target="_blank" rel="noopener">
+            <img src="pics/jcli-demo.png" alt="效果演示仓库">
+            <div class="caption">
+              <span class="name">artifact_demo · 生成效果演示</span>
+              <span class="url">github.com/LingoJack/gradiation_artifact_demo</span>
+            </div>
+          </a>
+          <a class="sf sf-4" href="https://github.com/LingoJack/jcli" target="_blank" rel="noopener">
+            <img src="pics/github-jcli.png" alt="jcli 仓库">
+            <div class="caption">
+              <span class="name">jcli · 主项目仓库</span>
               <span class="url">github.com/LingoJack/jcli</span>
             </div>
           </a>
@@ -92,14 +103,14 @@
       </div>
     </div>
     <div class="deck-footer">
-      <span class="mono">jcli · model_infrax · pages</span>
+      <span class="mono">jcli · model_infrax · artifact_demo · pages</span>
       <span class="slide-number" data-current="2" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>先把项目长什么样给大家看一下，等会讲设计的时候才有具体的对象。</p>
       <p>这个项目叫 <strong>jcli</strong>，是一个用 Rust 写的命令行工作台。最核心的功能是右上那张图里的<strong>终端 Agent</strong>——多模型、流式输出、工具调用、权限确认，可以直接在仓库里读代码、改代码、跑命令。</p>
       <p>除了 Agent，它还有几个比较实用的工具：<strong>别名打开</strong>，注册一次之后 j chrome、j vscode 这些都直接可用；<strong>日报周报</strong>，配 git 自动同步；<strong>待办备忘</strong>，TUI 界面 + Markdown checkbox。</p>
-      <p>右边这三张叠起来的图是项目的三个仓库 + 演示站点，<strong>都是开源的</strong>。鼠标点上去能直接跳过去。</p>
+      <p>右边这几张叠起来的图是项目的仓库和演示站点，<strong>都是开源的</strong>。鼠标点上去能直接跳过去。</p>
       <p>下一页我会从最朴素的问题讲起：为什么要做 Agent，而不是直接用 ChatGPT。</p>
     </aside>
   </section>

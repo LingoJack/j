@@ -1251,7 +1251,7 @@ code{
   word-break:break-all;
 }
 
-/* 三张错位叠放 */
+/* 四张错位叠放 */
 .stack-figs .sf-1{
   top:0;
   left:0;
@@ -1269,6 +1269,12 @@ code{
   left:22%;
   transform:rotate(-1deg);
   z-index:3;
+}
+.stack-figs .sf-4{
+  top:22%;
+  left:8%;
+  transform:rotate(1.5deg);
+  z-index:4;
 }
 
 /* hover 抬起效果 */
