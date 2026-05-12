@@ -538,29 +538,99 @@ hook.rs         storage.rs
   <!-- ============ 4. CORE: Context Window ============ -->
   <section class="slide" data-title="Context Window Challenge">
     <div class="title-bar">
-      <h2>核心挑战：<span class="accent">上下文窗口有限</span></h2>
+      <h2>第二章 · 起点：<span class="accent">上下文窗口是稀缺资源</span></h2>
     </div>
-    <div class="grid g2 mt-l">
-      <div class="card card-accent">
-        <h4>Problem</h4>
-        <p class="dim">LLM 的上下文窗口有硬上限（如 128K tokens）。Agent 执行一次复杂任务可能涉及数十次工具调用，每次调用结果都会填充窗口。</p>
-        <p class="dim" style="margin-top:8px">窗口一旦满了，Agent 就会丢失早期关键信息，导致<strong>幻觉、重复操作、忘记目标</strong>。</p>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">LLM 的窗口是<span class="accent">物理硬上限</span>。一次复杂任务可能跑数十轮工具调用，每条结果都会<span class="accent">永久占用</span> token 直到 session 结束。</p>
+        <h4>三个症状 · 当窗口被填满</h4>
+        <ul>
+          <li><strong>幻觉</strong> · 编造不存在的函数名 / 字段名</li>
+          <li><strong>重复操作</strong> · 反复读已读过的文件</li>
+          <li><strong>忘记目标</strong> · 用户让改 A，做到一半跑去改 B</li>
+        </ul>
+        <h4>我们怎么办 · 四条治理路径</h4>
+        <p class="note" style="margin-top:6px;border-top:none;padding-top:0">本章 4 页依次回答：<br>① 不治理会怎样（爆炸实录）<br>② 多级压缩 + 豁免机制（micro / auto）<br>③ 推荐系统视角的优先级漏斗<br>④ 动态 System Prompt 让 Agent 感知持续状态</p>
       </div>
-      <div class="card card-accent">
-        <h4>Solution</h4>
-        <p class="dim">设计<strong>分级消息窗口</strong>和<strong>滚动窗口</strong>机制，智能地决定哪些信息保留、哪些压缩、哪些丢弃。</p>
-        <p class="dim" style="margin-top:8px">类比推荐系统：<strong>把最有价值的上下文信息装入窗口</strong>，低价值执行过程少放，决策信息多放。</p>
+      <div class="col-visual">
+        <div class="fig" data-fig="图 · 窗口压力的来源与本章的应对路径">
+          <svg viewBox="0 0 380 320" style="width:100%;height:auto;font-family:var(--font-mono);font-size:11px">
+            <defs>
+              <marker id="ah-cw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+              </marker>
+              <linearGradient id="grad-fill" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#1e3a8a"/>
+                <stop offset="60%" stop-color="#7a5b00"/>
+                <stop offset="100%" stop-color="#7a1f1f"/>
+              </linearGradient>
+            </defs>
+
+            <!-- 顶部窗口条 -->
+            <text x="20" y="22" font-weight="600" fill="#0d1b2a" font-size="12">Context Window · 128K tokens</text>
+            <rect x="20" y="32" width="340" height="22" fill="#f3f5f9" stroke="#e5e9f2" stroke-width="1"/>
+            <rect x="20" y="32" width="306" height="22" fill="url(#grad-fill)" opacity="0.85"/>
+            <text x="338" y="48" fill="#7a1f1f" font-size="10" text-anchor="end">90%+ 危险区</text>
+
+            <!-- 三个填充来源 -->
+            <text x="20" y="82" font-weight="600" fill="#0d1b2a" font-size="11">填充来源 · 谁吃掉了窗口</text>
+            <g transform="translate(20,92)">
+              <rect width="100" height="36" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
+              <text x="50" y="16" text-anchor="middle" font-size="10" fill="#1e3a8a" font-weight="600">用户消息</text>
+              <text x="50" y="29" text-anchor="middle" font-size="9" fill="#6b7a8f">高价值 · 须保留</text>
+            </g>
+            <g transform="translate(140,92)">
+              <rect width="100" height="36" fill="#fff" stroke="#7a5b00" stroke-width="1.2"/>
+              <text x="50" y="16" text-anchor="middle" font-size="10" fill="#7a5b00" font-weight="600">Agent 决策</text>
+              <text x="50" y="29" text-anchor="middle" font-size="9" fill="#6b7a8f">高价值 · 须保留</text>
+            </g>
+            <g transform="translate(260,92)">
+              <rect width="100" height="36" fill="#fff" stroke="#7a1f1f" stroke-width="1.2"/>
+              <text x="50" y="16" text-anchor="middle" font-size="10" fill="#7a1f1f" font-weight="600">工具结果</text>
+              <text x="50" y="29" text-anchor="middle" font-size="9" fill="#6b7a8f">低价值 · 价值衰减</text>
+            </g>
+
+            <text x="190" y="150" text-anchor="middle" fill="#6b7a8f" font-size="10">↓ 工具结果是主要膨胀源 ↓</text>
+
+            <!-- 三条治理路径，向右收敛 -->
+            <text x="20" y="178" font-weight="600" fill="#0d1b2a" font-size="11">本章治理路径</text>
+            <g transform="translate(20,188)">
+              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">① 多级压缩 · micro / auto</text>
+            </g>
+            <g transform="translate(20,222)">
+              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">② 豁免高价值消息</text>
+            </g>
+            <g transform="translate(20,256)">
+              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">③ 优先级漏斗</text>
+            </g>
+            <g transform="translate(20,290)">
+              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">④ 动态 System Prompt</text>
+            </g>
+
+            <!-- 收敛箭头 -->
+            <path d="M180,201 Q230,201 240,240" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
+            <path d="M180,235 Q220,237 240,250" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
+            <path d="M180,269 Q220,267 240,260" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
+            <path d="M180,303 Q230,300 240,270" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
+
+            <!-- 目标节点 -->
+            <rect x="240" y="220" width="120" height="60" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5"/>
+            <text x="300" y="240" text-anchor="middle" font-size="11" font-weight="600" fill="#1e3a8a">健康低幻觉</text>
+            <text x="300" y="256" text-anchor="middle" font-size="11" font-weight="600" fill="#1e3a8a">长期运行</text>
+            <text x="300" y="272" text-anchor="middle" font-size="9" fill="#6b7a8f">Agent 工作目标</text>
+          </svg>
+        </div>
       </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#context-window #scrolling</span>
-      <span class="slide-number" data-current="5" data-total="36"></span>
     </div>
     <aside class="notes">
-      <p>现在进入第二部分，整个项目最核心的设计——<strong>上下文窗口治理</strong>。</p>
-      <p>问题很直接：LLM 的上下文窗口有硬上限，比如 128K tokens。但 Agent 执行一次复杂任务，可能要调用几十次工具，每次工具返回的结果都会往窗口里塞内容。窗口一满，早期的关键信息就丢了。</p>
-      <p>信息丢了会怎样？Agent 开始<strong>幻觉</strong>——编造不存在的函数名；开始<strong>重复操作</strong>——又去读一遍已经读过的文件；开始<strong>忘记目标</strong>——用户让它改 A，它改到一半跑去改 B。</p>
-      <p>怎么解决？我设计了一套<strong>分级消息窗口 + 滚动窗口</strong>的机制。核心思想很像推荐系统——窗口空间有限，我们把<strong>最有价值的信息</strong>优先塞进去。什么是高价值的？用户消息、Agent 的决策信息、Plan 计划文档——这些是指导方向的。什么是低价值的？工具执行的中间过程、大段文件内容——这些信息随着轮次推进，价值快速衰减。</p>
+      <p>第二章正式开场。这一章要解决的问题非常具体——<strong>上下文窗口是稀缺资源</strong>。</p>
+      <p>LLM 的窗口是<strong>物理硬上限</strong>，比如 128K tokens。但一次复杂 Agent 任务，几十轮工具调用之后，每条工具结果都会<strong>永久占着 token</strong>，直到 session 结束才释放。</p>
+      <p>右图三个填充来源——用户消息、Agent 决策、工具结果——前两者价值高必须保留，<strong>真正的膨胀源是工具结果</strong>。</p>
+      <p>窗口爆满会导致三个症状：幻觉、重复操作、忘记目标。这就是这一章 4 页要依次回应的——爆炸实录 / 多级压缩 / 优先级漏斗 / 动态 system prompt——本质上都是为了回答同一个问题：<strong>怎么在有限窗口里让 Agent 长期健康运行</strong>。</p>
     </aside>
   </section>
 
