@@ -171,7 +171,6 @@
   <section class="slide" data-title="ReAct · concept">
     <div class="title-bar">
       <h2>Agent 的心脏：Thought → Action → Observation</h2>
-      <span class="sub">第 1 帧 / 共 6 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -233,7 +232,6 @@
   <section class="slide" data-title="ReAct · user">
     <div class="title-bar">
       <h2>第一帧：用户发起一个开放性问题</h2>
-      <span class="sub">第 2 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -284,7 +282,6 @@
   <section class="slide" data-title="ReAct · action">
     <div class="title-bar">
       <h2>第二帧：Agent 思考后调出第一个工具</h2>
-      <span class="sub">第 3 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -344,7 +341,6 @@
   <section class="slide" data-title="ReAct · observation">
     <div class="title-bar">
       <h2>第三帧：运行时执行 → 结果回灌窗口</h2>
-      <span class="sub">第 4 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -414,7 +410,6 @@ hook.rs         storage.rs
   <section class="slide" data-title="ReAct · next round">
     <div class="title-bar">
       <h2>第四帧：进入下一轮 —— Read 关键源文件</h2>
-      <span class="sub">第 5 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -486,7 +481,6 @@ hook.rs         storage.rs
   <section class="slide" data-title="ReAct · summary">
     <div class="title-bar">
       <h2>第五帧：信息够了，Agent 给出结论</h2>
-      <span class="sub">第 6 帧 / 共 6 帧</span>
     </div>
     <div class="split s64">
       <div class="col-text">
@@ -840,7 +834,6 @@ hook.rs         storage.rs
   <section class="slide" data-title="Plan · concept">
     <div class="title-bar">
       <h2>Plan 工作流：先调研，写计划，<span class="accent">清空，再执行</span></h2>
-      <span class="sub">第 1 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -902,7 +895,6 @@ hook.rs         storage.rs
   <section class="slide" data-title="Plan · research">
     <div class="title-bar">
       <h2>第一阶段：进入 Plan 模式，<span class="accent">只读调研</span></h2>
-      <span class="sub">第 2 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -961,7 +953,6 @@ hook.rs         storage.rs
   <section class="slide" data-title="Plan · approve">
     <div class="title-bar">
       <h2>第二阶段：输出 plan.md，<span class="accent">用户审批</span></h2>
-      <span class="sub">第 3 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -999,7 +990,6 @@ hook.rs         storage.rs
   <section class="slide" data-title="Plan · execute">
     <div class="title-bar">
       <h2>第三阶段：<span class="accent">清空窗口</span>，只留 plan.md，开干</h2>
-      <span class="sub">第 4 帧 / 共 4 帧</span>
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1227,6 +1217,107 @@ hook.rs         storage.rs
     </aside>
   </section>
 
+  <!-- ============ 12.5. TODOWRITE + SYSTEM REMINDER ============ -->
+  <section class="slide" data-title="TodoWrite Reminder">
+    <div class="title-bar">
+      <h2>TodoWrite + <span class="accent">&lt;system_reminder&gt;</span>：防遗忘机制</h2>
+    </div>
+    <div class="grid g2 mt-l">
+      <div>
+        <h4 style="font-size:14px;margin-bottom:6px">TodoWrite/TodoRead</h4>
+        <p class="dim" style="font-size:13px">Agent 在开始大任务前列出所有子任务。每完成一个就更新状态。<strong>避免遗漏变更、避免忘记目标。</strong></p>
+        <ul style="font-size:12px;line-height:1.9;color:var(--text-2);padding-left:18px">
+          <li>[x] 改 ChatApp.update 增加 Action</li>
+          <li>改 handler/tui_loop.rs 调用点 <span class="dim">(in_progress)</span></li>
+          <li>[ ] 写测试覆盖新分支</li>
+          <li>[ ] 更新 CODEBUDDY.md</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="font-size:14px;margin-bottom:6px">system_reminder 注入</h4>
+        <p class="dim" style="font-size:13px">当 Agent 长时间没有更新 TODO，系统在下一轮 prompt 尾部<strong>动态注入提醒</strong>，把它拉回正轨。</p>
+        <div class="dialog" style="margin-top:6px;font-size:11px">
+          <div class="line"><span class="role agent">Agent:</span> &lt;读了 5 个文件，跑了 3 次 grep…&gt;</div>
+          <div class="reminder">
+            <span class="role system">system_reminder:</span><br>
+            You have 4 TODO items, last updated 8 turns ago.<br>
+            Currently <strong>in_progress</strong>: "改 handler/tui_loop.rs 调用点"<br>
+            → Are you still working on it? Consider marking it done or splitting.
+          </div>
+          <div class="line"><span class="role agent">Agent:</span> 我先把 in_progress 的标记完成，再继续……</div>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#todo #system-reminder</span>
+      <span class="slide-number" data-current="20" data-total="36"></span>
+    </div>
+    <aside class="notes">
+      <p>讲一个特别有用的小工具——<strong>TodoWrite + system_reminder</strong>。这看着简单，但对 Agent 长期运行有奇效。</p>
+      <p>问题是这样的：Agent 跑一个大任务，可能要改十几个文件。如果它没有显式的待办清单，跑着跑着就<strong>忘记原本要做的事</strong>。改了两个就觉得任务完成了，剩下的就漏了。</p>
+      <p>所以我让 Agent 在开始大任务前先<strong>列出所有 TODO 项</strong>。每完成一个就更新状态。这本身就强迫它<strong>把任务结构化拆分</strong>。</p>
+      <p>但还有个更巧妙的设计——<strong>system_reminder 注入</strong>。如果 Agent 连续好几轮都没更新 TODO，但 TODO 里还有 in_progress 项，系统就会在<strong>下一轮 prompt 尾部</strong>注入一条 system_reminder：「你还有 4 个 TODO，其中一个 in_progress 已经 8 轮没动了，是不是该看看？」</p>
+      <p>这相当于一个<strong>软中断</strong>——不强行打断 Agent，但在它注意力分散的时候轻轻拉一下。实测对完成度提升非常明显。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 12.7. HOOK SYSTEM EVENTS ============ -->
+  <section class="slide" data-title="Hook System Events">
+    <div class="title-bar">
+      <h2>Hook 系统：<span class="accent">14 个事件钩子</span>覆盖 Agent 生命周期</h2>
+    </div>
+    <p class="dim mt-s" style="font-size:14px">每个事件可挂载 Shell / Prompt 类型的 Hook —— 用作<strong>回归测试 + 工程规范 + 变更沉淀</strong></p>
+    <div class="hook-timeline">
+      <span class="ev session">session_start</span>
+      <span class="ev msg">pre_send_message</span>
+      <span class="ev msg">post_send_message</span>
+      <span class="ev llm">pre_llm_request</span>
+      <span class="ev llm">post_llm_request</span>
+      <span class="ev tool">pre_tool_execution</span>
+      <span class="ev tool">post_tool_execution</span>
+      <span class="ev tool">post_tool_execution_failure</span>
+      <span class="ev compact">pre_micro_compact</span>
+      <span class="ev compact">post_micro_compact</span>
+      <span class="ev compact">pre_auto_compact</span>
+      <span class="ev compact">post_auto_compact</span>
+      <span class="ev msg">stop</span>
+      <span class="ev session">session_end</span>
+    </div>
+    <div class="hook-legend">
+      <span class="lg-session">session 生命周期</span>
+      <span class="lg-msg">消息收发</span>
+      <span class="lg-llm">LLM 调用</span>
+      <span class="lg-tool">工具执行</span>
+      <span class="lg-compact">压缩前后</span>
+    </div>
+    <div class="grid g3 mt-l">
+      <div class="card card-soft">
+        <h4 style="font-size:13px">工程规范强制</h4>
+        <p class="dim" style="font-size:12px;margin-top:6px">在 post_tool_execution(Write/Edit) 后扫描新增/变更文件：禁用 <code>mod.rs</code>、禁用 <code>unwrap()/expect()</code>、要求 <code>name.rs + name/</code> 布局。</p>
+      </div>
+      <div class="card card-soft">
+        <h4 style="font-size:13px">回归测试守门</h4>
+        <p class="dim" style="font-size:12px;margin-top:6px">在 stop 事件触发时跑 <code>cargo fmt && cargo clippy -- -D warnings && cargo test</code>。任何一项失败，Agent 必须修复才能真正"结束"。</p>
+      </div>
+      <div class="card card-soft">
+        <h4 style="font-size:13px">变更沉淀文档</h4>
+        <p class="dim" style="font-size:12px;margin-top:6px">在 session_end 时把本次会话的<strong>关键变更摘要</strong>追加到 CHANGELOG / decision log，供后续追溯维护。</p>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#hook #14-events</span>
+      <span class="slide-number" data-current="21" data-total="36"></span>
+    </div>
+    <aside class="notes">
+      <p>Hook 系统是 Agent 真正能"用于生产"的关键。它<strong>把工程规范固化成自动执行的脚本</strong>，跑在 Agent 整个生命周期的各个事件点上。</p>
+      <p>一共 <strong>14 个事件</strong>，覆盖 session 启停、消息收发、LLM 请求前后、工具执行前后、压缩前后。每个事件都可以挂载 Hook，Hook 接收 JSON 输入、返回 JSON 修改 / 拦截。</p>
+      <p>给大家三个真实用例。</p>
+      <p>第一个是<strong>工程规范强制</strong>。我们项目要求所有模块用 <code>name.rs + name/</code> 这种布局，不能用 <code>mod.rs</code>。也禁止用 <code>unwrap()</code>、<code>expect()</code> 这种容易 panic 的写法。这些规则做成 Hook 挂在 post_tool_execution 上，Agent 写了违规代码立刻被拦截。</p>
+      <p>第二个是<strong>回归测试守门</strong>。Agent 说"我做完了"，要触发 stop 事件。Hook 拦截这个事件去跑 fmt、clippy、test。全过才允许真正退出。</p>
+      <p>第三个是<strong>变更沉淀</strong>。session 结束时自动写变更摘要到 CHANGELOG，方便后续追溯。这个对长期维护项目特别重要。</p>
+    </aside>
+  </section>
+
   <!-- ============ 11. MULTI-AGENT COLLABORATION ============ -->
   <section class="slide" data-title="Multi-Agent Collaboration">
     <div class="title-bar">
@@ -1390,137 +1481,6 @@ hook.rs         storage.rs
     </aside>
   </section>
 
-  <!-- ============ 12. ROBUSTNESS ============ -->
-  <section class="slide" data-title="Robustness">
-    <div class="title-bar">
-      <h2>健壮性设计：<span class="accent">错误处理</span>与 Hook 系统</h2>
-    </div>
-    <div class="grid g2 mt-l">
-      <div class="card card-accent">
-        <h4>指数退避重试</h4>
-        <div class="mt-s"></div>
-        <p class="dim">大模型 API 调用不可避免会遇到网络错误、限流、超时等问题。</p>
-        <p class="dim" style="margin-top:6px">采用<strong>指数退避</strong>（Exponential Backoff）机制：第一次重试等 1 秒，第二次等 2 秒，第三次等 4 秒……自动处理瞬态故障，无需人工干预。</p>
-      </div>
-      <div class="card card-accent">
-        <h4>Hook 系统</h4>
-        <div class="mt-s"></div>
-        <p class="dim">用作<strong>回归测试</strong>和工程规范强制执行：</p>
-        <ul class="dim" style="margin-top:6px;padding-left:18px;font-size:14px;line-height:1.8">
-          <li>禁止使用 <code>mod.rs</code>，强制 <code>name.rs + name/</code> 模式</li>
-          <li>禁止可能导致 panic 的 <code>unwrap()</code> / <code>expect()</code></li>
-          <li>变更内容必须沉淀为文档</li>
-          <li>代码必须通过 <code>cargo fmt</code> 和 <code>clippy</code></li>
-        </ul>
-      </div>
-    </div>
-    <aside class="notes">
-      <p>工程上还有一些健壮性设计，也值得提一下。</p>
-      <p><strong>指数退避重试</strong>。调用大模型 API 不是每次都成功的——网络会断、会被限流、会超时。如果 Agent 遇到一次错误就停下来等人工处理，那它的自主性就打了折扣。所以我实现了指数退避：第一次重试等 1 秒，第二次 2 秒，第三次 4 秒，以此类推。大多数瞬态故障都能自动恢复。</p>
-      <p><strong>Hook 系统</strong>。这是代码质量的守护者。我在项目中定义了一系列规则，通过 Hook 在代码提交或文件变更时自动检查。比如：禁止用 <code>mod.rs</code>，我们要求 <code>name.rs + name/</code> 的文件组织方式；禁止使用可能导致 panic 的 <code>unwrap()</code>；变更内容必须写文档方便后续维护。这些 Hook 确保了 Agent 生成的代码符合工程规范。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 12.5. TODOWRITE + SYSTEM REMINDER ============ -->
-  <section class="slide" data-title="TodoWrite Reminder">
-    <div class="title-bar">
-      <h2>TodoWrite + <span class="accent">&lt;system_reminder&gt;</span>：防遗忘机制</h2>
-    </div>
-    <div class="grid g2 mt-l">
-      <div>
-        <h4 style="font-size:14px;margin-bottom:6px">TodoWrite/TodoRead</h4>
-        <p class="dim" style="font-size:13px">Agent 在开始大任务前列出所有子任务。每完成一个就更新状态。<strong>避免遗漏变更、避免忘记目标。</strong></p>
-        <ul style="font-size:12px;line-height:1.9;color:var(--text-2);padding-left:18px">
-          <li>[x] 改 ChatApp.update 增加 Action</li>
-          <li>改 handler/tui_loop.rs 调用点 <span class="dim">(in_progress)</span></li>
-          <li>[ ] 写测试覆盖新分支</li>
-          <li>[ ] 更新 CODEBUDDY.md</li>
-        </ul>
-      </div>
-      <div>
-        <h4 style="font-size:14px;margin-bottom:6px">system_reminder 注入</h4>
-        <p class="dim" style="font-size:13px">当 Agent 长时间没有更新 TODO，系统在下一轮 prompt 尾部<strong>动态注入提醒</strong>，把它拉回正轨。</p>
-        <div class="dialog" style="margin-top:6px;font-size:11px">
-          <div class="line"><span class="role agent">Agent:</span> &lt;读了 5 个文件，跑了 3 次 grep…&gt;</div>
-          <div class="reminder">
-            <span class="role system">system_reminder:</span><br>
-            You have 4 TODO items, last updated 8 turns ago.<br>
-            Currently <strong>in_progress</strong>: "改 handler/tui_loop.rs 调用点"<br>
-            → Are you still working on it? Consider marking it done or splitting.
-          </div>
-          <div class="line"><span class="role agent">Agent:</span> 我先把 in_progress 的标记完成，再继续……</div>
-        </div>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#todo #system-reminder</span>
-      <span class="slide-number" data-current="20" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>讲一个特别有用的小工具——<strong>TodoWrite + system_reminder</strong>。这看着简单，但对 Agent 长期运行有奇效。</p>
-      <p>问题是这样的：Agent 跑一个大任务，可能要改十几个文件。如果它没有显式的待办清单，跑着跑着就<strong>忘记原本要做的事</strong>。改了两个就觉得任务完成了，剩下的就漏了。</p>
-      <p>所以我让 Agent 在开始大任务前先<strong>列出所有 TODO 项</strong>。每完成一个就更新状态。这本身就强迫它<strong>把任务结构化拆分</strong>。</p>
-      <p>但还有个更巧妙的设计——<strong>system_reminder 注入</strong>。如果 Agent 连续好几轮都没更新 TODO，但 TODO 里还有 in_progress 项，系统就会在<strong>下一轮 prompt 尾部</strong>注入一条 system_reminder：「你还有 4 个 TODO，其中一个 in_progress 已经 8 轮没动了，是不是该看看？」</p>
-      <p>这相当于一个<strong>软中断</strong>——不强行打断 Agent，但在它注意力分散的时候轻轻拉一下。实测对完成度提升非常明显。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 12.7. HOOK SYSTEM EVENTS ============ -->
-  <section class="slide" data-title="Hook System Events">
-    <div class="title-bar">
-      <h2>Hook 系统：<span class="accent">14 个事件钩子</span>覆盖 Agent 生命周期</h2>
-    </div>
-    <p class="dim mt-s" style="font-size:14px">每个事件可挂载 Shell / Prompt 类型的 Hook —— 用作<strong>回归测试 + 工程规范 + 变更沉淀</strong></p>
-    <div class="hook-timeline">
-      <span class="ev session">session_start</span>
-      <span class="ev msg">pre_send_message</span>
-      <span class="ev msg">post_send_message</span>
-      <span class="ev llm">pre_llm_request</span>
-      <span class="ev llm">post_llm_request</span>
-      <span class="ev tool">pre_tool_execution</span>
-      <span class="ev tool">post_tool_execution</span>
-      <span class="ev tool">post_tool_execution_failure</span>
-      <span class="ev compact">pre_micro_compact</span>
-      <span class="ev compact">post_micro_compact</span>
-      <span class="ev compact">pre_auto_compact</span>
-      <span class="ev compact">post_auto_compact</span>
-      <span class="ev msg">stop</span>
-      <span class="ev session">session_end</span>
-    </div>
-    <div class="hook-legend">
-      <span class="lg-session">session 生命周期</span>
-      <span class="lg-msg">消息收发</span>
-      <span class="lg-llm">LLM 调用</span>
-      <span class="lg-tool">工具执行</span>
-      <span class="lg-compact">压缩前后</span>
-    </div>
-    <div class="grid g3 mt-l">
-      <div class="card card-soft">
-        <h4 style="font-size:13px">工程规范强制</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">在 post_tool_execution(Write/Edit) 后扫描新增/变更文件：禁用 <code>mod.rs</code>、禁用 <code>unwrap()/expect()</code>、要求 <code>name.rs + name/</code> 布局。</p>
-      </div>
-      <div class="card card-soft">
-        <h4 style="font-size:13px">回归测试守门</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">在 stop 事件触发时跑 <code>cargo fmt && cargo clippy -- -D warnings && cargo test</code>。任何一项失败，Agent 必须修复才能真正"结束"。</p>
-      </div>
-      <div class="card card-soft">
-        <h4 style="font-size:13px">变更沉淀文档</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">在 session_end 时把本次会话的<strong>关键变更摘要</strong>追加到 CHANGELOG / decision log，供后续追溯维护。</p>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#hook #14-events</span>
-      <span class="slide-number" data-current="21" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>Hook 系统是 Agent 真正能"用于生产"的关键。它<strong>把工程规范固化成自动执行的脚本</strong>，跑在 Agent 整个生命周期的各个事件点上。</p>
-      <p>一共 <strong>14 个事件</strong>，覆盖 session 启停、消息收发、LLM 请求前后、工具执行前后、压缩前后。每个事件都可以挂载 Hook，Hook 接收 JSON 输入、返回 JSON 修改 / 拦截。</p>
-      <p>给大家三个真实用例。</p>
-      <p>第一个是<strong>工程规范强制</strong>。我们项目要求所有模块用 <code>name.rs + name/</code> 这种布局，不能用 <code>mod.rs</code>。也禁止用 <code>unwrap()</code>、<code>expect()</code> 这种容易 panic 的写法。这些规则做成 Hook 挂在 post_tool_execution 上，Agent 写了违规代码立刻被拦截。</p>
-      <p>第二个是<strong>回归测试守门</strong>。Agent 说"我做完了"，要触发 stop 事件。Hook 拦截这个事件去跑 fmt、clippy、test。全过才允许真正退出。</p>
-      <p>第三个是<strong>变更沉淀</strong>。session 结束时自动写变更摘要到 CHANGELOG，方便后续追溯。这个对长期维护项目特别重要。</p>
-    </aside>
-  </section>
 
   <!-- ============ 13. SKILL SYSTEM ============ -->
   <section class="slide" data-title="Skill System">
