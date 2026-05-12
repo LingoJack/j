@@ -1,3 +1,29 @@
+# v12.10.51
+
+
+### 新功能
+
+- **浏览器搜索支持 --engine 参数**: `j open <browser_alias> <keywords>` 支持 `--engine <google|bing|baidu>` 指定搜索引擎，多个关键词自动拼接为搜索词，同时保留 URL 别名和直接 URL 的优先匹配
+- **核心引擎拆分为独立 crate (j-agent)**: 将 Chat 核心（Agent、LLM 客户端、工具系统、权限管理、上下文管理等）提取为独立的 `j-agent` 库，不依赖 ratatui/crossterm，为后续 GUI（Tauri）复用奠定基础
+- **HTML PPT 技能包**: 新增 `html-ppt` skill，包含 36 套主题、20 种动画特效、30+ 页面模板、14 套完整演示文稿模板，支持 presenter 模式和键盘导航
+
+### 改进
+
+- **搜索命令参数优化**: `j search` 支持多关键词搜索（空格分隔自动拼接），`-f`/`--fuzzy` 改为标准 flag 参数
+- **Oneshot 模式 Markdown 重绘重构**: 用终端光标行号（`crossterm::cursor::position`）替代手动行计数实现流式文本的 Markdown 重绘，消除自动换行计算偏差导致的显示错位
+- **Windows 更新安装可靠性增强**: 安装脚本（install.ps1）和 `j update` 均支持 exe 被占用时的重命名策略（先重命名为 `.bak` 再替换），安装失败时自动恢复备份
+- **Windows zip 解压策略**: `j update` 优先使用系统自带 `tar` 命令解压，回退到 PowerShell `Expand-Archive`，兼容 7z 创建的 zip 格式
+- **self_update 依赖特性**: Windows 平台新增 `compression-zip-deflate` feature，提升 zip 解压兼容性
+- **ToolCategory/ToolStatus 颜色解耦**: 工具分类和状态的颜色方法通过扩展 trait（`ToolCategoryColor`/`ToolStatusColor`）注入，核心库不再依赖 ratatui
+- **Hook 帮助文档注入机制**: RegisterHookTool 的帮助内容改用 `OnceLock` + 注入函数，核心库不再依赖 `rust-embed` 资源系统
+
+### Bug 修复
+
+- **新笔记编辑后即使内容未变也强制保存**: 修复新建笔记在编辑器中保存时，因"内容未变化"判断导致文件未被写入的问题；同时自动创建不存在的父目录
+- **Windows 更新失败时手动安装提示**: 错误提示区分 Unix/Windows 平台，分别显示 `curl` 和 `irm` 安装命令
+- **Windows 卸载时处理进程占用**: 卸载脚本先尝试关闭 `j.exe` 进程，文件被占用时使用重命名策略替代直接删除
+</result
+
 # v12.10.48
 
 

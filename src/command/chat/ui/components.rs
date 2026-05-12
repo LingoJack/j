@@ -228,8 +228,90 @@ pub fn global_theme_row<'a>(name: &str, ctx: &GlobalRowCtx<'_>) -> Line<'a> {
 /// 渐变色从 Theme.welcome_gradient_start/mid/end 读取，
 /// 并基于 quote_idx 做正弦偏移产生变体，保证每次启动略有不同
 /// 但不偏离主题基调。
-pub fn welcome_box<'a>(width: u16, theme: &Theme, quote_idx: usize) -> Vec<Line<'a>> {
+pub fn welcome_box<'a>(
+    width: u16,
+    theme: &Theme,
+    quote_idx: usize,
+    show_quote: bool,
+) -> Vec<Line<'a>> {
     use unicode_width::UnicodeWidthStr;
+
+    // ── 关闭诗句时显示 J-CLI ASCII Art（无边框） ──
+    if !show_quote {
+        // ── 渐变色 ──
+        use super::palette;
+        let triple = palette::get_gradient(theme.welcome_palette, quote_idx);
+        let (start_c, mid_c, end_c) = triple;
+
+        // ── J-CLI ASCII Art（6行，与启动页一致） ──
+        let art_lines: &[&str] = &[
+            "                        ██╗        ██████╗ ██╗      ██╗",
+            "                        ██║       ██╔════╝ ██║      ██║",
+            "                        ██║ █████╗██║      ██║      ██║",
+            "                    ██  ██║ ╚════╝██║      ██║      ██║",
+            "                    ╚█████╔╝      ╚██████╗ ███████╗ ██║",
+            "                     ╚════╝        ╚═════╝ ╚══════╝ ╚═╝",
+        ];
+
+        // 保留各行间相对缩进：减去最小前导空格数
+        let min_leading = art_lines
+            .iter()
+            .map(|l| l.len() - l.trim_start().len())
+            .min()
+            .unwrap_or(0);
+        let trimmed: Vec<String> = art_lines
+            .iter()
+            .map(|l| {
+                if l.len() > min_leading {
+                    &l[min_leading..]
+                } else {
+                    l
+                }
+                .to_string()
+            })
+            .collect();
+        let art_max_w = trimmed
+            .iter()
+            .map(|l| UnicodeWidthStr::width(l.as_str()))
+            .max()
+            .unwrap_or(0);
+
+        // 基于屏幕宽度居中
+        let total_w = width as usize;
+        let block_pl = if total_w > art_max_w {
+            (total_w - art_max_w) / 2
+        } else {
+            0
+        };
+        let pad: String = " ".repeat(block_pl);
+
+        let mut result: Vec<Line<'a>> = vec![Line::from(""), Line::from("")];
+
+        for line in &trimmed {
+            let chars: Vec<char> = line.chars().collect();
+            let total_n = chars.len().max(2);
+            let mut spans: Vec<Span<'a>> = vec![Span::raw(pad.clone())];
+
+            for (i, &ch) in chars.iter().enumerate() {
+                let t = i as f32 / (total_n - 1) as f32;
+                let (from, to, local_t) = if t <= 0.5 {
+                    (start_c, mid_c, t * 2.0)
+                } else {
+                    (mid_c, end_c, (t - 0.5) * 2.0)
+                };
+                let r = (from.0 as f32 * (1.0 - local_t) + to.0 as f32 * local_t).round() as u8;
+                let g = (from.1 as f32 * (1.0 - local_t) + to.1 as f32 * local_t).round() as u8;
+                let b = (from.2 as f32 * (1.0 - local_t) + to.2 as f32 * local_t).round() as u8;
+                spans.push(Span::styled(
+                    ch.to_string(),
+                    Style::default().fg(ratatui::style::Color::Rgb(r, g, b)),
+                ));
+            }
+            result.push(Line::from(spans));
+        }
+
+        return result;
+    }
 
     // 框体内部宽度：取终端内宽的一半，最少 30，最多 55
     let inner = ((width as usize) / 2).clamp(30, 55);

@@ -677,6 +677,7 @@ pub fn run_chat_tui_internal(ws_bridge: Option<WsBridge>) -> io::Result<()> {
                 auto_restore_session: false,
                 flat_bubble: true,
                 thinking_style: Default::default(),
+                welcome_quote: true,
             };
             let _ = save_agent_config(&example);
             app.state.agent_config = example;
