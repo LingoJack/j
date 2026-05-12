@@ -1349,84 +1349,150 @@ hook.rs         storage.rs
     </div>
     <div class="grid g2 mt-m">
       <div>
-        <h4 style="font-size:14px;color:var(--bad);margin-bottom:8px">反例 · 无 2PC：Agent Loop 长时序的灾难</h4>
-        <div class="dialog">
+        <h4 style="font-size:14px;color:var(--bad);margin:0 0 8px">问题 · Agent Loop 是长时序异步</h4>
+        <p class="dim" style="font-size:13px;margin:0 0 8px;line-height:1.7">Agent 发完 SendMessage 之后<strong>不会原地等</strong>，立即进入下一轮 LLM 推理。下一轮看不到自己发出的消息（广播延迟 / 状态尚未刷入），就会判定"上次没发出去"<strong>再发一遍</strong>。</p>
+        <div class="dialog" style="font-size:13px">
           <div class="line"><span class="role agent">Agent A:</span> 我搞定了 auth 模块。</div>
-          <div class="line dim"><span class="role"></span> 广播... loop 卡顿 3s</div>
+          <div class="line dim"><span class="role"></span> · LLM 下一轮（200ms 后）开始</div>
+          <div class="line dim"><span class="role"></span> · 此时 inbox 状态尚未对自己可见</div>
           <div class="line"><span class="role agent">Agent A:</span> 我搞定了 auth 模块。<span class="dim"> ← 重发</span></div>
           <div class="line"><span class="role agent">Agent A:</span> 我搞定了 auth 模块。<span class="dim"> ← 重发</span></div>
-          <div class="line" style="color:var(--bad)">用户视角：怎么说三遍？</div>
+          <div class="line" style="color:var(--bad)">外部看：怎么说三遍？<br>内部看：每条都进了 B 的窗口，token 翻倍</div>
         </div>
       </div>
       <div>
-        <h4 style="font-size:14px;color:var(--good);margin-bottom:8px">正例 · 有 2PC：SendMessage + Inbox 两阶段提交</h4>
+        <h4 style="font-size:14px;color:var(--good);margin:0 0 8px">方案 · SendMessage + Inbox 两阶段提交</h4>
+        <p class="dim" style="font-size:13px;margin:0 0 8px;line-height:1.7"><strong>What</strong>：把 SendMessage 拆成 <em>prepare → commit</em> 两步。<br><strong>Why</strong>：让重发在第一阶段就被 Inbox 去重，根本不产生第二条对外可见消息。<br><strong>How</strong>：见右图时序。</p>
         <div class="seq">
           <div class="actor">Agent A</div>
           <div class="actor inbox">Message Inbox</div>
           <div class="actor peer">Agent B / UI</div>
           <div class="step act"><span class="tag">①</span>SendMessage<br>(stage 1: prepare)</div>
-          <div class="step inbox"><span class="tag">①</span>暂存 pending<br>等待确认</div>
+          <div class="step inbox"><span class="tag">①</span>暂存 pending<br>同 hash 直接幂等</div>
           <div class="step"></div>
-          <div class="step act"><span class="tag">②</span>确认提交<br>(stage 2: commit)</div>
+          <div class="step act"><span class="tag">②</span>SendMessage Gate<br>(stage 2: commit)</div>
           <div class="step inbox"><span class="tag">②</span>状态 → committed</div>
           <div class="step peer"><span class="tag">②</span>对外<strong>仅可见一次</strong></div>
         </div>
       </div>
     </div>
-    <p class="dim mt-m" style="font-size:12px;text-align:center">对外：用户体验一致，无重复消息。对内：上下文不被冗余消息污染。</p>
-    <div class="deck-footer">
-      <span class="mono">#2pc #message-inbox</span>
-      <span class="slide-number" data-current="16" data-total="36"></span>
-    </div>
+    <p class="dim mt-m" style="font-size:13px;text-align:center"><strong>双重收益</strong> · 对外：用户看到的协作过程一致，无重复消息 · 对内：重复消息不进入其他 Agent 的上下文窗口，节省 token、避免决策干扰</p>
     <aside class="notes">
-      <p>讲一个比较工程化的细节——<strong>Two-Staged Commit</strong>。这个问题大家可能不直观，我先描述一下场景。</p>
-      <p>因为 Agent Loop 是<strong>长时序异步</strong>的——Agent 发完一条消息之后，自己继续往下跑，但消息可能因为网络抖动、广播延迟没有立即送达。Agent 在下一轮看不到自己刚发的消息，会以为"上次发失败了"，<strong>再发一遍</strong>。结果用户看到同样的话重复三次，体验极差。</p>
-      <p>我设计的解决方案是<strong>两阶段提交</strong>。SendMessage 工具调用的时候，消息先进入 Inbox 的 <strong>pending 状态</strong>——这是第一阶段。然后由专门的提交器做<strong>第二阶段 commit</strong>，把状态变为 committed，这时候才对其他 Agent 和 UI 可见。</p>
-      <p>这个设计的双重好处是——<strong>对外</strong>，整个 Agent Team 系统给用户的体验是一致的，没有重复消息；<strong>对内</strong>，重复的消息也不会进入其他 Agent 的上下文窗口，避免了 token 浪费和决策干扰。</p>
+      <p>讲一个工程化的关键问题——<strong>Two-Staged Commit</strong>。这个问题大家可能不直观，我具体描述。</p>
+      <p>Agent Loop 是<strong>长时序异步</strong>的——Agent 发完 SendMessage 不会原地等，立即进入下一轮 LLM 推理。但消息广播 / inbox 状态可能有几百毫秒延迟。Agent 在下一轮看不到自己刚发的消息，就以为"上次发失败了"<strong>再发一遍</strong>。结果用户看到同样的话重复三次。</p>
+      <p>更糟的是<strong>内部影响</strong>：每条重发都会进入其他 Agent 的上下文窗口，token 浪费 + 决策干扰。</p>
+      <p>解决方案是 <strong>2PC</strong>：SendMessage 拆成 prepare（暂存到 pending）+ commit（提交可见）两步。同一 hash 在第一阶段就被去重，根本不产生第二条 committed 消息。<strong>对外一致、对内不污染</strong>——这就是这个设计的双重价值。</p>
+      <p>下一页的"轮流报数"实验就是为了暴露这个问题而设计的最简场景。</p>
     </aside>
   </section>
 
-  <!-- ============ 11.7. TEAMMATE EXPERIMENTS ============ -->
-  <section class="slide" data-title="Teammate Experiments">
+  <!-- ============ 11.7. EXPERIMENT 01 — 轮流报数 ============ -->
+  <section class="slide" data-title="Exp1 · 轮流报数">
     <div class="title-bar">
-      <h2>三个实验：<span class="accent">验证 Teammate 协作能力</span></h2>
+      <h2>实验 ①：<span class="accent">轮流报数</span> · 消息传递与唤醒</h2>
     </div>
-    <div class="exp3 mt-m">
-      <div class="e-card">
-        <span class="e-num">EXPERIMENT · 01</span>
-        <span class="e-goal">基础协调</span>
-        <h4>轮流报数</h4>
-        <p>多个 Agent 轮流报出递增整数 1, 2, 3, …，检验最基本的<strong>顺序协调</strong>和<strong>避免抢话</strong>能力。</p>
-        <p class="dim" style="font-size:11px">→ 暴露 Agent Loop 长时序导致的重复消息问题；驱动了 2PC 设计</p>
-        <span class="e-ref">probe: turn-taking</span>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">What · 任务设置</h4>
+        <p>2–3 个 Teammate 按预设顺序完成 1 → N 的递增报数。每个 Agent 收到上一位 SendMessage 后报下一个数，并 @target 唤醒下一位。</p>
+        <h4>Why · 为何先做这个</h4>
+        <p>把语义难度降到最低，<strong>只暴露 3 个系统问题</strong>：消息投递、目标唤醒、轮次顺序。<br>本实验直接驱动了 <strong>2PC + SendMessage Gate</strong> 的设计——长时序 Agent Loop 容易重复发送同一消息。</p>
+        <h4>How · 验证方式</h4>
+        <p>统计完成率、顺序错误数、唤醒失败数；通过 transcript.jsonl 复盘消息进入收件箱与唤醒标记。</p>
       </div>
-      <div class="e-card">
-        <span class="e-num">EXPERIMENT · 02</span>
-        <span class="e-goal">上下文共享</span>
-        <h4>续写接龙</h4>
-        <p>给一句开头，多个 Agent 轮流续写一段故事。每个 Agent 要<strong>读懂前文风格</strong>、<strong>承接情节</strong>，不能跑题。</p>
-        <p class="dim" style="font-size:11px">→ 验证 shared_messages 广播机制是否真的把上下文带到了每个 Teammate</p>
-        <span class="e-ref">probe: context-sharing</span>
+      <div class="col-visual">
+        <div class="exp-result">
+          <div class="er-head">论文表 7-10 · 实测结果</div>
+          <table class="exp-table">
+            <tr><td>目标数字数</td><td class="num">10</td></tr>
+            <tr class="ok"><td>正确报数数</td><td class="num">10 / 10 · <strong>100%</strong></td></tr>
+            <tr class="ok"><td>顺序错误数</td><td class="num">0</td></tr>
+            <tr class="ok"><td>唤醒失败数</td><td class="num">0</td></tr>
+            <tr><td>SendMessage 调用</td><td class="num">16 次</td></tr>
+            <tr class="ok"><td>人工干预次数</td><td class="num">0</td></tr>
+          </table>
+          <p class="er-note">10 个目标全部按序完成，顺序错误与唤醒失败均为 0 —— 证明<strong>消息层机制可用</strong>。SendMessage 多于目标数，反映协作协议本身的固定通信开销。</p>
+        </div>
       </div>
-      <div class="e-card">
-        <span class="e-num">EXPERIMENT · 03</span>
-        <span class="e-goal">真实协作开发</span>
-        <h4>协作测试开发</h4>
-        <p>分工：A 写代码，B 写测试，C 评审。参考 Anthropic 的 <em>harness-design-long-running-apps</em>——<strong>让另一个 Agent 评审</strong>，避免单 Agent 自我满意偏袒。</p>
-        <p class="dim" style="font-size:11px">→ 长期运行的真实工程场景；客观质量评估</p>
-        <span class="e-ref">ref: anthropic.com/engineering/harness-design</span>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#teammate #experiments</span>
-      <span class="slide-number" data-current="17" data-total="36"></span>
     </div>
     <aside class="notes">
-      <p>多 Agent 协作能力到底行不行？我设计了<strong>三个递进的实验</strong>来回答这个问题。</p>
-      <p><strong>实验一，轮流报数</strong>。这是最基础的，几个 Agent 轮流说 1、2、3、4。这看起来简单，但实际上要求<strong>不抢话、不重复、不跳号</strong>，是检验<strong>顺序协调</strong>能力的最干净的实验。这个实验暴露的问题就是前面讲的重复消息——所以才驱动了 2PC 的设计。</p>
-      <p><strong>实验二，续写接龙</strong>。给一句话开头，几个 Agent 轮流写故事。这个实验检验<strong>上下文共享</strong>——每个 Agent 都要能看到前文，理解风格，承接情节。如果广播机制有 bug，故事就会跑题。</p>
-      <p><strong>实验三，协作测试开发</strong>。这是真实工程场景了——A 写代码、B 写测试、C 评审。这里有个关键设计参考了 Anthropic 的研究：<strong>模型容易对自己的工作过度满意</strong>。让另一个 Agent 来评审，就能拿到相对客观的反馈。</p>
-      <p>这三个实验从简到难，验证了整个协作机制的有效性。</p>
+      <p>实验一是最基础的——几个 Agent 轮流报数 1、2、3。看起来简单，但要求 Agent 不抢话、不重复、不跳号。</p>
+      <p>这个实验最关键的作用是<strong>暴露问题</strong>。我做这个实验的时候发现，由于 Agent Loop 是长时序异步的，Agent 发完消息看不到自己发的，会以为没发出去再发一遍。这直接驱动了 2PC 的设计——下一页就讲。</p>
+      <p>论文表 7-10 的实测：10 个数字全部按序完成，顺序错误 0，唤醒失败 0，人工干预 0。SendMessage 调了 16 次比目标数多，这是协作协议的固定开销。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 11.7b. EXPERIMENT 02 — 续写接龙 ============ -->
+  <section class="slide" data-title="Exp2 · 续写接龙">
+    <div class="title-bar">
+      <h2>实验 ②：<span class="accent">续写接龙</span> · 共享上下文一致性</h2>
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">What · 任务设置</h4>
+        <p>多个 Teammate 轮流续写一句故事，保持人物、地点、时间线和事件因果一致。</p>
+        <h4>Why · 推进到语义层</h4>
+        <p>实验一只验证"能按序发言"，本实验进一步检验<strong>共享上下文</strong>——每个 Agent 是否真能读到前文设定。如果 shared_messages 广播有 bug，故事会立即跑题。</p>
+        <h4>How · 验证方式</h4>
+        <p>统计完成轮数、偏题次数、重复内容次数、人工干预次数。</p>
+      </div>
+      <div class="col-visual">
+        <div class="exp-result">
+          <div class="er-head">论文表 7-11 · 实测结果</div>
+          <table class="exp-table">
+            <tr><td>目标续写轮数</td><td class="num">13</td></tr>
+            <tr class="ok"><td>完成续写轮数</td><td class="num">13 / 13 · <strong>100%</strong></td></tr>
+            <tr class="ok"><td>偏题次数</td><td class="num">0</td></tr>
+            <tr class="warn"><td>重复内容次数</td><td class="num">1</td></tr>
+            <tr class="ok"><td>人工干预次数</td><td class="num">0</td></tr>
+          </table>
+          <p class="er-note"><strong>共享上下文有效</strong>：13 轮全部完成，偏题 0、人工干预 0。仅 1 次重复——角色「反转之王」被催促后重发了同句，提示仍需<strong>消息去重 / 过期约束</strong>。</p>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>实验二把验证重点从"能按序发言"推进到"能否沿用同一组事实"。</p>
+      <p>实验结果论文表 7-11：13 轮全部完成，偏题 0 次，人工干预 0 次——说明共享上下文确实让 Agent 能读到前文设定。</p>
+      <p>有一次重复——「反转之王」这个角色被 Main 催促后重发了同样的内容。这说明协作协议可以自主完成，但仍需要<strong>消息去重和过期约束</strong>。对应到工程场景就是：多 Agent 可以共享需求和接口事实，但任务边界必须明确。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 11.7c. EXPERIMENT 03 — 开发-测试协作 ============ -->
+  <section class="slide" data-title="Exp3 · 协作开发">
+    <div class="title-bar">
+      <h2>实验 ③：<span class="accent">开发—测试协作</span> · 工程闭环</h2>
+    </div>
+    <div class="split s46">
+      <div class="col-text">
+        <h4 style="margin-top:0">What · 任务设置</h4>
+        <p>Developer + Tester 双角色协作。任务是给前面端到端生成的电商网页项目<strong>追加 45 项验收清单</strong>（A 类页面跳转 20 + B 类浏览历史 15 + C 类 UX 改进 10）。Tester 把需求拆为可验收项 → 跑构建/静态检查 → SendMessage 反馈失败项 → Developer 修复 → 复验。</p>
+        <h4>Why · 客观评估的关键</h4>
+        <p>参考 Anthropic <em>harness-design-long-running-apps</em>：<strong>模型对自己的工作有偏袒</strong>，倾向给自己打高分。让<strong>另一个 Agent 做评审</strong>才能得到相对客观的反馈，形成"实现—验证—反馈—修复—复验"的工程闭环。</p>
+      </div>
+      <div class="col-visual">
+        <div class="exp-result">
+          <div class="er-head">论文表 7-13 · 实测结果</div>
+          <table class="exp-table">
+            <tr class="ok"><td>A 类 · 页面跳转</td><td class="num">20 / 20</td></tr>
+            <tr class="ok"><td>B 类 · 浏览历史</td><td class="num">15 / 15</td></tr>
+            <tr class="ok"><td>C 类 · UX 改进</td><td class="num">10 / 10</td></tr>
+            <tr class="ok"><td><strong>需求完成率</strong></td><td class="num"><strong>45 / 45 · 100%</strong></td></tr>
+            <tr><td>第 1 轮验收</td><td class="num">41 通过 / 4 失败</td></tr>
+            <tr class="ok"><td>第 2 轮复验</td><td class="num">45 / 45 全过</td></tr>
+            <tr><td>Tester 反馈轮次</td><td class="num">2 轮</td></tr>
+            <tr><td>Developer 修复轮次</td><td class="num">1 轮</td></tr>
+            <tr class="ok"><td>协同冲突 / 重复劳动</td><td class="num">0 / 0</td></tr>
+            <tr><td>人工干预</td><td class="num">2 次（仅流程调度）</td></tr>
+          </table>
+          <p class="er-note">闭环完整：<strong>需求清单 → 实现 → 首轮验收 → 反馈 → 集中修复 → 复验通过</strong>。Tester 发现的 4 个失败项都是局部细节（字段缺失、路径不一致等），未涉及架构级偏差。</p>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>实验三是真实工程场景了——电商网页项目追加 45 项验收清单。Developer 写代码，Tester 验收。</p>
+      <p>这里有个关键设计动机参考了 Anthropic 那篇 harness-design 文章——<strong>模型容易对自己的工作过度满意</strong>，让另一个 Agent 来评审才能拿到客观反馈。</p>
+      <p>结果论文表 7-13：第 1 轮 41 通过 4 失败，Developer 一次性修完那 4 项，第 2 轮 45/45 全过。<strong>需求完成率 100%、协同冲突 0、重复劳动 0</strong>。两次人工干预都是流程调度层面（提醒创建 Tester、提醒启动验收），不涉及代码或需求理解。</p>
+      <p>顺便提一句健壮性——LLM API 难免遇到限流、超时，我用<strong>指数退避</strong>自动处理瞬态故障（1s → 2s → 4s），不打断协作流程。</p>
     </aside>
   </section>
 
@@ -1482,138 +1548,271 @@ hook.rs         storage.rs
   </section>
 
 
-  <!-- ============ 13. SKILL SYSTEM ============ -->
-  <section class="slide" data-title="Skill System">
+  <!-- ============ §5.1 模板代码生成引擎：为什么需要它 ============ -->
+  <section class="slide" data-title="Template Engine · why">
     <div class="title-bar">
-      <h2>Skill 系统：<span class="accent">工程化能力</span>的按需封装</h2>
+      <h2>模板代码生成引擎：<span class="accent">把确定性还给确定的代码</span></h2>
     </div>
-    <div class="grid g2 mt-l">
-      <div class="card card-accent">
-        <h4>jen — SQL → Go 代码生成</h4>
-        <div class="mt-s"></div>
-        <p class="dim">自研 SQL 语法解析器 + 模板引擎，自动生成 DAO 层和 Model 层代码。</p>
-        <p class="dim" style="margin-top:6px"><strong>为什么不直接用 AI 生成？</strong>DAO/Model 代码高度模板化、体量大，AI 生成质量不稳定且耗时。工程化生成则<strong>质量可控、速度快、不侵入业务逻辑</strong>。</p>
-        <p class="dim" style="margin-top:6px"><strong>为什么封装为 Skill？</strong>按需加载，非必要不占用上下文。只在遇到 SQL 相关场景时才激活。</p>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">What · 这一章在讲什么</h4>
+        <p>把高度<strong>模板化、不侵入业务</strong>的代码——例如 PO/DTO/VO/DAO、CRUD 方法、列表查询——交给<strong>确定性生成器</strong>，而不是让 LLM 现场逐字写。</p>
+        <h4>Why · 为什么这件事值得做</h4>
+        <ul>
+          <li><strong>占比高</strong>：业务系统中模板代码常占大部分</li>
+          <li><strong>规则强</strong>：字段名、类型映射、CRUD 方法签名几乎可推导</li>
+          <li><strong>易出错</strong>：LLM 写时容易字段漂移、类型错、方法名不一致</li>
+          <li><strong>耗 token</strong>：51 张表用 LLM 直生 ≈ 24M token / 53 min（论文 §7.4）</li>
+        </ul>
+        <h4>How · 两层落地</h4>
+        <p><strong>① jen</strong>：自研 SQL parser + Go template，把 SQL → PO/DTO/VO/DAO/Tool。<br><strong>② webapp-gen</strong>：脚手架 + 原型驱动工作流，把"项目骨架"模板化。<br>两者都<strong>封装为 Skill</strong>——按需加载、不污染上下文。</p>
       </div>
-      <div class="card card-accent">
-        <h4>webapp-gen — Web App 生成</h4>
-        <div class="mt-s"></div>
-        <p class="dim">内含脚手架工具和完整工作流。</p>
-        <p class="dim" style="margin-top:6px"><strong>核心策略：原型驱动，逐步填充。</strong>先用脚手架搭出项目骨架和基础页面，再根据用户需求逐步替换和填充内容。</p>
-        <p class="dim" style="margin-top:6px"><strong>优势：</strong>保证项目结构完整性的同时，逐步逼近用户预期，减少"做完发现不对"的风险。</p>
+      <div class="col-visual">
+        <div class="fig" data-fig="图 · 模板化生成 vs LLM 现场生成">
+          <svg viewBox="0 0 380 280" style="width:100%;height:auto;font-family:var(--font-mono);font-size:11px">
+            <defs>
+              <marker id="ah-tg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+              </marker>
+            </defs>
+            <text x="190" y="18" text-anchor="middle" fill="#6b7a8f">两条路径处理同一份 SQL schema</text>
+
+            <!-- LLM 直接生成 -->
+            <text x="20" y="50" font-weight="600" fill="#7a1f1f">LLM 直接生成</text>
+            <rect x="20" y="60" width="80" height="32" fill="#fdf6f6" stroke="#7a1f1f" stroke-width="1.2"/>
+            <text x="60" y="80" text-anchor="middle">SQL</text>
+            <line x1="100" y1="76" x2="118" y2="76" stroke="#7a1f1f" stroke-width="1.2" marker-end="url(#ah-tg)"/>
+            <rect x="118" y="60" width="120" height="32" fill="#fdf6f6" stroke="#7a1f1f" stroke-width="1.2"/>
+            <text x="178" y="80" text-anchor="middle">LLM 逐字推理</text>
+            <line x1="238" y1="76" x2="256" y2="76" stroke="#7a1f1f" stroke-width="1.2" marker-end="url(#ah-tg)"/>
+            <rect x="256" y="60" width="100" height="32" fill="#fdf6f6" stroke="#7a1f1f" stroke-width="1.2"/>
+            <text x="306" y="80" text-anchor="middle">PO/DTO/VO/DAO</text>
+            <text x="190" y="110" text-anchor="middle" fill="#7a1f1f" font-size="10">字段漂移 · token 高 · 慢</text>
+
+            <!-- 分隔 -->
+            <line x1="20" y1="135" x2="360" y2="135" stroke="#e5e9f2" stroke-dasharray="2,2"/>
+
+            <!-- 模板化生成 -->
+            <text x="20" y="160" font-weight="600" fill="#1e5e3a">模板化生成（jen）</text>
+            <rect x="20" y="170" width="60" height="32" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+            <text x="50" y="190" text-anchor="middle">SQL</text>
+            <line x1="80" y1="186" x2="98" y2="186" stroke="#1e5e3a" stroke-width="1.2" marker-end="url(#ah-tg)"/>
+            <rect x="98" y="170" width="74" height="32" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+            <text x="135" y="190" text-anchor="middle">parser</text>
+            <line x1="172" y1="186" x2="190" y2="186" stroke="#1e5e3a" stroke-width="1.2" marker-end="url(#ah-tg)"/>
+            <rect x="190" y="170" width="80" height="32" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+            <text x="230" y="190" text-anchor="middle">template</text>
+            <line x1="270" y1="186" x2="288" y2="186" stroke="#1e5e3a" stroke-width="1.2" marker-end="url(#ah-tg)"/>
+            <rect x="288" y="170" width="68" height="32" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+            <text x="322" y="190" text-anchor="middle">代码</text>
+            <text x="190" y="220" text-anchor="middle" fill="#1e5e3a" font-size="10">100% 字段对齐 · token 1/50 · 27× 加速</text>
+
+            <text x="190" y="260" text-anchor="middle" fill="#6b7a8f" font-size="10">数字来源：论文表 7-8 / 7-9 · 51 张表 DAO 全生成</text>
+          </svg>
+        </div>
       </div>
     </div>
     <aside class="notes">
-      <p>最后讲一个重要的工程化设计——<strong>Skill 系统</strong>。</p>
-      <p>Skill 的核心理念是<strong>按需加载</strong>。不是把所有能力都塞进 System Prompt，而是只有当 Agent 遇到特定场景时，才通过 LoadSkill 工具加载对应的技能包。</p>
-      <p>第一个例子是 <strong>jen</strong>——一个从 SQL 语句自动生成 Go 结构体和 DAO 层代码的工具。它的核心是我开发的一个 SQL 语法解析器，能从 SQL 里提取出表名、字段、索引等关键信息，然后基于模板语法生成完整的 CRUD 方法、事务方法、条件查询等。为什么不用 AI 直接生成？因为 DAO/Model 代码太模板化了，AI 生成容易出错还慢，工程化生成质量可控。</p>
-      <p>第二个例子是 <strong>webapp-gen</strong>——一个 Web App 生成工作流。它的策略是"原型驱动，逐步填充"——先搭出完整的项目骨架和基础页面，确保项目结构没问题，然后再根据用户需求逐步填充替换。这比"一口气生成完整应用"靠谱得多。</p>
+      <p>第五章讲<strong>模板代码生成引擎</strong>，重点对象是 jen。</p>
+      <p>核心问题是：业务系统里有大量<strong>结构高度可预测</strong>的代码——PO/DTO/VO/DAO、CRUD 方法、列表查询。这些代码<strong>占比高、规则强</strong>，但 LLM 写起来<strong>易出错、耗 token</strong>。论文 §7.4 实测，让 LLM 直接为 51 张表生成 DAO，烧了 24M token、跑了 53 分钟。</p>
+      <p>方案是把这部分代码<strong>从 LLM 生成链路里剥离</strong>——交给确定性生成器 jen。Agent 负责理解需求 + 准备输入 + 检查产物，不再逐字写模板代码。</p>
+      <p>下一页详细讲 jen 的架构。</p>
     </aside>
   </section>
 
-  <!-- ============ 13.5. JEN DETAIL ============ -->
-  <section class="slide" data-title="jen Code Gen">
+  <!-- ============ §5.2 jen 架构 ============ -->
+  <section class="slide" data-title="jen Architecture">
     <div class="title-bar">
-      <h2>jen：<span class="accent">SQL → Go DAO/Model</span> 工程化生成</h2>
+      <h2>jen 架构：<span class="accent">SQL → 结构化模型 → 多层模板</span></h2>
     </div>
-    <div class="jen-flow mt-m">
-      <div class="step">
-        <h5>1. 输入 SQL</h5>
-        <p>CREATE TABLE<br>建表语句</p>
+    <div class="jen-arch mt-m">
+      <div class="ja-stage">
+        <span class="ja-tag">① 输入</span>
+        <h5>schema.sql</h5>
+        <p>建表语句 / 数据库连接</p>
+        <div class="ja-code">CREATE TABLE `t_user` (<br>&nbsp;&nbsp;`id` bigint UNSIGNED ...,<br>&nbsp;&nbsp;`name` varchar(128) ...,<br>&nbsp;&nbsp;UNIQUE KEY `uk_name` ...<br>);</div>
       </div>
-      <div class="arr">→</div>
-      <div class="step">
-        <h5>2. 语法解析</h5>
-        <p>自研 parser<br>提取表名、字段、索引</p>
+      <div class="ja-arr">→</div>
+      <div class="ja-stage">
+        <span class="ja-tag">② 解析</span>
+        <h5>statement_parser</h5>
+        <p>自研 SQL parser，输出结构化 Schema</p>
+        <div class="ja-code">Schema {<br>&nbsp;&nbsp;Table · Column[]<br>&nbsp;&nbsp;Index · UniqueKey<br>&nbsp;&nbsp;TypeMap (MySQL→Go)<br>}</div>
       </div>
-      <div class="arr">→</div>
-      <div class="step">
-        <h5>3. 模板渲染</h5>
-        <p>基于 Go template<br>填充关键变量</p>
-      </div>
-      <div class="arr">→</div>
-      <div class="step" style="flex:1.4">
-        <h5>4. 输出原子方法</h5>
-        <div class="out-list">
-          <span class="o">Insert</span><span class="o">Update</span>
-          <span class="o">Delete</span><span class="o">GetByPK</span>
-          <span class="o">GetByIdx</span><span class="o">List</span>
-          <span class="o">LikeQuery</span><span class="o">CustomCond</span>
-          <span class="o">WithTx</span><span class="o">BatchInsert</span>
+      <div class="ja-arr">→</div>
+      <div class="ja-stage">
+        <span class="ja-tag">③ 渲染</span>
+        <h5>generator × template</h5>
+        <p>5 个 generator × 2 套框架模板</p>
+        <div class="ja-grid">
+          <span>generate_po</span>
+          <span>generate_dto</span>
+          <span>generate_vo</span>
+          <span>generate_dao</span>
+          <span>generator_tool</span>
         </div>
+        <p class="ja-hint">framework: itea-go | gorm</p>
+      </div>
+      <div class="ja-arr">→</div>
+      <div class="ja-stage wide">
+        <span class="ja-tag">④ 产物</span>
+        <h5>原子方法集</h5>
+        <div class="ja-out">
+          <span>Insert</span><span>Update</span><span>Delete</span>
+          <span>GetByPK</span><span>GetByUK</span><span>GetByIdx</span>
+          <span>List</span><span>LikeQuery</span><span>CustomCond</span>
+          <span>WithTx</span><span>BatchInsert</span><span>Count</span>
+        </div>
+        <p class="ja-hint">主键 / 唯一索引 / 普通索引<br>分别派生独立查询方法</p>
       </div>
     </div>
-    <div class="grid g2 mt-l">
-      <div class="card card-soft">
-        <h4 style="font-size:13px;color:var(--good)">√ 为什么不让 AI 直接生成？</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">DAO/Model 代码<strong>模板化、体量大、不侵入业务</strong>。AI 生成质量不稳定、耗时长、易出现字段名拼写错误、SQL 注入风险。工程化生成则<strong>质量可控、速度快、格式统一</strong>。</p>
-      </div>
-      <div class="card card-soft">
-        <h4 style="font-size:13px;color:var(--accent)">√ 为什么封装为 Skill？</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">jen 只在<strong>遇到 SQL 相关任务</strong>时才被需要。如果常驻 system prompt 会浪费上下文。封装为 Skill 实现<strong>渐进式加载、按需激活</strong>——Agent 看到 SQL 才调 LoadSkill 拉入完整指令。</p>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#jen #code-gen #model_infrax</span>
-      <span class="slide-number" data-current="23" data-total="36"></span>
-    </div>
+    <p class="dim mt-m" style="font-size:13px;text-align:center">源码：<code>github.com/LingoJack/model_infrax</code> · <code>internal/parser</code> + <code>internal/generator/template/</code> · embed 模板供运行时渲染</p>
     <aside class="notes">
-      <p>Skill 系统的第一个深入案例是 <strong>jen</strong>——一个 SQL 到 Go 代码的工程化生成工具。</p>
-      <p>整个流程很清晰，四步走。<strong>第一步，用户给一段 CREATE TABLE 的 SQL。第二步，jen 用我自研的 SQL parser 把建表语句解析成结构化数据</strong>——表名是什么、有哪些字段、字段类型、哪些字段是主键、哪些有索引、哪些是唯一索引。<strong>第三步，把这些结构化数据塞进 Go template，渲染出代码。第四步，输出一套完整的原子方法</strong>——增删改查、按主键查、按索引查、列表分页、模糊查询、自定义条件、事务版本……一整套都有。</p>
-      <p>有同学会问：<strong>为什么不让 AI 直接写？</strong>很简单——DAO/Model 代码<strong>极度模板化、体量大、几乎不变</strong>，让 AI 生成质量不稳定还慢，可能字段名拼错、可能 SQL 注入。工程化方式生成则<strong>确定性强</strong>，AI 永远写不出比模板更好的样板代码。</p>
-      <p>那<strong>为什么封装为 Skill？</strong>因为 jen 只在做数据库相关功能时才需要。如果常驻系统提示就是浪费 token。封装为 Skill 后<strong>按需加载</strong>——Agent 看到 SQL 文件才调用 LoadSkill 加载完整指令。</p>
+      <p>jen 的架构很清晰，四个阶段。</p>
+      <p><strong>第一阶段，输入</strong>：用户给一段 CREATE TABLE 的 SQL，或者直接连数据库让 jen 反查 schema。</p>
+      <p><strong>第二阶段，解析</strong>：我自研了一个 SQL parser，把建表语句解析成结构化的 Schema 对象——表名、字段、字段类型、主键、唯一索引、普通索引，全部提取出来。MySQL 类型到 Go 类型的映射也在这一层处理。</p>
+      <p><strong>第三阶段，渲染</strong>：有 5 个 generator——po/dto/vo/dao/tool，每个 generator 对应不同的代码层；同时支持两套框架模板——itea-go 和 gorm。模板用 Go template 写，通过 embed 打包进二进制。</p>
+      <p><strong>第四阶段，产物</strong>：输出一整套<strong>原子方法</strong>。最关键的是<strong>按索引派生方法</strong>——主键查、唯一索引查、普通索引查分别生成独立方法，这是 LLM 直接写最容易漏的部分。</p>
+      <p>下一页给大家看实测对比数字。</p>
     </aside>
   </section>
 
-  <!-- ============ 13.7. WEBAPP-GEN ============ -->
-  <section class="slide" data-title="webapp-gen">
+  <!-- ============ §5.3 jen 实测对比 ============ -->
+  <section class="slide" data-title="jen Benchmark">
     <div class="title-bar">
-      <h2>webapp-gen：<span class="accent">原型驱动</span>逐步填充</h2>
+      <h2>jen 实测对比：<span class="accent">51 张表 DAO 全生成</span></h2>
+      <span class="sub">论文表 7-8 / 7-9</span>
     </div>
-    <div class="grid g2 mt-l" style="align-items:stretch">
-      <div style="display:flex;flex-direction:column">
-        <h4 style="font-size:16px;color:var(--bad);margin:0 0 10px">反例 · 一次性生成</h4>
-        <div class="dialog" style="font-size:14px;flex:1;margin-top:0">
-          <div class="line"><span class="role user">用户:</span> 帮我做一个待办应用</div>
-          <div class="line"><span class="role agent">Agent:</span> 一次性生成 50 个文件……</div>
-          <div class="line dim">5 分钟后</div>
-          <div class="line" style="color:var(--bad)">路由配置漏了 / CSS 引用错路径 / 组件 import 循环</div>
-          <div class="line"><span class="role user">用户:</span> 整个项目跑不起来。</div>
-        </div>
+    <div class="jen-bench">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th class="col-bad">LLM 直接生成</th>
+            <th class="col-good">jen + Skill</th>
+            <th class="col-delta">改善</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>编译通过</td><td>通过</td><td>通过</td><td>—</td></tr>
+          <tr><td>字段一致性</td><td>247 / 258 = 95.7%</td><td><strong>258 / 258 = 100%</strong></td><td class="delta">+4.3 pp</td></tr>
+          <tr><td>CRUD 覆盖率</td><td>100%</td><td>100%</td><td>—</td></tr>
+          <tr><td>索引查询覆盖</td><td>22 / 26 = 84.6%</td><td><strong>26 / 26 = 100%</strong></td><td class="delta">+15.4 pp</td></tr>
+          <tr class="hl"><td>LLM 调用次数</td><td>582</td><td><strong>11</strong></td><td class="delta">↓ 53×</td></tr>
+          <tr class="hl"><td>工具调用次数</td><td>2,006</td><td><strong>15</strong></td><td class="delta">↓ 134×</td></tr>
+          <tr class="hl"><td>Token 消耗</td><td>24,219,892</td><td><strong>483,775</strong></td><td class="delta">↓ 50×</td></tr>
+          <tr class="hl"><td>会话总耗时</td><td>53 min 5 sec</td><td><strong>1 min 56 sec</strong></td><td class="delta">↓ 27×</td></tr>
+          <tr><td>压缩触发次数</td><td>67</td><td>0</td><td class="delta">—</td></tr>
+          <tr><td>人工修正次数</td><td>0（2 次网络重试不计）</td><td>0</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <div class="bench-conclusion">
+        <h4>结论</h4>
+        <p>两者最终都能编译通过，但<strong>过程成本天壤之别</strong>。LLM 直接生成需要在字段对齐、DAO 方法补全、编译修复之间反复切换，触发 67 次 compact —— <strong>长上下文维护本身成为主要负担</strong>。</p>
+        <p style="margin-top:8px">jen + Skill 把模板代码从 LLM 链路剥离后，Agent 只负责理解需求、准备输入、验收结果。<strong>规则稳定、重复度高、易字段漂移</strong>的部分交给确定性生成器，是这套设计的核心价值。</p>
       </div>
-      <div style="display:flex;flex-direction:column">
-        <h4 style="font-size:16px;color:var(--good);margin:0 0 10px">√ 原型驱动：脚手架 + 填充</h4>
-        <div class="jen-flow webapp-flow" style="flex:1;margin-top:0;align-items:stretch">
-          <div class="step" style="text-align:left;display:flex;flex-direction:column;justify-content:center">
-            <h5>① 脚手架</h5>
-            <p>用成熟模板搭出可跑的最小项目（含路由、状态、样式系统）</p>
-          </div>
-          <div class="arr">→</div>
-          <div class="step" style="text-align:left;display:flex;flex-direction:column;justify-content:center">
-            <h5>② 原型替换</h5>
-            <p>逐页用 mock 数据填充<br>用户先看视觉效果</p>
-          </div>
-          <div class="arr">→</div>
-          <div class="step" style="text-align:left;display:flex;flex-direction:column;justify-content:center">
-            <h5>③ 接入真实数据</h5>
-            <p>mock 替换为真实 API<br>逐步加入业务逻辑</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <p class="dim mt-l" style="font-size:15px;text-align:center;line-height:1.7"><strong>核心优势：</strong>项目<strong>结构完整性</strong>有脚手架保证；用户预期通过<strong>逐步可见的原型</strong>校准，减少"做完发现不对"的反工。</p>
-    <div class="deck-footer">
-      <span class="mono">#webapp-gen #prototype-driven</span>
-      <span class="slide-number" data-current="24" data-total="36"></span>
     </div>
     <aside class="notes">
-      <p>Skill 系统的第二个深入案例是 <strong>webapp-gen</strong>——生成完整 Web App 的工作流。</p>
-      <p>先讲一个常见的反例。用户说"帮我做个待办应用"，AI 抖擞精神一口气生成 50 个文件。结果是什么？<strong>路由配置漏写一行、CSS 路径引错、组件 import 出现循环依赖</strong>。项目跑不起来。用户又得逐个排查。</p>
-      <p>问题在哪？<strong>大模型不擅长一次性产出结构完整的工程</strong>。文件越多，遗漏的概率越高。</p>
-      <p>所以我设计了<strong>原型驱动</strong>的工作流。<strong>第一步，用成熟的脚手架</strong>——比如 vite + react + tailwind 模板——搭出一个可以立即 run 起来的最小项目。这个项目已经有路由、状态、样式系统，工程结构完整。</p>
-      <p><strong>第二步，逐页用 mock 数据填充原型</strong>。用户能看到"应用大概长什么样"，可以提前给视觉反馈，减少方向漂移。</p>
-      <p><strong>第三步，把 mock 替换为真实 API</strong>，逐步加入业务逻辑。每一步都是<strong>增量改造</strong>，可见、可控、可回退。</p>
-      <p>这就是"<strong>原型驱动、逐步填充</strong>"——既保住项目完整性，又匹配用户预期。</p>
+      <p>这页是论文 §7.4 的实测数据，对象是<strong>51 张表的 DAO 代码全部生成</strong>。</p>
+      <p>看几个关键数字。最显著的是<strong>过程成本</strong>——LLM 直接生成调了 LLM 582 次、跑工具 2006 次、烧了 2400 万 token、用了 53 分钟。jen + Skill 这边只调 LLM 11 次、工具 15 次、48 万 token、不到 2 分钟。<strong>token 降到 1/50、耗时降到 1/27</strong>。</p>
+      <p>更重要的是<strong>质量</strong>。字段一致性从 95.7% 升到 100%；索引查询覆盖从 84.6% 升到 100%——这两个指标直接说明 LLM 写复杂场景容易丢字段、漏索引方法，而模板生成则<strong>规则稳定</strong>。</p>
+      <p>compact 触发次数 67 → 0 也很说明问题：LLM 直接生成已经把 51 张表撑爆了上下文，不停在压缩。jen 这边根本不需要——因为它<strong>没让 LLM 逐字写代码</strong>。</p>
+      <p>所以核心结论是：<strong>规则稳定、重复度高、易字段漂移的代码，应该交给确定性生成器</strong>，把 LLM 解放出来做需求理解和集成验收。</p>
+    </aside>
+  </section>
+
+  <!-- ============ §5.4 webapp-gen 完整工作流 ============ -->
+  <section class="slide" data-title="webapp-gen Flow">
+    <div class="title-bar">
+      <h2>webapp-gen：<span class="accent">脚手架 + 原型驱动</span>的全栈工作流</h2>
+    </div>
+    <div class="webapp-pipe mt-m">
+      <div class="wp-row">
+        <div class="wp-step wp-init">
+          <span class="wp-num">0</span>
+          <h5>项目初始化</h5>
+          <p><code>git clone proj_template</code><br>React+TS+Tailwind / Go+Gin+GORM 骨架</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step">
+          <span class="wp-num">1</span>
+          <h5>需求分析</h5>
+          <p>Plan Mode → docs/<strong>requirement.md</strong><br>用例 + 非功能需求</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step">
+          <span class="wp-num">2</span>
+          <h5>API 设计</h5>
+          <p>docs/<strong>api-design.md</strong><br>统一信封 / 错误码 / 分页 / 鉴权</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step">
+          <span class="wp-num">3</span>
+          <h5>前端设计</h5>
+          <p>docs/<strong>frontend_design.md</strong><br>路由 / 组件 / 状态管理</p>
+        </div>
+      </div>
+      <div class="wp-row">
+        <div class="wp-step wp-loop">
+          <span class="wp-num">4</span>
+          <h5>原型生成</h5>
+          <p>mock 数据填充<br><code>npx tsc --noEmit</code></p>
+        </div>
+        <div class="wp-arr">⇄</div>
+        <div class="wp-step wp-loop">
+          <span class="wp-num">5</span>
+          <h5>原型反馈</h5>
+          <p><code>make run-frontend</code><br>Ask 用户审视 → 迭代</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step">
+          <span class="wp-num">6</span>
+          <h5>后端设计</h5>
+          <p>docs/<strong>backend-design.md</strong><br><span class="hl-skill">@skill: jen</span> 生成 PO/DAO</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step">
+          <span class="wp-num">7</span>
+          <h5>后端编码</h5>
+          <p>controller / service / wire DI<br>Podman MySQL 单容器</p>
+        </div>
+      </div>
+      <div class="wp-row">
+        <div class="wp-step wp-test">
+          <span class="wp-num">8</span>
+          <h5>黑盒测试</h5>
+          <p><code>scripts/api-test.sh</code><br>覆盖 CRUD + 鉴权 + 边界</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step">
+          <span class="wp-num">9</span>
+          <h5>前端编码</h5>
+          <p>替换 mock → 真实 API<br>snake_case ↔ camelCase</p>
+        </div>
+        <div class="wp-arr">→</div>
+        <div class="wp-step wp-final">
+          <span class="wp-num">10</span>
+          <h5>容器化验收</h5>
+          <p><code>podman compose up</code><br>三环境矩阵跑通才算完成</p>
+        </div>
+        <div class="wp-arr"></div>
+        <div class="wp-step wp-result">
+          <span class="wp-num">✓</span>
+          <h5>可交付制品</h5>
+          <p>github.com/LingoJack/<br>gradiation_artifact_demo</p>
+        </div>
+      </div>
+    </div>
+    <p class="dim mt-m" style="font-size:13px;text-align:center"><strong>工作流核心</strong> · 脚手架保证<u>结构完整性</u> · 原型反馈保证<u>用户预期对齐</u> · 黑盒测试 + 三环境矩阵保证<u>部署链路可用</u> · jen Skill 嵌入 Step 6 处理模板代码</p>
+    <aside class="notes">
+      <p>webapp-gen 是 §5 的第二个 Skill，目标是<strong>生成完整全栈 Web 应用</strong>。</p>
+      <p>它不是"AI 一次性写完一个 App"，而是一条<strong>11 步固化工作流</strong>。给大家逐步看一下。</p>
+      <p><strong>Step 0 强制前置</strong>：git clone proj_template，先有可跑的最小骨架——React + TS + Tailwind + Go + Gin + GORM。结构完整性由模板兜底。</p>
+      <p><strong>Step 1–3</strong> 是文档驱动：先写需求，再定 API 契约（统一信封、错误码、分页、鉴权），再做前端设计。<strong>API 文档是前后端唯一契约</strong>——文档没定义的字段不允许出现在代码里。</p>
+      <p><strong>Step 4–5 是关键的反馈闭环</strong>：先用 mock 数据生成可视原型，让用户在还没写后端代码的时候就<strong>校准预期</strong>。这一步迭代多少轮都比"全做完才发现不对"便宜。论文实测案例迭代了 13 轮原型反馈。</p>
+      <p><strong>Step 6 用 jen Skill</strong>：写完 SQL schema 后调 <code>@skill:jen</code>，把 PO/DTO/VO/DAO 一次生成。这就是上一页对比里 jen 的实战位置。</p>
+      <p><strong>Step 7–10</strong> 后端编码 → 黑盒测试 → 前端编码 → 容器化验收。其中黑盒测试有个特别设计——<strong>三环境矩阵</strong>：本地 + podman 单容器 + 全栈 podman compose，三个环境同一份脚本都要过，避免"本地好好的容器里炸了"。</p>
+      <p>整个工作流的核心思想是：<strong>把 AI 不擅长的部分交给模板，AI 只做需求理解、契约定义、增量集成</strong>。最终产物在右下角的开源仓库可以直接看。</p>
     </aside>
   </section>
 
@@ -1662,31 +1861,33 @@ hook.rs         storage.rs
   <!-- ============ 14. SUMMARY ============ -->
   <section class="slide" data-title="Summary">
     <div class="title-bar">
-      <h2>总结：<span class="accent">三个核心贡献</span></h2>
+      <h2>总结：<span class="accent">四大贡献</span></h2>
     </div>
-    <div class="grid g3 mt-l">
+    <div class="grid g4 mt-l" style="gap:14px">
       <div class="card card-accent card-hover">
-        <h4>上下文窗口治理</h4>
-        <p class="dim" style="margin-top:8px">分级消息窗口 + 多级压缩（micro/auto）+ 动态 System Prompt 追加。让 Agent 能在有限窗口内长期稳定运行，大幅降低幻觉和重复操作。</p>
+        <h4>① 上下文窗口治理</h4>
+        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">分级消息窗口 + 多级压缩（micro / auto）+ 豁免高价值消息 + 动态 System Prompt 追加。把上下文当作推荐系统：决策信息多放、执行中间过程少放，让 Agent 长期低幻觉运行。</p>
       </div>
       <div class="card card-accent card-hover">
-        <h4>渐进式工具体系</h4>
-        <p class="dim" style="margin-top:8px">从 4 个基础工具到 20+ 工具，每个工具都有明确的问题驱动动机。Plan 清空上下文、Grep 构建上下文、Ask 防漂移、Session 处理交互——形成完整闭环。</p>
+        <h4>② 面向场景强化的工具</h4>
+        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Grep 构建上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / TodoWrite + system_reminder 防遗忘 / Hook 14 事件守工程规范。</p>
       </div>
       <div class="card card-accent card-hover">
-        <h4>多 Agent 协作</h4>
-        <p class="dim" style="margin-top:8px">Teammate/SubAgent 协作 + Two-Staged Commit 消息一致性 + 交叉评审客观评估 + 指数退避健壮性。Agent 团队能长期高效协作。</p>
+        <h4>③ 多 Agent 协作试验</h4>
+        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>2PC SendMessage</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
+      </div>
+      <div class="card card-accent card-hover">
+        <h4>④ 模板代码生成引擎</h4>
+        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65"><strong>jen</strong>：SQL → Go DAO 全套原子方法。51 张表实测：token <strong>↓ 50×</strong>、耗时 <strong>↓ 27×</strong>、字段一致性 <strong>100%</strong>。<br><strong>webapp-gen</strong>：脚手架 + 原型驱动 + 三环境矩阵验收。两者均封装为 Skill 按需加载。</p>
       </div>
     </div>
-    <div class="deck-footer">
-      <span class="mono">github.com/LingoJack/jcli</span>
-      <span class="slide-number" data-current="26" data-total="36"></span>
-    </div>
+    <p class="dim mt-l" style="font-size:14px;text-align:center;line-height:1.7">所有代码开源 · MIT License · <code>github.com/LingoJack/jcli</code> · <code>model_infrax</code> · <code>gradiation_artifact_demo</code></p>
     <aside class="notes">
-      <p>好，做个总结。我这个毕设的核心贡献有三个。</p>
-      <p><strong>第一，上下文窗口治理</strong>。这是最核心的。分级消息窗口决定哪些信息优先保留，多级压缩在窗口快满时智能释放空间，动态 System Prompt 让 Agent 感知持续状态。三者配合，Agent 能在有限窗口内长期稳定运行，幻觉和重复操作大幅降低。</p>
-      <p><strong>第二，渐进式工具体系</strong>。从 4 个基础工具扩展到 20 多个，每个新工具都是为了解决前面遇到的特定问题。Plan 帮助清空上下文重新出发，Grep 帮助高效构建上下文，Ask 防止需求漂移，Session 处理交互式命令。这些工具形成了一个完整的闭环。</p>
-      <p><strong>第三，多 Agent 协作</strong>。通过 Teammate 和 SubAgent 实现 Agent 团队协作，用 Two-Staged Commit 保证消息一致性，用交叉评审实现客观质量评估，用指数退避增强健壮性。</p>
+      <p>做个总结。这个毕设的核心贡献有<strong>四块</strong>。</p>
+      <p><strong>① 上下文窗口治理</strong>——分级窗口 + 多级压缩 + 豁免高价值消息 + 动态 System Prompt。把上下文当推荐系统优化：决策多放、中间过程少放。</p>
+      <p><strong>② 面向场景强化的工具</strong>——每个工具都是为解决具体问题而引入：Grep 主动构建上下文、Ask 防漂移、Plan 调研后清空上下文重新执行、Edit 精确替换、执行三态自动流转处理交互式命令、TodoWrite 防遗忘、Hook 14 事件守规范。</p>
+      <p><strong>③ 多 Agent 协作试验</strong>——这是这次重点重写的部分。三个实验从简到难：轮流报数验证消息层、续写接龙验证共享上下文、协作开发验证工程闭环。三组数字都在论文表里——100%、13/13、45/45。2PC 是为解决长时序重复消息设计的关键机制。</p>
+      <p><strong>④ 模板代码生成引擎</strong>——jen 把 51 张表的实测从 24M token 降到 48 万、53 分钟降到 2 分钟、字段一致性从 95.7% 升到 100%。webapp-gen 把全栈生成固化为 11 步工作流。两者都用 Skill 按需加载，不污染上下文。</p>
     </aside>
   </section>
 
