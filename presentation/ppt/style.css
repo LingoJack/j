@@ -591,12 +591,7 @@ code{
 .mini-table td.lvl-l{color:var(--text-3)}
 
 /* deck-footer 收敛 */
-.deck-footer{
-  font-family:var(--font-mono);
-  color:var(--text-3);
-  font-size:13px;
-}
-.deck-footer .mono{display:none}
+.deck-footer{display:none}
 .slide-number{color:var(--text-3)}
 
 /* ============================================
