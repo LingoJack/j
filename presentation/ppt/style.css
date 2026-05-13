@@ -1296,7 +1296,7 @@ code{
 .stack-figs{
   position:relative;
   width:100%;
-  aspect-ratio:16/10;
+  aspect-ratio:16/12;
   margin-top:8px;
 }
 .stack-figs .sf{
@@ -1343,25 +1343,25 @@ code{
 /* 四张错位叠放 */
 .stack-figs .sf-1{
   top:0;
-  left:0;
+  left:2%;
   transform:rotate(-2.5deg);
   z-index:1;
 }
 .stack-figs .sf-2{
-  top:6%;
-  left:11%;
+  top:22%;
+  left:14%;
   transform:rotate(1deg);
   z-index:2;
 }
 .stack-figs .sf-3{
-  top:14%;
-  left:22%;
+  top:44%;
+  left:4%;
   transform:rotate(-1deg);
   z-index:3;
 }
 .stack-figs .sf-4{
-  top:22%;
-  left:8%;
+  top:60%;
+  left:16%;
   transform:rotate(1.5deg);
   z-index:4;
 }
