@@ -883,254 +883,129 @@ hook.rs         storage.rs
   <!-- ============ 7. TOOL SYSTEM OVERVIEW ============ -->
   <section class="slide" data-title="Tool System">
     <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — 渐进增强的设计哲学
-    </div>
-    <div class="arch mt-m">
-      <div class="tier"><div class="tname">基础层</div>
-        <div class="cells"><div class="cell"><h4>Read</h4><p>读取文件</p></div>
-          <div class="cell"><h4>Write</h4><p>写入文件</p></div>
-          <div class="cell"><h4>Bash</h4><p>执行命令</p></div>
-          <div class="cell"><h4>LoadSkill</h4><p>按需加载</p></div>
-        </div>
-      </div>
-      <div class="tier hl"><div class="tname">增强层</div>
-        <div class="cells"><div class="cell"><h4>Grep</h4><p>搜索匹配</p></div>
-          <div class="cell"><h4>Ask</h4><p>澄清意图</p></div>
-          <div class="cell"><h4>Plan</h4><p>制定计划</p></div>
-          <div class="cell"><h4>WebFetch/Search</h4><p>网络能力</p></div>
-        </div>
-      </div>
-      <div class="tier"><div class="tname">协作层</div>
-        <div class="cells"><div class="cell"><h4>TodoWrite/Read</h4><p>任务追踪</p></div>
-          <div class="cell"><h4>SubAgent</h4><p>委派子任务</p></div>
-          <div class="cell"><h4>Teammate</h4><p>多人协作</p></div>
-          <div class="cell"><h4>Session</h4><p>交互式任务</p></div>
-        </div>
-      </div>
-    </div>
-    <aside class="notes">
-      <p>现在进入第三部分——<strong>工具体系</strong>。我的设计哲学是<strong>渐进增强</strong>：从最基础的几个工具开始，每个新工具的引入都是为了解决前面遇到的特定问题。</p>
-      <p>最底层是<strong>基础层</strong>：Read、Write、Bash、LoadSkill。有了这四个工具，Agent 理论上就能工作了——能读文件、写文件、执行命令。但实际上远远不够。</p>
-      <p>第二层是<strong>增强层</strong>。每个工具都有明确的引入动机：Grep 让 Agent 面对未知项目时能高效搜索，比用 Bash grep 质量稳定得多；Ask 给用户一个澄清意图的入口，避免做出来的东西跟预期漂移；Plan 帮 Agent 提前想清楚再动手，减少改不全的问题；WebFetch/Search 增强 Agent 获取最新知识的能力。</p>
-      <p>第三层是<strong>协作层</strong>：TodoWrite/Read 帮 Agent 追踪进度、避免遗漏；SubAgent 委派调研任务以低成本收集上下文；Teammate 实现多 Agent 协作；Session 处理交互式命令。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 8. TOOL: Grep + Ask ============ -->
-  <section class="slide" data-title="Grep & Ask">
-    <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — Grep 与 Ask 工具的设计动机
-    </div>
-    <div class="grid g2 mt-l">
-      <div class="card card-accent">
-        <h4>Grep：构建上下文的关键工具</h4>
-        <div class="mt-s"></div>
-        <p class="dim">面对一个未知的项目，Agent 需要主动搜索代码来<strong>构建上下文</strong>。</p>
-        <p class="dim" style="margin-top:8px"><strong>没有 Grep：</strong>Agent 只能通过 Bash 执行 grep 命令，匹配质量不稳定、输出格式难解析、速度慢。</p>
-        <p class="dim" style="margin-top:8px"><strong>有了 Grep：</strong>结构化搜索结果，支持正则、文件类型过滤、上下文行数、分页。Agent 能高效定位目标代码。</p>
-      </div>
-      <div class="card card-accent">
-        <h4>Ask：防止需求漂移的阀门</h4>
-        <div class="mt-s"></div>
-        <p class="dim">用户的需求描述往往模糊或不完整，Agent 如果盲目执行，最终产物可能与用户预期<strong>严重漂移</strong>。</p>
-        <p class="dim" style="margin-top:8px"><strong>没有 Ask：</strong>Agent 猜测意图，做完后发现不是用户想要的，返工成本高。</p>
-        <p class="dim" style="margin-top:8px"><strong>有了 Ask：</strong>Agent 可以在关键决策点征询用户意见，扩展明确需求，避免方向性错误。</p>
-      </div>
-    </div>
-    <aside class="notes">
-      <p>我挑两个典型工具展开讲一下，说明每个工具引入背后的<strong>问题驱动</strong>思路。</p>
-      <p>先说 <strong>Grep</strong>。Agent 面对一个从来没见过的项目，它怎么知道代码在哪？它需要搜索。没有 Grep 工具的时候，Agent 只能通过 Bash 执行 shell 的 grep 命令。但 shell grep 的输出格式不稳定，Agent 解析起来容易出错，而且缺乏上下文行、文件类型过滤等高级功能。</p>
-      <p>有了专用的 Grep 工具，搜索结果是结构化的——带行号、带上下文、支持正则、支持文件类型过滤。Agent 能快速定位到目标代码，这是它<strong>主动构建上下文的关键能力</strong>。</p>
-      <p>再说 <strong>Ask</strong>。用户说"帮我做一个好看的页面"，这需求太模糊了。如果 Agent 不问就直接做，做完发现用户要的是红色风格，Agent 做了个蓝色的——这就是<strong>需求漂移</strong>。Ask 工具让 Agent 在不确定的时候主动向用户确认，在关键决策点征询意见。一个简单的确认，可能省掉几个小时的返工。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 9. TOOL: Plan + Edit ============ -->
-  <section class="slide" data-title="Plan & Edit">
-    <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — Plan + Edit：先规划后执行
-    </div>
-    <div class="stack mt-l">
-      <div class="rule-row">
-        <span class="num" style="background:var(--accent);color:#fff;border-radius:2px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0;font-family:var(--font-mono)">P</span>
-        <div>
-          <b>Plan 工具：先调研，再规划，后执行</b>
-          <p class="dim"><strong>问题：</strong>LLM 有时候没想清楚就开始改代码，导致变更不完整、改了 A 漏了 B，且调研过程占用大量上下文。</p>
-          <p class="dim" style="margin-top:4px"><strong>方案：</strong>进入 Plan 模式 → 只读调研（Read/Grep/Glob）→ 制定自包含执行计划 → <strong>清空上下文</strong> → 按计划执行。调研信息不污染执行阶段窗口。</p>
-        </div>
-      </div>
-      <div class="rule-row">
-        <span class="num" style="background:var(--good);color:#fff;border-radius:2px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0;font-family:var(--font-mono)">E</span>
-        <div>
-          <b>Edit 工具：精确替换，非全文覆写</b>
-          <p class="dim"><strong>问题：</strong>Write 工具只能全文覆写文件，对大文件的微小改动效率极低，且容易引入意外修改。</p>
-          <p class="dim" style="margin-top:4px"><strong>方案：</strong>Edit 工具基于<strong>精确字符串匹配</strong>做局部替换，只发送 diff 而非全文，大幅减少 token 消耗和错误率。</p>
-        </div>
-      </div>
-    </div>
-    <aside class="notes">
-      <p>接下来讲两个对编码场景特别关键的工具。</p>
-      <p><strong>Plan 工具</strong>解决的问题是：LLM 经常没想清楚就开始动手。比如用户说"把这个函数重构一下"，Agent 直接去改代码，改了三处漏了两处，最后还不如不改。</p>
-      <p>Plan 的设计是：先进入一个<strong>只读调研模式</strong>——只能用 Read、Grep、Glob 这些工具去了解项目。调研完之后，制定一个完整的执行计划。然后做一个关键操作——<strong>清空上下文</strong>。调研阶段读了几十个文件，这些信息占了很多窗口空间，但真正执行的时候用不到那么多。清空之后，只把计划文档写进去，Agent 就能在干净的窗口里按计划高效执行。</p>
-      <p><strong>Edit 工具</strong>解决的是 Write 工具的粗粒度问题。Write 只能全文覆写，但如果一个文件有 500 行，你只改第 200 行的一个函数名，用 Write 就要把 500 行全部发给 LLM 再全部写回来。Edit 只需要指定"把这段旧字符串替换成这段新字符串"，精确、高效、不容易出错。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 9.5. PLAN WORKFLOW ============ -->
-  <section class="slide" data-title="Plan · concept">
-    <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — Plan 工作流全貌
+      <h2>03 · 面向场景强化的工具 — 从最小 Agent 到渐进增强
     </div>
     <div class="split s55">
       <div class="col-text">
-        <p class="lead">问题：LLM 习惯<span class="accent">边想边改</span>。调研读了 30 个文件，写代码时窗口已无空间。</p>
+        <h4 style="margin-top:0">最小 Agent：4 个工具即可工作</h4>
+        <p>Bash + Read + Write + LoadSkill — 能读文件、写文件、执行命令、按需加载技能。<strong>理论上够用。</strong></p>
+        <h4 style="color:var(--bad)">问题：基础工具覆盖不了的场景</h4>
         <ul>
-          <li>调研阶段读的源码 ≠ 执行阶段要写的代码</li>
-          <li>但都挤在<strong>同一个</strong>窗口里</li>
-          <li>导致 Agent 改一处忘一处、忘记原始约束</li>
+          <li>面对未知项目，只能 <code>Bash grep</code> 搜索 → 匹配质量不稳定、格式难解析</li>
+          <li>用户需求模糊 → 盲目执行，产物与预期<strong>漂移</strong></li>
+          <li>LLM 没想清楚就开始改 → 变更不完整，调研占满窗口</li>
+          <li>长任务跑着跑着忘记目标 → 漏改漏做</li>
         </ul>
-        <h4>方案：把调研和执行<span class="accent">物理隔离</span></h4>
-        <p class="note">三阶段：① 只读调研 → ② 写 plan.md + 用户审批 → ③ 清空窗口，只留 plan.md，开始改代码</p>
+        <p>每个增强工具都是为了<strong>解决一个具体问题</strong>。</p>
       </div>
       <div class="col-visual">
-        <div class="fig" data-fig="图 2 · Plan 工作流的三阶段，窗口在 ② 和 ③ 之间被清空">
-          <svg viewBox="0 0 480 220" style="width:100%;height:auto;font-family:var(--font-mono);font-size:11px">
-            <defs>
-              <marker id="pa1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/></marker>
-            </defs>
-            <!-- 三阶段框 -->
-            <rect x="10" y="40" width="130" height="120" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5"/>
-            <text x="75" y="60" text-anchor="middle" font-weight="600" fill="#0d1b2a">① 调研</text>
-            <text x="75" y="80" text-anchor="middle" fill="#6b7a8f" font-size="10">Read · Grep · Glob</text>
-            <text x="75" y="100" text-anchor="middle" fill="#6b7a8f" font-size="10">只读模式</text>
-            <text x="75" y="140" text-anchor="middle" fill="#7a1f1f" font-size="10">window: 60%</text>
-
-            <rect x="175" y="40" width="130" height="120" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.5"/>
-            <text x="240" y="60" text-anchor="middle" font-weight="600" fill="#0d1b2a">② 写 plan.md</text>
-            <text x="240" y="80" text-anchor="middle" fill="#6b7a8f" font-size="10">自包含执行计划</text>
-            <text x="240" y="100" text-anchor="middle" fill="#6b7a8f" font-size="10">用户审批</text>
-            <text x="240" y="140" text-anchor="middle" fill="#7a5b00" font-size="10">window: 65%</text>
-
-            <rect x="340" y="40" width="130" height="120" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.5"/>
-            <text x="405" y="60" text-anchor="middle" font-weight="600" fill="#0d1b2a">③ 执行</text>
-            <text x="405" y="80" text-anchor="middle" fill="#6b7a8f" font-size="10">Edit · Write · Test</text>
-            <text x="405" y="100" text-anchor="middle" fill="#6b7a8f" font-size="10">仅保留 plan.md</text>
-            <text x="405" y="140" text-anchor="middle" fill="#1e5e3a" font-size="10">window: 12%</text>
-
-            <!-- 箭头 -->
-            <path d="M140,100 L170,100" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
-            <path d="M305,100 L335,100" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
-            <!-- CLEAR 标记 + 引导虚线 -->
-            <line x1="320" y1="155" x2="320" y2="110" stroke="#7a1f1f" stroke-width="1" stroke-dasharray="3,2"/>
-            <text x="320" y="170" text-anchor="middle" fill="#7a1f1f" font-weight="600" font-size="10">CLEAR ↑</text>
-            <text x="320" y="184" text-anchor="middle" fill="#7a1f1f" font-size="9">调研窗口丢弃</text>
-          </svg>
-        </div>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#plan #three-phases</span>
-      <span class="slide-number" data-current="14" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>Plan 工作流要解决的核心问题是：<strong>LLM 习惯边想边改</strong>。它读了 30 个文件理解项目，然后直接开始改代码 —— 但这时候窗口里全是调研产生的源码片段，根本没空间装新的改动。</p>
-      <p>方案是把调研和执行<strong>物理隔离</strong>，关键是中间那一步<strong>清空窗口</strong> —— 把几十 K 的调研结果全丢掉，只留下一份用户审批过的 plan.md。</p>
-      <p>接下来三页用一个真实重构需求演示这个过程。</p>
-    </aside>
-  </section>
-
-  <section class="slide" data-title="Plan · research">
-    <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — Plan 模式只读调研
-    </div>
-    <div class="split s55">
-      <div class="col-text">
-        <p class="lead">用户提出重构需求 → Agent 进入 Plan 模式 → 工具集被<span class="accent">限制为只读</span>。</p>
-        <ul>
-          <li>能用 Read / Grep / Glob / WebFetch</li>
-          <li><strong>不能</strong> Edit / Write / Bash 写命令</li>
-          <li>目的：让窗口装满"理解"，但不产生副作用</li>
-        </ul>
-        <p class="note">窗口已涨到 60% —— 这是 Plan 阶段的正常代价。</p>
-      </div>
-      <div class="col-visual">
-        <div class="term">
-          <div class="term-bar"><span>jcli plan-mode · session #78</span><span>read-only</span></div>
-          <div class="term-body">
-            <div class="bubble user is-new">
-              <div class="who"><span>USER</span></div>
-              <div class="body">把 ChatApp 拆分成 UIState 和 ChatState，55 个字段太挤了，难维护。</div>
+        <div class="arch" style="margin-top:0">
+          <div class="tier"><div class="tname">基础层 <span style="font-weight:400;font-size:10px;color:var(--text-3)">(最小 Agent)</span></div>
+            <div class="cells"><div class="cell"><h4>Read</h4><p>读取文件</p></div>
+              <div class="cell"><h4>Write</h4><p>写入文件</p></div>
+              <div class="cell"><h4>Bash</h4><p>执行命令</p></div>
+              <div class="cell"><h4>LoadSkill</h4><p>按需加载</p></div>
             </div>
-            <div class="bubble agent is-new">
-              <div class="who"><span>AGENT</span><span class="tag">enter plan-mode</span></div>
-              <div class="body">进入 Plan 模式。先调研：app.rs 当前结构、所有引用 ChatApp 字段的位置、handler 模块依赖。</div>
+          </div>
+          <div class="tier hl"><div class="tname">增强层 <span style="font-weight:400;font-size:10px;color:var(--text-3)">← 每个解决一个问题</span></div>
+            <div class="cells"><div class="cell"><h4>Grep</h4><p>主动构建上下文</p></div>
+              <div class="cell"><h4>Ask</h4><p>关键决策点征询用户</p></div>
+              <div class="cell"><h4>Plan</h4><p>先调研再执行</p></div>
+              <div class="cell"><h4>WebFetch/Search</h4><p>获取最新知识</p></div>
             </div>
-            <div class="bubble tool">
-              <div class="who"><span>TOOL CALL</span><span class="tag">Read · app.rs</span></div>
-              <div class="body">取 1..300 行（结构定义与方法）</div>
-            </div>
-            <div class="bubble tool">
-              <div class="who"><span>TOOL CALL</span><span class="tag">Grep · "app.ui_"</span></div>
-              <div class="body">76 处匹配，集中在 handler/ ui/</div>
-            </div>
-            <div class="bubble tool">
-              <div class="who"><span>TOOL CALL</span><span class="tag">Grep · "app.state_"</span></div>
-              <div class="body">23 处匹配，集中在 agent.rs · compact.rs</div>
+          </div>
+          <div class="tier"><div class="tname">协作层</div>
+            <div class="cells"><div class="cell"><h4>TodoWrite/Read</h4><p>任务追踪</p></div>
+              <div class="cell"><h4>SubAgent</h4><p>委派子任务</p></div>
+              <div class="cell"><h4>Teammate</h4><p>多人协作</p></div>
+              <div class="cell"><h4>Session</h4><p>交互式任务</p></div>
             </div>
           </div>
         </div>
-        <div class="ctx-meter">
-          <span>context</span>
-          <div class="track"><div class="fill warn" style="width:60%"></div></div>
-          <span>60% · plan-mode</span>
-        </div>
       </div>
     </div>
-    <div class="deck-footer">
-      <span class="mono">#plan #research</span>
-      <span class="slide-number" data-current="15" data-total="36"></span>
-    </div>
     <aside class="notes">
-      <p>用户说 "把 ChatApp 拆分成 UIState 和 ChatState"。这是个跨越多个文件的重构。</p>
-      <p>Agent 进入 Plan 模式，<strong>工具集被自动限制为只读</strong> —— Edit、Write、Bash 写命令全被禁用。Agent 只能 Read、Grep、Glob、WebFetch。</p>
-      <p>它跑了三个 Grep 把所有引用点定位出来：76 处 ui_ 字段、23 处 state_ 字段。窗口涨到 60% —— 看起来很多，但<strong>下一步就要丢掉了</strong>。</p>
+      <p>第三部分讲工具体系。设计哲学是<strong>渐进增强</strong>：从最基础的工具开始，每个新工具解决一个具体问题。</p>
+      <p><strong>最小 Agent</strong>只需要 4 个工具：Read、Write、Bash、LoadSkill。理论上能工作了——能读文件、写文件、执行命令。但实际上远远不够。</p>
+      <p>面对未知项目，Agent 只能 Bash grep，匹配质量不稳定；用户需求模糊，Agent 盲目执行容易漂移；LLM 没想清楚就开始改，改一处忘一处；长任务跑着跑着忘记目标。每个增强工具都是为了解决一个这样的问题。</p>
+      <p>右边三层架构图，基础层就是最小 Agent，增强层每个工具下方是一句话动机。接下来的页面展开讲 Plan、Edit、执行三态、TodoWrite 这些关键工具。</p>
     </aside>
   </section>
 
-  <section class="slide" data-title="Plan · approve">
+  <!-- ============ 9. Plan + Edit + approve ============ -->
+  <section class="slide" data-title="Plan · Edit · approve">
     <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — 输出计划并审批
+      <h2>03 · 面向场景强化的工具 — Plan + Edit + 审批清空上下文
     </div>
     <div class="split s55">
       <div class="col-text">
-        <p class="lead">调研结论<span class="accent">沉淀</span>为一份执行计划，由用户在终端里直接<span class="accent">三选一</span>。</p>
-        <ul>
-          <li><strong>批准计划</strong>：保留当前上下文，开始实施</li>
-          <li><strong>批准并清空上下文</strong>：仅保留计划，丢弃所有调研产物</li>
-          <li><strong>驳回计划</strong>：留在 Plan Mode 修改方案</li>
+        <h4 style="margin-top:0">Plan — 先调研再执行</h4>
+        <p><strong style="color:var(--bad)">问题：</strong>LLM 习惯边想边改，调研读了 30 个文件，改代码时窗口已满 → 改一处忘一处。</p>
+        <p><strong style="color:var(--good)">方案：</strong>进入 Plan 模式 → 只读调研 → 制定自包含执行计划 → 用户审批 → <strong>清空上下文</strong> → 按计划执行。</p>
+        <h4>审批三选项</h4>
+        <ul style="line-height:1.8">
+          <li><strong>① 批准计划</strong> — 保留上下文，开始实施</li>
+          <li style="color:var(--good)"><strong>② 批准并清空上下文</strong> — 仅保留 plan.md，丢弃所有调研产物 ← 推荐</li>
+          <li><strong>③ 驳回</strong> — 留在 Plan Mode 修改方案</li>
         </ul>
-        <p class="note">右图是真实运行时的审批界面 —— 注意顶部 SubAgents 行（已派子 Agent 做调研）和 context 计数。</p>
+        <h4>Edit — 精确替换，非全文覆写</h4>
+        <p><strong style="color:var(--bad)">问题：</strong>Write 只能全文覆写，500 行文件改 1 行也要全发。</p>
+        <p><strong style="color:var(--good)">方案：</strong>Edit 基于<strong>精确字符串匹配</strong>做局部替换，只发 diff，大幅减少 token 消耗和错误率。</p>
       </div>
       <div class="col-visual">
-        <div class="fig-shot">
-          <img src="pics/plan-mode-clear-and-approval.png" alt="plan-mode 真实截图：审批界面与 clear-and-approval 选项">
-          <div class="shot-caption">jcli plan-mode 真实截图 · 含 SubAgent 调研、计划清单、批准/清空上下文 / 驳回三选项</div>
-        </div>
-        <div class="ctx-meter">
-          <span>context</span>
-          <div class="track"><div class="fill warn" style="width:65%"></div></div>
-          <span>36K tokens · 等待审批</span>
-        </div>
+        <svg viewBox="0 0 440 300" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+          <defs>
+            <marker id="pa1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/></marker>
+          </defs>
+          <!-- Plan 流程 -->
+          <text x="220" y="14" text-anchor="middle" font-weight="600" fill="var(--text-1)" font-size="12">Plan 工作流</text>
+          <rect x="10" y="28" width="110" height="60" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5" rx="3"/>
+          <text x="65" y="48" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="11">① 调研</text>
+          <text x="65" y="64" text-anchor="middle" fill="#6b7a8f" font-size="9">Read · Grep · Glob</text>
+          <text x="65" y="78" text-anchor="middle" fill="#7a1f1f" font-size="9">window: 60%</text>
+          <path d="M120,58 L150,58" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
+
+          <rect x="155" y="28" width="120" height="60" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.5" rx="3"/>
+          <text x="215" y="48" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="11">② plan.md</text>
+          <text x="215" y="64" text-anchor="middle" fill="#6b7a8f" font-size="9">自包含执行计划</text>
+          <text x="215" y="78" text-anchor="middle" fill="#7a5b00" font-size="9">用户审批三选一</text>
+
+          <!-- CLEAR 标记 -->
+          <line x1="290" y1="95" x2="290" y2="65" stroke="#7a1f1f" stroke-width="1.2" stroke-dasharray="3,2"/>
+          <text x="290" y="110" text-anchor="middle" fill="#7a1f1f" font-weight="700" font-size="10">CLEAR ↑</text>
+          <text x="290" y="124" text-anchor="middle" fill="#7a1f1f" font-size="9">调研窗口丢弃</text>
+
+          <rect x="315" y="28" width="115" height="60" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.5" rx="3"/>
+          <text x="372" y="48" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="11">③ 执行</text>
+          <text x="372" y="64" text-anchor="middle" fill="#6b7a8f" font-size="9">Edit · Write · Test</text>
+          <text x="372" y="78" text-anchor="middle" fill="#1e5e3a" font-size="9">window: 12%</text>
+          <path d="M275,58 L310,58" stroke="#1e3a8a" stroke-width="1.3" marker-end="url(#pa1)"/>
+
+          <!-- 分隔线 -->
+          <line x1="10" y1="142" x2="430" y2="142" stroke="#e5e9f2" stroke-width="1"/>
+
+          <!-- Edit 对比 -->
+          <text x="220" y="160" text-anchor="middle" font-weight="600" fill="var(--text-1)" font-size="12">Write vs Edit</text>
+          <!-- Write: 全文 -->
+          <text x="10" y="185" font-weight="600" fill="#7a1f1f" font-size="10">Write (全文覆写)</text>
+          <rect x="10" y="192" width="420" height="20" fill="#fef3f3" stroke="#7a1f1f" stroke-width="1" rx="2"/>
+          <text x="220" y="206" text-anchor="middle" fill="#7a1f1f" font-size="9">500 行全文 → 全部发给 LLM → 全部写回</text>
+          <!-- Edit: diff -->
+          <text x="10" y="232" font-weight="600" fill="#1e5e3a" font-size="10">Edit (精确替换)</text>
+          <rect x="10" y="239" width="180" height="20" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="100" y="253" text-anchor="middle" fill="#7a5b00" font-size="9">old_string (匹配)</text>
+          <path d="M190,249 L210,249" stroke="#1e5e3a" stroke-width="1.3" marker-end="url(#pa1)"/>
+          <rect x="215" y="239" width="180" height="20" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
+          <text x="305" y="253" text-anchor="middle" fill="#1e5e3a" font-size="9">new_string (替换)</text>
+          <text x="220" y="280" text-anchor="middle" fill="var(--text-3)" font-size="9">只发 diff · token 1/N · 不触碰无关行</text>
+        </svg>
       </div>
     </div>
-    <div class="deck-footer">
-      <span class="mono">#plan #approval</span>
-      <span class="slide-number" data-current="16" data-total="36"></span>
-    </div>
     <aside class="notes">
-      <p>第二阶段 —— Agent 把调研结论<strong>沉淀</strong>成一份 plan.md。注意几个特点：每一步都写明<strong>动哪个文件、加什么删什么</strong>，<strong>包含验证步骤</strong>（cargo build 和 test）。</p>
-      <p>plan.md 此时是个<strong>变更契约</strong> —— 用户可以审批、可以驳回、可以提修改意见。这一步是<strong>对齐预期的最后一道闸</strong>。</p>
-      <p>一旦 approve，下一步就是关键 —— 清空上下文。</p>
+      <p>这一页讲三个紧密相关的机制：Plan、审批、Edit。</p>
+      <p><strong>Plan</strong>解决 LLM 边想边改的问题。进入 Plan 模式后工具集被限制为只读，Agent 只能调研不能改代码。调研完后制定自包含执行计划，用户审批。关键操作是<strong>清空上下文</strong>——把几十 K 的调研结果全丢掉，只留 plan.md。</p>
+      <p><strong>审批三选项</strong>：① 批准 ② 批准并清空上下文（推荐）③ 驳回。推荐选项 ②，因为调研阶段的信息对执行阶段是噪音——窗口从 65% 回到 12%。</p>
+      <p><strong>Edit</strong>解决 Write 的粗粒度问题。Write 要全文覆写，Edit 只需要指定"把这段旧字符串替换成这段新字符串"，精确、高效。右下方对比图：Write 是 500 行全发，Edit 只发匹配和替换的两小段。</p>
     </aside>
   </section>
 
@@ -1367,7 +1242,7 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>03 · 面向场景强化的工具 — 防遗忘机制
     </div>
-    <div class="grid g2 mt-l">
+    <div class="grid g2" style="margin-top:8px">
       <div>
         <h4 style="font-size:14px;margin-bottom:6px">TodoWrite/TodoRead</h4>
         <p class="dim" style="font-size:13px">Agent 在开始大任务前列出所有子任务。每完成一个就更新状态。<strong>避免遗漏变更、避免忘记目标。</strong></p>
@@ -1435,7 +1310,7 @@ hook.rs         storage.rs
       <span class="lg-tool">工具执行</span>
       <span class="lg-compact">压缩前后</span>
     </div>
-    <div class="grid g3 mt-l">
+    <div class="grid g3" style="margin-top:8px">
       <div class="card card-soft">
         <h4 style="font-size:13px">工程规范强制</h4>
         <p class="dim" style="font-size:12px;margin-top:6px">在 post_tool_execution(Write/Edit) 后扫描新增/变更文件：禁用 <code>mod.rs</code>、禁用 <code>unwrap()/expect()</code>、要求 <code>name.rs + name/</code> 布局。</p>
