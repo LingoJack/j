@@ -392,17 +392,12 @@ code{
 }
 /* 双向数据流标签：上方派遣 ↓ + 回灌 ↑ */
 .subtree .conn-bidir{
-  display:flex;justify-content:center;gap:48px;
-  width:80%;padding:6px 0;
-  border-left:1px dashed var(--text-3);
-  border-right:1px dashed var(--text-3);
-  border-bottom:1px dashed var(--text-3);
+  display:flex;justify-content:center;gap:32px;
+  width:100%;padding:10px 0 6px;
   position:relative;
 }
 .subtree .conn-bidir::before{
-  content:"";position:absolute;
-  top:0;left:50%;width:1px;height:50%;
-  border-left:1px dashed var(--text-3);
+  display:none;
 }
 .subtree .conn-bidir .dir-down{
   font-size:11px;color:var(--accent);font-family:var(--font-mono);font-weight:600;
