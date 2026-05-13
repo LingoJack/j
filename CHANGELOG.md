@@ -1,3 +1,24 @@
+# v12.10.52
+
+
+### 新功能
+- **文件索引缓存**: 引入 FileIndex 后台缓存机制，替代 @ 弹窗和文件弹窗每帧 WalkBuilder 扫描，大幅提升文件搜索性能；支持 notify 文件监控自动刷新
+- **HTML PPT Skill**: 新增 html-ppt skill，包含 36 个主题、20+ 动画效果、15 个完整 deck 模板和 30+ 单页模板，支持一键生成专业 HTML 演示文稿
+- **欢迎诗句配置**: 新增 `welcome_quote` 全局配置项，关闭时显示 J-CLI ASCII Art 渐变色 Logo
+- **PPT 导出命令**: Makefile 新增 `ppt-serve`、`ppt-build`、`ppt-render` 等命令，支持 HTML PPT 一键导出为 .pptx（图片版）
+
+### 改进
+- **工具结果渲染**: 带行号的文本（如 Read 输出）自动检测，续行保留 │ 符号实现视觉对齐
+- **oneshot Markdown 重绘**: 用光标位置保存替代行数计算，流式输出重绘更精确
+- **search 命令**: 支持多词搜索，`-f/--fuzzy` 标志位置更灵活
+- **浏览器命令**: 支持多词搜索、`--engine` 标志指定搜索引擎
+- **笔记保存**: 新文件始终保存，自动创建父目录
+- **Windows 安装脚本**: 自动关闭占用进程，重命名策略处理文件占用
+- **Windows 更新**: 使用 tar 替代 PowerShell 解压 zip（解决 Deflate64 兼容问题），旧版本重命名备份 + 延迟清理
+- **Release workflow**: Windows zip 使用 7z 创建，确保标准 Deflate 压缩
+- **j-agent 资源整理**: 模板文件统一迁移至 j-agent/assets 目录
+</
+
 # v12.10.51
 
 
