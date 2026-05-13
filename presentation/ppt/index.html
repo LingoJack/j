@@ -1593,7 +1593,7 @@ hook.rs         storage.rs
         </div>
         <p class="dim" style="font-size:12px;margin-top:6px">临界区外消息不自洽：对外呈现 1, 2, 催促, 2</p>
       </div>
-      <div class="col-text">
+      <div class="col-text" style="padding-left:20px;border-left:2px solid var(--border)">
         <h4 style="margin-top:0;color:var(--good)">解决 · 二阶段提交 Gate</h4>
         <div class="swimlane">
           <div class="sw-row sw-head"><span class="sw-label">1 号</span><span class="sw-label">2 号</span></div>
@@ -1624,8 +1624,15 @@ hook.rs         storage.rs
         <p>1 号 Agent 进入循环时，2 号已报的"2"尚未到达其信箱。1 号只看到 [1]，于是催促 2 号报 2 → 2 号看到 [1,2] + 催促 → 重复报 2 → 对外不一致。</p>
         <h4>解决 · 二阶段提交 Gate</h4>
         <p>Agent 调 SendMessage 前，先检查信箱有无未读消息。有 → 进入二次确认：信箱串行化，Agent 可 commit（确认发送）或重新决策。兼顾效率与一致性。</p>
-        <h4>结果</h4>
-        <p>10 轮报数 <strong>100%</strong> 按序完成，顺序错误 0，唤醒失败 0。</p>
+        <h4>实测结果</h4>
+        <table class="exp-table" style="margin-top:6px">
+          <tr><td>目标数字数</td><td class="num">10</td></tr>
+          <tr class="ok"><td>正确报数数</td><td class="num">10 / 10 · <strong>100%</strong></td></tr>
+          <tr class="ok"><td>顺序错误数</td><td class="num">0</td></tr>
+          <tr class="ok"><td>唤醒失败数</td><td class="num">0</td></tr>
+          <tr><td>SendMessage 调用</td><td class="num">16 次</td></tr>
+          <tr class="ok"><td>人工干预次数</td><td class="num">0</td></tr>
+        </table>
       </div>
       <div class="col-visual">
         <svg viewBox="0 0 400 340" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">

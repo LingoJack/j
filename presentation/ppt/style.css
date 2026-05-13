@@ -474,7 +474,8 @@ code{
 .sw-cell.sw-good{border-color:var(--good);background:#f3fef5;color:var(--good);font-weight:600}
 
 /* ---------- split s50 ---------- */
-.split.s50{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+.split.s50{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}
+.split.s50 .col-text{gap:6px}
 
 /* ---------- Repo cards ---------- */
 .repo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
