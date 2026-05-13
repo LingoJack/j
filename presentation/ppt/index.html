@@ -1535,22 +1535,8 @@ hook.rs         storage.rs
           <li><code>context_messages</code> — 注入 Main Agent LLM 上下文（XML-wrapped <code>&lt;From&gt;text&lt;/From&gt;</code>）</li>
           <li><code>display_messages</code> — TUI 渲染（clean text + sender_name）</li>
         </ul>
-        <h4>SendMessage Gate · 防重复发送</h4>
-        <p>Agent Loop 长时序异步，发完 SendMessage 不原地等 → 下一轮可能重发。解决方案：<strong>Gate 重评估</strong>——Teammate 调 SendMessage 前检查 <code>broadcast_inbox</code> 是否有新消息。有则 hold + 注入 <code>system_reminder</code> 让 Agent 重新决策，最多重试 2 次。</p>
-        <div class="code-card" style="margin-top:8px">
-          <div class="cc-head">
-            <span><span class="cc-path">teammate_loop.rs</span> · SendMessage Gate</span>
-          </div>
-<pre style="font-size:10.5px;line-height:1.45;padding:6px 8px"><span class="kw">if</span> item.name == <span class="str">"SendMessage"</span> {
-    <span class="kw">let</span> inbox_has_new = inbox.lock()
-        .map(|i| !i.is_empty()).unwrap_or(<span class="kw">false</span>);
-    <span class="kw">if</span> inbox_has_new && retries &lt; MAX_GATE_RETRIES {
-        gate_triggered = <span class="kw">true</span>;
-        <span class="cm">// hold: return placeholder, inject system_reminder</span>
-        <span class="kw">continue</span>;
-    }
-}</pre>
-        </div>
+        <h4>设计动机</h4>
+        <p>Agent Loop 长时序异步，Agent 发完消息不原地等确认 → 下一轮可能因过期快照重发。这一问题的实验验证与解决方案（SendMessage Gate）在后页详述。</p>
       </div>
       <div class="col-visual">
         <h4 style="margin-top:0;font-size:14px;color:var(--text-3)">消息可见性矩阵</h4>
@@ -1569,16 +1555,15 @@ hook.rs         storage.rs
     <aside class="notes">
       <p>这一页讲多 Agent 之间消息怎么流转、谁能看到什么。</p>
       <p>首先是<strong>三通道架构</strong>。同一逻辑消息有两种物理表示：display 通道给 TUI 渲染，用 clean text；context 通道给 Main Agent 的 LLM 上下文，用 XML-wrapped 标签标出来源。这样 Main Agent 在推理时能知道"这段话是谁说的"。</p>
-      <p>然后是 <strong>SendMessage Gate</strong>——这是解决重复消息的机制。Agent Loop 是长时序的，Agent 发完消息不原地等，下一轮可能以为没发出去就重发。我的方案是：Teammate 调 SendMessage 之前，先检查 broadcast_inbox 有没有新消息到达。如果有，就 hold 住这条 SendMessage，注入 system_reminder 告诉 Agent "你在想的时候新消息到了，请重新决策"。最多重试 2 次。这不是传统的两阶段提交，而是一个重评估门控。</p>
+      <p>这里只介绍了消息通信的设计。Agent Loop 长时序异步导致的重复消息问题，以及 SendMessage Gate 的解决方案，在下一个实验页（轮流报数）中通过实验 → 问题 → 机制 → 结果的顺序详述。</p>
       <p>右边的可见性表格展示了三者的信息不对称设计：Main 能看到其他 Agent 的文本和工具调用名；Teammate 只能看到广播文本；SubAgent 完全看不到其他 Agent。工具结果一律不推入其他 Agent 的上下文——因为这些执行中间过程价值低但 token 占用高。</p>
     </aside>
   </section>
 
-  <!-- ============ 2PC — 二阶段提交 ============ -->
-  <!-- ============ 11.7. EXPERIMENT 01 — 轮流报数 + 2PC ============ -->
-  <section class="slide" data-title="Exp1 · 轮流报数与 SendMessage Gate">
+  <!-- ============ Exp1a — 轮流报数：问题 ============ -->
+  <section class="slide" data-title="Exp1a · 轮流报数 — 问题">
     <div class="title-bar">
-      <h2>04 · 多 Agent 协作试验 — 轮流报数与消息一致性
+      <h2>04 · 多 Agent 协作试验 — 轮流报数：过期快照问题
     </div>
     <div class="split s55">
       <div class="col-text">
@@ -1586,20 +1571,10 @@ hook.rs         storage.rs
         <p>两个 Teammate 轮流报递增数字（1, 2, 3 …），验证多 Agent 之间的<strong>消息传递与唤醒</strong>能力。仅通过 SendMessage 沟通，不共享全局状态。</p>
         <h4 style="color:var(--bad)">发现的问题 · 过期快照导致重复消息</h4>
         <p>1 号 Agent 进入循环时，2 号已报的"2"尚未到达其信箱。1 号快照只有 [1]，于是催促 2 号报 2 → 2 号看到 [1,2] + 催促 → 重复报 2 → <strong>对外不一致</strong>。</p>
-        <h4 style="color:var(--good)">解决 · 二阶段提交 Gate</h4>
-        <p>Agent 调 SendMessage 前，先检查信箱有无未读消息。有 → hold + 注入 reminder → 信箱串行化 → Agent 基于最新状态<strong>二次确认</strong>（commit 或重新决策）。兼顾效率与一致性。</p>
-        <h4>实测结果</h4>
-        <table class="exp-table" style="margin-top:6px">
-          <tr><td>目标数字数</td><td class="num">10</td></tr>
-          <tr class="ok"><td>正确报数数</td><td class="num">10 / 10 · <strong>100%</strong></td></tr>
-          <tr class="ok"><td>顺序错误数</td><td class="num">0</td></tr>
-          <tr class="ok"><td>唤醒失败数</td><td class="num">0</td></tr>
-          <tr><td>SendMessage 调用</td><td class="num">16 次</td></tr>
-          <tr class="ok"><td>人工干预次数</td><td class="num">0</td></tr>
-        </table>
+        <p class="dim" style="font-size:12px;margin-top:8px">根本原因：Agent Loop 长时序异步，发完 SendMessage 不原地等确认 → 下一轮基于过期快照决策。</p>
       </div>
       <div class="col-visual">
-        <svg viewBox="0 0 400 340" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+        <svg viewBox="0 0 400 170" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
           <defs>
             <marker id="ah-prob" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" fill="#6b7a8f"/>
@@ -1610,84 +1585,117 @@ hook.rs         storage.rs
           <text x="45" y="15" text-anchor="middle" fill="#fff" font-weight="600" font-size="11">1 号 Agent</text>
           <rect x="320" y="0" width="70" height="22" fill="#7a5b00" rx="3"/>
           <text x="355" y="15" text-anchor="middle" fill="#fff" font-weight="600" font-size="11">2 号 Agent</text>
-
           <!-- 泳道竖线 -->
           <line x1="45" y1="26" x2="45" y2="155" stroke="#1e3a8a" stroke-width="1" stroke-dasharray="4,3"/>
           <line x1="355" y1="26" x2="355" y2="155" stroke="#7a5b00" stroke-width="1" stroke-dasharray="4,3"/>
-
-          <!-- 问题场景 -->
-          <text x="200" y="36" text-anchor="middle" fill="#7a1f1f" font-weight="600" font-size="11">问题 · 无 Gate</text>
-
           <!-- 1号报1 -->
-          <rect x="20" y="44" width="50" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
-          <text x="45" y="56" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 1</text>
-          <line x1="70" y1="53" x2="310" y2="68" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-prob)"/>
-          <text x="190" y="56" text-anchor="middle" fill="#6b7a8f" font-size="9">SendMessage "1"</text>
-
+          <rect x="20" y="32" width="50" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
+          <text x="45" y="44" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 1</text>
+          <line x1="70" y1="41" x2="310" y2="56" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-prob)"/>
+          <text x="190" y="44" text-anchor="middle" fill="#6b7a8f" font-size="9">SendMessage "1"</text>
           <!-- 2号报2 -->
-          <rect x="330" y="64" width="50" height="18" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
-          <text x="355" y="76" text-anchor="middle" fill="#7a5b00" font-weight="600">报 2</text>
-          <line x1="330" y1="78" x2="90" y2="95" stroke="#7a5b00" stroke-width="1" stroke-dasharray="3,3"/>
-          <text x="210" y="84" text-anchor="middle" fill="#7a1f1f" font-size="9">❌ 尚未到达 1 号信箱</text>
-
-          <!-- 1号看到[1]，催促2号 -->
-          <rect x="10" y="92" width="70" height="18" fill="#fff5f5" stroke="#7a1f1f" stroke-width="1" rx="2"/>
-          <text x="45" y="104" text-anchor="middle" fill="#7a1f1f" font-weight="600">催 2 号报 2</text>
-          <line x1="80" y1="101" x2="310" y2="110" stroke="#7a1f1f" stroke-width="1" marker-end="url(#ah-prob)"/>
-          <text x="195" y="106" text-anchor="middle" fill="#6b7a8f" font-size="9">"请报 2"（快照只有 [1]）</text>
-
+          <rect x="330" y="52" width="50" height="18" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="355" y="64" text-anchor="middle" fill="#7a5b00" font-weight="600">报 2</text>
+          <line x1="330" y1="66" x2="90" y2="83" stroke="#7a5b00" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="210" y="72" text-anchor="middle" fill="#7a1f1f" font-size="9">❌ 尚未到达 1 号信箱</text>
+          <!-- 1号催促2号 -->
+          <rect x="10" y="80" width="70" height="18" fill="#fff5f5" stroke="#7a1f1f" stroke-width="1" rx="2"/>
+          <text x="45" y="92" text-anchor="middle" fill="#7a1f1f" font-weight="600">催 2 号报 2</text>
+          <line x1="80" y1="89" x2="310" y2="98" stroke="#7a1f1f" stroke-width="1" marker-end="url(#ah-prob)"/>
+          <text x="195" y="94" text-anchor="middle" fill="#6b7a8f" font-size="9">"请报 2"（快照只有 [1]）</text>
           <!-- 2号重复报2 -->
-          <rect x="320" y="108" width="70" height="18" fill="#fff5f5" stroke="#7a1f1f" stroke-width="1.5" rx="2"/>
-          <text x="355" y="120" text-anchor="middle" fill="#7a1f1f" font-weight="700">重复报 2!</text>
-
+          <rect x="320" y="96" width="70" height="18" fill="#fff5f5" stroke="#7a1f1f" stroke-width="1.5" rx="2"/>
+          <text x="355" y="108" text-anchor="middle" fill="#7a1f1f" font-weight="700">重复报 2!</text>
           <!-- 不一致标注 -->
-          <text x="200" y="145" text-anchor="middle" fill="#7a1f1f" font-size="10" font-weight="600">对外不一致：2 被报了两次</text>
-
-          <!-- 分隔线 -->
-          <line x1="10" y1="165" x2="390" y2="165" stroke="var(--border)" stroke-width="1"/>
-
-          <!-- 解决方案 -->
-          <text x="200" y="185" text-anchor="middle" fill="#1e5e3a" font-weight="600" font-size="11">解决 · 二阶段提交 Gate</text>
-
-          <!-- 泳道竖线 -->
-          <line x1="45" y1="195" x2="45" y2="330" stroke="#1e3a8a" stroke-width="1" stroke-dasharray="4,3"/>
-          <line x1="355" y1="195" x2="355" y2="330" stroke="#7a5b00" stroke-width="1" stroke-dasharray="4,3"/>
-
-          <!-- 1号报1 -->
-          <rect x="20" y="200" width="50" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
-          <text x="45" y="212" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 1</text>
-          <line x1="70" y1="209" x2="310" y2="220" stroke="#1e3a8a" stroke-width="1"/>
-          <text x="190" y="215" text-anchor="middle" fill="#6b7a8f" font-size="9">SendMessage "1"</text>
-
-          <!-- 2号报2 -->
-          <rect x="330" y="216" width="50" height="18" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
-          <text x="355" y="228" text-anchor="middle" fill="#7a5b00" font-weight="600">报 2</text>
-          <line x1="330" y1="230" x2="90" y2="248" stroke="#7a5b00" stroke-width="1"/>
-          <text x="210" y="238" text-anchor="middle" fill="#6b7a8f" font-size="9">SendMessage "2"</text>
-
-          <!-- 1号欲报3，Gate拦截 -->
-          <rect x="10" y="248" width="70" height="18" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
-          <text x="45" y="260" text-anchor="middle" fill="#1e5e3a" font-weight="600">欲报 3</text>
-          <rect x="90" y="250" width="90" height="16" fill="#1e5e3a" rx="3"/>
-          <text x="135" y="261" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">Gate: 信箱有新消息</text>
-
-          <!-- 串行化确认 -->
-          <rect x="20" y="276" width="70" height="18" fill="#1e5e3a" rx="3"/>
-          <text x="55" y="288" text-anchor="middle" fill="#fff" font-weight="600" font-size="10">二次确认</text>
-          <text x="200" y="288" text-anchor="middle" fill="#1e5e3a" font-size="9">信箱串行化 · 看到 [1,2] → 确认报 3</text>
-
-          <!-- 1号报3 -->
-          <rect x="20" y="304" width="50" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
-          <text x="45" y="316" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 3 ✓</text>
-          <text x="200" y="316" text-anchor="middle" fill="#1e5e3a" font-size="10" font-weight="600">对外一致：1, 2, 3 严格递增</text>
+          <text x="200" y="135" text-anchor="middle" fill="#7a1f1f" font-size="10" font-weight="600">对外不一致：2 被报了两次</text>
+          <text x="200" y="160" text-anchor="middle" fill="var(--text-3)" font-size="9">Agent Loop 长时序 → 过期快照 → 重复决策</text>
         </svg>
       </div>
     </div>
     <aside class="notes">
-      <p>这个实验的叙事逻辑是：<strong>先跑实验 → 发现问题 → 设计机制 → 再验证</strong>。</p>
-      <p><strong>实验内容</strong>：两个 Teammate 轮流报递增数字，仅通过 SendMessage 沟通。目的本是验证消息传递与唤醒能力。</p>
-      <p><strong>发现的问题</strong>：1 号 Agent 进入循环时，信箱快照里 2 号的 "2" 还没到达，1 号只看到 [1]，就催促 2 号报 2。2 号收到催促后重复报 2——过期快照导致对外不一致。右边时序图上半部分展示了这个问题场景。</p>
-      <p><strong>解决方案</strong>：二阶段提交 Gate。Agent 调 SendMessage 前，先检查信箱有没有未读消息。如果有，进入二次确认：信箱串行化，Agent 基于最新状态 commit 或重新决策。下半部分时序图展示了解决后的流程——1 号欲报 3 时被 Gate 拦截，看到 [1,2]，确认报 3，对外一致。</p>
+      <p>这个实验本来是为了验证消息传递与唤醒。两个 Teammate 轮流报递增数字，仅通过 SendMessage 沟通。</p>
+      <p>但实验中暴露了核心问题——<strong>过期快照导致重复消息</strong>。1 号 Agent 进入循环时，信箱快照里 2 号的 "2" 还没到达，1 号只看到 [1]，就催促 2 号报 2。2 号收到催促后重复报 2——对外不一致。</p>
+      <p>根本原因是 Agent Loop 长时序异步：发完 SendMessage 不原地等确认，下一轮基于过期快照决策。下一页讲怎么解决。</p>
+    </aside>
+  </section>
+
+  <!-- ============ Exp1b — SendMessage Gate 解决 ============ -->
+  <section class="slide" data-title="Exp1b · SendMessage Gate">
+    <div class="title-bar">
+      <h2>04 · 多 Agent 协作试验 — 二阶段提交 Gate 与实测结果
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0;color:var(--good);margin-bottom:4px">解决 · SendMessage Gate（二阶段提交）</h4>
+        <p style="margin-bottom:6px">Agent 调 SendMessage 前，先检查 <code>broadcast_inbox</code> 有无未读消息。有 → hold + 注入 <code>system_reminder</code> → 信箱串行化 → Agent 基于最新状态<strong>二次确认</strong>（commit 或重新决策），最多重试 2 次。</p>
+        <div class="code-card" style="margin-top:0;margin-bottom:8px">
+          <div class="cc-head">
+            <span><span class="cc-path">teammate_loop.rs</span> · SendMessage Gate</span>
+          </div>
+<pre style="font-size:10px;line-height:1.35;padding:4px 8px"><span class="kw">if</span> item.name == <span class="str">"SendMessage"</span> {
+    <span class="kw">let</span> inbox_has_new = inbox.lock()
+        .map(|i| !i.is_empty()).unwrap_or(<span class="kw">false</span>);
+    <span class="kw">if</span> inbox_has_new && retries &lt; MAX_GATE_RETRIES {
+        gate_triggered = <span class="kw">true</span>;
+        <span class="cm">// hold: return placeholder, inject system_reminder</span>
+        <span class="kw">continue</span>;
+    }
+}</pre>
+        </div>
+        <h4 style="margin-bottom:2px">实测结果</h4>
+        <table class="exp-table" style="margin-top:0;font-size:12px">
+          <tr><td>目标数字数</td><td class="num">10</td></tr>
+          <tr class="ok"><td>正确报数数</td><td class="num">10 / 10 · <strong>100%</strong></td></tr>
+          <tr class="ok"><td>顺序错误数</td><td class="num">0</td></tr>
+          <tr class="ok"><td>唤醒失败数</td><td class="num">0</td></tr>
+          <tr><td>SendMessage 调用</td><td class="num">16 次</td></tr>
+          <tr class="ok"><td>人工干预次数</td><td class="num">0</td></tr>
+        </table>
+      </div>
+      <div class="col-visual">
+        <svg viewBox="0 0 400 180" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+          <defs>
+            <marker id="ah-sol" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#6b7a8f"/>
+            </marker>
+          </defs>
+          <!-- 泳道标题 -->
+          <rect x="10" y="0" width="70" height="22" fill="#1e3a8a" rx="3"/>
+          <text x="45" y="15" text-anchor="middle" fill="#fff" font-weight="600" font-size="11">1 号 Agent</text>
+          <rect x="320" y="0" width="70" height="22" fill="#7a5b00" rx="3"/>
+          <text x="355" y="15" text-anchor="middle" fill="#fff" font-weight="600" font-size="11">2 号 Agent</text>
+          <!-- 泳道竖线 -->
+          <line x1="45" y1="26" x2="45" y2="170" stroke="#1e3a8a" stroke-width="1" stroke-dasharray="4,3"/>
+          <line x1="355" y1="26" x2="355" y2="170" stroke="#7a5b00" stroke-width="1" stroke-dasharray="4,3"/>
+          <!-- 1号报1 -->
+          <rect x="20" y="32" width="50" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
+          <text x="45" y="44" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 1</text>
+          <line x1="70" y1="41" x2="310" y2="52" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-sol)"/>
+          <text x="190" y="44" text-anchor="middle" fill="#6b7a8f" font-size="9">SendMessage "1"</text>
+          <!-- 2号报2 -->
+          <rect x="330" y="48" width="50" height="18" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="355" y="60" text-anchor="middle" fill="#7a5b00" font-weight="600">报 2</text>
+          <line x1="330" y1="62" x2="90" y2="80" stroke="#7a5b00" stroke-width="1"/>
+          <text x="210" y="70" text-anchor="middle" fill="#6b7a8f" font-size="9">SendMessage "2"</text>
+          <!-- 1号欲报3，Gate拦截 -->
+          <rect x="10" y="80" width="70" height="18" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
+          <text x="45" y="92" text-anchor="middle" fill="#1e5e3a" font-weight="600">欲报 3</text>
+          <rect x="90" y="82" width="90" height="16" fill="#1e5e3a" rx="3"/>
+          <text x="135" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">Gate: 信箱有新消息</text>
+          <!-- 串行化确认 -->
+          <rect x="20" y="108" width="70" height="18" fill="#1e5e3a" rx="3"/>
+          <text x="55" y="120" text-anchor="middle" fill="#fff" font-weight="600" font-size="10">二次确认</text>
+          <text x="200" y="120" text-anchor="middle" fill="#1e5e3a" font-size="9">信箱串行化 · 看到 [1,2] → 确认报 3</text>
+          <!-- 1号报3 -->
+          <rect x="20" y="136" width="50" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
+          <text x="45" y="148" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 3 ✓</text>
+          <text x="200" y="148" text-anchor="middle" fill="#1e5e3a" font-size="10" font-weight="600">对外一致：1, 2, 3 严格递增</text>
+        </svg>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>解决方案——<strong>二阶段提交 Gate</strong>。Agent 调 SendMessage 前，先检查 broadcast_inbox 有没有未读消息。如果有，hold 住，注入 system_reminder 让 Agent 重新决策。信箱从并行切换到串行化模式，Agent 可以看到最新消息后 commit 或重新决策。最多重试 2 次。</p>
+      <p>右边时序图展示了解决后的流程——1 号欲报 3 时被 Gate 拦截，看到 [1,2]，确认报 3，对外一致。</p>
       <p><strong>实测结果</strong>：10 个数字全部正确报出，顺序错误 0，唤醒失败 0，人工干预 0。SendMessage 调用 16 次（含 Gate 触发的二次确认），证明机制有效。</p>
     </aside>
   </section>
