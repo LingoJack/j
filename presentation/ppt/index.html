@@ -1733,7 +1733,7 @@ hook.rs         storage.rs
     </div>
     <div class="split s55">
       <div class="col-text">
-        <h4 style="margin-top:0">What · 这一章在讲什么</h4>
+        <h4 style="margin-top:0">what · 目标</h4>
         <p>把高度<strong>模板化、不侵入业务</strong>的代码——例如 PO/DTO/VO/DAO、CRUD 方法、列表查询——交给<strong>确定性生成器</strong>，而不是让 LLM 现场逐字写。</p>
         <h4>Why · 为什么这件事值得做</h4>
         <ul>
@@ -2020,13 +2020,6 @@ hook.rs         storage.rs
         <p>SQL parser + 模板引擎，自动生成 DAO/Model 层代码。封装为 gen-struct-and-dao-code-from-sql skill。</p>
         <span class="repo-tag">Go · SQL parser</span>
       </div>
-      <div class="repo-card">
-        <div class="icon"></div>
-        <div class="repo-name">github.com/LingoJack/gradiation_artifact_demo</div>
-        <h4>毕设交付制品</h4>
-        <p>由 j-cli 配合 webapp-gen / jen skill 实际生成的 Web App 示例 —— 端到端验证整套工具链。</p>
-        <span class="repo-tag">Demo · 制品</span>
-      </div>
     </div>
     <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>所有代码开源</strong>，欢迎 Star / Issue / PR · MIT License</p>
     <div class="deck-footer">
@@ -2039,6 +2032,43 @@ hook.rs         storage.rs
       <p>第二个是 <strong>model_infrax</strong>，里面装的是 jen 代码生成器。Go 写的 SQL parser + 模板引擎。它本身是独立工具，但被封装成 skill 集成进 j-cli。</p>
       <p>第三个是 <strong>gradiation_artifact_demo</strong>——这是我用 j-cli 配合 webapp-gen 和 jen 这两个 skill <strong>真实生成出来的 Web App</strong>。算是整套工具链的端到端验证。</p>
       <p>三个仓库都是开源的，MIT 协议。欢迎大家访问、star、提 issue 或者 PR。这也是我希望这个毕设能继续往下走的方向。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 13.9b. DEMO PREVIEW ============ -->
+  <section class="slide" data-title="Demo Preview">
+    <div class="title-bar">
+      <h2>06 · 总结与展望 — 交付制品预览
+    </div>
+    <p class="dim mt-s" style="font-size:14px">gradiation_artifact_demo — 由 j-cli 配合 webapp-gen / jen skill 端到端生成的电商 Web App</p>
+    <div class="demo-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
+      <div class="demo-cell">
+        <img src="pics/preview-1.png" alt="制品预览 1" style="width:100%;border-radius:4px;border:1px solid var(--border)">
+      </div>
+      <div class="demo-cell">
+        <img src="pics/preview-2.png" alt="制品预览 2" style="width:100%;border-radius:4px;border:1px solid var(--border)">
+      </div>
+      <div class="demo-cell">
+        <img src="pics/preview-3.png" alt="制品预览 3" style="width:100%;border-radius:4px;border:1px solid var(--border)">
+      </div>
+      <div class="demo-cell">
+        <img src="pics/preview-4.png" alt="制品预览 4" style="width:100%;border-radius:4px;border:1px solid var(--border)">
+      </div>
+      <div class="demo-cell">
+        <img src="pics/preview-5.png" alt="制品预览 5" style="width:100%;border-radius:4px;border:1px solid var(--border)">
+      </div>
+      <div class="demo-cell">
+        <img src="pics/preview-6.png" alt="制品预览 6" style="width:100%;border-radius:4px;border:1px solid var(--border)">
+      </div>
+    </div>
+    <p class="dim" style="font-size:12px;text-align:center;margin-top:8px"><code>github.com/LingoJack/gradiation_artifact_demo</code> · React + Go + GORM + Podman · 三环境矩阵验收通过</p>
+    <div class="deck-footer">
+      <span class="mono">#artifact #demo-preview</span>
+      <span class="slide-number" data-current="26" data-total="36"></span>
+    </div>
+    <aside class="notes">
+      <p>这一页是交付制品的<strong>实际效果预览</strong>。六张截图展示了 gradiation_artifact_demo 这个电商 Web App 的完整界面——从商品列表、详情页、购物车、订单管理到用户认证，全部由 j-cli 配合 webapp-gen 和 jen skill 生成，没有手写业务代码。</p>
+      <p>三环境矩阵验收——本地开发、podman 单容器、全栈 podman compose——全部通过。这也验证了整套工具链从需求分析到容器化部署的端到端可行性。</p>
     </aside>
   </section>
 
