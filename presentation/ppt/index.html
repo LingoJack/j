@@ -771,7 +771,6 @@ hook.rs         storage.rs
             <div class="msg-chip" data-pri="high">TODO 当前任务 <span class="score">p=0.88</span></div>
             <div class="msg-chip" data-pri="high">SubAgent 调研结论 <span class="score">p=0.85</span></div>
             <div class="msg-chip" data-pri="mid">Skill 加载内容 <span class="score">p=0.70</span></div>
-            <div class="msg-chip" data-pri="mid">最近 3 轮 Read <span class="score">p=0.55</span></div>
             <div class="msg-chip" data-pri="low">远期 Bash 输出 <span class="score">p=0.20</span></div>
             <div class="msg-chip" data-pri="low">中间 Grep 结果 <span class="score">p=0.15</span></div>
             <div class="msg-chip" data-pri="low">已被覆盖的旧 Edit <span class="score">p=0.08</span></div>
@@ -789,7 +788,6 @@ hook.rs         storage.rs
             <div class="msg-chip" data-pri="high">TODO 当前任务 <span class="score">30%</span></div>
             <div class="msg-chip" data-pri="high">SubAgent 调研结论 <span class="score">30%</span></div>
             <div class="msg-chip" data-pri="mid">Skill 加载内容 <span class="score">60%</span></div>
-            <div class="msg-chip" data-pri="mid">最近 3 轮 Read <span class="score">60%</span></div>
             <div class="msg-chip" data-pri="low">远期 Bash 输出 <span class="score">10%</span></div>
             <div class="msg-chip" data-pri="low">中间 Grep 结果 <span class="score">DROP</span></div>
             <div class="msg-chip" data-pri="low">已被覆盖的旧 Edit <span class="score">DROP</span></div>
@@ -808,29 +806,68 @@ hook.rs         storage.rs
   <!-- ============ 6. Dynamic System Prompt ============ -->
   <section class="slide" data-title="Dynamic System Prompt">
     <div class="title-bar">
-      <h2>02 · 上下文治理与状态感知 — 动态 System Prompt：尾部追加的状态感知
+      <h2>02 · 上下文治理与状态感知 — 动态 System Prompt 与鲁棒性
     </div>
-    <div class="arch mt-m">
-      <div class="tier"><div class="tname">静态基础</div>
-        <div class="cells"><div class="cell"><h4>项目规范</h4><p>AGENTS.md</p></div>
-          <div class="cell"><h4>工具定义</h4><p>Tool Schema</p></div>
-          <div class="cell"><h4>环境信息</h4><p>OS / Shell</p></div>
-          <div class="cell"><h4>Skill</h4><p>按需加载</p></div>
-        </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">动态 System Prompt</h4>
+        <p>System Prompt 尾部根据当前状态<strong>动态追加</strong>信息——后台任务状态、Teammate 存在、过期 TODO 提醒、交互式 Session。即使原始上下文已被压缩，Agent 仍能感知正在发生的持续性事件。</p>
+        <p class="note">核心思路：让 Agent 在压缩后仍能<strong>感知当前正在发生的持续性事件</strong>，避免遗忘正在运行的后台任务或协作队友。</p>
       </div>
-      <div class="tier hl"><div class="tname">动态追加</div>
-        <div class="cells"><div class="cell"><h4>后台任务</h4><p>Task / BackgroundJob</p></div>
-          <div class="cell"><h4>Teammate</h4><p>协作队友状态</p></div>
-          <div class="cell"><h4>TODO</h4><p>过期未更新提醒</p></div>
-          <div class="cell"><h4>Session</h4><p>交互式任务</p></div>
+      <div class="col-visual">
+        <div class="arch" style="margin-top:0">
+          <div class="tier"><div class="tname">静态基础</div>
+            <div class="cells"><div class="cell"><h4>项目规范</h4><p>AGENTS.md</p></div>
+              <div class="cell"><h4>工具定义</h4><p>Tool Schema</p></div>
+              <div class="cell"><h4>环境信息</h4><p>OS / Shell</p></div>
+              <div class="cell"><h4>Skill</h4><p>按需加载</p></div>
+            </div>
+          </div>
+          <div class="tier hl"><div class="tname">动态追加</div>
+            <div class="cells"><div class="cell"><h4>后台任务</h4><p>Task / BackgroundJob</p></div>
+              <div class="cell"><h4>Teammate</h4><p>协作队友状态</p></div>
+              <div class="cell"><h4>TODO</h4><p>过期未更新提醒</p></div>
+              <div class="cell"><h4>Session</h4><p>交互式任务</p></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>另一个关键设计是<strong>动态 System Prompt</strong>。System Prompt 不是一成不变的——它的尾部会根据当前状态动态追加信息。</p>
-      <p>基础部分是静态的：项目规范（比如 AGENTS.md 里定义的代码规范）、工具定义、环境信息、按需加载的 Skill 内容。</p>
-      <p>动态部分才是关键。当 Agent 之前启动了一个后台任务，但工具调用记录已经被压缩掉了，Agent 怎么知道这个任务还在跑？靠的就是<strong>System Prompt 尾部动态追加</strong>的后台任务状态。同样的机制还用于：Teammate 的存在和状态、很久没更新过的 TODO 项目的提醒、当前正在进行的交互式 Session。</p>
-      <p>这个设计的核心思路是：<strong>让 Agent 感知当前正在发生的持续性事件</strong>，即使这些事件的原始上下文已经被压缩了。</p>
+      <p>动态 System Prompt 是上下文治理的第三层保障。System Prompt 的尾部会根据当前状态动态追加信息——后台任务在跑、有 Teammate 存在、TODO 很久没更新了、有交互式 Session 在进行。即使这些事件的原始上下文已经被压缩掉了，Agent 仍然能感知到它们。</p>
+      <p>下一页会展示三重保障组合后的实测效果。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 6.5. 长程运行实测 ============ -->
+  <section class="slide" data-title="Long Running Proof">
+    <div class="title-bar">
+      <h2>02 · 上下文治理与状态感知 — 治理成果：长程运行实测
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">三重保障的协同效果</h4>
+        <ul>
+          <li><strong>分级压缩</strong> · micro 快速替换旧工具结果，auto 深度摘要清空窗口</li>
+          <li><strong>优先级窗口</strong> · 3:6:1 比例保证方向性信息始终在窗</li>
+          <li><strong>动态 System Prompt</strong> · 压缩后仍感知持续性事件</li>
+        </ul>
+        <h4>指数退避 · API 鲁棒性</h4>
+        <p>LLM API 限流、超时由指数退避 + 随机等待自动恢复，不打断工作流。</p>
+        <h4>使用场景</h4>
+        <p>睡前审批 Plan 需求文档 → Agent 自主执行 → 早上收到可运行的原型。Agent 不会因窗口爆满而幻觉、偷工减料或不可用。</p>
+      </div>
+      <div class="col-visual">
+        <div class="fig-shot">
+          <img src="pics/long-running-session-context.jpg" alt="2000+ 消息长程运行截图">
+          <div class="shot-caption">实测：2000+ 轮消息持续任务，上下文始终维持在健康水平，方向性不丢失</div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <p>这一页是整个第二章的成果总结。三重保障——分级压缩 + 优先级窗口 + 动态 System Prompt——组合起来的效果，右边这张截图就是证明。</p>
+      <p>这是一个真实的长程运行任务，2000+ 轮消息。可以看到上下文窗口始终维持在健康水平，没有冲到危险区，Agent 的方向性也没有丢失。中间有多次 micro 和 auto 压缩触发，但每次都回到健康水平继续运行。</p>
+      <p>再加上指数退避处理 API 故障，整个系统足够鲁棒。你可以睡前审批 Plan，让 Agent 自己跑，早上起来收到一个可运行的原型。Agent 不会因为上下文爆满而幻觉或偷工减料。</p>
     </aside>
   </section>
 
