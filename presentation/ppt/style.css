@@ -454,6 +454,28 @@ code{
 .hook-legend .lg-compact::before{border-color:var(--warn)}
 .hook-legend .lg-session::before{border-color:var(--bad)}
 
+/* ---------- Swimlane diagrams ---------- */
+.swimlane{
+  display:flex;flex-direction:column;gap:4px;
+  font-size:11px;font-family:var(--font-mono);
+}
+.sw-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sw-row.sw-head{margin-bottom:4px}
+.sw-label{font-weight:600;color:var(--text-2);font-size:12px;text-align:center;padding:2px 0;border-bottom:1px solid var(--border)}
+.sw-cell{
+  padding:5px 8px;border-radius:3px;
+  border:1px solid var(--border);background:var(--surface);
+  line-height:1.4;color:var(--text-2);
+}
+.sw-cell.sw-empty{border:none;background:none}
+.sw-cell.sw-dim{color:var(--text-3);background:var(--surface-2);border-style:dashed}
+.sw-cell.sw-stale{border-color:var(--warn);background:#fefbf3;color:var(--text-2)}
+.sw-cell.sw-bad{border-color:var(--bad);background:#fef3f3;color:var(--bad);font-weight:600}
+.sw-cell.sw-good{border-color:var(--good);background:#f3fef5;color:var(--good);font-weight:600}
+
+/* ---------- split s50 ---------- */
+.split.s50{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+
 /* ---------- Repo cards ---------- */
 .repo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
 .repo-card{
