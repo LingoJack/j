@@ -12,7 +12,7 @@
     §01 项目与背景（9 页）— 项目介绍 / Agenda / ChatBot vs Agent / ReAct 演示 5 帧
     §02 上下文窗口与压缩（5 页）— 问题 / 窗口膨胀 / 压缩系统 / 优先级漏斗 / 动态 System Prompt
     §03 面向场景强化的工具（11 页）— 总览 / Grep&Ask / Plan+Edit / Plan 工作流 3 帧 / 执行三态 2 帧 / TodoWrite / Hook
-    §04 多 Agent 协作试验（6 页）— 总览 / 2PC / 轮流报数 / 续写接龙 / 协作开发 / SubAgent
+    §04 多 Agent 协作试验（6 页）— 总览 / 消息设计 / 轮流报数 / 续写接龙 / 协作开发 / SubAgent
     §05 模板代码生成引擎（4 页）— 动机 / jen 架构 / 实测对比 / webapp-gen
     §06 总结与展望（2 页）— 仓库 / 四大贡献
 -->
@@ -1419,68 +1419,104 @@ hook.rs         storage.rs
   <!-- ============ 11. MULTI-AGENT COLLABORATION ============ -->
   <section class="slide" data-title="Multi-Agent Collaboration">
     <div class="title-bar">
-      <h2>04 · 多 Agent 协作试验 — 共享消息通道与客观评估
+      <h2>04 · 多 Agent 协作 — 两种协作模式
     </div>
-    <div class="grid g2 mt-l">
-      <div>
-        <div class="feature-row"><span class="num blue">①</span><div><b>Teammate</b><p class="dim">独立 Agent 实例，各有专属上下文和工具，通过 SendMessage 广播 + @提及 通信。</p></div></div>
-        <div class="feature-row mt-m"><span class="num green">②</span><div><b>SubAgent</b><p class="dim">临时子 Agent，用于委派调研任务或并行开发。主 Agent 只可见最终结果，以低上下文成本获取信息。</p></div></div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">Teammate · 对等协作</h4>
+        <p>独立 Agent 实例，各有专属上下文和工具集。通过 <code>SendMessage</code> 广播 + <code>@提及</code> 定向通信。支持 <code>WorkDone</code> 声明完成，<code>@self</code> 可重新激活。多 Teammate 共享消息通道，形成聊天室。</p>
+        <h4>SubAgent · 委派调研</h4>
+        <p>临时子 Agent，<strong>独立窗口完全隔离</strong>。无收件箱、不能发消息。执行完毕后仅回灌精简摘要（~1.5K tokens）到主 Agent 上下文，主窗口仅微增 4%。</p>
+        <h4>客观评估</h4>
+        <p class="dim">参考 Anthropic 研究——模型倾向偏袒自己的工作。通过聊天室让其他 Agent 交叉评审，实现相对客观的质量评估。</p>
       </div>
-      <div>
-        <div class="feature-row"><span class="num orange">③</span><div><b>Two-Staged Commit</b><p class="dim">SendMessage + Message Inbox 的两阶段提交机制，解决 Agent Loop 长时序导致的<strong>重复消息</strong>问题。</p></div></div>
-        <div class="feature-row mt-m"><span class="num purple">④</span><div><b>客观评估</b><p class="dim">参考 Anthropic 的研究——模型倾向偏袒自己的工作。通过聊天室让其他 Agent 交叉评审，实现相对客观的质量评估。</p></div></div>
+      <div class="col-visual">
+        <div class="ma-arch">
+          <div class="ma-section">
+            <h5>Teammate 协作架构</h5>
+            <div class="ma-row">
+              <div class="ma-node tm-node"><b>Frontend</b><p>独立上下文<br>独立工具集</p></div>
+              <div class="ma-arr">⇄</div>
+              <div class="ma-node main-node"><b>Main Agent</b><p>协调调度<br>共享消息通道</p></div>
+              <div class="ma-arr">⇄</div>
+              <div class="ma-node tm-node"><b>Backend</b><p>独立上下文<br>独立工具集</p></div>
+            </div>
+            <div class="ma-channels">
+              <span class="ma-ch ch-bi">broadcast_inbox</span>
+              <span class="ma-ch ch-ctx">context_messages</span>
+              <span class="ma-ch ch-disp">display_messages</span>
+            </div>
+          </div>
+          <div class="ma-section">
+            <h5>SubAgent 委派架构</h5>
+            <div class="ma-row">
+              <div class="ma-node main-node"><b>Main Agent</b><p>派遣任务<br>接收摘要</p></div>
+              <div class="ma-arr">→<br><span style="font-size:9px;color:var(--text-3)">prompt</span></div>
+              <div class="ma-node sub-node"><b>SubAgent</b><p>独立窗口<br>独立工具集</p></div>
+              <div class="ma-arr">←<br><span style="font-size:9px;color:var(--text-3)">摘要</span></div>
+              <div class="ma-node" style="border-top:2px solid var(--good)"><b>context</b><p>XML-wrapped<br>&lt;SubAgent&gt;摘要&lt;/SubAgent&gt;</p></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <aside class="notes">
-      <p>第四部分，多 Agent 协作。这是让 Agent 能处理复杂任务的关键能力。</p>
-      <p><strong>Teammate</strong> 是独立的 Agent 实例，每个都有自己专属的上下文和工具集。它们通过 SendMessage 工具在聊天室里广播消息，可以用 @提及 来定向通信。</p>
-      <p><strong>SubAgent</strong> 是一种轻量级的子 Agent，主要用来做两件事：一是<strong>调研</strong>——让 SubAgent 去搜索、阅读、收集信息，主 Agent 只需要看最终的调研结果，不需要消耗自己的上下文去遍历文件；二是<strong>并行开发</strong>——多个 SubAgent 同时工作，提高效率。</p>
-      <p>这里有个重要的工程问题——<strong>Two-Staged Commit</strong>。因为 Agent Loop 是长时序的，两个 Agent 可能同时往聊天室发消息，导致重复或冲突。我设计了发送 + 确认的两阶段提交机制，确保消息的一致性。</p>
-      <p>还有一个很有意思的设计是<strong>客观评估</strong>。Anthropic 有一篇研究指出，LLM 倾向于对自己的工作感到满意——"我做的挺好的"。通过聊天室让其他 Agent 来评审，就能实现相对客观的质量评估。</p>
+      <p>第四部分，多 Agent 协作。j-cli 支持两种协作模式。</p>
+      <p><strong>Teammate</strong> 是对等的 Agent 实例——每个都有独立的上下文窗口和工具集。它们通过 SendMessage 广播消息，用 @提及 定向通信。支持 WorkDone 声明完成，被 @self 提到可以重新激活。右上的架构图展示了三通道设计：broadcast_inbox 是每个 Teammate 的收件箱，context_messages 是注入 Main Agent LLM 上下文的通道，display_messages 是 TUI 渲染通道。</p>
+      <p><strong>SubAgent</strong> 完全不同——它是临时雇员，在独立窗口里执行任务，不能收发消息，执行完只回灌一段摘要。三份调研合计 ~71K tokens 在 SubAgent 独立窗口里消耗，主 Agent 只收到三段 1.5K 的摘要，窗口仅微增 4%。</p>
+      <p>还有一个有意思的设计——<strong>客观评估</strong>。Anthropic 研究指出模型倾向偏袒自己的工作，通过聊天室让其他 Agent 交叉评审，能拿到相对客观的反馈。</p>
     </aside>
   </section>
 
-  <!-- ============ 11.5. TWO-STAGED COMMIT ============ -->
-  <section class="slide" data-title="Two-Staged Commit">
+  <!-- ============ 11.5. MESSAGE DESIGN + VISIBILITY ============ -->
+  <section class="slide" data-title="Message Design & Visibility">
     <div class="title-bar">
-      <h2>04 · 多 Agent 协作试验 — Two-Staged Commit：消除重复消息
+      <h2>04 · 多 Agent 协作 — 消息通信设计与可见性
     </div>
-    <div class="grid g2 mt-m">
-      <div>
-        <h4 style="font-size:14px;color:var(--bad);margin:0 0 8px">问题 · Agent Loop 是长时序异步</h4>
-        <p class="dim" style="font-size:13px;margin:0 0 8px;line-height:1.7">Agent 发完 SendMessage 之后<strong>不会原地等</strong>，立即进入下一轮 LLM 推理。下一轮看不到自己发出的消息（广播延迟 / 状态尚未刷入），就会判定"上次没发出去"<strong>再发一遍</strong>。</p>
-        <div class="dialog" style="font-size:13px">
-          <div class="line"><span class="role agent">Agent A:</span> 我搞定了 auth 模块。</div>
-          <div class="line dim"><span class="role"></span> · LLM 下一轮（200ms 后）开始</div>
-          <div class="line dim"><span class="role"></span> · 此时 inbox 状态尚未对自己可见</div>
-          <div class="line"><span class="role agent">Agent A:</span> 我搞定了 auth 模块。<span class="dim"> ← 重发</span></div>
-          <div class="line"><span class="role agent">Agent A:</span> 我搞定了 auth 模块。<span class="dim"> ← 重发</span></div>
-          <div class="line" style="color:var(--bad)">外部看：怎么说三遍？<br>内部看：每条都进了 B 的窗口，token 翻倍</div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">三通道架构</h4>
+        <ul>
+          <li><code>broadcast_inbox</code> — 每个 Teammate 的收件箱，其他 Agent 广播投递</li>
+          <li><code>context_messages</code> — 注入 Main Agent LLM 上下文（XML-wrapped <code>&lt;From&gt;text&lt;/From&gt;</code>）</li>
+          <li><code>display_messages</code> — TUI 渲染（clean text + sender_name）</li>
+        </ul>
+        <h4>SendMessage Gate · 防重复发送</h4>
+        <p>Agent Loop 长时序异步，发完 SendMessage 不原地等 → 下一轮可能重发。解决方案：<strong>Gate 重评估</strong>——Teammate 调 SendMessage 前检查 <code>broadcast_inbox</code> 是否有新消息。有则 hold + 注入 <code>system_reminder</code> 让 Agent 重新决策，最多重试 2 次。</p>
+        <div class="code-card" style="margin-top:8px">
+          <div class="cc-head">
+            <span><span class="cc-path">teammate_loop.rs</span> · SendMessage Gate</span>
+          </div>
+<pre style="font-size:10.5px;line-height:1.45;padding:6px 8px"><span class="kw">if</span> item.name == <span class="str">"SendMessage"</span> {
+    <span class="kw">let</span> inbox_has_new = inbox.lock()
+        .map(|i| !i.is_empty()).unwrap_or(<span class="kw">false</span>);
+    <span class="kw">if</span> inbox_has_new && retries &lt; MAX_GATE_RETRIES {
+        gate_triggered = <span class="kw">true</span>;
+        <span class="cm">// hold: return placeholder, inject system_reminder</span>
+        <span class="kw">continue</span>;
+    }
+}</pre>
         </div>
       </div>
-      <div>
-        <h4 style="font-size:14px;color:var(--good);margin:0 0 8px">方案 · SendMessage + Inbox 两阶段提交</h4>
-        <p class="dim" style="font-size:13px;margin:0 0 8px;line-height:1.7"><strong>What</strong>：把 SendMessage 拆成 <em>prepare → commit</em> 两步。<br><strong>Why</strong>：让重发在第一阶段就被 Inbox 去重，根本不产生第二条对外可见消息。<br><strong>How</strong>：见右图时序。</p>
-        <div class="seq">
-          <div class="actor">Agent A</div>
-          <div class="actor inbox">Message Inbox</div>
-          <div class="actor peer">Agent B / UI</div>
-          <div class="step act"><span class="tag">①</span>SendMessage<br>(stage 1: prepare)</div>
-          <div class="step inbox"><span class="tag">①</span>暂存 pending<br>同 hash 直接幂等</div>
-          <div class="step"></div>
-          <div class="step act"><span class="tag">②</span>SendMessage Gate<br>(stage 2: commit)</div>
-          <div class="step inbox"><span class="tag">②</span>状态 → committed</div>
-          <div class="step peer"><span class="tag">②</span>对外<strong>仅可见一次</strong></div>
-        </div>
+      <div class="col-visual">
+        <h4 style="margin-top:0;font-size:14px;color:var(--text-3)">消息可见性矩阵</h4>
+        <table class="vis-table">
+          <tr><th></th><th>Main Agent</th><th>Teammate</th><th>SubAgent</th></tr>
+          <tr><td>Own messages</td><td class="yes">Full</td><td class="yes">Full</td><td class="yes">Full</td></tr>
+          <tr><td>Other agent text</td><td class="yes">context (XML)</td><td class="yes">broadcast_inbox</td><td class="no">None</td></tr>
+          <tr><td>Other tool calls</td><td class="yes">&lt;Name&gt;[called X]</td><td class="no">Not visible</td><td class="no">None</td></tr>
+          <tr><td>Other tool results</td><td class="no">Not pushed</td><td class="no">Not visible</td><td class="no">None</td></tr>
+          <tr><td>Can SendMessage</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">No</td></tr>
+          <tr><td>Can receive</td><td class="yes">main_inbox</td><td class="yes">broadcast_inbox</td><td class="no">No</td></tr>
+        </table>
+        <p class="dim" style="font-size:12px;margin-top:10px;line-height:1.6"><strong>设计原则</strong>: 决策信息多放（other agent text），执行中间过程少放（tool results 不推）。SubAgent 完全隔离——不能收发消息，只回灌摘要。</p>
       </div>
     </div>
-    <p class="dim mt-m" style="font-size:13px;text-align:center"><strong>双重收益</strong> · 对外：用户看到的协作过程一致，无重复消息 · 对内：重复消息不进入其他 Agent 的上下文窗口，节省 token、避免决策干扰</p>
     <aside class="notes">
-      <p>讲一个工程化的关键问题——<strong>Two-Staged Commit</strong>。这个问题大家可能不直观，我具体描述。</p>
-      <p>Agent Loop 是<strong>长时序异步</strong>的——Agent 发完 SendMessage 不会原地等，立即进入下一轮 LLM 推理。但消息广播 / inbox 状态可能有几百毫秒延迟。Agent 在下一轮看不到自己刚发的消息，就以为"上次发失败了"<strong>再发一遍</strong>。结果用户看到同样的话重复三次。</p>
-      <p>更糟的是<strong>内部影响</strong>：每条重发都会进入其他 Agent 的上下文窗口，token 浪费 + 决策干扰。</p>
-      <p>解决方案是 <strong>2PC</strong>：SendMessage 拆成 prepare（暂存到 pending）+ commit（提交可见）两步。同一 hash 在第一阶段就被去重，根本不产生第二条 committed 消息。<strong>对外一致、对内不污染</strong>——这就是这个设计的双重价值。</p>
-      <p>下一页的"轮流报数"实验就是为了暴露这个问题而设计的最简场景。</p>
+      <p>这一页讲多 Agent 之间消息怎么流转、谁能看到什么。</p>
+      <p>首先是<strong>三通道架构</strong>。同一逻辑消息有两种物理表示：display 通道给 TUI 渲染，用 clean text；context 通道给 Main Agent 的 LLM 上下文，用 XML-wrapped 标签标出来源。这样 Main Agent 在推理时能知道"这段话是谁说的"。</p>
+      <p>然后是 <strong>SendMessage Gate</strong>——这是解决重复消息的机制。Agent Loop 是长时序的，Agent 发完消息不原地等，下一轮可能以为没发出去就重发。我的方案是：Teammate 调 SendMessage 之前，先检查 broadcast_inbox 有没有新消息到达。如果有，就 hold 住这条 SendMessage，注入 system_reminder 告诉 Agent "你在想的时候新消息到了，请重新决策"。最多重试 2 次。这不是传统的两阶段提交，而是一个重评估门控。</p>
+      <p>右边的可见性表格展示了三者的信息不对称设计：Main 能看到其他 Agent 的文本和工具调用名；Teammate 只能看到广播文本；SubAgent 完全看不到其他 Agent。工具结果一律不推入其他 Agent 的上下文——因为这些执行中间过程价值低但 token 占用高。</p>
     </aside>
   </section>
 
@@ -1494,7 +1530,7 @@ hook.rs         storage.rs
         <h4 style="margin-top:0">What · 任务设置</h4>
         <p>2–3 个 Teammate 按预设顺序完成 1 → N 的递增报数。每个 Agent 收到上一位 SendMessage 后报下一个数，并 @target 唤醒下一位。</p>
         <h4>Why · 为何先做这个</h4>
-        <p>把语义难度降到最低，<strong>只暴露 3 个系统问题</strong>：消息投递、目标唤醒、轮次顺序。<br>本实验直接驱动了 <strong>2PC + SendMessage Gate</strong> 的设计——长时序 Agent Loop 容易重复发送同一消息。</p>
+        <p>把语义难度降到最低，<strong>只暴露 3 个系统问题</strong>：消息投递、目标唤醒、轮次顺序。<br>本实验直接驱动了 <strong>SendMessage Gate</strong> 的设计——长时序 Agent Loop 容易重复发送同一消息。</p>
         <h4>How · 验证方式</h4>
         <p>统计完成率、顺序错误数、唤醒失败数；通过 transcript.jsonl 复盘消息进入收件箱与唤醒标记。</p>
       </div>
@@ -1515,7 +1551,7 @@ hook.rs         storage.rs
     </div>
     <aside class="notes">
       <p>实验一是最基础的——几个 Agent 轮流报数 1、2、3。看起来简单，但要求 Agent 不抢话、不重复、不跳号。</p>
-      <p>这个实验最关键的作用是<strong>暴露问题</strong>。我做这个实验的时候发现，由于 Agent Loop 是长时序异步的，Agent 发完消息看不到自己发的，会以为没发出去再发一遍。这直接驱动了 2PC 的设计——下一页就讲。</p>
+      <p>这个实验最关键的作用是<strong>暴露问题</strong>。我做这个实验的时候发现，由于 Agent Loop 是长时序异步的，Agent 发完消息看不到自己发的，会以为没发出去再发一遍。这直接驱动了 SendMessage Gate 的设计——上一页已经讲了。</p>
       <p>论文表 7-10 的实测：10 个数字全部按序完成，顺序错误 0，唤醒失败 0，人工干预 0。SendMessage 调了 16 次比目标数多，这是协作协议的固定开销。</p>
     </aside>
   </section>
@@ -1527,11 +1563,11 @@ hook.rs         storage.rs
     </div>
     <div class="split s55">
       <div class="col-text">
-        <h4 style="margin-top:0">What · 任务设置</h4>
+        <h4 style="margin-top:0">任务设置</h4>
         <p>多个 Teammate 轮流续写一句故事，保持人物、地点、时间线和事件因果一致。</p>
-        <h4>Why · 推进到语义层</h4>
+        <h4>检验目标</h4>
         <p>实验一只验证"能按序发言"，本实验进一步检验<strong>共享上下文</strong>——每个 Agent 是否真能读到前文设定。如果 shared_messages 广播有 bug，故事会立即跑题。</p>
-        <h4>How · 验证方式</h4>
+        <h4>验证方式</h4>
         <p>统计完成轮数、偏题次数、重复内容次数、人工干预次数。</p>
       </div>
       <div class="col-visual">
@@ -1560,7 +1596,7 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>04 · 多 Agent 协作试验 — 开发-测试协作
     </div>
-    <div class="split s46">
+    <div class="split s55">
       <div class="col-text">
         <h4 style="margin-top:0">What · 任务设置</h4>
         <p>Developer + Tester 双角色协作。任务是给前面端到端生成的电商网页项目<strong>追加 45 项验收清单</strong>（A 类页面跳转 20 + B 类浏览历史 15 + C 类 UX 改进 10）。Tester 把需求拆为可验收项 → 跑构建/静态检查 → SendMessage 反馈失败项 → Developer 修复 → 复验。</p>
@@ -1597,50 +1633,63 @@ hook.rs         storage.rs
   <!-- ============ 11.8. SUBAGENT DELEGATION ============ -->
   <section class="slide" data-title="SubAgent Delegation">
     <div class="title-bar">
-      <h2>04 · 多 Agent 协作试验 — SubAgent：低上下文成本的调研委派
+      <h2>04 · 多 Agent 协作 — SubAgent：低上下文成本的调研委派
     </div>
-    <div class="subtree mt-m">
-      <div class="root">
-        <b>主 Agent</b>
-        <span>context: 38%</span>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">上下文隔离</h4>
+        <p>独立消息窗口，不继承父 Agent 历史。SubAgent 以 <code>prompt</code> 为唯一起点，在自己的窗口里 Read / Grep / WebFetch。</p>
+        <h4>工具隔离</h4>
+        <p>独立 <code>ToolRegistry</code>，排除 <code>Teammate</code> / <code>Agent</code> 工具（防递归）。可选 <code>worktree</code> 创建独立 git 工作树。</p>
+        <h4>结果回灌</h4>
+        <p>执行完毕后，仅回灌精简摘要到主 Agent：</p>
+        <ul>
+          <li><code>display</code> — clean text + sender_name</li>
+          <li><code>context</code> — XML-wrapped <code>&lt;SubAgent@Name&gt;摘要&lt;/SubAgent@Name&gt;</code></li>
+          <li>工具结果<strong>不推入</strong> context（token 占用高、价值低）</li>
+        </ul>
       </div>
-      <div class="conn-bidir">
-        <span class="dir-down">↓ 派遣调研任务</span>
-        <span class="dir-up">↑ 仅回灌精简摘要 (~1.5K tokens)</span>
-      </div>
-      <div class="branches">
-        <div class="branch">
-          <span class="tag">SubAgent A</span>
-          <b>调研 auth 模块</b>
-          <p>Read 12 文件<br>Grep 8 次</p>
-          <p class="dim" style="margin-top:6px;font-size:10px">独立窗口 ~22K tokens</p>
+      <div class="col-visual">
+        <div class="subtree">
+          <div class="root">
+            <b>主 Agent</b>
+            <span>context: 38%</span>
+          </div>
+          <div class="conn-bidir">
+            <span class="dir-down">↓ 派遣调研任务</span>
+            <span class="dir-up">↑ 仅回灌精简摘要 (~1.5K tokens)</span>
+          </div>
+          <div class="branches">
+            <div class="branch">
+              <span class="tag">SubAgent A</span>
+              <b>调研 auth 模块</b>
+              <p>Read 12 文件<br>Grep 8 次</p>
+              <p class="dim" style="margin-top:6px">独立窗口 ~22K tokens</p>
+            </div>
+            <div class="branch">
+              <span class="tag">SubAgent B</span>
+              <b>调研 storage 层</b>
+              <p>Read 18 文件<br>Glob 项目结构</p>
+              <p class="dim" style="margin-top:6px">独立窗口 ~31K tokens</p>
+            </div>
+            <div class="branch">
+              <span class="tag">SubAgent C</span>
+              <b>调研 hook 系统</b>
+              <p>WebFetch 文档<br>读 README</p>
+              <p class="dim" style="margin-top:6px">独立窗口 ~18K tokens</p>
+            </div>
+          </div>
+          <div class="summary">
+            三份调研合计 ~71K tokens 在 SubAgent 独立窗口里消耗，主 Agent 仅微增 <strong>4%</strong>
+          </div>
         </div>
-        <div class="branch">
-          <span class="tag">SubAgent B</span>
-          <b>调研 storage 层</b>
-          <p>Read 18 文件<br>Glob 项目结构</p>
-          <p class="dim" style="margin-top:6px;font-size:10px">独立窗口 ~31K tokens</p>
-        </div>
-        <div class="branch">
-          <span class="tag">SubAgent C</span>
-          <b>调研 hook 系统</b>
-          <p>WebFetch 文档<br>读 README</p>
-          <p class="dim" style="margin-top:6px;font-size:10px">独立窗口 ~18K tokens</p>
-        </div>
       </div>
-      <div class="summary">
-        三份调研合计 ~71K tokens 在 SubAgent 独立窗口里消耗，主 Agent 仅微增 <strong>4%</strong>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#subagent #parallel-research</span>
-      <span class="slide-number" data-current="18" data-total="36"></span>
     </div>
     <aside class="notes">
       <p>SubAgent 和 Teammate 不一样——Teammate 是平等的协作者，SubAgent 是<strong>临时雇用的调研员</strong>。</p>
       <p>核心思想是<strong>上下文隔离</strong>。主 Agent 想要了解一个未知模块，如果自己去 Read 十几个文件，主窗口会被瞬间填满几十 K token。这些原始内容里 90% 都是噪音，主 Agent 真正需要的只是<strong>一段结论</strong>。</p>
-      <p>所以我设计了 SubAgent 工具——主 Agent 派一个 SubAgent 去做调研，SubAgent 在<strong>自己独立的上下文窗口</strong>里读文件、搜代码、跑工具。调研完了，SubAgent 只把<strong>最终摘要结论</strong>回灌给主 Agent。</p>
-      <p>你看这张图——三个 SubAgent 并行调研，每个用掉 20-30K tokens 的独立窗口。但主 Agent 收到的只是三段总计 1.5K 的摘要。<strong>主窗口仅微增 4%</strong>，但主 Agent 获得了三个模块的完整理解。</p>
+      <p>隔离体现在三个层面：<strong>上下文隔离</strong>——独立消息窗口，不继承父 Agent 历史，以 prompt 为唯一起点；<strong>工具隔离</strong>——独立 ToolRegistry，排除 Teammate 和 Agent 工具防止递归，可选 worktree 创建独立 git 工作树；<strong>结果回灌</strong>——执行完毕后只推精简摘要，工具结果不推入主 Agent 上下文。</p>
+      <p>右边这张图——三个 SubAgent 并行调研，每个用掉 20-30K tokens 的独立窗口。但主 Agent 收到的只是三段总计 1.5K 的摘要。<strong>主窗口仅微增 4%</strong>，但获得了三个模块的完整理解。</p>
       <p>这就是"<strong>以较低的上下文成本了解调研目标</strong>"——也是 SubAgent 这个抽象最大的价值。</p>
     </aside>
   </section>
@@ -1971,7 +2020,7 @@ hook.rs         storage.rs
       </div>
       <div class="card card-accent card-hover">
         <h4>③ 多 Agent 协作试验</h4>
-        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>2PC SendMessage</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
+        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>SendMessage Gate</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
       </div>
       <div class="card card-accent card-hover">
         <h4>④ 模板代码生成引擎</h4>
@@ -1983,7 +2032,7 @@ hook.rs         storage.rs
       <p>做个总结。这个毕设的核心贡献有<strong>四块</strong>。</p>
       <p><strong>① 上下文窗口治理</strong>——分级窗口 + 多级压缩 + 豁免高价值消息 + 动态 System Prompt。把上下文当推荐系统优化：决策多放、中间过程少放。</p>
       <p><strong>② 面向场景强化的工具</strong>——每个工具都是为解决具体问题而引入：Grep 主动构建上下文、Ask 防漂移、Plan 调研后清空上下文重新执行、Edit 精确替换、执行三态自动流转处理交互式命令、TodoWrite 防遗忘、Hook 14 事件守规范。</p>
-      <p><strong>③ 多 Agent 协作试验</strong>——这是这次重点重写的部分。三个实验从简到难：轮流报数验证消息层、续写接龙验证共享上下文、协作开发验证工程闭环。三组数字都在论文表里——100%、13/13、45/45。2PC 是为解决长时序重复消息设计的关键机制。</p>
+      <p><strong>③ 多 Agent 协作试验</strong>——这是这次重点重写的部分。三个实验从简到难：轮流报数验证消息层、续写接龙验证共享上下文、协作开发验证工程闭环。三组数字都在论文表里——100%、13/13、45/45。SendMessage Gate 是为解决长时序重复消息设计的关键机制。</p>
       <p><strong>④ 模板代码生成引擎</strong>——jen 把 51 张表的实测从 24M token 降到 48 万、53 分钟降到 2 分钟、字段一致性从 95.7% 升到 100%。webapp-gen 把全栈生成固化为 11 步工作流。两者都用 Skill 按需加载，不污染上下文。</p>
     </aside>
   </section>

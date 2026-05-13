@@ -864,6 +864,64 @@ code{
 .mini-table td.lvl-h{color:var(--accent);font-weight:600}
 .mini-table td.lvl-l{color:var(--text-3)}
 
+/* ---------- Multi-Agent architecture diagram ---------- */
+.ma-arch{display:flex;flex-direction:column;gap:18px}
+.ma-section{display:flex;flex-direction:column;gap:6px}
+.ma-section h5{
+  margin:0;font-size:11px;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:.08em;
+  font-family:var(--font-mono);font-weight:500;
+}
+.ma-row{display:flex;gap:10px;align-items:stretch}
+.ma-node{
+  flex:1;background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:10px 12px;text-align:center;
+  min-width:0;
+}
+.ma-node.main-node{border-top:2px solid var(--accent)}
+.ma-node.tm-node{border-top:2px solid var(--accent-2)}
+.ma-node.sub-node{border-top:2px solid var(--text-3)}
+.ma-node b{display:block;font-size:13px;color:var(--text-1);font-weight:600;margin-bottom:3px}
+.ma-node p{margin:0;font-size:11px;color:var(--text-3);line-height:1.45}
+.ma-channels{
+  display:flex;gap:6px;justify-content:center;flex-wrap:wrap;
+  margin:4px 0;
+}
+.ma-ch{
+  font-family:var(--font-mono);font-size:10px;
+  padding:3px 8px;border-radius:2px;
+  background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text-2);white-space:nowrap;
+}
+.ma-ch.ch-bi{border-color:var(--accent);color:var(--accent)}
+.ma-ch.ch-ctx{border-color:var(--accent-2);color:var(--accent-2)}
+.ma-ch.ch-disp{border-color:var(--text-3)}
+.ma-arr{display:flex;align-items:center;justify-content:center;color:var(--accent);font-family:var(--font-mono);font-size:16px;flex-shrink:0}
+
+/* ---------- Visibility table ---------- */
+.vis-table{width:100%;border-collapse:collapse;font-size:13px}
+.vis-table th{
+  padding:8px 10px;background:var(--surface-2);
+  border-bottom:2px solid var(--border-strong);
+  font-family:var(--font-mono);font-size:11px;
+  letter-spacing:.04em;color:var(--text-3);font-weight:600;
+  text-align:center;
+}
+.vis-table th:first-child{text-align:left}
+.vis-table td{
+  padding:7px 10px;border-bottom:1px solid var(--border);
+  color:var(--text-2);text-align:center;
+  font-size:12.5px;
+}
+.vis-table td:first-child{
+  font-family:var(--font-mono);font-size:11.5px;
+  color:var(--text-1);font-weight:500;text-align:left;
+}
+.vis-table td.yes{color:var(--accent);font-weight:600}
+.vis-table td.no{color:var(--text-3)}
+
 /* deck-footer 收敛 */
 .deck-footer{display:none}
 .slide-number{color:var(--text-3)}
