@@ -1277,47 +1277,53 @@ hook.rs         storage.rs
     </aside>
   </section>
 
-  <!-- ============ 12.5. TODOWRITE + SYSTEM REMINDER ============ -->
-  <section class="slide" data-title="TodoWrite Reminder">
+  <!-- ============ 12.5. SYSTEM REMINDER ============ -->
+  <section class="slide" data-title="System Reminder">
     <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — 防遗忘机制
+      <h2>03 · 面向场景强化的工具 — &lt;system-reminder&gt; 状态感知注入
     </div>
-    <div class="grid g2" style="margin-top:8px">
-      <div>
-        <h4 style="font-size:14px;margin-bottom:6px">TodoWrite/TodoRead</h4>
-        <p class="dim" style="font-size:13px">Agent 在开始大任务前列出所有子任务。每完成一个就更新状态。<strong>避免遗漏变更、避免忘记目标。</strong></p>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">设计思路</h4>
+        <p style="font-size:13px">Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩或滚出窗口，Agent 就<strong>失去感知</strong>——忘记后台任务、忽略待办、遗漏 Teammate 消息。</p>
+        <p style="font-size:13px"><code>&lt;system-reminder&gt;</code> 是运行时在<strong>每轮 LLM 请求前</strong>（PreLlmRequest Hook）动态注入的消息，以 User 角色混入上下文。Agent 读到它就知道<strong>外部世界发生了什么</strong>。</p>
+        <h4>四种注入场景</h4>
         <ul style="font-size:12px;line-height:1.9;color:var(--text-2);padding-left:18px">
-          <li>[x] 改 ChatApp.update 增加 Action</li>
-          <li>改 handler/tui_loop.rs 调用点 <span class="dim">(in_progress)</span></li>
-          <li>[ ] 写测试覆盖新分支</li>
-          <li>[ ] 更新 CODEBUDDY.md</li>
+          <li><strong>background_task_completed</strong> · 后台任务跑完，结果通知</li>
+          <li><strong>todo_reminder</strong> · 待办 15+ 轮未更新，软提醒拉回注意力</li>
+          <li><strong>teammate 新消息</strong> · Teammate 发来消息，通知主 Agent 查看</li>
+          <li><strong>invoked_skills 附件</strong> · 压缩后重新注入已加载的技能指令</li>
         </ul>
       </div>
-      <div>
-        <h4 style="font-size:14px;margin-bottom:6px">system_reminder 注入</h4>
-        <p class="dim" style="font-size:13px">当 Agent 长时间没有更新 TODO，系统在下一轮 prompt 尾部<strong>动态注入提醒</strong>，把它拉回正轨。</p>
-        <div class="dialog" style="margin-top:6px;font-size:11px">
-          <div class="line"><span class="role agent">Agent:</span> &lt;读了 5 个文件，跑了 3 次 grep…&gt;</div>
-          <div class="reminder">
-            <span class="role system">system_reminder:</span><br>
-            You have 4 TODO items, last updated 8 turns ago.<br>
-            Currently <strong>in_progress</strong>: "改 handler/tui_loop.rs 调用点"<br>
-            → Are you still working on it? Consider marking it done or splitting.
+      <div class="col-visual">
+        <div class="term" style="margin-top:0">
+          <div class="term-bar"><span>LLM 上下文（每轮请求前）</span><span>inject</span></div>
+          <div class="term-body" style="font-size:10px;line-height:1.5">
+            <div style="color:#6b7a8f;margin-bottom:4px">… 前面的对话历史 …</div>
+            <div class="bubble agent is-new" style="margin-bottom:4px">
+              <div class="who"><span>system_prompt</span><span class="tag">占位符替换</span></div>
+              <div class="body" style="font-family:var(--font-mono);font-size:9px">&lt;session_status&gt;<br>{{.session_state}} &nbsp;← <span style="color:#1e5e3a">工具状态摘要</span><br>{{.tasks}} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← <span style="color:#1e5e3a">活跃任务列表</span><br>{{.background_tasks}} ← <span style="color:#1e5e3a">后台任务</span><br>{{.teammates}} &nbsp;&nbsp;&nbsp;&nbsp;← <span style="color:#1e5e3a">协作状态</span><br>&lt;/session_status&gt;</div>
+            </div>
+            <div class="bubble tool-result is-new">
+              <div class="who"><span>User role</span><span class="tag">system-reminder</span></div>
+              <div class="body" style="font-family:var(--font-mono);font-size:9px">&lt;system-reminder&gt;<br>&lt;background_task_completed&gt;<br>&nbsp;&lt;task_id&gt;bg_3&lt;/task_id&gt;<br>&nbsp;&lt;status&gt;completed&lt;/status&gt;<br>&nbsp;&lt;result&gt;Build succeeded&lt;/result&gt;<br>&lt;/background_task_completed&gt;<br>&lt;/system-reminder&gt;</div>
+            </div>
           </div>
-          <div class="line"><span class="role agent">Agent:</span> 我先把 in_progress 的标记完成，再继续……</div>
         </div>
       </div>
     </div>
     <div class="deck-footer">
-      <span class="mono">#todo #system-reminder</span>
+      <span class="mono">#system-reminder #state-awareness</span>
       <span class="slide-number" data-current="20" data-total="36"></span>
     </div>
     <aside class="notes">
-      <p>讲一个特别有用的小工具——<strong>TodoWrite + system_reminder</strong>。这看着简单，但对 Agent 长期运行有奇效。</p>
-      <p>问题是这样的：Agent 跑一个大任务，可能要改十几个文件。如果它没有显式的待办清单，跑着跑着就<strong>忘记原本要做的事</strong>。改了两个就觉得任务完成了，剩下的就漏了。</p>
-      <p>所以我让 Agent 在开始大任务前先<strong>列出所有 TODO 项</strong>。每完成一个就更新状态。这本身就强迫它<strong>把任务结构化拆分</strong>。</p>
-      <p>但还有个更巧妙的设计——<strong>system_reminder 注入</strong>。如果 Agent 连续好几轮都没更新 TODO，但 TODO 里还有 in_progress 项，系统就会在<strong>下一轮 prompt 尾部</strong>注入一条 system_reminder：「你还有 4 个 TODO，其中一个 in_progress 已经 8 轮没动了，是不是该看看？」</p>
-      <p>这相当于一个<strong>软中断</strong>——不强行打断 Agent，但在它注意力分散的时候轻轻拉一下。实测对完成度提升非常明显。</p>
+      <p>这一页讲 <strong>&lt;system-reminder&gt;</strong> —— 一个让 Agent 在长任务中<strong>保持状态感知</strong>的机制。</p>
+      <p>核心问题：Agent 每轮推理只能看到上下文窗口内的内容。一旦信息被压缩摘要了、或者滚出窗口了，Agent 就<strong>彻底失去感知</strong>。比如后台跑了一个 cargo build，跑完的时候 Agent 已经在干别的了，它不知道 build 完成了、结果是什么。再比如待办清单写了 4 件事，Agent 一头扎进第 2 件，忘了后面还有 3 件。</p>
+      <p>解决方案是 <strong>&lt;system-reminder&gt;</strong>。它不是静态的系统提示词，而是<strong>每轮 LLM 请求前</strong>，由 PreLlmRequest Hook 动态构建、以 User 角色注入的消息。</p>
+      <p>有两层机制。<strong>第一层</strong>是 system_prompt 里的<strong>占位符替换</strong>——system_prompt 模板里有 <code>{{.background_tasks}}</code>、<code>{{.session_state}}</code>、<code>{{.teammates}}</code> 这些占位符。每轮请求前，Hook 把它们替换成实时状态：哪些后台任务在跑、工具注册了什么、Teammate 在干什么。这确保 Agent 每轮都能看到<strong>当前环境的完整快照</strong>。</p>
+      <p><strong>第二层</strong>是 <code>&lt;system-reminder&gt;</code> 消息注入。当有<strong>突发事件</strong>时——后台任务完成、Teammate 发来新消息、待办清单太久没更新——运行时会构建一条 &lt;system-reminder&gt; 消息，以 User 角色插入上下文。</p>
+      <p>右边上面展示的是第一层——system_prompt 中的占位符替换。下面展示的是第二层——一个后台任务完成的通知，Agent 读到就知道 build 跑完了、结果如何。</p>
+      <p>这个设计的关键是<strong>软提醒，不强打断</strong>。Agent 不是被中断的，而是在下一轮推理时自然看到这些信息。如果它正在处理更紧急的事，可以选择暂时忽略。</p>
     </aside>
   </section>
 
@@ -2083,7 +2089,7 @@ hook.rs         storage.rs
       </div>
       <div class="card card-accent card-hover">
         <h4>② 面向场景强化的工具</h4>
-        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / TodoWrite + system_reminder 防遗忘 / Hook 14 事件守工程规范。</p>
+        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / system-reminder 状态感知注入 / Hook 14 事件守工程规范。</p>
       </div>
       <div class="card card-accent card-hover">
         <h4>③ 多 Agent 协作试验</h4>
