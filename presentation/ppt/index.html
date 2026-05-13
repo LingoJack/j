@@ -1803,55 +1803,75 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>05 · 模板代码生成引擎 — jen 架构
     </div>
-    <div class="jen-arch mt-m">
-      <div class="ja-stage">
-        <span class="ja-tag">① 输入</span>
-        <h5>schema.sql</h5>
-        <p>建表语句 / 数据库连接</p>
-        <div class="ja-code">CREATE TABLE `t_user` (<br>&nbsp;&nbsp;`id` bigint UNSIGNED ...,<br>&nbsp;&nbsp;`name` varchar(128) ...,<br>&nbsp;&nbsp;UNIQUE KEY `uk_name` ...<br>);</div>
-      </div>
-      <div class="ja-arr">→</div>
-      <div class="ja-stage">
-        <span class="ja-tag">② 解析</span>
-        <h5>statement_parser</h5>
-        <p>自研 SQL parser，输出结构化 Schema</p>
-        <div class="ja-code">Schema {<br>&nbsp;&nbsp;Table · Column[]<br>&nbsp;&nbsp;Index · UniqueKey<br>&nbsp;&nbsp;TypeMap (MySQL→Go)<br>}</div>
-      </div>
-      <div class="ja-arr">→</div>
-      <div class="ja-stage">
-        <span class="ja-tag">③ 渲染</span>
-        <h5>generator × template</h5>
-        <p>5 个 generator × 2 套框架模板</p>
-        <div class="ja-grid">
-          <span>generate_po</span>
-          <span>generate_dto</span>
-          <span>generate_vo</span>
-          <span>generate_dao</span>
-          <span>generator_tool</span>
+    <div class="jen-top-bottom">
+      <div class="jtb-row">
+        <div class="jtb-col">
+          <span class="jtb-label">设计初衷</span>
+          <p>复杂业务软件中存在大量<strong>"机械代码"</strong>——PO/DTO/VO/DAO、CRUD 接口——业务含量有限，但对字段命名、类型映射高度相关。LLM 逐字生成消耗大量 token，还容易引入字段遗漏和命名漂移。</p>
         </div>
-        <p class="ja-hint">framework: itea-go | gorm</p>
-      </div>
-      <div class="ja-arr">→</div>
-      <div class="ja-stage wide">
-        <span class="ja-tag">④ 产物</span>
-        <h5>原子方法集</h5>
-        <div class="ja-out">
-          <span>Insert</span><span>Update</span><span>Delete</span>
-          <span>GetByPK</span><span>GetByUK</span><span>GetByIdx</span>
-          <span>List</span><span>LikeQuery</span><span>CustomCond</span>
-          <span>WithTx</span><span>BatchInsert</span><span>Count</span>
+        <div class="jtb-col">
+          <span class="jtb-label">核心思路</span>
+          <p><strong>互补而非替代。</strong>LLM 擅长需求理解和流程调度，模板生成器擅长确定性输出。Agent 只负责准备 schema + 验收结果，不逐字写模板代码。</p>
         </div>
-        <p class="ja-hint">主键 / 唯一索引 / 普通索引<br>分别派生独立查询方法</p>
+        <div class="jtb-col">
+          <span class="jtb-label">为什么自研 parser</span>
+          <p>需要精确提取<strong>索引语义</strong>——主键 / 唯一索引 / 普通索引各自能派生什么查询方法。通用 parser 的 AST 里这些信息是隐式的。还要处理 MySQL→Go 类型映射和可空字段指针推导。</p>
+        </div>
+        <div class="jtb-col">
+          <span class="jtb-label">按索引派生方法</span>
+          <p>主键→<code>GetByPK</code>，唯一索引→<code>GetByUK</code>，普通索引→<code>GetByIdx</code>。<strong>LLM 最容易漏的环节</strong>——实测 26 个索引 LLM 漏了 4 个。</p>
+        </div>
+      </div>
+      <div class="jtb-diagram">
+        <div class="jen-arch-h">
+          <div class="jah-stage">
+            <span class="jah-tag">① 输入</span>
+            <h5>schema.sql</h5>
+            <p>建表语句 / 数据库连接</p>
+            <div class="jah-code">CREATE TABLE `t_user` (<br>&nbsp;&nbsp;`id` bigint UNSIGNED ...,<br>&nbsp;&nbsp;`name` varchar(128) ...,<br>&nbsp;&nbsp;UNIQUE KEY `uk_name` ...<br>);</div>
+          </div>
+          <div class="jah-arr">→</div>
+          <div class="jah-stage">
+            <span class="jah-tag">② 解析</span>
+            <h5>statement_parser</h5>
+            <p>自研 SQL parser，输出结构化 Schema</p>
+            <div class="jah-code">Schema {<br>&nbsp;&nbsp;Table · Column[]<br>&nbsp;&nbsp;Index · UniqueKey<br>&nbsp;&nbsp;TypeMap (MySQL→Go)<br>}</div>
+          </div>
+          <div class="jah-arr">→</div>
+          <div class="jah-stage">
+            <span class="jah-tag">③ 渲染</span>
+            <h5>generator × template</h5>
+            <p>5 个 generator × 2 套框架模板</p>
+            <div class="jah-grid">
+              <span>generate_po</span>
+              <span>generate_dto</span>
+              <span>generate_vo</span>
+              <span>generate_dao</span>
+              <span>generator_tool</span>
+            </div>
+            <p class="jah-hint">framework: itea-go | gorm</p>
+          </div>
+          <div class="jah-arr">→</div>
+          <div class="jah-stage jah-wide">
+            <span class="jah-tag">④ 产物</span>
+            <h5>原子方法集</h5>
+            <div class="jah-out">
+              <span>Insert</span><span>Update</span><span>Delete</span>
+              <span>GetByPK</span><span>GetByUK</span><span>GetByIdx</span>
+              <span>List</span><span>LikeQuery</span><span>CustomCond</span>
+              <span>WithTx</span><span>BatchInsert</span><span>Count</span>
+            </div>
+            <p class="jah-hint">主键 / 唯一索引 / 普通索引 分别派生独立查询方法</p>
+          </div>
+        </div>
+        <p class="dim" style="font-size:12px;margin-top:6px;text-align:center">源码：<code>github.com/LingoJack/model_infrax</code></p>
       </div>
     </div>
-    <p class="dim mt-m" style="font-size:13px;text-align:center">源码：<code>github.com/LingoJack/model_infrax</code> · <code>internal/parser</code> + <code>internal/generator/template/</code> · embed 模板供运行时渲染</p>
     <aside class="notes">
-      <p>jen 的架构很清晰，四个阶段。</p>
-      <p><strong>第一阶段，输入</strong>：用户给一段 CREATE TABLE 的 SQL，或者直接连数据库让 jen 反查 schema。</p>
-      <p><strong>第二阶段，解析</strong>：我自研了一个 SQL parser，把建表语句解析成结构化的 Schema 对象——表名、字段、字段类型、主键、唯一索引、普通索引，全部提取出来。MySQL 类型到 Go 类型的映射也在这一层处理。</p>
-      <p><strong>第三阶段，渲染</strong>：有 5 个 generator——po/dto/vo/dao/tool，每个 generator 对应不同的代码层；同时支持两套框架模板——itea-go 和 gorm。模板用 Go template 写，通过 embed 打包进二进制。</p>
-      <p><strong>第四阶段，产物</strong>：输出一整套<strong>原子方法</strong>。最关键的是<strong>按索引派生方法</strong>——主键查、唯一索引查、普通索引查分别生成独立方法，这是 LLM 直接写最容易漏的部分。</p>
-      <p>下一页给大家看实测对比数字。</p>
+      <p>先讲设计初衷——为什么要做 jen。复杂业务软件里有很多"机械代码"，PO/DTO/VO/DAO 这些，业务含量有限，但跟字段命名、类型映射强相关。LLM 逐字生成容易字段漂移、前后端不一致。</p>
+      <p>核心思路是<strong>互补而非替代</strong>——LLM 擅长需求理解和流程调度，模板生成器擅长确定性输出。Agent 只负责准备 schema 和验收结果，不逐字写模板代码。</p>
+      <p>自研 parser 的原因是需要<strong>精确提取索引语义</strong>——主键、唯一索引、普通索引分别能派生什么查询方法。通用 parser 的 AST 里这些信息是隐式的，必须自己走一遍。</p>
+      <p>最终产物的关键是<strong>按索引派生方法</strong>。这是 LLM 直写最容易漏的环节——51 张表实测 26 个索引 LLM 漏了 4 个。下一页看实测数据。</p>
     </aside>
   </section>
 
@@ -1860,41 +1880,50 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>05 · 模板代码生成引擎 — jen 实测对比
     </div>
-    <div class="jen-bench">
-      <table class="bench-table">
-        <thead>
-          <tr>
-            <th>维度</th>
-            <th class="col-bad">LLM 直接生成</th>
-            <th class="col-good">jen + Skill</th>
-            <th class="col-delta">改善</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>编译通过</td><td>通过</td><td>通过</td><td>—</td></tr>
-          <tr><td>字段一致性</td><td>247 / 258 = 95.7%</td><td><strong>258 / 258 = 100%</strong></td><td class="delta">+4.3 pp</td></tr>
-          <tr><td>CRUD 覆盖率</td><td>100%</td><td>100%</td><td>—</td></tr>
-          <tr><td>索引查询覆盖</td><td>22 / 26 = 84.6%</td><td><strong>26 / 26 = 100%</strong></td><td class="delta">+15.4 pp</td></tr>
-          <tr class="hl"><td>LLM 调用次数</td><td>582</td><td><strong>11</strong></td><td class="delta">↓ 53×</td></tr>
-          <tr class="hl"><td>工具调用次数</td><td>2,006</td><td><strong>15</strong></td><td class="delta">↓ 134×</td></tr>
-          <tr class="hl"><td>Token 消耗</td><td>24,219,892</td><td><strong>483,775</strong></td><td class="delta">↓ 50×</td></tr>
-          <tr class="hl"><td>会话总耗时</td><td>53 min 5 sec</td><td><strong>1 min 56 sec</strong></td><td class="delta">↓ 27×</td></tr>
-          <tr><td>压缩触发次数</td><td>67</td><td>0</td><td class="delta">—</td></tr>
-          <tr><td>人工修正次数</td><td>0（2 次网络重试不计）</td><td>0</td><td>—</td></tr>
-        </tbody>
-      </table>
-      <div class="bench-conclusion">
-        <h4>结论</h4>
-        <p>两者最终都能编译通过，但<strong>过程成本天壤之别</strong>。LLM 直接生成需要在字段对齐、DAO 方法补全、编译修复之间反复切换，触发 67 次 compact —— <strong>长上下文维护本身成为主要负担</strong>。</p>
-        <p style="margin-top:8px">jen + Skill 把模板代码从 LLM 链路剥离后，Agent 只负责理解需求、准备输入、验收结果。<strong>规则稳定、重复度高、易字段漂移</strong>的部分交给确定性生成器，是这套设计的核心价值。</p>
+    <div class="split s55">
+      <div class="col-text" style="font-size:14px;gap:12px">
+        <h4 style="margin-top:0;margin-bottom:2px;font-size:14px">验证方式</h4>
+        <p style="font-size:13px;line-height:1.65">51 张表的 DAO 代码全部生成。同一份 schema.sql，局部对照：<strong>①</strong> Agent 直接逐文件写；<strong>②</strong> Agent 加载 jen Skill，准备 schema + 调 jen + 验收。</p>
+        <h4 style="margin-bottom:2px;font-size:14px">关键发现 · 不只是"更快"</h4>
+        <p style="font-size:13px;line-height:1.65">两者都编译通过，<strong>差异在过程成本和字段精度</strong>。LLM 直写需要反复"字段对齐→方法补全→编译修复"——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明上下文已撑爆。</p>
+        <h4 style="margin-bottom:2px;font-size:14px">字段漂移 · 系统性风险</h4>
+        <p style="font-size:13px;line-height:1.65">11 个字段遗漏、4 个索引方法缺失——<strong>长链路推理的系统性风险</strong>：写到第 30 张表时，Agent 已忘了第 5 张表的唯一索引。jen 以 schema 为唯一事实源，从根本上消除漂移。</p>
+        <h4 style="margin-bottom:2px;font-size:14px">结论</h4>
+        <p style="font-size:13px;line-height:1.65">确定性生成器<strong>把规则稳定、易漂移的部分从 LLM 链路剥离</strong>，让 Agent 回归需求理解和集成验收。</p>
+      </div>
+      <div class="col-visual">
+        <div style="margin-top:0">
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>维度</th>
+                <th class="col-bad">LLM 直接生成</th>
+                <th class="col-good">jen + Skill</th>
+                <th class="col-delta">改善</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>编译通过</td><td>通过</td><td>通过</td><td>—</td></tr>
+              <tr><td>字段一致性</td><td>247 / 258 = 95.7%</td><td><strong>258 / 258 = 100%</strong></td><td class="delta">+4.3 pp</td></tr>
+              <tr><td>CRUD 覆盖率</td><td>100%</td><td>100%</td><td>—</td></tr>
+              <tr><td>索引查询覆盖</td><td>22 / 26 = 84.6%</td><td><strong>26 / 26 = 100%</strong></td><td class="delta">+15.4 pp</td></tr>
+              <tr class="hl"><td>LLM 调用次数</td><td>582</td><td><strong>11</strong></td><td class="delta">↓ 53×</td></tr>
+              <tr class="hl"><td>工具调用次数</td><td>2,006</td><td><strong>15</strong></td><td class="delta">↓ 134×</td></tr>
+              <tr class="hl"><td>Token 消耗</td><td>24,219,892</td><td><strong>483,775</strong></td><td class="delta">↓ 50×</td></tr>
+              <tr class="hl"><td>会话总耗时</td><td>53 min 5 sec</td><td><strong>1 min 56 sec</strong></td><td class="delta">↓ 27×</td></tr>
+              <tr><td>压缩触发次数</td><td>67</td><td>0</td><td class="delta">—</td></tr>
+              <tr><td>人工修正次数</td><td>0（2 次网络重试不计）</td><td>0</td><td>—</td></tr>
+            </tbody>
+          </table>
+          <p class="dim" style="font-size:11px;margin-top:6px">论文表 7-8 / 7-9 · 51 张表 DAO 全生成 · 数据来源：metrics.json + transcript.jsonl</p>
+        </div>
       </div>
     </div>
     <aside class="notes">
-      <p>这页是论文 §7.4 的实测数据，对象是<strong>51 张表的 DAO 代码全部生成</strong>。</p>
-      <p>看几个关键数字。最显著的是<strong>过程成本</strong>——LLM 直接生成调了 LLM 582 次、跑工具 2006 次、烧了 2400 万 token、用了 53 分钟。jen + Skill 这边只调 LLM 11 次、工具 15 次、48 万 token、不到 2 分钟。<strong>token 降到 1/50、耗时降到 1/27</strong>。</p>
-      <p>更重要的是<strong>质量</strong>。字段一致性从 95.7% 升到 100%；索引查询覆盖从 84.6% 升到 100%——这两个指标直接说明 LLM 写复杂场景容易丢字段、漏索引方法，而模板生成则<strong>规则稳定</strong>。</p>
-      <p>compact 触发次数 67 → 0 也很说明问题：LLM 直接生成已经把 51 张表撑爆了上下文，不停在压缩。jen 这边根本不需要——因为它<strong>没让 LLM 逐字写代码</strong>。</p>
-      <p>所以核心结论是：<strong>规则稳定、重复度高、易字段漂移的代码，应该交给确定性生成器</strong>，把 LLM 解放出来做需求理解和集成验收。</p>
+      <p>这页是论文 §7.4 的实测数据。先说验证方式——51 张表，同一份 schema，局部对照。</p>
+      <p>关键发现：<strong>不只是更快，而是过程成本和字段精度有本质差异</strong>。LLM 直写需要反复在字段对齐、DAO 方法补全、编译修复之间切换——<strong>长上下文维护本身成为主要负担</strong>。67 次 compact 说明 51 张表已把上下文撑爆。</p>
+      <p>11 个字段遗漏和 4 个索引方法缺失不是随机错误，而是<strong>长链路推理的系统性风险</strong>——写到第 30 张表时，Agent 已经忘了第 5 张表有哪些唯一索引。jen 以 schema 为唯一事实源，从根本上消除这类漂移。</p>
+      <p>结论：确定性生成器的价值不是替代 Agent 全部能力，而是把规则稳定、易字段漂移的部分剥离出 LLM 链路。</p>
     </aside>
   </section>
 
@@ -2000,28 +2029,44 @@ hook.rs         storage.rs
     <p class="ch-sub">四大贡献、开源仓库、未来方向。</p>
   </section>
 
-  <!-- ============ 13.9. REPO GALLERY ============ -->
+  <!-- ============ 13.9. REPO GALLERY + DEMO PREVIEW ============ -->
   <section class="slide" data-title="Repo Gallery">
     <div class="title-bar">
       <h2>06 · 总结与展望 — 项目仓库与交付制品
+    </h2>
     </div>
-    <div class="repo-grid">
-      <div class="repo-card">
-        <div class="icon"></div>
-        <div class="repo-name">github.com/LingoJack/jcli</div>
-        <h4>j-cli (主项目)</h4>
-        <p>Rust 实现的 LLM Agent 命令行工具。chat 模块、tool 体系、Skill/Hook 系统、多 Agent 协作。</p>
-        <span class="repo-tag">Rust · 24K LOC</span>
+    <div class="split s64">
+      <div class="col-text" style="min-width:0;font-size:13px;gap:10px">
+        <h4 style="margin-top:0;margin-bottom:6px;font-size:14px">三个开源仓库</h4>
+        <div class="repo-card" style="margin-bottom:8px">
+          <div class="repo-name" style="font-size:11px">github.com/LingoJack/jcli</div>
+          <h4 style="font-size:13px;margin:2px 0">j-cli · 主项目</h4>
+          <p class="dim" style="font-size:11px;margin:0">Rust · 24K LOC · chat / tool / Skill & Hook / 多 Agent</p>
+        </div>
+        <div class="repo-card" style="margin-bottom:8px">
+          <div class="repo-name" style="font-size:11px">github.com/LingoJack/model_infrax</div>
+          <h4 style="font-size:13px;margin:2px 0">jen · 代码生成引擎</h4>
+          <p class="dim" style="font-size:11px;margin:0">Go · SQL parser + 模板引擎 · 封装为 Skill</p>
+        </div>
+        <div class="repo-card" style="margin-bottom:8px">
+          <div class="repo-name" style="font-size:11px">github.com/LingoJack/gradiation_artifact_demo</div>
+          <h4 style="font-size:13px;margin:2px 0">artifact_demo · 端到端验证</h4>
+          <p class="dim" style="font-size:11px;margin:0">React + Go + GORM + Podman · 三环境验收通过</p>
+        </div>
+        <p class="dim" style="font-size:11px;margin-top:6px"><strong>所有代码开源</strong> · MIT License</p>
       </div>
-      <div class="repo-card">
-        <div class="icon"></div>
-        <div class="repo-name">github.com/LingoJack/model_infrax</div>
-        <h4>jen (代码生成)</h4>
-        <p>SQL parser + 模板引擎，自动生成 DAO/Model 层代码。封装为 gen-struct-and-dao-code-from-sql skill。</p>
-        <span class="repo-tag">Go · SQL parser</span>
+      <div class="col-visual" style="min-width:0">
+        <p style="margin:0 0 4px;font-size:12px;font-weight:600">交付制品预览 · gradiation_artifact_demo</p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px">
+          <img src="pics/preview-1.png" alt="制品预览 1" style="width:100%;border-radius:3px;border:1px solid var(--border)">
+          <img src="pics/preview-2.png" alt="制品预览 2" style="width:100%;border-radius:3px;border:1px solid var(--border)">
+          <img src="pics/preview-3.png" alt="制品预览 3" style="width:100%;border-radius:3px;border:1px solid var(--border)">
+          <img src="pics/preview-4.png" alt="制品预览 4" style="width:100%;border-radius:3px;border:1px solid var(--border)">
+          <img src="pics/preview-5.png" alt="制品预览 5" style="width:100%;border-radius:3px;border:1px solid var(--border)">
+          <img src="pics/preview-6.png" alt="制品预览 6" style="width:100%;border-radius:3px;border:1px solid var(--border)">
+        </div>
       </div>
     </div>
-    <p class="dim mt-l" style="font-size:13px;text-align:center"><strong>所有代码开源</strong>，欢迎 Star / Issue / PR · MIT License</p>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack</span>
       <span class="slide-number" data-current="25" data-total="36"></span>
@@ -2030,45 +2075,8 @@ hook.rs         storage.rs
       <p>讲完了所有设计，给大家看一下整个毕设的<strong>产出</strong>——三个 GitHub 仓库。</p>
       <p>第一个是<strong>主项目 jcli</strong>。Rust 写的，大概 24K 行代码。所有今天讲到的内容——chat 模块、工具体系、Skill 系统、Hook 系统、多 Agent 协作——都在这一个仓库里。</p>
       <p>第二个是 <strong>model_infrax</strong>，里面装的是 jen 代码生成器。Go 写的 SQL parser + 模板引擎。它本身是独立工具，但被封装成 skill 集成进 j-cli。</p>
-      <p>第三个是 <strong>gradiation_artifact_demo</strong>——这是我用 j-cli 配合 webapp-gen 和 jen 这两个 skill <strong>真实生成出来的 Web App</strong>。算是整套工具链的端到端验证。</p>
-      <p>三个仓库都是开源的，MIT 协议。欢迎大家访问、star、提 issue 或者 PR。这也是我希望这个毕设能继续往下走的方向。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 13.9b. DEMO PREVIEW ============ -->
-  <section class="slide" data-title="Demo Preview">
-    <div class="title-bar">
-      <h2>06 · 总结与展望 — 交付制品预览
-    </div>
-    <p class="dim mt-s" style="font-size:14px">gradiation_artifact_demo — 由 j-cli 配合 webapp-gen / jen skill 端到端生成的电商 Web App</p>
-    <div class="demo-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">
-      <div class="demo-cell">
-        <img src="pics/preview-1.png" alt="制品预览 1" style="width:100%;border-radius:4px;border:1px solid var(--border)">
-      </div>
-      <div class="demo-cell">
-        <img src="pics/preview-2.png" alt="制品预览 2" style="width:100%;border-radius:4px;border:1px solid var(--border)">
-      </div>
-      <div class="demo-cell">
-        <img src="pics/preview-3.png" alt="制品预览 3" style="width:100%;border-radius:4px;border:1px solid var(--border)">
-      </div>
-      <div class="demo-cell">
-        <img src="pics/preview-4.png" alt="制品预览 4" style="width:100%;border-radius:4px;border:1px solid var(--border)">
-      </div>
-      <div class="demo-cell">
-        <img src="pics/preview-5.png" alt="制品预览 5" style="width:100%;border-radius:4px;border:1px solid var(--border)">
-      </div>
-      <div class="demo-cell">
-        <img src="pics/preview-6.png" alt="制品预览 6" style="width:100%;border-radius:4px;border:1px solid var(--border)">
-      </div>
-    </div>
-    <p class="dim" style="font-size:12px;text-align:center;margin-top:8px"><code>github.com/LingoJack/gradiation_artifact_demo</code> · React + Go + GORM + Podman · 三环境矩阵验收通过</p>
-    <div class="deck-footer">
-      <span class="mono">#artifact #demo-preview</span>
-      <span class="slide-number" data-current="26" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>这一页是交付制品的<strong>实际效果预览</strong>。六张截图展示了 gradiation_artifact_demo 这个电商 Web App 的完整界面——从商品列表、详情页、购物车、订单管理到用户认证，全部由 j-cli 配合 webapp-gen 和 jen skill 生成，没有手写业务代码。</p>
-      <p>三环境矩阵验收——本地开发、podman 单容器、全栈 podman compose——全部通过。这也验证了整套工具链从需求分析到容器化部署的端到端可行性。</p>
+      <p>第三个是 <strong>gradiation_artifact_demo</strong>——这是我用 j-cli 配合 webapp-gen 和 jen 这两个 skill <strong>真实生成出来的电商 Web App</strong>。右边六张截图就是它的实际界面。三环境矩阵验收全部通过，算是整套工具链的端到端验证。</p>
+      <p>三个仓库都是开源的，MIT 协议。欢迎大家访问、star、提 issue 或者 PR。</p>
     </aside>
   </section>
 
