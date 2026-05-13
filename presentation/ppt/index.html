@@ -2093,19 +2093,19 @@ hook.rs         storage.rs
     </div>
     <div class="grid g2" style="gap:16px">
       <div>
-        <h4>① 上下文窗口治理</h4>
+        <h4>上下文窗口治理</h4>
         <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">分级消息窗口 + 多级压缩（micro / auto）+ 豁免高价值消息 + 动态 System Prompt 追加。把上下文当作推荐系统：决策信息多放、执行中间过程少放，让 Agent 长期低幻觉运行。</p>
       </div>
       <div>
-        <h4>② 面向场景强化的工具</h4>
+        <h4>面向场景强化的工具</h4>
         <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / system-reminder 状态感知注入 / Hook 14 事件守工程规范。</p>
       </div>
       <div>
-        <h4>③ 多 Agent 协作试验</h4>
+        <h4>多 Agent 协作试验</h4>
         <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>SendMessage Gate</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
       </div>
       <div>
-        <h4>④ 模板代码生成引擎</h4>
+        <h4>模板代码生成引擎</h4>
         <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65"><strong>jen</strong>：SQL → Go DAO 全套原子方法。51 张表实测：token <strong>↓ 50×</strong>、耗时 <strong>↓ 27×</strong>、字段一致性 <strong>100%</strong>。<br><strong>webapp-gen</strong>：脚手架 + 原型驱动 + 三环境矩阵验收。两者均封装为 Skill 按需加载。</p>
       </div>
     </div>
