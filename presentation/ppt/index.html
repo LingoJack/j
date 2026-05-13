@@ -202,23 +202,23 @@
       <h2>01 · 项目与背景 — Function Calling：LLM 如何调用工具
     </div>
     <div class="split s55">
-      <div class="col-text">
-        <p class="lead">LLM 本质上是<strong>文本预测器</strong>，它不能直接操作文件系统或终端。<span class="accent">Function Calling</span> 是让 LLM 从"说话"跨越到"做事"的桥梁。</p>
-        <h4>LLM 的输入结构</h4>
-        <p>每次请求，LLM 收到的是一份系统指令 system prompt 和一组 <strong>messages</strong>，分为三种角色：</p>
-        <ul>
-          <li><strong>User</strong> · 用户输入 + 系统注入的提醒（system-reminder）</li>
-          <li><strong>Assistant</strong> · LLM 自身的回复，含文本和 tool_calls</li>
-          <li><strong>Tool</strong> · 工具执行结果，回灌 messages</li>
+      <div class="col-text" style="gap:10px">
+        <p class="lead" style="font-size:19px">LLM 是<strong>文本预测器</strong>，不能直接操作文件或终端。<span class="accent">Function Calling</span> 是"说话"到"做事"的桥梁。</p>
+        <h4 style="margin-top:4px">LLM 的输入结构</h4>
+        <p>每次请求，LLM 收到一份 <strong>system prompt</strong> + 一组 <strong>messages</strong>：</p>
+        <ul style="line-height:1.7;margin:0">
+          <li><strong>User</strong> · 用户输入 + 系统注入的提醒</li>
+          <li><strong>Assistant</strong> · LLM 回复，含文本和 tool_calls</li>
+          <li><strong>Tool Result</strong> · 工具执行结果回灌</li>
         </ul>
-        <h4>Function Calling 流程</h4>
-        <ul>
-          <li><strong>工具注册</strong> · 运行时将工具的名称、描述、参数 Schema 写入 System Prompt</li>
-          <li><strong>LLM 决策</strong> · LLM 输出 <strong>tool_calls JSON</strong>（工具名 + 参数）</li>
-          <li><strong>运行时执行</strong> · 解析 JSON，执行工具，结果以 User 角色回灌 messages</li>
+        <h4 style="margin-top:4px">Function Calling 流程</h4>
+        <ul style="line-height:1.7;margin:0">
+          <li><strong>工具注册</strong> · 名称、描述、参数 Schema 写入 System Prompt</li>
+          <li><strong>LLM 决策</strong> · 输出 <strong>tool_calls JSON</strong>（工具名 + 参数）</li>
+          <li><strong>运行时执行</strong> · 解析 JSON，执行工具，结果回灌 messages</li>
           <li><strong>循环迭代</strong> · LLM 看到结果后继续推理，可能再次调工具</li>
         </ul>
-        <p class="note">关键：LLM 不直接执行任何操作 —— 它只产出"意图"，运行时代替它完成真实动作。</p>
+        <p class="note" style="padding-top:6px;margin-top:4px">关键：LLM 只产出"意图"，运行时代替它执行。</p>
       </div>
       <div class="col-visual">
         <div class="term" style="margin-top:0">
@@ -884,22 +884,21 @@ hook.rs         storage.rs
       <h2>02 · 上下文治理与状态感知 — 治理成果：长程运行实测
     </div>
     <div class="split s55">
-      <div class="col-text">
+      <div class="col-text" style="gap:6px">
         <h4 style="margin-top:0">三重保障的协同效果</h4>
-        <ul>
+        <ul style="line-height:1.7;margin:0">
           <li><strong>分级压缩</strong> · micro 快速替换旧工具结果，auto 深度摘要清空窗口</li>
           <li><strong>优先级窗口</strong> · 3:6:1 比例保证方向性信息始终在窗</li>
           <li><strong>动态 System Prompt</strong> · 压缩后仍感知持续性事件</li>
         </ul>
-        <h4>指数退避 · API 鲁棒性</h4>
+        <h4 style="margin-top:2px">指数退避 · API 鲁棒性</h4>
         <p>LLM API 限流、超时由指数退避 + 随机等待自动恢复，不打断工作流。</p>
-        <h4>使用场景</h4>
-        <p>睡前审批 Plan 需求文档 → Agent 自主执行 → 早上收到可运行的原型。Agent 不会因窗口爆满而幻觉、偷工减料或不可用。</p>
+        <p class="dim" style="font-size:12px">使用场景：睡前审批 Plan → Agent 自主执行 → 早上收到可运行原型。</p>
       </div>
       <div class="col-visual">
-        <div class="fig-shot">
-          <img src="pics/long-running-session-context.jpg" alt="2000+ 消息长程运行截图">
-          <div class="shot-caption">实测：2000+ 轮消息持续任务，上下文始终维持在健康水平，方向性不丢失</div>
+        <div class="fig-shot" style="display:flex;flex-direction:column;overflow:hidden">
+          <img src="pics/long-running-session-context.jpg" alt="2000+ 消息长程运行截图" style="flex:1;min-height:0;object-fit:cover;object-position:left top">
+          <div class="shot-caption">实测：2000+ 轮消息，上下文始终健康，方向性不丢失</div>
         </div>
       </div>
     </div>
@@ -1053,17 +1052,17 @@ hook.rs         storage.rs
       <h2>03 · 面向场景强化的工具 — 清空窗口按计划执行
     </div>
     <div class="split s55">
-      <div class="col-text">
-        <p class="lead">窗口从 65% <span class="accent">回到 12%</span>：调研产生的 30+ 工具结果全部丢弃。</p>
-        <ul>
+      <div class="col-text" style="gap:4px">
+        <p class="lead" style="font-size:18px">窗口从 65% <span class="accent">回到 12%</span>：调研产生的 30+ 工具结果全部丢弃。</p>
+        <ul style="line-height:1.7;margin:0">
           <li>Agent 重新启动，上下文只含 plan.md</li>
           <li>工具集恢复为<strong>完整集</strong>（Edit / Write / Bash）</li>
           <li>不再有调研中间产物干扰决策</li>
         </ul>
-        <h4 style="margin-top:4px;margin-bottom:2px">这就是 <span class="accent">clear & approve</span> 机制<span style="font-weight:400;font-size:14px;color:var(--text-3)"> — 代价：忘掉调研细节 / 收益：窗口干净，错误率下降</span></h4>
-        <div class="fig-shot" style="margin-top:4px;flex:1;min-height:0;overflow:hidden">
-          <img src="pics/plan-mode-clear-and-approval.png" alt="plan-mode 真实截图：审批界面与 clear-and-approval 选项" style="height:100%;object-fit:cover;object-position:left top">
-          <div class="shot-caption">jcli plan-mode 真实截图 · 批准 / 清空上下文 / 驳回三选项</div>
+        <p class="note" style="margin-top:2px;padding-top:4px"><span class="accent">clear & approve</span> 机制：忘掉调研细节 → 窗口干净，错误率下降</p>
+        <div class="fig-shot" style="margin-top:4px;flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+          <img src="pics/plan-mode-clear-and-approval.png" alt="plan-mode 真实截图" style="flex:1;min-height:0;object-fit:cover;object-position:left top">
+          <div class="shot-caption">jcli plan-mode · 批准 / 清空上下文 / 驳回三选项</div>
         </div>
       </div>
       <div class="col-visual">
