@@ -51,6 +51,155 @@ pub fn sanitize_single_line_text(s: &str) -> String {
         .collect()
 }
 
+/// 按显示宽度对文本进行自动换行，续行使用指定的前缀字符串。
+///
+/// 与 `wrap_text` 不同：当一行被截断为多行时，续行会以 `continuation_prefix` 开头，
+/// 用于保持带行号前缀文本的视觉对齐。例如原始行 `59│     let x = ...`，
+/// 续行前缀为 `  │     `，则续行显示为 `  │     ...`。
+pub fn wrap_text_with_prefix(
+    text: &str,
+    max_width: usize,
+    continuation_prefix: &str,
+) -> Vec<String> {
+    let normalized;
+    let text = if needs_terminal_sanitization(text) {
+        normalized = sanitize_terminal_text(text);
+        normalized.as_str()
+    } else {
+        text
+    };
+    let max_width = max_width.max(2);
+    let prefix_width = display_width(continuation_prefix);
+    // 前缀不能超过最大宽度（至少留 2 给内容字符）
+    let prefix_width = prefix_width.min(max_width.saturating_sub(2));
+    let prefix_display: String = continuation_prefix
+        .chars()
+        .fold((String::new(), 0), |(mut s, w), ch| {
+            let cw = char_width(ch);
+            if w + cw > prefix_width {
+                (s, w)
+            } else {
+                s.push(ch);
+                (s, w + cw)
+            }
+        })
+        .0;
+
+    let mut result = Vec::new();
+    let mut current_line = String::new();
+    let mut current_width = 0;
+    let mut is_first_line = true;
+
+    for ch in text.chars() {
+        if ch == '\n' {
+            result.push(current_line.clone());
+            current_line.clear();
+            current_width = 0;
+            is_first_line = true;
+            continue;
+        }
+        let ch_width = char_width(ch);
+        if current_width + ch_width > max_width && !current_line.is_empty() {
+            result.push(current_line.clone());
+            current_line.clear();
+            current_width = 0;
+            is_first_line = false;
+        }
+        // 续行以前缀开头
+        if current_line.is_empty() && !is_first_line && !prefix_display.is_empty() {
+            current_line.push_str(&prefix_display);
+            current_width = prefix_width;
+            if current_width + ch_width > max_width {
+                result.push(current_line.clone());
+                current_line = prefix_display.clone();
+                current_width = prefix_width;
+            }
+        }
+        current_line.push(ch);
+        current_width += ch_width;
+    }
+    if !current_line.is_empty() {
+        result.push(current_line);
+    }
+    if result.is_empty() {
+        result.push(String::new());
+    }
+    result
+}
+
+/// 检测行号前缀宽度。
+///
+/// 如果行以 `数字│` 格式开头（如 `123│` 或 `  5│`），返回前缀的显示宽度（含 `│` 后的空格）。
+/// 否则返回 None。
+pub fn line_number_prefix_width(line: &str) -> Option<usize> {
+    let trimmed = line.trim_start();
+    // 查找开头的连续数字
+    let digits_end = trimmed.find(|c: char| !c.is_ascii_digit())?;
+    if digits_end == 0 {
+        return None;
+    }
+    let rest = &trimmed[digits_end..];
+    // 检查紧跟的是 │ (U+2502) 或 | (ASCII pipe)
+    if let Some(after_pipe) = rest.strip_prefix('\u{2502}') {
+        let prefix_byte_len = line.len() - rest.len() + '\u{2502}'.len_utf8();
+        let space_count = after_pipe.chars().take_while(|c| *c == ' ').count();
+        return Some(display_width(&line[..prefix_byte_len + space_count]));
+    }
+    if let Some(after_pipe) = rest.strip_prefix('|') {
+        let prefix_byte_len = line.len() - rest.len() + 1;
+        let space_count = after_pipe.chars().take_while(|c| *c == ' ').count();
+        return Some(display_width(&line[..prefix_byte_len + space_count]));
+    }
+    None
+}
+
+/// 检测行号前缀并生成续行前缀字符串。
+///
+/// 如果行以 `数字│` 格式开头（如 `59│     `），返回续行前缀：
+/// 将数字部分用等宽空格替换，保留 `│` 符号及其后的空格。
+/// 例如 `59│     ` → `  │     `（`59` 替换为 2 个空格）。
+///
+/// 返回 `(prefix_width, continuation_prefix)`：
+/// - `prefix_width`: 原始前缀的显示宽度
+/// - `continuation_prefix`: 续行时使用的前缀字符串（数字替换为空格）
+pub fn line_number_continuation_prefix(line: &str) -> Option<(usize, String)> {
+    let leading_spaces = line.len() - line.trim_start().len();
+    let trimmed = line.trim_start();
+    // 查找开头的连续数字
+    let digits_end = trimmed.find(|c: char| !c.is_ascii_digit())?;
+    if digits_end == 0 {
+        return None;
+    }
+    let digits = &trimmed[..digits_end];
+    let digits_width = display_width(digits);
+    let rest = &trimmed[digits_end..];
+
+    // 检查紧跟的是 │ (U+2502) 或 | (ASCII pipe)
+    let (pipe_char, pipe_len) = if rest.starts_with('\u{2502}') {
+        ('\u{2502}', '\u{2502}'.len_utf8())
+    } else if rest.starts_with('|') {
+        ('|', 1)
+    } else {
+        return None;
+    };
+
+    let after_pipe = &rest[pipe_len..];
+    let trailing_space_count = after_pipe.chars().take_while(|c| *c == ' ').count();
+
+    // 构建续行前缀：前导空格 + 数字宽度对应的空格 + │ + 后续空格
+    let continuation = format!(
+        "{}{}{}{}",
+        " ".repeat(leading_spaces),
+        " ".repeat(digits_width),
+        pipe_char,
+        " ".repeat(trailing_space_count)
+    );
+    let prefix_width =
+        display_width(&line[..leading_spaces + digits_end + pipe_len + trailing_space_count]);
+
+    Some((prefix_width, continuation))
+}
+
 /// 按显示宽度对文本进行自动换行
 /// `\n` 字符会在该处断行（产生新的 wrapped line），`\n` 本身不出现在返回的行中
 pub fn wrap_text(text: &str, max_width: usize) -> Vec<String> {

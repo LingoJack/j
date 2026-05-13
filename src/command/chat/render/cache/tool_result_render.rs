@@ -15,7 +15,9 @@ use crate::command::chat::tools::classification::{
     ToolCategory, ToolStatus, get_result_summary_for_tool,
 };
 use crate::command::chat::tools::tool_names;
-use crate::util::text::wrap_text;
+use crate::util::text::{
+    line_number_continuation_prefix, line_number_prefix_width, wrap_text, wrap_text_with_prefix,
+};
 
 /// render_tool_result_msg 的只读参数（lines 作为输出单独传）
 pub struct ToolResultRenderParams<'a> {
@@ -172,12 +174,32 @@ pub fn render_tool_result_msg(params: &ToolResultRenderParams, lines: &mut Vec<L
     } else {
         // 正常结果
         let all_lines: Vec<&str> = clean.lines().take(NORMAL_RESULT_MAX_LINES).collect();
+        // 预扫描：判断是否大部分行都带行号前缀（如 Read 工具输出）
+        let numbered_count = all_lines
+            .iter()
+            .filter(|l| line_number_prefix_width(l).is_some())
+            .count();
+        let mostly_numbered = !all_lines.is_empty() && numbered_count * 2 >= all_lines.len();
+
         for line in all_lines {
-            for wrapped in wrap_text(line, content_w) {
-                lines.push(Line::from(Span::styled(
-                    format!("    {}", wrapped),
-                    Style::default().fg(theme.text_dim),
-                )));
+            if mostly_numbered {
+                // 带行号的文本：续行保留 │ 符号，与内容列对齐
+                let (_, cont_prefix) =
+                    line_number_continuation_prefix(line).unwrap_or_else(|| (0, String::new()));
+                for wrapped in wrap_text_with_prefix(line, content_w, &cont_prefix) {
+                    lines.push(Line::from(Span::styled(
+                        format!("    {}", wrapped),
+                        Style::default().fg(theme.text_dim),
+                    )));
+                }
+            } else {
+                // 普通文本：标准 wrap
+                for wrapped in wrap_text(line, content_w) {
+                    lines.push(Line::from(Span::styled(
+                        format!("    {}", wrapped),
+                        Style::default().fg(theme.text_dim),
+                    )));
+                }
             }
         }
 
