@@ -2089,32 +2089,32 @@ hook.rs         storage.rs
   <!-- ============ 14. SUMMARY ============ -->
   <section class="slide" data-title="Summary">
     <div class="title-bar">
-      <h2>06 · 总结与展望 — 四大贡献
+      <h2>06 · 总结与展望 — 四项主要工作
     </div>
-    <div class="grid g4 mt-l" style="gap:14px">
-      <div class="card card-accent card-hover">
+    <div class="grid g2" style="gap:16px">
+      <div>
         <h4>① 上下文窗口治理</h4>
-        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">分级消息窗口 + 多级压缩（micro / auto）+ 豁免高价值消息 + 动态 System Prompt 追加。把上下文当作推荐系统：决策信息多放、执行中间过程少放，让 Agent 长期低幻觉运行。</p>
+        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">分级消息窗口 + 多级压缩（micro / auto）+ 豁免高价值消息 + 动态 System Prompt 追加。把上下文当作推荐系统：决策信息多放、执行中间过程少放，让 Agent 长期低幻觉运行。</p>
       </div>
-      <div class="card card-accent card-hover">
+      <div>
         <h4>② 面向场景强化的工具</h4>
-        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / system-reminder 状态感知注入 / Hook 14 事件守工程规范。</p>
+        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">Grep 模板匹配上下文 / Ask 防需求漂移 / Plan 调研后 clear-and-approve / Edit 精确替换 / 执行三态自动流转 / system-reminder 状态感知注入 / Hook 14 事件守工程规范。</p>
       </div>
-      <div class="card card-accent card-hover">
+      <div>
         <h4>③ 多 Agent 协作试验</h4>
-        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>SendMessage Gate</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
+        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65">Teammate + SubAgent 共享上下文。<strong>SendMessage Gate</strong> 解决长时序重复消息。三个递进实验：轮流报数 100% / 续写接龙 13/13 / 协作开发 45/45 全过；指数退避兜底 API 故障。</p>
       </div>
-      <div class="card card-accent card-hover">
+      <div>
         <h4>④ 模板代码生成引擎</h4>
-        <p class="dim" style="margin-top:8px;font-size:13px;line-height:1.65"><strong>jen</strong>：SQL → Go DAO 全套原子方法。51 张表实测：token <strong>↓ 50×</strong>、耗时 <strong>↓ 27×</strong>、字段一致性 <strong>100%</strong>。<br><strong>webapp-gen</strong>：脚手架 + 原型驱动 + 三环境矩阵验收。两者均封装为 Skill 按需加载。</p>
+        <p class="dim" style="margin-top:6px;font-size:13px;line-height:1.65"><strong>jen</strong>：SQL → Go DAO 全套原子方法。51 张表实测：token <strong>↓ 50×</strong>、耗时 <strong>↓ 27×</strong>、字段一致性 <strong>100%</strong>。<br><strong>webapp-gen</strong>：脚手架 + 原型驱动 + 三环境矩阵验收。两者均封装为 Skill 按需加载。</p>
       </div>
     </div>
     <p class="dim mt-l" style="font-size:14px;text-align:center;line-height:1.7">所有代码开源 · MIT License · <code>github.com/LingoJack/jcli</code> · <code>model_infrax</code> · <code>gradiation_artifact_demo</code></p>
     <aside class="notes">
       <p>做个总结。这个毕设的核心贡献有<strong>四块</strong>。</p>
       <p><strong>① 上下文窗口治理</strong>——分级窗口 + 多级压缩 + 豁免高价值消息 + 动态 System Prompt。把上下文当推荐系统优化：决策多放、中间过程少放。</p>
-      <p><strong>② 面向场景强化的工具</strong>——每个工具都是为解决具体问题而引入：Grep 主动构建上下文、Ask 防漂移、Plan 调研后清空上下文重新执行、Edit 精确替换、执行三态自动流转处理交互式命令、TodoWrite 防遗忘、Hook 14 事件守规范。</p>
-      <p><strong>③ 多 Agent 协作试验</strong>——这是这次重点重写的部分。三个实验从简到难：轮流报数验证消息层、续写接龙验证共享上下文、协作开发验证工程闭环。三组数字都在论文表里——100%、13/13、45/45。SendMessage Gate 是为解决长时序重复消息设计的关键机制。</p>
+      <p><strong>② 面向场景强化的工具</strong>——每个工具都是为解决具体问题而引入：Grep 主动构建上下文、Ask 防漂移、Plan 调研后清空上下文重新执行、Edit 精确替换、执行三态自动流转处理交互式命令、system-reminder 状态感知注入、Hook 14 事件守规范。</p>
+      <p><strong>③ 多 Agent 协作试验</strong>——三个实验从简到难：轮流报数验证消息层、续写接龙验证共享上下文、协作开发验证工程闭环。三组数字都在论文表里——100%、13/13、45/45。SendMessage Gate 是为解决长时序重复消息设计的关键机制。</p>
       <p><strong>④ 模板代码生成引擎</strong>——jen 把 51 张表的实测从 24M token 降到 48 万、53 分钟降到 2 分钟、字段一致性从 95.7% 升到 100%。webapp-gen 把全栈生成固化为 11 步工作流。两者都用 Skill 按需加载，不污染上下文。</p>
     </aside>
   </section>
