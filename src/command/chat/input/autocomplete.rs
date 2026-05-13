@@ -198,7 +198,8 @@ pub fn get_filtered_all_items(app: &ChatApp) -> Vec<AtPopupItem> {
     }
 
     // 4. 匹配的文件（增强版：支持路径导航、~ 展开、优化评分）
-    let file_items = get_filtered_files_for_at(raw_filter);
+    // 使用 file_index 缓存进行内存过滤，避免每帧 WalkBuilder 扫描
+    let file_items = get_filtered_files_for_at(app, raw_filter);
     for path in file_items {
         items.push(AtPopupItem::File(path));
     }
@@ -207,30 +208,30 @@ pub fn get_filtered_all_items(app: &ChatApp) -> Vec<AtPopupItem> {
     items
 }
 
-/// 为 @ 弹窗获取文件列表（增强版）
-fn get_filtered_files_for_at(filter: &str) -> Vec<String> {
-    // 处理 ~ 路径展开
-    let expanded;
-    let effective_filter = if filter == "~" {
-        expanded = "~/".to_string();
-        &expanded
-    } else if filter.starts_with("~/") {
-        expanded = expand_tilde(filter);
-        &expanded
-    } else {
-        filter
-    };
+/// 为 @ 弹窗获取文件列表（使用 FileIndex 缓存）
+fn get_filtered_files_for_at(app: &ChatApp, filter: &str) -> Vec<String> {
+    // 索引未就绪时返回空（后台线程仍在扫描）
+    if !app.file_index.is_ready() {
+        return Vec::new();
+    }
 
-    let filter_lower = effective_filter.to_lowercase();
+    // 处理 ~ 路径展开
+    if filter == "~" || filter.starts_with("~/") {
+        // ~/ 路径无法从项目索引中匹配，直接返回空
+        return Vec::new();
+    }
+
+    let filter_lower = filter.to_lowercase();
 
     // 如果 filter 包含 /，先尝试精确路径补全（逐层浏览模式）
-    if let Some(last_slash) = effective_filter.rfind('/') {
-        let dir_part = &effective_filter[..=last_slash];
-        let prefix = &effective_filter[last_slash + 1..];
+    // 这里仍然用 read_dir 做实时读取（保证目录浏览的准确性）
+    if let Some(last_slash) = filter.rfind('/') {
+        let dir_part = &filter[..=last_slash];
+        let prefix = &filter[last_slash + 1..];
         let dir_path = if dir_part.is_empty() {
             std::path::PathBuf::from(".")
         } else {
-            std::path::PathBuf::from(expand_tilde(dir_part))
+            std::path::PathBuf::from(dir_part)
         };
 
         if dir_path.is_dir() {
@@ -266,14 +267,10 @@ fn get_filtered_files_for_at(filter: &str) -> Vec<String> {
             return entries;
         }
         // 目录不存在时，fallback 到用最后一个路径段做模糊搜索
-        // 例如 "s/" -> 用 "s" 搜索文件名
     }
 
-    // 提取搜索关键词：
-    // - 如果 filter 以 / 结尾（如 "s/"），用倒数第二段（"s"）
-    // - 否则用最后一段
+    // 提取搜索关键词
     let search_filter = if filter_lower.ends_with('/') {
-        // 去掉末尾的 /，再取最后一段
         let trimmed = &filter_lower[..filter_lower.len() - 1];
         if let Some(last_slash) = trimmed.rfind('/') {
             &trimmed[last_slash + 1..]
@@ -286,94 +283,12 @@ fn get_filtered_files_for_at(filter: &str) -> Vec<String> {
         &filter_lower
     };
 
-    // 如果搜索关键词为空，直接返回空
     if search_filter.is_empty() {
         return Vec::new();
     }
 
-    // 使用递归全目录模糊搜索
-    let search_root = std::path::PathBuf::from(".");
-    let walker = ignore::WalkBuilder::new(&search_root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .max_depth(Some(8))
-        .build();
-
-    let mut scored_files: Vec<(i32, String)> = Vec::new();
-    for entry in walker.flatten() {
-        let path = entry.path();
-        if path == std::path::Path::new(".") {
-            continue;
-        }
-        let rel = path
-            .strip_prefix(&search_root)
-            .unwrap_or(path)
-            .to_string_lossy();
-        let rel_str = rel.as_ref();
-
-        // 跳过隐藏路径
-        if !filter_lower.starts_with('.') && rel_str.split('/').any(|seg| seg.starts_with('.')) {
-            continue;
-        }
-
-        let file_name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        if let Some(score) = fuzzy_match_enhanced(&file_name, search_filter, rel_str) {
-            let is_dir = path.is_dir();
-            let display = if is_dir {
-                format!("{}/", rel_str)
-            } else {
-                rel_str.to_string()
-            };
-            scored_files.push((score, display));
-        }
-    }
-    scored_files.sort_by(|a, b| {
-        a.0.cmp(&b.0)
-            .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
-    });
-    scored_files
-        .into_iter()
-        .take(10)
-        .map(|(_, path)| path)
-        .collect()
-}
-
-/// 增强版模糊匹配：返回匹配分数（越小越好）
-fn fuzzy_match_enhanced(file_name: &str, filter: &str, rel_path: &str) -> Option<i32> {
-    let base_score = fuzzy_match(file_name, filter)?;
-
-    // 匹配位置加成：开头匹配更优
-    let file_name_lower = file_name.to_lowercase();
-    let position_bonus = if file_name_lower.starts_with(filter) {
-        -50 // 开头匹配，大幅加分
-    } else if file_name_lower.contains(filter) {
-        -20 // 包含匹配，中等加分
-    } else {
-        0
-    };
-
-    // 扩展名优先级：代码文件更优
-    let ext_bonus = if let Some(ext) = std::path::Path::new(file_name).extension() {
-        let ext_str = ext.to_string_lossy().to_lowercase();
-        match ext_str.as_str() {
-            "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "kt" | "swift" => -15,
-            "json" | "yaml" | "yml" | "toml" | "md" => -10,
-            _ => 0,
-        }
-    } else {
-        0
-    };
-
-    // 路径深度惩罚
-    let depth = rel_path.matches('/').count() as i32;
-
-    Some(base_score * 10 + depth + position_bonus + ext_bonus)
+    // 使用 FileIndex 缓存进行内存模糊搜索（替代 WalkBuilder 全目录扫描）
+    app.file_index.fuzzy_search(search_filter, 10)
 }
 
 /// 在 @ 弹窗中直接选中一个混合搜索结果时，替换输入框内容
@@ -459,70 +374,30 @@ pub fn update_file_filter(app: &mut ChatApp) {
     app.ui.file_popup_selected = 0;
 }
 
-/// 将 ~ 展开为用户 home 目录
-fn expand_tilde(path: &str) -> String {
-    if (path == "~" || path.starts_with("~/"))
-        && let Some(home) = dirs::home_dir()
-    {
-        return format!("{}{}", home.display(), &path[1..]);
-    }
-    path.to_string()
-}
-
-/// 模糊匹配：filter 的每个字符按顺序出现在 text 中即可匹配，返回匹配分数（越小越好）
-fn fuzzy_match(text: &str, filter: &str) -> Option<i32> {
-    if filter.is_empty() {
-        return Some(0);
-    }
-    let text_lower: Vec<char> = text.to_lowercase().chars().collect();
-    let filter_lower: Vec<char> = filter.to_lowercase().chars().collect();
-    let mut ti = 0;
-    let mut score: i32 = 0;
-    let mut last_match: Option<usize> = None;
-    for &fc in &filter_lower {
-        let mut found = false;
-        while ti < text_lower.len() {
-            if text_lower[ti] == fc {
-                // 连续匹配加分（间距小更好）
-                if let Some(lm) = last_match {
-                    score += (ti - lm - 1) as i32;
-                }
-                last_match = Some(ti);
-                ti += 1;
-                found = true;
-                break;
-            }
-            ti += 1;
-        }
-        if !found {
-            return None;
-        }
-    }
-    // 匹配起始位置越靠前越好
-    Some(score)
-}
-
-/// 获取文件补全列表（全目录递归搜索，支持模糊匹配）
+/// 获取文件补全列表（使用 FileIndex 缓存进行内存过滤，支持模糊匹配）
 pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
+    // 索引未就绪时返回空（后台线程仍在扫描）
+    if !app.file_index.is_ready() {
+        return Vec::new();
+    }
+
     let filter = &app.ui.file_popup_filter;
 
     // 处理 ~ 路径
-    let expanded;
-    let effective_filter = if filter == "~" {
-        expanded = "~/".to_string();
-        &expanded
-    } else {
-        filter
-    };
+    if filter == "~" || filter.starts_with("~/") {
+        // ~/ 路径无法从项目索引中匹配，直接返回空
+        return Vec::new();
+    }
 
     // 如果 filter 包含 /，先尝试精确路径补全（逐层浏览模式）
-    if let Some(last_slash) = effective_filter.rfind('/') {
-        let dir_part = &effective_filter[..=last_slash];
-        let prefix = &effective_filter[last_slash + 1..];
+    // 这里仍然用 read_dir 做实时读取（保证目录浏览的准确性）
+    if let Some(last_slash) = filter.rfind('/') {
+        let dir_part = &filter[..=last_slash];
+        let prefix = &filter[last_slash + 1..];
         let dir_path = if dir_part.is_empty() {
             std::path::PathBuf::from(".")
         } else {
-            std::path::PathBuf::from(expand_tilde(dir_part))
+            std::path::PathBuf::from(dir_part)
         };
 
         if dir_path.is_dir() {
@@ -559,63 +434,8 @@ pub fn get_filtered_files(app: &ChatApp) -> Vec<String> {
         }
     }
 
-    // 无 / 时使用递归全目录模糊搜索
-    let search_root = std::path::PathBuf::from(".");
-    let mut scored: Vec<(i32, String)> = Vec::new();
-
-    let walker = ignore::WalkBuilder::new(&search_root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .max_depth(Some(8))
-        .build();
-
-    for entry in walker.flatten() {
-        let path = entry.path();
-        // 跳过根目录本身
-        if path == std::path::Path::new(".") {
-            continue;
-        }
-        let rel = path
-            .strip_prefix(&search_root)
-            .unwrap_or(path)
-            .to_string_lossy();
-        let rel_str = rel.as_ref();
-
-        // 跳过隐藏路径段（除非 filter 以 . 开头）
-        if !effective_filter.starts_with('.') && rel_str.split('/').any(|seg| seg.starts_with('.'))
-        {
-            continue;
-        }
-
-        let is_dir = path.is_dir();
-        let display = if is_dir {
-            format!("{}/", rel_str)
-        } else {
-            rel_str.to_string()
-        };
-
-        // 用文件名部分做模糊匹配
-        let file_name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        if let Some(score) = fuzzy_match(&file_name, effective_filter) {
-            // 路径深度作为次要排序因素
-            let depth = rel_str.matches('/').count() as i32;
-            scored.push((score * 10 + depth, display));
-        }
-    }
-
-    // 按分数排序
-    scored.sort_by(|a, b| {
-        a.0.cmp(&b.0)
-            .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
-    });
-    scored.truncate(15);
-    scored.into_iter().map(|(_, path)| path).collect()
+    // 无 / 时使用 FileIndex 缓存进行内存模糊搜索
+    app.file_index.fuzzy_search(filter, 15)
 }
 
 /// 更新命令补全弹窗的过滤文本

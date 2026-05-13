@@ -263,6 +263,8 @@ fn handle_char_input(app: &mut ChatApp, c: char) {
             app.ui.at_popup_start_pos = cursor_pos - 1;
             app.ui.at_popup_filter.clear();
             app.ui.at_popup_selected = 0;
+            // 打开弹窗时触发文件索引刷新，确保最新
+            app.file_index.refresh();
         }
         return;
     }
@@ -282,6 +284,8 @@ fn handle_char_input(app: &mut ChatApp, c: char) {
             app.ui.file_popup_start_pos = app.ui.at_popup_start_pos;
             app.ui.file_popup_filter.clear();
             app.ui.file_popup_selected = 0;
+            // file: 弹窗激活时刷新文件索引
+            app.file_index.refresh();
         } else if app.ui.at_popup_filter == "command:" {
             app.ui.at_popup_active = false;
             app.ui.command_popup_active = true;

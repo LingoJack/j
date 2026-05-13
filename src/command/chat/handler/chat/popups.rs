@@ -177,6 +177,8 @@ fn handle_at_select(app: &mut ChatApp, item: &AtPopupItem) {
             app.ui.file_popup_start_pos = app.ui.at_popup_start_pos;
             app.ui.file_popup_filter.clear();
             app.ui.file_popup_selected = 0;
+            // file: 弹窗激活时刷新文件索引
+            app.file_index.refresh();
         }
         AtPopupItem::Skill(_) | AtPopupItem::Command(_) | AtPopupItem::File(_) => {
             complete_at_direct(app, item);

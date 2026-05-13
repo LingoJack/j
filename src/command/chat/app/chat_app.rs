@@ -18,6 +18,7 @@ use crate::command::chat::infra::command::{self, CommandSource};
 use crate::command::chat::infra::hook::{HookContext, HookEvent, HookManager, HookResult};
 use crate::command::chat::infra::sandbox::Sandbox;
 use crate::command::chat::infra::skill;
+use crate::command::chat::input::file_index::FileIndex;
 use crate::command::chat::permission::JcliConfig;
 use crate::command::chat::permission::queue::PermissionQueue;
 use crate::command::chat::remote::protocol::WsOutbound;
@@ -124,6 +125,8 @@ pub struct ChatApp {
     pub session_loaded_deferred: Arc<Mutex<Vec<String>>>,
     /// 会话内已调用技能追踪（LoadSkill 执行时记录，auto_compact 后恢复）
     pub invoked_skills: crate::command::chat::context::compact::InvokedSkillsMap,
+    /// 项目文件索引（后台维护，弹窗使用）
+    pub file_index: FileIndex,
 }
 
 /// 所有字段数 = provider 字段 + 全局字段
@@ -630,6 +633,7 @@ impl ChatApp {
             deferred_tools: deferred_tools_arc,
             session_loaded_deferred: session_loaded_deferred_arc,
             invoked_skills,
+            file_index: FileIndex::new(),
         };
 
         // 执行 SessionStart hook（fire-and-forget，不阻塞启动）
