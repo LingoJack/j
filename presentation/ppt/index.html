@@ -196,6 +196,86 @@
     </aside>
   </section>
 
+  <!-- ============ 3.5 FUNCTION CALL ============ -->
+  <section class="slide" data-title="Function Call">
+    <div class="title-bar">
+      <h2>01 · 项目与背景 — Function Calling：LLM 如何调用工具
+    </div>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">LLM 本质上是<strong>文本预测器</strong>，它不能直接操作文件系统或终端。<span class="accent">Function Calling</span> 是让 LLM 从"说话"跨越到"做事"的桥梁。</p>
+        <h4>工作原理</h4>
+        <ul>
+          <li><strong>工具注册</strong> · 运行时将每个工具的名称、描述、参数 JSON Schema 注册给 LLM</li>
+          <li><strong>LLM 决策</strong> · LLM 根据上下文判断是否需要调工具，若需要则输出<strong>结构化 JSON</strong>（工具名 + 参数）</li>
+          <li><strong>运行时执行</strong> · 解析 JSON，在真实环境中执行工具，将结果序列化回灌上下文</li>
+          <li><strong>循环迭代</strong> · LLM 看到工具结果后继续推理，决定是否需要再次调工具</li>
+        </ul>
+        <p class="note">关键：LLM 不直接执行任何操作 —— 它只产出"意图"，运行时代替它完成真实动作。</p>
+      </div>
+      <div class="col-visual">
+        <div class="term" style="margin-top:0">
+          <div class="term-bar"><span>LLM response · function call</span><span>JSON</span></div>
+          <div class="term-body" style="font-size:11px;line-height:1.5">
+            <div class="bubble agent is-new">
+              <div class="who"><span>LLM 输出</span><span class="tag">tool_calls</span></div>
+<div class="body" style="font-family:var(--font-mono);font-size:10px">{
+  <span class="k">"name"</span>: <span class="v">"Bash"</span>,
+  <span class="k">"arguments"</span>: {
+    <span class="k">"command"</span>: <span class="v">"ls -F src/command/chat"</span>,
+    <span class="k">"description"</span>: <span class="v">"List chat module entries"</span>
+  }
+}</div>
+            </div>
+            <div class="bubble tool-result is-new" style="margin-top:6px">
+              <div class="who"><span>运行时执行</span><span class="tag">tool_result</span></div>
+<div class="body">agent.rs  app.rs  compact.rs  hook.rs<br>handler/  markdown/  tools/  ui/</div>
+            </div>
+          </div>
+        </div>
+        <div class="fig" data-fig="图 · Function Calling 流程" style="margin-top:10px">
+          <svg viewBox="0 0 380 100" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+            <defs>
+              <marker id="ah-fc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+              </marker>
+            </defs>
+            <rect x="10" y="15" width="70" height="50" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.2" rx="3"/>
+            <text x="45" y="36" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="10">工具注册</text>
+            <text x="45" y="52" text-anchor="middle" fill="#6b7a8f" font-size="9">Schema → LLM</text>
+            <line x1="80" y1="40" x2="100" y2="40" stroke="#1e3a8a" stroke-width="1.2" marker-end="url(#ah-fc)"/>
+            <rect x="100" y="15" width="70" height="50" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.2" rx="3"/>
+            <text x="135" y="36" text-anchor="middle" font-weight="600" fill="#0d1b2a" font-size="10">LLM 推理</text>
+            <text x="135" y="52" text-anchor="middle" fill="#6b7a8f" font-size="9">输出 JSON</text>
+            <line x1="170" y1="40" x2="190" y2="40" stroke="#1e3a8a" stroke-width="1.2" marker-end="url(#ah-fc)"/>
+            <rect x="190" y="15" width="80" height="50" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2" rx="3"/>
+            <text x="230" y="36" text-anchor="middle" font-weight="600" fill="#1e5e3a" font-size="10">运行时执行</text>
+            <text x="230" y="52" text-anchor="middle" fill="#6b7a8f" font-size="9">bash/read/edit…</text>
+            <line x1="270" y1="40" x2="290" y2="40" stroke="#1e5e3a" stroke-width="1.2" marker-end="url(#ah-fc)"/>
+            <rect x="290" y="15" width="80" height="50" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.2" rx="3"/>
+            <text x="330" y="36" text-anchor="middle" font-weight="600" fill="#7a5b00" font-size="10">结果回灌</text>
+            <text x="330" y="52" text-anchor="middle" fill="#6b7a8f" font-size="9">tool_result → ctx</text>
+            <text x="190" y="85" text-anchor="middle" fill="#6b7a8f" font-size="9">LLM 看到结果后继续推理 → 可能再次调工具 → 循环</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="deck-footer">
+      <span class="mono">#function-calling #tool-use</span>
+      <span class="slide-number" data-current="4" data-total="37"></span>
+    </div>
+    <aside class="notes">
+      <p>在讲 ReAct 循环之前，先讲一个前置概念——<strong>Function Calling</strong>。</p>
+      <p>LLM 本质上是一个文本预测器。你给它一段文字，它接着往下写。它不能直接操作文件系统、不能跑命令、不能访问网络。那 Agent 是怎么"做事"的？</p>
+      <p>答案就是 <strong>Function Calling</strong>。思路分四步：<strong>第一步</strong>，运行时把每个工具的名称、功能描述、参数格式（JSON Schema）注册给 LLM。比如"有一个叫 Bash 的工具，它接收 command 字符串和 description 字符串，用来执行 shell 命令"。</p>
+      <p><strong>第二步</strong>，LLM 根据用户需求和上下文推理，判断需不需要调工具。如果需要，它<strong>不执行任何操作</strong>，只输出一段结构化 JSON——工具名 + 参数值。右边上面那个例子就是 LLM 输出的 function call：调 Bash，命令是 ls -F。</p>
+      <p><strong>第三步</strong>，运行时拿到这段 JSON，解析出工具名和参数，在真实环境里执行。比如真的去跑 ls 命令。</p>
+      <p><strong>第四步</strong>，把执行结果序列化为文本，作为 tool_result 消息回灌到上下文窗口。LLM 看到结果后继续推理——可能够了直接回答，也可能需要再调一个工具。</p>
+      <p>关键点是：<strong>LLM 不直接执行任何操作，它只产出"意图"</strong>——一段 JSON。运行时代替它完成真实动作。这个设计让 LLM 的能力边界从"说话"扩展到了"做事"。</p>
+      <p>下一页讲 ReAct 循环——把 Function Calling 放到一个更大的推理框架里看。</p>
+    </aside>
+  </section>
+
   <!-- ============ 4.1 ReAct: 概念 ============ -->
   <section class="slide" data-title="ReAct · concept">
     <div class="title-bar">
