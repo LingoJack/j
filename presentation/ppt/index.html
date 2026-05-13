@@ -1082,13 +1082,17 @@ hook.rs         storage.rs
     </div>
     <div class="split s55">
       <div class="col-text">
-        <p class="lead">一条命令怎么跑，取决于它<span class="accent">跑多久</span>、<span class="accent">要不要 stdin</span>。<br>Agent 不必预判 —— 入口都是 <code>Bash</code>，运行时自动落到对的形态。</p>
-        <ul>
-          <li><strong>Bash · 同步</strong> · 默认 120s（最大 600s）阻塞返回 stdout/stderr。<code>ls</code> · <code>cargo check</code> · 短命令首选。</li>
-          <li><strong>BackgroundTask · 异步</strong> · <code>run_in_background:true</code> 立即返回 task_id；用 <code>TaskOutput</code> 阻塞等待或非阻塞查询。<code>cargo build</code> · dev server。</li>
-          <li><strong>Session · 交互</strong> · <code>interactive:true</code> 走 PTY 启动，返回 sid；用 <code>Session</code> 工具 <code>stdin / stdout / quit</code> 双向操作。REPL · 需 y 确认的安装。</li>
+        <h4 style="margin-top:0;color:var(--bad)">问题背景 · 一个真实的卡死案例</h4>
+        <p style="margin-bottom:6px">生成业务软件时，Agent 执行了 <code>npm create vite@latest my-app -- --template react-ts</code>。命令<strong>久久没有返回</strong></p>
+        <p style="margin-bottom:8px">排查发现：这个命令有<strong>交互式设计</strong>，要求用户输入 Enter 确认安装。但 Agent 用的是同步 Bash —— 进程在等 stdin，Agent 在等 stdout，<strong>双方互相等待</strong>，形成死锁。</p>
+        <p class="dim" style="font-size:12px;margin-bottom:8px">这类交互式命令在包管理器中很常见：npm init、pip install、apt-get、Homebrew……Agent 必须能识别并正确处理。</p>
+        <h4 style="margin-top:10px">设计目标</h4>
+        <p style="margin-bottom:6px">入口统一 —— Agent 调用的都是 <code>Bash</code> 工具。<strong>运行时自动识别</strong>命令特性，落到对的执行形态：</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.8">
+          <li><strong>Bash · 同步</strong> · 短命令阻塞返回</li>
+          <li><strong>BackgroundTask · 异步</strong> · 长命令后台运行</li>
+          <li><strong>Session · 交互</strong> · 需要 stdin 的命令走 PTY</li>
         </ul>
-        <p class="note">同步 Bash 跑过 30s 仍未结束 —— <span class="accent">不 kill</span>，<code>adopt_process</code> 移交 BackgroundManager，立即返回 task_id。但升级前若检测到最近 N 秒完全无输出（静默判交互），则 kill 并提示 Agent 加 <code>-y</code> 或改用 <code>interactive:true</code>。</p>
       </div>
       <div class="col-visual">
         <div class="fig" data-fig="图 · 执行三态：横轴时间，纵向三泳道，虚线箭头为自动流转">
@@ -1158,9 +1162,12 @@ hook.rs         storage.rs
       <span class="slide-number" data-current="19" data-total="37"></span>
     </div>
     <aside class="notes">
-      <p>这一页讲 Agent 的命令执行模型。<strong>三种形态：同步 Bash、异步 Background、交互 Session</strong>。</p>
-      <p>关键设计是<strong>入口统一</strong> —— Agent 调用的都是 <code>Bash</code> 工具，只是参数不同：什么都不加是同步；加 <code>run_in_background:true</code> 走异步；加 <code>interactive:true</code> 走 PTY。Agent 不用预判命令会跑多久。</p>
-      <p>右图三条泳道是横轴时间。重点看<strong>那条虚线箭头</strong> —— 同步 Bash 跑过 30 秒还没结束，运行时<strong>不会 kill 进程</strong>，而是把这个已经在跑的进程连同 reader 线程一起<strong>移交</strong>给 BackgroundManager，返回 task_id。Agent 拿到 task_id 之后可以先去做别的事，过一会儿用 TaskOutput 取结果。</p>
+      <p>这一页讲 Agent 的命令执行模型。<strong>先说问题背景</strong>——我在生成业务软件时遇到一个真实的卡死案例。</p>
+      <p>Agent 执行了 <code>npm create vite@latest my-app -- --template react-ts</code>。这个命令是用来初始化一个 React + TypeScript 项目的。但命令执行后久久没有返回，窗口占用不断上涨。</p>
+      <p>排查发现这个命令有<strong>交互式设计</strong>——它会在安装前提示用户确认，要求输入 Enter。但 Agent 用的是同步 Bash 调用，进程在等 stdin，Agent 在等 stdout，<strong>双方互相等待形成死锁</strong>。</p>
+      <p>这类交互式命令在包管理器中非常常见——npm init、pip install 会问 y/n，Homebrew 会问是否继续。Agent 必须能识别并正确处理。</p>
+      <p>解决方案是<strong>三态执行模型</strong>：同步 Bash 处理短命令、BackgroundTask 处理长命令、Session 处理需要 stdin 的交互式命令。入口统一都是 <code>Bash</code> 工具，运行时自动识别命令特性落到对的形态。</p>
+      <p>右图三条泳道是横轴时间。重点看<strong>那条虚线箭头</strong> —— 同步 Bash 跑过 30 秒还没结束，运行时<strong>不会 kill 进程</strong>，而是把这个已经在跑的进程连同 reader 线程一起<strong>移交</strong>给 BackgroundManager，返回 task_id。</p>
       <p>但这又引入新问题：<strong>命令是慢、还是在等用户输入？</strong>外面看都是"没输出"。所以升级前我加了一道<strong>静默检测</strong> —— 如果最近 N 秒一点输出都没有，那大概率不是慢，是在等 stdin。这时候不该升级，而是 kill 掉，提示 Agent 加上 <code>-y</code> 之类的非交互标志重跑，或者改用 <code>interactive:true</code> 走 Session。</p>
       <p>下一页用真实代码展示这两个关键机制的实现。</p>
     </aside>
@@ -1283,63 +1290,6 @@ hook.rs         storage.rs
       <p>所以我让 Agent 在开始大任务前先<strong>列出所有 TODO 项</strong>。每完成一个就更新状态。这本身就强迫它<strong>把任务结构化拆分</strong>。</p>
       <p>但还有个更巧妙的设计——<strong>system_reminder 注入</strong>。如果 Agent 连续好几轮都没更新 TODO，但 TODO 里还有 in_progress 项，系统就会在<strong>下一轮 prompt 尾部</strong>注入一条 system_reminder：「你还有 4 个 TODO，其中一个 in_progress 已经 8 轮没动了，是不是该看看？」</p>
       <p>这相当于一个<strong>软中断</strong>——不强行打断 Agent，但在它注意力分散的时候轻轻拉一下。实测对完成度提升非常明显。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 12.7. HOOK SYSTEM EVENTS ============ -->
-  <section class="slide" data-title="Hook System Events">
-    <div class="title-bar">
-      <h2>03 · 面向场景强化的工具 — Hook 系统：14 个事件钩子覆盖 Agent 生命周期
-    </div>
-    <p class="dim mt-s" style="font-size:14px">每个事件可挂载 Shell / Prompt 类型的 Hook —— 用作<strong>回归测试 + 工程规范 + 变更沉淀</strong></p>
-    <div class="hook-timeline">
-      <span class="ev session">session_start</span>
-      <span class="ev msg">pre_send_message</span>
-      <span class="ev msg">post_send_message</span>
-      <span class="ev llm">pre_llm_request</span>
-      <span class="ev llm">post_llm_request</span>
-      <span class="ev tool">pre_tool_execution</span>
-      <span class="ev tool">post_tool_execution</span>
-      <span class="ev tool">post_tool_execution_failure</span>
-      <span class="ev compact">pre_micro_compact</span>
-      <span class="ev compact">post_micro_compact</span>
-      <span class="ev compact">pre_auto_compact</span>
-      <span class="ev compact">post_auto_compact</span>
-      <span class="ev msg">stop</span>
-      <span class="ev session">session_end</span>
-    </div>
-    <div class="hook-legend">
-      <span class="lg-session">session 生命周期</span>
-      <span class="lg-msg">消息收发</span>
-      <span class="lg-llm">LLM 调用</span>
-      <span class="lg-tool">工具执行</span>
-      <span class="lg-compact">压缩前后</span>
-    </div>
-    <div class="grid g3" style="margin-top:8px">
-      <div class="card card-soft">
-        <h4 style="font-size:13px">工程规范强制</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">在 post_tool_execution(Write/Edit) 后扫描新增/变更文件：禁用 <code>mod.rs</code>、禁用 <code>unwrap()/expect()</code>、要求 <code>name.rs + name/</code> 布局。</p>
-      </div>
-      <div class="card card-soft">
-        <h4 style="font-size:13px">回归测试守门</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">在 stop 事件触发时跑 <code>cargo fmt && cargo clippy -- -D warnings && cargo test</code>。任何一项失败，Agent 必须修复才能真正"结束"。</p>
-      </div>
-      <div class="card card-soft">
-        <h4 style="font-size:13px">变更沉淀文档</h4>
-        <p class="dim" style="font-size:12px;margin-top:6px">在 session_end 时把本次会话的<strong>关键变更摘要</strong>追加到 CHANGELOG / decision log，供后续追溯维护。</p>
-      </div>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#hook #14-events</span>
-      <span class="slide-number" data-current="21" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>Hook 系统是 Agent 真正能"用于生产"的关键。它<strong>把工程规范固化成自动执行的脚本</strong>，跑在 Agent 整个生命周期的各个事件点上。</p>
-      <p>一共 <strong>14 个事件</strong>，覆盖 session 启停、消息收发、LLM 请求前后、工具执行前后、压缩前后。每个事件都可以挂载 Hook，Hook 接收 JSON 输入、返回 JSON 修改 / 拦截。</p>
-      <p>给大家三个真实用例。</p>
-      <p>第一个是<strong>工程规范强制</strong>。我们项目要求所有模块用 <code>name.rs + name/</code> 这种布局，不能用 <code>mod.rs</code>。也禁止用 <code>unwrap()</code>、<code>expect()</code> 这种容易 panic 的写法。这些规则做成 Hook 挂在 post_tool_execution 上，Agent 写了违规代码立刻被拦截。</p>
-      <p>第二个是<strong>回归测试守门</strong>。Agent 说"我做完了"，要触发 stop 事件。Hook 拦截这个事件去跑 fmt、clippy、test。全过才允许真正退出。</p>
-      <p>第三个是<strong>变更沉淀</strong>。session 结束时自动写变更摘要到 CHANGELOG，方便后续追溯。这个对长期维护项目特别重要。</p>
     </aside>
   </section>
 
