@@ -564,6 +564,13 @@ hook.rs         storage.rs
     </aside>
   </section>
 
+  <!-- ============ §02 分隔页 ============ -->
+  <section class="slide chapter-divider" data-title="§02 Divider">
+    <span class="ch-num">Section 02</span>
+    <div class="ch-title">上下文窗口与压缩</div>
+    <p class="ch-sub">LLM 的窗口是物理硬上限。Agent 要长期运行，必须有一套机制来管理"往窗口里塞什么、丢掉什么"。</p>
+  </section>
+
   <!-- ============ 4. CORE: Context Window ============ -->
   <section class="slide" data-title="Context Window Challenge">
     <div class="title-bar">
@@ -831,6 +838,13 @@ hook.rs         storage.rs
       <p>动态部分才是关键。当 Agent 之前启动了一个后台任务，但工具调用记录已经被压缩掉了，Agent 怎么知道这个任务还在跑？靠的就是<strong>System Prompt 尾部动态追加</strong>的后台任务状态。同样的机制还用于：Teammate 的存在和状态、很久没更新过的 TODO 项目的提醒、当前正在进行的交互式 Session。</p>
       <p>这个设计的核心思路是：<strong>让 Agent 感知当前正在发生的持续性事件</strong>，即使这些事件的原始上下文已经被压缩了。</p>
     </aside>
+  </section>
+
+  <!-- ============ §03 分隔页 ============ -->
+  <section class="slide chapter-divider" data-title="§03 Divider">
+    <span class="ch-num">Section 03</span>
+    <div class="ch-title">面向场景强化的工具</div>
+    <p class="ch-sub">每个工具的引入都是为了解决一个具体问题——Grep 构建上下文、Ask 防漂移、Plan 先调研再执行、Edit 精确替换、执行三态自动流转。</p>
   </section>
 
   <!-- ============ 7. TOOL SYSTEM OVERVIEW ============ -->
@@ -1416,6 +1430,13 @@ hook.rs         storage.rs
     </aside>
   </section>
 
+  <!-- ============ §04 分隔页 ============ -->
+  <section class="slide chapter-divider" data-title="§04 Divider">
+    <span class="ch-num">Section 04</span>
+    <div class="ch-title">多 Agent 协作</div>
+    <p class="ch-sub">两种协作模式——Teammate 对等协作 + SubAgent 委派调研。共享消息通道的设计、可见性控制、以及三个递进实验验证。</p>
+  </section>
+
   <!-- ============ 11. MULTI-AGENT COLLABORATION ============ -->
   <section class="slide" data-title="Multi-Agent Collaboration">
     <div class="title-bar">
@@ -1695,6 +1716,13 @@ hook.rs         storage.rs
   </section>
 
 
+  <!-- ============ §05 分隔页 ============ -->
+  <section class="slide chapter-divider" data-title="§05 Divider">
+    <span class="ch-num">Section 05</span>
+    <div class="ch-title">模板代码生成引擎</div>
+    <p class="ch-sub">把高度模板化的代码交给确定性生成器，LLM 只做需求理解和增量集成。jen 处理数据层，webapp-gen 驱动全栈工作流。</p>
+  </section>
+
   <!-- ============ §5.1 模板代码生成引擎：为什么需要它 ============ -->
   <section class="slide" data-title="Template Engine · why">
     <div class="title-bar">
@@ -1960,6 +1988,13 @@ hook.rs         storage.rs
       <p><strong>Step 7–10</strong> 后端编码 → 黑盒测试 → 前端编码 → 容器化验收。其中黑盒测试有个特别设计——<strong>三环境矩阵</strong>：本地 + podman 单容器 + 全栈 podman compose，三个环境同一份脚本都要过，避免"本地好好的容器里炸了"。</p>
       <p>整个工作流的核心思想是：<strong>把 AI 不擅长的部分交给模板，AI 只做需求理解、契约定义、增量集成</strong>。最终产物在右下角的开源仓库可以直接看。</p>
     </aside>
+  </section>
+
+  <!-- ============ §06 分隔页 ============ -->
+  <section class="slide chapter-divider" data-title="§06 Divider">
+    <span class="ch-num">Section 06</span>
+    <div class="ch-title">总结与展望</div>
+    <p class="ch-sub">四大贡献、开源仓库、未来方向。</p>
   </section>
 
   <!-- ============ 13.9. REPO GALLERY ============ -->

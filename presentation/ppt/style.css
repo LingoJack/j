@@ -922,6 +922,37 @@ code{
 .vis-table td.yes{color:var(--accent);font-weight:600}
 .vis-table td.no{color:var(--text-3)}
 
+/* ---------- Chapter divider ---------- */
+.slide.chapter-divider{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:flex-start;
+}
+.slide.chapter-divider .ch-num{
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--accent);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  font-weight:600;
+  margin-bottom:12px;
+}
+.slide.chapter-divider .ch-title{
+  font-size:40px;
+  font-weight:700;
+  color:var(--text-1);
+  line-height:1.25;
+  letter-spacing:-0.01em;
+}
+.slide.chapter-divider .ch-sub{
+  font-size:17px;
+  color:var(--text-3);
+  margin-top:14px;
+  line-height:1.7;
+  max-width:52ch;
+}
+
 /* deck-footer 收敛 */
 .deck-footer{display:none}
 .slide-number{color:var(--text-3)}
