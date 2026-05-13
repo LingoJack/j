@@ -164,7 +164,7 @@
     </div>
     <div class="vs mt-l">
       <div class="card bad-side side">
-        <h3>ChatBot 时代</h3>
+        <h3>ChatBot</h3>
         <ul>
           <li>人手动收集代码、报错日志、配置信息</li>
           <li>复制粘贴到对话窗口</li>
@@ -175,7 +175,7 @@
       </div>
       <div class="mid">→</div>
       <div class="card good-side side">
-        <h3>Agent 时代</h3>
+        <h3>Agent</h3>
         <ul>
           <li>Agent 通过工具主动读取代码、执行命令</li>
           <li>Agent 自动管理上下文窗口</li>
@@ -1244,19 +1244,19 @@ hook.rs         storage.rs
     <div class="title-bar">
       <h2>03 · 面向场景强化的工具 — 执行三态实现
     </div>
-    <div class="split s46">
+    <div class="split s55">
       <div class="col-text">
-        <h4 style="font-size:14px;margin-top:0">① 超时自动升级</h4>
-        <p class="dim" style="font-size:12px;line-height:1.55;margin:4px 0 6px">同步 Bash 跑过 <code>SHELL_AUTO_BG_SECS</code>（30s）仍未结束：</p>
-        <ul style="font-size:11.5px;line-height:1.6;margin:0;padding-left:18px">
+        <h4 style="margin-top:0">① 超时自动升级</h4>
+        <p class="dim" style="line-height:1.6;margin:4px 0 6px">同步 Bash 跑过 <code>SHELL_AUTO_BG_SECS</code>（30s）仍未结束：</p>
+        <ul style="line-height:1.7;margin:0;padding-left:18px">
           <li>静默检测 — N 秒无输出 → 疑似交互 → kill + 提示</li>
           <li>非静默 → <span class="accent">不 kill</span>，<code>adopt_process</code> 移交 BackgroundManager</li>
           <li>立即返回 <code>task_id</code>，Agent 继续做别的事</li>
           <li>后台监控线程等 reader 写完后调 <code>complete_task</code></li>
         </ul>
-        <h4 style="font-size:14px;margin-top:14px">② PTY 交互式会话</h4>
-        <p class="dim" style="font-size:12px;line-height:1.55;margin:4px 0 6px">用 <code>portable_pty</code> 分配伪终端：</p>
-        <ul style="font-size:11.5px;line-height:1.6;margin:0;padding-left:18px">
+        <h4 style="margin-top:14px">② PTY 交互式会话</h4>
+        <p class="dim" style="line-height:1.6;margin:4px 0 6px">用 <code>portable_pty</code> 分配伪终端：</p>
+        <ul style="line-height:1.7;margin:0;padding-left:18px">
           <li><code>openpty</code> → <code>spawn_command</code> 启动进程</li>
           <li><code>try_clone_reader</code> → Session stdout</li>
           <li><code>take_writer</code> → <code>set_pty_writer</code> 注册到 BgTask</li>
@@ -1270,7 +1270,7 @@ hook.rs         storage.rs
             <span><span class="cc-path">shell.rs</span> · execute_sync 自动升级</span>
             <span class="cc-tag">real code</span>
           </div>
-<pre style="font-size:9px;line-height:1.35;padding:5px 8px"><span class="cm">// 超过阈值仍未结束，不 kill，移交后台</span>
+<pre style="font-size:11px;line-height:1.5;padding:8px 10px"><span class="cm">// 超过阈值仍未结束，不 kill，移交后台</span>
 <span class="kw">if</span> start.elapsed() &gt;= auto_bg_threshold {
     <span class="cm">// 静默判交互：最近 N 秒无输出 → 等 stdin</span>
     <span class="kw">if</span> silence_elapsed &gt;= Duration::<span class="fn">from_secs</span>(SILENCE) {
@@ -1294,7 +1294,7 @@ hook.rs         storage.rs
             <span><span class="cc-path">shell.rs</span> · execute_interactive 起 PTY</span>
             <span class="cc-tag">real code</span>
           </div>
-<pre style="font-size:9px;line-height:1.35;padding:5px 8px"><span class="kw">let</span> pty = <span class="fn">NativePtySystem::default</span>();
+<pre style="font-size:11px;line-height:1.5;padding:8px 10px"><span class="kw">let</span> pty = <span class="fn">NativePtySystem::default</span>();
 <span class="kw">let</span> pair = pty.<span class="fn">openpty</span>(PtySize { rows: <span class="num">24</span>, cols: <span class="num">80</span>, .. })?;
 <span class="kw">let</span> _child = pair.slave.<span class="fn">spawn_command</span>(builder)?;
 <span class="kw">let</span> reader = pair.master.<span class="fn">try_clone_reader</span>()?;   <span class="cm">// stdout</span>
