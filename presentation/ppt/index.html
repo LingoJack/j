@@ -2029,54 +2029,67 @@ hook.rs         storage.rs
     <p class="ch-sub">四大贡献、开源仓库、未来方向。</p>
   </section>
 
-  <!-- ============ 13.9. REPO GALLERY + DEMO PREVIEW ============ -->
+  <!-- ============ 13.9. REPO GALLERY ============ -->
   <section class="slide" data-title="Repo Gallery">
     <div class="title-bar">
-      <h2>06 · 总结与展望 — 项目仓库与交付制品
+      <h2>06 · 总结与展望 — 项目仓库
     </h2>
     </div>
-    <div class="split s64">
-      <div class="col-text" style="min-width:0;font-size:13px;gap:10px">
-        <h4 style="margin-top:0;margin-bottom:6px;font-size:14px">三个开源仓库</h4>
-        <div class="repo-card" style="margin-bottom:8px">
-          <div class="repo-name" style="font-size:11px">github.com/LingoJack/jcli</div>
-          <h4 style="font-size:13px;margin:2px 0">j-cli · 主项目</h4>
-          <p class="dim" style="font-size:11px;margin:0">Rust · 24K LOC · chat / tool / Skill & Hook / 多 Agent</p>
-        </div>
-        <div class="repo-card" style="margin-bottom:8px">
-          <div class="repo-name" style="font-size:11px">github.com/LingoJack/model_infrax</div>
-          <h4 style="font-size:13px;margin:2px 0">jen · 代码生成引擎</h4>
-          <p class="dim" style="font-size:11px;margin:0">Go · SQL parser + 模板引擎 · 封装为 Skill</p>
-        </div>
-        <div class="repo-card" style="margin-bottom:8px">
-          <div class="repo-name" style="font-size:11px">github.com/LingoJack/gradiation_artifact_demo</div>
-          <h4 style="font-size:13px;margin:2px 0">artifact_demo · 端到端验证</h4>
-          <p class="dim" style="font-size:11px;margin:0">React + Go + GORM + Podman · 三环境验收通过</p>
-        </div>
-        <p class="dim" style="font-size:11px;margin-top:6px"><strong>所有代码开源</strong> · MIT License</p>
+    <div class="repo-list">
+      <div class="rl-item">
+        <span class="rl-url">github.com/LingoJack/jcli</span>
+        <span class="rl-name">j-cli · 主项目</span>
+        <span class="rl-desc">Rust · 24K LOC · chat / tool / Skill & Hook / 多 Agent</span>
       </div>
-      <div class="col-visual" style="min-width:0">
-        <p style="margin:0 0 4px;font-size:12px;font-weight:600">交付制品预览 · gradiation_artifact_demo</p>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px">
-          <img src="pics/preview-1.png" alt="制品预览 1" style="width:100%;border-radius:3px;border:1px solid var(--border)">
-          <img src="pics/preview-2.png" alt="制品预览 2" style="width:100%;border-radius:3px;border:1px solid var(--border)">
-          <img src="pics/preview-3.png" alt="制品预览 3" style="width:100%;border-radius:3px;border:1px solid var(--border)">
-          <img src="pics/preview-4.png" alt="制品预览 4" style="width:100%;border-radius:3px;border:1px solid var(--border)">
-          <img src="pics/preview-5.png" alt="制品预览 5" style="width:100%;border-radius:3px;border:1px solid var(--border)">
-          <img src="pics/preview-6.png" alt="制品预览 6" style="width:100%;border-radius:3px;border:1px solid var(--border)">
-        </div>
+      <div class="rl-item">
+        <span class="rl-url">github.com/LingoJack/model_infrax</span>
+        <span class="rl-name">jen · 代码生成引擎</span>
+        <span class="rl-desc">Go · SQL parser + 模板引擎 · 封装为 Skill</span>
+      </div>
+      <div class="rl-item">
+        <span class="rl-url">github.com/LingoJack/gradiation_artifact_demo</span>
+        <span class="rl-name">artifact_demo · 端到端验证</span>
+        <span class="rl-desc">React + Go + GORM + Podman · 三环境验收通过</span>
       </div>
     </div>
+    <p class="rl-note">所有代码开源 · MIT License</p>
     <div class="deck-footer">
       <span class="mono">github.com/LingoJack</span>
-      <span class="slide-number" data-current="25" data-total="36"></span>
+      <span class="slide-number" data-current="25" data-total="37"></span>
     </div>
     <aside class="notes">
       <p>讲完了所有设计，给大家看一下整个毕设的<strong>产出</strong>——三个 GitHub 仓库。</p>
       <p>第一个是<strong>主项目 jcli</strong>。Rust 写的，大概 24K 行代码。所有今天讲到的内容——chat 模块、工具体系、Skill 系统、Hook 系统、多 Agent 协作——都在这一个仓库里。</p>
       <p>第二个是 <strong>model_infrax</strong>，里面装的是 jen 代码生成器。Go 写的 SQL parser + 模板引擎。它本身是独立工具，但被封装成 skill 集成进 j-cli。</p>
-      <p>第三个是 <strong>gradiation_artifact_demo</strong>——这是我用 j-cli 配合 webapp-gen 和 jen 这两个 skill <strong>真实生成出来的电商 Web App</strong>。右边六张截图就是它的实际界面。三环境矩阵验收全部通过，算是整套工具链的端到端验证。</p>
+      <p>第三个是 <strong>gradiation_artifact_demo</strong>——用 j-cli 配合 webapp-gen 和 jen 两个 skill <strong>真实生成出来的电商 Web App</strong>。下一页展示实际界面。三环境矩阵验收全部通过，算是整套工具链的端到端验证。</p>
       <p>三个仓库都是开源的，MIT 协议。欢迎大家访问、star、提 issue 或者 PR。</p>
+    </aside>
+  </section>
+
+  <!-- ============ 13.10. DEMO PREVIEW ============ -->
+  <section class="slide" data-title="Demo Preview">
+    <div class="title-bar">
+      <h2>06 · 总结与展望 — 交付制品预览
+    </h2>
+    </div>
+    <div class="demo-preview">
+      <img src="pics/preview-1.png" alt="制品预览 1">
+      <img src="pics/preview-2.png" alt="制品预览 2">
+      <img src="pics/preview-3.png" alt="制品预览 3">
+      <img src="pics/preview-4.png" alt="制品预览 4">
+      <img src="pics/preview-5.png" alt="制品预览 5">
+      <img src="pics/preview-6.png" alt="制品预览 6">
+    </div>
+    <p class="dp-caption">gradiation_artifact_demo · React + Go + GORM + Podman · 三环境验收通过</p>
+    <div class="deck-footer">
+      <span class="mono">github.com/LingoJack</span>
+      <span class="slide-number" data-current="26" data-total="37"></span>
+    </div>
+    <aside class="notes">
+      <p>这是用 j-cli 配合 webapp-gen 和 jen 两个 skill <strong>真实生成出来的电商 Web App</strong>——gradiation_artifact_demo。</p>
+      <p>六张截图展示了完整的用户流程：商品列表、商品详情、购物车、订单创建、订单列表、订单详情。</p>
+      <p>技术栈是 React 前端 + Go 后端 + GORM ORM + Podman 容器化。三环境矩阵验收全部通过——本地开发环境、测试环境、生产环境。</p>
+      <p>这算是整套工具链的<strong>端到端验证</strong>——从需求描述到完整可运行的 Web App，全程由 j-cli 驱动。</p>
     </aside>
   </section>
 
