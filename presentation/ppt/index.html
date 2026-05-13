@@ -1580,30 +1580,111 @@ hook.rs         storage.rs
       <h2>04 · 多 Agent 协作 — 二阶段提交：对外一致性保障
     </div>
     <p class="dim mt-s">轮流报数实验暴露的问题 → SendMessage Gate 的设计动机</p>
-    <div class="split s50" style="margin-top:12px">
+    <div class="split s50" style="margin-top:8px">
       <div class="col-text">
         <h4 style="margin-top:0;color:var(--bad)">问题 · 时序导致重复消息</h4>
-        <div class="swimlane">
-          <div class="sw-row sw-head"><span class="sw-label">1 号</span><span class="sw-label">2 号</span></div>
-          <div class="sw-row"><div class="sw-cell">报 "1" → send</div><div class="sw-cell sw-empty"></div></div>
-          <div class="sw-row"><div class="sw-cell sw-empty"></div><div class="sw-cell">收到 "1"，报 "2" → send</div></div>
-          <div class="sw-row"><div class="sw-cell sw-stale">进入 Agent Loop<br>但信箱快照里<br><strong>"2" 还未到达</strong><br>→ 只看到 "1"</div><div class="sw-cell sw-dim">（"2" 在传输中）</div></div>
-          <div class="sw-row"><div class="sw-cell sw-bad">认为 2 号还没报<br>→ 催促 "请报 2！"</div><div class="sw-cell sw-empty"></div></div>
-          <div class="sw-row"><div class="sw-cell sw-empty"></div><div class="sw-cell sw-bad">看到：1→2→催促<br>→ <strong>重复报 "2"</strong></div></div>
-        </div>
-        <p class="dim" style="font-size:12px;margin-top:6px">临界区外消息不自洽：对外呈现 1, 2, 催促, 2</p>
+        <svg viewBox="0 0 380 250" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+          <defs>
+            <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#6b7a8f"/>
+            </marker>
+            <marker id="ah-bad-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#7a1f1f"/>
+            </marker>
+          </defs>
+          <!-- 泳道标题 -->
+          <rect x="10" y="0" width="70" height="20" fill="#1e3a8a" rx="3"/>
+          <text x="45" y="14" text-anchor="middle" fill="#fff" font-weight="600" font-size="10">1 号 Agent</text>
+          <rect x="300" y="0" width="70" height="20" fill="#7a5b00" rx="3"/>
+          <text x="335" y="14" text-anchor="middle" fill="#fff" font-weight="600" font-size="10">2 号 Agent</text>
+          <!-- 泳道竖线 -->
+          <line x1="45" y1="24" x2="45" y2="220" stroke="#1e3a8a" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>
+          <line x1="335" y1="24" x2="335" y2="220" stroke="#7a5b00" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>
+          <!-- 时间轴 -->
+          <text x="2" y="48" fill="var(--text-3)" font-size="8">t₁</text>
+          <text x="2" y="88" fill="var(--text-3)" font-size="8">t₂</text>
+          <text x="2" y="128" fill="var(--text-3)" font-size="8">t₃</text>
+          <text x="2" y="168" fill="var(--text-3)" font-size="8">t₄</text>
+          <text x="2" y="208" fill="var(--text-3)" font-size="8">t₅</text>
+          <!-- t1: 1号报1 → 2号 -->
+          <rect x="18" y="34" width="54" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
+          <text x="45" y="46" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 "1"</text>
+          <line x1="72" y1="43" x2="290" y2="58" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-bad)"/>
+          <text x="190" y="44" text-anchor="middle" fill="#6b7a8f" font-size="8">SendMessage "1"</text>
+          <!-- t2: 2号收到1，报2 → 1号 -->
+          <rect x="308" y="74" width="54" height="18" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="335" y="86" text-anchor="middle" fill="#7a5b00" font-weight="600">报 "2"</text>
+          <line x1="308" y1="88" x2="90" y2="103" stroke="#7a1f1f" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#ah-bad-red)"/>
+          <text x="200" y="94" text-anchor="middle" fill="#7a1f1f" font-size="8">❌ 尚未到达信箱</text>
+          <!-- t3: 1号快照只有[1] -->
+          <rect x="10" y="114" width="70" height="18" fill="#fefbf3" stroke="var(--warn)" stroke-width="1" rx="2"/>
+          <text x="45" y="126" text-anchor="middle" fill="var(--warn)" font-weight="600">快照 [1]</text>
+          <rect x="300" y="114" width="70" height="18" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3" rx="2"/>
+          <text x="335" y="126" text-anchor="middle" fill="var(--text-3)" font-size="8">("2"传输中)</text>
+          <!-- t4: 1号催促2号 -->
+          <rect x="10" y="154" width="70" height="18" fill="#fef3f3" stroke="#7a1f1f" stroke-width="1" rx="2"/>
+          <text x="45" y="166" text-anchor="middle" fill="#7a1f1f" font-weight="600">催 "请报2!"</text>
+          <line x1="80" y1="163" x2="290" y2="175" stroke="#7a1f1f" stroke-width="1" marker-end="url(#ah-bad-red)"/>
+          <text x="190" y="168" text-anchor="middle" fill="#6b7a8f" font-size="8">快照[1] → 催促</text>
+          <!-- t5: 2号重复报2 -->
+          <rect x="300" y="194" width="70" height="18" fill="#fef3f3" stroke="#7a1f1f" stroke-width="1.5" rx="2"/>
+          <text x="335" y="206" text-anchor="middle" fill="#7a1f1f" font-weight="700">重复报 "2!"</text>
+          <!-- 不一致标注 -->
+          <text x="190" y="240" text-anchor="middle" fill="#7a1f1f" font-size="9" font-weight="600">对外不一致：1, 2, 催促, 2</text>
+        </svg>
       </div>
       <div class="col-text" style="padding-left:20px;border-left:2px solid var(--border)">
         <h4 style="margin-top:0;color:var(--good)">解决 · 二阶段提交 Gate</h4>
-        <div class="swimlane">
-          <div class="sw-row sw-head"><span class="sw-label">1 号</span><span class="sw-label">2 号</span></div>
-          <div class="sw-row"><div class="sw-cell">报 "1" → send</div><div class="sw-cell sw-empty"></div></div>
-          <div class="sw-row"><div class="sw-cell sw-empty"></div><div class="sw-cell">收到 "1"，报 "2" → send</div></div>
-          <div class="sw-row"><div class="sw-cell sw-stale">进入 Agent Loop<br>信箱快照里<br>"2" 还未到达</div><div class="sw-cell sw-dim">（"2" 在传输中）</div></div>
-          <div class="sw-row"><div class="sw-cell sw-good"><strong>Gate 触发</strong><br>SendMessage 前检查信箱<br>→ 发现有新消息！<br>→ hold + 注入 reminder</div><div class="sw-cell sw-dim">信箱串行化</div></div>
-          <div class="sw-row"><div class="sw-cell sw-good">重新决策<br>→ 看到已有 "2"<br>→ <strong>commit 或重新生成</strong></div><div class="sw-cell sw-empty"></div></div>
-        </div>
-        <p class="dim" style="font-size:12px;margin-top:6px">对外自洽：每条发出消息都基于最新信箱状态</p>
+        <svg viewBox="0 0 380 250" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
+          <defs>
+            <marker id="ah-good" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#6b7a8f"/>
+            </marker>
+            <marker id="ah-good-gn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#1e5e3a"/>
+            </marker>
+          </defs>
+          <!-- 泳道标题 -->
+          <rect x="10" y="0" width="70" height="20" fill="#1e3a8a" rx="3"/>
+          <text x="45" y="14" text-anchor="middle" fill="#fff" font-weight="600" font-size="10">1 号 Agent</text>
+          <rect x="300" y="0" width="70" height="20" fill="#7a5b00" rx="3"/>
+          <text x="335" y="14" text-anchor="middle" fill="#fff" font-weight="600" font-size="10">2 号 Agent</text>
+          <!-- 泳道竖线 -->
+          <line x1="45" y1="24" x2="45" y2="220" stroke="#1e3a8a" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>
+          <line x1="335" y1="24" x2="335" y2="220" stroke="#7a5b00" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>
+          <!-- 时间轴 -->
+          <text x="2" y="48" fill="var(--text-3)" font-size="8">t₁</text>
+          <text x="2" y="88" fill="var(--text-3)" font-size="8">t₂</text>
+          <text x="2" y="128" fill="var(--text-3)" font-size="8">t₃</text>
+          <text x="2" y="168" fill="var(--text-3)" font-size="8">t₄</text>
+          <text x="2" y="208" fill="var(--text-3)" font-size="8">t₅</text>
+          <!-- t1: 1号报1 -->
+          <rect x="18" y="34" width="54" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
+          <text x="45" y="46" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 "1"</text>
+          <line x1="72" y1="43" x2="290" y2="58" stroke="#1e3a8a" stroke-width="1" marker-end="url(#ah-good)"/>
+          <text x="190" y="44" text-anchor="middle" fill="#6b7a8f" font-size="8">SendMessage "1"</text>
+          <!-- t2: 2号报2 -->
+          <rect x="308" y="74" width="54" height="18" fill="#fefdf5" stroke="#7a5b00" stroke-width="1" rx="2"/>
+          <text x="335" y="86" text-anchor="middle" fill="#7a5b00" font-weight="600">报 "2"</text>
+          <line x1="308" y1="88" x2="90" y2="103" stroke="#7a5b00" stroke-width="1" marker-end="url(#ah-good)"/>
+          <text x="200" y="94" text-anchor="middle" fill="#6b7a8f" font-size="8">SendMessage "2"</text>
+          <!-- t3: 1号欲报3，Gate拦截 -->
+          <rect x="10" y="114" width="70" height="18" fill="#f0fff4" stroke="#1e5e3a" stroke-width="1" rx="2"/>
+          <text x="45" y="126" text-anchor="middle" fill="#1e5e3a" font-weight="600">欲报 "3"</text>
+          <rect x="100" y="116" width="90" height="14" fill="#1e5e3a" rx="3"/>
+          <text x="145" y="126" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">Gate: 信箱有新消息!</text>
+          <rect x="300" y="114" width="70" height="18" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1" rx="2"/>
+          <text x="335" y="126" text-anchor="middle" fill="var(--text-3)" font-size="8">信箱串行化</text>
+          <!-- t4: 二次确认 -->
+          <rect x="10" y="154" width="70" height="18" fill="#1e5e3a" rx="3"/>
+          <text x="45" y="166" text-anchor="middle" fill="#fff" font-weight="600" font-size="9">二次确认</text>
+          <line x1="80" y1="163" x2="120" y2="163" stroke="#1e5e3a" stroke-width="1" marker-end="url(#ah-good-gn)"/>
+          <text x="200" y="166" text-anchor="middle" fill="#1e5e3a" font-size="8">看到 [1,2] → 确认报 3</text>
+          <!-- t5: 1号报3 -->
+          <rect x="18" y="194" width="54" height="18" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1" rx="2"/>
+          <text x="45" y="206" text-anchor="middle" fill="#1e3a8a" font-weight="600">报 "3" ✓</text>
+          <text x="190" y="240" text-anchor="middle" fill="#1e5e3a" font-size="9" font-weight="600">对外一致：每条消息基于最新信箱状态</text>
+        </svg>
       </div>
     </div>
     <aside class="notes">
