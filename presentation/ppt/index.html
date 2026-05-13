@@ -10,7 +10,7 @@
 
   幻灯片结构（27 张内容页 + Cover/Thanks）：
     §01 项目与背景（9 页）— 项目介绍 / Agenda / ChatBot vs Agent / ReAct 演示 5 帧
-    §02 上下文窗口与压缩（5 页）— 问题 / 窗口膨胀 / 压缩系统 / 优先级漏斗 / 动态 System Prompt
+    §02 上下文治理与状态感知（5 页）— 问题 / 窗口膨胀 / 压缩系统 / 优先级漏斗 / 动态 System Prompt
     §03 面向场景强化的工具（11 页）— 总览 / Grep&Ask / Plan+Edit / Plan 工作流 3 帧 / 执行三态 2 帧 / TodoWrite / Hook
     §04 多 Agent 协作试验（6 页）— 总览 / 消息设计 / 轮流报数 / 续写接龙 / 协作开发 / SubAgent
     §05 模板代码生成引擎（4 页）— 动机 / jen 架构 / 实测对比 / webapp-gen
@@ -140,7 +140,7 @@
     <div class="stack mt-l">
       <!-- 这个是我敲定的大纲，不要改 -->
       <div class="agenda-row"><span class="num">01</span><span class="t">项目与背景</span><span class="d">~4min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">上下文窗口与压缩</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">上下文治理与状态感知</span><span class="d">~6min</span></div>
       <div class="agenda-row"><span class="num">03</span><span class="t">面向场景强化的工具</span><span class="d">~8min</span></div>
       <div class="agenda-row"><span class="num">04</span><span class="t">多 Agent 协作试验</span><span class="d">~5min</span></div>
       <div class="agenda-row"><span class="num">05</span><span class="t">模板代码生成引擎</span><span class="d">~4min</span></div>
@@ -567,29 +567,26 @@ hook.rs         storage.rs
   <!-- ============ §02 分隔页 ============ -->
   <section class="slide chapter-divider" data-title="§02 Divider">
     <span class="ch-num">Section 02</span>
-    <div class="ch-title">上下文窗口与压缩</div>
+    <div class="ch-title">上下文治理与状态感知</div>
     <p class="ch-sub">LLM 的窗口是物理硬上限。Agent 要长期运行，必须有一套机制来管理"往窗口里塞什么、丢掉什么"。</p>
   </section>
 
   <!-- ============ 4. CORE: Context Window ============ -->
   <section class="slide" data-title="Context Window Challenge">
     <div class="title-bar">
-      <h2>02 · 上下文窗口与压缩 — 上下文窗口是稀缺资源
+      <h2>02 · 上下文治理与状态感知 — 问题与治理路径
     </div>
     <div class="split s55">
       <div class="col-text">
-        <p class="lead">LLM 的窗口是<span class="accent">物理硬上限</span>。一次复杂任务可能跑数十轮工具调用，每条结果都会<span class="accent">永久占用</span> token 直到 session 结束。</p>
-        <h4>三个症状 · 当窗口被填满</h4>
+        <p class="lead">上一章的 ReAct 循环已经展示：每轮工具调用的结果都会<span class="accent">永久占用</span>上下文 token。轮次越多，窗口越满，Agent 开始幻觉、重复操作、忘记目标。</p>
+        <h4>两条治理路径</h4>
         <ul>
-          <li><strong>幻觉</strong> · 编造不存在的函数名 / 字段名</li>
-          <li><strong>重复操作</strong> · 反复读已读过的文件</li>
-          <li><strong>忘记目标</strong> · 用户让改 A，做到一半跑去改 B</li>
+          <li><strong>分级压缩</strong> · micro 快速替换旧工具结果为占位符，auto 调用 LLM 做深度摘要。均配备<strong>豁免机制</strong>保护关键信息。</li>
+          <li><strong>优先级窗口</strong> · 不是固定取最近 N 条，而是给消息打价值分，按 3:6:1 比例填充，保证方向性信息优先入窗。实测可稳定运行 <strong>2000+ 轮</strong>。</li>
         </ul>
-        <h4>我们怎么办 · 四条治理路径</h4>
-        <p class="note" style="margin-top:6px;border-top:none;padding-top:0">本章 4 页依次回答：<br>① 不治理会怎样（爆炸实录）<br>② 多级压缩 + 豁免机制（micro / auto）<br>③ 推荐系统视角的优先级漏斗<br>④ 动态 System Prompt 让 Agent 感知持续状态</p>
       </div>
       <div class="col-visual">
-        <div class="fig" data-fig="图 · 窗口压力的来源与本章的应对路径">
+        <div class="fig" data-fig="图 · 窗口压力来源与两条治理路径">
           <svg viewBox="0 0 380 320" style="width:100%;height:auto;font-family:var(--font-mono);font-size:11px">
             <defs>
               <marker id="ah-cw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
@@ -608,72 +605,49 @@ hook.rs         storage.rs
             <rect x="20" y="32" width="306" height="22" fill="url(#grad-fill)" opacity="0.85"/>
             <text x="338" y="48" fill="#7a1f1f" font-size="10" text-anchor="end">90%+ 危险区</text>
 
-            <!-- 三个填充来源 -->
-            <text x="20" y="82" font-weight="600" fill="#0d1b2a" font-size="11">填充来源 · 谁吃掉了窗口</text>
-            <g transform="translate(20,92)">
-              <rect width="100" height="36" fill="#fff" stroke="#1e3a8a" stroke-width="1.2"/>
-              <text x="50" y="16" text-anchor="middle" font-size="10" fill="#1e3a8a" font-weight="600">用户消息</text>
-              <text x="50" y="29" text-anchor="middle" font-size="9" fill="#6b7a8f">高价值 · 须保留</text>
+            <!-- ReAct 引出 -->
+            <text x="20" y="82" font-weight="600" fill="#0d1b2a" font-size="11">ReAct 循环的必然结果</text>
+            <text x="20" y="100" fill="#6b7a8f" font-size="10">每轮 Thought → Action → Observation 都在消耗窗口</text>
+            <text x="20" y="116" fill="#7a1f1f" font-size="10" font-weight="600">工具结果是主要膨胀源，且价值衰减极快</text>
+
+            <!-- 两条路径 -->
+            <text x="20" y="148" font-weight="600" fill="#0d1b2a" font-size="11">两条治理路径</text>
+            <g transform="translate(20,158)">
+              <rect width="160" height="40" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
+              <text x="10" y="16" font-size="10" fill="#1e5e3a" font-weight="600">① 分级压缩</text>
+              <text x="10" y="30" font-size="9" fill="#6b7a8f">micro 快速替换 / auto 深度摘要</text>
             </g>
-            <g transform="translate(140,92)">
-              <rect width="100" height="36" fill="#fff" stroke="#7a5b00" stroke-width="1.2"/>
-              <text x="50" y="16" text-anchor="middle" font-size="10" fill="#7a5b00" font-weight="600">Agent 决策</text>
-              <text x="50" y="29" text-anchor="middle" font-size="9" fill="#6b7a8f">高价值 · 须保留</text>
-            </g>
-            <g transform="translate(260,92)">
-              <rect width="100" height="36" fill="#fff" stroke="#7a1f1f" stroke-width="1.2"/>
-              <text x="50" y="16" text-anchor="middle" font-size="10" fill="#7a1f1f" font-weight="600">工具结果</text>
-              <text x="50" y="29" text-anchor="middle" font-size="9" fill="#6b7a8f">低价值 · 价值衰减</text>
+            <g transform="translate(200,158)">
+              <rect width="160" height="40" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.2"/>
+              <text x="10" y="16" font-size="10" fill="#1e3a8a" font-weight="600">② 优先级窗口</text>
+              <text x="10" y="30" font-size="9" fill="#6b7a8f">3:6:1 价值比例填充</text>
             </g>
 
-            <text x="190" y="150" text-anchor="middle" fill="#6b7a8f" font-size="10">↓ 工具结果是主要膨胀源 ↓</text>
-
-            <!-- 三条治理路径，向右收敛 -->
-            <text x="20" y="178" font-weight="600" fill="#0d1b2a" font-size="11">本章治理路径</text>
-            <g transform="translate(20,188)">
-              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
-              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">① 多级压缩 · micro / auto</text>
+            <!-- 共同机制 -->
+            <text x="20" y="222" font-weight="600" fill="#0d1b2a" font-size="11">共同机制</text>
+            <g transform="translate(20,232)">
+              <rect width="340" height="26" fill="#fbf8f0" stroke="#7a5b00" stroke-width="1.2"/>
+              <text x="10" y="17" font-size="10" fill="#7a5b00" font-weight="600">豁免机制 · 保护高价值消息不被压缩失真</text>
             </g>
-            <g transform="translate(20,222)">
-              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
-              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">② 豁免高价值消息</text>
+            <g transform="translate(20,266)">
+              <rect width="340" height="26" fill="#f8f8fb" stroke="#1e3a8a" stroke-width="1.2"/>
+              <text x="10" y="17" font-size="10" fill="#1e3a8a" font-weight="600">动态 System Prompt · 让 Agent 感知持续状态</text>
             </g>
-            <g transform="translate(20,256)">
-              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
-              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">③ 优先级漏斗</text>
-            </g>
-            <g transform="translate(20,290)">
-              <rect width="160" height="26" fill="#fbfdfb" stroke="#1e5e3a" stroke-width="1.2"/>
-              <text x="10" y="17" font-size="10" fill="#1e5e3a" font-weight="600">④ 动态 System Prompt</text>
-            </g>
-
-            <!-- 收敛箭头 -->
-            <path d="M180,201 Q230,201 238,235" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
-            <path d="M180,235 Q220,237 238,245" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
-            <path d="M180,269 Q220,267 238,255" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
-            <path d="M180,303 Q230,300 238,265" stroke="#1e3a8a" stroke-width="1.2" fill="none" marker-end="url(#ah-cw)"/>
-
-            <!-- 目标节点 -->
-            <rect x="240" y="220" width="120" height="60" fill="#f5f8ff" stroke="#1e3a8a" stroke-width="1.5"/>
-            <text x="300" y="240" text-anchor="middle" font-size="11" font-weight="600" fill="#1e3a8a">健康低幻觉</text>
-            <text x="300" y="256" text-anchor="middle" font-size="11" font-weight="600" fill="#1e3a8a">长期运行</text>
-            <text x="300" y="272" text-anchor="middle" font-size="9" fill="#6b7a8f">Agent 工作目标</text>
           </svg>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>第二章正式开场。这一章要解决的问题非常具体——<strong>上下文窗口是稀缺资源</strong>。</p>
-      <p>LLM 的窗口是<strong>物理硬上限</strong>，比如 128K tokens。但一次复杂 Agent 任务，几十轮工具调用之后，每条工具结果都会<strong>永久占着 token</strong>，直到 session 结束才释放。</p>
-      <p>右图三个填充来源——用户消息、Agent 决策、工具结果——前两者价值高必须保留，<strong>真正的膨胀源是工具结果</strong>。</p>
-      <p>窗口爆满会导致三个症状：幻觉、重复操作、忘记目标。这就是这一章 4 页要依次回应的——爆炸实录 / 多级压缩 / 优先级漏斗 / 动态 system prompt——本质上都是为了回答同一个问题：<strong>怎么在有限窗口里让 Agent 长期健康运行</strong>。</p>
+      <p>第二章。上一章的 ReAct 循环已经直观展示了问题——每轮工具调用都在消耗上下文窗口，工具结果是主要膨胀源，且信息价值衰减极快。窗口被填满后，Agent 就会幻觉、重复操作、忘记目标。</p>
+      <p>我们的治理方案分两条路径。<strong>第一条：分级压缩</strong>——micro 级别快速把旧的工具结果替换成占位符，auto 级别调用 LLM 做深度摘要。两条路径都配豁免机制，保护关键信息不被压缩掉。<strong>第二条：优先级窗口</strong>——不是固定取最近 N 条消息，而是给消息打价值分，按 3:6:1 的比例填充窗口。实测可以稳定运行 2000+ 轮。</p>
+      <p>两条路径共享两个机制：豁免机制保护高价值消息，动态 System Prompt 让 Agent 感知当前正在发生的持续性事件。</p>
     </aside>
   </section>
 
   <!-- ============ 4.5. WINDOW EVOLUTION ============ -->
   <section class="slide" data-title="Window Evolution">
     <div class="title-bar">
-      <h2>02 · 上下文窗口与压缩 — 未治理的窗口膨胀现象
+      <h2>02 · 上下文治理与状态感知 — 未治理的窗口膨胀现象
     </div>
     <p class="dim mt-s">一个真实的 Agent 任务，五轮工具调用之后……</p>
     <div class="cw-evolution">
@@ -725,96 +699,116 @@ hook.rs         storage.rs
   <!-- ============ 5. Compaction System ============ -->
   <section class="slide" data-title="Compaction System">
     <div class="title-bar">
-      <h2>02 · 上下文窗口与压缩 — 多级压缩：micro 与 auto
+      <h2>02 · 上下文治理与状态感知 — 分级压缩与豁免机制
     </div>
-    <div class="stack mt-l">
-      <div class="rule-row">
-        <span class="num blue">豁免</span>
-        <div>
-          <b>高价值消息不被压缩</b>
-          <p class="dim">用户消息、Agent 语言消息、System 提醒（TODO/Teammate）、Plan、Skill、TODOWrite/Read、SubAgent 结果 —— 这些是<strong>决策和方向信息</strong>，必须保留。</p>
-        </div>
+    <div class="split s55">
+      <div class="col-text">
+        <h4 style="margin-top:0">Micro 压缩 · 快速替换</h4>
+        <p>将相对久远的工具调用结果<strong>替换为占位符</strong>，仅保留"调用了什么"而丢弃具体内容。速度快、token 释放量大，适合窗口接近上限时紧急腾空间。</p>
+        <h4>Auto 压缩 · 深度摘要</h4>
+        <p>调用 LLM 将整个对话历史总结为精简摘要，然后<strong>清空窗口 + 写入摘要</strong>。成本较高但压缩彻底，适合 Agent 已运行很久需要"大扫除"的场景。</p>
+        <h4>豁免机制 · 保护关键信息</h4>
+        <p>无论 micro 还是 auto，以下消息<strong>不被压缩</strong>：</p>
+        <ul>
+          <li>用户消息 · 需求源头</li>
+          <li>Agent 纯文本回复 · 决策记录</li>
+          <li>TodoWrite / Plan / Skill · 方向性信息</li>
+          <li>SubAgent 最终结果 · 调研结论</li>
+        </ul>
       </div>
-      <div class="rule-row">
-        <span class="num green">micro</span>
-        <div>
-          <b>轻量级压缩 —— 快速腾出空间</b>
-          <p class="dim">保留消息摘要和关键结论，去除冗长的工具输出。速度快，适合窗口接近上限时快速释放空间。</p>
-        </div>
-      </div>
-      <div class="rule-row">
-        <span class="num orange">auto</span>
-        <div>
-          <b>深度压缩 —— 完整重写窗口</b>
-          <p class="dim">将整个对话历史总结为精简摘要，然后<strong>清空窗口 + 写入摘要</strong>。适合 Agent 已经运行很久，需要一次"大扫除"的场景。</p>
-        </div>
+      <div class="col-visual">
+        <h4 style="margin-top:0;font-size:14px;color:var(--text-3)">工具结果的价值衰减</h4>
+        <table class="vis-table">
+          <tr><th>工具类型</th><th>价值判断</th><th>豁免</th></tr>
+          <tr><td>Read</td><td class="no">低 · 文件内容随编辑失效</td><td class="no">No</td></tr>
+          <tr><td>Bash</td><td class="no">低 · 输出过时极快</td><td class="no">No</td></tr>
+          <tr><td>Edit</td><td class="no">低 · diff 已被后续覆盖</td><td class="no">No</td></tr>
+          <tr><td>Write</td><td class="no">低 · 与 Edit 同理</td><td class="no">No</td></tr>
+          <tr><td>Grep</td><td class="no">低 · 搜索结果一次性</td><td class="no">No</td></tr>
+          <tr><td>TodoWrite</td><td class="yes">高 · 任务追踪</td><td class="yes">Yes</td></tr>
+          <tr><td>Plan</td><td class="yes">高 · 执行方案</td><td class="yes">Yes</td></tr>
+          <tr><td>Ask</td><td class="yes">高 · 用户意图确认</td><td class="yes">Yes</td></tr>
+          <tr><td>Skill</td><td class="yes">高 · 能力定义</td><td class="yes">Yes</td></tr>
+        </table>
+        <p class="dim" style="font-size:12px;margin-top:8px;line-height:1.6">Bash / Edit / Read / Write 的信息价值随轮次衰减极快——第 20 轮时，第 3 轮的 Read 结果对决策几乎无价值。</p>
       </div>
     </div>
-    <p class="dim mt-m" style="font-size:14px">* Read/Edit/Bash 等工具调用结果<strong>不豁免</strong>，因为其信息价值随轮次衰减极快。</p>
     <aside class="notes">
-      <p>压缩系统是上下文治理的核心实现。分三个层面来讲。</p>
-      <p>首先，<strong>豁免机制</strong>。不是所有消息都能压缩——有些信息一旦丢失，Agent 就彻底跑偏了。我把这些消息标记为"豁免"：<strong>用户消息</strong>（这是需求源头）、<strong>Agent 的语言消息</strong>（这是决策记录）、<strong>System 提醒</strong>（TODO、Teammate 状态这些）、<strong>Plan 文档</strong>、<strong>Skill 内容</strong>、<strong>TODOWrite/Read</strong>（任务追踪）、<strong>SubAgent 的最终结果</strong>。</p>
-      <p>反过来，像 Read、Edit、Bash 这些工具的调用结果，我<strong>不豁免</strong>。为什么？因为一个文件被读过的内容，在第 20 轮对话的时候，对 Agent 决策的价值已经非常低了。它的信息价值随轮次衰减极快。</p>
-      <p>然后是两级压缩。<strong>micro</strong> 级别做轻量摘要，速度快，适合窗口快满时快速释放空间。<strong>auto</strong> 级别做深度压缩——把整个对话历史总结成一段精简摘要，然后清空窗口重新开始。这样兼顾了速度和准确率，让 Agent 可以<strong>长期健康运行</strong>，大大降低了幻觉。</p>
+      <p>分级压缩的第一级是 <strong>micro 压缩</strong>。它做的事情很简单——把相对久远的工具调用结果替换成占位符。比如原来 Read 了一个 500 行的文件占 8K token，micro 压缩后变成"[Read src/main.rs · 500 lines]"这样一个占位符，只占几十个 token。速度快，适合窗口快满时紧急释放空间。</p>
+      <p>第二级是 <strong>auto 压缩</strong>。它调用 LLM 把整个对话历史总结成一段精简摘要，然后清空窗口，把摘要写回去。成本高但压缩彻底——窗口从 97% 可以回到 30% 多。适合 Agent 已经跑了很多轮、需要一次大扫除的场景。</p>
+      <p>关键设计是<strong>豁免机制</strong>。无论是 micro 还是 auto，高价值消息都不参与压缩：用户消息是需求源头、Agent 的纯文本回复是决策记录、TodoWrite/Plan/Skill 是方向性信息、SubAgent 最终结果是调研结论。这些一旦压缩就会导致 Agent 跑偏。</p>
+      <p>反过来，Bash、Edit、Read、Write 这些操作性工具的结果价值衰减极快——第 3 轮的 Read 结果，到第 20 轮时对决策几乎没价值了。所以它们不豁免，优先被压缩。</p>
     </aside>
   </section>
 
   <!-- ============ 5.5. PRIORITY FUNNEL ============ -->
   <section class="slide" data-title="Priority Funnel">
     <div class="title-bar">
-      <h2>02 · 上下文窗口与压缩 — 滚动窗口：把上下文当作推荐系统
+      <h2>02 · 上下文治理与状态感知 — 优先级窗口：3:6:1 价值比例填充
     </div>
-    <p class="lede mt-s" style="font-size:15px">窗口空间 = 推荐位；候选消息 = 物料；价值评分 = CTR 预估</p>
-    <div class="priority-funnel mt-m">
-      <div class="lane">
-        <h5>候选池 (按价值打分)</h5>
-        <div class="msg-chip" data-pri="high">用户初始需求 <span class="score">p=1.00</span></div>
-        <div class="msg-chip" data-pri="high">Plan 文档 <span class="score">p=0.95</span></div>
-        <div class="msg-chip" data-pri="high">Agent 决策语句 <span class="score">p=0.90</span></div>
-        <div class="msg-chip" data-pri="high">TODO 当前任务 <span class="score">p=0.88</span></div>
-        <div class="msg-chip" data-pri="high">SubAgent 调研结论 <span class="score">p=0.85</span></div>
-        <div class="msg-chip" data-pri="mid">Skill 加载内容 <span class="score">p=0.70</span></div>
-        <div class="msg-chip" data-pri="mid">最近 3 轮 Read <span class="score">p=0.55</span></div>
-        <div class="msg-chip" data-pri="low">远期 Bash 输出 <span class="score">p=0.20</span></div>
-        <div class="msg-chip" data-pri="low">中间 Grep 结果 <span class="score">p=0.15</span></div>
-        <div class="msg-chip" data-pri="low">已被覆盖的旧 Edit <span class="score">p=0.08</span></div>
+    <div class="split s55">
+      <div class="col-text">
+        <p class="lead">固定取最近 N 条消息的问题：<strong>方向性信息可能在很早的位置</strong>，被新消息挤出窗口。我们把上下文当作推荐系统——给消息打价值分，优先填高价值的。</p>
+        <h4>高价值消息类型</h4>
+        <ul>
+          <li><strong>用户消息</strong> · 需求源头，方向锚点</li>
+          <li><strong>TodoWrite</strong> · 当前任务追踪</li>
+          <li><strong>Clean</strong>（Plan clear-and-approve）· 执行方案</li>
+          <li><strong>Skill 加载</strong> · 能力定义</li>
+          <li><strong>Agent 纯文本回复</strong> · 决策记录</li>
+        </ul>
+        <h4>3:6:1 填充比例</h4>
+        <p>在固定窗口内，按 3:6:1 比例分别加载<strong>高价值 / 中价值 / 低价值</strong>消息。保证 Agent 在长程运行时始终能看到方向性信息。</p>
+        <p class="note">实测：可稳定运行 <strong>2000+ 轮</strong>消息持续任务，Agent 方向性保持稳定。</p>
       </div>
-      <div class="sorter">
-        <span class="lbl">SORT BY<br>VALUE</span>
-        <span class="arr">→</span>
-        <span class="lbl">FILL<br>WINDOW</span>
+      <div class="col-visual">
+        <div class="priority-funnel" style="margin-top:0">
+          <div class="lane">
+            <h5>候选池 (按价值打分)</h5>
+            <div class="msg-chip" data-pri="high">用户初始需求 <span class="score">p=1.00</span></div>
+            <div class="msg-chip" data-pri="high">Plan 文档 <span class="score">p=0.95</span></div>
+            <div class="msg-chip" data-pri="high">Agent 决策语句 <span class="score">p=0.90</span></div>
+            <div class="msg-chip" data-pri="high">TODO 当前任务 <span class="score">p=0.88</span></div>
+            <div class="msg-chip" data-pri="high">SubAgent 调研结论 <span class="score">p=0.85</span></div>
+            <div class="msg-chip" data-pri="mid">Skill 加载内容 <span class="score">p=0.70</span></div>
+            <div class="msg-chip" data-pri="mid">最近 3 轮 Read <span class="score">p=0.55</span></div>
+            <div class="msg-chip" data-pri="low">远期 Bash 输出 <span class="score">p=0.20</span></div>
+            <div class="msg-chip" data-pri="low">中间 Grep 结果 <span class="score">p=0.15</span></div>
+            <div class="msg-chip" data-pri="low">已被覆盖的旧 Edit <span class="score">p=0.08</span></div>
+          </div>
+          <div class="sorter">
+            <span class="lbl">SORT BY<br>VALUE</span>
+            <span class="arr">→</span>
+            <span class="lbl">FILL<br>3:6:1</span>
+          </div>
+          <div class="lane">
+            <h5>装入窗口（3:6:1 比例）</h5>
+            <div class="msg-chip" data-pri="high">用户初始需求 <span class="score">30%</span></div>
+            <div class="msg-chip" data-pri="high">Plan 文档 <span class="score">30%</span></div>
+            <div class="msg-chip" data-pri="high">Agent 决策语句 <span class="score">30%</span></div>
+            <div class="msg-chip" data-pri="high">TODO 当前任务 <span class="score">30%</span></div>
+            <div class="msg-chip" data-pri="high">SubAgent 调研结论 <span class="score">30%</span></div>
+            <div class="msg-chip" data-pri="mid">Skill 加载内容 <span class="score">60%</span></div>
+            <div class="msg-chip" data-pri="mid">最近 3 轮 Read <span class="score">60%</span></div>
+            <div class="msg-chip" data-pri="low">远期 Bash 输出 <span class="score">10%</span></div>
+            <div class="msg-chip" data-pri="low">中间 Grep 结果 <span class="score">DROP</span></div>
+            <div class="msg-chip" data-pri="low">已被覆盖的旧 Edit <span class="score">DROP</span></div>
+          </div>
+        </div>
       </div>
-      <div class="lane">
-        <h5>装入窗口（按价值选取）</h5>
-        <div class="msg-chip" data-pri="high">用户初始需求 <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="high">Plan 文档 <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="high">Agent 决策语句 <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="high">TODO 当前任务 <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="high">SubAgent 调研结论 <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="mid">Skill 加载内容 <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="mid">最近 3 轮 Read <span class="score">KEEP</span></div>
-        <div class="msg-chip" data-pri="low">远期 Bash 输出 <span class="score">DROP</span></div>
-        <div class="msg-chip" data-pri="low">中间 Grep 结果 <span class="score">DROP</span></div>
-        <div class="msg-chip" data-pri="low">已被覆盖的旧 Edit <span class="score">DROP</span></div>
-      </div>
-    </div>
-    <p class="dim mt-m" style="font-size:12px;text-align:center">核心洞察：<strong>决策信息多放、指导方向信息多放、执行中间过程信息少放</strong></p>
-    <div class="deck-footer">
-      <span class="mono">#scrolling-window #rec-sys-analogy</span>
-      <span class="slide-number" data-current="8" data-total="36"></span>
     </div>
     <aside class="notes">
-      <p>这里我想分享一个比较有意思的<strong>跨领域类比</strong>——上下文窗口治理和<strong>推荐系统</strong>非常像。</p>
-      <p>推荐系统是什么？给定有限的展示位，从大量候选物料里挑出最值得展示的几个，按价值排序。上下文窗口治理是什么？给定有限的 token 配额，从大量历史消息里挑出最值得保留的几条，按价值塞入。</p>
-      <p>所以我设计了一套<strong>价值评分机制</strong>。左边是候选池——所有历史消息按"对未来决策的价值"打分。<strong>高价值消息</strong>：用户需求、Plan 文档、Agent 自己的决策语句、当前 TODO、SubAgent 的调研结论——这些是"指导方向"的信息。<strong>低价值消息</strong>：远期的 Bash 输出、中间过程的 Grep 结果、已经被覆盖的旧 Edit——这些是"执行中间过程"，价值衰减快。</p>
-      <p>排序器按价值降序填窗口，高分必保留，低分被丢弃。这就是我说的"<strong>决策信息多放、指导方向信息多放、执行中间过程信息少放</strong>"。</p>
+      <p>优先级窗口要解决的问题是：<strong>固定取最近 N 条消息，方向性信息可能在很早的位置被新消息挤出</strong>。比如用户在第 1 轮说"我要改认证模块"，到第 50 轮时这条消息可能已经不在窗口里了，Agent 就忘了自己在干什么。</p>
+      <p>我们的方案是把上下文当作推荐系统——给消息打价值分，优先填高价值的。高价值消息包括：用户消息（需求源头）、TodoWrite（当前任务追踪）、Clean 即 Plan clear-and-approve（执行方案）、Skill 加载（能力定义）、Agent 纯文本回复（决策记录）。</p>
+      <p>具体填充按 3:6:1 比例——30% 给高价值方向性信息，60% 给中等价值的近期上下文，10% 给低价值的执行细节。这样保证了 Agent 在长程运行时始终能看到方向性信息。</p>
+      <p>实测结果：可以稳定运行 <strong>2000+ 轮</strong>消息的持续任务，Agent 方向性保持稳定。2000+ 还只是跑到那里的数字，理论上还能继续。</p>
     </aside>
   </section>
 
   <!-- ============ 6. Dynamic System Prompt ============ -->
   <section class="slide" data-title="Dynamic System Prompt">
     <div class="title-bar">
-      <h2>02 · 上下文窗口与压缩 — 动态 System Prompt：尾部追加的状态感知
+      <h2>02 · 上下文治理与状态感知 — 动态 System Prompt：尾部追加的状态感知
     </div>
     <div class="arch mt-m">
       <div class="tier"><div class="tname">静态基础</div>
