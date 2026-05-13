@@ -941,18 +941,18 @@ hook.rs         storage.rs
     </div>
     <div class="split s55">
       <div class="col-text">
-        <h4 style="margin-top:0">Plan — 先调研再执行</h4>
-        <p><strong style="color:var(--bad)">问题：</strong>LLM 习惯边想边改，调研读了 30 个文件，改代码时窗口已满 → 改一处忘一处。</p>
-        <p><strong style="color:var(--good)">方案：</strong>进入 Plan 模式 → 只读调研 → 制定自包含执行计划 → 用户审批 → <strong>清空上下文</strong> → 按计划执行。</p>
-        <h4>审批三选项</h4>
-        <ul style="line-height:1.8">
-          <li><strong>① 批准计划</strong> — 保留上下文，开始实施</li>
-          <li style="color:var(--good)"><strong>② 批准并清空上下文</strong> — 仅保留 plan.md，丢弃所有调研产物 ← 推荐</li>
-          <li><strong>③ 驳回</strong> — 留在 Plan Mode 修改方案</li>
+        <h4 style="margin-top:0;margin-bottom:2px">Plan — 先调研再执行</h4>
+        <p style="margin-bottom:2px"><strong style="color:var(--bad)">问题：</strong>LLM 边想边改，调研读 30 个文件占满窗口 → 改一处忘一处。</p>
+        <p style="margin-bottom:4px"><strong style="color:var(--good)">方案：</strong>Plan 模式 → 只读调研 → plan.md → 审批 → <strong>清空上下文</strong> → 按计划执行。</p>
+        <h4 style="margin-bottom:2px">审批三选项</h4>
+        <ul style="line-height:1.6;margin:0 0 6px;padding-left:18px">
+          <li><strong>① 批准</strong> — 保留上下文，开始实施</li>
+          <li style="color:var(--good)"><strong>② 批准并清空上下文</strong> — 仅保留 plan.md，丢弃调研产物 ← 推荐</li>
+          <li><strong>③ 驳回</strong> — 留在 Plan Mode 修改</li>
         </ul>
-        <h4>Edit — 精确替换，非全文覆写</h4>
-        <p><strong style="color:var(--bad)">问题：</strong>Write 只能全文覆写，500 行文件改 1 行也要全发。</p>
-        <p><strong style="color:var(--good)">方案：</strong>Edit 基于<strong>精确字符串匹配</strong>做局部替换，只发 diff，大幅减少 token 消耗和错误率。</p>
+        <h4 style="margin-bottom:2px">Edit — 精确替换</h4>
+        <p style="margin-bottom:2px"><strong style="color:var(--bad)">问题：</strong>Write 只能全文覆写，改 1 行也要全发 500 行。</p>
+        <p><strong style="color:var(--good)">方案：</strong>Edit 基于精确字符串匹配做局部替换，只发 diff。</p>
       </div>
       <div class="col-visual">
         <svg viewBox="0 0 440 300" style="width:100%;height:auto;font-family:var(--font-mono);font-size:10px">
