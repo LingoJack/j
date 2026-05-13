@@ -12,9 +12,10 @@ const OUT_DIR   = process.argv[3] || path.join(PPT_DIR, 'ppt-png');
 
 const fileUrl = 'file://' + path.resolve(HTML_PATH);
 
-// 16:9 — render at design size 1280x720 with 2x DPI for sharp output
-const W = 1280, H = 720;
-const SCALE = 2;
+// 16:9 — render at html-ppt design size 1920x1080 with 1.33x DPI for sharp 2560x1440 output
+// This matches the html-ppt skill's render.sh which uses --window-size=1920,1080
+const W = 1920, H = 1080;
+const SCALE = 4/3;
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
