@@ -254,7 +254,7 @@
             <line x1="270" y1="40" x2="290" y2="40" stroke="#1e5e3a" stroke-width="1.2" marker-end="url(#ah-fc)"/>
             <rect x="290" y="15" width="80" height="50" fill="#fdfcf8" stroke="#7a5b00" stroke-width="1.2" rx="3"/>
             <text x="330" y="36" text-anchor="middle" font-weight="600" fill="#7a5b00" font-size="10">结果回灌</text>
-            <text x="330" y="52" text-anchor="middle" fill="#6b7a8f" font-size="9">tool_result → ctx</text>
+            <text x="330" y="52" text-anchor="middle" fill="#6b7a8f" font-size="8">result → ctx</text>
             <text x="190" y="85" text-anchor="middle" fill="#6b7a8f" font-size="9">LLM 看到结果后继续推理 → 可能再次调工具 → 循环</text>
           </svg>
         </div>
@@ -723,58 +723,6 @@ hook.rs         storage.rs
       <p>第二章。上一章的 ReAct 循环已经直观展示了问题——每轮工具调用都在消耗上下文窗口，工具结果是主要膨胀源，且信息价值衰减极快。窗口被填满后，Agent 就会幻觉、重复操作、忘记目标。</p>
       <p>我们的治理方案分两条路径。<strong>第一条：分级压缩</strong>——micro 级别快速把旧的工具结果替换成占位符，auto 级别调用 LLM 做深度摘要。两条路径都配豁免机制，保护关键信息不被压缩掉。<strong>第二条：优先级窗口</strong>——不是固定取最近 N 条消息，而是给消息打价值分，按 3:6:1 的比例填充窗口。实测可以稳定运行 2000+ 轮。</p>
       <p>两条路径共享两个机制：豁免机制保护高价值消息，动态 System Prompt 让 Agent 感知当前正在发生的持续性事件。</p>
-    </aside>
-  </section>
-
-  <!-- ============ 4.5. WINDOW EVOLUTION ============ -->
-  <section class="slide" data-title="Window Evolution">
-    <div class="title-bar">
-      <h2>02 · 上下文治理与状态感知 — 未治理的窗口膨胀现象
-    </div>
-    <p class="dim mt-s">一个真实的 Agent 任务，五轮工具调用之后……</p>
-    <div class="cw-evolution">
-      <span class="lbl">round 1</span>
-      <div class="bar"><div class="bar-fill" style="width:18%"></div></div>
-      <span class="pct">18%</span>
-      <p class="step-note">系统提示 + 用户初始需求</p>
-
-      <span class="lbl">round 2</span>
-      <div class="bar"><div class="bar-fill" style="width:38%"></div></div>
-      <span class="pct">38%</span>
-      <p class="step-note">Glob 扫描项目结构 + Read 主文件 (~3K tokens)</p>
-
-      <span class="lbl">round 3</span>
-      <div class="bar"><div class="bar-fill warn" style="width:62%"></div></div>
-      <span class="pct">62%</span>
-      <p class="step-note">Grep 三次搜索 + Read 五个相关文件 (~8K tokens)</p>
-
-      <span class="lbl">round 4</span>
-      <div class="bar"><div class="bar-fill warn" style="width:84%"></div></div>
-      <span class="pct">84%</span>
-      <p class="step-note">Bash 编译 + 完整错误日志 + Edit 候选 diff (~10K tokens)</p>
-
-      <span class="lbl">round 5</span>
-      <div class="bar"><div class="bar-fill danger" style="width:97%"></div></div>
-      <span class="pct">97%</span>
-      <p class="step-note" style="color:var(--bad)">超出健康区：Agent 开始忘记最早的需求，重复 Read 已读过的文件，编造不存在的函数名</p>
-
-      <span class="lbl">compact</span>
-      <div class="bar"><div class="bar-fill" style="width:34%"></div></div>
-      <span class="pct">34%</span>
-      <p class="step-note" style="color:var(--good)">auto compact 触发：摘要 + 清空 → 窗口回到健康水平，关键决策信息保留</p>
-    </div>
-    <div class="deck-footer">
-      <span class="mono">#token-pressure #hallucination</span>
-      <span class="slide-number" data-current="6" data-total="36"></span>
-    </div>
-    <aside class="notes">
-      <p>给大家直观感受一下，<strong>不治理</strong>会发生什么。这是我跑一个真实任务的窗口占用变化。</p>
-      <p>第一轮，刚发完用户需求，窗口才 18%——风平浪静。第二轮，Agent 用 Glob 扫了项目结构，又 Read 了几个主文件，已经到 38%。</p>
-      <p>第三轮是关键转折——Agent 开始<strong>大量 Grep 搜索 + 读相关文件</strong>，因为它要建立项目理解。每个 Read 都是几千个 token，五个文件就是上万。窗口冲到 62%。</p>
-      <p>第四轮跑了 cargo build，编译错误日志几百行，Edit 又产生了 diff，已经 84%。</p>
-      <p>第五轮，<strong>97% ——这是危险区</strong>。Agent 开始幻觉，开始重复读已经读过的文件，开始忘记最初的需求。</p>
-      <p>这时候我们的 <strong>auto compact</strong> 触发——把对话历史总结成精简摘要，清空窗口重写。窗口回到 34%，关键决策保留。Agent 又能继续高效工作。</p>
-      <p>这个曲线是<strong>真实跑出来</strong>的，不是画的示意。</p>
     </aside>
   </section>
 
