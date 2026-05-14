@@ -10,11 +10,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-12.10.7-green.svg)](https://github.com/LingoJack/jcli)
 
-[在线文档](https://lingojack.github.io/j/) · [快速开始](#-快速开始) · [功能一览](#-功能一览) · [安装](#-安装) · [GUI 版本](https://github.com/LingoJack/jcli-gui)
+[在线文档](https://lingojack.github.io/j/) · [快速开始](#-快速开始) · [功能一览](#-功能一览) · [安装](#-安装) · [GUI 版本](https://github.com/LingoJack/j-gui.git)
 
 </div>
 
-> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/jcli-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
+> 💡 如果你更偏好图形界面，可以试试 [j-gui](https://github.com/LingoJack/j-gui) —— 基于 Tauri 的 GUI 版本（研发中），提供可视化操作体验。当前 j-cli 的 TUI 界面也支持部分鼠标操作（点击、滚动等），在终端中即可获得接近 GUI 的交互体验。
 
 ---
 
