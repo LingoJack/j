@@ -1,3 +1,10 @@
+# v12.10.54
+
+
+### Bug 修复
+- **Windows CI 编译**: 修复 `j-agent` 中 `core-graphics` 和 `nix` 被无条件声明为依赖导致 Windows CI 编译失败的问题，改为平台条件依赖（`cfg(unix)` / `cfg(target_os = "macos")`）
+</result
+
 # v12.10.53
 
 

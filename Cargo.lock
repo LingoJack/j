@@ -2520,7 +2520,7 @@ dependencies = [
 
 [[package]]
 name = "j-cli"
-version = "12.10.53"
+version = "12.10.54"
 dependencies = [
  "aes-gcm",
  "ansi_colours",

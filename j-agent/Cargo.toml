@@ -63,12 +63,16 @@ portable-pty = "0.8"
 # Image processing (for computer use / multi-modal)
 image = "0.25"
 
-# macOS-specific (for computer use keyboard/mouse)
-core-graphics = "0.25"
-nix = { version = "0.31", features = ["process", "signal"] }
-
 # Optional: browser automation
 chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"], optional = true }
+
+# Unix-only dependencies
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["process", "signal"] }
+
+# macOS-only dependencies
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"
 
 [features]
 default = []
