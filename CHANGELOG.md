@@ -1,3 +1,26 @@
+# v12.10.55
+
+
+### 新功能
+
+- **文件索引缓存系统 (FileIndex)**: 新增后台文件索引模块，使用 `notify` crate 监控文件变化并维护内存路径缓存。`@` 弹窗和文件弹窗从每帧 WalkBuilder 扫描改为内存模糊搜索，大幅提升响应速度
+- **欢迎界面可切换模式**: 新增 `welcome_quote` 配置项，允许在欢迎界面切换诗句引言和 J-CLI ASCII Art 两种显示风格，可在全局设置面板中开关
+- **带行号文本智能换行**: 工具结果渲染器现在能检测带行号前缀的文本（如 Read 工具输出），续行自动保留 `│` 符号对齐，新增 `wrap_text_with_prefix`、`line_number_prefix_width`、`line_number_continuation_prefix` 等工具函数
+- **j-agent 模板资源外置**: 将系统提示词、teammate/sub-agent prompt、记忆/灵魂模板等从内联字符串提取为独立 `.md` 文件，放置于 `j-agent/assets/` 目录，便于维护和定制
+- **Makefile `commit` 命令**: 新增 `make commit` 伪目标，自动基于变更文件生成 commit message 并提交，无需 AI 参与
+- **PPT 一键导出工具链**: 新增 `make ppt-build`/`ppt-render`/`ppt-deps`/`ppt-clean` 命令，支持将 HTML 演示文稿渲染为高清 PNG 并打包为 .pptx 文件
+
+### 改进
+
+- **j-agent 模块结构扁平化**: 将 `context/mod.rs`、`infra/mod.rs`、`permission/mod.rs`、`storage/mod.rs`、`teammate/mod.rs`、`tools/mod.rs` 统一重命名为对应的 `.rs` 文件，遵循弃用 `mod.rs` 的项目规范
+- **版本号同步管理**: `bump-version` 和 `set-version` 目标现在同步更新 j-cli 和 j-agent 两个 crate 的版本号，确保版本一致性
+- **j-agent 独立版本号**: j-agent 版本号从 `0.1.0` 独立演进，与主项目保持同步
+- **欢迎页 ASCII Art 微调**: 修正了启动界面 J-CLI ASCII Art 的字符对齐问题
+
+### Bug 修复
+
+- **文件弹窗性能问题**: 修复 `@` 弹窗和 `file:` 弹窗每帧触发 WalkBuilder 全目录扫描导致的卡顿，改为后台缓存 + 内存过滤
+
 # v12.10.54
 
 

@@ -7,6 +7,7 @@ INSTALL_DIR := /usr/local/bin
 REPO := LingoJack/jcli
 TARGET_DIR := target/release
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+J_AGENT_VERSION := $(shell grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # ============================================
@@ -39,7 +40,7 @@ GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 help: ## 显示此帮助信息
 	@echo "📚 j-cli Makefile 帮助"
 	@echo "============================================"
-	@echo "版本: $(VERSION) | 分支: $(GIT_BRANCH)"
+	@echo "版本: $(VERSION) | j-agent: $(J_AGENT_VERSION) | 分支: $(GIT_BRANCH)"
 	@echo "============================================"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -212,22 +213,27 @@ uninstall: ## 卸载
 # ============================================
 # 发布相关
 # ============================================
-bump-version: ## 递增版本号（最后一位 patch）
+bump-version: ## 递增版本号（最后一位 patch，同步 j-agent）
 	@echo "📌 递增版本号..."
-	@current=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
-	major=$$(echo $$current | cut -d. -f1); \
-	minor=$$(echo $$current | cut -d. -f2); \
-	patch=$$(echo $$current | cut -d. -f3); \
+	@cli_ver=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	major=$$(echo $$cli_ver | cut -d. -f1); \
+	minor=$$(echo $$cli_ver | cut -d. -f2); \
+	patch=$$(echo $$cli_ver | cut -d. -f3); \
 	new_patch=$$((patch + 1)); \
 	new_version="$$major.$$minor.$$new_patch"; \
-	echo "  当前版本: $$current"; \
-	echo "  新版本: $$new_version"; \
+	agent_ver=$$(grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "  j-cli: $$cli_ver → $$new_version"; \
+	echo "  j-agent: $$agent_ver → $$new_version"; \
 	if [[ "$$OSTYPE" == "darwin"* ]]; then \
-		sed -i '' "s/^version = \"$$current\"/version = \"$$new_version\"/" Cargo.toml; \
+		sed -i '' "s/^version = \"$$cli_ver\"/version = \"$$new_version\"/" Cargo.toml; \
+		sed -i '' "s/^version = \"$$agent_ver\"/version = \"$$new_version\"/" j-agent/Cargo.toml; \
+		sed -i '' "s/\(j-agent.*version = \"\)[^\"]*\"/\1$$new_version\"/" Cargo.toml; \
 	else \
-		sed -i "s/^version = \"$$current\"/version = \"$$new_version\"/" Cargo.toml; \
+		sed -i "s/^version = \"$$cli_ver\"/version = \"$$new_version\"/" Cargo.toml; \
+		sed -i "s/^version = \"$$agent_ver\"/version = \"$$new_version\"/" j-agent/Cargo.toml; \
+		sed -i "s/\(j-agent.*version = \"\)[^\"]*\"/\1$$new_version\"/" Cargo.toml; \
 	fi; \
-	echo "☑️ 版本号已更新为 $$new_version"
+	echo "☑️ j-cli 和 j-agent 版本号已更新为 $$new_version"
 
 publish: ## 发布到 crates.io（NOTE='xxx' make publish 或 AI 自动生成）
 	@echo "📦 开始发布流程..."
@@ -326,21 +332,26 @@ tag: ## 创建 git tag（基于当前版本号）
 	git push origin "$$tag"; \
 	echo "☑️ 标签 $$tag 已创建并推送。GitHub Actions 将自动构建和发布。"
 
-set-version: ## 设置指定版本号（用法：make set-version V=1.2.3）
+set-version: ## 设置指定版本号（用法：make set-version V=1.2.3，同步 j-agent）
 ifndef V
 	@echo "✖️ 请指定版本号，例如: make set-version V=1.2.3"
 	@exit 1
 endif
 	@echo "📌 设置版本号为 $(V)..."
-	@current=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
-	echo "  当前版本: $$current"; \
-	echo "  新版本: $(V)"; \
+	@cli_ver=$$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	agent_ver=$$(grep '^version' j-agent/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "  j-cli: $$cli_ver → $(V)"; \
+	echo "  j-agent: $$agent_ver → $(V)"; \
 	if [[ "$$OSTYPE" == "darwin"* ]]; then \
-		sed -i '' "s/^version = \"$$current\"/version = \"$(V)\"/" Cargo.toml; \
+		sed -i '' "s/^version = \"$$cli_ver\"/version = \"$(V)\"/" Cargo.toml; \
+		sed -i '' "s/^version = \"$$agent_ver\"/version = \"$(V)\"/" j-agent/Cargo.toml; \
+		sed -i '' "s/\(j-agent.*version = \"\)[^\"]*\"/\1$(V)\"/" Cargo.toml; \
 	else \
-		sed -i "s/^version = \"$$current\"/version = \"$(V)\"/" Cargo.toml; \
+		sed -i "s/^version = \"$$cli_ver\"/version = \"$(V)\"/" Cargo.toml; \
+		sed -i "s/^version = \"$$agent_ver\"/version = \"$(V)\"/" j-agent/Cargo.toml; \
+		sed -i "s/\(j-agent.*version = \"\)[^\"]*\"/\1$(V)\"/" Cargo.toml; \
 	fi; \
-	echo "☑️ 版本号已更新为 $(V)"
+	echo "☑️ j-cli 和 j-agent 版本号已更新为 $(V)"
 
 tags: ## 查看最近的标签
 	@echo "🏷️  最近的标签:"
